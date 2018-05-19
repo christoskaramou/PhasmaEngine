@@ -130,7 +130,7 @@ Renderer::~Renderer()
     }
 
     if (info.instance){
-        info.instance.destroy();
+		info.instance.destroy();
         std::cout << "Instance destroyed\n";
     }
 }
@@ -1038,7 +1038,7 @@ void Renderer::draw()
 	// use the dynamic command buffer
 	recordDynamicCmdBuffer(imageIndex);
 
-	// submit the main command buffer for color
+	// submit the main command buffer
 	auto const si = vk::SubmitInfo()
 		.setWaitSemaphoreCount(1)
 		.setPWaitSemaphores(&info.semaphores[1])

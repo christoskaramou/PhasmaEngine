@@ -3,6 +3,7 @@
 
 
 #include <map>
+#include <any>
 #define VK_USE_PLATFORM_WIN32_KHR
 #define VULKAN_HPP_NO_EXCEPTIONS
 #include <vulkan/vulkan.hpp>
@@ -295,9 +296,25 @@ struct Light
 
 struct Context
 {
+private:
+	uint32_t __id = 0;
+	std::map<uint32_t, std::any> var{};
+public:
+	template<typename T>
+	void add(uint32_t* assignTo, const T & value) {
+		if (*assignTo != UINT32_MAX) throw std::runtime_error("attempt to write to an existing object");
+		*assignTo = __id++;
+		var[*assignTo] = std::any(value);
+	}
+	template<typename T>
+	T& get(const uint32_t id) {
+		if (id == UINT32_MAX) throw std::runtime_error("attempt to get an invalid object");
+		return std::any_cast<T&>(var[id]);
+	}
+
     SDL_Window* window;
     Surface surface;
-    vk::Instance instance;
+	vk::Instance instance;
     vk::PhysicalDevice gpu;
     vk::PhysicalDeviceProperties gpuProperties;
     vk::PhysicalDeviceFeatures gpuFeatures;
@@ -335,4 +352,3 @@ struct Context
 };
 
 #endif // CONTEXT_H
-
