@@ -7,4 +7,3 @@ glslangValidator.exe -V SkyBox/shaderSkyBox.vert -o SkyBox/vert.spv
 glslangValidator.exe -V SkyBox/shaderSkyBox.frag -o SkyBox/frag.spv
 glslangValidator.exe -V Terrain/shaderTerrain.vert -o Terrain/vert.spv
 glslangValidator.exe -V Terrain/shaderTerrain.frag -o Terrain/frag.spv
-pause

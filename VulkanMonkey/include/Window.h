@@ -1,7 +1,7 @@
 #ifndef WINDOW_H
 #define WINDOW_H
 
-#include "../include/Renderer.h"
+#include "Renderer.h"
 
 class Window
 {

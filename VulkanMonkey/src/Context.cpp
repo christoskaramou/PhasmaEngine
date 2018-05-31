@@ -2,11 +2,10 @@
 #include "../include/Errors.h"
 #include <iostream>
 #define STB_IMAGE_IMPLEMENTATION
-#include <../stb_image/stb_image.h>
-#include <../assimp/Importer.hpp>      // C++ importer interface
-#include <../assimp/scene.h>           // Output data structure
-#include <../assimp/postprocess.h>     // Post processing flags
-//#define NV_GLSL_SHADER
+#include "../include/stb_image/stb_image.h"
+#include "../include/assimp/Importer.hpp"      // C++ importer interface
+#include "../include/assimp/scene.h"           // Output data structure
+#include "../include/assimp/postprocess.h"     // Post processing flags
 
 vk::RenderPass Shadows::renderPass = nullptr;
 bool Shadows::shadowCast = true;
@@ -130,7 +129,7 @@ void Image::createImage(const Context* info, const uint32_t width, const uint32_
 	vk::ImageFormatProperties imageFormatProperties;
 	info->gpu.getImageFormatProperties(format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags(), &imageFormatProperties);
 
-    check(info->device.createImage(&imageInfo, nullptr, &image));
+    VkCheck(info->device.createImage(&imageInfo, nullptr, &image));
 
     uint32_t memTypeIndex = UINT32_MAX; ///////////////////
     auto const memRequirements = info->device.getImageMemoryRequirements(image);
@@ -157,8 +156,8 @@ void Image::createImage(const Context* info, const uint32_t width, const uint32_
 		.setAllocationSize(memRequirements.size)
 		.setMemoryTypeIndex(memTypeIndex);
 
-    check(info->device.allocateMemory(&allocInfo, nullptr, &memory));
-	check(info->device.bindImageMemory(image, memory, 0));
+    VkCheck(info->device.allocateMemory(&allocInfo, nullptr, &memory));
+	VkCheck(info->device.bindImageMemory(image, memory, 0));
 
     if (image && memory)
         std::cout << "Image created\n";
@@ -177,7 +176,7 @@ void Image::createImageView(const Context* info, const vk::ImageAspectFlags aspe
 		.setFormat(format)
 		.setSubresourceRange({ aspectFlags, 0, mipLevels, 0, arrayLayers });
 
-	check(info->device.createImageView(&viewInfo, nullptr, &view));
+	VkCheck(info->device.createImageView(&viewInfo, nullptr, &view));
     std::cout << "ImageView created\n";
 }
 
@@ -189,11 +188,11 @@ void Image::transitionImageLayout(const Context* info, const vk::ImageLayout old
 		.setCommandPool(info->commandPool);
 
     vk::CommandBuffer commandBuffer;
-	check(info->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
+	VkCheck(info->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-	check(commandBuffer.begin(&beginInfo));
+	VkCheck(commandBuffer.begin(&beginInfo));
 
 	auto barrier = vk::ImageMemoryBarrier()
 		.setOldLayout(oldLayout)
@@ -266,14 +265,14 @@ void Image::transitionImageLayout(const Context* info, const vk::ImageLayout old
 		0, nullptr,
 		1, &barrier);
 
-	check(commandBuffer.end());
+	VkCheck(commandBuffer.end());
 
 	auto const submitInfo = vk::SubmitInfo()
 		.setCommandBufferCount(1)
 		.setPCommandBuffers(&commandBuffer);
-	check(info->graphicsQueue.submit(1, &submitInfo, nullptr));
+	VkCheck(info->graphicsQueue.submit(1, &submitInfo, nullptr));
 
-	check(info->graphicsQueue.waitIdle());
+	VkCheck(info->graphicsQueue.waitIdle());
 }
 
 void Image::copyBufferToImage(const Context* info, const vk::Buffer buffer, const int x, const int y, const int width, const int height, const uint32_t baseLayer)
@@ -284,11 +283,11 @@ void Image::copyBufferToImage(const Context* info, const vk::Buffer buffer, cons
 		.setCommandPool(info->commandPool);
 
     vk::CommandBuffer commandBuffer;
-	check(info->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
+	VkCheck(info->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-	check(commandBuffer.begin(&beginInfo));
+	VkCheck(commandBuffer.begin(&beginInfo));
 
     vk::BufferImageCopy region;
     region.bufferOffset = 0;
@@ -303,14 +302,14 @@ void Image::copyBufferToImage(const Context* info, const vk::Buffer buffer, cons
 
     commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
 
-	check(commandBuffer.end());
+	VkCheck(commandBuffer.end());
 
 	auto const submitInfo = vk::SubmitInfo()
 		.setCommandBufferCount(1)
 		.setPCommandBuffers(&commandBuffer);
-	check(info->graphicsQueue.submit(1, &submitInfo, nullptr));
+	VkCheck(info->graphicsQueue.submit(1, &submitInfo, nullptr));
 
-	check(info->graphicsQueue.waitIdle());
+	VkCheck(info->graphicsQueue.waitIdle());
 }
 
 void Image::generateMipMaps(const Context* info, const int32_t texWidth, const int32_t texHeight)
@@ -321,11 +320,11 @@ void Image::generateMipMaps(const Context* info, const int32_t texWidth, const i
 		.setCommandPool(info->commandPool);
 
 	vk::CommandBuffer commandBuffer;
-	check(info->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
+	VkCheck(info->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-	check(commandBuffer.begin(&beginInfo));
+	VkCheck(commandBuffer.begin(&beginInfo));
 
 	vk::ImageMemoryBarrier barrier = {};
 	barrier.image = image;
@@ -402,14 +401,14 @@ void Image::generateMipMaps(const Context* info, const int32_t texWidth, const i
 		0, nullptr,
 		1, &barrier);
 
-	check(commandBuffer.end());
+	VkCheck(commandBuffer.end());
 
 	auto const submitInfo = vk::SubmitInfo()
 		.setCommandBufferCount(1)
 		.setPCommandBuffers(&commandBuffer);
-	check(info->graphicsQueue.submit(1, &submitInfo, nullptr));
+	VkCheck(info->graphicsQueue.submit(1, &submitInfo, nullptr));
 
-	check(info->graphicsQueue.waitIdle());
+	VkCheck(info->graphicsQueue.waitIdle());
 }
 
 void Image::createSampler(const Context* info)
@@ -430,7 +429,7 @@ void Image::createSampler(const Context* info)
 		.setCompareOp(vk::CompareOp::eLess)
 		.setBorderColor(borderColor)
 		.setUnnormalizedCoordinates(VK_FALSE);
-	check(info->device.createSampler(&samplerInfo, nullptr, &sampler));
+	VkCheck(info->device.createSampler(&samplerInfo, nullptr, &sampler));
 }
 
 void Buffer::createBuffer(const Context* info, const vk::DeviceSize size, const vk::BufferUsageFlags usage, const vk::MemoryPropertyFlags properties)
@@ -441,7 +440,7 @@ void Buffer::createBuffer(const Context* info, const vk::DeviceSize size, const 
 		.setSize(size)
 		.setUsage(usage)
 		.setSharingMode(vk::SharingMode::eExclusive); // used by graphics queue only
-	check(info->device.createBuffer(&bufferInfo, nullptr, &buffer));
+	VkCheck(info->device.createBuffer(&bufferInfo, nullptr, &buffer));
 
     uint32_t memTypeIndex = UINT32_MAX; ///////////////////
     auto const memRequirements = info->device.getBufferMemoryRequirements(buffer);
@@ -464,10 +463,10 @@ void Buffer::createBuffer(const Context* info, const vk::DeviceSize size, const 
 	auto const allocInfo = vk::MemoryAllocateInfo()
 		.setAllocationSize(this->size)
 		.setMemoryTypeIndex(memTypeIndex);
-	check(info->device.allocateMemory(&allocInfo, nullptr, &memory));
+	VkCheck(info->device.allocateMemory(&allocInfo, nullptr, &memory));
 
     //binding memory with buffer
-	check(info->device.bindBufferMemory(buffer, memory, 0));
+	VkCheck(info->device.bindBufferMemory(buffer, memory, 0));
     std::cout << "Buffer and memory created and binded\n";
 }
 
@@ -479,24 +478,24 @@ void Buffer::copyBuffer(const Context* info, const vk::Buffer srcBuffer, const v
 		.setLevel(vk::CommandBufferLevel::ePrimary)
 		.setCommandPool(info->commandPool)
 		.setCommandBufferCount(1);
-	check(info->device.allocateCommandBuffers(&cbai, &copyCmd));
+	VkCheck(info->device.allocateCommandBuffers(&cbai, &copyCmd));
 
     auto const cbbi = vk::CommandBufferBeginInfo();
-	check(copyCmd.begin(&cbbi));
+	VkCheck(copyCmd.begin(&cbbi));
 
     vk::BufferCopy bufferCopy{};
     bufferCopy.size = size;
 
     copyCmd.copyBuffer(srcBuffer, buffer, 1, &bufferCopy);
 
-	check(copyCmd.end());
+	VkCheck(copyCmd.end());
 
 	auto const si = vk::SubmitInfo()
 		.setCommandBufferCount(1)
 		.setPCommandBuffers(&copyCmd);
-	check(info->graphicsQueue.submit(1, &si, nullptr));
+	VkCheck(info->graphicsQueue.submit(1, &si, nullptr));
 
-	check(info->graphicsQueue.waitIdle());
+	VkCheck(info->graphicsQueue.waitIdle());
 
     info->device.freeCommandBuffers(info->commandPool, 1, &copyCmd);
 }
@@ -636,7 +635,7 @@ vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(const Context * info)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		check(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
+		VkCheck(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
 		std::cout << "Descriptor Set Layout created\n";
 	}
 	return descriptorSetLayout;
@@ -841,7 +840,7 @@ vk::DescriptorSetLayout Model::getDescriptorSetLayout(const Context * info)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		check(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
+		VkCheck(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
 		std::cout << "Descriptor Set Layout created\n";
 	}
 	return descriptorSetLayout;
@@ -851,11 +850,7 @@ specificGraphicsPipelineCreateInfo Model::getPipelineSpecifications(const Contex
 {
 	// General Pipeline
 	specificGraphicsPipelineCreateInfo generalSpecific;
-#ifdef NV_GLSL_SHADER
-	generalSpecific.shaders = { "shaders/General/shader.vert", "shaders/General/shader.frag" };
-#else
 	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
-#endif
 	generalSpecific.renderPass = info->renderPass;
 	generalSpecific.viewportSize = { info->surface.capabilities.currentExtent.width, info->surface.capabilities.currentExtent.height };
 	generalSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(info), Mesh::getDescriptorSetLayout(info), Shadows::getDescriptorSetLayout(info) };
@@ -911,7 +906,7 @@ void Model::createVertexBuffer(const Context* info)
 	Buffer staging;
 	staging.createBuffer(info, sizeof(Vertex)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	check(info->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
+	VkCheck(info->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
 	memcpy(staging.data, vertices.data(), sizeof(Vertex)*vertices.size());
 	info->device.unmapMemory(staging.memory);
 
@@ -932,7 +927,7 @@ void Model::createIndexBuffer(const Context* info)
 	Buffer staging;
 	staging.createBuffer(info, sizeof(uint32_t)*indices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	check(info->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
+	VkCheck(info->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
 	memcpy(staging.data, indices.data(), sizeof(uint32_t)*indices.size());
 	info->device.unmapMemory(staging.memory);
 
@@ -944,7 +939,7 @@ void Model::createUniformBuffers(const Context* info)
 {
 	// since the uniform buffers are unique for each model, they are not bigger than 256 in size
 	uniformBuffer.createBuffer(info, 256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	check(info->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
+	VkCheck(info->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
 }
 
 void Model::createDescriptorSets(const Context* info)
@@ -953,7 +948,7 @@ void Model::createDescriptorSets(const Context* info)
 		.setDescriptorPool(info->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&Model::descriptorSetLayout);
-	check(info->device.allocateDescriptorSets(&allocateInfo, &descriptorSet));
+	VkCheck(info->device.allocateDescriptorSets(&allocateInfo, &descriptorSet));
 
 	// Model MVP
 	auto const mvpWriteSet = vk::WriteDescriptorSet()
@@ -975,7 +970,7 @@ void Model::createDescriptorSets(const Context* info)
 			.setDescriptorPool(info->descriptorPool)
 			.setDescriptorSetCount(1)
 			.setPSetLayouts(&Mesh::descriptorSetLayout);
-		check(info->device.allocateDescriptorSets(&allocateInfo, &mesh.descriptorSet));
+		VkCheck(info->device.allocateDescriptorSets(&allocateInfo, &mesh.descriptorSet));
 
 		// Texture
 		vk::WriteDescriptorSet textureWriteSets[4];
@@ -1046,7 +1041,7 @@ vk::DescriptorSetLayout GUI::getDescriptorSetLayout(const Context* info)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		check(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
+		VkCheck(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
 		std::cout << "Descriptor Set Layout created\n";
 	}
 	return descriptorSetLayout;
@@ -1056,11 +1051,7 @@ specificGraphicsPipelineCreateInfo GUI::getPipelineSpecifications(const Context 
 {
 	// GUI Pipeline
 	specificGraphicsPipelineCreateInfo GUISpecific;
-#ifdef NV_GLSL_SHADER
-	GUISpecific.shaders = { "shaders/GUI/shaderGUI.vert", "shaders/GUI/shaderGUI.frag" };
-#else
 	GUISpecific.shaders = { "shaders/GUI/vert.spv", "shaders/GUI/frag.spv" };
-#endif
 	GUISpecific.renderPass = info->renderPass;
 	GUISpecific.viewportSize = { info->surface.capabilities.currentExtent.width, info->surface.capabilities.currentExtent.height };
 	GUISpecific.descriptorSetLayouts = { GUI::getDescriptorSetLayout(info) };
@@ -1077,7 +1068,7 @@ GUI GUI::loadGUI(const std::string textureName, const Context * info, bool show)
 {
 	GUI _gui;
 	//					 counter clock wise
-	// x, y coords orientation		// u, v coords orientation
+	// x, y, z coords orientation	// u, v coords orientation
 	//			|  /|				// (0,0)-------------> u
 	//			| /  +z				//	   |
 	//			|/					//	   |
@@ -1109,7 +1100,7 @@ void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout, con
 		.setDescriptorPool(info->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	check(info->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
+	VkCheck(info->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
 
 
 	vk::WriteDescriptorSet textureWriteSets[1];
@@ -1150,7 +1141,7 @@ vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(const Context * info)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		check(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
+		VkCheck(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
 		std::cout << "Descriptor Set Layout created\n";
 	}
 	return descriptorSetLayout;
@@ -1160,11 +1151,7 @@ specificGraphicsPipelineCreateInfo SkyBox::getPipelineSpecifications(const Conte
 {
 	// SkyBox Pipeline
 	specificGraphicsPipelineCreateInfo skyBoxSpecific;
-#ifdef NV_GLSL_SHADER
-	skyBoxSpecific.shaders = { "shaders/SkyBox/shaderSkyBox.vert", "shaders/SkyBox/shaderSkyBox.frag" };
-#else
 	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
-#endif
 	skyBoxSpecific.renderPass = info->renderPass;
 	skyBoxSpecific.viewportSize = { info->surface.capabilities.currentExtent.width, info->surface.capabilities.currentExtent.height };
 	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(info) };
@@ -1286,7 +1273,7 @@ void Object::createVertexBuffer(const Context * info)
 	Buffer staging;
 	staging.createBuffer(info, sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	check(info->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
+	VkCheck(info->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
 	memcpy(staging.data, vertices.data(), sizeof(float)*vertices.size());
 	info->device.unmapMemory(staging.memory);
 
@@ -1297,7 +1284,7 @@ void Object::createVertexBuffer(const Context * info)
 void Object::createUniformBuffer(const Context * info)
 {
 	uniformBuffer.createBuffer(info, 256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	check(info->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
+	VkCheck(info->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
 }
 
 void Object::loadTexture(const std::string path, const Context * info)
@@ -1342,7 +1329,7 @@ void Object::createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout, c
 		.setDescriptorPool(info->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	check(info->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
+	VkCheck(info->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
 
 
 	vk::WriteDescriptorSet textureWriteSets[2];
@@ -1378,7 +1365,7 @@ void Shadows::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout,
 		.setDescriptorPool(info->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	check(info->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
+	VkCheck(info->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
 
 	vk::WriteDescriptorSet textureWriteSets[2];	
 	// MVP
@@ -1430,7 +1417,7 @@ vk::DescriptorSetLayout Shadows::getDescriptorSetLayout(const Context * info)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		check(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
+		VkCheck(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
 		std::cout << "Descriptor Set Layout created\n";
 	}
 	return descriptorSetLayout;
@@ -1485,7 +1472,7 @@ vk::RenderPass Shadows::getRenderPass(const Context * info)
 			.setDependencyCount((uint32_t)spDependencies.size())
 			.setPDependencies(spDependencies.data());
 
-		check(info->device.createRenderPass(&rpci, nullptr, &renderPass));
+		VkCheck(info->device.createRenderPass(&rpci, nullptr, &renderPass));
 		std::cout << "RenderPass created\n";
 	}
 	return renderPass;
@@ -1495,12 +1482,7 @@ specificGraphicsPipelineCreateInfo Shadows::getPipelineSpecifications(const Cont
 {
 	// Shadows Pipeline
 	specificGraphicsPipelineCreateInfo shadowsSpecific;
-
-#ifdef NV_GLSL_SHADER
-	shadowsSpecific.shaders = { "shaders/Shadows/shaderShadows.vert" };
-#else
 	shadowsSpecific.shaders = { "shaders/Shadows/vert.spv" };
-#endif
 	shadowsSpecific.renderPass = Shadows::getRenderPass(info);
 	shadowsSpecific.viewportSize = { Shadows::imageSize, Shadows::imageSize };
 	shadowsSpecific.useBlendState = false;
@@ -1537,7 +1519,7 @@ void Shadows::createFrameBuffer(const Context * info)
 		.setWidth(imageSize)
 		.setHeight(imageSize)
 		.setLayers(1);
-	check(info->device.createFramebuffer(&fbci, nullptr, &frameBuffer));
+	VkCheck(info->device.createFramebuffer(&fbci, nullptr, &frameBuffer));
 	std::cout << "Framebuffer created\n";
 
 }
@@ -1545,7 +1527,7 @@ void Shadows::createFrameBuffer(const Context * info)
 void Shadows::createUniformBuffer(const Context * info)
 {
 	uniformBuffer.createBuffer(info, 256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	check(info->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
+	VkCheck(info->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
 }
 
 vk::DescriptorSetLayout Terrain::getDescriptorSetLayout(const Context * info)
@@ -1570,7 +1552,7 @@ vk::DescriptorSetLayout Terrain::getDescriptorSetLayout(const Context * info)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		check(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
+		VkCheck(info->device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
 		std::cout << "Descriptor Set Layout created\n";
 	}
 	return descriptorSetLayout;
@@ -1580,11 +1562,7 @@ specificGraphicsPipelineCreateInfo Terrain::getPipelineSpecifications(const Cont
 {
 	// Terrain Pipeline
 	specificGraphicsPipelineCreateInfo terrainSpecific;
-#ifdef NV_GLSL_SHADER
-	terrainSpecific.shaders = { "shaders/Terrain/shaderTerrain.vert", "shaders/Terrain/shaderTerrain.frag" };
-#else
 	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
-#endif
 	terrainSpecific.renderPass = info->renderPass;
 	terrainSpecific.viewportSize = { info->surface.capabilities.currentExtent.width, info->surface.capabilities.currentExtent.height };
 	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(info) };

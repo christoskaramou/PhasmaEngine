@@ -1,0 +1,11 @@
+﻿  main.cpp
+  Context.cpp
+  Renderer.cpp
+c:\vulkanmonkey3d\vulkanmonkey\src\renderer.cpp(859): warning C4244: 'argument': conversion from 'std::chrono::system_clock::rep' to 'unsigned int', possible loss of data
+  Window.cpp
+c:\vulkanmonkey3d\vulkanmonkey\src\window.cpp(88): warning C4305: '+=': truncation from 'double' to 'float'
+c:\vulkanmonkey3d\vulkanmonkey\src\window.cpp(89): warning C4305: '-=': truncation from 'double' to 'float'
+c:\vulkanmonkey3d\vulkanmonkey\src\window.cpp(90): warning C4305: '+=': truncation from 'double' to 'float'
+c:\vulkanmonkey3d\vulkanmonkey\src\window.cpp(91): warning C4305: '-=': truncation from 'double' to 'float'
+  Generating Code...
+  VulkanMonkey.vcxproj -> C:\VulkanMonkey3D\x64\Debug\VulkanMonkey.exe

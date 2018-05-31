@@ -7,17 +7,17 @@
 #define VK_USE_PLATFORM_WIN32_KHR
 #define VULKAN_HPP_NO_EXCEPTIONS
 #include <vulkan/vulkan.hpp>
-#include <../SDL/SDL.h>
-#include <../SDL/SDL_vulkan.h>
+#include "SDL/SDL.h"
+#include "SDL/SDL_vulkan.h"
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_LEFT_HANDED
 #define GLM_FORCE_RADIANS
-#include <../glm/glm.hpp>
-#include <../glm/gtc/matrix_transform.hpp>
-#include <../glm/gtx/hash.hpp>
-#include <../glm/gtx/rotate_vector.hpp>
-#include <../glm/gtc/constants.hpp>
-#include <../glm/gtx/matrix_decompose.hpp>
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtx/hash.hpp"
+#include "glm/gtx/rotate_vector.hpp"
+#include "glm/gtc/constants.hpp"
+#include "glm/gtx/matrix_decompose.hpp"
 
 struct Context; // foward declaration
 
@@ -301,7 +301,7 @@ private:
 	std::map<uint32_t, std::any> var{};
 public:
 	template<typename T>
-	void add(uint32_t* assignTo, const T & value) {
+	void add(uint32_t* assignTo, const T& value) {
 		if (*assignTo != UINT32_MAX) throw std::runtime_error("attempt to write to an existing object");
 		*assignTo = __id++;
 		var[*assignTo] = std::any(value);

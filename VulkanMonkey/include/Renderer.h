@@ -1,7 +1,7 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-#include "../include/Context.h"
+#include "Context.h"
 class Renderer
 {
     public:

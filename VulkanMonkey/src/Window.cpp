@@ -1,6 +1,7 @@
 #include "../include/Window.h"
 #include "../include/Errors.h"
 #include "../include/Timer.h"
+#include <iostream>
 
 #ifndef MAX_WINDOWS
 #define MAX_WINDOWS 5
@@ -22,8 +23,6 @@ Window::~Window()
     SDL_Quit();
 
     std::cout << "Avrg ms/frame: " << Timer::totalTime/(float)Timer::counter << std::endl;
-
-	system("PAUSE");
 }
 
 void Window::create(const char* title, int w, int h, Uint32 flags)

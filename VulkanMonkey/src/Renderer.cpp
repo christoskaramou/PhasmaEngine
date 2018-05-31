@@ -185,7 +185,7 @@ vk::Instance Renderer::createInstance()
 		.setApplicationVersion(0)
 		.setPEngineName("VulkanMonkey3D")
 		.setEngineVersion(0)
-		.setApiVersion(VK_MAKE_VERSION(1, 0, 0));
+		.setApiVersion(VK_MAKE_VERSION(1, 1, 0));
 	auto const instInfo = vk::InstanceCreateInfo()
 		.setPApplicationInfo(&appInfo)
 		.setEnabledLayerCount(0)
@@ -193,7 +193,7 @@ vk::Instance Renderer::createInstance()
 		.setEnabledExtensionCount((uint32_t)(instanceExtensions.size()))
 		.setPpEnabledExtensionNames(instanceExtensions.data())
 		.setPNext(nullptr);
-    check(vk::createInstance(&instInfo, nullptr, &_instance));
+    VkCheck(vk::createInstance(&instInfo, nullptr, &_instance));
     std::cout << "Instance created\n";
 
     return _instance;
@@ -298,10 +298,7 @@ vk::Device Renderer::createDevice()
 
 	std::vector<const char*> deviceExtensions{};
 	for (auto& i : extensionProperties) {
-		if (std::string(i.extensionName) == VK_NV_GLSL_SHADER_EXTENSION_NAME && i.specVersion < 100) {
-			deviceExtensions.push_back(VK_NV_GLSL_SHADER_EXTENSION_NAME); // NVidia extension for high level shaders
-		}
-		if (std::string(i.extensionName) == VK_KHR_SWAPCHAIN_EXTENSION_NAME && i.specVersion < 100)
+		if (std::string(i.extensionName) == VK_KHR_SWAPCHAIN_EXTENSION_NAME && i.specVersion < 110)
 			deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 	}
 
@@ -319,7 +316,7 @@ vk::Device Renderer::createDevice()
 		.setPpEnabledExtensionNames(deviceExtensions.data())
 		.setPEnabledFeatures(&info.gpuFeatures);
 
-    check(info.gpu.createDevice(&deviceCreateInfo, nullptr, &_device));
+    VkCheck(info.gpu.createDevice(&deviceCreateInfo, nullptr, &_device));
     std::cout << "Device created\n";
 
     //get the graphics queue handler
@@ -358,7 +355,7 @@ Swapchain Renderer::createSwapchain()
 
 	// new swapchain with old create info
     vk::SwapchainKHR newSwapchain;
-    check(info.device.createSwapchainKHR(&swapchainCreateInfo, nullptr, &newSwapchain));
+    VkCheck(info.device.createSwapchainKHR(&swapchainCreateInfo, nullptr, &newSwapchain));
     std::cout << "Swapchain created\n";
 
     if (_swapchain.swapchain)
@@ -392,7 +389,7 @@ Swapchain Renderer::createSwapchain()
 				.setLevelCount(1)
 				.setBaseArrayLayer(0)
 				.setLayerCount(1));
-		check(info.device.createImageView(&imageViewCreateInfo, nullptr, &image.view));
+		VkCheck(info.device.createImageView(&imageViewCreateInfo, nullptr, &image.view));
 		std::cout << "Swapchain ImageView created\n";
 	}
 
@@ -405,7 +402,7 @@ vk::CommandPool Renderer::createCommandPool()
 	auto const cpci = vk::CommandPoolCreateInfo()
 		.setQueueFamilyIndex(info.graphicsFamilyId)
 		.setFlags(vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
-    check(info.device.createCommandPool(&cpci, nullptr, &_commandPool));
+    VkCheck(info.device.createCommandPool(&cpci, nullptr, &_commandPool));
     std::cout << "CommandPool created\n";
     return _commandPool;
 }
@@ -484,7 +481,7 @@ vk::RenderPass Renderer::createRenderPass()
 		.setSubpassCount(1)
 		.setPSubpasses(&subpassDesc);
 
-    check(info.device.createRenderPass(&rpci, nullptr, &_renderPass));
+    VkCheck(info.device.createRenderPass(&rpci, nullptr, &_renderPass));
     std::cout << "RenderPass created\n";
 
     return _renderPass;
@@ -543,7 +540,7 @@ std::vector<vk::Framebuffer> Renderer::createFrameBuffers()
 			.setWidth(info.surface.capabilities.currentExtent.width)
 			.setHeight(info.surface.capabilities.currentExtent.height)
 			.setLayers(1);
-        check(info.device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
+        VkCheck(info.device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
         std::cout << "Framebuffer created\n";
     }
 
@@ -557,7 +554,7 @@ std::vector<vk::CommandBuffer> Renderer::createCmdBuffers(uint32_t bufferCount)
 		.setCommandPool(info.commandPool)
 		.setLevel(vk::CommandBufferLevel::ePrimary)
 		.setCommandBufferCount(bufferCount);
-    check(info.device.allocateCommandBuffers(&cbai, _cmdBuffers.data()));
+    VkCheck(info.device.allocateCommandBuffers(&cbai, _cmdBuffers.data()));
     std::cout << "Command Buffers allocated\n";
 
     return _cmdBuffers;
@@ -570,7 +567,7 @@ vk::CommandBuffer Renderer::createCmdBuffer()
 		.setCommandPool(info.commandPool)
 		.setLevel(vk::CommandBufferLevel::ePrimary)
 		.setCommandBufferCount(1);
-	check(info.device.allocateCommandBuffers(&cbai, &_cmdBuffer));
+	VkCheck(info.device.allocateCommandBuffers(&cbai, &_cmdBuffer));
 	std::cout << "Command Buffer allocated\n";
 
 	return _cmdBuffer;
@@ -619,10 +616,10 @@ Pipeline Renderer::createPipeline(const specificGraphicsPipelineCreateInfo& spec
 		};
 	}
 
-	check(info.device.createShaderModule(&vsmci, nullptr, &vertModule));
+	VkCheck(info.device.createShaderModule(&vsmci, nullptr, &vertModule));
 	std::cout << "Vertex Shader Module created\n";
 	if (specificInfo.shaders.size() > 1) {
-		check(info.device.createShaderModule(&fsmci, nullptr, &fragModule));
+		VkCheck(info.device.createShaderModule(&fsmci, nullptr, &fragModule));
 		std::cout << "Fragment Shader Module created\n";
 	}
 
@@ -750,7 +747,7 @@ Pipeline Renderer::createPipeline(const specificGraphicsPipelineCreateInfo& spec
 	uint32_t numOfConsts = pushConstantRange == vk::PushConstantRange() ? 0 : 1;
 
     // Pipeline Layout
-	check(info.device.createPipelineLayout(
+	VkCheck(info.device.createPipelineLayout(
 		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)specificInfo.descriptorSetLayouts.size(), specificInfo.descriptorSetLayouts.data(), numOfConsts, &pushConstantRange },
 		nullptr,
 		&_pipeline.info.layout));
@@ -768,7 +765,7 @@ Pipeline Renderer::createPipeline(const specificGraphicsPipelineCreateInfo& spec
     // Base Pipeline Index
 	_pipeline.info.basePipelineIndex = -1;
 
-    check(info.device.createGraphicsPipelines(nullptr, 1, &_pipeline.info, nullptr, &_pipeline.pipeline));
+    VkCheck(info.device.createGraphicsPipelines(nullptr, 1, &_pipeline.info, nullptr, &_pipeline.pipeline));
     std::cout << "Pipeline created\n";
 
     // destroy Shader Modules
@@ -837,7 +834,7 @@ vk::DescriptorPool Renderer::createDescriptorPool(uint32_t maxDescriptorSets)
 		.setPPoolSizes(descPoolsize.data())
 		.setMaxSets(maxDescriptorSets);
 
-	check(info.device.createDescriptorPool(&createInfo, nullptr, &_descriptorPool));
+	VkCheck(info.device.createDescriptorPool(&createInfo, nullptr, &_descriptorPool));
 	std::cout << "DescriptorPool created\n";
 
 	return _descriptorPool;
@@ -849,7 +846,7 @@ std::vector<vk::Semaphore> Renderer::createSemaphores(uint32_t semaphoresCount)
     auto const si = vk::SemaphoreCreateInfo();
 
 	for (uint32_t i = 0; i < semaphoresCount; i++) {
-		check(info.device.createSemaphore(&si, nullptr, &_semaphores[i]));
+		VkCheck(info.device.createSemaphore(&si, nullptr, &_semaphores[i]));
 		std::cout << "Semaphore created\n";
 	}
 
@@ -882,7 +879,7 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 		.setClearValueCount((uint32_t)clearValues.size())
 		.setPClearValues(clearValues.data());
 
-	check(info.dynamicCmdBuffer.begin(&beginInfo));
+	VkCheck(info.dynamicCmdBuffer.begin(&beginInfo));
 	info.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
 
 	vk::DeviceSize offset = vk::DeviceSize();
@@ -970,7 +967,7 @@ void Renderer::recordShadowsCmdBuffers()
 			.setClearValueCount((uint32_t)clearValuesShadows.size())
 			.setPClearValues(clearValuesShadows.data());
 
-		check(info.shadowsPassCmdBuffers[i].begin(&beginInfoShadows));
+		VkCheck(info.shadowsPassCmdBuffers[i].begin(&beginInfoShadows));
 		info.shadowsPassCmdBuffers[i].beginRenderPass(&renderPassInfoShadows, vk::SubpassContents::eInline);
 
 		vk::DeviceSize offset = vk::DeviceSize();
@@ -1020,7 +1017,7 @@ void Renderer::draw()
 
 	// if using shadows use the semaphore[0], record and submit the shadow commands, else use the semaphore[1]
 	if (Shadows::shadowCast) {
-		check(info.device.acquireNextImageKHR(info.swapchain.swapchain, UINT64_MAX, info.semaphores[0], vk::Fence(), &imageIndex));
+		VkCheck(info.device.acquireNextImageKHR(info.swapchain.swapchain, UINT64_MAX, info.semaphores[0], vk::Fence(), &imageIndex));
 		recordShadowsCmdBuffers();
 		auto const siShadows = vk::SubmitInfo()
 			.setWaitSemaphoreCount(1)
@@ -1030,10 +1027,10 @@ void Renderer::draw()
 			.setPCommandBuffers(info.shadowsPassCmdBuffers.data())
 			.setSignalSemaphoreCount(1)
 			.setPSignalSemaphores(&info.semaphores[1]);
-		check(info.graphicsQueue.submit(1, &siShadows, nullptr));
+		VkCheck(info.graphicsQueue.submit(1, &siShadows, nullptr));
 	}
 	else
-		check(info.device.acquireNextImageKHR(info.swapchain.swapchain, UINT64_MAX, info.semaphores[1], vk::Fence(), &imageIndex));
+		VkCheck(info.device.acquireNextImageKHR(info.swapchain.swapchain, UINT64_MAX, info.semaphores[1], vk::Fence(), &imageIndex));
 
 	// use the dynamic command buffer
 	recordDynamicCmdBuffer(imageIndex);
@@ -1047,7 +1044,7 @@ void Renderer::draw()
 		.setPCommandBuffers(&info.dynamicCmdBuffer)
 		.setSignalSemaphoreCount(1)
 		.setPSignalSemaphores(&info.semaphores[2]);
-	check(info.graphicsQueue.submit(1, &si, nullptr));
+	VkCheck(info.graphicsQueue.submit(1, &si, nullptr));
 
     // Presentation
 	auto const pi = vk::PresentInfoKHR()
@@ -1057,7 +1054,7 @@ void Renderer::draw()
 		.setPSwapchains(&info.swapchain.swapchain)
 		.setPImageIndices(&imageIndex)
 		.setPResults(nullptr); //optional
-	check(info.presentQueue.presentKHR(&pi));
+	VkCheck(info.presentQueue.presentKHR(&pi));
 	info.presentQueue.waitIdle();
 }
 
