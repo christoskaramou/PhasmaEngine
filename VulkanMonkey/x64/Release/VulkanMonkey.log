@@ -1,8 +1,0 @@
-﻿  main.cpp
-  Context.cpp
-  Generating code
-  100 of 3404 functions ( 2.9%) were compiled, the rest were copied from previous compilation.
-    0 functions were new in current compilation
-    29 functions had inline decision re-evaluated but remain unchanged
-  Finished generating code
-  VulkanMonkey.vcxproj -> C:\VulkanMonkey3D\x64\Release\VulkanMonkey.exe
