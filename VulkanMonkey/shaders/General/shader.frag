@@ -3,11 +3,21 @@
 
 const int numOfLights = 5;
 
+struct Light {
+	vec4 color;
+	vec4 position;
+	vec4 attenuation;
+	vec4 dummy;
+};
+
 layout(set = 1, binding = 0) uniform sampler2D tSampler;
 layout(set = 1, binding = 1) uniform sampler2D normSampler;
 layout(set = 1, binding = 2) uniform sampler2D specSampler;
 layout(set = 1, binding = 3) uniform sampler2D alphaSampler;
 layout(set = 2, binding = 1) uniform sampler2DShadow shadowMapSampler1;
+layout(set = 3, binding = 0) uniform Lights {
+	Light light[numOfLights];
+} lights;
 
 
 layout(location = 0) in vec2 v_TexCoords;
@@ -19,15 +29,9 @@ layout(location = 10) in float castShadows;
 
 layout(location = 0) out vec4 o_Color;
 
-struct Light {
-	vec4 color;
-	vec4 position;
-	vec4 attenuation;
-};
-
-layout(push_constant) uniform Lights {
-	Light light[numOfLights];
-}lights;
+//layout(push_constant) uniform Lights {
+//	Light light[numOfLights];
+//}lights;
 
 const int specDamper = 40;
 const float reflectivity = 0.588;
@@ -50,6 +54,23 @@ vec2 poissonDisk[16] = vec2[](
 	vec2(0.123478f, 0.463546f),
 	vec2(0.809534f, 0.682272f)
 );
+float D = 0.493393;
+vec2 shadowTest[9] = vec2[](
+	vec2(-D, -D),
+	vec2(0.0f, -D),
+	vec2(D, -D),
+	vec2(-D, 0.0f),
+	vec2(0.0, 0.0),
+	vec2(D, 0.0),
+	vec2(-D, D),
+	vec2(0.0f, D),
+	vec2(D, D)
+);
+float shadowTestWeights[9] = float[](
+	 0.5, 1.0,  0.5,
+	1.0,  4.0, 1.0,
+	 0.5, 1.0,  0.5
+);
 void main() {
 	vec4 s_coords1 = shadow_coords1 / shadow_coords1.w;
 
@@ -62,6 +83,11 @@ void main() {
 			shadow -= 0.125 * ( 1.0 - texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0015, s_coords1.z-0.0001 )));
 		}
 	}
+	//vec4 texel = vec4(0.0);
+	//for (int i=0;i<9;i++)
+	//{
+	//	texel += 0.1111111 * shadowTestWeights[i] * texture(tSampler, v_TexCoords + shadowTest[i]*0.0015);
+	//}
 	vec4 texel = texture(tSampler, v_TexCoords);
 	texel.a *= texture(alphaSampler, v_TexCoords).x;
 	if (texel.a < 0.8){

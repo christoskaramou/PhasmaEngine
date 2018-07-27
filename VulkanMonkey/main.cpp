@@ -4,8 +4,8 @@
 #include <cstring>
 #include <string>
 
-const int WIDTH = 1280;
-const int HEIGHT = 960;
+const int WIDTH = 1680;
+const int HEIGHT = 1050;
 
 int main(int argc, char* argv[])
 {
@@ -19,7 +19,6 @@ int main(int argc, char* argv[])
     SDL_SetWindowTitle(info.window, title.c_str());
 
     Timer::wantedFPS = 0;
-	SDL_ShowCursor(SDL_DISABLE);
     while(window->processEvents(Timer::delta))
 	{
         Timer timer;

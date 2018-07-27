@@ -19,6 +19,8 @@
 #include "glm/gtc/constants.hpp"
 #include "glm/gtx/matrix_decompose.hpp"
 
+#define MAX_LIGHTS 5
+
 struct Context; // foward declaration
 
 struct Vertex
@@ -214,7 +216,7 @@ struct Model
 	bool enabled = true;
 	static vk::DescriptorSetLayout descriptorSetLayout;
 	static vk::DescriptorSetLayout getDescriptorSetLayout(const Context* info = nullptr);
-	static specificGraphicsPipelineCreateInfo getPipelineSpecifications(const Context* info);
+	static specificGraphicsPipelineCreateInfo getPipelineSpecifications(Context* info);
 	vk::DescriptorSet descriptorSet;
 	std::map<std::string, Image> uniqueTextures{};
 	std::vector<Mesh> meshes{};
@@ -249,7 +251,7 @@ struct Camera
 	glm::vec3 up;
 	glm::vec3 right;
 	glm::vec3 worldUp;
-	float aspect = 4.f/3.f;
+	float aspect = 16.f/9.f;
 	float nearPlane = 0.01f;
 	float farPlane = 50.0f;
 	float FOV = 45.0f;
@@ -291,6 +293,7 @@ struct Light
 	glm::vec4 color;
 	glm::vec4 position;
 	glm::vec4 attenuation;
+	glm::vec4 dummy;
 	//void attachTo(glm::mat4& matrix, glm::vec3 offset);
 };
 
@@ -348,7 +351,10 @@ public:
 	SkyBox skyBox;
 	Camera mainCamera;
 	Terrain terrain;
-	std::vector<Light> light{};
+	std::vector<Light> light;
+	Buffer uniformBufferLights;
+	vk::DescriptorSet descriptorSetLights;
+	vk::DescriptorSetLayout descriptorSetLayoutLights;
 };
 
 #endif // CONTEXT_H

@@ -6,6 +6,7 @@
 #include "../include/assimp/Importer.hpp"      // C++ importer interface
 #include "../include/assimp/scene.h"           // Output data structure
 #include "../include/assimp/postprocess.h"     // Post processing flags
+#include "../include/assimp/DefaultLogger.hpp"
 
 vk::RenderPass Shadows::renderPass = nullptr;
 bool Shadows::shadowCast = true;
@@ -695,123 +696,150 @@ void Mesh::loadTexture(TextureType type, const std::string path, const Context* 
 	staging.destroy(info);
 }
 
+glm::mat4 aiMatrix4x4ToGlmMat4(const aiMatrix4x4 m)
+{
+	glm::mat4 _m;
+	for (uint32_t i = 0; i < 4; i++) {
+		for (uint32_t j = 0; j < 4; j++)
+			_m[i][j] = m[j][i];
+	}
+	return _m;
+}
+
+void getAllNodes(aiNode* node, std::vector<aiNode*>& allNodes) {
+	for (uint32_t i = 0; i < node->mNumChildren; i++)
+		getAllNodes(node->mChildren[i], allNodes);
+	if(node) allNodes.push_back(node);
+}
+
 Model Model::loadModel(const std::string path, const std::string modelName, const Context* info)
 {
 	Model _model;
 	_model.name = modelName;
 
 	// Materials, Vertices and Indices load
+	Assimp::Logger::LogSeverity severity = Assimp::Logger::VERBOSE;
+	// Create a logger instance for Console Output
+	Assimp::DefaultLogger::create("", severity, aiDefaultLogStream_STDOUT);
+
 	Assimp::Importer importer;
 	const aiScene* scene = importer.ReadFile(path + modelName,
 		//aiProcess_MakeLeftHanded |
 		aiProcess_FlipUVs |
 		aiProcess_JoinIdenticalVertices |
 		aiProcess_Triangulate |
-		aiProcess_CalcTangentSpace |
-		aiProcess_ImproveCacheLocality |
-		aiProcess_OptimizeMeshes |
-		aiProcess_OptimizeGraph
+		aiProcess_CalcTangentSpace //|
+		//aiProcess_ImproveCacheLocality |
+		//aiProcess_OptimizeMeshes |
+		//aiProcess_OptimizeGraph
 	);
 	if (!scene) exit(-100);
-	for (unsigned int i = 0; i < scene->mNumMeshes; i++) {
-		Mesh myMesh;
-		const aiMesh* mesh = scene->mMeshes[i];
-		const aiMaterial *material = scene->mMaterials[mesh->mMaterialIndex];
 
-		aiColor3D aiAmbient(0.f, 0.f, 0.f);
-		material->Get(AI_MATKEY_COLOR_AMBIENT, aiAmbient);
-		myMesh.colorEffects.ambient = { aiAmbient.r, aiAmbient.g, aiAmbient.b, 0.f };
+	bool hl = scene->HasLights();
 
-		aiColor3D aiDiffuse(1.f, 1.f, 1.f);
-		material->Get(AI_MATKEY_COLOR_DIFFUSE, aiDiffuse);
-		float aiOpacity = 1.f;
-		material->Get(AI_MATKEY_OPACITY, aiOpacity);
-		myMesh.colorEffects.diffuse = { aiDiffuse.r, aiDiffuse.g, aiDiffuse.b, aiOpacity };
+	std::vector<aiNode*> allNodes{};
+	getAllNodes(scene->mRootNode, allNodes);
 
-		aiColor3D aiSpecular(0.f, 0.f, 0.f);
-		material->Get(AI_MATKEY_COLOR_SPECULAR, aiSpecular);
-		myMesh.colorEffects.specular = { aiSpecular.r, aiSpecular.g, aiSpecular.b, 100.f };
+	for (unsigned int n = 0; n < allNodes.size(); n++) {
+		const aiNode* node = allNodes[n];
+		for (unsigned int i = 0; i < node->mNumMeshes; i++) {
+			Mesh myMesh;
+			const aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+			const aiMaterial *material = scene->mMaterials[mesh->mMaterialIndex];
 
-		aiString aitexPath;
-		material->GetTexture(aiTextureType_DIFFUSE, 0, &aitexPath);
-		std::string texPath = aitexPath.C_Str();
-		if (texPath != "")	texPath = path + texPath;
-		else				texPath = "objects/default.png";
-		if (_model.uniqueTextures.find(texPath) != _model.uniqueTextures.end()) {
-			myMesh.texture = _model.uniqueTextures[texPath];
-		}
-		else {
-			myMesh.loadTexture(Mesh::DiffuseMap, texPath, info);
-			_model.uniqueTextures[texPath] = myMesh.texture;
-		}
+			aiColor3D aiAmbient(0.f, 0.f, 0.f);
+			material->Get(AI_MATKEY_COLOR_AMBIENT, aiAmbient);
+			myMesh.colorEffects.ambient = { aiAmbient.r, aiAmbient.g, aiAmbient.b, 0.f };
 
-		aiString aiNormTexPath;
-		material->GetTexture(aiTextureType_HEIGHT, 0, &aiNormTexPath);
-		std::string normTexPath = aiNormTexPath.C_Str();
-		if (normTexPath != "")	
-			normTexPath = path + normTexPath;
-		else					normTexPath = "objects/defaultNormalMap.png";
-		if (_model.uniqueTextures.find(normTexPath) != _model.uniqueTextures.end()) {
-			myMesh.normalsTexture = _model.uniqueTextures[normTexPath];
-		}
-		else {
-			myMesh.loadTexture(Mesh::NormalMap, normTexPath, info);
-			_model.uniqueTextures[normTexPath] = myMesh.normalsTexture;
-		}
+			aiColor3D aiDiffuse(1.f, 1.f, 1.f);
+			material->Get(AI_MATKEY_COLOR_DIFFUSE, aiDiffuse);
+			float aiOpacity = 1.f;
+			material->Get(AI_MATKEY_OPACITY, aiOpacity);
+			myMesh.colorEffects.diffuse = { aiDiffuse.r, aiDiffuse.g, aiDiffuse.b, aiOpacity };
 
-		aiString aiSpecTexPath;
-		material->GetTexture(aiTextureType_SPECULAR, 0, &aiSpecTexPath);
-		std::string specTexPath = aiSpecTexPath.C_Str();
-		if (specTexPath != "")	specTexPath = path + specTexPath;
-		else					specTexPath = "objects/defaultSpecularMap.png";
-		if (_model.uniqueTextures.find(specTexPath) != _model.uniqueTextures.end()) {
-			myMesh.specularTexture = _model.uniqueTextures[specTexPath];
-		}
-		else {
-			myMesh.loadTexture(Mesh::SpecularMap, specTexPath, info);
-			_model.uniqueTextures[specTexPath] = myMesh.specularTexture;
-		}
+			aiColor3D aiSpecular(0.f, 0.f, 0.f);
+			material->Get(AI_MATKEY_COLOR_SPECULAR, aiSpecular);
+			myMesh.colorEffects.specular = { aiSpecular.r, aiSpecular.g, aiSpecular.b, 100.f };
 
-		aiString aiAlphaTexPath;
-		material->GetTexture(aiTextureType_OPACITY, 0, &aiAlphaTexPath);
-		std::string aplhaTexPath = aiAlphaTexPath.C_Str();
-		if (aplhaTexPath != "")	aplhaTexPath = path + aplhaTexPath;
-		else					aplhaTexPath = "objects/default.png";
-		if (_model.uniqueTextures.find(aplhaTexPath) != _model.uniqueTextures.end()) {
-			myMesh.alphaTexture = _model.uniqueTextures[aplhaTexPath];
-		}
-		else {
-			myMesh.loadTexture(Mesh::AlphaMap, aplhaTexPath, info);
-			_model.uniqueTextures[aplhaTexPath] = myMesh.alphaTexture;
-		}
+			aiString aitexPath;
+			material->GetTexture(aiTextureType_DIFFUSE, 0, &aitexPath);
+			std::string texPath = aitexPath.C_Str();
+			if (texPath != "")	texPath = path + texPath;
+			else				texPath = "objects/default.png";
+			if (_model.uniqueTextures.find(texPath) != _model.uniqueTextures.end()) {
+				myMesh.texture = _model.uniqueTextures[texPath];
+			}
+			else {
+				myMesh.loadTexture(Mesh::DiffuseMap, texPath, info);
+				_model.uniqueTextures[texPath] = myMesh.texture;
+			}
 
-		for (unsigned int j = 0; j < mesh->mNumVertices; j++) {
-			const aiVector3D* pos = mesh->HasPositions() ? &(mesh->mVertices[j]) : &(aiVector3D(0.f, 0.f, 0.f));
-			const aiVector3D* norm = mesh->HasNormals() ? &(mesh->mNormals[j]) : &(aiVector3D(0.f, 0.f, 0.f)); // -2.f to test if it has normals in shader
-			const aiVector3D* uv = mesh->HasTextureCoords(0) ? &(mesh->mTextureCoords[0][j]) : &(aiVector3D(0.f, 0.f, 0.f));
-			const aiVector3D* tangent = mesh->HasTangentsAndBitangents() ? &(mesh->mTangents[j]) : &(aiVector3D(0.f, 0.f, 0.f)); // -2.f to test if it has tangents in shader
+			aiString aiNormTexPath;
+			material->GetTexture(aiTextureType_HEIGHT, 0, &aiNormTexPath);
+			std::string normTexPath = aiNormTexPath.C_Str();
+			if (normTexPath != "")
+				normTexPath = path + normTexPath;
+			else					normTexPath = "objects/defaultNormalMap.png";
+			if (_model.uniqueTextures.find(normTexPath) != _model.uniqueTextures.end()) {
+				myMesh.normalsTexture = _model.uniqueTextures[normTexPath];
+			}
+			else {
+				myMesh.loadTexture(Mesh::NormalMap, normTexPath, info);
+				_model.uniqueTextures[normTexPath] = myMesh.normalsTexture;
+			}
 
-			Vertex v{
-				pos->x, pos->y, pos->z,
-				norm->x, norm->y, norm->z,
-				uv->x, uv->y,
-				tangent->x, tangent->y, tangent->z, 1.0f // passing tangents here
-			};
-			myMesh.vertices.push_back(v);
-		}
-		for (unsigned int i = 0; i < mesh->mNumFaces; i++) {
-			const aiFace& Face = mesh->mFaces[i];
-			assert(Face.mNumIndices == 3);
-			myMesh.indices.push_back(Face.mIndices[0]);
-			myMesh.indices.push_back(Face.mIndices[1]);
-			myMesh.indices.push_back(Face.mIndices[2]);
-		}
-		_model.meshes.push_back(myMesh);
+			aiString aiSpecTexPath;
+			material->GetTexture(aiTextureType_SPECULAR, 0, &aiSpecTexPath);
+			std::string specTexPath = aiSpecTexPath.C_Str();
+			if (specTexPath != "")	specTexPath = path + specTexPath;
+			else					specTexPath = "objects/defaultSpecularMap.png";
+			if (_model.uniqueTextures.find(specTexPath) != _model.uniqueTextures.end()) {
+				myMesh.specularTexture = _model.uniqueTextures[specTexPath];
+			}
+			else {
+				myMesh.loadTexture(Mesh::SpecularMap, specTexPath, info);
+				_model.uniqueTextures[specTexPath] = myMesh.specularTexture;
+			}
 
-		_model.numberOfVertices += mesh->mNumVertices;
-		_model.numberOfIndices += mesh->mNumFaces * 3;
+			aiString aiAlphaTexPath;
+			material->GetTexture(aiTextureType_OPACITY, 0, &aiAlphaTexPath);
+			std::string aplhaTexPath = aiAlphaTexPath.C_Str();
+			if (aplhaTexPath != "")	aplhaTexPath = path + aplhaTexPath;
+			else					aplhaTexPath = "objects/default.png";
+			if (_model.uniqueTextures.find(aplhaTexPath) != _model.uniqueTextures.end()) {
+				myMesh.alphaTexture = _model.uniqueTextures[aplhaTexPath];
+			}
+			else {
+				myMesh.loadTexture(Mesh::AlphaMap, aplhaTexPath, info);
+				_model.uniqueTextures[aplhaTexPath] = myMesh.alphaTexture;
+			}
+			for (unsigned int j = 0; j < mesh->mNumVertices; j++) {
+				const aiVector3D* pos = mesh->HasPositions() ? &(mesh->mVertices[j]) : &(aiVector3D(0.f, 0.f, 0.f));
+				const aiVector3D* norm = mesh->HasNormals() ? &(mesh->mNormals[j]) : &(aiVector3D(0.f, 0.f, 0.f)); // -2.f to test if it has normals in shader
+				const aiVector3D* uv = mesh->HasTextureCoords(0) ? &(mesh->mTextureCoords[0][j]) : &(aiVector3D(0.f, 0.f, 0.f));
+				const aiVector3D* tangent = mesh->HasTangentsAndBitangents() ? &(mesh->mTangents[j]) : &(aiVector3D(0.f, 0.f, 0.f)); // -2.f to test if it has tangents in shader
+				glm::vec4 p = aiMatrix4x4ToGlmMat4(node->mTransformation) * glm::vec4(pos->x, pos->y, pos->z, 1);
+				Vertex v{
+					p.x, p.y, p.z,
+					norm->x, norm->y, norm->z,
+					uv->x, uv->y,
+					tangent->x, tangent->y, tangent->z, 1.0f // passing tangents here
+				};
+				myMesh.vertices.push_back(v);
+			}
+			for (unsigned int i = 0; i < mesh->mNumFaces; i++) {
+				const aiFace& Face = mesh->mFaces[i];
+				assert(Face.mNumIndices == 3);
+				myMesh.indices.push_back(Face.mIndices[0]);
+				myMesh.indices.push_back(Face.mIndices[1]);
+				myMesh.indices.push_back(Face.mIndices[2]);
+			}
+			_model.meshes.push_back(myMesh);
+
+			_model.numberOfVertices += mesh->mNumVertices;
+			_model.numberOfIndices += mesh->mNumFaces * 3;
+		}
 	}
-
 	_model.createVertexBuffer(info);
 	_model.createIndexBuffer(info);
 	_model.createUniformBuffers(info);
@@ -846,21 +874,40 @@ vk::DescriptorSetLayout Model::getDescriptorSetLayout(const Context * info)
 	return descriptorSetLayout;
 }
 
-specificGraphicsPipelineCreateInfo Model::getPipelineSpecifications(const Context * info)
+vk::DescriptorSetLayout getDescriptorSetLayoutLights(Context * info)
+{
+	// binding for model mvp matrix
+	if (!info->descriptorSetLayoutLights) {
+		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
+		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
+			.setBinding(0) // binding number in shader stages
+			.setDescriptorCount(1) // number of descriptors contained
+			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
+			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
+		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
+			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
+			.setPBindings(descriptorSetLayoutBinding.data());
+		VkCheck(info->device.createDescriptorSetLayout(&createInfo, nullptr, &info->descriptorSetLayoutLights));
+		std::cout << "Descriptor Set Layout created\n";
+	}
+	return info->descriptorSetLayoutLights;
+}
+
+specificGraphicsPipelineCreateInfo Model::getPipelineSpecifications(Context * info)
 {
 	// General Pipeline
 	specificGraphicsPipelineCreateInfo generalSpecific;
 	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
 	generalSpecific.renderPass = info->renderPass;
 	generalSpecific.viewportSize = { info->surface.capabilities.currentExtent.width, info->surface.capabilities.currentExtent.height };
-	generalSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(info), Mesh::getDescriptorSetLayout(info), Shadows::getDescriptorSetLayout(info) };
+	generalSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(info), Mesh::getDescriptorSetLayout(info), Shadows::getDescriptorSetLayout(info), getDescriptorSetLayoutLights(info) };
 	generalSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	generalSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	generalSpecific.cull = vk::CullModeFlagBits::eBack;
 	generalSpecific.face = vk::FrontFace::eCounterClockwise;
-	generalSpecific.pushConstantRange = vk::PushConstantRange()
-		.setStageFlags(vk::ShaderStageFlagBits::eFragment)
-		.setSize(info->gpuProperties.limits.maxPushConstantsSize);
+	generalSpecific.pushConstantRange = vk::PushConstantRange();
+		//.setStageFlags(vk::ShaderStageFlagBits::eFragment)
+		//.setSize(info->gpuProperties.limits.maxPushConstantsSize);
 
 	return generalSpecific;
 }

@@ -13,20 +13,46 @@ Renderer::Renderer(SDL_Window* window)
 	initVulkanContext();
 
 	info.skyBox = SkyBox::loadSkyBox({ "objects/sky/right.png", "objects/sky/left.png", "objects/sky/top.png", "objects/sky/bottom.png", "objects/sky/back.png", "objects/sky/front.png" }, 1024, &info, true);
-	info.gui = GUI::loadGUI("objects/gui/gui.png", &info, false);
+	info.gui = GUI::loadGUI("objects/gui/gui.png", &info, true);
 	info.terrain = Terrain::generateTerrain("", &info);
 	info.models.push_back(Model::loadModel("objects/sponza/", "sponza.obj", &info));
 
-	// some random light colors and positions
-	info.light.resize(info.gpuProperties.limits.maxPushConstantsSize / sizeof(Light));
-	for (auto& light : info.light) {
-		light = { glm::vec4(rand(0.f,1.f), rand(0.0f,1.f), rand(0.f,1.f), rand(0.f,1.f)),
-			glm::vec4(rand(-1.f,1.f), rand(.3f,1.f),rand(-.5f,.5f), 1.f),
-			glm::vec4(2.f, 1.f, 1.f, 1.f) };
+	{
+		// some random light colors and positions
+		info.light.resize(MAX_LIGHTS);
+		for (auto& light : info.light) {
+			light = { glm::vec4(rand(0.f,1.f), rand(0.0f,1.f), rand(0.f,1.f), rand(0.f,1.f)),
+				glm::vec4(rand(-1.f,1.f), rand(.3f,1.f),rand(-.5f,.5f), 1.f),
+				glm::vec4(10.f, 1.f, 1.f, 1.f),
+				glm::vec4(0.f, 0.f, 0.f, 1.f) };
+		}
+		info.light[0] = { glm::vec4(1.f, 1.f, 1.f, .5f),
+			glm::vec4(0.f, 1.51f, -0.14f, 1.f),
+			glm::vec4(0.f, 0.f, 1.f, 1.f) };
+		info.uniformBufferLights.createBuffer(&info, info.light.size()*sizeof(Light), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		VkCheck(info.device.mapMemory(info.uniformBufferLights.memory, 0, info.uniformBufferLights.size, vk::MemoryMapFlags(), &info.uniformBufferLights.data));
+		memcpy(info.uniformBufferLights.data, info.light.data(), info.light.size() * sizeof(Light));
+		auto const allocateInfo = vk::DescriptorSetAllocateInfo()
+			.setDescriptorPool(info.descriptorPool)
+			.setDescriptorSetCount(1)
+			.setPSetLayouts(&info.descriptorSetLayoutLights);
+		VkCheck(info.device.allocateDescriptorSets(&allocateInfo, &info.descriptorSetLights));
+		auto const writeSet = vk::WriteDescriptorSet()
+			.setDstSet(info.descriptorSetLights)								// DescriptorSet dstSet;
+			.setDstBinding(0)												// uint32_t dstBinding;
+			.setDstArrayElement(0)											// uint32_t dstArrayElement;
+			.setDescriptorCount(1)											// uint32_t descriptorCount;
+			.setDescriptorType(vk::DescriptorType::eUniformBuffer)	        // DescriptorType descriptorType;
+			.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorBufferInfo* pBufferInfo;
+				.setBuffer(info.uniformBufferLights.buffer)							// Buffer buffer;
+				.setOffset(0)													// DeviceSize offset;
+				.setRange(info.uniformBufferLights.size));							// DeviceSize range;
+		info.device.updateDescriptorSets(1, &writeSet, 0, nullptr);
+		std::cout << "DescriptorSet allocated and updated\n";
 	}
-	info.light[0] = { glm::vec4(1.f, 1.f, 1.f, .5f),
-		glm::vec4(.5f, 1.2f, 0.f, 1.f),
-		glm::vec4(0.f, 0.f, 1.f, 1.f) };
+
+	// init is done
+	prepared = true;
 }
 
 Renderer::~Renderer()
@@ -150,6 +176,8 @@ void Renderer::initVulkanContext()
 	info.dynamicCmdBuffer = createCmdBuffer();
 	info.shadowsPassCmdBuffers = createCmdBuffers(1);
 	info.descriptorPool = createDescriptorPool(500); // max number of all descriptor sets to allocate	
+
+
 	info.shadows.resize(1);
 	for (auto& shadows : info.shadows) {
 		shadows.createFrameBuffer(&info);
@@ -337,6 +365,7 @@ Swapchain Renderer::createSwapchain()
         swapchainImageCount > info.surface.capabilities.maxImageCount) {
         swapchainImageCount = info.surface.capabilities.maxImageCount;
     }
+	auto aaa = info.surface.capabilities;
 
     vk::SwapchainKHR oldSwapchain = _swapchain.swapchain;
 	auto const swapchainCreateInfo = vk::SwapchainCreateInfoKHR()
@@ -897,7 +926,6 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 	// MODELS
 	if (info.models.size() > 0)
 	{
-		info.dynamicCmdBuffer.pushConstants(info.pipeline.info.layout, vk::ShaderStageFlagBits::eFragment, 0, static_cast<uint32_t>(info.light.size() * sizeof(Light)), info.light.data());
 		info.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, info.pipeline.pipeline);
 		for (auto& model : info.models) {
 			if (model.enabled) {
@@ -907,8 +935,8 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 				uint32_t vertex = 0;
 				for (auto& mesh : model.meshes) {
 					if (mesh.colorEffects.diffuse.a >= 1.f) {
-						const vk::DescriptorSet descriptorSets[] = { model.descriptorSet, mesh.descriptorSet, info.shadows[0].descriptorSet};
-						info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipeline.info.layout, 0, 3, descriptorSets, 0, nullptr);
+						const vk::DescriptorSet descriptorSets[] = { model.descriptorSet, mesh.descriptorSet, info.shadows[0].descriptorSet, info.descriptorSetLights};
+						info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipeline.info.layout, 0, 4, descriptorSets, 0, nullptr);
 						info.dynamicCmdBuffer.drawIndexed((uint32_t)mesh.indices.size(), 1, index, vertex, 0);
 					}
 					index += (uint32_t)mesh.indices.size();

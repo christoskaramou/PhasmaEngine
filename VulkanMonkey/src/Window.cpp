@@ -4,7 +4,7 @@
 #include <iostream>
 
 #ifndef MAX_WINDOWS
-#define MAX_WINDOWS 5
+#define MAX_WINDOWS 100
 #endif // MAX_WINDOWS
 
 Window::Window()
@@ -48,7 +48,7 @@ void Window::create(const char* title, int w, int h, Uint32 flags)
         exit(-1);
     }
 	SDL_Window* window;
-    if (!(window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, flags))) { std::cout << SDL_GetError(); return; }
+    if (!(window = SDL_CreateWindow(title, x, y /*SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED*/, w, h, flags))) { std::cout << SDL_GetError(); return; }
     std::cout << "Success at window creation\n";
 
     renderer.push_back(std::make_unique<Renderer>(window));
@@ -64,6 +64,7 @@ void Window::create(const char* title, int w, int h, Uint32 flags)
 
 bool Window::processEvents(float delta)
 {
+	if (!renderer[0]->prepared) return false;
 	static bool up = false;
 	static bool down = false;
 	static bool left = false;
@@ -89,6 +90,7 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_DOWN) info.light[0].position.y -= 0.005;
 			if (event.key.keysym.sym == SDLK_LEFT) info.light[0].position.z += 0.005;
 			if (event.key.keysym.sym == SDLK_RIGHT) info.light[0].position.z -= 0.005;
+			//std::cout << info.light[0].position.x << ", " << info.light[0].position.y << ", " << info.light[0].position.z << "\n";
 		}
 		else if (event.type == SDL_KEYUP) {
 			if (event.key.keysym.sym == SDLK_w) up = false;
@@ -100,18 +102,26 @@ bool Window::processEvents(float delta)
 				for (uint32_t i = 1; i < info.light.size(); i++) {
 					info.light[i] = { glm::vec4(renderer[0]->rand(0.f,1.f), renderer[0]->rand(0.0f,1.f), renderer[0]->rand(0.f,1.f), renderer[0]->rand(0.f,1.f)),
 						glm::vec4(renderer[0]->rand(-1.f,1.f), renderer[0]->rand(.3f,1.f), renderer[0]->rand(-.5f,.5f), 1.f),
-						glm::vec4(2.f, 1.f, 1.f, 1.f) };
+						glm::vec4(10.f, 1.f, 1.f, 1.f),
+						glm::vec4(0.f, 0.f, 0.f, 1.f) };
 				}
+				memcpy(info.uniformBufferLights.data, info.light.data(), info.light.size() * sizeof(Light));
 			}
-		}
-		if (event.type == SDL_MOUSEMOTION) {
-			xMove -= event.motion.xrel;
-			yMove -= event.motion.yrel;
-			info.mainCamera.rotate((float)xMove, (float)yMove);
 		}
 		if (event.type == SDL_MOUSEWHEEL) {
 			info.mainCamera.speed *= event.wheel.y > 0 ? 1.2f : 0.833f;
 		}
+		if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
+			SDL_ShowCursor(SDL_DISABLE);
+			SDL_WarpMouseInWindow(info.window, width / 2, height / 2);
+			if (event.type == SDL_MOUSEMOTION) {
+				xMove = -(event.motion.x - width / 2);
+				yMove = -(event.motion.y - height / 2);
+				info.mainCamera.rotate((float)xMove, (float)yMove);
+			}
+		}
+		else
+			SDL_ShowCursor(SDL_ENABLE);
 	}
 	if (up && left) combineDirections = true;
 	if (up && right) combineDirections = true;
@@ -122,8 +132,6 @@ bool Window::processEvents(float delta)
 	if (down) info.mainCamera.move(Camera::RelativeDirection::BACKWARD, delta, combineDirections);
 	if (left) info.mainCamera.move(Camera::RelativeDirection::LEFT, delta, combineDirections);
 	if (right) info.mainCamera.move(Camera::RelativeDirection::RIGHT, delta, combineDirections);
-
-	SDL_WarpMouseInWindow(info.window, width / 2, height / 2);
 
 	return true;
 }

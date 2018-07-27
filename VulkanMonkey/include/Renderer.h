@@ -11,6 +11,7 @@ class Renderer
         void draw();
 		float rand(float x1, float x2);
 		Context info;
+		bool prepared = false;
     private:
 		void initVulkanContext();
         vk::Instance createInstance();
