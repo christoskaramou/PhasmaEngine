@@ -108,6 +108,10 @@ bool Window::processEvents(float delta)
 				}
 				memcpy(info.uniformBufferLights.data, info.light.data(), info.light.size() * sizeof(Light));
 			}
+			if (event.key.keysym.sym == SDLK_3) for (auto& model : info.models) model.render = !info.models[0].render;
+			if (event.key.keysym.sym == SDLK_4) info.gui.render = !info.gui.render;
+			if (event.key.keysym.sym == SDLK_5) info.terrain.render = !info.terrain.render;
+			if (event.key.keysym.sym == SDLK_6) info.skyBox.render = !info.skyBox.render;
 		}
 		if (event.type == SDL_MOUSEWHEEL) {
 			info.mainCamera.speed *= event.wheel.y > 0 ? 1.2f : 0.833f;

@@ -129,6 +129,7 @@ struct Object
 {
 	virtual ~Object() = default;
 	bool render = true;
+	bool cull = false;
 	vk::DescriptorSet descriptorSet;
 	Image texture;
 	std::vector<float> vertices{};
@@ -192,6 +193,7 @@ struct Shadows
 struct Mesh
 {
 	bool render = true;
+	bool cull = false;
 	glm::vec4 boundingSphere;
 	void calculateBoundingSphere();
 	enum TextureType

@@ -819,36 +819,42 @@ void Renderer::update(float delta)
 	proj_view.view = info.mainCamera.getView();
 
 	//TERRAIN
-	UBO mvpTerrain;
-	mvpTerrain.projection = proj_view.projection;
-	mvpTerrain.view = proj_view.view;
-	mvpTerrain.model = glm::mat4(1.0f);
-	memcpy(info.terrain.uniformBuffer.data, &mvpTerrain, sizeof(UBO));
+	if (info.terrain.render) {
+		UBO mvpTerrain;
+		mvpTerrain.projection = proj_view.projection;
+		mvpTerrain.view = proj_view.view;
+		mvpTerrain.model = glm::mat4(1.0f);
+		memcpy(info.terrain.uniformBuffer.data, &mvpTerrain, sizeof(UBO));
+	}
 
 	// MODELS
-	UBO mvp;
-	mvp.projection = proj_view.projection;
-	mvp.view = proj_view.view;
 	for (auto &model : info.models) {
-		mvp.model = model.matrix;
-		memcpy(model.uniformBuffer.data, &mvp, sizeof(UBO));
-		ExtractFrustum(mvp.projection * mvp.view * mvp.model);
-		for (auto &mesh : model.meshes)
-			mesh.render = SphereInFrustum(mesh.boundingSphere);
+		if (model.render) {
+			UBO mvp;
+			mvp.projection = proj_view.projection;
+			mvp.view = proj_view.view;
+			mvp.model = model.matrix;
+			ExtractFrustum(mvp.projection * mvp.view * mvp.model);
+			for (auto &mesh : model.meshes) {
+				mesh.cull = !SphereInFrustum(mesh.boundingSphere);
+				if (!mesh.cull)
+					memcpy(model.uniformBuffer.data, &mvp, sizeof(UBO));
+			}
+		}
 	}
 
 	// SKYBOX
-	memcpy(info.skyBox.uniformBuffer.data, &proj_view, 2 * sizeof(glm::mat4));
+	if (info.skyBox.render)
+		memcpy(info.skyBox.uniformBuffer.data, &proj_view, 2 * sizeof(glm::mat4));
 
 	// SHADOWS
-	float FOV = 90.0f;
 	for (auto& shadows : info.shadows) {
 		ShadowsUBO shadows_UBO;
-		shadows_UBO.projection = glm::perspective(glm::radians(FOV), 1.f, 0.01f, 50.0f);
+		shadows_UBO.projection = glm::perspective(glm::radians(90.0f), 1.f, 0.01f, 50.0f);
 		glm::vec3 lightPos = glm::vec3(info.light[0].position);
 		glm::vec3 center = -lightPos;
 		shadows_UBO.view = glm::lookAt(lightPos, center, info.mainCamera.worldUp);
-		shadows_UBO.model = mvp.model;
+		shadows_UBO.model = info.models[0].matrix;
 		shadows_UBO.castShadows = Shadows::shadowCast ? 1.0f : 0.0f;
 		memcpy(shadows.uniformBuffer.data, &shadows_UBO, sizeof(ShadowsUBO));
 	}
@@ -945,7 +951,7 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 				uint32_t index = 0;
 				uint32_t vertex = 0;
 				for (auto& mesh : model.meshes) {
-					if (mesh.render && mesh.colorEffects.diffuse.a >= 1.f) {
+					if (mesh.render && !mesh.cull && mesh.colorEffects.diffuse.a >= 1.f) {
 						const vk::DescriptorSet descriptorSets[] = { model.descriptorSet, mesh.descriptorSet, info.shadows[0].descriptorSet, info.descriptorSetLights };
 						info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipeline.info.layout, 0, 4, descriptorSets, 0, nullptr);
 						info.dynamicCmdBuffer.drawIndexed((uint32_t)mesh.indices.size(), 1, index, vertex, 0);
@@ -956,7 +962,7 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 				index = 0;
 				vertex = 0;
 				for (auto& mesh : model.meshes) {
-					if (mesh.render && mesh.colorEffects.diffuse.a < 1.f) {
+					if (mesh.render && !mesh.cull && mesh.colorEffects.diffuse.a < 1.f) {
 						const vk::DescriptorSet descriptorSets[] = { model.descriptorSet, mesh.descriptorSet, info.shadows[0].descriptorSet};
 						info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipeline.info.layout, 0, 3, descriptorSets, 0, nullptr);
 						info.dynamicCmdBuffer.drawIndexed((uint32_t)mesh.indices.size(), 1, index, vertex, 0);
