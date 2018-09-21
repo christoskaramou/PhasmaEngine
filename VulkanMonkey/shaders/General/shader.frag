@@ -72,6 +72,14 @@ float shadowTestWeights[9] = float[](
 	 0.5, 1.0,  0.5
 );
 void main() {
+
+	float a = texture(alphaSampler, v_TexCoords).x;
+	if (a < 0.8){
+		discard;
+	}
+	vec4 texel = texture(tSampler, v_TexCoords);
+	texel.a *= a;
+
 	vec4 s_coords1 = shadow_coords1 / shadow_coords1.w;
 
 	float toCameraDistance = distance((view * vec4(0.0, 0.0, 0.0 ,1.0)).xyz, vertexCameraSpaceModel.xyz);
@@ -82,16 +90,6 @@ void main() {
 		{
 			shadow -= 0.125 * ( 1.0 - texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0015, s_coords1.z-0.0001 )));
 		}
-	}
-	//vec4 texel = vec4(0.0);
-	//for (int i=0;i<9;i++)
-	//{
-	//	texel += 0.1111111 * shadowTestWeights[i] * texture(tSampler, v_TexCoords + shadowTest[i]*0.0015);
-	//}
-	vec4 texel = texture(tSampler, v_TexCoords);
-	texel.a *= texture(alphaSampler, v_TexCoords).x;
-	if (texel.a < 0.8){
-		discard;
 	}
 	
 	vec3 normalMap = normalize(texture(normSampler, v_TexCoords).rgb*2.0 - 1.0);

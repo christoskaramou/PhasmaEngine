@@ -45,6 +45,7 @@ struct Image
     vk::DeviceMemory memory;
     vk::ImageView view;
 	vk::Sampler sampler;
+	std::string name;
 
 	// values
     vk::Format format;
@@ -126,7 +127,8 @@ struct Effects {
 
 struct Object
 {
-	bool enabled = true;
+	virtual ~Object() = default;
+	bool render = true;
 	vk::DescriptorSet descriptorSet;
 	Image texture;
 	std::vector<float> vertices{};
@@ -145,7 +147,7 @@ struct GUI : Object
 	static vk::DescriptorSetLayout descriptorSetLayout;
 	static vk::DescriptorSetLayout getDescriptorSetLayout(const Context* info = nullptr); // after the first call it is no need to point the Context for the divice
 	static specificGraphicsPipelineCreateInfo getPipelineSpecifications(const Context* info);
-	static GUI loadGUI(const std::string textureName, const Context* info, bool show);
+	static GUI loadGUI(const std::string textureName, const Context* info, bool show = true);
 	void createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout, const Context* info);
 };
 
@@ -154,7 +156,7 @@ struct SkyBox : Object
 	static vk::DescriptorSetLayout descriptorSetLayout;
 	static vk::DescriptorSetLayout getDescriptorSetLayout(const Context* info = nullptr);
 	static specificGraphicsPipelineCreateInfo getPipelineSpecifications(const Context* info);
-	static SkyBox loadSkyBox(const std::vector<std::string>& textureNames, uint32_t imageSideSize, const Context* info, bool show);
+	static SkyBox loadSkyBox(const std::vector<std::string>& textureNames, uint32_t imageSideSize, const Context* info, bool show = true);
 	void loadTextures(const std::vector<std::string>& paths, uint32_t imageSideSize, const Context* info);
 };
 
@@ -163,7 +165,7 @@ struct Terrain : Object
 	static vk::DescriptorSetLayout descriptorSetLayout;
 	static vk::DescriptorSetLayout getDescriptorSetLayout(const Context* info = nullptr);
 	static specificGraphicsPipelineCreateInfo getPipelineSpecifications(const Context* info);
-	static Terrain generateTerrain(const std::string path, const Context* info);
+	static Terrain generateTerrain(const std::string path, const Context* info, bool show = true);
 	void loadTexture(const std::string path, const Context* info);
 };
 
@@ -189,6 +191,9 @@ struct Shadows
 
 struct Mesh
 {
+	bool render = true;
+	glm::vec4 boundingSphere;
+	void calculateBoundingSphere();
 	enum TextureType
 	{
 		DiffuseMap,
@@ -213,7 +218,7 @@ struct Mesh
 
 struct Model
 {
-	bool enabled = true;
+	bool render = true;
 	static vk::DescriptorSetLayout descriptorSetLayout;
 	static vk::DescriptorSetLayout getDescriptorSetLayout(const Context* info = nullptr);
 	static specificGraphicsPipelineCreateInfo getPipelineSpecifications(Context* info);
@@ -230,7 +235,7 @@ struct Model
 	float initialBoundingSphereRadius = 0.0f;
 
 	glm::vec4 getBoundingSphere();
-	static Model loadModel(const std::string path, const std::string modelName, const Context* info);
+	static Model loadModel(const std::string path, const std::string modelName, const Context* info, bool show = true);
 	void createVertexBuffer(const Context* info);
 	void createIndexBuffer(const Context* info);
 	void createUniformBuffers(const Context* info);
@@ -304,10 +309,10 @@ private:
 	std::map<uint32_t, std::any> var{};
 public:
 	template<typename T>
-	void add(uint32_t* assignTo, const T& value) {
-		if (*assignTo != UINT32_MAX) throw std::runtime_error("attempt to write to an existing object");
-		*assignTo = __id++;
-		var[*assignTo] = std::any(value);
+	void add(uint32_t assignTo, const T& value) {
+		if (assignTo != UINT32_MAX) throw std::runtime_error("attempt to write to an existing object");
+		assignTo = __id++;
+		var[assignTo] = std::any(value);
 	}
 	template<typename T>
 	T& get(const uint32_t id) {

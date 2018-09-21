@@ -8,8 +8,8 @@ class Renderer
         Renderer(SDL_Window* window);
         ~Renderer();
         void update(float delta);
-        void draw();
-		float rand(float x1, float x2);
+        void present();
+		static float rand(float x1, float x2);
 		Context info;
 		bool prepared = false;
     private:
@@ -31,6 +31,10 @@ class Renderer
         std::vector<vk::Semaphore> createSemaphores(uint32_t semaphoresCount);
 		void recordDynamicCmdBuffer(const uint32_t imageIndex);
 		void recordShadowsCmdBuffers();
+
+		float frustum[6][4];
+		void ExtractFrustum(glm::mat4& projection_view_model);
+		bool SphereInFrustum(glm::vec4& boundingSphere);
 };
 
 #endif // RENDERER_H

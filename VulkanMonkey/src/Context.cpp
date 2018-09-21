@@ -1,6 +1,7 @@
 #include "../include/Context.h"
 #include "../include/Errors.h"
 #include <iostream>
+#include <future>
 #define STB_IMAGE_IMPLEMENTATION
 #include "../include/stb_image/stb_image.h"
 #include "../include/assimp/Importer.hpp"      // C++ importer interface
@@ -205,7 +206,7 @@ void Image::transitionImageLayout(const Context* info, const vk::ImageLayout old
     vk::PipelineStageFlags srcStage;
     vk::PipelineStageFlags dstStage;
 
-    // ubresource aspectMask
+    // Subresource aspectMask
     if (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
 		barrier.setSubresourceRange({ vk::ImageAspectFlagBits::eDepth, 0, mipLevels, 0, arrayLayers });
         if (format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint) {
@@ -589,7 +590,6 @@ void Object::destroy(Context * info)
 	vertexBuffer.destroy(info);
 	uniformBuffer.destroy(info);
 	vertices.clear();
-	std::cout << "GUI and associated structs destroyed\n";
 }
 
 void Shadows::destroy(const Context * info)
@@ -651,7 +651,7 @@ void Mesh::loadTexture(TextureType type, const std::string path, const Context* 
 	vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
 	if (!pixels) {
-		std::cout << "Can not load texture\n";
+		std::cout << "Can not load texture: " << path << "\n";
 		exit(-19);
 	}
 
@@ -665,7 +665,7 @@ void Mesh::loadTexture(TextureType type, const std::string path, const Context* 
 
 	stbi_image_free(pixels);
 
-	Image *tex = nullptr;
+	Image* tex = nullptr;
 	switch (type)
 	{
 	case Mesh::DiffuseMap:
@@ -684,6 +684,7 @@ void Mesh::loadTexture(TextureType type, const std::string path, const Context* 
 		break;
 	}
 
+	tex->name = path;
 	tex->format = vk::Format::eR8G8B8A8Unorm;
 	tex->mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
 	tex->createImage(info, texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
@@ -712,10 +713,9 @@ void getAllNodes(aiNode* node, std::vector<aiNode*>& allNodes) {
 	if(node) allNodes.push_back(node);
 }
 
-Model Model::loadModel(const std::string path, const std::string modelName, const Context* info)
+Model Model::loadModel(const std::string path, const std::string modelName, const Context* info, bool show)
 {
 	Model _model;
-	_model.name = modelName;
 
 	// Materials, Vertices and Indices load
 	Assimp::Logger::LogSeverity severity = Assimp::Logger::VERBOSE;
@@ -735,15 +735,15 @@ Model Model::loadModel(const std::string path, const std::string modelName, cons
 	);
 	if (!scene) exit(-100);
 
-	bool hl = scene->HasLights();
-
 	std::vector<aiNode*> allNodes{};
 	getAllNodes(scene->mRootNode, allNodes);
 
+	std::vector<Mesh> f_meshes{};
 	for (unsigned int n = 0; n < allNodes.size(); n++) {
 		const aiNode* node = allNodes[n];
 		for (unsigned int i = 0; i < node->mNumMeshes; i++) {
 			Mesh myMesh;
+
 			const aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
 			const aiMaterial *material = scene->mMaterials[mesh->mMaterialIndex];
 
@@ -777,8 +777,7 @@ Model Model::loadModel(const std::string path, const std::string modelName, cons
 			aiString aiNormTexPath;
 			material->GetTexture(aiTextureType_HEIGHT, 0, &aiNormTexPath);
 			std::string normTexPath = aiNormTexPath.C_Str();
-			if (normTexPath != "")
-				normTexPath = path + normTexPath;
+			if (normTexPath != "")	normTexPath = path + normTexPath;
 			else					normTexPath = "objects/defaultNormalMap.png";
 			if (_model.uniqueTextures.find(normTexPath) != _model.uniqueTextures.end()) {
 				myMesh.normalsTexture = _model.uniqueTextures[normTexPath];
@@ -834,22 +833,72 @@ Model Model::loadModel(const std::string path, const std::string modelName, cons
 				myMesh.indices.push_back(Face.mIndices[1]);
 				myMesh.indices.push_back(Face.mIndices[2]);
 			}
-			_model.meshes.push_back(myMesh);
-
-			_model.numberOfVertices += mesh->mNumVertices;
-			_model.numberOfIndices += mesh->mNumFaces * 3;
+			f_meshes.push_back(myMesh);
 		}
 	}
+
+	for (auto &m : f_meshes) {
+		m.calculateBoundingSphere();
+		_model.meshes.push_back(m);
+
+		_model.numberOfVertices += (uint32_t)_model.meshes.back().vertices.size();
+		_model.numberOfIndices += (uint32_t)_model.meshes.back().indices.size();
+	}
+
 	_model.createVertexBuffer(info);
 	_model.createIndexBuffer(info);
 	_model.createUniformBuffers(info);
 	_model.createDescriptorSets(info);
+	_model.name = modelName;
+	_model.render = show;
 
 	// resizing the model to always be at a certain magnitude
 	float scale = 2.0f / _model.getBoundingSphere().w;
 	_model.matrix = glm::scale(_model.matrix, glm::vec3(scale, scale, scale));
 
 	return _model;
+}
+
+// position x, y, z and radius w
+glm::vec4 Model::getBoundingSphere()
+{
+	if (initialBoundingSphereRadius <= 0) {
+		for (auto &mesh : meshes) {
+			for (auto& vertex : mesh.vertices) {
+				float dis = glm::length(glm::vec3(vertex.x, vertex.y, vertex.z));
+				if (dis > initialBoundingSphereRadius)
+					initialBoundingSphereRadius = dis;
+			}
+		}
+	}
+
+	glm::vec3 scale;
+	glm::quat rotation;
+	glm::vec3 translation;
+	glm::vec3 skew;
+	glm::vec4 perspective;
+	glm::decompose(matrix, scale, rotation, translation, skew, perspective);
+
+	glm::vec4 _boundingSphere = matrix * glm::vec4(0.0f, 0.0f, 0.0f, 1.0);
+	_boundingSphere.w = scale.x * initialBoundingSphereRadius; // supposes the scale was uniform for all x, y, z
+
+	return _boundingSphere;
+}
+
+void Mesh::calculateBoundingSphere()
+{
+	float maxX = 0, maxY = 0, maxZ = 0, minX = FLT_MAX, minY = FLT_MAX, minZ = FLT_MAX;
+	for (auto& vertex : vertices) {
+		if (vertex.x > maxX) maxX = vertex.x;
+		if (vertex.y > maxY) maxY = vertex.y;
+		if (vertex.z > maxZ) maxZ = vertex.z;
+		if (vertex.x < minX) minX = vertex.x;
+		if (vertex.y < minY) minY = vertex.y;
+		if (vertex.z < minZ) minZ = vertex.z;
+	}
+	glm::vec3 center = (glm::vec3(maxX, maxY, maxZ) + glm::vec3(minX, minY, minZ)) * .5f;
+	float sphereRadius = glm::length(glm::vec3(maxX, maxY, maxZ) - center);
+	boundingSphere = glm::vec4(center, sphereRadius);
 }
 
 vk::DescriptorSetLayout Model::getDescriptorSetLayout(const Context * info)
@@ -863,7 +912,6 @@ vk::DescriptorSetLayout Model::getDescriptorSetLayout(const Context * info)
 			.setDescriptorCount(1) // number of descriptors contained
 			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
 			.setStageFlags(vk::ShaderStageFlagBits::eVertex)); // which pipeline shader stages can access
-
 
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
@@ -910,33 +958,6 @@ specificGraphicsPipelineCreateInfo Model::getPipelineSpecifications(Context * in
 		//.setSize(info->gpuProperties.limits.maxPushConstantsSize);
 
 	return generalSpecific;
-}
-
-// position x, y, z and radius w
-glm::vec4 Model::getBoundingSphere()
-{
-	if (initialBoundingSphereRadius <= 0) {
-		for (auto &mesh : meshes) {
-			for (auto& vertex : mesh.vertices) {
-				float dis = glm::length(glm::vec3(vertex.x, vertex.y, vertex.z));
-				if (dis > initialBoundingSphereRadius)
-					initialBoundingSphereRadius = dis;
-			}
-		}
-	}
-
-	glm::vec3 scale;
-	glm::quat rotation;
-	glm::vec3 translation;
-	glm::vec3 skew;
-	glm::vec4 perspective;
-	glm::decompose(matrix, scale, rotation, translation, skew, perspective);
-
-	glm::vec4 _boundingSphere;
-	_boundingSphere = matrix * glm::vec4(0.0f, 0.0f, 0.0f, 1.0);
-	_boundingSphere.w = scale.x * initialBoundingSphereRadius; // supposes the scale was uniform for all x, y, z
-
-	return _boundingSphere;
 }
 
 void Model::createVertexBuffer(const Context* info)
@@ -1000,13 +1021,13 @@ void Model::createDescriptorSets(const Context* info)
 	// Model MVP
 	auto const mvpWriteSet = vk::WriteDescriptorSet()
 		.setDstSet(descriptorSet)								// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eUniformBuffer)	        // DescriptorType descriptorType;
-		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorBufferInfo* pBufferInfo;
-			.setBuffer(uniformBuffer.buffer)							// Buffer buffer;
-			.setOffset(0)													// DeviceSize offset;
+		.setDstBinding(0)										// uint32_t dstBinding;
+		.setDstArrayElement(0)									// uint32_t dstArrayElement;
+		.setDescriptorCount(1)									// uint32_t descriptorCount;
+		.setDescriptorType(vk::DescriptorType::eUniformBuffer)	// DescriptorType descriptorType;
+		.setPBufferInfo(&vk::DescriptorBufferInfo()				// const DescriptorBufferInfo* pBufferInfo;
+			.setBuffer(uniformBuffer.buffer)						// Buffer buffer;
+			.setOffset(0)											// DeviceSize offset;
 			.setRange(uniformBuffer.size));							// DeviceSize range;
 
 	info->device.updateDescriptorSets(1, &mvpWriteSet, 0, nullptr);
@@ -1029,7 +1050,7 @@ void Model::createDescriptorSets(const Context* info)
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(mesh.texture.sampler)										// Sampler sampler;
+				.setSampler(mesh.texture.sampler)								// Sampler sampler;
 				.setImageView(mesh.texture.view)								// ImageView imageView;
 				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
@@ -1136,7 +1157,7 @@ GUI GUI::loadGUI(const std::string textureName, const Context * info, bool show)
 	_gui.loadTexture(textureName, info);
 	_gui.createVertexBuffer(info);
 	_gui.createDescriptorSet(GUI::descriptorSetLayout, info);
-	_gui.enabled = show;
+	_gui.render = show;
 
 	return _gui;
 }
@@ -1150,8 +1171,8 @@ void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout, con
 	VkCheck(info->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
 
 
+	// texture sampler
 	vk::WriteDescriptorSet textureWriteSets[1];
-																		// texture sampler
 	textureWriteSets[0] = vk::WriteDescriptorSet()
 		.setDstSet(descriptorSet)										// DescriptorSet dstSet;
 		.setDstBinding(0)												// uint32_t dstBinding;
@@ -1263,7 +1284,7 @@ SkyBox SkyBox::loadSkyBox(const std::vector<std::string>& textureNames, uint32_t
 	_skyBox.createVertexBuffer(info);
 	_skyBox.createUniformBuffer(info);
 	_skyBox.createDescriptorSet(SkyBox::descriptorSetLayout, info);
-	_skyBox.enabled = show;
+	_skyBox.render = show;
 
 	return _skyBox;
 }
@@ -1288,7 +1309,7 @@ void SkyBox::loadTextures(const std::vector<std::string>& paths, uint32_t imageS
 
 		vk::DeviceSize imageSize = texWidth * texHeight * 4;
 		if (!pixels) {
-			std::cout << "Can not load texture\n";
+			std::cout << "Can not load texture: " << paths[i] << "\n";
 			exit(-19);
 		}
 		Buffer staging;
@@ -1343,7 +1364,7 @@ void Object::loadTexture(const std::string path, const Context * info)
 	vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
 	if (!pixels) {
-		std::cout << "Can not load texture\n";
+		std::cout << "Can not load texture: " << path << "\n";
 		exit(-19);
 	}
 
@@ -1417,7 +1438,7 @@ void Shadows::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout,
 	vk::WriteDescriptorSet textureWriteSets[2];	
 	// MVP
 	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(descriptorSet)							// DescriptorSet dstSet;
+		.setDstSet(descriptorSet)										// DescriptorSet dstSet;
 		.setDstBinding(0)												// uint32_t dstBinding;
 		.setDstArrayElement(0)											// uint32_t dstArrayElement;
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
@@ -1622,7 +1643,7 @@ specificGraphicsPipelineCreateInfo Terrain::getPipelineSpecifications(const Cont
 	return terrainSpecific;
 }
 
-Terrain Terrain::generateTerrain(const std::string path, const Context* info)
+Terrain Terrain::generateTerrain(const std::string path, const Context* info, bool show)
 {
 	auto size = 100.f;
 	Terrain _terrain;
@@ -1641,6 +1662,7 @@ Terrain Terrain::generateTerrain(const std::string path, const Context* info)
 	_terrain.createVertexBuffer(info);
 	_terrain.createUniformBuffer(info);
 	_terrain.createDescriptorSet(Terrain::descriptorSetLayout, info);
+	_terrain.render = show;
 
 	return _terrain;
 }
@@ -1654,7 +1676,7 @@ void Terrain::loadTexture(const std::string path, const Context* info)
 	vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
 	if (!pixels) {
-		std::cout << "Can not load texture\n";
+		std::cout << "Can not load texture: " << path << "\n";
 		exit(-19);
 	}
 

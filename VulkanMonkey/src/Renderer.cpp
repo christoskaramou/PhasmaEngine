@@ -1,5 +1,6 @@
 #include "../include/Renderer.h"
 #include "../include/Errors.h"
+#include "../include/glm/gtc/type_ptr.hpp"
 #include <iostream>
 #include <fstream>
 #include <memory>
@@ -12,8 +13,8 @@ Renderer::Renderer(SDL_Window* window)
 
 	initVulkanContext();
 
-	info.skyBox = SkyBox::loadSkyBox({ "objects/sky/right.png", "objects/sky/left.png", "objects/sky/top.png", "objects/sky/bottom.png", "objects/sky/back.png", "objects/sky/front.png" }, 1024, &info, true);
-	info.gui = GUI::loadGUI("objects/gui/gui.png", &info, true);
+	info.skyBox = SkyBox::loadSkyBox({ "objects/sky/right.png", "objects/sky/left.png", "objects/sky/top.png", "objects/sky/bottom.png", "objects/sky/back.png", "objects/sky/front.png" }, 1024, &info);
+	info.gui = GUI::loadGUI("objects/gui/gui.png", &info, false);
 	info.terrain = Terrain::generateTerrain("", &info);
 	info.models.push_back(Model::loadModel("objects/sponza/", "sponza.obj", &info));
 
@@ -38,15 +39,15 @@ Renderer::Renderer(SDL_Window* window)
 			.setPSetLayouts(&info.descriptorSetLayoutLights);
 		VkCheck(info.device.allocateDescriptorSets(&allocateInfo, &info.descriptorSetLights));
 		auto const writeSet = vk::WriteDescriptorSet()
-			.setDstSet(info.descriptorSetLights)								// DescriptorSet dstSet;
+			.setDstSet(info.descriptorSetLights)							// DescriptorSet dstSet;
 			.setDstBinding(0)												// uint32_t dstBinding;
 			.setDstArrayElement(0)											// uint32_t dstArrayElement;
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eUniformBuffer)	        // DescriptorType descriptorType;
 			.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorBufferInfo* pBufferInfo;
-				.setBuffer(info.uniformBufferLights.buffer)							// Buffer buffer;
+				.setBuffer(info.uniformBufferLights.buffer)						// Buffer buffer;
 				.setOffset(0)													// DeviceSize offset;
-				.setRange(info.uniformBufferLights.size));							// DeviceSize range;
+				.setRange(info.uniformBufferLights.size));						// DeviceSize range;
 		info.device.updateDescriptorSets(1, &writeSet, 0, nullptr);
 		std::cout << "DescriptorSet allocated and updated\n";
 	}
@@ -91,31 +92,37 @@ Renderer::~Renderer()
 
 	if (Shadows::descriptorSetLayout) {
 		info.device.destroyDescriptorSetLayout(Shadows::descriptorSetLayout);
+		Shadows::descriptorSetLayout = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 
 	if (SkyBox::descriptorSetLayout) {
 		info.device.destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
+		SkyBox::descriptorSetLayout = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 
 	if (GUI::descriptorSetLayout) {
 		info.device.destroyDescriptorSetLayout(GUI::descriptorSetLayout);
+		GUI::descriptorSetLayout = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 
 	if (Terrain::descriptorSetLayout) {
 		info.device.destroyDescriptorSetLayout(Terrain::descriptorSetLayout);
+		Terrain::descriptorSetLayout = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 
 	if (Mesh::descriptorSetLayout) {
 		info.device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
+		Mesh::descriptorSetLayout = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 
     if (Model::descriptorSetLayout){
         info.device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
+		Model::descriptorSetLayout = nullptr;
         std::cout << "Descriptor Set Layout destroyed\n";
     }
 
@@ -130,6 +137,7 @@ Renderer::~Renderer()
 
 	if (Shadows::renderPass) {
 		info.device.destroyRenderPass(Shadows::renderPass);
+		Shadows::renderPass = nullptr;
 		std::cout << "RenderPass destroyed\n";
 	}
 
@@ -175,7 +183,7 @@ void Renderer::initVulkanContext()
 	info.frameBuffers = createFrameBuffers();
 	info.dynamicCmdBuffer = createCmdBuffer();
 	info.shadowsPassCmdBuffers = createCmdBuffers(1);
-	info.descriptorPool = createDescriptorPool(500); // max number of all descriptor sets to allocate	
+	info.descriptorPool = createDescriptorPool(1500); // max number of all descriptor sets to allocate	
 
 
 	info.shadows.resize(1);
@@ -186,10 +194,10 @@ void Renderer::initVulkanContext()
 	}
 
 	// create pipelines
+	info.pipelineTerrain = createPipeline(Terrain::getPipelineSpecifications(&info));
 	info.pipelineShadows = createPipeline(Shadows::getPipelineSpecifications(&info));
 	info.pipelineSkyBox = createPipeline(SkyBox::getPipelineSpecifications(&info));
 	info.pipelineGUI = createPipeline(GUI::getPipelineSpecifications(&info));
-	info.pipelineTerrain = createPipeline(Terrain::getPipelineSpecifications(&info));
 	info.pipeline = createPipeline(Model::getPipelineSpecifications(&info));
 }
 
@@ -746,10 +754,10 @@ Pipeline Renderer::createPipeline(const specificGraphicsPipelineCreateInfo& spec
 	if (specificInfo.useBlendState) {
 		_pipeline.info.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
 			vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-			VK_FALSE,												// Bool32 logicOpEnable; // this muse be false is we want alpha blend
+			VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
 			vk::LogicOp::eCopy,										// LogicOp logicOp;
 			1,														// uint32_t attachmentCount;
-			&vk::PipelineColorBlendAttachmentState{		// const PipelineColorBlendAttachmentState* pAttachments;
+			&vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
 				VK_TRUE,												// Bool32 blendEnable;
 				vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
 				vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
@@ -824,6 +832,9 @@ void Renderer::update(float delta)
 	for (auto &model : info.models) {
 		mvp.model = model.matrix;
 		memcpy(model.uniformBuffer.data, &mvp, sizeof(UBO));
+		ExtractFrustum(mvp.projection * mvp.view * mvp.model);
+		for (auto &mesh : model.meshes)
+			mesh.render = SphereInFrustum(mesh.boundingSphere);
 	}
 
 	// SKYBOX
@@ -885,7 +896,7 @@ std::vector<vk::Semaphore> Renderer::createSemaphores(uint32_t semaphoresCount)
 float Renderer::rand(float x1, float x2)
 {
 	static auto seed = std::chrono::system_clock::now().time_since_epoch().count();
-	static std::default_random_engine gen(seed);
+	static std::default_random_engine gen(static_cast<unsigned int>(seed));
 	std::uniform_real_distribution<float> x(x1, x2);
 	return x(gen);
 }
@@ -914,13 +925,13 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 	vk::DeviceSize offset = vk::DeviceSize();
 
 	// TERRAIN
-	if (info.terrain.enabled)
+	if (info.terrain.render)
 	{
 		const vk::DescriptorSet descriptorSets[] = { info.terrain.descriptorSet };
 		info.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, info.pipelineTerrain.pipeline);
 		info.dynamicCmdBuffer.bindVertexBuffers(0, 1, &info.terrain.vertexBuffer.buffer, &offset);
 		info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipelineTerrain.info.layout, 0, 1, descriptorSets, 0, nullptr);
-		info.dynamicCmdBuffer.draw((uint32_t)info.terrain.vertices.size()/12, 1, 0, 0);
+		info.dynamicCmdBuffer.draw(static_cast<uint32_t>(info.terrain.vertices.size() * 0.0833333333333333f), 1, 0, 0);
 	}
 
 	// MODELS
@@ -928,14 +939,14 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 	{
 		info.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, info.pipeline.pipeline);
 		for (auto& model : info.models) {
-			if (model.enabled) {
+			if (model.render) {
 				info.dynamicCmdBuffer.bindVertexBuffers(0, 1, &model.vertexBuffer.buffer, &offset);
 				info.dynamicCmdBuffer.bindIndexBuffer(model.indexBuffer.buffer, 0, vk::IndexType::eUint32);
 				uint32_t index = 0;
 				uint32_t vertex = 0;
 				for (auto& mesh : model.meshes) {
-					if (mesh.colorEffects.diffuse.a >= 1.f) {
-						const vk::DescriptorSet descriptorSets[] = { model.descriptorSet, mesh.descriptorSet, info.shadows[0].descriptorSet, info.descriptorSetLights};
+					if (mesh.render && mesh.colorEffects.diffuse.a >= 1.f) {
+						const vk::DescriptorSet descriptorSets[] = { model.descriptorSet, mesh.descriptorSet, info.shadows[0].descriptorSet, info.descriptorSetLights };
 						info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipeline.info.layout, 0, 4, descriptorSets, 0, nullptr);
 						info.dynamicCmdBuffer.drawIndexed((uint32_t)mesh.indices.size(), 1, index, vertex, 0);
 					}
@@ -945,7 +956,7 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 				index = 0;
 				vertex = 0;
 				for (auto& mesh : model.meshes) {
-					if (mesh.colorEffects.diffuse.a < 1.f) {
+					if (mesh.render && mesh.colorEffects.diffuse.a < 1.f) {
 						const vk::DescriptorSet descriptorSets[] = { model.descriptorSet, mesh.descriptorSet, info.shadows[0].descriptorSet};
 						info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipeline.info.layout, 0, 3, descriptorSets, 0, nullptr);
 						info.dynamicCmdBuffer.drawIndexed((uint32_t)mesh.indices.size(), 1, index, vertex, 0);
@@ -958,21 +969,21 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 	}
 
 	// SKYBOX
-	if (info.skyBox.enabled)
+	if (info.skyBox.render)
 	{
 		info.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, info.pipelineSkyBox.pipeline);
 		info.dynamicCmdBuffer.bindVertexBuffers(0, 1, &info.skyBox.vertexBuffer.buffer, &offset);
 		info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipelineSkyBox.info.layout, 0, 1, &info.skyBox.descriptorSet, 0, nullptr);
-		info.dynamicCmdBuffer.draw((uint32_t)info.skyBox.vertices.size()/4, 1, 0, 0);
+		info.dynamicCmdBuffer.draw(static_cast<uint32_t>(info.skyBox.vertices.size() * 0.25f), 1, 0, 0);
 	}
 
 	// GUI
-	if (info.gui.enabled)
+	if (info.gui.render)
 	{
 		info.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, info.pipelineGUI.pipeline);
 		info.dynamicCmdBuffer.bindVertexBuffers(0, 1, &info.gui.vertexBuffer.buffer, &offset);
 		info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipelineGUI.info.layout, 0, 1, &info.gui.descriptorSet, 0, nullptr);
-		info.dynamicCmdBuffer.draw((uint32_t)info.gui.vertices.size()/5, 1, 0, 0);
+		info.dynamicCmdBuffer.draw(static_cast<uint32_t>(info.gui.vertices.size() * 0.2f), 1, 0, 0);
 	}
 
 	info.dynamicCmdBuffer.endRenderPass();
@@ -1006,14 +1017,14 @@ void Renderer::recordShadowsCmdBuffers()
 		if (info.models.size() > 0)
 		{
 			for (auto& model : info.models) {
-				if (model.enabled) {
+				if (model.render) {
 					info.shadowsPassCmdBuffers[i].bindVertexBuffers(0, 1, &model.vertexBuffer.buffer, &offset);
 					info.shadowsPassCmdBuffers[i].bindIndexBuffer(model.indexBuffer.buffer, 0, vk::IndexType::eUint32);
 					uint32_t index = 0;
 					uint32_t vertex = 0;
 
 					for (auto& mesh : model.meshes) {
-						if (mesh.colorEffects.diffuse.a >= 1.f) {
+						if (mesh.render && mesh.colorEffects.diffuse.a >= 1.f) {
 							info.shadowsPassCmdBuffers[i].drawIndexed((uint32_t)mesh.indices.size(), 1, index, vertex, 0);
 						}
 						index += (uint32_t)mesh.indices.size();
@@ -1022,7 +1033,7 @@ void Renderer::recordShadowsCmdBuffers()
 					index = 0;
 					vertex = 0;
 					for (auto& mesh : model.meshes) {
-						if (mesh.colorEffects.diffuse.a < 1.f) {
+						if (mesh.render && mesh.colorEffects.diffuse.a < 1.f) {
 							info.shadowsPassCmdBuffers[i].drawIndexed((uint32_t)mesh.indices.size(), 1, index, vertex, 0);
 						}
 						index += (uint32_t)mesh.indices.size();
@@ -1036,7 +1047,94 @@ void Renderer::recordShadowsCmdBuffers()
 	}
 }
 
-void Renderer::draw()
+void Renderer::ExtractFrustum(glm::mat4& projection_view_model)
+{
+	float clip[16];
+	float t;
+
+	const float* proj_view_model = (const float*)glm::value_ptr(projection_view_model);
+	for (unsigned i = 0; i < 16; i++) {
+		clip[i] = proj_view_model[i];
+	}
+
+	/* Extract the numbers for the RIGHT plane */
+	frustum[0][0] = clip[3] - clip[0];
+	frustum[0][1] = clip[7] - clip[4];
+	frustum[0][2] = clip[11] - clip[8];
+	frustum[0][3] = clip[15] - clip[12];
+	/* Normalize the result */
+	t = 1.f / sqrt(frustum[0][0] * frustum[0][0] + frustum[0][1] * frustum[0][1] + frustum[0][2] * frustum[0][2]);
+	frustum[0][0] *= t;
+	frustum[0][1] *= t;
+	frustum[0][2] *= t;
+	frustum[0][3] *= t;
+	/* Extract the numbers for the LEFT plane */
+	frustum[1][0] = clip[3] + clip[0];
+	frustum[1][1] = clip[7] + clip[4];
+	frustum[1][2] = clip[11] + clip[8];
+	frustum[1][3] = clip[15] + clip[12];
+	/* Normalize the result */
+	t = 1.f / sqrt(frustum[1][0] * frustum[1][0] + frustum[1][1] * frustum[1][1] + frustum[1][2] * frustum[1][2]);
+	frustum[1][0] *= t;
+	frustum[1][1] *= t;
+	frustum[1][2] *= t;
+	frustum[1][3] *= t;
+	/* Extract the BOTTOM plane */
+	frustum[2][0] = clip[3] + clip[1];
+	frustum[2][1] = clip[7] + clip[5];
+	frustum[2][2] = clip[11] + clip[9];
+	frustum[2][3] = clip[15] + clip[13];
+	/* Normalize the result */
+	t = 1.f / sqrt(frustum[2][0] * frustum[2][0] + frustum[2][1] * frustum[2][1] + frustum[2][2] * frustum[2][2]);
+	frustum[2][0] *= t;
+	frustum[2][1] *= t;
+	frustum[2][2] *= t;
+	frustum[2][3] *= t;
+	/* Extract the TOP plane */
+	frustum[3][0] = clip[3] - clip[1];
+	frustum[3][1] = clip[7] - clip[5];
+	frustum[3][2] = clip[11] - clip[9];
+	frustum[3][3] = clip[15] - clip[13];
+	/* Normalize the result */
+	t = 1.f / sqrt(frustum[3][0] * frustum[3][0] + frustum[3][1] * frustum[3][1] + frustum[3][2] * frustum[3][2]);
+	frustum[3][0] *= t;
+	frustum[3][1] *= t;
+	frustum[3][2] *= t;
+	frustum[3][3] *= t;
+	/* Extract the FAR plane */
+	frustum[4][0] = clip[3] - clip[2];
+	frustum[4][1] = clip[7] - clip[6];
+	frustum[4][2] = clip[11] - clip[10];
+	frustum[4][3] = clip[15] - clip[14];
+	/* Normalize the result */
+	t = 1.f / sqrt(frustum[4][0] * frustum[4][0] + frustum[4][1] * frustum[4][1] + frustum[4][2] * frustum[4][2]);
+	frustum[4][0] *= t;
+	frustum[4][1] *= t;
+	frustum[4][2] *= t;
+	frustum[4][3] *= t;
+	/* Extract the NEAR plane */
+	frustum[5][0] = clip[3] + clip[2];
+	frustum[5][1] = clip[7] + clip[6];
+	frustum[5][2] = clip[11] + clip[10];
+	frustum[5][3] = clip[15] + clip[14];
+	/* Normalize the result */
+	t = 1.f / sqrt(frustum[5][0] * frustum[5][0] + frustum[5][1] * frustum[5][1] + frustum[5][2] * frustum[5][2]);
+	frustum[5][0] *= t;
+	frustum[5][1] *= t;
+	frustum[5][2] *= t;
+	frustum[5][3] *= t;
+
+}
+
+bool Renderer::SphereInFrustum(glm::vec4& boundingSphere)
+{
+	for (unsigned i = 0; i < 6; i++)
+		if (frustum[i][0] * boundingSphere.x + frustum[i][1] * boundingSphere.y + frustum[i][2] * boundingSphere.z + frustum[i][3] <= -boundingSphere.w)
+			return false;
+	return true;
+}
+
+void Renderer::present()
 {
 	// what stage of a pipeline at a command buffer to wait for the semaphores to be done until keep going
 	vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };

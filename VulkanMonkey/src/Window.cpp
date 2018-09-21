@@ -3,30 +3,21 @@
 #include "../include/Timer.h"
 #include <iostream>
 
-#ifndef MAX_WINDOWS
-#define MAX_WINDOWS 100
-#endif // MAX_WINDOWS
+constexpr auto MAX_WINDOWS = 100;
 
-Window::Window()
-{
-	// reserve to ensure a stable pointer to this vector
-	renderer.reserve(MAX_WINDOWS);
-}
+std::vector<std::unique_ptr<Renderer>> Window::renderer = {};
+int Window::width = 0, Window::height = 0;
 
-Window::~Window()
-{
-	while (!renderer.empty()) {
-		SDL_DestroyWindow(renderer.back()->info.window);
-		std::cout << "Window destroyed\n";
-		renderer.pop_back();
-	}
-    SDL_Quit();
+Window::Window() {}
 
-    std::cout << "Avrg ms/frame: " << Timer::totalTime/(float)Timer::counter << std::endl;
-}
+Window::~Window() {}
+
 
 void Window::create(const char* title, int w, int h, Uint32 flags)
 {
+	if (Window::renderer.size() != MAX_WINDOWS)
+		Window::renderer.reserve(MAX_WINDOWS);
+
 	width = w;
 	height = h;
 
@@ -43,15 +34,15 @@ void Window::create(const char* title, int w, int h, Uint32 flags)
         std::cout << "No more windows can fit in the " << dm.w << "x" << dm.h << " screen resolution.\nIgnoring...\n";
         return;
     }
-    if (renderer.size() >= MAX_WINDOWS){
+    if (Window::renderer.size() >= MAX_WINDOWS){
         std::cout << "Max windows number has been exceeded, define more (#define MAX_WINDOWS)\n";
         exit(-1);
     }
 	SDL_Window* window;
-    if (!(window = SDL_CreateWindow(title, x, y /*SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED*/, w, h, flags))) { std::cout << SDL_GetError(); return; }
+    if (!((window = SDL_CreateWindow(title, x, y /*SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED*/, w, h, flags)))) { std::cout << SDL_GetError(); return; }
     std::cout << "Success at window creation\n";
 
-    renderer.push_back(std::make_unique<Renderer>(window));
+	Window::renderer.push_back(std::make_unique<Renderer>(window));
 
     std::cout << std::endl;
     x += w + 12;
@@ -60,6 +51,16 @@ void Window::create(const char* title, int w, int h, Uint32 flags)
         x = 12;
         y += h + 50;
     }
+}
+
+void Window::destroyAll()
+{
+	while (!renderer.empty()) {
+		SDL_DestroyWindow(renderer.back()->info.window);
+		std::cout << "Window destroyed\n";
+		renderer.pop_back();
+	}
+	SDL_Quit();
 }
 
 bool Window::processEvents(float delta)
@@ -86,10 +87,10 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_s) down = true;
 			if (event.key.keysym.sym == SDLK_a) left = true;
 			if (event.key.keysym.sym == SDLK_d) right = true;
-			if (event.key.keysym.sym == SDLK_UP) info.light[0].position.y += 0.005;
-			if (event.key.keysym.sym == SDLK_DOWN) info.light[0].position.y -= 0.005;
-			if (event.key.keysym.sym == SDLK_LEFT) info.light[0].position.z += 0.005;
-			if (event.key.keysym.sym == SDLK_RIGHT) info.light[0].position.z -= 0.005;
+			if (event.key.keysym.sym == SDLK_UP) info.light[0].position.y += 0.005f;
+			if (event.key.keysym.sym == SDLK_DOWN) info.light[0].position.y -= 0.005f;
+			if (event.key.keysym.sym == SDLK_LEFT) info.light[0].position.z += 0.005f;
+			if (event.key.keysym.sym == SDLK_RIGHT) info.light[0].position.z -= 0.005f;
 			//std::cout << info.light[0].position.x << ", " << info.light[0].position.y << ", " << info.light[0].position.z << "\n";
 		}
 		else if (event.type == SDL_KEYUP) {
@@ -113,20 +114,18 @@ bool Window::processEvents(float delta)
 		}
 		if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
 			SDL_ShowCursor(SDL_DISABLE);
-			SDL_WarpMouseInWindow(info.window, width / 2, height / 2);
+			SDL_WarpMouseInWindow(info.window, static_cast<int>(width * .5f), static_cast<int>(height * .5f));
 			if (event.type == SDL_MOUSEMOTION) {
-				xMove = -(event.motion.x - width / 2);
-				yMove = -(event.motion.y - height / 2);
+				xMove = -(event.motion.x - static_cast<int>(width * .5f));
+				yMove = -(event.motion.y - static_cast<int>(height * .5f));
 				info.mainCamera.rotate((float)xMove, (float)yMove);
 			}
 		}
 		else
 			SDL_ShowCursor(SDL_ENABLE);
 	}
-	if (up && left) combineDirections = true;
-	if (up && right) combineDirections = true;
-	if (down && left) combineDirections = true;
-	if (down && right) combineDirections = true;
+
+	if ((up || down) && (left || right)) combineDirections = true;
 
 	if (up) info.mainCamera.move(Camera::RelativeDirection::FORWARD, delta, combineDirections);
 	if (down) info.mainCamera.move(Camera::RelativeDirection::BACKWARD, delta, combineDirections);
