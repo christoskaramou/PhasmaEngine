@@ -1,7 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-const int numOfLights = 5;
+const int numOfLights = 10;
 
 struct Light {
 	vec4 color;
@@ -14,7 +14,7 @@ layout(set = 1, binding = 0) uniform sampler2D tSampler;
 layout(set = 1, binding = 1) uniform sampler2D normSampler;
 layout(set = 1, binding = 2) uniform sampler2D specSampler;
 layout(set = 1, binding = 3) uniform sampler2D alphaSampler;
-layout(set = 2, binding = 1) uniform sampler2DShadow shadowMapSampler1;
+layout(set = 0, binding = 1) uniform sampler2DShadow shadowMapSampler1;
 layout(set = 3, binding = 0) uniform Lights {
 	Light light[numOfLights];
 } lights;
@@ -82,13 +82,13 @@ void main() {
 
 	vec4 s_coords1 = shadow_coords1 / shadow_coords1.w;
 
-	float toCameraDistance = distance((view * vec4(0.0, 0.0, 0.0 ,1.0)).xyz, vertexCameraSpaceModel.xyz);
+	//float toCameraDistance = distance((view * vec4(0.0, 0.0, 0.0 ,1.0)).xyz, vertexCameraSpaceModel.xyz);
 
 	float shadow = 1.0;
 	if (castShadows > 0.5){
 		for (int i=0;i<8;i++)
 		{
-			shadow -= 0.125 * ( 1.0 - texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0015, s_coords1.z-0.0001 )));
+			shadow -= 0.125 * ( 1.0 - texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z-0.0001 )));
 		}
 	}
 	
@@ -111,18 +111,13 @@ void main() {
 
 		// Diffuse
 		float nDot = dot(nLight, normalMap);
-		float brigtness = max(nDot, 0.0);
+		float brightness = max(nDot, 0.0);
 		float lightAlpha = 1.0;
-		if (i > 0){
-			lightAlpha = 1.0;
-		}
-		else{
+		if (i == 0){
+			brightness = 1.0;
 			lightAlpha = lights.light[i].color.a;
 		}
-		totalDiffuse = totalDiffuse + (brigtness * lightColor.xyz) / attFactor * lightAlpha;
-		if (i == 0){
-			totalDiffuse *= shadow;
-		}
+		totalDiffuse = totalDiffuse + (brightness * lightColor.xyz) / attFactor * lightAlpha;
 
 		// Specular
 		vec3 reflectedLightDirection = reflect(-nLight, normalMap);
@@ -130,8 +125,13 @@ void main() {
 		specularFactor = max(specularFactor, 0.0);
 		float dampedFactor = pow(specularFactor, specDamper);
 		totalSpecular = totalSpecular + (dampedFactor * lightColor.xyz * reflectivity * texture(specSampler, v_TexCoords).xyz) / attFactor * lightAlpha;
+
+		if (i == 0){
+			totalDiffuse *= shadow;
+			totalSpecular *= shadow;
+		}
 	}
 	totalDiffuse = max(totalDiffuse, 0.2);
 
-    o_Color = vec4(totalDiffuse, 1.0) * texel + vec4(totalSpecular, 0.0) * shadow;
+    o_Color = vec4(totalDiffuse, 1.0) * texel + vec4(totalSpecular, 0.0);
 }

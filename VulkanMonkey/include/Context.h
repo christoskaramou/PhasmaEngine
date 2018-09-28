@@ -4,10 +4,12 @@
 
 #include <map>
 #include <any>
+#include "imgui/imgui.h"
 #define VK_USE_PLATFORM_WIN32_KHR
 #define VULKAN_HPP_NO_EXCEPTIONS
 #include <vulkan/vulkan.hpp>
 #include "SDL/SDL.h"
+#include "SDL/SDL_syswm.h"
 #include "SDL/SDL_vulkan.h"
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_LEFT_HANDED
@@ -19,9 +21,9 @@
 #include "glm/gtc/constants.hpp"
 #include "glm/gtx/matrix_decompose.hpp"
 
-#define MAX_LIGHTS 5
+#define MAX_LIGHTS 10
 
-struct Context; // foward declaration
+struct Context; // forward declaration
 
 struct Vertex
 {
@@ -52,6 +54,8 @@ struct Image
 	vk::ImageLayout initialLayout = vk::ImageLayout::ePreinitialized;
 	uint32_t mipLevels = 1;
 	uint32_t arrayLayers = 1;
+	float minLod = 0.f;
+	float maxLod = 1.f;
 	vk::ImageCreateFlags imageCreateFlags = vk::ImageCreateFlags();
 	vk::ImageViewType viewType = vk::ImageViewType::e2D;
 	vk::SamplerAddressMode addressMode = vk::SamplerAddressMode::eRepeat;
@@ -71,6 +75,7 @@ struct Image
 struct Surface
 {
 	vk::SurfaceKHR surface;
+	VkExtent2D actualExtent;
 	vk::SurfaceCapabilitiesKHR capabilities;
 	vk::SurfaceFormatKHR formatKHR;
 	vk::PresentModeKHR presentModeKHR;
@@ -109,6 +114,8 @@ struct specificGraphicsPipelineCreateInfo
 	vk::RenderPass renderPass;
 	vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
 	vk::Extent2D viewportSize;
+	std::vector<vk::DynamicState> dynamicStates{};
+	vk::PipelineDynamicStateCreateInfo dynamicStateInfo;
 };
 
 struct Pipeline
@@ -134,6 +141,7 @@ struct Object
 	Image texture;
 	std::vector<float> vertices{};
 	Buffer vertexBuffer;
+	Buffer indexBuffer;
 	Buffer uniformBuffer;
 
 	virtual void createVertexBuffer(const Context* info);
@@ -145,10 +153,25 @@ struct Object
 
 struct GUI : Object
 {
+	// Data
+	static SDL_Window*  g_Window;
+	static Uint64       g_Time;
+	static bool         g_MousePressed[3];
+	static SDL_Cursor*  g_MouseCursors[ImGuiMouseCursor_COUNT];
+	static char*        g_ClipboardTextData;
+	bool				show_demo_window = false;
+	static const char*	ImGui_ImplSDL2_GetClipboardText(void*);
+	static void			ImGui_ImplSDL2_SetClipboardText(void*, const char* text);
+	void				initImGui(const Context* info);
+	void				newFrame(const Context* info, SDL_Window* window);
+
+	std::string	name;
 	static vk::DescriptorSetLayout descriptorSetLayout;
-	static vk::DescriptorSetLayout getDescriptorSetLayout(const Context* info = nullptr); // after the first call it is no need to point the Context for the divice
+	static vk::DescriptorSetLayout getDescriptorSetLayout(const Context* info = nullptr); // after the first call it is no need to point the Context for the device
 	static specificGraphicsPipelineCreateInfo getPipelineSpecifications(const Context* info);
 	static GUI loadGUI(const std::string textureName, const Context* info, bool show = true);
+	void createVertexBuffer(const Context* info, size_t vertex_size);
+	void createIndexBuffer(const Context* info, size_t index_size);
 	void createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout, const Context* info);
 };
 
@@ -185,7 +208,7 @@ struct Shadows
 	Buffer uniformBuffer;
 
 	void createFrameBuffer(const Context* info);
-	void createUniformBuffer(const Context* info);
+	void createDynamicUniformBuffer(size_t num_of_objects, const Context* info);
 	void createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout, const Context* info);
 	void destroy(const Context* info);
 };
@@ -196,6 +219,8 @@ struct Mesh
 	bool cull = false;
 	glm::vec4 boundingSphere;
 	void calculateBoundingSphere();
+	uint32_t vertexOffset;
+	uint32_t indexOffset;
 	enum TextureType
 	{
 		DiffuseMap,
@@ -232,8 +257,8 @@ struct Model
 	Buffer vertexBuffer;
 	Buffer indexBuffer;
 	Buffer uniformBuffer;
-	uint32_t numberOfVertices;
-	uint32_t numberOfIndices;
+	uint32_t numberOfVertices = 0;
+	uint32_t numberOfIndices = 0;
 	float initialBoundingSphereRadius = 0.0f;
 
 	glm::vec4 getBoundingSphere();
@@ -259,7 +284,7 @@ struct Camera
 	glm::vec3 right;
 	glm::vec3 worldUp;
 	float aspect = 16.f/9.f;
-	float nearPlane = 0.01f;
+	float nearPlane = 0.005f;
 	float farPlane = 50.0f;
 	float FOV = 45.0f;
 	float yaw;
@@ -293,6 +318,7 @@ struct ShadowsUBO
 	glm::mat4 view;
 	glm::mat4 model;
 	float castShadows;
+	float dummy[15]; // for 256 bytes align
 };
 
 struct Light
@@ -341,8 +367,6 @@ public:
 	Image multiSampleColorImage;
 	Image multiSampleDepthImage;
     std::vector<vk::Framebuffer> frameBuffers{};
-    std::vector<vk::CommandBuffer> cmdBuffers{};
-	bool useDynamicCmdBuffer = true;
 	vk::CommandBuffer dynamicCmdBuffer;
 	std::vector<vk::CommandBuffer> shadowsPassCmdBuffers{};
 	vk::DescriptorPool descriptorPool;

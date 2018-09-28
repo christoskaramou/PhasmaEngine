@@ -14,16 +14,25 @@ Renderer::Renderer(SDL_Window* window)
 	initVulkanContext();
 
 	info.skyBox = SkyBox::loadSkyBox({ "objects/sky/right.png", "objects/sky/left.png", "objects/sky/top.png", "objects/sky/bottom.png", "objects/sky/back.png", "objects/sky/front.png" }, 1024, &info);
-	info.gui = GUI::loadGUI("objects/gui/gui.png", &info, false);
+	info.gui = GUI::loadGUI("ImGuiDemo", &info);
 	info.terrain = Terrain::generateTerrain("", &info);
 	info.models.push_back(Model::loadModel("objects/sponza/", "sponza.obj", &info));
+	
+	//info.models.push_back(Model::loadModel("objects/sponza/", "sponza.obj", &info));
+	//info.models.back().matrix = glm::rotate(glm::radians(90.f), glm::vec3(0.f, 1.f, 0.f)) * info.models.back().matrix;
+	//info.models.back().matrix = glm::translate(glm::mat4(1.f), glm::vec3(0.f, 0.f, -3.f)) * info.models.back().matrix;
+
+	for (auto& shadows : info.shadows) {
+		shadows.createDynamicUniformBuffer(info.models.size(), &info);
+		shadows.createDescriptorSet(Shadows::getDescriptorSetLayout(&info), &info);
+	}
 
 	{
 		// some random light colors and positions
 		info.light.resize(MAX_LIGHTS);
 		for (auto& light : info.light) {
 			light = { glm::vec4(rand(0.f,1.f), rand(0.0f,1.f), rand(0.f,1.f), rand(0.f,1.f)),
-				glm::vec4(rand(-1.f,1.f), rand(.3f,1.f),rand(-.5f,.5f), 1.f),
+				glm::vec4(rand(-1.f,1.f), rand(.3f,1.f), rand(-3.5f,.5f), 1.f),
 				glm::vec4(10.f, 1.f, 1.f, 1.f),
 				glm::vec4(0.f, 0.f, 0.f, 1.f) };
 		}
@@ -183,14 +192,11 @@ void Renderer::initVulkanContext()
 	info.frameBuffers = createFrameBuffers();
 	info.dynamicCmdBuffer = createCmdBuffer();
 	info.shadowsPassCmdBuffers = createCmdBuffers(1);
-	info.descriptorPool = createDescriptorPool(1500); // max number of all descriptor sets to allocate	
-
+	info.descriptorPool = createDescriptorPool(3000); // max number of all descriptor sets to allocate	
 
 	info.shadows.resize(1);
 	for (auto& shadows : info.shadows) {
 		shadows.createFrameBuffer(&info);
-		shadows.createUniformBuffer(&info);
-		shadows.createDescriptorSet(Shadows::getDescriptorSetLayout(&info), &info);
 	}
 
 	// create pipelines
@@ -244,6 +250,9 @@ Surface Renderer::createSurface()
         exit(-2);
     }
 	Surface _surface;
+	int width, height;
+	SDL_GL_GetDrawableSize(info.window, &width, &height); 
+	_surface.actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 	_surface.surface = vk::SurfaceKHR(_vkSurface);
 
 	return _surface;
@@ -367,13 +376,13 @@ vk::Device Renderer::createDevice()
 Swapchain Renderer::createSwapchain()
 {
     Swapchain _swapchain;
+	VkExtent2D extent = info.surface.actualExtent;
    
     uint32_t swapchainImageCount = info.surface.capabilities.minImageCount + 1;
     if (info.surface.capabilities.maxImageCount > 0 &&
         swapchainImageCount > info.surface.capabilities.maxImageCount) {
         swapchainImageCount = info.surface.capabilities.maxImageCount;
     }
-	auto aaa = info.surface.capabilities;
 
     vk::SwapchainKHR oldSwapchain = _swapchain.swapchain;
 	auto const swapchainCreateInfo = vk::SwapchainCreateInfoKHR()
@@ -381,7 +390,7 @@ Swapchain Renderer::createSwapchain()
 		.setMinImageCount(swapchainImageCount)
 		.setImageFormat(info.surface.formatKHR.format)
 		.setImageColorSpace(info.surface.formatKHR.colorSpace)
-		.setImageExtent(info.surface.capabilities.currentExtent)
+		.setImageExtent(extent)
 		.setImageArrayLayers(1)
 		.setImageUsage(vk::ImageUsageFlagBits::eColorAttachment)
 		.setPreTransform(info.surface.capabilities.currentTransform)
@@ -541,9 +550,8 @@ Image Renderer::createDepthResources()
 		std::cout << "No suitable format found!\n";
 		exit(-9);
 	}
-
-	_image.createImage(&info, info.surface.capabilities.currentExtent.width, info.surface.capabilities.currentExtent.height,
-        vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	_image.createImage(&info, info.surface.actualExtent.width, info.surface.actualExtent.height,
+		vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	_image.createImageView(&info, vk::ImageAspectFlagBits::eDepth);
 	_image.transitionImageLayout(&info, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
@@ -556,12 +564,12 @@ std::vector<vk::Framebuffer> Renderer::createFrameBuffers()
 		&& (VkSampleCountFlags(info.gpuProperties.limits.framebufferDepthSampleCounts) >= VkSampleCountFlags(info.sampleCount)));
 
 	info.multiSampleColorImage.format = info.surface.formatKHR.format;
-	info.multiSampleColorImage.createImage(&info, info.surface.capabilities.currentExtent.width, info.surface.capabilities.currentExtent.height, vk::ImageTiling::eOptimal,
+	info.multiSampleColorImage.createImage(&info, info.surface.actualExtent.width, info.surface.actualExtent.height, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment, vk::MemoryPropertyFlagBits::eLazilyAllocated, info.sampleCount);
 	info.multiSampleColorImage.createImageView(&info, vk::ImageAspectFlagBits::eColor);
 
 	info.multiSampleDepthImage.format = info.depth.format;
-	info.multiSampleDepthImage.createImage(&info, info.surface.capabilities.currentExtent.width, info.surface.capabilities.currentExtent.height, vk::ImageTiling::eOptimal,
+	info.multiSampleDepthImage.createImage(&info, info.surface.actualExtent.width, info.surface.actualExtent.height, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eLazilyAllocated, info.sampleCount);
 	info.multiSampleDepthImage.createImageView(&info, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
 
@@ -574,8 +582,8 @@ std::vector<vk::Framebuffer> Renderer::createFrameBuffers()
 			.setRenderPass(info.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
-			.setWidth(info.surface.capabilities.currentExtent.width)
-			.setHeight(info.surface.capabilities.currentExtent.height)
+			.setWidth(info.surface.actualExtent.width)
+			.setHeight(info.surface.actualExtent.height)
 			.setLayers(1);
         VkCheck(info.device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
         std::cout << "Framebuffer created\n";
@@ -633,32 +641,38 @@ Pipeline Renderer::createPipeline(const specificGraphicsPipelineCreateInfo& spec
 	vk::ShaderModule vertModule;
 	vk::ShaderModule fragModule;
 
-	auto vertCode = readFile(specificInfo.shaders[0]);
+	std::vector<char> vertCode{};
 	std::vector<char> fragCode{};
-	if (specificInfo.shaders.size()>1)
-		fragCode = readFile(specificInfo.shaders[1]);
 
-
-	auto vsmci = vk::ShaderModuleCreateInfo{
-		vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-		vertCode.size(),									// size_t codeSize;
-		reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-	};
+	vk::ShaderModuleCreateInfo vsmci;
 	vk::ShaderModuleCreateInfo fsmci;
-	if (specificInfo.shaders.size() > 1) {
-		fsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			fragCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-		};
-	}
 
-	VkCheck(info.device.createShaderModule(&vsmci, nullptr, &vertModule));
-	std::cout << "Vertex Shader Module created\n";
-	if (specificInfo.shaders.size() > 1) {
-		VkCheck(info.device.createShaderModule(&fsmci, nullptr, &fragModule));
-		std::cout << "Fragment Shader Module created\n";
+	if (specificInfo.shaders.size() > 0) {
+		vertCode = readFile(specificInfo.shaders[0]);
+		if (specificInfo.shaders.size() > 1)
+			fragCode = readFile(specificInfo.shaders[1]);
+
+		vsmci = vk::ShaderModuleCreateInfo{
+			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
+			vertCode.size(),									// size_t codeSize;
+			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
+		};
+		if (specificInfo.shaders.size() > 1) {
+			fsmci = vk::ShaderModuleCreateInfo{
+				vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
+				fragCode.size(),									// size_t codeSize;
+				reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
+			};
+		}
+		VkCheck(info.device.createShaderModule(&vsmci, nullptr, &vertModule));
+		std::cout << "Vertex Shader Module created\n";
+		if (specificInfo.shaders.size() > 1) {
+			VkCheck(info.device.createShaderModule(&fsmci, nullptr, &fragModule));
+			std::cout << "Fragment Shader Module created\n";
+		}
 	}
+	else
+		exit(-22);
 
 	_pipeline.info.stageCount = (uint32_t)specificInfo.shaders.size();
 
@@ -777,7 +791,7 @@ Pipeline Renderer::createPipeline(const specificGraphicsPipelineCreateInfo& spec
 		_pipeline.info.pColorBlendState = nullptr;
 
     // Dynamic state
-	_pipeline.info.pDynamicState = nullptr;
+	_pipeline.info.pDynamicState = specificInfo.dynamicStates.size() > 0 ? &specificInfo.dynamicStateInfo : nullptr;
 
 	// Push Constant Range
 	auto pushConstantRange = specificInfo.pushConstantRange;
@@ -814,27 +828,21 @@ Pipeline Renderer::createPipeline(const specificGraphicsPipelineCreateInfo& spec
 
 void Renderer::update(float delta)
 {
-	ProjView proj_view;
-	proj_view.projection = info.mainCamera.getPerspective();
-	proj_view.view = info.mainCamera.getView();
+
+	ProjView proj_view{ info.mainCamera.getPerspective(), info.mainCamera.getView() };
+	glm::mat4 p_v = proj_view.projection * proj_view.view;
 
 	//TERRAIN
 	if (info.terrain.render) {
-		UBO mvpTerrain;
-		mvpTerrain.projection = proj_view.projection;
-		mvpTerrain.view = proj_view.view;
-		mvpTerrain.model = glm::mat4(1.0f);
+		UBO mvpTerrain{ proj_view.projection, proj_view.view, glm::mat4(1.0f) };
 		memcpy(info.terrain.uniformBuffer.data, &mvpTerrain, sizeof(UBO));
 	}
 
 	// MODELS
 	for (auto &model : info.models) {
 		if (model.render) {
-			UBO mvp;
-			mvp.projection = proj_view.projection;
-			mvp.view = proj_view.view;
-			mvp.model = model.matrix;
-			ExtractFrustum(mvp.projection * mvp.view * mvp.model);
+			UBO mvp{ proj_view.projection, proj_view.view, model.matrix };
+			ExtractFrustum(p_v * model.matrix);
 			for (auto &mesh : model.meshes) {
 				mesh.cull = !SphereInFrustum(mesh.boundingSphere);
 				if (!mesh.cull)
@@ -849,15 +857,19 @@ void Renderer::update(float delta)
 
 	// SHADOWS
 	for (auto& shadows : info.shadows) {
-		ShadowsUBO shadows_UBO;
-		shadows_UBO.projection = glm::perspective(glm::radians(90.0f), 1.f, 0.01f, 50.0f);
 		glm::vec3 lightPos = glm::vec3(info.light[0].position);
 		glm::vec3 center = -lightPos;
-		shadows_UBO.view = glm::lookAt(lightPos, center, info.mainCamera.worldUp);
-		shadows_UBO.model = info.models[0].matrix;
-		shadows_UBO.castShadows = Shadows::shadowCast ? 1.0f : 0.0f;
-		memcpy(shadows.uniformBuffer.data, &shadows_UBO, sizeof(ShadowsUBO));
+		std::vector<ShadowsUBO> shadows_UBO{};
+		shadows_UBO.resize(info.models.size());
+		for (uint32_t i = 0; i < info.models.size(); i++) {
+			//glm::radians(90.0f), 1.f, 0.005f, 50.0f)
+			shadows_UBO[i] = { glm::ortho(-4.f, 4.f, 4.f, -4.f, 0.1f, 20.f), glm::lookAt(lightPos, center, info.mainCamera.worldUp), info.models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
+		}
+		memcpy(shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
 	}
+
+	if (info.gui.render)
+		info.gui.newFrame(&info, info.window);
 }
 
 vk::DescriptorPool Renderer::createDescriptorPool(uint32_t maxDescriptorSets)
@@ -921,8 +933,8 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 	auto renderPassInfo = vk::RenderPassBeginInfo()
 		.setRenderPass(info.renderPass)
 		.setFramebuffer(info.frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, info.surface.capabilities.currentExtent })
-		.setClearValueCount((uint32_t)clearValues.size())
+		.setRenderArea({ { 0, 0 }, info.surface.actualExtent })
+		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
 
 	VkCheck(info.dynamicCmdBuffer.begin(&beginInfo));
@@ -944,31 +956,26 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 	if (info.models.size() > 0)
 	{
 		info.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, info.pipeline.pipeline);
-		for (auto& model : info.models) {
+		for (uint32_t m = 0; m < info.models.size(); m++) {
+			auto& model = info.models[m];
 			if (model.render) {
 				info.dynamicCmdBuffer.bindVertexBuffers(0, 1, &model.vertexBuffer.buffer, &offset);
 				info.dynamicCmdBuffer.bindIndexBuffer(model.indexBuffer.buffer, 0, vk::IndexType::eUint32);
-				uint32_t index = 0;
-				uint32_t vertex = 0;
 				for (auto& mesh : model.meshes) {
 					if (mesh.render && !mesh.cull && mesh.colorEffects.diffuse.a >= 1.f) {
-						const vk::DescriptorSet descriptorSets[] = { model.descriptorSet, mesh.descriptorSet, info.shadows[0].descriptorSet, info.descriptorSetLights };
-						info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipeline.info.layout, 0, 4, descriptorSets, 0, nullptr);
-						info.dynamicCmdBuffer.drawIndexed((uint32_t)mesh.indices.size(), 1, index, vertex, 0);
+						const uint32_t dOffsets[] = { m * sizeof(ShadowsUBO) };
+						const vk::DescriptorSet descriptorSets[] = { info.shadows[0].descriptorSet, mesh.descriptorSet, model.descriptorSet, info.descriptorSetLights };
+						info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipeline.info.layout, 0, 4, descriptorSets, 1, dOffsets);
+						info.dynamicCmdBuffer.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
 					}
-					index += (uint32_t)mesh.indices.size();
-					vertex += (uint32_t)mesh.vertices.size();
 				}
-				index = 0;
-				vertex = 0;
 				for (auto& mesh : model.meshes) {
 					if (mesh.render && !mesh.cull && mesh.colorEffects.diffuse.a < 1.f) {
-						const vk::DescriptorSet descriptorSets[] = { model.descriptorSet, mesh.descriptorSet, info.shadows[0].descriptorSet};
-						info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipeline.info.layout, 0, 3, descriptorSets, 0, nullptr);
-						info.dynamicCmdBuffer.drawIndexed((uint32_t)mesh.indices.size(), 1, index, vertex, 0);
+						const uint32_t dOffsets[] = { m * sizeof(ShadowsUBO) };
+						const vk::DescriptorSet descriptorSets[] = { info.shadows[0].descriptorSet, mesh.descriptorSet, model.descriptorSet };
+						info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipeline.info.layout, 0, 3, descriptorSets, 1, dOffsets);
+						info.dynamicCmdBuffer.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
 					}
-					index += (uint32_t)mesh.indices.size();
-					vertex += (uint32_t)mesh.vertices.size();
 				}
 			}
 		}
@@ -986,10 +993,63 @@ void Renderer::recordDynamicCmdBuffer(const uint32_t imageIndex)
 	// GUI
 	if (info.gui.render)
 	{
-		info.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, info.pipelineGUI.pipeline);
-		info.dynamicCmdBuffer.bindVertexBuffers(0, 1, &info.gui.vertexBuffer.buffer, &offset);
-		info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipelineGUI.info.layout, 0, 1, &info.gui.descriptorSet, 0, nullptr);
-		info.dynamicCmdBuffer.draw(static_cast<uint32_t>(info.gui.vertices.size() * 0.2f), 1, 0, 0);
+		auto draw_data = ImGui::GetDrawData();
+		if (draw_data->TotalVtxCount > 0) 
+		{
+			info.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, info.pipelineGUI.pipeline);
+			info.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipelineGUI.info.layout, 0, 1, &info.gui.descriptorSet, 0, nullptr);
+			info.dynamicCmdBuffer.bindVertexBuffers(0, 1, &info.gui.vertexBuffer.buffer, &offset);
+			info.dynamicCmdBuffer.bindIndexBuffer(info.gui.indexBuffer.buffer, 0, vk::IndexType::eUint16);
+
+			vk::Viewport viewport;
+			viewport.x = 0;
+			viewport.y = 0;
+			viewport.width = draw_data->DisplaySize.x;
+			viewport.height = draw_data->DisplaySize.y;
+			viewport.minDepth = 0.0f;
+			viewport.maxDepth = 1.0f;
+			info.dynamicCmdBuffer.setViewport(0, 1, &viewport);
+
+			float data[4];
+			data[0] = 2.0f / draw_data->DisplaySize.x;				// scale
+			data[1] = 2.0f / draw_data->DisplaySize.y;				// scale
+			data[2] = -1.0f - draw_data->DisplayPos.x * data[0];	// transform
+			data[3] = -1.0f - draw_data->DisplayPos.y * data[1];	// transform
+			info.dynamicCmdBuffer.pushConstants(info.pipelineGUI.info.layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4, data);
+
+			// Render the command lists:
+			int vtx_offset = 0;
+			int idx_offset = 0;
+			ImVec2 display_pos = draw_data->DisplayPos;
+			for (int n = 0; n < draw_data->CmdListsCount; n++)
+			{
+				const ImDrawList* cmd_list = draw_data->CmdLists[n];
+				for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++)
+				{
+					const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
+					if (pcmd->UserCallback)
+					{
+						pcmd->UserCallback(cmd_list, pcmd);
+					}
+					else
+					{
+						// Apply scissor/clipping rectangle
+						// FIXME: We could clamp width/height based on clamped min/max values.
+						vk::Rect2D scissor;
+						scissor.offset.x = (int32_t)(pcmd->ClipRect.x - display_pos.x) > 0 ? (int32_t)(pcmd->ClipRect.x - display_pos.x) : 0;
+						scissor.offset.y = (int32_t)(pcmd->ClipRect.y - display_pos.y) > 0 ? (int32_t)(pcmd->ClipRect.y - display_pos.y) : 0;
+						scissor.extent.width = (uint32_t)(pcmd->ClipRect.z - pcmd->ClipRect.x);
+						scissor.extent.height = (uint32_t)(pcmd->ClipRect.w - pcmd->ClipRect.y + 1); // FIXME: Why +1 here?
+						info.dynamicCmdBuffer.setScissor(0, 1, &scissor);
+
+						// Draw
+						info.dynamicCmdBuffer.drawIndexed(pcmd->ElemCount, 1, idx_offset, vtx_offset, 0);
+					}
+					idx_offset += pcmd->ElemCount;
+				}
+				vtx_offset += cmd_list->VtxBuffer.Size;
+			}
+		}
 	}
 
 	info.dynamicCmdBuffer.endRenderPass();
@@ -1009,7 +1069,7 @@ void Renderer::recordShadowsCmdBuffers()
 			.setRenderPass(Shadows::getRenderPass(&info))
 			.setFramebuffer(info.shadows[i].frameBuffer)
 			.setRenderArea({ { 0, 0 },{ info.shadows[i].imageSize, info.shadows[i].imageSize } })
-			.setClearValueCount((uint32_t)clearValuesShadows.size())
+			.setClearValueCount(static_cast<uint32_t>(clearValuesShadows.size()))
 			.setPClearValues(clearValuesShadows.data());
 
 		VkCheck(info.shadowsPassCmdBuffers[i].begin(&beginInfoShadows));
@@ -1018,32 +1078,24 @@ void Renderer::recordShadowsCmdBuffers()
 		vk::DeviceSize offset = vk::DeviceSize();
 
 		info.shadowsPassCmdBuffers[i].bindPipeline(vk::PipelineBindPoint::eGraphics, info.pipelineShadows.pipeline);
-		info.shadowsPassCmdBuffers[i].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipelineShadows.info.layout, 0, 1, &info.shadows[i].descriptorSet, 0, nullptr);
 
 		if (info.models.size() > 0)
 		{
-			for (auto& model : info.models) {
-				if (model.render) {
-					info.shadowsPassCmdBuffers[i].bindVertexBuffers(0, 1, &model.vertexBuffer.buffer, &offset);
-					info.shadowsPassCmdBuffers[i].bindIndexBuffer(model.indexBuffer.buffer, 0, vk::IndexType::eUint32);
-					uint32_t index = 0;
-					uint32_t vertex = 0;
+			for (uint32_t m = 0; m < info.models.size(); m++) {
+				if (info.models[m].render) {
+					info.shadowsPassCmdBuffers[i].bindVertexBuffers(0, 1, &info.models[m].vertexBuffer.buffer, &offset);
+					info.shadowsPassCmdBuffers[i].bindIndexBuffer(info.models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
-					for (auto& mesh : model.meshes) {
-						if (mesh.render && mesh.colorEffects.diffuse.a >= 1.f) {
-							info.shadowsPassCmdBuffers[i].drawIndexed((uint32_t)mesh.indices.size(), 1, index, vertex, 0);
-						}
-						index += (uint32_t)mesh.indices.size();
-						vertex += (uint32_t)mesh.vertices.size();
+					const uint32_t dOffsets[] = { m * sizeof(ShadowsUBO) };
+					info.shadowsPassCmdBuffers[i].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipelineShadows.info.layout, 0, 1, &info.shadows[i].descriptorSet, 1, dOffsets);
+
+					for (auto& mesh : info.models[m].meshes) {
+						if (mesh.render && mesh.colorEffects.diffuse.a >= 1.f)
+							info.shadowsPassCmdBuffers[i].drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
 					}
-					index = 0;
-					vertex = 0;
-					for (auto& mesh : model.meshes) {
-						if (mesh.render && mesh.colorEffects.diffuse.a < 1.f) {
-							info.shadowsPassCmdBuffers[i].drawIndexed((uint32_t)mesh.indices.size(), 1, index, vertex, 0);
-						}
-						index += (uint32_t)mesh.indices.size();
-						vertex += (uint32_t)mesh.vertices.size();
+					for (auto& mesh : info.models[m].meshes) {
+						if (mesh.render && mesh.colorEffects.diffuse.a < 1.f)
+							info.shadowsPassCmdBuffers[i].drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
 					}
 				}
 			}
@@ -1053,15 +1105,44 @@ void Renderer::recordShadowsCmdBuffers()
 	}
 }
 
+void Renderer::resizeViewport()
+{
+	info.device.waitIdle();
+
+	// Free resources
+	info.depth.destroy(&info);
+	info.multiSampleColorImage.destroy(&info);
+	info.multiSampleDepthImage.destroy(&info);
+	for (auto& fb : info.frameBuffers)
+		info.device.destroyFramebuffer(fb);
+	info.device.freeCommandBuffers(info.commandPool, 1, &info.dynamicCmdBuffer);
+	info.pipeline.destroy(&info);
+	info.pipelineGUI.destroy(&info);
+	info.pipelineSkyBox.destroy(&info);
+	info.pipelineTerrain.destroy(&info);
+	info.device.destroyRenderPass(info.renderPass);
+	info.swapchain.destroy(info.device);
+
+	// Recreate resources
+	int width, height;
+	SDL_GL_GetDrawableSize(info.window, &width, &height);
+	info.surface.actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+
+	info.swapchain = createSwapchain();
+	info.depth = createDepthResources();
+	info.renderPass = createRenderPass();
+	info.frameBuffers = createFrameBuffers();
+	info.dynamicCmdBuffer = createCmdBuffer();
+	info.pipelineTerrain = createPipeline(Terrain::getPipelineSpecifications(&info));
+	info.pipelineSkyBox = createPipeline(SkyBox::getPipelineSpecifications(&info));
+	info.pipelineGUI = createPipeline(GUI::getPipelineSpecifications(&info));
+	info.pipeline = createPipeline(Model::getPipelineSpecifications(&info));
+}
+
 void Renderer::ExtractFrustum(glm::mat4& projection_view_model)
 {
-	float clip[16];
+	const float* clip = glm::value_ptr(projection_view_model);
 	float t;
-
-	const float* proj_view_model = (const float*)glm::value_ptr(projection_view_model);
-	for (unsigned i = 0; i < 16; i++) {
-		clip[i] = proj_view_model[i];
-	}
 
 	/* Extract the numbers for the RIGHT plane */
 	frustum[0][0] = clip[3] - clip[0];
@@ -1129,7 +1210,6 @@ void Renderer::ExtractFrustum(glm::mat4& projection_view_model)
 	frustum[5][1] *= t;
 	frustum[5][2] *= t;
 	frustum[5][3] *= t;
-
 }
 
 bool Renderer::SphereInFrustum(glm::vec4& boundingSphere)
@@ -1142,8 +1222,10 @@ bool Renderer::SphereInFrustum(glm::vec4& boundingSphere)
 
 void Renderer::present()
 {
+	if (!prepared) return;
+
 	// what stage of a pipeline at a command buffer to wait for the semaphores to be done until keep going
-	vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+	const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
     uint32_t imageIndex;
 
@@ -1187,10 +1269,7 @@ void Renderer::present()
 		.setPImageIndices(&imageIndex)
 		.setPResults(nullptr); //optional
 	VkCheck(info.presentQueue.presentKHR(&pi));
-	info.presentQueue.waitIdle();
+
+	if (overloadedGPU)
+		info.presentQueue.waitIdle(); // user set, when GPU hinders the CPU (e.g. tearing visuals)
 }
-
-
-
-
-

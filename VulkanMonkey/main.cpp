@@ -5,7 +5,7 @@
 #include <string>
 
 constexpr int WIDTH = 1644;
-constexpr int HEIGHT = 936;;
+constexpr int HEIGHT = 936;
 
 int main(int argc, char* argv[])
 {

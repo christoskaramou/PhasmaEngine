@@ -11,7 +11,7 @@
 
 vk::RenderPass Shadows::renderPass = nullptr;
 bool Shadows::shadowCast = true;
-uint32_t Shadows::imageSize = 2048;
+uint32_t Shadows::imageSize = 4096;
 
 vk::DescriptorSetLayout Mesh::descriptorSetLayout = nullptr;
 vk::DescriptorSetLayout Model::descriptorSetLayout = nullptr;
@@ -42,7 +42,7 @@ std::vector<vk::VertexInputBindingDescription> Vertex::getBindingDescriptionGUI(
 {
 	std::vector<vk::VertexInputBindingDescription> vInputBindDesc(1);
 	vInputBindDesc[0].binding = 0;
-	vInputBindDesc[0].stride = 5 * sizeof(float);
+	vInputBindDesc[0].stride = sizeof(ImDrawVert); //5 * sizeof(float);
 	vInputBindDesc[0].inputRate = vk::VertexInputRate::eVertex;
 
 	return vInputBindDesc;
@@ -87,17 +87,22 @@ std::vector<vk::VertexInputAttributeDescription> Vertex::getAttributeDescription
 
 std::vector<vk::VertexInputAttributeDescription> Vertex::getAttributeDescriptionGUI()
 {
-	std::vector<vk::VertexInputAttributeDescription> vInputAttrDesc(2);
+	std::vector<vk::VertexInputAttributeDescription> vInputAttrDesc(3);
 	vInputAttrDesc[0] = vk::VertexInputAttributeDescription()
 		.setBinding(0)										// index of the binding to get per-vertex data
 		.setLocation(0)										// location directive of the input in the vertex shader
-		.setFormat(vk::Format::eR32G32B32Sfloat)	//vec3
-		.setOffset(0);
+		.setFormat(vk::Format::eR32G32Sfloat)		//vec2
+		.setOffset(IM_OFFSETOF(ImDrawVert, pos));//(0);
 	vInputAttrDesc[1] = vk::VertexInputAttributeDescription()
 		.setBinding(0)
 		.setLocation(1)
 		.setFormat(vk::Format::eR32G32Sfloat)		//vec2
-		.setOffset(3 * sizeof(float));
+		.setOffset(IM_OFFSETOF(ImDrawVert, uv));//(3 * sizeof(float));
+	vInputAttrDesc[2] = vk::VertexInputAttributeDescription()
+		.setBinding(0)
+		.setLocation(2)
+		.setFormat(vk::Format::eR8G8B8A8Unorm)		//unsigned integer
+		.setOffset(IM_OFFSETOF(ImDrawVert, col));
 
 	return vInputAttrDesc;
 }
@@ -419,8 +424,8 @@ void Image::createSampler(const Context* info)
 		.setMagFilter(vk::Filter::eLinear)
 		.setMinFilter(vk::Filter::eLinear)
 		.setMipmapMode(vk::SamplerMipmapMode::eLinear)
-		.setMinLod(0.f)
-		.setMaxLod(static_cast<float>(mipLevels))
+		.setMinLod(minLod)
+		.setMaxLod(maxLod)
 		.setMipLodBias(0.f)
 		.setAddressModeU(addressMode)
 		.setAddressModeV(addressMode)
@@ -565,14 +570,18 @@ void Mesh::destroy(const Context* info)
 	specularTexture.destroy(info);
 	alphaTexture.destroy(info);
 	vertices.clear();
+	vertices.shrink_to_fit();
 	indices.clear();
+	indices.shrink_to_fit();
 }
 
 void Model::destroy(const Context* info)
 {
 	for (auto& mesh : meshes) {
 		mesh.vertices.clear();
+		mesh.vertices.shrink_to_fit();
 		mesh.indices.clear();
+		mesh.indices.shrink_to_fit();
 	}
 
 	for (auto& texture : uniqueTextures)
@@ -588,8 +597,10 @@ void Object::destroy(Context * info)
 {
 	texture.destroy(info);
 	vertexBuffer.destroy(info);
+	indexBuffer.destroy(info);
 	uniformBuffer.destroy(info);
 	vertices.clear();
+	vertices.shrink_to_fit();
 }
 
 void Shadows::destroy(const Context * info)
@@ -836,13 +847,14 @@ Model Model::loadModel(const std::string path, const std::string modelName, cons
 			f_meshes.push_back(myMesh);
 		}
 	}
-
 	for (auto &m : f_meshes) {
+		m.vertexOffset = _model.numberOfVertices;
+		m.indexOffset = _model.numberOfIndices;
+
 		m.calculateBoundingSphere();
 		_model.meshes.push_back(m);
-
-		_model.numberOfVertices += (uint32_t)_model.meshes.back().vertices.size();
-		_model.numberOfIndices += (uint32_t)_model.meshes.back().indices.size();
+		_model.numberOfVertices += static_cast<uint32_t>(_model.meshes.back().vertices.size());
+		_model.numberOfIndices += static_cast<uint32_t>(_model.meshes.back().indices.size());
 	}
 
 	_model.createVertexBuffer(info);
@@ -947,8 +959,8 @@ specificGraphicsPipelineCreateInfo Model::getPipelineSpecifications(Context * in
 	specificGraphicsPipelineCreateInfo generalSpecific;
 	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
 	generalSpecific.renderPass = info->renderPass;
-	generalSpecific.viewportSize = { info->surface.capabilities.currentExtent.width, info->surface.capabilities.currentExtent.height };
-	generalSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(info), Mesh::getDescriptorSetLayout(info), Shadows::getDescriptorSetLayout(info), getDescriptorSetLayoutLights(info) };
+	generalSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
+	generalSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(info), Mesh::getDescriptorSetLayout(info), Model::getDescriptorSetLayout(info), getDescriptorSetLayoutLights(info) };
 	generalSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	generalSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	generalSpecific.cull = vk::CullModeFlagBits::eBack;
@@ -1121,20 +1133,312 @@ specificGraphicsPipelineCreateInfo GUI::getPipelineSpecifications(const Context 
 	specificGraphicsPipelineCreateInfo GUISpecific;
 	GUISpecific.shaders = { "shaders/GUI/vert.spv", "shaders/GUI/frag.spv" };
 	GUISpecific.renderPass = info->renderPass;
-	GUISpecific.viewportSize = { info->surface.capabilities.currentExtent.width, info->surface.capabilities.currentExtent.height };
+	GUISpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	GUISpecific.descriptorSetLayouts = { GUI::getDescriptorSetLayout(info) };
 	GUISpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGUI();
 	GUISpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGUI();
-	GUISpecific.cull = vk::CullModeFlagBits::eBack;
+	GUISpecific.cull = vk::CullModeFlagBits::eNone;
 	GUISpecific.face = vk::FrontFace::eCounterClockwise;
-	GUISpecific.pushConstantRange = vk::PushConstantRange();
+	GUISpecific.pushConstantRange = vk::PushConstantRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4 };
+	GUISpecific.sampleCount = vk::SampleCountFlagBits::e4;
+	GUISpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	GUISpecific.dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(GUISpecific.dynamicStates.size()),
+		GUISpecific.dynamicStates.data()
+	};;
 
 	return GUISpecific;
+}
+
+SDL_Window*  GUI::g_Window = NULL;
+Uint64       GUI::g_Time = 0;
+bool         GUI::g_MousePressed[3] = { false, false, false };
+SDL_Cursor*  GUI::g_MouseCursors[ImGuiMouseCursor_COUNT] = { 0 };
+char*        GUI::g_ClipboardTextData = NULL;
+
+const char* GUI::ImGui_ImplSDL2_GetClipboardText(void*)
+{
+	if (g_ClipboardTextData)
+		SDL_free(g_ClipboardTextData);
+	g_ClipboardTextData = SDL_GetClipboardText();
+	return g_ClipboardTextData;
+}
+
+void GUI::ImGui_ImplSDL2_SetClipboardText(void*, const char* text)
+{
+	SDL_SetClipboardText(text);
+}
+
+void GUI::initImGui(const Context* context)
+{
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+
+	g_Window = context->window;
+
+	// Setup back-end capabilities flags
+	io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;       // We can honor GetMouseCursor() values (optional)
+	io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;        // We can honor io.WantSetMousePos requests (optional, rarely used)
+
+	// Keyboard mapping. ImGui will use those indices to peek into the io.KeysDown[] array.
+	io.KeyMap[ImGuiKey_Tab] = SDL_SCANCODE_TAB;
+	io.KeyMap[ImGuiKey_LeftArrow] = SDL_SCANCODE_LEFT;
+	io.KeyMap[ImGuiKey_RightArrow] = SDL_SCANCODE_RIGHT;
+	io.KeyMap[ImGuiKey_UpArrow] = SDL_SCANCODE_UP;
+	io.KeyMap[ImGuiKey_DownArrow] = SDL_SCANCODE_DOWN;
+	io.KeyMap[ImGuiKey_PageUp] = SDL_SCANCODE_PAGEUP;
+	io.KeyMap[ImGuiKey_PageDown] = SDL_SCANCODE_PAGEDOWN;
+	io.KeyMap[ImGuiKey_Home] = SDL_SCANCODE_HOME;
+	io.KeyMap[ImGuiKey_End] = SDL_SCANCODE_END;
+	io.KeyMap[ImGuiKey_Insert] = SDL_SCANCODE_INSERT;
+	io.KeyMap[ImGuiKey_Delete] = SDL_SCANCODE_DELETE;
+	io.KeyMap[ImGuiKey_Backspace] = SDL_SCANCODE_BACKSPACE;
+	io.KeyMap[ImGuiKey_Space] = SDL_SCANCODE_SPACE;
+	io.KeyMap[ImGuiKey_Enter] = SDL_SCANCODE_RETURN;
+	io.KeyMap[ImGuiKey_Escape] = SDL_SCANCODE_ESCAPE;
+	io.KeyMap[ImGuiKey_A] = SDL_SCANCODE_A;
+	io.KeyMap[ImGuiKey_C] = SDL_SCANCODE_C;
+	io.KeyMap[ImGuiKey_V] = SDL_SCANCODE_V;
+	io.KeyMap[ImGuiKey_X] = SDL_SCANCODE_X;
+	io.KeyMap[ImGuiKey_Y] = SDL_SCANCODE_Y;
+	io.KeyMap[ImGuiKey_Z] = SDL_SCANCODE_Z;
+
+	io.SetClipboardTextFn = ImGui_ImplSDL2_SetClipboardText;
+	io.GetClipboardTextFn = ImGui_ImplSDL2_GetClipboardText;
+	io.ClipboardUserData = NULL;
+
+	g_MouseCursors[ImGuiMouseCursor_Arrow] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
+	g_MouseCursors[ImGuiMouseCursor_TextInput] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM);
+	g_MouseCursors[ImGuiMouseCursor_ResizeAll] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEALL);
+	g_MouseCursors[ImGuiMouseCursor_ResizeNS] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENS);
+	g_MouseCursors[ImGuiMouseCursor_ResizeEW] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEWE);
+	g_MouseCursors[ImGuiMouseCursor_ResizeNESW] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENESW);
+	g_MouseCursors[ImGuiMouseCursor_ResizeNWSE] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENWSE);
+	g_MouseCursors[ImGuiMouseCursor_Hand] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
+
+#ifdef _WIN32
+	SDL_SysWMinfo wmInfo;
+	SDL_VERSION(&wmInfo.version);
+	SDL_GetWindowWMInfo(context->window, &wmInfo);
+	io.ImeWindowHandle = wmInfo.info.win.window;
+#else
+	(void)window;
+#endif
+	ImGui::StyleColorsDark();
+	
+	auto beginInfo = vk::CommandBufferBeginInfo()
+		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
+		.setPInheritanceInfo(nullptr);
+	VkCheck(context->dynamicCmdBuffer.begin(&beginInfo));
+
+	// Create fonts texture
+	unsigned char* pixels;
+	int width, height;
+	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+	size_t upload_size = width * height * 4 * sizeof(char);
+
+	// Create the Image:
+	{
+		texture.format = vk::Format::eR8G8B8A8Unorm;
+		texture.mipLevels = 1;
+		texture.arrayLayers = 1;
+		texture.initialLayout = vk::ImageLayout::eUndefined;
+		texture.createImage(context, width, height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+		texture.viewType = vk::ImageViewType::e2D;
+		texture.createImageView(context, vk::ImageAspectFlagBits::eColor);
+
+		texture.addressMode = vk::SamplerAddressMode::eRepeat;
+		texture.maxAnisotropy = 1.f;
+		texture.minLod = -1000.f;
+		texture.maxLod = 1000.f;
+		texture.createSampler(context);
+
+		createDescriptorSet(getDescriptorSetLayout(context), context);
+	}
+	// Create the and Upload to Buffer:
+	Buffer stagingBuffer;
+	{
+		stagingBuffer.createBuffer(context, upload_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
+		void* map;
+		VkCheck(context->device.mapMemory(stagingBuffer.memory, 0, upload_size, vk::MemoryMapFlags(), &map));
+		memcpy(map, pixels, upload_size);
+		vk::MappedMemoryRange range[1] = {};
+		range[0].memory = stagingBuffer.memory;
+		range[0].size = upload_size;
+		VkCheck(context->device.flushMappedMemoryRanges(1, range));
+		context->device.unmapMemory(stagingBuffer.memory);
+	}
+
+	// Copy to Image:
+	{
+		vk::ImageMemoryBarrier copy_barrier[1] = {};
+		copy_barrier[0].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+		copy_barrier[0].oldLayout = vk::ImageLayout::eUndefined;
+		copy_barrier[0].newLayout = vk::ImageLayout::eTransferDstOptimal;
+		copy_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		copy_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		copy_barrier[0].image = texture.image;
+		copy_barrier[0].subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+		copy_barrier[0].subresourceRange.levelCount = 1;
+		copy_barrier[0].subresourceRange.layerCount = 1;
+		context->dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlags(), 0, nullptr, 0, nullptr, 1, copy_barrier);
+
+		vk::BufferImageCopy region = {};
+		region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		region.imageSubresource.layerCount = 1;
+		region.imageExtent.width = width;
+		region.imageExtent.height = height;
+		region.imageExtent.depth = 1;
+		context->dynamicCmdBuffer.copyBufferToImage(stagingBuffer.buffer, texture.image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
+
+		vk::ImageMemoryBarrier use_barrier[1] = {};
+		use_barrier[0].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+		use_barrier[0].dstAccessMask = vk::AccessFlagBits::eShaderRead;
+		use_barrier[0].oldLayout = vk::ImageLayout::eTransferDstOptimal;
+		use_barrier[0].newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+		use_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		use_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		use_barrier[0].image = texture.image;
+		use_barrier[0].subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+		use_barrier[0].subresourceRange.levelCount = 1;
+		use_barrier[0].subresourceRange.layerCount = 1;
+		context->dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlags(), 0, nullptr, 0, nullptr, 1, use_barrier);
+	}
+
+	// Store our identifier
+	io.Fonts->TexID = (ImTextureID)(intptr_t)(VkImage)texture.image;
+
+	vk::SubmitInfo end_info = {};
+	end_info.commandBufferCount = 1;
+	end_info.pCommandBuffers = &context->dynamicCmdBuffer;
+	VkCheck(context->dynamicCmdBuffer.end());
+	context->graphicsQueue.submit(1, &end_info, nullptr);
+
+	context->device.waitIdle();
+	stagingBuffer.destroy(context);
+}
+
+void GUI::newFrame(const Context* info, SDL_Window* window)
+{
+	ImGuiIO& io = ImGui::GetIO();
+	IM_ASSERT(io.Fonts->IsBuilt());     // Font atlas needs to be built, call renderer _NewFrame() function e.g. ImGui_ImplOpenGL3_NewFrame() 
+
+	// Setup display size (every frame to accommodate for window resizing)
+	int w, h;
+	int display_w, display_h;
+	SDL_GetWindowSize(window, &w, &h);
+	SDL_GL_GetDrawableSize(window, &display_w, &display_h);
+	io.DisplaySize = ImVec2((float)w, (float)h);
+	io.DisplayFramebufferScale = ImVec2(w > 0 ? ((float)display_w / w) : 0, h > 0 ? ((float)display_h / h) : 0);
+
+	// Setup time step (we don't use SDL_GetTicks() because it is using millisecond resolution)
+	static Uint64 frequency = SDL_GetPerformanceFrequency();
+	Uint64 current_time = SDL_GetPerformanceCounter();
+	io.DeltaTime = g_Time > 0 ? (float)((double)(current_time - g_Time) / frequency) : (float)(1.0f / 60.0f);
+	g_Time = current_time;
+
+	// Set OS mouse position if requested (rarely used, only when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
+	if (io.WantSetMousePos)
+		SDL_WarpMouseInWindow(g_Window, (int)io.MousePos.x, (int)io.MousePos.y);
+	else
+		io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+
+	int mx, my;
+	Uint32 mouse_buttons = SDL_GetMouseState(&mx, &my);
+	io.MouseDown[0] = g_MousePressed[0] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;  // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
+	io.MouseDown[1] = g_MousePressed[1] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
+	io.MouseDown[2] = g_MousePressed[2] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
+	g_MousePressed[0] = g_MousePressed[1] = g_MousePressed[2] = false;
+
+#if SDL_HAS_CAPTURE_MOUSE && !defined(__EMSCRIPTEN__)
+	SDL_Window* focused_window = SDL_GetKeyboardFocus();
+	if (g_Window == focused_window)
+	{
+		// SDL_GetMouseState() gives mouse position seemingly based on the last window entered/focused(?)
+		// The creation of a new windows at runtime and SDL_CaptureMouse both seems to severely mess up with that, so we retrieve that position globally.
+		int wx, wy;
+		SDL_GetWindowPosition(focused_window, &wx, &wy);
+		SDL_GetGlobalMouseState(&mx, &my);
+		mx -= wx;
+		my -= wy;
+		io.MousePos = ImVec2((float)mx, (float)my);
+	}
+
+	// SDL_CaptureMouse() let the OS know e.g. that our imgui drag outside the SDL window boundaries shouldn't e.g. trigger the OS window resize cursor. 
+	// The function is only supported from SDL 2.0.4 (released Jan 2016)
+	bool any_mouse_button_down = ImGui::IsAnyMouseDown();
+	SDL_CaptureMouse(any_mouse_button_down ? SDL_TRUE : SDL_FALSE);
+#else
+	if (SDL_GetWindowFlags(g_Window) & SDL_WINDOW_INPUT_FOCUS)
+		io.MousePos = ImVec2((float)mx, (float)my);
+#endif
+	if (io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange)
+		return;
+
+	ImGuiMouseCursor imgui_cursor = ImGui::GetMouseCursor();
+	if (io.MouseDrawCursor || imgui_cursor == ImGuiMouseCursor_None)
+	{
+		// Hide OS mouse cursor if imgui is drawing it or if it wants no cursor
+		//SDL_ShowCursor(SDL_FALSE);
+	}
+	else
+	{
+		// Show OS mouse cursor
+		SDL_SetCursor(g_MouseCursors[imgui_cursor] ? g_MouseCursors[imgui_cursor] : g_MouseCursors[ImGuiMouseCursor_Arrow]);
+		//SDL_ShowCursor(SDL_TRUE);
+	}
+
+	ImGui::NewFrame();
+
+	if (show_demo_window)
+		ImGui::ShowDemoWindow(&show_demo_window);
+
+	ImGui::Render();
+
+	auto draw_data = ImGui::GetDrawData();
+	if (draw_data->TotalVtxCount < 1)
+		return;
+	size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
+	size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
+	if (!vertexBuffer.buffer || vertexBuffer.size < vertex_size)
+		createVertexBuffer(info, vertex_size);
+	if (!indexBuffer.buffer || indexBuffer.size < index_size)
+		createIndexBuffer(info, index_size);
+
+	// Upload Vertex and index Data:
+	{
+		ImDrawVert* vtx_dst = NULL;
+		ImDrawIdx* idx_dst = NULL;
+		VkCheck(info->device.mapMemory(vertexBuffer.memory, 0, vertex_size, vk::MemoryMapFlags(), (void**)(&vtx_dst)));
+		VkCheck(info->device.mapMemory(indexBuffer.memory, 0, index_size, vk::MemoryMapFlags(), (void**)(&idx_dst)));
+		for (int n = 0; n < draw_data->CmdListsCount; n++)
+		{
+			const ImDrawList* cmd_list = draw_data->CmdLists[n];
+			memcpy(vtx_dst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
+			memcpy(idx_dst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+			vtx_dst += cmd_list->VtxBuffer.Size;
+			idx_dst += cmd_list->IdxBuffer.Size;
+		}
+		vk::MappedMemoryRange range[2] = {};
+		range[0].memory = vertexBuffer.memory;
+		range[0].size = VK_WHOLE_SIZE;
+		range[1].memory = indexBuffer.memory;
+		range[1].size = VK_WHOLE_SIZE;
+		VkCheck(info->device.flushMappedMemoryRanges(2, range));
+		info->device.unmapMemory(vertexBuffer.memory);
+		info->device.unmapMemory(indexBuffer.memory);
+	}
 }
 
 GUI GUI::loadGUI(const std::string textureName, const Context * info, bool show)
 {
 	GUI _gui;
+
+	if (textureName == "ImGuiDemo")
+		_gui.show_demo_window = true;
+
 	//					 counter clock wise
 	// x, y, z coords orientation	// u, v coords orientation
 	//			|  /|				// (0,0)-------------> u
@@ -1146,20 +1450,34 @@ GUI GUI::loadGUI(const std::string textureName, const Context * info, bool show)
 	//	     /  |/ +y				//	   |/ v
 
 
-	_gui.vertices = {
-		-1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
-		-1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
-		 1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
-		 1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
-		-1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
-		 1.0f,  1.0f, 0.0f, 1.0f, 1.0f
-	};
-	_gui.loadTexture(textureName, info);
-	_gui.createVertexBuffer(info);
-	_gui.createDescriptorSet(GUI::descriptorSetLayout, info);
+	//_gui.vertices = {
+	//	-1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+	//	-1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+	//	 1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+	//	 1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+	//	-1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+	//	 1.0f,  1.0f, 0.0f, 1.0f, 1.0f
+	//};
+	//_gui.loadTexture(textureName, info);
+	//_gui.createVertexBuffer(info, _gui.vertices.size());
+	//_gui.createDescriptorSet(GUI::descriptorSetLayout, info);
+
+	_gui.initImGui(info);
 	_gui.render = show;
 
 	return _gui;
+}
+
+void GUI::createVertexBuffer(const Context * info, size_t vertex_size)
+{
+	vertexBuffer.destroy(info);
+	vertexBuffer.createBuffer(info, vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
+}
+
+void GUI::createIndexBuffer(const Context * info, size_t index_size)
+{
+	indexBuffer.destroy(info);
+	indexBuffer.createBuffer(info, index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 }
 
 void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout, const Context * info)
@@ -1221,7 +1539,7 @@ specificGraphicsPipelineCreateInfo SkyBox::getPipelineSpecifications(const Conte
 	specificGraphicsPipelineCreateInfo skyBoxSpecific;
 	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
 	skyBoxSpecific.renderPass = info->renderPass;
-	skyBoxSpecific.viewportSize = { info->surface.capabilities.currentExtent.width, info->surface.capabilities.currentExtent.height };
+	skyBoxSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(info) };
 	skyBoxSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionSkyBox();
 	skyBoxSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionSkyBox();
@@ -1442,11 +1760,11 @@ void Shadows::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout,
 		.setDstBinding(0)												// uint32_t dstBinding;
 		.setDstArrayElement(0)											// uint32_t dstArrayElement;
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eUniformBuffer)	        // DescriptorType descriptorType;
+		.setDescriptorType(vk::DescriptorType::eUniformBufferDynamic)	// DescriptorType descriptorType;
 		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorBufferInfo* pBufferInfo;
 			.setBuffer(uniformBuffer.buffer)							// Buffer buffer;
 			.setOffset(0)													// DeviceSize offset;
-			.setRange(uniformBuffer.size));									// DeviceSize range;
+			.setRange(sizeof(ShadowsUBO)));									// DeviceSize range;
 	// sampler
 	textureWriteSets[1] = vk::WriteDescriptorSet()
 		.setDstSet(descriptorSet)										// DescriptorSet dstSet;
@@ -1472,7 +1790,7 @@ vk::DescriptorSetLayout Shadows::getDescriptorSetLayout(const Context * info)
 		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
 			.setBinding(0) // binding number in shader stages
 			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
+			.setDescriptorType(vk::DescriptorType::eUniformBufferDynamic)
 			.setStageFlags(vk::ShaderStageFlagBits::eVertex)); // which pipeline shader stages can access
 
 		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
@@ -1555,7 +1873,7 @@ specificGraphicsPipelineCreateInfo Shadows::getPipelineSpecifications(const Cont
 	shadowsSpecific.viewportSize = { Shadows::imageSize, Shadows::imageSize };
 	shadowsSpecific.useBlendState = false;
 	shadowsSpecific.sampleCount = vk::SampleCountFlagBits::e1;
-	shadowsSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout() };
+	shadowsSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(info) };
 	shadowsSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	shadowsSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	shadowsSpecific.cull = vk::CullModeFlagBits::eBack;
@@ -1592,9 +1910,14 @@ void Shadows::createFrameBuffer(const Context * info)
 
 }
 
-void Shadows::createUniformBuffer(const Context * info)
+void Shadows::createDynamicUniformBuffer(size_t num_of_objects, const Context * info)
 {
-	uniformBuffer.createBuffer(info, 256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	if (num_of_objects > 256) {
+		std::cout << "256 objects for the Shadows Dynamic Uniform Buffer is the max for now\n";
+		exit(-21);
+	}
+	size_t size = num_of_objects * 256;
+	uniformBuffer.createBuffer(info, size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	VkCheck(info->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
 }
 
@@ -1632,7 +1955,7 @@ specificGraphicsPipelineCreateInfo Terrain::getPipelineSpecifications(const Cont
 	specificGraphicsPipelineCreateInfo terrainSpecific;
 	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
 	terrainSpecific.renderPass = info->renderPass;
-	terrainSpecific.viewportSize = { info->surface.capabilities.currentExtent.width, info->surface.capabilities.currentExtent.height };
+	terrainSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(info) };
 	terrainSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	terrainSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
@@ -1768,4 +2091,3 @@ glm::mat4 Camera::getView()
 {
 	return glm::lookAt(position, position + front, up);
 }
-

@@ -8,10 +8,12 @@ class Renderer
         Renderer(SDL_Window* window);
         ~Renderer();
         void update(float delta);
-        void present();
+		void present();
+		void resizeViewport();
 		static float rand(float x1, float x2);
 		Context info;
 		bool prepared = false;
+		bool overloadedGPU = true;
     private:
 		void initVulkanContext();
         vk::Instance createInstance();

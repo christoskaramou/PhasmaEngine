@@ -10,6 +10,7 @@ layout( set = 0, binding = 0 ) uniform UniformBuffer {
 	mat4 projection;
 	mat4 lightView;
 	mat4 model;
+	mat4 dummy;
 }ubo;
 
 void main() {

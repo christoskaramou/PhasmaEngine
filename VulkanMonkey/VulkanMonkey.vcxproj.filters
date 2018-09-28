@@ -17,6 +17,13 @@
     <ClInclude Include="include\Timer.h" />
     <ClInclude Include="include\Window.h" />
     <ClInclude Include="include\Context.h" />
+    <ClInclude Include="include\imgui-master\imconfig.h" />
+    <ClInclude Include="include\imgui\imconfig.h" />
+    <ClInclude Include="include\imgui\imgui.h" />
+    <ClInclude Include="include\imgui\imgui_internal.h" />
+    <ClInclude Include="include\imgui\imstb_rectpack.h" />
+    <ClInclude Include="include\imgui\imstb_textedit.h" />
+    <ClInclude Include="include\imgui\imstb_truetype.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Renderer.cpp" />
@@ -24,5 +31,9 @@
     <ClCompile Include="src\Window.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="src\Context.cpp" />
+    <ClCompile Include="include\imgui\imgui.cpp" />
+    <ClCompile Include="include\imgui\imgui_demo.cpp" />
+    <ClCompile Include="include\imgui\imgui_draw.cpp" />
+    <ClCompile Include="include\imgui\imgui_widgets.cpp" />
   </ItemGroup>
 </Project>

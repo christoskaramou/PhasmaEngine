@@ -6,7 +6,7 @@
 class Window
 {
     public:
-        static void create(const char* title, int w, int h, Uint32 flags = SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+        static void create(const char* title, int w, int h, Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
 		static void destroyAll();
 		static bool processEvents(float delta);
 
