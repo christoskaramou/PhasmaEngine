@@ -1,6 +1,4 @@
-#ifndef WINDOW_H
-#define WINDOW_H
-
+#pragma once
 #include "Renderer.h"
 
 class Window
@@ -16,5 +14,3 @@ class Window
         ~Window();
 		static int width, height;
 };
-
-#endif // WINDOW_H

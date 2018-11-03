@@ -1,7 +1,6 @@
-#ifndef RENDERER_H
-#define RENDERER_H
-
+#pragma once
 #include "Context.h"
+
 class Renderer
 {
     public:
@@ -9,34 +8,18 @@ class Renderer
         ~Renderer();
         void update(float delta);
 		void present();
-		void resizeViewport();
 		static float rand(float x1, float x2);
-		Context info;
-		bool prepared = false;
-		bool overloadedGPU = true;
-    private:
-		void initVulkanContext();
-        vk::Instance createInstance();
-		Surface createSurface();
-        vk::PhysicalDevice findGpu();
-		vk::Device createDevice();
-        Swapchain createSwapchain();
-        vk::CommandPool createCommandPool();
-        vk::RenderPass createRenderPass();
-        Image createDepthResources();
-        std::vector<vk::Framebuffer> createFrameBuffers();
-		std::vector<vk::CommandBuffer> createCmdBuffers(uint32_t bufferCount);
-		vk::CommandBuffer createCmdBuffer();
-        Pipeline createPipeline(const specificGraphicsPipelineCreateInfo& specificInfo);
 
-		vk::DescriptorPool createDescriptorPool(const uint32_t maxDescriptorSets);
-        std::vector<vk::Semaphore> createSemaphores(uint32_t semaphoresCount);
-		void recordDynamicCmdBuffer(const uint32_t imageIndex);
-		void recordShadowsCmdBuffers();
+		Context ctx;
+		bool prepared = false;
+		bool overloadedGPU = false;
+		bool deferredRender = true;
+    private:
+		void recordForwardCmds(const uint32_t& imageIndex);
+		void recordDeferredCmds(const uint32_t& imageIndex);
+		void recordShadowsCmds(const uint32_t& imageIndex);
 
 		float frustum[6][4];
-		void ExtractFrustum(glm::mat4& projection_view_model);
-		bool SphereInFrustum(glm::vec4& boundingSphere);
+		void ExtractFrustum(vm::mat4& projection_view_model);
+		bool SphereInFrustum(vm::vec4& boundingSphere);
 };
-
-#endif // RENDERER_H

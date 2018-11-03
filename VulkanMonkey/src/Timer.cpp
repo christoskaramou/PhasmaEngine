@@ -1,16 +1,16 @@
 #include "../include/Timer.h"
 #include <iostream>
 
-float Timer::_minFrameTime = 0.0f;
-unsigned Timer::totalCounter = 0;
-float Timer::totalTime = 0.0f;
-float Timer::delta = 0.0f;
-float Timer::time = 0.0f;
-unsigned Timer::instances = 0;
-std::vector<float> Timer::deltas(20, 0.f);
+unsigned			Timer::totalCounter = 0;
+float				Timer::totalTime = 0.0f;
+float				Timer::delta = 0.0f;
+float				Timer::time = 0.0f;
+unsigned			Timer::instances = 0;
+std::vector<float>	Timer::deltas(20, 0.f);
 
 Timer::Timer()
 {
+	_minFrameTime = 0.0f;
     if (++instances > 1)
     {
         std::cout << "No more than one instance of Timer can run properly yet!\n";

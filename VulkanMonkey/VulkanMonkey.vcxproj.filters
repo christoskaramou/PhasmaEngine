@@ -1,39 +1,237 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <None Include="shaders\GUI\shaderGUI.frag" />
-    <None Include="shaders\GUI\shaderGUI.vert" />
-    <None Include="shaders\SkyBox\shaderSkyBox.frag" />
-    <None Include="shaders\SkyBox\shaderSkyBox.vert" />
-    <None Include="shaders\General\shader.frag" />
-    <None Include="shaders\General\shader.vert" />
-    <None Include="shaders\Terrain\shaderTerrain.frag" />
-    <None Include="shaders\Terrain\shaderTerrain.vert" />
-    <None Include="shaders\Shadows\shaderShadows.vert" />
+    <None Include="shaders\Terrain\shaderTerrain.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\Reflections\reflection.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\Reflections\reflection.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\General\shader.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\General\shader.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\GUI\shaderGUI.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\GUI\shaderGUI.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\Shadows\shaderShadows.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\SkyBox\shaderSkyBox.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\SkyBox\shaderSkyBox.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\Terrain\shaderTerrain.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\Deferred\gBuffer.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\Deferred\composition.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\Deferred\composition.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="cpp.hint">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\Deferred\gBuffer.frag">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\Errors.h" />
-    <ClInclude Include="include\Renderer.h" />
-    <ClInclude Include="include\Timer.h" />
-    <ClInclude Include="include\Window.h" />
-    <ClInclude Include="include\Context.h" />
-    <ClInclude Include="include\imgui-master\imconfig.h" />
-    <ClInclude Include="include\imgui\imconfig.h" />
-    <ClInclude Include="include\imgui\imgui.h" />
-    <ClInclude Include="include\imgui\imgui_internal.h" />
-    <ClInclude Include="include\imgui\imstb_rectpack.h" />
-    <ClInclude Include="include\imgui\imstb_textedit.h" />
-    <ClInclude Include="include\imgui\imstb_truetype.h" />
+    <ClInclude Include="include\Buffer.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Camera.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Context.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Errors.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GUI.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Image.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Math.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Mesh.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Model.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Object.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Pipeline.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Renderer.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Shadows.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Skybox.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Surface.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\specificGraphicsPipelineCreateInfo.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Swapchain.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Terrain.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Timer.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Vertex.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Window.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imconfig.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui-master\imconfig.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imgui.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imgui_internal.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imstb_rectpack.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imstb_truetype.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imstb_textedit.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Vulkan.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\SDL.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Stbi.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GLM.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\stb_image\stb_image.h">
+      <Filter>Include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\Renderer.cpp" />
-    <ClCompile Include="src\Timer.cpp" />
-    <ClCompile Include="src\Window.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="src\Context.cpp" />
-    <ClCompile Include="include\imgui\imgui.cpp" />
-    <ClCompile Include="include\imgui\imgui_demo.cpp" />
-    <ClCompile Include="include\imgui\imgui_draw.cpp" />
-    <ClCompile Include="include\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="src\Buffer.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Camera.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Context.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\GUI.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Image.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Math.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Mesh.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Model.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Object.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Pipeline.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Renderer.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Shadows.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Skybox.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Swapchain.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Terrain.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Timer.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Vertex.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Window.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_widgets.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_demo.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_draw.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="include\stb_image\stb_image.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Include">
+      <UniqueIdentifier>{75d3f8cb-453c-4353-a312-705fb0cdbe8d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{926a54e5-7fb8-4380-843e-a500bb718dc3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{538de048-81d6-4f18-822d-bf9941e10043}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
 </Project>

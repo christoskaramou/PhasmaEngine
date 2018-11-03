@@ -11,11 +11,10 @@ int main(int argc, char* argv[])
 {
 	Window::create("", WIDTH, HEIGHT);
 	auto& renderer = Window::renderer;
-	auto& info = renderer[0]->info; // main renderer info
+	auto& ctx = renderer[0]->ctx; // main renderer info
 
-    //std::string deviceName = info.gpuProperties.deviceName;
-    std::string title = "VulkanMonkey3D   " + std::string(info.gpuProperties.deviceName) + " (Present Mode: " + vk::to_string(info.surface.presentModeKHR) + ")  -  FPS: ";
-    SDL_SetWindowTitle(info.window, title.c_str());
+    std::string title = "VulkanMonkey3D   " + std::string(ctx.gpuProperties.deviceName) + " (Present Mode: " + vk::to_string(ctx.surface.presentModeKHR) + ")  -  FPS: ";
+    SDL_SetWindowTitle(ctx.window, title.c_str());
 
     while(true)
 	{
@@ -33,7 +32,7 @@ int main(int argc, char* argv[])
         if (timer.intervalsOf(0.5f))
         {
 			std::string _fps = title + std::to_string(timer.getFPS());
-            SDL_SetWindowTitle(info.window, _fps.c_str());
+            SDL_SetWindowTitle(ctx.window, _fps.c_str());
         }
     }
 

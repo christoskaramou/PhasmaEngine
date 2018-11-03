@@ -1,8 +1,7 @@
-#ifndef TIMER_H
-#define TIMER_H
+#pragma once
 #include <chrono>
 #include <vector>
-#include "SDL/SDL.h"
+#include "SDL.h"
 class Timer
 {
     public:
@@ -16,8 +15,8 @@ class Timer
     private:
         std::chrono::high_resolution_clock::time_point start;
         std::chrono::duration<float> duration;
+		float _minFrameTime;
 	protected:
-		static float _minFrameTime;
 		static unsigned totalCounter;
 		static float totalTime;
 		static float delta;
@@ -25,5 +24,3 @@ class Timer
 		static unsigned instances;
 		static std::vector<float> deltas;
 };
-
-#endif // TIMER_H

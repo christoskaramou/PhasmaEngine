@@ -1,42 +1,14 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
-
-const int numOfLights = 10;
+#extension GL_ARB_shading_language_420pack : enable
 
 struct Light {
 	vec4 color;
 	vec4 position;
 	vec4 attenuation;
-	vec4 dummy;
-};
+	vec4 camPos; };
 
-layout(set = 1, binding = 0) uniform sampler2D tSampler;
-layout(set = 1, binding = 1) uniform sampler2D normSampler;
-layout(set = 1, binding = 2) uniform sampler2D specSampler;
-layout(set = 1, binding = 3) uniform sampler2D alphaSampler;
-layout(set = 0, binding = 1) uniform sampler2DShadow shadowMapSampler1;
-layout(set = 3, binding = 0) uniform Lights {
-	Light light[numOfLights];
-} lights;
-
-
-layout(location = 0) in vec2 v_TexCoords;
-layout(location = 1) in vec4 vertexCameraSpaceModel; // transformed to view * model * position
-layout(location = 2) in mat4 view; // camera view matrix
-layout(location = 6) in mat3 TBN; // to tangent space matrix
-layout(location = 9) in vec4 shadow_coords1;
-layout(location = 10) in float castShadows;
-
-layout(location = 0) out vec4 o_Color;
-
-//layout(push_constant) uniform Lights {
-//	Light light[numOfLights];
-//}lights;
-
-const int specDamper = 40;
-const float reflectivity = 0.588;
-
-vec2 poissonDisk[16] = vec2[](
+vec2 poissonDisk[8] = vec2[](
 	vec2(0.493393f, 0.394269f),
 	vec2(0.798547f, 0.885922f),
 	vec2(0.247322f, 0.92645f),
@@ -44,94 +16,112 @@ vec2 poissonDisk[16] = vec2[](
 	vec2(0.831843f, 0.00955229f),
 	vec2(0.428632f, 0.0171514f),
 	vec2(0.015656f, 0.749779f),
-	vec2(0.758385f, 0.49617f),
-	vec2(0.223487f, 0.562151f),
-	vec2(0.0116276f, 0.406995f),
-	vec2(0.241462f, 0.304636f),
-	vec2(0.430311f, 0.727226f),
-	vec2(0.981811f, 0.278359f),
-	vec2(0.407056f, 0.500534f),
-	vec2(0.123478f, 0.463546f),
-	vec2(0.809534f, 0.682272f)
-);
-float D = 0.493393;
-vec2 shadowTest[9] = vec2[](
-	vec2(-D, -D),
-	vec2(0.0f, -D),
-	vec2(D, -D),
-	vec2(-D, 0.0f),
-	vec2(0.0, 0.0),
-	vec2(D, 0.0),
-	vec2(-D, D),
-	vec2(0.0f, D),
-	vec2(D, D)
-);
-float shadowTestWeights[9] = float[](
-	 0.5, 1.0,  0.5,
-	1.0,  4.0, 1.0,
-	 0.5, 1.0,  0.5
-);
-void main() {
+	vec2(0.758385f, 0.49617f));
 
-	float a = texture(alphaSampler, v_TexCoords).x;
-	if (a < 0.8){
-		discard;
-	}
-	vec4 texel = texture(tSampler, v_TexCoords);
-	texel.a *= a;
+layout (constant_id = 0) const int NUM_LIGHTS = 1;
+layout (set = 1, binding = 0) uniform sampler2D tSampler;
+layout (set = 1, binding = 1) uniform sampler2D normSampler;
+layout (set = 1, binding = 2) uniform sampler2D specSampler;
+layout (set = 1, binding = 3) uniform sampler2D alphaSampler;
+layout (set = 0, binding = 1) uniform sampler2DShadow shadowMapSampler;
+layout (set = 3, binding = 0) uniform UBO { Light lights[NUM_LIGHTS]; } ubo;
 
-	vec4 s_coords1 = shadow_coords1 / shadow_coords1.w;
+layout (location = 0) in vec3 inNormal;
+layout (location = 1) in vec3 inColor;
+layout (location = 2) in vec3 inFragPos;
+layout (location = 3) in vec3 inTangent;
+layout (location = 4) in vec2 inUV;
+layout (location = 5) in float castShadows;
+layout (location = 6) in mat4 shadow_coords;
 
-	//float toCameraDistance = distance((view * vec4(0.0, 0.0, 0.0 ,1.0)).xyz, vertexCameraSpaceModel.xyz);
+layout(location = 0) out vec4 outColor;
 
-	float shadow = 1.0;
-	if (castShadows > 0.5){
-		for (int i=0;i<8;i++)
-		{
-			shadow -= 0.125 * ( 1.0 - texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z-0.0001 )));
-		}
-	}
+vec3 calculateShadow(int i, vec3 fragPos, vec3 normal, vec3 albedo, float specular, float shadow)
+{
+	// Light to fragment
+	vec3 L = fragPos - ubo.lights[i].position.xyz;
+
+	// Viewer to fragment
+	vec3 V = fragPos - ubo.lights[i].camPos.xyz;
+
+	// Diffuse part
+	vec3 diff = ubo.lights[i].color.rgb * albedo * ubo.lights[i].color.a;
+
+	// Specular part
+	L = normalize(L);
+	vec3 N = normalize(normal);
+	vec3 R = reflect(-L, N);
+	V = normalize(V);
+	float RdotV = max(0.0, dot(R, V));
+	vec3 spec = ubo.lights[i].color.rgb * specular * pow(RdotV, 32.0);
+
+	return shadow * (diff + spec);
+}
+
+vec3 calculateColor(int i, vec3 fragPos, vec3 normal, vec3 albedo, float specular)
+{
+	// Light to fragment
+	vec3 L =  fragPos - ubo.lights[i].position.xyz;
+
+	// Distance from light to fragment
+	float dist = length(L);
+	if (dist > ubo.lights[i].attenuation.x*5.0)
+		return vec3(0.0);
+
+	// Viewer to fragment
+	vec3 V = fragPos - ubo.lights[i].camPos.xyz;
+
+	// Diffuse part
+	L = normalize(L);
+	vec3 N = normalize(normal);
+	float LdotN = max(0.0, dot(L, N));
+	vec3 diff = ubo.lights[i].color.rgb * albedo * LdotN;
+
+	// Specular part
+	vec3 R = reflect(-L, N);
+	V = normalize(V);
+	float RdotV = max(0.0, dot(R, V));
+	vec3 spec = ubo.lights[i].color.rgb * specular * pow(RdotV, 32.0);
 	
-	vec3 normalMap = normalize(texture(normSampler, v_TexCoords).rgb*2.0 - 1.0);
+	// Attenuation
+	float atten = 1.0 / (1.0 + ubo.lights[i].attenuation.x * pow(dist, 2));
 
-	vec3 totalDiffuse = vec3(0.0);
-	vec3 totalSpecular = vec3(0.0);
-	for(int i=0; i<numOfLights; i++){
-		
-		// to tangent space
-		vec3 toLightVector = TBN * ((view * lights.light[i].position).xyz - vertexCameraSpaceModel.xyz);
-		vec4 lightColor = lights.light[i].color;
-		vec3 toCameraVector = TBN * (-vertexCameraSpaceModel.xyz);
-		vec3 attenuation = lights.light[i].attenuation.xyz;
+	return atten * (diff + spec);
+}
 
-		float distance = length(toLightVector);
-		float attFactor = attenuation.x * distance * distance + attenuation.y * distance + attenuation.z;
+void main()
+{
+	float alpha = texture(alphaSampler, inUV).r;
+	if (alpha < 0.8)
+		discard;
 
-		vec3 nLight = normalize(toLightVector);
+	vec3 N = normalize(inNormal);
+	vec3 T = normalize(inTangent);
+	vec3 B = normalize(cross(T, N));
+	mat3 TBN = mat3(T, B, N);
 
-		// Diffuse
-		float nDot = dot(nLight, normalMap);
-		float brightness = max(nDot, 0.0);
-		float lightAlpha = 1.0;
-		if (i == 0){
-			brightness = 1.0;
-			lightAlpha = lights.light[i].color.a;
-		}
-		totalDiffuse = totalDiffuse + (brightness * lightColor.xyz) / attFactor * lightAlpha;
+	vec3 fragPos = inFragPos;
+	vec3 normal = normalize(TBN * (texture(normSampler, inUV).rgb * 2.0 - 1.0));
+	vec3 albedo = texture(tSampler, inUV).rgb;
+	float specular = texture(specSampler, inUV).r;
+	
+	vec4 s_coords =  shadow_coords * vec4(inFragPos, 1.0);
+	s_coords = s_coords / s_coords.w;
+	float shadow = 0.0;
+	for (int i = 0; i < 8 * castShadows ; i++)
+		shadow += 0.125 * texture( shadowMapSampler, vec3( s_coords.xy + poissonDisk[i]*0.0008, s_coords.z-0.0001 ));
+	
+	// Ambient
+	vec3 fragColor = 0.05 * albedo.rgb;
 
-		// Specular
-		vec3 reflectedLightDirection = reflect(-nLight, normalMap);
-		float specularFactor = dot(reflectedLightDirection, normalize(toCameraVector));
-		specularFactor = max(specularFactor, 0.0);
-		float dampedFactor = pow(specularFactor, specDamper);
-		totalSpecular = totalSpecular + (dampedFactor * lightColor.xyz * reflectivity * texture(specSampler, v_TexCoords).xyz) / attFactor * lightAlpha;
+	fragColor += calculateShadow(0, fragPos, normal, albedo, specular, shadow);
 
-		if (i == 0){
-			totalDiffuse *= shadow;
-			totalSpecular *= shadow;
-		}
-	}
-	totalDiffuse = max(totalDiffuse, 0.2);
+	for(int i=1; i<NUM_LIGHTS; i++)
+		fragColor += calculateColor(i, fragPos, normal, albedo, specular);
 
-    o_Color = vec4(totalDiffuse, 1.0) * texel + vec4(totalSpecular, 0.0);
+	// Gamma correction
+	//vec3 gamma = vec3(1.0/2.2);
+	//fragColor = pow(fragColor, gamma);
+
+	outColor = vec4(fragColor, alpha);
 }

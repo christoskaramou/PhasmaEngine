@@ -12,7 +12,6 @@ Window::Window() {}
 
 Window::~Window() {}
 
-
 void Window::create(const char* title, int w, int h, Uint32 flags)
 {
 	if (Window::renderer.size() != MAX_WINDOWS)
@@ -56,7 +55,7 @@ void Window::create(const char* title, int w, int h, Uint32 flags)
 void Window::destroyAll()
 {
 	while (!renderer.empty()) {
-		SDL_DestroyWindow(renderer.back()->info.window);
+		SDL_DestroyWindow(renderer.back()->ctx.window);
 		std::cout << "Window destroyed\n";
 		renderer.pop_back();
 	}
@@ -73,7 +72,7 @@ bool Window::processEvents(float delta)
 	static int xMove = 0;
 	static int yMove = 0;
 
-	auto& info = renderer[0]->info;
+	auto& info = renderer[0]->ctx;
 	bool combineDirections = false;
 
 	ImGuiIO& io = ImGui::GetIO();
@@ -130,17 +129,16 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_1) Shadows::shadowCast = !Shadows::shadowCast;
 			if (event.key.keysym.sym == SDLK_2) {
 				for (uint32_t i = 1; i < info.light.size(); i++) {
-					info.light[i] = { glm::vec4(renderer[0]->rand(0.f,1.f), renderer[0]->rand(0.0f,1.f), renderer[0]->rand(0.f,1.f), renderer[0]->rand(0.f,1.f)),
-						glm::vec4(renderer[0]->rand(-1.f,1.f), renderer[0]->rand(.3f,1.f), renderer[0]->rand(-3.5f,.5f), 1.f),
-						glm::vec4(10.f, 1.f, 1.f, 1.f),
-						glm::vec4(0.f, 0.f, 0.f, 1.f) };
+					info.light[i].color = vm::vec4(renderer[0]->rand(0.f, 1.f), renderer[0]->rand(0.0f, 1.f), renderer[0]->rand(0.f, 1.f), renderer[0]->rand(0.f, 1.f));
+					info.light[i].position = vm::vec4(renderer[0]->rand(-3.5f, 3.5f), renderer[0]->rand(.3f, 1.f), renderer[0]->rand(-3.5f, 3.5f), 1.f);
 				}
-				memcpy(info.uniformBufferLights.data, info.light.data(), info.light.size() * sizeof(Light));
+				memcpy(info.UBLights.data, info.light.data(), info.light.size() * sizeof(Context::Light));
 			}
 			if (event.key.keysym.sym == SDLK_3) for (auto& model : info.models) model.render = !info.models[0].render;
 			if (event.key.keysym.sym == SDLK_4) info.gui.render = !info.gui.render;
 			if (event.key.keysym.sym == SDLK_5) info.terrain.render = !info.terrain.render;
 			if (event.key.keysym.sym == SDLK_6) info.skyBox.render = !info.skyBox.render;
+			if (event.key.keysym.sym == SDLK_7) renderer[0]->deferredRender = !renderer[0]->deferredRender;
 			if (event.key.keysym.sym == SDLK_0) for (auto& r : renderer) r->overloadedGPU = !renderer[0]->overloadedGPU;
 		}
 		if (event.type == SDL_MOUSEWHEEL) {
@@ -148,18 +146,24 @@ bool Window::processEvents(float delta)
 		}
 		if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
 			SDL_ShowCursor(SDL_DISABLE);
-			SDL_WarpMouseInWindow(info.window, static_cast<int>(renderer[0]->info.surface.actualExtent.width * .5f), static_cast<int>(renderer[0]->info.surface.actualExtent.height * .5f));
+			SDL_WarpMouseInWindow(info.window, static_cast<int>(renderer[0]->ctx.surface.actualExtent.width * .5f), static_cast<int>(renderer[0]->ctx.surface.actualExtent.height * .5f));
 			if (event.type == SDL_MOUSEMOTION) {
-				xMove = -(event.motion.x - static_cast<int>(renderer[0]->info.surface.actualExtent.width * .5f));
-				yMove = -(event.motion.y - static_cast<int>(renderer[0]->info.surface.actualExtent.height * .5f));
+				xMove = event.motion.x - static_cast<int>(renderer[0]->ctx.surface.actualExtent.width * .5f);
+				yMove = event.motion.y - static_cast<int>(renderer[0]->ctx.surface.actualExtent.height * .5f);
 				info.mainCamera.rotate((float)xMove, (float)yMove);
+				if (xMove > 0 || yMove > 0)
+					std::cout << "xMove: " << (float)xMove << ", yMove: " << (float)yMove << "\n";
 			}
 		}
 		else
 			SDL_ShowCursor(SDL_ENABLE);
 		if (event.type == SDL_WINDOWEVENT) {
-			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
-				renderer[0]->resizeViewport();
+			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+				int w, h;
+				SDL_GetWindowSize(info.window, &width, &height);
+				SDL_GL_GetDrawableSize(info.window, &w, &h);
+				renderer[0]->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+			}
 		}
 	}
 

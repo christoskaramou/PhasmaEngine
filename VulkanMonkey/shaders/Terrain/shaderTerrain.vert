@@ -11,6 +11,7 @@ layout(location = 0) in vec3 i_Position;
 layout(location = 1) in vec3 i_Normal;
 layout(location = 2) in vec2 i_TexCoords;
 layout(location = 3) in vec4 i_Tangent;
+layout(location = 4) in vec4 i_Color;
 
 layout(location = 0) out vec2 v_TexCoords;
 void main() {

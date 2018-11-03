@@ -1,7 +1,6 @@
-#ifndef ERRORS_H
-#define ERRORS_H
-
+#pragma once
 #include <iostream>
+#include "Vulkan.h"
 
 #ifdef _DEBUG
 #define VkCheck(x)																							\
@@ -17,4 +16,3 @@
 #else
 #define VkCheck(x) x
 #endif // _DEBUG
-#endif // ERRORS_H
