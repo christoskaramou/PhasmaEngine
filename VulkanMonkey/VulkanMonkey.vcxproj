@@ -201,7 +201,6 @@
     <ClInclude Include="include\GLM.h" />
     <ClInclude Include="include\GUI.h" />
     <ClInclude Include="include\Image.h" />
-    <ClInclude Include="include\imgui-master\imconfig.h" />
     <ClInclude Include="include\imgui\imconfig.h" />
     <ClInclude Include="include\imgui\imgui.h" />
     <ClInclude Include="include\imgui\imgui_internal.h" />

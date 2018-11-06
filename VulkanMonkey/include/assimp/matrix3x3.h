@@ -141,7 +141,7 @@ public:
 
     // -------------------------------------------------------------------
     /** @brief Returns a translation matrix
-     *  @param v Translation vector
+     *  @param _v Translation vector
      *  @param out Receives the output matrix
      *  @return Reference to the output matrix
      */

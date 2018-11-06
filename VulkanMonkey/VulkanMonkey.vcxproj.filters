@@ -114,27 +114,6 @@
     <ClInclude Include="include\Window.h">
       <Filter>Include</Filter>
     </ClInclude>
-    <ClInclude Include="include\imgui\imconfig.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui-master\imconfig.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui\imgui.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui\imgui_internal.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui\imstb_rectpack.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui\imstb_truetype.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui\imstb_textedit.h">
-      <Filter>Include</Filter>
-    </ClInclude>
     <ClInclude Include="include\Vulkan.h">
       <Filter>Include</Filter>
     </ClInclude>
@@ -148,6 +127,24 @@
       <Filter>Include</Filter>
     </ClInclude>
     <ClInclude Include="include\stb_image\stb_image.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imconfig.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imgui.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imgui_internal.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imstb_rectpack.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imstb_textedit.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imstb_truetype.h">
       <Filter>Include</Filter>
     </ClInclude>
   </ItemGroup>
@@ -207,7 +204,7 @@
     <ClCompile Include="src\Window.cpp">
       <Filter>Source</Filter>
     </ClCompile>
-    <ClCompile Include="include\imgui\imgui_widgets.cpp">
+    <ClCompile Include="include\stb_image\stb_image.cpp">
       <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="include\imgui\imgui.cpp">
@@ -219,7 +216,7 @@
     <ClCompile Include="include\imgui\imgui_draw.cpp">
       <Filter>Source</Filter>
     </ClCompile>
-    <ClCompile Include="include\stb_image\stb_image.cpp">
+    <ClCompile Include="include\imgui\imgui_widgets.cpp">
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>

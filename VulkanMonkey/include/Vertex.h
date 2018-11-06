@@ -5,7 +5,7 @@ struct Vertex
 {
 	float	x,	y,	z,			// Vertex Position
 			nX, nY, nZ,			// Normals x, y, z
-			u,	v,				// Texture u, v
+			u,	v,				// Texture u, _v
 			tX, tY, tZ, tW,		// Tangents
 			r,	g,	b,	a;		// color rgba
 

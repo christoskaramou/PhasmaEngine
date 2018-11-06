@@ -1,31 +1,41 @@
 #pragma once
 #include <cmath>
 
+#define cfloat const float
+#define cvec2  const vec2
+#define cvec3  const vec3
+#define cvec4  const vec4
+#define cmat4  const mat4
+#define ccol   const col
+
 // Left Handed, Colomn Major, Depth[0,1]
 namespace vm
 {
 	struct vec2 {
 		vec2();
-		vec2(const float value);
-		vec2(const float x, const float y);
-		vec2(const vec2& v);
-		vec2(const float* v);
-		vec2(const vec2* v);
-		void operator=(const vec2& v);
-		vec2 operator+(const vec2& v) const;
+		vec2(cfloat value);
+		vec2(cfloat x, cfloat y);
+		vec2(cvec2& v);
+		vec2(cfloat* v);
+		vec2(cvec2* v);
+		void operator=(cvec2& v);
+		vec2 operator+(cvec2& v) const;
 		vec2 operator-() const;
-		vec2 operator-(const vec2& v) const;
-		vec2 operator*(const vec2& v) const;
-		vec2 operator*(const float scalar) const;
-		vec2 operator/(const vec2& v) const;
-		vec2 operator/(const float scalar) const;
-		void operator+=(const vec2& v);
-		void operator-=(const vec2& v);
-		void operator*=(const vec2& v);
-		void operator*=(const float scalar);
-		void operator/=(const vec2& v);
-		void operator/=(const float scalar);
-		float& operator[](const unsigned i);
+		vec2 operator-(cvec2& v) const;
+		vec2 operator*(cvec2& v) const;
+		vec2 operator*(cfloat scalar) const;
+		vec2 operator/(cvec2& v) const;
+		vec2 operator/(cfloat scalar) const;
+		void operator+=(cvec2& v);
+		void operator-=(cvec2& v);
+		void operator*=(cvec2& v);
+		void operator*=(cfloat scalar);
+		void operator/=(cvec2& v);
+		void operator/=(cfloat scalar);
+		bool operator==(cfloat* v);
+		bool operator==(cvec2* v);
+		bool operator==(cvec2& v);
+		float& operator[](unsigned i);
 		float* ptr();
 
 		float x, y;
@@ -33,101 +43,110 @@ namespace vm
 
 	struct vec3 {
 		vec3();
-		vec3(const float value);
-		vec3(const float x, const float y, const float z);
-		vec3(const vec2& v, const float z);
-		vec3(const vec3& v);
-		vec3(const float* v);
-		vec3(const vec3* v);
-		void operator=(const vec3& v);
-		vec3 operator+(const vec3& v) const;
+		vec3(cfloat value);
+		vec3(cfloat x, cfloat y, cfloat z);
+		vec3(cvec2& v, cfloat z);
+		vec3(cvec3& v);
+		vec3(cfloat* v);
+		vec3(cvec3* v);
+		void operator=(cvec3& v);
+		vec3 operator+(cvec3& v) const;
 		vec3 operator-() const;
-		vec3 operator-(const vec3& v) const;
-		vec3 operator*(const vec3& v) const;
-		vec3 operator*(const float scalar) const;
-		vec3 operator/(const vec3& v) const;
-		vec3 operator/(const float scalar) const;
-		void operator+=(const vec3& v);
-		void operator-=(const vec3& v);
-		void operator*=(const vec3& v);
-		void operator*=(const float scalar);
-		void operator/=(const vec3& v);
-		void operator/=(const float scalar);
-		float& operator[](const unsigned i);
+		vec3 operator-(cvec3& v) const;
+		vec3 operator*(cvec3& v) const;
+		vec3 operator*(cfloat scalar) const;
+		vec3 operator/(cvec3& v) const;
+		vec3 operator/(cfloat scalar) const;
+		void operator+=(cvec3& v);
+		void operator-=(cvec3& v);
+		void operator*=(cvec3& v);
+		void operator*=(cfloat scalar);
+		void operator/=(cvec3& v);
+		void operator/=(cfloat scalar);
+		bool operator==(cfloat* v);
+		bool operator==(cvec3* v);
+		bool operator==(cvec3& v);
+		float& operator[](unsigned i);
 		float* ptr();
 
 		float x, y, z;
 	};
-
 	struct vec4 {
 		vec4();
-		vec4(const float value);
-		vec4(const float x, const float y, const float z, const float w);
-		vec4(const vec3& v, const float w);
-		vec4(const vec4& v);
-		vec4(const float* v);
-		vec4(const vec4* v);
-		void operator=(const vec4& v);
-		vec4 operator+(const vec4& v) const;
+		vec4(cfloat value);
+		vec4(cfloat x, cfloat y, cfloat z, cfloat w);
+		vec4(cvec3& v, cfloat w);
+		vec4(cvec4& v);
+		vec4(cfloat* v);
+		vec4(cvec4* v);
+		void operator=(cvec4& v);
+		vec4 operator+(cvec4& v) const;
 		vec4 operator-() const;
-		vec4 operator-(const vec4& v) const;
-		vec4 operator*(const vec4& v) const;
-		vec4 operator*(const float scalar) const;
-		vec4 operator/(const vec4& v) const;
-		vec4 operator/(const float scalar) const;
-		void operator+=(const vec4& v);
-		void operator-=(const vec4& v);
-		void operator*=(const vec4& v);
-		void operator*=(const float scalar);
-		void operator/=(const vec4& v);
-		void operator/=(const float scalar);
-		float& operator[](const unsigned i);
+		vec4 operator-(cvec4& v) const;
+		vec4 operator*(cvec4& v) const;
+		vec4 operator*(cfloat scalar) const;
+		vec4 operator/(cvec4& v) const;
+		vec4 operator/(cfloat scalar) const;
+		void operator+=(cvec4& v);
+		void operator-=(cvec4& v);
+		void operator*=(cvec4& v);
+		void operator*=(cfloat scalar);
+		void operator/=(cvec4& v);
+		void operator/=(cfloat scalar);
+		bool operator==(cfloat* v);
+		bool operator==(cvec4* v);
+		bool operator==(cvec4& v);
+		float& operator[](unsigned i);
 		float* ptr();
 
 		float x, y, z, w;
 	};
 
+	typedef vec4 col;
 	struct mat4 {
 		mat4();
-		mat4(const float diagonal);
-		mat4(const float* m);
-		mat4(const mat4* m);
-		mat4(const mat4& m);
-		mat4(const vec4& v0, const vec4& v1, const vec4& v2, const vec4& v3);
-		mat4(const float& x0, const float& y0, const float& z0, const float& w0,
-			const float& x1, const float& y1, const float& z1, const float& w1,
-			const float& x2, const float& y2, const float& z2, const float& w2,
-			const float& x3, const float& y3, const float& z3, const float& w3);
+		mat4(cfloat diagonal);
+		mat4(cfloat* m);
+		mat4(cmat4* m);
+		mat4(cmat4& m);
+		mat4(ccol& v0, ccol& v1, ccol& v2, ccol& v3);
+		mat4(cfloat& x0, cfloat& y0, cfloat& z0, cfloat& w0,
+			cfloat& x1, cfloat& y1, cfloat& z1, cfloat& w1,
+			cfloat& x2, cfloat& y2, cfloat& z2, cfloat& w2,
+			cfloat& x3, cfloat& y3, cfloat& z3, cfloat& w3);
 		static const mat4& identity();
-		void operator=(const mat4& m);
-		mat4 operator*(const mat4& m) const;
-		vec4 operator*(const vec4& m) const;
-		mat4 operator*(const float scalar);
-		vec4& operator[](const unsigned i);
+		void operator=(cmat4& m);
+		mat4 operator*(cmat4& m) const;
+		vec4 operator*(cvec4& m) const;
+		mat4 operator*(cfloat scalar);
+		bool operator==(cfloat* m);
+		bool operator==(cmat4* m);
+		bool operator==(cmat4& m);
+		col& operator[](unsigned i);
 		float* ptr();
 
-		vec4 _m[4];
+		col _v[4];
 	};
 
-	mat4 inverse(const mat4& m);
-	mat4 transpose(const mat4& m);
-	mat4 translate(const mat4& m, const vec3& v);
-	mat4 scale(const mat4& m, const vec3& v);
-	mat4 rotate(const mat4& m, const float angle, const vec3& v);
-	mat4 perspective(const float fovy, const float aspect, const float zNear, const float zFar);
-	mat4 ortho(const float left, const float right, const float bottom, const float top, const float zNear, const float zFar);
-	mat4 lookAt(const vm::vec3& eye, const vm::vec3& center, const vm::vec3& up);
-	float length(const vec2& v);
-	float length(const vec3& v);
-	float length(const vec4& v);
-	float dot(const vec2& v1, const vec2& v2);
-	float dot(const vec3& v1, const vec3& v2);
-	float dot(const vec4& v1, const vec4& v2);
-	vec2 normalize(const vec2& v);
-	vec3 normalize(const vec3& v);
-	vec4 normalize(const vec4& v);
-	vec3 cross(const vec3& v1, const vec3& v2);
-	float inversesqrt(const float x);
-	float radians(const float degrees);
-	float degrees(const float radians);
+	mat4 inverse(cmat4& m);
+	mat4 transpose(cmat4& m);
+	mat4 translate(cmat4& m, cvec3& v);
+	mat4 scale(cmat4& m, cvec3& v);
+	mat4 rotate(cmat4& m, cfloat angle, cvec3& v);
+	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar);
+	mat4 ortho(cfloat left, cfloat right, cfloat bottom, cfloat top, cfloat zNear, cfloat zFar);
+	mat4 lookAt(cvec3& eye, cvec3& center, cvec3& up);
+	float length(cvec2& v);
+	float length(cvec3& v);
+	float length(cvec4& v);
+	float dot(cvec2& v1, cvec2& v2);
+	float dot(cvec3& v1, cvec3& v2);
+	float dot(cvec4& v1, cvec4& v2);
+	vec2 normalize(cvec2& v);
+	vec3 normalize(cvec3& v);
+	vec4 normalize(cvec4& v);
+	vec3 cross(cvec3& v1, cvec3& v2);
+	float inversesqrt(cfloat x);
+	float radians(cfloat degrees);
+	float degrees(cfloat radians);
 }

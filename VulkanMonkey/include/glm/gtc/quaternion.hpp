@@ -103,7 +103,7 @@ namespace glm
 		/// Create a quaternion from two normalized axis
 		///
 		/// @param u A first normalized axis
-		/// @param v A second normalized axis
+		/// @param _v A second normalized axis
 		/// @see gtc_quaternion
 		/// @see http://lolengine.net/blog/2013/09/18/beautiful-maths-quaternion-from-vectors
 		GLM_FUNC_DECL tquat(tvec3<T, P> const & u, tvec3<T, P> const & v);

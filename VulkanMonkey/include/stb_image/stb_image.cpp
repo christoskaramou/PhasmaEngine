@@ -2606,7 +2606,7 @@ static int stbi__process_frame_header(stbi__jpeg *z, int scan)
 		// big blocks (e.g. a 16x16 iMCU on an image of width 33); we won't
 		// discard the extra data until colorspace conversion
 		//
-		// img_mcu_x, img_mcu_y: <=17 bits; comp[i].h and .v are <=4 (checked earlier)
+		// img_mcu_x, img_mcu_y: <=17 bits; comp[i].h and ._v are <=4 (checked earlier)
 		// so these muls can't overflow with 32-bit ints (which we require)
 		z->img_comp[i].w2 = z->img_mcu_x * z->img_comp[i].h * 8;
 		z->img_comp[i].h2 = z->img_mcu_y * z->img_comp[i].v * 8;
@@ -4618,7 +4618,7 @@ static int stbi__bitcount(unsigned int a)
 }
 
 // extract an arbitrarily-aligned N-bit value (N=bits)
-// from v, and then make it 8-bits long and fractionally
+// from _v, and then make it 8-bits long and fractionally
 // extend it to full full range.
 static int stbi__shiftsigned(int v, int shift, int bits)
 {
@@ -7031,7 +7031,7 @@ STBIDEF int stbi_is_16_bit_from_callbacks(stbi_io_callbacks const *c, void *user
 	  0.99    correct handling of alpha in palette
 	  0.98    TGA loader by lonesock; dynamically add loaders (untested)
 	  0.97    jpeg errors on too large a file; also catch another malloc failure
-	  0.96    fix detection of invalid v value - particleman@mollyrocket forum
+	  0.96    fix detection of invalid _v value - particleman@mollyrocket forum
 	  0.95    during header scan, seek to markers in case of padding
 	  0.94    STBI_NO_STDIO to disable stdio usage; rename all #defines the same
 	  0.93    handle jpegtran output; verbose errors

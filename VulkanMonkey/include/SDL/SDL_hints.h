@@ -673,7 +673,7 @@ extern "C" {
  *
  *  More details on back button behavior in Windows Phone apps can be found
  *  at the following page, on Microsoft's developer site:
- *  http://msdn.microsoft.com/en-us/library/windowsphone/develop/jj247550(v=vs.105).aspx
+ *  http://msdn.microsoft.com/en-us/library/windowsphone/develop/jj247550(_v=vs.105).aspx
  */
 #define SDL_HINT_WINRT_HANDLE_BACK_BUTTON "SDL_WINRT_HANDLE_BACK_BUTTON"
 

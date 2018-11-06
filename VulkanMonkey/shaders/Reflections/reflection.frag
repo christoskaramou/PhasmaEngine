@@ -14,22 +14,20 @@ layout (location = 0) out vec4 outColor;
 
 const float near = 0.005;
 const float far = 50.0;
-const bool fadeToEdges = false;
-const bool toggleBlur = false;
-const float user_pixelStepSize = 1.0f;
 
 // Screen space reflections
-vec4 ScreenSpaceReflections(vec2 UV, in vec3 normal)
+vec4 ScreenSpaceReflections(vec3 position, in vec3 normal)
 {
 	vec4 reflectedColor = vec4(0.0);
-	vec3 UVPosition = vec3(UV, texture(depthSampler, UV).r);
-	vec4 ndcPosition = vec4(2.0 * UVPosition.xy - 1.0, 0.99984, UVPosition.z);
-	vec4 csPosition = inverse(ubo.projection) * ndcPosition;
-	vec3 csReflection = reflect(vec3(csPosition.xy / csPosition.w, csPosition.z/csPosition.w), normal);
-	vec4 ndcReflection = ubo.projection * vec4(csReflection, 1.0); ndcReflection.xy /= ndcReflection.w;
-	vec3 step = normalize(ndcReflection.xyz) * 0.05;
-	vec3 newPosition = UVPosition + step;
-	//return vec4(vec3(csPosition.xy/ csPosition.w, csPosition.z), 1.0);
+
+	vec4 projected = ubo.projection * vec4(position, 1.0);
+	projected /= projected.w;
+	vec3 viewReflection = reflect(normalize(position), normal);
+	vec4 projectedRef = ubo.projection * vec4(viewReflection, 1.0);
+	projectedRef /= projectedRef.w;
+
+	vec3 step = normalize(projectedRef.xyz) * 0.05;
+	vec3 newPosition = projectedRef.xyz + step;
 
 	vec2 samplePosition = 0.5 * newPosition.xy + 0.5;
 	for(int i=0; i<150; i++)
@@ -41,13 +39,13 @@ vec4 ScreenSpaceReflections(vec2 UV, in vec3 normal)
 			samplePosition.y < 0.0 || samplePosition.y > 1.0 ||
 			newPosition.z < 0.0)
 		{
-			return vec4(0.0, 1.0, 0.0, 1.0);
+			return vec4(0.0, 0.0, 0.0, 0.0);
 		}
 
 		float delta = abs(currentDepth - sampledDepth);
-		if(delta < 0.005f)
+		if(delta < 0.0005f)
 		{
-			texture(albedoSampler, samplePosition.xy);
+			reflectedColor = texture(albedoSampler, samplePosition.xy);
 		}
 		if(currentDepth > sampledDepth)
 		{
@@ -65,8 +63,7 @@ vec4 ScreenSpaceReflections(vec2 UV, in vec3 normal)
 
 void main()
 {
+	vec4 position = ubo.view * texture(positionSampler, inUV);
 	vec4 normal = ubo.view * texture(normalSampler, inUV);
-	outColor = texture(albedoSampler, inUV) + ScreenSpaceReflections(inUV, normalize(normal.xyz));
-	//outColor = ScreenSpaceReflections(inUV, normalize(normal.xyz));
-	//outColor = normal;
-} 
+	outColor = texture(albedoSampler, inUV) + ScreenSpaceReflections(position.xyz, normalize(normal.xyz));
+}

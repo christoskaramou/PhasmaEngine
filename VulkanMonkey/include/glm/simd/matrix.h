@@ -947,13 +947,13 @@ GLM_FUNC_QUALIFIER void glm_mat4_inverse_lowp(glm_vec4 const in[4], glm_vec4 out
 	out[3] = _mm_mul_ps(Inv3, Rcp0);
 }
 /*
-GLM_FUNC_QUALIFIER void glm_mat4_rotate(__m128 const in[4], float Angle, float const v[3], __m128 out[4])
+GLM_FUNC_QUALIFIER void glm_mat4_rotate(__m128 const in[4], float Angle, float const _v[3], __m128 out[4])
 {
 	float a = glm::radians(Angle);
 	float c = cos(a);
 	float s = sin(a);
 
-	glm::vec4 AxisA(v[0], v[1], v[2], float(0));
+	glm::vec4 AxisA(_v[0], _v[1], _v[2], float(0));
 	__m128 AxisB = _mm_set_ps(AxisA.w, AxisA.z, AxisA.y, AxisA.x);
 	__m128 AxisC = detail::sse_nrm_ps(AxisB);
 

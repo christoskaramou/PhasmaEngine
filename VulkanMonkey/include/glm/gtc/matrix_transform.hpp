@@ -39,7 +39,7 @@ namespace glm
 	/// Builds a translation 4 * 4 matrix created from a vector of 3 components.
 	/// 
 	/// @param m Input matrix multiplied by this translation matrix.
-	/// @param v Coordinates of a translation vector.
+	/// @param _v Coordinates of a translation vector.
 	/// @tparam T Value type used to build the matrix. Currently supported: half (not recommanded), float or double.
 	/// @code
 	/// #include <glm/glm.hpp>
@@ -53,7 +53,7 @@ namespace glm
 	/// @endcode
 	/// @see gtc_matrix_transform
 	/// @see - translate(tmat4x4<T, P> const & m, T x, T y, T z)
-	/// @see - translate(tvec3<T, P> const & v)
+	/// @see - translate(tvec3<T, P> const & _v)
 	template <typename T, precision P>
 	GLM_FUNC_DECL tmat4x4<T, P> translate(
 		tmat4x4<T, P> const & m,
@@ -67,7 +67,7 @@ namespace glm
 	/// @tparam T Value type used to build the matrix. Supported: half, float or double.
 	/// @see gtc_matrix_transform
 	/// @see - rotate(tmat4x4<T, P> const & m, T angle, T x, T y, T z) 
-	/// @see - rotate(T angle, tvec3<T, P> const & v) 
+	/// @see - rotate(T angle, tvec3<T, P> const & _v) 
 	template <typename T, precision P>
 	GLM_FUNC_DECL tmat4x4<T, P> rotate(
 		tmat4x4<T, P> const & m,
@@ -77,11 +77,11 @@ namespace glm
 	/// Builds a scale 4 * 4 matrix created from 3 scalars. 
 	/// 
 	/// @param m Input matrix multiplied by this scale matrix.
-	/// @param v Ratio of scaling for each axis.
+	/// @param _v Ratio of scaling for each axis.
 	/// @tparam T Value type used to build the matrix. Currently supported: half (not recommanded), float or double.
 	/// @see gtc_matrix_transform
 	/// @see - scale(tmat4x4<T, P> const & m, T x, T y, T z)
-	/// @see - scale(tvec3<T, P> const & v)
+	/// @see - scale(tvec3<T, P> const & _v)
 	template <typename T, precision P>
 	GLM_FUNC_DECL tmat4x4<T, P> scale(
 		tmat4x4<T, P> const & m,

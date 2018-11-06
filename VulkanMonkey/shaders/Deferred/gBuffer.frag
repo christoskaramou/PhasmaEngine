@@ -26,7 +26,7 @@ void main() {
 	if(alpha < 0.8)
 		discard;
 
-	outPosition = vec4(inWorldPos, 1.0);
+	outPosition = vec4(inWorldPos, depth);
 
 	vec3 N = normalize(inNormal);
 	vec3 T = normalize(inTangent);
@@ -40,5 +40,5 @@ void main() {
 
 	outSpecular = texture(specSampler, inUV);
 
-	finalDepth = depth;
+	finalDepth = gl_FragCoord.z;
 }

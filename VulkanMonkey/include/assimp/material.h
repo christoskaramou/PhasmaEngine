@@ -107,7 +107,7 @@ enum aiTextureOp
  */
 enum aiTextureMapMode
 {
-    /** A texture coordinate u|v is translated to u%1|v%1
+    /** A texture coordinate u|_v is translated to u%1|_v%1
      */
     aiTextureMapMode_Wrap = 0x0,
 
@@ -121,8 +121,8 @@ enum aiTextureMapMode
      */
     aiTextureMapMode_Decal = 0x3,
 
-    /** A texture coordinate u|v becomes u%1|v%1 if (u-(u%1))%2 is zero and
-     *  1-(u%1)|1-(v%1) otherwise
+    /** A texture coordinate u|_v becomes u%1|_v%1 if (u-(u%1))%2 is zero and
+     *  1-(u%1)|1-(_v%1) otherwise
      */
     aiTextureMapMode_Mirror = 0x2,
 
@@ -459,13 +459,13 @@ enum aiBlendMode
  */
 struct aiUVTransform
 {
-    /** Translation on the u and v axes.
+    /** Translation on the u and _v axes.
      *
      *  The default value is (0|0).
      */
     C_STRUCT aiVector2D mTranslation;
 
-    /** Scaling on the u and v axes.
+    /** Scaling on the u and _v axes.
      *
      *  The default value is (1|1).
      */

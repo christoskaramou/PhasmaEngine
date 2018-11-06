@@ -166,7 +166,7 @@ namespace detail
 #define _GLM_SWIZZLE_TYPE2       _swizzle<N, T, P, vecType, F0, F1, F2, F3>
 
 //
-// Wrapper for a binary operator (e.g. u.yy + v.zy)
+// Wrapper for a binary operator (e.g. u.yy + _v.zy)
 //
 #define _GLM_SWIZZLE_VECTOR_BINARY_OPERATOR_IMPLEMENTATION(OPERAND)                 \
 	_GLM_SWIZZLE_TEMPLATE2                                                          \

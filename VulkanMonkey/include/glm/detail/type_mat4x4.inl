@@ -505,10 +505,10 @@ namespace glm
 	)
 	{
 /*
-		__m128 v0 = _mm_shuffle_ps(v.data, v.data, _MM_SHUFFLE(0, 0, 0, 0));
-		__m128 v1 = _mm_shuffle_ps(v.data, v.data, _MM_SHUFFLE(1, 1, 1, 1));
-		__m128 v2 = _mm_shuffle_ps(v.data, v.data, _MM_SHUFFLE(2, 2, 2, 2));
-		__m128 v3 = _mm_shuffle_ps(v.data, v.data, _MM_SHUFFLE(3, 3, 3, 3));
+		__m128 v0 = _mm_shuffle_ps(_v.data, _v.data, _MM_SHUFFLE(0, 0, 0, 0));
+		__m128 v1 = _mm_shuffle_ps(_v.data, _v.data, _MM_SHUFFLE(1, 1, 1, 1));
+		__m128 v2 = _mm_shuffle_ps(_v.data, _v.data, _MM_SHUFFLE(2, 2, 2, 2));
+		__m128 v3 = _mm_shuffle_ps(_v.data, _v.data, _MM_SHUFFLE(3, 3, 3, 3));
 
 		__m128 m0 = _mm_mul_ps(m[0].data, v0);
 		__m128 m1 = _mm_mul_ps(m[1].data, v1);
@@ -538,10 +538,10 @@ namespace glm
 
 /*
 		return typename tmat4x4<T, P>::col_type(
-			m[0][0] * v[0] + m[1][0] * v[1] + m[2][0] * v[2] + m[3][0] * v[3],
-			m[0][1] * v[0] + m[1][1] * v[1] + m[2][1] * v[2] + m[3][1] * v[3],
-			m[0][2] * v[0] + m[1][2] * v[1] + m[2][2] * v[2] + m[3][2] * v[3],
-			m[0][3] * v[0] + m[1][3] * v[1] + m[2][3] * v[2] + m[3][3] * v[3]);
+			m[0][0] * _v[0] + m[1][0] * _v[1] + m[2][0] * _v[2] + m[3][0] * _v[3],
+			m[0][1] * _v[0] + m[1][1] * _v[1] + m[2][1] * _v[2] + m[3][1] * _v[3],
+			m[0][2] * _v[0] + m[1][2] * _v[1] + m[2][2] * _v[2] + m[3][2] * _v[3],
+			m[0][3] * _v[0] + m[1][3] * _v[1] + m[2][3] * _v[2] + m[3][3] * _v[3]);
 */
 	}
 

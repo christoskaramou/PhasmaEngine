@@ -19,7 +19,7 @@
 #include "Model.h"
 #include "Camera.h"
 
-constexpr auto MAX_LIGHTS = 10;
+constexpr auto MAX_LIGHTS = 20;
 
 struct Context
 {

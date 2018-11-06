@@ -9,7 +9,6 @@ Renderer::Renderer(SDL_Window* window)
 {
 	Context::info = &ctx;
 	ctx.window = window;
-	vm::vec4 v4 = -vm::vec4();
 	ctx.initVulkanContext();
 
 	ctx.skyBox = SkyBox::loadSkyBox(

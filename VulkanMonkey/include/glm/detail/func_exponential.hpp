@@ -34,7 +34,7 @@ namespace glm
 
 	/// Returns the natural exponentiation of x, i.e., e^x.
 	///
-	/// @param v exp function is defined for input values of v defined in the range (inf-, inf+) in the limit of the type precision.
+	/// @param _v exp function is defined for input values of _v defined in the range (inf-, inf+) in the limit of the type precision.
 	/// @tparam genType Floating-point scalar or vector types.
 	/// 
 	/// @see <a href="http://www.opengl.org/sdk/docs/manglsl/xhtml/exp.xml">GLSL exp man page</a>
@@ -42,11 +42,11 @@ namespace glm
 	template <typename T, precision P, template <typename, precision> class vecType>
 	GLM_FUNC_DECL vecType<T, P> exp(vecType<T, P> const & v);
 
-	/// Returns the natural logarithm of v, i.e., 
+	/// Returns the natural logarithm of _v, i.e., 
 	/// returns the value y which satisfies the equation x = e^y. 
-	/// Results are undefined if v <= 0.
+	/// Results are undefined if _v <= 0.
 	///
-	/// @param v log function is defined for input values of v defined in the range (0, inf+) in the limit of the type precision.
+	/// @param _v log function is defined for input values of _v defined in the range (0, inf+) in the limit of the type precision.
 	/// @tparam genType Floating-point scalar or vector types.
 	/// 
 	/// @see <a href="http://www.opengl.org/sdk/docs/manglsl/xhtml/log.xml">GLSL log man page</a>
@@ -54,9 +54,9 @@ namespace glm
 	template <typename T, precision P, template <typename, precision> class vecType>
 	GLM_FUNC_DECL vecType<T, P> log(vecType<T, P> const & v);
 
-	/// Returns 2 raised to the v power.
+	/// Returns 2 raised to the _v power.
 	/// 
-	/// @param v exp2 function is defined for input values of v defined in the range (inf-, inf+) in the limit of the type precision.
+	/// @param _v exp2 function is defined for input values of _v defined in the range (inf-, inf+) in the limit of the type precision.
 	/// @tparam genType Floating-point scalar or vector types.
 	/// 
 	/// @see <a href="http://www.opengl.org/sdk/docs/manglsl/xhtml/exp2.xml">GLSL exp2 man page</a>
@@ -67,7 +67,7 @@ namespace glm
 	/// Returns the base 2 log of x, i.e., returns the value y, 
 	/// which satisfies the equation x = 2 ^ y.
 	/// 
-	/// @param v log2 function is defined for input values of v defined in the range (0, inf+) in the limit of the type precision.
+	/// @param _v log2 function is defined for input values of _v defined in the range (0, inf+) in the limit of the type precision.
 	/// @tparam genType Floating-point scalar or vector types.
 	///
 	/// @see <a href="http://www.opengl.org/sdk/docs/manglsl/xhtml/log2.xml">GLSL log2 man page</a>
@@ -75,9 +75,9 @@ namespace glm
 	template <typename T, precision P, template <typename, precision> class vecType>
 	GLM_FUNC_DECL vecType<T, P> log2(vecType<T, P> const & v);
 
-	/// Returns the positive square root of v.
+	/// Returns the positive square root of _v.
 	/// 
-	/// @param v sqrt function is defined for input values of v defined in the range [0, inf+) in the limit of the type precision.
+	/// @param _v sqrt function is defined for input values of _v defined in the range [0, inf+) in the limit of the type precision.
 	/// @tparam genType Floating-point scalar or vector types.
 	/// 
 	/// @see <a href="http://www.opengl.org/sdk/docs/manglsl/xhtml/sqrt.xml">GLSL sqrt man page</a>
@@ -87,9 +87,9 @@ namespace glm
 	template <typename T, precision P, template <typename, precision> class vecType>
 	GLM_FUNC_DECL vecType<T, P> sqrt(vecType<T, P> const & v);
 	
-	/// Returns the reciprocal of the positive square root of v.
+	/// Returns the reciprocal of the positive square root of _v.
 	/// 
-	/// @param v inversesqrt function is defined for input values of v defined in the range [0, inf+) in the limit of the type precision.
+	/// @param _v inversesqrt function is defined for input values of _v defined in the range [0, inf+) in the limit of the type precision.
 	/// @tparam genType Floating-point scalar or vector types.
 	/// 
 	/// @see <a href="http://www.opengl.org/sdk/docs/manglsl/xhtml/inversesqrt.xml">GLSL inversesqrt man page</a>
