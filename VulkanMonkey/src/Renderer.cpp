@@ -4,7 +4,6 @@
 #include <iostream>
 #include <random>
 #include <chrono>
-
 Renderer::Renderer(SDL_Window* window)
 {
 	Context::info = &ctx;
@@ -24,7 +23,6 @@ Renderer::Renderer(SDL_Window* window)
 	ctx.terrain = Terrain::generateTerrain(ctx.device, ctx.gpu, ctx.commandPool, ctx.graphicsQueue, ctx.descriptorPool, "");
 
 	ctx.models.push_back(Model::loadModel(ctx.device, ctx.gpu, ctx.commandPool, ctx.graphicsQueue, ctx.descriptorPool, "objects/sponza/", "sponza.obj"));
-	ctx.models.back().matrix = vm::translate(ctx.models.back().matrix, vm::vec3(2.f, 0.f, 0.f));
 
 	ctx.shadows.createDynamicUniformBuffer(ctx.device, ctx.gpu, ctx.models.size());
 	ctx.shadows.createDescriptorSet(ctx.device, ctx.descriptorPool, Shadows::getDescriptorSetLayout(ctx.device));

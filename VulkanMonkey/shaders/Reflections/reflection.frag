@@ -15,19 +15,37 @@ layout (location = 0) out vec4 outColor;
 const float near = 0.005;
 const float far = 50.0;
 
+vec4 ScreenSpaceReflections(vec3 position, vec3 normal);
+
+void main()
+{
+	// keep the rotation of the view matrix and discard its translation for correct normals
+	mat4 viewNoTranslation = ubo.view;
+	viewNoTranslation[3] = vec4(0.0, 0.0, 0.0, 1.0);
+
+	vec2 uv = vec2(inUV.x, inUV.y);
+	vec4 position = ubo.view * texture(positionSampler, inUV);
+	vec4 normal = viewNoTranslation * texture(normalSampler, inUV);
+	//outColor = vec4(normal.xyz, 1.0);
+	//outColor = texture(albedoSampler, inUV);// + ScreenSpaceReflections(position.xyz, normalize(normal.xyz));
+	outColor = ScreenSpaceReflections(position.xyz, normalize(normal.xyz));
+}
+
 // Screen space reflections
-vec4 ScreenSpaceReflections(vec3 position, in vec3 normal)
+vec4 ScreenSpaceReflections(vec3 position, vec3 normal)
 {
 	vec4 reflectedColor = vec4(0.0);
 
-	vec4 projected = ubo.projection * vec4(position, 1.0);
-	projected /= projected.w;
-	vec3 viewReflection = reflect(normalize(position), normal);
+	vec4 projectedPos = ubo.projection * vec4(position, 1.0);
+	projectedPos /= projectedPos.w;
+
+	vec3 viewReflection = normalize(reflect(normalize(position), normal));
 	vec4 projectedRef = ubo.projection * vec4(viewReflection, 1.0);
 	projectedRef /= projectedRef.w;
+	//return vec4(viewReflection, 1.0);
 
 	vec3 step = normalize(projectedRef.xyz) * 0.05;
-	vec3 newPosition = projectedRef.xyz + step;
+	vec3 newPosition = projectedRef.xyz;
 
 	vec2 samplePosition = 0.5 * newPosition.xy + 0.5;
 	for(int i=0; i<150; i++)
@@ -36,10 +54,14 @@ vec4 ScreenSpaceReflections(vec3 position, in vec3 normal)
 		float currentDepth = newPosition.z;
 
 		if(	samplePosition.x < 0.0 || samplePosition.x > 1.0 ||
-			samplePosition.y < 0.0 || samplePosition.y > 1.0 ||
-			newPosition.z < 0.0)
+			samplePosition.y < 0.0 || samplePosition.y > 1.0 )
 		{
-			return vec4(0.0, 0.0, 0.0, 0.0);
+			return vec4(0.0, 0.0, 1.0, 0.0);
+		}
+		
+		if( newPosition.z < 0.0 )
+		{
+			return vec4(1.0, 0.0, 0.0, 0.0);
 		}
 
 		float delta = abs(currentDepth - sampledDepth);
@@ -59,11 +81,4 @@ vec4 ScreenSpaceReflections(vec3 position, in vec3 normal)
 		}
 	}
 	return reflectedColor;
-}
-
-void main()
-{
-	vec4 position = ubo.view * texture(positionSampler, inUV);
-	vec4 normal = ubo.view * texture(normalSampler, inUV);
-	outColor = texture(albedoSampler, inUV) + ScreenSpaceReflections(position.xyz, normalize(normal.xyz));
 }

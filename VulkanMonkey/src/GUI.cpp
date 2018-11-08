@@ -365,13 +365,14 @@ void GUI::draw(vk::RenderPass guiRenderPass, vk::Framebuffer guiFrameBuffer, Sur
 		cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
 		cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint16);
 
-		vk::Viewport viewport;
-		viewport.x = 0;
-		viewport.y = 0;
-		viewport.width = draw_data->DisplaySize.x;
-		viewport.height = draw_data->DisplaySize.y;
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0f;
+		vk::Viewport viewport{
+			0,							// viewport.x =
+			0,							// viewport.y =
+			draw_data->DisplaySize.x,	// viewport.width =
+			draw_data->DisplaySize.y,	// viewport.height =
+			0.0f,						// viewport.minDepth =
+			1.0f						// viewport.maxDepth =
+		};
 		cmd.setViewport(0, 1, &viewport);
 
 		float data[4];

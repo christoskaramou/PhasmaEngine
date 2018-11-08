@@ -151,8 +151,6 @@ bool Window::processEvents(float delta)
 				xMove = event.motion.x - static_cast<int>(renderer[0]->ctx.surface.actualExtent.width * .5f);
 				yMove = event.motion.y - static_cast<int>(renderer[0]->ctx.surface.actualExtent.height * .5f);
 				info.mainCamera.rotate((float)xMove, (float)yMove);
-				if (xMove > 0 || yMove > 0)
-					std::cout << "xMove: " << (float)xMove << ", yMove: " << (float)yMove << "\n";
 			}
 		}
 		else

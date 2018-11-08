@@ -35,9 +35,9 @@ Model Model::loadModel(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPoo
 	Assimp::Importer importer;
 	const aiScene* scene = importer.ReadFile(path + modelName,
 		//aiProcess_MakeLeftHanded |
-		//aiProcess_FlipUVs |
+		aiProcess_FlipUVs |
 		//aiProcess_FlipWindingOrder |
-		aiProcess_ConvertToLeftHanded |
+		//aiProcess_ConvertToLeftHanded |
 		aiProcess_JoinIdenticalVertices |
 		aiProcess_Triangulate |
 		aiProcess_GenSmoothNormals |
@@ -206,17 +206,23 @@ void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& mod
 // position x, y, z and radius w
 vm::vec4 Model::getBoundingSphere()
 {
+
+	//vm::vec3 center = (float*)&(matrix * vm::vec4(0.0f, 0.0f, 0.0f, 1.f));
+	//vm::vec3 temp = (float*)&(matrix * vm::vec4(1.0f, 1.0f, 1.0f, 1.f));
+	//vm::vec3 tranformation = temp - center;
+	vm::vec3 center = vm::vec3(0.0f, 0.0f, 0.0f);
+
 	if (initialBoundingSphereRadius <= 0) {
 		for (auto &mesh : meshes) {
 			for (auto& vertex : mesh.vertices) {
-				float dis = vm::length(vm::vec3(vertex.x, vertex.y, vertex.z));
-				if (dis > initialBoundingSphereRadius)
-					initialBoundingSphereRadius = dis;
+				float distance = vm::length(vm::vec3(vertex.x, vertex.y, vertex.z));
+				if (distance > initialBoundingSphereRadius)
+					initialBoundingSphereRadius = distance;
 			}
 		}
 	}
 
-	return vm::vec4(0.0f, 0.0f, 0.0f, initialBoundingSphereRadius);
+	return vm::vec4(center, initialBoundingSphereRadius);
 }
 
 vk::DescriptorSetLayout Model::getDescriptorSetLayout(vk::Device device)

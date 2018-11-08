@@ -36,58 +36,8 @@ layout (location = 6) in mat4 shadow_coords;
 
 layout(location = 0) out vec4 outColor;
 
-vec3 calculateShadow(int i, vec3 fragPos, vec3 normal, vec3 albedo, float specular, float shadow)
-{
-	// Light to fragment
-	vec3 L = fragPos - ubo.lights[i].position.xyz;
-
-	// Viewer to fragment
-	vec3 V = fragPos - ubo.lights[i].camPos.xyz;
-
-	// Diffuse part
-	vec3 diff = ubo.lights[i].color.rgb * albedo * ubo.lights[i].color.a;
-
-	// Specular part
-	L = normalize(L);
-	vec3 N = normalize(normal);
-	vec3 R = reflect(-L, N);
-	V = normalize(V);
-	float RdotV = max(0.0, dot(R, V));
-	vec3 spec = ubo.lights[i].color.rgb * specular * pow(RdotV, 32.0);
-
-	return shadow * (diff + spec);
-}
-
-vec3 calculateColor(int i, vec3 fragPos, vec3 normal, vec3 albedo, float specular)
-{
-	// Light to fragment
-	vec3 L =  fragPos - ubo.lights[i].position.xyz;
-
-	// Distance from light to fragment
-	float dist = length(L);
-	if (dist > ubo.lights[i].attenuation.x*5.0)
-		return vec3(0.0);
-
-	// Viewer to fragment
-	vec3 V = fragPos - ubo.lights[i].camPos.xyz;
-
-	// Diffuse part
-	L = normalize(L);
-	vec3 N = normalize(normal);
-	float LdotN = max(0.0, dot(L, N));
-	vec3 diff = ubo.lights[i].color.rgb * albedo * LdotN;
-
-	// Specular part
-	vec3 R = reflect(-L, N);
-	V = normalize(V);
-	float RdotV = max(0.0, dot(R, V));
-	vec3 spec = ubo.lights[i].color.rgb * specular * pow(RdotV, 32.0);
-	
-	// Attenuation
-	float atten = 1.0 / (1.0 + ubo.lights[i].attenuation.x * pow(dist, 2));
-
-	return atten * (diff + spec);
-}
+vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
+vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
 
 void main()
 {
@@ -105,23 +55,72 @@ void main()
 	vec3 albedo = texture(tSampler, inUV).rgb;
 	float specular = texture(specSampler, inUV).r;
 	
-	vec4 s_coords =  shadow_coords * vec4(inFragPos, 1.0);
-	s_coords = s_coords / s_coords.w;
-	float shadow = 0.0;
-	for (int i = 0; i < 8 * castShadows ; i++)
-		shadow += 0.125 * texture( shadowMapSampler, vec3( s_coords.xy + poissonDisk[i]*0.0008, s_coords.z-0.0001 ));
-	
 	// Ambient
 	vec3 fragColor = 0.05 * albedo.rgb;
 
-	fragColor += calculateShadow(0, fragPos, normal, albedo, specular, shadow);
+	fragColor += calculateShadow(0, fragPos, normal, albedo, specular);
 
 	for(int i=1; i<NUM_LIGHTS; i++)
 		fragColor += calculateColor(i, fragPos, normal, albedo, specular);
 
-	// Gamma correction
-	//vec3 gamma = vec3(1.0/2.2);
-	//fragColor = pow(fragColor, gamma);
-
 	outColor = vec4(fragColor, alpha);
+}
+
+vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular)
+{
+	vec4 s_coords =  shadow_coords * vec4(fragPos, 1.0);
+	s_coords = s_coords / s_coords.w;
+	float shadow = 0.0;
+	for (int i = 0; i < 8 * castShadows ; i++)
+		shadow += 0.125 * texture( shadowMapSampler, vec3( s_coords.xy + poissonDisk[i]*0.0008, s_coords.z-0.0001 ));
+
+	// Light to fragment
+	vec3 L = fragPos - ubo.lights[mainLight].position.xyz;
+
+	// Viewer to fragment
+	vec3 V = fragPos - ubo.lights[mainLight].camPos.xyz;
+
+	// Diffuse part
+	vec3 diff = ubo.lights[mainLight].color.rgb * albedo * ubo.lights[mainLight].color.a;
+
+	// Specular part
+	L = normalize(L);
+	vec3 N = normalize(normal);
+	vec3 R = reflect(-L, N);
+	V = normalize(V);
+	float RdotV = max(0.0, dot(R, V));
+	vec3 spec = ubo.lights[mainLight].color.rgb * specular * pow(RdotV, 32.0);
+
+	return shadow * (diff + spec);
+}
+
+vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float specular)
+{
+	// Light to fragment
+	vec3 L =  fragPos - ubo.lights[light].position.xyz;
+
+	// Distance from light to fragment
+	float dist = length(L);
+	if (dist > ubo.lights[light].attenuation.x*5.0)
+		return vec3(0.0);
+
+	// Viewer to fragment
+	vec3 V = fragPos - ubo.lights[light].camPos.xyz;
+
+	// Diffuse part
+	L = normalize(L);
+	vec3 N = normalize(normal);
+	float LdotN = max(0.0, dot(L, N));
+	vec3 diff = ubo.lights[light].color.rgb * albedo * LdotN;
+
+	// Specular part
+	vec3 R = reflect(-L, N);
+	V = normalize(V);
+	float RdotV = max(0.0, dot(R, V));
+	vec3 spec = ubo.lights[light].color.rgb * specular * pow(RdotV, 32.0);
+	
+	// Attenuation
+	float atten = 1.0 / (1.0 + ubo.lights[light].attenuation.x * pow(dist, 2));
+
+	return atten * (diff + spec);
 }

@@ -10,14 +10,7 @@ struct Camera
 		RIGHT
 	};
 	vm::vec3 position, front, up, right, worldUp;
-	float aspect = 16.f / 9.f,
-		nearPlane = 0.005f,
-		farPlane = 50.0f,
-		FOV = 45.0f,
-		yaw,
-		pitch,
-		speed,
-		rotationSpeed;
+	float aspect, nearPlane, farPlane, FOV, yaw, pitch, speed, rotationSpeed;
 
 	Camera();
 	vm::mat4 getPerspective();

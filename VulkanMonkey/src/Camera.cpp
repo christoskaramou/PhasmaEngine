@@ -1,7 +1,12 @@
 #include "../include/Camera.h"
+#include <iostream>
 
 Camera::Camera()
 {
+	aspect = 16.f / 9.f;
+	nearPlane = 0.005f;
+	farPlane = 50.0f;
+	FOV = 45.0f;
 	worldUp = vm::vec3(0.0f, -1.0f, 0.0f);
 	yaw = 90.f;
 	pitch = 0.0f;
@@ -45,6 +50,10 @@ void Camera::rotate(float xoffset, float yoffset)
 			sin(vm::radians(pitch)),
 			cos(vm::radians(pitch)) * sin(vm::radians(yaw))));
 	right = vm::normalize(vm::cross(worldUp, front));
+	//std::cout << "position: " << position.x << ", " << position.y << ", " << position.z << "\n";
+	//std::cout << "front: " << front.x << ", " << front.y << ", " << front.z << "\n";
+	//std::cout << "right: " << right.x << ", " << right.y << ", " << right.z << "\n";
+	//std::cout << "worldUp: " << worldUp.x << ", " << worldUp.y << ", " << worldUp.z << "\n\n";
 }
 
 vm::mat4 Camera::getPerspective()

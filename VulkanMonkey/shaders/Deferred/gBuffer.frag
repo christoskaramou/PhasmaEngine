@@ -33,7 +33,8 @@ void main() {
 	vec3 B = normalize(cross(T, N));
 	mat3 TBN = mat3(T, B, N);
 
-	outNormal = vec4(normalize(TBN * (texture(normSampler, inUV).rgb * 2.0 - 1.0)), 1.0f);
+	vec3 normSampler = normalize(texture(normSampler, inUV).rgb * 2.0 - 1.0);
+	outNormal = vec4(TBN * normSampler , 1.0f);
 
 	outAlbedo = texture(tSampler, inUV);
 	outAlbedo.a = alpha;

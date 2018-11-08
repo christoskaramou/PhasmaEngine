@@ -53,13 +53,11 @@ namespace vm {
 
 	vec2 vec2::operator/(cvec2 & v) const
 	{
-		assert(v.x != 0.f && v.y != 0.f);
 		return vec2(x / v.x, y / v.y);
 	}
 
 	vec2 vec2::operator/(cfloat scalar) const
 	{
-		assert(scalar != 0.f);
 		return operator*(1.f/scalar);
 	}
 
@@ -93,23 +91,39 @@ namespace vm {
 		operator=(operator/(scalar));
 	}
 
-	bool vec2::operator==(cfloat * v)
+	bool vec2::operator==(cfloat * v) const
 	{
 		return x == v[0] && y == v[1];
 	}
 
-	bool vec2::operator==(cvec2 * v)
+	bool vec2::operator==(cvec2 * v) const
 	{
 		return operator==((float*)v);
 	}
 
-	bool vec2::operator==(cvec2 & v)
+	bool vec2::operator==(cvec2 & v) const
 	{
 		return operator==((float*)&v);
 	}
 
+	bool vec2::operator!=(cfloat * v) const
+	{
+		return !operator==(v);
+	}
+
+	bool vec2::operator!=(cvec2 * v) const
+	{
+		return !operator==(v);
+	}
+
+	bool vec2::operator!=(cvec2 & v) const
+	{
+		return !operator==(v);
+	}
+
 	float& vec2::operator[](unsigned i)
 	{
+		assert(i >= 0 && i < 2);
 		return (&x)[i];
 	}
 
@@ -173,13 +187,11 @@ namespace vm {
 
 	vec3 vec3::operator/(cvec3 & v) const
 	{
-		assert(v.x != 0.f && v.y != 0.f && v.z != 0.f);
 		return vec3(x / v.x, y / v.y,z / v.z);
 	}
 
 	vec3 vec3::operator/(cfloat scalar) const
 	{
-		assert(scalar != 0.f);
 		return operator*(1.f/scalar);
 	}
 
@@ -213,23 +225,39 @@ namespace vm {
 		operator=(operator/(scalar));
 	}
 
-	bool vec3::operator==(cfloat * v)
+	bool vec3::operator==(cfloat * v) const
 	{
 		return x == v[0] && y == v[1] && z == v[2];
 	}
 
-	bool vec3::operator==(cvec3 * v)
+	bool vec3::operator==(cvec3 * v) const
 	{
 		return operator==((float*)v);
 	}
 
-	bool vec3::operator==(cvec3 & v)
+	bool vec3::operator==(cvec3 & v) const
 	{
 		return operator==((float*)&v);
 	}
 
+	bool vec3::operator!=(cfloat * v) const
+	{
+		return !operator==(v);
+	}
+
+	bool vec3::operator!=(cvec3 * v) const
+	{
+		return !operator==(v);
+	}
+
+	bool vec3::operator!=(cvec3 & v) const
+	{
+		return !operator==(v);
+	}
+
 	float & vec3::operator[](unsigned i)
 	{
+		assert(i >= 0 && i < 3);
 		return (&x)[i];
 	}
 
@@ -309,13 +337,11 @@ namespace vm {
 
 	vec4 vec4::operator/(cvec4 & v) const
 	{
-		assert(v.x != 0.f && v.y != 0.f && v.z != 0.f && v.w != 0.f);
 		return vec4(x / v.x, y / v.y, z / v.z, w / v.w);
 	}
 
 	vec4 vec4::operator/(cfloat scalar) const
 	{
-		assert(scalar != 0.f);
 		return operator*(1.f / scalar);
 	}
 
@@ -349,23 +375,39 @@ namespace vm {
 		operator=(operator/(scalar));
 	}
 
-	bool vec4::operator==(cfloat * v)
+	bool vec4::operator==(cfloat * v) const
 	{
 		return x == v[0] && y == v[1] && z == v[2] && w == v[3];
 	}
 
-	bool vec4::operator==(cvec4 * v)
+	bool vec4::operator==(cvec4 * v) const
 	{
 		return operator==((float*)v);
 	}
 
-	bool vec4::operator==(cvec4 & v)
+	bool vec4::operator==(cvec4 & v) const
 	{
 		return operator==((float*)&v);
 	}
 
+	bool vec4::operator!=(cfloat * v) const
+	{
+		return !operator==(v);
+	}
+
+	bool vec4::operator!=(cvec4 * v) const
+	{
+		return !operator==(v);
+	}
+
+	bool vec4::operator!=(cvec4 & v) const
+	{
+		return !operator==(v);
+	}
+
 	float & vec4::operator[](unsigned i)
 	{
+		assert(i >= 0 && i < 4);
 		return (&x)[i];
 	}
 
@@ -452,12 +494,12 @@ namespace vm {
 
 	mat4 mat4::operator*(cmat4 & m) const
 	{
-		return {
+		return mat4(
 			_v[0] * m._v[0].x + _v[1] * m._v[0].y + _v[2] * m._v[0].z + _v[3] * m._v[0].w,
 			_v[0] * m._v[1].x + _v[1] * m._v[1].y + _v[2] * m._v[1].z + _v[3] * m._v[1].w,
 			_v[0] * m._v[2].x + _v[1] * m._v[2].y + _v[2] * m._v[2].z + _v[3] * m._v[2].w,
 			_v[0] * m._v[3].x + _v[1] * m._v[3].y + _v[2] * m._v[3].z + _v[3] * m._v[3].w
-		};	
+		);	
 	}
 
 	vec4 mat4::operator*(cvec4 & v) const
@@ -479,7 +521,7 @@ namespace vm {
 		);
 	}
 
-	bool mat4::operator==(cfloat * m)
+	bool mat4::operator==(cfloat * m) const
 	{
 		return 
 			_v[0].x == m[0] && _v[0].y == m[1] && _v[0].z == m[2] && _v[0].w == m[3] &&
@@ -488,18 +530,34 @@ namespace vm {
 			_v[3].x == m[12] && _v[3].y == m[13] && _v[3].z == m[14] && _v[3].w == m[15];
 	}
 
-	bool mat4::operator==(cmat4 * m)
+	bool mat4::operator==(cmat4 * m) const
 	{
 		return operator==((float*)m);
 	}
 
-	bool mat4::operator==(cmat4 & m)
+	bool mat4::operator==(cmat4 & m) const
 	{
 		return operator==((float*)&m);
 	}
 
+	bool mat4::operator!=(cfloat * m) const
+	{
+		return !operator==(m);
+	}
+
+	bool mat4::operator!=(cmat4 * m) const
+	{
+		return !operator==(m);
+	}
+
+	bool mat4::operator!=(cmat4 & m) const
+	{
+		return !operator==(m);
+	}
+
 	vec4 & mat4::operator[](unsigned i)
 	{
+		assert(i >= 0 && i < 4);
 		return _v[i];
 	}
 
@@ -508,61 +566,338 @@ namespace vm {
 		return &_v[0].x;
 	}
 
+	quat::quat() : x(0.f), y(0.f), z(0.f), w(0.f)
+	{ }
+
+	quat::quat(float * q) : x(q[0]), y(q[1]), z(q[2]), w(q[3])
+	{ }
+
+	quat::quat(cquat * q) : x(q->x), y(q->y), z(q->z), w(q->w)
+	{ }
+
+	quat::quat(cquat & q) : x(q.x), y(q.y), z(q.z), w(q.w)
+	{ }
+
+	quat::quat(cfloat f, cvec3& v) : x(v.x), y(v.y), z(v.z), w(f)
+	{ }
+
+	quat::quat(cfloat w, cfloat x, cfloat y, cfloat z) : x(x), y(y), z(z), w(w)
+	{ }
+
+	quat::quat(cvec3 & u, cvec3 & v)
+	{
+		float norm_u_norm_v = sqrt(dot(u, u) * dot(v, v));
+		float real_part = norm_u_norm_v + dot(u, v);
+		vec3 t;
+
+		if (real_part < 1.e-6f * norm_u_norm_v) {
+			real_part = 0.f;
+			t = abs(u.x) > abs(u.z) ? vec3(-u.y, u.x, 0.f) : vec3(0.f, -u.z, u.y);
+		}
+		else {
+			t = cross(u, v);
+		}
+
+		*this = vm::normalize(quat(real_part, t.x, t.y, t.z));
+	}
+
+	quat::quat(cvec3 & eulerAngle)
+	{
+		cvec3 c(cos(eulerAngle.x * .5f), cos(eulerAngle.y * .5f), cos(eulerAngle.z * .5f));
+		cvec3 s(sin(eulerAngle.x * .5f), sin(eulerAngle.y * .5f), sin(eulerAngle.z * .5f));
+
+		w = c.x * c.y * c.z + s.x * s.y * s.z;
+		x = s.x * c.y * c.z - c.x * s.y * s.z;
+		y = c.x * s.y * c.z + s.x * c.y * s.z;
+		z = c.x * c.y * s.z - s.x * s.y * c.z;
+	}
+
+	quat::quat(cvec4 & eulerAngle)
+	{
+		// w of vec4 is ignored
+		cvec3 c(cos(eulerAngle.x * .5f), cos(eulerAngle.y * .5f), cos(eulerAngle.z * .5f));
+		cvec3 s(sin(eulerAngle.x * .5f), sin(eulerAngle.y * .5f), sin(eulerAngle.z * .5f));
+
+		w = c.x * c.y * c.z + s.x * s.y * s.z;
+		x = s.x * c.y * c.z - c.x * s.y * s.z;
+		y = c.x * s.y * c.z + s.x * c.y * s.z;
+		z = c.x * c.y * s.z - s.x * s.y * c.z;
+	}
+
+	quat::quat(cmat4 & m)
+	{
+		float fourXSquaredMinus1 = m._v[0].x - m._v[1].y - m._v[2].z;
+		float fourYSquaredMinus1 = m._v[1].y - m._v[0].x - m._v[2].z;
+		float fourZSquaredMinus1 = m._v[2].z - m._v[0].x - m._v[1].y;
+		float fourWSquaredMinus1 = m._v[0].x + m._v[1].y + m._v[2].z;
+
+		int biggestIndex = 0;
+		float fourBiggestSquaredMinus1 = fourWSquaredMinus1;
+		if (fourXSquaredMinus1 > fourBiggestSquaredMinus1)
+		{
+			fourBiggestSquaredMinus1 = fourXSquaredMinus1;
+			biggestIndex = 1;
+		}
+		if (fourYSquaredMinus1 > fourBiggestSquaredMinus1)
+		{
+			fourBiggestSquaredMinus1 = fourYSquaredMinus1;
+			biggestIndex = 2;
+		}
+		if (fourZSquaredMinus1 > fourBiggestSquaredMinus1)
+		{
+			fourBiggestSquaredMinus1 = fourZSquaredMinus1;
+			biggestIndex = 3;
+		}
+
+		float biggestVal = sqrt(fourBiggestSquaredMinus1 + 1.f) * .5f;
+		float mult = .25f / biggestVal;
+
+		switch (biggestIndex)
+		{
+		case 0:
+			w = biggestVal;
+			x = (m._v[1].z - m._v[2].y) * mult;
+			y = (m._v[2].x - m._v[0].z) * mult;
+			z = (m._v[0].y - m._v[1].x) * mult;
+			break;
+		case 1:
+			w = (m._v[1].z - m._v[2].y) * mult;
+			x = biggestVal;
+			y = (m._v[0].y + m._v[1].x) * mult;
+			z = (m._v[2].x + m._v[0].z) * mult;
+			break;
+		case 2:
+			w = (m._v[2].x - m._v[0].z) * mult;
+			x = (m._v[0].y + m._v[1].x) * mult;
+			y = biggestVal;
+			z = (m._v[1].z + m._v[2].y) * mult;
+			break;
+		case 3:
+			w = (m._v[0].y - m._v[1].x) * mult;
+			x = (m._v[2].x + m._v[0].z) * mult;
+			y = (m._v[1].z + m._v[2].y) * mult;
+			z = biggestVal;
+			break;
+		default: // Silence a -Wswitch-default warning in GCC. Should never actually get here. Assert is just for sanity.
+			assert(false);
+			w = 1.f;
+			x = 0.f;
+			y = 0.f;
+			z = 0.f;
+		}
+	}
+
+	mat4 quat::mat() const
+	{
+		cfloat qxx(x * x);
+		cfloat qyy(y * y);
+		cfloat qzz(z * z);
+		cfloat qxz(x * z);
+		cfloat qxy(x * y);
+		cfloat qyz(y * z);
+		cfloat qwx(w * x);
+		cfloat qwy(w * y);
+		cfloat qwz(w * z);
+
+		cfloat r00 = 1.f - 2.f * (qyy + qzz);
+		cfloat r01 = 2.f * (qxy + qwz);
+		cfloat r02 = 2.f * (qxz - qwy);
+
+		cfloat r10 = 2.f * (qxy - qwz);
+		cfloat r11 = 1.f - 2.f * (qxx + qzz);
+		cfloat r12 = 2.f * (qyz + qwx);
+
+		cfloat r20 = 2.f * (qxz + qwy);
+		cfloat r21 = 2.f * (qyz - qwx);
+		cfloat r22 = 1.f - 2.f * (qxx + qyy);
+
+		return mat4(
+			r00, r01, r02, 0.f,
+			r10, r11, r12, 0.f,
+			r20, r21, r22, 0.f,
+			0.f, 0.f, 0.f, 1.f
+		);
+	}
+
+	vec3 quat::eulerAngles() const
+	{
+		return vec3(pitch(), yaw(), roll());
+	}
+
+	float quat::pitch() const
+	{
+		cfloat _x = w * w - x * x - y * y + z * z;
+		cfloat _y = 2.f * (y * z + w * x);
+		
+		return abs(_x) > FLT_EPSILON && abs(_y) > FLT_EPSILON ? atan2(y, x) : 2.f * atan2(x, w);
+	}
+
+	float quat::yaw() const
+	{
+		return asin(clamp(-2.f * (x * z - w * y), -1.f, 1.f));
+	}
+
+	float quat::roll() const
+	{
+		return atan2(2.f * (x * y + w * z), w * w + x * x - y * y - z * z);
+	}
+
+	void quat::operator=(cquat & q)
+	{
+		w = q.w;
+		x = q.x;
+		y = q.y;
+		z = q.z;
+	}
+
+	quat quat::operator+(cquat & q) const
+	{
+		return quat(w + q.w, x + q.x, y + q.y, z + q.z);
+	}
+
+	quat quat::operator-(cquat & q) const
+	{
+		return quat(w - q.w, x - q.x, y - q.y, z - q.z);
+	}
+
+	quat quat::operator-() const
+	{
+		return quat(-w, -x, -y, -z);
+	}
+
+	quat quat::operator*(cfloat scalar) const
+	{
+		return quat(w * scalar, x * scalar, y * scalar, z * scalar);
+	}
+
+	vec3 quat::operator*(cvec3 & v) const
+	{
+		cvec3 qv(x, y, z);
+		cvec3 uv(vm::cross(qv, v));
+		cvec3 uuv(vm::cross(qv, uv));
+
+		return v + ((uv * w) + uuv) * 2.f;
+	}
+
+	vec4 quat::operator*(cvec4 & v) const
+	{
+		return vec4(*this * vec3((float*)&v), v.w);
+	}
+
+	quat quat::operator*(cquat & q) const
+	{
+		return quat(
+			w * q.w - x * q.x - y * q.y - z * q.z,
+			w * q.x + x * q.w + y * q.z - z * q.y,
+			w * q.y + y * q.w + z * q.x - x * q.z,
+			w * q.z + z * q.w + x * q.y - y * q.x
+		);
+	}
+
+	quat quat::operator/(cfloat scalar) const
+	{
+		return operator*(1.f / scalar);
+	}
+
+	bool quat::operator==(cquat & q) const
+	{
+		return x == q.x && y == q.y && z == q.z && w == q.w;
+	}
+
+	bool quat::operator!=(cquat & q) const
+	{
+		return !quat::operator==(q);
+	}
+
+	float & quat::operator[](unsigned i)
+	{
+		assert(i >= 0 && i < 4);
+		return (&x)[i];
+	}
+
+	float * quat::ptr()
+	{
+		return &x;
+	}
+
+	vec3 operator*(cvec3 & v, cquat & q)
+	{
+		return inverse(q) * v;
+	}
+
+	vec4 operator*(cvec4 & v, cquat & q)
+	{
+		return inverse(q) * v;
+	}
+
+	quat operator*(cfloat scalar, cquat & q)
+	{
+		return q * scalar;
+	}
+
 	mat4 inverse(cmat4 & m)
 	{
-		cfloat Coef00 = m._v[2].z * m._v[3].w - m._v[3].z * m._v[2].w;
-		cfloat Coef02 = m._v[1].z * m._v[3].w - m._v[3].z * m._v[1].w;
-		cfloat Coef03 = m._v[1].z * m._v[2].w - m._v[2].z * m._v[1].w;
+		cfloat c00 = m._v[2].z * m._v[3].w - m._v[3].z * m._v[2].w;
+		cfloat c02 = m._v[1].z * m._v[3].w - m._v[3].z * m._v[1].w;
+		cfloat c03 = m._v[1].z * m._v[2].w - m._v[2].z * m._v[1].w;
 
-		cfloat Coef04 = m._v[2].y * m._v[3].w - m._v[3].y * m._v[2].w;
-		cfloat Coef06 = m._v[1].y * m._v[3].w - m._v[3].y * m._v[1].w;
-		cfloat Coef07 = m._v[1].y * m._v[2].w - m._v[2].y * m._v[1].w;
+		cfloat c04 = m._v[2].y * m._v[3].w - m._v[3].y * m._v[2].w;
+		cfloat c06 = m._v[1].y * m._v[3].w - m._v[3].y * m._v[1].w;
+		cfloat c07 = m._v[1].y * m._v[2].w - m._v[2].y * m._v[1].w;
 
-		cfloat Coef08 = m._v[2].y * m._v[3].z - m._v[3].y * m._v[2].z;
-		cfloat Coef10 = m._v[1].y * m._v[3].z - m._v[3].y * m._v[1].z;
-		cfloat Coef11 = m._v[1].y * m._v[2].z - m._v[2].y * m._v[1].z;
+		cfloat c08 = m._v[2].y * m._v[3].z - m._v[3].y * m._v[2].z;
+		cfloat c10 = m._v[1].y * m._v[3].z - m._v[3].y * m._v[1].z;
+		cfloat c11 = m._v[1].y * m._v[2].z - m._v[2].y * m._v[1].z;
 
-		cfloat Coef12 = m._v[2].x * m._v[3].w - m._v[3].x * m._v[2].w;
-		cfloat Coef14 = m._v[1].x * m._v[3].w - m._v[3].x * m._v[1].w;
-		cfloat Coef15 = m._v[1].x * m._v[2].w - m._v[2].x * m._v[1].w;
+		cfloat c12 = m._v[2].x * m._v[3].w - m._v[3].x * m._v[2].w;
+		cfloat c14 = m._v[1].x * m._v[3].w - m._v[3].x * m._v[1].w;
+		cfloat c15 = m._v[1].x * m._v[2].w - m._v[2].x * m._v[1].w;
 
-		cfloat Coef16 = m._v[2].x * m._v[3].z - m._v[3].x * m._v[2].z;
-		cfloat Coef18 = m._v[1].x * m._v[3].z - m._v[3].x * m._v[1].z;
-		cfloat Coef19 = m._v[1].x * m._v[2].z - m._v[2].x * m._v[1].z;
+		cfloat c16 = m._v[2].x * m._v[3].z - m._v[3].x * m._v[2].z;
+		cfloat c18 = m._v[1].x * m._v[3].z - m._v[3].x * m._v[1].z;
+		cfloat c19 = m._v[1].x * m._v[2].z - m._v[2].x * m._v[1].z;
 
-		cfloat Coef20 = m._v[2].x * m._v[3].y - m._v[3].x * m._v[2].y;
-		cfloat Coef22 = m._v[1].x * m._v[3].y - m._v[3].x * m._v[1].y;
-		cfloat Coef23 = m._v[1].x * m._v[2].y - m._v[2].x * m._v[1].y;
+		cfloat c20 = m._v[2].x * m._v[3].y - m._v[3].x * m._v[2].y;
+		cfloat c22 = m._v[1].x * m._v[3].y - m._v[3].x * m._v[1].y;
+		cfloat c23 = m._v[1].x * m._v[2].y - m._v[2].x * m._v[1].y;
 
-		cvec4 Fac0(Coef00, Coef00, Coef02, Coef03);
-		cvec4 Fac1(Coef04, Coef04, Coef06, Coef07);
-		cvec4 Fac2(Coef08, Coef08, Coef10, Coef11);
-		cvec4 Fac3(Coef12, Coef12, Coef14, Coef15);
-		cvec4 Fac4(Coef16, Coef16, Coef18, Coef19);
-		cvec4 Fac5(Coef20, Coef20, Coef22, Coef23);
+		cvec4 f0(c00, c00, c02, c03);
+		cvec4 f1(c04, c04, c06, c07);
+		cvec4 f2(c08, c08, c10, c11);
+		cvec4 f3(c12, c12, c14, c15);
+		cvec4 f4(c16, c16, c18, c19);
+		cvec4 f5(c20, c20, c22, c23);
 
-		cvec4 Vec0(m._v[1].x, m._v[0].x, m._v[0].x, m._v[0].x);
-		cvec4 Vec1(m._v[1].y, m._v[0].y, m._v[0].y, m._v[0].y);
-		cvec4 Vec2(m._v[1].z, m._v[0].z, m._v[0].z, m._v[0].z);
-		cvec4 Vec3(m._v[1].w, m._v[0].w, m._v[0].w, m._v[0].w);
+		cvec4 v0(m._v[1].x, m._v[0].x, m._v[0].x, m._v[0].x);
+		cvec4 v1(m._v[1].y, m._v[0].y, m._v[0].y, m._v[0].y);
+		cvec4 v2(m._v[1].z, m._v[0].z, m._v[0].z, m._v[0].z);
+		cvec4 v3(m._v[1].w, m._v[0].w, m._v[0].w, m._v[0].w);
 
-		cvec4 Inv0(Vec1 * Fac0 - Vec2 * Fac1 + Vec3 * Fac2);
-		cvec4 Inv1(Vec0 * Fac0 - Vec2 * Fac3 + Vec3 * Fac4);
-		cvec4 Inv2(Vec0 * Fac1 - Vec1 * Fac3 + Vec3 * Fac5);
-		cvec4 Inv3(Vec0 * Fac2 - Vec1 * Fac4 + Vec2 * Fac5);
+		cvec4 i0(v1 * f0 - v2 * f1 + v3 * f2);
+		cvec4 i1(v0 * f0 - v2 * f3 + v3 * f4);
+		cvec4 i2(v0 * f1 - v1 * f3 + v3 * f5);
+		cvec4 i3(v0 * f2 - v1 * f4 + v2 * f5);
 
-		cvec4 SignA(+1, -1, +1, -1);
-		cvec4 SignB(-1, +1, -1, +1);
-		mat4 Inverse(Inv0 * SignA, Inv1 * SignB, Inv2 * SignA, Inv3 * SignB);
+		cvec4 sA(+1, -1, +1, -1);
+		cvec4 sB(-1, +1, -1, +1);
+		mat4 i(i0 * sA, i1 * sB, i2 * sA, i3 * sB);
 
-		cvec4 Row0(Inverse[0][0], Inverse[1][0], Inverse[2][0], Inverse[3][0]);
+		cvec4 r0(i[0][0], i[1][0], i[2][0], i[3][0]);
 
-		cvec4 Dot0(m._v[0] * Row0);
-		cfloat Dot1 = (Dot0.x + Dot0.y) + (Dot0.z + Dot0.w);
+		cvec4 d0(m._v[0] * r0);
+		cfloat d1 = (d0.x + d0.y) + (d0.z + d0.w);
 
-		cfloat OneOverDeterminant = 1.f / Dot1;
+		return i * (1.f / d1);
+	}
 
-		return Inverse * OneOverDeterminant;
+	quat inverse(cquat & q)
+	{
+		return conjugate(q) / dot(q, q);
+	}
+
+	quat conjugate(cquat & q)
+	{
+		return quat(q.w, -q.x, -q.y, -q.z);
 	}
 
 	mat4 transpose(cmat4& m)
@@ -595,25 +930,25 @@ namespace vm {
 		);
 	}
 
-	mat4 rotate(cmat4 & m, cfloat angle, cvec3 & v)
+	mat4 rotate(cmat4 & m, cfloat angle, cvec3 & axis)
 	{
 		cfloat c = cos(angle);
 		cfloat s = sin(angle);
 
-		cvec3 axis(normalize(v));
-		cvec3 temp(axis * (1.f - c));
+		cvec3 naxis(normalize(axis));
+		cvec3 temp(naxis * (1.f - c));
 
-		cfloat r00 = c + temp.x * axis.x;
-		cfloat r01 = temp.x * axis.y + s * axis.z;
-		cfloat r02 = temp.x * axis.z - s * axis.y;
+		cfloat r00 = c + temp.x * naxis.x;
+		cfloat r01 = temp.x * naxis.y + s * naxis.z;
+		cfloat r02 = temp.x * naxis.z - s * naxis.y;
 
-		cfloat r10 = temp.y * axis.x - s * axis.z;
-		cfloat r11 = c + temp.y * axis.y;
-		cfloat r12 = temp.y * axis.z + s * axis.x;
+		cfloat r10 = temp.y * naxis.x - s * naxis.z;
+		cfloat r11 = c + temp.y * naxis.y;
+		cfloat r12 = temp.y * naxis.z + s * naxis.x;
 
-		cfloat r20 = temp.z * axis.x + s * axis.y;
-		cfloat r21 = temp.z * axis.y - s * axis.x;
-		cfloat r22 = c + temp.z * axis.z;
+		cfloat r20 = temp.z * naxis.x + s * naxis.y;
+		cfloat r21 = temp.z * naxis.y - s * naxis.x;
+		cfloat r22 = c + temp.z * naxis.z;
 
 		return mat4(
 			m._v[0] * r00 + m._v[1] * r01 + m._v[2] * r02,
@@ -628,10 +963,15 @@ namespace vm {
 		cfloat tanHalfFovy = tan(fovy / 2.f);
 		cfloat m00 = 1.f / (aspect * tanHalfFovy);
 		cfloat m11 = 1.f / (tanHalfFovy);
-		cfloat m22 = zFar / (zFar - zNear);
-		cfloat m23 = 1.f;
 		cfloat m32 = -(zFar * zNear) / (zFar - zNear);
 
+#ifdef VM_LEFT_HANDED
+		cfloat m22 = zFar / (zFar - zNear);
+		cfloat m23 = 1.f;
+#else
+		cfloat m22 = zFar / (zNear - zFar);
+		cfloat m23 = -1.f;
+#endif
 		return mat4(
 			m00, 0.f, 0.f, 0.f,
 			0.f, m11, 0.f, 0.f,
@@ -659,6 +999,7 @@ namespace vm {
 
 	mat4 lookAt(cvec3& eye, cvec3& center, cvec3& up)
 	{
+#ifdef VM_LEFT_HANDED
 		cvec3 f(normalize(center - eye));
 		cvec3 r(normalize(cross(up, f)));
 		cvec3 u(cross(f, r));
@@ -671,6 +1012,43 @@ namespace vm {
 			r.y, u.y, f.y, 0.f,
 			r.z, u.z, f.z, 0.f,
 			m30, m31, m32, 1.f
+		);
+#else
+		cvec3 f(normalize(center - eye));
+		cvec3 r(normalize(cross(f, up)));
+		cvec3 u(cross(r, f));
+
+		cfloat m30 = -dot(r, eye);
+		cfloat m31 = -dot(u, eye);
+		cfloat m32 = -dot(f, eye);
+		return mat4(
+			r.x, u.x, -f.x, 0.f,
+			r.y, u.y, -f.y, 0.f,
+			r.z, u.z, -f.z, 0.f,
+			m30, m31, m32, 1.f
+		);
+#endif
+	}
+
+	quat lookAt(cvec3 & direction, cvec3 & up)
+	{
+#ifdef VM_LEFT_HANDED
+		cvec3 r2(direction);
+#else
+		cvec3 r2(-direction);
+#endif
+
+		cvec3 r0(normalize(cross(up, r2)));
+		cvec3 r1(cross(r2, r0));
+		cvec3 r3(0.f, 0.f, 0.f);
+
+		return quat(
+			mat4(
+				col(r0, 0.f),
+				col(r1, 0.f),
+				col(r2, 0.f),
+				col(r3, 1.f)
+			)
 		);
 	}
 
@@ -689,6 +1067,11 @@ namespace vm {
 		return sqrt(dot(v, v));
 	}
 
+	float length(cquat & q)
+	{
+		return sqrt(dot(q, q));
+	}
+
 	vec2 normalize(cvec2 & v)
 	{
 		return v * inversesqrt(dot(v, v));
@@ -702,6 +1085,15 @@ namespace vm {
 	vec4 normalize(cvec4 & v)
 	{
 		return v * inversesqrt(dot(v, v));
+	}
+
+	quat normalize(cquat & q)
+	{
+		cfloat len = length(q);
+		if (len <= 0.f)
+			return quat(1.f, 0.f, 0.f, 0.f);
+		cfloat oneOverLen = 1.f / len;
+		return quat(q.w * oneOverLen, q.x * oneOverLen, q.y * oneOverLen, q.z * oneOverLen);
 	}
 
 	float dot(cvec2 & v1, cvec2 & v2)
@@ -722,12 +1114,28 @@ namespace vm {
 		return vec.x + vec.y + vec.z + vec.w;
 	}
 
+	float dot(cquat & q1, cquat & q2)
+	{
+		cvec4 q(q1.x * q2.x, q1.y * q2.y, q1.z * q2.z, q1.w * q2.w);
+		return q.x + q.y + q.z + q.w;
+	}
+
 	vec3 cross(cvec3 & v1, cvec3 & v2)
 	{
 		return vec3(
 			v1.y * v2.z - v2.y * v1.z,
 			v1.z * v2.x - v2.z * v1.x,
 			v1.x * v2.y - v2.x * v1.y);
+	}
+
+	quat cross(cquat & q1, cquat & q2)
+	{
+		return quat(
+			q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z,
+			q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y,
+			q1.w * q2.y + q1.y * q2.w + q1.z * q2.x - q1.x * q2.z,
+			q1.w * q2.z + q1.z * q2.w + q1.x * q2.y - q1.y * q2.x
+		);
 	}
 
 	float inversesqrt(cfloat x)
@@ -745,4 +1153,83 @@ namespace vm {
 		return radians * 57.295779513082320876798154814105f;
 	}
 
+	vec3 reflect(cvec3 & v, cvec3 & normal)
+	{
+		return v - normal * dot(normal, v) * 2.f;
+	}
+
+	float mix(cfloat f1, cfloat f2, cfloat a)
+	{
+		return f1 + a * (f2 - f1);
+	}
+
+	quat mix(cquat & q1, cquat & q2, cfloat a)
+	{
+		cfloat cosTheta = dot(q1, q2);
+		
+		// Perform a linear interpolation when cosTheta is close to 1 to avoid side effect of sin(angle) becoming a zero denominator
+		if (cosTheta > 1.f - FLT_EPSILON)
+		{
+			return quat(
+				mix(q1.w, q2.w, a),
+				mix(q1.x, q2.x, a),
+				mix(q1.y, q2.y, a),
+				mix(q1.z, q2.z, a)
+			);
+		}
+		else
+		{
+			cfloat angle = acos(cosTheta);
+			return (sin((1.f - a) * angle) * q1 + sin(a * angle) * q2) / sin(angle);
+		}
+	}
+
+	quat lerp(cquat & q1, cquat & q2, cfloat a)
+	{
+		assert(a >= 0.f && a <= 1.f);
+		return q1 * (1.f - a) + (q2 * a);
+	}
+
+	quat slerp(cquat & q1, cquat & q2, cfloat a)
+	{
+		quat q3(q2);
+
+		float cosTheta = dot(q1, q2);
+
+		// If cosTheta < 0, the interpolation will take the long way around the sphere.
+		// To fix this, one quat must be negated.
+		if (cosTheta < 0.f)
+		{
+			q3 = -q3;
+			cosTheta = -cosTheta;
+		}
+
+		// Perform a linear interpolation when cosTheta is close to 1 to avoid side effect of sin(angle) becoming a zero denominator
+		if (cosTheta > 1.f - FLT_EPSILON)
+		{
+			return quat(
+				mix(q1.w, q3.w, a),
+				mix(q1.x, q3.x, a),
+				mix(q1.y, q3.y, a),
+				mix(q1.z, q3.z, a)
+			);
+		}
+		else
+		{
+			cfloat angle = acos(cosTheta);
+			return (sin((1.f - a) * angle) * q1 + sin(a * angle) * q3) / sin(angle);
+		}
+	}
+	float clamp(cfloat x, cfloat minX, cfloat maxX)
+	{
+		return minimum(maximum(x, minX), maxX);
+	}
+	float minimum(cfloat a, cfloat b)
+	{
+		return (b < a) ? b : a;
+	}
+	float maximum(cfloat a, cfloat b)
+	{
+		return (a < b) ? b : a;
+	}
 }

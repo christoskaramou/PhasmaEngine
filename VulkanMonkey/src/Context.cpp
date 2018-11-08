@@ -1305,7 +1305,7 @@ Pipeline Context::createCompositionPipeline()
 		VK_FALSE,										// Bool32 depthClampEnable;
 		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
 		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eFront,					// CullModeFlags cullMode;
+		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
 		vk::FrontFace::eCounterClockwise,				// FrontFace frontFace;
 		VK_FALSE,										// Bool32 depthBiasEnable;
 		0.0f,											// float depthBiasConstantFactor;
@@ -1541,7 +1541,7 @@ Pipeline Context::createReflectionPipeline()
 		VK_FALSE,										// Bool32 depthClampEnable;
 		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
 		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eFront,					// CullModeFlags cullMode;
+		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
 		vk::FrontFace::eCounterClockwise,						// FrontFace frontFace;
 		VK_FALSE,										// Bool32 depthBiasEnable;
 		0.0f,											// float depthBiasConstantFactor;
