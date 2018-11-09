@@ -26,9 +26,7 @@ void main()
 	vec2 uv = vec2(inUV.x, inUV.y);
 	vec4 position = ubo.view * texture(positionSampler, inUV);
 	vec4 normal = viewNoTranslation * texture(normalSampler, inUV);
-	//outColor = vec4(normal.xyz, 1.0);
-	//outColor = texture(albedoSampler, inUV);// + ScreenSpaceReflections(position.xyz, normalize(normal.xyz));
-	outColor = ScreenSpaceReflections(position.xyz, normalize(normal.xyz));
+	outColor = texture(albedoSampler, inUV) + ScreenSpaceReflections(position.xyz, normalize(normal.xyz));
 }
 
 // Screen space reflections
@@ -42,7 +40,6 @@ vec4 ScreenSpaceReflections(vec3 position, vec3 normal)
 	vec3 viewReflection = normalize(reflect(normalize(position), normal));
 	vec4 projectedRef = ubo.projection * vec4(viewReflection, 1.0);
 	projectedRef /= projectedRef.w;
-	//return vec4(viewReflection, 1.0);
 
 	vec3 step = normalize(projectedRef.xyz) * 0.05;
 	vec3 newPosition = projectedRef.xyz;

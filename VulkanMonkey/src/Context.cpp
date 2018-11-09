@@ -33,8 +33,6 @@ specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsModel()
 	generalSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(info->device), Mesh::getDescriptorSetLayout(info->device), Model::getDescriptorSetLayout(info->device), getDescriptorSetLayoutLights(info) };
 	generalSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	generalSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
-	generalSpecific.cull = vk::CullModeFlagBits::eBack;
-	generalSpecific.face = vk::FrontFace::eCounterClockwise;
 	generalSpecific.pushConstantRange = vk::PushConstantRange();
 	generalSpecific.specializationInfo = vk::SpecializationInfo();
 
@@ -53,8 +51,6 @@ specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsShadows()
 	shadowsSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(info->device) };
 	shadowsSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	shadowsSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
-	shadowsSpecific.cull = vk::CullModeFlagBits::eBack;
-	shadowsSpecific.face = vk::FrontFace::eCounterClockwise;
 	shadowsSpecific.pushConstantRange = vk::PushConstantRange();
 
 	return shadowsSpecific;
@@ -70,8 +66,6 @@ specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsSkyBox()
 	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(info->device) };
 	skyBoxSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionSkyBox();
 	skyBoxSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionSkyBox();
-	skyBoxSpecific.cull = vk::CullModeFlagBits::eBack;
-	skyBoxSpecific.face = vk::FrontFace::eCounterClockwise;
 	skyBoxSpecific.sampleCount = vk::SampleCountFlagBits::e4;
 	skyBoxSpecific.pushConstantRange = vk::PushConstantRange();
 
@@ -88,8 +82,6 @@ specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsTerrain()
 	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(info->device) };
 	terrainSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	terrainSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
-	terrainSpecific.cull = vk::CullModeFlagBits::eBack;
-	terrainSpecific.face = vk::FrontFace::eCounterClockwise;
 	terrainSpecific.pushConstantRange = vk::PushConstantRange();
 
 	return terrainSpecific;
@@ -106,7 +98,6 @@ specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsGUI()
 	GUISpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGUI();
 	GUISpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGUI();
 	GUISpecific.cull = vk::CullModeFlagBits::eFront;
-	GUISpecific.face = vk::FrontFace::eCounterClockwise;
 	GUISpecific.pushConstantRange = vk::PushConstantRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4 };
 	GUISpecific.sampleCount = vk::SampleCountFlagBits::e1;
 	GUISpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };

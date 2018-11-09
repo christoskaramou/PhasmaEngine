@@ -39,7 +39,7 @@ Renderer::Renderer(SDL_Window* window)
 		ctx.light[0].color = vm::vec4(1.f, 1.f, 1.f, .5f);
 		ctx.light[0].position = vm::vec4(0.f, 1.51f, -0.14f, 1.f);
 		ctx.light[0].attenuation = vm::vec4(0.f, 0.f, 1.f, 1.f);
-		ctx.light[0].camPos = vm::vec4(ctx.mainCamera.position, 0.0f) * vm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);
+		ctx.light[0].camPos = vm::vec4(ctx.mainCamera.position, 0.0f);
 
 		ctx.UBLights.createBuffer(ctx.device, ctx.gpu, ctx.light.size() * sizeof(Context::Light), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 		VkCheck(ctx.device.mapMemory(ctx.UBLights.memory, 0, ctx.UBLights.size, vk::MemoryMapFlags(), &ctx.UBLights.data));
@@ -487,7 +487,7 @@ void Renderer::update(float delta)
 	const vm::vec3 center = -lightPos;
 	std::vector<ShadowsUBO> shadows_UBO(ctx.models.size());
 	for (uint32_t i = 0; i < ctx.models.size(); i++) {
-		shadows_UBO[i] = { vm::ortho(-4.f, 4.f, 4.f, -4.f, 0.1f, 20.f), vm::lookAt(lightPos, center, ctx.mainCamera.worldUp), ctx.models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
+		shadows_UBO[i] = { vm::ortho(-4.f, 4.f, 4.f, -4.f, 0.1f, 20.f), vm::lookAt(lightPos, center, vm::vec3(0.f, 1.f, 0.f)), ctx.models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
 	}
 	memcpy(ctx.shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
 
@@ -510,7 +510,7 @@ void Renderer::update(float delta)
 		}reflectionInput;
 
 		reflectionInput.vec[0] = vm::vec4(ctx.mainCamera.position, 1.0f);
-		reflectionInput.vec[1] = vm::vec4(ctx.mainCamera.front, 1.0f);
+		reflectionInput.vec[1] = vm::vec4(ctx.mainCamera.front(), 1.0f);
 		reflectionInput.vec[2] = vm::vec4(static_cast<float>(ctx.surface.actualExtent.width), static_cast<float>(ctx.surface.actualExtent.height), 0.f, 0.f);
 		reflectionInput.vec[3] = vm::vec4();
 		reflectionInput.projection = proj_view.projection;

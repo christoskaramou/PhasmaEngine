@@ -9,11 +9,13 @@
 #define ccol   const col
 #define cmat4  const mat4
 #define FLT_EPSILON 1.192092896e-07F
-#define VM_LEFT_HANDED
 
 // Left Handed, Colomn Major, Depth[0,1]
 namespace vm
 {
+	struct vec3;
+	struct vec4;
+
 	struct vec2 {
 		vec2();
 		vec2(cfloat value);
@@ -53,6 +55,7 @@ namespace vm
 		vec3(cfloat x, cfloat y, cfloat z);
 		vec3(cvec2& v, cfloat z);
 		vec3(cvec3& v);
+		vec3(cvec4& v);
 		vec3(cfloat* v);
 		vec3(cvec3* v);
 		void operator=(cvec3& v);
@@ -80,6 +83,7 @@ namespace vm
 
 		float x, y, z;
 	};
+
 	struct vec4 {
 		vec4();
 		vec4(cfloat value);
@@ -114,7 +118,9 @@ namespace vm
 		float x, y, z, w;
 	};
 
+	struct quat;
 	typedef vec4 col;
+	typedef vec4 row;
 	struct mat4 {
 		mat4();
 		mat4(cfloat diagonal);
@@ -122,11 +128,14 @@ namespace vm
 		mat4(cmat4* m);
 		mat4(cmat4& m);
 		mat4(ccol& v0, ccol& v1, ccol& v2, ccol& v3);
+		mat4(cquat& q);
 		mat4(cfloat& x0, cfloat& y0, cfloat& z0, cfloat& w0,
 			cfloat& x1, cfloat& y1, cfloat& z1, cfloat& w1,
 			cfloat& x2, cfloat& y2, cfloat& z2, cfloat& w2,
 			cfloat& x3, cfloat& y3, cfloat& z3, cfloat& w3);
-		static const mat4& identity();
+		static cmat4 identity();
+		quat quaternion() const;
+		vec3 translation();
 		void operator=(cmat4& m);
 		mat4 operator*(cmat4& m) const;
 		vec4 operator*(cvec4& m) const;
@@ -154,7 +163,8 @@ namespace vm
 		quat(cvec3& eulerAngle);
 		quat(cvec4& v);
 		quat(cmat4& m);
-		mat4 mat() const;
+		static cquat identity();
+		mat4 matrix() const;
 		vec3 eulerAngles() const;
 		float pitch() const;
 		float yaw() const;
@@ -187,6 +197,7 @@ namespace vm
 	mat4 translate(cmat4& m, cvec3& v);
 	mat4 scale(cmat4& m, cvec3& v);
 	mat4 rotate(cmat4& m, cfloat angle, cvec3& axis);
+	quat rotate(cquat& q, cfloat angle, cvec3& axis);
 	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar);
 	mat4 ortho(cfloat left, cfloat right, cfloat bottom, cfloat top, cfloat zNear, cfloat zFar);
 	mat4 lookAt(cvec3& eye, cvec3& center, cvec3& up);
@@ -213,7 +224,8 @@ namespace vm
 	quat mix(cquat& q1, cquat& q2, cfloat a);
 	quat lerp(cquat& q1, cquat& q2, cfloat a);
 	quat slerp(cquat& q1, cquat& q2, cfloat a);
-	float clamp(cfloat x, cfloat min, cfloat max);
+	float clamp(cfloat x, cfloat minX, cfloat maxX);
+	void clamp(float* const x, cfloat minX, cfloat maxX);
 	float minimum(cfloat a, cfloat b);
 	float maximum(cfloat a, cfloat b);
 }

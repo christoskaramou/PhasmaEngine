@@ -7,8 +7,8 @@ struct specificGraphicsPipelineCreateInfo
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
 	std::vector<vk::VertexInputBindingDescription> vertexInputBindingDescriptions{};
 	std::vector<vk::VertexInputAttributeDescription> vertexInputAttributeDescriptions{};
-	vk::CullModeFlagBits cull;
-	vk::FrontFace face;
+	vk::CullModeFlagBits cull = vk::CullModeFlagBits::eBack;
+	vk::FrontFace face = vk::FrontFace::eClockwise;
 	vk::PushConstantRange pushConstantRange;
 	bool useBlendState = true;
 	std::vector<vk::PipelineColorBlendAttachmentState> blendAttachmentStates{

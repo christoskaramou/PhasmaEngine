@@ -147,6 +147,9 @@ namespace vm {
 	vec3::vec3(cvec3 & v) : x(v.x), y(v.y), z(v.z)
 	{ }
 
+	vec3::vec3(cvec4 & v) : x(v.x), y(v.y), z(v.z)
+	{ }
+
 	vec3::vec3(cfloat * v) : x(v[0]), y(v[1]), z(v[2])
 	{ }
 
@@ -464,6 +467,36 @@ namespace vm {
 	}
 	{ }
 
+	mat4::mat4(cquat & q)
+	{
+		cfloat qxx(q.x * q.x);
+		cfloat qyy(q.y * q.y);
+		cfloat qzz(q.z * q.z);
+		cfloat qxz(q.x * q.z);
+		cfloat qxy(q.x * q.y);
+		cfloat qyz(q.y * q.z);
+		cfloat qwx(q.w * q.x);
+		cfloat qwy(q.w * q.y);
+		cfloat qwz(q.w * q.z);
+
+		cfloat r00 = 1.f - 2.f * (qyy + qzz);
+		cfloat r01 = 2.f * (qxy + qwz);
+		cfloat r02 = 2.f * (qxz - qwy);
+
+		cfloat r10 = 2.f * (qxy - qwz);
+		cfloat r11 = 1.f - 2.f * (qxx + qzz);
+		cfloat r12 = 2.f * (qyz + qwx);
+
+		cfloat r20 = 2.f * (qxz + qwy);
+		cfloat r21 = 2.f * (qyz - qwx);
+		cfloat r22 = 1.f - 2.f * (qxx + qyy);
+
+		_v[0] = col(r00, r01, r02, 0.f);
+		_v[1] = col(r10, r11, r12, 0.f);
+		_v[2] = col(r20, r21, r22, 0.f);
+		_v[3] = col(0.f, 0.f, 0.f, 1.f);
+	}
+
 	mat4::mat4
 	(
 		cfloat& x0, cfloat& y0, cfloat& z0, cfloat& w0,
@@ -478,10 +511,19 @@ namespace vm {
 	}
 	{ }
 
-	cmat4& mat4::identity()
+	cmat4 mat4::identity()
 	{
-		static cmat4 idendity = mat4(1.f);
-		return idendity;
+		return mat4(1.f);
+	}
+
+	quat mat4::quaternion() const
+	{
+		return quat(*this);
+	}
+
+	vec3 mat4::translation()
+	{
+		return vec3(_v[3].x, _v[3].y, _v[3].z);
 	}
 
 	void mat4::operator=(cmat4 & m)
@@ -566,7 +608,7 @@ namespace vm {
 		return &_v[0].x;
 	}
 
-	quat::quat() : x(0.f), y(0.f), z(0.f), w(0.f)
+	quat::quat() : x(0.f), y(0.f), z(0.f), w(1.f)
 	{ }
 
 	quat::quat(float * q) : x(q[0]), y(q[1]), z(q[2]), w(q[3])
@@ -687,36 +729,14 @@ namespace vm {
 		}
 	}
 
-	mat4 quat::mat() const
+	cquat quat::identity()
 	{
-		cfloat qxx(x * x);
-		cfloat qyy(y * y);
-		cfloat qzz(z * z);
-		cfloat qxz(x * z);
-		cfloat qxy(x * y);
-		cfloat qyz(y * z);
-		cfloat qwx(w * x);
-		cfloat qwy(w * y);
-		cfloat qwz(w * z);
+		return quat(1.f, 0.f, 0.f, 0.f);
+	}
 
-		cfloat r00 = 1.f - 2.f * (qyy + qzz);
-		cfloat r01 = 2.f * (qxy + qwz);
-		cfloat r02 = 2.f * (qxz - qwy);
-
-		cfloat r10 = 2.f * (qxy - qwz);
-		cfloat r11 = 1.f - 2.f * (qxx + qzz);
-		cfloat r12 = 2.f * (qyz + qwx);
-
-		cfloat r20 = 2.f * (qxz + qwy);
-		cfloat r21 = 2.f * (qyz - qwx);
-		cfloat r22 = 1.f - 2.f * (qxx + qyy);
-
-		return mat4(
-			r00, r01, r02, 0.f,
-			r10, r11, r12, 0.f,
-			r20, r21, r22, 0.f,
-			0.f, 0.f, 0.f, 1.f
-		);
+	mat4 quat::matrix() const
+	{
+		return mat4(*this);
 	}
 
 	vec3 quat::eulerAngles() const
@@ -781,7 +801,7 @@ namespace vm {
 
 	vec4 quat::operator*(cvec4 & v) const
 	{
-		return vec4(*this * vec3((float*)&v), v.w);
+		return vec4(*this * vec3(v), v.w);
 	}
 
 	quat quat::operator*(cquat & q) const
@@ -958,20 +978,24 @@ namespace vm {
 		);
 	}
 
+	quat rotate(cquat & q, cfloat angle, cvec3 & axis)
+	{
+		vec3 axisNorm = vm::normalize(axis);
+
+		cfloat c = cos(angle * .5f);
+		cfloat s = sin(angle * .5f);
+
+		return q * quat(c, axisNorm.x * s, axisNorm.y * s, axisNorm.z * s);
+	}
+
 	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar)
 	{
 		cfloat tanHalfFovy = tan(fovy / 2.f);
 		cfloat m00 = 1.f / (aspect * tanHalfFovy);
 		cfloat m11 = 1.f / (tanHalfFovy);
-		cfloat m32 = -(zFar * zNear) / (zFar - zNear);
-
-#ifdef VM_LEFT_HANDED
 		cfloat m22 = zFar / (zFar - zNear);
 		cfloat m23 = 1.f;
-#else
-		cfloat m22 = zFar / (zNear - zFar);
-		cfloat m23 = -1.f;
-#endif
+		cfloat m32 = -(zFar * zNear) / (zFar - zNear);
 		return mat4(
 			m00, 0.f, 0.f, 0.f,
 			0.f, m11, 0.f, 0.f,
@@ -999,7 +1023,6 @@ namespace vm {
 
 	mat4 lookAt(cvec3& eye, cvec3& center, cvec3& up)
 	{
-#ifdef VM_LEFT_HANDED
 		cvec3 f(normalize(center - eye));
 		cvec3 r(normalize(cross(up, f)));
 		cvec3 u(cross(f, r));
@@ -1013,41 +1036,21 @@ namespace vm {
 			r.z, u.z, f.z, 0.f,
 			m30, m31, m32, 1.f
 		);
-#else
-		cvec3 f(normalize(center - eye));
-		cvec3 r(normalize(cross(f, up)));
-		cvec3 u(cross(r, f));
-
-		cfloat m30 = -dot(r, eye);
-		cfloat m31 = -dot(u, eye);
-		cfloat m32 = -dot(f, eye);
-		return mat4(
-			r.x, u.x, -f.x, 0.f,
-			r.y, u.y, -f.y, 0.f,
-			r.z, u.z, -f.z, 0.f,
-			m30, m31, m32, 1.f
-		);
-#endif
 	}
 
 	quat lookAt(cvec3 & direction, cvec3 & up)
 	{
-#ifdef VM_LEFT_HANDED
-		cvec3 r2(direction);
-#else
-		cvec3 r2(-direction);
-#endif
-
-		cvec3 r0(normalize(cross(up, r2)));
-		cvec3 r1(cross(r2, r0));
-		cvec3 r3(0.f, 0.f, 0.f);
+		cvec3 f(direction);
+		cvec3 r(normalize(cross(up, f)));
+		cvec3 u(cross(f, r));
+		cvec4 fill(0.f, 0.f, 0.f, 1.f);
 
 		return quat(
 			mat4(
-				col(r0, 0.f),
-				col(r1, 0.f),
-				col(r2, 0.f),
-				col(r3, 1.f)
+				row(r, 0.f),
+				row(u, 0.f),
+				row(f, 0.f),
+				fill
 			)
 		);
 	}
@@ -1223,6 +1226,10 @@ namespace vm {
 	float clamp(cfloat x, cfloat minX, cfloat maxX)
 	{
 		return minimum(maximum(x, minX), maxX);
+	}
+	void clamp(float * const x, cfloat minX, cfloat maxX)
+	{
+		*x = clamp(*x, minX, maxX);
 	}
 	float minimum(cfloat a, cfloat b)
 	{
