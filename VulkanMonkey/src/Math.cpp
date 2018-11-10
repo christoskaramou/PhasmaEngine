@@ -1069,11 +1069,11 @@ namespace vm {
 		);
 	}
 
-	mat4 lookAt(cvec3& eye, cvec3& center, cvec3& up)
+	mat4 lookAt(cvec3& eye, cvec3& front, cvec3& right, cvec3& up)
 	{
-		cvec3 f(normalize(center - eye));
-		cvec3 r(normalize(cross(up, f)));
-		cvec3 u(cross(f, r));
+		cvec3 f(front);
+		cvec3 r(right);
+		cvec3 u(up);
 
 		cfloat m30 = -dot(r, eye);
 		cfloat m31 = -dot(u, eye);
@@ -1086,11 +1086,11 @@ namespace vm {
 		);
 	}
 
-	quat lookAt(cvec3 & direction, cvec3 & up)
+	quat lookAt(cvec3& front, cvec3& right, cvec3& up)
 	{
-		cvec3 f(direction);
-		cvec3 r(normalize(cross(up, f)));
-		cvec3 u(cross(f, r));
+		cvec3 f(front);
+		cvec3 r(right);
+		cvec3 u(up);
 		cvec4 fill(0.f, 0.f, 0.f, 1.f);
 
 		return quat(

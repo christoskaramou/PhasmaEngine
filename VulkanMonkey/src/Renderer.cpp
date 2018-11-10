@@ -483,11 +483,17 @@ void Renderer::update(float delta)
 		memcpy(ctx.skyBox.uniformBuffer.data, &proj_view, 2 * sizeof(vm::mat4));
 
 	// SHADOWS
-	const vm::vec3 lightPos = vm::vec3(ctx.light[0].position.x, ctx.light[0].position.y, ctx.light[0].position.z);
+	const float handiness = ctx.mainCamera.worldOrientation.x * ctx.mainCamera.worldOrientation.y;
+	const vm::vec3 lightPos = vm::vec3(ctx.light[0].position);
 	const vm::vec3 center = -lightPos;
+	const vm::vec3 front = vm::normalize(center - lightPos);
+	const vm::vec3 right = vm::normalize(handiness > 0.f ? vm::cross(ctx.mainCamera.worldUp(), front) : vm::cross(front, ctx.mainCamera.worldUp()));
+	const vm::vec3 up = vm::normalize(handiness > 0.f ? vm::cross(front, right) : vm::cross(right, front));
 	std::vector<ShadowsUBO> shadows_UBO(ctx.models.size());
+
+	// TODO: fix right
 	for (uint32_t i = 0; i < ctx.models.size(); i++) {
-		shadows_UBO[i] = { vm::ortho(-4.f, 4.f, 4.f, -4.f, 0.1f, 20.f), vm::lookAt(lightPos, center, vm::vec3(0.f, 1.f, 0.f)), ctx.models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
+		shadows_UBO[i] = { vm::ortho(-4.f, 4.f, -4.f, 4.f, 0.1f, 10.f), vm::lookAt(lightPos, front, right, up), ctx.models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
 	}
 	memcpy(ctx.shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
 

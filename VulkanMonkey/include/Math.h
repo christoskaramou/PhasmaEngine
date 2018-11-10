@@ -207,8 +207,8 @@ namespace vm
 	quat rotate(cquat& q, cfloat angle, cvec3& axis);
 	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar);
 	mat4 ortho(cfloat left, cfloat right, cfloat bottom, cfloat top, cfloat zNear, cfloat zFar);
-	mat4 lookAt(cvec3& eye, cvec3& center, cvec3& up);
-	quat lookAt(cvec3& direction, cvec3& up);
+	mat4 lookAt(cvec3& eye, cvec3& front, cvec3& right, cvec3& up);
+	quat lookAt(cvec3& front, cvec3& right, cvec3& up);
 	float length(cvec2& v);
 	float length(cvec3& v);
 	float length(cvec4& v);

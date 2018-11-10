@@ -3,9 +3,10 @@
 
 Camera::Camera()
 {
-	orientation = vm::quat::identity();
+	worldOrientation = vm::vec3(-1.f, -1.f, 1.f);
 	position = vm::vec3(0.f, 0.f, 0.f);
 	euler = vm::vec3(0.f, 0.f, 0.f);
+	orientation = vm::quat(euler);
 
 	aspect = 16.f / 9.f;
 	nearPlane = 0.005f;
@@ -15,19 +16,34 @@ Camera::Camera()
 	rotationSpeed = 0.05f;
 }
 
-vm::vec3 Camera::front()
+vm::vec3 Camera::worldRight()
 {
-	return orientation * vm::vec3(0.f, 0.f, 1.f);
+	return vm::vec3(worldOrientation.x, 0.f, 0.f);
+}
+
+vm::vec3 Camera::worldUp()
+{
+	return vm::vec3(0.f, worldOrientation.y, 0.f);
+}
+
+vm::vec3 Camera::worldFront()
+{
+	return vm::vec3(0.f, 0.f, worldOrientation.z);
 }
 
 vm::vec3 Camera::right()
 {
-	return orientation * vm::vec3(1.f, 0.f, 0.f);
+	return orientation * worldRight();
 }
 
 vm::vec3 Camera::up()
 {
-	return orientation * vm::vec3(.0f, -1.f, 0.f);
+	return orientation * worldUp();
+}
+
+vm::vec3 Camera::front()
+{
+	return orientation * worldFront();
 }
 
 void Camera::move(RelativeDirection direction, float deltaTime, bool combineDirections)
@@ -42,18 +58,21 @@ void Camera::move(RelativeDirection direction, float deltaTime, bool combineDire
 
 void Camera::rotate(float xoffset, float yoffset)
 {
-	xoffset *= rotationSpeed;
 	yoffset *= rotationSpeed;
+	xoffset *= rotationSpeed;
 
-	euler.x += vm::radians(yoffset); // pitch
-	euler.y += vm::radians(xoffset); // yaw
+	euler.x += vm::radians(-yoffset) * worldOrientation.y; // pitch
+	euler.y += vm::radians(xoffset) * worldOrientation.x; // yaw
 
 	orientation = vm::quat(euler);
 }
 
 vm::mat4 Camera::getPerspective()
 {
-	static const vm::mat4 perspective = vm::perspective(vm::radians(FOV), aspect, nearPlane, farPlane);
+	vm::mat4 perspective = vm::perspective(vm::radians(FOV), aspect, nearPlane, farPlane);
+	const float handiness = worldOrientation.x * worldOrientation.y;
+	perspective[2][2] *= handiness;
+	perspective[2][3] *= handiness;
 	return perspective;
 }
 vm::mat4 Camera::getView()

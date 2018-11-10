@@ -111,7 +111,6 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_DOWN) info.light[0].position.y -= 0.005f;
 			if (event.key.keysym.sym == SDLK_LEFT) info.light[0].position.z += 0.01f;
 			if (event.key.keysym.sym == SDLK_RIGHT) info.light[0].position.z -= 0.01f;
-			//std::cout << info.light[0].position.x << ", " << info.light[0].position.y << ", " << info.light[0].position.z << "\n";
 		}
 		else if (event.type == SDL_KEYUP) {
 			int key = event.key.keysym.scancode;
