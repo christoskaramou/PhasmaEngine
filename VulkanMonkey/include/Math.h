@@ -121,6 +121,7 @@ namespace vm
 	struct quat;
 	typedef vec4 col;
 	typedef vec4 row;
+
 	struct mat4 {
 		mat4();
 		mat4(cfloat diagonal);
@@ -135,7 +136,13 @@ namespace vm
 			cfloat& x3, cfloat& y3, cfloat& z3, cfloat& w3);
 		static cmat4 identity();
 		quat quaternion() const;
+		vec3 eulerAngles() const;
+		float pitch() const;
+		float yaw() const;
+		float roll() const;
 		vec3 translation();
+		vec3 scale() const;
+		quat rotation() const;
 		void operator=(cmat4& m);
 		mat4 operator*(cmat4& m) const;
 		vec4 operator*(cvec4& m) const;

@@ -518,12 +518,60 @@ namespace vm {
 
 	quat mat4::quaternion() const
 	{
-		return quat(*this);
+		return quat(eulerAngles());
+	}
+
+	vec3 mat4::eulerAngles() const
+	{
+		return rotation().eulerAngles();
+	}
+
+	float mat4::pitch() const
+	{
+		return eulerAngles().x;
+	}
+
+	float mat4::yaw() const
+	{
+		return eulerAngles().y;
+	}
+
+	float mat4::roll() const
+	{
+		return eulerAngles().z;
 	}
 
 	vec3 mat4::translation()
 	{
-		return vec3(_v[3].x, _v[3].y, _v[3].z);
+		return vec3(_v[3]);
+	}
+
+	vec3 mat4::scale() const
+	{
+		cfloat xSign = _v[0].x * _v[0].y * _v[0].z * _v[0].w < 0.f ? -1.f : 1.f;
+		cfloat ySign = _v[1].x * _v[1].y * _v[1].z * _v[1].w < 0.f ? -1.f : 1.f;
+		cfloat zSign = _v[2].x * _v[2].y * _v[2].z * _v[2].w < 0.f ? -1.f : 1.f;
+
+		return vec3(
+			xSign * length(vec3(_v[0])),
+			ySign * length(vec3(_v[1])),
+			zSign * length(vec3(_v[2]))
+		);
+	}
+
+	quat mat4::rotation() const
+	{
+		cvec3 s(scale());
+		if (abs(s.x * s.y * s.z) < FLT_EPSILON)
+			return quat::identity();
+
+		return quat(mat4(
+			_v[0].x / s.x, _v[0].y / s.x, _v[0].z / s.x, 0.f,
+			_v[1].x / s.y, _v[1].y / s.y, _v[1].z / s.y, 0.f,
+			_v[2].x / s.z, _v[2].y / s.z, _v[2].z / s.z, 0.f,
+			0.f, 0.f, 0.f, 1.f
+		)
+		);
 	}
 
 	void mat4::operator=(cmat4 & m)
@@ -749,7 +797,7 @@ namespace vm {
 		cfloat _x = w * w - x * x - y * y + z * z;
 		cfloat _y = 2.f * (y * z + w * x);
 		
-		return abs(_x) > FLT_EPSILON && abs(_y) > FLT_EPSILON ? atan2(y, x) : 2.f * atan2(x, w);
+		return abs(_x) < FLT_EPSILON && abs(_y) < FLT_EPSILON ? 2.f * atan2(x, w) : atan2(_y, _x);
 	}
 
 	float quat::yaw() const
