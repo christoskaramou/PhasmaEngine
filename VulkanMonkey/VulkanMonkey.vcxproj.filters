@@ -96,9 +96,6 @@
     <ClInclude Include="include\Surface.h">
       <Filter>Include</Filter>
     </ClInclude>
-    <ClInclude Include="include\specificGraphicsPipelineCreateInfo.h">
-      <Filter>Include</Filter>
-    </ClInclude>
     <ClInclude Include="include\Swapchain.h">
       <Filter>Include</Filter>
     </ClInclude>

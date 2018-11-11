@@ -528,17 +528,17 @@ namespace vm {
 
 	float mat4::pitch() const
 	{
-		return eulerAngles().x;
+		return rotation().pitch();
 	}
 
 	float mat4::yaw() const
 	{
-		return eulerAngles().y;
+		return rotation().yaw();
 	}
 
 	float mat4::roll() const
 	{
-		return eulerAngles().z;
+		return rotation().roll();
 	}
 
 	vec3 mat4::translation()
@@ -1121,6 +1121,26 @@ namespace vm {
 	float length(cquat & q)
 	{
 		return sqrt(dot(q, q));
+	}
+
+	float lengthSquared(cvec2 & v)
+	{
+		return dot(v, v);
+	}
+
+	float lengthSquared(cvec3 & v)
+	{
+		return dot(v, v);
+	}
+
+	float lengthSquared(cvec4 & v)
+	{
+		return dot(v, v);
+	}
+
+	float lengthSquared(cquat & q)
+	{
+		return dot(q, q);
 	}
 
 	vec2 normalize(cvec2 & v)

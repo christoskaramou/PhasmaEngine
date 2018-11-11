@@ -213,6 +213,10 @@ namespace vm
 	float length(cvec3& v);
 	float length(cvec4& v);
 	float length(cquat& q);
+	float lengthSquared(cvec2& v);
+	float lengthSquared(cvec3& v);
+	float lengthSquared(cvec4& v);
+	float lengthSquared(cquat& q);
 	float dot(cvec2& v1, cvec2& v2);
 	float dot(cvec3& v1, cvec3& v2);
 	float dot(cvec4& v1, cvec4& v2);

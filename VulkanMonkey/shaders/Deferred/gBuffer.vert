@@ -29,9 +29,9 @@ out gl_PerVertex
 void main() 
 {
 	vec4 inPos = vec4(i_Position, 1.0f);
-
-	gl_Position = ubo.projection * ubo.view * ubo.model * inPos;
-	depth = gl_Position.z;
+	vec4 viewPos = ubo.view * ubo.model * inPos;
+	depth = viewPos.z;
+	gl_Position = ubo.projection * viewPos;
 
 	// Normal in world space
 	outNormal = i_Normal;

@@ -483,7 +483,7 @@ void Renderer::update(float delta)
 		memcpy(ctx.skyBox.uniformBuffer.data, &proj_view, 2 * sizeof(vm::mat4));
 
 	// SHADOWS
-	const float handiness = ctx.mainCamera.worldOrientation.x * ctx.mainCamera.worldOrientation.y;
+	const float handiness = ctx.mainCamera.worldOrientation.x * ctx.mainCamera.worldOrientation.y * ctx.mainCamera.worldOrientation.z;
 	const vm::vec3 lightPos = vm::vec3(ctx.light[0].position);
 	const vm::vec3 center = -lightPos;
 	const vm::vec3 front = vm::normalize(center - lightPos);

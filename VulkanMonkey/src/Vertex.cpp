@@ -1,6 +1,30 @@
 #include "../include/Vertex.h"
 #include "../include/imgui/imgui.h"
 
+Vertex::Vertex() :
+	x(0.f), y(0.f), z(0.f),
+	nX(0.f), nY(0.f), nZ(0.f),
+	u(0.f), v(0.f),
+	tX(0.f), tY(0.f), tZ(0.f), tW(0.f),
+	r(0.f), g(0.f), b(0.f), a(0.f)
+{ }
+
+Vertex::Vertex(cfloat x, cfloat y, cfloat z, cfloat nX, cfloat nY, cfloat nZ, cfloat u, cfloat v, cfloat tX, cfloat tY, cfloat tZ, cfloat tW, cfloat r, cfloat g, cfloat b, cfloat a) :
+	x(x), y(y), z(z),
+	nX(nX), nY(nY), nZ(nZ),
+	u(u), v(v),
+	tX(tX), tY(tY), tZ(tZ), tW(tW),
+	r(r), g(g), b(b), a(a)
+{ }
+
+Vertex::Vertex(vm::vec3 pos, vm::vec3 norm, vm::vec2 uv, vm::vec4 tang, vm::vec4 color) :
+	x(pos.x), y(pos.y), z(pos.z),
+	nX(norm.x), nY(norm.y), nZ(norm.z),
+	u(uv.x), v(uv.y),
+	tX(tang.x), tY(tang.y), tZ(tang.z), tW(tang.w),
+	r(color.x), g(color.y), b(color.z), a(color.w)
+{ }
+
 bool Vertex::operator==(const Vertex& other) const
 {
 	return x == other.x && y == other.y && z == other.z

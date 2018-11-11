@@ -23,10 +23,10 @@ vk::DescriptorSetLayout getDescriptorSetLayoutLights(Context* info)
 	}
 	return info->DSLayoutLights;
 }
-specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsModel()
+PipelineInfo Context::getPipelineSpecificationsModel()
 {
 	// General Pipeline
-	specificGraphicsPipelineCreateInfo generalSpecific;
+	PipelineInfo generalSpecific;
 	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
 	generalSpecific.renderPass = info->renderPass;
 	generalSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
@@ -39,10 +39,10 @@ specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsModel()
 	return generalSpecific;
 }
 
-specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsShadows()
+PipelineInfo Context::getPipelineSpecificationsShadows()
 {
 	// Shadows Pipeline
-	specificGraphicsPipelineCreateInfo shadowsSpecific;
+	PipelineInfo shadowsSpecific;
 	shadowsSpecific.shaders = { "shaders/Shadows/vert.spv" };
 	shadowsSpecific.renderPass = Shadows::getRenderPass(info->device, info->depth);
 	shadowsSpecific.viewportSize = { Shadows::imageSize, Shadows::imageSize };
@@ -56,10 +56,10 @@ specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsShadows()
 	return shadowsSpecific;
 }
 
-specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsSkyBox()
+PipelineInfo Context::getPipelineSpecificationsSkyBox()
 {
 	// SkyBox Pipeline
-	specificGraphicsPipelineCreateInfo skyBoxSpecific;
+	PipelineInfo skyBoxSpecific;
 	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
 	skyBoxSpecific.renderPass = info->renderPass;
 	skyBoxSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
@@ -72,10 +72,10 @@ specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsSkyBox()
 	return skyBoxSpecific;
 }
 
-specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsTerrain()
+PipelineInfo Context::getPipelineSpecificationsTerrain()
 {
 	// Terrain Pipeline
-	specificGraphicsPipelineCreateInfo terrainSpecific;
+	PipelineInfo terrainSpecific;
 	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
 	terrainSpecific.renderPass = info->renderPass;
 	terrainSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
@@ -87,17 +87,17 @@ specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsTerrain()
 	return terrainSpecific;
 }
 
-specificGraphicsPipelineCreateInfo Context::getPipelineSpecificationsGUI()
+PipelineInfo Context::getPipelineSpecificationsGUI()
 {
 	// GUI Pipeline
-	specificGraphicsPipelineCreateInfo GUISpecific;
+	PipelineInfo GUISpecific;
 	GUISpecific.shaders = { "shaders/GUI/vert.spv", "shaders/GUI/frag.spv" };
 	GUISpecific.renderPass = info->guiRenderPass;
 	GUISpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	GUISpecific.descriptorSetLayouts = { GUI::getDescriptorSetLayout(info->device) };
 	GUISpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGUI();
 	GUISpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGUI();
-	GUISpecific.cull = vk::CullModeFlagBits::eFront;
+	GUISpecific.cull = vk::CullModeFlagBits::eBack;
 	GUISpecific.pushConstantRange = vk::PushConstantRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4 };
 	GUISpecific.sampleCount = vk::SampleCountFlagBits::e1;
 	GUISpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
@@ -142,7 +142,7 @@ void Context::initVulkanContext()
 	pipelineSkyBox = createPipeline(getPipelineSpecificationsSkyBox());
 	pipelineGUI = createPipeline(getPipelineSpecificationsGUI());
 
-	specificGraphicsPipelineCreateInfo sgpci = getPipelineSpecificationsModel();
+	PipelineInfo sgpci = getPipelineSpecificationsModel();
 	sgpci.specializationInfo = vk::SpecializationInfo{ 1, &vk::SpecializationMapEntry{ 0, 0, sizeof(MAX_LIGHTS) }, sizeof(MAX_LIGHTS), &MAX_LIGHTS };
 	pipeline = createPipeline(sgpci);
 
@@ -1022,7 +1022,7 @@ std::vector<char> readFile(const std::string& filename)
 	return buffer;
 }
 
-Pipeline Context::createPipeline(const specificGraphicsPipelineCreateInfo& specificInfo)
+Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 {
 	Pipeline _pipeline;
 

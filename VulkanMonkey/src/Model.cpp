@@ -54,6 +54,7 @@ Model Model::loadModel(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPoo
 	std::vector<Mesh> f_meshes{};
 	for (unsigned int n = 0; n < allNodes.size(); n++) {
 		const aiNode& node = *allNodes[n];
+		const vm::mat4 transform = aiMatrix4x4ToMat4(node.mTransformation);
 		for (unsigned int i = 0; i < node.mNumMeshes; i++) {
 			Mesh myMesh;
 
@@ -132,14 +133,16 @@ Model Model::loadModel(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPoo
 				const aiVector3D& tangent = mesh.HasTangentsAndBitangents() ? mesh.mTangents[j] : aiVector3D(0.f, 0.f, 0.f);
 				const aiColor4D& color = mesh.HasVertexColors(0) ? mesh.mColors[0][j] : aiColor4D(1.f, 1.f, 1.f, 1.f);
 
-				vm::vec4 p = aiMatrix4x4ToMat4(node.mTransformation) * vm::vec4(pos.x, pos.y, pos.z, 1.f);
-				Vertex v{
-					p.x,		p.y,		p.z,
-					norm.x,		norm.y,		norm.z,
-					uv.x,		uv.y,
-					tangent.x,	tangent.y,	tangent.z,	1.0f,
-					color.r,	color.g,	color.b,	color.a
-				};
+				vm::vec4 p = transform * vm::vec4(pos.x, pos.y, pos.z, 1.f);
+				vm::vec4 n = transform * vm::vec4(norm.x, norm.y, norm.z, 1.f);
+				vm::vec4 t = transform * vm::vec4(tangent.x, tangent.y, tangent.z, 1.f);
+				Vertex v(
+					vm::vec3(p),
+					vm::vec3(n),
+					vm::vec2((float*)&uv),
+					vm::vec4(t),
+					vm::vec4((float*)&color)
+				);
 				myMesh.vertices.push_back(v);
 			}
 			for (unsigned int i = 0; i < mesh.mNumFaces; i++) {

@@ -216,7 +216,6 @@
     <ClInclude Include="include\SDL.h" />
     <ClInclude Include="include\Shadows.h" />
     <ClInclude Include="include\Skybox.h" />
-    <ClInclude Include="include\specificGraphicsPipelineCreateInfo.h" />
     <ClInclude Include="include\Stbi.h" />
     <ClInclude Include="include\stb_image\stb_image.h" />
     <ClInclude Include="include\Surface.h" />

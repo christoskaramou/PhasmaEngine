@@ -8,7 +8,6 @@
 #include "Surface.h"
 #include "Swapchain.h"
 #include "Buffer.h"
-#include "specificGraphicsPipelineCreateInfo.h"
 #include "Pipeline.h"
 #include "Object.h"
 #include "GUI.h"
@@ -75,7 +74,7 @@ public:
 	Buffer UBLights, UBReflection, SBIn, SBOut;
 	vk::DescriptorSet DSLights, DSCompute, DSReflection;
 	vk::DescriptorSetLayout DSLayoutLights, DSLayoutCompute, DSLayoutReflection;
-	bool SSReflections = false;
+	bool SSReflections = true;
 
 	// deferred
 	vk::RenderPass dRenderPass;
@@ -85,11 +84,11 @@ public:
 	vk::DescriptorSetLayout DSLayoutComposition;
 	Pipeline pipelineDeferred, pipelineComposition;
 
-	static specificGraphicsPipelineCreateInfo getPipelineSpecificationsModel();
-	static specificGraphicsPipelineCreateInfo getPipelineSpecificationsShadows();
-	static specificGraphicsPipelineCreateInfo getPipelineSpecificationsSkyBox();
-	static specificGraphicsPipelineCreateInfo getPipelineSpecificationsTerrain();
-	static specificGraphicsPipelineCreateInfo getPipelineSpecificationsGUI();
+	static PipelineInfo getPipelineSpecificationsModel();
+	static PipelineInfo getPipelineSpecificationsShadows();
+	static PipelineInfo getPipelineSpecificationsSkyBox();
+	static PipelineInfo getPipelineSpecificationsTerrain();
+	static PipelineInfo getPipelineSpecificationsGUI();
 
 private:
 	vk::Instance createInstance();
@@ -109,7 +108,7 @@ private:
 	std::vector<vk::Framebuffer> createGUIFrameBuffers();
 	std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount);
 	vk::CommandBuffer createCmdBuffer();
-	Pipeline createPipeline(const specificGraphicsPipelineCreateInfo& specificInfo);
+	Pipeline createPipeline(const PipelineInfo& specificInfo);
 	Pipeline createCompositionPipeline();
 	Pipeline createReflectionPipeline();
 	Pipeline createComputePipeline();
