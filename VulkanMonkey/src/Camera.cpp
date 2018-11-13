@@ -5,14 +5,14 @@ Camera::Camera()
 {
 	// normalized device coordinates (ndc) of the API and left handed corrdinate system comparison
 
-	//		LEFT HANDED					VULKAN NDC	
-	//		+y /|  /|						|  /|				
-	//			| /  +z						| /  +z				
-	//			|/							|/					
+	//	LEFT HANDED		     	VULKAN NDC	
+	//	+y /|  /|				|  /|				
+	//	    | /  +z				| /  +z				
+	//	    |/					|/					
 	//  --------|-------->			--------|-------->			
-	//		   /|		+x				   /|		+x			
-	//		  /	|						  /	|					
-	//	     /  |   				     /  |/ +y
+	//         /|	    +x			       /|	+x			
+	//	  / |				      /	|					
+	//	 /  |   			     /  |/ +y
 	worldOrientation = vm::vec3(1.f, -1.f, 1.f);
 
 	// total pitch, yaw, roll
