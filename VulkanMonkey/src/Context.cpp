@@ -122,6 +122,7 @@ void Context::initVulkanContext()
 	commandPool = createCommandPool();
 	depth = createDepthResources();
 	renderPass = createRenderPass();
+	renderTarget = createRenderTargets({ {"position", vk::Format::eR16G16B16A16Sfloat}, {"normal", vk::Format::eR16G16B16A16Sfloat}, {"albedo", vk::Format::eR8G8B8A8Unorm}, {"specular", vk::Format::eR16G16B16A16Sfloat} });
 	dRenderPass = createDeferredRenderPass();
 	rRenderPass = createReflectionRenderPass();
 	guiRenderPass = createGUIRenderPass();
@@ -420,6 +421,20 @@ vk::CommandPool Context::createCommandPool()
 	return _commandPool;
 }
 
+std::map<std::string, Image> Context::createRenderTargets(std::vector<std::tuple<std::string, vk::Format>> RTtuples)
+{
+	std::map<std::string, Image> RT;
+	for (auto& t : RTtuples)
+	{
+		RT[std::get<0>(t)].format = std::get<1>(t);
+		RT[std::get<0>(t)].initialLayout = vk::ImageLayout::eUndefined;
+		RT[std::get<0>(t)].createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eInputAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		RT[std::get<0>(t)].createImageView(device, vk::ImageAspectFlagBits::eColor);
+		RT[std::get<0>(t)].createSampler(device);
+	}
+	return RT;
+}
+
 vk::RenderPass Context::createRenderPass()
 {
 	vk::RenderPass _renderPass;
@@ -503,47 +518,8 @@ vk::RenderPass Context::createRenderPass()
 vk::RenderPass Context::createDeferredRenderPass()
 {
 	vk::RenderPass _renderPass;
-	
-	position.format = vk::Format::eR16G16B16A16Sfloat;
-	position.initialLayout = vk::ImageLayout::eUndefined;
-	position.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eInputAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	position.createImageView(device, vk::ImageAspectFlagBits::eColor);
-	position.createSampler(device);
 
-	normal.format = vk::Format::eR16G16B16A16Sfloat;
-	normal.initialLayout = vk::ImageLayout::eUndefined;
-	normal.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eInputAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	normal.createImageView(device, vk::ImageAspectFlagBits::eColor);
-
-	albedo.format = vk::Format::eR8G8B8A8Unorm;
-	albedo.initialLayout = vk::ImageLayout::eUndefined;
-	albedo.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eInputAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	albedo.createImageView(device, vk::ImageAspectFlagBits::eColor);
-
-	specular.format = vk::Format::eR16G16B16A16Sfloat;
-	specular.initialLayout = vk::ImageLayout::eUndefined;
-	specular.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eInputAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	specular.createImageView(device, vk::ImageAspectFlagBits::eColor);
-
-	finalColor.format = vk::Format::eR8G8B8A8Unorm;
-	finalColor.initialLayout = vk::ImageLayout::eUndefined;
-	finalColor.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	finalColor.createImageView(device, vk::ImageAspectFlagBits::eColor);
-	finalColor.createSampler(device);
-
-	finalNormal.format = vk::Format::eR16G16B16A16Sfloat;
-	finalNormal.initialLayout = vk::ImageLayout::eUndefined;
-	finalNormal.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	finalNormal.createImageView(device, vk::ImageAspectFlagBits::eColor);
-	finalNormal.createSampler(device);
-
-	finalDepth.format = vk::Format::eR16Sfloat;
-	finalDepth.initialLayout = vk::ImageLayout::eUndefined;
-	finalDepth.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	finalDepth.createImageView(device, vk::ImageAspectFlagBits::eColor);
-	finalDepth.createSampler(device);
-
-	std::array<vk::AttachmentDescription, 9> attachments{};
+	std::array<vk::AttachmentDescription, 6> attachments{};
 	// Color attachment
 	attachments[0].format = info->surface.formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
@@ -556,7 +532,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 
 	// Deferred attachments
 	// Position
-	attachments[1].format = position.format;
+	attachments[1].format = renderTarget["position"].format;
 	attachments[1].samples = vk::SampleCountFlagBits::e1;
 	attachments[1].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[1].storeOp = vk::AttachmentStoreOp::eStore;
@@ -565,7 +541,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[1].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[1].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 	// Normals
-	attachments[2].format = normal.format;
+	attachments[2].format = renderTarget["normal"].format;
 	attachments[2].samples = vk::SampleCountFlagBits::e1;
 	attachments[2].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[2].storeOp = vk::AttachmentStoreOp::eDontCare;
@@ -574,7 +550,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[2].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[2].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 	// Albedo
-	attachments[3].format = albedo.format;
+	attachments[3].format = renderTarget["albedo"].format;
 	attachments[3].samples = vk::SampleCountFlagBits::e1;
 	attachments[3].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[3].storeOp = vk::AttachmentStoreOp::eDontCare;
@@ -583,7 +559,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[3].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[3].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 	// Specular
-	attachments[4].format = specular.format;
+	attachments[4].format = renderTarget["specular"].format;
 	attachments[4].samples = vk::SampleCountFlagBits::e1;
 	attachments[4].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[4].storeOp = vk::AttachmentStoreOp::eDontCare;
@@ -600,33 +576,6 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[5].stencilStoreOp = vk::AttachmentStoreOp::eStore;
 	attachments[5].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[5].finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-	// Final color store
-	attachments[6].format = info->finalColor.format;
-	attachments[6].samples = vk::SampleCountFlagBits::e1;
-	attachments[6].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[6].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[6].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[6].stencilStoreOp = vk::AttachmentStoreOp::eStore;
-	attachments[6].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[6].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Final normal store
-	attachments[7].format = info->finalNormal.format;
-	attachments[7].samples = vk::SampleCountFlagBits::e1;
-	attachments[7].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[7].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[7].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[7].stencilStoreOp = vk::AttachmentStoreOp::eStore;
-	attachments[7].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[7].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Final depth store
-	attachments[8].format = info->finalDepth.format;
-	attachments[8].samples = vk::SampleCountFlagBits::e1;
-	attachments[8].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[8].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[8].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[8].stencilStoreOp = vk::AttachmentStoreOp::eStore;
-	attachments[8].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[8].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
 	// Two subpasses
 	std::array<vk::SubpassDescription, 2> subpassDescriptions{};
@@ -638,8 +587,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 		{ 1, vk::ImageLayout::eColorAttachmentOptimal },
 		{ 2, vk::ImageLayout::eColorAttachmentOptimal },
 		{ 3, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 4, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 8, vk::ImageLayout::eColorAttachmentOptimal }
+		{ 4, vk::ImageLayout::eColorAttachmentOptimal }
 	};
 	vk::AttachmentReference depthReference = { 5, vk::ImageLayout::eDepthStencilAttachmentOptimal };
 
@@ -652,9 +600,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 	// ----------------------------------------------------------------------------------------
 
 	std::vector<vk::AttachmentReference> colorReferences1 = {
-		{ 0, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 6, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 7, vk::ImageLayout::eColorAttachmentOptimal }
+		{ 0, vk::ImageLayout::eColorAttachmentOptimal }
 	};
 
 	std::vector<vk::AttachmentReference> inputReferences{
@@ -724,7 +670,7 @@ vk::RenderPass Context::createReflectionRenderPass()
 	// Color attachment
 	attachments[0].format = info->surface.formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
@@ -851,7 +797,7 @@ Image Context::createDepthResources()
 		exit(-9);
 	}
 	_image.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height,
-		vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	_image.createImageView(device, vk::ImageAspectFlagBits::eDepth);
 
 	_image.addressMode = vk::SamplerAddressMode::eClampToEdge;
@@ -911,14 +857,11 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
 			swapchain.images[i].view,
-			position.view,
-			normal.view,
-			albedo.view,
-			specular.view,
-			depth.view,
-			finalColor.view,
-			finalNormal.view,
-			finalDepth.view
+			renderTarget["position"].view,
+			renderTarget["normal"].view,
+			renderTarget["albedo"].view,
+			renderTarget["specular"].view,
+			depth.view
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
