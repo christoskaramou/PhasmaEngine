@@ -72,23 +72,23 @@ Renderer::Renderer(SDL_Window* window)
 
 		// Image descriptors for the offscreen color attachments
 		vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
-			vk::Sampler(),								//Sampler sampler;
-			ctx.renderTarget["position"].view,			//ImageView imageView;
+			vk::Sampler(),					//Sampler sampler;
+			ctx.position.view,				//ImageView imageView;
 			vk::ImageLayout::eShaderReadOnlyOptimal		//ImageLayout imageLayout;
 		};
 		vk::DescriptorImageInfo texDescriptorNormal = vk::DescriptorImageInfo{
-			vk::Sampler(),								//Sampler sampler;
-			ctx.renderTarget["normal"].view,			//ImageView imageView;
+			vk::Sampler(),					//Sampler sampler;
+			ctx.normal.view,				//ImageView imageView;
 			vk::ImageLayout::eShaderReadOnlyOptimal		//ImageLayout imageLayout;
 		};
 		vk::DescriptorImageInfo texDescriptorAlbedo = vk::DescriptorImageInfo{
-			vk::Sampler(),								//Sampler sampler;
-			ctx.renderTarget["albedo"].view,			//ImageView imageView;
+			vk::Sampler(),					//Sampler sampler;
+			ctx.albedo.view,				//ImageView imageView;
 			vk::ImageLayout::eShaderReadOnlyOptimal		//ImageLayout imageLayout;
 		};
 		vk::DescriptorImageInfo texDescriptorSpecular = vk::DescriptorImageInfo{
-			vk::Sampler(),								//Sampler sampler;
-			ctx.renderTarget["specular"].view,			//ImageView imageView;
+			vk::Sampler(),					//Sampler sampler;
+			ctx.specular.view,				//ImageView imageView;
 			vk::ImageLayout::eShaderReadOnlyOptimal		//ImageLayout imageLayout;
 		};
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
@@ -167,51 +167,51 @@ Renderer::Renderer(SDL_Window* window)
 		vk::WriteDescriptorSet textureWriteSets[5];
 		// Albedo
 		textureWriteSets[0] = vk::WriteDescriptorSet()
-			.setDstSet(ctx.DSReflection)									// DescriptorSet dstSet;
+			.setDstSet(ctx.DSReflection)							// DescriptorSet dstSet;
 			.setDstBinding(0)												// uint32_t dstBinding;
 			.setDstArrayElement(0)											// uint32_t dstArrayElement;
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(ctx.renderTarget["albedo"].sampler)					// Sampler sampler;
-				.setImageView(ctx.renderTarget["albedo"].view)					// ImageView imageView;
-				.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
+				.setSampler(ctx.finalColor.sampler)									// Sampler sampler;
+				.setImageView(ctx.finalColor.view)									// ImageView imageView;
+				.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));			// ImageLayout imageLayout;
 		// Positions
 		textureWriteSets[1] = vk::WriteDescriptorSet()
-			.setDstSet(ctx.DSReflection)									// DescriptorSet dstSet;
+			.setDstSet(ctx.DSReflection)							// DescriptorSet dstSet;
 			.setDstBinding(1)												// uint32_t dstBinding;
 			.setDstArrayElement(0)											// uint32_t dstArrayElement;
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(ctx.renderTarget["position"].sampler)				// Sampler sampler;
-				.setImageView(ctx.renderTarget["position"].view)				// ImageView imageView;
-				.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
+				.setSampler(ctx.position.sampler)									// Sampler sampler;
+				.setImageView(ctx.position.view)									// ImageView imageView;
+				.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));			// ImageLayout imageLayout;
 		// Normals
 		textureWriteSets[2] = vk::WriteDescriptorSet()
-			.setDstSet(ctx.DSReflection)									// DescriptorSet dstSet;
+			.setDstSet(ctx.DSReflection)							// DescriptorSet dstSet;
 			.setDstBinding(2)												// uint32_t dstBinding;
 			.setDstArrayElement(0)											// uint32_t dstArrayElement;
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(ctx.renderTarget["normal"].sampler)					// Sampler sampler;
-				.setImageView(ctx.renderTarget["normal"].view)					// ImageView imageView;
-				.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-		// Specular
+				.setSampler(ctx.finalNormal.sampler)								// Sampler sampler;
+				.setImageView(ctx.finalNormal.view)									// ImageView imageView;
+				.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));			// ImageLayout imageLayout;
+		// Depth
 		textureWriteSets[3] = vk::WriteDescriptorSet()
-			.setDstSet(ctx.DSReflection)									// DescriptorSet dstSet;
+			.setDstSet(ctx.DSReflection)							// DescriptorSet dstSet;
 			.setDstBinding(3)												// uint32_t dstBinding;
 			.setDstArrayElement(0)											// uint32_t dstArrayElement;
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(ctx.renderTarget["specular"].sampler)				// Sampler sampler;
-				.setImageView(ctx.renderTarget["specular"].view)				// ImageView imageView;
-				.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-		// Uniform variables
+				.setSampler(ctx.finalDepth.sampler)								// Sampler sampler;
+				.setImageView(ctx.finalDepth.view)									// ImageView imageView;
+				.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));			// ImageLayout imageLayout;
+		// Uniforms
 		textureWriteSets[4] = vk::WriteDescriptorSet()
-			.setDstSet(ctx.DSReflection)									// DescriptorSet dstSet;
+			.setDstSet(ctx.DSReflection)							// DescriptorSet dstSet;
 			.setDstBinding(4)												// uint32_t dstBinding;
 			.setDstArrayElement(0)											// uint32_t dstArrayElement;
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
@@ -219,7 +219,7 @@ Renderer::Renderer(SDL_Window* window)
 			.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorImageInfo* pImageInfo;
 				.setBuffer(ctx.UBReflection.buffer)								// Buffer buffer;
 				.setOffset(0)													// DeviceSize offset;
-				.setRange(3*sizeof(vm::mat4)));									// DeviceSize range;
+				.setRange(3*sizeof(vm::mat4)));								// DeviceSize range;
 
 		ctx.device.updateDescriptorSets(5, textureWriteSets, 0, nullptr);
 		std::cout << "DescriptorSet allocated and updated\n";
@@ -308,8 +308,13 @@ Renderer::~Renderer()
 
 	ctx.MSColorImage.destroy(ctx.device);
 	ctx.MSDepthImage.destroy(ctx.device);
-	for (auto& rt : ctx.renderTarget)
-		rt.second.destroy(ctx.device);
+	ctx.position.destroy(ctx.device);
+	ctx.normal.destroy(ctx.device);
+	ctx.albedo.destroy(ctx.device);
+	ctx.specular.destroy(ctx.device);
+	ctx.finalColor.destroy(ctx.device);
+	ctx.finalNormal.destroy(ctx.device);
+	ctx.finalDepth.destroy(ctx.device);
 	ctx.depth.destroy(ctx.device);
 
 
@@ -573,7 +578,10 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
 		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
 		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
-		vk::ClearDepthStencilValue({ 1.0f, 0 })
+		vk::ClearDepthStencilValue({ 1.0f, 0 }),
+		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
+		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
+		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f })
 	};
 
 	auto beginInfo = vk::CommandBufferBeginInfo()

@@ -19,20 +19,27 @@ layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outNormal;
 layout (location = 2) out vec4 outAlbedo;
 layout (location = 3) out vec4 outSpecular;
+layout (location = 4) out float finalDepth;
 
 void main() {
 	float alpha = texture(alphaSampler, inUV).r;
 	if(alpha < 0.8)
 		discard;
 
+	outPosition = vec4(inWorldPos, depth);
+
 	vec3 N = normalize(inNormal);
 	vec3 T = normalize(inTangent);
 	vec3 B = normalize(cross(T, N));
 	mat3 TBN = mat3(T, B, N);
-	vec3 normSampler = normalize(texture(normSampler, inUV).rgb * 2.0 - 1.0);
 
-	outPosition = vec4(inWorldPos, depth);
+	vec3 normSampler = normalize(texture(normSampler, inUV).rgb * 2.0 - 1.0);
 	outNormal = vec4(TBN * normSampler , 1.0f);
-	outAlbedo = vec4(texture(tSampler, inUV).xyz, alpha);
+
+	outAlbedo = texture(tSampler, inUV);
+	outAlbedo.a = alpha;
+
 	outSpecular = texture(specSampler, inUV);
+
+	finalDepth = gl_FragCoord.z;
 }

@@ -9,7 +9,12 @@ vk::DescriptorSetLayout	Model::descriptorSetLayout = nullptr;
 
 vm::mat4 aiMatrix4x4ToMat4(const aiMatrix4x4& m)
 {
-	return vm::transpose(vm::mat4((float*)&m));
+	vm::mat4 _m;
+	for (uint32_t i = 0; i < 4; i++) {
+		for (uint32_t j = 0; j < 4; j++)
+			_m[i][j] = m[j][i];
+	}
+	return _m;
 }
 
 void getAllNodes(aiNode* root, std::vector<aiNode*>& allNodes) {
@@ -36,11 +41,10 @@ Model Model::loadModel(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPoo
 		aiProcess_JoinIdenticalVertices |
 		aiProcess_Triangulate |
 		aiProcess_GenSmoothNormals |
-		aiProcess_CalcTangentSpace |
+		aiProcess_CalcTangentSpace //|
 		//aiProcess_ImproveCacheLocality |
 		//aiProcess_OptimizeMeshes |
-		//aiProcess_OptimizeGraph |
-		0
+		//aiProcess_OptimizeGraph
 	);
 	if (!scene) exit(-100);
 
