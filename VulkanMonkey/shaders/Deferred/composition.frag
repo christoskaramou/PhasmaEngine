@@ -32,8 +32,6 @@ layout (location = 1) in float castShadows;
 layout (location = 2) in mat4 shadow_coords;
 
 layout (location = 0) out vec4 outColor;
-layout (location = 1) out vec4 outFinalColor;
-layout (location = 2) out vec4 outFinalNormal;
 
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
 vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
@@ -55,8 +53,6 @@ void main()
 		fragColor += calculateColor(i, fragPos.xyz, normal, albedo.rgb, specular);
 
 	outColor = vec4(fragColor, albedo.a);
-	outFinalColor = outColor;
-	outFinalNormal = vec4(normal, 1.0);
 }
 
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular)

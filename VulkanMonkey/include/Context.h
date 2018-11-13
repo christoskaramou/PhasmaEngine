@@ -18,6 +18,9 @@
 #include "Model.h"
 #include "Camera.h"
 
+#include <tuple>
+#include <map>
+
 constexpr auto MAX_LIGHTS = 20;
 
 struct Context
@@ -76,9 +79,10 @@ public:
 	vk::DescriptorSetLayout DSLayoutLights, DSLayoutCompute, DSLayoutReflection;
 	bool SSReflections = true;
 
-	// deferred
+	// DEFERRED
 	vk::RenderPass dRenderPass;
-	Image position, normal, albedo, specular, finalColor, finalNormal, finalDepth;
+	// render targets
+	std::map<std::string, Image> renderTarget{};
 	std::vector<vk::Framebuffer> dFrameBuffers{};
 	vk::DescriptorSet DSDeferredMainLight, DSComposition;
 	vk::DescriptorSetLayout DSLayoutComposition;
@@ -97,6 +101,7 @@ private:
 	vk::Device createDevice();
 	Swapchain createSwapchain();
 	vk::CommandPool createCommandPool();
+	std::map<std::string, Image> createRenderTargets(std::vector<std::tuple<std::string, vk::Format>> RTtuples);
 	vk::RenderPass createRenderPass();
 	vk::RenderPass createDeferredRenderPass();
 	vk::RenderPass createReflectionRenderPass();
