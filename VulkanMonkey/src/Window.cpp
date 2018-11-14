@@ -138,6 +138,7 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_5) info.terrain.render = !info.terrain.render;
 			if (event.key.keysym.sym == SDLK_6) info.skyBox.render = !info.skyBox.render;
 			if (event.key.keysym.sym == SDLK_7) renderer[0]->deferredRender = !renderer[0]->deferredRender;
+			if (event.key.keysym.sym == SDLK_8) { renderer[0]->useCompute = !renderer[0]->useCompute; }
 			if (event.key.keysym.sym == SDLK_0) for (auto& r : renderer) r->overloadedGPU = !renderer[0]->overloadedGPU;
 		}
 		if (event.type == SDL_MOUSEWHEEL) {

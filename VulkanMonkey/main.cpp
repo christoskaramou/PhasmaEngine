@@ -4,8 +4,8 @@
 #include <cstring>
 #include <string>
 
-constexpr int WIDTH = 1644;
-constexpr int HEIGHT = 936;
+constexpr int WIDTH = 1664;
+constexpr int HEIGHT = 960;
 
 int main(int argc, char* argv[])
 {

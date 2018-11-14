@@ -49,6 +49,9 @@
     <None Include="shaders\Deferred\gBuffer.frag">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\Compute\shader.comp">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Buffer.h">

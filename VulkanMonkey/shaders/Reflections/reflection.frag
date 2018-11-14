@@ -27,7 +27,6 @@ void main()
 // Screen space reflections
 vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 {
-	vec3 reflectedColor = vec3(0.0);
 	vec3 viewPos = position - ubo.camPos.xyz;
 	vec3 reflection = reflect(viewPos, normal);
 
@@ -37,16 +36,15 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 	vec3 step = reflection;
 	vec3 newPosition = position + step;
 
-	for(int i=0; i<30; i++)
+	float loops = max(sign(VdotR), 0.0) * 30;
+	for(int i=0; i<loops ; i++)
 	{
 		vec4 newViewPos = ubo.view * vec4(newPosition, 1.0);
-		if( newViewPos.z < 0.0 )
-			return vec3(0.0, 0.0, 0.0);
 		vec4 samplePosition = ubo.projection * newViewPos;
 		samplePosition.xy = samplePosition.xy / samplePosition.w * 0.5 + 0.5;
 
-		if(	samplePosition.x < 0.0 || samplePosition.x > 1.0 ||
-			samplePosition.y < 0.0 || samplePosition.y > 1.0 ) {
+		vec2 checkBoundsUV = max(sign(samplePosition.xy * (1.0 - samplePosition.xy)), 0.0);
+		if (checkBoundsUV.x * checkBoundsUV.y < 1.0){
 			step *= 0.5;
 			newPosition -= step;
 			continue;
@@ -62,18 +60,12 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 			fadeOnEdges = abs(fadeOnEdges);
 			float fadeAmount = min(1.0 - fadeOnEdges.x, 1.0 - fadeOnEdges.y);
 
-			reflectedColor = texture(albedoSampler, samplePosition.xy).xyz * fresnel * fadeAmount;
-			break;
+			return texture(albedoSampler, samplePosition.xy).xyz * fresnel * fadeAmount;
+			
 		}
-		if(currentDepth > sampledDepth)
-		{
-			step *= 0.5;
-			newPosition -= step;
-		}
-		else if(currentDepth < sampledDepth)
-		{
-			newPosition += step;
-		}
+
+		step *= 1.0 - 0.5 * max(sign(currentDepth - sampledDepth), 0.0);
+		newPosition += step * (sign(sampledDepth - currentDepth) + 0.000001);
 	}
-	return reflectedColor;
+	return vec3(0.0);
 }

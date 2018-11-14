@@ -56,6 +56,7 @@ public:
 	vk::Device device;
 	vk::Queue graphicsQueue, presentQueue, computeQueue;
 	vk::CommandPool commandPool;
+	vk::CommandPool commandPoolCompute;
 	vk::RenderPass renderPass, rRenderPass, guiRenderPass;
 	vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
 	Swapchain swapchain;
@@ -63,8 +64,9 @@ public:
 	std::vector<vk::Framebuffer> frameBuffers{}, rFrameBuffers{}, guiFrameBuffers{};
 	vk::CommandBuffer dynamicCmdBuffer;
 	vk::CommandBuffer shadowCmdBuffer;
+	vk::CommandBuffer computeCmdBuffer;
 	vk::DescriptorPool descriptorPool;
-	Pipeline pipeline, pipelineReflection, pipelineGUI, pipelineSkyBox, pipelineShadows, pipelineTerrain, pipelineCompute;
+	Pipeline pipeline, pipelineSSR, pipelineGUI, pipelineSkyBox, pipelineShadows, pipelineTerrain, pipelineCompute;
 	std::vector<vk::Fence> fences{};
 	std::vector<vk::Semaphore> semaphores{};
 	std::vector<Model> models{};
@@ -74,7 +76,7 @@ public:
 	Camera mainCamera;
 	Terrain terrain;
 	std::vector<Light> light;
-	Buffer UBLights, UBReflection, SBIn, SBOut;
+	Buffer UBLights, UBReflection, SBInOut;
 	vk::DescriptorSet DSLights, DSCompute, DSReflection;
 	vk::DescriptorSetLayout DSLayoutLights, DSLayoutCompute, DSLayoutReflection;
 	bool SSReflections = true;
@@ -93,6 +95,7 @@ public:
 	static PipelineInfo getPipelineSpecificationsSkyBox();
 	static PipelineInfo getPipelineSpecificationsTerrain();
 	static PipelineInfo getPipelineSpecificationsGUI();
+	static PipelineInfo getPipelineSpecificationsDeferred();
 
 private:
 	vk::Instance createInstance();
@@ -101,6 +104,7 @@ private:
 	vk::Device createDevice();
 	Swapchain createSwapchain();
 	vk::CommandPool createCommandPool();
+	vk::CommandPool createComputeCommadPool();
 	std::map<std::string, Image> createRenderTargets(std::vector<std::tuple<std::string, vk::Format>> RTtuples);
 	vk::RenderPass createRenderPass();
 	vk::RenderPass createDeferredRenderPass();
@@ -113,6 +117,7 @@ private:
 	std::vector<vk::Framebuffer> createGUIFrameBuffers();
 	std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount);
 	vk::CommandBuffer createCmdBuffer();
+	vk::CommandBuffer createComputeCmdBuffer();
 	Pipeline createPipeline(const PipelineInfo& specificInfo);
 	Pipeline createCompositionPipeline();
 	Pipeline createReflectionPipeline();

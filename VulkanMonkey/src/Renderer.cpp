@@ -225,45 +225,39 @@ Renderer::Renderer(SDL_Window* window)
 		std::cout << "DescriptorSet allocated and updated\n";
 		
 		// DESCRIPTOR SET FOR COMPUTE PIPELINE
-		//ctx.SBIn.createBuffer(256, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-		//ctx.SBOut.createBuffer(256, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+		std::vector<float> scrap(1024);
+		for (unsigned i = 0; i < scrap.size(); i++) {
+			scrap[i] = 1.f;
+		}
+		ctx.SBInOut.createBuffer(ctx.device, ctx.gpu, scrap.size() * sizeof(float), vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+		VkCheck(ctx.device.mapMemory(ctx.SBInOut.memory, 0, ctx.SBInOut.size, vk::MemoryMapFlags(), &ctx.SBInOut.data));
 
-		//vk::DescriptorSetAllocateInfo allocCompInfo = vk::DescriptorSetAllocateInfo{
-		//	ctx.descriptorPool,						//DescriptorPool descriptorPool;
-		//	1,										//uint32_t descriptorSetCount;
-		//	&ctx.DSLayoutCompute			//const DescriptorSetLayout* pSetLayouts;
-		//};
-		//VkCheck(ctx.device.allocateDescriptorSets(&allocCompInfo, &ctx.DSCompute));
-		//std::vector<vk::WriteDescriptorSet> writeCompDescriptorSets = {
-		//	// Binding 0 (in)
-		//	vk::WriteDescriptorSet{
-		//		ctx.DSComposition,			//DescriptorSet dstSet;
-		//		0,										//uint32_t dstBinding;
-		//		0,										//uint32_t dstArrayElement;
-		//		1,										//uint32_t descriptorCount_;
-		//		vk::DescriptorType::eStorageBuffer,		//DescriptorType descriptorType;
-		//		nullptr,								//const DescriptorImageInfo* pImageInfo;
-		//		&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
-		//			.setBuffer(ctx.SBIn.buffer)		// Buffer buffer;
-		//			.setOffset(0)								// DeviceSize offset;
-		//			.setRange(ctx.SBIn.size),		// DeviceSize range;
-		//		nullptr											//const BufferView* pTexelBufferView;
-		//	},
-		//	// Binding 1 (out)
-		//	vk::WriteDescriptorSet{
-		//		ctx.DSComposition,			//DescriptorSet dstSet;
-		//		0,										//uint32_t dstBinding;
-		//		0,										//uint32_t dstArrayElement;
-		//		1,										//uint32_t descriptorCount_;
-		//		vk::DescriptorType::eStorageBuffer,		//DescriptorType descriptorType;
-		//		nullptr,								//const DescriptorImageInfo* pImageInfo;
-		//		&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
-		//			.setBuffer(ctx.SBOut.buffer)		// Buffer buffer;
-		//			.setOffset(0)								// DeviceSize offset;
-		//			.setRange(ctx.SBIn.size),		// DeviceSize range;
-		//		nullptr											//const BufferView* pTexelBufferView;
-		//	}
-		//};
+		memcpy(ctx.SBInOut.data, scrap.data(), ctx.SBInOut.size);
+
+		vk::DescriptorSetAllocateInfo allocCompInfo = vk::DescriptorSetAllocateInfo{
+			ctx.descriptorPool,						//DescriptorPool descriptorPool;
+			1,										//uint32_t descriptorSetCount;
+			&ctx.DSLayoutCompute					//const DescriptorSetLayout* pSetLayouts;
+		};
+		VkCheck(ctx.device.allocateDescriptorSets(&allocCompInfo, &ctx.DSCompute));
+		std::vector<vk::WriteDescriptorSet> writeCompDescriptorSets = {
+			// Binding 0 (in out)
+			vk::WriteDescriptorSet{
+				ctx.DSCompute,							//DescriptorSet dstSet;
+				0,										//uint32_t dstBinding;
+				0,										//uint32_t dstArrayElement;
+				1,										//uint32_t descriptorCount_;
+				vk::DescriptorType::eStorageBuffer,		//DescriptorType descriptorType;
+				nullptr,								//const DescriptorImageInfo* pImageInfo;
+				&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
+					.setBuffer(ctx.SBInOut.buffer)			// Buffer buffer;
+					.setOffset(0)							// DeviceSize offset;
+					.setRange(ctx.SBInOut.size),			// DeviceSize range;
+				nullptr									//const BufferView* pTexelBufferView;
+			}
+		};
+		ctx.device.updateDescriptorSets(1, writeCompDescriptorSets.data(), 0, nullptr);
+		std::cout << "DescriptorSet allocated and updated\n";
 	}
 
 	// init is done
@@ -287,7 +281,7 @@ Renderer::~Renderer()
     }
 
 	ctx.pipelineCompute.destroy(ctx.device);
-	ctx.pipelineReflection.destroy(ctx.device);
+	ctx.pipelineSSR.destroy(ctx.device);
 	ctx.pipelineComposition.destroy(ctx.device);
 	ctx.pipelineDeferred.destroy(ctx.device);
 	ctx.pipeline.destroy(ctx.device);
@@ -315,8 +309,7 @@ Renderer::~Renderer()
 
 	ctx.UBLights.destroy(ctx.device);
 	ctx.UBReflection.destroy(ctx.device);
-	ctx.SBIn.destroy(ctx.device);
-	ctx.SBOut.destroy(ctx.device);
+	ctx.SBInOut.destroy(ctx.device);
 	ctx.light.clear();
 	ctx.light.shrink_to_fit();
 	for (auto &model : ctx.models)
@@ -529,6 +522,20 @@ float Renderer::rand(float x1, float x2)
 	return x(gen);
 }
 
+void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
+{
+	auto beginInfo = vk::CommandBufferBeginInfo()
+		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
+		.setPInheritanceInfo(nullptr);
+	VkCheck(ctx.computeCmdBuffer.begin(&beginInfo));
+
+	ctx.computeCmdBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, ctx.pipelineCompute.pipeline);
+	ctx.computeCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.pipelineCompute.compinfo.layout, 0, 1, &ctx.DSCompute, 0, nullptr);
+
+	ctx.computeCmdBuffer.dispatch(sizeX, sizeY, sizeZ);
+	ctx.computeCmdBuffer.end();
+}
+
 void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 {
 	// Render Pass (color)
@@ -635,8 +642,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 			.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
 			.setPClearValues(clearValues1.data());
 		ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfo1, vk::SubpassContents::eInline);
-		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.pipelineReflection.pipeline);
-		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.pipelineReflection.pipeinfo.layout, 0, 1, &ctx.DSReflection, 0, nullptr);
+		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.pipelineSSR.pipeline);
+		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.pipelineSSR.pipeinfo.layout, 0, 1, &ctx.DSReflection, 0, nullptr);
 		ctx.dynamicCmdBuffer.draw(3, 1, 0, 0);
 		ctx.dynamicCmdBuffer.endRenderPass();
 	}
@@ -762,7 +769,7 @@ void Renderer::ExtractFrustum(vm::mat4& projection_view_model)
 	frustum[5][3] *= t;
 }
 
-bool Renderer::SphereInFrustum(vm::vec4& boundingSphere)
+bool Renderer::SphereInFrustum(vm::vec4& boundingSphere) const
 {
 	for (unsigned i = 0; i < 6; i++)
 		if (frustum[i][0] * boundingSphere.x + frustum[i][1] * boundingSphere.y + frustum[i][2] * boundingSphere.z + frustum[i][3] <= -boundingSphere.w)
@@ -773,6 +780,16 @@ bool Renderer::SphereInFrustum(vm::vec4& boundingSphere)
 void Renderer::present()
 {
 	if (!prepared) return;
+
+	if (useCompute) {
+		recordComputeCmds(2, 2, 1);
+		auto const siCompute = vk::SubmitInfo()
+			.setCommandBufferCount(1)
+			.setPCommandBuffers(&ctx.computeCmdBuffer);
+		VkCheck(ctx.computeQueue.submit(1, &siCompute, ctx.fences[1]));
+		ctx.device.waitForFences(1, &ctx.fences[1], VK_TRUE, UINT64_MAX);
+		ctx.device.resetFences(1, &ctx.fences[1]);
+	}
 
 	// what stage of a pipeline at a command buffer to wait for the semaphores to be done until keep going
 	const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };

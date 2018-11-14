@@ -26,7 +26,7 @@ vk::DescriptorSetLayout getDescriptorSetLayoutLights(Context* info)
 PipelineInfo Context::getPipelineSpecificationsModel()
 {
 	// General Pipeline
-	PipelineInfo generalSpecific;
+	static PipelineInfo generalSpecific;
 	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
 	generalSpecific.renderPass = info->renderPass;
 	generalSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
@@ -42,7 +42,7 @@ PipelineInfo Context::getPipelineSpecificationsModel()
 PipelineInfo Context::getPipelineSpecificationsShadows()
 {
 	// Shadows Pipeline
-	PipelineInfo shadowsSpecific;
+	static PipelineInfo shadowsSpecific;
 	shadowsSpecific.shaders = { "shaders/Shadows/vert.spv" };
 	shadowsSpecific.renderPass = Shadows::getRenderPass(info->device, info->depth);
 	shadowsSpecific.viewportSize = { Shadows::imageSize, Shadows::imageSize };
@@ -59,7 +59,7 @@ PipelineInfo Context::getPipelineSpecificationsShadows()
 PipelineInfo Context::getPipelineSpecificationsSkyBox()
 {
 	// SkyBox Pipeline
-	PipelineInfo skyBoxSpecific;
+	static PipelineInfo skyBoxSpecific;
 	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
 	skyBoxSpecific.renderPass = info->renderPass;
 	skyBoxSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
@@ -75,7 +75,7 @@ PipelineInfo Context::getPipelineSpecificationsSkyBox()
 PipelineInfo Context::getPipelineSpecificationsTerrain()
 {
 	// Terrain Pipeline
-	PipelineInfo terrainSpecific;
+	static PipelineInfo terrainSpecific;
 	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
 	terrainSpecific.renderPass = info->renderPass;
 	terrainSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
@@ -90,7 +90,7 @@ PipelineInfo Context::getPipelineSpecificationsTerrain()
 PipelineInfo Context::getPipelineSpecificationsGUI()
 {
 	// GUI Pipeline
-	PipelineInfo GUISpecific;
+	static PipelineInfo GUISpecific;
 	GUISpecific.shaders = { "shaders/GUI/vert.spv", "shaders/GUI/frag.spv" };
 	GUISpecific.renderPass = info->guiRenderPass;
 	GUISpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
@@ -110,6 +110,30 @@ PipelineInfo Context::getPipelineSpecificationsGUI()
 	return GUISpecific;
 }
 
+PipelineInfo Context::getPipelineSpecificationsDeferred()
+{
+	// Deferred Pipeline
+	static PipelineInfo deferredSpecific;
+	deferredSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
+	deferredSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
+	deferredSpecific.pushConstantRange = vk::PushConstantRange();
+	deferredSpecific.shaders = { "shaders/Deferred/vert.spv", "shaders/Deferred/frag.spv" };
+	deferredSpecific.renderPass = info->dRenderPass;
+	deferredSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
+	deferredSpecific.sampleCount = vk::SampleCountFlagBits::e1;
+	deferredSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(info->device), Mesh::getDescriptorSetLayout(info->device) };
+	deferredSpecific.specializationInfo = vk::SpecializationInfo();
+	deferredSpecific.blendAttachmentStates[0].blendEnable = VK_FALSE;
+	deferredSpecific.blendAttachmentStates = {
+		deferredSpecific.blendAttachmentStates[0],
+		deferredSpecific.blendAttachmentStates[0],
+		deferredSpecific.blendAttachmentStates[0],
+		deferredSpecific.blendAttachmentStates[0]
+	};
+
+	return deferredSpecific;
+}
+
 void Context::initVulkanContext()
 {
 	instance = createInstance();
@@ -117,9 +141,10 @@ void Context::initVulkanContext()
 	gpu = findGpu();
 	device = createDevice();
 	semaphores = createSemaphores(3);
-	fences = createFences(1);
+	fences = createFences(2);
 	swapchain = createSwapchain();
 	commandPool = createCommandPool();
+	commandPoolCompute = createComputeCommadPool();
 	depth = createDepthResources();
 	renderPass = createRenderPass();
 	renderTarget = createRenderTargets({ {"position", vk::Format::eR16G16B16A16Sfloat}, {"normal", vk::Format::eR16G16B16A16Sfloat}, {"albedo", vk::Format::eR8G8B8A8Unorm}, {"specular", vk::Format::eR16G16B16A16Sfloat} });
@@ -132,7 +157,8 @@ void Context::initVulkanContext()
 	guiFrameBuffers = createGUIFrameBuffers();
 	dynamicCmdBuffer = createCmdBuffer();
 	shadowCmdBuffer = createCmdBuffer();
-	descriptorPool = createDescriptorPool(1000); // max number of all descriptor sets to allocate	
+	computeCmdBuffer = createComputeCmdBuffer();
+	descriptorPool = createDescriptorPool(1000); // max number of all descriptor sets to allocate
 
 	shadows.createFrameBuffers(device, gpu, depth, static_cast<uint32_t>(swapchain.images.size()));
 
@@ -143,31 +169,19 @@ void Context::initVulkanContext()
 	pipelineSkyBox = createPipeline(getPipelineSpecificationsSkyBox());
 	pipelineGUI = createPipeline(getPipelineSpecificationsGUI());
 
-	PipelineInfo sgpci = getPipelineSpecificationsModel();
-	sgpci.specializationInfo = vk::SpecializationInfo{ 1, &vk::SpecializationMapEntry{ 0, 0, sizeof(MAX_LIGHTS) }, sizeof(MAX_LIGHTS), &MAX_LIGHTS };
-	pipeline = createPipeline(sgpci);
+	PipelineInfo gpi = getPipelineSpecificationsModel();
+	gpi.specializationInfo = vk::SpecializationInfo{ 1, &vk::SpecializationMapEntry{ 0, 0, sizeof(MAX_LIGHTS) }, sizeof(MAX_LIGHTS), &MAX_LIGHTS };
+	pipeline = createPipeline(gpi);
 
 	// DEFERRED PIPELINES
-	sgpci.shaders = { "shaders/Deferred/vert.spv", "shaders/Deferred/frag.spv" };
-	sgpci.renderPass = info->dRenderPass;
-	sgpci.sampleCount = vk::SampleCountFlagBits::e1;
-	sgpci.descriptorSetLayouts = { Model::getDescriptorSetLayout(device), Mesh::getDescriptorSetLayout(device) };
-	sgpci.specializationInfo = vk::SpecializationInfo();
-	sgpci.blendAttachmentStates[0].blendEnable = VK_FALSE;
-	sgpci.blendAttachmentStates = {
-		sgpci.blendAttachmentStates[0],
-		sgpci.blendAttachmentStates[0],
-		sgpci.blendAttachmentStates[0],
-		sgpci.blendAttachmentStates[0],
-		sgpci.blendAttachmentStates[0] };
-	pipelineDeferred = createPipeline(sgpci);
+	pipelineDeferred = createPipeline(getPipelineSpecificationsDeferred());
 	pipelineComposition = createCompositionPipeline();
 
 	// SSR PIPELINE
-	pipelineReflection = createReflectionPipeline();
+	pipelineSSR = createReflectionPipeline();
 
 	// COMPUTE PIPELINE
-	//pipelineCompute = createComputePipeline();
+	pipelineCompute = createComputePipeline();
 }
 
 vk::Instance Context::createInstance()
@@ -419,6 +433,17 @@ vk::CommandPool Context::createCommandPool()
 	VkCheck(device.createCommandPool(&cpci, nullptr, &_commandPool));
 	std::cout << "CommandPool created\n";
 	return _commandPool;
+}
+
+vk::CommandPool Context::createComputeCommadPool()
+{
+	vk::CommandPool _commandPool;
+	auto const cpci = vk::CommandPoolCreateInfo()
+		.setQueueFamilyIndex(computeFamilyId)
+		.setFlags(vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
+	VkCheck(device.createCommandPool(&cpci, nullptr, &_commandPool));
+	std::cout << "Compute CommandPool created\n";
+	return _commandPool;;
 }
 
 std::map<std::string, Image> Context::createRenderTargets(std::vector<std::tuple<std::string, vk::Format>> RTtuples)
@@ -950,6 +975,19 @@ vk::CommandBuffer Context::createCmdBuffer()
 	return _cmdBuffer;
 }
 
+vk::CommandBuffer Context::createComputeCmdBuffer()
+{
+	vk::CommandBuffer _cmdBuffer;
+	auto const cbai = vk::CommandBufferAllocateInfo()
+		.setCommandPool(commandPoolCompute)
+		.setLevel(vk::CommandBufferLevel::ePrimary)
+		.setCommandBufferCount(1);
+	VkCheck(device.allocateCommandBuffers(&cbai, &_cmdBuffer));
+	std::cout << "Command Buffer allocated\n";
+
+	return _cmdBuffer;
+}
+
 std::vector<char> readFile(const std::string& filename)
 {
 	std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -1287,12 +1325,12 @@ Pipeline Context::createCompositionPipeline()
 				vk::ColorComponentFlagBits::eB |
 				vk::ColorComponentFlagBits::eA
 	};
-	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment , colorBlendAttachment, colorBlendAttachment };
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment };
 	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
 		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
 		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
 		vk::LogicOp::eCopy,										// LogicOp logicOp;
-		3,														// uint32_t attachmentCount;
+		(uint32_t)colorBlendAttachments.size(),					// uint32_t attachmentCount;
 		colorBlendAttachments.data(),							// const PipelineColorBlendAttachmentState* pAttachments;
 		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
 	};
@@ -1652,14 +1690,6 @@ Pipeline Context::createComputePipeline()
 			// Binding 0 (in)
 			vk::DescriptorSetLayoutBinding{
 				0,										//uint32_t binding;
-				vk::DescriptorType::eStorageBuffer,		//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eCompute,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			},
-			// Binding 1 (out)
-			vk::DescriptorSetLayoutBinding{
-				1,										//uint32_t binding;
 				vk::DescriptorType::eStorageBuffer,		//DescriptorType descriptorType;
 				1,										//uint32_t descriptorCount;
 				vk::ShaderStageFlagBits::eCompute,		//ShaderStageFlags stageFlags;

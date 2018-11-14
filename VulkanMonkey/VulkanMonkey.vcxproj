@@ -177,6 +177,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
+    <None Include="shaders\Compute\shader.comp" />
     <None Include="shaders\Deferred\composition.frag" />
     <None Include="shaders\Deferred\composition.vert" />
     <None Include="shaders\Deferred\gBuffer.frag" />
