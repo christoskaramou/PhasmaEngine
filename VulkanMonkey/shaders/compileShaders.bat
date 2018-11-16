@@ -14,3 +14,7 @@ glslangValidator.exe -V Deferred/composition.frag -o Deferred/cfrag.spv
 glslangValidator.exe -V Reflections/reflection.vert -o Reflections/vert.spv
 glslangValidator.exe -V Reflections/reflection.frag -o Reflections/frag.spv
 glslangValidator.exe -V Compute/shader.comp -o Compute/comp.spv
+glslangValidator.exe -V SSAO/ssao.vert -o SSAO/vert.spv
+glslangValidator.exe -V SSAO/ssao.frag -o SSAO/frag.spv
+glslangValidator.exe -V SSAO/ssaoBlur.vert -o SSAO/vertBlur.spv
+glslangValidator.exe -V SSAO/ssaoBlur.frag -o SSAO/fragBlur.spv

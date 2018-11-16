@@ -1291,20 +1291,37 @@ namespace vm {
 			return (sin((1.f - a) * angle) * q1 + sin(a * angle) * q3) / sin(angle);
 		}
 	}
+
 	float clamp(cfloat x, cfloat minX, cfloat maxX)
 	{
 		return minimum(maximum(x, minX), maxX);
 	}
+
 	void clamp(float * const x, cfloat minX, cfloat maxX)
 	{
 		*x = clamp(*x, minX, maxX);
 	}
+
 	float minimum(cfloat a, cfloat b)
 	{
 		return (b < a) ? b : a;
 	}
+
 	float maximum(cfloat a, cfloat b)
 	{
 		return (a < b) ? b : a;
+	}
+
+	float rand(float a, float b)
+	{
+		static auto seed = std::chrono::system_clock::now().time_since_epoch().count();
+		static std::default_random_engine gen(static_cast<unsigned int>(seed));
+		std::uniform_real_distribution<float> x(a, b);
+		return x(gen);
+	}
+
+	float lerp(float a, float b, float f)
+	{
+		return a + f * (b - a);
 	}
 }

@@ -8,12 +8,13 @@ layout (set = 1, binding = 2) uniform sampler2D specSampler;
 layout (set = 1, binding = 3) uniform sampler2D alphaSampler;
 
 
-layout (location = 0) in vec3 inNormal;
-layout (location = 1) in vec3 inColor;
-layout (location = 2) in vec3 inWorldPos;
+layout (location = 0) in vec3 inWorldPos;
+layout (location = 1) in vec2 inUV;
+layout (location = 2) in vec3 inNormal;
 layout (location = 3) in vec3 inTangent;
-layout (location = 4) in vec2 inUV;
-layout (location = 5) in float depth;
+layout (location = 4) in vec3 inBitangent;
+layout (location = 5) in vec3 inColor;
+layout (location = 6) in float depth;
 
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outNormal;
@@ -25,9 +26,9 @@ void main() {
 	if(alpha < 0.8)
 		discard;
 
-	vec3 N = normalize(inNormal);
 	vec3 T = normalize(inTangent);
-	vec3 B = normalize(cross(T, N));
+	vec3 B = normalize(inBitangent);
+	vec3 N = normalize(inNormal);
 	mat3 TBN = mat3(T, B, N);
 	vec3 normSampler = normalize(texture(normSampler, inUV).rgb * 2.0 - 1.0);
 

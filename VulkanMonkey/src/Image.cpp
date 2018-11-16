@@ -304,8 +304,8 @@ void Image::generateMipMaps(vk::Device device, vk::CommandPool commandPool, vk::
 void Image::createSampler(vk::Device device)
 {
 	auto const samplerInfo = vk::SamplerCreateInfo()
-		.setMagFilter(vk::Filter::eLinear)
-		.setMinFilter(vk::Filter::eLinear)
+		.setMagFilter(filter)
+		.setMinFilter(filter)
 		.setMipmapMode(vk::SamplerMipmapMode::eLinear)
 		.setMinLod(minLod)
 		.setMaxLod(maxLod)

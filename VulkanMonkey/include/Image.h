@@ -15,6 +15,7 @@ struct Image
 	uint32_t mipLevels = 1;
 	uint32_t arrayLayers = 1;
 	float minLod = 0.f, maxLod = 1.f, maxAnisotropy = 16.f;
+	vk::Filter filter = vk::Filter::eLinear;
 	vk::ImageCreateFlags imageCreateFlags = vk::ImageCreateFlags();
 	vk::ImageViewType viewType = vk::ImageViewType::e2D;
 	vk::SamplerAddressMode addressMode = vk::SamplerAddressMode::eRepeat;

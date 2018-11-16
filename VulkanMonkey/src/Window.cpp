@@ -128,8 +128,8 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_1) Shadows::shadowCast = !Shadows::shadowCast;
 			if (event.key.keysym.sym == SDLK_2) {
 				for (uint32_t i = 1; i < info.light.size(); i++) {
-					info.light[i].color = vm::vec4(renderer[0]->rand(0.f, 1.f), renderer[0]->rand(0.0f, 1.f), renderer[0]->rand(0.f, 1.f), renderer[0]->rand(0.f, 1.f));
-					info.light[i].position = vm::vec4(renderer[0]->rand(-3.5f, 3.5f), renderer[0]->rand(.3f, 1.f), renderer[0]->rand(-3.5f, 3.5f), 1.f);
+					info.light[i].color = vm::vec4(vm::rand(0.f, 1.f), vm::rand(0.0f, 1.f), vm::rand(0.f, 1.f), vm::rand(0.f, 1.f));
+					info.light[i].position = vm::vec4(vm::rand(-3.5f, 3.5f), vm::rand(.3f, 1.f), vm::rand(-3.5f, 3.5f), 1.f);
 				}
 				memcpy(info.UBLights.data, info.light.data(), info.light.size() * sizeof(Context::Light));
 			}
@@ -137,7 +137,7 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_4) info.gui.render = !info.gui.render;
 			if (event.key.keysym.sym == SDLK_5) info.terrain.render = !info.terrain.render;
 			if (event.key.keysym.sym == SDLK_6) info.skyBox.render = !info.skyBox.render;
-			if (event.key.keysym.sym == SDLK_7) renderer[0]->deferredRender = !renderer[0]->deferredRender;
+			if (event.key.keysym.sym == SDLK_7) renderer[0]->useDeferredRender = !renderer[0]->useDeferredRender;
 			if (event.key.keysym.sym == SDLK_8) { renderer[0]->useCompute = !renderer[0]->useCompute; }
 			if (event.key.keysym.sym == SDLK_0) for (auto& r : renderer) r->overloadedGPU = !renderer[0]->overloadedGPU;
 		}

@@ -127,16 +127,19 @@ Model Model::loadModel(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPoo
 				const aiVector3D& norm = mesh.HasNormals() ? mesh.mNormals[j] : aiVector3D(0.f, 0.f, 0.f);
 				const aiVector3D& uv = mesh.HasTextureCoords(0) ? mesh.mTextureCoords[0][j] : aiVector3D(0.f, 0.f, 0.f);
 				const aiVector3D& tangent = mesh.HasTangentsAndBitangents() ? mesh.mTangents[j] : aiVector3D(0.f, 0.f, 0.f);
+				const aiVector3D& bitangent = mesh.HasTangentsAndBitangents() ? mesh.mBitangents[j] : aiVector3D(0.f, 0.f, 0.f);
 				const aiColor4D& color = mesh.HasVertexColors(0) ? mesh.mColors[0][j] : aiColor4D(1.f, 1.f, 1.f, 1.f);
 
 				vm::vec4 p = transform * vm::vec4(pos.x, pos.y, pos.z, 1.f);
 				vm::vec4 n = transform * vm::vec4(norm.x, norm.y, norm.z, 1.f);
 				vm::vec4 t = transform * vm::vec4(tangent.x, tangent.y, tangent.z, 1.f);
+				vm::vec4 b = transform * vm::vec4(bitangent.x, bitangent.y, bitangent.z, 1.f);
 				Vertex v(
 					vm::vec3(p),
-					vm::vec3(n),
 					vm::vec2((float*)&uv),
-					vm::vec4(t),
+					vm::vec3(n),
+					vm::vec3(t),
+					vm::vec3(b),
 					vm::vec4((float*)&color)
 				);
 				myMesh.vertices.push_back(v);

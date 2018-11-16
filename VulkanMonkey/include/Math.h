@@ -1,5 +1,8 @@
 #pragma once
 #include <cmath>
+#include <chrono>
+#include <random>
+#include "GLM.h"
 
 #define cfloat const float
 #define cvec2  const vec2
@@ -239,4 +242,6 @@ namespace vm
 	void clamp(float* const x, cfloat minX, cfloat maxX);
 	float minimum(cfloat a, cfloat b);
 	float maximum(cfloat a, cfloat b);
+	float rand(float x1, float x2);
+	float lerp(float a, float b, float f);
 }

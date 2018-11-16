@@ -28,7 +28,7 @@ PipelineInfo Context::getPipelineSpecificationsModel()
 	// General Pipeline
 	static PipelineInfo generalSpecific;
 	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
-	generalSpecific.renderPass = info->renderPass;
+	generalSpecific.renderPass = info->forwardRenderPass;
 	generalSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	generalSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(info->device), Mesh::getDescriptorSetLayout(info->device), Model::getDescriptorSetLayout(info->device), getDescriptorSetLayoutLights(info) };
 	generalSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
@@ -61,7 +61,7 @@ PipelineInfo Context::getPipelineSpecificationsSkyBox()
 	// SkyBox Pipeline
 	static PipelineInfo skyBoxSpecific;
 	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
-	skyBoxSpecific.renderPass = info->renderPass;
+	skyBoxSpecific.renderPass = info->forwardRenderPass;
 	skyBoxSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(info->device) };
 	skyBoxSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionSkyBox();
@@ -77,7 +77,7 @@ PipelineInfo Context::getPipelineSpecificationsTerrain()
 	// Terrain Pipeline
 	static PipelineInfo terrainSpecific;
 	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
-	terrainSpecific.renderPass = info->renderPass;
+	terrainSpecific.renderPass = info->forwardRenderPass;
 	terrainSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(info->device) };
 	terrainSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
@@ -118,7 +118,7 @@ PipelineInfo Context::getPipelineSpecificationsDeferred()
 	deferredSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	deferredSpecific.pushConstantRange = vk::PushConstantRange();
 	deferredSpecific.shaders = { "shaders/Deferred/vert.spv", "shaders/Deferred/frag.spv" };
-	deferredSpecific.renderPass = info->dRenderPass;
+	deferredSpecific.renderPass = info->deferredRenderPass;
 	deferredSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	deferredSpecific.sampleCount = vk::SampleCountFlagBits::e1;
 	deferredSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(info->device), Mesh::getDescriptorSetLayout(info->device) };
@@ -146,14 +146,26 @@ void Context::initVulkanContext()
 	commandPool = createCommandPool();
 	commandPoolCompute = createComputeCommadPool();
 	depth = createDepthResources();
-	renderPass = createRenderPass();
-	renderTarget = createRenderTargets({ {"position", vk::Format::eR16G16B16A16Sfloat}, {"normal", vk::Format::eR16G16B16A16Sfloat}, {"albedo", vk::Format::eR8G8B8A8Unorm}, {"specular", vk::Format::eR16G16B16A16Sfloat} });
-	dRenderPass = createDeferredRenderPass();
-	rRenderPass = createReflectionRenderPass();
+	renderTarget = createRenderTargets({ 
+		{"position", vk::Format::eR16G16B16A16Sfloat},
+		{"normal", vk::Format::eR16G16B16A16Sfloat},
+		{"albedo", vk::Format::eR8G8B8A8Unorm},
+		{"specular", vk::Format::eR16G16B16A16Sfloat},
+		{"ssao", vk::Format::eR16Sfloat},
+		{"ssaoBlur", vk::Format::eR16Sfloat} });
+	forwardRenderPass = createRenderPass();
+	deferredRenderPass = createDeferredRenderPass();
+	compositionRenderPass = createCompositionRenderPass();
+	ssrRenderPass = createReflectionRenderPass();
+	ssaoRenderPass = createSSAORenderPass();
+	ssaoBlurRenderPass = createSSAOBlurRenderPass();
 	guiRenderPass = createGUIRenderPass();
 	frameBuffers = createFrameBuffers();
-	dFrameBuffers = createDeferredFrameBuffers();
-	rFrameBuffers = createReflectionFrameBuffers();
+	deferredFrameBuffers = createDeferredFrameBuffers();
+	compositionFrameBuffers = createCompositionFrameBuffers();
+	ssrFrameBuffers = createReflectionFrameBuffers();
+	ssaoFrameBuffers = createSSAOFrameBuffers();
+	ssaoBlurFrameBuffers = createSSAOBlurFrameBuffers();
 	guiFrameBuffers = createGUIFrameBuffers();
 	dynamicCmdBuffer = createCmdBuffer();
 	shadowCmdBuffer = createCmdBuffer();
@@ -182,6 +194,10 @@ void Context::initVulkanContext()
 
 	// COMPUTE PIPELINE
 	pipelineCompute = createComputePipeline();
+
+	// SSAO
+	pipelineSSAO = createSSAOPipeline();
+	pipelineSSAOBlur = createSSAOBlurPipeline();
 }
 
 vk::Instance Context::createInstance()
@@ -453,7 +469,7 @@ std::map<std::string, Image> Context::createRenderTargets(std::vector<std::tuple
 	{
 		RT[std::get<0>(t)].format = std::get<1>(t);
 		RT[std::get<0>(t)].initialLayout = vk::ImageLayout::eUndefined;
-		RT[std::get<0>(t)].createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eInputAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		RT[std::get<0>(t)].createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		RT[std::get<0>(t)].createImageView(device, vk::ImageAspectFlagBits::eColor);
 		RT[std::get<0>(t)].createSampler(device);
 	}
@@ -543,21 +559,19 @@ vk::RenderPass Context::createRenderPass()
 vk::RenderPass Context::createDeferredRenderPass()
 {
 	vk::RenderPass _renderPass;
-
-	std::array<vk::AttachmentDescription, 6> attachments{};
-	// Color attachment
-	attachments[0].format = info->surface.formatKHR.format;
+	std::array<vk::AttachmentDescription, 5> attachments{};
+	// Deferred targets
+	// Position
+	attachments[0].format = renderTarget["position"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
-
-	// Deferred attachments
-	// Position
-	attachments[1].format = renderTarget["position"].format;
+	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+	// Normals
+	attachments[1].format = renderTarget["normal"].format;
 	attachments[1].samples = vk::SampleCountFlagBits::e1;
 	attachments[1].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[1].storeOp = vk::AttachmentStoreOp::eStore;
@@ -565,83 +579,50 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[1].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[1].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[1].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Normals
-	attachments[2].format = renderTarget["normal"].format;
+	// Albedo
+	attachments[2].format = renderTarget["albedo"].format;
 	attachments[2].samples = vk::SampleCountFlagBits::e1;
 	attachments[2].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[2].storeOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[2].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[2].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[2].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[2].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[2].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Albedo
-	attachments[3].format = renderTarget["albedo"].format;
+	// Specular
+	attachments[3].format = renderTarget["specular"].format;
 	attachments[3].samples = vk::SampleCountFlagBits::e1;
 	attachments[3].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[3].storeOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[3].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[3].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[3].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[3].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[3].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Specular
-	attachments[4].format = renderTarget["specular"].format;
+
+	// Depth
+	attachments[4].format = info->depth.format;
 	attachments[4].samples = vk::SampleCountFlagBits::e1;
 	attachments[4].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[4].storeOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[4].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[4].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[4].stencilStoreOp = vk::AttachmentStoreOp::eStore;
 	attachments[4].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[4].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Depth attachment
-	attachments[5].format = info->depth.format;
-	attachments[5].samples = vk::SampleCountFlagBits::e1;
-	attachments[5].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[5].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[5].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[5].stencilStoreOp = vk::AttachmentStoreOp::eStore;
-	attachments[5].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[5].finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+	attachments[4].finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
-	// Two subpasses
-	std::array<vk::SubpassDescription, 2> subpassDescriptions{};
-
-	// First subpass: Fill G-Buffer components
-	// ----------------------------------------------------------------------------------------
+	std::array<vk::SubpassDescription, 1> subpassDescriptions{};
 
 	std::vector<vk::AttachmentReference> colorReferences{
+		{ 0, vk::ImageLayout::eColorAttachmentOptimal },
 		{ 1, vk::ImageLayout::eColorAttachmentOptimal },
 		{ 2, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 3, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 4, vk::ImageLayout::eColorAttachmentOptimal }
+		{ 3, vk::ImageLayout::eColorAttachmentOptimal }
 	};
-	vk::AttachmentReference depthReference = { 5, vk::ImageLayout::eDepthStencilAttachmentOptimal };
+	vk::AttachmentReference depthReference = { 4, vk::ImageLayout::eDepthStencilAttachmentOptimal };
 
 	subpassDescriptions[0].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
 	subpassDescriptions[0].colorAttachmentCount = static_cast<uint32_t>(colorReferences.size());
 	subpassDescriptions[0].pColorAttachments = colorReferences.data();
 	subpassDescriptions[0].pDepthStencilAttachment = &depthReference;
 
-	// Second subpass: Final composition (using G-Buffer components)
-	// ----------------------------------------------------------------------------------------
-
-	std::vector<vk::AttachmentReference> colorReferences1 = {
-		{ 0, vk::ImageLayout::eColorAttachmentOptimal }
-	};
-
-	std::vector<vk::AttachmentReference> inputReferences{
-		{ 1, vk::ImageLayout::eShaderReadOnlyOptimal },
-		{ 2, vk::ImageLayout::eShaderReadOnlyOptimal },
-		{ 3, vk::ImageLayout::eShaderReadOnlyOptimal },
-		{ 4, vk::ImageLayout::eShaderReadOnlyOptimal }
-	};
-
-	subpassDescriptions[1].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-	subpassDescriptions[1].colorAttachmentCount = static_cast<uint32_t>(colorReferences1.size());
-	subpassDescriptions[1].pColorAttachments = colorReferences1.data();
-	subpassDescriptions[1].pDepthStencilAttachment = nullptr;//&depthReference;
-	// Use the color attachments filled in the first pass as input attachments
-	subpassDescriptions[1].inputAttachmentCount = static_cast<uint32_t>(inputReferences.size());;
-	subpassDescriptions[1].pInputAttachments = inputReferences.data();
 
 	// Subpass dependencies for layout transitions
 	std::vector<vk::SubpassDependency> dependencies{
@@ -652,15 +633,6 @@ vk::RenderPass Context::createDeferredRenderPass()
 			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
 			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
 			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			1,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eFragmentShader,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentWrite,				// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eShaderRead,						// AccessFlags dstAccessMask;
 			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
 		},
 		vk::SubpassDependency{
@@ -679,6 +651,184 @@ vk::RenderPass Context::createDeferredRenderPass()
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 	renderPassInfo.pSubpasses = subpassDescriptions.data();
+	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	renderPassInfo.pDependencies = dependencies.data();
+
+	VkCheck(info->device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
+
+	return _renderPass;
+}
+
+vk::RenderPass Context::createCompositionRenderPass()
+{
+	vk::RenderPass _renderPass;
+
+	std::array<vk::AttachmentDescription, 1> attachments{};
+	// Color target
+	attachments[0].format = info->surface.formatKHR.format;
+	attachments[0].samples = vk::SampleCountFlagBits::e1;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
+	attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
+
+	std::array<vk::SubpassDescription, 1> subpassDescriptions{};
+
+	std::vector<vk::AttachmentReference> colorReferences{ { 0, vk::ImageLayout::eColorAttachmentOptimal } };
+
+	subpassDescriptions[0].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+	subpassDescriptions[0].colorAttachmentCount = static_cast<uint32_t>(colorReferences.size());
+	subpassDescriptions[0].pColorAttachments = colorReferences.data();
+	subpassDescriptions[0].pDepthStencilAttachment = nullptr;
+
+
+	// Subpass dependencies for layout transitions
+	std::vector<vk::SubpassDependency> dependencies{
+		vk::SubpassDependency{
+			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
+			0,														// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		},
+		vk::SubpassDependency{
+			0,														// uint32_t srcSubpass;
+			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		},
+	};
+
+	vk::RenderPassCreateInfo renderPassInfo = {};
+	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+	renderPassInfo.pAttachments = attachments.data();
+	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
+	renderPassInfo.pSubpasses = subpassDescriptions.data();
+	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	renderPassInfo.pDependencies = dependencies.data();
+
+	VkCheck(info->device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
+
+	return _renderPass;
+}
+
+vk::RenderPass Context::createSSAORenderPass()
+{
+	vk::RenderPass _renderPass;
+
+	std::array<vk::AttachmentDescription, 1> attachments{};
+	// Color attachment
+	attachments[0].format = info->renderTarget["ssao"].format;
+	attachments[0].samples = vk::SampleCountFlagBits::e1;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
+	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+
+	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
+
+	vk::SubpassDescription subpassDescription;
+	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+	subpassDescription.colorAttachmentCount = 1;
+	subpassDescription.pColorAttachments = &colorReference;
+	subpassDescription.pDepthStencilAttachment = nullptr;
+
+	// Subpass dependencies for layout transitions
+	std::vector<vk::SubpassDependency> dependencies{
+		vk::SubpassDependency{
+			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
+			0,														// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		},
+		vk::SubpassDependency{
+			0,														// uint32_t srcSubpass;
+			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		}
+	};
+
+	vk::RenderPassCreateInfo renderPassInfo = {};
+	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+	renderPassInfo.pAttachments = attachments.data();
+	renderPassInfo.subpassCount = 1;
+	renderPassInfo.pSubpasses = &subpassDescription;
+	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	renderPassInfo.pDependencies = dependencies.data();
+
+	VkCheck(info->device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
+
+	return _renderPass;
+}
+
+vk::RenderPass Context::createSSAOBlurRenderPass()
+{
+	vk::RenderPass _renderPass;
+
+	std::array<vk::AttachmentDescription, 1> attachments{};
+	// Color attachment
+	attachments[0].format = info->renderTarget["ssaoBlur"].format;
+	attachments[0].samples = vk::SampleCountFlagBits::e1;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
+	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+
+	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
+
+	vk::SubpassDescription subpassDescription;
+	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+	subpassDescription.colorAttachmentCount = 1;
+	subpassDescription.pColorAttachments = &colorReference;
+	subpassDescription.pDepthStencilAttachment = nullptr;
+
+	// Subpass dependencies for layout transitions
+	std::vector<vk::SubpassDependency> dependencies{
+		vk::SubpassDependency{
+			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
+			0,														// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		},
+		vk::SubpassDependency{
+			0,														// uint32_t srcSubpass;
+			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		}
+	};
+
+	vk::RenderPassCreateInfo renderPassInfo = {};
+	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+	renderPassInfo.pAttachments = attachments.data();
+	renderPassInfo.subpassCount = 1;
+	renderPassInfo.pSubpasses = &subpassDescription;
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
@@ -862,7 +1012,7 @@ std::vector<vk::Framebuffer> Context::createFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(renderPass)
+			.setRenderPass(forwardRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -881,7 +1031,6 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 
 	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			swapchain.images[i].view,
 			renderTarget["position"].view,
 			renderTarget["normal"].view,
 			renderTarget["albedo"].view,
@@ -890,7 +1039,30 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(dRenderPass)
+			.setRenderPass(deferredRenderPass)
+			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+			.setPAttachments(attachments.data())
+			.setWidth(surface.actualExtent.width)
+			.setHeight(surface.actualExtent.height)
+			.setLayers(1);
+		VkCheck(device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
+		std::cout << "Framebuffer created\n";
+	}
+
+	return _frameBuffers;
+}
+
+std::vector<vk::Framebuffer> Context::createCompositionFrameBuffers()
+{
+	std::vector<vk::Framebuffer> _frameBuffers(swapchain.images.size());
+
+	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
+		std::vector<vk::ImageView> attachments = {
+			swapchain.images[i].view
+		};
+
+		auto const fbci = vk::FramebufferCreateInfo()
+			.setRenderPass(compositionRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -913,7 +1085,53 @@ std::vector<vk::Framebuffer> Context::createReflectionFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(rRenderPass)
+			.setRenderPass(ssrRenderPass)
+			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+			.setPAttachments(attachments.data())
+			.setWidth(surface.actualExtent.width)
+			.setHeight(surface.actualExtent.height)
+			.setLayers(1);
+		VkCheck(device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
+		std::cout << "Framebuffer created\n";
+	}
+
+	return _frameBuffers;
+}
+
+std::vector<vk::Framebuffer> Context::createSSAOFrameBuffers()
+{
+	std::vector<vk::Framebuffer> _frameBuffers(swapchain.images.size());
+
+	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
+		std::vector<vk::ImageView> attachments = {
+			renderTarget["ssao"].view
+		};
+
+		auto const fbci = vk::FramebufferCreateInfo()
+			.setRenderPass(ssaoRenderPass)
+			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+			.setPAttachments(attachments.data())
+			.setWidth(surface.actualExtent.width)
+			.setHeight(surface.actualExtent.height)
+			.setLayers(1);
+		VkCheck(device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
+		std::cout << "Framebuffer created\n";
+	}
+
+	return _frameBuffers;
+}
+
+std::vector<vk::Framebuffer> Context::createSSAOBlurFrameBuffers()
+{
+	std::vector<vk::Framebuffer> _frameBuffers(swapchain.images.size());
+
+	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
+		std::vector<vk::ImageView> attachments = {
+			renderTarget["ssaoBlur"].view
+		};
+
+		auto const fbci = vk::FramebufferCreateInfo()
+			.setRenderPass(ssaoRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1350,7 +1568,7 @@ Pipeline Context::createCompositionPipeline()
 			// Binding 0: Position input attachment 
 			vk::DescriptorSetLayoutBinding{
 				0,										//uint32_t binding;
-				vk::DescriptorType::eInputAttachment,	//DescriptorType descriptorType;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
 				1,										//uint32_t descriptorCount;
 				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
 				nullptr									//const Sampler* pImmutableSamplers;
@@ -1358,7 +1576,7 @@ Pipeline Context::createCompositionPipeline()
 			// Binding 1: Normal input attachment 
 			vk::DescriptorSetLayoutBinding{
 				1,										//uint32_t binding;
-				vk::DescriptorType::eInputAttachment,	//DescriptorType descriptorType;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
 				1,										//uint32_t descriptorCount;
 				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
 				nullptr									//const Sampler* pImmutableSamplers;
@@ -1366,7 +1584,7 @@ Pipeline Context::createCompositionPipeline()
 			// Binding 2: Albedo input attachment 
 			vk::DescriptorSetLayoutBinding{
 				2,										//uint32_t binding;
-				vk::DescriptorType::eInputAttachment,	//DescriptorType descriptorType;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
 				1,										//uint32_t descriptorCount;
 				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
 				nullptr									//const Sampler* pImmutableSamplers;
@@ -1374,7 +1592,7 @@ Pipeline Context::createCompositionPipeline()
 			// Binding 3: Specular input attachment 
 			vk::DescriptorSetLayoutBinding{
 				3,										//uint32_t binding;
-				vk::DescriptorType::eInputAttachment,	//DescriptorType descriptorType;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
 				1,										//uint32_t descriptorCount;
 				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
 				nullptr									//const Sampler* pImmutableSamplers;
@@ -1383,6 +1601,14 @@ Pipeline Context::createCompositionPipeline()
 			vk::DescriptorSetLayoutBinding{
 				4,										//uint32_t binding;
 				vk::DescriptorType::eUniformBuffer,		//DescriptorType descriptorType;
+				1,										//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
+				nullptr									//const Sampler* pImmutableSamplers;
+			},
+			// Binding 5: SSAO image
+			vk::DescriptorSetLayoutBinding{
+				5,										//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
 				1,										//uint32_t descriptorCount;
 				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
 				nullptr									//const Sampler* pImmutableSamplers;
@@ -1407,10 +1633,10 @@ Pipeline Context::createCompositionPipeline()
 	std::cout << "Pipeline Layout created\n";
 
 	// Render Pass
-	_pipeline.pipeinfo.renderPass = dRenderPass;
+	_pipeline.pipeinfo.renderPass = compositionRenderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
-	_pipeline.pipeinfo.subpass = 1;
+	_pipeline.pipeinfo.subpass = 0;
 
 	// Base Pipeline Handle
 	_pipeline.pipeinfo.basePipelineHandle = nullptr;
@@ -1633,7 +1859,7 @@ Pipeline Context::createReflectionPipeline()
 
 	}
 
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutReflection, Shadows::getDescriptorSetLayout(device) };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutReflection };
 	VkCheck(device.createPipelineLayout(
 		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
 		nullptr,
@@ -1641,7 +1867,443 @@ Pipeline Context::createReflectionPipeline()
 	std::cout << "Pipeline Layout created\n";
 
 	// Render Pass
-	_pipeline.pipeinfo.renderPass = rRenderPass;
+	_pipeline.pipeinfo.renderPass = ssrRenderPass;
+
+	// Subpass (Index of subpass this pipeline will be used in)
+	_pipeline.pipeinfo.subpass = 0;
+
+	// Base Pipeline Handle
+	_pipeline.pipeinfo.basePipelineHandle = nullptr;
+
+	// Base Pipeline Index
+	_pipeline.pipeinfo.basePipelineIndex = -1;
+
+	VkCheck(device.createGraphicsPipelines(nullptr, 1, &_pipeline.pipeinfo, nullptr, &_pipeline.pipeline));
+	std::cout << "Pipeline created\n";
+
+	// destroy Shader Modules
+	device.destroyShaderModule(vertModule);
+	device.destroyShaderModule(fragModule);
+
+	return _pipeline;
+}
+
+Pipeline Context::createSSAOPipeline()
+{
+	Pipeline _pipeline;
+
+	// Shader stages
+	std::vector<char> vertCode{};
+	std::vector<char> fragCode{};
+
+	vk::ShaderModuleCreateInfo vsmci;
+	vk::ShaderModuleCreateInfo fsmci;
+
+	vk::ShaderModule vertModule;
+	vk::ShaderModule fragModule;
+	{
+		vertCode = readFile("shaders/SSAO/vert.spv");
+		fragCode = readFile("shaders/SSAO/frag.spv");
+
+		vsmci = vk::ShaderModuleCreateInfo{
+			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
+			vertCode.size(),									// size_t codeSize;
+			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
+		};
+		fsmci = vk::ShaderModuleCreateInfo{
+			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
+			fragCode.size(),									// size_t codeSize;
+			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
+		};
+		VkCheck(device.createShaderModule(&vsmci, nullptr, &vertModule));
+		std::cout << "Vertex Shader Module created\n";
+		VkCheck(device.createShaderModule(&fsmci, nullptr, &fragModule));
+		std::cout << "Fragment Shader Module created\n";
+	}
+
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{
+		vk::PipelineShaderStageCreateInfo{
+			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
+			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
+			vertModule,								// ShaderModule module;
+			"main",									// const char* pName;
+			nullptr									// const SpecializationInfo* pSpecializationInfo;
+		},
+		vk::PipelineShaderStageCreateInfo{
+			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
+			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
+			fragModule,								// ShaderModule module;
+			"main",									// const char* pName;
+			nullptr									// const SpecializationInfo* pSpecializationInfo;
+		}
+	};
+	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
+	_pipeline.pipeinfo.pStages = stages.data();
+
+	// Vertex Input state
+	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+
+	// Input Assembly stage
+	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
+		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
+		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
+		VK_FALSE										// Bool32 primitiveRestartEnable;
+	};
+
+	// Viewports and Scissors
+	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
+		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
+		1,													// uint32_t viewportCount;
+		&vk::Viewport{										// const Viewport* pViewports;
+			0.0f,												// float x;
+			0.0f,												// float y;
+			static_cast<float>(surface.actualExtent.width), 	// float width;
+			static_cast<float>(surface.actualExtent.height),	// float height;
+			0.0f,												// float minDepth;
+			1.0f },												// float maxDepth;
+		1,													// uint32_t scissorCount;
+		&vk::Rect2D{										// const Rect2D* pScissors;
+			vk::Offset2D(),										// Offset2D offset;
+			surface.actualExtent }								// Extent2D extent;
+	};
+
+	// Rasterization state
+	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
+		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
+		VK_FALSE,										// Bool32 depthClampEnable;
+		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
+		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
+		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
+		vk::FrontFace::eCounterClockwise,						// FrontFace frontFace;
+		VK_FALSE,										// Bool32 depthBiasEnable;
+		0.0f,											// float depthBiasConstantFactor;
+		0.0f,											// float depthBiasClamp;
+		0.0f,											// float depthBiasSlopeFactor;
+		1.0f											// float lineWidth;
+	};
+
+	// Multisample state
+	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
+		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
+		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
+		VK_FALSE,									// Bool32 sampleShadingEnable;
+		1.0f,										// float minSampleShading;
+		nullptr,									// const SampleMask* pSampleMask;
+		VK_FALSE,									// Bool32 alphaToCoverageEnable;
+		VK_FALSE									// Bool32 alphaToOneEnable;
+	};
+
+	// Depth and stencil state
+	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
+		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
+		VK_TRUE,													// Bool32 depthTestEnable;
+		VK_TRUE,													// Bool32 depthWriteEnable;
+		vk::CompareOp::eLessOrEqual,								// CompareOp depthCompareOp;
+		VK_FALSE,													// Bool32 depthBoundsTestEnable;
+		VK_FALSE,													// Bool32 stencilTestEnable;
+		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
+		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
+		0.0f,														// float minDepthBounds;
+		0.0f														// float maxDepthBounds;
+	};
+
+	// Color Blending state
+	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
+		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
+		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
+		vk::LogicOp::eCopy,										// LogicOp logicOp;
+		1,														// uint32_t attachmentCount;
+		&vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
+			VK_TRUE,												// Bool32 blendEnable;
+			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
+			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
+			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
+			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
+			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
+			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
+			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
+			vk::ColorComponentFlagBits::eG |
+			vk::ColorComponentFlagBits::eB |
+			vk::ColorComponentFlagBits::eA
+		},
+		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
+	};
+
+	// Dynamic state
+	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	_pipeline.pipeinfo.pDynamicState = &vk::PipelineDynamicStateCreateInfo{
+			vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
+			static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
+			dynamicStates.data()							//const DynamicState* pDynamicStates;
+	};
+
+	// Pipeline Layout
+	{// DescriptorSetLayout
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
+		{
+			// Binding 0: Positions image sampler  
+			vk::DescriptorSetLayoutBinding{
+				0,											//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			},
+			// Binding 1: Normals image sampler  
+			vk::DescriptorSetLayoutBinding{
+				1,											//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			},
+			// Binding 2: Noise image sampler  
+			vk::DescriptorSetLayoutBinding{
+				2,											//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			},
+			// Binding 3: Kernel Uniform
+			vk::DescriptorSetLayoutBinding{
+				3,											//uint32_t binding;
+				vk::DescriptorType::eUniformBuffer,			//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			},
+			// Binding 4: PVM Uniform
+			vk::DescriptorSetLayoutBinding{
+				4,											//uint32_t binding;
+				vk::DescriptorType::eUniformBuffer,			//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			}
+		};
+
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
+			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
+			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
+			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		};
+
+		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &DSLayoutSSAO));
+
+	}
+
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutSSAO };
+	VkCheck(device.createPipelineLayout(
+		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
+		nullptr,
+		&_pipeline.pipeinfo.layout));
+	std::cout << "Pipeline Layout created\n";
+
+	// Render Pass
+	_pipeline.pipeinfo.renderPass = ssaoRenderPass;
+
+	// Subpass (Index of subpass this pipeline will be used in)
+	_pipeline.pipeinfo.subpass = 0;
+
+	// Base Pipeline Handle
+	_pipeline.pipeinfo.basePipelineHandle = nullptr;
+
+	// Base Pipeline Index
+	_pipeline.pipeinfo.basePipelineIndex = -1;
+
+	VkCheck(device.createGraphicsPipelines(nullptr, 1, &_pipeline.pipeinfo, nullptr, &_pipeline.pipeline));
+	std::cout << "Pipeline created\n";
+
+	// destroy Shader Modules
+	device.destroyShaderModule(vertModule);
+	device.destroyShaderModule(fragModule);
+
+	return _pipeline;
+}
+
+Pipeline Context::createSSAOBlurPipeline()
+{
+	Pipeline _pipeline;
+
+	// Shader stages
+	std::vector<char> vertCode{};
+	std::vector<char> fragCode{};
+
+	vk::ShaderModuleCreateInfo vsmci;
+	vk::ShaderModuleCreateInfo fsmci;
+
+	vk::ShaderModule vertModule;
+	vk::ShaderModule fragModule;
+	{
+		vertCode = readFile("shaders/SSAO/vertBlur.spv");
+		fragCode = readFile("shaders/SSAO/fragBlur.spv");
+
+		vsmci = vk::ShaderModuleCreateInfo{
+			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
+			vertCode.size(),									// size_t codeSize;
+			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
+		};
+		fsmci = vk::ShaderModuleCreateInfo{
+			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
+			fragCode.size(),									// size_t codeSize;
+			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
+		};
+		VkCheck(device.createShaderModule(&vsmci, nullptr, &vertModule));
+		std::cout << "Vertex Shader Module created\n";
+		VkCheck(device.createShaderModule(&fsmci, nullptr, &fragModule));
+		std::cout << "Fragment Shader Module created\n";
+	}
+
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{
+		vk::PipelineShaderStageCreateInfo{
+			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
+			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
+			vertModule,								// ShaderModule module;
+			"main",									// const char* pName;
+			nullptr									// const SpecializationInfo* pSpecializationInfo;
+		},
+		vk::PipelineShaderStageCreateInfo{
+			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
+			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
+			fragModule,								// ShaderModule module;
+			"main",									// const char* pName;
+			nullptr									// const SpecializationInfo* pSpecializationInfo;
+		}
+	};
+	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
+	_pipeline.pipeinfo.pStages = stages.data();
+
+	// Vertex Input state
+	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+
+	// Input Assembly stage
+	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
+		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
+		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
+		VK_FALSE										// Bool32 primitiveRestartEnable;
+	};
+
+	// Viewports and Scissors
+	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
+		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
+		1,													// uint32_t viewportCount;
+		&vk::Viewport{										// const Viewport* pViewports;
+			0.0f,												// float x;
+			0.0f,												// float y;
+			static_cast<float>(surface.actualExtent.width), 	// float width;
+			static_cast<float>(surface.actualExtent.height),	// float height;
+			0.0f,												// float minDepth;
+			1.0f },												// float maxDepth;
+		1,													// uint32_t scissorCount;
+		&vk::Rect2D{										// const Rect2D* pScissors;
+			vk::Offset2D(),										// Offset2D offset;
+			surface.actualExtent }								// Extent2D extent;
+	};
+
+	// Rasterization state
+	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
+		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
+		VK_FALSE,										// Bool32 depthClampEnable;
+		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
+		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
+		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
+		vk::FrontFace::eCounterClockwise,				// FrontFace frontFace;
+		VK_FALSE,										// Bool32 depthBiasEnable;
+		0.0f,											// float depthBiasConstantFactor;
+		0.0f,											// float depthBiasClamp;
+		0.0f,											// float depthBiasSlopeFactor;
+		1.0f											// float lineWidth;
+	};
+
+	// Multisample state
+	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
+		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
+		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
+		VK_FALSE,									// Bool32 sampleShadingEnable;
+		1.0f,										// float minSampleShading;
+		nullptr,									// const SampleMask* pSampleMask;
+		VK_FALSE,									// Bool32 alphaToCoverageEnable;
+		VK_FALSE									// Bool32 alphaToOneEnable;
+	};
+
+	// Depth and stencil state
+	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
+		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
+		VK_TRUE,													// Bool32 depthTestEnable;
+		VK_TRUE,													// Bool32 depthWriteEnable;
+		vk::CompareOp::eLessOrEqual,								// CompareOp depthCompareOp;
+		VK_FALSE,													// Bool32 depthBoundsTestEnable;
+		VK_FALSE,													// Bool32 stencilTestEnable;
+		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
+		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
+		0.0f,														// float minDepthBounds;
+		0.0f														// float maxDepthBounds;
+	};
+
+	// Color Blending state
+	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
+		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
+		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
+		vk::LogicOp::eCopy,										// LogicOp logicOp;
+		1,														// uint32_t attachmentCount;
+		&vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
+			VK_TRUE,												// Bool32 blendEnable;
+			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
+			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
+			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
+			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
+			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
+			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
+			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
+			vk::ColorComponentFlagBits::eG |
+			vk::ColorComponentFlagBits::eB |
+			vk::ColorComponentFlagBits::eA
+		},
+		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
+	};
+
+	// Dynamic state
+	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	_pipeline.pipeinfo.pDynamicState = &vk::PipelineDynamicStateCreateInfo{
+			vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
+			static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
+			dynamicStates.data()							//const DynamicState* pDynamicStates;
+	};
+
+	// Pipeline Layout
+	{// DescriptorSetLayout
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
+		{
+			// Binding 0: SSAO image sampler  
+			vk::DescriptorSetLayoutBinding{
+				0,											//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			}
+		};
+
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
+			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
+			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
+			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		};
+
+		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &DSLayoutSSAOBlur));
+
+	}
+
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutSSAOBlur };
+	VkCheck(device.createPipelineLayout(
+		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
+		nullptr,
+		&_pipeline.pipeinfo.layout));
+	std::cout << "Pipeline Layout created\n";
+
+	// Render Pass
+	_pipeline.pipeinfo.renderPass = ssaoBlurRenderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	_pipeline.pipeinfo.subpass = 0;
@@ -1712,6 +2374,9 @@ Pipeline Context::createComputePipeline()
 	std::cout << "Compute Pipeline Layout created\n";
 
 	VkCheck(device.createComputePipelines(nullptr, 1, &_pipeline.compinfo, nullptr, &_pipeline.pipeline));
+
+	// destroy Shader Modules
+	device.destroyShaderModule(compModule);
 
 	return _pipeline;
 }
@@ -1792,14 +2457,14 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	pipelineGUI.destroy(device);
 	pipelineSkyBox.destroy(device);
 	pipelineTerrain.destroy(device);
-	device.destroyRenderPass(renderPass);
+	device.destroyRenderPass(forwardRenderPass);
 	swapchain.destroy(device);
 
 	// Recreate resources
 	surface.actualExtent = { width, height };
 	swapchain = createSwapchain();
 	depth = createDepthResources();
-	renderPass = createRenderPass(); // ?
+	forwardRenderPass = createRenderPass(); // ?
 	frameBuffers = createFrameBuffers();
 	pipelineTerrain = createPipeline(getPipelineSpecificationsTerrain());
 	pipelineSkyBox = createPipeline(getPipelineSpecificationsSkyBox());

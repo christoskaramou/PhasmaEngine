@@ -50,8 +50,8 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 			continue;
 		}
 
-		float currentDepth = newViewPos.z;
-		float sampledDepth = texture(positionSampler, samplePosition.xy).w;
+		float currentDepth = abs(newViewPos.z);
+		float sampledDepth = abs(texture(positionSampler, samplePosition.xy).w);
 
 		float delta = abs(currentDepth - sampledDepth);
 		if(delta < 0.001f)
@@ -61,7 +61,6 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 			float fadeAmount = min(1.0 - fadeOnEdges.x, 1.0 - fadeOnEdges.y);
 
 			return texture(albedoSampler, samplePosition.xy).xyz * fresnel * fadeAmount;
-			
 		}
 
 		step *= 1.0 - 0.5 * max(sign(currentDepth - sampledDepth), 0.0);

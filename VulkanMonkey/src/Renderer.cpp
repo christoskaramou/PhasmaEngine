@@ -31,8 +31,8 @@ Renderer::Renderer(SDL_Window* window)
 		// some random light colors and positions
 		ctx.light.resize(MAX_LIGHTS);
 		for (auto& light : ctx.light) {
-			light.color = vm::vec4(rand(0.f, 1.f), rand(0.0f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f));
-			light.position = vm::vec4(rand(-3.5f, 3.5f), rand(.3f, 1.f), rand(-3.5f, 3.5f), 1.f);
+			light.color = vm::vec4(vm::rand(0.f, 1.f), vm::rand(0.0f, 1.f), vm::rand(0.f, 1.f), vm::rand(0.f, 1.f));
+			light.position = vm::vec4(vm::rand(-3.5f, 3.5f), vm::rand(.7f, .7f), vm::rand(-3.5f, 3.5f), 1.f);
 			light.attenuation = vm::vec4(1.05f, 1.f, 1.f, 1.f);
 			light.camPos = vm::vec4(0.f, 0.f, 0.f, 1.f);
 		}
@@ -62,6 +62,180 @@ Renderer::Renderer(SDL_Window* window)
 		ctx.device.updateDescriptorSets(1, &writeSet, 0, nullptr);
 		std::cout << "DescriptorSet allocated and updated\n";
 
+		// Image descriptors for the offscreen color attachments
+		vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
+			ctx.renderTarget["position"].sampler,		//Sampler sampler;
+			ctx.renderTarget["position"].view,			//ImageView imageView;
+			vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
+		};
+		vk::DescriptorImageInfo texDescriptorNormal = vk::DescriptorImageInfo{
+			ctx.renderTarget["normal"].sampler,			//Sampler sampler;
+			ctx.renderTarget["normal"].view,			//ImageView imageView;
+			vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
+		};
+		vk::DescriptorImageInfo texDescriptorAlbedo = vk::DescriptorImageInfo{
+			ctx.renderTarget["albedo"].sampler,			//Sampler sampler;
+			ctx.renderTarget["albedo"].view,			//ImageView imageView;
+			vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
+		};
+		vk::DescriptorImageInfo texDescriptorSpecular = vk::DescriptorImageInfo{
+			ctx.renderTarget["specular"].sampler,		//Sampler sampler;
+			ctx.renderTarget["specular"].view,			//ImageView imageView;
+			vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
+		};
+		vk::DescriptorImageInfo texDescriptorSSAO = vk::DescriptorImageInfo{
+			ctx.renderTarget["ssao"].sampler,			//Sampler sampler;
+			ctx.renderTarget["ssao"].view,				//ImageView imageView;
+			vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
+		};
+		vk::DescriptorImageInfo texDescriptorSSAOBlur = vk::DescriptorImageInfo{
+			ctx.renderTarget["ssaoBlur"].sampler,		//Sampler sampler;
+			ctx.renderTarget["ssaoBlur"].view,			//ImageView imageView;
+			vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
+		};
+		// DESCRIPTOR SETS FOR SSAO
+		// kernel buffer
+		std::vector<vm::vec4> ssaoKernel{};
+		for (unsigned i = 0; i < 32; i++) {
+			vm::vec3 sample(vm::rand(-1.f, 1.f), vm::rand(-1.f, 1.f), vm::rand(0.f, 1.f));
+			sample = vm::normalize(sample);
+			sample *= vm::rand(0.f, 1.f);
+			float scale = float(i) / 32.f;
+			scale = vm::lerp(.1f, 1.f, scale * scale);
+			ssaoKernel.push_back(vm::vec4(sample * scale, 0.f));
+		}
+		ctx.UBssaoKernel.createBuffer(ctx.device, ctx.gpu, sizeof(vm::vec4) * 32, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+		VkCheck(ctx.device.mapMemory(ctx.UBssaoKernel.memory, 0, ctx.UBssaoKernel.size, vk::MemoryMapFlags(), &ctx.UBssaoKernel.data));
+		memcpy(ctx.UBssaoKernel.data, ssaoKernel.data(), ctx.UBssaoKernel.size);
+		// noise image
+		std::vector<vm::vec4> ssaoNoise{};
+		for (unsigned int i = 0; i < 16; i++)
+			ssaoNoise.push_back(vm::vec4(vm::rand(-1.f, 1.f), vm::rand(-1.f, 1.f), 0.f, 1.f));
+		Buffer staging;
+		void* data;
+		uint64_t bufSize = sizeof(vm::vec4) * 16;
+		staging.createBuffer(ctx.device, ctx.gpu, bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		ctx.device.mapMemory(staging.memory, vk::DeviceSize(), staging.size, vk::MemoryMapFlags(), &data);
+		memcpy(data, ssaoNoise.data(), staging.size);
+		ctx.device.unmapMemory(staging.memory);      
+		ctx.ssaoNoise.filter = vk::Filter::eNearest;
+		ctx.ssaoNoise.minLod = 0.0f;
+		ctx.ssaoNoise.maxLod = 0.0f;
+		ctx.ssaoNoise.maxAnisotropy = 1.0f;
+		ctx.ssaoNoise.format = vk::Format::eR16G16B16A16Sfloat;
+		ctx.ssaoNoise.createImage(ctx.device, ctx.gpu, 4, 4, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		ctx.ssaoNoise.transitionImageLayout(ctx.device, ctx.commandPool, ctx.graphicsQueue, vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
+		ctx.ssaoNoise.copyBufferToImage(ctx.device, ctx.commandPool, ctx.graphicsQueue, staging.buffer, 0, 0, 4, 4);
+		ctx.ssaoNoise.transitionImageLayout(ctx.device, ctx.commandPool, ctx.graphicsQueue, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+		ctx.ssaoNoise.createImageView(ctx.device, vk::ImageAspectFlagBits::eColor);
+		ctx.ssaoNoise.createSampler(ctx.device);
+		staging.destroy(ctx.device);
+		// pvm uniform
+		ctx.UBssaoPVM.createBuffer(ctx.device, ctx.gpu, 2 * sizeof(vm::mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+		VkCheck(ctx.device.mapMemory(ctx.UBssaoPVM.memory, 0, ctx.UBssaoPVM.size, vk::MemoryMapFlags(), &ctx.UBssaoPVM.data));
+
+		vk::DescriptorSetAllocateInfo allocInfoSSAO = vk::DescriptorSetAllocateInfo{
+			ctx.descriptorPool,						//DescriptorPool descriptorPool;
+			1,										//uint32_t descriptorSetCount;
+			&ctx.DSLayoutSSAO						//const DescriptorSetLayout* pSetLayouts;
+		};
+
+		VkCheck(ctx.device.allocateDescriptorSets(&allocInfoSSAO, &ctx.DSssao));
+
+		std::vector<vk::WriteDescriptorSet> writeDescriptorSetsSSAO = {
+			// Binding 0: Position texture target
+			vk::WriteDescriptorSet{
+				ctx.DSssao,								//DescriptorSet dstSet;
+				0,										//uint32_t dstBinding;
+				0,										//uint32_t dstArrayElement;
+				1,										//uint32_t descriptorCount_;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
+				&texDescriptorPosition,					//const DescriptorImageInfo* pImageInfo;
+				nullptr,								//const DescriptorBufferInfo* pBufferInfo;
+				nullptr									//const BufferView* pTexelBufferView;
+			},
+			// Binding 1: Normals texture target
+			vk::WriteDescriptorSet{
+				ctx.DSssao,								//DescriptorSet dstSet;
+				1,										//uint32_t dstBinding;
+				0,										//uint32_t dstArrayElement;
+				1,										//uint32_t descriptorCount_;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
+				&texDescriptorNormal,					//const DescriptorImageInfo* pImageInfo;
+				nullptr,								//const DescriptorBufferInfo* pBufferInfo;
+				nullptr									//const BufferView* pTexelBufferView;
+			},
+			// Binding 2: SSAO Noise Image
+			vk::WriteDescriptorSet{
+				ctx.DSssao,								//DescriptorSet dstSet;
+				2,										//uint32_t dstBinding;
+				0,										//uint32_t dstArrayElement;
+				1,										//uint32_t descriptorCount_;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
+				&vk::DescriptorImageInfo()				//const DescriptorImageInfo* pImageInfo;
+					.setSampler(ctx.ssaoNoise.sampler)
+					.setImageView(ctx.ssaoNoise.view)
+					.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal),
+				nullptr,								//const DescriptorBufferInfo* pBufferInfo;
+				nullptr									//const BufferView* pTexelBufferView;
+			},
+			// Binding 3: SSAO Kernel
+			vk::WriteDescriptorSet{
+				ctx.DSssao,								//DescriptorSet dstSet;
+				3,										//uint32_t dstBinding;
+				0,										//uint32_t dstArrayElement;
+				1,										//uint32_t descriptorCount_;
+				vk::DescriptorType::eUniformBuffer,		//DescriptorType descriptorType;
+				nullptr,								//const DescriptorImageInfo* pImageInfo;
+				&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
+					.setBuffer(ctx.UBssaoKernel.buffer)		// Buffer buffer;
+					.setOffset(0)							// DeviceSize offset;
+					.setRange(ctx.UBssaoKernel.size),		// DeviceSize range;
+				nullptr									//const BufferView* pTexelBufferView;
+			},
+			// Binding 4: Projection View Size
+			vk::WriteDescriptorSet{
+				ctx.DSssao,								//DescriptorSet dstSet;
+				4,										//uint32_t dstBinding;
+				0,										//uint32_t dstArrayElement;
+				1,										//uint32_t descriptorCount_;
+				vk::DescriptorType::eUniformBuffer,		//DescriptorType descriptorType;
+				nullptr,								//const DescriptorImageInfo* pImageInfo;
+				&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
+					.setBuffer(ctx.UBssaoPVM.buffer)		// Buffer buffer;
+					.setOffset(0)							// DeviceSize offset;
+					.setRange(ctx.UBssaoPVM.size),			// DeviceSize range;
+				nullptr									//const BufferView* pTexelBufferView;
+			}
+		};
+		ctx.device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSetsSSAO.size()), writeDescriptorSetsSSAO.data(), 0, nullptr);
+		std::cout << "DescriptorSet allocated and updated\n";
+
+		// DESCRIPTOR SET FOR SSAO BLUR
+		vk::DescriptorSetAllocateInfo allocInfoSSAOBlur = vk::DescriptorSetAllocateInfo{
+			ctx.descriptorPool,						//DescriptorPool descriptorPool;
+			1,										//uint32_t descriptorSetCount;
+			&ctx.DSLayoutSSAOBlur					//const DescriptorSetLayout* pSetLayouts;
+		};
+
+		VkCheck(ctx.device.allocateDescriptorSets(&allocInfoSSAOBlur, &ctx.DSssaoBlur));
+
+		std::vector<vk::WriteDescriptorSet> writeDescriptorSetsSSAOBlur = {
+			// Binding 0: Position texture target
+			vk::WriteDescriptorSet{
+				ctx.DSssaoBlur,							//DescriptorSet dstSet;
+				0,										//uint32_t dstBinding;
+				0,										//uint32_t dstArrayElement;
+				1,										//uint32_t descriptorCount_;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
+				&texDescriptorSSAO,					//const DescriptorImageInfo* pImageInfo;
+				nullptr,								//const DescriptorBufferInfo* pBufferInfo;
+				nullptr									//const BufferView* pTexelBufferView;
+			}
+		};
+		ctx.device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSetsSSAOBlur.size()), writeDescriptorSetsSSAOBlur.data(), 0, nullptr);
+		std::cout << "DescriptorSet allocated and updated\n";
+
 		// DESCRIPTOR SETS FOR COMPOSITION PIPELINE
 		vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
 			ctx.descriptorPool,						//DescriptorPool descriptorPool;
@@ -70,27 +244,6 @@ Renderer::Renderer(SDL_Window* window)
 		};
 		VkCheck(ctx.device.allocateDescriptorSets(&allocInfo, &ctx.DSComposition));
 
-		// Image descriptors for the offscreen color attachments
-		vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
-			vk::Sampler(),								//Sampler sampler;
-			ctx.renderTarget["position"].view,			//ImageView imageView;
-			vk::ImageLayout::eShaderReadOnlyOptimal		//ImageLayout imageLayout;
-		};
-		vk::DescriptorImageInfo texDescriptorNormal = vk::DescriptorImageInfo{
-			vk::Sampler(),								//Sampler sampler;
-			ctx.renderTarget["normal"].view,			//ImageView imageView;
-			vk::ImageLayout::eShaderReadOnlyOptimal		//ImageLayout imageLayout;
-		};
-		vk::DescriptorImageInfo texDescriptorAlbedo = vk::DescriptorImageInfo{
-			vk::Sampler(),								//Sampler sampler;
-			ctx.renderTarget["albedo"].view,			//ImageView imageView;
-			vk::ImageLayout::eShaderReadOnlyOptimal		//ImageLayout imageLayout;
-		};
-		vk::DescriptorImageInfo texDescriptorSpecular = vk::DescriptorImageInfo{
-			vk::Sampler(),								//Sampler sampler;
-			ctx.renderTarget["specular"].view,			//ImageView imageView;
-			vk::ImageLayout::eShaderReadOnlyOptimal		//ImageLayout imageLayout;
-		};
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
 			// Binding 0: Position texture target
 			vk::WriteDescriptorSet{
@@ -98,7 +251,7 @@ Renderer::Renderer(SDL_Window* window)
 				0,										//uint32_t dstBinding;
 				0,										//uint32_t dstArrayElement;
 				1,										//uint32_t descriptorCount_;
-				vk::DescriptorType::eInputAttachment,	//DescriptorType descriptorType;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
 				&texDescriptorPosition,					//const DescriptorImageInfo* pImageInfo;
 				nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 				nullptr									//const BufferView* pTexelBufferView;
@@ -109,7 +262,7 @@ Renderer::Renderer(SDL_Window* window)
 				1,										//uint32_t dstBinding;
 				0,										//uint32_t dstArrayElement;
 				1,										//uint32_t descriptorCount_;
-				vk::DescriptorType::eInputAttachment,	//DescriptorType descriptorType;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
 				&texDescriptorNormal,					//const DescriptorImageInfo* pImageInfo;
 				nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 				nullptr									//const BufferView* pTexelBufferView;
@@ -120,7 +273,7 @@ Renderer::Renderer(SDL_Window* window)
 				2,										//uint32_t dstBinding;
 				0,										//uint32_t dstArrayElement;
 				1,										//uint32_t descriptorCount_;
-				vk::DescriptorType::eInputAttachment,	//DescriptorType descriptorType;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
 				&texDescriptorAlbedo,					//const DescriptorImageInfo* pImageInfo;
 				nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 				nullptr									//const BufferView* pTexelBufferView;
@@ -131,7 +284,7 @@ Renderer::Renderer(SDL_Window* window)
 				3,										//uint32_t dstBinding;
 				0,										//uint32_t dstArrayElement;
 				1,										//uint32_t descriptorCount_;
-				vk::DescriptorType::eInputAttachment,	//DescriptorType descriptorType;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
 				&texDescriptorSpecular,					//const DescriptorImageInfo* pImageInfo;
 				nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 				nullptr									//const BufferView* pTexelBufferView;
@@ -145,12 +298,24 @@ Renderer::Renderer(SDL_Window* window)
 				vk::DescriptorType::eUniformBuffer,		//DescriptorType descriptorType;
 				nullptr,								//const DescriptorImageInfo* pImageInfo;
 				&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
-					.setBuffer(ctx.UBLights.buffer)	// Buffer buffer;
-					.setOffset(0)								// DeviceSize offset;
-					.setRange(ctx.UBLights.size),	// DeviceSize range;
+					.setBuffer(ctx.UBLights.buffer)			// Buffer buffer;
+					.setOffset(0)							// DeviceSize offset;
+					.setRange(ctx.UBLights.size),			// DeviceSize range;
+				nullptr									//const BufferView* pTexelBufferView;
+			},
+			// Binding 5: SSAO Blurred Image
+			vk::WriteDescriptorSet{
+				ctx.DSComposition,						//DescriptorSet dstSet;
+				5,										//uint32_t dstBinding;
+				0,										//uint32_t dstArrayElement;
+				1,										//uint32_t descriptorCount_;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
+				&texDescriptorSSAOBlur,						//const DescriptorImageInfo* pImageInfo;
+				nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 				nullptr									//const BufferView* pTexelBufferView;
 			}
 		};
+
 		ctx.device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
 		std::cout << "DescriptorSet allocated and updated\n";
 
@@ -282,6 +447,8 @@ Renderer::~Renderer()
 
 	ctx.pipelineCompute.destroy(ctx.device);
 	ctx.pipelineSSR.destroy(ctx.device);
+	ctx.pipelineSSAO.destroy(ctx.device);
+	ctx.pipelineSSAOBlur.destroy(ctx.device);
 	ctx.pipelineComposition.destroy(ctx.device);
 	ctx.pipelineDeferred.destroy(ctx.device);
 	ctx.pipeline.destroy(ctx.device);
@@ -304,12 +471,14 @@ Renderer::~Renderer()
 	ctx.MSDepthImage.destroy(ctx.device);
 	for (auto& rt : ctx.renderTarget)
 		rt.second.destroy(ctx.device);
+	ctx.ssaoNoise.destroy(ctx.device);
 	ctx.depth.destroy(ctx.device);
-
 
 	ctx.UBLights.destroy(ctx.device);
 	ctx.UBReflection.destroy(ctx.device);
 	ctx.SBInOut.destroy(ctx.device);
+	ctx.UBssaoKernel.destroy(ctx.device);
+	ctx.UBssaoPVM.destroy(ctx.device);
 	ctx.light.clear();
 	ctx.light.shrink_to_fit();
 	for (auto &model : ctx.models)
@@ -352,6 +521,16 @@ Renderer::~Renderer()
 		ctx.DSLayoutComposition = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
+	if (ctx.DSLayoutSSAO) {
+		ctx.device.destroyDescriptorSetLayout(ctx.DSLayoutSSAO);
+		ctx.DSLayoutSSAO = nullptr;
+		std::cout << "Descriptor Set Layout destroyed\n";
+	}
+	if (ctx.DSLayoutSSAOBlur) {
+		ctx.device.destroyDescriptorSetLayout(ctx.DSLayoutSSAOBlur);
+		ctx.DSLayoutSSAOBlur = nullptr;
+		std::cout << "Descriptor Set Layout destroyed\n";
+	}
 	if (ctx.DSLayoutReflection) {
 		ctx.device.destroyDescriptorSetLayout(ctx.DSLayoutReflection);
 		ctx.DSLayoutReflection = nullptr;
@@ -374,13 +553,31 @@ Renderer::~Renderer()
 			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
-	for (auto &frameBuffer : ctx.rFrameBuffers) {
+	for (auto &frameBuffer : ctx.ssrFrameBuffers) {
 		if (frameBuffer) {
 			ctx.device.destroyFramebuffer(frameBuffer);
 			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
-	for (auto &frameBuffer : ctx.dFrameBuffers) {
+	for (auto &frameBuffer : ctx.ssaoFrameBuffers) {
+		if (frameBuffer) {
+			ctx.device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	for (auto &frameBuffer : ctx.ssaoBlurFrameBuffers) {
+		if (frameBuffer) {
+			ctx.device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	for (auto &frameBuffer : ctx.compositionFrameBuffers) {
+		if (frameBuffer) {
+			ctx.device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	for (auto &frameBuffer : ctx.deferredFrameBuffers) {
 		if (frameBuffer) {
 			ctx.device.destroyFramebuffer(frameBuffer);
 			std::cout << "Frame Buffer destroyed\n";
@@ -393,14 +590,29 @@ Renderer::~Renderer()
 		}
 	}
 
-	if (ctx.dRenderPass) {
-		ctx.device.destroyRenderPass(ctx.dRenderPass);
-		ctx.dRenderPass = nullptr;
+	if (ctx.deferredRenderPass) {
+		ctx.device.destroyRenderPass(ctx.deferredRenderPass);
+		ctx.deferredRenderPass = nullptr;
 		std::cout << "RenderPass destroyed\n";
 	}
-	if (ctx.rRenderPass) {
-		ctx.device.destroyRenderPass(ctx.rRenderPass);
-		ctx.rRenderPass = nullptr;
+	if (ctx.compositionRenderPass) {
+		ctx.device.destroyRenderPass(ctx.compositionRenderPass);
+		ctx.compositionRenderPass = nullptr;
+		std::cout << "RenderPass destroyed\n";
+	}
+	if (ctx.ssaoRenderPass) {
+		ctx.device.destroyRenderPass(ctx.ssaoRenderPass);
+		ctx.ssaoRenderPass = nullptr;
+		std::cout << "RenderPass destroyed\n";
+	}
+	if (ctx.ssaoBlurRenderPass) {
+		ctx.device.destroyRenderPass(ctx.ssaoBlurRenderPass);
+		ctx.ssaoBlurRenderPass = nullptr;
+		std::cout << "RenderPass destroyed\n";
+	}
+	if (ctx.ssrRenderPass) {
+		ctx.device.destroyRenderPass(ctx.ssrRenderPass);
+		ctx.ssrRenderPass = nullptr;
 		std::cout << "RenderPass destroyed\n";
 	}
 	if (ctx.guiRenderPass) {
@@ -413,8 +625,8 @@ Renderer::~Renderer()
 		Shadows::renderPass = nullptr;
 		std::cout << "RenderPass destroyed\n";
 	}
-	if (ctx.renderPass) {
-		ctx.device.destroyRenderPass(ctx.renderPass);
+	if (ctx.forwardRenderPass) {
+		ctx.device.destroyRenderPass(ctx.forwardRenderPass);
 		std::cout << "RenderPass destroyed\n";
 	}
 
@@ -422,7 +634,10 @@ Renderer::~Renderer()
         ctx.device.destroyCommandPool(ctx.commandPool);
         std::cout << "CommandPool destroyed\n";
     }
-	
+	if (ctx.commandPoolCompute) {
+		ctx.device.destroyCommandPool(ctx.commandPoolCompute);
+		std::cout << "CommandPool destroyed\n";
+	}
 	ctx.swapchain.destroy(ctx.device);
 
     if (ctx.device){
@@ -495,8 +710,14 @@ void Renderer::update(float delta)
 		light.camPos = camPos;
 	memcpy(ctx.UBLights.data, ctx.light.data(), ctx.light.size() * sizeof(Context::Light));
 
+	// SSAO SHADER
+	if (useSSAO) {
+		vm::mat4 pvm[2]{ proj_view.projection, proj_view.view };
+		memcpy(ctx.UBssaoPVM.data, pvm, sizeof(pvm));
+	}
+
 	// REFLECTIONS
-	if (ctx.SSReflections) {
+	if (useSSR) {
 		struct {
 			vm::vec4 vec[4];
 			vm::mat4 projection;
@@ -512,14 +733,6 @@ void Renderer::update(float delta)
 
 		memcpy(ctx.UBReflection.data, &reflectionInput, sizeof(reflectionInput));
 	}
-}
-
-float Renderer::rand(float x1, float x2)
-{
-	static auto seed = std::chrono::system_clock::now().time_since_epoch().count();
-	static std::default_random_engine gen(static_cast<unsigned int>(seed));
-	std::uniform_real_distribution<float> x(x1, x2);
-	return x(gen);
 }
 
 void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
@@ -548,7 +761,7 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
 	auto renderPassInfo = vk::RenderPassBeginInfo()
-		.setRenderPass(ctx.renderPass)
+		.setRenderPass(ctx.forwardRenderPass)
 		.setFramebuffer(ctx.frameBuffers[imageIndex])
 		.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
@@ -574,26 +787,26 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 {
+
+	auto beginInfo = vk::CommandBufferBeginInfo()
+		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
+		.setPInheritanceInfo(nullptr);
+	VkCheck(ctx.dynamicCmdBuffer.begin(&beginInfo));
+
+	// Begin deferred
 	std::vector<vk::ClearValue> clearValues = {
 		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
 		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
 		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
 		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
-		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
-		vk::ClearDepthStencilValue({ 1.0f, 0 })
-	};
-
-	auto beginInfo = vk::CommandBufferBeginInfo()
-		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
-		.setPInheritanceInfo(nullptr);
+		vk::ClearDepthStencilValue({ 1.0f, 0 }) };
 	auto renderPassInfo = vk::RenderPassBeginInfo()
-		.setRenderPass(ctx.dRenderPass)
-		.setFramebuffer(ctx.dFrameBuffers[imageIndex])
+		.setRenderPass(ctx.deferredRenderPass)
+		.setFramebuffer(ctx.deferredFrameBuffers[imageIndex])
 		.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
 
-	VkCheck(ctx.dynamicCmdBuffer.begin(&beginInfo));
 	ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
 
 	vk::Viewport viewport;
@@ -612,32 +825,75 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	scissor.extent.height = ctx.surface.actualExtent.height;
 	ctx.dynamicCmdBuffer.setScissor(0, 1, &scissor);
 
-	vk::DeviceSize offset = vk::DeviceSize();
-
-	// First Subpass
 	// MODELS
 	for (uint32_t m = 0; m < ctx.models.size(); m++)
 		ctx.models[m].draw(ctx.pipelineDeferred, ctx.dynamicCmdBuffer, m, true);
+	ctx.dynamicCmdBuffer.endRenderPass();
+	// End deferred
 
-	// Second Subpass
-	ctx.dynamicCmdBuffer.nextSubpass(vk::SubpassContents::eInline);
+	// Begin SSAO
+	if (useSSAO) {
+		// SSAO image
+		std::vector<vk::ClearValue> clearValuesSSAO = {
+		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
+		auto renderPassInfoSSAO = vk::RenderPassBeginInfo()
+			.setRenderPass(ctx.ssaoRenderPass)
+			.setFramebuffer(ctx.ssaoFrameBuffers[imageIndex])
+			.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
+			.setClearValueCount(static_cast<uint32_t>(clearValuesSSAO.size()))
+			.setPClearValues(clearValuesSSAO.data());
+		ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAO, vk::SubpassContents::eInline);
+		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.pipelineSSAO.pipeline);
+		const vk::DescriptorSet descriptorSets[] = { ctx.DSssao };
+		const uint32_t dOffsets[] = { 0 };
+		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.pipelineSSAO.pipeinfo.layout, 0, 1, descriptorSets, 0, dOffsets);
+		ctx.dynamicCmdBuffer.draw(3, 1, 0, 0);
+		ctx.dynamicCmdBuffer.endRenderPass();
+		
+		// new blurry SSAO image
+		std::vector<vk::ClearValue> clearValuesSSAOBlur = {
+		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
+		auto renderPassInfoSSAOBlur = vk::RenderPassBeginInfo()
+			.setRenderPass(ctx.ssaoBlurRenderPass)
+			.setFramebuffer(ctx.ssaoBlurFrameBuffers[imageIndex])
+			.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
+			.setClearValueCount(static_cast<uint32_t>(clearValuesSSAOBlur.size()))
+			.setPClearValues(clearValuesSSAOBlur.data());
+		ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAOBlur, vk::SubpassContents::eInline);
+		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.pipelineSSAOBlur.pipeline);
+		const vk::DescriptorSet descriptorSetsBlur[] = { ctx.DSssaoBlur };
+		const uint32_t dOffsetsBlur[] = { 0 };
+		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.pipelineSSAOBlur.pipeinfo.layout, 0, 1, descriptorSetsBlur, 0, dOffsetsBlur);
+		ctx.dynamicCmdBuffer.draw(3, 1, 0, 0);
+		ctx.dynamicCmdBuffer.endRenderPass();
+	}
+	// End SSAO
 
-	// Composition
+	// Begin Composition
+	std::vector<vk::ClearValue> clearValues0 = {
+	vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
+	auto renderPassInfo0 = vk::RenderPassBeginInfo()
+		.setRenderPass(ctx.compositionRenderPass)
+		.setFramebuffer(ctx.compositionFrameBuffers[imageIndex])
+		.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
+		.setClearValueCount(static_cast<uint32_t>(clearValues0.size()))
+		.setPClearValues(clearValues0.data());
+	ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfo0, vk::SubpassContents::eInline);
 	ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.pipelineComposition.pipeline);
 	const vk::DescriptorSet descriptorSets[] = { ctx.DSComposition, ctx.shadows.descriptorSet };
 	const uint32_t dOffsets[] = { 0 };
 	ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.pipelineComposition.pipeinfo.layout, 0, 2, descriptorSets, 1, dOffsets);
 	ctx.dynamicCmdBuffer.draw(3, 1, 0, 0);
-
 	ctx.dynamicCmdBuffer.endRenderPass();
+	// End Composition
 
 	// SCREEN SPACE REFLECTIONS
-	if (ctx.SSReflections) {
+	if (useSSR) {
 		std::vector<vk::ClearValue> clearValues1 = {
 			vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
 		auto renderPassInfo1 = vk::RenderPassBeginInfo()
-			.setRenderPass(ctx.rRenderPass)
-			.setFramebuffer(ctx.rFrameBuffers[imageIndex])
+			.setRenderPass(ctx.ssrRenderPass)
+			.setFramebuffer(ctx.ssrFrameBuffers[imageIndex])
 			.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
 			.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
 			.setPClearValues(clearValues1.data());
@@ -815,7 +1071,7 @@ void Renderer::present()
 	else
 		VkCheck(ctx.device.acquireNextImageKHR(ctx.swapchain.swapchain, UINT64_MAX, ctx.semaphores[1], vk::Fence(), &imageIndex));
 
-	if (deferredRender) {
+	if (useDeferredRender) {
 		// use the deferred command buffer
 		recordDeferredCmds(imageIndex);
 	}

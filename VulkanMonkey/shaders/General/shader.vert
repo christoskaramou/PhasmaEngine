@@ -15,19 +15,21 @@ layout(set = 0, binding = 0) uniform shadowBufferObject {
 	float castShadows;
 }sun;
 
-layout(location = 0) in vec3 i_Position;
-layout(location = 1) in vec3 i_Normal;
-layout(location = 2) in vec2 i_TexCoords;
-layout(location = 3) in vec4 i_Tangent;
-layout(location = 4) in vec4 i_Color;
+layout(location = 0) in vec3 inPosition;
+layout(location = 1) in vec2 inTexCoords;
+layout(location = 2) in vec3 inNormal;
+layout(location = 3) in vec3 inTangent;
+layout(location = 4) in vec3 inBitangent;
+layout(location = 5) in vec4 inColor;
 
-layout (location = 0) out vec3 outNormal;
-layout (location = 1) out vec3 outColor;
-layout (location = 2) out vec3 outFragPos;
+layout (location = 0) out vec3 outFragPos;
+layout (location = 1) out vec2 outUV;
+layout (location = 2) out vec3 outNormal;
 layout (location = 3) out vec3 outTangent;
-layout (location = 4) out vec2 outUV;
-layout (location = 5) out float castShadows;
-layout (location = 6) out mat4 shadow_coords;
+layout (location = 4) out vec3 outBitangent;
+layout (location = 5) out vec3 outColor;
+layout (location = 6) out float castShadows;
+layout (location = 7) out mat4 shadow_coords;
 
 const mat4 bias = mat4( 
   0.5, 0.0, 0.0, 0.0,
@@ -37,25 +39,23 @@ const mat4 bias = mat4(
 
 void main()
 {
-	vec4 inPos = vec4(i_Position, 1.0f);
+	vec4 inPos = vec4(inPosition, 1.0f);
 
 	gl_Position = ubo.projection * ubo.view * ubo.model * inPos;
 
-	// Normal in world space
-	outNormal = i_Normal;
-
-	// Color (not in use)
-	outColor = i_Color.rgb;
-
 	// Fragment in world space
 	outFragPos = (ubo.model * inPos).xyz;
-
-	// Tangent in world space
-	outTangent = i_Tangent.xyz;
-
 	// UV
-	outUV = i_TexCoords;
-	
+	outUV = inTexCoords;
+	// Normal in world space
+	outNormal = inNormal;
+	// Tangent in world space
+	outTangent = inTangent;
+	// Bitangent in world space
+	outBitangent = inBitangent;
+	// Color (not in use)
+	outColor = inColor.rgb;
+
 	shadow_coords = bias * sun.projection * sun.view;
 	castShadows = sun.castShadows;
 }

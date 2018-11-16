@@ -19,11 +19,12 @@ vec2 poissonDisk[8] = vec2[](
 	vec2(0.758385f, 0.49617f));
 	
 layout (constant_id = 0) const int NUM_LIGHTS = 1;
-layout (input_attachment_index = 0, set = 0, binding = 0) uniform subpassInput samplerPosition;
-layout (input_attachment_index = 1, set = 0, binding = 1) uniform subpassInput samplerNormal;
-layout (input_attachment_index = 2, set = 0, binding = 2) uniform subpassInput samplerAlbedo;
-layout (input_attachment_index = 3, set = 0, binding = 3) uniform subpassInput samplerSpecular;
+layout (set = 0, binding = 0) uniform sampler2D samplerPosition;
+layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
+layout (set = 0, binding = 2) uniform sampler2D samplerAlbedo;
+layout (set = 0, binding = 3) uniform sampler2D samplerSpecular;
 layout (set = 0, binding = 4) uniform UBO { Light lights[NUM_LIGHTS]; } ubo;
+layout (set = 0, binding = 5) uniform sampler2D ssaoBlurSampler;
 layout (set = 1, binding = 1) uniform sampler2DShadow shadowMapSampler;
 
 
@@ -38,14 +39,14 @@ vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float spe
 
 void main() 
 {
-	// Read G-Buffer values from previous sub pass
-	vec4 fragPos = subpassLoad(samplerPosition);
-	vec3 normal = subpassLoad(samplerNormal).rgb;
-	vec4 albedo = subpassLoad(samplerAlbedo);
-	float specular = subpassLoad(samplerSpecular).r;
+	vec4 fragPos = texture(samplerPosition, inUV);
+	vec3 normal = texture(samplerNormal, inUV).xyz;
+	vec4 albedo = texture(samplerAlbedo, inUV);
+	float specular = texture(samplerSpecular, inUV).r;
+	float oclusion = texture(ssaoBlurSampler, inUV).r;
 
 	// Ambient
-	vec3 fragColor = 0.05 * albedo.rgb;
+	vec3 fragColor = 0.15 * albedo.rgb * oclusion;
 
 	fragColor += calculateShadow(0, fragPos.xyz, normal, albedo.rgb, specular);
 

@@ -9,6 +9,12 @@ void Pipeline::destroy(vk::Device device)
 		std::cout << "Pipeline Layout destroyed\n";
 	}
 
+	if (compinfo.layout) {
+		device.destroyPipelineLayout(this->compinfo.layout);
+		pipeinfo.layout = nullptr;
+		std::cout << "Compute Pipeline Layout destroyed\n";
+	}
+
 	if (pipeline) {
 		device.destroyPipeline(pipeline);
 		pipeline = nullptr;

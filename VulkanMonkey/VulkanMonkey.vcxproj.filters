@@ -52,6 +52,18 @@
     <None Include="shaders\Compute\shader.comp">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\SSAO\ssao.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\SSAO\ssao.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\SSAO\ssaoBlur.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\SSAO\ssaoBlur.vert">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Buffer.h">

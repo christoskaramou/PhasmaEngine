@@ -8,13 +8,14 @@ class Renderer
         ~Renderer();
         void update(float delta);
 		void present();
-		static float rand(float x1, float x2);
 
 		Context ctx;
 		bool prepared = false;
 		bool overloadedGPU = false;
-		bool deferredRender = true;
 		bool useCompute = false;
+		bool useDeferredRender = true;
+		bool useSSAO = true;
+		bool useSSR = false;
     private:
 		void recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ);
 		void recordForwardCmds(const uint32_t& imageIndex);

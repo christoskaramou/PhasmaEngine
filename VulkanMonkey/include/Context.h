@@ -57,11 +57,11 @@ public:
 	vk::Queue graphicsQueue, presentQueue, computeQueue;
 	vk::CommandPool commandPool;
 	vk::CommandPool commandPoolCompute;
-	vk::RenderPass renderPass, rRenderPass, guiRenderPass;
+	vk::RenderPass forwardRenderPass, ssrRenderPass, guiRenderPass;
 	vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
 	Swapchain swapchain;
 	Image depth, MSColorImage, MSDepthImage;
-	std::vector<vk::Framebuffer> frameBuffers{}, rFrameBuffers{}, guiFrameBuffers{};
+	std::vector<vk::Framebuffer> frameBuffers{}, ssrFrameBuffers{}, guiFrameBuffers{};
 	vk::CommandBuffer dynamicCmdBuffer;
 	vk::CommandBuffer shadowCmdBuffer;
 	vk::CommandBuffer computeCmdBuffer;
@@ -79,16 +79,23 @@ public:
 	Buffer UBLights, UBReflection, SBInOut;
 	vk::DescriptorSet DSLights, DSCompute, DSReflection;
 	vk::DescriptorSetLayout DSLayoutLights, DSLayoutCompute, DSLayoutReflection;
-	bool SSReflections = true;
 
 	// DEFERRED
-	vk::RenderPass dRenderPass;
-	// render targets
+	vk::RenderPass deferredRenderPass, compositionRenderPass;
 	std::map<std::string, Image> renderTarget{};
-	std::vector<vk::Framebuffer> dFrameBuffers{};
+	std::vector<vk::Framebuffer> deferredFrameBuffers{}, compositionFrameBuffers{};
 	vk::DescriptorSet DSDeferredMainLight, DSComposition;
 	vk::DescriptorSetLayout DSLayoutComposition;
 	Pipeline pipelineDeferred, pipelineComposition;
+
+	// SSAO
+	Buffer UBssaoKernel, UBssaoPVM;
+	Image ssaoNoise;
+	vk::RenderPass ssaoRenderPass, ssaoBlurRenderPass;
+	std::vector<vk::Framebuffer> ssaoFrameBuffers{}, ssaoBlurFrameBuffers{};
+	Pipeline pipelineSSAO, pipelineSSAOBlur;
+	vk::DescriptorSetLayout DSLayoutSSAO, DSLayoutSSAOBlur;
+	vk::DescriptorSet DSssao, DSssaoBlur;
 
 	static PipelineInfo getPipelineSpecificationsModel();
 	static PipelineInfo getPipelineSpecificationsShadows();
@@ -108,12 +115,18 @@ private:
 	std::map<std::string, Image> createRenderTargets(std::vector<std::tuple<std::string, vk::Format>> RTtuples);
 	vk::RenderPass createRenderPass();
 	vk::RenderPass createDeferredRenderPass();
+	vk::RenderPass createCompositionRenderPass();
+	vk::RenderPass createSSAORenderPass();
+	vk::RenderPass createSSAOBlurRenderPass();
 	vk::RenderPass createReflectionRenderPass();
 	vk::RenderPass createGUIRenderPass();
 	Image createDepthResources();
 	std::vector<vk::Framebuffer> createFrameBuffers();
 	std::vector<vk::Framebuffer> createDeferredFrameBuffers();
+	std::vector<vk::Framebuffer> createCompositionFrameBuffers();
 	std::vector<vk::Framebuffer> createReflectionFrameBuffers();
+	std::vector<vk::Framebuffer> createSSAOFrameBuffers();
+	std::vector<vk::Framebuffer> createSSAOBlurFrameBuffers();
 	std::vector<vk::Framebuffer> createGUIFrameBuffers();
 	std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount);
 	vk::CommandBuffer createCmdBuffer();
@@ -121,6 +134,8 @@ private:
 	Pipeline createPipeline(const PipelineInfo& specificInfo);
 	Pipeline createCompositionPipeline();
 	Pipeline createReflectionPipeline();
+	Pipeline createSSAOPipeline();
+	Pipeline createSSAOBlurPipeline();
 	Pipeline createComputePipeline();
 	vk::DescriptorPool createDescriptorPool(const uint32_t maxDescriptorSets);
 	std::vector<vk::Fence> createFences(const uint32_t fenceCount);
