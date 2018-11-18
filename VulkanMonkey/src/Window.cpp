@@ -3,7 +3,7 @@
 #include "../include/Timer.h"
 #include <iostream>
 
-constexpr auto MAX_WINDOWS = 100;
+constexpr auto MAX_WINDOWS = 20;
 
 std::vector<std::unique_ptr<Renderer>> Window::renderer = {};
 int Window::width = 0, Window::height = 0;
@@ -107,10 +107,10 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_s) down = true;
 			if (event.key.keysym.sym == SDLK_a) left = true;
 			if (event.key.keysym.sym == SDLK_d) right = true;
-			if (event.key.keysym.sym == SDLK_UP) info.light[0].position.y += 0.005f;
-			if (event.key.keysym.sym == SDLK_DOWN) info.light[0].position.y -= 0.005f;
-			if (event.key.keysym.sym == SDLK_LEFT) info.light[0].position.z += 0.01f;
-			if (event.key.keysym.sym == SDLK_RIGHT) info.light[0].position.z -= 0.01f;
+			//if (event.key.keysym.sym == SDLK_UP) info.light[0].position.y += 0.005f;
+			//if (event.key.keysym.sym == SDLK_DOWN) info.light[0].position.y -= 0.005f;
+			//if (event.key.keysym.sym == SDLK_LEFT) info.light[0].position.z += 0.01f;
+			//if (event.key.keysym.sym == SDLK_RIGHT) info.light[0].position.z -= 0.01f;
 		}
 		else if (event.type == SDL_KEYUP) {
 			int key = event.key.keysym.scancode;
@@ -126,20 +126,14 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_a) left = false;
 			if (event.key.keysym.sym == SDLK_d) right = false;
 			if (event.key.keysym.sym == SDLK_1) Shadows::shadowCast = !Shadows::shadowCast;
-			if (event.key.keysym.sym == SDLK_2) {
-				for (uint32_t i = 1; i < info.light.size(); i++) {
-					info.light[i].color = vm::vec4(vm::rand(0.f, 1.f), vm::rand(0.0f, 1.f), vm::rand(0.f, 1.f), vm::rand(0.f, 1.f));
-					info.light[i].position = vm::vec4(vm::rand(-3.5f, 3.5f), vm::rand(.3f, 1.f), vm::rand(-3.5f, 3.5f), 1.f);
-				}
-				memcpy(info.UBLights.data, info.light.data(), info.light.size() * sizeof(Context::Light));
-			}
+			if (event.key.keysym.sym == SDLK_2) { LightsUBO lubo; memcpy(info.lightUniforms.uniform.data, &lubo, sizeof(LightsUBO)); }
 			if (event.key.keysym.sym == SDLK_3) for (auto& model : info.models) model.render = !info.models[0].render;
 			if (event.key.keysym.sym == SDLK_4) info.gui.render = !info.gui.render;
-			if (event.key.keysym.sym == SDLK_5) info.terrain.render = !info.terrain.render;
-			if (event.key.keysym.sym == SDLK_6) info.skyBox.render = !info.skyBox.render;
+			if (event.key.keysym.sym == SDLK_5) renderer[0]->useSSAO = !renderer[0]->useSSAO;
+			if (event.key.keysym.sym == SDLK_6) renderer[0]->useSSR = !renderer[0]->useSSR;
 			if (event.key.keysym.sym == SDLK_7) renderer[0]->useDeferredRender = !renderer[0]->useDeferredRender;
-			if (event.key.keysym.sym == SDLK_8) { renderer[0]->useCompute = !renderer[0]->useCompute; }
-			if (event.key.keysym.sym == SDLK_0) for (auto& r : renderer) r->overloadedGPU = !renderer[0]->overloadedGPU;
+			if (event.key.keysym.sym == SDLK_8) renderer[0]->useCompute = !renderer[0]->useCompute;
+			if (event.key.keysym.sym == SDLK_0) renderer[0]->overloadedGPU = !renderer[0]->overloadedGPU;
 		}
 		if (event.type == SDL_MOUSEWHEEL) {
 			info.mainCamera.speed *= event.wheel.y > 0 ? 1.2f : 0.833f;

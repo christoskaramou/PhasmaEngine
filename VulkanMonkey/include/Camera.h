@@ -24,4 +24,8 @@ struct Camera
 	vm::vec3 front();
 	vm::vec3 right();
 	vm::vec3 up();
+
+	float frustum[6][4];
+	void ExtractFrustum(vm::mat4& model);
+	bool SphereInFrustum(vm::vec4& boundingSphere) const;
 };

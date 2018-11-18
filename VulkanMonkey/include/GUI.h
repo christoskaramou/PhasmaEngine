@@ -5,6 +5,7 @@
 #include "Surface.h"
 #include "Pipeline.h"
 #include "SDL.h"
+#include <vector>
 
 struct GUI : Object
 {
@@ -21,9 +22,12 @@ struct GUI : Object
 	void				newFrame(vk::Device device, vk::PhysicalDevice gpu, SDL_Window* window);
 
 	std::string	name;
+	vk::RenderPass guiRenderPass;
+	std::vector<vk::Framebuffer> guiFrameBuffers{};
+	Pipeline pipelineGUI;
 	static vk::DescriptorSetLayout descriptorSetLayout;
 	static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
-	static GUI loadGUI(vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer dynamicCmdBuffer, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, SDL_Window* window, const std::string textureName, bool show = true);
+	void loadGUI(const std::string textureName, vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer dynamicCmdBuffer, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, SDL_Window* window, bool show = true);
 	void draw(vk::RenderPass guiRenderPass, vk::Framebuffer guiFrameBuffer, Surface& surface, Pipeline& pipelineGUI, const vk::CommandBuffer & cmd);
 	void createVertexBuffer(vk::Device device, vk::PhysicalDevice gpu, size_t vertex_size);
 	void createIndexBuffer(vk::Device device, vk::PhysicalDevice gpu, size_t index_size);

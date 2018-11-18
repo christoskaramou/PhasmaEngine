@@ -3,13 +3,8 @@
 #include "Image.h"
 #include "Buffer.h"
 #include "Image.h"
+#include "Pipeline.h"
 #include "Math.h"
-
-struct ShadowsUBO
-{
-	vm::mat4 projection, view, model;
-	float castShadows, dummy[15]; // for 256 bytes align
-};
 
 struct Shadows
 {
@@ -23,9 +18,17 @@ struct Shadows
 	vk::DescriptorSet descriptorSet;
 	std::vector<vk::Framebuffer> frameBuffer;
 	Buffer uniformBuffer;
+	Pipeline pipelineShadows;
 
 	void createFrameBuffers(vk::Device device, vk::PhysicalDevice gpu, Image& depth, uint32_t bufferCount);
 	void createDynamicUniformBuffer(vk::Device device, vk::PhysicalDevice gpu, size_t num_of_objects);
 	void createDescriptorSet(vk::Device device, vk::DescriptorPool descriptorPool, vk::DescriptorSetLayout & descriptorSetLayout);
 	void destroy(vk::Device device);
+};
+
+
+struct ShadowsUBO
+{
+	vm::mat4 projection, view, model;
+	float castShadows, dummy[15]; // for 256 bytes align
 };

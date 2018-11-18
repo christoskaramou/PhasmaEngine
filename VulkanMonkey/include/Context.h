@@ -14,88 +14,85 @@
 #include "Skybox.h"
 #include "Terrain.h"
 #include "Shadows.h"
+#include "Light.h"
 #include "Mesh.h"
 #include "Model.h"
 #include "Camera.h"
+#include "SSAO.h"
+#include "SSR.h"
+#include "Deferred.h"
+#include "Compute.h"
+#include "Forward.h"
 
 #include <tuple>
 #include <map>
-
-constexpr auto MAX_LIGHTS = 20;
 
 struct Context
 {
 public:
 	static Context* info;
 
-	struct ProjView
-	{
-		vm::mat4 projection, view;
-	};
-
-	struct UBO
-	{
-		vm::mat4 projection, view, model;
-	};
-
-	struct Light
-	{
-		vm::vec4 color, position, attenuation, camPos;
-	};
-
-	void initVulkanContext();
-	void resizeViewport(uint32_t width, uint32_t height);
-
+	// VULKAN CONTEXT
 	SDL_Window* window;
-	Surface surface;
 	vk::Instance instance;
+	Surface surface;
+	int graphicsFamilyId, presentFamilyId, computeFamilyId;
 	vk::PhysicalDevice gpu;
 	vk::PhysicalDeviceProperties gpuProperties;
 	vk::PhysicalDeviceFeatures gpuFeatures;
-	int graphicsFamilyId = -1, presentFamilyId = -1, computeFamilyId = -1;
 	vk::Device device;
 	vk::Queue graphicsQueue, presentQueue, computeQueue;
-	vk::CommandPool commandPool;
-	vk::CommandPool commandPoolCompute;
-	vk::RenderPass forwardRenderPass, ssrRenderPass, guiRenderPass;
+	vk::CommandPool commandPool, commandPoolCompute;
 	vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
 	Swapchain swapchain;
-	Image depth, MSColorImage, MSDepthImage;
-	std::vector<vk::Framebuffer> frameBuffers{}, ssrFrameBuffers{}, guiFrameBuffers{};
-	vk::CommandBuffer dynamicCmdBuffer;
-	vk::CommandBuffer shadowCmdBuffer;
-	vk::CommandBuffer computeCmdBuffer;
+	Image depth;
+	vk::CommandBuffer dynamicCmdBuffer, computeCmdBuffer, shadowCmdBuffer;
 	vk::DescriptorPool descriptorPool;
-	Pipeline pipeline, pipelineSSR, pipelineGUI, pipelineSkyBox, pipelineShadows, pipelineTerrain, pipelineCompute;
 	std::vector<vk::Fence> fences{};
 	std::vector<vk::Semaphore> semaphores{};
+	std::map<std::string, Image> renderTargets{};
+
+	// MODELS
 	std::vector<Model> models{};
+	
+	// SHADOWS
 	Shadows shadows;
-	GUI gui;
-	SkyBox skyBox;
-	Camera mainCamera;
-	Terrain terrain;
-	std::vector<Light> light;
-	Buffer UBLights, UBReflection, SBInOut;
-	vk::DescriptorSet DSLights, DSCompute, DSReflection;
-	vk::DescriptorSetLayout DSLayoutLights, DSLayoutCompute, DSLayoutReflection;
+
+	// COMPUTE
+	Compute compute;
+
+	// FORWARD
+	Forward forward;
 
 	// DEFERRED
-	vk::RenderPass deferredRenderPass, compositionRenderPass;
-	std::map<std::string, Image> renderTarget{};
-	std::vector<vk::Framebuffer> deferredFrameBuffers{}, compositionFrameBuffers{};
-	vk::DescriptorSet DSDeferredMainLight, DSComposition;
-	vk::DescriptorSetLayout DSLayoutComposition;
-	Pipeline pipelineDeferred, pipelineComposition;
+	Deferred deferred;
+
+	// SSR
+	SSR ssr;
 
 	// SSAO
-	Buffer UBssaoKernel, UBssaoPVM;
-	Image ssaoNoise;
-	vk::RenderPass ssaoRenderPass, ssaoBlurRenderPass;
-	std::vector<vk::Framebuffer> ssaoFrameBuffers{}, ssaoBlurFrameBuffers{};
-	Pipeline pipelineSSAO, pipelineSSAOBlur;
-	vk::DescriptorSetLayout DSLayoutSSAO, DSLayoutSSAOBlur;
-	vk::DescriptorSet DSssao, DSssaoBlur;
+	SSAO ssao;
+
+	// SKYBOX
+	SkyBox skyBox;
+
+	// TERRAIN
+	Terrain terrain;
+
+	// GUI
+	GUI gui;
+
+	// LIGHTS
+	LightUniforms lightUniforms;
+
+	// MAIN CAMERA
+	Camera mainCamera;
+
+	void initVulkanContext();
+	void initRendering();
+	void loadResources();
+	void createUniforms();
+	void resizeViewport(uint32_t width, uint32_t height);
 
 	static PipelineInfo getPipelineSpecificationsModel();
 	static PipelineInfo getPipelineSpecificationsShadows();
@@ -107,8 +104,19 @@ public:
 private:
 	vk::Instance createInstance();
 	Surface createSurface();
+	int getGraphicsFamilyId();
+	int getPresentFamilyId();
+	int getComputeFamilyId();
 	vk::PhysicalDevice findGpu();
+	vk::PhysicalDeviceProperties getGPUProperties();
+	vk::PhysicalDeviceFeatures getGPUFeatures();
+	vk::SurfaceCapabilitiesKHR getSurfaceCapabilities();
+	vk::SurfaceFormatKHR getSurfaceFormat();
+	vk::PresentModeKHR getPresentationMode();
 	vk::Device createDevice();
+	vk::Queue getGraphicsQueue();
+	vk::Queue getPresentQueue();
+	vk::Queue getComputeQueue();
 	Swapchain createSwapchain();
 	vk::CommandPool createCommandPool();
 	vk::CommandPool createComputeCommadPool();

@@ -201,8 +201,11 @@
   <ItemGroup>
     <ClInclude Include="include\Buffer.h" />
     <ClInclude Include="include\Camera.h" />
+    <ClInclude Include="include\Compute.h" />
+    <ClInclude Include="include\Deferred.h" />
     <ClInclude Include="include\Errors.h" />
     <ClInclude Include="include\Context.h" />
+    <ClInclude Include="include\Forward.h" />
     <ClInclude Include="include\GLM.h" />
     <ClInclude Include="include\GUI.h" />
     <ClInclude Include="include\Image.h" />
@@ -212,6 +215,7 @@
     <ClInclude Include="include\imgui\imstb_rectpack.h" />
     <ClInclude Include="include\imgui\imstb_textedit.h" />
     <ClInclude Include="include\imgui\imstb_truetype.h" />
+    <ClInclude Include="include\Light.h" />
     <ClInclude Include="include\Math.h" />
     <ClInclude Include="include\Mesh.h" />
     <ClInclude Include="include\Model.h" />
@@ -221,6 +225,8 @@
     <ClInclude Include="include\SDL.h" />
     <ClInclude Include="include\Shadows.h" />
     <ClInclude Include="include\Skybox.h" />
+    <ClInclude Include="include\SSAO.h" />
+    <ClInclude Include="include\SSR.h" />
     <ClInclude Include="include\Stbi.h" />
     <ClInclude Include="include\stb_image\stb_image.h" />
     <ClInclude Include="include\Surface.h" />
@@ -240,9 +246,13 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="src\Buffer.cpp" />
     <ClCompile Include="src\Camera.cpp" />
+    <ClCompile Include="src\Compute.cpp" />
     <ClCompile Include="src\Context.cpp" />
+    <ClCompile Include="src\Deferred.cpp" />
+    <ClCompile Include="src\Forward.cpp" />
     <ClCompile Include="src\GUI.cpp" />
     <ClCompile Include="src\Image.cpp" />
+    <ClCompile Include="src\Light.cpp" />
     <ClCompile Include="src\Math.cpp" />
     <ClCompile Include="src\Mesh.cpp" />
     <ClCompile Include="src\Model.cpp" />
@@ -251,6 +261,8 @@
     <ClCompile Include="src\Renderer.cpp" />
     <ClCompile Include="src\Shadows.cpp" />
     <ClCompile Include="src\Skybox.cpp" />
+    <ClCompile Include="src\SSAO.cpp" />
+    <ClCompile Include="src\SSR.cpp" />
     <ClCompile Include="src\Swapchain.cpp" />
     <ClCompile Include="src\Terrain.cpp" />
     <ClCompile Include="src\Timer.cpp" />

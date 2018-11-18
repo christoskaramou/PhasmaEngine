@@ -53,5 +53,5 @@ void main()
 	}
 	occlusion = 1.0 - (occlusion / float(KERNEL_SIZE));
 	
-	outColor = pow(occlusion, 2.0);
+	outColor = occlusion;
 }

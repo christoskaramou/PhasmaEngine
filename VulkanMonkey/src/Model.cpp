@@ -18,7 +18,7 @@ void getAllNodes(aiNode* root, std::vector<aiNode*>& allNodes) {
 	if (root) allNodes.push_back(root);
 }
 
-Model Model::loadModel(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, const std::string path, const std::string modelName, bool show)
+Model Model::loadModel(const std::string path, const std::string modelName, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show)
 {
 	Model _model;
 

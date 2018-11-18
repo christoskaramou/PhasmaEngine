@@ -5,8 +5,7 @@
 struct Light {
 	vec4 color;
 	vec4 position;
-	vec4 attenuation;
-	vec4 camPos; };
+	vec4 attenuation; };
 
 vec2 poissonDisk[8] = vec2[](
 	vec2(0.493393f, 0.394269f),
@@ -24,7 +23,7 @@ layout (set = 1, binding = 1) uniform sampler2D normSampler;
 layout (set = 1, binding = 2) uniform sampler2D specSampler;
 layout (set = 1, binding = 3) uniform sampler2D alphaSampler;
 layout (set = 0, binding = 1) uniform sampler2DShadow shadowMapSampler;
-layout (set = 3, binding = 0) uniform UBO { Light lights[NUM_LIGHTS]; } ubo;
+layout (set = 3, binding = 0) uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS+1]; } ubo;
 
 layout (location = 0) in vec3 inFragPos;
 layout (location = 1) in vec2 inUV;
@@ -57,11 +56,11 @@ void main()
 	float specular = texture(specSampler, inUV).r;
 	
 	// Ambient
-	vec3 fragColor = 0.15 * albedo.rgb;
+	vec3 fragColor = 0.3 * albedo.rgb;
 
 	fragColor += calculateShadow(0, fragPos, normal, albedo, specular);
 
-	for(int i=1; i<NUM_LIGHTS; i++)
+	for(int i=1; i<NUM_LIGHTS+1; i++)
 		fragColor += calculateColor(i, fragPos, normal, albedo, specular);
 
 	outColor = vec4(fragColor, alpha);
@@ -79,7 +78,7 @@ vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, floa
 	vec3 L = fragPos - ubo.lights[mainLight].position.xyz;
 
 	// Viewer to fragment
-	vec3 V = fragPos - ubo.lights[mainLight].camPos.xyz;
+	vec3 V = fragPos - ubo.camPos.xyz;
 
 	// Diffuse part
 	vec3 diff = ubo.lights[mainLight].color.rgb * albedo * ubo.lights[mainLight].color.a;
@@ -106,7 +105,7 @@ vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float spe
 		return vec3(0.0);
 
 	// Viewer to fragment
-	vec3 V = fragPos - ubo.lights[light].camPos.xyz;
+	vec3 V = fragPos - ubo.camPos.xyz;
 
 	// Diffuse part
 	L = normalize(L);

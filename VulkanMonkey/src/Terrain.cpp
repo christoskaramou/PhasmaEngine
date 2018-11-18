@@ -32,12 +32,11 @@ vk::DescriptorSetLayout Terrain::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-Terrain Terrain::generateTerrain(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, const std::string path, bool show)
+void Terrain::generateTerrain(const std::string path, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show)
 {
 	auto size = 100.f;
-	Terrain _terrain;
 
-	_terrain.vertices = {
+	vertices = {
 		// x,    y,    z,     u,    v,   nX,    nY,   nZ,   tX,   tY,   tZ,   bX,   bY,   bZ,   r,    g,    b,    a
 		-size, -0.1f, -size, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f,
 		-size, -0.1f,  size, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f,
@@ -47,13 +46,11 @@ Terrain Terrain::generateTerrain(vk::Device device, vk::PhysicalDevice gpu, vk::
 		 size, -0.1f,  size, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f
 	};
 	std::string texPath = path == "" ? "objects/defaultTerrainMap.png" : path;
-	_terrain.loadTexture(device, gpu, commandPool, graphicsQueue, texPath);
-	_terrain.createVertexBuffer(device, gpu, commandPool, graphicsQueue);
-	_terrain.createUniformBuffer(device, gpu);
-	_terrain.createDescriptorSet(device, descriptorPool, Terrain::descriptorSetLayout);
-	_terrain.render = show;
-
-	return _terrain;
+	loadTexture(device, gpu, commandPool, graphicsQueue, texPath);
+	createVertexBuffer(device, gpu, commandPool, graphicsQueue);
+	createUniformBuffer(device, gpu, 2 * sizeof(vm::mat4));
+	createDescriptorSet(device, descriptorPool, Terrain::descriptorSetLayout);
+	render = show;
 }
 
 void Terrain::draw(Pipeline& pipeline, const vk::CommandBuffer & cmd)

@@ -15,14 +15,10 @@ class Renderer
 		bool useCompute = false;
 		bool useDeferredRender = true;
 		bool useSSAO = true;
-		bool useSSR = false;
+		bool useSSR = true;
     private:
 		void recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ);
 		void recordForwardCmds(const uint32_t& imageIndex);
 		void recordDeferredCmds(const uint32_t& imageIndex);
 		void recordShadowsCmds(const uint32_t& imageIndex);
-
-		float frustum[6][4];
-		void ExtractFrustum(vm::mat4& projection_view_model);
-		bool SphereInFrustum(vm::vec4& boundingSphere) const;
 };

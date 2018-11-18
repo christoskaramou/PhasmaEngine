@@ -307,12 +307,10 @@ void GUI::newFrame(vk::Device device, vk::PhysicalDevice gpu, SDL_Window* window
 	}
 }
 
-GUI GUI::loadGUI(vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer dynamicCmdBuffer, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, SDL_Window* window, const std::string textureName, bool show)
+void GUI::loadGUI(const std::string textureName, vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer dynamicCmdBuffer, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, SDL_Window* window, bool show)
 {
-	GUI _gui;
-
 	if (textureName == "ImGuiDemo")
-		_gui.show_demo_window = true;
+		show_demo_window = true;
 
 	//					 counter clock wise
 	// x, y, z coords orientation	// u, v coords orientation
@@ -337,10 +335,8 @@ GUI GUI::loadGUI(vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer dy
 	//_gui.createVertexBuffer(info, _gui.vertices.size());
 	//_gui.createDescriptorSet(GUI::descriptorSetLayout, info);
 
-	_gui.initImGui(device, gpu, dynamicCmdBuffer, graphicsQueue, descriptorPool, window);
-	_gui.render = show;
-
-	return _gui;
+	initImGui(device, gpu, dynamicCmdBuffer, graphicsQueue, descriptorPool, window);
+	render = show;
 }
 
 void GUI::draw(vk::RenderPass guiRenderPass, vk::Framebuffer guiFrameBuffer, Surface& surface, Pipeline& pipelineGUI, const vk::CommandBuffer & cmd)

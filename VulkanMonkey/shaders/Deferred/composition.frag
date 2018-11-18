@@ -5,8 +5,7 @@
 struct Light {
 	vec4 color;
 	vec4 position;
-	vec4 attenuation;
-	vec4 camPos; };
+	vec4 attenuation; };
 
 vec2 poissonDisk[8] = vec2[](
 	vec2(0.493393f, 0.394269f),
@@ -17,13 +16,14 @@ vec2 poissonDisk[8] = vec2[](
 	vec2(0.428632f, 0.0171514f),
 	vec2(0.015656f, 0.749779f),
 	vec2(0.758385f, 0.49617f));
-	
+
+layout(push_constant) uniform SSAO { float useSSAO; } ambient;
 layout (constant_id = 0) const int NUM_LIGHTS = 1;
 layout (set = 0, binding = 0) uniform sampler2D samplerPosition;
 layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
 layout (set = 0, binding = 2) uniform sampler2D samplerAlbedo;
 layout (set = 0, binding = 3) uniform sampler2D samplerSpecular;
-layout (set = 0, binding = 4) uniform UBO { Light lights[NUM_LIGHTS]; } ubo;
+layout (set = 0, binding = 4) uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS+1]; } ubo;
 layout (set = 0, binding = 5) uniform sampler2D ssaoBlurSampler;
 layout (set = 1, binding = 1) uniform sampler2DShadow shadowMapSampler;
 
@@ -46,11 +46,13 @@ void main()
 	float oclusion = texture(ssaoBlurSampler, inUV).r;
 
 	// Ambient
-	vec3 fragColor = 0.15 * albedo.rgb * oclusion;
+	vec3 fragColor = 0.3 * albedo.rgb;
+	if (ambient.useSSAO > 0.5f)
+		fragColor *= oclusion;
 
 	fragColor += calculateShadow(0, fragPos.xyz, normal, albedo.rgb, specular);
 
-	for(int i = 1; i < NUM_LIGHTS; ++i)
+	for(int i = 1; i < NUM_LIGHTS+1; ++i)
 		fragColor += calculateColor(i, fragPos.xyz, normal, albedo.rgb, specular);
 
 	outColor = vec4(fragColor, albedo.a);
@@ -69,7 +71,7 @@ vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, floa
 	vec3 L = fragPos - ubo.lights[mainLight].position.xyz;
 
 	// Viewer to fragment
-	vec3 V = fragPos - ubo.lights[mainLight].camPos.xyz;
+	vec3 V = fragPos - ubo.camPos.xyz;
 
 	// Diffuse part
 	vec3 diff = ubo.lights[mainLight].color.rgb * albedo.rgb * ubo.lights[mainLight].color.a;
@@ -96,7 +98,7 @@ vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float spe
 		return vec3(0.0);
 
 	// Viewer to fragment
-	vec3 V = fragPos - ubo.lights[light].camPos.xyz;
+	vec3 V = fragPos - ubo.camPos.xyz;
 
 	// Diffuse part
 	L = normalize(L);

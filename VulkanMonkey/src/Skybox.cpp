@@ -32,12 +32,10 @@ vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-SkyBox SkyBox::loadSkyBox(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, const std::vector<std::string>& textureNames, uint32_t imageSideSize, bool show)
+void SkyBox::loadSkyBox(const std::vector<std::string>& textureNames, uint32_t imageSideSize, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show)
 {
-	SkyBox _skyBox;
-
 	float SIZE = static_cast<float>(imageSideSize);
-	_skyBox.vertices = {
+	vertices = {
 		-SIZE,  SIZE, -SIZE, 0.0f,
 		-SIZE, -SIZE, -SIZE, 0.0f,
 		 SIZE, -SIZE, -SIZE, 0.0f,
@@ -80,13 +78,11 @@ SkyBox SkyBox::loadSkyBox(vk::Device device, vk::PhysicalDevice gpu, vk::Command
 		-SIZE, -SIZE,  SIZE, 0.0f,
 		 SIZE, -SIZE,  SIZE, 0.0f
 	};
-	_skyBox.loadTextures(device, gpu, commandPool, graphicsQueue, textureNames, imageSideSize);
-	_skyBox.createVertexBuffer(device, gpu, commandPool, graphicsQueue);
-	_skyBox.createUniformBuffer(device, gpu);
-	_skyBox.createDescriptorSet(device, descriptorPool, SkyBox::descriptorSetLayout);
-	_skyBox.render = show;
-
-	return _skyBox;
+	loadTextures(device, gpu, commandPool, graphicsQueue, textureNames, imageSideSize);
+	createVertexBuffer(device, gpu, commandPool, graphicsQueue);
+	createUniformBuffer(device, gpu, 2 * sizeof(vm::mat4));
+	createDescriptorSet(device, descriptorPool, SkyBox::descriptorSetLayout);
+	render = show;
 }
 
 void SkyBox::draw(Pipeline& pipeline, const vk::CommandBuffer & cmd)

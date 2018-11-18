@@ -8,7 +8,7 @@ Context* Context::info = nullptr;
 vk::DescriptorSetLayout getDescriptorSetLayoutLights(Context* info)
 {
 	// binding for model mvp matrix
-	if (!info->DSLayoutLights) {
+	if (!info->lightUniforms.descriptorSetLayout) {
 		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
 		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
 			.setBinding(0) // binding number in shader stages
@@ -18,17 +18,17 @@ vk::DescriptorSetLayout getDescriptorSetLayoutLights(Context* info)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		VkCheck(info->device.createDescriptorSetLayout(&createInfo, nullptr, &info->DSLayoutLights));
+		VkCheck(info->device.createDescriptorSetLayout(&createInfo, nullptr, &info->lightUniforms.descriptorSetLayout));
 		std::cout << "Descriptor Set Layout created\n";
 	}
-	return info->DSLayoutLights;
+	return info->lightUniforms.descriptorSetLayout;
 }
 PipelineInfo Context::getPipelineSpecificationsModel()
 {
 	// General Pipeline
 	static PipelineInfo generalSpecific;
 	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
-	generalSpecific.renderPass = info->forwardRenderPass;
+	generalSpecific.renderPass = info->forward.forwardRenderPass;
 	generalSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	generalSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(info->device), Mesh::getDescriptorSetLayout(info->device), Model::getDescriptorSetLayout(info->device), getDescriptorSetLayoutLights(info) };
 	generalSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
@@ -61,7 +61,7 @@ PipelineInfo Context::getPipelineSpecificationsSkyBox()
 	// SkyBox Pipeline
 	static PipelineInfo skyBoxSpecific;
 	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
-	skyBoxSpecific.renderPass = info->forwardRenderPass;
+	skyBoxSpecific.renderPass = info->forward.forwardRenderPass;
 	skyBoxSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(info->device) };
 	skyBoxSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionSkyBox();
@@ -77,7 +77,7 @@ PipelineInfo Context::getPipelineSpecificationsTerrain()
 	// Terrain Pipeline
 	static PipelineInfo terrainSpecific;
 	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
-	terrainSpecific.renderPass = info->forwardRenderPass;
+	terrainSpecific.renderPass = info->forward.forwardRenderPass;
 	terrainSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(info->device) };
 	terrainSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
@@ -92,7 +92,7 @@ PipelineInfo Context::getPipelineSpecificationsGUI()
 	// GUI Pipeline
 	static PipelineInfo GUISpecific;
 	GUISpecific.shaders = { "shaders/GUI/vert.spv", "shaders/GUI/frag.spv" };
-	GUISpecific.renderPass = info->guiRenderPass;
+	GUISpecific.renderPass = info->gui.guiRenderPass;
 	GUISpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	GUISpecific.descriptorSetLayouts = { GUI::getDescriptorSetLayout(info->device) };
 	GUISpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGUI();
@@ -118,7 +118,7 @@ PipelineInfo Context::getPipelineSpecificationsDeferred()
 	deferredSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	deferredSpecific.pushConstantRange = vk::PushConstantRange();
 	deferredSpecific.shaders = { "shaders/Deferred/vert.spv", "shaders/Deferred/frag.spv" };
-	deferredSpecific.renderPass = info->deferredRenderPass;
+	deferredSpecific.renderPass = info->deferred.deferredRenderPass;
 	deferredSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
 	deferredSpecific.sampleCount = vk::SampleCountFlagBits::e1;
 	deferredSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(info->device), Mesh::getDescriptorSetLayout(info->device) };
@@ -138,66 +138,111 @@ void Context::initVulkanContext()
 {
 	instance = createInstance();
 	surface = createSurface();
+	graphicsFamilyId = getGraphicsFamilyId();
+	presentFamilyId = getPresentFamilyId();
+	computeFamilyId = getComputeFamilyId();
 	gpu = findGpu();
+	gpuProperties = getGPUProperties();
+	gpuFeatures = getGPUFeatures();
+	surface.capabilities = getSurfaceCapabilities();
+	surface.formatKHR = getSurfaceFormat();
+	surface.presentModeKHR = getPresentationMode();
 	device = createDevice();
+	graphicsQueue = getGraphicsQueue();
+	presentQueue = getPresentQueue();
+	computeQueue = getComputeQueue();
 	semaphores = createSemaphores(3);
 	fences = createFences(2);
 	swapchain = createSwapchain();
 	commandPool = createCommandPool();
 	commandPoolCompute = createComputeCommadPool();
+	descriptorPool = createDescriptorPool(1000); // max number of all descriptor sets to allocate
+	dynamicCmdBuffer = createCmdBuffer();
+	shadowCmdBuffer = createCmdBuffer();
+	computeCmdBuffer = createComputeCmdBuffer();
 	depth = createDepthResources();
-	renderTarget = createRenderTargets({ 
+	renderTargets = createRenderTargets({ 
 		{"position", vk::Format::eR16G16B16A16Sfloat},
 		{"normal", vk::Format::eR16G16B16A16Sfloat},
 		{"albedo", vk::Format::eR8G8B8A8Unorm},
 		{"specular", vk::Format::eR16G16B16A16Sfloat},
 		{"ssao", vk::Format::eR16Sfloat},
 		{"ssaoBlur", vk::Format::eR16Sfloat} });
-	forwardRenderPass = createRenderPass();
-	deferredRenderPass = createDeferredRenderPass();
-	compositionRenderPass = createCompositionRenderPass();
-	ssrRenderPass = createReflectionRenderPass();
-	ssaoRenderPass = createSSAORenderPass();
-	ssaoBlurRenderPass = createSSAOBlurRenderPass();
-	guiRenderPass = createGUIRenderPass();
-	frameBuffers = createFrameBuffers();
-	deferredFrameBuffers = createDeferredFrameBuffers();
-	compositionFrameBuffers = createCompositionFrameBuffers();
-	ssrFrameBuffers = createReflectionFrameBuffers();
-	ssaoFrameBuffers = createSSAOFrameBuffers();
-	ssaoBlurFrameBuffers = createSSAOBlurFrameBuffers();
-	guiFrameBuffers = createGUIFrameBuffers();
-	dynamicCmdBuffer = createCmdBuffer();
-	shadowCmdBuffer = createCmdBuffer();
-	computeCmdBuffer = createComputeCmdBuffer();
-	descriptorPool = createDescriptorPool(1000); // max number of all descriptor sets to allocate
+}
 
+void Context::initRendering()
+{
+	// render passes
+	forward.forwardRenderPass = createRenderPass();
+	deferred.deferredRenderPass = createDeferredRenderPass();
+	deferred.compositionRenderPass = createCompositionRenderPass();
+	ssr.ssrRenderPass = createReflectionRenderPass();
+	ssao.ssaoRenderPass = createSSAORenderPass();
+	ssao.ssaoBlurRenderPass = createSSAOBlurRenderPass();
+	gui.guiRenderPass = createGUIRenderPass();
+
+	// frame buffers
+	forward.frameBuffers = createFrameBuffers();
+	deferred.deferredFrameBuffers = createDeferredFrameBuffers();
+	deferred.compositionFrameBuffers = createCompositionFrameBuffers();
+	ssr.ssrFrameBuffers = createReflectionFrameBuffers();
+	ssao.ssaoFrameBuffers = createSSAOFrameBuffers();
+	ssao.ssaoBlurFrameBuffers = createSSAOBlurFrameBuffers();
+	gui.guiFrameBuffers = createGUIFrameBuffers();
 	shadows.createFrameBuffers(device, gpu, depth, static_cast<uint32_t>(swapchain.images.size()));
 
-	// create pipelines
-	// FORWARD PIPELINES
-	pipelineTerrain = createPipeline(getPipelineSpecificationsTerrain());
-	pipelineShadows = createPipeline(getPipelineSpecificationsShadows());
-	pipelineSkyBox = createPipeline(getPipelineSpecificationsSkyBox());
-	pipelineGUI = createPipeline(getPipelineSpecificationsGUI());
-
+	// pipelines
 	PipelineInfo gpi = getPipelineSpecificationsModel();
 	gpi.specializationInfo = vk::SpecializationInfo{ 1, &vk::SpecializationMapEntry{ 0, 0, sizeof(MAX_LIGHTS) }, sizeof(MAX_LIGHTS), &MAX_LIGHTS };
-	pipeline = createPipeline(gpi);
 
-	// DEFERRED PIPELINES
-	pipelineDeferred = createPipeline(getPipelineSpecificationsDeferred());
-	pipelineComposition = createCompositionPipeline();
+	forward.pipeline = createPipeline(gpi);
+	terrain.pipelineTerrain = createPipeline(getPipelineSpecificationsTerrain());
+	shadows.pipelineShadows = createPipeline(getPipelineSpecificationsShadows());
+	skyBox.pipelineSkyBox = createPipeline(getPipelineSpecificationsSkyBox());
+	gui.pipelineGUI = createPipeline(getPipelineSpecificationsGUI());
+	deferred.pipelineDeferred = createPipeline(getPipelineSpecificationsDeferred());
+	deferred.pipelineComposition = createCompositionPipeline();
+	ssr.pipelineSSR = createReflectionPipeline();
+	compute.pipelineCompute = createComputePipeline();
+	ssao.pipelineSSAO = createSSAOPipeline();
+	ssao.pipelineSSAOBlur = createSSAOBlurPipeline();
+}
 
-	// SSR PIPELINE
-	pipelineSSR = createReflectionPipeline();
+void Context::loadResources()
+{
+	// SKYBOX LOAD
+	skyBox.loadSkyBox(
+		{ "objects/sky/right.png", "objects/sky/left.png", "objects/sky/top.png", "objects/sky/bottom.png", "objects/sky/back.png", "objects/sky/front.png" },
+		1024,
+		device,
+		gpu,
+		commandPool,
+		graphicsQueue,
+		descriptorPool
+	);
+	// GUI LOAD
+	gui.loadGUI("ImGuiDemo", device, gpu, dynamicCmdBuffer, graphicsQueue, descriptorPool, window);
+	// TERRAIN LOAD
+	terrain.generateTerrain("", device, gpu, commandPool, graphicsQueue, descriptorPool);
+	// MODELS LOAD
+	models.push_back(Model::loadModel("objects/sponza/", "sponza.obj", device, gpu, commandPool, graphicsQueue, descriptorPool));
+}
 
-	// COMPUTE PIPELINE
-	pipelineCompute = createComputePipeline();
-
-	// SSAO
-	pipelineSSAO = createSSAOPipeline();
-	pipelineSSAOBlur = createSSAOBlurPipeline();
+void Context::createUniforms()
+{
+	// DESCRIPTOR SETS FOR SHADOWS
+	shadows.createDynamicUniformBuffer(device, gpu, models.size());
+	shadows.createDescriptorSet(device, descriptorPool, Shadows::getDescriptorSetLayout(device));
+	// DESCRIPTOR SETS FOR LIGHTS
+	lightUniforms.createLightUniforms(device, gpu, descriptorPool);
+	// DESCRIPTOR SETS FOR SSAO
+	ssao.createSSAOUniforms(renderTargets, device, gpu, commandPool, graphicsQueue, descriptorPool);
+	// DESCRIPTOR SETS FOR COMPOSITION PIPELINE
+	deferred.createDeferredUniforms(renderTargets, lightUniforms, device, descriptorPool);
+	// DESCRIPTOR SET FOR REFLECTION PIPELINE
+	ssr.createSSRUniforms(renderTargets, device, gpu, descriptorPool);
+	// DESCRIPTOR SET FOR COMPUTE PIPELINE
+	compute.createComputeUniforms(device, gpu, descriptorPool);
 }
 
 vk::Instance Context::createInstance()
@@ -251,7 +296,7 @@ Surface Context::createSurface()
 	return _surface;
 }
 
-vk::PhysicalDevice Context::findGpu()
+int Context::getGraphicsFamilyId()
 {
 	uint32_t gpuCount = 0;
 	instance.enumeratePhysicalDevices(&gpuCount, nullptr);
@@ -267,66 +312,126 @@ vk::PhysicalDevice Context::findGpu()
 		for (uint32_t i = 0; i < familyCount; ++i) {
 			//find graphics queue family index
 			if (properties[i].queueFlags & vk::QueueFlagBits::eGraphics)
-				graphicsFamilyId = i;
-			//find compute queue family index
-			if (properties[i].queueFlags & vk::QueueFlagBits::eCompute)
-				computeFamilyId = i;
+				return i;
+		}
+	}
+	return -1;
+}
+
+int Context::getPresentFamilyId()
+{
+	uint32_t gpuCount = 0;
+	instance.enumeratePhysicalDevices(&gpuCount, nullptr);
+	std::vector<vk::PhysicalDevice> gpuList(gpuCount);
+	instance.enumeratePhysicalDevices(&gpuCount, gpuList.data());
+
+	for (const auto& gpu : gpuList) {
+		uint32_t familyCount = 0;
+		gpu.getQueueFamilyProperties(&familyCount, nullptr);
+		std::vector<vk::QueueFamilyProperties> properties(familyCount);
+		gpu.getQueueFamilyProperties(&familyCount, properties.data());
+
+		for (uint32_t i = 0; i < familyCount; ++i) {
 			// find present queue family index
 			vk::Bool32 presentSupport = false;
 			gpu.getSurfaceSupportKHR(i, surface.surface, &presentSupport);
 			if (properties[i].queueCount > 0 && presentSupport)
-				presentFamilyId = i;
-
-			//TODO: Check for different family IDs support in different queue families
-			if (graphicsFamilyId >= 0 && presentFamilyId >=0 && computeFamilyId >= 0) {
-				gpu.getProperties(&gpuProperties);
-				gpu.getFeatures(&gpuFeatures);
-
-				// 1. surface capabilities
-				gpu.getSurfaceCapabilitiesKHR(surface.surface, &surface.capabilities);
-
-				// 2. surface format
-				uint32_t formatCount = 0;
-				std::vector<vk::SurfaceFormatKHR> formats{};
-				gpu.getSurfaceFormatsKHR(surface.surface, &formatCount, nullptr);
-				if (formatCount == 0) {
-					std::cout << "Surface formats missing\n";
-					exit(-5);
-				}
-				formats.resize(formatCount);
-				gpu.getSurfaceFormatsKHR(surface.surface, &formatCount, formats.data());
-
-				// 3. presentation mode
-				uint32_t presentCount = 0;
-				std::vector<vk::PresentModeKHR> presentModes{};
-				gpu.getSurfacePresentModesKHR(surface.surface, &presentCount, nullptr);
-				if (presentCount == 0) {
-					std::cout << "Surface formats missing\n";
-					exit(-5);
-				}
-				presentModes.resize(presentCount);
-				gpu.getSurfacePresentModesKHR(surface.surface, &presentCount, presentModes.data());
-
-				for (const auto& i : presentModes) {
-					if (i == vk::PresentModeKHR::eImmediate || i == vk::PresentModeKHR::eMailbox) {
-						surface.presentModeKHR = i;
-						break;
-					}
-					else surface.presentModeKHR = vk::PresentModeKHR::eFifo;
-				}
-				for (const auto& i : formats) {
-					if (i.format == vk::Format::eB8G8R8A8Unorm && i.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
-						surface.formatKHR = i;
-						break;
-					}
-					else surface.formatKHR = formats[0];
-				}
-				return gpu;
-			}
+				return i;
 		}
 	}
+	return -1;
+}
+
+int Context::getComputeFamilyId()
+{
+	uint32_t gpuCount = 0;
+	instance.enumeratePhysicalDevices(&gpuCount, nullptr);
+	std::vector<vk::PhysicalDevice> gpuList(gpuCount);
+	instance.enumeratePhysicalDevices(&gpuCount, gpuList.data());
+
+	for (const auto& gpu : gpuList) {
+		uint32_t familyCount = 0;
+		gpu.getQueueFamilyProperties(&familyCount, nullptr);
+		std::vector<vk::QueueFamilyProperties> properties(familyCount);
+		gpu.getQueueFamilyProperties(&familyCount, properties.data());
+
+		for (uint32_t i = 0; i < familyCount; ++i) {
+			//find compute queue family index
+			if (properties[i].queueFlags & vk::QueueFlagBits::eCompute)
+				return i;
+		}
+	}
+	return -1;
+}
+
+vk::PhysicalDevice Context::findGpu()
+{
+	uint32_t gpuCount = 0;
+	instance.enumeratePhysicalDevices(&gpuCount, nullptr);
+	std::vector<vk::PhysicalDevice> gpuList(gpuCount);
+	instance.enumeratePhysicalDevices(&gpuCount, gpuList.data());
+
+	for (const auto& gpu : gpuList)
+		if (graphicsFamilyId >= 0 && presentFamilyId >= 0 && computeFamilyId >= 0)
+			return gpu;
 
 	return nullptr;
+}
+
+vk::SurfaceCapabilitiesKHR Context::getSurfaceCapabilities()
+{
+	vk::SurfaceCapabilitiesKHR _surfaceCapabilities;
+	gpu.getSurfaceCapabilitiesKHR(surface.surface, &_surfaceCapabilities);
+
+	return _surfaceCapabilities;
+}
+
+vk::SurfaceFormatKHR Context::getSurfaceFormat()
+{
+	uint32_t formatCount = 0;
+	std::vector<vk::SurfaceFormatKHR> formats{};
+	gpu.getSurfaceFormatsKHR(surface.surface, &formatCount, nullptr);
+	if (formatCount == 0) exit(-5);
+	formats.resize(formatCount);
+	gpu.getSurfaceFormatsKHR(surface.surface, &formatCount, formats.data());
+
+	for (const auto& i : formats)
+		if (i.format == vk::Format::eB8G8R8A8Unorm && i.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+			return i;
+
+	return formats[0];
+}
+
+vk::PresentModeKHR Context::getPresentationMode()
+{
+	uint32_t presentCount = 0;
+	std::vector<vk::PresentModeKHR> presentModes{};
+	gpu.getSurfacePresentModesKHR(surface.surface, &presentCount, nullptr);
+	if (presentCount == 0) exit(-5);
+	presentModes.resize(presentCount);
+	gpu.getSurfacePresentModesKHR(surface.surface, &presentCount, presentModes.data());
+
+	for (const auto& i : presentModes)
+		if (i == vk::PresentModeKHR::eImmediate || i == vk::PresentModeKHR::eMailbox)
+			return i;
+
+	return vk::PresentModeKHR::eFifo;
+}
+
+vk::PhysicalDeviceProperties Context::getGPUProperties()
+{
+	vk::PhysicalDeviceProperties _gpuProperties;
+	gpu.getProperties(&_gpuProperties);
+
+	return _gpuProperties;
+}
+
+vk::PhysicalDeviceFeatures Context::getGPUFeatures()
+{
+	vk::PhysicalDeviceFeatures _gpuFeatures;
+	gpu.getFeatures(&_gpuFeatures);
+
+	return _gpuFeatures;
 }
 
 vk::Device Context::createDevice()
@@ -361,14 +466,31 @@ vk::Device Context::createDevice()
 	VkCheck(gpu.createDevice(&deviceCreateInfo, nullptr, &_device));
 	std::cout << "Device created\n";
 
-	//get the graphics queue handler
-	graphicsQueue = _device.getQueue(graphicsFamilyId, 0);
-	presentQueue = _device.getQueue(presentFamilyId, 0);
-	computeQueue = _device.getQueue(computeFamilyId, 0);
-	if (!graphicsQueue || !presentQueue || !computeQueue)
-		return nullptr;
-
 	return _device;
+}
+
+vk::Queue Context::getGraphicsQueue()
+{
+	vk::Queue _graphicsQueue = device.getQueue(graphicsFamilyId, 0);
+	if (!_graphicsQueue) exit(-23);
+
+	return _graphicsQueue;
+}
+
+vk::Queue Context::getPresentQueue()
+{
+	vk::Queue _presentQueue = device.getQueue(presentFamilyId, 0);
+	if (!_presentQueue) exit(-23);
+
+	return _presentQueue;
+}
+
+vk::Queue Context::getComputeQueue()
+{
+	vk::Queue _computeQueue = device.getQueue(computeFamilyId, 0);
+	if (!_computeQueue) exit(-23);
+
+	return _computeQueue;
 }
 
 Swapchain Context::createSwapchain()
@@ -562,7 +684,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 	std::array<vk::AttachmentDescription, 5> attachments{};
 	// Deferred targets
 	// Position
-	attachments[0].format = renderTarget["position"].format;
+	attachments[0].format = renderTargets["position"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -571,7 +693,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 	// Normals
-	attachments[1].format = renderTarget["normal"].format;
+	attachments[1].format = renderTargets["normal"].format;
 	attachments[1].samples = vk::SampleCountFlagBits::e1;
 	attachments[1].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[1].storeOp = vk::AttachmentStoreOp::eStore;
@@ -580,7 +702,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[1].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[1].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 	// Albedo
-	attachments[2].format = renderTarget["albedo"].format;
+	attachments[2].format = renderTargets["albedo"].format;
 	attachments[2].samples = vk::SampleCountFlagBits::e1;
 	attachments[2].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[2].storeOp = vk::AttachmentStoreOp::eStore;
@@ -589,7 +711,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[2].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[2].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 	// Specular
-	attachments[3].format = renderTarget["specular"].format;
+	attachments[3].format = renderTargets["specular"].format;
 	attachments[3].samples = vk::SampleCountFlagBits::e1;
 	attachments[3].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[3].storeOp = vk::AttachmentStoreOp::eStore;
@@ -725,7 +847,7 @@ vk::RenderPass Context::createSSAORenderPass()
 
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
-	attachments[0].format = info->renderTarget["ssao"].format;
+	attachments[0].format = info->renderTargets["ssao"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -784,7 +906,7 @@ vk::RenderPass Context::createSSAOBlurRenderPass()
 
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
-	attachments[0].format = info->renderTarget["ssaoBlur"].format;
+	attachments[0].format = info->renderTargets["ssaoBlur"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -991,28 +1113,28 @@ std::vector<vk::Framebuffer> Context::createFrameBuffers()
 	assert((VkSampleCountFlags(gpuProperties.limits.framebufferColorSampleCounts) >= VkSampleCountFlags(sampleCount))
 		&& (VkSampleCountFlags(gpuProperties.limits.framebufferDepthSampleCounts) >= VkSampleCountFlags(sampleCount)));
 
-	MSColorImage.format = surface.formatKHR.format;
-	MSColorImage.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal,
+	forward.MSColorImage.format = surface.formatKHR.format;
+	forward.MSColorImage.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment, vk::MemoryPropertyFlagBits::eLazilyAllocated, sampleCount);
-	MSColorImage.createImageView(device, vk::ImageAspectFlagBits::eColor);
+	forward.MSColorImage.createImageView(device, vk::ImageAspectFlagBits::eColor);
 
-	MSDepthImage.format = depth.format;
-	MSDepthImage.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal,
+	forward.MSDepthImage.format = depth.format;
+	forward.MSDepthImage.createImage(device, gpu, surface.actualExtent.width, surface.actualExtent.height, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eLazilyAllocated, sampleCount);
-	MSDepthImage.createImageView(device, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+	forward.MSDepthImage.createImageView(device, vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
 
 	std::vector<vk::Framebuffer> _frameBuffers(swapchain.images.size());
 
 	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
 		std::array<vk::ImageView, 4> attachments = {
-			MSColorImage.view,
+			forward.MSColorImage.view,
 			swapchain.images[i].view,
-			MSDepthImage.view,
+			forward.MSDepthImage.view,
 			depth.view
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(forwardRenderPass)
+			.setRenderPass(forward.forwardRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1031,15 +1153,15 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 
 	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			renderTarget["position"].view,
-			renderTarget["normal"].view,
-			renderTarget["albedo"].view,
-			renderTarget["specular"].view,
+			renderTargets["position"].view,
+			renderTargets["normal"].view,
+			renderTargets["albedo"].view,
+			renderTargets["specular"].view,
 			depth.view
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(deferredRenderPass)
+			.setRenderPass(deferred.deferredRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1062,7 +1184,7 @@ std::vector<vk::Framebuffer> Context::createCompositionFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(compositionRenderPass)
+			.setRenderPass(deferred.compositionRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1085,7 +1207,7 @@ std::vector<vk::Framebuffer> Context::createReflectionFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(ssrRenderPass)
+			.setRenderPass(ssr.ssrRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1104,11 +1226,11 @@ std::vector<vk::Framebuffer> Context::createSSAOFrameBuffers()
 
 	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			renderTarget["ssao"].view
+			renderTargets["ssao"].view
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(ssaoRenderPass)
+			.setRenderPass(ssao.ssaoRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1127,11 +1249,11 @@ std::vector<vk::Framebuffer> Context::createSSAOBlurFrameBuffers()
 
 	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			renderTarget["ssaoBlur"].view
+			renderTargets["ssaoBlur"].view
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(ssaoRenderPass)
+			.setRenderPass(ssao.ssaoRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1154,7 +1276,7 @@ std::vector<vk::Framebuffer> Context::createGUIFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(guiRenderPass)
+			.setRenderPass(gui.guiRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1621,19 +1743,20 @@ Pipeline Context::createCompositionPipeline()
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
 
-		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &DSLayoutComposition));
-
+		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &deferred.DSLayoutComposition));
 	}
 
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutComposition, Shadows::getDescriptorSetLayout(device) };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { deferred.DSLayoutComposition, Shadows::getDescriptorSetLayout(device) };
+
+
 	VkCheck(device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
+		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, sizeof(float) } },
 		nullptr,
 		&_pipeline.pipeinfo.layout));
 	std::cout << "Pipeline Layout created\n";
 
 	// Render Pass
-	_pipeline.pipeinfo.renderPass = compositionRenderPass;
+	_pipeline.pipeinfo.renderPass = deferred.compositionRenderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	_pipeline.pipeinfo.subpass = 0;
@@ -1855,11 +1978,11 @@ Pipeline Context::createReflectionPipeline()
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
 
-		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &DSLayoutReflection));
+		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &ssr.DSLayoutReflection));
 
 	}
 
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutReflection };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssr.DSLayoutReflection };
 	VkCheck(device.createPipelineLayout(
 		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
 		nullptr,
@@ -1867,7 +1990,7 @@ Pipeline Context::createReflectionPipeline()
 	std::cout << "Pipeline Layout created\n";
 
 	// Render Pass
-	_pipeline.pipeinfo.renderPass = ssrRenderPass;
+	_pipeline.pipeinfo.renderPass = ssr.ssrRenderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	_pipeline.pipeinfo.subpass = 0;
@@ -2089,11 +2212,11 @@ Pipeline Context::createSSAOPipeline()
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
 
-		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &DSLayoutSSAO));
+		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &ssao.DSLayoutSSAO));
 
 	}
 
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutSSAO };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayoutSSAO };
 	VkCheck(device.createPipelineLayout(
 		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
 		nullptr,
@@ -2101,7 +2224,7 @@ Pipeline Context::createSSAOPipeline()
 	std::cout << "Pipeline Layout created\n";
 
 	// Render Pass
-	_pipeline.pipeinfo.renderPass = ssaoRenderPass;
+	_pipeline.pipeinfo.renderPass = ssao.ssaoRenderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	_pipeline.pipeinfo.subpass = 0;
@@ -2291,11 +2414,11 @@ Pipeline Context::createSSAOBlurPipeline()
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
 
-		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &DSLayoutSSAOBlur));
+		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &ssao.DSLayoutSSAOBlur));
 
 	}
 
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutSSAOBlur };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayoutSSAOBlur };
 	VkCheck(device.createPipelineLayout(
 		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
 		nullptr,
@@ -2303,7 +2426,7 @@ Pipeline Context::createSSAOBlurPipeline()
 	std::cout << "Pipeline Layout created\n";
 
 	// Render Pass
-	_pipeline.pipeinfo.renderPass = ssaoBlurRenderPass;
+	_pipeline.pipeinfo.renderPass = ssao.ssaoBlurRenderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	_pipeline.pipeinfo.subpass = 0;
@@ -2364,9 +2487,9 @@ Pipeline Context::createComputePipeline()
 			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
-		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &DSLayoutCompute));
+		VkCheck(device.createDescriptorSetLayout(&descriptorLayout, nullptr, &compute.DSLayoutCompute));
 	}
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutCompute };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { compute.DSLayoutCompute };
 	VkCheck(device.createPipelineLayout(
 		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
 		nullptr,
@@ -2449,25 +2572,25 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 
 	// Free resources
 	depth.destroy(device);
-	MSColorImage.destroy(device);
-	MSDepthImage.destroy(device);
-	for (auto& fb : frameBuffers)
+	forward.MSColorImage.destroy(device);
+	forward.MSDepthImage.destroy(device);
+	for (auto& fb : forward.frameBuffers)
 		device.destroyFramebuffer(fb);
-	pipeline.destroy(device);
-	pipelineGUI.destroy(device);
-	pipelineSkyBox.destroy(device);
-	pipelineTerrain.destroy(device);
-	device.destroyRenderPass(forwardRenderPass);
+	forward.pipeline.destroy(device);
+	gui.pipelineGUI.destroy(device);
+	skyBox.pipelineSkyBox.destroy(device);
+	terrain.pipelineTerrain.destroy(device);
+	device.destroyRenderPass(forward.forwardRenderPass);
 	swapchain.destroy(device);
 
 	// Recreate resources
 	surface.actualExtent = { width, height };
 	swapchain = createSwapchain();
 	depth = createDepthResources();
-	forwardRenderPass = createRenderPass(); // ?
-	frameBuffers = createFrameBuffers();
-	pipelineTerrain = createPipeline(getPipelineSpecificationsTerrain());
-	pipelineSkyBox = createPipeline(getPipelineSpecificationsSkyBox());
-	pipelineGUI = createPipeline(getPipelineSpecificationsGUI());
-	pipeline = createPipeline(getPipelineSpecificationsModel());
+	forward.forwardRenderPass = createRenderPass(); // ?
+	forward.frameBuffers = createFrameBuffers();
+	terrain.pipelineTerrain = createPipeline(getPipelineSpecificationsTerrain());
+	skyBox.pipelineSkyBox = createPipeline(getPipelineSpecificationsSkyBox());
+	gui.pipelineGUI = createPipeline(getPipelineSpecificationsGUI());
+	forward.pipeline = createPipeline(getPipelineSpecificationsModel());
 }

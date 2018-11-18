@@ -9,8 +9,6 @@ layout(location = 0) in vec2 v_TexCoords;
 layout(location = 0) out vec4 o_Color;
 
 void main() {
-
 	vec4 texel = texture(tSampler, v_TexCoords);
-
     o_Color = texel;
 }

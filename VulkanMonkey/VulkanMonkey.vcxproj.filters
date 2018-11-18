@@ -159,6 +159,24 @@
     <ClInclude Include="include\imgui\imstb_truetype.h">
       <Filter>Include</Filter>
     </ClInclude>
+    <ClInclude Include="include\Light.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\SSAO.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Deferred.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\SSR.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Compute.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Forward.h">
+      <Filter>Include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -229,6 +247,24 @@
       <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="include\imgui\imgui_widgets.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Light.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\SSAO.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Deferred.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\SSR.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Compute.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Forward.cpp">
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>

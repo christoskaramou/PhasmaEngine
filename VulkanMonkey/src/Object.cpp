@@ -17,9 +17,9 @@ void Object::createVertexBuffer(vk::Device device, vk::PhysicalDevice gpu, vk::C
 	staging.destroy(device);
 }
 
-void Object::createUniformBuffer(vk::Device device, vk::PhysicalDevice gpu)
+void Object::createUniformBuffer(vk::Device device, vk::PhysicalDevice gpu, size_t size)
 {
-	uniformBuffer.createBuffer(device, gpu, 256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniformBuffer.createBuffer(device, gpu, size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	VkCheck(device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
 }
 
