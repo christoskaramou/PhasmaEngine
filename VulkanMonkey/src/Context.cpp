@@ -366,14 +366,24 @@ int Context::getComputeFamilyId()
 
 vk::PhysicalDevice Context::findGpu()
 {
+	if (graphicsFamilyId < 0 || presentFamilyId < 0 || computeFamilyId < 0)
+		return nullptr;
 	uint32_t gpuCount = 0;
 	instance.enumeratePhysicalDevices(&gpuCount, nullptr);
 	std::vector<vk::PhysicalDevice> gpuList(gpuCount);
 	instance.enumeratePhysicalDevices(&gpuCount, gpuList.data());
 
-	for (const auto& gpu : gpuList)
-		if (graphicsFamilyId >= 0 && presentFamilyId >= 0 && computeFamilyId >= 0)
+	for (const auto& gpu : gpuList) {
+		uint32_t familyCount = 0;
+		gpu.getQueueFamilyProperties(&familyCount, nullptr);
+		std::vector<vk::QueueFamilyProperties> properties(familyCount);
+		gpu.getQueueFamilyProperties(&familyCount, properties.data());
+
+		if (properties[graphicsFamilyId].queueFlags & vk::QueueFlagBits::eGraphics &&
+			gpu.getSurfaceSupportKHR(presentFamilyId, surface.surface).value &&
+			properties[computeFamilyId].queueFlags & vk::QueueFlagBits::eCompute)
 			return gpu;
+	}
 
 	return nullptr;
 }

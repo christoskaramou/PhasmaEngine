@@ -184,6 +184,7 @@ void Camera::ExtractFrustum(vm::mat4& model)
 	frustum[5][3] *= t;
 }
 
+// center x,y,z - radius w 
 bool Camera::SphereInFrustum(vm::vec4& boundingSphere) const
 {
 	for (unsigned i = 0; i < 6; i++)
