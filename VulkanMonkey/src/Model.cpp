@@ -5,6 +5,8 @@
 #include "../include/assimp/postprocess.h"     // Post processing flags
 #include "../include/assimp/DefaultLogger.hpp"
 
+using namespace vm;
+
 vk::DescriptorSetLayout	Model::descriptorSetLayout = nullptr;
 
 vm::mat4 aiMatrix4x4ToMat4(const aiMatrix4x4& m)
@@ -395,5 +397,11 @@ void Model::destroy(vk::Device device)
 	vertexBuffer.destroy(device);
 	indexBuffer.destroy(device);
 	uniformBuffer.destroy(device);
+
+	if (descriptorSetLayout)
+		device.destroyDescriptorSetLayout(descriptorSetLayout);
+	if (Mesh::descriptorSetLayout)
+		device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
+
 	std::cout << "Model and associated structs destroyed\n";
 }

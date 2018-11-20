@@ -4,6 +4,8 @@
 #include <cstring>
 #include <string>
 
+using namespace vm;
+
 constexpr int WIDTH = 1664;
 constexpr int HEIGHT = 960;
 

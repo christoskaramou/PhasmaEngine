@@ -2,10 +2,12 @@
 #include "Vulkan.h"
 #include "Image.h"
 
-struct Swapchain
-{
-	vk::SwapchainKHR swapchain;
-	std::vector<Image> images{};
+namespace vm {
+	struct Swapchain
+	{
+		vk::SwapchainKHR swapchain;
+		std::vector<Image> images{};
 
-	void destroy(vk::Device device);
-};
+		void destroy(vk::Device device);
+	};
+}

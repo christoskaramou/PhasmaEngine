@@ -1,6 +1,8 @@
 #include "../include/Light.h"
 #include "../include/Errors.h"
 
+using namespace vm;
+
 Light::Light() : 
 	color(vm::rand(0.f, 1.f), vm::rand(0.0f, 1.f), vm::rand(0.f, 1.f), vm::rand(0.f, 1.f)),
 	position(vm::rand(-3.5f, 3.5f), vm::rand(.7f, .7f), vm::rand(-3.5f, 3.5f), 1.f),
@@ -46,4 +48,14 @@ void LightUniforms::createLightUniforms(vk::Device device, vk::PhysicalDevice gp
 			.setRange(uniform.size));							// DeviceSize range;
 	device.updateDescriptorSets(1, &writeSet, 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
+}
+
+void vm::LightUniforms::destroy(vk::Device device)
+{
+	uniform.destroy(device);
+	if (descriptorSetLayout) {
+		device.destroyDescriptorSetLayout(descriptorSetLayout);
+		descriptorSetLayout = nullptr;
+		std::cout << "Descriptor Set Layout destroyed\n";
+	}
 }

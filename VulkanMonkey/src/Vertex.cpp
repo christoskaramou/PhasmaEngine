@@ -1,6 +1,8 @@
 #include "../include/Vertex.h"
 #include "../include/imgui/imgui.h"
 
+using namespace vm;
+
 Vertex::Vertex() :
 	x(0.f), y(0.f), z(0.f),
 	u(0.f), v(0.f),

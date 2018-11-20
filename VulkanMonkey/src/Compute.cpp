@@ -1,6 +1,8 @@
 #include "../include/Compute.h"
 #include "../include/Errors.h"
 
+using namespace vm;
+
 void Compute::createComputeUniforms(vk::Device device, vk::PhysicalDevice gpu, vk::DescriptorPool descriptorPool)
 {
 	std::vector<float> scrap(1024);
@@ -37,4 +39,12 @@ void Compute::createComputeUniforms(vk::Device device, vk::PhysicalDevice gpu, v
 	device.updateDescriptorSets(1, writeCompDescriptorSets.data(), 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
 
+}
+
+void vm::Compute::destroy(vk::Device device)
+{
+	SBInOut.destroy(device);
+	if (DSLayoutCompute)
+		device.destroyDescriptorSetLayout(DSLayoutCompute);
+	pipeline.destroy(device);
 }

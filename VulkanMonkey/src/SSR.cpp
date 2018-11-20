@@ -1,6 +1,8 @@
 #include "../include/SSR.h"
 #include "../include/Errors.h"
 
+using namespace vm;
+
 void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets, vk::Device device, vk::PhysicalDevice gpu, vk::DescriptorPool descriptorPool)
 {
 	UBReflection.createBuffer(device, gpu, 256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
@@ -71,4 +73,26 @@ void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets, vk::Dev
 
 	device.updateDescriptorSets(5, textureWriteSets, 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
+}
+
+void vm::SSR::destroy(vk::Device device)
+{
+	for (auto &frameBuffer : frameBuffers) {
+		if (frameBuffer) {
+			device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	if (renderPass) {
+		device.destroyRenderPass(renderPass);
+		renderPass = nullptr;
+		std::cout << "RenderPass destroyed\n";
+	}
+	if (DSLayoutReflection) {
+		device.destroyDescriptorSetLayout(DSLayoutReflection);
+		DSLayoutReflection = nullptr;
+		std::cout << "Descriptor Set Layout destroyed\n";
+	}
+	UBReflection.destroy(device);
+	pipeline.destroy(device);
 }

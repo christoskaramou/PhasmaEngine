@@ -1,6 +1,8 @@
 #include "../include/Object.h"
 #include "../include/Errors.h"
 
+using namespace vm;
+
 void Object::createVertexBuffer(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue)
 {
 	vertexBuffer.createBuffer(device, gpu, sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);

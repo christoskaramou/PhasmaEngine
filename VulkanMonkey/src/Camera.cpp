@@ -1,6 +1,8 @@
 #include "../include/Camera.h"
 #include <iostream>
 
+using namespace vm;
+
 Camera::Camera()
 {
 	// normalized device coordinates (ndc) of the API and left handed corrdinate system comparison

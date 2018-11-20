@@ -5,13 +5,16 @@
 #include "Stbi.h"
 #include "Math.h"
 
-struct SkyBox : Object
-{
-	Pipeline pipelineSkyBox;
+namespace vm {
+	struct SkyBox : Object
+	{
+		Pipeline pipeline;
 
-	static vk::DescriptorSetLayout descriptorSetLayout;
-	static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
-	void loadSkyBox(const std::vector<std::string>& textureNames, uint32_t imageSideSize, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show = true);
-	void draw(Pipeline& pipeline, const vk::CommandBuffer & cmd);
-	void loadTextures(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, const std::vector<std::string>& paths, uint32_t imageSideSize);
-};
+		static vk::DescriptorSetLayout descriptorSetLayout;
+		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
+		void loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show = true);
+		void draw(Pipeline& pipeline, const vk::CommandBuffer & cmd);
+		void loadTextures(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, const std::array<std::string, 6>& paths, uint32_t imageSideSize);
+		void destroy(vk::Device device);
+	};
+}

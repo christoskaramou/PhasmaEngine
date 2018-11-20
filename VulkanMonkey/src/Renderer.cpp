@@ -4,9 +4,11 @@
 #include <iostream>
 #include <random>
 #include <chrono>
+
+using namespace vm;
+
 Renderer::Renderer(SDL_Window* window)
 {
-	Context::info = &ctx;
 	ctx.window = window;
 
 	// INIT ALL VULKAN CONTEXT
@@ -25,226 +27,20 @@ Renderer::Renderer(SDL_Window* window)
 Renderer::~Renderer()
 {
     ctx.device.waitIdle();
-	for (auto& fence : ctx.fences) {
-		if (fence) {
-			ctx.device.destroyFence(fence);
-			std::cout << "Fence destroyed\n";
-		}
-	}
-    for (auto &semaphore : ctx.semaphores){
-        if (semaphore){
-            ctx.device.destroySemaphore(semaphore);
-            std::cout << "Semaphore destroyed\n";
-        }
-    }
 
-	ctx.compute.pipelineCompute.destroy(ctx.device);
-	ctx.ssr.pipelineSSR.destroy(ctx.device);
-	ctx.ssao.pipelineSSAO.destroy(ctx.device);
-	ctx.ssao.pipelineSSAOBlur.destroy(ctx.device);
-	ctx.deferred.pipelineComposition.destroy(ctx.device);
-	ctx.deferred.pipelineDeferred.destroy(ctx.device);
-	ctx.forward.pipeline.destroy(ctx.device);
-	ctx.gui.pipelineGUI.destroy(ctx.device);
-	ctx.skyBox.pipelineSkyBox.destroy(ctx.device);
-	ctx.shadows.pipelineShadows.destroy(ctx.device);
-	ctx.terrain.pipelineTerrain.destroy(ctx.device);
-
+	for (auto &model : ctx.models)
+		model.destroy(ctx.device);
+	ctx.shadows.destroy(ctx.device);
+	ctx.compute.destroy(ctx.device);
+	ctx.forward.destroy(ctx.device);
+	ctx.deferred.destroy(ctx.device);
+	ctx.ssr.destroy(ctx.device);
+	ctx.ssao.destroy(ctx.device);
 	ctx.skyBox.destroy(ctx.device);
 	ctx.terrain.destroy(ctx.device);
 	ctx.gui.destroy(ctx.device);
-	ctx.shadows.destroy(ctx.device);
-
-    if (ctx.descriptorPool){
-        ctx.device.destroyDescriptorPool(ctx.descriptorPool);
-        std::cout << "DescriptorPool destroyed\n";
-    }
-
-	ctx.forward.MSColorImage.destroy(ctx.device);
-	ctx.forward.MSDepthImage.destroy(ctx.device);
-	for (auto& rt : ctx.renderTargets)
-		rt.second.destroy(ctx.device);
-	ctx.ssao.ssaoNoise.destroy(ctx.device);
-	ctx.depth.destroy(ctx.device);
-
-	ctx.lightUniforms.uniform.destroy(ctx.device);
-	ctx.ssr.UBReflection.destroy(ctx.device);
-	ctx.compute.SBInOut.destroy(ctx.device);
-	ctx.ssao.UBssaoKernel.destroy(ctx.device);
-	ctx.ssao.UBssaoPVM.destroy(ctx.device);
-	for (auto &model : ctx.models)
-		model.destroy(ctx.device);
-	ctx.models.clear();
-	ctx.models.shrink_to_fit();
-
-	if (Shadows::descriptorSetLayout) {
-		ctx.device.destroyDescriptorSetLayout(Shadows::descriptorSetLayout);
-		Shadows::descriptorSetLayout = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
-	}
-	if (SkyBox::descriptorSetLayout) {
-		ctx.device.destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
-		SkyBox::descriptorSetLayout = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
-	}
-	if (GUI::descriptorSetLayout) {
-		ctx.device.destroyDescriptorSetLayout(GUI::descriptorSetLayout);
-		GUI::descriptorSetLayout = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
-	}
-	if (Terrain::descriptorSetLayout) {
-		ctx.device.destroyDescriptorSetLayout(Terrain::descriptorSetLayout);
-		Terrain::descriptorSetLayout = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
-	}
-	if (Mesh::descriptorSetLayout) {
-		ctx.device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
-		Mesh::descriptorSetLayout = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
-	}
-    if (Model::descriptorSetLayout){
-        ctx.device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
-		Model::descriptorSetLayout = nullptr;
-        std::cout << "Descriptor Set Layout destroyed\n";
-    }
-	if (ctx.deferred.DSLayoutComposition) {
-		ctx.device.destroyDescriptorSetLayout(ctx.deferred.DSLayoutComposition);
-		ctx.deferred.DSLayoutComposition = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
-	}
-	if (ctx.ssao.DSLayoutSSAO) {
-		ctx.device.destroyDescriptorSetLayout(ctx.ssao.DSLayoutSSAO);
-		ctx.ssao.DSLayoutSSAO = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
-	}
-	if (ctx.ssao.DSLayoutSSAOBlur) {
-		ctx.device.destroyDescriptorSetLayout(ctx.ssao.DSLayoutSSAOBlur);
-		ctx.ssao.DSLayoutSSAOBlur = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
-	}
-	if (ctx.ssr.DSLayoutReflection) {
-		ctx.device.destroyDescriptorSetLayout(ctx.ssr.DSLayoutReflection);
-		ctx.ssr.DSLayoutReflection = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
-	}
-	if (ctx.compute.DSLayoutCompute) {
-		ctx.device.destroyDescriptorSetLayout(ctx.compute.DSLayoutCompute);
-		ctx.compute.DSLayoutCompute = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
-	}
-	if (ctx.lightUniforms.descriptorSetLayout) {
-		ctx.device.destroyDescriptorSetLayout(ctx.lightUniforms.descriptorSetLayout);
-		ctx.lightUniforms.descriptorSetLayout = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
-	}
-
-	for (auto &frameBuffer : ctx.gui.guiFrameBuffers) {
-		if (frameBuffer) {
-			ctx.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
-		}
-	}
-	for (auto &frameBuffer : ctx.ssr.ssrFrameBuffers) {
-		if (frameBuffer) {
-			ctx.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
-		}
-	}
-	for (auto &frameBuffer : ctx.ssao.ssaoFrameBuffers) {
-		if (frameBuffer) {
-			ctx.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
-		}
-	}
-	for (auto &frameBuffer : ctx.ssao.ssaoBlurFrameBuffers) {
-		if (frameBuffer) {
-			ctx.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
-		}
-	}
-	for (auto &frameBuffer : ctx.deferred.compositionFrameBuffers) {
-		if (frameBuffer) {
-			ctx.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
-		}
-	}
-	for (auto &frameBuffer : ctx.deferred.deferredFrameBuffers) {
-		if (frameBuffer) {
-			ctx.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
-		}
-	}
-	for (auto &frameBuffer : ctx.forward.frameBuffers) {
-		if (frameBuffer) {
-			ctx.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
-		}
-	}
-
-	if (ctx.deferred.deferredRenderPass) {
-		ctx.device.destroyRenderPass(ctx.deferred.deferredRenderPass);
-		ctx.deferred.deferredRenderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
-	}
-	if (ctx.deferred.compositionRenderPass) {
-		ctx.device.destroyRenderPass(ctx.deferred.compositionRenderPass);
-		ctx.deferred.compositionRenderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
-	}
-	if (ctx.ssao.ssaoRenderPass) {
-		ctx.device.destroyRenderPass(ctx.ssao.ssaoRenderPass);
-		ctx.ssao.ssaoRenderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
-	}
-	if (ctx.ssao.ssaoBlurRenderPass) {
-		ctx.device.destroyRenderPass(ctx.ssao.ssaoBlurRenderPass);
-		ctx.ssao.ssaoBlurRenderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
-	}
-	if (ctx.ssr.ssrRenderPass) {
-		ctx.device.destroyRenderPass(ctx.ssr.ssrRenderPass);
-		ctx.ssr.ssrRenderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
-	}
-	if (ctx.gui.guiRenderPass) {
-		ctx.device.destroyRenderPass(ctx.gui.guiRenderPass);
-		ctx.gui.guiRenderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
-	}
-	if (Shadows::renderPass) {
-		ctx.device.destroyRenderPass(Shadows::renderPass);
-		Shadows::renderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
-	}
-	if (ctx.forward.forwardRenderPass) {
-		ctx.device.destroyRenderPass(ctx.forward.forwardRenderPass);
-		std::cout << "RenderPass destroyed\n";
-	}
-
-    if (ctx.commandPool){
-        ctx.device.destroyCommandPool(ctx.commandPool);
-        std::cout << "CommandPool destroyed\n";
-    }
-	if (ctx.commandPoolCompute) {
-		ctx.device.destroyCommandPool(ctx.commandPoolCompute);
-		std::cout << "CommandPool destroyed\n";
-	}
-	ctx.swapchain.destroy(ctx.device);
-
-    if (ctx.device){
-        ctx.device.destroy();
-        std::cout << "Device destroyed\n";
-    }
-
-    if (ctx.surface.surface){
-        ctx.instance.destroySurfaceKHR(ctx.surface.surface);
-        std::cout << "Surface destroyed\n";
-    }
-
-    if (ctx.instance){
-		ctx.instance.destroy();
-        std::cout << "Instance destroyed\n";
-    }
+	ctx.lightUniforms.destroy(ctx.device);
+	ctx.destroyVkContext();
 }
 
 void Renderer::update(float delta)
@@ -322,8 +118,8 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 		.setPInheritanceInfo(nullptr);
 	VkCheck(ctx.computeCmdBuffer.begin(&beginInfo));
 
-	ctx.computeCmdBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, ctx.compute.pipelineCompute.pipeline);
-	ctx.computeCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.compute.pipelineCompute.compinfo.layout, 0, 1, &ctx.compute.DSCompute, 0, nullptr);
+	ctx.computeCmdBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.pipeline);
+	ctx.computeCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.compinfo.layout, 0, 1, &ctx.compute.DSCompute, 0, nullptr);
 
 	ctx.computeCmdBuffer.dispatch(sizeX, sizeY, sizeZ);
 	ctx.computeCmdBuffer.end();
@@ -341,7 +137,7 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
 	auto renderPassInfo = vk::RenderPassBeginInfo()
-		.setRenderPass(ctx.forward.forwardRenderPass)
+		.setRenderPass(ctx.forward.renderPass)
 		.setFramebuffer(ctx.forward.frameBuffers[imageIndex])
 		.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
@@ -351,16 +147,16 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 	ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
 
 	// TERRAIN
-	ctx.terrain.draw(ctx.terrain.pipelineTerrain, ctx.dynamicCmdBuffer);
+	ctx.terrain.draw(ctx.terrain.pipeline, ctx.dynamicCmdBuffer);
 	// MODELS
 	for (uint32_t m = 0; m < ctx.models.size(); m++)
 		ctx.models[m].draw(ctx.forward.pipeline, ctx.dynamicCmdBuffer, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
 	// SKYBOX
-	ctx.skyBox.draw(ctx.skyBox.pipelineSkyBox, ctx.dynamicCmdBuffer);
+	ctx.skyBox.draw(ctx.skyBox.pipeline, ctx.dynamicCmdBuffer);
 	ctx.dynamicCmdBuffer.endRenderPass();
 
 	// GUI
-	ctx.gui.draw(ctx.gui.guiRenderPass, ctx.gui.guiFrameBuffers[imageIndex], ctx.surface, ctx.gui.pipelineGUI, ctx.dynamicCmdBuffer);
+	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.surface, ctx.gui.pipeline, ctx.dynamicCmdBuffer);
 
 	ctx.dynamicCmdBuffer.end();
 }
@@ -381,8 +177,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
 		vk::ClearDepthStencilValue({ 1.0f, 0 }) };
 	auto renderPassInfo = vk::RenderPassBeginInfo()
-		.setRenderPass(ctx.deferred.deferredRenderPass)
-		.setFramebuffer(ctx.deferred.deferredFrameBuffers[imageIndex])
+		.setRenderPass(ctx.deferred.renderPass)
+		.setFramebuffer(ctx.deferred.frameBuffers[imageIndex])
 		.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
@@ -407,7 +203,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	// MODELS
 	for (uint32_t m = 0; m < ctx.models.size(); m++)
-		ctx.models[m].draw(ctx.deferred.pipelineDeferred, ctx.dynamicCmdBuffer, m, true);
+		ctx.models[m].draw(ctx.deferred.pipeline, ctx.dynamicCmdBuffer, m, true);
 	ctx.dynamicCmdBuffer.endRenderPass();
 	// End deferred
 
@@ -417,16 +213,16 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		std::vector<vk::ClearValue> clearValuesSSAO = {
 		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
 		auto renderPassInfoSSAO = vk::RenderPassBeginInfo()
-			.setRenderPass(ctx.ssao.ssaoRenderPass)
-			.setFramebuffer(ctx.ssao.ssaoFrameBuffers[imageIndex])
+			.setRenderPass(ctx.ssao.renderPass)
+			.setFramebuffer(ctx.ssao.frameBuffers[imageIndex])
 			.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
 			.setClearValueCount(static_cast<uint32_t>(clearValuesSSAO.size()))
 			.setPClearValues(clearValuesSSAO.data());
 		ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAO, vk::SubpassContents::eInline);
-		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineSSAO.pipeline);
+		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipeline.pipeline);
 		const vk::DescriptorSet descriptorSets[] = { ctx.ssao.DSssao };
 		const uint32_t dOffsets[] = { 0 };
-		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineSSAO.pipeinfo.layout, 0, 1, descriptorSets, 0, dOffsets);
+		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipeline.pipeinfo.layout, 0, 1, descriptorSets, 0, dOffsets);
 		ctx.dynamicCmdBuffer.draw(3, 1, 0, 0);
 		ctx.dynamicCmdBuffer.endRenderPass();
 		
@@ -434,16 +230,16 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		std::vector<vk::ClearValue> clearValuesSSAOBlur = {
 		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
 		auto renderPassInfoSSAOBlur = vk::RenderPassBeginInfo()
-			.setRenderPass(ctx.ssao.ssaoBlurRenderPass)
-			.setFramebuffer(ctx.ssao.ssaoBlurFrameBuffers[imageIndex])
+			.setRenderPass(ctx.ssao.blurRenderPass)
+			.setFramebuffer(ctx.ssao.blurFrameBuffers[imageIndex])
 			.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
 			.setClearValueCount(static_cast<uint32_t>(clearValuesSSAOBlur.size()))
 			.setPClearValues(clearValuesSSAOBlur.data());
 		ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAOBlur, vk::SubpassContents::eInline);
-		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineSSAOBlur.pipeline);
+		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineBlur.pipeline);
 		const vk::DescriptorSet descriptorSetsBlur[] = { ctx.ssao.DSssaoBlur };
 		const uint32_t dOffsetsBlur[] = { 0 };
-		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineSSAOBlur.pipeinfo.layout, 0, 1, descriptorSetsBlur, 0, dOffsetsBlur);
+		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineBlur.pipeinfo.layout, 0, 1, descriptorSetsBlur, 0, dOffsetsBlur);
 		ctx.dynamicCmdBuffer.draw(3, 1, 0, 0);
 		ctx.dynamicCmdBuffer.endRenderPass();
 	}
@@ -474,20 +270,20 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		std::vector<vk::ClearValue> clearValues1 = {
 			vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
 		auto renderPassInfo1 = vk::RenderPassBeginInfo()
-			.setRenderPass(ctx.ssr.ssrRenderPass)
-			.setFramebuffer(ctx.ssr.ssrFrameBuffers[imageIndex])
+			.setRenderPass(ctx.ssr.renderPass)
+			.setFramebuffer(ctx.ssr.frameBuffers[imageIndex])
 			.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
 			.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
 			.setPClearValues(clearValues1.data());
 		ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfo1, vk::SubpassContents::eInline);
-		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssr.pipelineSSR.pipeline);
-		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssr.pipelineSSR.pipeinfo.layout, 0, 1, &ctx.ssr.DSReflection, 0, nullptr);
+		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssr.pipeline.pipeline);
+		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssr.pipeline.pipeinfo.layout, 0, 1, &ctx.ssr.DSReflection, 0, nullptr);
 		ctx.dynamicCmdBuffer.draw(3, 1, 0, 0);
 		ctx.dynamicCmdBuffer.endRenderPass();
 	}
 
 	// GUI
-	ctx.gui.draw(ctx.gui.guiRenderPass, ctx.gui.guiFrameBuffers[imageIndex], ctx.surface, ctx.gui.pipelineGUI, ctx.dynamicCmdBuffer);
+	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.surface, ctx.gui.pipeline, ctx.dynamicCmdBuffer);
 
 	ctx.dynamicCmdBuffer.end();
 }
@@ -513,7 +309,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 
 	vk::DeviceSize offset = vk::DeviceSize();
 
-	ctx.shadowCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipelineShadows.pipeline);
+	ctx.shadowCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
 
 	for (uint32_t m = 0; m < ctx.models.size(); m++) {
 		if (ctx.models[m].render) {
@@ -521,7 +317,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 			ctx.shadowCmdBuffer.bindIndexBuffer(ctx.models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
 			const uint32_t dOffsets[] = { m * sizeof(ShadowsUBO) };
-			ctx.shadowCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipelineShadows.pipeinfo.layout, 0, 1, &ctx.shadows.descriptorSet, 1, dOffsets);
+			ctx.shadowCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, 1, &ctx.shadows.descriptorSet, 1, dOffsets);
 
 			for (auto& mesh : ctx.models[m].meshes) {
 				if (mesh.render)

@@ -2,6 +2,8 @@
 #include "../include/Errors.h"
 #include <iostream>
 
+using namespace vm;
+
 vk::DescriptorSetLayout	SkyBox::descriptorSetLayout = nullptr;
 
 vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(vk::Device device)
@@ -32,7 +34,7 @@ vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-void SkyBox::loadSkyBox(const std::vector<std::string>& textureNames, uint32_t imageSideSize, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show)
+void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show)
 {
 	float SIZE = static_cast<float>(imageSideSize);
 	vertices = {
@@ -98,7 +100,7 @@ void SkyBox::draw(Pipeline& pipeline, const vk::CommandBuffer & cmd)
 }
 
 // images must be squared and the image size must be the real else the assertion will fail
-void SkyBox::loadTextures(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, const std::vector<std::string>& paths, uint32_t imageSideSize)
+void SkyBox::loadTextures(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, const std::array<std::string, 6>& paths, uint32_t imageSideSize)
 {
 	assert(paths.size() == 6);
 
@@ -122,10 +124,8 @@ void SkyBox::loadTextures(vk::Device device, vk::PhysicalDevice gpu, vk::Command
 		}
 		Buffer staging;
 		staging.createBuffer(device, gpu, imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-		void* data;
-		device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &data);
-		memcpy(data, pixels, static_cast<size_t>(imageSize));
+		device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &staging.data);
+		memcpy(staging.data, pixels, static_cast<size_t>(imageSize));
 		device.unmapMemory(staging.memory);
 		stbi_image_free(pixels);
 
@@ -139,4 +139,15 @@ void SkyBox::loadTextures(vk::Device device, vk::PhysicalDevice gpu, vk::Command
 
 	texture.addressMode = vk::SamplerAddressMode::eClampToEdge;
 	texture.createSampler(device);
+}
+
+void vm::SkyBox::destroy(vk::Device device)
+{
+	Object::destroy(device);
+	pipeline.destroy(device);
+	if (descriptorSetLayout) {
+		device.destroyDescriptorSetLayout(descriptorSetLayout);
+		descriptorSetLayout = nullptr;
+		std::cout << "Descriptor Set Layout destroyed\n";
+	}
 }

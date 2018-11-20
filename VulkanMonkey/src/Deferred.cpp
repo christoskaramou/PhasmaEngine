@@ -2,6 +2,8 @@
 #include "../include/Errors.h"
 #include <iostream>
 
+using namespace vm;
+
 void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms, vk::Device device, vk::DescriptorPool descriptorPool)
 {
 	vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
@@ -112,4 +114,37 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 
 	device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
+}
+
+void vm::Deferred::destroy(vk::Device device)
+{
+	if (renderPass) {
+		device.destroyRenderPass(renderPass);
+		renderPass = nullptr;
+		std::cout << "RenderPass destroyed\n";
+	}
+	if (compositionRenderPass) {
+		device.destroyRenderPass(compositionRenderPass);
+		compositionRenderPass = nullptr;
+		std::cout << "RenderPass destroyed\n";
+	}
+	for (auto &frameBuffer : frameBuffers) {
+		if (frameBuffer) {
+			device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	for (auto &frameBuffer : compositionFrameBuffers) {
+		if (frameBuffer) {
+			device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	if (DSLayoutComposition) {
+		device.destroyDescriptorSetLayout(DSLayoutComposition);
+		DSLayoutComposition = nullptr;
+		std::cout << "Descriptor Set Layout destroyed\n";
+	}
+	pipeline.destroy(device);
+	pipelineComposition.destroy(device);
 }

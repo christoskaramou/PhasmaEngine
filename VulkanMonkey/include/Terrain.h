@@ -5,13 +5,16 @@
 #include "Stbi.h"
 #include "Math.h"
 
-struct Terrain : Object
-{
-	Pipeline pipelineTerrain;
+namespace vm {
+	struct Terrain : Object
+	{
+		Pipeline pipeline;
 
-	static vk::DescriptorSetLayout descriptorSetLayout;
-	static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
-	void generateTerrain(const std::string path, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show = true);
-	void draw(Pipeline& pipeline, const vk::CommandBuffer& cmd);
-	void loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, const std::string path);
-};
+		static vk::DescriptorSetLayout descriptorSetLayout;
+		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
+		void generateTerrain(const std::string path, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show = true);
+		void draw(Pipeline& pipeline, const vk::CommandBuffer& cmd);
+		void loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, const std::string path);
+		void destroy(vk::Device device);
+	};
+}

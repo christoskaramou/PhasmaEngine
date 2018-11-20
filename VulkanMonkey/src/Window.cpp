@@ -3,6 +3,8 @@
 #include "../include/Timer.h"
 #include <iostream>
 
+using namespace vm;
+
 constexpr auto MAX_WINDOWS = 20;
 
 std::vector<std::unique_ptr<Renderer>> Window::renderer = {};

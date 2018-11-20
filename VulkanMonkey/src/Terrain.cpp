@@ -2,6 +2,8 @@
 #include "../include/Errors.h"
 #include <iostream>
 
+using namespace vm;
+
 vk::DescriptorSetLayout	Terrain::descriptorSetLayout = nullptr;
 
 vk::DescriptorSetLayout Terrain::getDescriptorSetLayout(vk::Device device)
@@ -99,4 +101,15 @@ void Terrain::loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::Command
 	texture.createSampler(device);
 
 	staging.destroy(device);
+}
+
+void vm::Terrain::destroy(vk::Device device)
+{
+	Object::destroy(device);
+	pipeline.destroy(device);
+	if (descriptorSetLayout) {
+		device.destroyDescriptorSetLayout(descriptorSetLayout);
+		descriptorSetLayout = nullptr;
+		std::cout << "Descriptor Set Layout destroyed\n";
+	}
 }

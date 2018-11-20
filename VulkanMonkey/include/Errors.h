@@ -2,6 +2,7 @@
 #include <iostream>
 #include "Vulkan.h"
 
+namespace vm {
 #ifdef _DEBUG
 #define VkCheck(x)																							\
 {																											\
@@ -16,3 +17,4 @@
 #else
 #define VkCheck(x) x
 #endif // _DEBUG
+}

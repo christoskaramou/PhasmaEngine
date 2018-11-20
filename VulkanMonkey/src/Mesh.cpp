@@ -3,6 +3,8 @@
 #include "../include/Buffer.h"
 #include <iostream>
 
+using namespace vm;
+
 vk::DescriptorSetLayout	Mesh::descriptorSetLayout = nullptr;
 
 vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(vk::Device device)
@@ -129,4 +131,6 @@ void Mesh::destroy(vk::Device device)
 	vertices.shrink_to_fit();
 	indices.clear();
 	indices.shrink_to_fit();
+	if (descriptorSetLayout)
+		device.destroyDescriptorSetLayout(descriptorSetLayout);
 }

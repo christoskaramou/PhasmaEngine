@@ -1,6 +1,8 @@
 #include "../include/Swapchain.h"
 #include <iostream>
 
+using namespace vm;
+
 void Swapchain::destroy(vk::Device device)
 {
 	for (auto &image : images) {

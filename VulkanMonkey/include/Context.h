@@ -27,125 +27,126 @@
 #include <tuple>
 #include <map>
 
-struct Context
-{
-public:
-	static Context* info;
+namespace vm {
+	struct Context
+	{
+	public:
+		// VULKAN CONTEXT
+		SDL_Window* window;
+		vk::Instance instance;
+		Surface surface;
+		int graphicsFamilyId, presentFamilyId, computeFamilyId;
+		vk::PhysicalDevice gpu;
+		vk::PhysicalDeviceProperties gpuProperties;
+		vk::PhysicalDeviceFeatures gpuFeatures;
+		vk::Device device;
+		vk::Queue graphicsQueue, presentQueue, computeQueue;
+		vk::CommandPool commandPool, commandPoolCompute;
+		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
+		Swapchain swapchain;
+		Image depth;
+		vk::CommandBuffer dynamicCmdBuffer, computeCmdBuffer, shadowCmdBuffer;
+		vk::DescriptorPool descriptorPool;
+		std::vector<vk::Fence> fences{};
+		std::vector<vk::Semaphore> semaphores{};
+		std::map<std::string, Image> renderTargets{};
 
-	// VULKAN CONTEXT
-	SDL_Window* window;
-	vk::Instance instance;
-	Surface surface;
-	int graphicsFamilyId, presentFamilyId, computeFamilyId;
-	vk::PhysicalDevice gpu;
-	vk::PhysicalDeviceProperties gpuProperties;
-	vk::PhysicalDeviceFeatures gpuFeatures;
-	vk::Device device;
-	vk::Queue graphicsQueue, presentQueue, computeQueue;
-	vk::CommandPool commandPool, commandPoolCompute;
-	vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
-	Swapchain swapchain;
-	Image depth;
-	vk::CommandBuffer dynamicCmdBuffer, computeCmdBuffer, shadowCmdBuffer;
-	vk::DescriptorPool descriptorPool;
-	std::vector<vk::Fence> fences{};
-	std::vector<vk::Semaphore> semaphores{};
-	std::map<std::string, Image> renderTargets{};
+		// MODELS
+		std::vector<Model> models{};
 
-	// MODELS
-	std::vector<Model> models{};
-	
-	// SHADOWS
-	Shadows shadows;
+		// SHADOWS
+		Shadows shadows;
 
-	// COMPUTE
-	Compute compute;
+		// COMPUTE
+		Compute compute;
 
-	// FORWARD
-	Forward forward;
+		// FORWARD
+		Forward forward;
 
-	// DEFERRED
-	Deferred deferred;
+		// DEFERRED
+		Deferred deferred;
 
-	// SSR
-	SSR ssr;
+		// SSR
+		SSR ssr;
 
-	// SSAO
-	SSAO ssao;
+		// SSAO
+		SSAO ssao;
 
-	// SKYBOX
-	SkyBox skyBox;
+		// SKYBOX
+		SkyBox skyBox;
 
-	// TERRAIN
-	Terrain terrain;
+		// TERRAIN
+		Terrain terrain;
 
-	// GUI
-	GUI gui;
+		// GUI
+		GUI gui;
 
-	// LIGHTS
-	LightUniforms lightUniforms;
+		// LIGHTS
+		LightUniforms lightUniforms;
 
-	// MAIN CAMERA
-	Camera mainCamera;
+		// MAIN CAMERA
+		Camera mainCamera;
 
-	void initVulkanContext();
-	void initRendering();
-	void loadResources();
-	void createUniforms();
-	void resizeViewport(uint32_t width, uint32_t height);
+		void initVulkanContext();
+		void initRendering();
+		void loadResources();
+		void createUniforms();
+		void destroyVkContext();
+		void resizeViewport(uint32_t width, uint32_t height);
 
-	static PipelineInfo getPipelineSpecificationsModel();
-	static PipelineInfo getPipelineSpecificationsShadows();
-	static PipelineInfo getPipelineSpecificationsSkyBox();
-	static PipelineInfo getPipelineSpecificationsTerrain();
-	static PipelineInfo getPipelineSpecificationsGUI();
-	static PipelineInfo getPipelineSpecificationsDeferred();
+		PipelineInfo getPipelineSpecificationsModel();
+		PipelineInfo getPipelineSpecificationsShadows();
+		PipelineInfo getPipelineSpecificationsSkyBox();
+		PipelineInfo getPipelineSpecificationsTerrain();
+		PipelineInfo getPipelineSpecificationsGUI();
+		PipelineInfo getPipelineSpecificationsDeferred();
 
-private:
-	vk::Instance createInstance();
-	Surface createSurface();
-	int getGraphicsFamilyId();
-	int getPresentFamilyId();
-	int getComputeFamilyId();
-	vk::PhysicalDevice findGpu();
-	vk::PhysicalDeviceProperties getGPUProperties();
-	vk::PhysicalDeviceFeatures getGPUFeatures();
-	vk::SurfaceCapabilitiesKHR getSurfaceCapabilities();
-	vk::SurfaceFormatKHR getSurfaceFormat();
-	vk::PresentModeKHR getPresentationMode();
-	vk::Device createDevice();
-	vk::Queue getGraphicsQueue();
-	vk::Queue getPresentQueue();
-	vk::Queue getComputeQueue();
-	Swapchain createSwapchain();
-	vk::CommandPool createCommandPool();
-	vk::CommandPool createComputeCommadPool();
-	std::map<std::string, Image> createRenderTargets(std::vector<std::tuple<std::string, vk::Format>> RTtuples);
-	vk::RenderPass createRenderPass();
-	vk::RenderPass createDeferredRenderPass();
-	vk::RenderPass createCompositionRenderPass();
-	vk::RenderPass createSSAORenderPass();
-	vk::RenderPass createSSAOBlurRenderPass();
-	vk::RenderPass createReflectionRenderPass();
-	vk::RenderPass createGUIRenderPass();
-	Image createDepthResources();
-	std::vector<vk::Framebuffer> createFrameBuffers();
-	std::vector<vk::Framebuffer> createDeferredFrameBuffers();
-	std::vector<vk::Framebuffer> createCompositionFrameBuffers();
-	std::vector<vk::Framebuffer> createReflectionFrameBuffers();
-	std::vector<vk::Framebuffer> createSSAOFrameBuffers();
-	std::vector<vk::Framebuffer> createSSAOBlurFrameBuffers();
-	std::vector<vk::Framebuffer> createGUIFrameBuffers();
-	std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount);
-	vk::CommandBuffer createCmdBuffer();
-	vk::CommandBuffer createComputeCmdBuffer();
-	Pipeline createPipeline(const PipelineInfo& specificInfo);
-	Pipeline createCompositionPipeline();
-	Pipeline createReflectionPipeline();
-	Pipeline createSSAOPipeline();
-	Pipeline createSSAOBlurPipeline();
-	Pipeline createComputePipeline();
-	vk::DescriptorPool createDescriptorPool(const uint32_t maxDescriptorSets);
-	std::vector<vk::Fence> createFences(const uint32_t fenceCount);
-	std::vector<vk::Semaphore> createSemaphores(const uint32_t semaphoresCount);
-};
+	private:
+		vk::Instance createInstance();
+		Surface createSurface();
+		int getGraphicsFamilyId();
+		int getPresentFamilyId();
+		int getComputeFamilyId();
+		vk::PhysicalDevice findGpu();
+		vk::PhysicalDeviceProperties getGPUProperties();
+		vk::PhysicalDeviceFeatures getGPUFeatures();
+		vk::SurfaceCapabilitiesKHR getSurfaceCapabilities();
+		vk::SurfaceFormatKHR getSurfaceFormat();
+		vk::PresentModeKHR getPresentationMode();
+		vk::Device createDevice();
+		vk::Queue getGraphicsQueue();
+		vk::Queue getPresentQueue();
+		vk::Queue getComputeQueue();
+		Swapchain createSwapchain();
+		vk::CommandPool createCommandPool();
+		vk::CommandPool createComputeCommadPool();
+		std::map<std::string, Image> createRenderTargets(std::vector<std::tuple<std::string, vk::Format>> RTtuples);
+		vk::RenderPass createRenderPass();
+		vk::RenderPass createDeferredRenderPass();
+		vk::RenderPass createCompositionRenderPass();
+		vk::RenderPass createSSAORenderPass();
+		vk::RenderPass createSSAOBlurRenderPass();
+		vk::RenderPass createReflectionRenderPass();
+		vk::RenderPass createGUIRenderPass();
+		Image createDepthResources();
+		std::vector<vk::Framebuffer> createFrameBuffers();
+		std::vector<vk::Framebuffer> createDeferredFrameBuffers();
+		std::vector<vk::Framebuffer> createCompositionFrameBuffers();
+		std::vector<vk::Framebuffer> createReflectionFrameBuffers();
+		std::vector<vk::Framebuffer> createSSAOFrameBuffers();
+		std::vector<vk::Framebuffer> createSSAOBlurFrameBuffers();
+		std::vector<vk::Framebuffer> createGUIFrameBuffers();
+		std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount);
+		vk::CommandBuffer createCmdBuffer();
+		vk::CommandBuffer createComputeCmdBuffer();
+		Pipeline createPipeline(const PipelineInfo& specificInfo);
+		Pipeline createCompositionPipeline();
+		Pipeline createReflectionPipeline();
+		Pipeline createSSAOPipeline();
+		Pipeline createSSAOBlurPipeline();
+		Pipeline createComputePipeline();
+		vk::DescriptorPool createDescriptorPool(const uint32_t maxDescriptorSets);
+		std::vector<vk::Fence> createFences(const uint32_t fenceCount);
+		std::vector<vk::Semaphore> createSemaphores(const uint32_t semaphoresCount);
+	};
+}

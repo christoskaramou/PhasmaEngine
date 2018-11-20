@@ -1,6 +1,8 @@
 #include "../include/Shadows.h"
 #include "../include/Errors.h"
 
+using namespace vm;
+
 vk::RenderPass				Shadows::renderPass = nullptr;
 bool						Shadows::shadowCast = true;
 uint32_t					Shadows::imageSize = 4096;
@@ -167,8 +169,13 @@ void Shadows::createDynamicUniformBuffer(vk::Device device, vk::PhysicalDevice g
 
 void Shadows::destroy(vk::Device device)
 {
+	if (renderPass)
+		device.destroyRenderPass(renderPass);
+	if (descriptorSetLayout)
+		device.destroyDescriptorSetLayout(descriptorSetLayout);
 	texture.destroy(device);
 	for (auto& fb : frameBuffer)
 		device.destroyFramebuffer(fb);
 	uniformBuffer.destroy(device);
+	pipeline.destroy(device);
 }

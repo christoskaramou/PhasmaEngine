@@ -1,6 +1,8 @@
 #include "../include/SSAO.h"
 #include "../include/Errors.h"
 
+using namespace vm;
+
 void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool)
 {
 	// kernel buffer
@@ -158,4 +160,45 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets, vk::D
 	};
 	device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSetsSSAOBlur.size()), writeDescriptorSetsSSAOBlur.data(), 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
+}
+
+void vm::SSAO::destroy(vk::Device device)
+{
+	UBssaoKernel.destroy(device);
+	UBssaoPVM.destroy(device);
+	ssaoNoise.destroy(device);
+	if (renderPass) {
+		device.destroyRenderPass(renderPass);
+		renderPass = nullptr;
+		std::cout << "RenderPass destroyed\n";
+	}
+	if (blurRenderPass) {
+		device.destroyRenderPass(blurRenderPass);
+		blurRenderPass = nullptr;
+		std::cout << "RenderPass destroyed\n";
+	}
+	for (auto &frameBuffer : frameBuffers) {
+		if (frameBuffer) {
+			device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	for (auto &frameBuffer : blurFrameBuffers) {
+		if (frameBuffer) {
+			device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	pipeline.destroy(device);
+	pipelineBlur.destroy(device);
+	if (DSLayoutSSAO) {
+		device.destroyDescriptorSetLayout(DSLayoutSSAO);
+		DSLayoutSSAO = nullptr;
+		std::cout << "Descriptor Set Layout destroyed\n";
+	}
+	if (DSLayoutSSAOBlur) {
+		device.destroyDescriptorSetLayout(DSLayoutSSAOBlur);
+		DSLayoutSSAOBlur = nullptr;
+		std::cout << "Descriptor Set Layout destroyed\n";
+	}
 }

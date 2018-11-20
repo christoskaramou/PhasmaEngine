@@ -2,6 +2,8 @@
 #include "../include/Errors.h"
 #include <iostream>
 
+using namespace vm;
+
 SDL_Window*					GUI::g_Window = nullptr;
 Uint64						GUI::g_Time = 0;
 bool						GUI::g_MousePressed[3] = { false, false, false };
@@ -339,7 +341,7 @@ void GUI::loadGUI(const std::string textureName, vk::Device device, vk::Physical
 	render = show;
 }
 
-void GUI::draw(vk::RenderPass guiRenderPass, vk::Framebuffer guiFrameBuffer, Surface& surface, Pipeline& pipelineGUI, const vk::CommandBuffer & cmd)
+void GUI::draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Surface& surface, Pipeline& pipeline, const vk::CommandBuffer & cmd)
 {
 	auto draw_data = ImGui::GetDrawData();
 	if (render && draw_data->TotalVtxCount > 0)
@@ -348,7 +350,7 @@ void GUI::draw(vk::RenderPass guiRenderPass, vk::Framebuffer guiFrameBuffer, Sur
 			vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
 			vk::ClearDepthStencilValue({ 1.0f, 0 }) };
 		auto renderPassInfo2 = vk::RenderPassBeginInfo()
-			.setRenderPass(guiRenderPass)
+			.setRenderPass(renderPass)
 			.setFramebuffer(guiFrameBuffer)
 			.setRenderArea({ { 0, 0 }, surface.actualExtent })
 			.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
@@ -356,8 +358,8 @@ void GUI::draw(vk::RenderPass guiRenderPass, vk::Framebuffer guiFrameBuffer, Sur
 		cmd.beginRenderPass(&renderPassInfo2, vk::SubpassContents::eInline);
 
 		vk::DeviceSize offset{ 0 };
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineGUI.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineGUI.pipeinfo.layout, 0, 1, &descriptorSet, 0, nullptr);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, 1, &descriptorSet, 0, nullptr);
 		cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
 		cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint16);
 
@@ -376,7 +378,7 @@ void GUI::draw(vk::RenderPass guiRenderPass, vk::Framebuffer guiFrameBuffer, Sur
 		data[1] = 2.0f / draw_data->DisplaySize.y;				// scale
 		data[2] = -1.0f - draw_data->DisplayPos.x * data[0];	// transform
 		data[3] = -1.0f - draw_data->DisplayPos.y * data[1];	// transform
-		cmd.pushConstants(pipelineGUI.pipeinfo.layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4, data);
+		cmd.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4, data);
 
 		// Render the command lists:
 		int vtx_offset = 0;
@@ -449,4 +451,26 @@ void GUI::createDescriptorSet(vk::Device device, vk::DescriptorPool descriptorPo
 			.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 	device.updateDescriptorSets(1, textureWriteSets, 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
+}
+
+void vm::GUI::destroy(vk::Device device)
+{
+	Object::destroy(device);
+	if (renderPass) {
+		device.destroyRenderPass(renderPass);
+		renderPass = nullptr;
+		std::cout << "RenderPass destroyed\n";
+	}
+	for (auto &frameBuffer : frameBuffers) {
+		if (frameBuffer) {
+			device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	pipeline.destroy(device);
+	if (descriptorSetLayout) {
+		device.destroyDescriptorSetLayout(descriptorSetLayout);
+		descriptorSetLayout = nullptr;
+		std::cout << "Descriptor Set Layout destroyed\n";
+	}
 }

@@ -2,31 +2,34 @@
 #include "Math.h"
 #include "Buffer.h"
 
-constexpr auto MAX_LIGHTS = 20;
+namespace vm {
+	constexpr auto MAX_LIGHTS = 20;
 
-struct Light
-{
-	Light();
-	Light(const vm::vec4& color, const vm::vec4& position, const vm::vec4& attenuation);
-	static Light sun();
+	struct Light
+	{
+		Light();
+		Light(const vm::vec4& color, const vm::vec4& position, const vm::vec4& attenuation);
+		static Light sun();
 
-	vm::vec4 color;
-	vm::vec4 position;
-	vm::vec4 attenuation;
-};
+		vm::vec4 color;
+		vm::vec4 position;
+		vm::vec4 attenuation;
+	};
 
-struct LightsUBO
-{
-	vm::vec4 camPos;
-	Light sun = Light::sun();
-	Light lights[MAX_LIGHTS];
-};
+	struct LightsUBO
+	{
+		vm::vec4 camPos;
+		Light sun = Light::sun();
+		Light lights[MAX_LIGHTS];
+	};
 
-struct LightUniforms : Light
-{
-	Buffer uniform;
-	vk::DescriptorSet descriptorSet;
-	vk::DescriptorSetLayout descriptorSetLayout;
+	struct LightUniforms : Light
+	{
+		Buffer uniform;
+		vk::DescriptorSet descriptorSet;
+		vk::DescriptorSetLayout descriptorSetLayout;
 
-	void createLightUniforms(vk::Device device, vk::PhysicalDevice gpu, vk::DescriptorPool descriptorPool);
-};
+		void createLightUniforms(vk::Device device, vk::PhysicalDevice gpu, vk::DescriptorPool descriptorPool);
+		void destroy(vk::Device device);
+	};
+}

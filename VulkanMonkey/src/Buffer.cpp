@@ -1,6 +1,8 @@
 #include "../include/Buffer.h"
 #include "../include/Errors.h"
 
+using namespace vm;
+
 void Buffer::createBuffer(vk::Device device, vk::PhysicalDevice gpu, const vk::DeviceSize size, const vk::BufferUsageFlags usage, const vk::MemoryPropertyFlags properties)
 {
 	this->size = size;

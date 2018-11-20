@@ -5,10 +5,14 @@
 #include "Pipeline.h"
 #include <vector>
 
-struct Forward
-{
-	vk::RenderPass forwardRenderPass;
-	std::vector<vk::Framebuffer> frameBuffers{};
-	Image MSColorImage, MSDepthImage;
-	Pipeline pipeline;
-};
+namespace vm {
+	struct Forward
+	{
+		vk::RenderPass renderPass;
+		std::vector<vk::Framebuffer> frameBuffers{};
+		Image MSColorImage, MSDepthImage;
+		Pipeline pipeline;
+
+		void destroy(vk::Device device);
+	};
+}

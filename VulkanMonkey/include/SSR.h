@@ -7,14 +7,17 @@
 #include <vector>
 #include <map>
 
-struct SSR
-{
-	Buffer UBReflection;
-	std::vector<vk::Framebuffer> ssrFrameBuffers{};
-	Pipeline pipelineSSR;
-	vk::RenderPass ssrRenderPass;
-	vk::DescriptorSet  DSReflection;
-	vk::DescriptorSetLayout DSLayoutReflection;
+namespace vm {
+	struct SSR
+	{
+		Buffer UBReflection;
+		std::vector<vk::Framebuffer> frameBuffers{};
+		Pipeline pipeline;
+		vk::RenderPass renderPass;
+		vk::DescriptorSet  DSReflection;
+		vk::DescriptorSetLayout DSLayoutReflection;
 
-	void createSSRUniforms(std::map<std::string, Image>& renderTargets, vk::Device device, vk::PhysicalDevice gpu, vk::DescriptorPool descriptorPool);
-};
+		void createSSRUniforms(std::map<std::string, Image>& renderTargets, vk::Device device, vk::PhysicalDevice gpu, vk::DescriptorPool descriptorPool);
+		void destroy(vk::Device device);
+	};
+}

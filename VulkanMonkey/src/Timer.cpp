@@ -1,6 +1,8 @@
 #include "../include/Timer.h"
 #include <iostream>
 
+using namespace vm;
+
 unsigned			Timer::totalCounter = 0;
 float				Timer::totalTime = 0.0f;
 float				Timer::delta = 0.0f;

@@ -1,6 +1,8 @@
 #include "../include/Pipeline.h"
 #include <iostream>
 
+using namespace vm;
+
 void Pipeline::destroy(vk::Device device)
 {
 	if (pipeinfo.layout) {

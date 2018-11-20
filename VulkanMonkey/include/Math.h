@@ -4,6 +4,8 @@
 #include <random>
 #include "GLM.h"
 
+namespace vm {
+
 #define cfloat const float
 #define cvec2  const vec2
 #define cvec3  const vec3
@@ -13,9 +15,6 @@
 #define cmat4  const mat4
 #define FLT_EPSILON 1.192092896e-07F
 
-// Left Handed, Colomn Major, Depth[0,1]
-namespace vm
-{
 	struct vec3;
 	struct vec4;
 

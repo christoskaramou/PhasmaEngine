@@ -3,7 +3,7 @@
 #include <iostream>
 #include <fstream>
 
-Context* Context::info = nullptr;
+using namespace vm;
 
 vk::DescriptorSetLayout getDescriptorSetLayoutLights(Context* info)
 {
@@ -28,9 +28,9 @@ PipelineInfo Context::getPipelineSpecificationsModel()
 	// General Pipeline
 	static PipelineInfo generalSpecific;
 	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
-	generalSpecific.renderPass = info->forward.forwardRenderPass;
-	generalSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
-	generalSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(info->device), Mesh::getDescriptorSetLayout(info->device), Model::getDescriptorSetLayout(info->device), getDescriptorSetLayoutLights(info) };
+	generalSpecific.renderPass = forward.renderPass;
+	generalSpecific.viewportSize = { surface.actualExtent.width, surface.actualExtent.height };
+	generalSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(device), Mesh::getDescriptorSetLayout(device), Model::getDescriptorSetLayout(device), getDescriptorSetLayoutLights(this) };
 	generalSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	generalSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	generalSpecific.pushConstantRange = vk::PushConstantRange();
@@ -44,11 +44,11 @@ PipelineInfo Context::getPipelineSpecificationsShadows()
 	// Shadows Pipeline
 	static PipelineInfo shadowsSpecific;
 	shadowsSpecific.shaders = { "shaders/Shadows/vert.spv" };
-	shadowsSpecific.renderPass = Shadows::getRenderPass(info->device, info->depth);
+	shadowsSpecific.renderPass = Shadows::getRenderPass(device, depth);
 	shadowsSpecific.viewportSize = { Shadows::imageSize, Shadows::imageSize };
 	shadowsSpecific.useBlendState = false;
 	shadowsSpecific.sampleCount = vk::SampleCountFlagBits::e1;
-	shadowsSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(info->device) };
+	shadowsSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(device) };
 	shadowsSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	shadowsSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	shadowsSpecific.pushConstantRange = vk::PushConstantRange();
@@ -61,9 +61,9 @@ PipelineInfo Context::getPipelineSpecificationsSkyBox()
 	// SkyBox Pipeline
 	static PipelineInfo skyBoxSpecific;
 	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
-	skyBoxSpecific.renderPass = info->forward.forwardRenderPass;
-	skyBoxSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
-	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(info->device) };
+	skyBoxSpecific.renderPass = forward.renderPass;
+	skyBoxSpecific.viewportSize = { surface.actualExtent.width, surface.actualExtent.height };
+	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(device) };
 	skyBoxSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionSkyBox();
 	skyBoxSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionSkyBox();
 	skyBoxSpecific.sampleCount = vk::SampleCountFlagBits::e4;
@@ -77,9 +77,9 @@ PipelineInfo Context::getPipelineSpecificationsTerrain()
 	// Terrain Pipeline
 	static PipelineInfo terrainSpecific;
 	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
-	terrainSpecific.renderPass = info->forward.forwardRenderPass;
-	terrainSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
-	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(info->device) };
+	terrainSpecific.renderPass = forward.renderPass;
+	terrainSpecific.viewportSize = { surface.actualExtent.width, surface.actualExtent.height };
+	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(device) };
 	terrainSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	terrainSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	terrainSpecific.pushConstantRange = vk::PushConstantRange();
@@ -92,9 +92,9 @@ PipelineInfo Context::getPipelineSpecificationsGUI()
 	// GUI Pipeline
 	static PipelineInfo GUISpecific;
 	GUISpecific.shaders = { "shaders/GUI/vert.spv", "shaders/GUI/frag.spv" };
-	GUISpecific.renderPass = info->gui.guiRenderPass;
-	GUISpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
-	GUISpecific.descriptorSetLayouts = { GUI::getDescriptorSetLayout(info->device) };
+	GUISpecific.renderPass = gui.renderPass;
+	GUISpecific.viewportSize = { surface.actualExtent.width, surface.actualExtent.height };
+	GUISpecific.descriptorSetLayouts = { GUI::getDescriptorSetLayout(device) };
 	GUISpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGUI();
 	GUISpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGUI();
 	GUISpecific.cull = vk::CullModeFlagBits::eBack;
@@ -118,10 +118,10 @@ PipelineInfo Context::getPipelineSpecificationsDeferred()
 	deferredSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	deferredSpecific.pushConstantRange = vk::PushConstantRange();
 	deferredSpecific.shaders = { "shaders/Deferred/vert.spv", "shaders/Deferred/frag.spv" };
-	deferredSpecific.renderPass = info->deferred.deferredRenderPass;
-	deferredSpecific.viewportSize = { info->surface.actualExtent.width, info->surface.actualExtent.height };
+	deferredSpecific.renderPass = deferred.renderPass;
+	deferredSpecific.viewportSize = { surface.actualExtent.width, surface.actualExtent.height };
 	deferredSpecific.sampleCount = vk::SampleCountFlagBits::e1;
-	deferredSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(info->device), Mesh::getDescriptorSetLayout(info->device) };
+	deferredSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(device), Mesh::getDescriptorSetLayout(device) };
 	deferredSpecific.specializationInfo = vk::SpecializationInfo();
 	deferredSpecific.blendAttachmentStates[0].blendEnable = VK_FALSE;
 	deferredSpecific.blendAttachmentStates = {
@@ -173,22 +173,22 @@ void Context::initVulkanContext()
 void Context::initRendering()
 {
 	// render passes
-	forward.forwardRenderPass = createRenderPass();
-	deferred.deferredRenderPass = createDeferredRenderPass();
+	forward.renderPass = createRenderPass();
+	deferred.renderPass = createDeferredRenderPass();
 	deferred.compositionRenderPass = createCompositionRenderPass();
-	ssr.ssrRenderPass = createReflectionRenderPass();
-	ssao.ssaoRenderPass = createSSAORenderPass();
-	ssao.ssaoBlurRenderPass = createSSAOBlurRenderPass();
-	gui.guiRenderPass = createGUIRenderPass();
+	ssr.renderPass = createReflectionRenderPass();
+	ssao.renderPass = createSSAORenderPass();
+	ssao.blurRenderPass = createSSAOBlurRenderPass();
+	gui.renderPass = createGUIRenderPass();
 
 	// frame buffers
 	forward.frameBuffers = createFrameBuffers();
-	deferred.deferredFrameBuffers = createDeferredFrameBuffers();
+	deferred.frameBuffers = createDeferredFrameBuffers();
 	deferred.compositionFrameBuffers = createCompositionFrameBuffers();
-	ssr.ssrFrameBuffers = createReflectionFrameBuffers();
-	ssao.ssaoFrameBuffers = createSSAOFrameBuffers();
-	ssao.ssaoBlurFrameBuffers = createSSAOBlurFrameBuffers();
-	gui.guiFrameBuffers = createGUIFrameBuffers();
+	ssr.frameBuffers = createReflectionFrameBuffers();
+	ssao.frameBuffers = createSSAOFrameBuffers();
+	ssao.blurFrameBuffers = createSSAOBlurFrameBuffers();
+	gui.frameBuffers = createGUIFrameBuffers();
 	shadows.createFrameBuffers(device, gpu, depth, static_cast<uint32_t>(swapchain.images.size()));
 
 	// pipelines
@@ -196,30 +196,23 @@ void Context::initRendering()
 	gpi.specializationInfo = vk::SpecializationInfo{ 1, &vk::SpecializationMapEntry{ 0, 0, sizeof(MAX_LIGHTS) }, sizeof(MAX_LIGHTS), &MAX_LIGHTS };
 
 	forward.pipeline = createPipeline(gpi);
-	terrain.pipelineTerrain = createPipeline(getPipelineSpecificationsTerrain());
-	shadows.pipelineShadows = createPipeline(getPipelineSpecificationsShadows());
-	skyBox.pipelineSkyBox = createPipeline(getPipelineSpecificationsSkyBox());
-	gui.pipelineGUI = createPipeline(getPipelineSpecificationsGUI());
-	deferred.pipelineDeferred = createPipeline(getPipelineSpecificationsDeferred());
+	terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
+	shadows.pipeline = createPipeline(getPipelineSpecificationsShadows());
+	skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
+	gui.pipeline = createPipeline(getPipelineSpecificationsGUI());
+	deferred.pipeline = createPipeline(getPipelineSpecificationsDeferred());
 	deferred.pipelineComposition = createCompositionPipeline();
-	ssr.pipelineSSR = createReflectionPipeline();
-	compute.pipelineCompute = createComputePipeline();
-	ssao.pipelineSSAO = createSSAOPipeline();
-	ssao.pipelineSSAOBlur = createSSAOBlurPipeline();
+	ssr.pipeline = createReflectionPipeline();
+	compute.pipeline = createComputePipeline();
+	ssao.pipeline = createSSAOPipeline();
+	ssao.pipelineBlur = createSSAOBlurPipeline();
 }
 
 void Context::loadResources()
 {
 	// SKYBOX LOAD
-	skyBox.loadSkyBox(
-		{ "objects/sky/right.png", "objects/sky/left.png", "objects/sky/top.png", "objects/sky/bottom.png", "objects/sky/back.png", "objects/sky/front.png" },
-		1024,
-		device,
-		gpu,
-		commandPool,
-		graphicsQueue,
-		descriptorPool
-	);
+	std::array<std::string, 6> skyTextures = { "objects/sky/right.png", "objects/sky/left.png", "objects/sky/top.png", "objects/sky/bottom.png", "objects/sky/back.png", "objects/sky/front.png" };
+	skyBox.loadSkyBox(skyTextures, 1024, device, gpu, commandPool, graphicsQueue, descriptorPool);
 	// GUI LOAD
 	gui.loadGUI("ImGuiDemo", device, gpu, dynamicCmdBuffer, graphicsQueue, descriptorPool, window);
 	// TERRAIN LOAD
@@ -731,7 +724,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[3].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
 	// Depth
-	attachments[4].format = info->depth.format;
+	attachments[4].format = depth.format;
 	attachments[4].samples = vk::SampleCountFlagBits::e1;
 	attachments[4].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[4].storeOp = vk::AttachmentStoreOp::eDontCare;
@@ -786,7 +779,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(info->device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
+	VkCheck(device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
 
 	return _renderPass;
 }
@@ -797,7 +790,7 @@ vk::RenderPass Context::createCompositionRenderPass()
 
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color target
-	attachments[0].format = info->surface.formatKHR.format;
+	attachments[0].format = surface.formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -846,7 +839,7 @@ vk::RenderPass Context::createCompositionRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(info->device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
+	VkCheck(device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
 
 	return _renderPass;
 }
@@ -857,7 +850,7 @@ vk::RenderPass Context::createSSAORenderPass()
 
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
-	attachments[0].format = info->renderTargets["ssao"].format;
+	attachments[0].format = renderTargets["ssao"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -905,7 +898,7 @@ vk::RenderPass Context::createSSAORenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(info->device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
+	VkCheck(device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
 
 	return _renderPass;
 }
@@ -916,7 +909,7 @@ vk::RenderPass Context::createSSAOBlurRenderPass()
 
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
-	attachments[0].format = info->renderTargets["ssaoBlur"].format;
+	attachments[0].format = renderTargets["ssaoBlur"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -964,7 +957,7 @@ vk::RenderPass Context::createSSAOBlurRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(info->device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
+	VkCheck(device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
 
 	return _renderPass;
 }
@@ -975,7 +968,7 @@ vk::RenderPass Context::createReflectionRenderPass()
 
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
-	attachments[0].format = info->surface.formatKHR.format;
+	attachments[0].format = surface.formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -1023,7 +1016,7 @@ vk::RenderPass Context::createReflectionRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(info->device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
+	VkCheck(device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
 
 	return _renderPass;
 }
@@ -1034,7 +1027,7 @@ vk::RenderPass Context::createGUIRenderPass()
 
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
-	attachments[0].format = info->surface.formatKHR.format;
+	attachments[0].format = surface.formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -1081,7 +1074,7 @@ vk::RenderPass Context::createGUIRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(info->device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
+	VkCheck(device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
 
 	return _renderPass;
 }
@@ -1144,7 +1137,7 @@ std::vector<vk::Framebuffer> Context::createFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(forward.forwardRenderPass)
+			.setRenderPass(forward.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1171,7 +1164,7 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(deferred.deferredRenderPass)
+			.setRenderPass(deferred.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1217,7 +1210,7 @@ std::vector<vk::Framebuffer> Context::createReflectionFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(ssr.ssrRenderPass)
+			.setRenderPass(ssr.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1240,7 +1233,7 @@ std::vector<vk::Framebuffer> Context::createSSAOFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(ssao.ssaoRenderPass)
+			.setRenderPass(ssao.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1263,7 +1256,7 @@ std::vector<vk::Framebuffer> Context::createSSAOBlurFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(ssao.ssaoRenderPass)
+			.setRenderPass(ssao.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -1286,7 +1279,7 @@ std::vector<vk::Framebuffer> Context::createGUIFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(gui.guiRenderPass)
+			.setRenderPass(gui.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(surface.actualExtent.width)
@@ -2000,7 +1993,7 @@ Pipeline Context::createReflectionPipeline()
 	std::cout << "Pipeline Layout created\n";
 
 	// Render Pass
-	_pipeline.pipeinfo.renderPass = ssr.ssrRenderPass;
+	_pipeline.pipeinfo.renderPass = ssr.renderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	_pipeline.pipeinfo.subpass = 0;
@@ -2234,7 +2227,7 @@ Pipeline Context::createSSAOPipeline()
 	std::cout << "Pipeline Layout created\n";
 
 	// Render Pass
-	_pipeline.pipeinfo.renderPass = ssao.ssaoRenderPass;
+	_pipeline.pipeinfo.renderPass = ssao.renderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	_pipeline.pipeinfo.subpass = 0;
@@ -2436,7 +2429,7 @@ Pipeline Context::createSSAOBlurPipeline()
 	std::cout << "Pipeline Layout created\n";
 
 	// Render Pass
-	_pipeline.pipeinfo.renderPass = ssao.ssaoBlurRenderPass;
+	_pipeline.pipeinfo.renderPass = ssao.blurRenderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	_pipeline.pipeinfo.subpass = 0;
@@ -2576,6 +2569,56 @@ std::vector<vk::Semaphore> Context::createSemaphores(const uint32_t semaphoresCo
 	return _semaphores;
 }
 
+void vm::Context::destroyVkContext()
+{
+	for (auto& fence : fences) {
+		if (fence) {
+			device.destroyFence(fence);
+			std::cout << "Fence destroyed\n";
+		}
+	}
+	for (auto &semaphore : semaphores) {
+		if (semaphore) {
+			device.destroySemaphore(semaphore);
+			std::cout << "Semaphore destroyed\n";
+		}
+	}
+	for (auto& rt : renderTargets)
+		rt.second.destroy(device);
+
+	depth.destroy(device);
+
+	if (descriptorPool) {
+		device.destroyDescriptorPool(descriptorPool);
+		std::cout << "DescriptorPool destroyed\n";
+	}
+	if (commandPool) {
+		device.destroyCommandPool(commandPool);
+		std::cout << "CommandPool destroyed\n";
+	}
+	if (commandPoolCompute) {
+		device.destroyCommandPool(commandPoolCompute);
+		std::cout << "CommandPool destroyed\n";
+	}
+
+	swapchain.destroy(device);
+
+	if (device) {
+		device.destroy();
+		std::cout << "Device destroyed\n";
+	}
+
+	if (surface.surface) {
+		instance.destroySurfaceKHR(surface.surface);
+		std::cout << "Surface destroyed\n";
+	}
+
+	if (instance) {
+		instance.destroy();
+		std::cout << "Instance destroyed\n";
+	}
+}
+
 void Context::resizeViewport(uint32_t width, uint32_t height)
 {
 	device.waitIdle();
@@ -2587,20 +2630,20 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	for (auto& fb : forward.frameBuffers)
 		device.destroyFramebuffer(fb);
 	forward.pipeline.destroy(device);
-	gui.pipelineGUI.destroy(device);
-	skyBox.pipelineSkyBox.destroy(device);
-	terrain.pipelineTerrain.destroy(device);
-	device.destroyRenderPass(forward.forwardRenderPass);
+	gui.pipeline.destroy(device);
+	skyBox.pipeline.destroy(device);
+	terrain.pipeline.destroy(device);
+	device.destroyRenderPass(forward.renderPass);
 	swapchain.destroy(device);
 
 	// Recreate resources
 	surface.actualExtent = { width, height };
 	swapchain = createSwapchain();
 	depth = createDepthResources();
-	forward.forwardRenderPass = createRenderPass(); // ?
+	forward.renderPass = createRenderPass(); // ?
 	forward.frameBuffers = createFrameBuffers();
-	terrain.pipelineTerrain = createPipeline(getPipelineSpecificationsTerrain());
-	skyBox.pipelineSkyBox = createPipeline(getPipelineSpecificationsSkyBox());
-	gui.pipelineGUI = createPipeline(getPipelineSpecificationsGUI());
+	terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
+	skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
+	gui.pipeline = createPipeline(getPipelineSpecificationsGUI());
 	forward.pipeline = createPipeline(getPipelineSpecificationsModel());
 }
