@@ -1,5 +1,5 @@
 #pragma once
-#include "Vulkan.h"
+#include "VulkanContext.h"
 #include "Object.h"
 #include "Pipeline.h"
 #include "Stbi.h"
@@ -8,13 +8,15 @@
 namespace vm {
 	struct Terrain : Object
 	{
-		Pipeline pipeline;
+		Terrain(VulkanContext* vulkan);
+
+		Pipeline pipeline = Pipeline(vulkan);
 
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
-		void generateTerrain(const std::string path, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show = true);
-		void draw(Pipeline& pipeline, const vk::CommandBuffer& cmd);
-		void loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, const std::string path);
-		void destroy(vk::Device device);
+		void generateTerrain(const std::string path, bool show = true);
+		void draw(const vk::CommandBuffer& cmd);
+		void loadTexture(const std::string path);
+		void destroy();
 	};
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Vulkan.h"
+#include "VulkanContext.h"
 #include "Pipeline.h"
 #include "Image.h"
 #include "Light.h"
@@ -10,13 +10,17 @@
 namespace vm {
 	struct Deferred
 	{
+		VulkanContext* vulkan;
+		Deferred(VulkanContext* vulkan);
+
 		vk::RenderPass renderPass, compositionRenderPass;
 		std::vector<vk::Framebuffer> frameBuffers{}, compositionFrameBuffers{};
 		vk::DescriptorSet DSDeferredMainLight, DSComposition;
 		vk::DescriptorSetLayout DSLayoutComposition;
-		Pipeline pipeline, pipelineComposition;
+		Pipeline pipeline = Pipeline(vulkan);
+		Pipeline pipelineComposition = Pipeline(vulkan);
 
-		void createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms, vk::Device device, vk::DescriptorPool descriptorPool);
-		void destroy(vk::Device device);
+		void createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
+		void destroy();
 	};
 }

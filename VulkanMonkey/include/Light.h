@@ -1,4 +1,6 @@
 #pragma once
+
+#include "VulkanContext.h"
 #include "Math.h"
 #include "Buffer.h"
 
@@ -25,11 +27,14 @@ namespace vm {
 
 	struct LightUniforms : Light
 	{
-		Buffer uniform;
+		VulkanContext* vulkan;
+		LightUniforms(VulkanContext* vulkan);
+
+		Buffer uniform = Buffer(vulkan);
 		vk::DescriptorSet descriptorSet;
 		vk::DescriptorSetLayout descriptorSetLayout;
 
-		void createLightUniforms(vk::Device device, vk::PhysicalDevice gpu, vk::DescriptorPool descriptorPool);
-		void destroy(vk::Device device);
+		void createLightUniforms();
+		void destroy();
 	};
 }

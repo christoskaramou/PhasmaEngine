@@ -24,18 +24,21 @@ Light Light::sun()
 	);
 }
 
-void LightUniforms::createLightUniforms(vk::Device device, vk::PhysicalDevice gpu, vk::DescriptorPool descriptorPool)
+vm::LightUniforms::LightUniforms(VulkanContext * vulkan) : vulkan(vulkan)
+{ }
+
+void LightUniforms::createLightUniforms()
 {
-	uniform.createBuffer(device, gpu, sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(device.mapMemory(uniform.memory, 0, uniform.size, vk::MemoryMapFlags(), &uniform.data));
+	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	VkCheck(vulkan->device.mapMemory(uniform.memory, 0, uniform.size, vk::MemoryMapFlags(), &uniform.data));
 	LightsUBO lubo;
 	memcpy(uniform.data, &lubo, uniform.size);
 
 	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(descriptorPool)
+		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	VkCheck(device.allocateDescriptorSets(&allocateInfo, &descriptorSet));
+	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet));
 	auto writeSet = vk::WriteDescriptorSet()
 		.setDstSet(descriptorSet)								// DescriptorSet dstSet;
 		.setDstBinding(0)										// uint32_t dstBinding;
@@ -46,15 +49,15 @@ void LightUniforms::createLightUniforms(vk::Device device, vk::PhysicalDevice gp
 			.setBuffer(uniform.buffer)							// Buffer buffer;
 			.setOffset(0)											// DeviceSize offset;
 			.setRange(uniform.size));							// DeviceSize range;
-	device.updateDescriptorSets(1, &writeSet, 0, nullptr);
+	vulkan->device.updateDescriptorSets(1, &writeSet, 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
 }
 
-void vm::LightUniforms::destroy(vk::Device device)
+void vm::LightUniforms::destroy()
 {
-	uniform.destroy(device);
+	uniform.destroy();
 	if (descriptorSetLayout) {
-		device.destroyDescriptorSetLayout(descriptorSetLayout);
+		vulkan->device.destroyDescriptorSetLayout(descriptorSetLayout);
 		descriptorSetLayout = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}

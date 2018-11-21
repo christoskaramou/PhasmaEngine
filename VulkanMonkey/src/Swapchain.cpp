@@ -3,14 +3,17 @@
 
 using namespace vm;
 
-void Swapchain::destroy(vk::Device device)
+vm::Swapchain::Swapchain(VulkanContext * vulkan) :vulkan(vulkan)
+{ }
+
+void Swapchain::destroy()
 {
 	for (auto &image : images) {
-		device.destroyImageView(image.view);
+		vulkan->device.destroyImageView(image.view);
 		image.view = nullptr;
 	}
 	if (swapchain) {
-		device.destroySwapchainKHR(swapchain);
+		vulkan->device.destroySwapchainKHR(swapchain);
 		swapchain = nullptr;
 		std::cout << "Swapchain destroyed\n";
 	}

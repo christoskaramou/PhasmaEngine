@@ -9,7 +9,7 @@ using namespace vm;
 
 Renderer::Renderer(SDL_Window* window)
 {
-	ctx.window = window;
+	ctx.vulkan.window = window;
 
 	// INIT ALL VULKAN CONTEXT
 	ctx.initVulkanContext();
@@ -26,20 +26,20 @@ Renderer::Renderer(SDL_Window* window)
 
 Renderer::~Renderer()
 {
-    ctx.device.waitIdle();
+    ctx.vulkan.device.waitIdle();
 
 	for (auto &model : ctx.models)
-		model.destroy(ctx.device);
-	ctx.shadows.destroy(ctx.device);
-	ctx.compute.destroy(ctx.device);
-	ctx.forward.destroy(ctx.device);
-	ctx.deferred.destroy(ctx.device);
-	ctx.ssr.destroy(ctx.device);
-	ctx.ssao.destroy(ctx.device);
-	ctx.skyBox.destroy(ctx.device);
-	ctx.terrain.destroy(ctx.device);
-	ctx.gui.destroy(ctx.device);
-	ctx.lightUniforms.destroy(ctx.device);
+		model.destroy();
+	ctx.shadows.destroy();
+	ctx.compute.destroy();
+	ctx.forward.destroy();
+	ctx.deferred.destroy();
+	ctx.ssr.destroy();
+	ctx.ssao.destroy();
+	ctx.skyBox.destroy();
+	ctx.terrain.destroy();
+	ctx.gui.destroy();
+	ctx.lightUniforms.destroy();
 	ctx.destroyVkContext();
 }
 
@@ -86,7 +86,7 @@ void Renderer::update(float delta)
 
 	// GUI
 	if (ctx.gui.render)
-		ctx.gui.newFrame(ctx.device, ctx.gpu, ctx.window);
+		ctx.gui.newFrame(ctx.vulkan.device, ctx.vulkan.gpu, ctx.vulkan.window);
 
 	// LIGHTS
 	vm::vec4 camPos(ctx.mainCamera.position, 1.0f);
@@ -103,7 +103,7 @@ void Renderer::update(float delta)
 		vm::mat4 reflectionInput[3];
 		reflectionInput[0][0] = vm::vec4(ctx.mainCamera.position, 1.0f);
 		reflectionInput[0][1] = vm::vec4(ctx.mainCamera.front(), 1.0f);
-		reflectionInput[0][2] = vm::vec4(static_cast<float>(ctx.surface.actualExtent.width), static_cast<float>(ctx.surface.actualExtent.height), 0.f, 0.f);
+		reflectionInput[0][2] = vm::vec4(static_cast<float>(ctx.vulkan.surface->actualExtent.width), static_cast<float>(ctx.vulkan.surface->actualExtent.height), 0.f, 0.f);
 		reflectionInput[0][3] = vm::vec4();
 		reflectionInput[1] = projection;
 		reflectionInput[2] = view;
@@ -116,13 +116,13 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 	auto beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
-	VkCheck(ctx.computeCmdBuffer.begin(&beginInfo));
+	VkCheck(ctx.vulkan.computeCmdBuffer.begin(&beginInfo));
 
-	ctx.computeCmdBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.pipeline);
-	ctx.computeCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.compinfo.layout, 0, 1, &ctx.compute.DSCompute, 0, nullptr);
+	ctx.vulkan.computeCmdBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.pipeline);
+	ctx.vulkan.computeCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.compinfo.layout, 0, 1, &ctx.compute.DSCompute, 0, nullptr);
 
-	ctx.computeCmdBuffer.dispatch(sizeX, sizeY, sizeZ);
-	ctx.computeCmdBuffer.end();
+	ctx.vulkan.computeCmdBuffer.dispatch(sizeX, sizeY, sizeZ);
+	ctx.vulkan.computeCmdBuffer.end();
 }
 
 void Renderer::recordForwardCmds(const uint32_t& imageIndex)
@@ -139,26 +139,26 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 	auto renderPassInfo = vk::RenderPassBeginInfo()
 		.setRenderPass(ctx.forward.renderPass)
 		.setFramebuffer(ctx.forward.frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
+		.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
 
-	VkCheck(ctx.dynamicCmdBuffer.begin(&beginInfo));
-	ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
+	VkCheck(ctx.vulkan.dynamicCmdBuffer.begin(&beginInfo));
+	ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
 
 	// TERRAIN
-	ctx.terrain.draw(ctx.terrain.pipeline, ctx.dynamicCmdBuffer);
+	ctx.terrain.draw(ctx.vulkan.dynamicCmdBuffer);
 	// MODELS
 	for (uint32_t m = 0; m < ctx.models.size(); m++)
-		ctx.models[m].draw(ctx.forward.pipeline, ctx.dynamicCmdBuffer, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
+		ctx.models[m].draw(ctx.forward.pipeline, ctx.vulkan.dynamicCmdBuffer, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
 	// SKYBOX
-	ctx.skyBox.draw(ctx.skyBox.pipeline, ctx.dynamicCmdBuffer);
-	ctx.dynamicCmdBuffer.endRenderPass();
+	ctx.skyBox.draw(ctx.vulkan.dynamicCmdBuffer);
+	ctx.vulkan.dynamicCmdBuffer.endRenderPass();
 
 	// GUI
-	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.surface, ctx.gui.pipeline, ctx.dynamicCmdBuffer);
+	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.gui.pipeline, ctx.vulkan.dynamicCmdBuffer);
 
-	ctx.dynamicCmdBuffer.end();
+	ctx.vulkan.dynamicCmdBuffer.end();
 }
 
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
@@ -167,7 +167,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	auto beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
-	VkCheck(ctx.dynamicCmdBuffer.begin(&beginInfo));
+	VkCheck(ctx.vulkan.dynamicCmdBuffer.begin(&beginInfo));
 
 	// Begin deferred
 	std::vector<vk::ClearValue> clearValues = {
@@ -179,32 +179,32 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	auto renderPassInfo = vk::RenderPassBeginInfo()
 		.setRenderPass(ctx.deferred.renderPass)
 		.setFramebuffer(ctx.deferred.frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
+		.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
 
-	ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
+	ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
 
 	vk::Viewport viewport;
 	viewport.x = 0;
 	viewport.y = 0;
-	viewport.width = static_cast<float>(ctx.surface.actualExtent.width);
-	viewport.height = static_cast<float>(ctx.surface.actualExtent.height);
+	viewport.width = static_cast<float>(ctx.vulkan.surface->actualExtent.width);
+	viewport.height = static_cast<float>(ctx.vulkan.surface->actualExtent.height);
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
-	ctx.dynamicCmdBuffer.setViewport(0, 1, &viewport);
+	ctx.vulkan.dynamicCmdBuffer.setViewport(0, 1, &viewport);
 
 	vk::Rect2D scissor;
 	scissor.offset.x = 0;
 	scissor.offset.y = 0;
-	scissor.extent.width = ctx.surface.actualExtent.width;
-	scissor.extent.height = ctx.surface.actualExtent.height;
-	ctx.dynamicCmdBuffer.setScissor(0, 1, &scissor);
+	scissor.extent.width = ctx.vulkan.surface->actualExtent.width;
+	scissor.extent.height = ctx.vulkan.surface->actualExtent.height;
+	ctx.vulkan.dynamicCmdBuffer.setScissor(0, 1, &scissor);
 
 	// MODELS
 	for (uint32_t m = 0; m < ctx.models.size(); m++)
-		ctx.models[m].draw(ctx.deferred.pipeline, ctx.dynamicCmdBuffer, m, true);
-	ctx.dynamicCmdBuffer.endRenderPass();
+		ctx.models[m].draw(ctx.deferred.pipeline, ctx.vulkan.dynamicCmdBuffer, m, true);
+	ctx.vulkan.dynamicCmdBuffer.endRenderPass();
 	// End deferred
 
 	// Begin SCREEN SPACE AMBIENT OCCLUSION
@@ -215,16 +215,16 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		auto renderPassInfoSSAO = vk::RenderPassBeginInfo()
 			.setRenderPass(ctx.ssao.renderPass)
 			.setFramebuffer(ctx.ssao.frameBuffers[imageIndex])
-			.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
+			.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
 			.setClearValueCount(static_cast<uint32_t>(clearValuesSSAO.size()))
 			.setPClearValues(clearValuesSSAO.data());
-		ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAO, vk::SubpassContents::eInline);
-		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipeline.pipeline);
+		ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAO, vk::SubpassContents::eInline);
+		ctx.vulkan.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipeline.pipeline);
 		const vk::DescriptorSet descriptorSets[] = { ctx.ssao.DSssao };
 		const uint32_t dOffsets[] = { 0 };
-		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipeline.pipeinfo.layout, 0, 1, descriptorSets, 0, dOffsets);
-		ctx.dynamicCmdBuffer.draw(3, 1, 0, 0);
-		ctx.dynamicCmdBuffer.endRenderPass();
+		ctx.vulkan.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipeline.pipeinfo.layout, 0, 1, descriptorSets, 0, dOffsets);
+		ctx.vulkan.dynamicCmdBuffer.draw(3, 1, 0, 0);
+		ctx.vulkan.dynamicCmdBuffer.endRenderPass();
 		
 		// new blurry SSAO image
 		std::vector<vk::ClearValue> clearValuesSSAOBlur = {
@@ -232,16 +232,16 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		auto renderPassInfoSSAOBlur = vk::RenderPassBeginInfo()
 			.setRenderPass(ctx.ssao.blurRenderPass)
 			.setFramebuffer(ctx.ssao.blurFrameBuffers[imageIndex])
-			.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
+			.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
 			.setClearValueCount(static_cast<uint32_t>(clearValuesSSAOBlur.size()))
 			.setPClearValues(clearValuesSSAOBlur.data());
-		ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAOBlur, vk::SubpassContents::eInline);
-		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineBlur.pipeline);
+		ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAOBlur, vk::SubpassContents::eInline);
+		ctx.vulkan.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineBlur.pipeline);
 		const vk::DescriptorSet descriptorSetsBlur[] = { ctx.ssao.DSssaoBlur };
 		const uint32_t dOffsetsBlur[] = { 0 };
-		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineBlur.pipeinfo.layout, 0, 1, descriptorSetsBlur, 0, dOffsetsBlur);
-		ctx.dynamicCmdBuffer.draw(3, 1, 0, 0);
-		ctx.dynamicCmdBuffer.endRenderPass();
+		ctx.vulkan.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineBlur.pipeinfo.layout, 0, 1, descriptorSetsBlur, 0, dOffsetsBlur);
+		ctx.vulkan.dynamicCmdBuffer.draw(3, 1, 0, 0);
+		ctx.vulkan.dynamicCmdBuffer.endRenderPass();
 	}
 	// End SCREEN SPACE AMBIENT OCCLUSION
 
@@ -251,18 +251,18 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	auto renderPassInfo0 = vk::RenderPassBeginInfo()
 		.setRenderPass(ctx.deferred.compositionRenderPass)
 		.setFramebuffer(ctx.deferred.compositionFrameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
+		.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValues0.size()))
 		.setPClearValues(clearValues0.data());
-	ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfo0, vk::SubpassContents::eInline);
+	ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo0, vk::SubpassContents::eInline);
 	float ssao = useSSAO ? 1.f : 0.f;
-	ctx.dynamicCmdBuffer.pushConstants(ctx.deferred.pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(float), &ssao);
-	ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.deferred.pipelineComposition.pipeline);
+	ctx.vulkan.dynamicCmdBuffer.pushConstants(ctx.deferred.pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(float), &ssao);
+	ctx.vulkan.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.deferred.pipelineComposition.pipeline);
 	const vk::DescriptorSet descriptorSets[] = { ctx.deferred.DSComposition, ctx.shadows.descriptorSet };
 	const uint32_t dOffsets[] = { 0 };
-	ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.deferred.pipelineComposition.pipeinfo.layout, 0, 2, descriptorSets, 1, dOffsets);
-	ctx.dynamicCmdBuffer.draw(3, 1, 0, 0);
-	ctx.dynamicCmdBuffer.endRenderPass();
+	ctx.vulkan.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.deferred.pipelineComposition.pipeinfo.layout, 0, 2, descriptorSets, 1, dOffsets);
+	ctx.vulkan.dynamicCmdBuffer.draw(3, 1, 0, 0);
+	ctx.vulkan.dynamicCmdBuffer.endRenderPass();
 	// End Composition
 
 	// SCREEN SPACE REFLECTIONS
@@ -272,20 +272,20 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		auto renderPassInfo1 = vk::RenderPassBeginInfo()
 			.setRenderPass(ctx.ssr.renderPass)
 			.setFramebuffer(ctx.ssr.frameBuffers[imageIndex])
-			.setRenderArea({ { 0, 0 }, ctx.surface.actualExtent })
+			.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
 			.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
 			.setPClearValues(clearValues1.data());
-		ctx.dynamicCmdBuffer.beginRenderPass(&renderPassInfo1, vk::SubpassContents::eInline);
-		ctx.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssr.pipeline.pipeline);
-		ctx.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssr.pipeline.pipeinfo.layout, 0, 1, &ctx.ssr.DSReflection, 0, nullptr);
-		ctx.dynamicCmdBuffer.draw(3, 1, 0, 0);
-		ctx.dynamicCmdBuffer.endRenderPass();
+		ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo1, vk::SubpassContents::eInline);
+		ctx.vulkan.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssr.pipeline.pipeline);
+		ctx.vulkan.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssr.pipeline.pipeinfo.layout, 0, 1, &ctx.ssr.DSReflection, 0, nullptr);
+		ctx.vulkan.dynamicCmdBuffer.draw(3, 1, 0, 0);
+		ctx.vulkan.dynamicCmdBuffer.endRenderPass();
 	}
 
 	// GUI
-	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.surface, ctx.gui.pipeline, ctx.dynamicCmdBuffer);
+	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.gui.pipeline, ctx.vulkan.dynamicCmdBuffer);
 
-	ctx.dynamicCmdBuffer.end();
+	ctx.vulkan.dynamicCmdBuffer.end();
 }
 
 void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
@@ -298,36 +298,36 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
 	auto renderPassInfoShadows = vk::RenderPassBeginInfo()
-		.setRenderPass(Shadows::getRenderPass(ctx.device, ctx.depth))
+		.setRenderPass(ctx.shadows.getRenderPass())
 		.setFramebuffer(ctx.shadows.frameBuffer[imageIndex])
 		.setRenderArea({ { 0, 0 },{ ctx.shadows.imageSize, ctx.shadows.imageSize } })
 		.setClearValueCount(static_cast<uint32_t>(clearValuesShadows.size()))
 		.setPClearValues(clearValuesShadows.data());
 
-	VkCheck(ctx.shadowCmdBuffer.begin(&beginInfoShadows));
-	ctx.shadowCmdBuffer.beginRenderPass(&renderPassInfoShadows, vk::SubpassContents::eInline);
+	VkCheck(ctx.vulkan.shadowCmdBuffer.begin(&beginInfoShadows));
+	ctx.vulkan.shadowCmdBuffer.beginRenderPass(&renderPassInfoShadows, vk::SubpassContents::eInline);
 
 	vk::DeviceSize offset = vk::DeviceSize();
 
-	ctx.shadowCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
+	ctx.vulkan.shadowCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
 
 	for (uint32_t m = 0; m < ctx.models.size(); m++) {
 		if (ctx.models[m].render) {
-			ctx.shadowCmdBuffer.bindVertexBuffers(0, 1, &ctx.models[m].vertexBuffer.buffer, &offset);
-			ctx.shadowCmdBuffer.bindIndexBuffer(ctx.models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
+			ctx.vulkan.shadowCmdBuffer.bindVertexBuffers(0, 1, &ctx.models[m].vertexBuffer.buffer, &offset);
+			ctx.vulkan.shadowCmdBuffer.bindIndexBuffer(ctx.models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
 			const uint32_t dOffsets[] = { m * sizeof(ShadowsUBO) };
-			ctx.shadowCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, 1, &ctx.shadows.descriptorSet, 1, dOffsets);
+			ctx.vulkan.shadowCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, 1, &ctx.shadows.descriptorSet, 1, dOffsets);
 
 			for (auto& mesh : ctx.models[m].meshes) {
 				if (mesh.render)
-					ctx.shadowCmdBuffer.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
+					ctx.vulkan.shadowCmdBuffer.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
 			}
 		}
 	}
 
-	ctx.shadowCmdBuffer.endRenderPass();
-	ctx.shadowCmdBuffer.end();
+	ctx.vulkan.shadowCmdBuffer.endRenderPass();
+	ctx.vulkan.shadowCmdBuffer.end();
 }
 
 void Renderer::present()
@@ -338,10 +338,10 @@ void Renderer::present()
 		recordComputeCmds(2, 2, 1);
 		auto const siCompute = vk::SubmitInfo()
 			.setCommandBufferCount(1)
-			.setPCommandBuffers(&ctx.computeCmdBuffer);
-		VkCheck(ctx.computeQueue.submit(1, &siCompute, ctx.fences[1]));
-		ctx.device.waitForFences(1, &ctx.fences[1], VK_TRUE, UINT64_MAX);
-		ctx.device.resetFences(1, &ctx.fences[1]);
+			.setPCommandBuffers(&ctx.vulkan.computeCmdBuffer);
+		VkCheck(ctx.vulkan.computeQueue.submit(1, &siCompute, ctx.vulkan.fences[1]));
+		ctx.vulkan.device.waitForFences(1, &ctx.vulkan.fences[1], VK_TRUE, UINT64_MAX);
+		ctx.vulkan.device.resetFences(1, &ctx.vulkan.fences[1]);
 	}
 
 	// what stage of a pipeline at a command buffer to wait for the semaphores to be done until keep going
@@ -351,22 +351,22 @@ void Renderer::present()
 
 	// if using shadows use the semaphore[0], record and submit the shadow commands, else use the semaphore[1]
 	if (Shadows::shadowCast) {
-		VkCheck(ctx.device.acquireNextImageKHR(ctx.swapchain.swapchain, UINT64_MAX, ctx.semaphores[0], vk::Fence(), &imageIndex));
+		VkCheck(ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[0], vk::Fence(), &imageIndex));
 
 		recordShadowsCmds(imageIndex);
 
 		auto const siShadows = vk::SubmitInfo()
 			.setWaitSemaphoreCount(1)
-			.setPWaitSemaphores(&ctx.semaphores[0])
+			.setPWaitSemaphores(&ctx.vulkan.semaphores[0])
 			.setPWaitDstStageMask(waitStages)
 			.setCommandBufferCount(1)
-			.setPCommandBuffers(&ctx.shadowCmdBuffer)
+			.setPCommandBuffers(&ctx.vulkan.shadowCmdBuffer)
 			.setSignalSemaphoreCount(1)
-			.setPSignalSemaphores(&ctx.semaphores[1]);
-		VkCheck(ctx.graphicsQueue.submit(1, &siShadows, nullptr));
+			.setPSignalSemaphores(&ctx.vulkan.semaphores[1]);
+		VkCheck(ctx.vulkan.graphicsQueue.submit(1, &siShadows, nullptr));
 	}
 	else
-		VkCheck(ctx.device.acquireNextImageKHR(ctx.swapchain.swapchain, UINT64_MAX, ctx.semaphores[1], vk::Fence(), &imageIndex));
+		VkCheck(ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[1], vk::Fence(), &imageIndex));
 
 	if (useDeferredRender) {
 		// use the deferred command buffer
@@ -380,27 +380,27 @@ void Renderer::present()
 	// submit the main command buffer
 	auto const si = vk::SubmitInfo()
 		.setWaitSemaphoreCount(1)
-		.setPWaitSemaphores(&ctx.semaphores[1])
+		.setPWaitSemaphores(&ctx.vulkan.semaphores[1])
 		.setPWaitDstStageMask(waitStages)
 		.setCommandBufferCount(1)
-		.setPCommandBuffers(&ctx.dynamicCmdBuffer)
+		.setPCommandBuffers(&ctx.vulkan.dynamicCmdBuffer)
 		.setSignalSemaphoreCount(1)
-		.setPSignalSemaphores(&ctx.semaphores[2]);
-	VkCheck(ctx.graphicsQueue.submit(1, &si, ctx.fences[0]));
+		.setPSignalSemaphores(&ctx.vulkan.semaphores[2]);
+	VkCheck(ctx.vulkan.graphicsQueue.submit(1, &si, ctx.vulkan.fences[0]));
 
     // Presentation
 	auto const pi = vk::PresentInfoKHR()
 		.setWaitSemaphoreCount(1)
-		.setPWaitSemaphores(&ctx.semaphores[2])
+		.setPWaitSemaphores(&ctx.vulkan.semaphores[2])
 		.setSwapchainCount(1)
-		.setPSwapchains(&ctx.swapchain.swapchain)
+		.setPSwapchains(&ctx.vulkan.swapchain->swapchain)
 		.setPImageIndices(&imageIndex)
 		.setPResults(nullptr); //optional
-	VkCheck(ctx.presentQueue.presentKHR(&pi));
+	VkCheck(ctx.vulkan.presentQueue.presentKHR(&pi));
 
-	ctx.device.waitForFences(1, &ctx.fences[0], VK_TRUE, UINT64_MAX);
-	ctx.device.resetFences(1, &ctx.fences[0]);
+	ctx.vulkan.device.waitForFences(1, &ctx.vulkan.fences[0], VK_TRUE, UINT64_MAX);
+	ctx.vulkan.device.resetFences(1, &ctx.vulkan.fences[0]);
 
 	if (overloadedGPU)
-		ctx.presentQueue.waitIdle(); // user set, when GPU can't catch the CPU commands 
+		ctx.vulkan.presentQueue.waitIdle(); // user set, when GPU can't catch the CPU commands 
 }

@@ -3,18 +3,17 @@
 
 using namespace vm;
 
-vk::RenderPass				Shadows::renderPass = nullptr;
+vk::DescriptorSetLayout		Shadows::descriptorSetLayout = nullptr;
 bool						Shadows::shadowCast = true;
 uint32_t					Shadows::imageSize = 4096;
-vk::DescriptorSetLayout		Shadows::descriptorSetLayout = nullptr;
 
-void Shadows::createDescriptorSet(vk::Device device, vk::DescriptorPool descriptorPool, vk::DescriptorSetLayout & descriptorSetLayout)
+void Shadows::createDescriptorSet()
 {
 	auto allocateInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(descriptorPool)
+		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	VkCheck(device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
+	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
 
 	vk::WriteDescriptorSet textureWriteSets[2];
 	// MVP
@@ -40,9 +39,12 @@ void Shadows::createDescriptorSet(vk::Device device, vk::DescriptorPool descript
 			.setImageView(texture.view)										// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
-	device.updateDescriptorSets(2, textureWriteSets, 0, nullptr);
+	vulkan->device.updateDescriptorSets(2, textureWriteSets, 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
 }
+
+vm::Shadows::Shadows(VulkanContext * vulkan) : vulkan(vulkan)
+{ }
 
 vk::DescriptorSetLayout Shadows::getDescriptorSetLayout(vk::Device device)
 {
@@ -72,11 +74,11 @@ vk::DescriptorSetLayout Shadows::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-vk::RenderPass Shadows::getRenderPass(vk::Device device, Image& depth)
+vk::RenderPass Shadows::getRenderPass()
 {
 	if (!renderPass) {
 		auto attachment = vk::AttachmentDescription()
-			.setFormat(depth.format)
+			.setFormat(vulkan->depth->format)
 			.setSamples(vk::SampleCountFlagBits::e1)
 			.setLoadOp(vk::AttachmentLoadOp::eClear)
 			.setStoreOp(vk::AttachmentStoreOp::eStore)
@@ -121,61 +123,63 @@ vk::RenderPass Shadows::getRenderPass(vk::Device device, Image& depth)
 			.setDependencyCount((uint32_t)spDependencies.size())
 			.setPDependencies(spDependencies.data());
 
-		VkCheck(device.createRenderPass(&rpci, nullptr, &renderPass));
+		VkCheck(vulkan->device.createRenderPass(&rpci, nullptr, &renderPass));
 		std::cout << "RenderPass created\n";
 	}
 	return renderPass;
 }
 
-void Shadows::createFrameBuffers(vk::Device device, vk::PhysicalDevice gpu, Image& depth, uint32_t bufferCount)
+void Shadows::createFrameBuffers(uint32_t bufferCount)
 {
 	frameBuffer.resize(bufferCount);
-	texture.format = depth.format;
+	texture.format = vulkan->depth->format;
 	texture.initialLayout = vk::ImageLayout::eUndefined;
-	texture.createImage(device, gpu, imageSize, imageSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	texture.createImage(imageSize, imageSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-	texture.createImageView(device, vk::ImageAspectFlagBits::eDepth);
+	texture.createImageView(vk::ImageAspectFlagBits::eDepth);
 
 	texture.addressMode = vk::SamplerAddressMode::eClampToEdge;
 	texture.maxAnisotropy = 1.f;
 	texture.borderColor = vk::BorderColor::eFloatOpaqueWhite;
 	texture.samplerCompareEnable = VK_TRUE;
-	texture.createSampler(device);
+	texture.createSampler();
 
 	for (uint32_t i = 0; i < bufferCount; ++i) {
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(Shadows::getRenderPass(device, depth))
+			.setRenderPass(getRenderPass())
 			.setAttachmentCount(1)
 			.setPAttachments(&texture.view)
 			.setWidth(imageSize)
 			.setHeight(imageSize)
 			.setLayers(1);
-		VkCheck(device.createFramebuffer(&fbci, nullptr, &frameBuffer[i]));
+		VkCheck(vulkan->device.createFramebuffer(&fbci, nullptr, &frameBuffer[i]));
 		std::cout << "Framebuffer created\n";
 	}
 
 }
 
-void Shadows::createDynamicUniformBuffer(vk::Device device, vk::PhysicalDevice gpu, size_t num_of_objects)
+void Shadows::createDynamicUniformBuffer(size_t num_of_objects)
 {
 	if (num_of_objects > 256) {
 		std::cout << "256 objects for the Shadows Dynamic Uniform Buffer is the max for now\n";
 		exit(-21);
 	}
 	size_t size = num_of_objects * 256;
-	uniformBuffer.createBuffer(device, gpu, size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
+	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	VkCheck(vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
 }
 
-void Shadows::destroy(vk::Device device)
+void Shadows::destroy()
 {
 	if (renderPass)
-		device.destroyRenderPass(renderPass);
-	if (descriptorSetLayout)
-		device.destroyDescriptorSetLayout(descriptorSetLayout);
-	texture.destroy(device);
+		vulkan->device.destroyRenderPass(renderPass);
+	if (Shadows::descriptorSetLayout) {
+		vulkan->device.destroyDescriptorSetLayout(Shadows::descriptorSetLayout);
+		Shadows::descriptorSetLayout = nullptr;
+	}
+	texture.destroy();
 	for (auto& fb : frameBuffer)
-		device.destroyFramebuffer(fb);
-	uniformBuffer.destroy(device);
-	pipeline.destroy(device);
+		vulkan->device.destroyFramebuffer(fb);
+	uniformBuffer.destroy();
+	pipeline.destroy();
 }

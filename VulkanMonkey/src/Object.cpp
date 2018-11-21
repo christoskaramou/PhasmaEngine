@@ -3,29 +3,32 @@
 
 using namespace vm;
 
-void Object::createVertexBuffer(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue)
+vm::Object::Object(VulkanContext * vulkan) :vulkan(vulkan)
+{ }
+
+void Object::createVertexBuffer()
 {
-	vertexBuffer.createBuffer(device, gpu, sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	vertexBuffer.createBuffer(sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer
-	Buffer staging;
-	staging.createBuffer(device, gpu, sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	Buffer staging = Buffer(vulkan);
+	staging.createBuffer(sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	VkCheck(device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
+	VkCheck(vulkan->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
 	memcpy(staging.data, vertices.data(), sizeof(float)*vertices.size());
-	device.unmapMemory(staging.memory);
+	vulkan->device.unmapMemory(staging.memory);
 
-	vertexBuffer.copyBuffer(device, commandPool, graphicsQueue, staging.buffer, staging.size);
-	staging.destroy(device);
+	vertexBuffer.copyBuffer(staging.buffer, staging.size);
+	staging.destroy();
 }
 
-void Object::createUniformBuffer(vk::Device device, vk::PhysicalDevice gpu, size_t size)
+void Object::createUniformBuffer(size_t size)
 {
-	uniformBuffer.createBuffer(device, gpu, size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
+	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	VkCheck(vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
 }
 
-void Object::loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, const std::string path)
+void Object::loadTexture(const std::string path)
 {
 	// Texture Load
 	int texWidth, texHeight, texChannels;
@@ -38,36 +41,38 @@ void Object::loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::CommandP
 		exit(-19);
 	}
 
-	Buffer staging;
-	staging.createBuffer(device, gpu, imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	Buffer staging = Buffer(vulkan);
+	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 	void* data;
-	device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &data);
+	vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &data);
 	memcpy(data, pixels, static_cast<size_t>(imageSize));
-	device.unmapMemory(staging.memory);
+	vulkan->device.unmapMemory(staging.memory);
 
 	stbi_image_free(pixels);
 
 	texture.format = vk::Format::eR8G8B8A8Unorm;
 	texture.mipLevels = 1;
-	texture.createImage(device, gpu, texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	texture.transitionImageLayout(device, commandPool, graphicsQueue, vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-	texture.copyBufferToImage(device, commandPool, graphicsQueue, staging.buffer, 0, 0, texWidth, texHeight);
-	texture.transitionImageLayout(device, commandPool, graphicsQueue, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-	texture.createImageView(device, vk::ImageAspectFlagBits::eColor);
-	texture.createSampler(device);
+	texture.createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	texture.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
+	texture.copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight);
+	texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+	texture.createImageView(vk::ImageAspectFlagBits::eColor);
+	texture.createSampler();
 
-	device.destroyBuffer(staging.buffer);
-	device.freeMemory(staging.memory);
+	vulkan->device.destroyBuffer(staging.buffer);
+	vulkan->device.freeMemory(staging.memory);
 }
 
-void Object::createDescriptorSet(vk::Device device, vk::DescriptorPool descriptorPool, vk::DescriptorSetLayout& descriptorSetLayout)
+void Object::createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout)
 {
+	createUniformBuffer(2 * sizeof(vm::mat4));
+
 	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(descriptorPool)
+		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	VkCheck(device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
+	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
 
 
 	vk::WriteDescriptorSet textureWriteSets[2];
@@ -93,16 +98,16 @@ void Object::createDescriptorSet(vk::Device device, vk::DescriptorPool descripto
 			.setSampler(texture.sampler)									// Sampler sampler;
 			.setImageView(texture.view)										// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
-	device.updateDescriptorSets(2, textureWriteSets, 0, nullptr);
+	vulkan->device.updateDescriptorSets(2, textureWriteSets, 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
 }
 
-void Object::destroy(vk::Device device)
+void Object::destroy()
 {
-	texture.destroy(device);
-	vertexBuffer.destroy(device);
-	indexBuffer.destroy(device);
-	uniformBuffer.destroy(device);
+	texture.destroy();
+	vertexBuffer.destroy();
+	indexBuffer.destroy();
+	uniformBuffer.destroy();
 	vertices.clear();
 	vertices.shrink_to_fit();
 }

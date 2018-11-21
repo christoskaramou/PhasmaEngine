@@ -3,23 +3,26 @@
 
 using namespace vm;
 
-void Compute::createComputeUniforms(vk::Device device, vk::PhysicalDevice gpu, vk::DescriptorPool descriptorPool)
+Compute::Compute(VulkanContext * vulkan) : vulkan(vulkan)
+{ }
+
+void Compute::createComputeUniforms()
 {
 	std::vector<float> scrap(1024);
 	for (unsigned i = 0; i < scrap.size(); i++) {
 		scrap[i] = 1.f;
 	}
-	SBInOut.createBuffer(device, gpu, scrap.size() * sizeof(float), vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(device.mapMemory(SBInOut.memory, 0, SBInOut.size, vk::MemoryMapFlags(), &SBInOut.data));
+	SBInOut.createBuffer(scrap.size() * sizeof(float), vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	VkCheck(vulkan->device.mapMemory(SBInOut.memory, 0, SBInOut.size, vk::MemoryMapFlags(), &SBInOut.data));
 
 	memcpy(SBInOut.data, scrap.data(), SBInOut.size);
 
 	vk::DescriptorSetAllocateInfo allocCompInfo = vk::DescriptorSetAllocateInfo{
-		descriptorPool,						//DescriptorPool descriptorPool;
+		vulkan->descriptorPool,						//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
 		&DSLayoutCompute					//const DescriptorSetLayout* pSetLayouts;
 	};
-	VkCheck(device.allocateDescriptorSets(&allocCompInfo, &DSCompute));
+	VkCheck(vulkan->device.allocateDescriptorSets(&allocCompInfo, &DSCompute));
 	std::vector<vk::WriteDescriptorSet> writeCompDescriptorSets = {
 		// Binding 0 (in out)
 		vk::WriteDescriptorSet{
@@ -36,15 +39,15 @@ void Compute::createComputeUniforms(vk::Device device, vk::PhysicalDevice gpu, v
 			nullptr									//const BufferView* pTexelBufferView;
 		}
 	};
-	device.updateDescriptorSets(1, writeCompDescriptorSets.data(), 0, nullptr);
+	vulkan->device.updateDescriptorSets(1, writeCompDescriptorSets.data(), 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
 
 }
 
-void vm::Compute::destroy(vk::Device device)
+void Compute::destroy()
 {
-	SBInOut.destroy(device);
+	SBInOut.destroy();
 	if (DSLayoutCompute)
-		device.destroyDescriptorSetLayout(DSLayoutCompute);
-	pipeline.destroy(device);
+		vulkan->device.destroyDescriptorSetLayout(DSLayoutCompute);
+	pipeline.destroy();
 }

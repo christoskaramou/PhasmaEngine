@@ -3,16 +3,19 @@
 
 using namespace vm;
 
-void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets, vk::Device device, vk::PhysicalDevice gpu, vk::DescriptorPool descriptorPool)
+vm::SSR::SSR(VulkanContext * vulkan) : vulkan(vulkan)
+{ }
+
+void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 {
-	UBReflection.createBuffer(device, gpu, 256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(device.mapMemory(UBReflection.memory, 0, UBReflection.size, vk::MemoryMapFlags(), &UBReflection.data));
+	UBReflection.createBuffer(256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	VkCheck(vulkan->device.mapMemory(UBReflection.memory, 0, UBReflection.size, vk::MemoryMapFlags(), &UBReflection.data));
 
 	auto const allocateInfo2 = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(descriptorPool)
+		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&DSLayoutReflection);
-	VkCheck(device.allocateDescriptorSets(&allocateInfo2, &DSReflection));
+	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo2, &DSReflection));
 
 	vk::WriteDescriptorSet textureWriteSets[5];
 	// Albedo
@@ -71,28 +74,28 @@ void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets, vk::Dev
 			.setOffset(0)													// DeviceSize offset;
 			.setRange(3 * 64));									// DeviceSize range;
 
-	device.updateDescriptorSets(5, textureWriteSets, 0, nullptr);
+	vulkan->device.updateDescriptorSets(5, textureWriteSets, 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
 }
 
-void vm::SSR::destroy(vk::Device device)
+void vm::SSR::destroy()
 {
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
-			device.destroyFramebuffer(frameBuffer);
+			vulkan->device.destroyFramebuffer(frameBuffer);
 			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	if (renderPass) {
-		device.destroyRenderPass(renderPass);
+		vulkan->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
 		std::cout << "RenderPass destroyed\n";
 	}
 	if (DSLayoutReflection) {
-		device.destroyDescriptorSetLayout(DSLayoutReflection);
+		vulkan->device.destroyDescriptorSetLayout(DSLayoutReflection);
 		DSLayoutReflection = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
-	UBReflection.destroy(device);
-	pipeline.destroy(device);
+	UBReflection.destroy();
+	pipeline.destroy();
 }

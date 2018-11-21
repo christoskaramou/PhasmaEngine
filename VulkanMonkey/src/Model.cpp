@@ -7,7 +7,10 @@
 
 using namespace vm;
 
-vk::DescriptorSetLayout	Model::descriptorSetLayout = nullptr;
+vk::DescriptorSetLayout Model::descriptorSetLayout = nullptr;
+
+Model::Model(VulkanContext * vulkan) : vulkan(vulkan)
+{ }
 
 vm::mat4 aiMatrix4x4ToMat4(const aiMatrix4x4& m)
 {
@@ -20,10 +23,8 @@ void getAllNodes(aiNode* root, std::vector<aiNode*>& allNodes) {
 	if (root) allNodes.push_back(root);
 }
 
-Model Model::loadModel(const std::string path, const std::string modelName, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show)
+void Model::loadModel(const std::string path, const std::string modelName, bool show)
 {
-	Model _model;
-
 	// Materials, Vertices and Indices load
 	Assimp::Logger::LogSeverity severity = Assimp::Logger::VERBOSE;
 	// Create a logger instance for Console Output
@@ -49,12 +50,12 @@ Model Model::loadModel(const std::string path, const std::string modelName, vk::
 	std::vector<aiNode*> allNodes{};
 	getAllNodes(scene->mRootNode, allNodes);
 
-	std::vector<Mesh> f_meshes{};
+	std::vector<Mesh> f_meshes;
 	for (unsigned int n = 0; n < allNodes.size(); n++) {
 		const aiNode& node = *allNodes[n];
 		const vm::mat4 transform = aiMatrix4x4ToMat4(node.mTransformation);
 		for (unsigned int i = 0; i < node.mNumMeshes; i++) {
-			Mesh myMesh;
+			Mesh myMesh = Mesh(vulkan);
 
 			const aiMesh& mesh = *scene->mMeshes[node.mMeshes[i]];
 			const aiMaterial& material = *scene->mMaterials[mesh.mMaterialIndex];
@@ -78,12 +79,12 @@ Model Model::loadModel(const std::string path, const std::string modelName, vk::
 			std::string texPath = aitexPath.C_Str();
 			if (texPath != "")	texPath = path + texPath;
 			else				texPath = "objects/default.png";
-			if (_model.uniqueTextures.find(texPath) != _model.uniqueTextures.end()) {
-				myMesh.texture = _model.uniqueTextures[texPath];
+			if (uniqueTextures.find(texPath) != uniqueTextures.end()) {
+				myMesh.texture = uniqueTextures[texPath];
 			}
 			else {
-				myMesh.loadTexture(device, gpu, commandPool, graphicsQueue, Mesh::DiffuseMap, texPath);
-				_model.uniqueTextures[texPath] = myMesh.texture;
+				myMesh.loadTexture(Mesh::DiffuseMap, texPath);
+				uniqueTextures[texPath] = myMesh.texture;
 			}
 
 			aiString aiNormTexPath;
@@ -91,12 +92,12 @@ Model Model::loadModel(const std::string path, const std::string modelName, vk::
 			std::string normTexPath = aiNormTexPath.C_Str();
 			if (normTexPath != "")	normTexPath = path + normTexPath;
 			else					normTexPath = "objects/defaultNormalMap.png";
-			if (_model.uniqueTextures.find(normTexPath) != _model.uniqueTextures.end()) {
-				myMesh.normalsTexture = _model.uniqueTextures[normTexPath];
+			if (uniqueTextures.find(normTexPath) != uniqueTextures.end()) {
+				myMesh.normalsTexture = uniqueTextures[normTexPath];
 			}
 			else {
-				myMesh.loadTexture(device, gpu, commandPool, graphicsQueue, Mesh::NormalMap, normTexPath);
-				_model.uniqueTextures[normTexPath] = myMesh.normalsTexture;
+				myMesh.loadTexture(Mesh::NormalMap, normTexPath);
+				uniqueTextures[normTexPath] = myMesh.normalsTexture;
 			}
 
 			aiString aiSpecTexPath;
@@ -104,12 +105,12 @@ Model Model::loadModel(const std::string path, const std::string modelName, vk::
 			std::string specTexPath = aiSpecTexPath.C_Str();
 			if (specTexPath != "")	specTexPath = path + specTexPath;
 			else					specTexPath = "objects/defaultSpecularMap.png";
-			if (_model.uniqueTextures.find(specTexPath) != _model.uniqueTextures.end()) {
-				myMesh.specularTexture = _model.uniqueTextures[specTexPath];
+			if (uniqueTextures.find(specTexPath) != uniqueTextures.end()) {
+				myMesh.specularTexture = uniqueTextures[specTexPath];
 			}
 			else {
-				myMesh.loadTexture(device, gpu, commandPool, graphicsQueue, Mesh::SpecularMap, specTexPath);
-				_model.uniqueTextures[specTexPath] = myMesh.specularTexture;
+				myMesh.loadTexture(Mesh::SpecularMap, specTexPath);
+				uniqueTextures[specTexPath] = myMesh.specularTexture;
 			}
 
 			aiString aiAlphaTexPath;
@@ -117,12 +118,12 @@ Model Model::loadModel(const std::string path, const std::string modelName, vk::
 			std::string aplhaTexPath = aiAlphaTexPath.C_Str();
 			if (aplhaTexPath != "")	aplhaTexPath = path + aplhaTexPath;
 			else					aplhaTexPath = "objects/default.png";
-			if (_model.uniqueTextures.find(aplhaTexPath) != _model.uniqueTextures.end()) {
-				myMesh.alphaTexture = _model.uniqueTextures[aplhaTexPath];
+			if (uniqueTextures.find(aplhaTexPath) != uniqueTextures.end()) {
+				myMesh.alphaTexture = uniqueTextures[aplhaTexPath];
 			}
 			else {
-				myMesh.loadTexture(device, gpu, commandPool, graphicsQueue, Mesh::AlphaMap, aplhaTexPath);
-				_model.uniqueTextures[aplhaTexPath] = myMesh.alphaTexture;
+				myMesh.loadTexture(Mesh::AlphaMap, aplhaTexPath);
+				uniqueTextures[aplhaTexPath] = myMesh.alphaTexture;
 			}
 			for (unsigned int j = 0; j < mesh.mNumVertices; j++) {
 				const aiVector3D& pos = mesh.HasPositions() ? mesh.mVertices[j] : aiVector3D(0.f, 0.f, 0.f);
@@ -158,26 +159,24 @@ Model Model::loadModel(const std::string path, const std::string modelName, vk::
 		}
 	}
 	for (auto &m : f_meshes) {
-		m.vertexOffset = _model.numberOfVertices;
-		m.indexOffset = _model.numberOfIndices;
+		m.vertexOffset = numberOfVertices;
+		m.indexOffset = numberOfIndices;
 
-		_model.meshes.push_back(m);
-		_model.numberOfVertices += static_cast<uint32_t>(m.vertices.size());
-		_model.numberOfIndices += static_cast<uint32_t>(m.indices.size());
+		meshes.push_back(m);
+		numberOfVertices += static_cast<uint32_t>(m.vertices.size());
+		numberOfIndices += static_cast<uint32_t>(m.indices.size());
 	}
 
-	_model.createVertexBuffer(device, gpu, commandPool, graphicsQueue);
-	_model.createIndexBuffer(device, gpu, commandPool, graphicsQueue);
-	_model.createUniformBuffers(device, gpu);
-	_model.createDescriptorSets(device, descriptorPool);
-	_model.name = modelName;
-	_model.render = show;
+	createVertexBuffer();
+	createIndexBuffer();
+	createUniformBuffers();
+	createDescriptorSets();
+	name = modelName;
+	render = show;
 
 	// resizing the model to always be at a certain magnitude
-	float scale = 2.0f / _model.getBoundingSphere().w;
-	_model.matrix = vm::scale(_model.matrix, vm::vec3(scale, scale, scale));
-
-	return _model;
+	float scale = 2.0f / getBoundingSphere().w;
+	matrix = vm::scale(matrix, vm::vec3(scale, scale, scale));
 }
 
 void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows, vk::DescriptorSet* DSLights)
@@ -250,7 +249,7 @@ vk::DescriptorSetLayout Model::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-void Model::createVertexBuffer(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue)
+void Model::createVertexBuffer()
 {
 	std::vector<Vertex> vertices{};
 	for (auto& mesh : meshes) {
@@ -258,55 +257,55 @@ void Model::createVertexBuffer(vk::Device device, vk::PhysicalDevice gpu, vk::Co
 			vertices.push_back(vertex);
 	}
 
-	vertexBuffer.createBuffer(device, gpu, sizeof(Vertex)*vertices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	vertexBuffer.createBuffer(sizeof(Vertex)*vertices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer
-	Buffer staging;
-	staging.createBuffer(device, gpu, sizeof(Vertex)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	Buffer staging = Buffer(vulkan);
+	staging.createBuffer(sizeof(Vertex)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	VkCheck(device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
+	VkCheck(vulkan->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
 	memcpy(staging.data, vertices.data(), sizeof(Vertex)*vertices.size());
-	device.unmapMemory(staging.memory);
+	vulkan->device.unmapMemory(staging.memory);
 
-	vertexBuffer.copyBuffer(device, commandPool, graphicsQueue, staging.buffer, staging.size);
-	staging.destroy(device);
+	vertexBuffer.copyBuffer(staging.buffer, staging.size);
+	staging.destroy();
 }
 
-void Model::createIndexBuffer(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue)
+void Model::createIndexBuffer()
 {
 	std::vector<uint32_t> indices{};
 	for (auto& mesh : meshes) {
 		for (auto& index : mesh.indices)
 			indices.push_back(index);
 	}
-	indexBuffer.createBuffer(device, gpu, sizeof(uint32_t)*indices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	indexBuffer.createBuffer(sizeof(uint32_t)*indices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer
-	Buffer staging;
-	staging.createBuffer(device, gpu, sizeof(uint32_t)*indices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	Buffer staging = Buffer(vulkan);
+	staging.createBuffer(sizeof(uint32_t)*indices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	VkCheck(device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
+	VkCheck(vulkan->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
 	memcpy(staging.data, indices.data(), sizeof(uint32_t)*indices.size());
-	device.unmapMemory(staging.memory);
+	vulkan->device.unmapMemory(staging.memory);
 
-	indexBuffer.copyBuffer(device, commandPool, graphicsQueue, staging.buffer, staging.size);
-	staging.destroy(device);
+	indexBuffer.copyBuffer(staging.buffer, staging.size);
+	staging.destroy();
 }
 
-void Model::createUniformBuffers(vk::Device device, vk::PhysicalDevice gpu)
+void Model::createUniformBuffers()
 {
 	// since the uniform buffers are unique for each model, they are not bigger than 256 in size
-	uniformBuffer.createBuffer(device, gpu, 256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
+	uniformBuffer.createBuffer(256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	VkCheck(vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
 }
 
-void Model::createDescriptorSets(vk::Device device, vk::DescriptorPool descriptorPool)
+void Model::createDescriptorSets()
 {
 	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(descriptorPool)
+		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
-		.setPSetLayouts(&Model::descriptorSetLayout);
-	VkCheck(device.allocateDescriptorSets(&allocateInfo, &descriptorSet));
+		.setPSetLayouts(&descriptorSetLayout);
+	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet));
 
 	// Model MVP
 	auto const mvpWriteSet = vk::WriteDescriptorSet()
@@ -320,15 +319,15 @@ void Model::createDescriptorSets(vk::Device device, vk::DescriptorPool descripto
 			.setOffset(0)											// DeviceSize offset;
 			.setRange(uniformBuffer.size));							// DeviceSize range;
 
-	device.updateDescriptorSets(1, &mvpWriteSet, 0, nullptr);
+	vulkan->device.updateDescriptorSets(1, &mvpWriteSet, 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
 
 	for (auto& mesh : meshes) {
 		auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-			.setDescriptorPool(descriptorPool)
+			.setDescriptorPool(vulkan->descriptorPool)
 			.setDescriptorSetCount(1)
-			.setPSetLayouts(&Mesh::descriptorSetLayout);
-		VkCheck(device.allocateDescriptorSets(&allocateInfo, &mesh.descriptorSet));
+			.setPSetLayouts(&mesh.descriptorSetLayout);
+		VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &mesh.descriptorSet));
 
 		// Texture
 		vk::WriteDescriptorSet textureWriteSets[4];
@@ -377,12 +376,12 @@ void Model::createDescriptorSets(vk::Device device, vk::DescriptorPool descripto
 				.setImageView(mesh.alphaTexture.view)							// ImageView imageView;
 				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
-		device.updateDescriptorSets(4, textureWriteSets, 0, nullptr);
+		vulkan->device.updateDescriptorSets(4, textureWriteSets, 0, nullptr);
 		std::cout << "DescriptorSet allocated and updated\n";
 	}
 }
 
-void Model::destroy(vk::Device device)
+void Model::destroy()
 {
 	for (auto& mesh : meshes) {
 		mesh.vertices.clear();
@@ -392,16 +391,21 @@ void Model::destroy(vk::Device device)
 	}
 
 	for (auto& texture : uniqueTextures)
-		texture.second.destroy(device);
+		texture.second.destroy();
 
-	vertexBuffer.destroy(device);
-	indexBuffer.destroy(device);
-	uniformBuffer.destroy(device);
+	vertexBuffer.destroy();
+	indexBuffer.destroy();
+	uniformBuffer.destroy();
 
-	if (descriptorSetLayout)
-		device.destroyDescriptorSetLayout(descriptorSetLayout);
-	if (Mesh::descriptorSetLayout)
-		device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
+	if (Model::descriptorSetLayout) {
+		vulkan->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
+		Model::descriptorSetLayout = nullptr;
+	}
+
+	if (Mesh::descriptorSetLayout) {
+		vulkan->device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
+		Mesh::descriptorSetLayout = nullptr;
+	}
 
 	std::cout << "Model and associated structs destroyed\n";
 }

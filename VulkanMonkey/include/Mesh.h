@@ -1,5 +1,5 @@
 #pragma once
-#include "Vulkan.h"
+#include "VulkanContext.h"
 #include "Math.h"
 #include "Vertex.h"
 #include "Image.h"
@@ -12,6 +12,9 @@ namespace vm {
 
 	struct Mesh
 	{
+		VulkanContext* vulkan;
+		Mesh(VulkanContext* vulkan);
+
 		bool render = true, cull = false;
 		vm::vec4 boundingSphere;
 		void calculateBoundingSphere();
@@ -28,10 +31,13 @@ namespace vm {
 		vk::DescriptorSet descriptorSet;
 		std::vector<Vertex> vertices{};
 		std::vector<uint32_t> indices{};
-		Image texture, normalsTexture, specularTexture, alphaTexture;
+		Image texture = Image(vulkan);
+		Image normalsTexture = Image(vulkan);
+		Image specularTexture = Image(vulkan);
+		Image alphaTexture = Image(vulkan);
 		Effects colorEffects;
 
-		void loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, TextureType type, const std::string path);
-		void destroy(vk::Device device);
+		void loadTexture(TextureType type, const std::string path);
+		void destroy();
 	};
 }

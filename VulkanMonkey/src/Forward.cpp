@@ -1,20 +1,23 @@
 #include "../include/Forward.h"
 #include <iostream>
 
-void vm::Forward::destroy(vk::Device device)
+vm::Forward::Forward(VulkanContext * vulkan) : vulkan(vulkan)
+{ }
+
+void vm::Forward::destroy()
 {
 	if (renderPass) {
-		device.destroyRenderPass(renderPass);
+		vulkan->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
 		std::cout << "RenderPass destroyed\n";
 	}
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
-			device.destroyFramebuffer(frameBuffer);
+			vulkan->device.destroyFramebuffer(frameBuffer);
 			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
-	MSColorImage.destroy(device);
-	MSDepthImage.destroy(device);
-	pipeline.destroy(device);
+	MSColorImage.destroy();
+	MSDepthImage.destroy();
+	pipeline.destroy();
 }

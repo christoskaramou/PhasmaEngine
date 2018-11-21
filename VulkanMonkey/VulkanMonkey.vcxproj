@@ -235,6 +235,7 @@
     <ClInclude Include="include\Timer.h" />
     <ClInclude Include="include\Vertex.h" />
     <ClInclude Include="include\Vulkan.h" />
+    <ClInclude Include="include\VulkanContext.h" />
     <ClInclude Include="include\Window.h" />
   </ItemGroup>
   <ItemGroup>

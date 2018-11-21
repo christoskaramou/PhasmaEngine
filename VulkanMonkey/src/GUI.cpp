@@ -4,12 +4,12 @@
 
 using namespace vm;
 
+vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
 SDL_Window*					GUI::g_Window = nullptr;
 Uint64						GUI::g_Time = 0;
 bool						GUI::g_MousePressed[3] = { false, false, false };
 SDL_Cursor*					GUI::g_MouseCursors[ImGuiMouseCursor_COUNT] = { 0 };
 char*						GUI::g_ClipboardTextData = nullptr;
-vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
 
 vk::DescriptorSetLayout GUI::getDescriptorSetLayout(vk::Device device)
 {
@@ -34,6 +34,9 @@ vk::DescriptorSetLayout GUI::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
+GUI::GUI(VulkanContext * vulkan) : Object(vulkan)
+{ }
+
 const char* GUI::ImGui_ImplSDL2_GetClipboardText(void*)
 {
 	if (g_ClipboardTextData)
@@ -47,12 +50,12 @@ void GUI::ImGui_ImplSDL2_SetClipboardText(void*, const char* text)
 	SDL_SetClipboardText(text);
 }
 
-void GUI::initImGui(vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer dynamicCmdBuffer, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, SDL_Window* window)
+void GUI::initImGui()
 {
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 
-	g_Window = window;
+	g_Window = vulkan->window;
 
 	// Setup back-end capabilities flags
 	io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;       // We can honor GetMouseCursor() values (optional)
@@ -97,7 +100,7 @@ void GUI::initImGui(vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer
 #ifdef _WIN32
 	SDL_SysWMinfo wmInfo;
 	SDL_VERSION(&wmInfo.version);
-	SDL_GetWindowWMInfo(window, &wmInfo);
+	SDL_GetWindowWMInfo(vulkan->window, &wmInfo);
 	io.ImeWindowHandle = wmInfo.info.win.window;
 #else
 	(void)window;
@@ -107,7 +110,7 @@ void GUI::initImGui(vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer
 	auto beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
-	VkCheck(dynamicCmdBuffer.begin(&beginInfo));
+	VkCheck(vulkan->dynamicCmdBuffer.begin(&beginInfo));
 
 	// Create fonts texture
 	unsigned char* pixels;
@@ -121,31 +124,29 @@ void GUI::initImGui(vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer
 		texture.mipLevels = 1;
 		texture.arrayLayers = 1;
 		texture.initialLayout = vk::ImageLayout::eUndefined;
-		texture.createImage(device, gpu, width, height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		texture.createImage(width, height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 		texture.viewType = vk::ImageViewType::e2D;
-		texture.createImageView(device, vk::ImageAspectFlagBits::eColor);
+		texture.createImageView(vk::ImageAspectFlagBits::eColor);
 
 		texture.addressMode = vk::SamplerAddressMode::eRepeat;
 		texture.maxAnisotropy = 1.f;
 		texture.minLod = -1000.f;
 		texture.maxLod = 1000.f;
-		texture.createSampler(device);
-
-		createDescriptorSet(device, descriptorPool, getDescriptorSetLayout(device));
+		texture.createSampler();
 	}
 	// Create the and Upload to Buffer:
-	Buffer stagingBuffer;
+	Buffer stagingBuffer = Buffer(vulkan);
 	{
-		stagingBuffer.createBuffer(device, gpu, upload_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
+		stagingBuffer.createBuffer(upload_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
 		void* map;
-		VkCheck(device.mapMemory(stagingBuffer.memory, 0, upload_size, vk::MemoryMapFlags(), &map));
+		VkCheck(vulkan->device.mapMemory(stagingBuffer.memory, 0, upload_size, vk::MemoryMapFlags(), &map));
 		memcpy(map, pixels, upload_size);
 		vk::MappedMemoryRange range[1] = {};
 		range[0].memory = stagingBuffer.memory;
 		range[0].size = upload_size;
-		VkCheck(device.flushMappedMemoryRanges(1, range));
-		device.unmapMemory(stagingBuffer.memory);
+		VkCheck(vulkan->device.flushMappedMemoryRanges(1, range));
+		vulkan->device.unmapMemory(stagingBuffer.memory);
 	}
 
 	// Copy to Image:
@@ -160,7 +161,7 @@ void GUI::initImGui(vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer
 		copy_barrier[0].subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 		copy_barrier[0].subresourceRange.levelCount = 1;
 		copy_barrier[0].subresourceRange.layerCount = 1;
-		dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlags(), 0, nullptr, 0, nullptr, 1, copy_barrier);
+		vulkan->dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlags(), 0, nullptr, 0, nullptr, 1, copy_barrier);
 
 		vk::BufferImageCopy region = {};
 		region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
@@ -168,7 +169,7 @@ void GUI::initImGui(vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer
 		region.imageExtent.width = width;
 		region.imageExtent.height = height;
 		region.imageExtent.depth = 1;
-		dynamicCmdBuffer.copyBufferToImage(stagingBuffer.buffer, texture.image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
+		vulkan->dynamicCmdBuffer.copyBufferToImage(stagingBuffer.buffer, texture.image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
 
 		vk::ImageMemoryBarrier use_barrier[1] = {};
 		use_barrier[0].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -181,7 +182,7 @@ void GUI::initImGui(vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer
 		use_barrier[0].subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 		use_barrier[0].subresourceRange.levelCount = 1;
 		use_barrier[0].subresourceRange.layerCount = 1;
-		dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlags(), 0, nullptr, 0, nullptr, 1, use_barrier);
+		vulkan->dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlags(), 0, nullptr, 0, nullptr, 1, use_barrier);
 	}
 
 	// Store our identifier
@@ -189,12 +190,12 @@ void GUI::initImGui(vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer
 
 	vk::SubmitInfo end_info = {};
 	end_info.commandBufferCount = 1;
-	end_info.pCommandBuffers = &dynamicCmdBuffer;
-	VkCheck(dynamicCmdBuffer.end());
-	graphicsQueue.submit(1, &end_info, nullptr);
+	end_info.pCommandBuffers = &vulkan->dynamicCmdBuffer;
+	VkCheck(vulkan->dynamicCmdBuffer.end());
+	vulkan->graphicsQueue.submit(1, &end_info, nullptr);
 
-	device.waitIdle();
-	stagingBuffer.destroy(device);
+	vulkan->device.waitIdle();
+	stagingBuffer.destroy();
 }
 
 void GUI::newFrame(vk::Device device, vk::PhysicalDevice gpu, SDL_Window* window)
@@ -280,9 +281,9 @@ void GUI::newFrame(vk::Device device, vk::PhysicalDevice gpu, SDL_Window* window
 	size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
 	size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
 	if (!vertexBuffer.buffer || vertexBuffer.size < vertex_size)
-		createVertexBuffer(device, gpu, vertex_size);
+		createVertexBuffer(vertex_size);
 	if (!indexBuffer.buffer || indexBuffer.size < index_size)
-		createIndexBuffer(device, gpu, index_size);
+		createIndexBuffer(index_size);
 
 	// Upload Vertex and index Data:
 	{
@@ -309,7 +310,7 @@ void GUI::newFrame(vk::Device device, vk::PhysicalDevice gpu, SDL_Window* window
 	}
 }
 
-void GUI::loadGUI(const std::string textureName, vk::Device device, vk::PhysicalDevice gpu, vk::CommandBuffer dynamicCmdBuffer, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, SDL_Window* window, bool show)
+void GUI::loadGUI(const std::string textureName, bool show)
 {
 	if (textureName == "ImGuiDemo")
 		show_demo_window = true;
@@ -337,11 +338,11 @@ void GUI::loadGUI(const std::string textureName, vk::Device device, vk::Physical
 	//_gui.createVertexBuffer(info, _gui.vertices.size());
 	//_gui.createDescriptorSet(GUI::descriptorSetLayout, info);
 
-	initImGui(device, gpu, dynamicCmdBuffer, graphicsQueue, descriptorPool, window);
+	initImGui();
 	render = show;
 }
 
-void GUI::draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Surface& surface, Pipeline& pipeline, const vk::CommandBuffer & cmd)
+void GUI::draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Pipeline& pipeline, const vk::CommandBuffer & cmd)
 {
 	auto draw_data = ImGui::GetDrawData();
 	if (render && draw_data->TotalVtxCount > 0)
@@ -352,7 +353,7 @@ void GUI::draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Surfac
 		auto renderPassInfo2 = vk::RenderPassBeginInfo()
 			.setRenderPass(renderPass)
 			.setFramebuffer(guiFrameBuffer)
-			.setRenderArea({ { 0, 0 }, surface.actualExtent })
+			.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
 			.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 			.setPClearValues(clearValues.data());
 		cmd.beginRenderPass(&renderPassInfo2, vk::SubpassContents::eInline);
@@ -416,25 +417,25 @@ void GUI::draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Surfac
 	}
 }
 
-void GUI::createVertexBuffer(vk::Device device, vk::PhysicalDevice gpu, size_t vertex_size)
+void GUI::createVertexBuffer(size_t vertex_size)
 {
-	vertexBuffer.destroy(device);
-	vertexBuffer.createBuffer(device, gpu, vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
+	vertexBuffer.destroy();
+	vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 }
 
-void GUI::createIndexBuffer(vk::Device device, vk::PhysicalDevice gpu, size_t index_size)
+void GUI::createIndexBuffer(size_t index_size)
 {
-	indexBuffer.destroy(device);
-	indexBuffer.createBuffer(device, gpu, index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
+	indexBuffer.destroy();
+	indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 }
 
-void GUI::createDescriptorSet(vk::Device device, vk::DescriptorPool descriptorPool, vk::DescriptorSetLayout & descriptorSetLayout)
+void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout)
 {
 	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(descriptorPool)
+		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	VkCheck(device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
+	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
 
 
 	// texture sampler
@@ -449,28 +450,28 @@ void GUI::createDescriptorSet(vk::Device device, vk::DescriptorPool descriptorPo
 			.setSampler(texture.sampler)									// Sampler sampler;
 			.setImageView(texture.view)										// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
-	device.updateDescriptorSets(1, textureWriteSets, 0, nullptr);
+	vulkan->device.updateDescriptorSets(1, textureWriteSets, 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
 }
 
-void vm::GUI::destroy(vk::Device device)
+void GUI::destroy()
 {
-	Object::destroy(device);
+	Object::destroy();
 	if (renderPass) {
-		device.destroyRenderPass(renderPass);
+		vulkan->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
 		std::cout << "RenderPass destroyed\n";
 	}
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
-			device.destroyFramebuffer(frameBuffer);
+			vulkan->device.destroyFramebuffer(frameBuffer);
 			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
-	pipeline.destroy(device);
-	if (descriptorSetLayout) {
-		device.destroyDescriptorSetLayout(descriptorSetLayout);
-		descriptorSetLayout = nullptr;
+	pipeline.destroy();
+	if (GUI::descriptorSetLayout) {
+		vulkan->device.destroyDescriptorSetLayout(GUI::descriptorSetLayout);
+		GUI::descriptorSetLayout = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 }

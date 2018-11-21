@@ -4,14 +4,17 @@
 
 using namespace vm;
 
-void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms, vk::Device device, vk::DescriptorPool descriptorPool)
+vm::Deferred::Deferred(VulkanContext * vulkan) : vulkan(vulkan)
+{ }
+
+void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 {
 	vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
-	descriptorPool,						//DescriptorPool descriptorPool;
+	vulkan->descriptorPool,						//DescriptorPool descriptorPool;
 	1,										//uint32_t descriptorSetCount;
 	&DSLayoutComposition				//const DescriptorSetLayout* pSetLayouts;
 	};
-	VkCheck(device.allocateDescriptorSets(&allocInfo, &DSComposition));
+	VkCheck(vulkan->device.allocateDescriptorSets(&allocInfo, &DSComposition));
 
 	// Image descriptors for the offscreen color attachments
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
@@ -112,39 +115,39 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 		}
 	};
 
-	device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+	vulkan->device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
 }
 
-void vm::Deferred::destroy(vk::Device device)
+void vm::Deferred::destroy()
 {
 	if (renderPass) {
-		device.destroyRenderPass(renderPass);
+		vulkan->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
 		std::cout << "RenderPass destroyed\n";
 	}
 	if (compositionRenderPass) {
-		device.destroyRenderPass(compositionRenderPass);
+		vulkan->device.destroyRenderPass(compositionRenderPass);
 		compositionRenderPass = nullptr;
 		std::cout << "RenderPass destroyed\n";
 	}
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
-			device.destroyFramebuffer(frameBuffer);
+			vulkan->device.destroyFramebuffer(frameBuffer);
 			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	for (auto &frameBuffer : compositionFrameBuffers) {
 		if (frameBuffer) {
-			device.destroyFramebuffer(frameBuffer);
+			vulkan->device.destroyFramebuffer(frameBuffer);
 			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	if (DSLayoutComposition) {
-		device.destroyDescriptorSetLayout(DSLayoutComposition);
+		vulkan->device.destroyDescriptorSetLayout(DSLayoutComposition);
 		DSLayoutComposition = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
-	pipeline.destroy(device);
-	pipelineComposition.destroy(device);
+	pipeline.destroy();
+	pipelineComposition.destroy();
 }

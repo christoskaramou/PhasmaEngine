@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Vulkan.h"
+#include "VulkanContext.h"
 #include "SDL.h"
 #include "Math.h"
 #include "Vertex.h"
@@ -28,61 +29,69 @@
 #include <map>
 
 namespace vm {
+
+	//struct VulkanContext {
+	//	SDL_Window* window;
+	//	vk::Instance instance;
+	//	Surface surface;
+	//	int graphicsFamilyId, presentFamilyId, computeFamilyId;
+	//	vk::PhysicalDevice gpu;
+	//	vk::PhysicalDeviceProperties gpuProperties;
+	//	vk::PhysicalDeviceFeatures gpuFeatures;
+	//	vk::Device device;
+	//	vk::Queue graphicsQueue, presentQueue, computeQueue;
+	//	vk::CommandPool commandPool, commandPoolCompute;
+	//	vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
+	//	Swapchain swapchain;
+	//	Image depth;
+	//	vk::CommandBuffer dynamicCmdBuffer, computeCmdBuffer, shadowCmdBuffer;
+	//	vk::DescriptorPool descriptorPool;
+	//	std::vector<vk::Fence> fences{};
+	//	std::vector<vk::Semaphore> semaphores{};
+	//	std::map<std::string, Image> renderTargets{};
+	//};
+
 	struct Context
 	{
 	public:
 		// VULKAN CONTEXT
-		SDL_Window* window;
-		vk::Instance instance;
-		Surface surface;
-		int graphicsFamilyId, presentFamilyId, computeFamilyId;
-		vk::PhysicalDevice gpu;
-		vk::PhysicalDeviceProperties gpuProperties;
-		vk::PhysicalDeviceFeatures gpuFeatures;
-		vk::Device device;
-		vk::Queue graphicsQueue, presentQueue, computeQueue;
-		vk::CommandPool commandPool, commandPoolCompute;
-		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
-		Swapchain swapchain;
-		Image depth;
-		vk::CommandBuffer dynamicCmdBuffer, computeCmdBuffer, shadowCmdBuffer;
-		vk::DescriptorPool descriptorPool;
-		std::vector<vk::Fence> fences{};
-		std::vector<vk::Semaphore> semaphores{};
-		std::map<std::string, Image> renderTargets{};
+		VulkanContext vulkan;
+
+		// RENDER TARGETS
+		std::map<std::string, Image> renderTargets;
 
 		// MODELS
 		std::vector<Model> models{};
 
 		// SHADOWS
-		Shadows shadows;
+		Shadows shadows = Shadows(&vulkan);
 
 		// COMPUTE
-		Compute compute;
+		Compute compute = Compute(&vulkan);
 
 		// FORWARD
-		Forward forward;
+		Forward forward = Forward(&vulkan);
 
 		// DEFERRED
-		Deferred deferred;
+		Deferred deferred = Deferred(&vulkan);
 
 		// SSR
-		SSR ssr;
+		SSR ssr = SSR(&vulkan);
 
 		// SSAO
-		SSAO ssao;
+		SSAO ssao = SSAO(&vulkan);
 
 		// SKYBOX
-		SkyBox skyBox;
+		SkyBox skyBox = SkyBox(&vulkan);
 
 		// TERRAIN
-		Terrain terrain;
+		Terrain terrain = Terrain(&vulkan);
 
 		// GUI
-		GUI gui;
+		GUI gui = GUI(&vulkan);
 
 		// LIGHTS
-		LightUniforms lightUniforms;
+		LightUniforms lightUniforms = LightUniforms(&vulkan);
 
 		// MAIN CAMERA
 		Camera mainCamera;
@@ -100,6 +109,8 @@ namespace vm {
 		PipelineInfo getPipelineSpecificationsTerrain();
 		PipelineInfo getPipelineSpecificationsGUI();
 		PipelineInfo getPipelineSpecificationsDeferred();
+
+		vk::DescriptorSetLayout getDescriptorSetLayoutLights();
 
 	private:
 		vk::Instance createInstance();

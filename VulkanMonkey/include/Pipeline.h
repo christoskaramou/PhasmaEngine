@@ -1,14 +1,17 @@
 #pragma once
-#include "Vulkan.h"
+#include "VulkanContext.h"
 
 namespace vm {
 	struct Pipeline
 	{
+		VulkanContext* vulkan;
+		Pipeline(VulkanContext* vulkan);
+
 		vk::Pipeline pipeline;
 		vk::GraphicsPipelineCreateInfo pipeinfo;
 		vk::ComputePipelineCreateInfo compinfo;
 
-		void destroy(vk::Device device);
+		void destroy();
 	};
 
 	struct PipelineInfo

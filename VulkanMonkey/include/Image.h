@@ -1,9 +1,13 @@
 #pragma once
-#include "Vulkan.h"
+#include "VulkanContext.h"
 
 namespace vm {
 	struct Image
 	{
+		VulkanContext* vulkan;
+		Image(VulkanContext* vulkan);
+		Image() = default;
+
 		vk::Image image;
 		vk::DeviceMemory memory;
 		vk::ImageView view;
@@ -23,12 +27,12 @@ namespace vm {
 		vk::BorderColor borderColor = vk::BorderColor::eFloatOpaqueBlack;
 		vk::Bool32 samplerCompareEnable = VK_FALSE;
 
-		void createImage(vk::Device device, vk::PhysicalDevice gpu, const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1);
-		void createImageView(vk::Device device, const vk::ImageAspectFlags aspectFlags);
-		void transitionImageLayout(vk::Device device, vk::CommandPool commandPool, vk::Queue graphicsQueue, const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout);
-		void copyBufferToImage(vk::Device device, vk::CommandPool commandPool, vk::Queue graphicsQueue, const vk::Buffer buffer, const int x, const int y, const int width, const int height, const uint32_t baseLayer = 0);
-		void generateMipMaps(vk::Device device, vk::CommandPool commandPool, vk::Queue graphicsQueue, const int32_t texWidth, const int32_t texHeight);
-		void createSampler(vk::Device device);
-		void destroy(vk::Device device);
+		void createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1);
+		void createImageView(const vk::ImageAspectFlags aspectFlags);
+		void transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout);
+		void copyBufferToImage(const vk::Buffer buffer, const int x, const int y, const int width, const int height, const uint32_t baseLayer = 0);
+		void generateMipMaps(const int32_t texWidth, const int32_t texHeight);
+		void createSampler();
+		void destroy();
 	};
 }

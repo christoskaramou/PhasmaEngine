@@ -15,8 +15,8 @@ int main(int argc, char* argv[])
 	auto& renderer = Window::renderer;
 	auto& ctx = renderer[0]->ctx; // main renderer info
 
-    std::string title = "VulkanMonkey3D   " + std::string(ctx.gpuProperties.deviceName) + " (Present Mode: " + vk::to_string(ctx.surface.presentModeKHR) + ")  -  FPS: ";
-    SDL_SetWindowTitle(ctx.window, title.c_str());
+    std::string title = "VulkanMonkey3D   " + std::string(ctx.vulkan.gpuProperties.deviceName) + " (Present Mode: " + vk::to_string(ctx.vulkan.surface->presentModeKHR) + ")  -  FPS: ";
+    SDL_SetWindowTitle(ctx.vulkan.window, title.c_str());
 
     while(true)
 	{
@@ -34,7 +34,7 @@ int main(int argc, char* argv[])
         if (timer.intervalsOf(0.5f))
         {
 			std::string _fps = title + std::to_string(timer.getFPS());
-            SDL_SetWindowTitle(ctx.window, _fps.c_str());
+            SDL_SetWindowTitle(ctx.vulkan.window, _fps.c_str());
         }
     }
 

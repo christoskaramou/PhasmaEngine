@@ -3,7 +3,10 @@
 
 using namespace vm;
 
-void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool)
+vm::SSAO::SSAO(VulkanContext * vulkan) : vulkan(vulkan)
+{ }
+
+void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 {
 	// kernel buffer
 	std::vector<vm::vec4> ssaoKernel{};
@@ -15,42 +18,42 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets, vk::D
 		scale = vm::lerp(.1f, 1.f, scale * scale);
 		ssaoKernel.push_back(vm::vec4(sample * scale, 0.f));
 	}
-	UBssaoKernel.createBuffer(device, gpu, sizeof(vm::vec4) * 32, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(device.mapMemory(UBssaoKernel.memory, 0, UBssaoKernel.size, vk::MemoryMapFlags(), &UBssaoKernel.data));
+	UBssaoKernel.createBuffer(sizeof(vm::vec4) * 32, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	VkCheck(vulkan->device.mapMemory(UBssaoKernel.memory, 0, UBssaoKernel.size, vk::MemoryMapFlags(), &UBssaoKernel.data));
 	memcpy(UBssaoKernel.data, ssaoKernel.data(), UBssaoKernel.size);
 	// noise image
 	std::vector<vm::vec4> noise{};
 	for (unsigned int i = 0; i < 16; i++)
 		noise.push_back(vm::vec4(vm::rand(-1.f, 1.f), vm::rand(-1.f, 1.f), 0.f, 1.f));
-	Buffer staging;
+	Buffer staging = Buffer(vulkan);
 	void* data;
 	uint64_t bufSize = sizeof(vm::vec4) * 16;
-	staging.createBuffer(device, gpu, bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	device.mapMemory(staging.memory, vk::DeviceSize(), staging.size, vk::MemoryMapFlags(), &data);
+	staging.createBuffer(bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), staging.size, vk::MemoryMapFlags(), &data);
 	memcpy(data, noise.data(), staging.size);
-	device.unmapMemory(staging.memory);
+	vulkan->device.unmapMemory(staging.memory);
 	ssaoNoise.filter = vk::Filter::eNearest;
 	ssaoNoise.minLod = 0.0f;
 	ssaoNoise.maxLod = 0.0f;
 	ssaoNoise.maxAnisotropy = 1.0f;
 	ssaoNoise.format = vk::Format::eR16G16B16A16Sfloat;
-	ssaoNoise.createImage(device, gpu, 4, 4, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	ssaoNoise.transitionImageLayout(device, commandPool, graphicsQueue, vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-	ssaoNoise.copyBufferToImage(device, commandPool, graphicsQueue, staging.buffer, 0, 0, 4, 4);
-	ssaoNoise.transitionImageLayout(device, commandPool, graphicsQueue, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-	ssaoNoise.createImageView(device, vk::ImageAspectFlagBits::eColor);
-	ssaoNoise.createSampler(device);
-	staging.destroy(device);
+	ssaoNoise.createImage(4, 4, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	ssaoNoise.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
+	ssaoNoise.copyBufferToImage(staging.buffer, 0, 0, 4, 4);
+	ssaoNoise.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+	ssaoNoise.createImageView(vk::ImageAspectFlagBits::eColor);
+	ssaoNoise.createSampler();
+	staging.destroy();
 	// pvm uniform
-	UBssaoPVM.createBuffer(device, gpu, 2 * sizeof(vm::mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(device.mapMemory(UBssaoPVM.memory, 0, UBssaoPVM.size, vk::MemoryMapFlags(), &UBssaoPVM.data));
+	UBssaoPVM.createBuffer(2 * sizeof(vm::mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	VkCheck(vulkan->device.mapMemory(UBssaoPVM.memory, 0, UBssaoPVM.size, vk::MemoryMapFlags(), &UBssaoPVM.data));
 
 	vk::DescriptorSetAllocateInfo allocInfoSSAO = vk::DescriptorSetAllocateInfo{
-		descriptorPool,						//DescriptorPool descriptorPool;
+		vulkan->descriptorPool,						//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
 		&DSLayoutSSAO						//const DescriptorSetLayout* pSetLayouts;
 	};
-	VkCheck(device.allocateDescriptorSets(&allocInfoSSAO, &DSssao));
+	VkCheck(vulkan->device.allocateDescriptorSets(&allocInfoSSAO, &DSssao));
 
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
 		renderTargets["position"].sampler,		//Sampler sampler;
@@ -133,17 +136,17 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets, vk::D
 			nullptr									//const BufferView* pTexelBufferView;
 		}
 	};
-	device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSetsSSAO.size()), writeDescriptorSetsSSAO.data(), 0, nullptr);
+	vulkan->device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSetsSSAO.size()), writeDescriptorSetsSSAO.data(), 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
 
 	// DESCRIPTOR SET FOR SSAO BLUR
 	vk::DescriptorSetAllocateInfo allocInfoSSAOBlur = vk::DescriptorSetAllocateInfo{
-		descriptorPool,						//DescriptorPool descriptorPool;
+		vulkan->descriptorPool,						//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
 		&DSLayoutSSAOBlur					//const DescriptorSetLayout* pSetLayouts;
 	};
 
-	VkCheck(device.allocateDescriptorSets(&allocInfoSSAOBlur, &DSssaoBlur));
+	VkCheck(vulkan->device.allocateDescriptorSets(&allocInfoSSAOBlur, &DSssaoBlur));
 
 	std::vector<vk::WriteDescriptorSet> writeDescriptorSetsSSAOBlur = {
 		// Binding 0: Position texture target
@@ -158,46 +161,46 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets, vk::D
 			nullptr									//const BufferView* pTexelBufferView;
 		}
 	};
-	device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSetsSSAOBlur.size()), writeDescriptorSetsSSAOBlur.data(), 0, nullptr);
+	vulkan->device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSetsSSAOBlur.size()), writeDescriptorSetsSSAOBlur.data(), 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";
 }
 
-void vm::SSAO::destroy(vk::Device device)
+void vm::SSAO::destroy()
 {
-	UBssaoKernel.destroy(device);
-	UBssaoPVM.destroy(device);
-	ssaoNoise.destroy(device);
+	UBssaoKernel.destroy();
+	UBssaoPVM.destroy();
+	ssaoNoise.destroy();
 	if (renderPass) {
-		device.destroyRenderPass(renderPass);
+		vulkan->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
 		std::cout << "RenderPass destroyed\n";
 	}
 	if (blurRenderPass) {
-		device.destroyRenderPass(blurRenderPass);
+		vulkan->device.destroyRenderPass(blurRenderPass);
 		blurRenderPass = nullptr;
 		std::cout << "RenderPass destroyed\n";
 	}
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
-			device.destroyFramebuffer(frameBuffer);
+			vulkan->device.destroyFramebuffer(frameBuffer);
 			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	for (auto &frameBuffer : blurFrameBuffers) {
 		if (frameBuffer) {
-			device.destroyFramebuffer(frameBuffer);
+			vulkan->device.destroyFramebuffer(frameBuffer);
 			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
-	pipeline.destroy(device);
-	pipelineBlur.destroy(device);
+	pipeline.destroy();
+	pipelineBlur.destroy();
 	if (DSLayoutSSAO) {
-		device.destroyDescriptorSetLayout(DSLayoutSSAO);
+		vulkan->device.destroyDescriptorSetLayout(DSLayoutSSAO);
 		DSLayoutSSAO = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 	if (DSLayoutSSAOBlur) {
-		device.destroyDescriptorSetLayout(DSLayoutSSAOBlur);
+		vulkan->device.destroyDescriptorSetLayout(DSLayoutSSAOBlur);
 		DSLayoutSSAOBlur = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}

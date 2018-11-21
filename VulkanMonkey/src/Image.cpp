@@ -3,7 +3,10 @@
 
 using namespace vm;
 
-void Image::createImage(vk::Device device ,vk::PhysicalDevice gpu, const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples)
+vm::Image::Image(VulkanContext * vulkan) : vulkan(vulkan)
+{ }
+
+void Image::createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples)
 {
 	auto const imageInfo = vk::ImageCreateInfo()
 		.setFlags(imageCreateFlags)
@@ -18,13 +21,13 @@ void Image::createImage(vk::Device device ,vk::PhysicalDevice gpu, const uint32_
 		.setSharingMode(vk::SharingMode::eExclusive)
 		.setInitialLayout(initialLayout);
 	vk::ImageFormatProperties imageFormatProperties;
-	gpu.getImageFormatProperties(format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags(), &imageFormatProperties);
+	vulkan->gpu.getImageFormatProperties(format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags(), &imageFormatProperties);
 
-	VkCheck(device.createImage(&imageInfo, nullptr, &image));
+	VkCheck(vulkan->device.createImage(&imageInfo, nullptr, &image));
 
 	uint32_t memTypeIndex = UINT32_MAX; ///////////////////
-	auto const memRequirements = device.getImageMemoryRequirements(image);
-	auto const memProperties = gpu.getMemoryProperties();
+	auto const memRequirements = vulkan->device.getImageMemoryRequirements(image);
+	auto const memProperties = vulkan->gpu.getMemoryProperties();
 	for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
 		if (memRequirements.memoryTypeBits & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
 			memTypeIndex = i;
@@ -47,8 +50,8 @@ void Image::createImage(vk::Device device ,vk::PhysicalDevice gpu, const uint32_
 		.setAllocationSize(memRequirements.size)
 		.setMemoryTypeIndex(memTypeIndex);
 
-	VkCheck(device.allocateMemory(&allocInfo, nullptr, &memory));
-	VkCheck(device.bindImageMemory(image, memory, 0));
+	VkCheck(vulkan->device.allocateMemory(&allocInfo, nullptr, &memory));
+	VkCheck(vulkan->device.bindImageMemory(image, memory, 0));
 
 	if (image && memory)
 		std::cout << "Image created\n";
@@ -59,7 +62,7 @@ void Image::createImage(vk::Device device ,vk::PhysicalDevice gpu, const uint32_
 	}
 }
 
-void Image::createImageView(vk::Device device, const vk::ImageAspectFlags aspectFlags)
+void Image::createImageView(const vk::ImageAspectFlags aspectFlags)
 {
 	auto const viewInfo = vk::ImageViewCreateInfo()
 		.setImage(image)
@@ -67,19 +70,19 @@ void Image::createImageView(vk::Device device, const vk::ImageAspectFlags aspect
 		.setFormat(format)
 		.setSubresourceRange({ aspectFlags, 0, mipLevels, 0, arrayLayers });
 
-	VkCheck(device.createImageView(&viewInfo, nullptr, &view));
+	VkCheck(vulkan->device.createImageView(&viewInfo, nullptr, &view));
 	std::cout << "ImageView created\n";
 }
 
-void Image::transitionImageLayout(vk::Device device, vk::CommandPool commandPool, vk::Queue graphicsQueue, const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout)
+void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout)
 {
 	auto const allocInfo = vk::CommandBufferAllocateInfo()
 		.setLevel(vk::CommandBufferLevel::ePrimary)
 		.setCommandBufferCount(1)
-		.setCommandPool(commandPool);
+		.setCommandPool(vulkan->commandPool);
 
 	vk::CommandBuffer commandBuffer;
-	VkCheck(device.allocateCommandBuffers(&allocInfo, &commandBuffer));
+	VkCheck(vulkan->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
@@ -162,20 +165,20 @@ void Image::transitionImageLayout(vk::Device device, vk::CommandPool commandPool
 	auto const submitInfo = vk::SubmitInfo()
 		.setCommandBufferCount(1)
 		.setPCommandBuffers(&commandBuffer);
-	VkCheck(graphicsQueue.submit(1, &submitInfo, nullptr));
+	VkCheck(vulkan->graphicsQueue.submit(1, &submitInfo, nullptr));
 
-	VkCheck(graphicsQueue.waitIdle());
+	VkCheck(vulkan->graphicsQueue.waitIdle());
 }
 
-void Image::copyBufferToImage(vk::Device device, vk::CommandPool commandPool, vk::Queue graphicsQueue, const vk::Buffer buffer, const int x, const int y, const int width, const int height, const uint32_t baseLayer)
+void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y, const int width, const int height, const uint32_t baseLayer)
 {
 	auto const allocInfo = vk::CommandBufferAllocateInfo()
 		.setLevel(vk::CommandBufferLevel::ePrimary)
 		.setCommandBufferCount(1)
-		.setCommandPool(commandPool);
+		.setCommandPool(vulkan->commandPool);
 
 	vk::CommandBuffer commandBuffer;
-	VkCheck(device.allocateCommandBuffers(&allocInfo, &commandBuffer));
+	VkCheck(vulkan->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
@@ -199,20 +202,20 @@ void Image::copyBufferToImage(vk::Device device, vk::CommandPool commandPool, vk
 	auto const submitInfo = vk::SubmitInfo()
 		.setCommandBufferCount(1)
 		.setPCommandBuffers(&commandBuffer);
-	VkCheck(graphicsQueue.submit(1, &submitInfo, nullptr));
+	VkCheck(vulkan->graphicsQueue.submit(1, &submitInfo, nullptr));
 
-	VkCheck(graphicsQueue.waitIdle());
+	VkCheck(vulkan->graphicsQueue.waitIdle());
 }
 
-void Image::generateMipMaps(vk::Device device, vk::CommandPool commandPool, vk::Queue graphicsQueue, const int32_t texWidth, const int32_t texHeight)
+void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 {
 	auto const allocInfo = vk::CommandBufferAllocateInfo()
 		.setLevel(vk::CommandBufferLevel::ePrimary)
 		.setCommandBufferCount(1)
-		.setCommandPool(commandPool);
+		.setCommandPool(vulkan->commandPool);
 
 	vk::CommandBuffer commandBuffer;
-	VkCheck(device.allocateCommandBuffers(&allocInfo, &commandBuffer));
+	VkCheck(vulkan->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
@@ -298,12 +301,12 @@ void Image::generateMipMaps(vk::Device device, vk::CommandPool commandPool, vk::
 	auto const submitInfo = vk::SubmitInfo()
 		.setCommandBufferCount(1)
 		.setPCommandBuffers(&commandBuffer);
-	VkCheck(graphicsQueue.submit(1, &submitInfo, nullptr));
+	VkCheck(vulkan->graphicsQueue.submit(1, &submitInfo, nullptr));
 
-	VkCheck(graphicsQueue.waitIdle());
+	VkCheck(vulkan->graphicsQueue.waitIdle());
 }
 
-void Image::createSampler(vk::Device device)
+void Image::createSampler()
 {
 	auto const samplerInfo = vk::SamplerCreateInfo()
 		.setMagFilter(filter)
@@ -321,20 +324,16 @@ void Image::createSampler(vk::Device device)
 		.setCompareOp(vk::CompareOp::eLess)
 		.setBorderColor(borderColor)
 		.setUnnormalizedCoordinates(VK_FALSE);
-	VkCheck(device.createSampler(&samplerInfo, nullptr, &sampler));
+	VkCheck(vulkan->device.createSampler(&samplerInfo, nullptr, &sampler));
 	std::cout << "Image sampler created\n";
 }
 
-void Image::destroy(vk::Device device)
+void Image::destroy()
 {
-	if (view)
-		device.destroyImageView(view);
-	if (image)
-		device.destroyImage(image);
-	if (memory)
-		device.freeMemory(memory);
-	if (sampler)
-		device.destroySampler(sampler);
+	if (view) vulkan->device.destroyImageView(view);
+	if (image) vulkan->device.destroyImage(image);
+	if (memory) vulkan->device.freeMemory(memory);
+	if (sampler) vulkan->device.destroySampler(sampler);
 	view = nullptr;
 	image = nullptr;
 	memory = nullptr;

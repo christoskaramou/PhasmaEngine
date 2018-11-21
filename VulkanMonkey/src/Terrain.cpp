@@ -4,7 +4,10 @@
 
 using namespace vm;
 
-vk::DescriptorSetLayout	Terrain::descriptorSetLayout = nullptr;
+vk::DescriptorSetLayout Terrain::descriptorSetLayout = nullptr;
+
+Terrain::Terrain(VulkanContext * vulkan) : Object(vulkan)
+{ }
 
 vk::DescriptorSetLayout Terrain::getDescriptorSetLayout(vk::Device device)
 {
@@ -34,7 +37,7 @@ vk::DescriptorSetLayout Terrain::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-void Terrain::generateTerrain(const std::string path, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show)
+void Terrain::generateTerrain(const std::string path, bool show)
 {
 	auto size = 100.f;
 
@@ -48,14 +51,12 @@ void Terrain::generateTerrain(const std::string path, vk::Device device, vk::Phy
 		 size, -0.1f,  size, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f
 	};
 	std::string texPath = path == "" ? "objects/defaultTerrainMap.png" : path;
-	loadTexture(device, gpu, commandPool, graphicsQueue, texPath);
-	createVertexBuffer(device, gpu, commandPool, graphicsQueue);
-	createUniformBuffer(device, gpu, 2 * sizeof(vm::mat4));
-	createDescriptorSet(device, descriptorPool, Terrain::descriptorSetLayout);
+	loadTexture(texPath);
+	createVertexBuffer();
 	render = show;
 }
 
-void Terrain::draw(Pipeline& pipeline, const vk::CommandBuffer & cmd)
+void Terrain::draw(const vk::CommandBuffer & cmd)
 {
 	if (render)
 	{
@@ -68,7 +69,7 @@ void Terrain::draw(Pipeline& pipeline, const vk::CommandBuffer & cmd)
 	}
 }
 
-void Terrain::loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, const std::string path)
+void Terrain::loadTexture(const std::string path)
 {
 	// Texture Load
 	int texWidth, texHeight, texChannels;
@@ -81,35 +82,35 @@ void Terrain::loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::Command
 		exit(-19);
 	}
 
-	Buffer staging;
-	staging.createBuffer(device, gpu, imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	Buffer staging = Buffer(vulkan);
+	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 	void* data;
-	device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &data);
+	vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &data);
 	memcpy(data, pixels, static_cast<size_t>(imageSize));
-	device.unmapMemory(staging.memory);
+	vulkan->device.unmapMemory(staging.memory);
 
 	stbi_image_free(pixels);
 
 	texture.format = vk::Format::eR8G8B8A8Unorm;
 	texture.mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
-	texture.createImage(device, gpu, texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	texture.transitionImageLayout(device, commandPool, graphicsQueue, vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-	texture.copyBufferToImage(device, commandPool, graphicsQueue, staging.buffer, 0, 0, texWidth, texHeight);
-	texture.generateMipMaps(device, commandPool, graphicsQueue, texWidth, texHeight);
-	texture.createImageView(device, vk::ImageAspectFlagBits::eColor);
-	texture.createSampler(device);
+	texture.createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	texture.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
+	texture.copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight);
+	texture.generateMipMaps(texWidth, texHeight);
+	texture.createImageView(vk::ImageAspectFlagBits::eColor);
+	texture.createSampler();
 
-	staging.destroy(device);
+	staging.destroy();
 }
 
-void vm::Terrain::destroy(vk::Device device)
+void Terrain::destroy()
 {
-	Object::destroy(device);
-	pipeline.destroy(device);
-	if (descriptorSetLayout) {
-		device.destroyDescriptorSetLayout(descriptorSetLayout);
-		descriptorSetLayout = nullptr;
+	Object::destroy();
+	pipeline.destroy();
+	if (Terrain::descriptorSetLayout) {
+		vulkan->device.destroyDescriptorSetLayout(Terrain::descriptorSetLayout);
+		Terrain::descriptorSetLayout = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 }

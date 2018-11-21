@@ -4,7 +4,10 @@
 
 using namespace vm;
 
-vk::DescriptorSetLayout	SkyBox::descriptorSetLayout = nullptr;
+vk::DescriptorSetLayout SkyBox::descriptorSetLayout = nullptr;
+
+SkyBox::SkyBox(VulkanContext * vulkan) : Object(vulkan)
+{ }
 
 vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(vk::Device device)
 {
@@ -34,7 +37,7 @@ vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool, bool show)
+void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, bool show)
 {
 	float SIZE = static_cast<float>(imageSideSize);
 	vertices = {
@@ -80,14 +83,12 @@ void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t
 		-SIZE, -SIZE,  SIZE, 0.0f,
 		 SIZE, -SIZE,  SIZE, 0.0f
 	};
-	loadTextures(device, gpu, commandPool, graphicsQueue, textureNames, imageSideSize);
-	createVertexBuffer(device, gpu, commandPool, graphicsQueue);
-	createUniformBuffer(device, gpu, 2 * sizeof(vm::mat4));
-	createDescriptorSet(device, descriptorPool, SkyBox::descriptorSetLayout);
+	loadTextures(textureNames, imageSideSize);
+	createVertexBuffer();
 	render = show;
 }
 
-void SkyBox::draw(Pipeline& pipeline, const vk::CommandBuffer & cmd)
+void SkyBox::draw(const vk::CommandBuffer & cmd)
 {
 	if (render)
 	{
@@ -100,16 +101,16 @@ void SkyBox::draw(Pipeline& pipeline, const vk::CommandBuffer & cmd)
 }
 
 // images must be squared and the image size must be the real else the assertion will fail
-void SkyBox::loadTextures(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, const std::array<std::string, 6>& paths, uint32_t imageSideSize)
+void SkyBox::loadTextures(const std::array<std::string, 6>& paths, uint32_t imageSideSize)
 {
 	assert(paths.size() == 6);
 
 	texture.arrayLayers = 6;
 	texture.format = vk::Format::eR8G8B8A8Unorm;
 	texture.imageCreateFlags = vk::ImageCreateFlagBits::eCubeCompatible;
-	texture.createImage(device, gpu, imageSideSize, imageSideSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	texture.createImage(imageSideSize, imageSideSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-	texture.transitionImageLayout(device, commandPool, graphicsQueue, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+	texture.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 	for (uint32_t i = 0; i < texture.arrayLayers; ++i) {
 		// Texture Load
 		int texWidth, texHeight, texChannels;
@@ -122,32 +123,32 @@ void SkyBox::loadTextures(vk::Device device, vk::PhysicalDevice gpu, vk::Command
 			std::cout << "Can not load texture: " << paths[i] << "\n";
 			exit(-19);
 		}
-		Buffer staging;
-		staging.createBuffer(device, gpu, imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &staging.data);
+		Buffer staging = Buffer(vulkan);
+		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &staging.data);
 		memcpy(staging.data, pixels, static_cast<size_t>(imageSize));
-		device.unmapMemory(staging.memory);
+		vulkan->device.unmapMemory(staging.memory);
 		stbi_image_free(pixels);
 
-		texture.copyBufferToImage(device, commandPool, graphicsQueue, staging.buffer, 0, 0, texWidth, texHeight, i);
-		staging.destroy(device);
+		texture.copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight, i);
+		staging.destroy();
 	}
-	texture.transitionImageLayout(device, commandPool, graphicsQueue, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+	texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 	texture.viewType = vk::ImageViewType::eCube;
-	texture.createImageView(device, vk::ImageAspectFlagBits::eColor);
+	texture.createImageView(vk::ImageAspectFlagBits::eColor);
 
 	texture.addressMode = vk::SamplerAddressMode::eClampToEdge;
-	texture.createSampler(device);
+	texture.createSampler();
 }
 
-void vm::SkyBox::destroy(vk::Device device)
+void SkyBox::destroy()
 {
-	Object::destroy(device);
-	pipeline.destroy(device);
-	if (descriptorSetLayout) {
-		device.destroyDescriptorSetLayout(descriptorSetLayout);
-		descriptorSetLayout = nullptr;
+	Object::destroy();
+	pipeline.destroy();
+	if (SkyBox::descriptorSetLayout) {
+		vulkan->device.destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
+		SkyBox::descriptorSetLayout = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 }

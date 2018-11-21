@@ -57,7 +57,7 @@ void Window::create(const char* title, int w, int h, Uint32 flags)
 void Window::destroyAll()
 {
 	while (!renderer.empty()) {
-		SDL_DestroyWindow(renderer.back()->ctx.window);
+		SDL_DestroyWindow(renderer.back()->ctx.vulkan.window);
 		std::cout << "Window destroyed\n";
 		renderer.pop_back();
 	}
@@ -142,10 +142,10 @@ bool Window::processEvents(float delta)
 		}
 		if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
 			SDL_ShowCursor(SDL_DISABLE);
-			SDL_WarpMouseInWindow(info.window, static_cast<int>(renderer[0]->ctx.surface.actualExtent.width * .5f), static_cast<int>(renderer[0]->ctx.surface.actualExtent.height * .5f));
+			SDL_WarpMouseInWindow(info.vulkan.window, static_cast<int>(renderer[0]->ctx.vulkan.surface->actualExtent.width * .5f), static_cast<int>(renderer[0]->ctx.vulkan.surface->actualExtent.height * .5f));
 			if (event.type == SDL_MOUSEMOTION) {
-				xMove = event.motion.x - static_cast<int>(renderer[0]->ctx.surface.actualExtent.width * .5f);
-				yMove = event.motion.y - static_cast<int>(renderer[0]->ctx.surface.actualExtent.height * .5f);
+				xMove = event.motion.x - static_cast<int>(renderer[0]->ctx.vulkan.surface->actualExtent.width * .5f);
+				yMove = event.motion.y - static_cast<int>(renderer[0]->ctx.vulkan.surface->actualExtent.height * .5f);
 				info.mainCamera.rotate((float)xMove, (float)yMove);
 			}
 		}
@@ -154,8 +154,8 @@ bool Window::processEvents(float delta)
 		if (event.type == SDL_WINDOWEVENT) {
 			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
 				int w, h;
-				SDL_GetWindowSize(info.window, &width, &height);
-				SDL_GL_GetDrawableSize(info.window, &w, &h);
+				SDL_GetWindowSize(info.vulkan.window, &width, &height);
+				SDL_GL_GetDrawableSize(info.vulkan.window, &w, &h);
 				renderer[0]->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 			}
 		}

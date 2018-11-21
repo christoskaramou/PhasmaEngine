@@ -5,7 +5,11 @@
 
 using namespace vm;
 
-vk::DescriptorSetLayout	Mesh::descriptorSetLayout = nullptr;
+vk::DescriptorSetLayout Mesh::descriptorSetLayout = nullptr;
+
+vm::Mesh::Mesh(VulkanContext * vulkan) : vulkan(vulkan)
+{ }
+
 
 vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(vk::Device device)
 {
@@ -50,7 +54,7 @@ vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-void Mesh::loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, TextureType type, const std::string path)
+void Mesh::loadTexture(TextureType type, const std::string path)
 {
 	// Texture Load
 	int texWidth, texHeight, texChannels;
@@ -63,13 +67,13 @@ void Mesh::loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPoo
 		exit(-19);
 	}
 
-	Buffer staging;
-	staging.createBuffer(device, gpu, imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	Buffer staging = Buffer(vulkan);
+	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 	void* data;
-	device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &data);
+	vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &data);
 	memcpy(data, pixels, static_cast<size_t>(imageSize));
-	device.unmapMemory(staging.memory);
+	vulkan->device.unmapMemory(staging.memory);
 
 	stbi_image_free(pixels);
 
@@ -95,14 +99,14 @@ void Mesh::loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPoo
 	tex->name = path;
 	tex->format = vk::Format::eR8G8B8A8Unorm;
 	tex->mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
-	tex->createImage(device, gpu, texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	tex->transitionImageLayout(device, commandPool, graphicsQueue, vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-	tex->copyBufferToImage(device, commandPool, graphicsQueue, staging.buffer, 0, 0, texWidth, texHeight);
-	tex->generateMipMaps(device, commandPool, graphicsQueue, texWidth, texHeight);
-	tex->createImageView(device, vk::ImageAspectFlagBits::eColor);
-	tex->createSampler(device);
+	tex->createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	tex->transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
+	tex->copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight);
+	tex->generateMipMaps(texWidth, texHeight);
+	tex->createImageView(vk::ImageAspectFlagBits::eColor);
+	tex->createSampler();
 
-	staging.destroy(device);
+	staging.destroy();
 }
 
 void Mesh::calculateBoundingSphere()
@@ -121,16 +125,16 @@ void Mesh::calculateBoundingSphere()
 	boundingSphere = vm::vec4(center, sphereRadius);
 }
 
-void Mesh::destroy(vk::Device device)
+void Mesh::destroy()
 {
-	texture.destroy(device);
-	normalsTexture.destroy(device);
-	specularTexture.destroy(device);
-	alphaTexture.destroy(device);
+	texture.destroy();
+	normalsTexture.destroy();
+	specularTexture.destroy();
+	alphaTexture.destroy();
 	vertices.clear();
 	vertices.shrink_to_fit();
 	indices.clear();
 	indices.shrink_to_fit();
 	if (descriptorSetLayout)
-		device.destroyDescriptorSetLayout(descriptorSetLayout);
+		vulkan->device.destroyDescriptorSetLayout(descriptorSetLayout);
 }

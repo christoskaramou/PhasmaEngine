@@ -1,5 +1,6 @@
 #pragma once
 
+#include "VulkanContext.h"
 #include "Math.h"
 #include "Buffer.h"
 #include "Pipeline.h"
@@ -9,15 +10,20 @@
 namespace vm {
 	struct SSAO
 	{
-		Buffer UBssaoKernel, UBssaoPVM;
-		Image ssaoNoise;
+		VulkanContext* vulkan;
+		SSAO(VulkanContext* vulkan);
+
+		Buffer UBssaoKernel = Buffer(vulkan);
+		Buffer UBssaoPVM = Buffer(vulkan);
+		Image ssaoNoise = Image(vulkan);
 		vk::RenderPass renderPass, blurRenderPass;
 		std::vector<vk::Framebuffer> frameBuffers{}, blurFrameBuffers{};
-		Pipeline pipeline, pipelineBlur;
+		Pipeline pipeline = Pipeline(vulkan);
+		Pipeline pipelineBlur = Pipeline(vulkan);
 		vk::DescriptorSetLayout DSLayoutSSAO, DSLayoutSSAOBlur;
 		vk::DescriptorSet DSssao, DSssaoBlur;
 
-		void createSSAOUniforms(std::map<std::string, Image>& renderTargets, vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, vk::DescriptorPool descriptorPool);
-		void destroy(vk::Device device);
+		void createSSAOUniforms(std::map<std::string, Image>& renderTargets);
+		void destroy();
 	};
 }

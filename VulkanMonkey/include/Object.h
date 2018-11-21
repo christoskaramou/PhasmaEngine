@@ -1,23 +1,29 @@
 #pragma once
-#include "Vulkan.h"
+#include "VulkanContext.h"
 #include "Image.h"
 #include "Buffer.h"
+#include "Math.h"
 #include "Stbi.h"
 
 namespace vm {
 	struct Object
 	{
+		VulkanContext* vulkan;
+		Object(VulkanContext* vulkan);
+
 		virtual ~Object() = default;
 		bool render = true, cull = false;
 		vk::DescriptorSet descriptorSet;
-		Image texture;
+		Image texture = Image(vulkan);
 		std::vector<float> vertices{};
-		Buffer vertexBuffer, indexBuffer, uniformBuffer;
+		Buffer vertexBuffer = Buffer(vulkan);
+		Buffer indexBuffer = Buffer(vulkan);
+		Buffer uniformBuffer = Buffer(vulkan);
 
-		virtual void createVertexBuffer(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue);
-		virtual void createUniformBuffer(vk::Device device, vk::PhysicalDevice gpu, size_t size);
-		virtual void loadTexture(vk::Device device, vk::PhysicalDevice gpu, vk::CommandPool commandPool, vk::Queue graphicsQueue, const std::string path);
-		virtual void createDescriptorSet(vk::Device device, vk::DescriptorPool descriptorPool, vk::DescriptorSetLayout& descriptorSetLayout);
-		virtual void destroy(vk::Device device);
+		virtual void createVertexBuffer();
+		virtual void createUniformBuffer(size_t size);
+		virtual void loadTexture(const std::string path);
+		virtual void createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout);
+		virtual void destroy();
 	};
 }

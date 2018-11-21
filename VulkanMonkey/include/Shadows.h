@@ -1,5 +1,5 @@
 #pragma once
-#include "Vulkan.h"
+#include "VulkanContext.h"
 #include "Image.h"
 #include "Buffer.h"
 #include "Image.h"
@@ -9,22 +9,25 @@
 namespace vm {
 	struct Shadows
 	{
+		VulkanContext* vulkan;
+		Shadows(VulkanContext* vulkan);
+
 		static bool shadowCast;
+		static uint32_t imageSize;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
-		static vk::RenderPass renderPass;
-		static vk::RenderPass getRenderPass(vk::Device device, Image& depth);
-		static uint32_t imageSize;
-		Image texture;
+		vk::RenderPass renderPass;
+		vk::RenderPass getRenderPass();
+		Image texture = Image(vulkan);
 		vk::DescriptorSet descriptorSet;
 		std::vector<vk::Framebuffer> frameBuffer;
-		Buffer uniformBuffer;
-		Pipeline pipeline;
+		Buffer uniformBuffer = Buffer(vulkan);
+		Pipeline pipeline = Pipeline(vulkan);
 
-		void createFrameBuffers(vk::Device device, vk::PhysicalDevice gpu, Image& depth, uint32_t bufferCount);
-		void createDynamicUniformBuffer(vk::Device device, vk::PhysicalDevice gpu, size_t num_of_objects);
-		void createDescriptorSet(vk::Device device, vk::DescriptorPool descriptorPool, vk::DescriptorSetLayout & descriptorSetLayout);
-		void destroy(vk::Device device);
+		void createFrameBuffers(uint32_t bufferCount);
+		void createDynamicUniformBuffer(size_t num_of_objects);
+		void createDescriptorSet();
+		void destroy();
 	};
 
 

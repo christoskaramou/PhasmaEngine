@@ -1,13 +1,16 @@
 #pragma once
-#include "Vulkan.h"
+#include "VulkanContext.h"
 #include "Image.h"
 
 namespace vm {
 	struct Swapchain
 	{
+		VulkanContext* vulkan;
+		Swapchain(VulkanContext* vulkan);
+
 		vk::SwapchainKHR swapchain;
 		std::vector<Image> images{};
 
-		void destroy(vk::Device device);
+		void destroy();
 	};
 }
