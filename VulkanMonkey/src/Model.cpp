@@ -158,6 +158,7 @@ void Model::loadModel(const std::string path, const std::string modelName, bool 
 			f_meshes.push_back(myMesh);
 		}
 	}
+	std::sort(f_meshes.begin(), f_meshes.end(), [](Mesh& a, Mesh& b) -> bool { return a.hasAlpha < b.hasAlpha; });
 	for (auto &m : f_meshes) {
 		m.vertexOffset = numberOfVertices;
 		m.indexOffset = numberOfIndices;

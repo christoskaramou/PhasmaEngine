@@ -15,10 +15,10 @@ namespace vm {
 		VulkanContext* vulkan;
 		Mesh(VulkanContext* vulkan);
 
-		bool render = true, cull = false;
+		bool render = true, cull = false, hasAlpha = false;
 		vm::vec4 boundingSphere;
 		void calculateBoundingSphere();
-		uint32_t vertexOffset, indexOffset;
+		uint32_t vertexOffset = 0, indexOffset = 0;
 		enum TextureType
 		{
 			DiffuseMap,

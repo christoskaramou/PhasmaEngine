@@ -91,6 +91,7 @@ void Mesh::loadTexture(TextureType type, const std::string path)
 		break;
 	case Mesh::AlphaMap:
 		tex = &alphaTexture;
+		hasAlpha = true;
 		break;
 	default:
 		break;

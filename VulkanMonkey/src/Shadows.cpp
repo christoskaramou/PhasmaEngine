@@ -37,7 +37,7 @@ void Shadows::createDescriptorSet()
 		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
 			.setSampler(texture.sampler)									// Sampler sampler;
 			.setImageView(texture.view)										// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+			.setImageLayout(vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal));// ImageLayout imageLayout;
 
 	vulkan->device.updateDescriptorSets(2, textureWriteSets, 0, nullptr);
 	std::cout << "DescriptorSet allocated and updated\n";

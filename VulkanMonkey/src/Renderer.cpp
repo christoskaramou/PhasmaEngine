@@ -56,7 +56,6 @@ void Renderer::update(float delta)
 
 	// MODELS
 	for (auto &model : ctx.models) {
-		std::sort(model.meshes.begin(), model.meshes.end(), [](Mesh& a, Mesh& b) -> bool { return a.colorEffects.diffuse.w > b.colorEffects.diffuse.w; });
 		if (model.render) {
 			const vm::mat4 pvm[3]{ projection, view, model.matrix };
 			ctx.mainCamera.ExtractFrustum(model.matrix);
