@@ -506,8 +506,9 @@ vk::Queue Context::getComputeQueue()
 
 Swapchain Context::createSwapchain()
 {
-	Swapchain _swapchain = Swapchain(&vulkan);
 	VkExtent2D extent = vulkan.surface->actualExtent;
+	vulkan.surface->capabilities = getSurfaceCapabilities();
+	Swapchain _swapchain = Swapchain(&vulkan);
 
 	uint32_t swapchainImageCount = vulkan.surface->capabilities.minImageCount + 1;
 	if (vulkan.surface->capabilities.maxImageCount > 0 &&
@@ -1697,6 +1698,7 @@ Pipeline Context::createCompositionPipeline()
 	};
 
 	// Pipeline Layout
+	if (!deferred.DSLayoutComposition)
 	{// DescriptorSetLayout
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
 		{
@@ -1940,6 +1942,7 @@ Pipeline Context::createReflectionPipeline()
 	};
 
 	// Pipeline Layout
+	if (!ssr.DSLayoutReflection)
 	{// DescriptorSetLayout
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
 		{
@@ -1992,7 +1995,6 @@ Pipeline Context::createReflectionPipeline()
 		};
 
 		VkCheck(vulkan.device.createDescriptorSetLayout(&descriptorLayout, nullptr, &ssr.DSLayoutReflection));
-
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssr.DSLayoutReflection };
@@ -2174,6 +2176,7 @@ Pipeline Context::createSSAOPipeline()
 	};
 
 	// Pipeline Layout
+	if (!ssao.DSLayoutSSAO)
 	{// DescriptorSetLayout
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
 		{
@@ -2226,7 +2229,6 @@ Pipeline Context::createSSAOPipeline()
 		};
 
 		VkCheck(vulkan.device.createDescriptorSetLayout(&descriptorLayout, nullptr, &ssao.DSLayoutSSAO));
-
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayoutSSAO };
@@ -2408,6 +2410,7 @@ Pipeline Context::createSSAOBlurPipeline()
 	};
 
 	// Pipeline Layout
+	if (!ssao.DSLayoutSSAOBlur)
 	{// DescriptorSetLayout
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
 		{
@@ -2635,27 +2638,148 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 {
 	vulkan.device.waitIdle();
 
-	// Free resources
-	vulkan.depth->destroy();
-	forward.MSColorImage.destroy();
-	forward.MSDepthImage.destroy();
-	for (auto& fb : forward.frameBuffers)
-		vulkan.device.destroyFramebuffer(fb);
-	forward.pipeline.destroy();
-	gui.pipeline.destroy();
-	skyBox.pipeline.destroy();
-	terrain.pipeline.destroy();
-	vulkan.device.destroyRenderPass(forward.renderPass);
-	vulkan.swapchain->destroy();
+	//- Free resources ----------------------
 
-	// Recreate resources
+	// render targets
+	for (auto& RT : renderTargets)
+		RT.second.destroy();
+	renderTargets.clear();
+
+	// forward
+	forward.destroy();
+
+	// GUI
+	if (gui.renderPass) {
+		vulkan.device.destroyRenderPass(gui.renderPass);
+		std::cout << "RenderPass destroyed\n";
+	}
+	for (auto &frameBuffer : gui.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	gui.pipeline.destroy();
+
+	// deferred
+	if (deferred.renderPass) {
+		vulkan.device.destroyRenderPass(deferred.renderPass);
+		std::cout << "RenderPass destroyed\n";
+	}
+	if (deferred.compositionRenderPass) {
+		vulkan.device.destroyRenderPass(deferred.compositionRenderPass);
+		std::cout << "RenderPass destroyed\n";
+	}
+	for (auto &frameBuffer : deferred.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	for (auto &frameBuffer : deferred.compositionFrameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	deferred.pipeline.destroy();
+	deferred.pipelineComposition.destroy();
+
+	// SSR
+	for (auto &frameBuffer : ssr.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	if (ssr.renderPass) {
+		vulkan.device.destroyRenderPass(ssr.renderPass);
+		std::cout << "RenderPass destroyed\n";
+	}
+	ssr.pipeline.destroy();
+
+	// SSAO
+	if (ssao.renderPass) {
+		vulkan.device.destroyRenderPass(ssao.renderPass);
+		std::cout << "RenderPass destroyed\n";
+	}
+	if (ssao.blurRenderPass) {
+		vulkan.device.destroyRenderPass(ssao.blurRenderPass);
+		std::cout << "RenderPass destroyed\n";
+	}
+	for (auto &frameBuffer : ssao.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	for (auto &frameBuffer : ssao.blurFrameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+			std::cout << "Frame Buffer destroyed\n";
+		}
+	}
+	ssao.pipeline.destroy();
+	ssao.pipelineBlur.destroy();
+
+	// terrain
+	terrain.pipeline.destroy();
+	
+	// skybox
+	skyBox.pipeline.destroy();
+
+	vulkan.depth->destroy();
+	vulkan.swapchain->destroy();
+	//---------------------------------------
+
+	//- Recreate resources ------------------
 	vulkan.surface->actualExtent = { width, height };
-	vulkan.swapchain = &createSwapchain();
-	vulkan.depth = &createDepthResources();
+	*vulkan.swapchain = createSwapchain();
+	*vulkan.depth = createDepthResources();
+
+	renderTargets = createRenderTargets({
+		{"position", vk::Format::eR16G16B16A16Sfloat},
+		{"normal", vk::Format::eR16G16B16A16Sfloat},
+		{"albedo", vk::Format::eR8G8B8A8Unorm},
+		{"specular", vk::Format::eR16G16B16A16Sfloat},
+		{"ssao", vk::Format::eR16Sfloat},
+		{"ssaoBlur", vk::Format::eR16Sfloat} });
+
+
 	forward.renderPass = createRenderPass();
 	forward.frameBuffers = createFrameBuffers();
-	terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
-	skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
+	PipelineInfo gpi = getPipelineSpecificationsModel();
+	gpi.specializationInfo = vk::SpecializationInfo{ 1, &vk::SpecializationMapEntry{ 0, 0, sizeof(MAX_LIGHTS) }, sizeof(MAX_LIGHTS), &MAX_LIGHTS };
+	forward.pipeline = createPipeline(gpi);
+
+	deferred.renderPass = createDeferredRenderPass();
+	deferred.compositionRenderPass = createCompositionRenderPass();
+	deferred.frameBuffers = createDeferredFrameBuffers();
+	deferred.compositionFrameBuffers = createCompositionFrameBuffers();
+	deferred.pipeline = createPipeline(getPipelineSpecificationsDeferred());
+	deferred.pipelineComposition = createCompositionPipeline();
+	deferred.updateDescriptorSets(renderTargets, lightUniforms);
+
+	ssr.renderPass = createReflectionRenderPass();
+	ssr.frameBuffers = createReflectionFrameBuffers();
+	ssr.pipeline = createReflectionPipeline();
+	ssr.updateDescriptorSets(renderTargets);
+
+	ssao.renderPass = createSSAORenderPass();
+	ssao.blurRenderPass = createSSAOBlurRenderPass();
+	ssao.frameBuffers = createSSAOFrameBuffers();
+	ssao.blurFrameBuffers = createSSAOBlurFrameBuffers();
+	ssao.pipeline = createSSAOPipeline();
+	ssao.pipelineBlur = createSSAOBlurPipeline();
+	ssao.updateDescriptorSets(renderTargets);
+
+
+	gui.renderPass = createGUIRenderPass();
+	gui.frameBuffers = createGUIFrameBuffers();
 	gui.pipeline = createPipeline(getPipelineSpecificationsGUI());
-	forward.pipeline = createPipeline(getPipelineSpecificationsModel());
+
+	terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
+
+	skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
+	//---------------------------------------
 }

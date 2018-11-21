@@ -15,12 +15,13 @@ namespace vm {
 
 		vk::RenderPass renderPass, compositionRenderPass;
 		std::vector<vk::Framebuffer> frameBuffers{}, compositionFrameBuffers{};
-		vk::DescriptorSet DSDeferredMainLight, DSComposition;
+		vk::DescriptorSet DSComposition;
 		vk::DescriptorSetLayout DSLayoutComposition;
 		Pipeline pipeline = Pipeline(vulkan);
 		Pipeline pipelineComposition = Pipeline(vulkan);
 
 		void createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
+		void updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
 		void destroy();
 	};
 }

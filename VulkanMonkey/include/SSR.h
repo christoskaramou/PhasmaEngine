@@ -21,6 +21,7 @@ namespace vm {
 		vk::DescriptorSetLayout DSLayoutReflection;
 
 		void createSSRUniforms(std::map<std::string, Image>& renderTargets);
+		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void destroy();
 	};
 }

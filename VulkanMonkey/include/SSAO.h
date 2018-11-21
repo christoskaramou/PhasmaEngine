@@ -24,6 +24,7 @@ namespace vm {
 		vk::DescriptorSet DSssao, DSssaoBlur;
 
 		void createSSAOUniforms(std::map<std::string, Image>& renderTargets);
+		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void destroy();
 	};
 }

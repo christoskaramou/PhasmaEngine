@@ -1,10 +1,12 @@
 #include "../include/Forward.h"
 #include <iostream>
 
-vm::Forward::Forward(VulkanContext * vulkan) : vulkan(vulkan)
+using namespace vm;
+
+Forward::Forward(VulkanContext * vulkan) : vulkan(vulkan)
 { }
 
-void vm::Forward::destroy()
+void Forward::destroy()
 {
 	if (renderPass) {
 		vulkan->device.destroyRenderPass(renderPass);
