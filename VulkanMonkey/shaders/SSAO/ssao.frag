@@ -7,6 +7,7 @@ layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
 layout (set = 0, binding = 2) uniform sampler2D samplerNoise;
 layout (set = 0, binding = 3) uniform UniformBufferObject { vec4 samples[64]; } kernel;
 layout (set = 0, binding = 4) uniform UniformBufferPVM { mat4 projection; mat4 view; vec4 size; } pvm;
+layout(push_constant) uniform Position { vec4 offset; } pos;
 
 
 layout (location = 0) in vec2 inUV;
@@ -42,7 +43,9 @@ void main()
 		vec4 newViewPos = pvm.view * vec4(fragPos + direction, 1.0);
 		vec4 samplePosition = pvm.projection * newViewPos;
 		samplePosition.xy /= samplePosition.w;
-		samplePosition.xy = samplePosition.xy * 0.5f + 0.5f; 
+		samplePosition.xy = samplePosition.xy * 0.5f + 0.5f;
+		samplePosition.xy *= pos.offset.zw; // floating window size correction
+		samplePosition.xy += pos.offset.xy; // floating window position correction
 		
 		float currentDepth = newViewPos.z;
 		float sampledDepth = texture(samplerPosition, samplePosition.xy).w;

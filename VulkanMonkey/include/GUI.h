@@ -13,6 +13,8 @@ namespace vm {
 		GUI(VulkanContext* vulkan);
 
 		// Data
+		static ImVec2		winPos;
+		static ImVec2		winSize;
 		static SDL_Window*  g_Window;
 		static Uint64       g_Time;
 		static bool         g_MousePressed[3];
@@ -22,7 +24,7 @@ namespace vm {
 		static const char*	ImGui_ImplSDL2_GetClipboardText(void*);
 		static void			ImGui_ImplSDL2_SetClipboardText(void*, const char* text);
 		void				initImGui();
-		void				newFrame(vk::Device device, vk::PhysicalDevice gpu, SDL_Window* window);
+		void				newFrame();
 
 		std::string	name;
 		vk::RenderPass renderPass;
@@ -32,6 +34,8 @@ namespace vm {
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
 		void loadGUI(const std::string textureName, bool show = true);
 		void draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Pipeline& pipeline, const vk::CommandBuffer & cmd);
+		void windowStyle(ImGuiStyle* dst = nullptr);
+		void setWindows();
 		void createVertexBuffer(size_t vertex_size);
 		void createIndexBuffer(size_t index_size);
 		void createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout);

@@ -14,7 +14,7 @@ namespace vm {
 		bool prepared = false;
 		bool overloadedGPU = false;
 		bool useCompute = false;
-		bool useDeferredRender = false;
+		bool useDeferredRender = true;
 		bool useSSAO = true;
 		bool useSSR = true;
 	private:

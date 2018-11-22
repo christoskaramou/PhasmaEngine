@@ -43,9 +43,6 @@
     <None Include="shaders\Deferred\composition.vert">
       <Filter>Shaders</Filter>
     </None>
-    <None Include="cpp.hint">
-      <Filter>Shaders</Filter>
-    </None>
     <None Include="shaders\Deferred\gBuffer.frag">
       <Filter>Shaders</Filter>
     </None>

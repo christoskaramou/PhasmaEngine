@@ -17,7 +17,7 @@ vec2 poissonDisk[8] = vec2[](
 	vec2(0.015656f, 0.749779f),
 	vec2(0.758385f, 0.49617f));
 
-layout(push_constant) uniform SSAO { float useSSAO; } ambient;
+layout(push_constant) uniform SSAO { vec4 useSSAO; } ambient;
 layout (constant_id = 0) const int NUM_LIGHTS = 1;
 layout (set = 0, binding = 0) uniform sampler2D samplerPosition;
 layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
@@ -47,7 +47,7 @@ void main()
 
 	// Ambient
 	vec3 fragColor = 0.3 * albedo.rgb;
-	if (ambient.useSSAO > 0.5f)
+	if (ambient.useSSAO.x > 0.5f)
 		fragColor *= oclusion;
 
 	fragColor += calculateShadow(0, fragPos.xyz, normal, albedo.rgb, specular);

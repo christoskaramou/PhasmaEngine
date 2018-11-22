@@ -51,6 +51,7 @@ void Camera::rotate(float xoffset, float yoffset)
 
 vm::mat4 Camera::getPerspective()
 {
+	aspect = GUI::winSize.x / GUI::winSize.y;
 	cfloat tanHalfFovy = tan(vm::radians(FOV) * .5f);
 	cfloat m00 = 1.f / (aspect * tanHalfFovy);
 	cfloat m11 = 1.f / (tanHalfFovy);

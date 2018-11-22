@@ -35,6 +35,12 @@ PipelineInfo Context::getPipelineSpecificationsModel()
 	generalSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	generalSpecific.pushConstantRange = vk::PushConstantRange();
 	generalSpecific.specializationInfo = vk::SpecializationInfo();
+	generalSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	generalSpecific.dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(generalSpecific.dynamicStates.size()),
+		generalSpecific.dynamicStates.data()
+	};
 
 	return generalSpecific;
 }
@@ -68,6 +74,13 @@ PipelineInfo Context::getPipelineSpecificationsSkyBox()
 	skyBoxSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionSkyBox();
 	skyBoxSpecific.sampleCount = vk::SampleCountFlagBits::e4;
 	skyBoxSpecific.pushConstantRange = vk::PushConstantRange();
+	skyBoxSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	skyBoxSpecific.dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(skyBoxSpecific.dynamicStates.size()),
+		skyBoxSpecific.dynamicStates.data()
+	};
+
 
 	return skyBoxSpecific;
 }
@@ -83,6 +96,12 @@ PipelineInfo Context::getPipelineSpecificationsTerrain()
 	terrainSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	terrainSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	terrainSpecific.pushConstantRange = vk::PushConstantRange();
+	terrainSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	terrainSpecific.dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(terrainSpecific.dynamicStates.size()),
+		terrainSpecific.dynamicStates.data()
+	};
 
 	return terrainSpecific;
 }
@@ -129,6 +148,12 @@ PipelineInfo Context::getPipelineSpecificationsDeferred()
 		deferredSpecific.blendAttachmentStates[0],
 		deferredSpecific.blendAttachmentStates[0],
 		deferredSpecific.blendAttachmentStates[0]
+	};
+	deferredSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	deferredSpecific.dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(deferredSpecific.dynamicStates.size()),
+		deferredSpecific.dynamicStates.data()
 	};
 
 	return deferredSpecific;
@@ -204,9 +229,9 @@ void Context::initRendering()
 	deferred.pipeline = createPipeline(getPipelineSpecificationsDeferred());
 	deferred.pipelineComposition = createCompositionPipeline();
 	ssr.pipeline = createReflectionPipeline();
-	compute.pipeline = createComputePipeline();
 	ssao.pipeline = createSSAOPipeline();
 	ssao.pipelineBlur = createSSAOBlurPipeline();
+	compute.pipeline = createComputePipeline();
 }
 
 void Context::loadResources()
@@ -1691,11 +1716,12 @@ Pipeline Context::createCompositionPipeline()
 
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	_pipeline.pipeinfo.pDynamicState = &vk::PipelineDynamicStateCreateInfo{
-			vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
-			static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
-			dynamicStates.data()							//const DynamicState* pDynamicStates;
-	};
+	_pipeline.pipeinfo.pDynamicState = nullptr;
+	//&vk::PipelineDynamicStateCreateInfo{
+	//		vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
+	//		static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
+	//		dynamicStates.data()							//const DynamicState* pDynamicStates;
+	//};
 
 	// Pipeline Layout
 	if (!deferred.DSLayoutComposition)
@@ -1763,9 +1789,10 @@ Pipeline Context::createCompositionPipeline()
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { deferred.DSLayoutComposition, Shadows::getDescriptorSetLayout(vulkan.device) };
 
+	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, sizeof(vm::vec4) };
 
 	VkCheck(vulkan.device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, sizeof(float) } },
+		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants },
 		nullptr,
 		&_pipeline.pipeinfo.layout));
 	std::cout << "Pipeline Layout created\n";
@@ -1935,11 +1962,12 @@ Pipeline Context::createReflectionPipeline()
 
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	_pipeline.pipeinfo.pDynamicState = &vk::PipelineDynamicStateCreateInfo{
-			vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
-			static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
-			dynamicStates.data()							//const DynamicState* pDynamicStates;
-	};
+	_pipeline.pipeinfo.pDynamicState = nullptr;
+	//&vk::PipelineDynamicStateCreateInfo{
+	//		vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
+	//		static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
+	//		dynamicStates.data()							//const DynamicState* pDynamicStates;
+	//};
 
 	// Pipeline Layout
 	if (!ssr.DSLayoutReflection)
@@ -1998,8 +2026,9 @@ Pipeline Context::createReflectionPipeline()
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssr.DSLayoutReflection };
+	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
 	VkCheck(vulkan.device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
+		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants },
 		nullptr,
 		&_pipeline.pipeinfo.layout));
 	std::cout << "Pipeline Layout created\n";
@@ -2169,11 +2198,12 @@ Pipeline Context::createSSAOPipeline()
 
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	_pipeline.pipeinfo.pDynamicState = &vk::PipelineDynamicStateCreateInfo{
-			vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
-			static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
-			dynamicStates.data()							//const DynamicState* pDynamicStates;
-	};
+	_pipeline.pipeinfo.pDynamicState = nullptr;
+	//&vk::PipelineDynamicStateCreateInfo{
+	//		vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
+	//		static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
+	//		dynamicStates.data()							//const DynamicState* pDynamicStates;
+	//};
 
 	// Pipeline Layout
 	if (!ssao.DSLayoutSSAO)
@@ -2232,8 +2262,9 @@ Pipeline Context::createSSAOPipeline()
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayoutSSAO };
+	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
 	VkCheck(vulkan.device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
+		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants },
 		nullptr,
 		&_pipeline.pipeinfo.layout));
 	std::cout << "Pipeline Layout created\n";
@@ -2403,11 +2434,12 @@ Pipeline Context::createSSAOBlurPipeline()
 
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	_pipeline.pipeinfo.pDynamicState = &vk::PipelineDynamicStateCreateInfo{
-			vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
-			static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
-			dynamicStates.data()							//const DynamicState* pDynamicStates;
-	};
+	_pipeline.pipeinfo.pDynamicState = nullptr;
+	//&vk::PipelineDynamicStateCreateInfo{
+	//		vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
+	//		static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
+	//		dynamicStates.data()							//const DynamicState* pDynamicStates;
+	//};
 
 	// Pipeline Layout
 	if (!ssao.DSLayoutSSAOBlur)
@@ -2435,8 +2467,9 @@ Pipeline Context::createSSAOBlurPipeline()
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayoutSSAOBlur };
+	vk::PushConstantRange pConstants = vk::PushConstantRange();//{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
 	VkCheck(vulkan.device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
+		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &pConstants },
 		nullptr,
 		&_pipeline.pipeinfo.layout));
 	std::cout << "Pipeline Layout created\n";
@@ -2639,7 +2672,6 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	vulkan.device.waitIdle();
 
 	//- Free resources ----------------------
-
 	// render targets
 	for (auto& RT : renderTargets)
 		RT.second.destroy();

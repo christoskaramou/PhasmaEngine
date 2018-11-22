@@ -7,6 +7,7 @@ layout (set = 0, binding = 1) uniform sampler2D positionSampler;
 layout (set = 0, binding = 2) uniform sampler2D normalSampler;
 layout (set = 0, binding = 3) uniform sampler2D specSampler;
 layout (set = 0, binding = 4) uniform WorldCameraPos{ vec4 camPos; vec4 camFront; vec4 size; vec4 dummy1; mat4 projection; mat4 view; } ubo;
+layout(push_constant) uniform Position { vec4 offset; } pos;
 
 layout (location = 0) in vec2 inUV;
 
@@ -42,6 +43,8 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 		vec4 newViewPos = ubo.view * vec4(newPosition, 1.0);
 		vec4 samplePosition = ubo.projection * newViewPos;
 		samplePosition.xy = samplePosition.xy / samplePosition.w * 0.5 + 0.5;
+		samplePosition.xy *= pos.offset.zw; // floating window size correction
+		samplePosition.xy += pos.offset.xy; // floating window position correction
 
 		vec2 checkBoundsUV = max(sign(samplePosition.xy * (1.0 - samplePosition.xy)), 0.0);
 		if (checkBoundsUV.x * checkBoundsUV.y < 1.0){
@@ -56,7 +59,8 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 		float delta = abs(currentDepth - sampledDepth);
 		if(delta < 0.001f)
 		{
-			vec2 fadeOnEdges = samplePosition.xy * 2.0 - 1.0;
+			vec2 reverted = (samplePosition.xy - pos.offset.xy) / pos.offset.zw; // floating window correction
+			vec2 fadeOnEdges = reverted * 2.0 - 1.0;
 			fadeOnEdges = abs(fadeOnEdges);
 			float fadeAmount = min(1.0 - fadeOnEdges.x, 1.0 - fadeOnEdges.y);
 

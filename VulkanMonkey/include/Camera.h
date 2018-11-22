@@ -1,5 +1,6 @@
 #pragma once
 #include "Math.h"
+#include "GUI.h"
 
 namespace vm {
 	struct Camera
