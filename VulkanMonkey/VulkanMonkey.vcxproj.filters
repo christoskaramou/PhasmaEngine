@@ -177,6 +177,9 @@
     <ClInclude Include="include\VulkanContext.h">
       <Filter>Include</Filter>
     </ClInclude>
+    <ClInclude Include="include\Console.h">
+      <Filter>Include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -265,6 +268,9 @@
       <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="src\Forward.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Console.cpp">
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>

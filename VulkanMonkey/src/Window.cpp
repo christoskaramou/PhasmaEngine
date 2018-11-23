@@ -67,6 +67,7 @@ void Window::destroyAll()
 bool Window::processEvents(float delta)
 {
 	if (!renderer[0]->prepared) return false;
+	if (Console::close_app) return false;
 	static bool up = false;
 	static bool down = false;
 	static bool left = false;
@@ -109,10 +110,6 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_s) down = true;
 			if (event.key.keysym.sym == SDLK_a) left = true;
 			if (event.key.keysym.sym == SDLK_d) right = true;
-			//if (event.key.keysym.sym == SDLK_UP) info.light[0].position.y += 0.005f;
-			//if (event.key.keysym.sym == SDLK_DOWN) info.light[0].position.y -= 0.005f;
-			//if (event.key.keysym.sym == SDLK_LEFT) info.light[0].position.z += 0.01f;
-			//if (event.key.keysym.sym == SDLK_RIGHT) info.light[0].position.z -= 0.01f;
 		}
 		else if (event.type == SDL_KEYUP) {
 			int key = event.key.keysym.scancode;
@@ -127,26 +124,16 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_s) down = false;
 			if (event.key.keysym.sym == SDLK_a) left = false;
 			if (event.key.keysym.sym == SDLK_d) right = false;
-			if (event.key.keysym.sym == SDLK_1) Shadows::shadowCast = !Shadows::shadowCast;
-			if (event.key.keysym.sym == SDLK_2) { LightsUBO lubo; memcpy(info.lightUniforms.uniform.data, &lubo, sizeof(LightsUBO)); }
-			if (event.key.keysym.sym == SDLK_3) for (auto& model : info.models) model.render = !info.models[0].render;
-			if (event.key.keysym.sym == SDLK_4) info.gui.render = !info.gui.render;
-			if (event.key.keysym.sym == SDLK_5) renderer[0]->useSSAO = !renderer[0]->useSSAO;
-			if (event.key.keysym.sym == SDLK_6) renderer[0]->useSSR = !renderer[0]->useSSR;
-			if (event.key.keysym.sym == SDLK_7) renderer[0]->useDeferredRender = !renderer[0]->useDeferredRender;
-			if (event.key.keysym.sym == SDLK_8) renderer[0]->useCompute = !renderer[0]->useCompute;
-			if (event.key.keysym.sym == SDLK_0) renderer[0]->overloadedGPU = !renderer[0]->overloadedGPU;
-		}
-		if (event.type == SDL_MOUSEWHEEL) {
-			info.mainCamera.speed *= event.wheel.y > 0 ? 1.2f : 0.833f;
 		}
 		if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
-			SDL_ShowCursor(SDL_DISABLE);
-			SDL_WarpMouseInWindow(info.vulkan.window, static_cast<int>(renderer[0]->ctx.vulkan.surface->actualExtent.width * .5f), static_cast<int>(renderer[0]->ctx.vulkan.surface->actualExtent.height * .5f));
-			if (event.type == SDL_MOUSEMOTION) {
-				xMove = event.motion.x - static_cast<int>(renderer[0]->ctx.vulkan.surface->actualExtent.width * .5f);
-				yMove = event.motion.y - static_cast<int>(renderer[0]->ctx.vulkan.surface->actualExtent.height * .5f);
-				info.mainCamera.rotate((float)xMove, (float)yMove);
+			if (isInsideRenderWindow(event.motion.x, event.motion.y)) {
+				SDL_ShowCursor(SDL_DISABLE);
+				SDL_WarpMouseInWindow(info.vulkan.window, static_cast<int>(GUI::winSize.x * .5f + GUI::winPos.x), static_cast<int>(GUI::winSize.y * .5f + GUI::winPos.y));
+				if (event.type == SDL_MOUSEMOTION) {
+					xMove = event.motion.x - static_cast<int>(GUI::winSize.x * .5f + GUI::winPos.x);
+					yMove = event.motion.y - static_cast<int>(GUI::winSize.y * .5f + GUI::winPos.y);
+					info.mainCamera.rotate((float)xMove, (float)yMove);
+				}
 			}
 		}
 		else
@@ -169,4 +156,9 @@ bool Window::processEvents(float delta)
 	if (right) info.mainCamera.move(Camera::RelativeDirection::RIGHT, delta, combineDirections);
 
 	return true;
+}
+
+bool Window::isInsideRenderWindow(int32_t x, int32_t y)
+{
+	return x > GUI::winPos.x && y > GUI::winPos.y && x < GUI::winPos.x + GUI::winSize.x && y < GUI::winPos.y + GUI::winSize.y;
 }

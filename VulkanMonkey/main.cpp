@@ -21,7 +21,7 @@ int main(int argc, char* argv[])
     while(true)
 	{
         Timer timer;
-		//timer.minFrameTime(0.0167f);
+		timer.minFrameTime(1.f / (float)GUI::fps);
 
 		if (!Window::processEvents(timer.getDelta()))
 			break;

@@ -49,13 +49,14 @@ void Renderer::update(float delta)
 	const vm::mat4 view = ctx.mainCamera.getView();
 
 	//TERRAIN
-	if (ctx.terrain.render) {
-		const vm::mat4 pvm[3]{ projection, view };
-		memcpy(ctx.terrain.uniformBuffer.data, &pvm, sizeof(pvm));
-	}
+	//if (ctx.terrain.render) {
+	//	const vm::mat4 pvm[3]{ projection, view };
+	//	memcpy(ctx.terrain.uniformBuffer.data, &pvm, sizeof(pvm));
+	//}
 
 	// MODELS
 	for (auto &model : ctx.models) {
+		model.render = GUI::render_models;
 		if (model.render) {
 			const vm::mat4 pvm[3]{ projection, view, model.matrix };
 			ctx.mainCamera.ExtractFrustum(model.matrix);
@@ -68,12 +69,13 @@ void Renderer::update(float delta)
 	}
 
 	// SKYBOX
-	if (ctx.skyBox.render) {
-		const vm::mat4 pvm[2]{ projection, view };
-		memcpy(ctx.skyBox.uniformBuffer.data, &pvm, sizeof(pvm));
-	}
+	//if (ctx.skyBox.render) {
+	//	const vm::mat4 pvm[2]{ projection, view };
+	//	memcpy(ctx.skyBox.uniformBuffer.data, &pvm, sizeof(pvm));
+	//}
 
 	// SHADOWS
+	Shadows::shadowCast = GUI::shadow_cast;
 	const vm::vec3 pos = Light::sun().position;
 	const vm::vec3 front = vm::normalize(-pos);
 	const vm::vec3 right = vm::normalize(vm::cross(front, ctx.mainCamera.worldUp()));
@@ -88,17 +90,25 @@ void Renderer::update(float delta)
 		ctx.gui.newFrame();
 
 	// LIGHTS
-	vm::vec4 camPos(ctx.mainCamera.position, 1.0f);
-	memcpy(ctx.lightUniforms.uniform.data, &camPos, sizeof(vm::vec4));
+	if (GUI::randomize_lights) {
+		GUI::randomize_lights = false;
+		LightsUBO lubo;
+		lubo.camPos = vm::vec4(ctx.mainCamera.position, 1.0f);
+		memcpy(ctx.lightUniforms.uniform.data, &lubo, sizeof(LightsUBO));
+	}
+	else {
+		vm::vec4 camPos(ctx.mainCamera.position, 1.0f);
+		memcpy(ctx.lightUniforms.uniform.data, &camPos, sizeof(vm::vec4));
+	}
 
 	// SSAO
-	if (useSSAO) {
+	if (GUI::show_ssao) {
 		vm::mat4 pvm[2]{ projection, view };
 		memcpy(ctx.ssao.UBssaoPVM.data, pvm, sizeof(pvm));
 	}
 
 	// REFLECTIONS
-	if (useSSR) {
+	if (GUI::show_ssr) {
 		vm::mat4 reflectionInput[3];
 		reflectionInput[0][0] = vm::vec4(ctx.mainCamera.position, 1.0f);
 		reflectionInput[0][1] = vm::vec4(ctx.mainCamera.front(), 1.0f);
@@ -169,13 +179,10 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 
 	ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
 
-	// TERRAIN
-	ctx.terrain.draw(ctx.vulkan.dynamicCmdBuffer);
 	// MODELS
 	for (uint32_t m = 0; m < ctx.models.size(); m++)
 		ctx.models[m].draw(ctx.forward.pipeline, ctx.vulkan.dynamicCmdBuffer, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
-	// SKYBOX
-	ctx.skyBox.draw(ctx.vulkan.dynamicCmdBuffer);
+
 	ctx.vulkan.dynamicCmdBuffer.endRenderPass();
 
 	// GUI
@@ -237,7 +244,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	// End deferred
 
 	// Begin SCREEN SPACE AMBIENT OCCLUSION
-	if (useSSAO) {
+	if (GUI::show_ssao) {
 		// SSAO image
 		std::vector<vk::ClearValue> clearValuesSSAO = {
 		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
@@ -287,7 +294,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		.setPClearValues(clearValues0.data());
 	ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo0, vk::SubpassContents::eInline);
 
-	vm::vec4 ssao(useSSAO ? 1.f : 0.f);
+	vm::vec4 ssao(GUI::show_ssao ? 1.f : 0.f);
 	ctx.vulkan.dynamicCmdBuffer.pushConstants(ctx.deferred.pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vm::vec4), &ssao);
 	ctx.vulkan.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.deferred.pipelineComposition.pipeline);
 	const vk::DescriptorSet descriptorSets[] = { ctx.deferred.DSComposition, ctx.shadows.descriptorSet };
@@ -299,7 +306,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	// SCREEN SPACE REFLECTIONS
 
-	if (useSSR) {
+	if (GUI::show_ssr) {
 		std::vector<vk::ClearValue> clearValues1 = {
 			vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
 		auto renderPassInfo1 = vk::RenderPassBeginInfo()
@@ -402,7 +409,7 @@ void Renderer::present()
 	else
 		VkCheck(ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[1], vk::Fence(), &imageIndex));
 
-	if (useDeferredRender) {
+	if (GUI::deferred_rendering) {
 		// use the deferred command buffer
 		recordDeferredCmds(imageIndex);
 	}

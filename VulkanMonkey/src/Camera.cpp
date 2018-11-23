@@ -32,7 +32,7 @@ Camera::Camera()
 
 void Camera::move(RelativeDirection direction, float deltaTime, bool combineDirections)
 {
-	float velocity = combineDirections ? 0.707f * speed * deltaTime : speed * deltaTime;
+	float velocity = combineDirections ? 0.707f * GUI::cameraSpeed * deltaTime : GUI::cameraSpeed * deltaTime;
 	if (direction == RelativeDirection::FORWARD)	position += front() * (velocity * worldOrientation.z);
 	if (direction == RelativeDirection::BACKWARD)	position -= front() * (velocity * worldOrientation.z);
 	if (direction == RelativeDirection::RIGHT)		position += right() * velocity;

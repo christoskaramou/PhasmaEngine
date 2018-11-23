@@ -5,6 +5,19 @@
 using namespace vm;
 ImVec2						GUI::winPos = ImVec2();
 ImVec2						GUI::winSize = ImVec2();
+bool						GUI::p_open = true;
+bool						GUI::console_open = true;
+bool						GUI::lock_render_window = true;
+bool						GUI::deferred_rendering = true;
+bool						GUI::show_ssr = true;
+bool						GUI::show_ssao = true;
+bool						GUI::shadow_cast = true;
+bool						GUI::render_models = true;
+bool						GUI::randomize_lights = false;
+int							GUI::fps = 60;
+float						GUI::cameraSpeed = 0.35f;
+bool						GUI::fullscreen = false;
+
 vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
 SDL_Window*					GUI::g_Window = nullptr;
 Uint64						GUI::g_Time = 0;
@@ -199,119 +212,6 @@ void GUI::initImGui()
 	stagingBuffer.destroy();
 }
 
-void GUI::newFrame()
-{
-	ImGuiIO& io = ImGui::GetIO();
-	IM_ASSERT(io.Fonts->IsBuilt());     // Font atlas needs to be built, call renderer _NewFrame() function e.g. ImGui_ImplOpenGL3_NewFrame() 
-
-	// Setup display size (every frame to accommodate for window resizing)
-	int w, h;
-	int display_w, display_h;
-	SDL_GetWindowSize(vulkan->window, &w, &h);
-	SDL_GL_GetDrawableSize(vulkan->window, &display_w, &display_h);
-	io.DisplaySize = ImVec2((float)w, (float)h);
-	io.DisplayFramebufferScale = ImVec2(w > 0 ? ((float)display_w / w) : 0, h > 0 ? ((float)display_h / h) : 0);
-
-	// Setup time step (we don't use SDL_GetTicks() because it is using millisecond resolution)
-	static Uint64 frequency = SDL_GetPerformanceFrequency();
-	Uint64 current_time = SDL_GetPerformanceCounter();
-	io.DeltaTime = g_Time > 0 ? (float)((double)(current_time - g_Time) / frequency) : (float)(1.0f / 60.0f);
-	g_Time = current_time;
-
-	// Set OS mouse position if requested (rarely used, only when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
-	if (io.WantSetMousePos)
-		SDL_WarpMouseInWindow(g_Window, (int)io.MousePos.x, (int)io.MousePos.y);
-	else
-		io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
-
-	int mx, my;
-	Uint32 mouse_buttons = SDL_GetMouseState(&mx, &my);
-	io.MouseDown[0] = g_MousePressed[0] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;  // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
-	io.MouseDown[1] = g_MousePressed[1] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
-	io.MouseDown[2] = g_MousePressed[2] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
-	g_MousePressed[0] = g_MousePressed[1] = g_MousePressed[2] = false;
-
-#if SDL_HAS_CAPTURE_MOUSE && !defined(__EMSCRIPTEN__)
-	SDL_Window* focused_window = SDL_GetKeyboardFocus();
-	if (g_Window == focused_window)
-	{
-		// SDL_GetMouseState() gives mouse position seemingly based on the last window entered/focused(?)
-		// The creation of a new windows at runtime and SDL_CaptureMouse both seems to severely mess up with that, so we retrieve that position globally.
-		int wx, wy;
-		SDL_GetWindowPosition(focused_window, &wx, &wy);
-		SDL_GetGlobalMouseState(&mx, &my);
-		mx -= wx;
-		my -= wy;
-		io.MousePos = ImVec2((float)mx, (float)my);
-	}
-
-	// SDL_CaptureMouse() let the OS know e.g. that our imgui drag outside the SDL window boundaries shouldn't e.g. trigger the OS window resize cursor. 
-	// The function is only supported from SDL 2.0.4 (released Jan 2016)
-	bool any_mouse_button_down = ImGui::IsAnyMouseDown();
-	SDL_CaptureMouse(any_mouse_button_down ? SDL_TRUE : SDL_FALSE);
-#else
-	if (SDL_GetWindowFlags(g_Window) & SDL_WINDOW_INPUT_FOCUS)
-		io.MousePos = ImVec2((float)mx, (float)my);
-#endif
-	if (io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange)
-		return;
-
-	ImGuiMouseCursor imgui_cursor = ImGui::GetMouseCursor();
-	if (io.MouseDrawCursor || imgui_cursor == ImGuiMouseCursor_None)
-	{
-		// Hide OS mouse cursor if imgui is drawing it or if it wants no cursor
-		//SDL_ShowCursor(SDL_FALSE);
-	}
-	else
-	{
-		// Show OS mouse cursor
-		SDL_SetCursor(g_MouseCursors[imgui_cursor] ? g_MouseCursors[imgui_cursor] : g_MouseCursors[ImGuiMouseCursor_Arrow]);
-		//SDL_ShowCursor(SDL_TRUE);
-	}
-
-	ImGui::NewFrame();
-
-	setWindows();
-	if (show_demo_window)
-		ImGui::ShowDemoWindow(&show_demo_window);
-
-	ImGui::Render();
-
-	auto draw_data = ImGui::GetDrawData();
-	if (draw_data->TotalVtxCount < 1)
-		return;
-	size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
-	size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-	if (!vertexBuffer.buffer || vertexBuffer.size < vertex_size)
-		createVertexBuffer(vertex_size);
-	if (!indexBuffer.buffer || indexBuffer.size < index_size)
-		createIndexBuffer(index_size);
-
-	// Upload Vertex and index Data:
-	{
-		ImDrawVert* vtx_dst = NULL;
-		ImDrawIdx* idx_dst = NULL;
-		VkCheck(vulkan->device.mapMemory(vertexBuffer.memory, 0, vertex_size, vk::MemoryMapFlags(), (void**)(&vtx_dst)));
-		VkCheck(vulkan->device.mapMemory(indexBuffer.memory, 0, index_size, vk::MemoryMapFlags(), (void**)(&idx_dst)));
-		for (int n = 0; n < draw_data->CmdListsCount; n++)
-		{
-			const ImDrawList* cmd_list = draw_data->CmdLists[n];
-			memcpy(vtx_dst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
-			memcpy(idx_dst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
-			vtx_dst += cmd_list->VtxBuffer.Size;
-			idx_dst += cmd_list->IdxBuffer.Size;
-		}
-		vk::MappedMemoryRange range[2] = {};
-		range[0].memory = vertexBuffer.memory;
-		range[0].size = VK_WHOLE_SIZE;
-		range[1].memory = indexBuffer.memory;
-		range[1].size = VK_WHOLE_SIZE;
-		VkCheck(vulkan->device.flushMappedMemoryRanges(2, range));
-		vulkan->device.unmapMemory(vertexBuffer.memory);
-		vulkan->device.unmapMemory(indexBuffer.memory);
-	}
-}
-
 void GUI::loadGUI(const std::string textureName, bool show)
 {
 	if (textureName == "ImGuiDemo")
@@ -416,6 +316,119 @@ void GUI::draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Pipeli
 			vtx_offset += cmd_list->VtxBuffer.Size;
 		}
 		cmd.endRenderPass();
+	}
+}
+
+void GUI::newFrame()
+{
+	ImGuiIO& io = ImGui::GetIO();
+	IM_ASSERT(io.Fonts->IsBuilt());     // Font atlas needs to be built, call renderer _NewFrame() function e.g. ImGui_ImplOpenGL3_NewFrame() 
+
+	// Setup display size (every frame to accommodate for window resizing)
+	int w, h;
+	int display_w, display_h;
+	SDL_GetWindowSize(vulkan->window, &w, &h);
+	SDL_GL_GetDrawableSize(vulkan->window, &display_w, &display_h);
+	io.DisplaySize = ImVec2((float)w, (float)h);
+	io.DisplayFramebufferScale = ImVec2(w > 0 ? ((float)display_w / w) : 0, h > 0 ? ((float)display_h / h) : 0);
+
+	// Setup time step (we don't use SDL_GetTicks() because it is using millisecond resolution)
+	static Uint64 frequency = SDL_GetPerformanceFrequency();
+	Uint64 current_time = SDL_GetPerformanceCounter();
+	io.DeltaTime = g_Time > 0 ? (float)((double)(current_time - g_Time) / frequency) : (float)(1.0f / 60.0f);
+	g_Time = current_time;
+
+	// Set OS mouse position if requested (rarely used, only when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
+	if (io.WantSetMousePos)
+		SDL_WarpMouseInWindow(g_Window, (int)io.MousePos.x, (int)io.MousePos.y);
+	else
+		io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+
+	int mx, my;
+	Uint32 mouse_buttons = SDL_GetMouseState(&mx, &my);
+	io.MouseDown[0] = g_MousePressed[0] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;  // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
+	io.MouseDown[1] = g_MousePressed[1] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
+	io.MouseDown[2] = g_MousePressed[2] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
+	g_MousePressed[0] = g_MousePressed[1] = g_MousePressed[2] = false;
+
+#if SDL_HAS_CAPTURE_MOUSE && !defined(__EMSCRIPTEN__)
+	SDL_Window* focused_window = SDL_GetKeyboardFocus();
+	if (g_Window == focused_window)
+	{
+		// SDL_GetMouseState() gives mouse position seemingly based on the last window entered/focused(?)
+		// The creation of a new windows at runtime and SDL_CaptureMouse both seems to severely mess up with that, so we retrieve that position globally.
+		int wx, wy;
+		SDL_GetWindowPosition(focused_window, &wx, &wy);
+		SDL_GetGlobalMouseState(&mx, &my);
+		mx -= wx;
+		my -= wy;
+		io.MousePos = ImVec2((float)mx, (float)my);
+	}
+
+	// SDL_CaptureMouse() let the OS know e.g. that our imgui drag outside the SDL window boundaries shouldn't e.g. trigger the OS window resize cursor. 
+	// The function is only supported from SDL 2.0.4 (released Jan 2016)
+	bool any_mouse_button_down = ImGui::IsAnyMouseDown();
+	SDL_CaptureMouse(any_mouse_button_down ? SDL_TRUE : SDL_FALSE);
+#else
+	if (SDL_GetWindowFlags(g_Window) & SDL_WINDOW_INPUT_FOCUS)
+		io.MousePos = ImVec2((float)mx, (float)my);
+#endif
+	if (io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange)
+		return;
+
+	ImGuiMouseCursor imgui_cursor = ImGui::GetMouseCursor();
+	if (io.MouseDrawCursor || imgui_cursor == ImGuiMouseCursor_None)
+	{
+		// Hide OS mouse cursor if imgui is drawing it or if it wants no cursor
+		//SDL_ShowCursor(SDL_FALSE);
+	}
+	else
+	{
+		// Show OS mouse cursor
+		SDL_SetCursor(g_MouseCursors[imgui_cursor] ? g_MouseCursors[imgui_cursor] : g_MouseCursors[ImGuiMouseCursor_Arrow]);
+		//SDL_ShowCursor(SDL_TRUE);
+	}
+
+	ImGui::NewFrame();
+
+	setWindows();
+	//if (show_demo_window)
+	//	ImGui::ShowDemoWindow(&show_demo_window);
+
+	ImGui::Render();
+
+	auto draw_data = ImGui::GetDrawData();
+	if (draw_data->TotalVtxCount < 1)
+		return;
+	size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
+	size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
+	if (!vertexBuffer.buffer || vertexBuffer.size < vertex_size)
+		createVertexBuffer(vertex_size);
+	if (!indexBuffer.buffer || indexBuffer.size < index_size)
+		createIndexBuffer(index_size);
+
+	// Upload Vertex and index Data:
+	{
+		ImDrawVert* vtx_dst = NULL;
+		ImDrawIdx* idx_dst = NULL;
+		VkCheck(vulkan->device.mapMemory(vertexBuffer.memory, 0, vertex_size, vk::MemoryMapFlags(), (void**)(&vtx_dst)));
+		VkCheck(vulkan->device.mapMemory(indexBuffer.memory, 0, index_size, vk::MemoryMapFlags(), (void**)(&idx_dst)));
+		for (int n = 0; n < draw_data->CmdListsCount; n++)
+		{
+			const ImDrawList* cmd_list = draw_data->CmdLists[n];
+			memcpy(vtx_dst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
+			memcpy(idx_dst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+			vtx_dst += cmd_list->VtxBuffer.Size;
+			idx_dst += cmd_list->IdxBuffer.Size;
+		}
+		vk::MappedMemoryRange range[2] = {};
+		range[0].memory = vertexBuffer.memory;
+		range[0].size = VK_WHOLE_SIZE;
+		range[1].memory = indexBuffer.memory;
+		range[1].size = VK_WHOLE_SIZE;
+		VkCheck(vulkan->device.flushMappedMemoryRanges(2, range));
+		vulkan->device.unmapMemory(vertexBuffer.memory);
+		vulkan->device.unmapMemory(indexBuffer.memory);
 	}
 }
 
@@ -533,9 +546,49 @@ void GUI::setWindows()
 {
 	static bool active = true;
 
-	// Create a window called "My First Tool", with a menu bar.
-	ImGui::Begin("Test", &active, ImGuiWindowFlags_NoTitleBar);
+	ImGuiStyle* style = &ImGui::GetStyle();
+	ImVec4* colors = style->Colors;
+
+	// Rendering window
+	colors[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.06f, 0.06f, 0.00f);
+	int flags = ImGuiWindowFlags_NoTitleBar;
+	if (lock_render_window)
+		flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+	ImGui::Begin("Rendering Window", &active, flags);
 	winPos = ImGui::GetWindowPos();
 	winSize = ImGui::GetWindowSize();
 	ImGui::End();
+	colors[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.06f, 0.06f, 0.60f);
+
+	// Metrics
+	ImGui::Begin("Metrics", &p_open);
+	ImGuiIO& io = ImGui::GetIO();
+	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
+	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+	ImGui::Text("%d gui vertices, %d gui indices (%d triangles)", io.MetricsRenderVertices, io.MetricsRenderIndices, io.MetricsRenderIndices / 3);
+	ImGui::Separator();
+	ImGui::End();
+
+	// Checkboxes and boxes
+	ImGui::Begin("Testing", &p_open);
+	ImGui::Checkbox("Lock Render Window", &lock_render_window);
+	ImGui::Checkbox("Deffered", &deferred_rendering);
+	if (deferred_rendering) {
+		ImGui::Checkbox("SSR", &show_ssr);
+		ImGui::Checkbox("SSAO", &show_ssao);
+	}
+	ImGui::Checkbox("Models", &render_models);
+	ImGui::Checkbox("Sun Light", &shadow_cast);
+	//ImGui::Checkbox("Fullscreen", &fullscreen);
+	ImGui::Separator();
+	if (ImGui::Button("Randomize Lights"))
+		randomize_lights = true;
+	ImGui::Separator();
+	ImGui::SliderInt("FPS", &fps, 30, 240);
+	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.0f, 5.0f);
+	ImGui::End();
+
+	// Console
+	static Console console;
+	console.Draw("Console", &console_open);
 }

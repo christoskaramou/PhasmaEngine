@@ -222,9 +222,9 @@ void Context::initRendering()
 	gpi.specializationInfo = vk::SpecializationInfo{ 1, &vk::SpecializationMapEntry{ 0, 0, sizeof(MAX_LIGHTS) }, sizeof(MAX_LIGHTS), &MAX_LIGHTS };
 
 	forward.pipeline = createPipeline(gpi);
-	terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
+	//terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
 	shadows.pipeline = createPipeline(getPipelineSpecificationsShadows());
-	skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
+	//skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
 	gui.pipeline = createPipeline(getPipelineSpecificationsGUI());
 	deferred.pipeline = createPipeline(getPipelineSpecificationsDeferred());
 	deferred.pipelineComposition = createCompositionPipeline();
@@ -237,12 +237,12 @@ void Context::initRendering()
 void Context::loadResources()
 {
 	// SKYBOX LOAD
-	std::array<std::string, 6> skyTextures = { "objects/sky/right.png", "objects/sky/left.png", "objects/sky/top.png", "objects/sky/bottom.png", "objects/sky/back.png", "objects/sky/front.png" };
-	skyBox.loadSkyBox(skyTextures, 1024);
+	//std::array<std::string, 6> skyTextures = { "objects/sky/right.png", "objects/sky/left.png", "objects/sky/top.png", "objects/sky/bottom.png", "objects/sky/back.png", "objects/sky/front.png" };
+	//skyBox.loadSkyBox(skyTextures, 1024);
 	// GUI LOAD
 	gui.loadGUI("ImGuiDemo");
 	// TERRAIN LOAD
-	terrain.generateTerrain("");
+	//terrain.generateTerrain("");
 	// MODELS LOAD
 	models.push_back(Model(&vulkan));
 	models.back().loadModel("objects/sponza/", "sponza.obj");
@@ -253,9 +253,9 @@ void Context::createUniforms()
 	// DESCRIPTOR SETS FOR GUI
 	gui.createDescriptorSet(GUI::getDescriptorSetLayout(vulkan.device));
 	// DESCRIPTOR SETS FOR TERRAIN
-	terrain.createDescriptorSet(Terrain::getDescriptorSetLayout(vulkan.device));
+	//terrain.createDescriptorSet(Terrain::getDescriptorSetLayout(vulkan.device));
 	// DESCRIPTOR SETS FOR SKYBOX
-	skyBox.createDescriptorSet(SkyBox::getDescriptorSetLayout(vulkan.device));
+	//skyBox.createDescriptorSet(SkyBox::getDescriptorSetLayout(vulkan.device));
 	// DESCRIPTOR SETS FOR SHADOWS
 	shadows.createDynamicUniformBuffer(models.size());
 	shadows.createDescriptorSet();

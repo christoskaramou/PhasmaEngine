@@ -1,6 +1,7 @@
 #pragma once
 #include "VulkanContext.h"
 #include "imgui/imgui.h"
+#include "Console.h"
 #include "Object.h"
 #include "Surface.h"
 #include "Pipeline.h"
@@ -15,6 +16,19 @@ namespace vm {
 		// Data
 		static ImVec2		winPos;
 		static ImVec2		winSize;
+		static bool			p_open;
+		static bool			console_open;
+		static bool			lock_render_window;
+		static bool			deferred_rendering;
+		static bool			show_ssr;
+		static bool			show_ssao;
+		static bool			shadow_cast;
+		static bool			render_models;
+		static bool			randomize_lights;
+		static int			fps;
+		static float		cameraSpeed;
+		static bool			fullscreen;
+
 		static SDL_Window*  g_Window;
 		static Uint64       g_Time;
 		static bool         g_MousePressed[3];
