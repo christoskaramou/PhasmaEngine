@@ -1,6 +1,7 @@
 #pragma once
 #include "Context.h"
 #include "Node.h"
+#include "Queue.h"
 
 namespace vm {
 	class Renderer

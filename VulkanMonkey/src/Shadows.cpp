@@ -13,7 +13,7 @@ void Shadows::createDescriptorSet()
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
+	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet));
 
 	vk::WriteDescriptorSet textureWriteSets[2];
 	// MVP

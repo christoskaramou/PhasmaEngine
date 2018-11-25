@@ -200,7 +200,6 @@
   <ItemGroup>
     <ClInclude Include="include\Buffer.h" />
     <ClInclude Include="include\Camera.h" />
-    <ClInclude Include="include\Component.h" />
     <ClInclude Include="include\Compute.h" />
     <ClInclude Include="include\Console.h" />
     <ClInclude Include="include\Deferred.h" />
@@ -223,6 +222,7 @@
     <ClInclude Include="include\Node.h" />
     <ClInclude Include="include\Object.h" />
     <ClInclude Include="include\Pipeline.h" />
+    <ClInclude Include="include\Queue.h" />
     <ClInclude Include="include\Renderer.h" />
     <ClInclude Include="include\SDL.h" />
     <ClInclude Include="include\Shadows.h" />
@@ -249,7 +249,6 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="src\Buffer.cpp" />
     <ClCompile Include="src\Camera.cpp" />
-    <ClCompile Include="src\Component.cpp" />
     <ClCompile Include="src\Compute.cpp" />
     <ClCompile Include="src\Console.cpp" />
     <ClCompile Include="src\Context.cpp" />
@@ -264,6 +263,7 @@
     <ClCompile Include="src\Node.cpp" />
     <ClCompile Include="src\Object.cpp" />
     <ClCompile Include="src\Pipeline.cpp" />
+    <ClCompile Include="src\Queue.cpp" />
     <ClCompile Include="src\Renderer.cpp" />
     <ClCompile Include="src\Shadows.cpp" />
     <ClCompile Include="src\Skybox.cpp" />

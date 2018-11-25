@@ -6,6 +6,7 @@
 using namespace vm;
 
 std::vector<std::unique_ptr<Renderer>> Window::renderer = {};
+//vm::vec2 Window::surfaceSize = vm::vec2(800.f, 600.f);
 
 Window::Window() {}
 
@@ -16,7 +17,7 @@ void Window::create(std::string title, Uint32 flags)
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) { std::cout << SDL_GetError(); return; }
 
 	SDL_Window* window;
-    if (!((window = SDL_CreateWindow(title.c_str(), 0, 0, 0, 0, flags)))) { std::cout << SDL_GetError(); return; }
+    if (!((window = SDL_CreateWindow(title.c_str(), 50, 50, 800, 600, flags)))) { std::cout << SDL_GetError(); return; }
     std::cout << "Success at window creation\n";
 
 	Window::renderer.push_back(std::make_unique<Renderer>(window));
@@ -118,6 +119,8 @@ bool Window::processEvents(float delta)
 			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
 				int w, h;
 				SDL_GL_GetDrawableSize(info.vulkan.window, &w, &h);
+				//Window::surfaceSize.x = (float)w;
+				//Window::surfaceSize.y = (float)h;
 				renderer[0]->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 			}
 		}

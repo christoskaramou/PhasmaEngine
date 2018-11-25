@@ -61,7 +61,7 @@ namespace vm {
 		std::map<std::string, Image> renderTargets;
 
 		// MODELS
-		std::vector<Model> models{};
+		static std::vector<Model> models;
 
 		// SHADOWS
 		Shadows shadows = Shadows(&vulkan);

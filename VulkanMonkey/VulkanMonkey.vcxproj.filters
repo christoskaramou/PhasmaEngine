@@ -183,7 +183,7 @@
     <ClInclude Include="include\Node.h">
       <Filter>Include</Filter>
     </ClInclude>
-    <ClInclude Include="include\Component.h">
+    <ClInclude Include="include\Queue.h">
       <Filter>Include</Filter>
     </ClInclude>
   </ItemGroup>
@@ -282,7 +282,7 @@
     <ClCompile Include="src\Node.cpp">
       <Filter>Source</Filter>
     </ClCompile>
-    <ClCompile Include="src\Component.cpp">
+    <ClCompile Include="src\Queue.cpp">
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>

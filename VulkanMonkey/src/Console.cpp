@@ -13,6 +13,7 @@ Console::Console()
 	Commands.push_back("HISTORY");
 	Commands.push_back("CLEAR");
 	Commands.push_back("CLOSE");
+	Commands.push_back("LOAD MODEL SPONZA");
 	AddLog("Welcome to Dear ImGui!");
 }
 
@@ -44,9 +45,10 @@ void Console::AddLog(const char * fmt, ...) IM_FMTARGS(2)
 	ScrollToBottom = true;
 }
 
-void Console::Draw(const char * title, bool * p_open)
+void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 {
-	ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(pos);
+	ImGui::SetNextWindowSize(size);// , ImGuiCond_FirstUseEver);
 	if (!ImGui::Begin(title, p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
 	{
 		ImGui::End();
@@ -62,13 +64,9 @@ void Console::Draw(const char * title, bool * p_open)
 		ImGui::EndPopup();
 	}
 
-	ImGui::TextWrapped("This example implements a console with basic coloring, completion and history. A more elaborate implementation may want to store entries along with extra data such as timestamp, emitter, etc.");
-	ImGui::TextWrapped("Enter 'HELP' for help, press TAB to use text completion.");
-
 	// TODO: display items starting from the bottom
 
-	if (ImGui::SmallButton("Add Dummy Text")) { AddLog("%d some text", Items.Size); AddLog("some more text"); AddLog("display very important message here!"); } ImGui::SameLine();
-	if (ImGui::SmallButton("Add Dummy Error")) { AddLog("[error] something went wrong"); } ImGui::SameLine();
+	if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" }); AddLog("objects/sponza/sponza.obj is in queue for loading"); } ImGui::SameLine();
 	if (ImGui::SmallButton("Clear")) { ClearLog(); } ImGui::SameLine();
 	bool copy_to_clipboard = ImGui::SmallButton("Copy"); ImGui::SameLine();
 	if (ImGui::SmallButton("Scroll to bottom")) ScrollToBottom = true;
@@ -181,6 +179,10 @@ void Console::ExecCommand(const char * command_line)
 	else if (Stricmp(command_line, "CLOSE") == 0)
 	{
 		close_app = true;
+	}
+	else if (Stricmp(command_line, "LOAD MODEL SPONZA") == 0)
+	{
+		Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" });
 	}
 	else
 	{

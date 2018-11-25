@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imgui/imgui.h"
+#include "Queue.h"
 #include <ctype.h> 
 #include <stdlib.h>
 #include <stdio.h>
@@ -29,7 +30,7 @@ namespace vm {
 
 		void ClearLog();
 		void AddLog(const char* fmt, ...) IM_FMTARGS(2);
-		void Draw(const char* title, bool* p_open);
+		void Draw(const char* title, bool* p_open, ImVec2 pos, ImVec2 size);
 		void ExecCommand(const char* command_line);
 		static int TextEditCallbackStub(ImGuiInputTextCallbackData* data); // In C++11 you are better off using lambdas for this sort of forwarding callbacks
 		int TextEditCallback(ImGuiInputTextCallbackData* data);

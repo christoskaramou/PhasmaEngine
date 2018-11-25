@@ -16,7 +16,6 @@ bool						GUI::render_models = true;
 bool						GUI::randomize_lights = false;
 int							GUI::fps = 60;
 float						GUI::cameraSpeed = 0.35f;
-bool						GUI::fullscreen = false;
 std::array<float, 4>		GUI::clearColor = { 0.0f, 0.31f, 0.483f, 0.0f };
 
 vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
@@ -25,6 +24,68 @@ Uint64						GUI::g_Time = 0;
 bool						GUI::g_MousePressed[3] = { false, false, false };
 SDL_Cursor*					GUI::g_MouseCursors[ImGuiMouseCursor_COUNT] = { 0 };
 char*						GUI::g_ClipboardTextData = nullptr;
+
+void GUI::setWindows()
+{
+	static bool active = true;
+
+	static ImVec2 tlPanelPos;
+	static ImVec2 tlPanelSize;
+	static ImVec2 mlPanelPos;
+	static ImVec2 mlPanelSize;
+
+	ImGuiStyle* style = &ImGui::GetStyle();
+
+	// Top Left Panel
+	ImGui::Begin("Metrics", &p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+	ImGuiIO& io = ImGui::GetIO();
+	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
+	ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+	ImGui::Separator();
+	tlPanelPos = ImGui::GetWindowPos();
+	tlPanelSize = ImGui::GetWindowSize();
+	ImGui::End();
+
+	// Middle Left Panel
+	ImGui::SetNextWindowPos(ImVec2(0.f, tlPanelSize.y));
+	ImGui::Begin("Testing", &p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+	ImGui::Checkbox("Lock Render Window", &lock_render_window);
+	ImGui::Checkbox("Deffered", &deferred_rendering);
+	if (deferred_rendering) {
+		ImGui::Checkbox("SSR", &show_ssr);
+		ImGui::Checkbox("SSAO", &show_ssao);
+	}
+	ImGui::Checkbox("Models", &render_models);
+	ImGui::Checkbox("Sun Light", &shadow_cast);
+	ImGui::Separator();
+	if (ImGui::Button("Randomize Lights"))
+		randomize_lights = true;
+	ImGui::Separator();
+	ImGui::SliderInt("FPS", &fps, 30, 500);
+	ImGui::SliderFloat4("Clear Color", (float*)clearColor.data(), 0.0f, 1.0f);
+	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.0f, 5.0f);
+	mlPanelPos = ImGui::GetWindowPos();
+	mlPanelSize = ImGui::GetWindowSize();
+	ImGui::End();
+
+	// Console
+	static Console console;
+	console.Draw("Console", &console_open, ImVec2(0.f, tlPanelSize.y + mlPanelSize.y) ,ImVec2((float)vulkan->surface->actualExtent.width, (float)vulkan->surface->actualExtent.height - (tlPanelSize.y + mlPanelSize.y)));
+
+	// Rendering window
+	style->Colors[ImGuiCol_WindowBg].w = 0.0f;
+	int flags = ImGuiWindowFlags_NoTitleBar;
+	if (lock_render_window) {
+		flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+		ImGui::SetNextWindowPos(ImVec2(mlPanelPos.x + mlPanelSize.x, 0.f));
+		ImGui::SetNextWindowSize(ImVec2((float)vulkan->surface->actualExtent.width - (mlPanelPos.x + mlPanelSize.x), tlPanelPos.y + tlPanelSize.y + mlPanelSize.y));
+	}
+	ImGui::Begin("Rendering Window", &active, flags);
+	winPos = ImGui::GetWindowPos();
+	winSize = ImGui::GetWindowSize();
+	ImGui::End();
+	style->Colors[ImGuiCol_WindowBg].w = 1.0f;
+}
 
 vk::DescriptorSetLayout GUI::getDescriptorSetLayout(vk::Device device)
 {
@@ -528,54 +589,4 @@ void GUI::destroy()
 		GUI::descriptorSetLayout = nullptr;
 		std::cout << "Descriptor Set Layout destroyed\n";
 	}
-}
-
-void GUI::setWindows()
-{
-	static bool active = true;
-
-	ImGuiStyle* style = &ImGui::GetStyle();
-
-	// Rendering window
-	style->Colors[ImGuiCol_WindowBg].w = 0.0f;
-	int flags = ImGuiWindowFlags_NoTitleBar;
-	if (lock_render_window)
-		flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-	ImGui::Begin("Rendering Window", &active, flags);
-	winPos = ImGui::GetWindowPos();
-	winSize = ImGui::GetWindowSize();
-	ImGui::End();
-	style->Colors[ImGuiCol_WindowBg].w = 1.0f;
-
-	// Top Left Panel
-	ImGui::Begin("Metrics", &p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-	ImGuiIO& io = ImGui::GetIO();
-	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
-	ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-	ImGui::Separator();
-	ImGui::End();
-
-	// Middle Left Panel
-	ImGui::Begin("Testing", &p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-	ImGui::Checkbox("Lock Render Window", &lock_render_window);
-	ImGui::Checkbox("Deffered", &deferred_rendering);
-	if (deferred_rendering) {
-		ImGui::Checkbox("SSR", &show_ssr);
-		ImGui::Checkbox("SSAO", &show_ssao);
-	}
-	ImGui::Checkbox("Models", &render_models);
-	ImGui::Checkbox("Sun Light", &shadow_cast);
-	//ImGui::Checkbox("Fullscreen", &fullscreen);
-	ImGui::Separator();
-	if (ImGui::Button("Randomize Lights"))
-		randomize_lights = true;
-	ImGui::Separator();
-	ImGui::SliderInt("FPS", &fps, 30, 500);
-	ImGui::SliderFloat4("Clear Color", (float*)clearColor.data(), 0.0f, 1.0f);
-	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.0f, 5.0f);
-	ImGui::End();
-
-	// Console
-	static Console console;
-	console.Draw("Console", &console_open);
 }

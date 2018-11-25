@@ -5,6 +5,8 @@
 
 using namespace vm;
 
+std::vector<Model> Context::models = {};
+
 vk::DescriptorSetLayout Context::getDescriptorSetLayoutLights()
 {
 	// binding for model mvp matrix
@@ -181,7 +183,7 @@ void Context::initVulkanContext()
 	vulkan.swapchain = new Swapchain(createSwapchain());
 	vulkan.commandPool = createCommandPool();
 	vulkan.commandPoolCompute = createComputeCommadPool();
-	vulkan.descriptorPool = createDescriptorPool(1000); // max number of all descriptor sets to allocate
+	vulkan.descriptorPool = createDescriptorPool(2000); // max number of all descriptor sets to allocate
 	vulkan.dynamicCmdBuffer = createCmdBuffer();
 	vulkan.shadowCmdBuffer = createCmdBuffer();
 	vulkan.computeCmdBuffer = createComputeCmdBuffer();
@@ -246,8 +248,8 @@ void Context::loadResources()
 	// TERRAIN LOAD
 	//terrain.generateTerrain("");
 	// MODELS LOAD
-	models.push_back(Model(&vulkan));
-	models.back().loadModel("objects/sponza/", "sponza.obj");
+	//models.push_back(Model(&vulkan));
+	//models.back().loadModel("objects/sponza/", "sponza.obj");
 }
 
 void Context::createUniforms()
@@ -259,7 +261,7 @@ void Context::createUniforms()
 	// DESCRIPTOR SETS FOR SKYBOX
 	//skyBox.createDescriptorSet(SkyBox::getDescriptorSetLayout(vulkan.device));
 	// DESCRIPTOR SETS FOR SHADOWS
-	shadows.createDynamicUniformBuffer(models.size());
+	shadows.createDynamicUniformBuffer(10); // TODO: Fix to dynamic add or remove memory
 	shadows.createDescriptorSet();
 	// DESCRIPTOR SETS FOR LIGHTS
 	lightUniforms.createLightUniforms();
