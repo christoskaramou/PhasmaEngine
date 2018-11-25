@@ -33,7 +33,7 @@ void main() {
 	vec3 normSampler = normalize(texture(normSampler, inUV).rgb * 2.0 - 1.0);
 
 	outPosition = vec4(inWorldPos, depth);
-	outNormal = vec4(TBN * normSampler , 1.0f);
+	outNormal = vec4(TBN * normSampler , 0.0f);
 	outAlbedo = vec4(texture(tSampler, inUV).xyz, alpha);
 	outSpecular = texture(specSampler, inUV);
 }

@@ -94,7 +94,10 @@ namespace vm {
 		LightUniforms lightUniforms = LightUniforms(&vulkan);
 
 		// MAIN CAMERA
-		Camera mainCamera;
+		Camera camera_main;
+
+		// CAMERAS
+		std::vector<Camera> camera{};
 
 		void initVulkanContext();
 		void initRendering();

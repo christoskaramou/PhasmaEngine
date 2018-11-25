@@ -269,6 +269,45 @@ void vm::SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	std::cout << "DescriptorSet updated\n";
 }
 
+void SSAO::draw(uint32_t imageIndex, vk::Extent2D actualExtent, const vm::vec2 UVOffset[2])
+{
+	// SSAO image
+	std::vector<vk::ClearValue> clearValuesSSAO = {
+		vk::ClearColorValue().setFloat32({0.f, 0.f, 0.f, 0.f})
+	};
+	auto renderPassInfoSSAO = vk::RenderPassBeginInfo()
+		.setRenderPass(renderPass)
+		.setFramebuffer(frameBuffers[imageIndex])
+		.setRenderArea({ { 0, 0 },actualExtent })
+		.setClearValueCount(static_cast<uint32_t>(clearValuesSSAO.size()))
+		.setPClearValues(clearValuesSSAO.data());
+	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAO, vk::SubpassContents::eInline);
+	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vm::vec2), UVOffset);
+	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+	const vk::DescriptorSet descriptorSets[] = { DSssao };
+	const uint32_t dOffsets[] = { 0 };
+	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, 1, descriptorSets, 0, dOffsets);
+	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
+	vulkan->dynamicCmdBuffer.endRenderPass();
+
+	// new blurry SSAO image
+	std::vector<vk::ClearValue> clearValuesSSAOBlur = {
+	vk::ClearColorValue().setFloat32({0.f, 0.f, 0.f, 0.f}) };
+	auto renderPassInfoSSAOBlur = vk::RenderPassBeginInfo()
+		.setRenderPass(blurRenderPass)
+		.setFramebuffer(blurFrameBuffers[imageIndex])
+		.setRenderArea({ { 0, 0 }, actualExtent })
+		.setClearValueCount(static_cast<uint32_t>(clearValuesSSAOBlur.size()))
+		.setPClearValues(clearValuesSSAOBlur.data());
+	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAOBlur, vk::SubpassContents::eInline);
+	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeline);
+	const vk::DescriptorSet descriptorSetsBlur[] = { DSssaoBlur };
+	const uint32_t dOffsetsBlur[] = { 0 };
+	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeinfo.layout, 0, 1, descriptorSetsBlur, 0, dOffsetsBlur);
+	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
+	vulkan->dynamicCmdBuffer.endRenderPass();
+}
+
 void vm::SSAO::destroy()
 {
 	UBssaoKernel.destroy();

@@ -1,5 +1,6 @@
 #pragma once
 #include "Context.h"
+#include "Node.h"
 
 namespace vm {
 	class Renderer
@@ -14,9 +15,7 @@ namespace vm {
 		bool prepared = false;
 		bool overloadedGPU = false;
 		bool useCompute = false;
-		//bool useDeferredRender = true;
-		//bool useSSAO = true;
-		//bool useSSR = true;
+
 	private:
 		void recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ);
 		void recordForwardCmds(const uint32_t& imageIndex);

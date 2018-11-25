@@ -10,7 +10,6 @@ using namespace vm;
 Renderer::Renderer(SDL_Window* window)
 {
 	ctx.vulkan.window = window;
-
 	// INIT ALL VULKAN CONTEXT
 	ctx.initVulkanContext();
 	// INIT RENDERING
@@ -19,7 +18,6 @@ Renderer::Renderer(SDL_Window* window)
 	ctx.loadResources();
 	// CREATE UNIFORMS AND DESCRIPTOR SETS
 	ctx.createUniforms();
-
 	// init is done
 	prepared = true;
 }
@@ -45,8 +43,8 @@ Renderer::~Renderer()
 
 void Renderer::update(float delta)
 {
-	const vm::mat4 projection = ctx.mainCamera.getPerspective();
-	const vm::mat4 view = ctx.mainCamera.getView();
+	const vm::mat4 projection = ctx.camera_main.getPerspective();
+	const vm::mat4 view = ctx.camera_main.getView();
 
 	//TERRAIN
 	//if (ctx.terrain.render) {
@@ -59,9 +57,9 @@ void Renderer::update(float delta)
 		model.render = GUI::render_models;
 		if (model.render) {
 			const vm::mat4 pvm[3]{ projection, view, model.matrix };
-			ctx.mainCamera.ExtractFrustum(model.matrix);
+			ctx.camera_main.ExtractFrustum(model.matrix);
 			for (auto &mesh : model.meshes) {
-				mesh.cull = !ctx.mainCamera.SphereInFrustum(mesh.boundingSphere);
+				mesh.cull = !ctx.camera_main.SphereInFrustum(mesh.boundingSphere);
 				if (!mesh.cull)
 					memcpy(model.uniformBuffer.data, &pvm, sizeof(pvm));
 			}
@@ -78,7 +76,7 @@ void Renderer::update(float delta)
 	Shadows::shadowCast = GUI::shadow_cast;
 	const vm::vec3 pos = Light::sun().position;
 	const vm::vec3 front = vm::normalize(-pos);
-	const vm::vec3 right = vm::normalize(vm::cross(front, ctx.mainCamera.worldUp()));
+	const vm::vec3 right = vm::normalize(vm::cross(front, ctx.camera_main.worldUp()));
 	const vm::vec3 up = vm::normalize(vm::cross(right, front));
 	std::vector<ShadowsUBO> shadows_UBO(ctx.models.size());
 	for (uint32_t i = 0; i < ctx.models.size(); i++)
@@ -93,11 +91,11 @@ void Renderer::update(float delta)
 	if (GUI::randomize_lights) {
 		GUI::randomize_lights = false;
 		LightsUBO lubo;
-		lubo.camPos = vm::vec4(ctx.mainCamera.position, 1.0f);
+		lubo.camPos = vm::vec4(ctx.camera_main.position, 1.0f);
 		memcpy(ctx.lightUniforms.uniform.data, &lubo, sizeof(LightsUBO));
 	}
 	else {
-		vm::vec4 camPos(ctx.mainCamera.position, 1.0f);
+		vm::vec4 camPos(ctx.camera_main.position, 1.0f);
 		memcpy(ctx.lightUniforms.uniform.data, &camPos, sizeof(vm::vec4));
 	}
 
@@ -110,8 +108,8 @@ void Renderer::update(float delta)
 	// REFLECTIONS
 	if (GUI::show_ssr) {
 		vm::mat4 reflectionInput[3];
-		reflectionInput[0][0] = vm::vec4(ctx.mainCamera.position, 1.0f);
-		reflectionInput[0][1] = vm::vec4(ctx.mainCamera.front(), 1.0f);
+		reflectionInput[0][0] = vm::vec4(ctx.camera_main.position, 1.0f);
+		reflectionInput[0][1] = vm::vec4(ctx.camera_main.front(), 1.0f);
 		reflectionInput[0][2] = vm::vec4(static_cast<float>(ctx.vulkan.surface->actualExtent.width), static_cast<float>(ctx.vulkan.surface->actualExtent.height), 0.f, 0.f);
 		reflectionInput[0][3] = vm::vec4();
 		reflectionInput[1] = projection;
@@ -143,24 +141,12 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 
 	vm::vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
 
-	vk::Viewport viewport;
-	viewport.x = winPos.x;
-	viewport.y = winPos.y;
-	viewport.width = winSize.x;
-	viewport.height = winSize.y;
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
-
-	vk::Rect2D scissor;
-	scissor.offset.x = (int32_t)winPos.x;
-	scissor.offset.y = (int32_t)winPos.y;
-	scissor.extent.width = (int32_t)winSize.x;
-	scissor.extent.height = (int32_t)winSize.y;
+	ctx.camera_main.renderArea.update(winPos, winSize);
 
 	// Render Pass (color)
 	std::vector<vk::ClearValue> clearValues = {
-		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
-		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
+		vk::ClearColorValue().setFloat32(GUI::clearColor),
+		vk::ClearColorValue().setFloat32(GUI::clearColor),
 		vk::ClearDepthStencilValue({ 1.0f, 0 }) };
 
 	auto beginInfo = vk::CommandBufferBeginInfo()
@@ -174,8 +160,8 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 		.setPClearValues(clearValues.data());
 
 	VkCheck(ctx.vulkan.dynamicCmdBuffer.begin(&beginInfo));
-	ctx.vulkan.dynamicCmdBuffer.setViewport(0, 1, &viewport);
-	ctx.vulkan.dynamicCmdBuffer.setScissor(0, 1, &scissor);
+	ctx.vulkan.dynamicCmdBuffer.setViewport(0, 1, &ctx.camera_main.renderArea.viewport);
+	ctx.vulkan.dynamicCmdBuffer.setScissor(0, 1, &ctx.camera_main.renderArea.scissor);
 
 	ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
 
@@ -183,6 +169,15 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 	for (uint32_t m = 0; m < ctx.models.size(); m++)
 		ctx.models[m].draw(ctx.forward.pipeline, ctx.vulkan.dynamicCmdBuffer, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
 
+	for (auto& cam : ctx.camera) {
+		cam.renderArea.update(winPos + winSize * .7f, winSize * .2f, -1.f, 0.f);
+		ctx.vulkan.dynamicCmdBuffer.setViewport(0, 1, &cam.renderArea.viewport);
+		ctx.vulkan.dynamicCmdBuffer.setScissor(0, 1, &cam.renderArea.scissor);
+
+		// MODELS
+		for (uint32_t m = 0; m < ctx.models.size(); m++)
+			ctx.models[m].draw(ctx.forward.pipeline, ctx.vulkan.dynamicCmdBuffer, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
+	}
 	ctx.vulkan.dynamicCmdBuffer.endRenderPass();
 
 	// GUI
@@ -199,19 +194,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	vm::vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
 
-	vk::Viewport viewport;
-	viewport.x = winPos.x;
-	viewport.y = winPos.y;
-	viewport.width = winSize.x;
-	viewport.height = winSize.y;
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
-
-	vk::Rect2D scissor;
-	scissor.offset.x = (int32_t)winPos.x;
-	scissor.offset.y = (int32_t)winPos.y;
-	scissor.extent.width = (int32_t)winSize.x;
-	scissor.extent.height = (int32_t)winSize.y;
+	ctx.camera_main.renderArea.update(winPos, winSize);
 
 	auto beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
@@ -219,10 +202,10 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	// Begin deferred
 	std::vector<vk::ClearValue> clearValues = {
-		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
-		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
-		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
-		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
+		vk::ClearColorValue().setFloat32(GUI::clearColor),
+		vk::ClearColorValue().setFloat32(GUI::clearColor),
+		vk::ClearColorValue().setFloat32(GUI::clearColor),
+		vk::ClearColorValue().setFloat32(GUI::clearColor),
 		vk::ClearDepthStencilValue({ 1.0f, 0 }) };
 	auto renderPassInfo = vk::RenderPassBeginInfo()
 		.setRenderPass(ctx.deferred.renderPass)
@@ -232,8 +215,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		.setPClearValues(clearValues.data());
 
 	VkCheck(ctx.vulkan.dynamicCmdBuffer.begin(&beginInfo));
-	ctx.vulkan.dynamicCmdBuffer.setViewport(0, 1, &viewport);
-	ctx.vulkan.dynamicCmdBuffer.setScissor(0, 1, &scissor);
+	ctx.vulkan.dynamicCmdBuffer.setViewport(0, 1, &ctx.camera_main.renderArea.viewport);
+	ctx.vulkan.dynamicCmdBuffer.setScissor(0, 1, &ctx.camera_main.renderArea.scissor);
 
 	ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
 
@@ -243,49 +226,13 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	ctx.vulkan.dynamicCmdBuffer.endRenderPass();
 	// End deferred
 
-	// Begin SCREEN SPACE AMBIENT OCCLUSION
-	if (GUI::show_ssao) {
-		// SSAO image
-		std::vector<vk::ClearValue> clearValuesSSAO = {
-		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
-		auto renderPassInfoSSAO = vk::RenderPassBeginInfo()
-			.setRenderPass(ctx.ssao.renderPass)
-			.setFramebuffer(ctx.ssao.frameBuffers[imageIndex])
-			.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
-			.setClearValueCount(static_cast<uint32_t>(clearValuesSSAO.size()))
-			.setPClearValues(clearValuesSSAO.data());
-		ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAO, vk::SubpassContents::eInline);
-		ctx.vulkan.dynamicCmdBuffer.pushConstants(ctx.ssao.pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vm::vec2), UVOffset);
-		ctx.vulkan.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipeline.pipeline);
-		const vk::DescriptorSet descriptorSets[] = { ctx.ssao.DSssao };
-		const uint32_t dOffsets[] = { 0 };
-		ctx.vulkan.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipeline.pipeinfo.layout, 0, 1, descriptorSets, 0, dOffsets);
-		ctx.vulkan.dynamicCmdBuffer.draw(3, 1, 0, 0);
-		ctx.vulkan.dynamicCmdBuffer.endRenderPass();
-		
-		// new blurry SSAO image
-		std::vector<vk::ClearValue> clearValuesSSAOBlur = {
-		vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
-		auto renderPassInfoSSAOBlur = vk::RenderPassBeginInfo()
-			.setRenderPass(ctx.ssao.blurRenderPass)
-			.setFramebuffer(ctx.ssao.blurFrameBuffers[imageIndex])
-			.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
-			.setClearValueCount(static_cast<uint32_t>(clearValuesSSAOBlur.size()))
-			.setPClearValues(clearValuesSSAOBlur.data());
-		ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAOBlur, vk::SubpassContents::eInline);
-		ctx.vulkan.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineBlur.pipeline);
-		const vk::DescriptorSet descriptorSetsBlur[] = { ctx.ssao.DSssaoBlur };
-		const uint32_t dOffsetsBlur[] = { 0 };
-		ctx.vulkan.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssao.pipelineBlur.pipeinfo.layout, 0, 1, descriptorSetsBlur, 0, dOffsetsBlur);
-		ctx.vulkan.dynamicCmdBuffer.draw(3, 1, 0, 0);
-		ctx.vulkan.dynamicCmdBuffer.endRenderPass();
-	}
-	// End SCREEN SPACE AMBIENT OCCLUSION
+	// SCREEN SPACE AMBIENT OCCLUSION
+	if (GUI::show_ssao)
+		ctx.ssao.draw(imageIndex, ctx.vulkan.surface->actualExtent, UVOffset);
 
 	// Begin Composition
-
 	std::vector<vk::ClearValue> clearValues0 = {
-	vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
+	vk::ClearColorValue().setFloat32(GUI::clearColor) };
 	auto renderPassInfo0 = vk::RenderPassBeginInfo()
 		.setRenderPass(ctx.deferred.compositionRenderPass)
 		.setFramebuffer(ctx.deferred.compositionFrameBuffers[imageIndex])
@@ -305,23 +252,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	// End Composition
 
 	// SCREEN SPACE REFLECTIONS
-
-	if (GUI::show_ssr) {
-		std::vector<vk::ClearValue> clearValues1 = {
-			vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }) };
-		auto renderPassInfo1 = vk::RenderPassBeginInfo()
-			.setRenderPass(ctx.ssr.renderPass)
-			.setFramebuffer(ctx.ssr.frameBuffers[imageIndex])
-			.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
-			.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
-			.setPClearValues(clearValues1.data());
-		ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo1, vk::SubpassContents::eInline);
-		ctx.vulkan.dynamicCmdBuffer.pushConstants(ctx.deferred.pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vm::vec2), UVOffset);
-		ctx.vulkan.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.ssr.pipeline.pipeline);
-		ctx.vulkan.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.ssr.pipeline.pipeinfo.layout, 0, 1, &ctx.ssr.DSReflection, 0, nullptr);
-		ctx.vulkan.dynamicCmdBuffer.draw(3, 1, 0, 0);
-		ctx.vulkan.dynamicCmdBuffer.endRenderPass();
-	}
+	if (GUI::show_ssr) 
+		ctx.ssr.draw(imageIndex, ctx.vulkan.surface->actualExtent, UVOffset);
 
 	// GUI
 	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.gui.pipeline, ctx.vulkan.dynamicCmdBuffer);
@@ -409,16 +341,12 @@ void Renderer::present()
 	else
 		VkCheck(ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[1], vk::Fence(), &imageIndex));
 
-	if (GUI::deferred_rendering) {
-		// use the deferred command buffer
+	if (GUI::deferred_rendering) 
 		recordDeferredCmds(imageIndex);
-	}
-	else {
-		// use the dynamic command buffer
+	else
 		recordForwardCmds(imageIndex);
-	}
 
-	// submit the main command buffer
+	// submit the command buffer
 	auto const si = vk::SubmitInfo()
 		.setWaitSemaphoreCount(1)
 		.setPWaitSemaphores(&ctx.vulkan.semaphores[1])

@@ -17,21 +17,20 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal);
 
 void main()
 {
-	vec3 position = texture(positionSampler, inUV).xyz;
-	vec3 normal = texture(normalSampler, inUV).xyz;
+	vec4 position = ubo.view * vec4(texture(positionSampler, inUV).xyz, 1.0);
+	vec4 normal = ubo.view * texture(normalSampler, inUV);
 	float specular = texture(specSampler, inUV).r;
 
 	// The swapchain image is loaded and not cleared in this render pass
-	outColor = vec4(ScreenSpaceReflections(position, normalize(normal)), 0.5) * specular;
+	outColor = vec4(ScreenSpaceReflections(position.xyz, normalize(normal.xyz)), 0.5) * specular;
 }
 
 // Screen space reflections
 vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 {
-	vec3 viewPos = position - ubo.camPos.xyz;
-	vec3 reflection = reflect(viewPos, normal);
+	vec3 reflection = reflect(position, normal);
 
-	float VdotR = max(dot(normalize(viewPos), normalize(reflection)), 0.0);
+	float VdotR = max(dot(normalize(position), normalize(reflection)), 0.0);
 	float fresnel = pow(VdotR, 5);
 
 	vec3 step = reflection;
@@ -40,7 +39,7 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 	float loops = max(sign(VdotR), 0.0) * 30;
 	for(int i=0; i<loops ; i++)
 	{
-		vec4 newViewPos = ubo.view * vec4(newPosition, 1.0);
+		vec4 newViewPos = vec4(newPosition, 1.0);
 		vec4 samplePosition = ubo.projection * newViewPos;
 		samplePosition.xy = samplePosition.xy / samplePosition.w * 0.5 + 0.5;
 		samplePosition.xy *= pos.offset.zw; // floating window size correction

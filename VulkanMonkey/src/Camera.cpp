@@ -22,17 +22,26 @@ Camera::Camera()
 	orientation = vm::quat(euler);
 	position = vm::vec3(0.f, 0.f, 0.f);
 
-	aspect = 16.f / 9.f;
 	nearPlane = 0.005f;
 	farPlane = 50.0f;
 	FOV = 45.0f;
 	speed = 0.35f;
 	rotationSpeed = 0.05f;
+
+	renderArea.viewport.x = GUI::winPos.x;
+	renderArea.viewport.y = GUI::winPos.y;
+	renderArea.viewport.width = GUI::winSize.x;
+	renderArea.viewport.height = GUI::winSize.y;
+	renderArea.viewport.minDepth = 0.f;
+	renderArea.viewport.maxDepth = 1.f;
+	renderArea.scissor.offset.x = (int32_t)GUI::winPos.x;
+	renderArea.scissor.offset.y = (int32_t)GUI::winPos.y;
+	renderArea.scissor.extent.width = (int32_t)GUI::winSize.x;
+	renderArea.scissor.extent.height = (int32_t)GUI::winSize.y;
 }
 
-void Camera::move(RelativeDirection direction, float deltaTime, bool combineDirections)
+void Camera::move(RelativeDirection direction, float velocity)
 {
-	float velocity = combineDirections ? 0.707f * GUI::cameraSpeed * deltaTime : GUI::cameraSpeed * deltaTime;
 	if (direction == RelativeDirection::FORWARD)	position += front() * (velocity * worldOrientation.z);
 	if (direction == RelativeDirection::BACKWARD)	position -= front() * (velocity * worldOrientation.z);
 	if (direction == RelativeDirection::RIGHT)		position += right() * velocity;
@@ -51,13 +60,13 @@ void Camera::rotate(float xoffset, float yoffset)
 
 vm::mat4 Camera::getPerspective()
 {
-	aspect = GUI::winSize.x / GUI::winSize.y;
-	cfloat tanHalfFovy = tan(vm::radians(FOV) * .5f);
-	cfloat m00 = 1.f / (aspect * tanHalfFovy);
-	cfloat m11 = 1.f / (tanHalfFovy);
-	cfloat m22 = farPlane / (farPlane - nearPlane) * worldOrientation.z;
-	cfloat m23 = worldOrientation.z;
-	cfloat m32 = -(farPlane * nearPlane) / (farPlane - nearPlane);
+	float aspect = renderArea.viewport.width / renderArea.viewport.height;
+	float tanHalfFovy = tan(vm::radians(FOV) * .5f);
+	float m00 = 1.f / (aspect * tanHalfFovy);
+	float m11 = 1.f / (tanHalfFovy);
+	float m22 = farPlane / (farPlane - nearPlane) * worldOrientation.z;
+	float m23 = worldOrientation.z;
+	float m32 = -(farPlane * nearPlane) / (farPlane - nearPlane);
 	return vm::mat4(
 		m00, 0.f, 0.f, 0.f,
 		0.f, m11, 0.f, 0.f,
@@ -65,15 +74,15 @@ vm::mat4 Camera::getPerspective()
 		0.f, 0.f, m32, 0.f
 	);
 }
-vm::mat4 Camera::getView()
+vm::mat4 Camera::getView() const
 {
-	const vm::vec3 f(front());
-	const vm::vec3 r(right());
-	const vm::vec3 u(up());
+	vm::vec3 f(front());
+	vm::vec3 r(right());
+	vm::vec3 u(up());
 
-	cfloat m30 = -dot(r, position);
-	cfloat m31 = -dot(u, position);
-	cfloat m32 = -dot(f, position);
+	float m30 = -dot(r, position);
+	float m31 = -dot(u, position);
+	float m32 = -dot(f, position);
 
 	return vm::mat4(
 		r.x, u.x, f.x, 0.f,
@@ -83,32 +92,32 @@ vm::mat4 Camera::getView()
 	);
 }
 
-vm::vec3 Camera::worldRight()
+vm::vec3 Camera::worldRight() const
 {
 	return vm::vec3(worldOrientation.x, 0.f, 0.f);
 }
 
-vm::vec3 Camera::worldUp()
+vm::vec3 Camera::worldUp() const
 {
 	return vm::vec3(0.f, worldOrientation.y, 0.f);
 }
 
-vm::vec3 Camera::worldFront()
+vm::vec3 Camera::worldFront() const
 {
 	return vm::vec3(0.f, 0.f, worldOrientation.z);
 }
 
-vm::vec3 Camera::right()
+vm::vec3 Camera::right() const
 {
 	return orientation * worldRight();
 }
 
-vm::vec3 Camera::up()
+vm::vec3 Camera::up() const
 {
 	return orientation * worldUp();
 }
 
-vm::vec3 Camera::front()
+vm::vec3 Camera::front() const
 {
 	return orientation * worldFront();
 }
@@ -194,4 +203,19 @@ bool Camera::SphereInFrustum(vm::vec4& boundingSphere) const
 		if (frustum[i][0] * boundingSphere.x + frustum[i][1] * boundingSphere.y + frustum[i][2] * boundingSphere.z + frustum[i][3] <= -boundingSphere.w)
 			return false;
 	return true;
+}
+
+void vm::Camera::SurfaceTargetArea::update(const vm::vec2& position, const vm::vec2& size, float minDepth, float maxDepth)
+{
+	viewport.x = position.x;
+	viewport.y = position.y;
+	viewport.width = size.x;
+	viewport.height = size.y;
+	viewport.minDepth = minDepth;
+	viewport.maxDepth = maxDepth;
+
+	scissor.offset.x = (int32_t)position.x;
+	scissor.offset.y = (int32_t)position.y;
+	scissor.extent.width = (int32_t)size.x;
+	scissor.extent.height = (int32_t)size.y;
 }

@@ -659,7 +659,7 @@ namespace vm {
 	quat::quat() : x(0.f), y(0.f), z(0.f), w(1.f)
 	{ }
 
-	quat::quat(float * q) : x(q[0]), y(q[1]), z(q[2]), w(q[3])
+	quat::quat(cfloat * q) : x(q[0]), y(q[1]), z(q[2]), w(q[3])
 	{ }
 
 	quat::quat(cquat * q) : x(q->x), y(q->y), z(q->z), w(q->w)
@@ -1312,7 +1312,7 @@ namespace vm {
 		return (a < b) ? b : a;
 	}
 
-	float rand(float a, float b)
+	float rand(cfloat a, cfloat b)
 	{
 		static auto seed = std::chrono::system_clock::now().time_since_epoch().count();
 		static std::default_random_engine gen(static_cast<unsigned int>(seed));
@@ -1320,7 +1320,7 @@ namespace vm {
 		return x(gen);
 	}
 
-	float lerp(float a, float b, float f)
+	float lerp(cfloat a, cfloat b, cfloat f)
 	{
 		return a + f * (b - a);
 	}

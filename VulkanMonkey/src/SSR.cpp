@@ -142,6 +142,24 @@ void vm::SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	std::cout << "DescriptorSet updated\n";
 }
 
+void vm::SSR::draw(uint32_t imageIndex, vk::Extent2D actualExtent, const vm::vec2 UVOffset[2])
+{
+	std::vector<vk::ClearValue> clearValues1 = {
+	vk::ClearColorValue().setFloat32({0.f, 0.f, 0.f, 0.f}) };
+	auto renderPassInfo1 = vk::RenderPassBeginInfo()
+		.setRenderPass(renderPass)
+		.setFramebuffer(frameBuffers[imageIndex])
+		.setRenderArea({ { 0, 0 }, actualExtent })
+		.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
+		.setPClearValues(clearValues1.data());
+	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfo1, vk::SubpassContents::eInline);
+	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vm::vec2), UVOffset);
+	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, 1, &DSReflection, 0, nullptr);
+	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
+	vulkan->dynamicCmdBuffer.endRenderPass();
+}
+
 void vm::SSR::destroy()
 {
 	for (auto &frameBuffer : frameBuffers) {

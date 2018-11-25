@@ -232,6 +232,8 @@ void Context::initRendering()
 	ssao.pipeline = createSSAOPipeline();
 	ssao.pipelineBlur = createSSAOBlurPipeline();
 	compute.pipeline = createComputePipeline();
+
+	camera.push_back(Camera());
 }
 
 void Context::loadResources()

@@ -47,7 +47,7 @@ void Console::AddLog(const char * fmt, ...) IM_FMTARGS(2)
 void Console::Draw(const char * title, bool * p_open)
 {
 	ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin(title, p_open))
+	if (!ImGui::Begin(title, p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
 	{
 		ImGui::End();
 		return;

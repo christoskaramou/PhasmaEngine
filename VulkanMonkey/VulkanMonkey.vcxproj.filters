@@ -180,6 +180,12 @@
     <ClInclude Include="include\Console.h">
       <Filter>Include</Filter>
     </ClInclude>
+    <ClInclude Include="include\Node.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Component.h">
+      <Filter>Include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -271,6 +277,12 @@
       <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="src\Console.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Node.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Component.cpp">
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>

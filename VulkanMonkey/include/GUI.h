@@ -28,6 +28,7 @@ namespace vm {
 		static int			fps;
 		static float		cameraSpeed;
 		static bool			fullscreen;
+		static std::array<float, 4>	clearColor;
 
 		static SDL_Window*  g_Window;
 		static Uint64       g_Time;

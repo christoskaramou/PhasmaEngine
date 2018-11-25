@@ -163,7 +163,7 @@ namespace vm {
 
 	struct quat {
 		quat();
-		quat(float* q);
+		quat(cfloat* q);
 		quat(cquat* q);
 		quat(cquat& q);
 		quat(cfloat f, cvec3& v);
@@ -241,6 +241,6 @@ namespace vm {
 	void clamp(float* const x, cfloat minX, cfloat maxX);
 	float minimum(cfloat a, cfloat b);
 	float maximum(cfloat a, cfloat b);
-	float rand(float x1, float x2);
-	float lerp(float a, float b, float f);
+	float rand(cfloat x1, cfloat x2);
+	float lerp(cfloat a, cfloat b, cfloat f);
 }

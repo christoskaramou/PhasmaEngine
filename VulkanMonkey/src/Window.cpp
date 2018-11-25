@@ -5,53 +5,29 @@
 
 using namespace vm;
 
-constexpr auto MAX_WINDOWS = 20;
-
 std::vector<std::unique_ptr<Renderer>> Window::renderer = {};
-int Window::width = 0, Window::height = 0;
 
 Window::Window() {}
 
 Window::~Window() {}
 
-void Window::create(const char* title, int w, int h, Uint32 flags)
+void Window::create(std::string title, Uint32 flags)
 {
-	if (Window::renderer.size() != MAX_WINDOWS)
-		Window::renderer.reserve(MAX_WINDOWS);
-
-	width = w;
-	height = h;
-
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) { std::cout << SDL_GetError(); return; }
-    SDL_DisplayMode dm;
-    if (SDL_GetDesktopDisplayMode(0, &dm) != 0) {
-        SDL_Log("SDL_GetDesktopDisplayMode failed: %s", SDL_GetError());
-        exit(-1);
-    }
-    static int x = 12;
-    static int y = 50;
 
-    if (y + h >= dm.h){
-        std::cout << "No more windows can fit in the " << dm.w << "x" << dm.h << " screen resolution.\nIgnoring...\n";
-        return;
-    }
-    if (Window::renderer.size() >= MAX_WINDOWS){
-        std::cout << "Max windows number has been exceeded, define more (#define MAX_WINDOWS)\n";
-        exit(-1);
-    }
 	SDL_Window* window;
-    if (!((window = SDL_CreateWindow(title, x, y /*SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED*/, w, h, flags)))) { std::cout << SDL_GetError(); return; }
+    if (!((window = SDL_CreateWindow(title.c_str(), 0, 0, 0, 0, flags)))) { std::cout << SDL_GetError(); return; }
     std::cout << "Success at window creation\n";
 
 	Window::renderer.push_back(std::make_unique<Renderer>(window));
 
-    std::cout << std::endl;
-    x += w + 12;
-    if (x + w >= dm.w)
-    {
-        x = 12;
-        y += h + 50;
-    }
+	std::string _title = 
+		"VulkanMonkey3D   "
+		+ std::string(Window::renderer.back()->ctx.vulkan.gpuProperties.deviceName)
+		+ " (Present Mode: "
+		+ vk::to_string(Window::renderer.back()->ctx.vulkan.surface->presentModeKHR) + ")";
+
+	SDL_SetWindowTitle(window, _title.c_str());
 }
 
 void Window::destroyAll()
@@ -132,7 +108,7 @@ bool Window::processEvents(float delta)
 				if (event.type == SDL_MOUSEMOTION) {
 					xMove = event.motion.x - static_cast<int>(GUI::winSize.x * .5f + GUI::winPos.x);
 					yMove = event.motion.y - static_cast<int>(GUI::winSize.y * .5f + GUI::winPos.y);
-					info.mainCamera.rotate((float)xMove, (float)yMove);
+					info.camera_main.rotate((float)xMove, (float)yMove);
 				}
 			}
 		}
@@ -141,7 +117,6 @@ bool Window::processEvents(float delta)
 		if (event.type == SDL_WINDOWEVENT) {
 			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
 				int w, h;
-				SDL_GetWindowSize(info.vulkan.window, &width, &height);
 				SDL_GL_GetDrawableSize(info.vulkan.window, &w, &h);
 				renderer[0]->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 			}
@@ -149,11 +124,11 @@ bool Window::processEvents(float delta)
 	}
 
 	if ((up || down) && (left || right)) combineDirections = true;
-
-	if (up) info.mainCamera.move(Camera::RelativeDirection::FORWARD, delta, combineDirections);
-	if (down) info.mainCamera.move(Camera::RelativeDirection::BACKWARD, delta, combineDirections);
-	if (left) info.mainCamera.move(Camera::RelativeDirection::LEFT, delta, combineDirections);
-	if (right) info.mainCamera.move(Camera::RelativeDirection::RIGHT, delta, combineDirections);
+	float velocity = combineDirections ? GUI::cameraSpeed * delta * 0.707f : GUI::cameraSpeed * delta;
+	if (up) info.camera_main.move(Camera::RelativeDirection::FORWARD, velocity);
+	if (down) info.camera_main.move(Camera::RelativeDirection::BACKWARD, velocity);
+	if (left) info.camera_main.move(Camera::RelativeDirection::LEFT, velocity);
+	if (right) info.camera_main.move(Camera::RelativeDirection::RIGHT, velocity);
 
 	return true;
 }
