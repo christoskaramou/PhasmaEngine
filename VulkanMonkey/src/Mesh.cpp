@@ -105,6 +105,7 @@ void Mesh::loadTexture(TextureType type, const std::string path)
 	tex->copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight);
 	tex->generateMipMaps(texWidth, texHeight);
 	tex->createImageView(vk::ImageAspectFlagBits::eColor);
+	tex->maxLod = (float)tex->mipLevels;
 	tex->createSampler();
 
 	staging.destroy();

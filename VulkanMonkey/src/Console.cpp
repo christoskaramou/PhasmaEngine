@@ -66,7 +66,7 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 
 	// TODO: display items starting from the bottom
 
-	if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" }); AddLog("objects/sponza/sponza.obj is in queue for loading"); } ImGui::SameLine();
+	if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" }); AddLog("objects/sponza/sponza.obj loading..."); } ImGui::SameLine();
 	if (ImGui::SmallButton("Clear")) { ClearLog(); } ImGui::SameLine();
 	bool copy_to_clipboard = ImGui::SmallButton("Copy"); ImGui::SameLine();
 	if (ImGui::SmallButton("Scroll to bottom")) ScrollToBottom = true;
@@ -74,11 +74,11 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 
 	ImGui::Separator();
 
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-	static ImGuiTextFilter filter;
-	filter.Draw("Filter (\"incl,-excl\") (\"error\")", 180);
-	ImGui::PopStyleVar();
-	ImGui::Separator();
+	//ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+	//static ImGuiTextFilter filter;
+	//filter.Draw("Filter (\"incl,-excl\") (\"error\")", 180);
+	//ImGui::PopStyleVar();
+	//ImGui::Separator();
 
 	const float footer_height_to_reserve = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing(); // 1 separator, 1 input text
 	ImGui::BeginChild("ScrollingRegion", ImVec2(0, -footer_height_to_reserve), false, ImGuiWindowFlags_HorizontalScrollbar); // Leave room for 1 separator + 1 InputText
@@ -106,8 +106,8 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 	for (int i = 0; i < Items.Size; i++)
 	{
 		const char* item = Items[i];
-		if (!filter.PassFilter(item))
-			continue;
+		//if (!filter.PassFilter(item))
+		//	continue;
 		ImVec4 col = col_default_text;
 		if (strstr(item, "[error]")) col = ImColor(1.0f, 0.4f, 0.4f, 1.0f);
 		else if (strncmp(item, "# ", 2) == 0) col = ImColor(1.0f, 0.78f, 0.58f, 1.0f);
