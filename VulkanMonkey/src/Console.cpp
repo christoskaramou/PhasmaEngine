@@ -66,7 +66,13 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 
 	// TODO: display items starting from the bottom
 
-	if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" }); AddLog("objects/sponza/sponza.obj loading..."); } ImGui::SameLine();
+	if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load CesiumMilkTruck")) { Queue::loadModel.push_back({ "objects/CesiumMilkTruck/glTF/", "CesiumMilkTruck.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load Monster")) { Queue::loadModel.push_back({ "objects/Monster/glTF/", "Monster.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load 2CylinderEngine")) { Queue::loadModel.push_back({ "objects/2CylinderEngine/glTF-Binary/", "2CylinderEngine.glb" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load BrainStem")) { Queue::loadModel.push_back({ "objects/BrainStem/glTF-pbrSpecularGlossiness/", "BrainStem.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load Virtual City")) { Queue::loadModel.push_back({ "objects/VC/glTF/", "VC.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+
 	if (ImGui::SmallButton("Clear")) { ClearLog(); } ImGui::SameLine();
 	bool copy_to_clipboard = ImGui::SmallButton("Copy"); ImGui::SameLine();
 	if (ImGui::SmallButton("Scroll to bottom")) ScrollToBottom = true;

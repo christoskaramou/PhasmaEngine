@@ -1,5 +1,6 @@
 #pragma once
 #include "VulkanContext.h"
+#include "Math.h"
 
 namespace vm {
 	struct Pipeline
@@ -47,5 +48,6 @@ namespace vm {
 		vk::PipelineDynamicStateCreateInfo dynamicStateInfo;
 		vk::CompareOp compareOp = vk::CompareOp::eLessOrEqual;
 		uint32_t subpassTarget = 0;
+		vm::vec2 depth = vm::vec2(0.f, 1.f);
 	};
 }

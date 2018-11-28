@@ -47,13 +47,20 @@ void Model::loadModel(const std::string path, const std::string modelName, bool 
 	);
 	if (!scene) exit(-100);
 
+
+	// TODO: remake to have a known parent tranformation
 	std::vector<aiNode*> allNodes{};
 	getAllNodes(scene->mRootNode, allNodes);
 
 	std::vector<Mesh> f_meshes;
 	for (unsigned int n = 0; n < allNodes.size(); n++) {
-		const aiNode& node = *allNodes[n];
-		const vm::mat4 transform = aiMatrix4x4ToMat4(node.mTransformation);
+		aiNode& node = *allNodes[n];
+		vm::mat4 transform = aiMatrix4x4ToMat4(node.mTransformation);
+		aiNode* tranformNode = &node;
+		while (tranformNode->mParent) {
+			transform = aiMatrix4x4ToMat4(tranformNode->mParent->mTransformation) * transform;
+			tranformNode = tranformNode->mParent;
+		}
 		for (unsigned int i = 0; i < node.mNumMeshes; i++) {
 			Mesh myMesh = Mesh(vulkan);
 

@@ -24,7 +24,7 @@ Renderer::Renderer(SDL_Window* window)
 
 Renderer::~Renderer()
 {
-    ctx.vulkan.device.waitIdle();
+	ctx.vulkan.device.waitIdle();
 
 	for (auto &model : Context::models)
 		model.destroy();
@@ -101,7 +101,7 @@ void Renderer::update(float delta)
 	const vm::vec3 up = vm::normalize(vm::cross(right, front));
 	std::vector<ShadowsUBO> shadows_UBO(Context::models.size());
 	for (uint32_t i = 0; i < Context::models.size(); i++)
-		shadows_UBO[i] = { vm::ortho(-4.f, 4.f, -4.f, 4.f, 0.1f, 10.f), vm::lookAt(Light::sun().position, front, right, up), Context::models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
+		shadows_UBO[i] = { vm::ortho(-4.f, 4.f, -4.f, 4.f, 0.1f, 10.f), vm::lookAt(pos, front, right, up), Context::models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
 	memcpy(ctx.shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
 
 	// GUI
@@ -162,7 +162,7 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 
 	vm::vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
 
-	ctx.camera_main.renderArea.update(winPos, winSize, .5f, 1.f);
+	ctx.camera_main.renderArea.update(winPos, winSize, 0.5f, 1.f);
 
 	// Render Pass (color)
 	std::vector<vk::ClearValue> clearValues = {
@@ -342,7 +342,7 @@ void Renderer::present()
 	// what stage of a pipeline at a command buffer to wait for the semaphores to be done until keep going
 	const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
-    uint32_t imageIndex;
+	uint32_t imageIndex;
 
 	// if using shadows use the semaphore[0], record and submit the shadow commands, else use the semaphore[1]
 	if (Shadows::shadowCast) {
@@ -379,7 +379,7 @@ void Renderer::present()
 		.setPSignalSemaphores(&ctx.vulkan.semaphores[2]);
 	VkCheck(ctx.vulkan.graphicsQueue.submit(1, &si, ctx.vulkan.fences[0]));
 
-    // Presentation
+	// Presentation
 	auto const pi = vk::PresentInfoKHR()
 		.setWaitSemaphoreCount(1)
 		.setPWaitSemaphores(&ctx.vulkan.semaphores[2])

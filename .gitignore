@@ -22,6 +22,7 @@ bld/
 [Oo]bj/
 [Ll]og/
 VulkanMonkey/x64/
+VulkanMonkey/objects/
 
 # Visual Studio 2015 cache/options directory
 .vs/

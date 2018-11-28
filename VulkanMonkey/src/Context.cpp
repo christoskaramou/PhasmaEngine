@@ -60,6 +60,7 @@ PipelineInfo Context::getPipelineSpecificationsShadows()
 	shadowsSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	shadowsSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	shadowsSpecific.pushConstantRange = vk::PushConstantRange();
+	//shadowsSpecific.depth = vm::vec2(1.f, 0.f);
 
 	return shadowsSpecific;
 }
@@ -1469,8 +1470,8 @@ Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 			0.0f,													// float y;
 			(float)specificInfo.viewportSize.width, 				// float width;
 			(float)specificInfo.viewportSize.height,				// float height;
-			0.0f,													// float minDepth;
-			1.0f },													// float maxDepth;
+			specificInfo.depth.x,									// float minDepth;
+			specificInfo.depth.y },									// float maxDepth;
 		1,														// uint32_t scissorCount;
 		&vk::Rect2D{											// const Rect2D* pScissors;
 			vk::Offset2D(),											// Offset2D offset;

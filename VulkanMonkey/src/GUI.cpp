@@ -37,6 +37,8 @@ void GUI::setWindows()
 	ImGuiStyle* style = &ImGui::GetStyle();
 
 	// Top Left Panel
+	ImGui::SetNextWindowPos(ImVec2(0.f, 1.f));
+	ImGui::SetNextWindowSize(ImVec2(282.f, 111.f));
 	ImGui::Begin("Metrics", &p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
@@ -48,6 +50,7 @@ void GUI::setWindows()
 
 	// Middle Left Panel
 	ImGui::SetNextWindowPos(ImVec2(0.f, tlPanelSize.y));
+	ImGui::SetNextWindowSize(ImVec2(tlPanelSize.x, (float)vulkan->surface->actualExtent.height - 279.f - tlPanelSize.y));
 	ImGui::Begin("Testing", &p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGui::Checkbox("Lock Render Window", &lock_render_window);
 	ImGui::Checkbox("Deffered", &deferred_rendering);
@@ -70,15 +73,15 @@ void GUI::setWindows()
 
 	// Console
 	static Console console;
-	console.Draw("Console", &console_open, ImVec2(0.f, tlPanelSize.y + mlPanelSize.y) ,ImVec2((float)vulkan->surface->actualExtent.width, (float)vulkan->surface->actualExtent.height - (tlPanelSize.y + mlPanelSize.y)));
+	console.Draw("Console", &console_open, ImVec2(0.f, (float)vulkan->surface->actualExtent.height - 279.f), ImVec2((float)vulkan->surface->actualExtent.width, 279.f));
 
 	// Rendering window
 	style->Colors[ImGuiCol_WindowBg].w = 0.0f;
 	int flags = ImGuiWindowFlags_NoTitleBar;
 	if (lock_render_window) {
 		flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-		ImGui::SetNextWindowPos(ImVec2(mlPanelPos.x + mlPanelSize.x, 0.f));
-		ImGui::SetNextWindowSize(ImVec2((float)vulkan->surface->actualExtent.width - (mlPanelPos.x + mlPanelSize.x), tlPanelPos.y + tlPanelSize.y + mlPanelSize.y));
+		ImGui::SetNextWindowPos(ImVec2(mlPanelSize.x, 0.f));
+		ImGui::SetNextWindowSize(ImVec2((float)vulkan->surface->actualExtent.width - tlPanelSize.x, (float)vulkan->surface->actualExtent.height - 279.f));
 	}
 	ImGui::Begin("Rendering Window", &active, flags);
 	winPos = ImGui::GetWindowPos();
