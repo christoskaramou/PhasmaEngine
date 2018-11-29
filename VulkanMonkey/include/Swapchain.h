@@ -5,8 +5,7 @@
 namespace vm {
 	struct Swapchain
 	{
-		VulkanContext* vulkan;
-		Swapchain(VulkanContext* vulkan);
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		vk::SwapchainKHR swapchain;
 		std::vector<Image> images{};

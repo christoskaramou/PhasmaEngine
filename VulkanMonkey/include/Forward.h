@@ -8,14 +8,13 @@
 namespace vm {
 	struct Forward
 	{
-		VulkanContext* vulkan;
-		Forward(VulkanContext* vulkan);
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		vk::RenderPass renderPass;
 		std::vector<vk::Framebuffer> frameBuffers{};
-		Image MSColorImage = Image(vulkan);
-		Image MSDepthImage = Image(vulkan);
-		Pipeline pipeline = Pipeline(vulkan);
+		Image MSColorImage;
+		Image MSDepthImage;
+		Pipeline pipeline;
 
 		void destroy();
 	};

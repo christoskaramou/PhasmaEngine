@@ -3,9 +3,6 @@
 
 using namespace vm;
 
-vm::SSAO::SSAO(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
 void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 {
 	// kernel buffer
@@ -25,7 +22,7 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 	std::vector<vm::vec4> noise{};
 	for (unsigned int i = 0; i < 16; i++)
 		noise.push_back(vm::vec4(vm::rand(-1.f, 1.f), vm::rand(-1.f, 1.f), 0.f, 1.f));
-	Buffer staging = Buffer(vulkan);
+	Buffer staging;
 	void* data;
 	uint64_t bufSize = sizeof(vm::vec4) * 16;
 	staging.createBuffer(bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);

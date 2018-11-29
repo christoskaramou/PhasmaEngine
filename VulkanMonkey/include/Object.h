@@ -8,17 +8,16 @@
 namespace vm {
 	struct Object
 	{
-		VulkanContext* vulkan;
-		Object(VulkanContext* vulkan);
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		virtual ~Object() = default;
 		bool render = true, cull = false;
 		vk::DescriptorSet descriptorSet;
-		Image texture = Image(vulkan);
+		Image texture;
 		std::vector<float> vertices{};
-		Buffer vertexBuffer = Buffer(vulkan);
-		Buffer indexBuffer = Buffer(vulkan);
-		Buffer uniformBuffer = Buffer(vulkan);
+		Buffer vertexBuffer;
+		Buffer indexBuffer;
+		Buffer uniformBuffer;
 
 		virtual void createVertexBuffer();
 		virtual void createUniformBuffer(size_t size);

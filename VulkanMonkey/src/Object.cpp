@@ -3,15 +3,12 @@
 
 using namespace vm;
 
-vm::Object::Object(VulkanContext * vulkan) :vulkan(vulkan)
-{ }
-
 void Object::createVertexBuffer()
 {
 	vertexBuffer.createBuffer(sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer
-	Buffer staging = Buffer(vulkan);
+	Buffer staging;
 	staging.createBuffer(sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 	VkCheck(vulkan->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
@@ -41,7 +38,7 @@ void Object::loadTexture(const std::string path)
 		exit(-19);
 	}
 
-	Buffer staging = Buffer(vulkan);
+	Buffer staging;
 	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 	void* data;

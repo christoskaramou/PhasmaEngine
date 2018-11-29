@@ -1,12 +1,12 @@
 #pragma once
 #include "VulkanContext.h"
 #include "Math.h"
+#include <vector>
 
 namespace vm {
 	struct Pipeline
 	{
-		VulkanContext* vulkan;
-		Pipeline(VulkanContext* vulkan);
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		vk::Pipeline pipeline;
 		vk::GraphicsPipelineCreateInfo pipeinfo;

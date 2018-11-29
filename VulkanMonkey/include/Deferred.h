@@ -10,15 +10,14 @@
 namespace vm {
 	struct Deferred
 	{
-		VulkanContext* vulkan;
-		Deferred(VulkanContext* vulkan);
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		vk::RenderPass renderPass, compositionRenderPass;
 		std::vector<vk::Framebuffer> frameBuffers{}, compositionFrameBuffers{};
 		vk::DescriptorSet DSComposition;
 		vk::DescriptorSetLayout DSLayoutComposition;
-		Pipeline pipeline = Pipeline(vulkan);
-		Pipeline pipelineComposition = Pipeline(vulkan);
+		Pipeline pipeline;
+		Pipeline pipelineComposition;
 
 		void createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);

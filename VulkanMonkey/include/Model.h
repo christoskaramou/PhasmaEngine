@@ -10,8 +10,7 @@
 namespace vm {
 	struct Model
 	{
-		VulkanContext* vulkan;
-		Model(VulkanContext* vulkan);
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		bool render = true;
 		static vk::DescriptorSetLayout descriptorSetLayout;
@@ -21,9 +20,9 @@ namespace vm {
 		std::vector<Mesh> meshes;
 		std::string name;
 		vm::mat4 matrix = vm::mat4(1.0f);
-		Buffer vertexBuffer = Buffer(vulkan);
-		Buffer indexBuffer = Buffer(vulkan);
-		Buffer uniformBuffer = Buffer(vulkan);
+		Buffer vertexBuffer;
+		Buffer indexBuffer;
+		Buffer uniformBuffer;
 		uint32_t numberOfVertices = 0, numberOfIndices = 0;
 		float initialBoundingSphereRadius = 0.0f;
 

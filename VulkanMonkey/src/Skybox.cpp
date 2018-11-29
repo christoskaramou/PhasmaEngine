@@ -6,9 +6,6 @@ using namespace vm;
 
 vk::DescriptorSetLayout SkyBox::descriptorSetLayout = nullptr;
 
-SkyBox::SkyBox(VulkanContext * vulkan) : Object(vulkan)
-{ }
-
 vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(vk::Device device)
 {
 	if (!descriptorSetLayout) {
@@ -123,7 +120,7 @@ void SkyBox::loadTextures(const std::array<std::string, 6>& paths, uint32_t imag
 			std::cout << "Can not load texture: " << paths[i] << "\n";
 			exit(-19);
 		}
-		Buffer staging = Buffer(vulkan);
+		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 		vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &staging.data);
 		memcpy(staging.data, pixels, static_cast<size_t>(imageSize));

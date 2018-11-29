@@ -8,9 +8,7 @@
 namespace vm {
 	struct Terrain : Object
 	{
-		Terrain(VulkanContext* vulkan);
-
-		Pipeline pipeline = Pipeline(vulkan);
+		Pipeline pipeline;
 
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);

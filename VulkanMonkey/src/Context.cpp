@@ -538,7 +538,7 @@ Swapchain Context::createSwapchain()
 {
 	VkExtent2D extent = vulkan.surface->actualExtent;
 	vulkan.surface->capabilities = getSurfaceCapabilities();
-	Swapchain _swapchain = Swapchain(&vulkan);
+	Swapchain _swapchain;
 
 	uint32_t swapchainImageCount = vulkan.surface->capabilities.minImageCount + 1;
 	if (vulkan.surface->capabilities.maxImageCount > 0 &&
@@ -631,7 +631,7 @@ std::map<std::string, Image> Context::createRenderTargets(std::vector<std::tuple
 	std::map<std::string, Image> RT;
 	for (auto& t : RTtuples)
 	{
-		RT[std::get<0>(t)] = Image(&vulkan);
+		RT[std::get<0>(t)] = Image();
 		RT[std::get<0>(t)].format = std::get<1>(t);
 		RT[std::get<0>(t)].initialLayout = vk::ImageLayout::eUndefined;
 		RT[std::get<0>(t)].createImage(vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height, vk::ImageTiling::eOptimal,
@@ -1122,7 +1122,7 @@ vk::RenderPass Context::createGUIRenderPass()
 
 Image Context::createDepthResources()
 {
-	Image _image = Image(&vulkan);
+	Image _image = Image();
 	_image.format = vk::Format::eUndefined;
 	std::vector<vk::Format> candidates = { vk::Format::eD32SfloatS8Uint, vk::Format::eD32Sfloat, vk::Format::eD24UnormS8Uint };
 	for (auto &format : candidates) {
@@ -1389,7 +1389,7 @@ std::vector<char> readFile(const std::string& filename)
 
 Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 {
-	Pipeline _pipeline = Pipeline(&vulkan);
+	Pipeline _pipeline;
 
 	// Shader stages
 	vk::ShaderModule vertModule;
@@ -1570,7 +1570,7 @@ Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 
 Pipeline Context::createCompositionPipeline()
 {
-	Pipeline _pipeline = Pipeline(&vulkan);
+	Pipeline _pipeline;
 
 	// Shader stages
 	std::vector<char> vertCode{};
@@ -1826,7 +1826,7 @@ Pipeline Context::createCompositionPipeline()
 
 Pipeline Context::createReflectionPipeline()
 {
-	Pipeline _pipeline = Pipeline(&vulkan);
+	Pipeline _pipeline;
 
 	// Shader stages
 	std::vector<char> vertCode{};
@@ -2062,7 +2062,7 @@ Pipeline Context::createReflectionPipeline()
 
 Pipeline Context::createSSAOPipeline()
 {
-	Pipeline _pipeline = Pipeline(&vulkan);
+	Pipeline _pipeline;
 
 	// Shader stages
 	std::vector<char> vertCode{};
@@ -2298,7 +2298,7 @@ Pipeline Context::createSSAOPipeline()
 
 Pipeline Context::createSSAOBlurPipeline()
 {
-	Pipeline _pipeline = Pipeline(&vulkan);
+	Pipeline _pipeline;
 
 	// Shader stages
 	std::vector<char> vertCode{};
@@ -2503,7 +2503,7 @@ Pipeline Context::createSSAOBlurPipeline()
 
 Pipeline Context::createComputePipeline()
 {
-	Pipeline _pipeline = Pipeline(&vulkan);
+	Pipeline _pipeline;
 
 	// Shader stages
 	std::vector<char> compCode{};

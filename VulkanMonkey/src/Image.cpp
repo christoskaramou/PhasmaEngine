@@ -3,9 +3,6 @@
 
 using namespace vm;
 
-vm::Image::Image(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
 void Image::createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples)
 {
 	auto const imageInfo = vk::ImageCreateInfo()

@@ -3,9 +3,6 @@
 
 using namespace vm;
 
-vm::SSR::SSR(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
 void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 {
 	UBReflection.createBuffer(256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);

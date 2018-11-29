@@ -7,10 +7,6 @@ using namespace vm;
 
 vk::DescriptorSetLayout Mesh::descriptorSetLayout = nullptr;
 
-vm::Mesh::Mesh(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
-
 vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(vk::Device device)
 {
 	if (!descriptorSetLayout) {
@@ -67,7 +63,7 @@ void Mesh::loadTexture(TextureType type, const std::string path)
 		exit(-19);
 	}
 
-	Buffer staging = Buffer(vulkan);
+	Buffer staging;
 	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 	void* data;

@@ -8,9 +8,7 @@
 namespace vm {
 	struct SkyBox : Object
 	{
-		SkyBox(VulkanContext* vulkan);
-
-		Pipeline pipeline = Pipeline(vulkan);
+		Pipeline pipeline;
 
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);

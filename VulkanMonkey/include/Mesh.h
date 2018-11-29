@@ -12,8 +12,7 @@ namespace vm {
 
 	struct Mesh
 	{
-		VulkanContext* vulkan;
-		Mesh(VulkanContext* vulkan);
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		bool render = true, cull = false, hasAlpha = false;
 		vm::vec4 boundingSphere;
@@ -31,10 +30,10 @@ namespace vm {
 		vk::DescriptorSet descriptorSet;
 		std::vector<Vertex> vertices{};
 		std::vector<uint32_t> indices{};
-		Image texture = Image(vulkan);
-		Image normalsTexture = Image(vulkan);
-		Image specularTexture = Image(vulkan);
-		Image alphaTexture = Image(vulkan);
+		Image texture;
+		Image normalsTexture;
+		Image specularTexture;
+		Image alphaTexture;
 		Effects colorEffects;
 
 		void loadTexture(TextureType type, const std::string path);

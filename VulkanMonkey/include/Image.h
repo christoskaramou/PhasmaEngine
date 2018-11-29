@@ -4,9 +4,7 @@
 namespace vm {
 	struct Image
 	{
-		VulkanContext* vulkan;
-		Image(VulkanContext* vulkan);
-		Image() = default;
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		vk::Image image;
 		vk::DeviceMemory memory;

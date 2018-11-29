@@ -3,9 +3,6 @@
 
 using namespace vm;
 
-Forward::Forward(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
 void Forward::destroy()
 {
 	if (renderPass) {

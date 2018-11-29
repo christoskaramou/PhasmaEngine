@@ -43,9 +43,6 @@ void Shadows::createDescriptorSet()
 	std::cout << "DescriptorSet allocated and updated\n";
 }
 
-vm::Shadows::Shadows(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
 vk::DescriptorSetLayout Shadows::getDescriptorSetLayout(vk::Device device)
 {
 	if (!descriptorSetLayout) {

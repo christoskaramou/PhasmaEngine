@@ -44,13 +44,13 @@ Renderer::~Renderer()
 //std::atomic<bool> ready(false);
 void Renderer::update(float delta)
 {
-	for (int i = Queue::loadModel.size() - 1; i >= 0; i--) {
+	for (int i = static_cast<int>(Queue::loadModel.size()) - 1; i >= 0; i--) {
 		auto temp = Queue::loadModel[i];
 		Queue::func.push_back( std::async( std::launch::async, [](std::tuple<std::string, std::string> temp, VulkanContext* vulkan) {
 			vulkan->device.waitIdle();
 			std::string path = std::get<0>(temp);
 			std::string name = std::get<1>(temp);
-			Model m = Model(vulkan);
+			Model m;
 			m.loadModel(path, name);
 			Context::models.push_back(m);
 			//ready = true;

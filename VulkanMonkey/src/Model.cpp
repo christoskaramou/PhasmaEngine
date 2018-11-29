@@ -9,9 +9,6 @@ using namespace vm;
 
 vk::DescriptorSetLayout Model::descriptorSetLayout = nullptr;
 
-Model::Model(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
 vm::mat4 aiMatrix4x4ToMat4(const aiMatrix4x4& m)
 {
 	return vm::transpose(vm::mat4((float*)&m));
@@ -62,7 +59,7 @@ void Model::loadModel(const std::string path, const std::string modelName, bool 
 			tranformNode = tranformNode->mParent;
 		}
 		for (unsigned int i = 0; i < node.mNumMeshes; i++) {
-			Mesh myMesh = Mesh(vulkan);
+			Mesh myMesh;
 
 			const aiMesh& mesh = *scene->mMeshes[node.mMeshes[i]];
 			const aiMaterial& material = *scene->mMaterials[mesh.mMaterialIndex];
@@ -268,7 +265,7 @@ void Model::createVertexBuffer()
 	vertexBuffer.createBuffer(sizeof(Vertex)*vertices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer
-	Buffer staging = Buffer(vulkan);
+	Buffer staging;
 	staging.createBuffer(sizeof(Vertex)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 	VkCheck(vulkan->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
@@ -289,7 +286,7 @@ void Model::createIndexBuffer()
 	indexBuffer.createBuffer(sizeof(uint32_t)*indices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer
-	Buffer staging = Buffer(vulkan);
+	Buffer staging;
 	staging.createBuffer(sizeof(uint32_t)*indices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 	VkCheck(vulkan->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));

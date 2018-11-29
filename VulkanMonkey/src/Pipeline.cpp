@@ -3,9 +3,6 @@
 
 using namespace vm;
 
-vm::Pipeline::Pipeline(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
 void Pipeline::destroy()
 {
 	if (pipeinfo.layout) {

@@ -4,9 +4,6 @@
 
 using namespace vm;
 
-Deferred::Deferred(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
 void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 {
 	vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{

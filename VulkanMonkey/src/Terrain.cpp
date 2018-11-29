@@ -6,9 +6,6 @@ using namespace vm;
 
 vk::DescriptorSetLayout Terrain::descriptorSetLayout = nullptr;
 
-Terrain::Terrain(VulkanContext * vulkan) : Object(vulkan)
-{ }
-
 vk::DescriptorSetLayout Terrain::getDescriptorSetLayout(vk::Device device)
 {
 	if (!descriptorSetLayout) {
@@ -82,7 +79,7 @@ void Terrain::loadTexture(const std::string path)
 		exit(-19);
 	}
 
-	Buffer staging = Buffer(vulkan);
+	Buffer staging;
 	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 	void* data;

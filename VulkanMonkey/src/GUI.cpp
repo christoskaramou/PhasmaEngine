@@ -113,9 +113,6 @@ vk::DescriptorSetLayout GUI::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-GUI::GUI(VulkanContext * vulkan) : Object(vulkan)
-{ }
-
 const char* GUI::ImGui_ImplSDL2_GetClipboardText(void*)
 {
 	if (g_ClipboardTextData)
@@ -215,7 +212,7 @@ void GUI::initImGui()
 		texture.createSampler();
 	}
 	// Create the and Upload to Buffer:
-	Buffer stagingBuffer = Buffer(vulkan);
+	Buffer stagingBuffer;
 	{
 		stagingBuffer.createBuffer(upload_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
 		void* map;

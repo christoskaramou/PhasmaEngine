@@ -10,16 +10,15 @@
 namespace vm {
 	struct SSAO
 	{
-		VulkanContext* vulkan;
-		SSAO(VulkanContext* vulkan);
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
-		Buffer UBssaoKernel = Buffer(vulkan);
-		Buffer UBssaoPVM = Buffer(vulkan);
-		Image ssaoNoise = Image(vulkan);
+		Buffer UBssaoKernel;
+		Buffer UBssaoPVM;
+		Image ssaoNoise;
 		vk::RenderPass renderPass, blurRenderPass;
 		std::vector<vk::Framebuffer> frameBuffers{}, blurFrameBuffers{};
-		Pipeline pipeline = Pipeline(vulkan);
-		Pipeline pipelineBlur = Pipeline(vulkan);
+		Pipeline pipeline;
+		Pipeline pipelineBlur;
 		vk::DescriptorSetLayout DSLayoutSSAO, DSLayoutSSAOBlur;
 		vk::DescriptorSet DSssao, DSssaoBlur;
 

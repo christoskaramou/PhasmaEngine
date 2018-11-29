@@ -3,9 +3,6 @@
 
 using namespace vm;
 
-Compute::Compute(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
 void Compute::createComputeUniforms()
 {
 	std::vector<float> scrap(1024);

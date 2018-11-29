@@ -6,13 +6,12 @@
 namespace vm {
 	struct Compute
 	{
-		VulkanContext* vulkan;
-		Compute(VulkanContext* vulkan);
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
-		Buffer SBInOut = Buffer(vulkan);
+		Buffer SBInOut;
 		vk::DescriptorSet DSCompute;
 		vk::DescriptorSetLayout DSLayoutCompute;
-		Pipeline pipeline = Pipeline(vulkan);
+		Pipeline pipeline;
 		void createComputeUniforms();
 		void destroy();
 	};

@@ -11,12 +11,11 @@
 namespace vm {
 	struct SSR
 	{
-		VulkanContext* vulkan;
-		SSR(VulkanContext* vulkan);
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
-		Buffer UBReflection = Buffer(vulkan);
+		Buffer UBReflection;
 		std::vector<vk::Framebuffer> frameBuffers{};
-		Pipeline pipeline = Pipeline(vulkan);
+		Pipeline pipeline;
 		vk::RenderPass renderPass;
 		vk::DescriptorSet  DSReflection;
 		vk::DescriptorSetLayout DSLayoutReflection;

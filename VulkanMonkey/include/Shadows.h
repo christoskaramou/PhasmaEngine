@@ -9,8 +9,7 @@
 namespace vm {
 	struct Shadows
 	{
-		VulkanContext* vulkan;
-		Shadows(VulkanContext* vulkan);
+		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		static bool shadowCast;
 		static uint32_t imageSize;
@@ -18,11 +17,11 @@ namespace vm {
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
 		vk::RenderPass renderPass;
 		vk::RenderPass getRenderPass();
-		Image texture = Image(vulkan);
+		Image texture;
 		vk::DescriptorSet descriptorSet;
 		std::vector<vk::Framebuffer> frameBuffer;
-		Buffer uniformBuffer = Buffer(vulkan);
-		Pipeline pipeline = Pipeline(vulkan);
+		Buffer uniformBuffer;
+		Pipeline pipeline;
 
 		void createFrameBuffers(uint32_t bufferCount);
 		void createDynamicUniformBuffer(size_t num_of_objects);

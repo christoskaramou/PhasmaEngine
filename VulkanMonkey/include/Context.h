@@ -33,7 +33,7 @@ namespace vm {
 	{
 	public:
 		// VULKAN CONTEXT
-		VulkanContext vulkan;
+		VulkanContext &vulkan = VulkanContext::getVulkanContext();
 
 		// RENDER TARGETS
 		std::map<std::string, Image> renderTargets;
@@ -42,34 +42,34 @@ namespace vm {
 		static std::vector<Model> models;
 
 		// SHADOWS
-		Shadows shadows = Shadows(&vulkan);
+		Shadows shadows;
 
 		// COMPUTE
-		Compute compute = Compute(&vulkan);
+		Compute compute;
 
 		// FORWARD
-		Forward forward = Forward(&vulkan);
+		Forward forward;
 
 		// DEFERRED
-		Deferred deferred = Deferred(&vulkan);
+		Deferred deferred;
 
 		// SSR
-		SSR ssr = SSR(&vulkan);
+		SSR ssr;
 
 		// SSAO
-		SSAO ssao = SSAO(&vulkan);
+		SSAO ssao;
 
 		// SKYBOX
-		SkyBox skyBox = SkyBox(&vulkan);
+		SkyBox skyBox;
 
 		// TERRAIN
-		Terrain terrain = Terrain(&vulkan);
+		Terrain terrain;
 
 		// GUI
-		GUI gui = GUI(&vulkan);
+		GUI gui;
 
 		// LIGHTS
-		LightUniforms lightUniforms = LightUniforms(&vulkan);
+		LightUniforms lightUniforms;
 
 		// MAIN CAMERA
 		Camera camera_main;

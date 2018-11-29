@@ -24,9 +24,6 @@ Light Light::sun()
 	);
 }
 
-vm::LightUniforms::LightUniforms(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
 void LightUniforms::createLightUniforms()
 {
 	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);

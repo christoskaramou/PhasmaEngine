@@ -11,8 +11,6 @@
 namespace vm {
 	struct GUI : Object
 	{
-		GUI(VulkanContext* vulkan);
-
 		// Data
 		static ImVec2		winPos;
 		static ImVec2		winSize;
@@ -43,7 +41,7 @@ namespace vm {
 		std::string	name;
 		vk::RenderPass renderPass;
 		std::vector<vk::Framebuffer> frameBuffers{};
-		Pipeline pipeline = Pipeline(vulkan);
+		Pipeline pipeline;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
 		void loadGUI(const std::string textureName, bool show = true);

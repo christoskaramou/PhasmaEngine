@@ -3,9 +3,6 @@
 
 using namespace vm;
 
-vm::Buffer::Buffer(VulkanContext * vulkan) : vulkan(vulkan)
-{ }
-
 void Buffer::createBuffer(const vk::DeviceSize size, const vk::BufferUsageFlags usage, const vk::MemoryPropertyFlags properties)
 {
 	this->size = size;

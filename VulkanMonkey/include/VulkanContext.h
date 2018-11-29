@@ -3,6 +3,7 @@
 #include "Vulkan.h"
 #include "SDL.h"
 #include <map>
+#include <vector>
 
 namespace vm {
 
@@ -11,6 +12,12 @@ namespace vm {
 	struct Swapchain;
 
 	struct VulkanContext {
+		static VulkanContext& getVulkanContext()
+		{
+			static VulkanContext VkCTX;
+			return VkCTX;
+		}
+
 		SDL_Window* window;
 		vk::Instance instance;
 		Surface* surface;
@@ -28,5 +35,11 @@ namespace vm {
 		vk::DescriptorPool descriptorPool;
 		std::vector<vk::Fence> fences{};
 		std::vector<vk::Semaphore> semaphores{};
+
+	private:
+		VulkanContext() {};
+		VulkanContext(VulkanContext const&) {};
+		VulkanContext& operator=(VulkanContext const&) {};
+		~VulkanContext() {};
 	};
 }

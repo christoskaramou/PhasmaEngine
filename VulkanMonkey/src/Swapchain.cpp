@@ -3,9 +3,6 @@
 
 using namespace vm;
 
-vm::Swapchain::Swapchain(VulkanContext * vulkan) :vulkan(vulkan)
-{ }
-
 void Swapchain::destroy()
 {
 	for (auto &image : images) {
