@@ -4,12 +4,6 @@
     <None Include="shaders\Terrain\shaderTerrain.vert">
       <Filter>Shaders</Filter>
     </None>
-    <None Include="shaders\Reflections\reflection.frag">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\Reflections\reflection.vert">
-      <Filter>Shaders</Filter>
-    </None>
     <None Include="shaders\General\shader.frag">
       <Filter>Shaders</Filter>
     </None>
@@ -59,6 +53,18 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="shaders\SSAO\ssaoBlur.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\MotionBlur\motionBlur.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\MotionBlur\motionBlur.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\SSR\ssr.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\SSR\ssr.vert">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>
@@ -186,6 +192,9 @@
     <ClInclude Include="include\Queue.h">
       <Filter>Include</Filter>
     </ClInclude>
+    <ClInclude Include="include\MotionBlur.h">
+      <Filter>Include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -283,6 +292,9 @@
       <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="src\Queue.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\MotionBlur.cpp">
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>

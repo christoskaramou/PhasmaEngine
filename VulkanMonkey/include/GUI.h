@@ -20,6 +20,7 @@ namespace vm {
 		static bool			deferred_rendering;
 		static bool			show_ssr;
 		static bool			show_ssao;
+		static bool			show_motionBlur;
 		static bool			shadow_cast;
 		static bool			render_models;
 		static bool			randomize_lights;

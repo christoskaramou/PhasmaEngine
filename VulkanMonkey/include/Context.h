@@ -21,10 +21,12 @@
 #include "Camera.h"
 #include "SSAO.h"
 #include "SSR.h"
+#include "MotionBlur.h"
 #include "Deferred.h"
 #include "Compute.h"
 #include "Forward.h"
 
+#include <vector>
 #include <tuple>
 #include <map>
 
@@ -53,11 +55,14 @@ namespace vm {
 		// DEFERRED
 		Deferred deferred;
 
+		// SSAO
+		SSAO ssao;
+
 		// SSR
 		SSR ssr;
 
-		// SSAO
-		SSAO ssao;
+		// MOTION BLUR
+		MotionBlur motionBlur;
 
 		// SKYBOX
 		SkyBox skyBox;
@@ -118,24 +123,27 @@ namespace vm {
 		vk::RenderPass createCompositionRenderPass();
 		vk::RenderPass createSSAORenderPass();
 		vk::RenderPass createSSAOBlurRenderPass();
-		vk::RenderPass createReflectionRenderPass();
+		vk::RenderPass createSSRRenderPass();
+		vk::RenderPass createMotionBlurRenderPass();
 		vk::RenderPass createGUIRenderPass();
 		Image createDepthResources();
 		std::vector<vk::Framebuffer> createFrameBuffers();
 		std::vector<vk::Framebuffer> createDeferredFrameBuffers();
 		std::vector<vk::Framebuffer> createCompositionFrameBuffers();
-		std::vector<vk::Framebuffer> createReflectionFrameBuffers();
+		std::vector<vk::Framebuffer> createSSRFrameBuffers();
 		std::vector<vk::Framebuffer> createSSAOFrameBuffers();
 		std::vector<vk::Framebuffer> createSSAOBlurFrameBuffers();
+		std::vector<vk::Framebuffer> createMotionBlurFrameBuffers();
 		std::vector<vk::Framebuffer> createGUIFrameBuffers();
 		std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount);
 		vk::CommandBuffer createCmdBuffer();
 		vk::CommandBuffer createComputeCmdBuffer();
 		Pipeline createPipeline(const PipelineInfo& specificInfo);
 		Pipeline createCompositionPipeline();
-		Pipeline createReflectionPipeline();
+		Pipeline createSSRPipeline();
 		Pipeline createSSAOPipeline();
 		Pipeline createSSAOBlurPipeline();
+		Pipeline createMotionBlurPipeline();
 		Pipeline createComputePipeline();
 		vk::DescriptorPool createDescriptorPool(const uint32_t maxDescriptorSets);
 		std::vector<vk::Fence> createFences(const uint32_t fenceCount);

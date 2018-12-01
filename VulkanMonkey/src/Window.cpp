@@ -14,11 +14,11 @@ Window::~Window() {}
 
 void Window::create(std::string title, Uint32 flags)
 {
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) { std::cout << SDL_GetError(); return; }
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) { std::cout << SDL_GetError(); return; }
 
 	SDL_Window* window;
-    if (!((window = SDL_CreateWindow(title.c_str(), 50, 50, 800, 600, flags)))) { std::cout << SDL_GetError(); return; }
-    std::cout << "Success at window creation\n";
+	if (!((window = SDL_CreateWindow(title.c_str(), 50, 50, 800, 600, flags)))) { std::cout << SDL_GetError(); return; }
+	std::cout << "Success at window creation\n";
 
 	Window::renderer.push_back(std::make_unique<Renderer>(window));
 

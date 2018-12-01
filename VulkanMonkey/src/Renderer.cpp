@@ -26,14 +26,26 @@ Renderer::~Renderer()
 {
 	ctx.vulkan.device.waitIdle();
 
+	if (Context::models.size() == 0) {
+		if (Model::descriptorSetLayout) {
+			ctx.vulkan.device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
+			Model::descriptorSetLayout = nullptr;
+		}
+
+		if (Mesh::descriptorSetLayout) {
+			ctx.vulkan.device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
+			Mesh::descriptorSetLayout = nullptr;
+		}
+	}
 	for (auto &model : Context::models)
 		model.destroy();
 	ctx.shadows.destroy();
 	ctx.compute.destroy();
 	ctx.forward.destroy();
 	ctx.deferred.destroy();
-	ctx.ssr.destroy();
 	ctx.ssao.destroy();
+	ctx.ssr.destroy();
+	ctx.motionBlur.destroy();
 	ctx.skyBox.destroy();
 	ctx.terrain.destroy();
 	ctx.gui.destroy();
@@ -45,16 +57,14 @@ Renderer::~Renderer()
 void Renderer::update(float delta)
 {
 	for (int i = static_cast<int>(Queue::loadModel.size()) - 1; i >= 0; i--) {
-		auto temp = Queue::loadModel[i];
-		Queue::func.push_back( std::async( std::launch::async, [](std::tuple<std::string, std::string> temp, VulkanContext* vulkan) {
-			vulkan->device.waitIdle();
+		Queue::func.push_back( std::async( std::launch::async, [](std::tuple<std::string, std::string>& temp) {
+			VulkanContext::getVulkanContext().device.waitIdle();
 			std::string path = std::get<0>(temp);
 			std::string name = std::get<1>(temp);
-			Model m;
-			m.loadModel(path, name);
-			Context::models.push_back(m);
+			Context::models.push_back(Model());
+			Context::models.back().loadModel(path, name);
 			//ready = true;
-		}, temp, &ctx.vulkan));
+		}, Queue::loadModel[i]));
 		Queue::func.back().get();
 		Queue::loadModel.pop_back();
 		Queue::func.pop_back();
@@ -63,7 +73,6 @@ void Renderer::update(float delta)
 	//	Queue::func.back().get();
 	//	ready = false;
 	//}
-
 	const vm::mat4 projection = ctx.camera_main.getPerspective();
 	const vm::mat4 view = ctx.camera_main.getView();
 
@@ -136,6 +145,14 @@ void Renderer::update(float delta)
 		reflectionInput[1] = projection;
 		reflectionInput[2] = view;
 		memcpy(ctx.ssr.UBReflection.data, &reflectionInput, sizeof(reflectionInput));
+	}
+
+	// MOTION BLUR
+	if (GUI::show_motionBlur) {
+		static vm::mat4 previousView = view;
+		vm::mat4 motionBlurInput[3]{ projection, view, previousView };
+		memcpy(ctx.motionBlur.UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
+		previousView = view;
 	}
 }
 
@@ -221,7 +238,6 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
 
-	// Begin deferred
 	std::vector<vk::ClearValue> clearValues = {
 		vk::ClearColorValue().setFloat32(GUI::clearColor),
 		vk::ClearColorValue().setFloat32(GUI::clearColor),
@@ -245,36 +261,21 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		for (uint32_t m = 0; m < Context::models.size(); m++)
 			Context::models[m].draw(ctx.deferred.pipeline, ctx.vulkan.dynamicCmdBuffer, m, true);
 		ctx.vulkan.dynamicCmdBuffer.endRenderPass();
-		// End deferred
 
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao)
-			ctx.ssao.draw(imageIndex, ctx.vulkan.surface->actualExtent, UVOffset);
-
-		// Begin Composition
-		std::vector<vk::ClearValue> clearValues0 = {
-		vk::ClearColorValue().setFloat32(GUI::clearColor) };
-		auto renderPassInfo0 = vk::RenderPassBeginInfo()
-			.setRenderPass(ctx.deferred.compositionRenderPass)
-			.setFramebuffer(ctx.deferred.compositionFrameBuffers[imageIndex])
-			.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
-			.setClearValueCount(static_cast<uint32_t>(clearValues0.size()))
-			.setPClearValues(clearValues0.data());
-		ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo0, vk::SubpassContents::eInline);
-
-		vm::vec4 ssao(GUI::show_ssao ? 1.f : 0.f);
-		ctx.vulkan.dynamicCmdBuffer.pushConstants(ctx.deferred.pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vm::vec4), &ssao);
-		ctx.vulkan.dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.deferred.pipelineComposition.pipeline);
-		const vk::DescriptorSet descriptorSets[] = { ctx.deferred.DSComposition, ctx.shadows.descriptorSet };
-		const uint32_t dOffsets[] = { 0 };
-		ctx.vulkan.dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.deferred.pipelineComposition.pipeinfo.layout, 0, 2, descriptorSets, 1, dOffsets);
-		ctx.vulkan.dynamicCmdBuffer.draw(3, 1, 0, 0);
-		ctx.vulkan.dynamicCmdBuffer.endRenderPass();
-		// End Composition
+			ctx.ssao.draw(imageIndex, UVOffset);
 
 		// SCREEN SPACE REFLECTIONS
 		if (GUI::show_ssr)
-			ctx.ssr.draw(imageIndex, ctx.vulkan.surface->actualExtent, UVOffset);
+			ctx.ssr.draw(imageIndex, UVOffset);
+
+		// COMPOSITION
+		ctx.deferred.draw(imageIndex, ctx.shadows);
+		
+		// MOTION BLUR
+		if (GUI::show_motionBlur)
+			ctx.motionBlur.draw(imageIndex);
 	}
 
 	// GUI

@@ -266,16 +266,16 @@ void vm::SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	std::cout << "DescriptorSet updated\n";
 }
 
-void SSAO::draw(uint32_t imageIndex, vk::Extent2D actualExtent, const vm::vec2 UVOffset[2])
+void SSAO::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
 {
 	// SSAO image
 	std::vector<vk::ClearValue> clearValuesSSAO = {
-		vk::ClearColorValue().setFloat32({0.f, 0.f, 0.f, 0.f})
+		vk::ClearColorValue().setFloat32(GUI::clearColor)
 	};
 	auto renderPassInfoSSAO = vk::RenderPassBeginInfo()
 		.setRenderPass(renderPass)
 		.setFramebuffer(frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 },actualExtent })
+		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValuesSSAO.size()))
 		.setPClearValues(clearValuesSSAO.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAO, vk::SubpassContents::eInline);
@@ -289,11 +289,11 @@ void SSAO::draw(uint32_t imageIndex, vk::Extent2D actualExtent, const vm::vec2 U
 
 	// new blurry SSAO image
 	std::vector<vk::ClearValue> clearValuesSSAOBlur = {
-	vk::ClearColorValue().setFloat32({0.f, 0.f, 0.f, 0.f}) };
+	vk::ClearColorValue().setFloat32(GUI::clearColor) };
 	auto renderPassInfoSSAOBlur = vk::RenderPassBeginInfo()
 		.setRenderPass(blurRenderPass)
 		.setFramebuffer(blurFrameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, actualExtent })
+		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValuesSSAOBlur.size()))
 		.setPClearValues(clearValuesSSAOBlur.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAOBlur, vk::SubpassContents::eInline);

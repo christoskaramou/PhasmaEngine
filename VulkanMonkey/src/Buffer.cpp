@@ -1,5 +1,6 @@
 #include "../include/Buffer.h"
 #include "../include/Errors.h"
+#include <iostream>
 
 using namespace vm;
 

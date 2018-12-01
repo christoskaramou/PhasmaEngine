@@ -3,6 +3,8 @@
 #include "VulkanContext.h"
 #include "Buffer.h"
 #include "Pipeline.h"
+#include <vector>
+
 namespace vm {
 	struct Compute
 	{

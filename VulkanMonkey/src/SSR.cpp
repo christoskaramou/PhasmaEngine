@@ -1,9 +1,7 @@
 #include "../include/SSR.h"
 #include "../include/Errors.h"
 
-using namespace vm;
-
-void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
+void vm::SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 {
 	UBReflection.createBuffer(256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	VkCheck(vulkan->device.mapMemory(UBReflection.memory, 0, UBReflection.size, vk::MemoryMapFlags(), &UBReflection.data));
@@ -139,14 +137,14 @@ void vm::SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	std::cout << "DescriptorSet updated\n";
 }
 
-void vm::SSR::draw(uint32_t imageIndex, vk::Extent2D actualExtent, const vm::vec2 UVOffset[2])
+void vm::SSR::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
 {
 	std::vector<vk::ClearValue> clearValues1 = {
-	vk::ClearColorValue().setFloat32({0.f, 0.f, 0.f, 0.f}) };
+	vk::ClearColorValue().setFloat32(GUI::clearColor) };
 	auto renderPassInfo1 = vk::RenderPassBeginInfo()
 		.setRenderPass(renderPass)
 		.setFramebuffer(frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, actualExtent })
+		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
 		.setPClearValues(clearValues1.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfo1, vk::SubpassContents::eInline);

@@ -5,6 +5,8 @@
 #include "Buffer.h"
 #include "Pipeline.h"
 #include "Image.h"
+#include "Surface.h"
+#include "GUI.h"
 #include <map>
 
 namespace vm {
@@ -24,7 +26,7 @@ namespace vm {
 
 		void createSSAOUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(uint32_t imageIndex, vk::Extent2D actualExtent, const vm::vec2 UVOffset[2]);
+		void draw(uint32_t imageIndex, const vm::vec2 UVOffset[2]);
 		void destroy();
 	};
 }

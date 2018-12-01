@@ -1,6 +1,7 @@
 #pragma once
 #include "VulkanContext.h"
 #include "Image.h"
+#include <vector>
 
 namespace vm {
 	struct Swapchain

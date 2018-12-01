@@ -5,26 +5,28 @@
 #include "Pipeline.h"
 #include "Image.h"
 #include "Surface.h"
-#include "Math.h"
+#include "Swapchain.h"
 #include "GUI.h"
+#include "Timer.h"
 #include <vector>
-#include <map>
+#include <string>
 
 namespace vm {
-	struct SSR
+	struct MotionBlur
 	{
 		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
-		Buffer UBReflection;
+		Buffer UBmotionBlur;
 		std::vector<vk::Framebuffer> frameBuffers{};
 		Pipeline pipeline;
 		vk::RenderPass renderPass;
-		vk::DescriptorSet DSReflection;
-		vk::DescriptorSetLayout DSLayoutReflection;
-
-		void createSSRUniforms(std::map<std::string, Image>& renderTargets);
+		vk::DescriptorSet DSMotionBlur;
+		vk::DescriptorSetLayout DSLayoutMotionBlur;
+		
+		void createMotionBlurFrameBuffers();
+		void createMotionBlurUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(uint32_t imageIndex, const vm::vec2 UVOffset[2]);
+		void draw(uint32_t imageIndex);
 		void destroy();
 	};
 }

@@ -10,9 +10,9 @@ int main(int argc, char* argv[])
 {
 	Window::create();
 
-    while(true)
+	while(true)
 	{
-        Timer timer;
+		Timer timer;
 		timer.minFrameTime(1.f / (float)GUI::fps);
 
 		if (!Window::processEvents(timer.getDelta()))
@@ -21,10 +21,10 @@ int main(int argc, char* argv[])
 		for (auto& renderer : Window::renderer) {
 			renderer->update(timer.getDelta());
 			renderer->present();
-        }
-    }
+		}
+	}
 
 	Window::destroyAll();
 
-    return 0;
+	return 0;
 }

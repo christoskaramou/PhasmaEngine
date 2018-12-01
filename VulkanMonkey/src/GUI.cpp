@@ -11,6 +11,7 @@ bool						GUI::lock_render_window = true;
 bool						GUI::deferred_rendering = true;
 bool						GUI::show_ssr = true;
 bool						GUI::show_ssao = true;
+bool						GUI::show_motionBlur = true;
 bool						GUI::shadow_cast = true;
 bool						GUI::render_models = true;
 bool						GUI::randomize_lights = false;
@@ -57,6 +58,7 @@ void GUI::setWindows()
 	if (deferred_rendering) {
 		ImGui::Checkbox("SSR", &show_ssr);
 		ImGui::Checkbox("SSAO", &show_ssao);
+		ImGui::Checkbox("Motion Blur", &show_motionBlur);
 	}
 	ImGui::Checkbox("Models", &render_models);
 	ImGui::Checkbox("Sun Light", &shadow_cast);
@@ -299,7 +301,7 @@ void GUI::draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Pipeli
 	if (render && draw_data->TotalVtxCount > 0)
 	{
 		std::vector<vk::ClearValue> clearValues = {
-			vk::ClearColorValue().setFloat32({ 0.0f, 0.0f, 0.0f, 0.0f }),
+			vk::ClearColorValue().setFloat32(GUI::clearColor),
 			vk::ClearDepthStencilValue({ 1.0f, 0 }) };
 		auto renderPassInfo2 = vk::RenderPassBeginInfo()
 			.setRenderPass(renderPass)

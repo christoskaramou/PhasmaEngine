@@ -1,6 +1,7 @@
 #pragma once
 #include "Renderer.h"
 #include "Math.h"
+#include <vector>
 
 namespace vm {
 	class Window

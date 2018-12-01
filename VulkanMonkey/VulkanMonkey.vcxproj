@@ -185,8 +185,8 @@
     <None Include="shaders\General\shader.vert" />
     <None Include="shaders\GUI\shaderGUI.frag" />
     <None Include="shaders\GUI\shaderGUI.vert" />
-    <None Include="shaders\Reflections\reflection.frag" />
-    <None Include="shaders\Reflections\reflection.vert" />
+    <None Include="shaders\MotionBlur\motionBlur.frag" />
+    <None Include="shaders\MotionBlur\motionBlur.vert" />
     <None Include="shaders\Shadows\shaderShadows.vert" />
     <None Include="shaders\SkyBox\shaderSkyBox.frag" />
     <None Include="shaders\SkyBox\shaderSkyBox.vert" />
@@ -194,6 +194,8 @@
     <None Include="shaders\SSAO\ssao.vert" />
     <None Include="shaders\SSAO\ssaoBlur.frag" />
     <None Include="shaders\SSAO\ssaoBlur.vert" />
+    <None Include="shaders\SSR\ssr.frag" />
+    <None Include="shaders\SSR\ssr.vert" />
     <None Include="shaders\Terrain\shaderTerrain.frag" />
     <None Include="shaders\Terrain\shaderTerrain.vert" />
   </ItemGroup>
@@ -219,6 +221,7 @@
     <ClInclude Include="include\Math.h" />
     <ClInclude Include="include\Mesh.h" />
     <ClInclude Include="include\Model.h" />
+    <ClInclude Include="include\MotionBlur.h" />
     <ClInclude Include="include\Node.h" />
     <ClInclude Include="include\Object.h" />
     <ClInclude Include="include\Pipeline.h" />
@@ -260,6 +263,7 @@
     <ClCompile Include="src\Math.cpp" />
     <ClCompile Include="src\Mesh.cpp" />
     <ClCompile Include="src\Model.cpp" />
+    <ClCompile Include="src\MotionBlur.cpp" />
     <ClCompile Include="src\Node.cpp" />
     <ClCompile Include="src\Object.cpp" />
     <ClCompile Include="src\Pipeline.cpp" />

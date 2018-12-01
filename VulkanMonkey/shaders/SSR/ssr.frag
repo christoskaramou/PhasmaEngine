@@ -21,8 +21,7 @@ void main()
 	vec4 normal = ubo.view * texture(normalSampler, inUV);
 	float specular = texture(specSampler, inUV).r;
 
-	// The swapchain image is loaded and not cleared in this render pass
-	outColor = vec4(ScreenSpaceReflections(position.xyz, normalize(normal.xyz)), 0.5) * specular;
+	outColor = vec4(ScreenSpaceReflections(position.xyz, normalize(normal.xyz)) * specular, 1.0);
 }
 
 // Screen space reflections
@@ -41,7 +40,7 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 	{
 		vec4 newViewPos = vec4(newPosition, 1.0);
 		vec4 samplePosition = ubo.projection * newViewPos;
-		samplePosition.xy = samplePosition.xy / samplePosition.w * 0.5 + 0.5;
+		samplePosition.xy = (samplePosition.xy / samplePosition.w) * 0.5 + 0.5;
 		samplePosition.xy *= pos.offset.zw; // floating window size correction
 		samplePosition.xy += pos.offset.xy; // floating window position correction
 

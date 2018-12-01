@@ -4,6 +4,8 @@
 #include "Pipeline.h"
 #include "Image.h"
 #include "Light.h"
+#include "GUI.h"
+#include "Shadows.h"
 #include <map>
 #include <vector>
 
@@ -21,6 +23,7 @@ namespace vm {
 
 		void createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
+		void draw(uint32_t imageIndex, Shadows& shadows);
 		void destroy();
 	};
 }

@@ -17,7 +17,7 @@ vec2 poissonDisk[8] = vec2[](
 	vec2(0.015656f, 0.749779f),
 	vec2(0.758385f, 0.49617f));
 
-layout(push_constant) uniform SSAO { vec4 useSSAO; } ambient;
+layout(push_constant) uniform SS { vec4 effect; } screenSpace;
 layout (constant_id = 0) const int NUM_LIGHTS = 1;
 layout (set = 0, binding = 0) uniform sampler2D samplerPosition;
 layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
@@ -25,6 +25,7 @@ layout (set = 0, binding = 2) uniform sampler2D samplerAlbedo;
 layout (set = 0, binding = 3) uniform sampler2D samplerSpecular;
 layout (set = 0, binding = 4) uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS+1]; } ubo;
 layout (set = 0, binding = 5) uniform sampler2D ssaoBlurSampler;
+layout (set = 0, binding = 6) uniform sampler2D ssrSampler;
 layout (set = 1, binding = 1) uniform sampler2DShadow shadowMapSampler;
 
 
@@ -33,6 +34,7 @@ layout (location = 1) in float castShadows;
 layout (location = 2) in mat4 shadow_coords;
 
 layout (location = 0) out vec4 outColor;
+layout (location = 1) out vec4 outComposition;
 
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
 vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
@@ -47,7 +49,9 @@ void main()
 
 	// Ambient
 	vec3 fragColor = 0.3 * albedo.rgb;
-	if (ambient.useSSAO.x > 0.5f)
+
+	// SSAO
+	if (screenSpace.effect.x > 0.5f)
 		fragColor *= oclusion;
 
 	fragColor += calculateShadow(0, fragPos.xyz, normal, albedo.rgb, specular);
@@ -56,6 +60,12 @@ void main()
 		fragColor += calculateColor(i, fragPos.xyz, normal, albedo.rgb, specular);
 
 	outColor = vec4(fragColor, albedo.a);
+
+	// SSR
+	if (screenSpace.effect.y > 0.5)
+		outColor += vec4(texture(ssrSampler, inUV).xyz, 0.0);
+
+	outComposition = outColor;
 }
 
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular)

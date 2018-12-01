@@ -44,7 +44,9 @@ void Compute::createComputeUniforms()
 void Compute::destroy()
 {
 	SBInOut.destroy();
-	if (DSLayoutCompute)
+	if (DSLayoutCompute) {
 		vulkan->device.destroyDescriptorSetLayout(DSLayoutCompute);
+		DSLayoutCompute = nullptr;
+	}
 	pipeline.destroy();
 }
