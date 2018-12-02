@@ -78,6 +78,32 @@ void Model::loadModel(const std::string path, const std::string modelName, bool 
 			material.Get(AI_MATKEY_COLOR_SPECULAR, aiSpecular);
 			myMesh.colorEffects.specular = { aiSpecular.r, aiSpecular.g, aiSpecular.b, 100.f };
 
+			aiString aiRoughPath;
+			material.GetTexture(aiTextureType_SHININESS, 0, &aiRoughPath);
+			std::string roughTexPath = aiRoughPath.C_Str();
+			if (roughTexPath != "")	roughTexPath = path + roughTexPath;
+			else				roughTexPath = "objects/defaultSpecularMap.png";
+			if (uniqueTextures.find(roughTexPath) != uniqueTextures.end()) {
+				myMesh.roughnessTexture = uniqueTextures[roughTexPath];
+			}
+			else {
+				myMesh.loadTexture(Mesh::RoughnessMap, roughTexPath);
+				uniqueTextures[roughTexPath] = myMesh.roughnessTexture;
+			}
+
+			aiString aiMetalPath;
+			material.GetTexture(aiTextureType_AMBIENT, 0, &aiMetalPath);
+			std::string metalTexPath = aiMetalPath.C_Str();
+			if (metalTexPath != "")	metalTexPath = path + metalTexPath;
+			else				metalTexPath = "objects/defaultSpecularMap.png";
+			if (uniqueTextures.find(metalTexPath) != uniqueTextures.end()) {
+				myMesh.metallicTexture = uniqueTextures[metalTexPath];
+			}
+			else {
+				myMesh.loadTexture(Mesh::MetallicMap, metalTexPath);
+				uniqueTextures[metalTexPath] = myMesh.metallicTexture;
+			}
+
 			aiString aitexPath;
 			material.GetTexture(aiTextureType_DIFFUSE, 0, &aitexPath);
 			std::string texPath = aitexPath.C_Str();
@@ -92,7 +118,7 @@ void Model::loadModel(const std::string path, const std::string modelName, bool 
 			}
 
 			aiString aiNormTexPath;
-			material.GetTexture(aiTextureType_HEIGHT, 0, &aiNormTexPath);
+			material.GetTexture(aiTextureType_NORMALS, 0, &aiNormTexPath);
 			std::string normTexPath = aiNormTexPath.C_Str();
 			if (normTexPath != "")	normTexPath = path + normTexPath;
 			else					normTexPath = "objects/defaultNormalMap.png";
@@ -335,7 +361,7 @@ void Model::createDescriptorSets()
 		VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &mesh.descriptorSet));
 
 		// Texture
-		vk::WriteDescriptorSet textureWriteSets[4];
+		vk::WriteDescriptorSet textureWriteSets[6];
 
 		textureWriteSets[0] = vk::WriteDescriptorSet()
 			.setDstSet(mesh.descriptorSet)									// DescriptorSet dstSet;
@@ -381,7 +407,29 @@ void Model::createDescriptorSets()
 				.setImageView(mesh.alphaTexture.view)							// ImageView imageView;
 				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
-		vulkan->device.updateDescriptorSets(4, textureWriteSets, 0, nullptr);
+		textureWriteSets[4] = vk::WriteDescriptorSet()
+			.setDstSet(mesh.descriptorSet)									// DescriptorSet dstSet;
+			.setDstBinding(4)												// uint32_t dstBinding;
+			.setDstArrayElement(0)											// uint32_t dstArrayElement;
+			.setDescriptorCount(1)											// uint32_t descriptorCount;
+			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+				.setSampler(mesh.roughnessTexture.sampler)						// Sampler sampler;
+				.setImageView(mesh.roughnessTexture.view)						// ImageView imageView;
+				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+
+		textureWriteSets[5] = vk::WriteDescriptorSet()
+			.setDstSet(mesh.descriptorSet)									// DescriptorSet dstSet;
+			.setDstBinding(5)												// uint32_t dstBinding;
+			.setDstArrayElement(0)											// uint32_t dstArrayElement;
+			.setDescriptorCount(1)											// uint32_t descriptorCount;
+			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+				.setSampler(mesh.metallicTexture.sampler)						// Sampler sampler;
+				.setImageView(mesh.metallicTexture.view)						// ImageView imageView;
+				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+
+		vulkan->device.updateDescriptorSets(6, textureWriteSets, 0, nullptr);
 		std::cout << "DescriptorSet allocated and updated\n";
 	}
 }

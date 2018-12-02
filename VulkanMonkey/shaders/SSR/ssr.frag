@@ -5,7 +5,7 @@
 layout (set = 0, binding = 0) uniform sampler2D albedoSampler;
 layout (set = 0, binding = 1) uniform sampler2D positionSampler;
 layout (set = 0, binding = 2) uniform sampler2D normalSampler;
-layout (set = 0, binding = 3) uniform sampler2D specSampler;
+layout (set = 0, binding = 3) uniform sampler2D specRoughMetSampler;
 layout (set = 0, binding = 4) uniform WorldCameraPos{ vec4 camPos; vec4 camFront; vec4 size; vec4 dummy1; mat4 projection; mat4 view; } ubo;
 layout(push_constant) uniform Position { vec4 offset; } pos;
 
@@ -19,9 +19,9 @@ void main()
 {
 	vec4 position = ubo.view * vec4(texture(positionSampler, inUV).xyz, 1.0);
 	vec4 normal = ubo.view * texture(normalSampler, inUV);
-	float specular = texture(specSampler, inUV).r;
+	vec2 roughMetalic = texture(specRoughMetSampler, inUV).yz;
 
-	outColor = vec4(ScreenSpaceReflections(position.xyz, normalize(normal.xyz)) * specular, 1.0);
+	outColor = vec4(ScreenSpaceReflections(position.xyz, normalize(normal.xyz)) * roughMetalic.x * (1.0-roughMetalic.y), 1.0);
 }
 
 // Screen space reflections

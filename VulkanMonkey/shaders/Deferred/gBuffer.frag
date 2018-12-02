@@ -6,6 +6,8 @@ layout (set = 1, binding = 0) uniform sampler2D tSampler;
 layout (set = 1, binding = 1) uniform sampler2D normSampler;
 layout (set = 1, binding = 2) uniform sampler2D specSampler;
 layout (set = 1, binding = 3) uniform sampler2D alphaSampler;
+layout (set = 1, binding = 4) uniform sampler2D roughSampler;
+layout (set = 1, binding = 5) uniform sampler2D metalSampler;
 
 
 layout (location = 0) in vec3 inWorldPos;
@@ -19,7 +21,7 @@ layout (location = 6) in float depth;
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outNormal;
 layout (location = 2) out vec4 outAlbedo;
-layout (location = 3) out vec4 outSpecular;
+layout (location = 3) out vec4 outSpecRoughMet;
 
 void main() {
 	float alpha = texture(alphaSampler, inUV).r;
@@ -35,5 +37,5 @@ void main() {
 	outPosition = vec4(inWorldPos, depth);
 	outNormal = vec4(TBN * normSampler , 0.0f);
 	outAlbedo = vec4(texture(tSampler, inUV).xyz, alpha);
-	outSpecular = texture(specSampler, inUV);
+	outSpecRoughMet = vec4(texture(specSampler, inUV).r, texture(roughSampler, inUV).r, texture(metalSampler, inUV).r, 1.0);
 }
