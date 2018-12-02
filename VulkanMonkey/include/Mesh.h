@@ -23,9 +23,7 @@ namespace vm {
 			DiffuseMap,
 			NormalMap,
 			SpecularMap,
-			AlphaMap,
-			RoughnessMap,
-			MetallicMap
+			AlphaMap
 		};
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
@@ -36,8 +34,6 @@ namespace vm {
 		Image normalsTexture;
 		Image specularTexture;
 		Image alphaTexture;
-		Image roughnessTexture;
-		Image metallicTexture;
 		Effects colorEffects;
 
 		void loadTexture(TextureType type, const std::string path);

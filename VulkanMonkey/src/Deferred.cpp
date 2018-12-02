@@ -29,9 +29,9 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 		renderTargets["albedo"].view,				//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
-	vk::DescriptorImageInfo texDescriptorSRM = vk::DescriptorImageInfo{
-		renderTargets["srm"].sampler,			//Sampler sampler;
-		renderTargets["srm"].view,				//ImageView imageView;
+	vk::DescriptorImageInfo texDescriptorSpecular = vk::DescriptorImageInfo{
+		renderTargets["specular"].sampler,			//Sampler sampler;
+		renderTargets["specular"].view,				//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
 	vk::DescriptorImageInfo texDescriptorSSAOBlur = vk::DescriptorImageInfo{
@@ -79,14 +79,14 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
 		},
-		// Binding 3: Specula Roughness Metallic texture target
+		// Binding 3: Specular texture target
 		vk::WriteDescriptorSet{
 			DSComposition,						//DescriptorSet dstSet;
 			3,										//uint32_t dstBinding;
 			0,										//uint32_t dstArrayElement;
 			1,										//uint32_t descriptorCount_;
 			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorSRM,					//const DescriptorImageInfo* pImageInfo;
+			&texDescriptorSpecular,					//const DescriptorImageInfo* pImageInfo;
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
 		},
@@ -150,9 +150,9 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 		renderTargets["albedo"].view,			//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
-	vk::DescriptorImageInfo texDescriptorSRM = vk::DescriptorImageInfo{
-		renderTargets["srm"].sampler,		//Sampler sampler;
-		renderTargets["srm"].view,			//ImageView imageView;
+	vk::DescriptorImageInfo texDescriptorSpecular = vk::DescriptorImageInfo{
+		renderTargets["specular"].sampler,		//Sampler sampler;
+		renderTargets["specular"].view,			//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
 	vk::DescriptorImageInfo texDescriptorSSAOBlur = vk::DescriptorImageInfo{
@@ -200,14 +200,14 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
 		},
-		// Binding 3: Specular Roughness Metallic target
+		// Binding 3: Specular texture target
 		vk::WriteDescriptorSet{
 			DSComposition,						//DescriptorSet dstSet;
 			3,										//uint32_t dstBinding;
 			0,										//uint32_t dstArrayElement;
 			1,										//uint32_t descriptorCount_;
 			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorSRM,					//const DescriptorImageInfo* pImageInfo;
+			&texDescriptorSpecular,					//const DescriptorImageInfo* pImageInfo;
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
 		},

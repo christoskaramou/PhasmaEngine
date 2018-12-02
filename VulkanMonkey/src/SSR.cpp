@@ -54,8 +54,8 @@ void vm::SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
 		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["srm"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["srm"].view)				// ImageView imageView;
+			.setSampler(renderTargets["specular"].sampler)				// Sampler sampler;
+			.setImageView(renderTargets["specular"].view)				// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
 	// Uniform variables
 	textureWriteSets[4] = vk::WriteDescriptorSet()
@@ -118,8 +118,8 @@ void vm::SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
 		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["srm"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["srm"].view)				// ImageView imageView;
+			.setSampler(renderTargets["specular"].sampler)				// Sampler sampler;
+			.setImageView(renderTargets["specular"].view)				// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
 	// Uniform variables
 	textureWriteSets[4] = vk::WriteDescriptorSet()
