@@ -68,10 +68,6 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 
 	//if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" }); AddLog("loading..."); } ImGui::SameLine();
 	if (ImGui::SmallButton("Load Sponza PBR")) { Queue::loadModel.push_back({ "objects/sponza/", "sponzaPBR.obj" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load pbrSpecularGlossiness")) { Queue::loadModel.push_back({ "objects/WaterBottle/glTF-pbrSpecularGlossiness/", "WaterBottle.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load 2CylinderEngine")) { Queue::loadModel.push_back({ "objects/2CylinderEngine/glTF-Binary/", "2CylinderEngine.glb" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load BrainStem")) { Queue::loadModel.push_back({ "objects/BrainStem/glTF-pbrSpecularGlossiness/", "BrainStem.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load Virtual City")) { Queue::loadModel.push_back({ "objects/VC/glTF/", "VC.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 
 	if (ImGui::SmallButton("Clear")) { ClearLog(); } ImGui::SameLine();
 	bool copy_to_clipboard = ImGui::SmallButton("Copy"); ImGui::SameLine();

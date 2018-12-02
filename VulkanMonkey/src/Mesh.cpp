@@ -64,29 +64,32 @@ vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-void Mesh::loadTexture(TextureType type, const std::string path)
+void Mesh::loadTexture(TextureType type, const std::string& folderPath, const std::string& texName, std::map<std::string, Image>& uniqueTextures)
 {
-	// Texture Load
-	int texWidth, texHeight, texChannels;
-	//stbi_set_flip_vertically_on_load(true);
-	stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-	vk::DeviceSize imageSize = texWidth * texHeight * 4;
+	std::string path = folderPath + texName;
 
-	if (!pixels) {
-		std::cout << "Can not load texture: " << path << "\n";
-		exit(-19);
+	// default maps
+	if (texName == "") {
+		switch (type)
+		{
+		case Mesh::RoughnessMap:
+		case Mesh::MetallicMap:
+		case Mesh::SpecularMap:
+			path = "objects/defaultSpecularMap.png";
+			break;
+		case Mesh::DiffuseMap:
+		case Mesh::AlphaMap:
+			path = "objects/default.png";
+			break;
+		case Mesh::NormalMap:
+			path = "objects/defaultNormalMap.png";
+			break;
+		default:
+			break;
+		}
 	}
 
-	Buffer staging;
-	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-	void* data;
-	vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &data);
-	memcpy(data, pixels, static_cast<size_t>(imageSize));
-	vulkan->device.unmapMemory(staging.memory);
-
-	stbi_image_free(pixels);
-
+	// get the right texture
 	Image* tex = nullptr;
 	switch (type)
 	{
@@ -110,21 +113,48 @@ void Mesh::loadTexture(TextureType type, const std::string path)
 		hasAlpha = true;
 		break;
 	default:
-		break;
+		exit(-19);
 	}
 
-	tex->name = path;
-	tex->format = vk::Format::eR8G8B8A8Unorm;
-	tex->mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
-	tex->createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	tex->transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-	tex->copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight);
-	tex->generateMipMaps(texWidth, texHeight);
-	tex->createImageView(vk::ImageAspectFlagBits::eColor);
-	tex->maxLod = (float)tex->mipLevels;
-	tex->createSampler();
+	if (uniqueTextures.find(path) != uniqueTextures.end()) {
+		*tex = uniqueTextures[path];
+	}
+	else {
+		int texWidth, texHeight, texChannels;
+		//stbi_set_flip_vertically_on_load(true);
+		stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
-	staging.destroy();
+		if (!pixels) {
+			std::cout << "Can not load texture: " << path << "\n";
+			exit(-19);
+		}
+
+		Buffer staging;
+		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+		void* data;
+		vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &data);
+		memcpy(data, pixels, static_cast<size_t>(imageSize));
+		vulkan->device.unmapMemory(staging.memory);
+
+		stbi_image_free(pixels);
+
+		tex->name = path;
+		tex->format = vk::Format::eR8G8B8A8Unorm;
+		tex->mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
+		tex->createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		tex->transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
+		tex->copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight);
+		tex->generateMipMaps(texWidth, texHeight);
+		tex->createImageView(vk::ImageAspectFlagBits::eColor);
+		tex->maxLod = (float)tex->mipLevels;
+		tex->createSampler();
+
+		staging.destroy();
+
+		uniqueTextures[path] = *tex;
+	}
 }
 
 void Mesh::calculateBoundingSphere()

@@ -20,7 +20,17 @@ void getAllNodes(aiNode* root, std::vector<aiNode*>& allNodes) {
 	if (root) allNodes.push_back(root);
 }
 
-void Model::loadModel(const std::string path, const std::string modelName, bool show)
+vm::mat4 getTranform(aiNode& node) {
+	vm::mat4 transform = aiMatrix4x4ToMat4(node.mTransformation);
+	aiNode* tranformNode = &node;
+	while (tranformNode->mParent) {
+		transform = aiMatrix4x4ToMat4(tranformNode->mParent->mTransformation) * transform;
+		tranformNode = tranformNode->mParent;
+	}
+	return transform;
+}
+
+void Model::loadModel(const std::string folderPath, const std::string modelName, bool show)
 {
 	// Materials, Vertices and Indices load
 	Assimp::Logger::LogSeverity severity = Assimp::Logger::VERBOSE;
@@ -28,7 +38,7 @@ void Model::loadModel(const std::string path, const std::string modelName, bool 
 	Assimp::DefaultLogger::create("", severity, aiDefaultLogStream_STDOUT);
 
 	Assimp::Importer importer;
-	const aiScene* scene = importer.ReadFile(path + modelName,
+	const aiScene* scene = importer.ReadFile(folderPath + modelName,
 		//aiProcess_MakeLeftHanded |
 		aiProcess_FlipUVs |
 		//aiProcess_FlipWindingOrder |
@@ -44,20 +54,24 @@ void Model::loadModel(const std::string path, const std::string modelName, bool 
 	);
 	if (!scene) exit(-100);
 
-
-	// TODO: remake to have a known parent tranformation
 	std::vector<aiNode*> allNodes{};
 	getAllNodes(scene->mRootNode, allNodes);
+
+	// set texture types to request
+	std::vector<std::tuple<aiTextureType, Mesh::TextureType>> textureMaps
+	{
+		{aiTextureType_SHININESS, Mesh::RoughnessMap},
+		{aiTextureType_AMBIENT, Mesh::MetallicMap},
+		{aiTextureType_DIFFUSE, Mesh::DiffuseMap},
+		{aiTextureType_NORMALS, Mesh::NormalMap},
+		{aiTextureType_SPECULAR, Mesh::SpecularMap},
+		{aiTextureType_OPACITY, Mesh::AlphaMap}
+	};
 
 	std::vector<Mesh> f_meshes;
 	for (unsigned int n = 0; n < allNodes.size(); n++) {
 		aiNode& node = *allNodes[n];
-		vm::mat4 transform = aiMatrix4x4ToMat4(node.mTransformation);
-		aiNode* tranformNode = &node;
-		while (tranformNode->mParent) {
-			transform = aiMatrix4x4ToMat4(tranformNode->mParent->mTransformation) * transform;
-			tranformNode = tranformNode->mParent;
-		}
+		vm::mat4 transform = getTranform(node);
 		for (unsigned int i = 0; i < node.mNumMeshes; i++) {
 			Mesh myMesh;
 
@@ -78,83 +92,13 @@ void Model::loadModel(const std::string path, const std::string modelName, bool 
 			material.Get(AI_MATKEY_COLOR_SPECULAR, aiSpecular);
 			myMesh.colorEffects.specular = { aiSpecular.r, aiSpecular.g, aiSpecular.b, 100.f };
 
-			aiString aiRoughPath;
-			material.GetTexture(aiTextureType_SHININESS, 0, &aiRoughPath);
-			std::string roughTexPath = aiRoughPath.C_Str();
-			if (roughTexPath != "")	roughTexPath = path + roughTexPath;
-			else				roughTexPath = "objects/defaultSpecularMap.png";
-			if (uniqueTextures.find(roughTexPath) != uniqueTextures.end()) {
-				myMesh.roughnessTexture = uniqueTextures[roughTexPath];
-			}
-			else {
-				myMesh.loadTexture(Mesh::RoughnessMap, roughTexPath);
-				uniqueTextures[roughTexPath] = myMesh.roughnessTexture;
+			// texture maps loading
+			for (auto& tm : textureMaps) {
+				aiString aiTexPath;
+				material.GetTexture(std::get<0>(tm), 0, &aiTexPath);
+				myMesh.loadTexture(std::get<1>(tm), folderPath, aiTexPath.C_Str(), uniqueTextures);
 			}
 
-			aiString aiMetalPath;
-			material.GetTexture(aiTextureType_AMBIENT, 0, &aiMetalPath);
-			std::string metalTexPath = aiMetalPath.C_Str();
-			if (metalTexPath != "")	metalTexPath = path + metalTexPath;
-			else				metalTexPath = "objects/defaultSpecularMap.png";
-			if (uniqueTextures.find(metalTexPath) != uniqueTextures.end()) {
-				myMesh.metallicTexture = uniqueTextures[metalTexPath];
-			}
-			else {
-				myMesh.loadTexture(Mesh::MetallicMap, metalTexPath);
-				uniqueTextures[metalTexPath] = myMesh.metallicTexture;
-			}
-
-			aiString aitexPath;
-			material.GetTexture(aiTextureType_DIFFUSE, 0, &aitexPath);
-			std::string texPath = aitexPath.C_Str();
-			if (texPath != "")	texPath = path + texPath;
-			else				texPath = "objects/default.png";
-			if (uniqueTextures.find(texPath) != uniqueTextures.end()) {
-				myMesh.texture = uniqueTextures[texPath];
-			}
-			else {
-				myMesh.loadTexture(Mesh::DiffuseMap, texPath);
-				uniqueTextures[texPath] = myMesh.texture;
-			}
-
-			aiString aiNormTexPath;
-			material.GetTexture(aiTextureType_NORMALS, 0, &aiNormTexPath);
-			std::string normTexPath = aiNormTexPath.C_Str();
-			if (normTexPath != "")	normTexPath = path + normTexPath;
-			else					normTexPath = "objects/defaultNormalMap.png";
-			if (uniqueTextures.find(normTexPath) != uniqueTextures.end()) {
-				myMesh.normalsTexture = uniqueTextures[normTexPath];
-			}
-			else {
-				myMesh.loadTexture(Mesh::NormalMap, normTexPath);
-				uniqueTextures[normTexPath] = myMesh.normalsTexture;
-			}
-
-			aiString aiSpecTexPath;
-			material.GetTexture(aiTextureType_SPECULAR, 0, &aiSpecTexPath);
-			std::string specTexPath = aiSpecTexPath.C_Str();
-			if (specTexPath != "")	specTexPath = path + specTexPath;
-			else					specTexPath = "objects/defaultSpecularMap.png";
-			if (uniqueTextures.find(specTexPath) != uniqueTextures.end()) {
-				myMesh.specularTexture = uniqueTextures[specTexPath];
-			}
-			else {
-				myMesh.loadTexture(Mesh::SpecularMap, specTexPath);
-				uniqueTextures[specTexPath] = myMesh.specularTexture;
-			}
-
-			aiString aiAlphaTexPath;
-			material.GetTexture(aiTextureType_OPACITY, 0, &aiAlphaTexPath);
-			std::string aplhaTexPath = aiAlphaTexPath.C_Str();
-			if (aplhaTexPath != "")	aplhaTexPath = path + aplhaTexPath;
-			else					aplhaTexPath = "objects/default.png";
-			if (uniqueTextures.find(aplhaTexPath) != uniqueTextures.end()) {
-				myMesh.alphaTexture = uniqueTextures[aplhaTexPath];
-			}
-			else {
-				myMesh.loadTexture(Mesh::AlphaMap, aplhaTexPath);
-				uniqueTextures[aplhaTexPath] = myMesh.alphaTexture;
-			}
 			for (unsigned int j = 0; j < mesh.mNumVertices; j++) {
 				const aiVector3D& pos = mesh.HasPositions() ? mesh.mVertices[j] : aiVector3D(0.f, 0.f, 0.f);
 				const aiVector3D& norm = mesh.HasNormals() ? mesh.mNormals[j] : aiVector3D(0.f, 0.f, 0.f);

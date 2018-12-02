@@ -56,7 +56,7 @@ vec3 F_FresnelSchlick(float HdV, vec3 F0);
 float G_SmithSchlickGGX(float NdotV, float NdotL, float a);
 float D_GGX(float a, float NdotH);
 vec3 Diffuse_OrenNayar(vec3 DiffuseColor, float Roughness, float NoV, float NoL, float VoH);
-vec3 BRDF(Material material, Light light, vec3 normal, vec3 camera_to_pixel);
+vec3 BRDF(Material material, int i, vec3 normal, vec3 camera_to_pixel);
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
 vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
 
@@ -86,7 +86,7 @@ void main()
 	for(int i = 1; i < NUM_LIGHTS+1; ++i){
 		vec3 L =  ubo.lights[i].position.xyz - fragPos.xyz;
 		float atten = 1.0 / (1.0 + ubo.lights[i].attenuation.x * pow(length(L), 2));
-		fragColor += BRDF(material, ubo.lights[i], normal, fragPos.xyz - ubo.camPos.xyz) * atten;
+		fragColor += BRDF(material, i, normal, fragPos.xyz - ubo.camPos.xyz) * atten;
 	}
 
 	outColor = vec4(fragColor, albedo.a);
@@ -198,12 +198,12 @@ vec3 Diffuse_OrenNayar(vec3 DiffuseColor, float Roughness, float NoV, float NoL,
 	return DiffuseColor / PI * ( C1 + C2 ) * ( 1 + Roughness * 0.5 );
 }
 
-vec3 BRDF(Material material, Light light, vec3 normal, vec3 camera_to_pixel)
+vec3 BRDF(Material material,int i, vec3 normal, vec3 camera_to_pixel)
 {
 	// Compute some commmon vectors
-	vec3 h 	= normalize(light.position.xyz - camera_to_pixel);
+	vec3 h 	= normalize(ubo.lights[i].position.xyz - camera_to_pixel);
 	float NdotV = abs(dot(normal, -camera_to_pixel)) + 1e-5;
-    float NdotL = clamp(dot(normal, light.position.xyz), 0.0f, 1.0f);   
+    float NdotL = clamp(dot(normal, ubo.lights[i].position.xyz), 0.0f, 1.0f);   
     float NdotH = clamp(dot(normal, h), 0.0f, 1.0f);
     float VdotH = clamp(dot(-camera_to_pixel, h), 0.0f, 1.0f);
 	
@@ -218,5 +218,5 @@ vec3 BRDF(Material material, Light light, vec3 normal, vec3 camera_to_pixel)
 	float denominator = 4.0f * NdotL * NdotV;
 	vec3 cSpecular = nominator / max(0.001f, denominator);
 
-	return light.color.xyz * NdotL * (cDiffuse * (1.0f - cSpecular) + cSpecular);
+	return ubo.lights[i].color.xyz * NdotL * (cDiffuse * (1.0f - cSpecular) + cSpecular);
 }

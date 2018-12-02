@@ -28,7 +28,7 @@ namespace vm {
 
 		void draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows = nullptr, vk::DescriptorSet* DSLights = nullptr);
 		vm::vec4 getBoundingSphere();
-		void loadModel(const std::string path, const std::string modelName, bool show = true);
+		void loadModel(const std::string folderPath, const std::string modelName, bool show = true);
 		void createVertexBuffer();
 		void createIndexBuffer();
 		void createUniformBuffers();

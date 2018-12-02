@@ -40,7 +40,7 @@ namespace vm {
 		Image metallicTexture;
 		Effects colorEffects;
 
-		void loadTexture(TextureType type, const std::string path);
+		void loadTexture(TextureType type, const std::string& folderPath, const std::string& texName, std::map<std::string, Image>& uniqueTextures);
 		void destroy();
 	};
 }
