@@ -22,6 +22,8 @@ layout (set = 1, binding = 0) uniform sampler2D tSampler;
 layout (set = 1, binding = 1) uniform sampler2D normSampler;
 layout (set = 1, binding = 2) uniform sampler2D specSampler;
 layout (set = 1, binding = 3) uniform sampler2D alphaSampler;
+layout (set = 1, binding = 4) uniform sampler2D roughSampler;
+layout (set = 1, binding = 5) uniform sampler2D metalSampler;
 layout (set = 0, binding = 1) uniform sampler2DShadow shadowMapSampler;
 layout (set = 3, binding = 0) uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS+1]; } ubo;
 

@@ -41,6 +41,20 @@ vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(vk::Device device)
 			.setPImmutableSamplers(nullptr)
 			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
 
+		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
+			.setBinding(4) // binding number in shader stages
+			.setDescriptorCount(1) // number of descriptors contained
+			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+			.setPImmutableSamplers(nullptr)
+			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
+
+		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
+			.setBinding(5) // binding number in shader stages
+			.setDescriptorCount(1) // number of descriptors contained
+			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+			.setPImmutableSamplers(nullptr)
+			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
+
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
@@ -78,6 +92,12 @@ void Mesh::loadTexture(TextureType type, const std::string path)
 	{
 	case Mesh::DiffuseMap:
 		tex = &texture;
+		break;
+	case Mesh::RoughnessMap:
+		tex = &roughnessTexture;
+		break;
+	case Mesh::MetallicMap:
+		tex = &metallicTexture;
 		break;
 	case Mesh::NormalMap:
 		tex = &normalsTexture;

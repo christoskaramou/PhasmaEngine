@@ -197,7 +197,7 @@ void Context::initRendering()
 		{"position", vk::Format::eR16G16B16A16Sfloat},
 		{"normal", vk::Format::eR16G16B16A16Sfloat},
 		{"albedo", vk::Format::eR8G8B8A8Unorm},
-		{"specular", vk::Format::eR16G16B16A16Sfloat},
+		{"srm", vk::Format::eR16G16B16A16Sfloat},
 		{"ssao", vk::Format::eR16Sfloat},
 		{"ssaoBlur", vk::Format::eR16Sfloat},
 		{"ssr", vk::Format::eR16G16B16A16Sfloat},
@@ -762,8 +762,8 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[2].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[2].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[2].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Specular
-	attachments[3].format = renderTargets["specular"].format;
+	// Specular Roughness Metallic
+	attachments[3].format = renderTargets["srm"].format;
 	attachments[3].samples = vk::SampleCountFlagBits::e1;
 	attachments[3].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[3].storeOp = vk::AttachmentStoreOp::eStore;
@@ -1279,7 +1279,7 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 			renderTargets["position"].view,
 			renderTargets["normal"].view,
 			renderTargets["albedo"].view,
-			renderTargets["specular"].view,
+			renderTargets["srm"].view,
 			vulkan.depth->view
 		};
 
@@ -3122,7 +3122,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 		{"position", vk::Format::eR16G16B16A16Sfloat},
 		{"normal", vk::Format::eR16G16B16A16Sfloat},
 		{"albedo", vk::Format::eR8G8B8A8Unorm},
-		{"specular", vk::Format::eR16G16B16A16Sfloat},
+		{"srm", vk::Format::eR16G16B16A16Sfloat},
 		{"ssao", vk::Format::eR16Sfloat},
 		{"ssaoBlur", vk::Format::eR16Sfloat},
 		{"ssr", vk::Format::eR16G16B16A16Sfloat},
