@@ -6,6 +6,7 @@
 using namespace vm;
 
 vk::DescriptorSetLayout Mesh::descriptorSetLayout = nullptr;
+std::map<std::string, Image> Mesh::uniqueTextures{};
 
 vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(vk::Device device)
 {
@@ -64,58 +65,51 @@ vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-void Mesh::loadTexture(TextureType type, const std::string& folderPath, const std::string& texName, std::map<std::string, Image>& uniqueTextures)
+void Mesh::loadTexture(TextureType type, const std::string& folderPath, const std::string& texName)
 {
 	std::string path = folderPath + texName;
-
-	// default maps
-	if (texName == "") {
-		switch (type)
-		{
-		case Mesh::RoughnessMap:
-		case Mesh::MetallicMap:
-		case Mesh::SpecularMap:
-			path = "objects/defaultSpecularMap.png";
-			break;
-		case Mesh::DiffuseMap:
-		case Mesh::AlphaMap:
-			path = "objects/default.png";
-			break;
-		case Mesh::NormalMap:
-			path = "objects/defaultNormalMap.png";
-			break;
-		default:
-			break;
-		}
-	}
 
 	// get the right texture
 	Image* tex = nullptr;
 	switch (type)
 	{
-	case Mesh::DiffuseMap:
-		tex = &texture;
-		break;
 	case Mesh::RoughnessMap:
 		tex = &roughnessTexture;
+		if (texName == "")
+			path = "objects/defaultSpecularMap.png";
 		break;
 	case Mesh::MetallicMap:
 		tex = &metallicTexture;
-		break;
-	case Mesh::NormalMap:
-		tex = &normalsTexture;
+		if (texName == "")
+			path = "objects/defaultSpecularMap.png";
 		break;
 	case Mesh::SpecularMap:
 		tex = &specularTexture;
+		if (texName == "")
+			path = "objects/defaultSpecularMap.png";
+		break;
+	case Mesh::DiffuseMap:
+		tex = &texture;
+		if (texName == "")
+			path = "objects/default.png";
 		break;
 	case Mesh::AlphaMap:
 		tex = &alphaTexture;
-		hasAlpha = true;
+		if (texName == "")
+			path = "objects/default.png";
+		else
+			hasAlpha = true;
+		break;
+	case Mesh::NormalMap:
+		tex = &normalsTexture;
+		if (texName == "")
+			path = "objects/defaultNormalMap.png";
 		break;
 	default:
 		exit(-19);
 	}
 
+	// Check if it is already loaded in the 
 	if (uniqueTextures.find(path) != uniqueTextures.end()) {
 		*tex = uniqueTextures[path];
 	}
@@ -123,7 +117,7 @@ void Mesh::loadTexture(TextureType type, const std::string& folderPath, const st
 		int texWidth, texHeight, texChannels;
 		//stbi_set_flip_vertically_on_load(true);
 		stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-		vk::DeviceSize imageSize = texWidth * texHeight * 4;
+		vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
 		if (!pixels) {
 			std::cout << "Can not load texture: " << path << "\n";

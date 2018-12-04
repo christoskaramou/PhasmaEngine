@@ -110,7 +110,7 @@ void Renderer::update(float delta)
 	const vm::vec3 up = vm::normalize(vm::cross(right, front));
 	std::vector<ShadowsUBO> shadows_UBO(Context::models.size());
 	for (uint32_t i = 0; i < Context::models.size(); i++)
-		shadows_UBO[i] = { vm::ortho(-4.f, 4.f, -4.f, 4.f, 0.1f, 10.f), vm::lookAt(pos, front, right, up), Context::models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
+		shadows_UBO[i] = { vm::ortho(-4.f, 4.f, -4.f, 4.f, 50.f, 0.005f), vm::lookAt(pos, front, right, up), Context::models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
 	memcpy(ctx.shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
 
 	// GUI
@@ -179,13 +179,13 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 
 	vm::vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
 
-	ctx.camera_main.renderArea.update(winPos, winSize, 0.5f, 1.f);
+	ctx.camera_main.renderArea.update(winPos, winSize, 0.f, 1.f);
 
 	// Render Pass (color)
 	std::vector<vk::ClearValue> clearValues = {
 		vk::ClearColorValue().setFloat32(GUI::clearColor),
 		vk::ClearColorValue().setFloat32(GUI::clearColor),
-		vk::ClearDepthStencilValue({ 1.0f, 0 }) };
+		vk::ClearDepthStencilValue({ 0.0f, 0 }) };
 
 	auto beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
@@ -243,7 +243,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		vk::ClearColorValue().setFloat32(GUI::clearColor),
 		vk::ClearColorValue().setFloat32(GUI::clearColor),
 		vk::ClearColorValue().setFloat32(GUI::clearColor),
-		vk::ClearDepthStencilValue({ 1.0f, 0 }) };
+		vk::ClearDepthStencilValue({ 0.0f, 0 }) };
 	auto renderPassInfo = vk::RenderPassBeginInfo()
 		.setRenderPass(ctx.deferred.renderPass)
 		.setFramebuffer(ctx.deferred.frameBuffers[imageIndex])
@@ -289,7 +289,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 	// Render Pass (shadows mapping) (outputs the depth image with the light POV)
 
 	std::array<vk::ClearValue, 1> clearValuesShadows = {};
-	clearValuesShadows[0].setDepthStencil({ 1.0f, 0 });
+	clearValuesShadows[0].setDepthStencil({ 0.0f, 0 });
 	auto beginInfoShadows = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);

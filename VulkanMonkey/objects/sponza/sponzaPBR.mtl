@@ -18,6 +18,7 @@ newmtl leaf
 	map_bump textures_pbr\Sponza_Thorn_normal.tga
 	bump textures_pbr\Sponza_Thorn_normal.tga
 	map_Ns textures_pbr\Sponza_Thorn_roughness.tga
+	map_Ks textures_pbr\sponza_thorn_spec.tga
 
 newmtl vase_round
 	Ns 10.0000
@@ -35,6 +36,7 @@ newmtl vase_round
 	map_bump textures_pbr\VaseRound_normal.tga
 	bump textures_pbr\VaseRound_normal.tga
 	map_Ns textures_pbr\VaseRound_roughness.tga
+	map_Ks textures_pbr\vase_round_spec.tga
 
 newmtl Material__57
 	Ns 10.0000
@@ -53,6 +55,7 @@ newmtl Material__57
 	bump textures_pbr\VasePlant_normal.tga
 	map_Ns textures_pbr\VasePlant_roughness.tga
 	map_d textures_pbr\vase_plant_mask.tga
+	map_Ks textures_pbr\vase_plant_spec.tga
 
 newmtl Material__298
 	Ns 10.0000
@@ -87,6 +90,7 @@ newmtl bricks
 	map_bump textures_pbr\Sponza_Bricks_a_Normal.tga
 	map_Ns textures_pbr\Sponza_Bricks_a_Roughness.tga
 	bump textures_pbr\Sponza_Bricks_a_Normal.tga
+	map_Ks textures_pbr\spnza_bricks_a_spec.tga
 
 newmtl arch
 	Ns 10.0000
@@ -104,6 +108,7 @@ newmtl arch
 	map_Ns textures_pbr\Sponza_Arch_roughness.tga
 	map_bump textures_pbr\Sponza_Arch_normal.tga
 	bump textures_pbr\Sponza_Arch_normal.tga
+	map_Ks textures_pbr\sponza_arch_spec.tga
 
 newmtl ceiling
 	Ns 10.0000
@@ -121,6 +126,7 @@ newmtl ceiling
 	map_Ns textures_pbr\Sponza_Ceiling_roughness.tga
 	map_bump textures_pbr\Sponza_Ceiling_normal.tga
 	bump textures_pbr\Sponza_Ceiling_normal.tga
+	map_Ks textures_pbr\sponza_ceiling_a_spec.tga
 
 newmtl column_a
 	Ns 10.0000
@@ -138,6 +144,7 @@ newmtl column_a
 	map_bump textures_pbr\Sponza_Column_a_normal.tga
 	bump textures_pbr\Sponza_Column_a_normal.tga
 	map_Ns textures_pbr\Sponza_Column_a_roughness.tga
+	map_Ks textures_pbr\sponza_column_a_spec.tga
 
 newmtl floor
 	Ns 10.0000
@@ -155,6 +162,7 @@ newmtl floor
 	map_bump textures_pbr\Sponza_Floor_normal.tga
 	bump textures_pbr\Sponza_Floor_normal.tga
 	map_Ns textures_pbr\Sponza_Floor_roughness.tga
+	map_Ks textures_pbr\sponza_floor_a_spec.tga
 
 newmtl column_c
 	Ns 10.0000
@@ -172,6 +180,7 @@ newmtl column_c
 	map_bump textures_pbr\Sponza_Column_c_normal.tga
 	bump textures_pbr\Sponza_Column_c_normal.tga
 	map_Ns textures_pbr\Sponza_Column_c_roughness.tga
+	map_Ks textures_pbr\sponza_column_c_spec.tga
 
 newmtl details
 	Ns 10.0000
@@ -189,6 +198,7 @@ newmtl details
 	map_bump textures_pbr\Sponza_Details_normal.tga
 	bump textures_pbr\Sponza_Details_normal.tga
 	map_Ns textures_pbr\Sponza_Details_roughness.tga
+	map_Ks textures_pbr\sponza_details_spec.tga
 
 newmtl column_b
 	Ns 10.0000
@@ -203,6 +213,7 @@ newmtl column_b
 	Ke 0.0000 0.0000 0.0000
 	map_Ka textures_pbr\Dielectric_metallic.tga
 	map_Kd textures_pbr\Sponza_Column_b_diffuse.tga
+	map_Ks textures_pbr\sponza_column_b_spec.tga
 	map_bump textures_pbr\Sponza_Column_b_normal.tga
 	bump textures_pbr\Sponza_Column_b_normal.tga
 	map_Ns textures_pbr\Sponza_Column_b_roughness.tga
@@ -220,6 +231,7 @@ newmtl flagpole
 	Ke 0.0000 0.0000 0.0000
 	map_Ka textures_pbr\Metallic_metallic.tga
 	map_Kd textures_pbr\Sponza_FlagPole_diffuse.tga
+	map_Ks textures_pbr\sponza_flagpole_spec.tga
 	map_bump textures_pbr\Sponza_FlagPole_normal.tga
 	bump textures_pbr\Sponza_FlagPole_normal.tga
 	map_Ns textures_pbr\Sponza_FlagPole_roughness.tga
@@ -237,6 +249,7 @@ newmtl fabric_e
 	Ke 0.0000 0.0000 0.0000
 	map_Ka textures_pbr\Sponza_Fabric_metallic.tga
 	map_Kd textures_pbr\Sponza_Fabric_Green_diffuse.tga
+	map_Ks textures_pbr\sponza_fabric_spec.tga
 	map_bump textures_pbr\Sponza_Fabric_Green_normal.tga
 	bump textures_pbr\Sponza_Fabric_Green_normal.tga
 	map_Ns textures_pbr\Sponza_Fabric_roughness.tga
@@ -254,6 +267,7 @@ newmtl fabric_d
 	Ke 0.0000 0.0000 0.0000
 	map_Ka textures_pbr\Sponza_Fabric_metallic.tga
 	map_Kd textures_pbr\Sponza_Fabric_Blue_diffuse.tga
+	map_Ks textures_pbr\sponza_fabric_spec.tga
 	map_bump textures_pbr\Sponza_Fabric_Blue_normal.tga
 	bump textures_pbr\Sponza_Fabric_Blue_normal.tga
 	map_Ns textures_pbr\Sponza_Fabric_roughness.tga
@@ -271,6 +285,7 @@ newmtl fabric_a
 	Ke 0.0000 0.0000 0.0000
 	map_Ka textures_pbr\Sponza_Fabric_metallic.tga
 	map_Kd textures_pbr\Sponza_Fabric_Red_diffuse.tga
+	map_Ks textures_pbr\sponza_fabric_spec.tga
 	map_bump textures_pbr\Sponza_Fabric_Red_normal.tga
 	bump textures_pbr\Sponza_Fabric_Red_normal.tga
 	map_Ns textures_pbr\Sponza_Fabric_roughness.tga

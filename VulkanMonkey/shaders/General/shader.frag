@@ -66,6 +66,7 @@ void main()
 		fragColor += calculateColor(i, fragPos, normal, albedo, specular);
 
 	outColor = vec4(fragColor, alpha);
+	//outColor = vec4(fragPos, 1.0);
 }
 
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular)
@@ -74,7 +75,7 @@ vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, floa
 	s_coords = s_coords / s_coords.w;
 	float shadow = 0.0;
 	for (int i = 0; i < 8 * castShadows ; i++)
-		shadow += 0.125 * texture( shadowMapSampler, vec3( s_coords.xy + poissonDisk[i]*0.0008, s_coords.z-0.0001 ));
+		shadow += 0.125 * (1.0-texture( shadowMapSampler, vec3( s_coords.xy + poissonDisk[i]*0.0008, s_coords.z+0.0001 )));
 
 	// Light to fragment
 	vec3 L = fragPos - ubo.lights[mainLight].position.xyz;

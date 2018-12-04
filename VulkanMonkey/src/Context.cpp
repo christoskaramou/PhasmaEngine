@@ -241,7 +241,7 @@ void Context::initRendering()
 	motionBlur.pipeline = createMotionBlurPipeline();
 	compute.pipeline = createComputePipeline();
 
-	camera.push_back(Camera());
+	//camera.push_back(Camera());
 }
 
 void Context::loadResources()
@@ -443,9 +443,10 @@ vk::SurfaceFormatKHR Context::getSurfaceFormat()
 	formats.resize(formatCount);
 	vulkan.gpu.getSurfaceFormatsKHR(vulkan.surface->surface, &formatCount, formats.data());
 
-	for (const auto& i : formats)
-		if (i.format == vk::Format::eB8G8R8A8Unorm && i.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+	for (const auto& i : formats) {
+		if (i.format == vk::Format::eR16G16B16A16Unorm && i.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
 			return i;
+	}
 
 	return formats[0];
 }
@@ -1789,7 +1790,7 @@ Pipeline Context::createCompositionPipeline()
 		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
 		VK_TRUE,													// Bool32 depthTestEnable;
 		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eLessOrEqual,								// CompareOp depthCompareOp;
+		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
 		VK_FALSE,													// Bool32 depthBoundsTestEnable;
 		VK_FALSE,													// Bool32 stencilTestEnable;
 		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
@@ -2045,7 +2046,7 @@ Pipeline Context::createSSRPipeline()
 		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
 		VK_TRUE,													// Bool32 depthTestEnable;
 		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eLessOrEqual,								// CompareOp depthCompareOp;
+		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
 		VK_FALSE,													// Bool32 depthBoundsTestEnable;
 		VK_FALSE,													// Bool32 stencilTestEnable;
 		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
@@ -2281,7 +2282,7 @@ Pipeline Context::createSSAOPipeline()
 		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
 		VK_TRUE,													// Bool32 depthTestEnable;
 		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eLessOrEqual,								// CompareOp depthCompareOp;
+		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
 		VK_FALSE,													// Bool32 depthBoundsTestEnable;
 		VK_FALSE,													// Bool32 stencilTestEnable;
 		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
@@ -2517,7 +2518,7 @@ Pipeline Context::createSSAOBlurPipeline()
 		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
 		VK_TRUE,													// Bool32 depthTestEnable;
 		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eLessOrEqual,								// CompareOp depthCompareOp;
+		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
 		VK_FALSE,													// Bool32 depthBoundsTestEnable;
 		VK_FALSE,													// Bool32 stencilTestEnable;
 		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
@@ -2722,7 +2723,7 @@ Pipeline Context::createMotionBlurPipeline()
 		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
 		VK_TRUE,													// Bool32 depthTestEnable;
 		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eLessOrEqual,								// CompareOp depthCompareOp;
+		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
 		VK_FALSE,													// Bool32 depthBoundsTestEnable;
 		VK_FALSE,													// Bool32 stencilTestEnable;
 		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;

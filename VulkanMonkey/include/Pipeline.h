@@ -46,7 +46,7 @@ namespace vm {
 		vk::Extent2D viewportSize;
 		std::vector<vk::DynamicState> dynamicStates{};
 		vk::PipelineDynamicStateCreateInfo dynamicStateInfo;
-		vk::CompareOp compareOp = vk::CompareOp::eLessOrEqual;
+		vk::CompareOp compareOp = vk::CompareOp::eGreater;
 		uint32_t subpassTarget = 0;
 		vm::vec2 depth = vm::vec2(0.f, 1.f);
 	};

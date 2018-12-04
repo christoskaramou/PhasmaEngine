@@ -16,13 +16,13 @@ layout (location = 0) out float outColor;
 
 const int KERNEL_SIZE = 16;
 const float RADIUS = 0.05f;
-const float bias = 0.001;
+const float bias = 0;
 
 void main() 
 {
 	// Get G-Buffer values
 	vec4 fragPos = pvm.view * vec4(texture(samplerPosition, inUV).rgb, 1.0);
-	vec4 normal = pvm.view * vec4(texture(samplerNormal, inUV).rgb, 1.0);
+	vec4 normal = pvm.view * texture(samplerNormal, inUV);
 
 	// Get a random vector using a noise lookup
 	ivec2 texDim = textureSize(samplerPosition, 0); 
@@ -51,8 +51,9 @@ void main()
 		float sampledDepth = texture(samplerPosition, samplePosition.xy).w;
 
 		// Range check
+
 		float rangeCheck = smoothstep(0.0f, 1.0f, RADIUS / abs(currentDepth - sampledDepth));
-		occlusion += (sampledDepth <= currentDepth - bias ? 1.0f : 0.0f) * rangeCheck;           
+		occlusion += (sampledDepth >= currentDepth - bias ? 0.0f : 1.0f) * rangeCheck;           
 	}
 	occlusion = 1.0 - (occlusion / float(KERNEL_SIZE));
 	

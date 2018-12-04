@@ -96,7 +96,7 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 			for (auto& tm : textureMaps) {
 				aiString aiTexPath;
 				material.GetTexture(std::get<0>(tm), 0, &aiTexPath);
-				myMesh.loadTexture(std::get<1>(tm), folderPath, aiTexPath.C_Str(), uniqueTextures);
+				myMesh.loadTexture(std::get<1>(tm), folderPath, aiTexPath.C_Str());
 			}
 
 			for (unsigned int j = 0; j < mesh.mNumVertices; j++) {
@@ -387,8 +387,9 @@ void Model::destroy()
 		mesh.indices.shrink_to_fit();
 	}
 
-	for (auto& texture : uniqueTextures)
+	for (auto& texture : Mesh::uniqueTextures)
 		texture.second.destroy();
+	Mesh::uniqueTextures.clear();
 
 	vertexBuffer.destroy();
 	indexBuffer.destroy();

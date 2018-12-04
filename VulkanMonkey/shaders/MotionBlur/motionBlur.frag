@@ -23,7 +23,7 @@ void main()
 	vec4 previousPos = ubo.projection * ubo.previousView * vec4(texture(positionSampler, UV).rgb, 1.0);
 	previousPos.xy = previousPos.xy * 0.5 + 0.5;
 
-	vec2 velocity = (currentPos.xy - previousPos.xy) * pushConst.fps.x * 0.001;
+	vec2 velocity = clamp((currentPos.xy - previousPos.xy) * pushConst.fps.x * 0.001, -0.001, 0.001); // TODO: clamp this
 
 	vec4 color = vec4(0.0);
 	for (int i = 0; i < samples; i++, UV += velocity)

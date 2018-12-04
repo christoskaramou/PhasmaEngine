@@ -19,9 +19,9 @@ void main()
 {
 	vec4 position = ubo.view * vec4(texture(positionSampler, inUV).xyz, 1.0);
 	vec4 normal = ubo.view * texture(normalSampler, inUV);
-	vec2 roughMetalic = texture(specRoughMetSampler, inUV).yz;
+	vec3 specRoughMetalic = texture(specRoughMetSampler, inUV).xyz;
 
-	outColor = vec4(ScreenSpaceReflections(position.xyz, normalize(normal.xyz)) * roughMetalic.x * (1.0-roughMetalic.y), 1.0);
+	outColor = vec4(ScreenSpaceReflections(position.xyz, normalize(normal.xyz)) * specRoughMetalic.x, 1.0);
 }
 
 // Screen space reflections

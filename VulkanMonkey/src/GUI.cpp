@@ -16,7 +16,7 @@ bool						GUI::shadow_cast = true;
 bool						GUI::render_models = true;
 bool						GUI::randomize_lights = false;
 int							GUI::fps = 60;
-float						GUI::cameraSpeed = 0.35f;
+float						GUI::cameraSpeed = 1.f;
 std::array<float, 4>		GUI::clearColor = { 0.0f, 0.31f, 0.483f, 0.0f };
 
 vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
@@ -66,9 +66,9 @@ void GUI::setWindows()
 	if (ImGui::Button("Randomize Lights"))
 		randomize_lights = true;
 	ImGui::Separator();
-	ImGui::SliderInt("FPS", &fps, 30, 500);
+	ImGui::InputInt("FPS", &fps, 1, 15);
+	ImGui::InputFloat("Camera Speed", &cameraSpeed, 0.1f, 1.f, 3);
 	ImGui::SliderFloat4("Clear Color", (float*)clearColor.data(), 0.0f, 1.0f);
-	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.0f, 5.0f);
 	mlPanelPos = ImGui::GetWindowPos();
 	mlPanelSize = ImGui::GetWindowSize();
 	ImGui::End();

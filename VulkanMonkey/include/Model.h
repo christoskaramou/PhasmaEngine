@@ -16,7 +16,6 @@ namespace vm {
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
 		vk::DescriptorSet descriptorSet;
-		std::map<std::string, Image> uniqueTextures;
 		std::vector<Mesh> meshes;
 		std::string name;
 		vm::mat4 matrix = vm::mat4(1.0f);
