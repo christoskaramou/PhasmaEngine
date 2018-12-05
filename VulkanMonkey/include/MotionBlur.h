@@ -10,6 +10,7 @@
 #include "Timer.h"
 #include <vector>
 #include <string>
+#include <map>
 
 namespace vm {
 	struct MotionBlur

@@ -1,5 +1,4 @@
 #include "../include/Image.h"
-#include "../include/Errors.h"
 
 using namespace vm;
 
@@ -17,10 +16,9 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 		.setUsage(usage)
 		.setSharingMode(vk::SharingMode::eExclusive)
 		.setInitialLayout(initialLayout);
-	vk::ImageFormatProperties imageFormatProperties;
-	vulkan->gpu.getImageFormatProperties(format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags(), &imageFormatProperties);
+	vk::ImageFormatProperties imageFormatProperties = vulkan->gpu.getImageFormatProperties(format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
 
-	VkCheck(vulkan->device.createImage(&imageInfo, nullptr, &image));
+	image = vulkan->device.createImage(imageInfo);
 
 	uint32_t memTypeIndex = UINT32_MAX; ///////////////////
 	auto const memRequirements = vulkan->device.getImageMemoryRequirements(image);
@@ -39,24 +37,14 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 				break;
 			}
 		}
-		//std::cout << "No suitable memory type found\n";
-		//exit(-1);
 	}
 
 	auto const allocInfo = vk::MemoryAllocateInfo()
 		.setAllocationSize(memRequirements.size)
 		.setMemoryTypeIndex(memTypeIndex);
 
-	VkCheck(vulkan->device.allocateMemory(&allocInfo, nullptr, &memory));
-	VkCheck(vulkan->device.bindImageMemory(image, memory, 0));
-
-	if (image && memory)
-		std::cout << "Image created\n";
-	else
-	{
-		std::cout << "Error at image creation\n";
-		exit(-1);
-	}
+	memory = vulkan->device.allocateMemory(allocInfo);
+	vulkan->device.bindImageMemory(image, memory, 0);
 }
 
 void Image::createImageView(const vk::ImageAspectFlags aspectFlags)
@@ -67,8 +55,7 @@ void Image::createImageView(const vk::ImageAspectFlags aspectFlags)
 		.setFormat(format)
 		.setSubresourceRange({ aspectFlags, 0, mipLevels, 0, arrayLayers });
 
-	VkCheck(vulkan->device.createImageView(&viewInfo, nullptr, &view));
-	std::cout << "ImageView created\n";
+	view = vulkan->device.createImageView(viewInfo);
 }
 
 void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout)
@@ -79,11 +66,11 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 		.setCommandPool(vulkan->commandPool);
 
 	vk::CommandBuffer commandBuffer;
-	VkCheck(vulkan->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
+	commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo)[0];
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-	VkCheck(commandBuffer.begin(&beginInfo));
+	commandBuffer.begin(beginInfo);
 
 	auto barrier = vk::ImageMemoryBarrier()
 		.setOldLayout(oldLayout)
@@ -146,7 +133,6 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 		dstStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
 	}
 	else {
-		std::cout << "Not all image layout transitions are supported yet\n";
 		exit(-1);
 	}
 
@@ -157,14 +143,14 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 		0, nullptr,
 		1, &barrier);
 
-	VkCheck(commandBuffer.end());
+	commandBuffer.end();
 
 	auto const submitInfo = vk::SubmitInfo()
 		.setCommandBufferCount(1)
 		.setPCommandBuffers(&commandBuffer);
-	VkCheck(vulkan->graphicsQueue.submit(1, &submitInfo, nullptr));
+	vulkan->graphicsQueue.submit(submitInfo, nullptr);
 
-	VkCheck(vulkan->graphicsQueue.waitIdle());
+	vulkan->graphicsQueue.waitIdle();
 }
 
 void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y, const int width, const int height, const uint32_t baseLayer)
@@ -174,12 +160,11 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y,
 		.setCommandBufferCount(1)
 		.setCommandPool(vulkan->commandPool);
 
-	vk::CommandBuffer commandBuffer;
-	VkCheck(vulkan->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
+	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo)[0];
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-	VkCheck(commandBuffer.begin(&beginInfo));
+	commandBuffer.begin(beginInfo);
 
 	vk::BufferImageCopy region;
 	region.bufferOffset = 0;
@@ -194,14 +179,14 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y,
 
 	commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
 
-	VkCheck(commandBuffer.end());
+	commandBuffer.end();
 
 	auto const submitInfo = vk::SubmitInfo()
 		.setCommandBufferCount(1)
 		.setPCommandBuffers(&commandBuffer);
-	VkCheck(vulkan->graphicsQueue.submit(1, &submitInfo, nullptr));
+	vulkan->graphicsQueue.submit(submitInfo, nullptr);
 
-	VkCheck(vulkan->graphicsQueue.waitIdle());
+	vulkan->graphicsQueue.waitIdle();
 }
 
 void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
@@ -211,12 +196,11 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 		.setCommandBufferCount(1)
 		.setCommandPool(vulkan->commandPool);
 
-	vk::CommandBuffer commandBuffer;
-	VkCheck(vulkan->device.allocateCommandBuffers(&allocInfo, &commandBuffer));
+	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo)[0];
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-	VkCheck(commandBuffer.begin(&beginInfo));
+	commandBuffer.begin(beginInfo);
 
 	vk::ImageMemoryBarrier barrier = {};
 	barrier.image = image;
@@ -293,14 +277,14 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 		0, nullptr,
 		1, &barrier);
 
-	VkCheck(commandBuffer.end());
+	commandBuffer.end();
 
 	auto const submitInfo = vk::SubmitInfo()
 		.setCommandBufferCount(1)
 		.setPCommandBuffers(&commandBuffer);
-	VkCheck(vulkan->graphicsQueue.submit(1, &submitInfo, nullptr));
+	vulkan->graphicsQueue.submit(submitInfo, nullptr);
 
-	VkCheck(vulkan->graphicsQueue.waitIdle());
+	vulkan->graphicsQueue.waitIdle();
 }
 
 void Image::createSampler()
@@ -321,8 +305,7 @@ void Image::createSampler()
 		.setCompareOp(vk::CompareOp::eLess)
 		.setBorderColor(borderColor)
 		.setUnnormalizedCoordinates(VK_FALSE);
-	VkCheck(vulkan->device.createSampler(&samplerInfo, nullptr, &sampler));
-	std::cout << "Image sampler created\n";
+	sampler = vulkan->device.createSampler(samplerInfo);
 }
 
 void Image::destroy()
@@ -335,5 +318,4 @@ void Image::destroy()
 	image = nullptr;
 	memory = nullptr;
 	sampler = nullptr;
-	std::cout << "Image and associated structs destroyed\n";
 }

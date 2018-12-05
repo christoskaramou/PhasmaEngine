@@ -1,5 +1,4 @@
 #include "../include/GUI.h"
-#include "../include/Errors.h"
 #include <iostream>
 
 using namespace vm;
@@ -109,8 +108,7 @@ vk::DescriptorSetLayout GUI::getDescriptorSetLayout(vk::Device device)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		VkCheck(device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
-		std::cout << "Descriptor Set Layout created\n";
+		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
 	}
 	return descriptorSetLayout;
 }
@@ -188,7 +186,7 @@ void GUI::initImGui()
 	auto beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
-	VkCheck(vulkan->dynamicCmdBuffer.begin(&beginInfo));
+	vulkan->dynamicCmdBuffer.begin(beginInfo);
 
 	// Create fonts texture
 	unsigned char* pixels;
@@ -217,29 +215,28 @@ void GUI::initImGui()
 	Buffer stagingBuffer;
 	{
 		stagingBuffer.createBuffer(upload_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
-		void* map;
-		VkCheck(vulkan->device.mapMemory(stagingBuffer.memory, 0, upload_size, vk::MemoryMapFlags(), &map));
+		void* map = vulkan->device.mapMemory(stagingBuffer.memory, 0, upload_size);
 		memcpy(map, pixels, upload_size);
-		vk::MappedMemoryRange range[1] = {};
-		range[0].memory = stagingBuffer.memory;
-		range[0].size = upload_size;
-		VkCheck(vulkan->device.flushMappedMemoryRanges(1, range));
+		vk::MappedMemoryRange range;
+		range.memory = stagingBuffer.memory;
+		range.size = upload_size;
+		vulkan->device.flushMappedMemoryRanges(range);
 		vulkan->device.unmapMemory(stagingBuffer.memory);
 	}
 
 	// Copy to Image:
 	{
-		vk::ImageMemoryBarrier copy_barrier[1] = {};
-		copy_barrier[0].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-		copy_barrier[0].oldLayout = vk::ImageLayout::eUndefined;
-		copy_barrier[0].newLayout = vk::ImageLayout::eTransferDstOptimal;
-		copy_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		copy_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		copy_barrier[0].image = texture.image;
-		copy_barrier[0].subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-		copy_barrier[0].subresourceRange.levelCount = 1;
-		copy_barrier[0].subresourceRange.layerCount = 1;
-		vulkan->dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlags(), 0, nullptr, 0, nullptr, 1, copy_barrier);
+		vk::ImageMemoryBarrier copy_barrier = {};
+		copy_barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+		copy_barrier.oldLayout = vk::ImageLayout::eUndefined;
+		copy_barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+		copy_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		copy_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		copy_barrier.image = texture.image;
+		copy_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+		copy_barrier.subresourceRange.levelCount = 1;
+		copy_barrier.subresourceRange.layerCount = 1;
+		vulkan->dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlags(), nullptr, nullptr, copy_barrier);
 
 		vk::BufferImageCopy region = {};
 		region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
@@ -249,18 +246,18 @@ void GUI::initImGui()
 		region.imageExtent.depth = 1;
 		vulkan->dynamicCmdBuffer.copyBufferToImage(stagingBuffer.buffer, texture.image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
 
-		vk::ImageMemoryBarrier use_barrier[1] = {};
-		use_barrier[0].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-		use_barrier[0].dstAccessMask = vk::AccessFlagBits::eShaderRead;
-		use_barrier[0].oldLayout = vk::ImageLayout::eTransferDstOptimal;
-		use_barrier[0].newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-		use_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		use_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		use_barrier[0].image = texture.image;
-		use_barrier[0].subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-		use_barrier[0].subresourceRange.levelCount = 1;
-		use_barrier[0].subresourceRange.layerCount = 1;
-		vulkan->dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlags(), 0, nullptr, 0, nullptr, 1, use_barrier);
+		vk::ImageMemoryBarrier use_barrier = {};
+		use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+		use_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+		use_barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+		use_barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+		use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		use_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		use_barrier.image = texture.image;
+		use_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+		use_barrier.subresourceRange.levelCount = 1;
+		use_barrier.subresourceRange.layerCount = 1;
+		vulkan->dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlags(), nullptr, nullptr, use_barrier);
 	}
 
 	// Store our identifier
@@ -269,8 +266,8 @@ void GUI::initImGui()
 	vk::SubmitInfo end_info = {};
 	end_info.commandBufferCount = 1;
 	end_info.pCommandBuffers = &vulkan->dynamicCmdBuffer;
-	VkCheck(vulkan->dynamicCmdBuffer.end());
-	vulkan->graphicsQueue.submit(1, &end_info, nullptr);
+	vulkan->dynamicCmdBuffer.end();
+	vulkan->graphicsQueue.submit(end_info, nullptr);
 
 	vulkan->device.waitIdle();
 	stagingBuffer.destroy();
@@ -309,12 +306,12 @@ void GUI::draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Pipeli
 			.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
 			.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 			.setPClearValues(clearValues.data());
-		cmd.beginRenderPass(&renderPassInfo2, vk::SubpassContents::eInline);
+		cmd.beginRenderPass(renderPassInfo2, vk::SubpassContents::eInline);
 
 		vk::DeviceSize offset{ 0 };
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, 1, &descriptorSet, 0, nullptr);
-		cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSet, nullptr);
+		cmd.bindVertexBuffers(0, vertexBuffer.buffer, offset);
 		cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint16);
 
 		vk::Viewport viewport{
@@ -462,8 +459,8 @@ void GUI::newFrame()
 	{
 		ImDrawVert* vtx_dst = NULL;
 		ImDrawIdx* idx_dst = NULL;
-		VkCheck(vulkan->device.mapMemory(vertexBuffer.memory, 0, vertex_size, vk::MemoryMapFlags(), (void**)(&vtx_dst)));
-		VkCheck(vulkan->device.mapMemory(indexBuffer.memory, 0, index_size, vk::MemoryMapFlags(), (void**)(&idx_dst)));
+		vtx_dst = (ImDrawVert*)vulkan->device.mapMemory(vertexBuffer.memory, 0, vertex_size);
+		idx_dst = (ImDrawIdx*)vulkan->device.mapMemory(indexBuffer.memory, 0, index_size);
 		for (int n = 0; n < draw_data->CmdListsCount; n++)
 		{
 			const ImDrawList* cmd_list = draw_data->CmdLists[n];
@@ -477,7 +474,7 @@ void GUI::newFrame()
 		range[0].size = VK_WHOLE_SIZE;
 		range[1].memory = indexBuffer.memory;
 		range[1].size = VK_WHOLE_SIZE;
-		VkCheck(vulkan->device.flushMappedMemoryRanges(2, range));
+		vulkan->device.flushMappedMemoryRanges(2, range);
 		vulkan->device.unmapMemory(vertexBuffer.memory);
 		vulkan->device.unmapMemory(indexBuffer.memory);
 	}
@@ -552,12 +549,11 @@ void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout)
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
+	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
 
 
 	// texture sampler
-	vk::WriteDescriptorSet textureWriteSets[1];
-	textureWriteSets[0] = vk::WriteDescriptorSet()
+	vk::WriteDescriptorSet textureWriteSets = vk::WriteDescriptorSet()
 		.setDstSet(descriptorSet)										// DescriptorSet dstSet;
 		.setDstBinding(0)												// uint32_t dstBinding;
 		.setDstArrayElement(0)											// uint32_t dstArrayElement;
@@ -567,8 +563,7 @@ void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout)
 			.setSampler(texture.sampler)									// Sampler sampler;
 			.setImageView(texture.view)										// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
-	vulkan->device.updateDescriptorSets(1, textureWriteSets, 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 void GUI::destroy()
@@ -577,18 +572,15 @@ void GUI::destroy()
 	if (renderPass) {
 		vulkan->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
 	}
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
 			vulkan->device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	pipeline.destroy();
 	if (GUI::descriptorSetLayout) {
 		vulkan->device.destroyDescriptorSetLayout(GUI::descriptorSetLayout);
 		GUI::descriptorSetLayout = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 }

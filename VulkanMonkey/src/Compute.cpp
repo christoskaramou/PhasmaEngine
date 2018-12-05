@@ -1,5 +1,4 @@
 #include "../include/Compute.h"
-#include "../include/Errors.h"
 
 using namespace vm;
 
@@ -10,7 +9,7 @@ void Compute::createComputeUniforms()
 		scrap[i] = 1.f;
 	}
 	SBInOut.createBuffer(scrap.size() * sizeof(float), vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(vulkan->device.mapMemory(SBInOut.memory, 0, SBInOut.size, vk::MemoryMapFlags(), &SBInOut.data));
+	SBInOut.data = vulkan->device.mapMemory(SBInOut.memory, 0, SBInOut.size);
 
 	memcpy(SBInOut.data, scrap.data(), SBInOut.size);
 
@@ -19,7 +18,7 @@ void Compute::createComputeUniforms()
 		1,										//uint32_t descriptorSetCount;
 		&DSLayoutCompute					//const DescriptorSetLayout* pSetLayouts;
 	};
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocCompInfo, &DSCompute));
+	DSCompute = vulkan->device.allocateDescriptorSets(allocCompInfo)[0];
 	std::vector<vk::WriteDescriptorSet> writeCompDescriptorSets = {
 		// Binding 0 (in out)
 		vk::WriteDescriptorSet{
@@ -36,8 +35,7 @@ void Compute::createComputeUniforms()
 			nullptr									//const BufferView* pTexelBufferView;
 		}
 	};
-	vulkan->device.updateDescriptorSets(1, writeCompDescriptorSets.data(), 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(writeCompDescriptorSets, nullptr);
 
 }
 

@@ -1,5 +1,4 @@
 #include "../include/Model.h"
-#include "../include/Errors.h"
 #include "../include/assimp/Importer.hpp"      // C++ importer interface
 #include "../include/assimp/scene.h"           // Output data structure
 #include "../include/assimp/postprocess.h"     // Post processing flags
@@ -167,13 +166,11 @@ void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& mod
 		for (auto& mesh : meshes) {
 			if (mesh.render && !mesh.cull) {
 				if (deferredRenderer) {
-					const vk::DescriptorSet descriptorSets[2] = { descriptorSet, mesh.descriptorSet };
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, 2, descriptorSets, 0, nullptr);
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, { descriptorSet, mesh.descriptorSet }, nullptr);
 				}
 				else {
-					const uint32_t dOffsets[] = { modelID * sizeof(ShadowsUBO) };
-					const vk::DescriptorSet descriptorSets[4] = { shadows->descriptorSet, mesh.descriptorSet, descriptorSet, *DSLights };
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, 4, descriptorSets, 1, dOffsets);
+					const uint32_t dOffsets = modelID * sizeof(ShadowsUBO);
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, { shadows->descriptorSet, mesh.descriptorSet, descriptorSet, *DSLights }, dOffsets);
 				}
 				cmd.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
 			}
@@ -218,8 +215,7 @@ vk::DescriptorSetLayout Model::getDescriptorSetLayout(vk::Device device)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		VkCheck(device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
-		std::cout << "Descriptor Set Layout created\n";
+		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
 	}
 	return descriptorSetLayout;
 }
@@ -238,7 +234,7 @@ void Model::createVertexBuffer()
 	Buffer staging;
 	staging.createBuffer(sizeof(Vertex)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	VkCheck(vulkan->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
+	staging.data = vulkan->device.mapMemory(staging.memory, 0, staging.size);
 	memcpy(staging.data, vertices.data(), sizeof(Vertex)*vertices.size());
 	vulkan->device.unmapMemory(staging.memory);
 
@@ -259,7 +255,7 @@ void Model::createIndexBuffer()
 	Buffer staging;
 	staging.createBuffer(sizeof(uint32_t)*indices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	VkCheck(vulkan->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
+	staging.data = vulkan->device.mapMemory(staging.memory, 0, staging.size);
 	memcpy(staging.data, indices.data(), sizeof(uint32_t)*indices.size());
 	vulkan->device.unmapMemory(staging.memory);
 
@@ -271,7 +267,7 @@ void Model::createUniformBuffers()
 {
 	// since the uniform buffers are unique for each model, they are not bigger than 256 in size
 	uniformBuffer.createBuffer(256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
+	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 }
 
 void Model::createDescriptorSets()
@@ -280,7 +276,7 @@ void Model::createDescriptorSets()
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet));
+	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
 
 	// Model MVP
 	auto const mvpWriteSet = vk::WriteDescriptorSet()
@@ -294,18 +290,17 @@ void Model::createDescriptorSets()
 			.setOffset(0)											// DeviceSize offset;
 			.setRange(uniformBuffer.size));							// DeviceSize range;
 
-	vulkan->device.updateDescriptorSets(1, &mvpWriteSet, 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(mvpWriteSet, nullptr);
 
 	for (auto& mesh : meshes) {
 		auto const allocateInfo = vk::DescriptorSetAllocateInfo()
 			.setDescriptorPool(vulkan->descriptorPool)
 			.setDescriptorSetCount(1)
 			.setPSetLayouts(&mesh.descriptorSetLayout);
-		VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &mesh.descriptorSet));
+		mesh.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
 
 		// Texture
-		vk::WriteDescriptorSet textureWriteSets[6];
+		std::vector<vk::WriteDescriptorSet> textureWriteSets(6);
 
 		textureWriteSets[0] = vk::WriteDescriptorSet()
 			.setDstSet(mesh.descriptorSet)									// DescriptorSet dstSet;
@@ -373,8 +368,7 @@ void Model::createDescriptorSets()
 				.setImageView(mesh.metallicTexture.view)						// ImageView imageView;
 				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
-		vulkan->device.updateDescriptorSets(6, textureWriteSets, 0, nullptr);
-		std::cout << "DescriptorSet allocated and updated\n";
+		vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 	}
 }
 
@@ -404,6 +398,4 @@ void Model::destroy()
 		vulkan->device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
 		Mesh::descriptorSetLayout = nullptr;
 	}
-
-	std::cout << "Model and associated structs destroyed\n";
 }

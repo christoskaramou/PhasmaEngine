@@ -1,5 +1,4 @@
 #include "../include/Shadows.h"
-#include "../include/Errors.h"
 
 using namespace vm;
 
@@ -13,9 +12,9 @@ void Shadows::createDescriptorSet()
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet));
+	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
 
-	vk::WriteDescriptorSet textureWriteSets[2];
+	std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 	// MVP
 	textureWriteSets[0] = vk::WriteDescriptorSet()
 		.setDstSet(descriptorSet)										// DescriptorSet dstSet;
@@ -39,8 +38,7 @@ void Shadows::createDescriptorSet()
 			.setImageView(texture.view)										// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal));// ImageLayout imageLayout;
 
-	vulkan->device.updateDescriptorSets(2, textureWriteSets, 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 vk::DescriptorSetLayout Shadows::getDescriptorSetLayout(vk::Device device)
@@ -65,8 +63,7 @@ vk::DescriptorSetLayout Shadows::getDescriptorSetLayout(vk::Device device)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		VkCheck(device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
-		std::cout << "Descriptor Set Layout created\n";
+		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
 	}
 	return descriptorSetLayout;
 }
@@ -120,8 +117,7 @@ vk::RenderPass Shadows::getRenderPass()
 			.setDependencyCount((uint32_t)spDependencies.size())
 			.setPDependencies(spDependencies.data());
 
-		VkCheck(vulkan->device.createRenderPass(&rpci, nullptr, &renderPass));
-		std::cout << "RenderPass created\n";
+		renderPass = vulkan->device.createRenderPass(rpci);
 	}
 	return renderPass;
 }
@@ -149,8 +145,7 @@ void Shadows::createFrameBuffers(uint32_t bufferCount)
 			.setWidth(imageSize)
 			.setHeight(imageSize)
 			.setLayers(1);
-		VkCheck(vulkan->device.createFramebuffer(&fbci, nullptr, &frameBuffer[i]));
-		std::cout << "Framebuffer created\n";
+		frameBuffer[i] = vulkan->device.createFramebuffer(fbci);
 	}
 
 }
@@ -158,12 +153,11 @@ void Shadows::createFrameBuffers(uint32_t bufferCount)
 void Shadows::createDynamicUniformBuffer(size_t num_of_objects)
 {
 	if (num_of_objects > 256) {
-		std::cout << "256 objects for the Shadows Dynamic Uniform Buffer is the max for now\n";
 		exit(-21);
 	}
 	size_t size = num_of_objects * 256;
 	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
+	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 }
 
 void Shadows::destroy()

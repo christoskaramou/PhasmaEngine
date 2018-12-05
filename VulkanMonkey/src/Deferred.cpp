@@ -1,5 +1,4 @@
 #include "../include/Deferred.h"
-#include "../include/Errors.h"
 #include <iostream>
 
 using namespace vm;
@@ -11,7 +10,7 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 	1,										//uint32_t descriptorSetCount;
 	&DSLayoutComposition				//const DescriptorSetLayout* pSetLayouts;
 	};
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocInfo, &DSComposition));
+	DSComposition = vulkan->device.allocateDescriptorSets(allocInfo)[0];
 
 	// Image descriptors for the offscreen color attachments
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
@@ -128,8 +127,7 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 		}
 	};
 
-	vulkan->device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
 void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
@@ -249,8 +247,7 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 		}
 	};
 
-	vulkan->device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
-	std::cout << "DescriptorSet updated\n";
+	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
 void vm::Deferred::draw(uint32_t imageIndex, Shadows& shadows)
@@ -266,14 +263,13 @@ void vm::Deferred::draw(uint32_t imageIndex, Shadows& shadows)
 		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValues0.size()))
 		.setPClearValues(clearValues0.data());
-	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfo0, vk::SubpassContents::eInline);
+	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo0, vk::SubpassContents::eInline);
 
 	vm::vec4 screenSpace(GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, 0.f, 0.f);
 	vulkan->dynamicCmdBuffer.pushConstants(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vm::vec4), &screenSpace);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline);
-	const vk::DescriptorSet descriptorSets[] = { DSComposition, shadows.descriptorSet };
-	const uint32_t dOffsets[] = { 0 };
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo.layout, 0, 2, descriptorSets, 1, dOffsets);
+	uint32_t ofsets = 0;
+	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo.layout, 0, { DSComposition, shadows.descriptorSet }, ofsets);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
 	// End Composition
@@ -284,29 +280,24 @@ void Deferred::destroy()
 	if (renderPass) {
 		vulkan->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
 	}
 	if (compositionRenderPass) {
 		vulkan->device.destroyRenderPass(compositionRenderPass);
 		compositionRenderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
 	}
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
 			vulkan->device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	for (auto &frameBuffer : compositionFrameBuffers) {
 		if (frameBuffer) {
 			vulkan->device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	if (DSLayoutComposition) {
 		vulkan->device.destroyDescriptorSetLayout(DSLayoutComposition);
 		DSLayoutComposition = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 	pipeline.destroy();
 	pipelineComposition.destroy();

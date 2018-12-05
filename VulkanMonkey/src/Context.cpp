@@ -1,5 +1,4 @@
 #include "../include/Context.h"
-#include "../include/Errors.h"
 #include <iostream>
 #include <fstream>
 
@@ -20,8 +19,7 @@ vk::DescriptorSetLayout Context::getDescriptorSetLayoutLights()
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		VkCheck(vulkan.device.createDescriptorSetLayout(&createInfo, nullptr, &lightUniforms.descriptorSetLayout));
-		std::cout << "Descriptor Set Layout created\n";
+		lightUniforms.descriptorSetLayout = vulkan.device.createDescriptorSetLayout(createInfo);
 	}
 	return lightUniforms.descriptorSetLayout;
 }
@@ -185,23 +183,22 @@ void Context::initVulkanContext()
 	vulkan.commandPool = createCommandPool();
 	vulkan.commandPoolCompute = createComputeCommadPool();
 	vulkan.descriptorPool = createDescriptorPool(2000); // max number of all descriptor sets to allocate
-	vulkan.dynamicCmdBuffer = createCmdBuffer();
-	vulkan.shadowCmdBuffer = createCmdBuffer();
+	vulkan.dynamicCmdBuffer = createCmdBuffers(1)[0];
+	vulkan.shadowCmdBuffer = createCmdBuffers(1)[0];
 	vulkan.computeCmdBuffer = createComputeCmdBuffer();
 	vulkan.depth = new Image(createDepthResources());
 }
 
 void Context::initRendering()
 {
-	renderTargets = createRenderTargets({
-		{"position", vk::Format::eR16G16B16A16Sfloat},
-		{"normal", vk::Format::eR16G16B16A16Sfloat},
-		{"albedo", vk::Format::eR8G8B8A8Unorm},
-		{"srm", vk::Format::eR16G16B16A16Sfloat},
-		{"ssao", vk::Format::eR16Sfloat},
-		{"ssaoBlur", vk::Format::eR16Sfloat},
-		{"ssr", vk::Format::eR16G16B16A16Sfloat},
-		{"composition", vk::Format::eR16G16B16A16Sfloat} });
+	addRenderTarget("position", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("srm", vk::Format::eR16G16B16A16Sfloat); // Specular Roughness Metallic
+	addRenderTarget("ssao", vk::Format::eR16Sfloat);
+	addRenderTarget("ssaoBlur", vk::Format::eR16Sfloat);
+	addRenderTarget("ssr", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
 
 	// render passes
 	forward.renderPass = createRenderPass();
@@ -285,7 +282,6 @@ void Context::createUniforms()
 
 vk::Instance Context::createInstance()
 {
-	vk::Instance _instance;
 	unsigned extCount;
 	if (!SDL_Vulkan_GetInstanceExtensions(vulkan.window, &extCount, nullptr))
 	{
@@ -311,10 +307,8 @@ vk::Instance Context::createInstance()
 		.setEnabledExtensionCount((uint32_t)(instanceExtensions.size()))
 		.setPpEnabledExtensionNames(instanceExtensions.data())
 		.setPNext(nullptr);
-	VkCheck(vk::createInstance(&instInfo, nullptr, &_instance));
-	std::cout << "Instance created\n";
 
-	return _instance;
+	return vk::createInstance(instInfo);
 }
 
 Surface Context::createSurface()
@@ -336,18 +330,13 @@ Surface Context::createSurface()
 
 int Context::getGraphicsFamilyId()
 {
-	uint32_t gpuCount = 0;
-	vulkan.instance.enumeratePhysicalDevices(&gpuCount, nullptr);
-	std::vector<vk::PhysicalDevice> gpuList(gpuCount);
-	vulkan.instance.enumeratePhysicalDevices(&gpuCount, gpuList.data());
+	std::vector<vk::PhysicalDevice> gpuList = vulkan.instance.enumeratePhysicalDevices();
 
 	for (const auto& gpu : gpuList) {
-		uint32_t familyCount = 0;
-		gpu.getQueueFamilyProperties(&familyCount, nullptr);
-		std::vector<vk::QueueFamilyProperties> properties(familyCount);
-		gpu.getQueueFamilyProperties(&familyCount, properties.data());
 
-		for (uint32_t i = 0; i < familyCount; ++i) {
+		std::vector<vk::QueueFamilyProperties> properties = gpu.getQueueFamilyProperties();
+
+		for (int i = 0; i < properties.size(); i++) {
 			//find graphics queue family index
 			if (properties[i].queueFlags & vk::QueueFlagBits::eGraphics)
 				return i;
@@ -358,22 +347,15 @@ int Context::getGraphicsFamilyId()
 
 int Context::getPresentFamilyId()
 {
-	uint32_t gpuCount = 0;
-	vulkan.instance.enumeratePhysicalDevices(&gpuCount, nullptr);
-	std::vector<vk::PhysicalDevice> gpuList(gpuCount);
-	vulkan.instance.enumeratePhysicalDevices(&gpuCount, gpuList.data());
+	std::vector<vk::PhysicalDevice> gpuList = vulkan.instance.enumeratePhysicalDevices();
 
 	for (const auto& gpu : gpuList) {
-		uint32_t familyCount = 0;
-		gpu.getQueueFamilyProperties(&familyCount, nullptr);
-		std::vector<vk::QueueFamilyProperties> properties(familyCount);
-		gpu.getQueueFamilyProperties(&familyCount, properties.data());
 
-		for (uint32_t i = 0; i < familyCount; ++i) {
+		std::vector<vk::QueueFamilyProperties> properties = gpu.getQueueFamilyProperties();
+
+		for (uint32_t i = 0; i < properties.size(); ++i) {
 			// find present queue family index
-			vk::Bool32 presentSupport = false;
-			gpu.getSurfaceSupportKHR(i, vulkan.surface->surface, &presentSupport);
-			if (properties[i].queueCount > 0 && presentSupport)
+			if (properties[i].queueCount > 0 && gpu.getSurfaceSupportKHR(i, vulkan.surface->surface))
 				return i;
 		}
 	}
@@ -382,18 +364,12 @@ int Context::getPresentFamilyId()
 
 int Context::getComputeFamilyId()
 {
-	uint32_t gpuCount = 0;
-	vulkan.instance.enumeratePhysicalDevices(&gpuCount, nullptr);
-	std::vector<vk::PhysicalDevice> gpuList(gpuCount);
-	vulkan.instance.enumeratePhysicalDevices(&gpuCount, gpuList.data());
+	std::vector<vk::PhysicalDevice> gpuList = vulkan.instance.enumeratePhysicalDevices();
 
 	for (const auto& gpu : gpuList) {
-		uint32_t familyCount = 0;
-		gpu.getQueueFamilyProperties(&familyCount, nullptr);
-		std::vector<vk::QueueFamilyProperties> properties(familyCount);
-		gpu.getQueueFamilyProperties(&familyCount, properties.data());
+		std::vector<vk::QueueFamilyProperties> properties = gpu.getQueueFamilyProperties();
 
-		for (uint32_t i = 0; i < familyCount; ++i) {
+		for (uint32_t i = 0; i < properties.size(); ++i) {
 			//find compute queue family index
 			if (properties[i].queueFlags & vk::QueueFlagBits::eCompute)
 				return i;
@@ -406,45 +382,30 @@ vk::PhysicalDevice Context::findGpu()
 {
 	if (vulkan.graphicsFamilyId < 0 || vulkan.presentFamilyId < 0 || vulkan.computeFamilyId < 0)
 		return nullptr;
-	uint32_t gpuCount = 0;
-	vulkan.instance.enumeratePhysicalDevices(&gpuCount, nullptr);
-	std::vector<vk::PhysicalDevice> gpuList(gpuCount);
-	vulkan.instance.enumeratePhysicalDevices(&gpuCount, gpuList.data());
+	std::vector<vk::PhysicalDevice> gpuList = vulkan.instance.enumeratePhysicalDevices();
 
 	for (const auto& gpu : gpuList) {
-		uint32_t familyCount = 0;
-		gpu.getQueueFamilyProperties(&familyCount, nullptr);
-		std::vector<vk::QueueFamilyProperties> properties(familyCount);
-		gpu.getQueueFamilyProperties(&familyCount, properties.data());
+		std::vector<vk::QueueFamilyProperties> properties = gpu.getQueueFamilyProperties();
 
 		if (properties[vulkan.graphicsFamilyId].queueFlags & vk::QueueFlagBits::eGraphics &&
-			gpu.getSurfaceSupportKHR(vulkan.presentFamilyId, vulkan.surface->surface).value &&
+			gpu.getSurfaceSupportKHR(vulkan.presentFamilyId, vulkan.surface->surface) &&
 			properties[vulkan.computeFamilyId].queueFlags & vk::QueueFlagBits::eCompute)
 			return gpu;
 	}
-
 	return nullptr;
 }
 
 vk::SurfaceCapabilitiesKHR Context::getSurfaceCapabilities()
 {
-	vk::SurfaceCapabilitiesKHR _surfaceCapabilities;
-	vulkan.gpu.getSurfaceCapabilitiesKHR(vulkan.surface->surface, &_surfaceCapabilities);
-
-	return _surfaceCapabilities;
+	return vulkan.gpu.getSurfaceCapabilitiesKHR(vulkan.surface->surface);
 }
 
 vk::SurfaceFormatKHR Context::getSurfaceFormat()
 {
-	uint32_t formatCount = 0;
-	std::vector<vk::SurfaceFormatKHR> formats{};
-	vulkan.gpu.getSurfaceFormatsKHR(vulkan.surface->surface, &formatCount, nullptr);
-	if (formatCount == 0) exit(-5);
-	formats.resize(formatCount);
-	vulkan.gpu.getSurfaceFormatsKHR(vulkan.surface->surface, &formatCount, formats.data());
+	std::vector<vk::SurfaceFormatKHR> formats = vulkan.gpu.getSurfaceFormatsKHR(vulkan.surface->surface);
 
 	for (const auto& i : formats) {
-		if (i.format == vk::Format::eR16G16B16A16Unorm && i.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+		if (i.format == vk::Format::eR8G8B8A8Unorm && i.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
 			return i;
 	}
 
@@ -453,12 +414,7 @@ vk::SurfaceFormatKHR Context::getSurfaceFormat()
 
 vk::PresentModeKHR Context::getPresentationMode()
 {
-	uint32_t presentCount = 0;
-	std::vector<vk::PresentModeKHR> presentModes{};
-	vulkan.gpu.getSurfacePresentModesKHR(vulkan.surface->surface, &presentCount, nullptr);
-	if (presentCount == 0) exit(-5);
-	presentModes.resize(presentCount);
-	vulkan.gpu.getSurfacePresentModesKHR(vulkan.surface->surface, &presentCount, presentModes.data());
+	std::vector<vk::PresentModeKHR> presentModes = vulkan.gpu.getSurfacePresentModesKHR(vulkan.surface->surface);
 
 	for (const auto& i : presentModes)
 		if (i == vk::PresentModeKHR::eImmediate || i == vk::PresentModeKHR::eMailbox)
@@ -469,29 +425,17 @@ vk::PresentModeKHR Context::getPresentationMode()
 
 vk::PhysicalDeviceProperties Context::getGPUProperties()
 {
-	vk::PhysicalDeviceProperties _gpuProperties;
-	vulkan.gpu.getProperties(&_gpuProperties);
-
-	return _gpuProperties;
+	return vulkan.gpu.getProperties();
 }
 
 vk::PhysicalDeviceFeatures Context::getGPUFeatures()
 {
-	vk::PhysicalDeviceFeatures _gpuFeatures;
-	vulkan.gpu.getFeatures(&_gpuFeatures);
-
-	return _gpuFeatures;
+	return vulkan.gpu.getFeatures();
 }
 
 vk::Device Context::createDevice()
 {
-	vk::Device _device;
-
-	uint32_t count;
-	//vulkan.gpu.enumerateDeviceExtensionProperties(nullptr, &count, nullptr);
-	vkEnumerateDeviceExtensionProperties(VkPhysicalDevice(vulkan.gpu), nullptr, &count, nullptr);
-	std::vector<vk::ExtensionProperties> extensionProperties(count);
-	vulkan.gpu.enumerateDeviceExtensionProperties(nullptr, &count, extensionProperties.data());
+	std::vector<vk::ExtensionProperties> extensionProperties = vulkan.gpu.enumerateDeviceExtensionProperties();
 
 	std::vector<const char*> deviceExtensions{};
 	for (auto& i : extensionProperties) {
@@ -513,34 +457,22 @@ vk::Device Context::createDevice()
 		.setPpEnabledExtensionNames(deviceExtensions.data())
 		.setPEnabledFeatures(&vulkan.gpuFeatures);
 
-	VkCheck(vulkan.gpu.createDevice(&deviceCreateInfo, nullptr, &_device));
-	std::cout << "Device created\n";
-
-	return _device;
+	return vulkan.gpu.createDevice(deviceCreateInfo);
 }
 
 vk::Queue Context::getGraphicsQueue()
 {
-	vk::Queue _graphicsQueue = vulkan.device.getQueue(vulkan.graphicsFamilyId, 0);
-	if (!_graphicsQueue) exit(-23);
-
-	return _graphicsQueue;
+	return vulkan.device.getQueue(vulkan.graphicsFamilyId, 0);
 }
 
 vk::Queue Context::getPresentQueue()
 {
-	vk::Queue _presentQueue = vulkan.device.getQueue(vulkan.presentFamilyId, 0);
-	if (!_presentQueue) exit(-23);
-
-	return _presentQueue;
+	return vulkan.device.getQueue(vulkan.presentFamilyId, 0);
 }
 
 vk::Queue Context::getComputeQueue()
 {
-	vk::Queue _computeQueue = vulkan.device.getQueue(vulkan.computeFamilyId, 0);
-	if (!_computeQueue) exit(-23);
-
-	return _computeQueue;
+	return vulkan.device.getQueue(vulkan.computeFamilyId, 0);;
 }
 
 Swapchain Context::createSwapchain()
@@ -571,19 +503,14 @@ Swapchain Context::createSwapchain()
 		.setOldSwapchain(oldSwapchain);
 
 	// new swapchain with old create info
-	vk::SwapchainKHR newSwapchain;
-	VkCheck(vulkan.device.createSwapchainKHR(&swapchainCreateInfo, nullptr, &newSwapchain));
-	std::cout << "Swapchain created\n";
+	vk::SwapchainKHR newSwapchain = vulkan.device.createSwapchainKHR(swapchainCreateInfo);
 
 	if (_swapchain.swapchain)
 		vulkan.device.destroySwapchainKHR(_swapchain.swapchain);
 	_swapchain.swapchain = newSwapchain;
 
 	// get the swapchain image handlers
-	std::vector<vk::Image> images{};
-	vulkan.device.getSwapchainImagesKHR(_swapchain.swapchain, &swapchainImageCount, nullptr);
-	images.resize(swapchainImageCount);
-	vulkan.device.getSwapchainImagesKHR(_swapchain.swapchain, &swapchainImageCount, images.data());
+	std::vector<vk::Image> images = vulkan.device.getSwapchainImagesKHR(_swapchain.swapchain);
 
 	_swapchain.images.resize(images.size());
 	for (unsigned i = 0; i < images.size(); i++)
@@ -606,8 +533,7 @@ Swapchain Context::createSwapchain()
 				.setLevelCount(1)
 				.setBaseArrayLayer(0)
 				.setLayerCount(1));
-		VkCheck(vulkan.device.createImageView(&imageViewCreateInfo, nullptr, &image.view));
-		std::cout << "Swapchain ImageView created\n";
+		image.view = vulkan.device.createImageView(imageViewCreateInfo);
 	}
 
 	return _swapchain;
@@ -615,45 +541,39 @@ Swapchain Context::createSwapchain()
 
 vk::CommandPool Context::createCommandPool()
 {
-	vk::CommandPool _commandPool;
 	auto const cpci = vk::CommandPoolCreateInfo()
 		.setQueueFamilyIndex(vulkan.graphicsFamilyId)
 		.setFlags(vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
-	VkCheck(vulkan.device.createCommandPool(&cpci, nullptr, &_commandPool));
-	std::cout << "CommandPool created\n";
-	return _commandPool;
+
+	return vulkan.device.createCommandPool(cpci);
 }
 
 vk::CommandPool Context::createComputeCommadPool()
 {
-	vk::CommandPool _commandPool;
 	auto const cpci = vk::CommandPoolCreateInfo()
 		.setQueueFamilyIndex(vulkan.computeFamilyId)
 		.setFlags(vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
-	VkCheck(vulkan.device.createCommandPool(&cpci, nullptr, &_commandPool));
-	std::cout << "Compute CommandPool created\n";
-	return _commandPool;;
+
+	return vulkan.device.createCommandPool(cpci);
 }
 
-std::map<std::string, Image> Context::createRenderTargets(std::vector<std::tuple<std::string, vk::Format>> RTtuples)
+void Context::addRenderTarget(const std::string& name, vk::Format format)
 {
-	std::map<std::string, Image> RT;
-	for (auto& t : RTtuples)
-	{
-		RT[std::get<0>(t)] = Image();
-		RT[std::get<0>(t)].format = std::get<1>(t);
-		RT[std::get<0>(t)].initialLayout = vk::ImageLayout::eUndefined;
-		RT[std::get<0>(t)].createImage(vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height, vk::ImageTiling::eOptimal,
-			vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-		RT[std::get<0>(t)].createImageView(vk::ImageAspectFlagBits::eColor);
-		RT[std::get<0>(t)].createSampler();
+	if (renderTargets.find(name) != renderTargets.end()) {
+		std::cout << "Render Target already exists\n";
+		return;
 	}
-	return RT;
+	renderTargets[name] = Image();
+	renderTargets[name].format = format;
+	renderTargets[name].initialLayout = vk::ImageLayout::eUndefined;
+	renderTargets[name].createImage(vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height, vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	renderTargets[name].createImageView(vk::ImageAspectFlagBits::eColor);
+	renderTargets[name].createSampler();
 }
 
 vk::RenderPass Context::createRenderPass()
 {
-	vk::RenderPass _renderPass;
 	std::array<vk::AttachmentDescription, 4> attachments = {};
 
 	// for Multisampling
@@ -725,15 +645,11 @@ vk::RenderPass Context::createRenderPass()
 		.setSubpassCount(1)
 		.setPSubpasses(&subpassDesc);
 
-	VkCheck(vulkan.device.createRenderPass(&rpci, nullptr, &_renderPass));
-	std::cout << "RenderPass created\n";
-
-	return _renderPass;
+	return vulkan.device.createRenderPass(rpci);
 }
 
 vk::RenderPass Context::createDeferredRenderPass()
 {
-	vk::RenderPass _renderPass;
 	std::array<vk::AttachmentDescription, 5> attachments{};
 	// Deferred targets
 	// Position
@@ -829,15 +745,11 @@ vk::RenderPass Context::createDeferredRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(vulkan.device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
-
-	return _renderPass;
+	return vulkan.device.createRenderPass(renderPassInfo);
 }
 
 vk::RenderPass Context::createCompositionRenderPass()
 {
-	vk::RenderPass _renderPass;
-
 	std::array<vk::AttachmentDescription, 2> attachments{};
 	// Color target
 	attachments[0].format = vulkan.surface->formatKHR.format;
@@ -902,15 +814,11 @@ vk::RenderPass Context::createCompositionRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(vulkan.device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
-
-	return _renderPass;
+	return vulkan.device.createRenderPass(renderPassInfo);
 }
 
 vk::RenderPass Context::createSSAORenderPass()
 {
-	vk::RenderPass _renderPass;
-
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
 	attachments[0].format = renderTargets["ssao"].format;
@@ -961,15 +869,11 @@ vk::RenderPass Context::createSSAORenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(vulkan.device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
-
-	return _renderPass;
+	return vulkan.device.createRenderPass(renderPassInfo);
 }
 
 vk::RenderPass Context::createSSAOBlurRenderPass()
 {
-	vk::RenderPass _renderPass;
-
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
 	attachments[0].format = renderTargets["ssaoBlur"].format;
@@ -1020,15 +924,11 @@ vk::RenderPass Context::createSSAOBlurRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(vulkan.device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
-
-	return _renderPass;
+	return vulkan.device.createRenderPass(renderPassInfo);
 }
 
 vk::RenderPass Context::createMotionBlurRenderPass()
 {
-	vk::RenderPass _renderPass;
-
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
 	attachments[0].format = vulkan.surface->formatKHR.format;
@@ -1078,15 +978,11 @@ vk::RenderPass Context::createMotionBlurRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(vulkan.device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
-
-	return _renderPass;
+	return vulkan.device.createRenderPass(renderPassInfo);
 }
 
 vk::RenderPass Context::createSSRRenderPass()
 {
-	vk::RenderPass _renderPass;
-
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
 	attachments[0].format = renderTargets["ssr"].format;
@@ -1137,15 +1033,11 @@ vk::RenderPass Context::createSSRRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(vulkan.device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
-
-	return _renderPass;
+	return vulkan.device.createRenderPass(renderPassInfo);
 }
 
 vk::RenderPass Context::createGUIRenderPass()
 {
-	vk::RenderPass _renderPass;
-
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
 	attachments[0].format = vulkan.surface->formatKHR.format;
@@ -1195,9 +1087,7 @@ vk::RenderPass Context::createGUIRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VkCheck(vulkan.device.createRenderPass(&renderPassInfo, nullptr, &_renderPass));
-
-	return _renderPass;
+	return vulkan.device.createRenderPass(renderPassInfo);
 }
 
 Image Context::createDepthResources()
@@ -1214,7 +1104,6 @@ Image Context::createDepthResources()
 	}
 	if (_image.format == vk::Format::eUndefined)
 	{
-		std::cout << "No suitable format found!\n";
 		exit(-9);
 	}
 	_image.createImage(vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height,
@@ -1264,8 +1153,7 @@ std::vector<vk::Framebuffer> Context::createFrameBuffers()
 			.setWidth(vulkan.surface->actualExtent.width)
 			.setHeight(vulkan.surface->actualExtent.height)
 			.setLayers(1);
-		VkCheck(vulkan.device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
-		std::cout << "Framebuffer created\n";
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
 	return _frameBuffers;
@@ -1291,8 +1179,7 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 			.setWidth(vulkan.surface->actualExtent.width)
 			.setHeight(vulkan.surface->actualExtent.height)
 			.setLayers(1);
-		VkCheck(vulkan.device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
-		std::cout << "Framebuffer created\n";
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
 	return _frameBuffers;
@@ -1315,8 +1202,7 @@ std::vector<vk::Framebuffer> Context::createCompositionFrameBuffers()
 			.setWidth(vulkan.surface->actualExtent.width)
 			.setHeight(vulkan.surface->actualExtent.height)
 			.setLayers(1);
-		VkCheck(vulkan.device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
-		std::cout << "Framebuffer created\n";
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
 	return _frameBuffers;
@@ -1338,8 +1224,7 @@ std::vector<vk::Framebuffer> Context::createSSRFrameBuffers()
 			.setWidth(vulkan.surface->actualExtent.width)
 			.setHeight(vulkan.surface->actualExtent.height)
 			.setLayers(1);
-		VkCheck(vulkan.device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
-		std::cout << "Framebuffer created\n";
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
 	return _frameBuffers;
@@ -1361,8 +1246,7 @@ std::vector<vk::Framebuffer> Context::createSSAOFrameBuffers()
 			.setWidth(vulkan.surface->actualExtent.width)
 			.setHeight(vulkan.surface->actualExtent.height)
 			.setLayers(1);
-		VkCheck(vulkan.device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
-		std::cout << "Framebuffer created\n";
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
 	return _frameBuffers;
@@ -1384,8 +1268,7 @@ std::vector<vk::Framebuffer> Context::createSSAOBlurFrameBuffers()
 			.setWidth(vulkan.surface->actualExtent.width)
 			.setHeight(vulkan.surface->actualExtent.height)
 			.setLayers(1);
-		VkCheck(vulkan.device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
-		std::cout << "Framebuffer created\n";
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
 	return _frameBuffers;
@@ -1407,8 +1290,7 @@ std::vector<vk::Framebuffer> Context::createMotionBlurFrameBuffers()
 			.setWidth(vulkan.surface->actualExtent.width)
 			.setHeight(vulkan.surface->actualExtent.height)
 			.setLayers(1);
-		VkCheck(vulkan.device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
-		std::cout << "Framebuffer created\n";
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
 	return _frameBuffers;
@@ -1430,8 +1312,7 @@ std::vector<vk::Framebuffer> Context::createGUIFrameBuffers()
 			.setWidth(vulkan.surface->actualExtent.width)
 			.setHeight(vulkan.surface->actualExtent.height)
 			.setLayers(1);
-		VkCheck(vulkan.device.createFramebuffer(&fbci, nullptr, &_frameBuffers[i]));
-		std::cout << "Framebuffer created\n";
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
 	return _frameBuffers;
@@ -1439,28 +1320,12 @@ std::vector<vk::Framebuffer> Context::createGUIFrameBuffers()
 
 std::vector<vk::CommandBuffer> Context::createCmdBuffers(const uint32_t bufferCount)
 {
-	std::vector<vk::CommandBuffer> _cmdBuffers(bufferCount);
 	auto const cbai = vk::CommandBufferAllocateInfo()
 		.setCommandPool(vulkan.commandPool)
 		.setLevel(vk::CommandBufferLevel::ePrimary)
 		.setCommandBufferCount(bufferCount);
-	VkCheck(vulkan.device.allocateCommandBuffers(&cbai, _cmdBuffers.data()));
-	std::cout << "Command Buffers allocated\n";
 
-	return _cmdBuffers;
-}
-
-vk::CommandBuffer Context::createCmdBuffer()
-{
-	vk::CommandBuffer _cmdBuffer;
-	auto const cbai = vk::CommandBufferAllocateInfo()
-		.setCommandPool(vulkan.commandPool)
-		.setLevel(vk::CommandBufferLevel::ePrimary)
-		.setCommandBufferCount(1);
-	VkCheck(vulkan.device.allocateCommandBuffers(&cbai, &_cmdBuffer));
-	std::cout << "Command Buffer allocated\n";
-
-	return _cmdBuffer;
+	return vulkan.device.allocateCommandBuffers(cbai);
 }
 
 vk::CommandBuffer Context::createComputeCmdBuffer()
@@ -1470,10 +1335,8 @@ vk::CommandBuffer Context::createComputeCmdBuffer()
 		.setCommandPool(vulkan.commandPoolCompute)
 		.setLevel(vk::CommandBufferLevel::ePrimary)
 		.setCommandBufferCount(1);
-	VkCheck(vulkan.device.allocateCommandBuffers(&cbai, &_cmdBuffer));
-	std::cout << "Command Buffer allocated\n";
 
-	return _cmdBuffer;
+	return vulkan.device.allocateCommandBuffers(cbai)[0];
 }
 
 std::vector<char> readFile(const std::string& filename)
@@ -1522,11 +1385,9 @@ Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 				reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
 			};
 		}
-		VkCheck(vulkan.device.createShaderModule(&vsmci, nullptr, &vertModule));
-		std::cout << "Vertex Shader Module created\n";
+		vertModule = vulkan.device.createShaderModule(vsmci);
 		if (specificInfo.shaders.size() > 1) {
-			VkCheck(vulkan.device.createShaderModule(&fsmci, nullptr, &fragModule));
-			std::cout << "Fragment Shader Module created\n";
+			fragModule = vulkan.device.createShaderModule(fsmci);
 		}
 	}
 	else
@@ -1644,11 +1505,8 @@ Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 	uint32_t numOfConsts = pushConstantRange == vk::PushConstantRange() ? 0 : 1;
 
 	// Pipeline Layout
-	VkCheck(vulkan.device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)specificInfo.descriptorSetLayouts.size(), specificInfo.descriptorSetLayouts.data(), numOfConsts, &pushConstantRange },
-		nullptr,
-		&_pipeline.pipeinfo.layout));
-	std::cout << "Pipeline Layout created\n";
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)specificInfo.descriptorSetLayouts.size(), specificInfo.descriptorSetLayouts.data(), numOfConsts, &pushConstantRange });
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = specificInfo.renderPass;
@@ -1662,8 +1520,7 @@ Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	VkCheck(vulkan.device.createGraphicsPipelines(nullptr, 1, &_pipeline.pipeinfo, nullptr, &_pipeline.pipeline));
-	std::cout << "Pipeline created\n";
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -1699,10 +1556,8 @@ Pipeline Context::createCompositionPipeline()
 			fragCode.size(),									// size_t codeSize;
 			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
 		};
-		VkCheck(vulkan.device.createShaderModule(&vsmci, nullptr, &vertModule));
-		std::cout << "Vertex Shader Module created\n";
-		VkCheck(vulkan.device.createShaderModule(&fsmci, nullptr, &fragModule));
-		std::cout << "Fragment Shader Module created\n";
+		vertModule = vulkan.device.createShaderModule(vsmci);
+		fragModule = vulkan.device.createShaderModule(fsmci);
 	}
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{
@@ -1826,11 +1681,6 @@ Pipeline Context::createCompositionPipeline()
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	_pipeline.pipeinfo.pDynamicState = nullptr;
-	//&vk::PipelineDynamicStateCreateInfo{
-	//		vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
-	//		static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
-	//		dynamicStates.data()							//const DynamicState* pDynamicStates;
-	//};
 
 	// Pipeline Layout
 	if (!deferred.DSLayoutComposition)
@@ -1901,18 +1751,15 @@ Pipeline Context::createCompositionPipeline()
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
 
-		VkCheck(vulkan.device.createDescriptorSetLayout(&descriptorLayout, nullptr, &deferred.DSLayoutComposition));
+		deferred.DSLayoutComposition  = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { deferred.DSLayoutComposition, Shadows::getDescriptorSetLayout(vulkan.device) };
 
 	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, sizeof(vm::vec4) };
 
-	VkCheck(vulkan.device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants },
-		nullptr,
-		&_pipeline.pipeinfo.layout));
-	std::cout << "Pipeline Layout created\n";
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = deferred.compositionRenderPass;
@@ -1926,8 +1773,7 @@ Pipeline Context::createCompositionPipeline()
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	VkCheck(vulkan.device.createGraphicsPipelines(nullptr, 1, &_pipeline.pipeinfo, nullptr, &_pipeline.pipeline));
-	std::cout << "Pipeline created\n";
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -1963,10 +1809,8 @@ Pipeline Context::createSSRPipeline()
 			fragCode.size(),									// size_t codeSize;
 			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
 		};
-		VkCheck(vulkan.device.createShaderModule(&vsmci, nullptr, &vertModule));
-		std::cout << "Vertex Shader Module created\n";
-		VkCheck(vulkan.device.createShaderModule(&fsmci, nullptr, &fragModule));
-		std::cout << "Fragment Shader Module created\n";
+		vertModule = vulkan.device.createShaderModule(vsmci);
+		fragModule = vulkan.device.createShaderModule(fsmci);
 	}
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{
@@ -2080,11 +1924,6 @@ Pipeline Context::createSSRPipeline()
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	_pipeline.pipeinfo.pDynamicState = nullptr;
-	//&vk::PipelineDynamicStateCreateInfo{
-	//		vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
-	//		static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
-	//		dynamicStates.data()							//const DynamicState* pDynamicStates;
-	//};
 
 	// Pipeline Layout
 	if (!ssr.DSLayoutReflection)
@@ -2139,16 +1978,13 @@ Pipeline Context::createSSRPipeline()
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
 
-		VkCheck(vulkan.device.createDescriptorSetLayout(&descriptorLayout, nullptr, &ssr.DSLayoutReflection));
+		ssr.DSLayoutReflection = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssr.DSLayoutReflection };
 	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
-	VkCheck(vulkan.device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants },
-		nullptr,
-		&_pipeline.pipeinfo.layout));
-	std::cout << "Pipeline Layout created\n";
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants } );
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = ssr.renderPass;
@@ -2162,8 +1998,7 @@ Pipeline Context::createSSRPipeline()
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	VkCheck(vulkan.device.createGraphicsPipelines(nullptr, 1, &_pipeline.pipeinfo, nullptr, &_pipeline.pipeline));
-	std::cout << "Pipeline created\n";
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -2199,10 +2034,8 @@ Pipeline Context::createSSAOPipeline()
 			fragCode.size(),									// size_t codeSize;
 			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
 		};
-		VkCheck(vulkan.device.createShaderModule(&vsmci, nullptr, &vertModule));
-		std::cout << "Vertex Shader Module created\n";
-		VkCheck(vulkan.device.createShaderModule(&fsmci, nullptr, &fragModule));
-		std::cout << "Fragment Shader Module created\n";
+		vertModule = vulkan.device.createShaderModule(vsmci);
+		fragModule = vulkan.device.createShaderModule(fsmci);
 	}
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{
@@ -2375,16 +2208,13 @@ Pipeline Context::createSSAOPipeline()
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
 
-		VkCheck(vulkan.device.createDescriptorSetLayout(&descriptorLayout, nullptr, &ssao.DSLayoutSSAO));
+		ssao.DSLayoutSSAO = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayoutSSAO };
 	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
-	VkCheck(vulkan.device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants },
-		nullptr,
-		&_pipeline.pipeinfo.layout));
-	std::cout << "Pipeline Layout created\n";
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants } );
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = ssao.renderPass;
@@ -2398,8 +2228,7 @@ Pipeline Context::createSSAOPipeline()
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	VkCheck(vulkan.device.createGraphicsPipelines(nullptr, 1, &_pipeline.pipeinfo, nullptr, &_pipeline.pipeline));
-	std::cout << "Pipeline created\n";
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -2435,10 +2264,8 @@ Pipeline Context::createSSAOBlurPipeline()
 			fragCode.size(),									// size_t codeSize;
 			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
 		};
-		VkCheck(vulkan.device.createShaderModule(&vsmci, nullptr, &vertModule));
-		std::cout << "Vertex Shader Module created\n";
-		VkCheck(vulkan.device.createShaderModule(&fsmci, nullptr, &fragModule));
-		std::cout << "Fragment Shader Module created\n";
+		vertModule = vulkan.device.createShaderModule(vsmci);
+		fragModule = vulkan.device.createShaderModule(fsmci);
 	}
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{
@@ -2552,11 +2379,6 @@ Pipeline Context::createSSAOBlurPipeline()
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	_pipeline.pipeinfo.pDynamicState = nullptr;
-	//&vk::PipelineDynamicStateCreateInfo{
-	//		vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
-	//		static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
-	//		dynamicStates.data()							//const DynamicState* pDynamicStates;
-	//};
 
 	// Pipeline Layout
 	if (!ssao.DSLayoutSSAOBlur)
@@ -2579,17 +2401,14 @@ Pipeline Context::createSSAOBlurPipeline()
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
 
-		VkCheck(vulkan.device.createDescriptorSetLayout(&descriptorLayout, nullptr, &ssao.DSLayoutSSAOBlur));
+		ssao.DSLayoutSSAOBlur = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayoutSSAOBlur };
 	vk::PushConstantRange pConstants = vk::PushConstantRange();//{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
-	VkCheck(vulkan.device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &pConstants },
-		nullptr,
-		&_pipeline.pipeinfo.layout));
-	std::cout << "Pipeline Layout created\n";
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &pConstants } );
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = ssao.blurRenderPass;
@@ -2603,8 +2422,7 @@ Pipeline Context::createSSAOBlurPipeline()
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	VkCheck(vulkan.device.createGraphicsPipelines(nullptr, 1, &_pipeline.pipeinfo, nullptr, &_pipeline.pipeline));
-	std::cout << "Pipeline created\n";
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -2640,10 +2458,8 @@ Pipeline Context::createMotionBlurPipeline()
 			fragCode.size(),									// size_t codeSize;
 			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
 		};
-		VkCheck(vulkan.device.createShaderModule(&vsmci, nullptr, &vertModule));
-		std::cout << "Vertex Shader Module created\n";
-		VkCheck(vulkan.device.createShaderModule(&fsmci, nullptr, &fragModule));
-		std::cout << "Fragment Shader Module created\n";
+		vertModule = vulkan.device.createShaderModule(vsmci);
+		fragModule = vulkan.device.createShaderModule(fsmci);
 	}
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{
@@ -2757,11 +2573,6 @@ Pipeline Context::createMotionBlurPipeline()
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	_pipeline.pipeinfo.pDynamicState = nullptr;
-	//&vk::PipelineDynamicStateCreateInfo{
-	//		vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
-	//		static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
-	//		dynamicStates.data()							//const DynamicState* pDynamicStates;
-	//};
 
 	// Pipeline Layout
 	if (!motionBlur.DSLayoutMotionBlur)
@@ -2800,16 +2611,13 @@ Pipeline Context::createMotionBlurPipeline()
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
 
-		VkCheck(vulkan.device.createDescriptorSetLayout(&descriptorLayout, nullptr, &motionBlur.DSLayoutMotionBlur));
+		motionBlur.DSLayoutMotionBlur = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { motionBlur.DSLayoutMotionBlur };
 	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
-	VkCheck(vulkan.device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants },
-		nullptr,
-		&_pipeline.pipeinfo.layout));
-	std::cout << "Pipeline Layout created\n";
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants } );
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = motionBlur.renderPass;
@@ -2823,8 +2631,7 @@ Pipeline Context::createMotionBlurPipeline()
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	VkCheck(vulkan.device.createGraphicsPipelines(nullptr, 1, &_pipeline.pipeinfo, nullptr, &_pipeline.pipeline));
-	std::cout << "Pipeline created\n";
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -2847,8 +2654,7 @@ Pipeline Context::createComputePipeline()
 			vk::ShaderModuleCreateFlags(),							// ShaderModuleCreateFlags flags;
 			compCode.size(),										// size_t codeSize;
 			reinterpret_cast<const uint32_t*>(compCode.data()) };	// const uint32_t* pCode;
-		VkCheck(vulkan.device.createShaderModule(&csmci, nullptr, &compModule));
-		std::cout << "Compute Shader Module created\n";
+		compModule = vulkan.device.createShaderModule(csmci);
 	}
 
 	_pipeline.compinfo.stage.module = compModule;
@@ -2873,16 +2679,13 @@ Pipeline Context::createComputePipeline()
 			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
-		VkCheck(vulkan.device.createDescriptorSetLayout(&descriptorLayout, nullptr, &compute.DSLayoutCompute));
+		compute.DSLayoutCompute = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { compute.DSLayoutCompute };
-	VkCheck(vulkan.device.createPipelineLayout(
-		&vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() },
-		nullptr,
-		&_pipeline.compinfo.layout));
-	std::cout << "Compute Pipeline Layout created\n";
+	_pipeline.compinfo.layout = vulkan.device.createPipelineLayout(
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() } );
 
-	VkCheck(vulkan.device.createComputePipelines(nullptr, 1, &_pipeline.compinfo, nullptr, &_pipeline.pipeline));
+	_pipeline.pipeline = vulkan.device.createComputePipelines(nullptr, _pipeline.compinfo)[0];
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(compModule);
@@ -2892,8 +2695,6 @@ Pipeline Context::createComputePipeline()
 
 vk::DescriptorPool Context::createDescriptorPool(uint32_t maxDescriptorSets)
 {
-	vk::DescriptorPool _descriptorPool;
-
 	std::vector<vk::DescriptorPoolSize> descPoolsize = {};
 	// mvp
 	descPoolsize.push_back(vk::DescriptorPoolSize()
@@ -2920,10 +2721,7 @@ vk::DescriptorPool Context::createDescriptorPool(uint32_t maxDescriptorSets)
 		.setPPoolSizes(descPoolsize.data())
 		.setMaxSets(maxDescriptorSets);
 
-	VkCheck(vulkan.device.createDescriptorPool(&createInfo, nullptr, &_descriptorPool));
-	std::cout << "DescriptorPool created\n";
-
-	return _descriptorPool;
+	return vulkan.device.createDescriptorPool(createInfo);
 }
 
 std::vector<vk::Fence> Context::createFences(const uint32_t fenceCount)
@@ -2932,8 +2730,7 @@ std::vector<vk::Fence> Context::createFences(const uint32_t fenceCount)
 	auto const fi = vk::FenceCreateInfo();
 
 	for (uint32_t i = 0; i < fenceCount; i++) {
-		vulkan.device.createFence(&fi, nullptr, &_fences[i]);
-		std::cout << "Fence created\n";
+		_fences[i] = vulkan.device.createFence(fi);
 	}
 
 	return _fences;
@@ -2945,8 +2742,7 @@ std::vector<vk::Semaphore> Context::createSemaphores(const uint32_t semaphoresCo
 	auto const si = vk::SemaphoreCreateInfo();
 
 	for (uint32_t i = 0; i < semaphoresCount; i++) {
-		VkCheck(vulkan.device.createSemaphore(&si, nullptr, &_semaphores[i]));
-		std::cout << "Semaphore created\n";
+		_semaphores[i] = vulkan.device.createSemaphore(si);
 	}
 
 	return _semaphores;
@@ -2957,13 +2753,11 @@ void vm::Context::destroyVkContext()
 	for (auto& fence : vulkan.fences) {
 		if (fence) {
 			vulkan.device.destroyFence(fence);
-			std::cout << "Fence destroyed\n";
 		}
 	}
 	for (auto &semaphore : vulkan.semaphores) {
 		if (semaphore) {
 			vulkan.device.destroySemaphore(semaphore);
-			std::cout << "Semaphore destroyed\n";
 		}
 	}
 	for (auto& rt : renderTargets)
@@ -2974,15 +2768,12 @@ void vm::Context::destroyVkContext()
 
 	if (vulkan.descriptorPool) {
 		vulkan.device.destroyDescriptorPool(vulkan.descriptorPool);
-		std::cout << "DescriptorPool destroyed\n";
 	}
 	if (vulkan.commandPool) {
 		vulkan.device.destroyCommandPool(vulkan.commandPool);
-		std::cout << "CommandPool destroyed\n";
 	}
 	if (vulkan.commandPoolCompute) {
 		vulkan.device.destroyCommandPool(vulkan.commandPoolCompute);
-		std::cout << "CommandPool destroyed\n";
 	}
 
 	vulkan.swapchain->destroy();
@@ -2990,17 +2781,14 @@ void vm::Context::destroyVkContext()
 
 	if (vulkan.device) {
 		vulkan.device.destroy();
-		std::cout << "Device destroyed\n";
 	}
 
 	if (vulkan.surface->surface) {
 		vulkan.instance.destroySurfaceKHR(vulkan.surface->surface);
-		std::cout << "Surface destroyed\n";
 	}delete vulkan.surface;
 
 	if (vulkan.instance) {
 		vulkan.instance.destroy();
-		std::cout << "Instance destroyed\n";
 	}
 }
 
@@ -3020,12 +2808,10 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	// GUI
 	if (gui.renderPass) {
 		vulkan.device.destroyRenderPass(gui.renderPass);
-		std::cout << "RenderPass destroyed\n";
 	}
 	for (auto &frameBuffer : gui.frameBuffers) {
 		if (frameBuffer) {
 			vulkan.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	gui.pipeline.destroy();
@@ -3033,22 +2819,18 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	// deferred
 	if (deferred.renderPass) {
 		vulkan.device.destroyRenderPass(deferred.renderPass);
-		std::cout << "RenderPass destroyed\n";
 	}
 	if (deferred.compositionRenderPass) {
 		vulkan.device.destroyRenderPass(deferred.compositionRenderPass);
-		std::cout << "RenderPass destroyed\n";
 	}
 	for (auto &frameBuffer : deferred.frameBuffers) {
 		if (frameBuffer) {
 			vulkan.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	for (auto &frameBuffer : deferred.compositionFrameBuffers) {
 		if (frameBuffer) {
 			vulkan.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	deferred.pipeline.destroy();
@@ -3058,12 +2840,10 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	for (auto &frameBuffer : ssr.frameBuffers) {
 		if (frameBuffer) {
 			vulkan.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	if (ssr.renderPass) {
 		vulkan.device.destroyRenderPass(ssr.renderPass);
-		std::cout << "RenderPass destroyed\n";
 	}
 	ssr.pipeline.destroy();
 
@@ -3071,34 +2851,28 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	for (auto &frameBuffer : motionBlur.frameBuffers) {
 		if (frameBuffer) {
 			vulkan.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	if (motionBlur.renderPass) {
 		vulkan.device.destroyRenderPass(motionBlur.renderPass);
-		std::cout << "RenderPass destroyed\n";
 	}
 	motionBlur.pipeline.destroy();
 
 	// SSAO
 	if (ssao.renderPass) {
 		vulkan.device.destroyRenderPass(ssao.renderPass);
-		std::cout << "RenderPass destroyed\n";
 	}
 	if (ssao.blurRenderPass) {
 		vulkan.device.destroyRenderPass(ssao.blurRenderPass);
-		std::cout << "RenderPass destroyed\n";
 	}
 	for (auto &frameBuffer : ssao.frameBuffers) {
 		if (frameBuffer) {
 			vulkan.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	for (auto &frameBuffer : ssao.blurFrameBuffers) {
 		if (frameBuffer) {
 			vulkan.device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	ssao.pipeline.destroy();
@@ -3119,15 +2893,14 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	*vulkan.swapchain = createSwapchain();
 	*vulkan.depth = createDepthResources();
 
-	renderTargets = createRenderTargets({
-		{"position", vk::Format::eR16G16B16A16Sfloat},
-		{"normal", vk::Format::eR16G16B16A16Sfloat},
-		{"albedo", vk::Format::eR8G8B8A8Unorm},
-		{"srm", vk::Format::eR16G16B16A16Sfloat},
-		{"ssao", vk::Format::eR16Sfloat},
-		{"ssaoBlur", vk::Format::eR16Sfloat},
-		{"ssr", vk::Format::eR16G16B16A16Sfloat},
-		{"composition", vk::Format::eR16G16B16A16Sfloat} });
+	addRenderTarget("position", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("srm", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("ssao", vk::Format::eR16Sfloat);
+	addRenderTarget("ssaoBlur", vk::Format::eR16Sfloat);
+	addRenderTarget("ssr", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
 
 
 	forward.renderPass = createRenderPass();

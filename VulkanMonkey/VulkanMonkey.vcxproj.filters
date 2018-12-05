@@ -78,9 +78,6 @@
     <ClInclude Include="include\Context.h">
       <Filter>Include</Filter>
     </ClInclude>
-    <ClInclude Include="include\Errors.h">
-      <Filter>Include</Filter>
-    </ClInclude>
     <ClInclude Include="include\GUI.h">
       <Filter>Include</Filter>
     </ClInclude>

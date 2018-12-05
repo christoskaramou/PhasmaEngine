@@ -1,5 +1,4 @@
 #include "../include/Renderer.h"
-#include "../include/Errors.h"
 #include "../include/Math.h"
 #include <iostream>
 #include <random>
@@ -161,10 +160,10 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 	auto beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
-	VkCheck(ctx.vulkan.computeCmdBuffer.begin(&beginInfo));
+	ctx.vulkan.computeCmdBuffer.begin(beginInfo);
 
 	ctx.vulkan.computeCmdBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.pipeline);
-	ctx.vulkan.computeCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.compinfo.layout, 0, 1, &ctx.compute.DSCompute, 0, nullptr);
+	ctx.vulkan.computeCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.compinfo.layout, 0, ctx.compute.DSCompute, nullptr);
 
 	ctx.vulkan.computeCmdBuffer.dispatch(sizeX, sizeY, sizeZ);
 	ctx.vulkan.computeCmdBuffer.end();
@@ -197,11 +196,11 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
 
-	VkCheck(ctx.vulkan.dynamicCmdBuffer.begin(&beginInfo));
-	ctx.vulkan.dynamicCmdBuffer.setViewport(0, 1, &ctx.camera_main.renderArea.viewport);
-	ctx.vulkan.dynamicCmdBuffer.setScissor(0, 1, &ctx.camera_main.renderArea.scissor);
+	ctx.vulkan.dynamicCmdBuffer.begin(beginInfo);
+	ctx.vulkan.dynamicCmdBuffer.setViewport(0, ctx.camera_main.renderArea.viewport);
+	ctx.vulkan.dynamicCmdBuffer.setScissor(0, ctx.camera_main.renderArea.scissor);
 
-	ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
+	ctx.vulkan.dynamicCmdBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
 	// MODELS
 	for (uint32_t m = 0; m < Context::models.size(); m++)
@@ -209,8 +208,8 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 
 	for (auto& cam : ctx.camera) {
 		cam.renderArea.update(winPos + winSize * .7f, winSize * .2f, 0.f, 0.5f);
-		ctx.vulkan.dynamicCmdBuffer.setViewport(0, 1, &cam.renderArea.viewport);
-		ctx.vulkan.dynamicCmdBuffer.setScissor(0, 1, &cam.renderArea.scissor);
+		ctx.vulkan.dynamicCmdBuffer.setViewport(0, cam.renderArea.viewport);
+		ctx.vulkan.dynamicCmdBuffer.setScissor(0, cam.renderArea.scissor);
 
 		// MODELS
 		for (uint32_t m = 0; m < Context::models.size(); m++)
@@ -251,12 +250,12 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
 
-	VkCheck(ctx.vulkan.dynamicCmdBuffer.begin(&beginInfo));
-	ctx.vulkan.dynamicCmdBuffer.setViewport(0, 1, &ctx.camera_main.renderArea.viewport);
-	ctx.vulkan.dynamicCmdBuffer.setScissor(0, 1, &ctx.camera_main.renderArea.scissor);
+	ctx.vulkan.dynamicCmdBuffer.begin(beginInfo);
+	ctx.vulkan.dynamicCmdBuffer.setViewport(0, ctx.camera_main.renderArea.viewport);
+	ctx.vulkan.dynamicCmdBuffer.setScissor(0, ctx.camera_main.renderArea.scissor);
 
 	if (Context::models.size() > 0) {
-		ctx.vulkan.dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
+		ctx.vulkan.dynamicCmdBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 		// MODELS
 		for (uint32_t m = 0; m < Context::models.size(); m++)
 			Context::models[m].draw(ctx.deferred.pipeline, ctx.vulkan.dynamicCmdBuffer, m, true);
@@ -300,8 +299,8 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 		.setClearValueCount(static_cast<uint32_t>(clearValuesShadows.size()))
 		.setPClearValues(clearValuesShadows.data());
 
-	VkCheck(ctx.vulkan.shadowCmdBuffer.begin(&beginInfoShadows));
-	ctx.vulkan.shadowCmdBuffer.beginRenderPass(&renderPassInfoShadows, vk::SubpassContents::eInline);
+	ctx.vulkan.shadowCmdBuffer.begin(beginInfoShadows);
+	ctx.vulkan.shadowCmdBuffer.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 
 	vk::DeviceSize offset = vk::DeviceSize();
 
@@ -309,11 +308,11 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 
 	for (uint32_t m = 0; m < Context::models.size(); m++) {
 		if (Context::models[m].render) {
-			ctx.vulkan.shadowCmdBuffer.bindVertexBuffers(0, 1, &Context::models[m].vertexBuffer.buffer, &offset);
+			ctx.vulkan.shadowCmdBuffer.bindVertexBuffers(0, Context::models[m].vertexBuffer.buffer, offset);
 			ctx.vulkan.shadowCmdBuffer.bindIndexBuffer(Context::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
-			const uint32_t dOffsets[] = { m * sizeof(ShadowsUBO) };
-			ctx.vulkan.shadowCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, 1, &ctx.shadows.descriptorSet, 1, dOffsets);
+			const uint32_t dOffsets =  m * sizeof(ShadowsUBO);
+			ctx.vulkan.shadowCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, ctx.shadows.descriptorSet, dOffsets);
 
 			for (auto& mesh : Context::models[m].meshes) {
 				if (mesh.render)
@@ -335,9 +334,9 @@ void Renderer::present()
 		auto const siCompute = vk::SubmitInfo()
 			.setCommandBufferCount(1)
 			.setPCommandBuffers(&ctx.vulkan.computeCmdBuffer);
-		VkCheck(ctx.vulkan.computeQueue.submit(1, &siCompute, ctx.vulkan.fences[1]));
-		ctx.vulkan.device.waitForFences(1, &ctx.vulkan.fences[1], VK_TRUE, UINT64_MAX);
-		ctx.vulkan.device.resetFences(1, &ctx.vulkan.fences[1]);
+		ctx.vulkan.computeQueue.submit(siCompute, ctx.vulkan.fences[1]);
+		ctx.vulkan.device.waitForFences(ctx.vulkan.fences[1], VK_TRUE, UINT64_MAX);
+		ctx.vulkan.device.resetFences(ctx.vulkan.fences[1]);
 	}
 
 	// what stage of a pipeline at a command buffer to wait for the semaphores to be done until keep going
@@ -347,7 +346,7 @@ void Renderer::present()
 
 	// if using shadows use the semaphore[0], record and submit the shadow commands, else use the semaphore[1]
 	if (Shadows::shadowCast) {
-		VkCheck(ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[0], vk::Fence(), &imageIndex));
+		imageIndex = ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[0], vk::Fence()).value;
 
 		recordShadowsCmds(imageIndex);
 
@@ -359,10 +358,10 @@ void Renderer::present()
 			.setPCommandBuffers(&ctx.vulkan.shadowCmdBuffer)
 			.setSignalSemaphoreCount(1)
 			.setPSignalSemaphores(&ctx.vulkan.semaphores[1]);
-		VkCheck(ctx.vulkan.graphicsQueue.submit(1, &siShadows, nullptr));
+		ctx.vulkan.graphicsQueue.submit(siShadows, nullptr);
 	}
 	else
-		VkCheck(ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[1], vk::Fence(), &imageIndex));
+		imageIndex = ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[1], vk::Fence()).value;
 
 	if (GUI::deferred_rendering) 
 		recordDeferredCmds(imageIndex);
@@ -378,7 +377,7 @@ void Renderer::present()
 		.setPCommandBuffers(&ctx.vulkan.dynamicCmdBuffer)
 		.setSignalSemaphoreCount(1)
 		.setPSignalSemaphores(&ctx.vulkan.semaphores[2]);
-	VkCheck(ctx.vulkan.graphicsQueue.submit(1, &si, ctx.vulkan.fences[0]));
+	ctx.vulkan.graphicsQueue.submit(si, ctx.vulkan.fences[0]);
 
 	// Presentation
 	auto const pi = vk::PresentInfoKHR()
@@ -388,10 +387,10 @@ void Renderer::present()
 		.setPSwapchains(&ctx.vulkan.swapchain->swapchain)
 		.setPImageIndices(&imageIndex)
 		.setPResults(nullptr); //optional
-	VkCheck(ctx.vulkan.presentQueue.presentKHR(&pi));
+	ctx.vulkan.presentQueue.presentKHR(pi);
 
-	ctx.vulkan.device.waitForFences(1, &ctx.vulkan.fences[0], VK_TRUE, UINT64_MAX);
-	ctx.vulkan.device.resetFences(1, &ctx.vulkan.fences[0]);
+	ctx.vulkan.device.waitForFences(ctx.vulkan.fences[0], VK_TRUE, UINT64_MAX);
+	ctx.vulkan.device.resetFences(ctx.vulkan.fences[0]);
 
 	if (overloadedGPU)
 		ctx.vulkan.presentQueue.waitIdle(); // user set, when GPU can't catch the CPU commands 

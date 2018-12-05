@@ -1,5 +1,4 @@
 #include "../include/Window.h"
-#include "../include/Errors.h"
 #include "../include/Timer.h"
 #include <iostream>
 
@@ -18,7 +17,6 @@ void Window::create(std::string title, Uint32 flags)
 
 	SDL_Window* window;
 	if (!((window = SDL_CreateWindow(title.c_str(), 50, 50, 800, 600, flags)))) { std::cout << SDL_GetError(); return; }
-	std::cout << "Success at window creation\n";
 
 	Window::renderer.push_back(std::make_unique<Renderer>(window));
 
@@ -35,7 +33,6 @@ void Window::destroyAll()
 {
 	while (!renderer.empty()) {
 		SDL_DestroyWindow(renderer.back()->ctx.vulkan.window);
-		std::cout << "Window destroyed\n";
 		renderer.pop_back();
 	}
 	SDL_Quit();

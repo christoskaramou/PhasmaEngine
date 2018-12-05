@@ -15,7 +15,6 @@ Timer::Timer()
 	_minFrameTime = 0.0f;
     if (++instances > 1)
     {
-        std::cout << "No more than one instance of Timer can run properly yet!\n";
         exit(-1);
     }
     start = std::chrono::high_resolution_clock::now();

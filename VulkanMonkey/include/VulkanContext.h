@@ -1,9 +1,8 @@
 #pragma once
 
+#include <vector>
 #include "Vulkan.h"
 #include "SDL.h"
-#include <map>
-#include <vector>
 
 namespace vm {
 

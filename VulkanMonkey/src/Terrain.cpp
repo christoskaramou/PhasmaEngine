@@ -1,5 +1,4 @@
 #include "../include/Terrain.h"
-#include "../include/Errors.h"
 #include <iostream>
 
 using namespace vm;
@@ -28,8 +27,7 @@ vk::DescriptorSetLayout Terrain::getDescriptorSetLayout(vk::Device device)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		VkCheck(device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
-		std::cout << "Descriptor Set Layout created\n";
+		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
 	}
 	return descriptorSetLayout;
 }
@@ -58,10 +56,9 @@ void Terrain::draw(const vk::CommandBuffer & cmd)
 	if (render)
 	{
 		vk::DeviceSize offset = vk::DeviceSize();
-		const vk::DescriptorSet descriptorSets[] = { descriptorSet };
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-		cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, 1, descriptorSets, 0, nullptr);
+		cmd.bindVertexBuffers(0, vertexBuffer.buffer, offset);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSet, nullptr);
 		cmd.draw(static_cast<uint32_t>(vertices.size() * 0.0833333333333333f), 1, 0, 0);
 	}
 }
@@ -75,15 +72,13 @@ void Terrain::loadTexture(const std::string path)
 	vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
 	if (!pixels) {
-		std::cout << "Can not load texture: " << path << "\n";
 		exit(-19);
 	}
 
 	Buffer staging;
 	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	void* data;
-	vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &data);
+	void* data = vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize);
 	memcpy(data, pixels, static_cast<size_t>(imageSize));
 	vulkan->device.unmapMemory(staging.memory);
 
@@ -108,6 +103,5 @@ void Terrain::destroy()
 	if (Terrain::descriptorSetLayout) {
 		vulkan->device.destroyDescriptorSetLayout(Terrain::descriptorSetLayout);
 		Terrain::descriptorSetLayout = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 }

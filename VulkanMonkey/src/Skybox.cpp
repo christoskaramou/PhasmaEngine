@@ -1,5 +1,4 @@
 #include "../include/Skybox.h"
-#include "../include/Errors.h"
 #include <iostream>
 
 using namespace vm;
@@ -28,8 +27,7 @@ vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(vk::Device device)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		VkCheck(device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
-		std::cout << "Descriptor Set Layout created\n";
+		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
 	}
 	return descriptorSetLayout;
 }
@@ -91,8 +89,8 @@ void SkyBox::draw(const vk::CommandBuffer & cmd)
 	{
 		vk::DeviceSize offset{ 0 };
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, 1, &descriptorSet, 0, nullptr);
-		cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSet, nullptr);
+		cmd.bindVertexBuffers(0, vertexBuffer.buffer, offset);
 		cmd.draw(static_cast<uint32_t>(vertices.size() * 0.25f), 1, 0, 0);
 	}
 }
@@ -117,12 +115,11 @@ void SkyBox::loadTextures(const std::array<std::string, 6>& paths, uint32_t imag
 
 		vk::DeviceSize imageSize = texWidth * texHeight * 4;
 		if (!pixels) {
-			std::cout << "Can not load texture: " << paths[i] << "\n";
 			exit(-19);
 		}
 		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &staging.data);
+		staging.data = vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize);
 		memcpy(staging.data, pixels, static_cast<size_t>(imageSize));
 		vulkan->device.unmapMemory(staging.memory);
 		stbi_image_free(pixels);
@@ -146,6 +143,5 @@ void SkyBox::destroy()
 	if (SkyBox::descriptorSetLayout) {
 		vulkan->device.destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
 		SkyBox::descriptorSetLayout = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 }

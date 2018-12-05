@@ -1,5 +1,4 @@
 #include "../include/SSAO.h"
-#include "../include/Errors.h"
 
 using namespace vm;
 
@@ -16,19 +15,20 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 		ssaoKernel.push_back(vm::vec4(sample * scale, 0.f));
 	}
 	UBssaoKernel.createBuffer(sizeof(vm::vec4) * 32, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(vulkan->device.mapMemory(UBssaoKernel.memory, 0, UBssaoKernel.size, vk::MemoryMapFlags(), &UBssaoKernel.data));
+	UBssaoKernel.data = vulkan->device.mapMemory(UBssaoKernel.memory, 0, UBssaoKernel.size);
 	memcpy(UBssaoKernel.data, ssaoKernel.data(), UBssaoKernel.size);
 	// noise image
 	std::vector<vm::vec4> noise{};
 	for (unsigned int i = 0; i < 16; i++)
 		noise.push_back(vm::vec4(vm::rand(-1.f, 1.f), vm::rand(-1.f, 1.f), 0.f, 1.f));
+
 	Buffer staging;
-	void* data;
 	uint64_t bufSize = sizeof(vm::vec4) * 16;
 	staging.createBuffer(bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), staging.size, vk::MemoryMapFlags(), &data);
+	void* data = vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), staging.size);
 	memcpy(data, noise.data(), staging.size);
 	vulkan->device.unmapMemory(staging.memory);
+
 	ssaoNoise.filter = vk::Filter::eNearest;
 	ssaoNoise.minLod = 0.0f;
 	ssaoNoise.maxLod = 0.0f;
@@ -43,14 +43,14 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 	staging.destroy();
 	// pvm uniform
 	UBssaoPVM.createBuffer(2 * sizeof(vm::mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(vulkan->device.mapMemory(UBssaoPVM.memory, 0, UBssaoPVM.size, vk::MemoryMapFlags(), &UBssaoPVM.data));
+	UBssaoPVM.data = vulkan->device.mapMemory(UBssaoPVM.memory, 0, UBssaoPVM.size);
 
 	vk::DescriptorSetAllocateInfo allocInfoSSAO = vk::DescriptorSetAllocateInfo{
 		vulkan->descriptorPool,						//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
 		&DSLayoutSSAO						//const DescriptorSetLayout* pSetLayouts;
 	};
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocInfoSSAO, &DSssao));
+	DSssao = vulkan->device.allocateDescriptorSets(allocInfoSSAO)[0];
 
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
 		renderTargets["position"].sampler,		//Sampler sampler;
@@ -133,8 +133,7 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 			nullptr									//const BufferView* pTexelBufferView;
 		}
 	};
-	vulkan->device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSetsSSAO.size()), writeDescriptorSetsSSAO.data(), 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(writeDescriptorSetsSSAO, nullptr);
 
 	// DESCRIPTOR SET FOR SSAO BLUR
 	vk::DescriptorSetAllocateInfo allocInfoSSAOBlur = vk::DescriptorSetAllocateInfo{
@@ -143,7 +142,7 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 		&DSLayoutSSAOBlur					//const DescriptorSetLayout* pSetLayouts;
 	};
 
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocInfoSSAOBlur, &DSssaoBlur));
+	DSssaoBlur = vulkan->device.allocateDescriptorSets(allocInfoSSAOBlur)[0];
 
 	std::vector<vk::WriteDescriptorSet> writeDescriptorSetsSSAOBlur = {
 		// Binding 0: Position texture target
@@ -158,8 +157,7 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 			nullptr									//const BufferView* pTexelBufferView;
 		}
 	};
-	vulkan->device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSetsSSAOBlur.size()), writeDescriptorSetsSSAOBlur.data(), 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(writeDescriptorSetsSSAOBlur, nullptr);
 }
 
 void vm::SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
@@ -245,8 +243,7 @@ void vm::SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 			nullptr									//const BufferView* pTexelBufferView;
 		}
 	};
-	vulkan->device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSetsSSAO.size()), writeDescriptorSetsSSAO.data(), 0, nullptr);
-	std::cout << "DescriptorSet updated\n";
+	vulkan->device.updateDescriptorSets(writeDescriptorSetsSSAO, nullptr);
 
 
 	std::vector<vk::WriteDescriptorSet> writeDescriptorSetsSSAOBlur = {
@@ -262,8 +259,7 @@ void vm::SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 			nullptr									//const BufferView* pTexelBufferView;
 		}
 	};
-	vulkan->device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSetsSSAOBlur.size()), writeDescriptorSetsSSAOBlur.data(), 0, nullptr);
-	std::cout << "DescriptorSet updated\n";
+	vulkan->device.updateDescriptorSets(writeDescriptorSetsSSAOBlur, nullptr);
 }
 
 void SSAO::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
@@ -278,12 +274,11 @@ void SSAO::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
 		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValuesSSAO.size()))
 		.setPClearValues(clearValuesSSAO.data());
-	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAO, vk::SubpassContents::eInline);
+	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfoSSAO, vk::SubpassContents::eInline);
 	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vm::vec2), UVOffset);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-	const vk::DescriptorSet descriptorSets[] = { DSssao };
-	const uint32_t dOffsets[] = { 0 };
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, 1, descriptorSets, 0, dOffsets);
+	const vk::DescriptorSet descriptorSets = { DSssao };
+	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSets, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
 
@@ -296,11 +291,10 @@ void SSAO::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
 		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValuesSSAOBlur.size()))
 		.setPClearValues(clearValuesSSAOBlur.data());
-	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfoSSAOBlur, vk::SubpassContents::eInline);
+	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfoSSAOBlur, vk::SubpassContents::eInline);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeline);
-	const vk::DescriptorSet descriptorSetsBlur[] = { DSssaoBlur };
-	const uint32_t dOffsetsBlur[] = { 0 };
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeinfo.layout, 0, 1, descriptorSetsBlur, 0, dOffsetsBlur);
+	const vk::DescriptorSet descriptorSetsBlur = { DSssaoBlur };
+	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeinfo.layout, 0, descriptorSetsBlur, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
 }
@@ -313,23 +307,19 @@ void vm::SSAO::destroy()
 	if (renderPass) {
 		vulkan->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
 	}
 	if (blurRenderPass) {
 		vulkan->device.destroyRenderPass(blurRenderPass);
 		blurRenderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
 	}
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
 			vulkan->device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	for (auto &frameBuffer : blurFrameBuffers) {
 		if (frameBuffer) {
 			vulkan->device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	pipeline.destroy();
@@ -337,11 +327,9 @@ void vm::SSAO::destroy()
 	if (DSLayoutSSAO) {
 		vulkan->device.destroyDescriptorSetLayout(DSLayoutSSAO);
 		DSLayoutSSAO = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 	if (DSLayoutSSAOBlur) {
 		vulkan->device.destroyDescriptorSetLayout(DSLayoutSSAOBlur);
 		DSLayoutSSAOBlur = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 }

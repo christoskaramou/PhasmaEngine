@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Vulkan.h"
 #include "VulkanContext.h"
 #include "SDL.h"
 #include "Math.h"
@@ -38,7 +37,7 @@ namespace vm {
 		VulkanContext &vulkan = VulkanContext::getVulkanContext();
 
 		// RENDER TARGETS
-		std::map<std::string, Image> renderTargets;
+		std::map<std::string, Image> renderTargets{};
 
 		// MODELS
 		static std::vector<Model> models;
@@ -117,7 +116,7 @@ namespace vm {
 		Swapchain createSwapchain();
 		vk::CommandPool createCommandPool();
 		vk::CommandPool createComputeCommadPool();
-		std::map<std::string, Image> createRenderTargets(std::vector<std::tuple<std::string, vk::Format>> RTtuples);
+		void addRenderTarget(const std::string& name, vk::Format format);
 		vk::RenderPass createRenderPass();
 		vk::RenderPass createDeferredRenderPass();
 		vk::RenderPass createCompositionRenderPass();
@@ -135,8 +134,7 @@ namespace vm {
 		std::vector<vk::Framebuffer> createSSAOBlurFrameBuffers();
 		std::vector<vk::Framebuffer> createMotionBlurFrameBuffers();
 		std::vector<vk::Framebuffer> createGUIFrameBuffers();
-		std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount);
-		vk::CommandBuffer createCmdBuffer();
+		std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount = 1);
 		vk::CommandBuffer createComputeCmdBuffer();
 		Pipeline createPipeline(const PipelineInfo& specificInfo);
 		Pipeline createCompositionPipeline();

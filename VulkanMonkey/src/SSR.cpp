@@ -1,18 +1,17 @@
 #include "../include/SSR.h"
-#include "../include/Errors.h"
 
 void vm::SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 {
 	UBReflection.createBuffer(256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(vulkan->device.mapMemory(UBReflection.memory, 0, UBReflection.size, vk::MemoryMapFlags(), &UBReflection.data));
+	UBReflection.data = vulkan->device.mapMemory(UBReflection.memory, 0, UBReflection.size);
 
 	auto const allocateInfo2 = vk::DescriptorSetAllocateInfo()
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&DSLayoutReflection);
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo2, &DSReflection));
+	DSReflection = vulkan->device.allocateDescriptorSets(allocateInfo2)[0];
 
-	vk::WriteDescriptorSet textureWriteSets[5];
+	std::vector<vk::WriteDescriptorSet> textureWriteSets(5);
 	// Albedo
 	textureWriteSets[0] = vk::WriteDescriptorSet()
 		.setDstSet(DSReflection)									// DescriptorSet dstSet;
@@ -69,14 +68,13 @@ void vm::SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 			.setOffset(0)													// DeviceSize offset;
 			.setRange(3 * 64));									// DeviceSize range;
 
-	vulkan->device.updateDescriptorSets(5, textureWriteSets, 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 void vm::SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
 
-	vk::WriteDescriptorSet textureWriteSets[5];
+	std::vector<vk::WriteDescriptorSet> textureWriteSets(5);
 	// Albedo
 	textureWriteSets[0] = vk::WriteDescriptorSet()
 		.setDstSet(DSReflection)									// DescriptorSet dstSet;
@@ -133,8 +131,7 @@ void vm::SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 			.setOffset(0)													// DeviceSize offset;
 			.setRange(3 * 64));									// DeviceSize range;
 
-	vulkan->device.updateDescriptorSets(5, textureWriteSets, 0, nullptr);
-	std::cout << "DescriptorSet updated\n";
+	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 void vm::SSR::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
@@ -150,7 +147,7 @@ void vm::SSR::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
 	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfo1, vk::SubpassContents::eInline);
 	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vm::vec2), UVOffset);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, 1, &DSReflection, 0, nullptr);
+	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSReflection, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
 }
@@ -160,18 +157,15 @@ void vm::SSR::destroy()
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
 			vulkan->device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	if (renderPass) {
 		vulkan->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
 	}
 	if (DSLayoutReflection) {
 		vulkan->device.destroyDescriptorSetLayout(DSLayoutReflection);
 		DSLayoutReflection = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 	UBReflection.destroy();
 	pipeline.destroy();

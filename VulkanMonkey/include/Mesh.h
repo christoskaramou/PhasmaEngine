@@ -4,6 +4,7 @@
 #include "Vertex.h"
 #include "Image.h"
 #include "Stbi.h"
+#include <map>
 
 namespace vm {
 	struct Effects {

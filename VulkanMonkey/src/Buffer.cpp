@@ -1,5 +1,4 @@
 #include "../include/Buffer.h"
-#include "../include/Errors.h"
 #include <iostream>
 
 using namespace vm;
@@ -12,7 +11,7 @@ void Buffer::createBuffer(const vk::DeviceSize size, const vk::BufferUsageFlags 
 		.setSize(size)
 		.setUsage(usage)
 		.setSharingMode(vk::SharingMode::eExclusive); // used by graphics queue only
-	VkCheck(vulkan->device.createBuffer(&bufferInfo, nullptr, &buffer));
+	buffer = vulkan->device.createBuffer(bufferInfo);
 
 	uint32_t memTypeIndex = UINT32_MAX; ///////////////////
 	auto const memRequirements = vulkan->device.getBufferMemoryRequirements(buffer);
@@ -25,7 +24,6 @@ void Buffer::createBuffer(const vk::DeviceSize size, const vk::BufferUsageFlags 
 	}
 	if (memTypeIndex == UINT32_MAX)
 	{
-		std::cout << "No suitable memory type found\n";
 		exit(-1);
 	}
 
@@ -35,41 +33,37 @@ void Buffer::createBuffer(const vk::DeviceSize size, const vk::BufferUsageFlags 
 	auto const allocInfo = vk::MemoryAllocateInfo()
 		.setAllocationSize(this->size)
 		.setMemoryTypeIndex(memTypeIndex);
-	VkCheck(vulkan->device.allocateMemory(&allocInfo, nullptr, &memory));
+	memory = vulkan->device.allocateMemory(allocInfo);
 
 	//binding memory with buffer
-	VkCheck(vulkan->device.bindBufferMemory(buffer, memory, 0));
-	std::cout << "Buffer and memory created and binded\n";
+	vulkan->device.bindBufferMemory(buffer, memory, 0);
 }
 
 void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size)
 {
-	vk::CommandBuffer copyCmd;
-
 	auto const cbai = vk::CommandBufferAllocateInfo()
 		.setLevel(vk::CommandBufferLevel::ePrimary)
 		.setCommandPool(vulkan->commandPool)
 		.setCommandBufferCount(1);
-	VkCheck(vulkan->device.allocateCommandBuffers(&cbai, &copyCmd));
+	vk::CommandBuffer copyCmd = vulkan->device.allocateCommandBuffers(cbai)[0];
 
-	auto const cbbi = vk::CommandBufferBeginInfo();
-	VkCheck(copyCmd.begin(&cbbi));
+	copyCmd.begin(vk::CommandBufferBeginInfo());
 
 	vk::BufferCopy bufferCopy{};
 	bufferCopy.size = size;
 
 	copyCmd.copyBuffer(srcBuffer, buffer, 1, &bufferCopy);
 
-	VkCheck(copyCmd.end());
+	copyCmd.end();
 
 	auto const si = vk::SubmitInfo()
 		.setCommandBufferCount(1)
 		.setPCommandBuffers(&copyCmd);
-	VkCheck(vulkan->graphicsQueue.submit(1, &si, nullptr));
+	vulkan->graphicsQueue.submit(si, nullptr);
 
-	VkCheck(vulkan->graphicsQueue.waitIdle());
+	vulkan->graphicsQueue.waitIdle();
 
-	vulkan->device.freeCommandBuffers(vulkan->commandPool, 1, &copyCmd);
+	vulkan->device.freeCommandBuffers(vulkan->commandPool, copyCmd);
 }
 
 void Buffer::destroy()
@@ -80,5 +74,4 @@ void Buffer::destroy()
 		vulkan->device.freeMemory(memory);
 	buffer = nullptr;
 	memory = nullptr;
-	std::cout << "Buffer and memory destroyed\n";
 }

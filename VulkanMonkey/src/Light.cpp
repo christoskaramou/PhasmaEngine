@@ -1,5 +1,4 @@
 #include "../include/Light.h"
-#include "../include/Errors.h"
 
 using namespace vm;
 
@@ -27,7 +26,7 @@ Light Light::sun()
 void LightUniforms::createLightUniforms()
 {
 	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(vulkan->device.mapMemory(uniform.memory, 0, uniform.size, vk::MemoryMapFlags(), &uniform.data));
+	uniform.data = vulkan->device.mapMemory(uniform.memory, 0, uniform.size);
 	LightsUBO lubo;
 	memcpy(uniform.data, &lubo, uniform.size);
 
@@ -35,7 +34,7 @@ void LightUniforms::createLightUniforms()
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet));
+	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
 	auto writeSet = vk::WriteDescriptorSet()
 		.setDstSet(descriptorSet)								// DescriptorSet dstSet;
 		.setDstBinding(0)										// uint32_t dstBinding;
@@ -46,8 +45,7 @@ void LightUniforms::createLightUniforms()
 			.setBuffer(uniform.buffer)							// Buffer buffer;
 			.setOffset(0)											// DeviceSize offset;
 			.setRange(uniform.size));							// DeviceSize range;
-	vulkan->device.updateDescriptorSets(1, &writeSet, 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(writeSet, nullptr);
 }
 
 void vm::LightUniforms::destroy()
@@ -56,6 +54,5 @@ void vm::LightUniforms::destroy()
 	if (descriptorSetLayout) {
 		vulkan->device.destroyDescriptorSetLayout(descriptorSetLayout);
 		descriptorSetLayout = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 }

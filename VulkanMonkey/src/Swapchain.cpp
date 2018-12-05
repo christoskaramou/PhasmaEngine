@@ -12,6 +12,5 @@ void Swapchain::destroy()
 	if (swapchain) {
 		vulkan->device.destroySwapchainKHR(swapchain);
 		swapchain = nullptr;
-		std::cout << "Swapchain destroyed\n";
 	}
 }

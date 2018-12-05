@@ -1,5 +1,4 @@
 #include "../include/MotionBlur.h"
-#include "../include/Errors.h"
 
 void vm::MotionBlur::createMotionBlurFrameBuffers()
 {
@@ -16,23 +15,22 @@ void vm::MotionBlur::createMotionBlurFrameBuffers()
 			.setWidth(vulkan->surface->actualExtent.width)
 			.setHeight(vulkan->surface->actualExtent.height)
 			.setLayers(1);
-		VkCheck(vulkan->device.createFramebuffer(&fbci, nullptr, &frameBuffers[i]));
-		std::cout << "Framebuffer created\n";
+		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
 	}
 }
 
 void vm::MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTargets)
 {
 	UBmotionBlur.createBuffer(256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(vulkan->device.mapMemory(UBmotionBlur.memory, 0, UBmotionBlur.size, vk::MemoryMapFlags(), &UBmotionBlur.data));
+	UBmotionBlur.data = vulkan->device.mapMemory(UBmotionBlur.memory, 0, UBmotionBlur.size);
 
 	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&DSLayoutMotionBlur);
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &DSMotionBlur));
+	DSMotionBlur = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
 
-	vk::WriteDescriptorSet textureWriteSets[3];
+	std::vector<vk::WriteDescriptorSet> textureWriteSets(3);
 	// Composition image
 	textureWriteSets[0] = vk::WriteDescriptorSet()
 		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
@@ -68,13 +66,12 @@ void vm::MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& rend
 			.setOffset(0)													// DeviceSize offset;
 			.setRange(3 * 64));									// DeviceSize range;
 
-	vulkan->device.updateDescriptorSets(3, textureWriteSets, 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 void vm::MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
-	vk::WriteDescriptorSet textureWriteSets[3];
+	std::vector<vk::WriteDescriptorSet> textureWriteSets(3);
 	// Composition
 	textureWriteSets[0] = vk::WriteDescriptorSet()
 		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
@@ -110,8 +107,7 @@ void vm::MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTa
 			.setOffset(0)													// DeviceSize offset;
 			.setRange(3 * 64));									// DeviceSize range;
 
-	vulkan->device.updateDescriptorSets(3, textureWriteSets, 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 void vm::MotionBlur::draw(uint32_t imageIndex)
@@ -125,11 +121,11 @@ void vm::MotionBlur::draw(uint32_t imageIndex)
 		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
 		.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
 		.setPClearValues(clearValues1.data());
-	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfo1, vk::SubpassContents::eInline);
+	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo1, vk::SubpassContents::eInline);
 	vm::vec4 fps(1.f / Timer::delta);
 	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vm::vec4), &fps);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, 1, &DSMotionBlur, 0, nullptr);
+	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSMotionBlur, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
 }
@@ -139,18 +135,15 @@ void vm::MotionBlur::destroy()
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
 			vulkan->device.destroyFramebuffer(frameBuffer);
-			std::cout << "Frame Buffer destroyed\n";
 		}
 	}
 	if (renderPass) {
 		vulkan->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
-		std::cout << "RenderPass destroyed\n";
 	}
 	if (DSLayoutMotionBlur) {
 		vulkan->device.destroyDescriptorSetLayout(DSLayoutMotionBlur);
 		DSLayoutMotionBlur = nullptr;
-		std::cout << "Descriptor Set Layout destroyed\n";
 	}
 	UBmotionBlur.destroy();
 	pipeline.destroy();

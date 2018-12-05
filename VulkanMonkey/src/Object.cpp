@@ -1,5 +1,4 @@
 #include "../include/Object.h"
-#include "../include/Errors.h"
 
 using namespace vm;
 
@@ -11,7 +10,7 @@ void Object::createVertexBuffer()
 	Buffer staging;
 	staging.createBuffer(sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	VkCheck(vulkan->device.mapMemory(staging.memory, 0, staging.size, vk::MemoryMapFlags(), &staging.data));
+	staging.data = vulkan->device.mapMemory(staging.memory, 0, staging.size);
 	memcpy(staging.data, vertices.data(), sizeof(float)*vertices.size());
 	vulkan->device.unmapMemory(staging.memory);
 
@@ -22,7 +21,7 @@ void Object::createVertexBuffer()
 void Object::createUniformBuffer(size_t size)
 {
 	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	VkCheck(vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size, vk::MemoryMapFlags(), &uniformBuffer.data));
+	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 }
 
 void Object::loadTexture(const std::string path)
@@ -34,15 +33,13 @@ void Object::loadTexture(const std::string path)
 	vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
 	if (!pixels) {
-		std::cout << "Can not load texture: " << path << "\n";
 		exit(-19);
 	}
 
 	Buffer staging;
 	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	void* data;
-	vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &data);
+	void* data = vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize);
 	memcpy(data, pixels, static_cast<size_t>(imageSize));
 	vulkan->device.unmapMemory(staging.memory);
 
@@ -69,10 +66,10 @@ void Object::createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout)
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	VkCheck(vulkan->device.allocateDescriptorSets(&allocateInfo, &descriptorSet)); // why the handle of the vk::Image is changing with 2 dSets allocation????
+	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
 
 
-	vk::WriteDescriptorSet textureWriteSets[2];
+	std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 	// MVP
 	textureWriteSets[0] = vk::WriteDescriptorSet()
 		.setDstSet(descriptorSet)										// DescriptorSet dstSet;
@@ -95,8 +92,7 @@ void Object::createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout)
 			.setSampler(texture.sampler)									// Sampler sampler;
 			.setImageView(texture.view)										// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
-	vulkan->device.updateDescriptorSets(2, textureWriteSets, 0, nullptr);
-	std::cout << "DescriptorSet allocated and updated\n";
+	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 void Object::destroy()

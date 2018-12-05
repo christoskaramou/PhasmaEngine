@@ -1,5 +1,4 @@
 #include "../include/Mesh.h"
-#include "../include/Errors.h"
 #include "../include/Buffer.h"
 #include <iostream>
 
@@ -59,8 +58,7 @@ vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(vk::Device device)
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		VkCheck(device.createDescriptorSetLayout(&createInfo, nullptr, &descriptorSetLayout));
-		std::cout << "Descriptor Set Layout created\n";
+		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
 	}
 	return descriptorSetLayout;
 }
@@ -120,7 +118,6 @@ void Mesh::loadTexture(TextureType type, const std::string& folderPath, const st
 		vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
 		if (!pixels) {
-			std::cout << "Can not load texture: " << path << "\n";
 			exit(-19);
 		}
 
