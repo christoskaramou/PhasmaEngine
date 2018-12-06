@@ -15,12 +15,12 @@ Camera::Camera()
 	//         /|	    +x			       /|	+x			
 	//	  / |				      /	|					
 	//	 /  |   			     /  |/ +y
-	worldOrientation = vm::vec3(1.f, -1.f, 1.f);
+	worldOrientation = vec3(1.f, -1.f, 1.f);
 
 	// total pitch, yaw, roll
-	euler = vm::vec3(0.f, 0.f, 0.f);
-	orientation = vm::quat(euler);
-	position = vm::vec3(0.f, 0.f, 0.f);
+	euler = vec3(0.f, 0.f, 0.f);
+	orientation = quat(euler);
+	position = vec3(0.f, 0.f, 0.f);
 
 	nearPlane = 500.0f;
 	farPlane = 0.005f;
@@ -52,39 +52,39 @@ void Camera::rotate(float xoffset, float yoffset)
 {
 	yoffset *= rotationSpeed;
 	xoffset *= rotationSpeed;
-	euler.x += vm::radians(-yoffset) * worldOrientation.y;	// pitch
-	euler.y += vm::radians(xoffset) * worldOrientation.x;	// yaw
+	euler.x += radians(-yoffset) * worldOrientation.y;	// pitch
+	euler.y += radians(xoffset) * worldOrientation.x;	// yaw
 
-	orientation = vm::quat(euler);
+	orientation = quat(euler);
 }
 
-vm::mat4 Camera::getPerspective()
+mat4 Camera::getPerspective()
 {
 	float aspect = renderArea.viewport.width / renderArea.viewport.height;
-	float tanHalfFovy = tan(vm::radians(FOV) * .5f);
+	float tanHalfFovy = tan(radians(FOV) * .5f);
 	float m00 = 1.f / (aspect * tanHalfFovy);
 	float m11 = 1.f / (tanHalfFovy);
 	float m22 = farPlane / (farPlane - nearPlane) * worldOrientation.z;
 	float m23 = worldOrientation.z;
 	float m32 = -(farPlane * nearPlane) / (farPlane - nearPlane);
-	return vm::mat4(
+	return mat4(
 		m00, 0.f, 0.f, 0.f,
 		0.f, m11, 0.f, 0.f,
 		0.f, 0.f, m22, m23,
 		0.f, 0.f, m32, 0.f
 	);
 }
-vm::mat4 Camera::getView() const
+mat4 Camera::getView() const
 {
-	vm::vec3 f(front());
-	vm::vec3 r(right());
-	vm::vec3 u(up());
+	vec3 f(front());
+	vec3 r(right());
+	vec3 u(up());
 
 	float m30 = -dot(r, position);
 	float m31 = -dot(u, position);
 	float m32 = -dot(f, position);
 
-	return vm::mat4(
+	return mat4(
 		r.x, u.x, f.x, 0.f,
 		r.y, u.y, f.y, 0.f,
 		r.z, u.z, f.z, 0.f,
@@ -92,39 +92,39 @@ vm::mat4 Camera::getView() const
 	);
 }
 
-vm::vec3 Camera::worldRight() const
+vec3 Camera::worldRight() const
 {
-	return vm::vec3(worldOrientation.x, 0.f, 0.f);
+	return vec3(worldOrientation.x, 0.f, 0.f);
 }
 
-vm::vec3 Camera::worldUp() const
+vec3 Camera::worldUp() const
 {
-	return vm::vec3(0.f, worldOrientation.y, 0.f);
+	return vec3(0.f, worldOrientation.y, 0.f);
 }
 
-vm::vec3 Camera::worldFront() const
+vec3 Camera::worldFront() const
 {
-	return vm::vec3(0.f, 0.f, worldOrientation.z);
+	return vec3(0.f, 0.f, worldOrientation.z);
 }
 
-vm::vec3 Camera::right() const
+vec3 Camera::right() const
 {
 	return orientation * worldRight();
 }
 
-vm::vec3 Camera::up() const
+vec3 Camera::up() const
 {
 	return orientation * worldUp();
 }
 
-vm::vec3 Camera::front() const
+vec3 Camera::front() const
 {
 	return orientation * worldFront();
 }
 
-void Camera::ExtractFrustum(vm::mat4& model)
+void Camera::ExtractFrustum(mat4& model)
 {
-	vm::mat4 pvm = getPerspective() * getView() * model;
+	mat4 pvm = getPerspective() * getView() * model;
 	const float* clip = pvm.ptr();
 	float t;
 
@@ -197,7 +197,7 @@ void Camera::ExtractFrustum(vm::mat4& model)
 }
 
 // center x,y,z - radius w 
-bool Camera::SphereInFrustum(vm::vec4& boundingSphere) const
+bool Camera::SphereInFrustum(vec4& boundingSphere) const
 {
 	for (unsigned i = 0; i < 6; i++)
 		if (frustum[i][0] * boundingSphere.x + frustum[i][1] * boundingSphere.y + frustum[i][2] * boundingSphere.z + frustum[i][3] <= -boundingSphere.w)
@@ -205,7 +205,7 @@ bool Camera::SphereInFrustum(vm::vec4& boundingSphere) const
 	return true;
 }
 
-void vm::Camera::SurfaceTargetArea::update(const vm::vec2& position, const vm::vec2& size, float minDepth, float maxDepth)
+void Camera::SurfaceTargetArea::update(const vec2& position, const vec2& size, float minDepth, float maxDepth)
 {
 	viewport.x = position.x;
 	viewport.y = position.y;

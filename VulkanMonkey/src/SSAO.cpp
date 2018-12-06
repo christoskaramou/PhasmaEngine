@@ -5,25 +5,25 @@ using namespace vm;
 void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 {
 	// kernel buffer
-	std::vector<vm::vec4> ssaoKernel{};
+	std::vector<vec4> ssaoKernel{};
 	for (unsigned i = 0; i < 32; i++) {
-		vm::vec3 sample(vm::rand(-1.f, 1.f), vm::rand(-1.f, 1.f), vm::rand(0.f, 1.f));
-		sample = vm::normalize(sample);
-		sample *= vm::rand(0.f, 1.f);
+		vec3 sample(rand(-1.f, 1.f), rand(-1.f, 1.f), rand(0.f, 1.f));
+		sample = normalize(sample);
+		sample *= rand(0.f, 1.f);
 		float scale = float(i) / 32.f;
-		scale = vm::lerp(.1f, 1.f, scale * scale);
-		ssaoKernel.push_back(vm::vec4(sample * scale, 0.f));
+		scale = lerp(.1f, 1.f, scale * scale);
+		ssaoKernel.push_back(vec4(sample * scale, 0.f));
 	}
-	UBssaoKernel.createBuffer(sizeof(vm::vec4) * 32, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	UBssaoKernel.createBuffer(sizeof(vec4) * 32, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UBssaoKernel.data = vulkan->device.mapMemory(UBssaoKernel.memory, 0, UBssaoKernel.size);
 	memcpy(UBssaoKernel.data, ssaoKernel.data(), UBssaoKernel.size);
 	// noise image
-	std::vector<vm::vec4> noise{};
+	std::vector<vec4> noise{};
 	for (unsigned int i = 0; i < 16; i++)
-		noise.push_back(vm::vec4(vm::rand(-1.f, 1.f), vm::rand(-1.f, 1.f), 0.f, 1.f));
+		noise.push_back(vec4(rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f, 1.f));
 
 	Buffer staging;
-	uint64_t bufSize = sizeof(vm::vec4) * 16;
+	uint64_t bufSize = sizeof(vec4) * 16;
 	staging.createBuffer(bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	void* data = vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), staging.size);
 	memcpy(data, noise.data(), staging.size);
@@ -42,7 +42,7 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 	ssaoNoise.createSampler();
 	staging.destroy();
 	// pvm uniform
-	UBssaoPVM.createBuffer(2 * sizeof(vm::mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	UBssaoPVM.createBuffer(2 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UBssaoPVM.data = vulkan->device.mapMemory(UBssaoPVM.memory, 0, UBssaoPVM.size);
 
 	vk::DescriptorSetAllocateInfo allocInfoSSAO = vk::DescriptorSetAllocateInfo{
@@ -160,7 +160,7 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 	vulkan->device.updateDescriptorSets(writeDescriptorSetsSSAOBlur, nullptr);
 }
 
-void vm::SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
+void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
 		renderTargets["position"].sampler,		//Sampler sampler;
@@ -262,7 +262,7 @@ void vm::SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	vulkan->device.updateDescriptorSets(writeDescriptorSetsSSAOBlur, nullptr);
 }
 
-void SSAO::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
+void SSAO::draw(uint32_t imageIndex, const vec2 UVOffset[2])
 {
 	// SSAO image
 	std::vector<vk::ClearValue> clearValuesSSAO = {
@@ -275,7 +275,7 @@ void SSAO::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
 		.setClearValueCount(static_cast<uint32_t>(clearValuesSSAO.size()))
 		.setPClearValues(clearValuesSSAO.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfoSSAO, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vm::vec2), UVOffset);
+	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vec2), UVOffset);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	const vk::DescriptorSet descriptorSets = { DSssao };
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSets, nullptr);
@@ -299,7 +299,7 @@ void SSAO::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
 	vulkan->dynamicCmdBuffer.endRenderPass();
 }
 
-void vm::SSAO::destroy()
+void SSAO::destroy()
 {
 	UBssaoKernel.destroy();
 	UBssaoPVM.destroy();

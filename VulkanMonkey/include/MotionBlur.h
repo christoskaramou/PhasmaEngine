@@ -27,7 +27,7 @@ namespace vm {
 		void createMotionBlurFrameBuffers();
 		void createMotionBlurUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(uint32_t imageIndex, const vm::vec2 UVOffset[2]);
+		void draw(uint32_t imageIndex, const vec2 UVOffset[2]);
 		void destroy();
 	};
 }

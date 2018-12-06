@@ -21,7 +21,7 @@ Vertex::Vertex(cfloat x, cfloat y, cfloat z, cfloat u, cfloat v, cfloat nX, cflo
 	r(r), g(g), b(b), a(a)
 { }
 
-Vertex::Vertex(vm::vec3 pos, vm::vec2 uv, vm::vec3 norm, vm::vec3 tang, vm::vec3 bitang, vm::vec4 color) :
+Vertex::Vertex(vec3 pos, vec2 uv, vec3 norm, vec3 tang, vec3 bitang, vec4 color) :
 	x(pos.x), y(pos.y), z(pos.z),
 	u(uv.x), v(uv.y),
 	nX(norm.x), nY(norm.y), nZ(norm.z),

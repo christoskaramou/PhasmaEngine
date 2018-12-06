@@ -159,9 +159,9 @@ void Mesh::calculateBoundingSphere()
 		if (vertex.y < minY) minY = vertex.y;
 		if (vertex.z < minZ) minZ = vertex.z;
 	}
-	vm::vec3 center = (vm::vec3(maxX, maxY, maxZ) + vm::vec3(minX, minY, minZ)) * .5f;
-	float sphereRadius = vm::length(vm::vec3(maxX, maxY, maxZ) - center);
-	boundingSphere = vm::vec4(center, sphereRadius);
+	vec3 center = (vec3(maxX, maxY, maxZ) + vec3(minX, minY, minZ)) * .5f;
+	float sphereRadius = length(vec3(maxX, maxY, maxZ) - center);
+	boundingSphere = vec4(center, sphereRadius);
 }
 
 void Mesh::destroy()

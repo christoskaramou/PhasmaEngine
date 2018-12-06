@@ -1755,7 +1755,7 @@ Pipeline Context::createCompositionPipeline()
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { deferred.DSLayoutComposition, Shadows::getDescriptorSetLayout(vulkan.device) };
 
-	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, sizeof(vm::vec4) };
+	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, sizeof(vec4) };
 
 	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
 		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
@@ -2746,7 +2746,7 @@ std::vector<vk::Semaphore> Context::createSemaphores(const uint32_t semaphoresCo
 	return _semaphores;
 }
 
-void vm::Context::destroyVkContext()
+void Context::destroyVkContext()
 {
 	for (auto& fence : vulkan.fences) {
 		if (fence) {

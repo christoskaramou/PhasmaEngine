@@ -250,7 +250,7 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void vm::Deferred::draw(uint32_t imageIndex, Shadows& shadows)
+void Deferred::draw(uint32_t imageIndex, Shadows& shadows)
 {
 	// Begin Composition
 	std::vector<vk::ClearValue> clearValues0 = {
@@ -265,8 +265,8 @@ void vm::Deferred::draw(uint32_t imageIndex, Shadows& shadows)
 		.setPClearValues(clearValues0.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo0, vk::SubpassContents::eInline);
 
-	vm::vec4 screenSpace(GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, 0.f, 0.f);
-	vulkan->dynamicCmdBuffer.pushConstants(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vm::vec4), &screenSpace);
+	vec4 screenSpace(GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, 0.f, 0.f);
+	vulkan->dynamicCmdBuffer.pushConstants(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vec4), &screenSpace);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline);
 	uint32_t ofsets = 0;
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo.layout, 0, { DSComposition, shadows.descriptorSet }, ofsets);

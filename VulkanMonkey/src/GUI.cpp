@@ -480,7 +480,7 @@ void GUI::newFrame()
 	}
 }
 
-void vm::GUI::windowStyle(ImGuiStyle* dst)
+void GUI::windowStyle(ImGuiStyle* dst)
 {
 	ImGuiStyle* style = dst ? dst : &ImGui::GetStyle();
 

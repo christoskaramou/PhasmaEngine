@@ -60,7 +60,7 @@ void Object::loadTexture(const std::string path)
 
 void Object::createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout)
 {
-	createUniformBuffer(2 * sizeof(vm::mat4));
+	createUniformBuffer(2 * sizeof(mat4));
 
 	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
 		.setDescriptorPool(vulkan->descriptorPool)

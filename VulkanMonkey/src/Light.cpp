@@ -3,12 +3,12 @@
 using namespace vm;
 
 Light::Light() : 
-	color(vm::rand(0.f, 1.f), vm::rand(0.0f, 1.f), vm::rand(0.f, 1.f), vm::rand(0.f, 1.f)),
-	position(vm::rand(-3.5f, 3.5f), vm::rand(.7f, .7f), vm::rand(-3.5f, 3.5f), 1.f),
+	color(rand(0.f, 1.f), rand(0.0f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f)),
+	position(rand(-3.5f, 3.5f), rand(.7f, .7f), rand(-3.5f, 3.5f), 1.f),
 	attenuation(1.05f, 1.f, 1.f, 1.f)
 { }
 
-Light::Light(const vm::vec4& color, const vm::vec4& position, const vm::vec4& attenuation) :
+Light::Light(const vec4& color, const vec4& position, const vec4& attenuation) :
 	color(color),
 	position(position),
 	attenuation(attenuation)
@@ -17,9 +17,9 @@ Light::Light(const vm::vec4& color, const vm::vec4& position, const vm::vec4& at
 Light Light::sun()
 {
 	return Light(
-		vm::vec4(1.f, 1.f, 1.f, .5f),
-		vm::vec4(0.f, 300.f, 10.f, 1.f),
-		vm::vec4(0.f, 0.f, 1.f, 1.f)
+		vec4(1.f, 1.f, 1.f, .5f),
+		vec4(0.f, 300.f, 10.f, 1.f),
+		vec4(0.f, 0.f, 1.f, 1.f)
 	);
 }
 
@@ -48,7 +48,7 @@ void LightUniforms::createLightUniforms()
 	vulkan->device.updateDescriptorSets(writeSet, nullptr);
 }
 
-void vm::LightUniforms::destroy()
+void LightUniforms::destroy()
 {
 	uniform.destroy();
 	if (descriptorSetLayout) {

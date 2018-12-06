@@ -8,19 +8,21 @@ using namespace vm;
 
 vk::DescriptorSetLayout Model::descriptorSetLayout = nullptr;
 
-vm::mat4 aiMatrix4x4ToMat4(const aiMatrix4x4& m)
+mat4 aiMatrix4x4ToMat4(const aiMatrix4x4& m)
 {
-	return vm::transpose(vm::mat4((float*)&m));
+	return transpose(mat4((float*)&m));
 }
 
-void getAllNodes(aiNode* root, std::vector<aiNode*>& allNodes) {
+void getAllNodes(aiNode* root, std::vector<aiNode*>& allNodes)
+{
 	for (uint32_t i = 0; i < root->mNumChildren; i++)
 		getAllNodes(root->mChildren[i], allNodes);
 	if (root) allNodes.push_back(root);
 }
 
-vm::mat4 getTranform(aiNode& node) {
-	vm::mat4 transform = aiMatrix4x4ToMat4(node.mTransformation);
+mat4 getTranform(aiNode& node)
+{
+	mat4 transform = aiMatrix4x4ToMat4(node.mTransformation);
 	aiNode* tranformNode = &node;
 	while (tranformNode->mParent) {
 		transform = aiMatrix4x4ToMat4(tranformNode->mParent->mTransformation) * transform;
@@ -70,7 +72,7 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 	std::vector<Mesh> f_meshes;
 	for (unsigned int n = 0; n < allNodes.size(); n++) {
 		aiNode& node = *allNodes[n];
-		vm::mat4 transform = getTranform(node);
+		mat4 transform = getTranform(node);
 		for (unsigned int i = 0; i < node.mNumMeshes; i++) {
 			Mesh myMesh;
 
@@ -106,17 +108,17 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 				const aiVector3D& bitangent = mesh.HasTangentsAndBitangents() ? mesh.mBitangents[j] : aiVector3D(0.f, 0.f, 0.f);
 				const aiColor4D& color = mesh.HasVertexColors(0) ? mesh.mColors[0][j] : aiColor4D(1.f, 1.f, 1.f, 1.f);
 
-				vm::vec4 p = transform * vm::vec4(pos.x, pos.y, pos.z, 1.f);
-				vm::vec4 n = transform * vm::vec4(norm.x, norm.y, norm.z, 1.f);
-				vm::vec4 t = transform * vm::vec4(tangent.x, tangent.y, tangent.z, 1.f);
-				vm::vec4 b = transform * vm::vec4(bitangent.x, bitangent.y, bitangent.z, 1.f);
+				vec4 p = transform * vec4(pos.x, pos.y, pos.z, 1.f);
+				vec4 n = transform * vec4(norm.x, norm.y, norm.z, 1.f);
+				vec4 t = transform * vec4(tangent.x, tangent.y, tangent.z, 1.f);
+				vec4 b = transform * vec4(bitangent.x, bitangent.y, bitangent.z, 1.f);
 				Vertex v(
-					vm::vec3(p),
-					vm::vec2((float*)&uv),
-					vm::vec3(n),
-					vm::vec3(t),
-					vm::vec3(b),
-					vm::vec4((float*)&color)
+					vec3(p),
+					vec2((float*)&uv),
+					vec3(n),
+					vec3(t),
+					vec3(b),
+					vec4((float*)&color)
 				);
 				myMesh.vertices.push_back(v);
 			}
@@ -149,8 +151,8 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 	render = show;
 
 	// resizing the model to always be at a certain magnitude
-	float scale = 20.0f / getBoundingSphere().w;
-	matrix = vm::scale(matrix, vm::vec3(scale, scale, scale));
+	float factor = 20.0f / getBoundingSphere().w;
+	matrix = scale(matrix, vec3(factor, factor, factor));
 }
 
 void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows, vk::DescriptorSet* DSLights)
@@ -179,25 +181,25 @@ void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& mod
 }
 
 // position x, y, z and radius w
-vm::vec4 Model::getBoundingSphere()
+vec4 Model::getBoundingSphere()
 {
 
-	//vm::vec3 center = (float*)&(matrix * vm::vec4(0.0f, 0.0f, 0.0f, 1.f));
-	//vm::vec3 temp = (float*)&(matrix * vm::vec4(1.0f, 1.0f, 1.0f, 1.f));
-	//vm::vec3 tranformation = temp - center;
-	vm::vec3 center = vm::vec3(0.0f, 0.0f, 0.0f);
+	//vec3 center = (float*)&(matrix * vec4(0.0f, 0.0f, 0.0f, 1.f));
+	//vec3 temp = (float*)&(matrix * vec4(1.0f, 1.0f, 1.0f, 1.f));
+	//vec3 tranformation = temp - center;
+	vec3 center = vec3(0.0f, 0.0f, 0.0f);
 
 	if (initialBoundingSphereRadius <= 0) {
 		for (auto &mesh : meshes) {
 			for (auto& vertex : mesh.vertices) {
-				float distance = vm::length(vm::vec3(vertex.x, vertex.y, vertex.z));
+				float distance = length(vec3(vertex.x, vertex.y, vertex.z));
 				if (distance > initialBoundingSphereRadius)
 					initialBoundingSphereRadius = distance;
 			}
 		}
 	}
 
-	return vm::vec4(center, initialBoundingSphereRadius);
+	return vec4(center, initialBoundingSphereRadius);
 }
 
 vk::DescriptorSetLayout Model::getDescriptorSetLayout(vk::Device device)

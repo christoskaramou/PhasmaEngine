@@ -1,6 +1,8 @@
 #include "../include/SSR.h"
 
-void vm::SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
+using namespace vm;
+
+void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 {
 	UBReflection.createBuffer(256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UBReflection.data = vulkan->device.mapMemory(UBReflection.memory, 0, UBReflection.size);
@@ -71,7 +73,7 @@ void vm::SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
-void vm::SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
+void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
 
 	std::vector<vk::WriteDescriptorSet> textureWriteSets(5);
@@ -134,7 +136,7 @@ void vm::SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
-void vm::SSR::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
+void SSR::draw(uint32_t imageIndex, const vec2 UVOffset[2])
 {
 	std::vector<vk::ClearValue> clearValues1 = {
 	vk::ClearColorValue().setFloat32(GUI::clearColor) };
@@ -145,14 +147,14 @@ void vm::SSR::draw(uint32_t imageIndex, const vm::vec2 UVOffset[2])
 		.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
 		.setPClearValues(clearValues1.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfo1, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vm::vec2), UVOffset);
+	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vec2), UVOffset);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSReflection, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
 }
 
-void vm::SSR::destroy()
+void SSR::destroy()
 {
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {

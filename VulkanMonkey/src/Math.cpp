@@ -688,7 +688,7 @@ namespace vm {
 			t = cross(u, v);
 		}
 
-		*this = vm::normalize(quat(real_part, t.x, t.y, t.z));
+		*this = normalize(quat(real_part, t.x, t.y, t.z));
 	}
 
 	quat::quat(cvec3 & eulerAngle)
@@ -841,8 +841,8 @@ namespace vm {
 	vec3 quat::operator*(cvec3 & v) const
 	{
 		cvec3 qv(x, y, z);
-		cvec3 uv(vm::cross(qv, v));
-		cvec3 uuv(vm::cross(qv, uv));
+		cvec3 uv(cross(qv, v));
+		cvec3 uuv(cross(qv, uv));
 
 		return v + ((uv * w) + uuv) * 2.f;
 	}
@@ -1028,7 +1028,7 @@ namespace vm {
 
 	quat rotate(cquat & q, cfloat angle, cvec3 & axis)
 	{
-		vec3 axisNorm = vm::normalize(axis);
+		vec3 axisNorm = normalize(axis);
 
 		cfloat c = cos(angle * .5f);
 		cfloat s = sin(angle * .5f);

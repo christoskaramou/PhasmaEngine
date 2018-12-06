@@ -10,17 +10,17 @@ namespace vm {
 	struct Light
 	{
 		Light();
-		Light(const vm::vec4& color, const vm::vec4& position, const vm::vec4& attenuation);
+		Light(const vec4& color, const vec4& position, const vec4& attenuation);
 		static Light sun();
 
-		vm::vec4 color;
-		vm::vec4 position;
-		vm::vec4 attenuation;
+		vec4 color;
+		vec4 position;
+		vec4 attenuation;
 	};
 
 	struct LightsUBO
 	{
-		vm::vec4 camPos;
+		vec4 camPos;
 		Light sun = Light::sun();
 		Light lights[MAX_LIGHTS];
 	};

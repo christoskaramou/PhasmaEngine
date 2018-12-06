@@ -6,10 +6,10 @@
 namespace vm {
 
 	struct Transform {
-		vm::vec3 position;
-		vm::quat rotation;
-		vm::vec3 scale;
-		vm::mat4 matrix;
+		vec3 position;
+		quat rotation;
+		vec3 scale;
+		mat4 matrix;
 	};
 
 	struct Node

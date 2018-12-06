@@ -8,7 +8,7 @@
 
 namespace vm {
 	struct Effects {
-		vm::vec4 specular, ambient, diffuse;
+		vec4 specular, ambient, diffuse;
 	};
 
 	struct Mesh
@@ -16,7 +16,7 @@ namespace vm {
 		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		bool render = true, cull = false, hasAlpha = false;
-		vm::vec4 boundingSphere;
+		vec4 boundingSphere;
 		void calculateBoundingSphere();
 		uint32_t vertexOffset = 0, indexOffset = 0;
 		enum TextureType

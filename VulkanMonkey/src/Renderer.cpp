@@ -55,6 +55,7 @@ Renderer::~Renderer()
 //std::atomic<bool> ready(false);
 void Renderer::update(float delta)
 {
+	// TODO: make an other command pool for multithreading
 	for (int i = static_cast<int>(Queue::loadModel.size()) - 1; i >= 0; i--) {
 		Queue::func.push_back( std::async( std::launch::async, [](std::tuple<std::string, std::string>& temp) {
 			VulkanContext::getVulkanContext().device.waitIdle();
@@ -72,12 +73,12 @@ void Renderer::update(float delta)
 	//	Queue::func.back().get();
 	//	ready = false;
 	//}
-	const vm::mat4 projection = ctx.camera_main.getPerspective();
-	const vm::mat4 view = ctx.camera_main.getView();
+	const mat4 projection = ctx.camera_main.getPerspective();
+	const mat4 view = ctx.camera_main.getView();
 
 	//TERRAIN
 	//if (ctx.terrain.render) {
-	//	const vm::mat4 pvm[3]{ projection, view };
+	//	const mat4 pvm[3]{ projection, view };
 	//	memcpy(ctx.terrain.uniformBuffer.data, &pvm, sizeof(pvm));
 	//}
 
@@ -85,7 +86,7 @@ void Renderer::update(float delta)
 	for (auto &model : Context::models) {
 		model.render = GUI::render_models;
 		if (model.render) {
-			const vm::mat4 pvm[3]{ projection, view, model.matrix };
+			const mat4 pvm[3]{ projection, view, model.matrix };
 			ctx.camera_main.ExtractFrustum(model.matrix);
 			for (auto &mesh : model.meshes) {
 				mesh.cull = !ctx.camera_main.SphereInFrustum(mesh.boundingSphere);
@@ -97,19 +98,19 @@ void Renderer::update(float delta)
 
 	// SKYBOX
 	//if (ctx.skyBox.render) {
-	//	const vm::mat4 pvm[2]{ projection, view };
+	//	const mat4 pvm[2]{ projection, view };
 	//	memcpy(ctx.skyBox.uniformBuffer.data, &pvm, sizeof(pvm));
 	//}
 
 	// SHADOWS
 	Shadows::shadowCast = GUI::shadow_cast;
-	const vm::vec3 pos = Light::sun().position;
-	const vm::vec3 front = vm::normalize(-pos);
-	const vm::vec3 right = vm::normalize(vm::cross(front, ctx.camera_main.worldUp()));
-	const vm::vec3 up = vm::normalize(vm::cross(right, front));
+	const vec3 pos = Light::sun().position;
+	const vec3 front = normalize(-pos);
+	const vec3 right = normalize(cross(front, ctx.camera_main.worldUp()));
+	const vec3 up = normalize(cross(right, front));
 	std::vector<ShadowsUBO> shadows_UBO(Context::models.size());
 	for (uint32_t i = 0; i < Context::models.size(); i++)
-		shadows_UBO[i] = { vm::ortho(-40.f, 40.f, -40.f, 40.f, 500.f, 0.005f), vm::lookAt(pos, front, right, up), Context::models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
+		shadows_UBO[i] = { ortho(-40.f, 40.f, -40.f, 40.f, 500.f, 0.005f), lookAt(pos, front, right, up), Context::models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
 	memcpy(ctx.shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
 
 	// GUI
@@ -120,27 +121,27 @@ void Renderer::update(float delta)
 	if (GUI::randomize_lights) {
 		GUI::randomize_lights = false;
 		LightsUBO lubo;
-		lubo.camPos = vm::vec4(ctx.camera_main.position, 1.0f);
+		lubo.camPos = vec4(ctx.camera_main.position, 1.0f);
 		memcpy(ctx.lightUniforms.uniform.data, &lubo, sizeof(LightsUBO));
 	}
 	else {
-		vm::vec4 camPos(ctx.camera_main.position, 1.0f);
-		memcpy(ctx.lightUniforms.uniform.data, &camPos, sizeof(vm::vec4));
+		vec4 camPos(ctx.camera_main.position, 1.0f);
+		memcpy(ctx.lightUniforms.uniform.data, &camPos, sizeof(vec4));
 	}
 
 	// SSAO
 	if (GUI::show_ssao) {
-		vm::mat4 pvm[2]{ projection, view };
+		mat4 pvm[2]{ projection, view };
 		memcpy(ctx.ssao.UBssaoPVM.data, pvm, sizeof(pvm));
 	}
 
 	// REFLECTIONS
 	if (GUI::show_ssr) {
-		vm::mat4 reflectionInput[3];
-		reflectionInput[0][0] = vm::vec4(ctx.camera_main.position, 1.0f);
-		reflectionInput[0][1] = vm::vec4(ctx.camera_main.front(), 1.0f);
-		reflectionInput[0][2] = vm::vec4(static_cast<float>(ctx.vulkan.surface->actualExtent.width), static_cast<float>(ctx.vulkan.surface->actualExtent.height), 0.f, 0.f);
-		reflectionInput[0][3] = vm::vec4();
+		mat4 reflectionInput[3];
+		reflectionInput[0][0] = vec4(ctx.camera_main.position, 1.0f);
+		reflectionInput[0][1] = vec4(ctx.camera_main.front(), 1.0f);
+		reflectionInput[0][2] = vec4(static_cast<float>(ctx.vulkan.surface->actualExtent.width), static_cast<float>(ctx.vulkan.surface->actualExtent.height), 0.f, 0.f);
+		reflectionInput[0][3] = vec4();
 		reflectionInput[1] = projection;
 		reflectionInput[2] = view;
 		memcpy(ctx.ssr.UBReflection.data, &reflectionInput, sizeof(reflectionInput));
@@ -148,8 +149,8 @@ void Renderer::update(float delta)
 
 	// MOTION BLUR
 	if (GUI::show_motionBlur) {
-		static vm::mat4 previousView = view;
-		vm::mat4 motionBlurInput[3]{ projection, view, previousView };
+		static mat4 previousView = view;
+		mat4 motionBlurInput[3]{ projection, view, previousView };
 		memcpy(ctx.motionBlur.UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
 		previousView = view;
 	}
@@ -172,11 +173,11 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 {
 
-	vm::vec2 surfSize((float)ctx.vulkan.surface->actualExtent.width, (float)ctx.vulkan.surface->actualExtent.height);
-	vm::vec2 winPos((float*)&GUI::winPos);
-	vm::vec2 winSize((float*)&GUI::winSize);
+	vec2 surfSize((float)ctx.vulkan.surface->actualExtent.width, (float)ctx.vulkan.surface->actualExtent.height);
+	vec2 winPos((float*)&GUI::winPos);
+	vec2 winSize((float*)&GUI::winSize);
 
-	vm::vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
+	vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
 
 	ctx.camera_main.renderArea.update(winPos, winSize, 0.f, 1.f);
 
@@ -225,11 +226,11 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 {
-	vm::vec2 surfSize((float)ctx.vulkan.surface->actualExtent.width, (float)ctx.vulkan.surface->actualExtent.height);
-	vm::vec2 winPos((float*)&GUI::winPos);
-	vm::vec2 winSize((float*)&GUI::winSize);
+	vec2 surfSize((float)ctx.vulkan.surface->actualExtent.width, (float)ctx.vulkan.surface->actualExtent.height);
+	vec2 winPos((float*)&GUI::winPos);
+	vec2 winSize((float*)&GUI::winSize);
 
-	vm::vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
+	vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
 
 	ctx.camera_main.renderArea.update(winPos, winSize);
 

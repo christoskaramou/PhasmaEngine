@@ -12,7 +12,7 @@ namespace vm {
 			cfloat tX, cfloat tY, cfloat tZ,
 			cfloat bX, cfloat bY, cfloat bZ,
 			cfloat r, cfloat g, cfloat b, cfloat a);
-		Vertex(vm::vec3 pos, vm::vec2 uv, vm::vec3 norm, vm::vec3 tang, vm::vec3 bitang, vm::vec4 color);
+		Vertex(vec3 pos, vec2 uv, vec3 norm, vec3 tang, vec3 bitang, vec4 color);
 
 		bool operator==(const Vertex& other) const;
 		static std::vector<vk::VertexInputBindingDescription> getBindingDescriptionGeneral();

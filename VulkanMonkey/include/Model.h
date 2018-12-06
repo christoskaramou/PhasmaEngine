@@ -18,7 +18,7 @@ namespace vm {
 		vk::DescriptorSet descriptorSet;
 		std::vector<Mesh> meshes{};
 		std::string name;
-		vm::mat4 matrix = vm::mat4(1.0f);
+		mat4 matrix = mat4(1.0f);
 		Buffer vertexBuffer;
 		Buffer indexBuffer;
 		Buffer uniformBuffer;
@@ -26,7 +26,7 @@ namespace vm {
 		float initialBoundingSphereRadius = 0.0f;
 
 		void draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows = nullptr, vk::DescriptorSet* DSLights = nullptr);
-		vm::vec4 getBoundingSphere();
+		vec4 getBoundingSphere();
 		void loadModel(const std::string folderPath, const std::string modelName, bool show = true);
 		void createVertexBuffer();
 		void createIndexBuffer();

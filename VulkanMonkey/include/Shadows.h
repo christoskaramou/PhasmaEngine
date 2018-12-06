@@ -32,7 +32,7 @@ namespace vm {
 
 	struct ShadowsUBO
 	{
-		vm::mat4 projection, view, model;
+		mat4 projection, view, model;
 		float castShadows, dummy[15]; // for 256 bytes align
 	};
 }
