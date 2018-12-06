@@ -21,12 +21,6 @@ layout (location = 2) out vec3 outNormal;
 layout (location = 3) out vec3 outTangent;
 layout (location = 4) out vec3 outBitangent;
 layout (location = 5) out vec3 outColor;
-layout (location = 6) out highp float depth;
-
-out gl_PerVertex
-{
-	vec4 gl_Position;
-};
 
 void main() 
 {
@@ -46,6 +40,4 @@ void main()
 	outBitangent = inBitangent;
 	// Color (not in use)	
 	outColor = inColor.rgb;
-	// Depth in view space
-	depth = viewPos.z;
 }

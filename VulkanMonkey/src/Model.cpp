@@ -149,7 +149,7 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 	render = show;
 
 	// resizing the model to always be at a certain magnitude
-	float scale = 2.0f / getBoundingSphere().w;
+	float scale = 20.0f / getBoundingSphere().w;
 	matrix = vm::scale(matrix, vm::vec3(scale, scale, scale));
 }
 

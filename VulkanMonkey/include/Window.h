@@ -1,6 +1,5 @@
 #pragma once
 #include "Renderer.h"
-#include "Math.h"
 #include <vector>
 
 namespace vm {
@@ -13,7 +12,6 @@ namespace vm {
 		static bool isInsideRenderWindow(int32_t x, int32_t y);
 
 		static std::vector<std::unique_ptr<Renderer>> renderer; // window pointer is also stored in here
-		//static vm::vec2 surfaceSize;
 	private:
 		Window();
 		~Window();

@@ -55,7 +55,7 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 		float sampledDepth = abs(texture(positionSampler, samplePosition.xy).w);
 
 		float delta = abs(currentDepth - sampledDepth);
-		if(delta < 0.001f)
+		if(delta < 0.01f)
 		{
 			vec2 reverted = (samplePosition.xy - pos.offset.xy) / pos.offset.zw; // floating window correction
 			vec2 fadeOnEdges = reverted * 2.0 - 1.0;

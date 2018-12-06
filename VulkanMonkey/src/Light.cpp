@@ -18,7 +18,7 @@ Light Light::sun()
 {
 	return Light(
 		vm::vec4(1.f, 1.f, 1.f, .5f),
-		vm::vec4(0.f, 1.51f, -0.14f, 1.f),
+		vm::vec4(0.f, 300.f, 10.f, 1.f),
 		vm::vec4(0.f, 0.f, 1.f, 1.f)
 	);
 }

@@ -5,7 +5,6 @@
 using namespace vm;
 
 std::vector<std::unique_ptr<Renderer>> Window::renderer = {};
-//vm::vec2 Window::surfaceSize = vm::vec2(800.f, 600.f);
 
 Window::Window() {}
 
@@ -24,7 +23,8 @@ void Window::create(std::string title, Uint32 flags)
 		"VulkanMonkey3D   "
 		+ std::string(Window::renderer.back()->ctx.vulkan.gpuProperties.deviceName)
 		+ " (Present Mode: "
-		+ vk::to_string(Window::renderer.back()->ctx.vulkan.surface->presentModeKHR) + ")";
+		+ vk::to_string(Window::renderer.back()->ctx.vulkan.surface->presentModeKHR)
+		+ ")";
 
 	SDL_SetWindowTitle(window, _title.c_str());
 }
@@ -116,8 +116,6 @@ bool Window::processEvents(float delta)
 			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
 				int w, h;
 				SDL_GL_GetDrawableSize(info.vulkan.window, &w, &h);
-				//Window::surfaceSize.x = (float)w;
-				//Window::surfaceSize.y = (float)h;
 				renderer[0]->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 			}
 		}

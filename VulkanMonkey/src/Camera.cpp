@@ -22,7 +22,7 @@ Camera::Camera()
 	orientation = vm::quat(euler);
 	position = vm::vec3(0.f, 0.f, 0.f);
 
-	nearPlane = 50.0f;
+	nearPlane = 500.0f;
 	farPlane = 0.005f;
 	FOV = 45.0f;
 	speed = 0.35f;

@@ -66,7 +66,6 @@ void main()
 		fragColor += calculateColor(i, fragPos, normal, albedo, specular);
 
 	outColor = vec4(fragColor, alpha);
-	//outColor = vec4(fragPos, 1.0);
 }
 
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular)

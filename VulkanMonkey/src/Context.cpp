@@ -58,7 +58,6 @@ PipelineInfo Context::getPipelineSpecificationsShadows()
 	shadowsSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	shadowsSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	shadowsSpecific.pushConstantRange = vk::PushConstantRange();
-	//shadowsSpecific.depth = vm::vec2(1.f, 0.f);
 
 	return shadowsSpecific;
 }
@@ -2571,7 +2570,6 @@ Pipeline Context::createMotionBlurPipeline()
 	};
 
 	// Dynamic state
-	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
@@ -2615,7 +2613,7 @@ Pipeline Context::createMotionBlurPipeline()
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { motionBlur.DSLayoutMotionBlur };
-	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
+	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 8 * sizeof(float) };
 	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
 		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants } );
 

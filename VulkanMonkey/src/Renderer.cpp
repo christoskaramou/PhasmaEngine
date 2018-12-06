@@ -109,7 +109,7 @@ void Renderer::update(float delta)
 	const vm::vec3 up = vm::normalize(vm::cross(right, front));
 	std::vector<ShadowsUBO> shadows_UBO(Context::models.size());
 	for (uint32_t i = 0; i < Context::models.size(); i++)
-		shadows_UBO[i] = { vm::ortho(-4.f, 4.f, -4.f, 4.f, 50.f, 0.005f), vm::lookAt(pos, front, right, up), Context::models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
+		shadows_UBO[i] = { vm::ortho(-40.f, 40.f, -40.f, 40.f, 500.f, 0.005f), vm::lookAt(pos, front, right, up), Context::models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
 	memcpy(ctx.shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
 
 	// GUI
@@ -274,7 +274,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		
 		// MOTION BLUR
 		if (GUI::show_motionBlur)
-			ctx.motionBlur.draw(imageIndex);
+			ctx.motionBlur.draw(imageIndex, UVOffset);
 	}
 
 	// GUI

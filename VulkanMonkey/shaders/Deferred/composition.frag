@@ -81,11 +81,11 @@ void main()
 	if (screenSpace.effect.x > 0.5f)
 		fragColor *= oclusion;
 
-	fragColor += calculateShadow(0, fragPos.xyz, normal, albedo.xyz, material.roughness);
+	fragColor += calculateShadow(0, fragPos.xyz, normal, albedo.xyz, specRoughMet.x);
 
 	for(int i = 1; i < NUM_LIGHTS+1; ++i){
-		vec3 L =  ubo.lights[i].position.xyz - fragPos.xyz;
-		float atten = 1.0 / (1.0 + ubo.lights[i].attenuation.x * pow(length(L), 2));
+		//vec3 L =  ubo.lights[i].position.xyz - fragPos.xyz;
+		//float atten = 1.0 / (1.0 + ubo.lights[i].attenuation.x * pow(length(L), 2));
 		//fragColor += BRDF(material, i, normal, fragPos.xyz - ubo.camPos.xyz) * atten;
 		fragColor += calculateColor(i, fragPos.xyz, normal, albedo.xyz, specRoughMet.x);
 	}
@@ -97,9 +97,6 @@ void main()
 		outColor += vec4(texture(ssrSampler, inUV).xyz, 0.0);
 	
 	outComposition = outColor;
-
-	//outColor = vec4(oclusion, oclusion, oclusion, 1.0);
-	//outColor = vec4(fragPos.xyz, 1.0);
 }
 
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular)
