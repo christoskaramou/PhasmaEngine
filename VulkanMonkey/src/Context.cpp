@@ -6,159 +6,6 @@ using namespace vm;
 
 std::vector<Model> Context::models = {};
 
-vk::DescriptorSetLayout Context::getDescriptorSetLayoutLights()
-{
-	// binding for model mvp matrix
-	if (!lightUniforms.descriptorSetLayout) {
-		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(0) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
-			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
-		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
-			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
-			.setPBindings(descriptorSetLayoutBinding.data());
-		lightUniforms.descriptorSetLayout = vulkan.device.createDescriptorSetLayout(createInfo);
-	}
-	return lightUniforms.descriptorSetLayout;
-}
-PipelineInfo Context::getPipelineSpecificationsModel()
-{
-	// General Pipeline
-	static PipelineInfo generalSpecific;
-	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
-	generalSpecific.renderPass = forward.renderPass;
-	generalSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
-	generalSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(vulkan.device), Mesh::getDescriptorSetLayout(vulkan.device), Model::getDescriptorSetLayout(vulkan.device), getDescriptorSetLayoutLights() };
-	generalSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
-	generalSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
-	generalSpecific.pushConstantRange = vk::PushConstantRange();
-	generalSpecific.specializationInfo = vk::SpecializationInfo();
-	generalSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	generalSpecific.dynamicStateInfo = {
-		vk::PipelineDynamicStateCreateFlags(),
-		static_cast<uint32_t>(generalSpecific.dynamicStates.size()),
-		generalSpecific.dynamicStates.data()
-	};
-
-	return generalSpecific;
-}
-
-PipelineInfo Context::getPipelineSpecificationsShadows()
-{
-	// Shadows Pipeline
-	static PipelineInfo shadowsSpecific;
-	shadowsSpecific.shaders = { "shaders/Shadows/vert.spv" };
-	shadowsSpecific.renderPass = shadows.getRenderPass();
-	shadowsSpecific.viewportSize = { Shadows::imageSize, Shadows::imageSize };
-	shadowsSpecific.useBlendState = false;
-	shadowsSpecific.sampleCount = vk::SampleCountFlagBits::e1;
-	shadowsSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(vulkan.device) };
-	shadowsSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
-	shadowsSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
-	shadowsSpecific.pushConstantRange = vk::PushConstantRange();
-
-	return shadowsSpecific;
-}
-
-PipelineInfo Context::getPipelineSpecificationsSkyBox()
-{
-	// SkyBox Pipeline
-	static PipelineInfo skyBoxSpecific;
-	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
-	skyBoxSpecific.renderPass = forward.renderPass;
-	skyBoxSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
-	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(vulkan.device) };
-	skyBoxSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionSkyBox();
-	skyBoxSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionSkyBox();
-	skyBoxSpecific.sampleCount = vk::SampleCountFlagBits::e4;
-	skyBoxSpecific.pushConstantRange = vk::PushConstantRange();
-	skyBoxSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	skyBoxSpecific.dynamicStateInfo = {
-		vk::PipelineDynamicStateCreateFlags(),
-		static_cast<uint32_t>(skyBoxSpecific.dynamicStates.size()),
-		skyBoxSpecific.dynamicStates.data()
-	};
-
-
-	return skyBoxSpecific;
-}
-
-PipelineInfo Context::getPipelineSpecificationsTerrain()
-{
-	// Terrain Pipeline
-	static PipelineInfo terrainSpecific;
-	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
-	terrainSpecific.renderPass = forward.renderPass;
-	terrainSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
-	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(vulkan.device) };
-	terrainSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
-	terrainSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
-	terrainSpecific.pushConstantRange = vk::PushConstantRange();
-	terrainSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	terrainSpecific.dynamicStateInfo = {
-		vk::PipelineDynamicStateCreateFlags(),
-		static_cast<uint32_t>(terrainSpecific.dynamicStates.size()),
-		terrainSpecific.dynamicStates.data()
-	};
-
-	return terrainSpecific;
-}
-
-PipelineInfo Context::getPipelineSpecificationsGUI()
-{
-	// GUI Pipeline
-	static PipelineInfo GUISpecific;
-	GUISpecific.shaders = { "shaders/GUI/vert.spv", "shaders/GUI/frag.spv" };
-	GUISpecific.renderPass = gui.renderPass;
-	GUISpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
-	GUISpecific.descriptorSetLayouts = { GUI::getDescriptorSetLayout(vulkan.device) };
-	GUISpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGUI();
-	GUISpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGUI();
-	GUISpecific.cull = vk::CullModeFlagBits::eBack;
-	GUISpecific.pushConstantRange = vk::PushConstantRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4 };
-	GUISpecific.sampleCount = vk::SampleCountFlagBits::e1;
-	GUISpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	GUISpecific.dynamicStateInfo = {
-		vk::PipelineDynamicStateCreateFlags(),
-		static_cast<uint32_t>(GUISpecific.dynamicStates.size()),
-		GUISpecific.dynamicStates.data()
-	};
-
-	return GUISpecific;
-}
-
-PipelineInfo Context::getPipelineSpecificationsDeferred()
-{
-	// Deferred Pipeline
-	static PipelineInfo deferredSpecific;
-	deferredSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
-	deferredSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
-	deferredSpecific.pushConstantRange = vk::PushConstantRange();
-	deferredSpecific.shaders = { "shaders/Deferred/vert.spv", "shaders/Deferred/frag.spv" };
-	deferredSpecific.renderPass = deferred.renderPass;
-	deferredSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
-	deferredSpecific.sampleCount = vk::SampleCountFlagBits::e1;
-	deferredSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(vulkan.device), Mesh::getDescriptorSetLayout(vulkan.device) };
-	deferredSpecific.specializationInfo = vk::SpecializationInfo();
-	deferredSpecific.blendAttachmentStates[0].blendEnable = VK_FALSE;
-	deferredSpecific.blendAttachmentStates = {
-		deferredSpecific.blendAttachmentStates[0],
-		deferredSpecific.blendAttachmentStates[0],
-		deferredSpecific.blendAttachmentStates[0],
-		deferredSpecific.blendAttachmentStates[0]
-	};
-	deferredSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	deferredSpecific.dynamicStateInfo = {
-		vk::PipelineDynamicStateCreateFlags(),
-		static_cast<uint32_t>(deferredSpecific.dynamicStates.size()),
-		deferredSpecific.dynamicStates.data()
-	};
-
-	return deferredSpecific;
-}
-
 void Context::initVulkanContext()
 {
 	vulkan.instance = createInstance();
@@ -246,7 +93,7 @@ void Context::loadResources()
 	//std::array<std::string, 6> skyTextures = { "objects/sky/right.png", "objects/sky/left.png", "objects/sky/top.png", "objects/sky/bottom.png", "objects/sky/back.png", "objects/sky/front.png" };
 	//skyBox.loadSkyBox(skyTextures, 1024);
 	// GUI LOAD
-	gui.loadGUI("ImGuiDemo");
+	gui.loadGUI();
 	// TERRAIN LOAD
 	//terrain.generateTerrain("");
 	// MODELS LOAD
@@ -2942,4 +2789,157 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 
 	skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
 	//---------------------------------------
+}
+
+vk::DescriptorSetLayout Context::getDescriptorSetLayoutLights()
+{
+	// binding for model mvp matrix
+	if (!lightUniforms.descriptorSetLayout) {
+		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
+		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
+			.setBinding(0) // binding number in shader stages
+			.setDescriptorCount(1) // number of descriptors contained
+			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
+			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
+		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
+			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
+			.setPBindings(descriptorSetLayoutBinding.data());
+		lightUniforms.descriptorSetLayout = vulkan.device.createDescriptorSetLayout(createInfo);
+	}
+	return lightUniforms.descriptorSetLayout;
+}
+PipelineInfo Context::getPipelineSpecificationsModel()
+{
+	// General Pipeline
+	static PipelineInfo generalSpecific;
+	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
+	generalSpecific.renderPass = forward.renderPass;
+	generalSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
+	generalSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(vulkan.device), Mesh::getDescriptorSetLayout(vulkan.device), Model::getDescriptorSetLayout(vulkan.device), getDescriptorSetLayoutLights() };
+	generalSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
+	generalSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
+	generalSpecific.pushConstantRange = vk::PushConstantRange();
+	generalSpecific.specializationInfo = vk::SpecializationInfo();
+	generalSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	generalSpecific.dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(generalSpecific.dynamicStates.size()),
+		generalSpecific.dynamicStates.data()
+	};
+
+	return generalSpecific;
+}
+
+PipelineInfo Context::getPipelineSpecificationsShadows()
+{
+	// Shadows Pipeline
+	static PipelineInfo shadowsSpecific;
+	shadowsSpecific.shaders = { "shaders/Shadows/vert.spv" };
+	shadowsSpecific.renderPass = shadows.getRenderPass();
+	shadowsSpecific.viewportSize = { Shadows::imageSize, Shadows::imageSize };
+	shadowsSpecific.useBlendState = false;
+	shadowsSpecific.sampleCount = vk::SampleCountFlagBits::e1;
+	shadowsSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(vulkan.device) };
+	shadowsSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
+	shadowsSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
+	shadowsSpecific.pushConstantRange = vk::PushConstantRange();
+
+	return shadowsSpecific;
+}
+
+PipelineInfo Context::getPipelineSpecificationsSkyBox()
+{
+	// SkyBox Pipeline
+	static PipelineInfo skyBoxSpecific;
+	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
+	skyBoxSpecific.renderPass = forward.renderPass;
+	skyBoxSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
+	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(vulkan.device) };
+	skyBoxSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionSkyBox();
+	skyBoxSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionSkyBox();
+	skyBoxSpecific.sampleCount = vk::SampleCountFlagBits::e4;
+	skyBoxSpecific.pushConstantRange = vk::PushConstantRange();
+	skyBoxSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	skyBoxSpecific.dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(skyBoxSpecific.dynamicStates.size()),
+		skyBoxSpecific.dynamicStates.data()
+	};
+
+
+	return skyBoxSpecific;
+}
+
+PipelineInfo Context::getPipelineSpecificationsTerrain()
+{
+	// Terrain Pipeline
+	static PipelineInfo terrainSpecific;
+	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
+	terrainSpecific.renderPass = forward.renderPass;
+	terrainSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
+	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(vulkan.device) };
+	terrainSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
+	terrainSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
+	terrainSpecific.pushConstantRange = vk::PushConstantRange();
+	terrainSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	terrainSpecific.dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(terrainSpecific.dynamicStates.size()),
+		terrainSpecific.dynamicStates.data()
+	};
+
+	return terrainSpecific;
+}
+
+PipelineInfo Context::getPipelineSpecificationsGUI()
+{
+	// GUI Pipeline
+	static PipelineInfo GUISpecific;
+	GUISpecific.shaders = { "shaders/GUI/vert.spv", "shaders/GUI/frag.spv" };
+	GUISpecific.renderPass = gui.renderPass;
+	GUISpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
+	GUISpecific.descriptorSetLayouts = { GUI::getDescriptorSetLayout(vulkan.device) };
+	GUISpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGUI();
+	GUISpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGUI();
+	GUISpecific.cull = vk::CullModeFlagBits::eBack;
+	GUISpecific.pushConstantRange = vk::PushConstantRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4 };
+	GUISpecific.sampleCount = vk::SampleCountFlagBits::e1;
+	GUISpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	GUISpecific.dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(GUISpecific.dynamicStates.size()),
+		GUISpecific.dynamicStates.data()
+	};
+
+	return GUISpecific;
+}
+
+PipelineInfo Context::getPipelineSpecificationsDeferred()
+{
+	// Deferred Pipeline
+	static PipelineInfo deferredSpecific;
+	deferredSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
+	deferredSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
+	deferredSpecific.pushConstantRange = vk::PushConstantRange();
+	deferredSpecific.shaders = { "shaders/Deferred/vert.spv", "shaders/Deferred/frag.spv" };
+	deferredSpecific.renderPass = deferred.renderPass;
+	deferredSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
+	deferredSpecific.sampleCount = vk::SampleCountFlagBits::e1;
+	deferredSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(vulkan.device), Mesh::getDescriptorSetLayout(vulkan.device) };
+	deferredSpecific.specializationInfo = vk::SpecializationInfo();
+	deferredSpecific.blendAttachmentStates[0].blendEnable = VK_FALSE;
+	deferredSpecific.blendAttachmentStates = {
+		deferredSpecific.blendAttachmentStates[0],
+		deferredSpecific.blendAttachmentStates[0],
+		deferredSpecific.blendAttachmentStates[0],
+		deferredSpecific.blendAttachmentStates[0]
+	};
+	deferredSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	deferredSpecific.dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(deferredSpecific.dynamicStates.size()),
+		deferredSpecific.dynamicStates.data()
+	};
+
+	return deferredSpecific;
 }

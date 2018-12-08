@@ -52,7 +52,6 @@ Renderer::~Renderer()
 	ctx.destroyVkContext();
 }
 
-//std::atomic<bool> ready(false);
 void Renderer::update(float delta)
 {
 	// TODO: make an other command pool for multithreading
@@ -69,38 +68,25 @@ void Renderer::update(float delta)
 		Queue::loadModel.pop_back();
 		Queue::func.pop_back();
 	}
-	//if (ready) {
-	//	Queue::func.back().get();
-	//	ready = false;
-	//}
+
+	ctx.camera_main.update();
 	const mat4 projection = ctx.camera_main.getPerspective();
 	const mat4 view = ctx.camera_main.getView();
-
-	//TERRAIN
-	//if (ctx.terrain.render) {
-	//	const mat4 pvm[3]{ projection, view };
-	//	memcpy(ctx.terrain.uniformBuffer.data, &pvm, sizeof(pvm));
-	//}
 
 	// MODELS
 	for (auto &model : Context::models) {
 		model.render = GUI::render_models;
 		if (model.render) {
-			const mat4 pvm[3]{ projection, view, model.matrix };
-			ctx.camera_main.ExtractFrustum(model.matrix);
+			const mat4 pvm[3]{ projection, view, model.transform };
+			ctx.camera_main.ExtractFrustum(model.transform);
 			for (auto &mesh : model.meshes) {
 				mesh.cull = !ctx.camera_main.SphereInFrustum(mesh.boundingSphere);
-				if (!mesh.cull)
+				if (!mesh.cull) {
 					memcpy(model.uniformBuffer.data, &pvm, sizeof(pvm));
+				}
 			}
 		}
 	}
-
-	// SKYBOX
-	//if (ctx.skyBox.render) {
-	//	const mat4 pvm[2]{ projection, view };
-	//	memcpy(ctx.skyBox.uniformBuffer.data, &pvm, sizeof(pvm));
-	//}
 
 	// SHADOWS
 	Shadows::shadowCast = GUI::shadow_cast;
@@ -110,7 +96,7 @@ void Renderer::update(float delta)
 	const vec3 up = normalize(cross(right, front));
 	std::vector<ShadowsUBO> shadows_UBO(Context::models.size());
 	for (uint32_t i = 0; i < Context::models.size(); i++)
-		shadows_UBO[i] = { ortho(-40.f, 40.f, -40.f, 40.f, 500.f, 0.005f), lookAt(pos, front, right, up), Context::models[i].matrix, Shadows::shadowCast ? 1.0f : 0.0f };
+		shadows_UBO[i] = { ortho(-40.f, 40.f, -40.f, 40.f, 500.f, 0.005f), lookAt(pos, front, right, up), Context::models[i].transform, Shadows::shadowCast ? 1.0f : 0.0f };
 	memcpy(ctx.shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
 
 	// GUI
@@ -154,6 +140,18 @@ void Renderer::update(float delta)
 		memcpy(ctx.motionBlur.UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
 		previousView = view;
 	}
+
+	//TERRAIN
+	//if (ctx.terrain.render) {
+	//	const mat4 pvm[3]{ projection, view };
+	//	memcpy(ctx.terrain.uniformBuffer.data, &pvm, sizeof(pvm));
+	//}
+	// SKYBOX
+	//if (ctx.skyBox.render) {
+	//	const mat4 pvm[2]{ projection, view };
+	//	memcpy(ctx.skyBox.uniformBuffer.data, &pvm, sizeof(pvm));
+	//}
+
 }
 
 void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)

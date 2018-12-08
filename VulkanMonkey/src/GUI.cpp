@@ -285,8 +285,6 @@ void GUI::loadGUI(const std::string textureName, bool show)
 	//        /	|                   //     |
 	//       /  |/ +y               //     |/ v
 
-	if (textureName == "ImGuiDemo")
-		show_demo_window = true;
 	render = show; 
 
 	initImGui();

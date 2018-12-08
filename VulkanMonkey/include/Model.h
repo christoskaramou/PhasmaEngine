@@ -18,12 +18,12 @@ namespace vm {
 		vk::DescriptorSet descriptorSet;
 		std::vector<Mesh> meshes{};
 		std::string name;
-		mat4 matrix = mat4(1.0f);
+		mat4 transform = mat4(1.0f);
 		Buffer vertexBuffer;
 		Buffer indexBuffer;
 		Buffer uniformBuffer;
 		uint32_t numberOfVertices = 0, numberOfIndices = 0;
-		float initialBoundingSphereRadius = 0.0f;
+		vec4 boundingSphere;
 
 		void draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows = nullptr, vk::DescriptorSet* DSLights = nullptr);
 		vec4 getBoundingSphere();

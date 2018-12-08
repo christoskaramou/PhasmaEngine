@@ -152,7 +152,10 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 
 	// resizing the model to always be at a certain magnitude
 	float factor = 20.0f / getBoundingSphere().w;
-	matrix = scale(matrix, vec3(factor, factor, factor));
+	transform = scale(transform, vec3(factor, factor, factor));
+	for (auto &m : f_meshes) {
+		m.transform = transform;
+	}
 }
 
 void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows, vk::DescriptorSet* DSLights)
@@ -183,23 +186,12 @@ void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& mod
 // position x, y, z and radius w
 vec4 Model::getBoundingSphere()
 {
-
-	//vec3 center = (float*)&(matrix * vec4(0.0f, 0.0f, 0.0f, 1.f));
-	//vec3 temp = (float*)&(matrix * vec4(1.0f, 1.0f, 1.0f, 1.f));
-	//vec3 tranformation = temp - center;
-	vec3 center = vec3(0.0f, 0.0f, 0.0f);
-
-	if (initialBoundingSphereRadius <= 0) {
-		for (auto &mesh : meshes) {
-			for (auto& vertex : mesh.vertices) {
-				float distance = length(vec3(vertex.x, vertex.y, vertex.z));
-				if (distance > initialBoundingSphereRadius)
-					initialBoundingSphereRadius = distance;
-			}
-		}
+	for (auto &mesh : meshes) {
+		float temp = mesh.boundingSphere.w + length(vec3(mesh.boundingSphere.x, mesh.boundingSphere.x, mesh.boundingSphere.z));
+		if (temp > boundingSphere.w)
+			boundingSphere.w = temp;
 	}
-
-	return vec4(center, initialBoundingSphereRadius);
+	return boundingSphere;
 }
 
 vk::DescriptorSetLayout Model::getDescriptorSetLayout(vk::Device device)

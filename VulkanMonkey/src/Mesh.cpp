@@ -164,6 +164,11 @@ void Mesh::calculateBoundingSphere()
 	boundingSphere = vec4(center, sphereRadius);
 }
 
+vec4 vm::Mesh::getBoundingSphere() const
+{
+	return boundingSphere;
+}
+
 void Mesh::destroy()
 {
 	texture.destroy();

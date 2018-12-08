@@ -40,6 +40,47 @@ Camera::Camera()
 	renderArea.scissor.extent.height = (int32_t)GUI::winSize.y;
 }
 
+void vm::Camera::update()
+{
+	updatePerspective();
+	updateView();
+}
+
+void vm::Camera::updatePerspective()
+{
+	float aspect = renderArea.viewport.width / renderArea.viewport.height;
+	float tanHalfFovy = tan(radians(FOV) * .5f);
+	float m00 = 1.f / (aspect * tanHalfFovy);
+	float m11 = 1.f / (tanHalfFovy);
+	float m22 = farPlane / (farPlane - nearPlane) * worldOrientation.z;
+	float m23 = worldOrientation.z;
+	float m32 = -(farPlane * nearPlane) / (farPlane - nearPlane);
+	perspective = mat4(
+		m00, 0.f, 0.f, 0.f,
+		0.f, m11, 0.f, 0.f,
+		0.f, 0.f, m22, m23,
+		0.f, 0.f, m32, 0.f
+	);
+}
+
+void vm::Camera::updateView()
+{
+	vec3 f(front());
+	vec3 r(right());
+	vec3 u(up());
+
+	float m30 = -dot(r, position);
+	float m31 = -dot(u, position);
+	float m32 = -dot(f, position);
+
+	view = mat4(
+		r.x, u.x, f.x, 0.f,
+		r.y, u.y, f.y, 0.f,
+		r.z, u.z, f.z, 0.f,
+		m30, m31, m32, 1.f
+	);
+}
+
 void Camera::move(RelativeDirection direction, float velocity)
 {
 	if (direction == RelativeDirection::FORWARD)	position += front() * (velocity * worldOrientation.z);
@@ -60,36 +101,11 @@ void Camera::rotate(float xoffset, float yoffset)
 
 mat4 Camera::getPerspective()
 {
-	float aspect = renderArea.viewport.width / renderArea.viewport.height;
-	float tanHalfFovy = tan(radians(FOV) * .5f);
-	float m00 = 1.f / (aspect * tanHalfFovy);
-	float m11 = 1.f / (tanHalfFovy);
-	float m22 = farPlane / (farPlane - nearPlane) * worldOrientation.z;
-	float m23 = worldOrientation.z;
-	float m32 = -(farPlane * nearPlane) / (farPlane - nearPlane);
-	return mat4(
-		m00, 0.f, 0.f, 0.f,
-		0.f, m11, 0.f, 0.f,
-		0.f, 0.f, m22, m23,
-		0.f, 0.f, m32, 0.f
-	);
+	return perspective;
 }
-mat4 Camera::getView() const
+mat4 Camera::getView()
 {
-	vec3 f(front());
-	vec3 r(right());
-	vec3 u(up());
-
-	float m30 = -dot(r, position);
-	float m31 = -dot(u, position);
-	float m32 = -dot(f, position);
-
-	return mat4(
-		r.x, u.x, f.x, 0.f,
-		r.y, u.y, f.y, 0.f,
-		r.z, u.z, f.z, 0.f,
-		m30, m31, m32, 1.f
-	);
+	return view;
 }
 
 vec3 Camera::worldRight() const
@@ -122,85 +138,40 @@ vec3 Camera::front() const
 	return orientation * worldFront();
 }
 
-void Camera::ExtractFrustum(mat4& model)
+void Camera::ExtractFrustum(const mat4& model)
 {
-	mat4 pvm = getPerspective() * getView() * model;
-	const float* clip = pvm.ptr();
-	float t;
+	mat4 pvm = transpose(perspective * view * model);
 
 	/* Extract the numbers for the RIGHT plane */
-	frustum[0][0] = clip[3] - clip[0];
-	frustum[0][1] = clip[7] - clip[4];
-	frustum[0][2] = clip[11] - clip[8];
-	frustum[0][3] = clip[15] - clip[12];
-	/* Normalize the result */
-	t = 1.f / sqrt(frustum[0][0] * frustum[0][0] + frustum[0][1] * frustum[0][1] + frustum[0][2] * frustum[0][2]);
-	frustum[0][0] *= t;
-	frustum[0][1] *= t;
-	frustum[0][2] *= t;
-	frustum[0][3] *= t;
+	frustum[0] = pvm[3] - pvm[0];
+	frustum[0] /= length(vec3(frustum[0]));
+
 	/* Extract the numbers for the LEFT plane */
-	frustum[1][0] = clip[3] + clip[0];
-	frustum[1][1] = clip[7] + clip[4];
-	frustum[1][2] = clip[11] + clip[8];
-	frustum[1][3] = clip[15] + clip[12];
-	/* Normalize the result */
-	t = 1.f / sqrt(frustum[1][0] * frustum[1][0] + frustum[1][1] * frustum[1][1] + frustum[1][2] * frustum[1][2]);
-	frustum[1][0] *= t;
-	frustum[1][1] *= t;
-	frustum[1][2] *= t;
-	frustum[1][3] *= t;
+	frustum[1] = pvm[3] + pvm[0];
+	frustum[1] /= length(vec3(frustum[1]));
+
 	/* Extract the BOTTOM plane */
-	frustum[2][0] = clip[3] + clip[1];
-	frustum[2][1] = clip[7] + clip[5];
-	frustum[2][2] = clip[11] + clip[9];
-	frustum[2][3] = clip[15] + clip[13];
-	/* Normalize the result */
-	t = 1.f / sqrt(frustum[2][0] * frustum[2][0] + frustum[2][1] * frustum[2][1] + frustum[2][2] * frustum[2][2]);
-	frustum[2][0] *= t;
-	frustum[2][1] *= t;
-	frustum[2][2] *= t;
-	frustum[2][3] *= t;
+	frustum[2] = pvm[3] + pvm[1];
+	frustum[2] /= length(vec3(frustum[2]));
+
 	/* Extract the TOP plane */
-	frustum[3][0] = clip[3] - clip[1];
-	frustum[3][1] = clip[7] - clip[5];
-	frustum[3][2] = clip[11] - clip[9];
-	frustum[3][3] = clip[15] - clip[13];
-	/* Normalize the result */
-	t = 1.f / sqrt(frustum[3][0] * frustum[3][0] + frustum[3][1] * frustum[3][1] + frustum[3][2] * frustum[3][2]);
-	frustum[3][0] *= t;
-	frustum[3][1] *= t;
-	frustum[3][2] *= t;
-	frustum[3][3] *= t;
+	frustum[3] = pvm[3] - pvm[1];
+	frustum[3] /= length(vec3(frustum[3]));
+
 	/* Extract the FAR plane */
-	frustum[4][0] = clip[3] - clip[2];
-	frustum[4][1] = clip[7] - clip[6];
-	frustum[4][2] = clip[11] - clip[10];
-	frustum[4][3] = clip[15] - clip[14];
-	/* Normalize the result */
-	t = 1.f / sqrt(frustum[4][0] * frustum[4][0] + frustum[4][1] * frustum[4][1] + frustum[4][2] * frustum[4][2]);
-	frustum[4][0] *= t;
-	frustum[4][1] *= t;
-	frustum[4][2] *= t;
-	frustum[4][3] *= t;
+	frustum[4] = pvm[3] - pvm[2];
+	frustum[4] /= length(vec3(frustum[4]));
+
 	/* Extract the NEAR plane */
-	frustum[5][0] = clip[3] + clip[2];
-	frustum[5][1] = clip[7] + clip[6];
-	frustum[5][2] = clip[11] + clip[10];
-	frustum[5][3] = clip[15] + clip[14];
-	/* Normalize the result */
-	t = 1.f / sqrt(frustum[5][0] * frustum[5][0] + frustum[5][1] * frustum[5][1] + frustum[5][2] * frustum[5][2]);
-	frustum[5][0] *= t;
-	frustum[5][1] *= t;
-	frustum[5][2] *= t;
-	frustum[5][3] *= t;
+	frustum[5] = pvm[3] + pvm[2];
+	frustum[5] /= length(vec3(frustum[5]));
 }
 
 // center x,y,z - radius w 
-bool Camera::SphereInFrustum(vec4& boundingSphere) const
+bool Camera::SphereInFrustum(const vec4& boundingSphere) const
 {
 	for (unsigned i = 0; i < 6; i++)
-		if (frustum[i][0] * boundingSphere.x + frustum[i][1] * boundingSphere.y + frustum[i][2] * boundingSphere.z + frustum[i][3] <= -boundingSphere.w)
+		if (dot(vec3(frustum[i]), vec3(boundingSphere)) + frustum[i].w <= -boundingSphere.w)
 			return false;
 	return true;
 }

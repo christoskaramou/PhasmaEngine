@@ -9,7 +9,7 @@ namespace vm {
 		vec3 position;
 		quat rotation;
 		vec3 scale;
-		mat4 matrix;
+		mat4 transform;
 	};
 
 	struct Node

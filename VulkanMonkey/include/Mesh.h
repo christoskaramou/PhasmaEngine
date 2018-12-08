@@ -16,8 +16,10 @@ namespace vm {
 		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		bool render = true, cull = false, hasAlpha = false;
+		mat4 transform = mat4(1.0f);
 		vec4 boundingSphere;
 		void calculateBoundingSphere();
+		vec4 getBoundingSphere() const;
 		uint32_t vertexOffset = 0, indexOffset = 0;
 		enum TextureType
 		{

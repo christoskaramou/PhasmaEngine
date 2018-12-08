@@ -45,7 +45,7 @@ namespace vm {
 		Pipeline pipeline;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
-		void loadGUI(const std::string textureName, bool show = true);
+		void loadGUI(const std::string textureName = "", bool show = true);
 		void draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Pipeline& pipeline, const vk::CommandBuffer & cmd);
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();
