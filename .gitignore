@@ -260,3 +260,7 @@ paket-files/
 # Python Tools for Visual Studio (PTVS)
 __pycache__/
 *.pyc
+
+# Allow
+!VulkanMonkey/objects/sponza/sponza.obj
+!VulkanMonkey/objects/sponza/sponzaPBR.obj
