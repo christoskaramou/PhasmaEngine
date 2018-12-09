@@ -22,6 +22,15 @@ layout (location = 1) out vec4 outNormal;
 layout (location = 2) out vec4 outAlbedo;
 layout (location = 3) out vec4 outSpecRoughMet;
 
+const float FAR_PLANE = 0.005f;
+const float NEAR_PLANE = 500.0f;
+
+float linearDepth(float depth)
+{
+	float z = depth * 2.0f - 1.0f; 
+	return (2.0f * NEAR_PLANE * FAR_PLANE) / (FAR_PLANE + NEAR_PLANE - z * (FAR_PLANE - NEAR_PLANE));	
+}
+
 void main() {
 	float alpha = texture(alphaSampler, inUV).r;
 	if(alpha < 0.8)
@@ -33,7 +42,7 @@ void main() {
 	mat3 TBN = mat3(T, B, N);
 	vec3 normSampler = normalize(texture(normSampler, inUV).rgb * 2.0 - 1.0);
 
-	outPosition = vec4(inWorldPos, 1.0 / gl_FragCoord.w);
+	outPosition = vec4(inWorldPos, linearDepth(gl_FragCoord.z)); //1.0 / gl_FragCoord.w);
 	outNormal = vec4(TBN * normSampler , 0.0f);
 	outAlbedo = vec4(texture(tSampler, inUV).xyz, alpha);
 	outSpecRoughMet = vec4(texture(specSampler, inUV).r, texture(roughSampler, inUV).r, texture(metalSampler, inUV).r, 1.0);

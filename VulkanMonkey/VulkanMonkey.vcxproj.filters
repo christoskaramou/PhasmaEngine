@@ -69,63 +69,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\Buffer.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Camera.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Context.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\GUI.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Image.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Math.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Mesh.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Model.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Object.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Pipeline.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Renderer.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Shadows.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Skybox.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Surface.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Swapchain.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Terrain.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Timer.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Vertex.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Window.h">
-      <Filter>Include</Filter>
-    </ClInclude>
     <ClInclude Include="include\Vulkan.h">
       <Filter>Include</Filter>
     </ClInclude>
@@ -133,9 +76,6 @@
       <Filter>Include</Filter>
     </ClInclude>
     <ClInclude Include="include\Stbi.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\GLM.h">
       <Filter>Include</Filter>
     </ClInclude>
     <ClInclude Include="include\stb_image\stb_image.h">
@@ -159,139 +99,201 @@
     <ClInclude Include="include\imgui\imstb_truetype.h">
       <Filter>Include</Filter>
     </ClInclude>
-    <ClInclude Include="include\Light.h">
+    <ClInclude Include="include\GLM.h">
       <Filter>Include</Filter>
     </ClInclude>
-    <ClInclude Include="include\SSAO.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="Code\Buffer\Buffer.h">
+      <Filter>Code\Buffer</Filter>
     </ClInclude>
-    <ClInclude Include="include\Deferred.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="Code\Camera\Camera.h">
+      <Filter>Code\Camera</Filter>
     </ClInclude>
-    <ClInclude Include="include\SSR.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="Code\Compute\Compute.h">
+      <Filter>Code\Compute</Filter>
     </ClInclude>
-    <ClInclude Include="include\Compute.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="Code\Console\Console.h">
+      <Filter>Code\Console</Filter>
     </ClInclude>
-    <ClInclude Include="include\Forward.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="Code\Context\Context.h">
+      <Filter>Code\Context</Filter>
     </ClInclude>
-    <ClInclude Include="include\VulkanContext.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="Code\Deferred\Deferred.h">
+      <Filter>Code\Deferred</Filter>
     </ClInclude>
-    <ClInclude Include="include\Console.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="Code\Forward\Forward.h">
+      <Filter>Code\Forward</Filter>
     </ClInclude>
-    <ClInclude Include="include\Node.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="Code\GUI\GUI.h">
+      <Filter>Code\GUI</Filter>
     </ClInclude>
-    <ClInclude Include="include\Queue.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="Code\Image\Image.h">
+      <Filter>Code\Image</Filter>
     </ClInclude>
-    <ClInclude Include="include\MotionBlur.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="Code\Light\Light.h">
+      <Filter>Code\Light</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Math\Math.h">
+      <Filter>Code\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Mesh\Mesh.h">
+      <Filter>Code\Mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Model\Model.h">
+      <Filter>Code\Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\MotionBlur\MotionBlur.h">
+      <Filter>Code\MotionBlur</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Node\Node.h">
+      <Filter>Code\Node</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Object\Object.h">
+      <Filter>Code\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Pipeline\Pipeline.h">
+      <Filter>Code\Pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Queue\Queue.h">
+      <Filter>Code\Queue</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Renderer\Renderer.h">
+      <Filter>Code\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Shadows\Shadows.h">
+      <Filter>Code\Shadows</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Skybox\Skybox.h">
+      <Filter>Code\Skybox</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\SSAO\SSAO.h">
+      <Filter>Code\SSAO</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\SSR\SSR.h">
+      <Filter>Code\SSR</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Surface\Surface.h">
+      <Filter>Code\Surface</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Swapchain\Swapchain.h">
+      <Filter>Code\Swapchain</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Terrain\Terrain.h">
+      <Filter>Code\Terrain</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Timer\Timer.h">
+      <Filter>Code\Timer</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Vertex\Vertex.h">
+      <Filter>Code\Vertex</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\VulkanContext\VulkanContext.h">
+      <Filter>Code\VulkanContext</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Window\Window.h">
+      <Filter>Code\Window</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="src\Buffer.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Buffer\Buffer.cpp">
+      <Filter>Code\Buffer</Filter>
     </ClCompile>
-    <ClCompile Include="src\Camera.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Camera\Camera.cpp">
+      <Filter>Code\Camera</Filter>
     </ClCompile>
-    <ClCompile Include="src\Context.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Compute\Compute.cpp">
+      <Filter>Code\Compute</Filter>
     </ClCompile>
-    <ClCompile Include="src\GUI.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Console\Console.cpp">
+      <Filter>Code\Console</Filter>
     </ClCompile>
-    <ClCompile Include="src\Image.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Context\Context.cpp">
+      <Filter>Code\Context</Filter>
     </ClCompile>
-    <ClCompile Include="src\Math.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Deferred\Deferred.cpp">
+      <Filter>Code\Deferred</Filter>
     </ClCompile>
-    <ClCompile Include="src\Mesh.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Forward\Forward.cpp">
+      <Filter>Code\Forward</Filter>
     </ClCompile>
-    <ClCompile Include="src\Model.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\GUI\GUI.cpp">
+      <Filter>Code\GUI</Filter>
     </ClCompile>
-    <ClCompile Include="src\Object.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Image\Image.cpp">
+      <Filter>Code\Image</Filter>
     </ClCompile>
-    <ClCompile Include="src\Pipeline.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Light\Light.cpp">
+      <Filter>Code\Light</Filter>
     </ClCompile>
-    <ClCompile Include="src\Renderer.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Math\Math.cpp">
+      <Filter>Code\Math</Filter>
     </ClCompile>
-    <ClCompile Include="src\Shadows.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Mesh\Mesh.cpp">
+      <Filter>Code\Mesh</Filter>
     </ClCompile>
-    <ClCompile Include="src\Skybox.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Model\Model.cpp">
+      <Filter>Code\Model</Filter>
     </ClCompile>
-    <ClCompile Include="src\Swapchain.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\MotionBlur\MotionBlur.cpp">
+      <Filter>Code\MotionBlur</Filter>
     </ClCompile>
-    <ClCompile Include="src\Terrain.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Node\Node.cpp">
+      <Filter>Code\Node</Filter>
     </ClCompile>
-    <ClCompile Include="src\Timer.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Object\Object.cpp">
+      <Filter>Code\Object</Filter>
     </ClCompile>
-    <ClCompile Include="src\Vertex.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Pipeline\Pipeline.cpp">
+      <Filter>Code\Pipeline</Filter>
     </ClCompile>
-    <ClCompile Include="src\Window.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Queue\Queue.cpp">
+      <Filter>Code\Queue</Filter>
     </ClCompile>
-    <ClCompile Include="include\stb_image\stb_image.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="Code\Renderer\Renderer.cpp">
+      <Filter>Code\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Shadows\Shadows.cpp">
+      <Filter>Code\Shadows</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Skybox\Skybox.cpp">
+      <Filter>Code\Skybox</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\SSAO\SSAO.cpp">
+      <Filter>Code\SSAO</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\SSR\SSR.cpp">
+      <Filter>Code\SSR</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Swapchain\Swapchain.cpp">
+      <Filter>Code\Swapchain</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Terrain\Terrain.cpp">
+      <Filter>Code\Terrain</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Timer\Timer.cpp">
+      <Filter>Code\Timer</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Vertex\Vertex.cpp">
+      <Filter>Code\Vertex</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Window\Window.cpp">
+      <Filter>Code\Window</Filter>
     </ClCompile>
     <ClCompile Include="include\imgui\imgui.cpp">
-      <Filter>Source</Filter>
+      <Filter>Include</Filter>
     </ClCompile>
     <ClCompile Include="include\imgui\imgui_demo.cpp">
-      <Filter>Source</Filter>
+      <Filter>Include</Filter>
     </ClCompile>
     <ClCompile Include="include\imgui\imgui_draw.cpp">
-      <Filter>Source</Filter>
+      <Filter>Include</Filter>
     </ClCompile>
     <ClCompile Include="include\imgui\imgui_widgets.cpp">
-      <Filter>Source</Filter>
+      <Filter>Include</Filter>
     </ClCompile>
-    <ClCompile Include="src\Light.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="include\stb_image\stb_image.cpp">
+      <Filter>Include</Filter>
     </ClCompile>
-    <ClCompile Include="src\SSAO.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="src\Deferred.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="src\SSR.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="src\Compute.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="src\Forward.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="src\Console.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="src\Node.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="src\Queue.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="src\MotionBlur.cpp">
+    <ClCompile Include="main.cpp">
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>
@@ -304,6 +306,99 @@
     </Filter>
     <Filter Include="Shaders">
       <UniqueIdentifier>{538de048-81d6-4f18-822d-bf9941e10043}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code">
+      <UniqueIdentifier>{ecd26234-4cc7-45c9-9622-6f7a91e53f60}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Buffer">
+      <UniqueIdentifier>{6bf5526a-e17e-42c8-be66-32c578a9427f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Camera">
+      <UniqueIdentifier>{34da3064-92f5-4c84-a80d-53b65db5bd1c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Compute">
+      <UniqueIdentifier>{3c57c093-fb44-4050-8634-fb028ba94adb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Console">
+      <UniqueIdentifier>{e6b522aa-75ad-4d1d-ae2e-e175787fdba5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Context">
+      <UniqueIdentifier>{3d360cc3-76d6-4955-be00-8146a8686e72}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Deferred">
+      <UniqueIdentifier>{60004d75-1983-4a33-a3ec-281c712ef8d7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Forward">
+      <UniqueIdentifier>{9e537224-81e6-404d-96a0-f7890facefcf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\GUI">
+      <UniqueIdentifier>{9ffdd4d7-c58f-4753-8b0c-b6b4b4b35bce}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Image">
+      <UniqueIdentifier>{5bd0e5c8-33df-4392-956c-90bfb5453efb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Light">
+      <UniqueIdentifier>{f7bd5cba-2570-4da6-b27a-cbc5a1b6d7f7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Math">
+      <UniqueIdentifier>{4ebc677b-7fe6-478c-ae4d-ff81493ceaee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Mesh">
+      <UniqueIdentifier>{57d07b15-88ab-4dec-a7fb-2f6dbd750e82}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Model">
+      <UniqueIdentifier>{8a93bf13-b615-4a3f-b290-fb36b2984127}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\MotionBlur">
+      <UniqueIdentifier>{d93ccf8a-27f0-40a4-b1b2-641bce0d9ec7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Node">
+      <UniqueIdentifier>{31e22306-c5d2-4921-ba8f-86c036883dc0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Object">
+      <UniqueIdentifier>{164c09a8-7422-437c-baaf-acdcff871ccf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Pipeline">
+      <UniqueIdentifier>{09305895-199e-4415-b8e7-aef4015d8fc1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Queue">
+      <UniqueIdentifier>{1ba7e23e-37cd-4bcf-834f-41eec162ecb7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Renderer">
+      <UniqueIdentifier>{24ef02e3-637a-4d1f-827f-184f0f578d41}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Shadows">
+      <UniqueIdentifier>{2ed620b9-3794-4f6a-92c9-8e7a2de170b1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Skybox">
+      <UniqueIdentifier>{fa07bab4-d33f-44e7-80e4-4a5d0ef41cb0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Window">
+      <UniqueIdentifier>{0d4ad2d5-8716-4cbf-8b2d-09ede4b38bfb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\SSAO">
+      <UniqueIdentifier>{88fdf4ee-d4e0-4832-aadc-897eecb5dc0f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\SSR">
+      <UniqueIdentifier>{0ddd5f01-f50b-4889-a19b-949a38c6ec41}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Surface">
+      <UniqueIdentifier>{19940bde-323a-481c-9414-97b5e9d7c04a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Swapchain">
+      <UniqueIdentifier>{b7feefc7-c3d2-4d95-b645-20fc805ee63a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Terrain">
+      <UniqueIdentifier>{2b06e4f1-0cb8-4ee8-a3d7-7c92bed17031}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Timer">
+      <UniqueIdentifier>{d272beee-5cc8-4088-8772-3db2042daf80}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Vertex">
+      <UniqueIdentifier>{f1967fb7-208f-478b-9318-a5defa5ac0ba}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\VulkanContext">
+      <UniqueIdentifier>{95b3c1e6-694e-4b75-b39a-452c99bb5b99}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

@@ -33,11 +33,14 @@ void main()
 	// UV
 	outUV = inTexCoords;
 	// Normal in world space
-	outNormal = inNormal;
+
+	mat3 mNormal = transpose(inverse(mat3(ubo.model)));
+
+	outNormal = mNormal * inNormal;
 	// Tangent in world space
-	outTangent = inTangent;
+	outTangent = mNormal * inTangent;
 	// Bitangent in world space
-	outBitangent = inBitangent;
+	outBitangent = mNormal * inBitangent;
 	// Color (not in use)	
 	outColor = inColor.rgb;
 }

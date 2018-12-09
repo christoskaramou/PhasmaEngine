@@ -79,6 +79,7 @@
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>C:\VulkanSDK\1.1.92.1\Include;$(IncludePath)</IncludePath>
     <LibraryPath>C:\VulkanSDK\1.1.92.1\Lib;Libs;$(LibraryPath)</LibraryPath>
+    <ReferencePath>$(VC_ReferencesPath_x64);</ReferencePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -93,6 +94,7 @@
     <EnableExperimentalCppCoreCheck>true</EnableExperimentalCppCoreCheck>
     <IncludePath>C:\VulkanSDK\1.1.92.1\Include;$(IncludePath)</IncludePath>
     <LibraryPath>C:\VulkanSDK\1.1.92.1\Lib;Libs;$(LibraryPath)</LibraryPath>
+    <ReferencePath>$(VC_ReferencesPath_x64);</ReferencePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -202,83 +204,83 @@
     <None Include="shaders\Terrain\shaderTerrain.vert" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\Buffer.h" />
-    <ClInclude Include="include\Camera.h" />
-    <ClInclude Include="include\Compute.h" />
-    <ClInclude Include="include\Console.h" />
-    <ClInclude Include="include\Deferred.h" />
-    <ClInclude Include="include\Context.h" />
-    <ClInclude Include="include\Forward.h" />
+    <ClInclude Include="Code\Buffer\Buffer.h" />
+    <ClInclude Include="Code\Camera\Camera.h" />
+    <ClInclude Include="Code\Compute\Compute.h" />
+    <ClInclude Include="Code\Console\Console.h" />
+    <ClInclude Include="Code\Context\Context.h" />
+    <ClInclude Include="Code\Deferred\Deferred.h" />
+    <ClInclude Include="Code\Forward\Forward.h" />
+    <ClInclude Include="Code\GUI\GUI.h" />
+    <ClInclude Include="Code\Image\Image.h" />
+    <ClInclude Include="Code\Light\Light.h" />
+    <ClInclude Include="Code\Math\Math.h" />
+    <ClInclude Include="Code\Mesh\Mesh.h" />
+    <ClInclude Include="Code\Model\Model.h" />
+    <ClInclude Include="Code\MotionBlur\MotionBlur.h" />
+    <ClInclude Include="Code\Node\Node.h" />
+    <ClInclude Include="Code\Object\Object.h" />
+    <ClInclude Include="Code\Pipeline\Pipeline.h" />
+    <ClInclude Include="Code\Queue\Queue.h" />
+    <ClInclude Include="Code\Renderer\Renderer.h" />
+    <ClInclude Include="Code\Shadows\Shadows.h" />
+    <ClInclude Include="Code\Skybox\Skybox.h" />
+    <ClInclude Include="Code\SSAO\SSAO.h" />
+    <ClInclude Include="Code\SSR\SSR.h" />
+    <ClInclude Include="Code\Surface\Surface.h" />
+    <ClInclude Include="Code\Swapchain\Swapchain.h" />
+    <ClInclude Include="Code\Terrain\Terrain.h" />
+    <ClInclude Include="Code\Timer\Timer.h" />
+    <ClInclude Include="Code\Vertex\Vertex.h" />
+    <ClInclude Include="Code\VulkanContext\VulkanContext.h" />
+    <ClInclude Include="Code\Window\Window.h" />
     <ClInclude Include="include\GLM.h" />
-    <ClInclude Include="include\GUI.h" />
-    <ClInclude Include="include\Image.h" />
     <ClInclude Include="include\imgui\imconfig.h" />
     <ClInclude Include="include\imgui\imgui.h" />
     <ClInclude Include="include\imgui\imgui_internal.h" />
     <ClInclude Include="include\imgui\imstb_rectpack.h" />
     <ClInclude Include="include\imgui\imstb_textedit.h" />
     <ClInclude Include="include\imgui\imstb_truetype.h" />
-    <ClInclude Include="include\Light.h" />
-    <ClInclude Include="include\Math.h" />
-    <ClInclude Include="include\Mesh.h" />
-    <ClInclude Include="include\Model.h" />
-    <ClInclude Include="include\MotionBlur.h" />
-    <ClInclude Include="include\Node.h" />
-    <ClInclude Include="include\Object.h" />
-    <ClInclude Include="include\Pipeline.h" />
-    <ClInclude Include="include\Queue.h" />
-    <ClInclude Include="include\Renderer.h" />
     <ClInclude Include="include\SDL.h" />
-    <ClInclude Include="include\Shadows.h" />
-    <ClInclude Include="include\Skybox.h" />
-    <ClInclude Include="include\SSAO.h" />
-    <ClInclude Include="include\SSR.h" />
     <ClInclude Include="include\Stbi.h" />
     <ClInclude Include="include\stb_image\stb_image.h" />
-    <ClInclude Include="include\Surface.h" />
-    <ClInclude Include="include\Swapchain.h" />
-    <ClInclude Include="include\Terrain.h" />
-    <ClInclude Include="include\Timer.h" />
-    <ClInclude Include="include\Vertex.h" />
     <ClInclude Include="include\Vulkan.h" />
-    <ClInclude Include="include\VulkanContext.h" />
-    <ClInclude Include="include\Window.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Code\Buffer\Buffer.cpp" />
+    <ClCompile Include="Code\Camera\Camera.cpp" />
+    <ClCompile Include="Code\Compute\Compute.cpp" />
+    <ClCompile Include="Code\Console\Console.cpp" />
+    <ClCompile Include="Code\Context\Context.cpp" />
+    <ClCompile Include="Code\Deferred\Deferred.cpp" />
+    <ClCompile Include="Code\Forward\Forward.cpp" />
+    <ClCompile Include="Code\GUI\GUI.cpp" />
+    <ClCompile Include="Code\Image\Image.cpp" />
+    <ClCompile Include="Code\Light\Light.cpp" />
+    <ClCompile Include="Code\Math\Math.cpp" />
+    <ClCompile Include="Code\Mesh\Mesh.cpp" />
+    <ClCompile Include="Code\Model\Model.cpp" />
+    <ClCompile Include="Code\MotionBlur\MotionBlur.cpp" />
+    <ClCompile Include="Code\Node\Node.cpp" />
+    <ClCompile Include="Code\Object\Object.cpp" />
+    <ClCompile Include="Code\Pipeline\Pipeline.cpp" />
+    <ClCompile Include="Code\Queue\Queue.cpp" />
+    <ClCompile Include="Code\Renderer\Renderer.cpp" />
+    <ClCompile Include="Code\Shadows\Shadows.cpp" />
+    <ClCompile Include="Code\Skybox\Skybox.cpp" />
+    <ClCompile Include="Code\SSAO\SSAO.cpp" />
+    <ClCompile Include="Code\SSR\SSR.cpp" />
+    <ClCompile Include="Code\Swapchain\Swapchain.cpp" />
+    <ClCompile Include="Code\Terrain\Terrain.cpp" />
+    <ClCompile Include="Code\Timer\Timer.cpp" />
+    <ClCompile Include="Code\Vertex\Vertex.cpp" />
+    <ClCompile Include="Code\Window\Window.cpp" />
     <ClCompile Include="include\imgui\imgui.cpp" />
     <ClCompile Include="include\imgui\imgui_demo.cpp" />
     <ClCompile Include="include\imgui\imgui_draw.cpp" />
     <ClCompile Include="include\imgui\imgui_widgets.cpp" />
     <ClCompile Include="include\stb_image\stb_image.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="src\Buffer.cpp" />
-    <ClCompile Include="src\Camera.cpp" />
-    <ClCompile Include="src\Compute.cpp" />
-    <ClCompile Include="src\Console.cpp" />
-    <ClCompile Include="src\Context.cpp" />
-    <ClCompile Include="src\Deferred.cpp" />
-    <ClCompile Include="src\Forward.cpp" />
-    <ClCompile Include="src\GUI.cpp" />
-    <ClCompile Include="src\Image.cpp" />
-    <ClCompile Include="src\Light.cpp" />
-    <ClCompile Include="src\Math.cpp" />
-    <ClCompile Include="src\Mesh.cpp" />
-    <ClCompile Include="src\Model.cpp" />
-    <ClCompile Include="src\MotionBlur.cpp" />
-    <ClCompile Include="src\Node.cpp" />
-    <ClCompile Include="src\Object.cpp" />
-    <ClCompile Include="src\Pipeline.cpp" />
-    <ClCompile Include="src\Queue.cpp" />
-    <ClCompile Include="src\Renderer.cpp" />
-    <ClCompile Include="src\Shadows.cpp" />
-    <ClCompile Include="src\Skybox.cpp" />
-    <ClCompile Include="src\SSAO.cpp" />
-    <ClCompile Include="src\SSR.cpp" />
-    <ClCompile Include="src\Swapchain.cpp" />
-    <ClCompile Include="src\Terrain.cpp" />
-    <ClCompile Include="src\Timer.cpp" />
-    <ClCompile Include="src\Vertex.cpp" />
-    <ClCompile Include="src\Window.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

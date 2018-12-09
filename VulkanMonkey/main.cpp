@@ -1,5 +1,5 @@
-#include "include/Window.h"
-#include "include/Timer.h"
+#include "Code/Window/Window.h"
+#include "Code/Timer/Timer.h"
 #include <iostream>
 #include <cstring>
 #include <string>
