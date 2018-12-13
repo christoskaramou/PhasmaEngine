@@ -18,15 +18,6 @@ const int KERNEL_SIZE = 8;
 const float RADIUS = 0.5f;
 const float bias = 0;
 
-// Near and Far planes for reversed z depth checking
-const float FAR_PLANE = 0.005f;
-const float NEAR_PLANE = 500.0f;
-float linearDepth(float depth)
-{
-	float z = depth * 2.0f - 1.0f; 
-	return (2.0f * NEAR_PLANE * FAR_PLANE) / (FAR_PLANE + NEAR_PLANE - z * (FAR_PLANE - NEAR_PLANE));	
-}
-
 vec3 getViewPosFromDepth(vec2 UV, float depth)
 {
 	vec2 revertedUV = (UV - pos.offset.xy) / pos.offset.zw; // floating window correction
@@ -69,7 +60,7 @@ void main()
 		samplePosition.xy += pos.offset.xy; // floating window position correction
 		
 		float currentDepth = newViewPos.z;
-		float sampledDepth = linearDepth(texture(samplerDepth, samplePosition.xy).x);
+		float sampledDepth = getViewPosFromDepth(inUV, texture(samplerDepth, samplePosition.xy).x).z;
 
 		// Range check
 
