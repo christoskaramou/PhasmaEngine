@@ -3,7 +3,7 @@
 #extension GL_ARB_shading_language_420pack : enable
 
 layout (set = 0, binding = 0) uniform sampler2D compositionSampler;
-layout (set = 0, binding = 1) uniform sampler2D positionSampler;
+layout (set = 0, binding = 1) uniform sampler2D depthSampler;
 layout (set = 0, binding = 2) uniform UniformBufferObject { mat4 projection; mat4 view; mat4 previousView;} ubo;
 layout(push_constant) uniform Constants { vec4 fps; vec4 offset; } pushConst;
 
@@ -14,13 +14,35 @@ layout (location = 0) out vec4 outColor;
 
 const int samples = 8;
 
+// Near and Far planes for reversed z depth checking
+const float FAR_PLANE = 0.005f;
+const float NEAR_PLANE = 500.0f;
+float linearDepth(float depth)
+{
+	float z = depth * 2.0f - 1.0f; 
+	return (2.0f * NEAR_PLANE * FAR_PLANE) / (FAR_PLANE + NEAR_PLANE - z * (FAR_PLANE - NEAR_PLANE));	
+}
+
+vec3 getWorldPosFromDepth(vec2 UV, float depth)
+{
+	vec2 revertedUV = (UV - pushConst.offset.xy) / pushConst.offset.zw; // floating window correction
+	vec4 ndcPos;
+	ndcPos.xy = revertedUV * 2.0 - 1.0;
+	ndcPos.z = depth;
+	ndcPos.w = 1.0;
+	
+	vec4 clipPos = inverse(ubo.view) * inverse(ubo.projection) * ndcPos;
+	return (clipPos / clipPos.w).xyz;
+}
+
+
 void main() 
 {
 	vec2 UV = inUV;
-
-	vec4 currentPos = ubo.view * vec4(texture(positionSampler, UV).rgb, 1.0);
-	vec4 previousPos = ubo.previousView * vec4(texture(positionSampler, UV).rgb, 1.0);
-	vec3 viewVelocity = currentPos.xyz - previousPos.xyz;
+	vec3 worldPos = getWorldPosFromDepth(UV, texture(depthSampler, UV).x);
+	vec3 currentPos = (ubo.view * vec4(worldPos, 1.0)).xyz;
+	vec3 previousPos = (ubo.previousView * vec4(worldPos, 1.0)).xyz;
+	vec3 viewVelocity = currentPos - previousPos;
 
 	vec2 velocity = (ubo.projection * vec4(viewVelocity, 1.0)).xy;
 	velocity *= 0.5; // -0.5 to 0.5;

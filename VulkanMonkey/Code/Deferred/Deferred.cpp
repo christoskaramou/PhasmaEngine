@@ -14,8 +14,8 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 
 	// Image descriptors for the offscreen color attachments
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
-		renderTargets["position"].sampler,			//Sampler sampler;
-		renderTargets["position"].view,				//ImageView imageView;
+		renderTargets["depth"].sampler,			//Sampler sampler;
+		renderTargets["depth"].view,				//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
 	vk::DescriptorImageInfo texDescriptorNormal = vk::DescriptorImageInfo{
@@ -134,8 +134,8 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 {
 	// Image descriptors for the offscreen color attachments
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
-		renderTargets["position"].sampler,		//Sampler sampler;
-		renderTargets["position"].view,			//ImageView imageView;
+		renderTargets["depth"].sampler,		//Sampler sampler;
+		renderTargets["depth"].view,			//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
 	vk::DescriptorImageInfo texDescriptorNormal = vk::DescriptorImageInfo{
@@ -250,7 +250,7 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void Deferred::draw(uint32_t imageIndex, Shadows& shadows)
+void Deferred::draw(uint32_t imageIndex, Shadows& shadows, mat4& invViewProj, vec2 UVOffset[2])
 {
 	// Begin Composition
 	std::vector<vk::ClearValue> clearValues0 = {
@@ -265,8 +265,15 @@ void Deferred::draw(uint32_t imageIndex, Shadows& shadows)
 		.setPClearValues(clearValues0.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo0, vk::SubpassContents::eInline);
 
-	vec4 screenSpace(GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, 0.f, 0.f);
-	vulkan->dynamicCmdBuffer.pushConstants(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vec4), &screenSpace);
+	vec4 screenSpace[6];
+	screenSpace[0] = { GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, 0.f, 0.f };
+	screenSpace[1] = { UVOffset[0].x, UVOffset[0].y, UVOffset[1].x, UVOffset[1].y };
+	screenSpace[2] = { invViewProj[0] };
+	screenSpace[3] = { invViewProj[1] };
+	screenSpace[4] = { invViewProj[2] };
+	screenSpace[5] = { invViewProj[3] };
+
+	vulkan->dynamicCmdBuffer.pushConstants(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(screenSpace), &screenSpace);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline);
 	uint32_t ofsets = 0;
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo.layout, 0, { DSComposition, shadows.descriptorSet }, ofsets);

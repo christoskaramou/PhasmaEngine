@@ -1,71 +1,71 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <None Include="shaders\Terrain\shaderTerrain.vert">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\General\shader.frag">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\General\shader.vert">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\GUI\shaderGUI.frag">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\GUI\shaderGUI.vert">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\Shadows\shaderShadows.vert">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\SkyBox\shaderSkyBox.frag">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\SkyBox\shaderSkyBox.vert">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\Terrain\shaderTerrain.frag">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\Deferred\gBuffer.vert">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\Deferred\composition.frag">
-      <Filter>Shaders</Filter>
+    <None Include="shaders\Compute\shader.comp">
+      <Filter>Shaders\Compute</Filter>
     </None>
     <None Include="shaders\Deferred\composition.vert">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\Deferred</Filter>
+    </None>
+    <None Include="shaders\Deferred\composition.frag">
+      <Filter>Shaders\Deferred</Filter>
     </None>
     <None Include="shaders\Deferred\gBuffer.frag">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\Deferred</Filter>
     </None>
-    <None Include="shaders\Compute\shader.comp">
-      <Filter>Shaders</Filter>
+    <None Include="shaders\Deferred\gBuffer.vert">
+      <Filter>Shaders\Deferred</Filter>
     </None>
-    <None Include="shaders\SSAO\ssao.frag">
-      <Filter>Shaders</Filter>
+    <None Include="shaders\General\shader.frag">
+      <Filter>Shaders\General</Filter>
     </None>
-    <None Include="shaders\SSAO\ssao.vert">
-      <Filter>Shaders</Filter>
+    <None Include="shaders\General\shader.vert">
+      <Filter>Shaders\General</Filter>
     </None>
-    <None Include="shaders\SSAO\ssaoBlur.frag">
-      <Filter>Shaders</Filter>
+    <None Include="shaders\GUI\shaderGUI.frag">
+      <Filter>Shaders\GUI</Filter>
     </None>
-    <None Include="shaders\SSAO\ssaoBlur.vert">
-      <Filter>Shaders</Filter>
+    <None Include="shaders\GUI\shaderGUI.vert">
+      <Filter>Shaders\GUI</Filter>
     </None>
     <None Include="shaders\MotionBlur\motionBlur.frag">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\MotionBlur</Filter>
     </None>
     <None Include="shaders\MotionBlur\motionBlur.vert">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\MotionBlur</Filter>
+    </None>
+    <None Include="shaders\Shadows\shaderShadows.vert">
+      <Filter>Shaders\Shadows</Filter>
+    </None>
+    <None Include="shaders\SkyBox\shaderSkyBox.frag">
+      <Filter>Shaders\SkyBox</Filter>
+    </None>
+    <None Include="shaders\SkyBox\shaderSkyBox.vert">
+      <Filter>Shaders\SkyBox</Filter>
+    </None>
+    <None Include="shaders\SSAO\ssao.frag">
+      <Filter>Shaders\SSAO</Filter>
+    </None>
+    <None Include="shaders\SSAO\ssao.vert">
+      <Filter>Shaders\SSAO</Filter>
+    </None>
+    <None Include="shaders\SSAO\ssaoBlur.frag">
+      <Filter>Shaders\SSAO</Filter>
+    </None>
+    <None Include="shaders\SSAO\ssaoBlur.vert">
+      <Filter>Shaders\SSAO</Filter>
     </None>
     <None Include="shaders\SSR\ssr.frag">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\SSR</Filter>
     </None>
     <None Include="shaders\SSR\ssr.vert">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\SSR</Filter>
+    </None>
+    <None Include="shaders\Terrain\shaderTerrain.frag">
+      <Filter>Shaders\Terrain</Filter>
+    </None>
+    <None Include="shaders\Terrain\shaderTerrain.vert">
+      <Filter>Shaders\Terrain</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -399,6 +399,36 @@
     </Filter>
     <Filter Include="Code\VulkanContext">
       <UniqueIdentifier>{95b3c1e6-694e-4b75-b39a-452c99bb5b99}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Compute">
+      <UniqueIdentifier>{fb6a0079-f718-4fa4-9fae-681e32acbfa5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Deferred">
+      <UniqueIdentifier>{9a6948a0-6012-4b67-8b7a-e7d77fe6a168}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\General">
+      <UniqueIdentifier>{04a14cf0-8809-4144-b74b-53ce254343f3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\GUI">
+      <UniqueIdentifier>{eadcd61f-0718-45fd-8eda-5840694e734c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\MotionBlur">
+      <UniqueIdentifier>{69023f3c-933b-41e8-bccc-7f3fd33f3dbc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Terrain">
+      <UniqueIdentifier>{6c46ff52-319a-42e7-84e7-1e0d88448f0a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Shadows">
+      <UniqueIdentifier>{f760e029-558a-492c-9891-59413013f1cb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\SkyBox">
+      <UniqueIdentifier>{bee13345-00eb-4f8d-a682-9be4e28155c9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\SSAO">
+      <UniqueIdentifier>{cdaf21c9-57e3-4aeb-b055-f3ba5309a371}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\SSR">
+      <UniqueIdentifier>{5ba48d8f-b259-4246-a771-c0fa1ab016c3}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

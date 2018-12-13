@@ -2,7 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
-layout (set = 0, binding = 0) uniform sampler2D samplerPosition;
+layout (set = 0, binding = 0) uniform sampler2D samplerDepth;
 layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
 layout (set = 0, binding = 2) uniform sampler2D samplerNoise;
 layout (set = 0, binding = 3) uniform UniformBufferObject { vec4 samples[64]; } kernel;
@@ -18,14 +18,35 @@ const int KERNEL_SIZE = 8;
 const float RADIUS = 0.5f;
 const float bias = 0;
 
+// Near and Far planes for reversed z depth checking
+const float FAR_PLANE = 0.005f;
+const float NEAR_PLANE = 500.0f;
+float linearDepth(float depth)
+{
+	float z = depth * 2.0f - 1.0f; 
+	return (2.0f * NEAR_PLANE * FAR_PLANE) / (FAR_PLANE + NEAR_PLANE - z * (FAR_PLANE - NEAR_PLANE));	
+}
+
+vec3 getViewPosFromDepth(vec2 UV, float depth)
+{
+	vec2 revertedUV = (UV - pos.offset.xy) / pos.offset.zw; // floating window correction
+	vec4 ndcPos;
+	ndcPos.xy = revertedUV * 2.0 - 1.0;
+	ndcPos.z = depth;
+	ndcPos.w = 1.0;
+	
+	vec4 clipPos = inverse(pvm.projection) * ndcPos;
+	return (clipPos / clipPos.w).xyz;
+}
+
 void main() 
 {
 	// Get G-Buffer values
-	vec4 fragPos = pvm.view * vec4(texture(samplerPosition, inUV).rgb, 1.0);
+	vec3 fragPos = getViewPosFromDepth(inUV, texture(samplerDepth, inUV).x);
 	vec4 normal = pvm.view * texture(samplerNormal, inUV);
 
 	// Get a random vector using a noise lookup
-	ivec2 texDim = textureSize(samplerPosition, 0); 
+	ivec2 texDim = textureSize(samplerDepth, 0); 
 	ivec2 noiseDim = textureSize(samplerNoise, 0);
 	const vec2 noiseUV = vec2(float(texDim.x)/float(noiseDim.x), float(texDim.y)/(noiseDim.y)) * inUV;  
 	vec3 randomVec = texture(samplerNoise, noiseUV).xyz * 2.0 - 1.0;
@@ -40,7 +61,7 @@ void main()
 	for(int i = 0; i < KERNEL_SIZE; i++)
 	{
 		vec3 direction = TBN * kernel.samples[i].xyz * RADIUS;
-		vec4 newViewPos = vec4(fragPos.xyz + direction, 1.0);
+		vec4 newViewPos = vec4(fragPos + direction, 1.0);
 		vec4 samplePosition = pvm.projection * newViewPos;
 		samplePosition.xy /= samplePosition.w;
 		samplePosition.xy = samplePosition.xy * 0.5f + 0.5f;
@@ -48,7 +69,7 @@ void main()
 		samplePosition.xy += pos.offset.xy; // floating window position correction
 		
 		float currentDepth = newViewPos.z;
-		float sampledDepth = texture(samplerPosition, samplePosition.xy).w;
+		float sampledDepth = linearDepth(texture(samplerDepth, samplePosition.xy).x);
 
 		// Range check
 

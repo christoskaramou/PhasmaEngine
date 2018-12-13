@@ -33,8 +33,8 @@ void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
 		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["position"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["position"].view)				// ImageView imageView;
+			.setSampler(renderTargets["depth"].sampler)				// Sampler sampler;
+			.setImageView(renderTargets["depth"].view)				// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
 	// Normals
 	textureWriteSets[2] = vk::WriteDescriptorSet()
@@ -96,8 +96,8 @@ void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
 		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["position"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["position"].view)				// ImageView imageView;
+			.setSampler(renderTargets["depth"].sampler)				// Sampler sampler;
+			.setImageView(renderTargets["depth"].view)				// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
 	// Normals
 	textureWriteSets[2] = vk::WriteDescriptorSet()

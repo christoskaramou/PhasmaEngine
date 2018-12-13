@@ -71,6 +71,8 @@ void Renderer::update(float delta)
 	const mat4 projection = ctx.camera_main.getPerspective();
 	const mat4 view = ctx.camera_main.getView();
 
+	vec4 test = projection * view * vec4(-0.4f, -0.6f, 14.f, 1.f);
+
 	//vec4 posis = projection * view * vec4(1.2f, 1.4f, 350.f, 1.f);
 	//vec4 posis1 = inverse(view) * inverse(projection) * posis;
 
@@ -270,7 +272,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 			ctx.ssr.draw(imageIndex, UVOffset);
 
 		// COMPOSITION
-		ctx.deferred.draw(imageIndex, ctx.shadows);
+		ctx.deferred.draw(imageIndex, ctx.shadows, inverse(ctx.camera_main.getPerspective() * ctx.camera_main.getView()), UVOffset);
 		
 		// MOTION BLUR
 		if (GUI::show_motionBlur)

@@ -13,11 +13,18 @@ mat4 aiMatrix4x4ToMat4(const aiMatrix4x4& m)
 	return transpose(mat4((float*)&m));
 }
 
-void getAllNodes(aiNode* root, std::vector<aiNode*>& allNodes)
+void getNodes(aiNode* root, std::vector<aiNode*>& allNodes)
 {
 	for (uint32_t i = 0; i < root->mNumChildren; i++)
-		getAllNodes(root->mChildren[i], allNodes);
+		getNodes(root->mChildren[i], allNodes);
 	if (root) allNodes.push_back(root);
+}
+
+std::vector<aiNode*> getAllNodes(aiNode* root)
+{
+	std::vector<aiNode*> allNodes;
+	getNodes(root, allNodes);
+	return allNodes;
 }
 
 mat4 getTranform(aiNode& node)
@@ -29,6 +36,13 @@ mat4 getTranform(aiNode& node)
 		tranformNode = tranformNode->mParent;
 	}
 	return transform;
+}
+
+std::string getTextureName(const aiMaterial& material, const aiTextureType& type)
+{
+	aiString aiTexName;
+	material.GetTexture(type, 0, &aiTexName);
+	return aiTexName.C_Str();
 }
 
 void Model::loadModel(const std::string folderPath, const std::string modelName, bool show)
@@ -55,11 +69,10 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 	);
 	if (!scene) exit(-100);
 
-	std::vector<aiNode*> allNodes{};
-	getAllNodes(scene->mRootNode, allNodes);
+	std::vector<aiNode*> allNodes = getAllNodes(scene->mRootNode);
 
-	// set texture types to request
-	std::vector<std::tuple<aiTextureType, Mesh::TextureType>> textureMaps
+	// for each different type it will search for the corresponding material in mesh if possible
+	std::vector<std::tuple<aiTextureType, Mesh::TextureType>> textureType
 	{
 		{aiTextureType_SHININESS, Mesh::RoughnessMap},
 		{aiTextureType_AMBIENT, Mesh::MetallicMap},
@@ -69,14 +82,13 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 		{aiTextureType_OPACITY, Mesh::AlphaMap}
 	};
 
-	std::vector<Mesh> f_meshes;
-	for (unsigned int n = 0; n < allNodes.size(); n++) {
-		aiNode& node = *allNodes[n];
-		mat4 transform = getTranform(node);
-		for (unsigned int i = 0; i < node.mNumMeshes; i++) {
+	for (auto& node : allNodes) {
+		mat4 transform = aiMatrix4x4ToMat4(node->mTransformation);
+		for (unsigned int i = 0; i < node->mNumMeshes; i++) {
 			Mesh myMesh;
+			myMesh.transform = transform;
 
-			const aiMesh& mesh = *scene->mMeshes[node.mMeshes[i]];
+			const aiMesh& mesh = *scene->mMeshes[node->mMeshes[i]];
 			const aiMaterial& material = *scene->mMaterials[mesh.mMaterialIndex];
 
 			aiColor3D aiAmbient(0.f, 0.f, 0.f);
@@ -94,33 +106,18 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 			myMesh.colorEffects.specular = { aiSpecular.r, aiSpecular.g, aiSpecular.b, 100.f };
 
 			// texture maps loading
-			for (auto& tm : textureMaps) {
-				aiString aiTexPath;
-				material.GetTexture(std::get<0>(tm), 0, &aiTexPath);
-				myMesh.loadTexture(std::get<1>(tm), folderPath, aiTexPath.C_Str());
-			}
+			for (auto& type : textureType)
+				myMesh.loadTexture(std::get<1>(type), folderPath, getTextureName(material, std::get<0>(type)));
 
 			for (unsigned int j = 0; j < mesh.mNumVertices; j++) {
-				const aiVector3D& pos = mesh.HasPositions() ? mesh.mVertices[j] : aiVector3D(0.f, 0.f, 0.f);
-				const aiVector3D& norm = mesh.HasNormals() ? mesh.mNormals[j] : aiVector3D(0.f, 0.f, 0.f);
-				const aiVector3D& uv = mesh.HasTextureCoords(0) ? mesh.mTextureCoords[0][j] : aiVector3D(0.f, 0.f, 0.f);
-				const aiVector3D& tangent = mesh.HasTangentsAndBitangents() ? mesh.mTangents[j] : aiVector3D(0.f, 0.f, 0.f);
-				const aiVector3D& bitangent = mesh.HasTangentsAndBitangents() ? mesh.mBitangents[j] : aiVector3D(0.f, 0.f, 0.f);
-				const aiColor4D& color = mesh.HasVertexColors(0) ? mesh.mColors[0][j] : aiColor4D(1.f, 1.f, 1.f, 1.f);
-
-				vec4 p = transform * vec4(pos.x, pos.y, pos.z, 1.f);
-				vec4 n = transform * vec4(norm.x, norm.y, norm.z, 1.f);
-				vec4 t = transform * vec4(tangent.x, tangent.y, tangent.z, 1.f);
-				vec4 b = transform * vec4(bitangent.x, bitangent.y, bitangent.z, 1.f);
-				Vertex v(
-					vec3(p),
-					vec2((float*)&uv),
-					vec3(n),
-					vec3(t),
-					vec3(b),
-					vec4((float*)&color)
-				);
-				myMesh.vertices.push_back(v);
+				myMesh.vertices.push_back({
+					reinterpret_cast<float*>(&(mesh.HasPositions() ? mesh.mVertices[j] : aiVector3D(0.f, 0.f, 0.f))),
+					reinterpret_cast<float*>(&(mesh.HasTextureCoords(0) ? mesh.mTextureCoords[0][j] : aiVector3D(0.f, 0.f, 0.f))),
+					reinterpret_cast<float*>(&(mesh.HasNormals() ? mesh.mNormals[j] : aiVector3D(0.f, 0.f, 0.f))),
+					reinterpret_cast<float*>(&(mesh.HasTangentsAndBitangents() ? mesh.mTangents[j] : aiVector3D(0.f, 0.f, 0.f))),
+					reinterpret_cast<float*>(&(mesh.HasTangentsAndBitangents() ? mesh.mBitangents[j] : aiVector3D(0.f, 0.f, 0.f))),
+					reinterpret_cast<float*>(&(mesh.HasVertexColors(0) ? mesh.mColors[0][j] : aiColor4D(1.f, 1.f, 1.f, 1.f)))
+				});
 			}
 			for (unsigned int i = 0; i < mesh.mNumFaces; i++) {
 				const aiFace& Face = mesh.mFaces[i];
@@ -129,16 +126,20 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 				myMesh.indices.push_back(Face.mIndices[1]);
 				myMesh.indices.push_back(Face.mIndices[2]);
 			}
-			myMesh.calculateBoundingSphere();
-			f_meshes.push_back(myMesh);
+			meshes.push_back(myMesh);
 		}
 	}
-	std::sort(f_meshes.begin(), f_meshes.end(), [](Mesh& a, Mesh& b) -> bool { return a.hasAlpha < b.hasAlpha; });
-	for (auto &m : f_meshes) {
+	std::sort(meshes.begin(), meshes.end(), [](Mesh& a, Mesh& b) -> bool { return a.hasAlpha < b.hasAlpha; });
+	float factor = 20.f / getBoundingSphere().w;
+	for (auto &m : meshes) {
+		for (auto& v : m.vertices) {
+			v.x *= factor;
+			v.y *= factor;
+			v.z *= factor;
+		}
+		m.calculateBoundingSphere();
 		m.vertexOffset = numberOfVertices;
 		m.indexOffset = numberOfIndices;
-
-		meshes.push_back(m);
 		numberOfVertices += static_cast<uint32_t>(m.vertices.size());
 		numberOfIndices += static_cast<uint32_t>(m.indices.size());
 	}
@@ -149,13 +150,6 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 	createDescriptorSets();
 	name = modelName;
 	render = show;
-
-	// resizing the model to always be at a certain magnitude
-	float factor = 20.0f / getBoundingSphere().w;
-	transform = scale(transform, vec3(factor, factor, factor));
-	for (auto &m : f_meshes) {
-		m.transform = transform;
-	}
 }
 
 void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows, vk::DescriptorSet* DSLights)
@@ -186,10 +180,12 @@ void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& mod
 // position x, y, z and radius w
 vec4 Model::getBoundingSphere()
 {
-	for (auto &mesh : meshes) {
-		float temp = mesh.boundingSphere.w + length(vec3(mesh.boundingSphere.x, mesh.boundingSphere.x, mesh.boundingSphere.z));
-		if (temp > boundingSphere.w)
-			boundingSphere.w = temp;
+	for (auto& mesh : meshes) {
+		for (auto& vertex : mesh.vertices) {
+			float temp = length(vec3(vertex.x, vertex.y, vertex.z));
+			if (temp > boundingSphere.w)
+				boundingSphere.w = temp;
+		}
 	}
 	return boundingSphere;
 }

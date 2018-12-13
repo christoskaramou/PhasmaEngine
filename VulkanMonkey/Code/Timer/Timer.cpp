@@ -32,10 +32,10 @@ Timer::~Timer()
     duration = std::chrono::high_resolution_clock::now() - start;
 	delta = duration.count();
 
-	deltas[totalCounter % 20] = delta;
+	deltas[totalCounter++] = delta;
+    totalCounter %= deltas.size();
     time += delta; // for any time rate given
     totalTime += delta;
-    totalCounter++;
     instances--;
 }
 

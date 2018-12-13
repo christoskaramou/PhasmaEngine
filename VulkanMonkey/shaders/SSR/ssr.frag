@@ -3,7 +3,7 @@
 #extension GL_ARB_shading_language_420pack : enable
 
 layout (set = 0, binding = 0) uniform sampler2D albedoSampler;
-layout (set = 0, binding = 1) uniform sampler2D positionSampler;
+layout (set = 0, binding = 1) uniform sampler2D depthSampler;
 layout (set = 0, binding = 2) uniform sampler2D normalSampler;
 layout (set = 0, binding = 3) uniform sampler2D specRoughMetSampler;
 layout (set = 0, binding = 4) uniform WorldCameraPos{ vec4 camPos; vec4 camFront; vec4 size; vec4 dummy1; mat4 projection; mat4 view; } ubo;
@@ -15,13 +15,34 @@ layout (location = 0) out vec4 outColor;
 
 vec3 ScreenSpaceReflections(vec3 position, vec3 normal);
 
+// Near and Far planes for reversed z depth checking
+const float FAR_PLANE = 0.005f;
+const float NEAR_PLANE = 500.0f;
+float linearDepth(float depth)
+{
+	float z = depth * 2.0f - 1.0f; 
+	return (2.0f * NEAR_PLANE * FAR_PLANE) / (FAR_PLANE + NEAR_PLANE - z * (FAR_PLANE - NEAR_PLANE));	
+}
+
+vec3 getViewPosFromDepth(vec2 UV, float depth)
+{
+	vec2 revertedUV = (UV - pos.offset.xy) / pos.offset.zw; // floating window correction
+	vec4 ndcPos;
+	ndcPos.xy = revertedUV * 2.0 - 1.0;
+	ndcPos.z = depth;
+	ndcPos.w = 1.0;
+	
+	vec4 clipPos = inverse(ubo.projection) * ndcPos;
+	return (clipPos / clipPos.w).xyz;
+}
+
 void main()
 {
-	vec4 position = ubo.view * vec4(texture(positionSampler, inUV).xyz, 1.0);
-	vec4 normal = ubo.view * texture(normalSampler, inUV);
-	vec3 specRoughMetalic = texture(specRoughMetSampler, inUV).xyz;
+	vec3 position = getViewPosFromDepth(inUV, texture(depthSampler, inUV).x);
+	vec4 normal = ubo.view * vec4(texture(normalSampler, inUV).xyz, 0.0);
+	float spec = texture(specRoughMetSampler, inUV).x;
 
-	outColor = vec4(ScreenSpaceReflections(position.xyz, normalize(normal.xyz)) * specRoughMetalic.x, 1.0);
+	outColor = vec4(ScreenSpaceReflections(position, normalize(normal.xyz)) * spec , 1.0);
 }
 
 // Screen space reflections
@@ -52,7 +73,7 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 		}
 
 		float currentDepth = abs(newViewPos.z);
-		float sampledDepth = abs(texture(positionSampler, samplePosition.xy).w);
+		float sampledDepth = abs(linearDepth(texture(depthSampler, samplePosition.xy).x));
 
 		float delta = abs(currentDepth - sampledDepth);
 		if(delta < 0.01f)

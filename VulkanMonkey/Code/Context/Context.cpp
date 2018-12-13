@@ -37,13 +37,13 @@ void Context::initVulkanContext()
 
 void Context::initRendering()
 {
-	addRenderTarget("position", vk::Format::eR32G32B32A32Sfloat);
+	addRenderTarget("depth", vk::Format::eR16Sfloat);
 	addRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
 	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("srm", vk::Format::eR16G16B16A16Sfloat); // Specular Roughness Metallic
-	addRenderTarget("ssao", vk::Format::eR16Sfloat);
-	addRenderTarget("ssaoBlur", vk::Format::eR16Sfloat);
-	addRenderTarget("ssr", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
+	addRenderTarget("ssao", vk::Format::eR8Unorm);
+	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
+	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
 
 	// render passes
@@ -140,6 +140,12 @@ vk::Instance Context::createInstance()
 		std::cout << SDL_GetError();
 		exit(-1);
 	}
+	std::vector<const char*> instanceLayers{};
+#ifdef _DEBUG
+	instanceLayers.push_back("VK_LAYER_LUNARG_standard_validation");
+	instanceLayers.push_back("VK_LAYER_LUNARG_assistant_layer");
+#endif
+
 	auto const appInfo = vk::ApplicationInfo()
 		.setPApplicationName("VulkanMonkey3D")
 		.setApplicationVersion(0)
@@ -148,8 +154,8 @@ vk::Instance Context::createInstance()
 		.setApiVersion(VK_MAKE_VERSION(1, 1, 0));
 	auto const instInfo = vk::InstanceCreateInfo()
 		.setPApplicationInfo(&appInfo)
-		.setEnabledLayerCount(0)
-		.setPpEnabledLayerNames(nullptr)
+		.setEnabledLayerCount(static_cast<uint32_t>(instanceLayers.size()))
+		.setPpEnabledLayerNames(instanceLayers.data())
 		.setEnabledExtensionCount((uint32_t)(instanceExtensions.size()))
 		.setPpEnabledExtensionNames(instanceExtensions.data())
 		.setPNext(nullptr);
@@ -499,7 +505,7 @@ vk::RenderPass Context::createDeferredRenderPass()
 	std::array<vk::AttachmentDescription, 5> attachments{};
 	// Deferred targets
 	// Position
-	attachments[0].format = renderTargets["position"].format;
+	attachments[0].format = renderTargets["depth"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -1011,7 +1017,7 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 
 	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			renderTargets["position"].view,
+			renderTargets["depth"].view,
 			renderTargets["normal"].view,
 			renderTargets["albedo"].view,
 			renderTargets["srm"].view,
@@ -1602,7 +1608,7 @@ Pipeline Context::createCompositionPipeline()
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { deferred.DSLayoutComposition, Shadows::getDescriptorSetLayout(vulkan.device) };
 
-	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, sizeof(vec4) };
+	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 6 * sizeof(vec4) };
 
 	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
 		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
@@ -2738,13 +2744,13 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	*vulkan.swapchain = createSwapchain();
 	*vulkan.depth = createDepthResources();
 
-	addRenderTarget("position", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("depth", vk::Format::eR16Sfloat);
 	addRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
 	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("srm", vk::Format::eR16G16B16A16Sfloat);
-	addRenderTarget("ssao", vk::Format::eR16Sfloat);
-	addRenderTarget("ssaoBlur", vk::Format::eR16Sfloat);
-	addRenderTarget("ssr", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
+	addRenderTarget("ssao", vk::Format::eR8Unorm);
+	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
+	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
 
 

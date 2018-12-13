@@ -17,6 +17,7 @@ namespace vm {
 		vk::ImageLayout initialLayout = vk::ImageLayout::ePreinitialized;
 		uint32_t mipLevels = 1;
 		uint32_t arrayLayers = 1;
+		bool anisotropyEnabled = VK_TRUE;
 		float minLod = 0.f, maxLod = 1.f, maxAnisotropy = 16.f;
 		vk::Filter filter = vk::Filter::eLinear;
 		vk::ImageCreateFlags imageCreateFlags = vk::ImageCreateFlags();

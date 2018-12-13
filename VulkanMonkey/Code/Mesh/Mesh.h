@@ -16,6 +16,7 @@ namespace vm {
 		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		bool render = true, cull = false, hasAlpha = false;
+		Mesh* parent = nullptr;
 		mat4 transform = mat4(1.0f);
 		vec4 boundingSphere;
 		void calculateBoundingSphere();

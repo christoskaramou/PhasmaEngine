@@ -52,8 +52,8 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
 		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["position"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["position"].view)				// ImageView imageView;
+			.setSampler(renderTargets["depth"].sampler)				// Sampler sampler;
+			.setImageView(renderTargets["depth"].view)				// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
 
 		// Uniform variables
@@ -93,8 +93,8 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
 		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["position"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["position"].view)				// ImageView imageView;
+			.setSampler(renderTargets["depth"].sampler)				// Sampler sampler;
+			.setImageView(renderTargets["depth"].view)				// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
 
 		// Uniform variables

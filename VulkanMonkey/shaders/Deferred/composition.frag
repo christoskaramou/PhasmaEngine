@@ -33,9 +33,9 @@ vec2 poissonDisk[8] = vec2[](
 	vec2(0.015656f, 0.749779f),
 	vec2(0.758385f, 0.49617f));
 
-layout(push_constant) uniform SS { vec4 effect; } screenSpace;
+layout(push_constant) uniform SS { vec4 effect; vec4 size; mat4 invViewProj; } screenSpace;
 layout (constant_id = 0) const int NUM_LIGHTS = 1;
-layout (set = 0, binding = 0) uniform sampler2D samplerPosition;
+layout (set = 0, binding = 0) uniform sampler2D samplerDepth;
 layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
 layout (set = 0, binding = 2) uniform sampler2D samplerAlbedo;
 layout (set = 0, binding = 3) uniform sampler2D samplerSpecRoughMet;
@@ -60,9 +60,21 @@ vec3 BRDF(Material material, int i, vec3 normal, vec3 camera_to_pixel);
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
 vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
 
+vec3 getWorldPosFromDepth(vec2 UV, float depth)
+{
+	vec2 revertedUV = (UV - screenSpace.size.xy) / screenSpace.size.zw; // floating window correction
+	vec4 ndcPos;
+	ndcPos.xy = revertedUV * 2.0 - 1.0;
+	ndcPos.z = depth;
+	ndcPos.w = 1.0;
+	
+	vec4 clipPos = screenSpace.invViewProj * ndcPos;
+	return (clipPos / clipPos.w).xyz;
+}
+
 void main() 
 {
-	vec4 fragPos = texture(samplerPosition, inUV);
+	vec3 fragPos = getWorldPosFromDepth(inUV, texture(samplerDepth, inUV).x);
 	vec3 normal = texture(samplerNormal, inUV).xyz;
 	vec4 albedo = texture(samplerAlbedo, inUV);
 	float oclusion = texture(ssaoBlurSampler, inUV).x;
@@ -81,13 +93,13 @@ void main()
 	if (screenSpace.effect.x > 0.5f)
 		fragColor *= oclusion;
 
-	fragColor += calculateShadow(0, fragPos.xyz, normal, albedo.xyz, specRoughMet.x);
+	fragColor += calculateShadow(0, fragPos, normal, albedo.xyz, specRoughMet.x);
 
 	for(int i = 1; i < NUM_LIGHTS+1; ++i){
-		//vec3 L =  ubo.lights[i].position.xyz - fragPos.xyz;
+		//vec3 L =  ubo.lights[i].position.xyz - fragPos;
 		//float atten = 1.0 / (1.0 + ubo.lights[i].attenuation.x * pow(length(L), 2));
-		//fragColor += BRDF(material, i, normal, fragPos.xyz - ubo.camPos.xyz) * atten;
-		fragColor += calculateColor(i, fragPos.xyz, normal, albedo.xyz, specRoughMet.x);
+		//fragColor += BRDF(material, i, normal, fragPos - ubo.camPos.xyz) * atten;
+		fragColor += calculateColor(i, fragPos, normal, albedo.xyz, specRoughMet.x);
 	}
 
 	outColor = vec4(fragColor, albedo.a);
@@ -97,11 +109,15 @@ void main()
 		outColor += vec4(texture(ssrSampler, inUV).xyz, 0.0);
 	
 	outComposition = outColor;
+
+	//fragPos = normalize(fragPos);
+	//fragPos = fragPos * 0.5 + 0.5;
+	//outColor = vec4(fragPos, 1.0);
 }
 
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular)
 {
-	vec4 s_coords =  shadow_coords * vec4(fragPos.xyz, 1.0);
+	vec4 s_coords =  shadow_coords * vec4(fragPos, 1.0);
 	s_coords = s_coords / s_coords.w;
 	float shadow = 0.0;
 	for (int i = 0; i < 8 * castShadows; i++)

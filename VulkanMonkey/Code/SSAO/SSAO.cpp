@@ -53,8 +53,8 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 	DSssao = vulkan->device.allocateDescriptorSets(allocInfoSSAO)[0];
 
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
-		renderTargets["position"].sampler,		//Sampler sampler;
-		renderTargets["position"].view,			//ImageView imageView;
+		renderTargets["depth"].sampler,		//Sampler sampler;
+		renderTargets["depth"].view,			//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
 	vk::DescriptorImageInfo texDescriptorNormal = vk::DescriptorImageInfo{
@@ -163,8 +163,8 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
-		renderTargets["position"].sampler,		//Sampler sampler;
-		renderTargets["position"].view,			//ImageView imageView;
+		renderTargets["depth"].sampler,		//Sampler sampler;
+		renderTargets["depth"].view,			//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
 	vk::DescriptorImageInfo texDescriptorNormal = vk::DescriptorImageInfo{

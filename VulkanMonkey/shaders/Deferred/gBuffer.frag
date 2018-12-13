@@ -9,27 +9,16 @@ layout (set = 1, binding = 3) uniform sampler2D alphaSampler;
 layout (set = 1, binding = 4) uniform sampler2D roughSampler;
 layout (set = 1, binding = 5) uniform sampler2D metalSampler;
 
+layout (location = 0) in vec2 inUV;
+layout (location = 1) in vec3 inNormal;
+layout (location = 2) in vec3 inTangent;
+layout (location = 3) in vec3 inBitangent;
+layout (location = 4) in vec3 inColor;
 
-layout (location = 0) in vec3 inWorldPos;
-layout (location = 1) in vec2 inUV;
-layout (location = 2) in vec3 inNormal;
-layout (location = 3) in vec3 inTangent;
-layout (location = 4) in vec3 inBitangent;
-layout (location = 5) in vec3 inColor;
-
-layout (location = 0) out vec4 outPosition;
-layout (location = 1) out vec4 outNormal;
+layout (location = 0) out float outDepth;
+layout (location = 1) out vec3 outNormal;
 layout (location = 2) out vec4 outAlbedo;
-layout (location = 3) out vec4 outSpecRoughMet;
-
-const float FAR_PLANE = 0.005f;
-const float NEAR_PLANE = 500.0f;
-
-float linearDepth(float depth)
-{
-	float z = depth * 2.0f - 1.0f; 
-	return (2.0f * NEAR_PLANE * FAR_PLANE) / (FAR_PLANE + NEAR_PLANE - z * (FAR_PLANE - NEAR_PLANE));	
-}
+layout (location = 3) out vec3 outSpecRoughMet;
 
 void main() {
 	float alpha = texture(alphaSampler, inUV).r;
@@ -42,8 +31,8 @@ void main() {
 	mat3 TBN = mat3(T, B, N);
 	vec3 normSampler = normalize(texture(normSampler, inUV).rgb * 2.0 - 1.0);
 
-	outPosition = vec4(inWorldPos, linearDepth(gl_FragCoord.z)); //1.0 / gl_FragCoord.w);
-	outNormal = vec4(TBN * normSampler , 0.0f);
+	outDepth = gl_FragCoord.z;
+	outNormal = TBN * normSampler;
 	outAlbedo = vec4(texture(tSampler, inUV).xyz, alpha);
-	outSpecRoughMet = vec4(texture(specSampler, inUV).r, texture(roughSampler, inUV).r, texture(metalSampler, inUV).r, 1.0);
+	outSpecRoughMet = vec3(texture(specSampler, inUV).r, texture(roughSampler, inUV).r, texture(metalSampler, inUV).r);
 }
