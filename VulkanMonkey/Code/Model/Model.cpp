@@ -83,7 +83,7 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 	};
 
 	for (auto& node : allNodes) {
-		mat4 transform = aiMatrix4x4ToMat4(node->mTransformation);
+		mat4 transform = getTranform(*node);
 		for (unsigned int i = 0; i < node->mNumMeshes; i++) {
 			Mesh myMesh;
 			myMesh.transform = transform;
@@ -133,9 +133,22 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 	float factor = 20.f / getBoundingSphere().w;
 	for (auto &m : meshes) {
 		for (auto& v : m.vertices) {
-			v.x *= factor;
-			v.y *= factor;
-			v.z *= factor;
+			vec3 pos = m.transform * vec4(v.x, v.y, v.z, 1.f) * factor;
+			vec3 norm = m.transform * vec4(v.nX, v.nY, v.nZ, 0.f);
+			vec3 tang = m.transform * vec4(v.tX, v.tY, v.tZ, 0.f);
+			vec3 btang = m.transform * vec4(v.bX, v.bY, v.bZ, 0.f);
+			v.x = pos.x;
+			v.y = pos.y;
+			v.z = pos.z;
+			v.nX = norm.x;
+			v.nY = norm.y;
+			v.nZ = norm.z;
+			v.tX = tang.x;
+			v.tY = tang.y;
+			v.tZ = tang.z;
+			v.bX = btang.x;
+			v.bY = btang.y;
+			v.bZ = btang.z;
 		}
 		m.calculateBoundingSphere();
 		m.vertexOffset = numberOfVertices;

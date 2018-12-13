@@ -15,15 +15,15 @@ layout (location = 0) in vec2 inUV;
 layout (location = 0) out float outColor;
 
 const int KERNEL_SIZE = 8;
-const float RADIUS = 0.5f;
-const float bias = 0;
+const float RADIUS = 0.25f;
+const float bias = 0.001;
 
-vec3 getViewPosFromDepth(vec2 UV, float depth)
+vec3 getViewPosFromUV(vec2 UV)
 {
 	vec2 revertedUV = (UV - pos.offset.xy) / pos.offset.zw; // floating window correction
 	vec4 ndcPos;
 	ndcPos.xy = revertedUV * 2.0 - 1.0;
-	ndcPos.z = depth;
+	ndcPos.z = texture(samplerDepth, UV).x; // sample from the gl_FragCoord.z image
 	ndcPos.w = 1.0;
 	
 	vec4 clipPos = pvm.invProjection * ndcPos;
@@ -33,7 +33,7 @@ vec3 getViewPosFromDepth(vec2 UV, float depth)
 void main() 
 {
 	// Get G-Buffer values
-	vec3 fragPos = getViewPosFromDepth(inUV, texture(samplerDepth, inUV).x);
+	vec3 fragPos = getViewPosFromUV(inUV);
 	vec4 normal = pvm.view * texture(samplerNormal, inUV);
 
 	// Get a random vector using a noise lookup
@@ -60,7 +60,7 @@ void main()
 		samplePosition.xy += pos.offset.xy; // floating window position correction
 		
 		float currentDepth = newViewPos.z;
-		float sampledDepth = getViewPosFromDepth(samplePosition.xy, texture(samplerDepth, samplePosition.xy).x).z;
+		float sampledDepth = getViewPosFromUV(samplePosition.xy).z;
 
 		// Range check
 

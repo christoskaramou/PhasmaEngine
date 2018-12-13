@@ -60,12 +60,12 @@ vec3 BRDF(Material material, int i, vec3 normal, vec3 camera_to_pixel);
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
 vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
 
-vec3 getWorldPosFromDepth(vec2 UV, float depth)
+vec3 getWorldPosFromUV(vec2 UV)
 {
 	vec2 revertedUV = (UV - screenSpace.size.xy) / screenSpace.size.zw; // floating window correction
 	vec4 ndcPos;
 	ndcPos.xy = revertedUV * 2.0 - 1.0;
-	ndcPos.z = depth;
+	ndcPos.z = texture(samplerDepth, UV).x; // sample from the gl_FragCoord.z image
 	ndcPos.w = 1.0;
 	
 	vec4 clipPos = screenSpace.invViewProj * ndcPos;
@@ -74,7 +74,7 @@ vec3 getWorldPosFromDepth(vec2 UV, float depth)
 
 void main() 
 {
-	vec3 fragPos = getWorldPosFromDepth(inUV, texture(samplerDepth, inUV).x);
+	vec3 fragPos = getWorldPosFromUV(inUV);
 	vec3 normal = texture(samplerNormal, inUV).xyz;
 	vec4 albedo = texture(samplerAlbedo, inUV);
 	float oclusion = texture(ssaoBlurSampler, inUV).x;

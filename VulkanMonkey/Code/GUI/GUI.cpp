@@ -15,7 +15,7 @@ bool						GUI::shadow_cast = true;
 bool						GUI::render_models = true;
 bool						GUI::randomize_lights = false;
 int							GUI::fps = 60;
-float						GUI::cameraSpeed = 1.f;
+float						GUI::cameraSpeed = 10.f;
 std::array<float, 4>		GUI::clearColor = { 0.0f, 0.31f, 0.483f, 0.0f };
 
 vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;

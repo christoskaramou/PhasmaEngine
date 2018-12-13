@@ -15,12 +15,12 @@ layout (location = 0) out vec4 outColor;
 
 vec3 ScreenSpaceReflections(vec3 position, vec3 normal);
 
-vec3 getViewPosFromDepth(vec2 UV, float depth)
-{
+vec3 getViewPosFromUV(vec2 UV)
+{ 
 	vec2 revertedUV = (UV - pos.offset.xy) / pos.offset.zw; // floating window correction
 	vec4 ndcPos;
 	ndcPos.xy = revertedUV * 2.0 - 1.0;
-	ndcPos.z = depth;
+	ndcPos.z = texture(depthSampler, UV).x; // sample from the gl_FragCoord.z image
 	ndcPos.w = 1.0;
 	
 	vec4 clipPos = ubo.invProj * ndcPos;
@@ -29,7 +29,7 @@ vec3 getViewPosFromDepth(vec2 UV, float depth)
 
 void main()
 {
-	vec3 position = getViewPosFromDepth(inUV, texture(depthSampler, inUV).x);
+	vec3 position = getViewPosFromUV(inUV);
 	vec4 normal = ubo.view * vec4(texture(normalSampler, inUV).xyz, 0.0);
 	float spec = texture(specRoughMetSampler, inUV).x;
 
@@ -64,7 +64,7 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 		}
 
 		float currentDepth = abs(newViewPos.z);
-		float sampledDepth = abs(getViewPosFromDepth(samplePosition.xy, texture(depthSampler, samplePosition.xy).x).z);
+		float sampledDepth = abs(getViewPosFromUV(samplePosition.xy).z);
 
 		float delta = abs(currentDepth - sampledDepth);
 		if(delta < 0.01f)
