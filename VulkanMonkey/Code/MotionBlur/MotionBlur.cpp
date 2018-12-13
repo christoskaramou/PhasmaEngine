@@ -23,7 +23,7 @@ void MotionBlur::createMotionBlurFrameBuffers()
 
 void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTargets)
 {
-	UBmotionBlur.createBuffer(256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	UBmotionBlur.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UBmotionBlur.data = vulkan->device.mapMemory(UBmotionBlur.memory, 0, UBmotionBlur.size);
 
 	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
@@ -66,7 +66,7 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorImageInfo* pImageInfo;
 			.setBuffer(UBmotionBlur.buffer)								// Buffer buffer;
 			.setOffset(0)													// DeviceSize offset;
-			.setRange(3 * 64));									// DeviceSize range;
+			.setRange(UBmotionBlur.size));									// DeviceSize range;
 
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
@@ -107,7 +107,7 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorImageInfo* pImageInfo;
 			.setBuffer(UBmotionBlur.buffer)								// Buffer buffer;
 			.setOffset(0)													// DeviceSize offset;
-			.setRange(3 * 64));									// DeviceSize range;
+			.setRange(UBmotionBlur.size));									// DeviceSize range;
 
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }

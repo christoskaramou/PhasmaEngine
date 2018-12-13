@@ -37,7 +37,7 @@ void Context::initVulkanContext()
 
 void Context::initRendering()
 {
-	addRenderTarget("depth", vk::Format::eR16Sfloat);
+	addRenderTarget("depth", vk::Format::eR32Sfloat);
 	addRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
 	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
@@ -2744,7 +2744,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	*vulkan.swapchain = createSwapchain();
 	*vulkan.depth = createDepthResources();
 
-	addRenderTarget("depth", vk::Format::eR16Sfloat);
+	addRenderTarget("depth", vk::Format::eR32Sfloat);
 	addRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
 	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic

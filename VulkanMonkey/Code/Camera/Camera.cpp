@@ -44,6 +44,9 @@ void vm::Camera::update()
 {
 	updatePerspective();
 	updateView();
+	invView = inverse(view);
+	invPerspective = inverse(perspective);
+	invViewPerspective = invView * invPerspective;
 }
 
 void vm::Camera::updatePerspective()
@@ -106,6 +109,21 @@ mat4 Camera::getPerspective()
 mat4 Camera::getView()
 {
 	return view;
+}
+
+mat4 vm::Camera::getInvPerspective()
+{
+	return invPerspective;
+}
+
+mat4 vm::Camera::getInvView()
+{
+	return invView;
+}
+
+mat4 vm::Camera::getInvViewPerspective()
+{
+	return invViewPerspective;
 }
 
 vec3 Camera::worldRight() const

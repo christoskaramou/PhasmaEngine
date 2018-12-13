@@ -70,11 +70,9 @@ void Renderer::update(float delta)
 	ctx.camera_main.update();
 	const mat4 projection = ctx.camera_main.getPerspective();
 	const mat4 view = ctx.camera_main.getView();
+	const mat4 invProjection = ctx.camera_main.getInvPerspective();
+	const mat4 invViewProjection = ctx.camera_main.getInvViewPerspective();
 
-	vec4 test = projection * view * vec4(-0.4f, -0.6f, 14.f, 1.f);
-
-	//vec4 posis = projection * view * vec4(1.2f, 1.4f, 350.f, 1.f);
-	//vec4 posis1 = inverse(view) * inverse(projection) * posis;
 
 	// MODELS
 	for (auto &model : Context::models) {
@@ -120,26 +118,27 @@ void Renderer::update(float delta)
 
 	// SSAO
 	if (GUI::show_ssao) {
-		mat4 pvm[2]{ projection, view };
+		mat4 pvm[3]{ projection, view, invProjection };
 		memcpy(ctx.ssao.UBssaoPVM.data, pvm, sizeof(pvm));
 	}
 
-	// REFLECTIONS
+	// SSR
 	if (GUI::show_ssr) {
-		mat4 reflectionInput[3];
+		mat4 reflectionInput[4];
 		reflectionInput[0][0] = vec4(ctx.camera_main.position, 1.0f);
 		reflectionInput[0][1] = vec4(ctx.camera_main.front(), 1.0f);
 		reflectionInput[0][2] = vec4(static_cast<float>(ctx.vulkan.surface->actualExtent.width), static_cast<float>(ctx.vulkan.surface->actualExtent.height), 0.f, 0.f);
 		reflectionInput[0][3] = vec4();
 		reflectionInput[1] = projection;
 		reflectionInput[2] = view;
+		reflectionInput[3] = invProjection;
 		memcpy(ctx.ssr.UBReflection.data, &reflectionInput, sizeof(reflectionInput));
 	}
 
 	// MOTION BLUR
 	if (GUI::show_motionBlur) {
 		static mat4 previousView = view;
-		mat4 motionBlurInput[3]{ projection, view, previousView };
+		mat4 motionBlurInput[4]{ projection, view, previousView, invViewProjection };
 		memcpy(ctx.motionBlur.UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
 		previousView = view;
 	}
@@ -272,7 +271,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 			ctx.ssr.draw(imageIndex, UVOffset);
 
 		// COMPOSITION
-		ctx.deferred.draw(imageIndex, ctx.shadows, inverse(ctx.camera_main.getPerspective() * ctx.camera_main.getView()), UVOffset);
+		ctx.deferred.draw(imageIndex, ctx.shadows, ctx.camera_main.getInvViewPerspective(), UVOffset);
 		
 		// MOTION BLUR
 		if (GUI::show_motionBlur)

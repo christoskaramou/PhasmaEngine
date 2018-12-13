@@ -42,7 +42,7 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 	ssaoNoise.createSampler();
 	staging.destroy();
 	// pvm uniform
-	UBssaoPVM.createBuffer(2 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	UBssaoPVM.createBuffer(3 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UBssaoPVM.data = vulkan->device.mapMemory(UBssaoPVM.memory, 0, UBssaoPVM.size);
 
 	vk::DescriptorSetAllocateInfo allocInfoSSAO = vk::DescriptorSetAllocateInfo{
@@ -118,7 +118,7 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 				.setRange(UBssaoKernel.size),		// DeviceSize range;
 			nullptr									//const BufferView* pTexelBufferView;
 		},
-		// Binding 4: Projection View Size
+		// Binding 4: Projection, View, InvProj
 		vk::WriteDescriptorSet{
 			DSssao,								//DescriptorSet dstSet;
 			4,										//uint32_t dstBinding;

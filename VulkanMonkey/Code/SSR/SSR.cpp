@@ -4,7 +4,7 @@ using namespace vm;
 
 void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 {
-	UBReflection.createBuffer(256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	UBReflection.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UBReflection.data = vulkan->device.mapMemory(UBReflection.memory, 0, UBReflection.size);
 
 	auto const allocateInfo2 = vk::DescriptorSetAllocateInfo()
@@ -68,7 +68,7 @@ void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorImageInfo* pImageInfo;
 			.setBuffer(UBReflection.buffer)								// Buffer buffer;
 			.setOffset(0)													// DeviceSize offset;
-			.setRange(3 * 64));									// DeviceSize range;
+			.setRange(UBReflection.size));									// DeviceSize range;
 
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
@@ -131,7 +131,7 @@ void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorImageInfo* pImageInfo;
 			.setBuffer(UBReflection.buffer)								// Buffer buffer;
 			.setOffset(0)													// DeviceSize offset;
-			.setRange(3 * 64));									// DeviceSize range;
+			.setRange(UBReflection.size));									// DeviceSize range;
 
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }

@@ -6,7 +6,7 @@ layout (set = 0, binding = 0) uniform sampler2D samplerDepth;
 layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
 layout (set = 0, binding = 2) uniform sampler2D samplerNoise;
 layout (set = 0, binding = 3) uniform UniformBufferObject { vec4 samples[64]; } kernel;
-layout (set = 0, binding = 4) uniform UniformBufferPVM { mat4 projection; mat4 view; vec4 size; } pvm;
+layout (set = 0, binding = 4) uniform UniformBufferPVM { mat4 projection; mat4 view; mat4 invProjection; } pvm;
 layout(push_constant) uniform Position { vec4 offset; } pos;
 
 
@@ -26,7 +26,7 @@ vec3 getViewPosFromDepth(vec2 UV, float depth)
 	ndcPos.z = depth;
 	ndcPos.w = 1.0;
 	
-	vec4 clipPos = inverse(pvm.projection) * ndcPos;
+	vec4 clipPos = pvm.invProjection * ndcPos;
 	return (clipPos / clipPos.w).xyz;
 }
 
@@ -60,7 +60,7 @@ void main()
 		samplePosition.xy += pos.offset.xy; // floating window position correction
 		
 		float currentDepth = newViewPos.z;
-		float sampledDepth = getViewPosFromDepth(inUV, texture(samplerDepth, samplePosition.xy).x).z;
+		float sampledDepth = getViewPosFromDepth(samplePosition.xy, texture(samplerDepth, samplePosition.xy).x).z;
 
 		// Range check
 

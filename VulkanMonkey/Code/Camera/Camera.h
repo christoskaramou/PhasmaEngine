@@ -21,6 +21,9 @@ namespace vm {
 
 		mat4 view;
 		mat4 perspective;
+		mat4 invView;
+		mat4 invPerspective;
+		mat4 invViewPerspective;
 		quat orientation;
 		vec3 position, euler, worldOrientation;
 		float nearPlane, farPlane, FOV, speed, rotationSpeed;
@@ -34,6 +37,9 @@ namespace vm {
 		void rotate(float xoffset, float yoffset);
 		mat4 getPerspective();
 		mat4 getView();
+		mat4 getInvPerspective();
+		mat4 getInvView();
+		mat4 getInvViewPerspective();
 		vec3 worldFront() const;
 		vec3 worldRight() const;
 		vec3 worldUp() const;

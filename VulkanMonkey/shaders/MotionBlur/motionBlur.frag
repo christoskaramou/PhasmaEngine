@@ -4,7 +4,7 @@
 
 layout (set = 0, binding = 0) uniform sampler2D compositionSampler;
 layout (set = 0, binding = 1) uniform sampler2D depthSampler;
-layout (set = 0, binding = 2) uniform UniformBufferObject { mat4 projection; mat4 view; mat4 previousView;} ubo;
+layout (set = 0, binding = 2) uniform UniformBufferObject { mat4 projection; mat4 view; mat4 previousView; mat4 invViewProj; } ubo;
 layout(push_constant) uniform Constants { vec4 fps; vec4 offset; } pushConst;
 
 
@@ -14,15 +14,6 @@ layout (location = 0) out vec4 outColor;
 
 const int samples = 8;
 
-// Near and Far planes for reversed z depth checking
-const float FAR_PLANE = 0.005f;
-const float NEAR_PLANE = 500.0f;
-float linearDepth(float depth)
-{
-	float z = depth * 2.0f - 1.0f; 
-	return (2.0f * NEAR_PLANE * FAR_PLANE) / (FAR_PLANE + NEAR_PLANE - z * (FAR_PLANE - NEAR_PLANE));	
-}
-
 vec3 getWorldPosFromDepth(vec2 UV, float depth)
 {
 	vec2 revertedUV = (UV - pushConst.offset.xy) / pushConst.offset.zw; // floating window correction
@@ -31,7 +22,7 @@ vec3 getWorldPosFromDepth(vec2 UV, float depth)
 	ndcPos.z = depth;
 	ndcPos.w = 1.0;
 	
-	vec4 clipPos = inverse(ubo.view) * inverse(ubo.projection) * ndcPos;
+	vec4 clipPos = ubo.invViewProj * ndcPos;
 	return (clipPos / clipPos.w).xyz;
 }
 
