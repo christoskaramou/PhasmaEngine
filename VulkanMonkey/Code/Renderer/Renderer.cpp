@@ -51,7 +51,7 @@ Renderer::~Renderer()
 	ctx.destroyVkContext();
 }
 
-void Renderer::update(float delta)
+void Renderer::update()
 {
 	// TODO: make an other command pool for multithreading
 	for (int i = static_cast<int>(Queue::loadModel.size()) - 1; i >= 0; i--) {
@@ -68,17 +68,16 @@ void Renderer::update(float delta)
 	}
 
 	ctx.camera_main.update();
-	const mat4 projection = ctx.camera_main.getPerspective();
-	const mat4 view = ctx.camera_main.getView();
-	const mat4 invProjection = ctx.camera_main.getInvPerspective();
-	const mat4 invViewProjection = ctx.camera_main.getInvViewPerspective();
-
+	const mat4 &proj = ctx.camera_main.projection;
+	const mat4 &view = ctx.camera_main.view;
+	const mat4 &invProj = ctx.camera_main.invProjection;
+	const mat4 &invViewProj = ctx.camera_main.invViewProjection;
 
 	// MODELS
 	for (auto &model : Context::models) {
 		model.render = GUI::render_models;
 		if (model.render) {
-			const mat4 pvm[3]{ projection, view, model.transform };
+			const mat4 pvm[3]{ proj, view, model.transform };
 			ctx.camera_main.ExtractFrustum(model.transform);
 			for (auto &mesh : model.meshes) {
 				mesh.cull = !ctx.camera_main.SphereInFrustum(mesh.boundingSphere);
@@ -109,16 +108,16 @@ void Renderer::update(float delta)
 		GUI::randomize_lights = false;
 		LightsUBO lubo;
 		lubo.camPos = vec4(ctx.camera_main.position, 1.0f);
-		memcpy(ctx.lightUniforms.uniform.data, &lubo, sizeof(LightsUBO));
+		memcpy(ctx.lightUniforms.uniform.data, &lubo, sizeof(lubo));
 	}
 	else {
 		vec4 camPos(ctx.camera_main.position, 1.0f);
-		memcpy(ctx.lightUniforms.uniform.data, &camPos, sizeof(vec4));
+		memcpy(ctx.lightUniforms.uniform.data, &camPos, sizeof(camPos));
 	}
 
 	// SSAO
 	if (GUI::show_ssao) {
-		mat4 pvm[3]{ projection, view, invProjection };
+		mat4 pvm[3]{ proj, view, invProj };
 		memcpy(ctx.ssao.UBssaoPVM.data, pvm, sizeof(pvm));
 	}
 
@@ -126,19 +125,19 @@ void Renderer::update(float delta)
 	if (GUI::show_ssr) {
 		mat4 reflectionInput[4];
 		reflectionInput[0][0] = vec4(ctx.camera_main.position, 1.0f);
-		reflectionInput[0][1] = vec4(ctx.camera_main.front(), 1.0f);
-		reflectionInput[0][2] = vec4(static_cast<float>(ctx.vulkan.surface->actualExtent.width), static_cast<float>(ctx.vulkan.surface->actualExtent.height), 0.f, 0.f);
+		reflectionInput[0][1] = vec4(ctx.camera_main.front, 1.0f);
+		reflectionInput[0][2] = vec4(WIDTH_f, HEIGHT_f, 0.f, 0.f);
 		reflectionInput[0][3] = vec4();
-		reflectionInput[1] = projection;
+		reflectionInput[1] = proj;
 		reflectionInput[2] = view;
-		reflectionInput[3] = invProjection;
+		reflectionInput[3] = invProj;
 		memcpy(ctx.ssr.UBReflection.data, &reflectionInput, sizeof(reflectionInput));
 	}
 
 	// MOTION BLUR
 	if (GUI::show_motionBlur) {
 		static mat4 previousView = view;
-		mat4 motionBlurInput[4]{ projection, view, previousView, invViewProjection };
+		mat4 motionBlurInput[4]{ proj, view, previousView, invViewProj };
 		memcpy(ctx.motionBlur.UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
 		previousView = view;
 	}
@@ -172,8 +171,7 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 
 void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 {
-
-	vec2 surfSize((float)ctx.vulkan.surface->actualExtent.width, (float)ctx.vulkan.surface->actualExtent.height);
+	vec2 surfSize(WIDTH_f, HEIGHT_f);
 	vec2 winPos((float*)&GUI::winPos);
 	vec2 winSize((float*)&GUI::winSize);
 
@@ -226,7 +224,7 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 {
-	vec2 surfSize((float)ctx.vulkan.surface->actualExtent.width, (float)ctx.vulkan.surface->actualExtent.height);
+	vec2 surfSize(WIDTH_f, HEIGHT_f);
 	vec2 winPos((float*)&GUI::winPos);
 	vec2 winSize((float*)&GUI::winSize);
 
@@ -271,7 +269,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 			ctx.ssr.draw(imageIndex, UVOffset);
 
 		// COMPOSITION
-		ctx.deferred.draw(imageIndex, ctx.shadows, ctx.camera_main.getInvViewPerspective(), UVOffset);
+		ctx.deferred.draw(imageIndex, ctx.shadows, ctx.camera_main.invViewProjection, UVOffset);
 		
 		// MOTION BLUR
 		if (GUI::show_motionBlur)
@@ -294,13 +292,14 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
 	auto renderPassInfoShadows = vk::RenderPassBeginInfo()
-		.setRenderPass(ctx.shadows.getRenderPass())
-		.setFramebuffer(ctx.shadows.frameBuffer[imageIndex])
+		.setRenderPass(ctx.shadows.renderPass)
+		.setFramebuffer(ctx.shadows.frameBuffers[imageIndex])
 		.setRenderArea({ { 0, 0 },{ ctx.shadows.imageSize, ctx.shadows.imageSize } })
 		.setClearValueCount(static_cast<uint32_t>(clearValuesShadows.size()))
 		.setPClearValues(clearValuesShadows.data());
 
 	ctx.vulkan.shadowCmdBuffer.begin(beginInfoShadows);
+	ctx.vulkan.shadowCmdBuffer.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 	ctx.vulkan.shadowCmdBuffer.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 
 	vk::DeviceSize offset = vk::DeviceSize();

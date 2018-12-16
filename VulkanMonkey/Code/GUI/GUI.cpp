@@ -16,6 +16,7 @@ bool						GUI::render_models = true;
 bool						GUI::randomize_lights = false;
 int							GUI::fps = 60;
 float						GUI::cameraSpeed = 10.f;
+std::array<float, 3>		GUI::depthBias = { 0.0f, 0.0f, -6.2f };
 std::array<float, 4>		GUI::clearColor = { 0.0f, 0.31f, 0.483f, 0.0f };
 
 vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
@@ -50,7 +51,7 @@ void GUI::setWindows()
 
 	// Middle Left Panel
 	ImGui::SetNextWindowPos(ImVec2(0.f, tlPanelSize.y));
-	ImGui::SetNextWindowSize(ImVec2(tlPanelSize.x, (float)vulkan->surface->actualExtent.height - 279.f - tlPanelSize.y));
+	ImGui::SetNextWindowSize(ImVec2(tlPanelSize.x, HEIGHT_f - 279.f - tlPanelSize.y));
 	ImGui::Begin("Testing", &p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGui::Checkbox("Lock Render Window", &lock_render_window);
 	ImGui::Checkbox("Deffered", &deferred_rendering);
@@ -68,13 +69,16 @@ void GUI::setWindows()
 	ImGui::InputInt("FPS", &fps, 1, 15); if (fps < 10) fps = 10;
 	ImGui::InputFloat("Camera Speed", &cameraSpeed, 0.1f, 1.f, 3);
 	ImGui::SliderFloat4("Clear Color", (float*)clearColor.data(), 0.0f, 1.0f);
+	ImGui::InputFloat("Depth Bias", &depthBias[0], 0.15f, 0.5f, 5);
+	ImGui::InputFloat("Depth Clamp", &depthBias[1], 0.15f, 0.5f, 5);
+	ImGui::InputFloat("Depth Slope", &depthBias[2], 0.15f, 0.5f, 5);
 	mlPanelPos = ImGui::GetWindowPos();
 	mlPanelSize = ImGui::GetWindowSize();
 	ImGui::End();
 
 	// Console
 	static Console console;
-	console.Draw("Console", &console_open, ImVec2(0.f, (float)vulkan->surface->actualExtent.height - 279.f), ImVec2((float)vulkan->surface->actualExtent.width, 279.f));
+	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - 279.f), ImVec2(WIDTH_f, 279.f));
 
 	// Rendering window
 	style->Colors[ImGuiCol_WindowBg].w = 0.0f;
@@ -82,7 +86,7 @@ void GUI::setWindows()
 	if (lock_render_window) {
 		flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 		ImGui::SetNextWindowPos(ImVec2(mlPanelSize.x, 0.f));
-		ImGui::SetNextWindowSize(ImVec2((float)vulkan->surface->actualExtent.width - tlPanelSize.x, (float)vulkan->surface->actualExtent.height - 279.f));
+		ImGui::SetNextWindowSize(ImVec2(WIDTH_f - tlPanelSize.x, HEIGHT_f - 279.f));
 	}
 	ImGui::Begin("Rendering Window", &active, flags);
 	winPos = ImGui::GetWindowPos();

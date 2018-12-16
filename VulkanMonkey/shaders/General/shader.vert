@@ -1,6 +1,4 @@
 #version 450
-#extension GL_ARB_separate_shader_objects : enable
-#extension GL_ARB_shading_language_420pack : enable
 
 layout(set = 2, binding = 0) uniform UniformBufferObject {
 	mat4 projection;
@@ -31,12 +29,6 @@ layout (location = 5) out vec3 outColor;
 layout (location = 6) out float castShadows;
 layout (location = 7) out mat4 shadow_coords;
 
-const mat4 bias = mat4( 
-  0.5, 0.0, 0.0, 0.0,
-  0.0, 0.5, 0.0, 0.0,
-  0.0, 0.0, 1.0, 0.0,
-  0.5, 0.5, 0.0, 1.0 );
-
 void main()
 {
 	vec4 inPos = vec4(inPosition, 1.0f);
@@ -56,6 +48,6 @@ void main()
 	// Color (not in use)
 	outColor = inColor.rgb;
 
-	shadow_coords = bias * sun.projection * sun.view;
+	shadow_coords = sun.projection * sun.view;
 	castShadows = sun.castShadows;
 }

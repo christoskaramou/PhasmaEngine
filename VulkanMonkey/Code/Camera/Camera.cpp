@@ -42,11 +42,14 @@ Camera::Camera()
 
 void vm::Camera::update()
 {
+	front = orientation * worldFront();
+	right = orientation * worldRight();
+	up = orientation * worldUp();
 	updatePerspective();
 	updateView();
 	invView = inverse(view);
-	invPerspective = inverse(perspective);
-	invViewPerspective = invView * invPerspective;
+	invProjection = inverse(projection);
+	invViewProjection = invView * invProjection;
 }
 
 void vm::Camera::updatePerspective()
@@ -58,7 +61,7 @@ void vm::Camera::updatePerspective()
 	float m22 = farPlane / (farPlane - nearPlane) * worldOrientation.z;
 	float m23 = worldOrientation.z;
 	float m32 = -(farPlane * nearPlane) / (farPlane - nearPlane);
-	perspective = mat4(
+	projection = mat4(
 		m00, 0.f, 0.f, 0.f,
 		0.f, m11, 0.f, 0.f,
 		0.f, 0.f, m22, m23,
@@ -68,9 +71,9 @@ void vm::Camera::updatePerspective()
 
 void vm::Camera::updateView()
 {
-	vec3 f(front());
-	vec3 r(right());
-	vec3 u(up());
+	vec3 &f = front;
+	vec3 &r = right;
+	vec3 &u = up;
 
 	float m30 = -dot(r, position);
 	float m31 = -dot(u, position);
@@ -86,10 +89,10 @@ void vm::Camera::updateView()
 
 void Camera::move(RelativeDirection direction, float velocity)
 {
-	if (direction == RelativeDirection::FORWARD)	position += front() * (velocity * worldOrientation.z);
-	if (direction == RelativeDirection::BACKWARD)	position -= front() * (velocity * worldOrientation.z);
-	if (direction == RelativeDirection::RIGHT)		position += right() * velocity;
-	if (direction == RelativeDirection::LEFT)		position -= right() * velocity;
+	if (direction == RelativeDirection::FORWARD)	position += front * (velocity * worldOrientation.z);
+	if (direction == RelativeDirection::BACKWARD)	position -= front * (velocity * worldOrientation.z);
+	if (direction == RelativeDirection::RIGHT)		position += right * velocity;
+	if (direction == RelativeDirection::LEFT)		position -= right * velocity;
 }
 
 void Camera::rotate(float xoffset, float yoffset)
@@ -100,30 +103,6 @@ void Camera::rotate(float xoffset, float yoffset)
 	euler.y += radians(xoffset) * worldOrientation.x;	// yaw
 
 	orientation = quat(euler);
-}
-
-mat4 Camera::getPerspective()
-{
-	return perspective;
-}
-mat4 Camera::getView()
-{
-	return view;
-}
-
-mat4 vm::Camera::getInvPerspective()
-{
-	return invPerspective;
-}
-
-mat4 vm::Camera::getInvView()
-{
-	return invView;
-}
-
-mat4 vm::Camera::getInvViewPerspective()
-{
-	return invViewPerspective;
 }
 
 vec3 Camera::worldRight() const
@@ -141,24 +120,9 @@ vec3 Camera::worldFront() const
 	return vec3(0.f, 0.f, worldOrientation.z);
 }
 
-vec3 Camera::right() const
-{
-	return orientation * worldRight();
-}
-
-vec3 Camera::up() const
-{
-	return orientation * worldUp();
-}
-
-vec3 Camera::front() const
-{
-	return orientation * worldFront();
-}
-
 void Camera::ExtractFrustum(const mat4& model)
 {
-	mat4 pvm = transpose(perspective * view * model);
+	mat4 pvm = transpose(projection * view * model);
 
 	/* Extract the numbers for the RIGHT plane */
 	frustum[0] = pvm[3] - pvm[0];

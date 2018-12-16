@@ -49,5 +49,6 @@ namespace vm {
 		vk::CompareOp compareOp = vk::CompareOp::eGreater;
 		uint32_t subpassTarget = 0;
 		vec2 depth = vec2(0.f, 1.f);
+		bool depthBiasEnable = VK_FALSE;
 	};
 }

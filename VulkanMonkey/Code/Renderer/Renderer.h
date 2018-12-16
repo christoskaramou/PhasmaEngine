@@ -10,7 +10,7 @@ namespace vm {
 	public:
 		Renderer(SDL_Window* window);
 		~Renderer();
-		void update(float delta);
+		void update();
 		void present();
 
 		Context ctx;

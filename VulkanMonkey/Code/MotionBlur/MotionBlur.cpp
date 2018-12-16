@@ -14,8 +14,8 @@ void MotionBlur::createMotionBlurFrameBuffers()
 			.setRenderPass(renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
-			.setWidth(vulkan->surface->actualExtent.width)
-			.setHeight(vulkan->surface->actualExtent.height)
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
 			.setLayers(1);
 		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
 	}

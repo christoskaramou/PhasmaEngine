@@ -55,6 +55,7 @@ void Context::initRendering()
 	ssr.renderPass = createSSRRenderPass();
 	motionBlur.renderPass = createMotionBlurRenderPass();
 	gui.renderPass = createGUIRenderPass();
+	shadows.renderPass = createShadowsRenderPass();
 
 	// frame buffers
 	forward.frameBuffers = createFrameBuffers();
@@ -65,7 +66,7 @@ void Context::initRendering()
 	ssr.frameBuffers = createSSRFrameBuffers();
 	motionBlur.frameBuffers = createMotionBlurFrameBuffers();
 	gui.frameBuffers = createGUIFrameBuffers();
-	shadows.createFrameBuffers(static_cast<uint32_t>(vulkan.swapchain->images.size()));
+	shadows.frameBuffers = createShadowsFrameBuffers();
 
 	// pipelines
 	PipelineInfo gpi = getPipelineSpecificationsModel();
@@ -73,7 +74,6 @@ void Context::initRendering()
 
 	forward.pipeline = createPipeline(gpi);
 	//terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
-	shadows.pipeline = createPipeline(getPipelineSpecificationsShadows());
 	//skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
 	gui.pipeline = createPipeline(getPipelineSpecificationsGUI());
 	deferred.pipeline = createPipeline(getPipelineSpecificationsDeferred());
@@ -83,6 +83,7 @@ void Context::initRendering()
 	ssr.pipeline = createSSRPipeline();
 	motionBlur.pipeline = createMotionBlurPipeline();
 	compute.pipeline = createComputePipeline();
+	shadows.pipeline = createPipeline(getPipelineSpecificationsShadows());
 
 	//camera.push_back(Camera());
 }
@@ -418,7 +419,7 @@ void Context::addRenderTarget(const std::string& name, vk::Format format)
 	renderTargets[name] = Image();
 	renderTargets[name].format = format;
 	renderTargets[name].initialLayout = vk::ImageLayout::eUndefined;
-	renderTargets[name].createImage(vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height, vk::ImageTiling::eOptimal,
+	renderTargets[name].createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	renderTargets[name].createImageView(vk::ImageAspectFlagBits::eColor);
 	renderTargets[name].createSampler();
@@ -942,6 +943,58 @@ vk::RenderPass Context::createGUIRenderPass()
 	return vulkan.device.createRenderPass(renderPassInfo);
 }
 
+
+vk::RenderPass Context::createShadowsRenderPass()
+{
+	auto attachment = vk::AttachmentDescription()
+		.setFormat(vulkan.depth->format)
+		.setSamples(vk::SampleCountFlagBits::e1)
+		.setLoadOp(vk::AttachmentLoadOp::eClear)
+		.setStoreOp(vk::AttachmentStoreOp::eStore)
+		.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+		.setStencilStoreOp(vk::AttachmentStoreOp::eStore)
+		.setInitialLayout(vk::ImageLayout::eUndefined)
+		.setFinalLayout(vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal);
+
+	auto const depthAttachmentRef = vk::AttachmentReference()
+		.setAttachment(0)
+		.setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
+	auto const subpassDesc = vk::SubpassDescription() // subpass desc (there can be multiple subpasses)
+		.setPDepthStencilAttachment(&depthAttachmentRef);
+
+	std::vector<vk::SubpassDependency> spDependencies{
+		vk::SubpassDependency{
+			VK_SUBPASS_EXTERNAL,
+			0,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::PipelineStageFlagBits::eLateFragmentTests,
+			vk::AccessFlagBits::eMemoryRead,
+			vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite,
+			vk::DependencyFlagBits::eByRegion
+		},
+		vk::SubpassDependency{
+			0,
+			VK_SUBPASS_EXTERNAL,
+			vk::PipelineStageFlagBits::eLateFragmentTests,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite,
+			vk::AccessFlagBits::eMemoryRead,
+			vk::DependencyFlagBits::eByRegion
+		}
+	};
+
+	auto const rpci = vk::RenderPassCreateInfo()
+		.setAttachmentCount(1)
+		.setPAttachments(&attachment)
+		.setSubpassCount(1)
+		.setPSubpasses(&subpassDesc)
+		.setDependencyCount((uint32_t)spDependencies.size())
+		.setPDependencies(spDependencies.data());
+
+	return vulkan.device.createRenderPass(rpci);
+}
+
 Image Context::createDepthResources()
 {
 	Image _image = Image();
@@ -958,8 +1011,7 @@ Image Context::createDepthResources()
 	{
 		exit(-9);
 	}
-	_image.createImage(vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height,
-		vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	_image.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	_image.createImageView(vk::ImageAspectFlagBits::eDepth);
 
 	_image.addressMode = vk::SamplerAddressMode::eClampToEdge;
@@ -979,12 +1031,11 @@ std::vector<vk::Framebuffer> Context::createFrameBuffers()
 		&& (VkSampleCountFlags(vulkan.gpuProperties.limits.framebufferDepthSampleCounts) >= VkSampleCountFlags(vulkan.sampleCount)));
 
 	forward.MSColorImage.format = vulkan.surface->formatKHR.format;
-	forward.MSColorImage.createImage(vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height, vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment, vk::MemoryPropertyFlagBits::eLazilyAllocated, vulkan.sampleCount);
+	forward.MSColorImage.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment, vk::MemoryPropertyFlagBits::eLazilyAllocated, vulkan.sampleCount);
 	forward.MSColorImage.createImageView(vk::ImageAspectFlagBits::eColor);
 
 	forward.MSDepthImage.format = vulkan.depth->format;
-	forward.MSDepthImage.createImage(vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height, vk::ImageTiling::eOptimal,
+	forward.MSDepthImage.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eLazilyAllocated, vulkan.sampleCount);
 	forward.MSDepthImage.createImageView(vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
 
@@ -1002,8 +1053,8 @@ std::vector<vk::Framebuffer> Context::createFrameBuffers()
 			.setRenderPass(forward.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
-			.setWidth(vulkan.surface->actualExtent.width)
-			.setHeight(vulkan.surface->actualExtent.height)
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
 			.setLayers(1);
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
@@ -1028,8 +1079,8 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 			.setRenderPass(deferred.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
-			.setWidth(vulkan.surface->actualExtent.width)
-			.setHeight(vulkan.surface->actualExtent.height)
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
 			.setLayers(1);
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
@@ -1051,8 +1102,8 @@ std::vector<vk::Framebuffer> Context::createCompositionFrameBuffers()
 			.setRenderPass(deferred.compositionRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
-			.setWidth(vulkan.surface->actualExtent.width)
-			.setHeight(vulkan.surface->actualExtent.height)
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
 			.setLayers(1);
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
@@ -1073,8 +1124,8 @@ std::vector<vk::Framebuffer> Context::createSSRFrameBuffers()
 			.setRenderPass(ssr.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
-			.setWidth(vulkan.surface->actualExtent.width)
-			.setHeight(vulkan.surface->actualExtent.height)
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
 			.setLayers(1);
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
@@ -1095,8 +1146,8 @@ std::vector<vk::Framebuffer> Context::createSSAOFrameBuffers()
 			.setRenderPass(ssao.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
-			.setWidth(vulkan.surface->actualExtent.width)
-			.setHeight(vulkan.surface->actualExtent.height)
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
 			.setLayers(1);
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
@@ -1117,8 +1168,8 @@ std::vector<vk::Framebuffer> Context::createSSAOBlurFrameBuffers()
 			.setRenderPass(ssao.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
-			.setWidth(vulkan.surface->actualExtent.width)
-			.setHeight(vulkan.surface->actualExtent.height)
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
 			.setLayers(1);
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
@@ -1139,8 +1190,8 @@ std::vector<vk::Framebuffer> Context::createMotionBlurFrameBuffers()
 			.setRenderPass(motionBlur.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
-			.setWidth(vulkan.surface->actualExtent.width)
-			.setHeight(vulkan.surface->actualExtent.height)
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
 			.setLayers(1);
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
@@ -1161,8 +1212,44 @@ std::vector<vk::Framebuffer> Context::createGUIFrameBuffers()
 			.setRenderPass(gui.renderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
-			.setWidth(vulkan.surface->actualExtent.width)
-			.setHeight(vulkan.surface->actualExtent.height)
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
+			.setLayers(1);
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
+	}
+
+	return _frameBuffers;
+}
+
+std::vector<vk::Framebuffer> Context::createShadowsFrameBuffers()
+{
+	std::vector<vk::Framebuffer> _frameBuffers(vulkan.swapchain->images.size());
+
+	shadows.texture.format = vulkan.depth->format;
+	shadows.texture.initialLayout = vk::ImageLayout::eUndefined;
+	shadows.texture.createImage(shadows.imageSize, shadows.imageSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+	shadows.texture.createImageView(vk::ImageAspectFlagBits::eDepth);
+
+	shadows.texture.addressMode = vk::SamplerAddressMode::eClampToEdge;
+	shadows.texture.maxAnisotropy = 1.f;
+	shadows.texture.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+	shadows.texture.samplerCompareEnable = VK_TRUE;
+	shadows.texture.compareOp = vk::CompareOp::eGreaterOrEqual;
+	shadows.texture.samplerMipmapMode = vk::SamplerMipmapMode::eLinear;
+	shadows.texture.createSampler();
+
+	for (uint32_t i = 0; i < _frameBuffers.size(); ++i) {
+		std::vector<vk::ImageView> attachments = {
+			shadows.texture.view
+		};
+
+		auto const fbci = vk::FramebufferCreateInfo()
+			.setRenderPass(shadows.renderPass)
+			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+			.setPAttachments(attachments.data())
+			.setWidth(shadows.imageSize)
+			.setHeight(shadows.imageSize)
 			.setLayers(1);
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
@@ -1303,7 +1390,7 @@ Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
 		specificInfo.cull,								// CullModeFlags cullMode;
 		specificInfo.face,								// FrontFace frontFace;
-		VK_FALSE,										// Bool32 depthBiasEnable;
+		specificInfo.depthBiasEnable,					// Bool32 depthBiasEnable;
 		0.0f,											// float depthBiasConstantFactor;
 		0.0f,											// float depthBiasClamp;
 		0.0f,											// float depthBiasSlopeFactor;
@@ -1456,8 +1543,8 @@ Pipeline Context::createCompositionPipeline()
 		&vk::Viewport{										// const Viewport* pViewports;
 			0.0f,												// float x;
 			0.0f,												// float y;
-			static_cast<float>(vulkan.surface->actualExtent.width), 	// float width;
-			static_cast<float>(vulkan.surface->actualExtent.height),	// float height;
+			WIDTH_f, 											// float width;
+			HEIGHT_f,											// float height;
 			0.0f,												// float minDepth;
 			1.0f },												// float maxDepth;
 		1,													// uint32_t scissorCount;
@@ -1497,7 +1584,7 @@ Pipeline Context::createCompositionPipeline()
 		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
 		VK_TRUE,													// Bool32 depthTestEnable;
 		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
+		vk::CompareOp::eGreater,									// CompareOp depthCompareOp;
 		VK_FALSE,													// Bool32 depthBoundsTestEnable;
 		VK_FALSE,													// Bool32 stencilTestEnable;
 		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
@@ -1531,7 +1618,12 @@ Pipeline Context::createCompositionPipeline()
 	};
 
 	// Dynamic state
-	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eDepthBias };
+	vk::PipelineDynamicStateCreateInfo dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(dynamicStates.size()),
+		dynamicStates.data()
+	};
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
@@ -1701,8 +1793,8 @@ Pipeline Context::createSSRPipeline()
 		&vk::Viewport{										// const Viewport* pViewports;
 			0.0f,												// float x;
 			0.0f,												// float y;
-			static_cast<float>(vulkan.surface->actualExtent.width), 	// float width;
-			static_cast<float>(vulkan.surface->actualExtent.height),	// float height;
+			WIDTH_f, 											// float width;
+			HEIGHT_f,											// float height;
 			0.0f,												// float minDepth;
 			1.0f },												// float maxDepth;
 		1,													// uint32_t scissorCount;
@@ -1718,7 +1810,7 @@ Pipeline Context::createSSRPipeline()
 		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
 		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
 		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eCounterClockwise,						// FrontFace frontFace;
+		vk::FrontFace::eCounterClockwise,				// FrontFace frontFace;
 		VK_FALSE,										// Bool32 depthBiasEnable;
 		0.0f,											// float depthBiasConstantFactor;
 		0.0f,											// float depthBiasClamp;
@@ -1926,8 +2018,8 @@ Pipeline Context::createSSAOPipeline()
 		&vk::Viewport{										// const Viewport* pViewports;
 			0.0f,												// float x;
 			0.0f,												// float y;
-			static_cast<float>(vulkan.surface->actualExtent.width), 	// float width;
-			static_cast<float>(vulkan.surface->actualExtent.height),	// float height;
+			WIDTH_f,											// float width;
+			HEIGHT_f,											// float height;
 			0.0f,												// float minDepth;
 			1.0f },												// float maxDepth;
 		1,													// uint32_t scissorCount;
@@ -2156,8 +2248,8 @@ Pipeline Context::createSSAOBlurPipeline()
 		&vk::Viewport{										// const Viewport* pViewports;
 			0.0f,												// float x;
 			0.0f,												// float y;
-			static_cast<float>(vulkan.surface->actualExtent.width), 	// float width;
-			static_cast<float>(vulkan.surface->actualExtent.height),	// float height;
+			WIDTH_f, 											// float width;
+			HEIGHT_f,											// float height;
 			0.0f,												// float minDepth;
 			1.0f },												// float maxDepth;
 		1,													// uint32_t scissorCount;
@@ -2350,8 +2442,8 @@ Pipeline Context::createMotionBlurPipeline()
 		&vk::Viewport{										// const Viewport* pViewports;
 			0.0f,												// float x;
 			0.0f,												// float y;
-			static_cast<float>(vulkan.surface->actualExtent.width), 	// float width;
-			static_cast<float>(vulkan.surface->actualExtent.height),	// float height;
+			WIDTH_f, 											// float width;
+			HEIGHT_f,											// float height;
 			0.0f,												// float minDepth;
 			1.0f },												// float maxDepth;
 		1,													// uint32_t scissorCount;
@@ -2391,7 +2483,7 @@ Pipeline Context::createMotionBlurPipeline()
 		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
 		VK_TRUE,													// Bool32 depthTestEnable;
 		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
+		vk::CompareOp::eGreater,									// CompareOp depthCompareOp;
 		VK_FALSE,													// Bool32 depthBoundsTestEnable;
 		VK_FALSE,													// Bool32 stencilTestEnable;
 		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
@@ -2820,7 +2912,7 @@ PipelineInfo Context::getPipelineSpecificationsModel()
 	static PipelineInfo generalSpecific;
 	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
 	generalSpecific.renderPass = forward.renderPass;
-	generalSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
+	generalSpecific.viewportSize = { WIDTH, HEIGHT };
 	generalSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(vulkan.device), Mesh::getDescriptorSetLayout(vulkan.device), Model::getDescriptorSetLayout(vulkan.device), getDescriptorSetLayoutLights() };
 	generalSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	generalSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
@@ -2841,7 +2933,7 @@ PipelineInfo Context::getPipelineSpecificationsShadows()
 	// Shadows Pipeline
 	static PipelineInfo shadowsSpecific;
 	shadowsSpecific.shaders = { "shaders/Shadows/vert.spv" };
-	shadowsSpecific.renderPass = shadows.getRenderPass();
+	shadowsSpecific.renderPass = shadows.renderPass;
 	shadowsSpecific.viewportSize = { Shadows::imageSize, Shadows::imageSize };
 	shadowsSpecific.useBlendState = false;
 	shadowsSpecific.sampleCount = vk::SampleCountFlagBits::e1;
@@ -2849,6 +2941,16 @@ PipelineInfo Context::getPipelineSpecificationsShadows()
 	shadowsSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	shadowsSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	shadowsSpecific.pushConstantRange = vk::PushConstantRange();
+	shadowsSpecific.cull = vk::CullModeFlagBits::eBack;
+	shadowsSpecific.face = vk::FrontFace::eCounterClockwise;
+	shadowsSpecific.depthBiasEnable = VK_TRUE;
+	shadowsSpecific.dynamicStates = { vk::DynamicState::eDepthBias };
+	shadowsSpecific.dynamicStateInfo = {
+		vk::PipelineDynamicStateCreateFlags(),
+		static_cast<uint32_t>(shadowsSpecific.dynamicStates.size()),
+		shadowsSpecific.dynamicStates.data()
+	};
+
 
 	return shadowsSpecific;
 }
@@ -2859,7 +2961,7 @@ PipelineInfo Context::getPipelineSpecificationsSkyBox()
 	static PipelineInfo skyBoxSpecific;
 	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
 	skyBoxSpecific.renderPass = forward.renderPass;
-	skyBoxSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
+	skyBoxSpecific.viewportSize = { WIDTH, HEIGHT };
 	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(vulkan.device) };
 	skyBoxSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionSkyBox();
 	skyBoxSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionSkyBox();
@@ -2882,7 +2984,7 @@ PipelineInfo Context::getPipelineSpecificationsTerrain()
 	static PipelineInfo terrainSpecific;
 	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
 	terrainSpecific.renderPass = forward.renderPass;
-	terrainSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
+	terrainSpecific.viewportSize = { WIDTH, HEIGHT };
 	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(vulkan.device) };
 	terrainSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	terrainSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
@@ -2903,11 +3005,12 @@ PipelineInfo Context::getPipelineSpecificationsGUI()
 	static PipelineInfo GUISpecific;
 	GUISpecific.shaders = { "shaders/GUI/vert.spv", "shaders/GUI/frag.spv" };
 	GUISpecific.renderPass = gui.renderPass;
-	GUISpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
+	GUISpecific.viewportSize = { WIDTH, HEIGHT };
 	GUISpecific.descriptorSetLayouts = { GUI::getDescriptorSetLayout(vulkan.device) };
 	GUISpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGUI();
 	GUISpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGUI();
 	GUISpecific.cull = vk::CullModeFlagBits::eBack;
+	GUISpecific.face = vk::FrontFace::eClockwise;
 	GUISpecific.pushConstantRange = vk::PushConstantRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4 };
 	GUISpecific.sampleCount = vk::SampleCountFlagBits::e1;
 	GUISpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
@@ -2929,7 +3032,7 @@ PipelineInfo Context::getPipelineSpecificationsDeferred()
 	deferredSpecific.pushConstantRange = vk::PushConstantRange();//{ vk::ShaderStageFlagBits::eFragment, 0, sizeof(vec4) };
 	deferredSpecific.shaders = { "shaders/Deferred/vert.spv", "shaders/Deferred/frag.spv" };
 	deferredSpecific.renderPass = deferred.renderPass;
-	deferredSpecific.viewportSize = { vulkan.surface->actualExtent.width, vulkan.surface->actualExtent.height };
+	deferredSpecific.viewportSize = { WIDTH, HEIGHT };
 	deferredSpecific.sampleCount = vk::SampleCountFlagBits::e1;
 	deferredSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(vulkan.device), Mesh::getDescriptorSetLayout(vulkan.device) };
 	deferredSpecific.specializationInfo = vk::SpecializationInfo();

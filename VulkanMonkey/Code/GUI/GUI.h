@@ -26,6 +26,7 @@ namespace vm {
 		static bool			randomize_lights;
 		static int			fps;
 		static float		cameraSpeed;
+		static std::array<float, 3>	depthBias;
 		static std::array<float, 4>	clearColor;
 
 		static SDL_Window*  g_Window;

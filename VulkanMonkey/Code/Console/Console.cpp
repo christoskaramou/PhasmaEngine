@@ -69,9 +69,9 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 	if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" }); AddLog("loading..."); } ImGui::SameLine();
 	if (ImGui::SmallButton("Load Sponza PBR")) { Queue::loadModel.push_back({ "objects/sponza/", "sponzaPBR.obj" }); AddLog("loading..."); } ImGui::SameLine();
 	//if (ImGui::SmallButton("Load VC gltf")) { Queue::loadModel.push_back({ "objects/VC/glTF/", "VC.glTF" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load Suzanne")) { Queue::loadModel.push_back({ "objects/Suzanne/glTF/", "Suzanne.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load BoomBox")) { Queue::loadModel.push_back({ "objects/BoomBox/glTF/", "BoomBox.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	if (ImGui::SmallButton("Load Suzanne")) { Queue::loadModel.push_back({ "objects/Suzanne/glTF/", "Suzanne.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	if (ImGui::SmallButton("Load BoomBox")) { Queue::loadModel.push_back({ "objects/BoomBox/glTF/", "BoomBox.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 
 	if (ImGui::SmallButton("Clear")) { ClearLog(); } ImGui::SameLine();
 	bool copy_to_clipboard = ImGui::SmallButton("Copy"); ImGui::SameLine();

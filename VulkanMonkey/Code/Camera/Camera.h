@@ -20,34 +20,26 @@ namespace vm {
 		};
 
 		mat4 view;
-		mat4 perspective;
+		mat4 projection;
 		mat4 invView;
-		mat4 invPerspective;
-		mat4 invViewPerspective;
+		mat4 invProjection;
+		mat4 invViewProjection;
 		quat orientation;
 		vec3 position, euler, worldOrientation;
+		vec3 front, right, up;
 		float nearPlane, farPlane, FOV, speed, rotationSpeed;
 		SurfaceTargetArea renderArea;
+		vec4 frustum[6];
 
 		Camera();
 		void update();
 		void updatePerspective();
 		void updateView();
-		void move(RelativeDirection direction, float velocity);
-		void rotate(float xoffset, float yoffset);
-		mat4 getPerspective();
-		mat4 getView();
-		mat4 getInvPerspective();
-		mat4 getInvView();
-		mat4 getInvViewPerspective();
 		vec3 worldFront() const;
 		vec3 worldRight() const;
 		vec3 worldUp() const;
-		vec3 front() const;
-		vec3 right() const;
-		vec3 up() const;
-
-		vec4 frustum[6];
+		void move(RelativeDirection direction, float velocity);
+		void rotate(float xoffset, float yoffset);
 		void ExtractFrustum(const mat4& model);
 		bool SphereInFrustum(const vec4& boundingSphere) const;
 	};

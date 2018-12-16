@@ -4,6 +4,11 @@
 #include "../../include/Vulkan.h"
 #include "../../include/SDL.h"
 
+#define WIDTH VulkanContext::getVulkanContext().surface->actualExtent.width
+#define HEIGHT VulkanContext::getVulkanContext().surface->actualExtent.height
+#define WIDTH_f static_cast<float>(WIDTH)
+#define HEIGHT_f static_cast<float>(HEIGHT)
+
 namespace vm {
 
 	struct Image;

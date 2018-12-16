@@ -6,8 +6,6 @@
 //
 
 #version 450
-#extension GL_ARB_separate_shader_objects : enable
-#extension GL_ARB_shading_language_420pack : enable
 
 const float PI = 3.141592653589793f;
 
@@ -58,6 +56,7 @@ float D_GGX(float a, float NdotH);
 vec3 Diffuse_OrenNayar(vec3 DiffuseColor, float Roughness, float NoV, float NoL, float VoH);
 vec3 BRDF(Material material, int i, vec3 normal, vec3 camera_to_pixel);
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
+float shadowMultiSample(vec3 coords);
 vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
 
 vec3 getWorldPosFromUV(vec2 UV)
@@ -109,19 +108,16 @@ void main()
 		outColor += vec4(texture(ssrSampler, inUV).xyz, 0.0);
 	
 	outComposition = outColor;
-
-	//fragPos = normalize(fragPos);
-	//fragPos = fragPos * 0.5 + 0.5;
-	//outColor = vec4(fragPos, 1.0);
 }
 
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular)
 {
 	vec4 s_coords =  shadow_coords * vec4(fragPos, 1.0);
+	s_coords.xy = s_coords.xy * 0.5 + 0.5;
 	s_coords = s_coords / s_coords.w;
-	float shadow = 0.0;
-	for (int i = 0; i < 8 * castShadows; i++)
-		shadow += 0.125 * (1.0-texture( shadowMapSampler, vec3( s_coords.xy + poissonDisk[i]*0.0008, s_coords.z+0.0001 )));
+	float lit = 0.0;
+	for (int i = 0; i < 4 * castShadows; i++)
+		lit += 0.25 * (texture( shadowMapSampler, vec3( s_coords.xy + poissonDisk[i]*0.0008, s_coords.z+0.0001 )));
 
 	// Light to fragment
 	vec3 L = fragPos - ubo.lights[mainLight].position.xyz;
@@ -140,7 +136,8 @@ vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, floa
 	float RdotV = max(0.0, dot(R, V));
 	vec3 spec = ubo.lights[mainLight].color.xyz * specular * pow(RdotV, 32.0);
 
-	return shadow * (diff + spec);
+	lit *= dot(N, -L);
+	return lit * (diff + spec);
 }
 
 vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float specular)

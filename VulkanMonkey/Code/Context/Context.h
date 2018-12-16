@@ -125,6 +125,7 @@ namespace vm {
 		vk::RenderPass createSSRRenderPass();
 		vk::RenderPass createMotionBlurRenderPass();
 		vk::RenderPass createGUIRenderPass();
+		vk::RenderPass createShadowsRenderPass();
 		Image createDepthResources();
 		std::vector<vk::Framebuffer> createFrameBuffers();
 		std::vector<vk::Framebuffer> createDeferredFrameBuffers();
@@ -134,6 +135,7 @@ namespace vm {
 		std::vector<vk::Framebuffer> createSSAOBlurFrameBuffers();
 		std::vector<vk::Framebuffer> createMotionBlurFrameBuffers();
 		std::vector<vk::Framebuffer> createGUIFrameBuffers();
+		std::vector<vk::Framebuffer> createShadowsFrameBuffers();
 		std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount = 1);
 		vk::CommandBuffer createComputeCmdBuffer();
 		Pipeline createPipeline(const PipelineInfo& specificInfo);

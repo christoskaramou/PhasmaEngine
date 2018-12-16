@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
 			break;
 
 		for (auto& renderer : Window::renderer) {
-			renderer->update(timer.getDelta());
+			renderer->update();
 			renderer->present();
 		}
 	}
