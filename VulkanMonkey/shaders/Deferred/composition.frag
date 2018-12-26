@@ -263,5 +263,5 @@ vec3 BRDFShadows(Material material, vec3 fragPos, vec3 normal, int light)
 	    
 	// outgoing radiance
 	float NdotL = max(dot(N, L), 0.0);                
-	return (kD * material.albedo / PI + specular) * radiance * NdotL * lit; 
+	return (kD * material.albedo / PI + specular) * radiance * NdotL * lit * 1.5; //intensity; 
 }
