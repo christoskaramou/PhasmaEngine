@@ -29,8 +29,8 @@ void Context::initVulkanContext()
 	vulkan.commandPool = createCommandPool();
 	vulkan.commandPoolCompute = createComputeCommadPool();
 	vulkan.descriptorPool = createDescriptorPool(2000); // max number of all descriptor sets to allocate
-	vulkan.dynamicCmdBuffer = createCmdBuffers(1)[0];
-	vulkan.shadowCmdBuffer = createCmdBuffers(1)[0];
+	vulkan.dynamicCmdBuffer = createCmdBuffers()[0];
+	vulkan.shadowCmdBuffer = createCmdBuffers()[0];
 	vulkan.computeCmdBuffer = createComputeCmdBuffer();
 	vulkan.depth = new Image(createDepthResources());
 }
@@ -38,10 +38,10 @@ void Context::initVulkanContext()
 void Context::initRendering()
 {
 	addRenderTarget("depth", vk::Format::eR32Sfloat);
-	addRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat); // increased precision for some banding errors
 	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
-	addRenderTarget("ssao", vk::Format::eR8Unorm);
+	addRenderTarget("ssao", vk::Format::eR16Unorm);
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
@@ -1165,7 +1165,7 @@ std::vector<vk::Framebuffer> Context::createSSAOBlurFrameBuffers()
 		};
 
 		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(ssao.renderPass)
+			.setRenderPass(ssao.blurRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(WIDTH)
@@ -1560,7 +1560,7 @@ Pipeline Context::createCompositionPipeline()
 		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
 		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
 		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eCounterClockwise,				// FrontFace frontFace;
+		vk::FrontFace::eClockwise,						// FrontFace frontFace;
 		VK_FALSE,										// Bool32 depthBiasEnable;
 		0.0f,											// float depthBiasConstantFactor;
 		0.0f,											// float depthBiasClamp;
@@ -1810,7 +1810,7 @@ Pipeline Context::createSSRPipeline()
 		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
 		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
 		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eCounterClockwise,				// FrontFace frontFace;
+		vk::FrontFace::eClockwise,						// FrontFace frontFace;
 		VK_FALSE,										// Bool32 depthBiasEnable;
 		0.0f,											// float depthBiasConstantFactor;
 		0.0f,											// float depthBiasClamp;
@@ -2035,7 +2035,7 @@ Pipeline Context::createSSAOPipeline()
 		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
 		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
 		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eCounterClockwise,						// FrontFace frontFace;
+		vk::FrontFace::eClockwise,						// FrontFace frontFace;
 		VK_FALSE,										// Bool32 depthBiasEnable;
 		0.0f,											// float depthBiasConstantFactor;
 		0.0f,											// float depthBiasClamp;
@@ -2265,7 +2265,7 @@ Pipeline Context::createSSAOBlurPipeline()
 		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
 		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
 		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eCounterClockwise,				// FrontFace frontFace;
+		vk::FrontFace::eClockwise,						// FrontFace frontFace;
 		VK_FALSE,										// Bool32 depthBiasEnable;
 		0.0f,											// float depthBiasConstantFactor;
 		0.0f,											// float depthBiasClamp;
@@ -2459,7 +2459,7 @@ Pipeline Context::createMotionBlurPipeline()
 		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
 		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
 		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eCounterClockwise,						// FrontFace frontFace;
+		vk::FrontFace::eClockwise,						// FrontFace frontFace;
 		VK_FALSE,										// Bool32 depthBiasEnable;
 		0.0f,											// float depthBiasConstantFactor;
 		0.0f,											// float depthBiasClamp;
@@ -2837,10 +2837,10 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	*vulkan.depth = createDepthResources();
 
 	addRenderTarget("depth", vk::Format::eR32Sfloat);
-	addRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat); // increased precision for some banding errors
 	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
-	addRenderTarget("ssao", vk::Format::eR8Unorm);
+	addRenderTarget("ssao", vk::Format::eR16Unorm);
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
@@ -2924,6 +2924,7 @@ PipelineInfo Context::getPipelineSpecificationsModel()
 		static_cast<uint32_t>(generalSpecific.dynamicStates.size()),
 		generalSpecific.dynamicStates.data()
 	};
+	generalSpecific.blendAttachmentStates = { generalSpecific.blendAttachmentStates[0] };
 
 	return generalSpecific;
 }

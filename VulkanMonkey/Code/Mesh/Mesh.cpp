@@ -71,43 +71,73 @@ void Mesh::loadTexture(TextureType type, const std::string& folderPath, const st
 	Image* tex = nullptr;
 	switch (type)
 	{
-	case Mesh::RoughnessMap:
-		tex = &roughnessTexture;
-		if (texName == "")
-			path = "objects/defaultSpecularMap.png";
-		break;
-	case Mesh::MetallicMap:
-		tex = &metallicTexture;
-		if (texName == "")
-			path = "objects/defaultSpecularMap.png";
-		break;
-	case Mesh::SpecularMap:
-		tex = &specularTexture;
-		if (texName == "")
-			path = "objects/defaultSpecularMap.png";
-		break;
 	case Mesh::DiffuseMap:
-		tex = &texture;
+		tex = &material.textureDiffuse;
 		if (texName == "")
 			path = "objects/default.png";
 		break;
-	case Mesh::AlphaMap:
-		tex = &alphaTexture;
+	case Mesh::SpecularMap:
+		tex = &material.textureSpecular;
+		if (texName == "")
+			path = "objects/defaultSpecularMap.png";
+		break;
+	case Mesh::AmbientMap:
+		tex = &material.textureAmbient;
+		if (texName == "")
+			path = "objects/defaultSpecularMap.png";
+		break;
+	case Mesh::EmissiveMap:
+		tex = &material.textureEmissive;
+		if (texName == "")
+			path = "objects/defaultSpecularMap.png";
+		break;
+	case Mesh::HeightMap:
+		tex = &material.textureHeight;
+		if (texName == "")
+			path = "objects/defaultSpecularMap.png";
+		break;
+	case Mesh::NormalsMap:
+		tex = &material.textureNormals;
+		if (texName == "")
+			path = "objects/defaultNormalMap.png";
+		break;
+	case Mesh::ShininessMap:
+		tex = &material.textureShininess;
+		if (texName == "")
+			path = "objects/defaultSpecularMap.png";
+		break;
+	case Mesh::OpacityMap:
+		tex = &material.textureOpacity;
 		if (texName == "")
 			path = "objects/default.png";
 		else
 			hasAlpha = true;
 		break;
-	case Mesh::NormalMap:
-		tex = &normalsTexture;
+	case Mesh::DisplacementMap:
+		tex = &material.textureDisplacement;
 		if (texName == "")
-			path = "objects/defaultNormalMap.png";
+			path = "objects/defaultSpecularMap.png";
+		break;
+	case Mesh::LightMap: //Ambient Occlusion
+		tex = &material.textureLight;
+		if (texName == "")
+			path = "objects/default.png";
+		break;
+	case Mesh::ReflectionMap:
+		tex = &material.textureReflection;
+		if (texName == "")
+			path = "objects/default.png";
+		break;
+	case Mesh::MetallicRoughness:
+		tex = &gltfMaterial.metallicRoughnessTexture;
+		if (texName == "")
+			path = "objects/default.png";
 		break;
 	default:
 		exit(-19);
 	}
 
-	// Check if it is already loaded in the 
+	// Check if it is already loaded
 	if (uniqueTextures.find(path) != uniqueTextures.end()) {
 		*tex = uniqueTextures[path];
 	}
@@ -150,17 +180,14 @@ void Mesh::loadTexture(TextureType type, const std::string& folderPath, const st
 
 void Mesh::calculateBoundingSphere()
 {
-	float maxX = 0, maxY = 0, maxZ = 0, minX = FLT_MAX, minY = FLT_MAX, minZ = FLT_MAX;
+	vec3 _max(-FLT_MAX);
+	vec3 _min(FLT_MAX);
 	for (auto& vertex : vertices) {
-		if (vertex.x > maxX) maxX = vertex.x;
-		if (vertex.y > maxY) maxY = vertex.y;
-		if (vertex.z > maxZ) maxZ = vertex.z;
-		if (vertex.x < minX) minX = vertex.x;
-		if (vertex.y < minY) minY = vertex.y;
-		if (vertex.z < minZ) minZ = vertex.z;
+		_max = maximum(_max, vertex.position);
+		_min = minimum(_min, vertex.position);
 	}
-	vec3 center = (vec3(maxX, maxY, maxZ) + vec3(minX, minY, minZ)) * .5f;
-	float sphereRadius = length(vec3(maxX, maxY, maxZ) - center);
+	vec3 center = (_max + _min) * .5f;
+	float sphereRadius = length(_max - center);
 	boundingSphere = vec4(center, sphereRadius);
 }
 
@@ -171,10 +198,10 @@ vec4 vm::Mesh::getBoundingSphere() const
 
 void Mesh::destroy()
 {
-	texture.destroy();
-	normalsTexture.destroy();
-	specularTexture.destroy();
-	alphaTexture.destroy();
+	material.textureDiffuse.destroy();
+	material.textureNormals.destroy();
+	material.textureSpecular.destroy();
+	material.textureOpacity.destroy();
 	vertices.clear();
 	vertices.shrink_to_fit();
 	indices.clear();

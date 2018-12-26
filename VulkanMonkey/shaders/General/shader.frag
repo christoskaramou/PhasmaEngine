@@ -76,10 +76,10 @@ vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, floa
 		lit += 0.25 * (texture( shadowMapSampler, vec3( s_coords.xy + poissonDisk[i]*0.0008, s_coords.z+0.0001 )));
 
 	// Light to fragment
-	vec3 L = fragPos - ubo.lights[mainLight].position.xyz;
+	vec3 L = ubo.lights[mainLight].position.xyz - fragPos;
 
 	// Viewer to fragment
-	vec3 V = fragPos - ubo.camPos.xyz;
+	vec3 V = ubo.camPos.xyz - fragPos;
 
 	// Diffuse part
 	vec3 diff = ubo.lights[mainLight].color.rgb * albedo * ubo.lights[mainLight].color.a;
@@ -92,22 +92,20 @@ vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, floa
 	float RdotV = max(0.0, dot(R, V));
 	vec3 spec = ubo.lights[mainLight].color.rgb * specular * pow(RdotV, 32.0);
 
-	lit *= dot(N, -L);
+	lit *= dot(N, L);
 	return lit * (diff + spec);
 }
 
 vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float specular)
 {
 	// Light to fragment
-	vec3 L =  fragPos - ubo.lights[light].position.xyz;
+	vec3 L = ubo.lights[light].position.xyz - fragPos;
 
 	// Distance from light to fragment
 	float dist = length(L);
-	if (dist > ubo.lights[light].attenuation.x*5.0)
-		return vec3(0.0);
 
 	// Viewer to fragment
-	vec3 V = fragPos - ubo.camPos.xyz;
+	vec3 V = ubo.camPos.xyz - fragPos;
 
 	// Diffuse part
 	L = normalize(L);
@@ -122,7 +120,7 @@ vec3 calculateColor(int light, vec3 fragPos, vec3 normal, vec3 albedo, float spe
 	vec3 spec = ubo.lights[light].color.rgb * specular * pow(RdotV, 32.0);
 	
 	// Attenuation
-	float atten = 1.0 / (1.0 + ubo.lights[light].attenuation.x * pow(dist, 2));
+	float atten = 1.0 / (1.0 + 3.6 * dist + 7.06 * (dist * dist));
 
 	return atten * (diff + spec);
 }

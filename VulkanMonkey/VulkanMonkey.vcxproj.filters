@@ -192,6 +192,12 @@
     <ClInclude Include="Code\Window\Window.h">
       <Filter>Code\Window</Filter>
     </ClInclude>
+    <ClInclude Include="include\stb_image\stb_image_write.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Material\Material.h">
+      <Filter>Code\Material</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -295,6 +301,9 @@
     </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="include\stb_image\stb_image_write.cpp">
+      <Filter>Include</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -429,6 +438,9 @@
     </Filter>
     <Filter Include="Shaders\SSR">
       <UniqueIdentifier>{5ba48d8f-b259-4246-a771-c0fa1ab016c3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Material">
+      <UniqueIdentifier>{6a5f8731-cf08-4933-9564-202ed73b006b}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

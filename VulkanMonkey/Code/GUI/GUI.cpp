@@ -69,8 +69,8 @@ void GUI::setWindows()
 	ImGui::InputInt("FPS", &fps, 1, 15); if (fps < 10) fps = 10;
 	ImGui::InputFloat("Camera Speed", &cameraSpeed, 0.1f, 1.f, 3);
 	ImGui::SliderFloat4("Clear Color", (float*)clearColor.data(), 0.0f, 1.0f);
-	ImGui::InputFloat("Depth Bias", &depthBias[0], 0.15f, 0.5f, 5);
-	ImGui::InputFloat("Depth Clamp", &depthBias[1], 0.15f, 0.5f, 5);
+	ImGui::InputFloat("Depth Bias", &depthBias[0], 0.00001f, 0.0002f, 5);
+	ImGui::InputFloat("Depth Clamp", &depthBias[1], 0.00001f, 0.0002f, 5);
 	ImGui::InputFloat("Depth Slope", &depthBias[2], 0.15f, 0.5f, 5);
 	mlPanelPos = ImGui::GetWindowPos();
 	mlPanelSize = ImGui::GetWindowSize();

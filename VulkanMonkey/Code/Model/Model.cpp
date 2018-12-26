@@ -3,6 +3,7 @@
 #include "../../include/assimp/scene.h"           // Output data structure
 #include "../../include/assimp/postprocess.h"     // Post processing flags
 #include "../../include/assimp/DefaultLogger.hpp"
+#include "../../include/assimp/pbrmaterial.h"
 
 using namespace vm;
 
@@ -45,8 +46,20 @@ std::string getTextureName(const aiMaterial& material, const aiTextureType& type
 	return aiTexName.C_Str();
 }
 
-void Model::loadModel(const std::string folderPath, const std::string modelName, bool show)
+bool endsWith(const std::string &mainStr, const std::string &toMatch)
 {
+	if (mainStr.size() >= toMatch.size() &&
+		mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
+		return true;
+	else
+		return false;
+}
+
+void Model::loadModel(const std::string& folderPath, const std::string& modelName, bool show)
+{
+	bool gltfModel = false;
+	if (endsWith(modelName, "gltf"))
+		gltfModel = true;
 	// Materials, Vertices and Indices load
 	Assimp::Logger::LogSeverity severity = Assimp::Logger::VERBOSE;
 	// Create a logger instance for Console Output
@@ -55,9 +68,9 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 	Assimp::Importer importer;
 	const aiScene* scene = importer.ReadFile(folderPath + modelName,
 		//aiProcess_MakeLeftHanded |
-		aiProcess_FlipUVs |
+		//aiProcess_FlipUVs |
 		//aiProcess_FlipWindingOrder |
-		//aiProcess_ConvertToLeftHanded |
+		aiProcess_ConvertToLeftHanded |
 		aiProcess_JoinIdenticalVertices |
 		aiProcess_Triangulate |
 		aiProcess_GenSmoothNormals |
@@ -70,18 +83,6 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 	if (!scene) exit(-100);
 
 	std::vector<aiNode*> allNodes = getAllNodes(scene->mRootNode);
-
-	// for each different type it will search for the corresponding material in mesh if possible
-	std::vector<std::tuple<aiTextureType, Mesh::TextureType>> textureType
-	{
-		{aiTextureType_SHININESS, Mesh::RoughnessMap},
-		{aiTextureType_AMBIENT, Mesh::MetallicMap},
-		{aiTextureType_DIFFUSE, Mesh::DiffuseMap},
-		{aiTextureType_NORMALS, Mesh::NormalMap},
-		{aiTextureType_SPECULAR, Mesh::SpecularMap},
-		{aiTextureType_OPACITY, Mesh::AlphaMap}
-	};
-
 	for (auto& node : allNodes) {
 		mat4 transform = getTranform(*node);
 		for (unsigned int i = 0; i < node->mNumMeshes; i++) {
@@ -89,26 +90,6 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 			myMesh.transform = transform;
 
 			const aiMesh& mesh = *scene->mMeshes[node->mMeshes[i]];
-			const aiMaterial& material = *scene->mMaterials[mesh.mMaterialIndex];
-
-			aiColor3D aiAmbient(0.f, 0.f, 0.f);
-			material.Get(AI_MATKEY_COLOR_AMBIENT, aiAmbient);
-			myMesh.colorEffects.ambient = { aiAmbient.r, aiAmbient.g, aiAmbient.b, 0.f };
-
-			aiColor3D aiDiffuse(1.f, 1.f, 1.f);
-			material.Get(AI_MATKEY_COLOR_DIFFUSE, aiDiffuse);
-			float aiOpacity = 1.f;
-			material.Get(AI_MATKEY_OPACITY, aiOpacity);
-			myMesh.colorEffects.diffuse = { aiDiffuse.r, aiDiffuse.g, aiDiffuse.b, aiOpacity };
-
-			aiColor3D aiSpecular(0.f, 0.f, 0.f);
-			material.Get(AI_MATKEY_COLOR_SPECULAR, aiSpecular);
-			myMesh.colorEffects.specular = { aiSpecular.r, aiSpecular.g, aiSpecular.b, 100.f };
-
-			// texture maps loading
-			for (auto& type : textureType)
-				myMesh.loadTexture(std::get<1>(type), folderPath, getTextureName(material, std::get<0>(type)));
-
 			for (unsigned int j = 0; j < mesh.mNumVertices; j++) {
 				myMesh.vertices.push_back({
 					reinterpret_cast<float*>(&(mesh.HasPositions() ? mesh.mVertices[j] : aiVector3D(0.f, 0.f, 0.f))),
@@ -117,7 +98,7 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 					reinterpret_cast<float*>(&(mesh.HasTangentsAndBitangents() ? mesh.mTangents[j] : aiVector3D(0.f, 0.f, 0.f))),
 					reinterpret_cast<float*>(&(mesh.HasTangentsAndBitangents() ? mesh.mBitangents[j] : aiVector3D(0.f, 0.f, 0.f))),
 					reinterpret_cast<float*>(&(mesh.HasVertexColors(0) ? mesh.mColors[0][j] : aiColor4D(1.f, 1.f, 1.f, 1.f)))
-				});
+					});
 			}
 			for (unsigned int i = 0; i < mesh.mNumFaces; i++) {
 				const aiFace& Face = mesh.mFaces[i];
@@ -126,29 +107,63 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 				myMesh.indices.push_back(Face.mIndices[1]);
 				myMesh.indices.push_back(Face.mIndices[2]);
 			}
+
+			const aiMaterial& material = *scene->mMaterials[mesh.mMaterialIndex];
+			// factors
+			material.Get(AI_MATKEY_COLOR_DIFFUSE, *reinterpret_cast<aiColor3D*>(&myMesh.material.colorDiffuse));
+			material.Get(AI_MATKEY_COLOR_SPECULAR, *reinterpret_cast<aiColor3D*>(&myMesh.material.colorSpecular));
+			material.Get(AI_MATKEY_COLOR_AMBIENT, *reinterpret_cast<aiColor3D*>(&myMesh.material.colorAmbient));
+			material.Get(AI_MATKEY_COLOR_EMISSIVE, *reinterpret_cast<aiColor3D*>(&myMesh.material.colorEmissive));
+			material.Get(AI_MATKEY_COLOR_TRANSPARENT, *reinterpret_cast<aiColor3D*>(&myMesh.material.colorTransparent));
+			material.Get(AI_MATKEY_ENABLE_WIREFRAME, myMesh.material.wireframe);
+			material.Get(AI_MATKEY_TWOSIDED, myMesh.material.twoSided);
+			material.Get(AI_MATKEY_SHADING_MODEL, myMesh.material.shadingModel);
+			material.Get(AI_MATKEY_BLEND_FUNC, myMesh.material.blendFunc);
+			material.Get(AI_MATKEY_OPACITY, myMesh.material.opacity);
+			material.Get(AI_MATKEY_SHININESS, myMesh.material.shininess);
+			material.Get(AI_MATKEY_SHININESS_STRENGTH, myMesh.material.shininessStrength);
+			material.Get(AI_MATKEY_REFRACTI, myMesh.material.refraction);
+			// textures
+			myMesh.loadTexture(Mesh::DiffuseMap, folderPath, getTextureName(material, aiTextureType_DIFFUSE));
+			myMesh.loadTexture(Mesh::SpecularMap, folderPath, getTextureName(material, aiTextureType_SPECULAR));
+			myMesh.loadTexture(Mesh::AmbientMap, folderPath, getTextureName(material, aiTextureType_AMBIENT));
+			myMesh.loadTexture(Mesh::EmissiveMap, folderPath, getTextureName(material, aiTextureType_EMISSIVE));
+			myMesh.loadTexture(Mesh::HeightMap, folderPath, getTextureName(material, aiTextureType_HEIGHT));
+			myMesh.loadTexture(Mesh::NormalsMap, folderPath, getTextureName(material, aiTextureType_NORMALS));
+			myMesh.loadTexture(Mesh::ShininessMap, folderPath, getTextureName(material, aiTextureType_SHININESS));
+			myMesh.loadTexture(Mesh::OpacityMap, folderPath, getTextureName(material, aiTextureType_OPACITY));
+			myMesh.loadTexture(Mesh::DisplacementMap, folderPath, getTextureName(material, aiTextureType_DISPLACEMENT));
+			myMesh.loadTexture(Mesh::LightMap, folderPath, getTextureName(material, aiTextureType_LIGHTMAP));
+			myMesh.loadTexture(Mesh::ReflectionMap, folderPath, getTextureName(material, aiTextureType_REFLECTION));
+			if (gltfModel) {
+				// factors
+				material.Get(AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_BASE_COLOR_FACTOR, *reinterpret_cast<aiColor4D*>(&myMesh.gltfMaterial.baseColorFactor));
+				material.Get(AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_METALLIC_FACTOR, myMesh.gltfMaterial.metallicFactor);
+				material.Get(AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_ROUGHNESS_FACTOR, myMesh.gltfMaterial.roughnessFactor);
+				std::swap(myMesh.gltfMaterial.emissiveFactor, myMesh.material.colorEmissive);
+				material.Get(AI_MATKEY_GLTF_ALPHACUTOFF, myMesh.gltfMaterial.alphaCutoff);
+				std::swap(myMesh.gltfMaterial.doubleSided, myMesh.material.twoSided);
+				// textures
+				std::swap(myMesh.gltfMaterial.baseColorTexture, myMesh.material.textureDiffuse);
+				myMesh.loadTexture(Mesh::MetallicRoughness, folderPath, getTextureName(material, aiTextureType_UNKNOWN));
+				std::swap(myMesh.gltfMaterial.normalTexture, myMesh.material.textureNormals);
+				std::swap(myMesh.gltfMaterial.occlusionTexture, myMesh.material.textureLight);
+				std::swap(myMesh.gltfMaterial.emissiveTexture, myMesh.material.textureEmissive);
+			}
 			meshes.push_back(myMesh);
 		}
 	}
+	// Free assimp resources
+	importer.FreeScene();
+
 	std::sort(meshes.begin(), meshes.end(), [](Mesh& a, Mesh& b) -> bool { return a.hasAlpha < b.hasAlpha; });
 	float factor = 20.f / getBoundingSphere().w;
 	for (auto &m : meshes) {
 		for (auto& v : m.vertices) {
-			vec3 pos = m.transform * vec4(v.x, v.y, v.z, 1.f) * factor;
-			vec3 norm = m.transform * vec4(v.nX, v.nY, v.nZ, 0.f);
-			vec3 tang = m.transform * vec4(v.tX, v.tY, v.tZ, 0.f);
-			vec3 btang = m.transform * vec4(v.bX, v.bY, v.bZ, 0.f);
-			v.x = pos.x;
-			v.y = pos.y;
-			v.z = pos.z;
-			v.nX = norm.x;
-			v.nY = norm.y;
-			v.nZ = norm.z;
-			v.tX = tang.x;
-			v.tY = tang.y;
-			v.tZ = tang.z;
-			v.bX = btang.x;
-			v.bY = btang.y;
-			v.bZ = btang.z;
+			v.position = m.transform * vec4(v.position, 1.f) * factor;
+			v.normals = normalize(m.transform * vec4(v.normals, 0.f));
+			v.tangents = normalize(m.transform * vec4(v.tangents, 0.f));
+			v.bitangents = normalize(m.transform * vec4(v.bitangents, 0.f));
 		}
 		m.calculateBoundingSphere();
 		m.vertexOffset = numberOfVertices;
@@ -157,12 +172,12 @@ void Model::loadModel(const std::string folderPath, const std::string modelName,
 		numberOfIndices += static_cast<uint32_t>(m.indices.size());
 	}
 
+	name = modelName;
+	render = show;
 	createVertexBuffer();
 	createIndexBuffer();
 	createUniformBuffers();
 	createDescriptorSets();
-	name = modelName;
-	render = show;
 }
 
 void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows, vk::DescriptorSet* DSLights)
@@ -195,12 +210,12 @@ vec4 Model::getBoundingSphere()
 {
 	for (auto& mesh : meshes) {
 		for (auto& vertex : mesh.vertices) {
-			float temp = length(vec3(vertex.x, vertex.y, vertex.z));
+			float temp = length(vertex.position);
 			if (temp > boundingSphere.w)
 				boundingSphere.w = temp;
 		}
 	}
-	return boundingSphere;
+	return boundingSphere; // unscaled bounding sphere with 0,0,0 origin
 }
 
 vk::DescriptorSetLayout Model::getDescriptorSetLayout(vk::Device device)
@@ -295,6 +310,10 @@ void Model::createDescriptorSets()
 
 	vulkan->device.updateDescriptorSets(mvpWriteSet, nullptr);
 
+	bool gltfModel = false;
+	if (endsWith(name, "gltf"))
+		gltfModel = true;
+
 	for (auto& mesh : meshes) {
 		auto const allocateInfo = vk::DescriptorSetAllocateInfo()
 			.setDescriptorPool(vulkan->descriptorPool)
@@ -305,6 +324,13 @@ void Model::createDescriptorSets()
 		// Texture
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(6);
 
+		Image& baseColor = gltfModel ? mesh.gltfMaterial.baseColorTexture : mesh.material.textureDiffuse;
+		Image& normals = gltfModel ? mesh.gltfMaterial.normalTexture : mesh.material.textureNormals;
+		Image& specORroughMetal = gltfModel ? mesh.gltfMaterial.metallicRoughnessTexture : mesh.material.textureSpecular;
+		Image& opacity = mesh.material.textureOpacity;
+		Image& shininessOremissive = gltfModel ? mesh.gltfMaterial.emissiveTexture : mesh.material.textureShininess;
+		Image& ambientORao = gltfModel ? mesh.gltfMaterial.occlusionTexture : mesh.material.textureAmbient;
+
 		textureWriteSets[0] = vk::WriteDescriptorSet()
 			.setDstSet(mesh.descriptorSet)									// DescriptorSet dstSet;
 			.setDstBinding(0)												// uint32_t dstBinding;
@@ -312,8 +338,8 @@ void Model::createDescriptorSets()
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(mesh.texture.sampler)								// Sampler sampler;
-				.setImageView(mesh.texture.view)								// ImageView imageView;
+				.setSampler(baseColor.sampler)									// Sampler sampler;
+				.setImageView(baseColor.view)									// ImageView imageView;
 				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
 		textureWriteSets[1] = vk::WriteDescriptorSet()
@@ -323,8 +349,8 @@ void Model::createDescriptorSets()
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(mesh.normalsTexture.sampler)						// Sampler sampler;
-				.setImageView(mesh.normalsTexture.view)							// ImageView imageView;
+				.setSampler(normals.sampler)									// Sampler sampler;
+				.setImageView(normals.view)										// ImageView imageView;
 				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
 		textureWriteSets[2] = vk::WriteDescriptorSet()
@@ -334,8 +360,8 @@ void Model::createDescriptorSets()
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(mesh.specularTexture.sampler)						// Sampler sampler;
-				.setImageView(mesh.specularTexture.view)						// ImageView imageView;
+				.setSampler(specORroughMetal.sampler)							// Sampler sampler;
+				.setImageView(specORroughMetal.view)							// ImageView imageView;
 				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
 		textureWriteSets[3] = vk::WriteDescriptorSet()
@@ -345,8 +371,8 @@ void Model::createDescriptorSets()
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(mesh.alphaTexture.sampler)							// Sampler sampler;
-				.setImageView(mesh.alphaTexture.view)							// ImageView imageView;
+				.setSampler(opacity.sampler)								// Sampler sampler;
+				.setImageView(opacity.view)									// ImageView imageView;
 				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
 		textureWriteSets[4] = vk::WriteDescriptorSet()
@@ -356,8 +382,8 @@ void Model::createDescriptorSets()
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(mesh.roughnessTexture.sampler)						// Sampler sampler;
-				.setImageView(mesh.roughnessTexture.view)						// ImageView imageView;
+				.setSampler(shininessOremissive.sampler)						// Sampler sampler;
+				.setImageView(shininessOremissive.view)							// ImageView imageView;
 				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
 		textureWriteSets[5] = vk::WriteDescriptorSet()
@@ -367,8 +393,8 @@ void Model::createDescriptorSets()
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(mesh.metallicTexture.sampler)						// Sampler sampler;
-				.setImageView(mesh.metallicTexture.view)						// ImageView imageView;
+				.setSampler(ambientORao.sampler)								// Sampler sampler;
+				.setImageView(ambientORao.view)									// ImageView imageView;
 				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
 		vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);

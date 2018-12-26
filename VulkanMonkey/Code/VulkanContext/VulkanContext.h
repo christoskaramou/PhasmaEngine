@@ -4,6 +4,8 @@
 #include "../../include/Vulkan.h"
 #include "../../include/SDL.h"
 
+#define VULKAN_CONTEXT_INSTANCES 2
+
 #define WIDTH VulkanContext::getVulkanContext().surface->actualExtent.width
 #define HEIGHT VulkanContext::getVulkanContext().surface->actualExtent.height
 #define WIDTH_f static_cast<float>(WIDTH)
@@ -16,10 +18,12 @@ namespace vm {
 	struct Swapchain;
 
 	struct VulkanContext {
-		static VulkanContext& getVulkanContext()
+		static VulkanContext& getVulkanContext(uint32_t index = 0)
 		{
-			static VulkanContext VkCTX;
-			return VkCTX;
+			static VulkanContext VkCTX[VULKAN_CONTEXT_INSTANCES];
+
+			assert(index < VULKAN_CONTEXT_INSTANCES);
+			return VkCTX[index];
 		}
 
 		SDL_Window* window;

@@ -3,14 +3,11 @@
 #include "../Math/Math.h"
 #include "../Vertex/Vertex.h"
 #include "../Image/Image.h"
+#include "../Material/Material.h"
 #include "../../include/Stbi.h"
 #include <map>
 
 namespace vm {
-	struct Effects {
-		vec4 specular, ambient, diffuse;
-	};
-
 	struct Mesh
 	{
 		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
@@ -25,24 +22,26 @@ namespace vm {
 		enum TextureType
 		{
 			DiffuseMap,
-			NormalMap,
 			SpecularMap,
-			AlphaMap,
-			RoughnessMap,
-			MetallicMap
+			AmbientMap,
+			EmissiveMap,
+			HeightMap,
+			NormalsMap,
+			ShininessMap,
+			OpacityMap,
+			DisplacementMap,
+			LightMap,
+			ReflectionMap,
+			MetallicRoughness
 		};
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
 		vk::DescriptorSet descriptorSet;
 		std::vector<Vertex> vertices{};
 		std::vector<uint32_t> indices{};
-		Image texture;
-		Image normalsTexture;
-		Image specularTexture;
-		Image alphaTexture;
-		Image roughnessTexture;
-		Image metallicTexture;
-		Effects colorEffects;
+
+		Material material;
+		GltfMaterial gltfMaterial;
 
 		void loadTexture(TextureType type, const std::string& folderPath, const std::string& texName);
 		void destroy();

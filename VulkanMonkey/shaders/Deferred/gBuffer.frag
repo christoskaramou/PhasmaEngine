@@ -1,11 +1,11 @@
 #version 450
 
-layout (set = 1, binding = 0) uniform sampler2D tSampler;
-layout (set = 1, binding = 1) uniform sampler2D normSampler;
-layout (set = 1, binding = 2) uniform sampler2D specSampler;
-layout (set = 1, binding = 3) uniform sampler2D alphaSampler;
-layout (set = 1, binding = 4) uniform sampler2D roughSampler;
-layout (set = 1, binding = 5) uniform sampler2D metalSampler;
+layout (set = 1, binding = 0) uniform sampler2D tSampler; // diffuse
+layout (set = 1, binding = 1) uniform sampler2D normSampler; // normals
+layout (set = 1, binding = 2) uniform sampler2D s_rm_Sampler; // specular or roughness-metallic
+layout (set = 1, binding = 3) uniform sampler2D alphaSampler; // alpha
+layout (set = 1, binding = 4) uniform sampler2D s_e_sampler; // shininess or emissive
+layout (set = 1, binding = 5) uniform sampler2D a_AO_Sampler; // ambient or AO
 
 layout (location = 0) in vec2 inUV;
 layout (location = 1) in vec3 inNormal;
@@ -32,5 +32,5 @@ void main() {
 	outDepth = gl_FragCoord.z;
 	outNormal = TBN * normSampler;
 	outAlbedo = vec4(texture(tSampler, inUV).xyz, alpha);
-	outSpecRoughMet = vec3(texture(specSampler, inUV).r, texture(roughSampler, inUV).r, texture(metalSampler, inUV).r);
+	outSpecRoughMet = vec3(texture(s_rm_Sampler, inUV).r, texture(s_rm_Sampler, inUV).g, texture(s_rm_Sampler, inUV).b);
 }

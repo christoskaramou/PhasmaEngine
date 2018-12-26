@@ -66,16 +66,28 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 
 	// TODO: display items starting from the bottom
 	ClearLog();
-	if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("TextureCoordinateTest")) { Queue::loadModel.push_back({ "objects/TextureCoordinateTest/glTF/", "TextureCoordinateTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("TextureSettingsTest")) { Queue::loadModel.push_back({ "objects/TextureSettingsTest/glTF/", "TextureSettingsTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("TextureTransformTest")) { Queue::loadModel.push_back({ "objects/TextureTransformTest/glTF/", "TextureTransformTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("VertexColorTest")) { Queue::loadModel.push_back({ "objects/VertexColorTest/glTF/", "VertexColorTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("MorphPrimitivesTest")) { Queue::loadModel.push_back({ "objects/MorphPrimitivesTest/glTF/", "MorphPrimitivesTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("MultiUVTest")) { Queue::loadModel.push_back({ "objects/MultiUVTest/glTF/", "MultiUVTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("NormalTangentMirrorTest")) { Queue::loadModel.push_back({ "objects/NormalTangentMirrorTest/glTF/", "NormalTangentMirrorTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("NormalTangentTest")) { Queue::loadModel.push_back({ "objects/NormalTangentTest/glTF/", "NormalTangentTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("OrientationTest")) { Queue::loadModel.push_back({ "objects/OrientationTest/glTF/", "OrientationTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("AlphaBlendModeTest")) { Queue::loadModel.push_back({ "objects/AlphaBlendModeTest/glTF/", "AlphaBlendModeTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load Sponza gltf")) { Queue::loadModel.push_back({ "objects/sponza/glTF/", "Sponza.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 	if (ImGui::SmallButton("Load Sponza PBR")) { Queue::loadModel.push_back({ "objects/sponza/", "sponzaPBR.obj" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load VC gltf")) { Queue::loadModel.push_back({ "objects/VC/glTF/", "VC.glTF" }); AddLog("loading..."); } ImGui::SameLine();
-	if (ImGui::SmallButton("Load Suzanne")) { Queue::loadModel.push_back({ "objects/Suzanne/glTF/", "Suzanne.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	if (ImGui::SmallButton("Load BoomBox")) { Queue::loadModel.push_back({ "objects/BoomBox/glTF/", "BoomBox.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-
+	//if (ImGui::SmallButton("Load Suzanne")) { Queue::loadModel.push_back({ "objects/Suzanne/glTF/", "Suzanne.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load BoomBox")) { Queue::loadModel.push_back({ "objects/BoomBox/glTF/", "BoomBox.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load MetalRoughSpheres")) { Queue::loadModel.push_back({ "objects/MetalRoughSpheres/Blend/", "MetalRoughSpheres.blend" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load Bugatti")) { Queue::loadModel.push_back({ "objects/bugatti/", "bugatti.obj" }); AddLog("loading..."); } ImGui::SameLine();
+	
 	if (ImGui::SmallButton("Clear")) { ClearLog(); } ImGui::SameLine();
-	bool copy_to_clipboard = ImGui::SmallButton("Copy"); ImGui::SameLine();
-	if (ImGui::SmallButton("Scroll to bottom")) ScrollToBottom = true;
+	//bool copy_to_clipboard = ImGui::SmallButton("Copy"); ImGui::SameLine();
+	//if (ImGui::SmallButton("Scroll to bottom")) ScrollToBottom = true;
 	//static float t = 0.0f; if (ImGui::GetTime() - t > 0.02f) { t = ImGui::GetTime(); AddLog("Spam %f", t); }
 
 	ImGui::Separator();
@@ -106,8 +118,8 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 	// and appending newly elements as they are inserted. This is left as a task to the user until we can manage to improve this example code!
 	// If your items are of variable size you may want to implement code similar to what ImGuiListClipper does. Or split your data into fixed height items to allow random-seeking into your list.
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 1)); // Tighten spacing
-	if (copy_to_clipboard)
-		ImGui::LogToClipboard();
+	//if (copy_to_clipboard)
+	//	ImGui::LogToClipboard();
 	ImVec4 col_default_text = ImGui::GetStyleColorVec4(ImGuiCol_Text);
 	for (int i = 0; i < Items.Size; i++)
 	{
@@ -121,8 +133,8 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 		ImGui::TextUnformatted(item);
 		ImGui::PopStyleColor();
 	}
-	if (copy_to_clipboard)
-		ImGui::LogFinish();
+	//if (copy_to_clipboard)
+	//	ImGui::LogFinish();
 	if (ScrollToBottom)
 		ImGui::SetScrollHereY(1.0f);
 	ScrollToBottom = false;

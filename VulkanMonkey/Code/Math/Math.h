@@ -240,6 +240,8 @@ namespace vm {
 	void clamp(float* const x, cfloat minX, cfloat maxX);
 	float minimum(cfloat a, cfloat b);
 	float maximum(cfloat a, cfloat b);
+	vec3 minimum(cvec3& v1, cvec3& v2);
+	vec3 maximum(cvec3& v1, cvec3& v2);
 	float rand(cfloat x1, cfloat x2);
 	float lerp(cfloat a, cfloat b, cfloat f);
 }

@@ -1311,6 +1311,20 @@ namespace vm {
 	{
 		return (a < b) ? b : a;
 	}
+	vec3 minimum(cvec3& v1, cvec3& v2)
+	{
+		return vec3(
+			minimum(v1.x, v2.x),
+			minimum(v1.y, v2.y),
+			minimum(v1.z, v2.z));
+	}
+	vec3 maximum(cvec3& v1, cvec3& v2)
+	{
+		return vec3(
+			maximum(v1.x, v2.x),
+			maximum(v1.y, v2.y),
+			maximum(v1.z, v2.z));
+	}
 
 	float rand(cfloat a, cfloat b)
 	{

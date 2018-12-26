@@ -3,40 +3,31 @@
 using namespace vm;
 
 Vertex::Vertex() :
-	x(0.f), y(0.f), z(0.f),
-	u(0.f), v(0.f),
-	nX(0.f), nY(0.f), nZ(0.f),
-	tX(0.f), tY(0.f), tZ(0.f),
-	bX(0.f), bY(0.f), bZ(0.f),
-	r(0.f), g(0.f), b(0.f), a(0.f)
-{ }
-
-Vertex::Vertex(cfloat x, cfloat y, cfloat z, cfloat u, cfloat v, cfloat nX, cfloat nY, cfloat nZ, cfloat tX, cfloat tY, cfloat tZ, cfloat bX, cfloat bY, cfloat bZ, cfloat r, cfloat g, cfloat b, cfloat a) :
-	x(x), y(y), z(z),
-	u(u), v(v),
-	nX(nX), nY(nY), nZ(nZ),
-	tX(tX), tY(tY), tZ(tZ),
-	bX(bX), bY(bY), bZ(bZ),
-	r(r), g(g), b(b), a(a)
+	position(),
+	uv(),
+	normals(),
+	tangents(),
+	bitangents(),
+	color()
 { }
 
 Vertex::Vertex(vec3 pos, vec2 uv, vec3 norm, vec3 tang, vec3 bitang, vec4 color) :
-	x(pos.x), y(pos.y), z(pos.z),
-	u(uv.x), v(uv.y),
-	nX(norm.x), nY(norm.y), nZ(norm.z),
-	tX(tang.x), tY(tang.y), tZ(tang.z),
-	bX(tang.x), bY(tang.y), bZ(tang.z),
-	r(color.x), g(color.y), b(color.z), a(color.w)
+	position(pos),
+	uv(uv),
+	normals(norm),
+	tangents(tang),
+	bitangents(bitang),
+	color(color)
 { }
 
 bool Vertex::operator==(const Vertex& other) const
 {
-	return x == other.x && y == other.y && z == other.z
-		&& u == other.u && v == other.v
-		&& nX == other.nX && nY == other.nY && nZ == other.nZ
-		&& tX == other.tX && tY == other.tY && tZ == other.tZ
-		&& bX == other.bX && bY == other.bY && bZ == other.bZ
-		&& r == other.r && g == other.g && b == other.b && a == other.a;
+	return position == other.position &&
+		uv == other.uv &&
+		normals == other.normals &&
+		tangents == other.tangents &&
+		bitangents == other.bitangents &&
+		color == other.color;
 }
 
 std::vector<vk::VertexInputBindingDescription> Vertex::getBindingDescriptionGeneral()
