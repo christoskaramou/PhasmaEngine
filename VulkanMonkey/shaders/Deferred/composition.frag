@@ -64,8 +64,8 @@ void main()
 
 	Material material;
 	material.albedo = albedo.xyz;
-	material.roughness = specRoughMet.y;
-	material.metallic = specRoughMet.z;
+	material.roughness = 1.0 - specRoughMet.y; // for pbr .obj models only, else the "1.0 - " should not be there
+	material.metallic = 1.0 - specRoughMet.z; // for pbr .obj models only, else the "1.0 - " should not be there
 	material.F0 = mix(vec3(0.04f), material.albedo, material.metallic);
 
 	// Ambient
