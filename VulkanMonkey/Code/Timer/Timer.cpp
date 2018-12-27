@@ -9,6 +9,8 @@ float				Timer::delta = 0.0f;
 float				Timer::time = 0.0f;
 unsigned			Timer::instances = 0;
 std::vector<float>	Timer::deltas(20, 0.f);
+std::chrono::high_resolution_clock::time_point Timer::frameStart = {};
+float				Timer::noWaitDelta = 0.f;
 
 Timer::Timer()
 {
@@ -18,6 +20,7 @@ Timer::Timer()
         exit(-1);
     }
     start = std::chrono::high_resolution_clock::now();
+	frameStart = start;
 }
 
 Timer::~Timer()

@@ -24,7 +24,7 @@
 #include "../Deferred/Deferred.h"
 #include "../Compute/Compute.h"
 #include "../Forward/Forward.h"
-
+#include "../Metrics/Metrics.h"
 #include <vector>
 #include <tuple>
 #include <map>
@@ -80,6 +80,9 @@ namespace vm {
 
 		// CAMERAS
 		std::vector<Camera> camera{};
+
+		//Metrics
+		Metrics metrics;
 
 		void initVulkanContext();
 		void initRendering();

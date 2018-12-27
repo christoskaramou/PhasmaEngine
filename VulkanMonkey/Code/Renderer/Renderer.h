@@ -3,6 +3,7 @@
 #include "../Node/Node.h"
 #include "../Queue/Queue.h"
 #include "../Math/Math.h"
+#include "../Timer/Timer.h"
 
 namespace vm {
 	class Renderer
@@ -14,6 +15,7 @@ namespace vm {
 		void present();
 
 		Context ctx;
+		float waitingTime = 0.f; // ms
 		bool prepared = false;
 		bool overloadedGPU = false;
 		bool useCompute = false;

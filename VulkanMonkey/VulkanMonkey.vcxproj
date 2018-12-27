@@ -219,6 +219,7 @@
     <ClInclude Include="Code\Material\Material.h" />
     <ClInclude Include="Code\Math\Math.h" />
     <ClInclude Include="Code\Mesh\Mesh.h" />
+    <ClInclude Include="Code\Metrics\Metrics.h" />
     <ClInclude Include="Code\Model\Model.h" />
     <ClInclude Include="Code\MotionBlur\MotionBlur.h" />
     <ClInclude Include="Code\Node\Node.h" />
@@ -263,6 +264,7 @@
     <ClCompile Include="Code\Light\Light.cpp" />
     <ClCompile Include="Code\Math\Math.cpp" />
     <ClCompile Include="Code\Mesh\Mesh.cpp" />
+    <ClCompile Include="Code\Metrics\Metrics.cpp" />
     <ClCompile Include="Code\Model\Model.cpp" />
     <ClCompile Include="Code\MotionBlur\MotionBlur.cpp" />
     <ClCompile Include="Code\Node\Node.cpp" />

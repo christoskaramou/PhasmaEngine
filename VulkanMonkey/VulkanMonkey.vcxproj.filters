@@ -198,6 +198,9 @@
     <ClInclude Include="Code\Material\Material.h">
       <Filter>Code\Material</Filter>
     </ClInclude>
+    <ClInclude Include="Code\Metrics\Metrics.h">
+      <Filter>Code\Metrics</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -304,6 +307,9 @@
     </ClCompile>
     <ClCompile Include="include\stb_image\stb_image_write.cpp">
       <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Metrics\Metrics.cpp">
+      <Filter>Code\Metrics</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -441,6 +447,9 @@
     </Filter>
     <Filter Include="Code\Material">
       <UniqueIdentifier>{6a5f8731-cf08-4933-9564-202ed73b006b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Metrics">
+      <UniqueIdentifier>{258cb5d3-a50f-46b3-84e1-e87a6fd2f915}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

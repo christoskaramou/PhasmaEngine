@@ -87,7 +87,7 @@ void main()
 
 	// SSR
 	if (screenSpace.effect.y > 0.5)
-		outColor += vec4(texture(ssrSampler, inUV).xyz, 0.0);
+		outColor += vec4(texture(ssrSampler, inUV).xyz, 0.0) * specRoughMet.x;
 	
 	outComposition = outColor;
 }

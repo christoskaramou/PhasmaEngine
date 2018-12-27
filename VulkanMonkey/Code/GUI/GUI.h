@@ -28,6 +28,9 @@ namespace vm {
 		static float		cameraSpeed;
 		static std::array<float, 3>	depthBias;
 		static std::array<float, 4>	clearColor;
+		static float		cpuTime;
+		static float		cpuWaitingTime;
+		static float		gpuTime;
 
 		static SDL_Window*  g_Window;
 		static Uint64       g_Time;

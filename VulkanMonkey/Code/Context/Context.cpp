@@ -86,6 +86,8 @@ void Context::initRendering()
 	shadows.pipeline = createPipeline(getPipelineSpecificationsShadows());
 
 	//camera.push_back(Camera());
+
+	metrics.initQueryPool();
 }
 
 void Context::loadResources()

@@ -18,6 +18,9 @@ int							GUI::fps = 60;
 float						GUI::cameraSpeed = 10.f;
 std::array<float, 3>		GUI::depthBias = { 0.0f, 0.0f, -6.2f };
 std::array<float, 4>		GUI::clearColor = { 0.0f, 0.31f, 0.483f, 0.0f };
+float						GUI::cpuTime = 0;
+float						GUI::cpuWaitingTime = 0;
+float						GUI::gpuTime = 0;
 
 vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
 SDL_Window*					GUI::g_Window = nullptr;
@@ -44,6 +47,8 @@ void GUI::setWindows()
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
 	ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+	ImGui::Text("CPU: %.3f (waited %.3f) ms/frame", cpuTime, cpuWaitingTime);
+	ImGui::Text("GPU: %.3f ms/frame", gpuTime);
 	ImGui::Separator();
 	tlPanelPos = ImGui::GetWindowPos();
 	tlPanelSize = ImGui::GetWindowSize();

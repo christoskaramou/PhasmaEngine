@@ -48,6 +48,7 @@ Renderer::~Renderer()
 	ctx.terrain.destroy();
 	ctx.gui.destroy();
 	ctx.lightUniforms.destroy();
+	ctx.metrics.destroy();
 	ctx.destroyVkContext();
 }
 
@@ -196,6 +197,8 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 		.setPClearValues(clearValues.data());
 
 	ctx.vulkan.dynamicCmdBuffer.begin(beginInfo);
+	ctx.vulkan.dynamicCmdBuffer.resetQueryPool(ctx.metrics.queryPool, 0, 2);
+	ctx.vulkan.dynamicCmdBuffer.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, ctx.metrics.queryPool, 0);
 	ctx.vulkan.dynamicCmdBuffer.setViewport(0, ctx.camera_main.renderArea.viewport);
 	ctx.vulkan.dynamicCmdBuffer.setScissor(0, ctx.camera_main.renderArea.scissor);
 
@@ -219,6 +222,7 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 	// GUI
 	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.gui.pipeline, ctx.vulkan.dynamicCmdBuffer);
 
+	ctx.vulkan.dynamicCmdBuffer.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, ctx.metrics.queryPool, 1);
 	ctx.vulkan.dynamicCmdBuffer.end();
 }
 
@@ -250,6 +254,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		.setPClearValues(clearValues.data());
 
 	ctx.vulkan.dynamicCmdBuffer.begin(beginInfo);
+	ctx.vulkan.dynamicCmdBuffer.resetQueryPool(ctx.metrics.queryPool, 0, 2);
+	ctx.vulkan.dynamicCmdBuffer.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, ctx.metrics.queryPool, 0);
 	ctx.vulkan.dynamicCmdBuffer.setViewport(0, ctx.camera_main.renderArea.viewport);
 	ctx.vulkan.dynamicCmdBuffer.setScissor(0, ctx.camera_main.renderArea.scissor);
 
@@ -278,7 +284,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	// GUI
 	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.gui.pipeline, ctx.vulkan.dynamicCmdBuffer);
-
+	ctx.vulkan.dynamicCmdBuffer.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, ctx.metrics.queryPool, 1);
 	ctx.vulkan.dynamicCmdBuffer.end();
 }
 
@@ -389,9 +395,14 @@ void Renderer::present()
 		.setPResults(nullptr); //optional
 	ctx.vulkan.presentQueue.presentKHR(pi);
 
+	std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<float> duration = start - Timer::frameStart;
+	Timer::noWaitDelta = duration.count();
 	ctx.vulkan.device.waitForFences(ctx.vulkan.fences[0], VK_TRUE, UINT64_MAX);
 	ctx.vulkan.device.resetFences(ctx.vulkan.fences[0]);
 
 	if (overloadedGPU)
 		ctx.vulkan.presentQueue.waitIdle(); // user set, when GPU can't catch the CPU commands 
+	duration = std::chrono::high_resolution_clock::now() - start;
+	waitingTime = duration.count();
 }

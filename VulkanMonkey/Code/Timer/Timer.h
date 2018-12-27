@@ -15,6 +15,8 @@ namespace vm {
 		bool intervalsOf(float seconds);
 		void minFrameTime(float seconds);
 		static float delta;
+		static std::chrono::high_resolution_clock::time_point frameStart;
+		static float noWaitDelta;
 	private:
 		std::chrono::high_resolution_clock::time_point start;
 		std::chrono::duration<float> duration;

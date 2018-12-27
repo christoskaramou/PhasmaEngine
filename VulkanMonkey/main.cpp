@@ -22,6 +22,11 @@ int main(int argc, char* argv[])
 			renderer->update();
 			renderer->present();
 		}
+		if (timer.intervalsOf(0.25f)) {
+			GUI::cpuWaitingTime = Window::renderer[0]->waitingTime * 1000.f;
+			GUI::cpuTime = Timer::noWaitDelta * 1000.f;
+			GUI::gpuTime = Window::renderer[0]->ctx.metrics.getGPUFrameTime();
+		}
 	}
 
 	Window::destroyAll();
