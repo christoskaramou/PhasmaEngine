@@ -43,6 +43,7 @@ void main()
 	vec4 color = vec4(0.0);
 	for (int i = 0; i < samples; i++, UV += velocity)
 	{
+		UV = clamp(UV, pushConst.offset.xy + 0.0005, pushConst.offset.xy + pushConst.offset.zw - 0.0005);
 		color += texture(compositionSampler, UV);
 	}
 	outColor = color / samples;
