@@ -4,6 +4,13 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 	mat4 projection;
 	mat4 view;
 	mat4 model;
+	vec4 baseColorFactor;
+	vec4 emissiveFactor;
+	float metallicFactor;
+	float roughnessFactor;
+	float alphaCutoff;
+	float hasAlphaMap;
+	vec4 dummy;
 } ubo;
 
 layout(location = 0) in vec3 inPosition;
@@ -18,6 +25,9 @@ layout (location = 1) out vec3 outNormal;
 layout (location = 2) out vec3 outTangent;
 layout (location = 3) out vec3 outBitangent;
 layout (location = 4) out vec3 outColor;
+layout (location = 5) out vec4 baseColorFactor;
+layout (location = 6) out vec3 emissiveFactor;
+layout (location = 7) out vec4 metRoughAlphacut;
 
 void main() 
 {
@@ -40,4 +50,9 @@ void main()
 
 	// Color (not in use)	
 	outColor = inColor.rgb;
+
+	// Factors
+	baseColorFactor = ubo.baseColorFactor;
+	emissiveFactor = ubo.emissiveFactor.xyz;
+	metRoughAlphacut = vec4(ubo.metallicFactor, ubo.roughnessFactor, ubo.alphaCutoff, ubo.hasAlphaMap);
 }

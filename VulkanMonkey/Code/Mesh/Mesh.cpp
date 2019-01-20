@@ -111,7 +111,7 @@ void Mesh::loadTexture(TextureType type, const std::string& folderPath, const st
 		if (texName == "")
 			path = "objects/default.png";
 		else
-			hasAlpha = true;
+			hasAlphaMap = true;
 		break;
 	case Mesh::DisplacementMap:
 		tex = &material.textureDisplacement;

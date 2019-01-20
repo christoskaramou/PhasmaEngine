@@ -8,6 +8,7 @@ using namespace vm;
 
 int main(int argc, char* argv[])
 {
+
 	Window::create();
 
 	while(true)
@@ -19,7 +20,7 @@ int main(int argc, char* argv[])
 			break;
 
 		for (auto& renderer : Window::renderer) {
-			renderer->update();
+			renderer->update(timer.getDelta());
 			renderer->present();
 		}
 		if (timer.intervalsOf(0.25f)) {
@@ -30,6 +31,7 @@ int main(int argc, char* argv[])
 	}
 
 	Window::destroyAll();
+	Script::Cleanup();
 
 	return 0;
 }

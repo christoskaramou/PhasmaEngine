@@ -58,7 +58,7 @@ bool endsWith(const std::string &mainStr, const std::string &toMatch)
 void Model::loadModel(const std::string& folderPath, const std::string& modelName, bool show)
 {
 	bool gltfModel = false;
-	if (endsWith(modelName, "gltf"))
+	if (endsWith(modelName, ".gltf"))
 		gltfModel = true;
 	// Materials, Vertices and Indices load
 	Assimp::Logger::LogSeverity severity = Assimp::Logger::VERBOSE;
@@ -126,11 +126,11 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 			// textures
 			myMesh.loadTexture(Mesh::DiffuseMap, folderPath, getTextureName(material, aiTextureType_DIFFUSE));
 			myMesh.loadTexture(Mesh::SpecularMap, folderPath, getTextureName(material, aiTextureType_SPECULAR));
-			myMesh.loadTexture(Mesh::AmbientMap, folderPath, getTextureName(material, aiTextureType_AMBIENT));
+			myMesh.loadTexture(Mesh::AmbientMap, folderPath, getTextureName(material, aiTextureType_AMBIENT)); // metalic
 			myMesh.loadTexture(Mesh::EmissiveMap, folderPath, getTextureName(material, aiTextureType_EMISSIVE));
-			myMesh.loadTexture(Mesh::HeightMap, folderPath, getTextureName(material, aiTextureType_HEIGHT));
+			myMesh.loadTexture(Mesh::HeightMap, folderPath, getTextureName(material, aiTextureType_HEIGHT)); // normals
 			myMesh.loadTexture(Mesh::NormalsMap, folderPath, getTextureName(material, aiTextureType_NORMALS));
-			myMesh.loadTexture(Mesh::ShininessMap, folderPath, getTextureName(material, aiTextureType_SHININESS));
+			myMesh.loadTexture(Mesh::ShininessMap, folderPath, getTextureName(material, aiTextureType_SHININESS)); // roughness
 			myMesh.loadTexture(Mesh::OpacityMap, folderPath, getTextureName(material, aiTextureType_OPACITY));
 			myMesh.loadTexture(Mesh::DisplacementMap, folderPath, getTextureName(material, aiTextureType_DISPLACEMENT));
 			myMesh.loadTexture(Mesh::LightMap, folderPath, getTextureName(material, aiTextureType_LIGHTMAP));
@@ -156,8 +156,8 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 	// Free assimp resources
 	importer.FreeScene();
 
-	std::sort(meshes.begin(), meshes.end(), [](Mesh& a, Mesh& b) -> bool { return a.hasAlpha < b.hasAlpha; });
-	float factor = 20.f / getBoundingSphere().w;
+	std::sort(meshes.begin(), meshes.end(), [](Mesh& a, Mesh& b) -> bool { return a.hasAlphaMap < b.hasAlphaMap; });
+	float factor = 1.0f;// 20.f / getBoundingSphere().w;
 	for (auto &m : meshes) {
 		for (auto& v : m.vertices) {
 			v.position = m.transform * vec4(v.position, 1.f) * factor;
@@ -185,8 +185,8 @@ void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& mod
 	if (render)
 	{
 		const vk::DeviceSize offset{ 0 };
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 		cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
 		cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
@@ -311,7 +311,7 @@ void Model::createDescriptorSets()
 	vulkan->device.updateDescriptorSets(mvpWriteSet, nullptr);
 
 	bool gltfModel = false;
-	if (endsWith(name, "gltf"))
+	if (endsWith(name, ".gltf"))
 		gltfModel = true;
 
 	for (auto& mesh : meshes) {
@@ -325,7 +325,7 @@ void Model::createDescriptorSets()
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(6);
 
 		Image& baseColor = gltfModel ? mesh.gltfMaterial.baseColorTexture : mesh.material.textureDiffuse;
-		Image& normals = gltfModel ? mesh.gltfMaterial.normalTexture : mesh.material.textureNormals;
+		Image& normals = gltfModel ? mesh.gltfMaterial.normalTexture : mesh.material.textureHeight;
 		Image& specORroughMetal = gltfModel ? mesh.gltfMaterial.metallicRoughnessTexture : mesh.material.textureSpecular;
 		Image& opacity = mesh.material.textureOpacity;
 		Image& shininessOremissive = gltfModel ? mesh.gltfMaterial.emissiveTexture : mesh.material.textureShininess;

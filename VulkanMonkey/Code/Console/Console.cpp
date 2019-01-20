@@ -13,7 +13,6 @@ Console::Console()
 	Commands.push_back("HISTORY");
 	Commands.push_back("CLEAR");
 	Commands.push_back("CLOSE");
-	Commands.push_back("LOAD MODEL SPONZA");
 	AddLog("Welcome to Dear ImGui!");
 }
 
@@ -77,12 +76,13 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 	//if (ImGui::SmallButton("OrientationTest")) { Queue::loadModel.push_back({ "objects/OrientationTest/glTF/", "OrientationTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 	//if (ImGui::SmallButton("AlphaBlendModeTest")) { Queue::loadModel.push_back({ "objects/AlphaBlendModeTest/glTF/", "AlphaBlendModeTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 	//if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load Sponza gltf")) { Queue::loadModel.push_back({ "objects/sponza/glTF/", "Sponza.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	if (ImGui::SmallButton("Load Sponza PBR")) { Queue::loadModel.push_back({ "objects/sponza/", "sponzaPBR.obj" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load Suzanne")) { Queue::loadModel.push_back({ "objects/Suzanne/glTF/", "Suzanne.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load BoomBox")) { Queue::loadModel.push_back({ "objects/BoomBox/glTF/", "BoomBox.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load MetalRoughSpheres")) { Queue::loadModel.push_back({ "objects/MetalRoughSpheres/Blend/", "MetalRoughSpheres.blend" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load Sponza PBR")) { Queue::loadModel.push_back({ "objects/sponza/", "sponzaPBR.obj" }); AddLog("loading..."); } ImGui::SameLine();
+	if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/glTF/", "Sponza.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	if (ImGui::SmallButton("Load Suzanne")) { Queue::loadModel.push_back({ "objects/Suzanne/glTF/", "Suzanne.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	if (ImGui::SmallButton("Load Corset")) { Queue::loadModel.push_back({ "objects/Corset/glTF/", "Corset.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load BoomBox")) { Queue::loadModel.push_back({ "objects/BoomBoxWithAxes/glTF/", "BoomBoxWithAxes.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load MetalRoughSpheres")) { Queue::loadModel.push_back({ "objects/MetalRoughSpheres/glTF/", "MetalRoughSpheres.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 	//if (ImGui::SmallButton("Load Bugatti")) { Queue::loadModel.push_back({ "objects/bugatti/", "bugatti.obj" }); AddLog("loading..."); } ImGui::SameLine();
 	
 	if (ImGui::SmallButton("Clear")) { ClearLog(); } ImGui::SameLine();
@@ -198,10 +198,10 @@ void Console::ExecCommand(const char * command_line)
 	{
 		close_app = true;
 	}
-	else if (Stricmp(command_line, "LOAD MODEL SPONZA") == 0)
-	{
-		Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" });
-	}
+	//else if (Stricmp(command_line, "LOAD MODEL SPONZA") == 0)
+	//{
+	//	Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" });
+	//}
 	else
 	{
 		AddLog("Unknown command: '%s'\n", command_line);

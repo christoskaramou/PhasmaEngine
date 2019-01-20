@@ -9,7 +9,7 @@ Window::Window() {}
 
 Window::~Window() {}
 
-void Window::create(std::string title, Uint32 flags)
+void Window::create(std::string title, Uint32 flags) // flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN
 {
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) { std::cout << SDL_GetError(); return; }
 

@@ -90,6 +90,11 @@ void Context::initRendering()
 	metrics.initQueryPool();
 }
 
+static void Sample()
+{
+	std::cout << "Hello!\n";
+}
+
 void Context::loadResources()
 {
 	// SKYBOX LOAD
@@ -102,6 +107,12 @@ void Context::loadResources()
 	// MODELS LOAD
 	//models.push_back(Model(&vulkan));
 	//models.back().loadModel("objects/sponza/", "sponza.obj");
+	Script::Init();
+	Script::addCallback("Ext::Sample", Sample);
+	scripts.push_back(std::make_unique<Script>("Entity"));
+	scripts.push_back(std::make_unique<Script>("Test"));
+	scripts.push_back(std::make_unique<Script>("TestCSharp"));
+	scripts.push_back(std::make_unique<Script>("TestCSharp1"));
 }
 
 void Context::createUniforms()
@@ -2885,9 +2896,9 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	gui.frameBuffers = createGUIFrameBuffers();
 	gui.pipeline = createPipeline(getPipelineSpecificationsGUI());
 
-	terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
+	//terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
 
-	skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
+	//skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
 	//---------------------------------------
 }
 
@@ -2963,13 +2974,22 @@ PipelineInfo Context::getPipelineSpecificationsSkyBox()
 	// SkyBox Pipeline
 	static PipelineInfo skyBoxSpecific;
 	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
-	skyBoxSpecific.renderPass = forward.renderPass;
+	skyBoxSpecific.renderPass = deferred.renderPass;
 	skyBoxSpecific.viewportSize = { WIDTH, HEIGHT };
 	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(vulkan.device) };
 	skyBoxSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionSkyBox();
 	skyBoxSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionSkyBox();
-	skyBoxSpecific.sampleCount = vk::SampleCountFlagBits::e4;
+	skyBoxSpecific.cull = vk::CullModeFlagBits::eFront;
+	skyBoxSpecific.face = vk::FrontFace::eCounterClockwise;
+	skyBoxSpecific.sampleCount = vk::SampleCountFlagBits::e1;
 	skyBoxSpecific.pushConstantRange = vk::PushConstantRange();
+	skyBoxSpecific.blendAttachmentStates[0].blendEnable = VK_FALSE;
+	skyBoxSpecific.blendAttachmentStates = {
+		skyBoxSpecific.blendAttachmentStates[0],
+		skyBoxSpecific.blendAttachmentStates[0],
+		skyBoxSpecific.blendAttachmentStates[0],
+		skyBoxSpecific.blendAttachmentStates[0]
+	};
 	skyBoxSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	skyBoxSpecific.dynamicStateInfo = {
 		vk::PipelineDynamicStateCreateFlags(),

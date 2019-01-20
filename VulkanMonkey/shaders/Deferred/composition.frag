@@ -29,7 +29,7 @@ layout (constant_id = 0) const int NUM_LIGHTS = 1;
 layout (set = 0, binding = 0) uniform sampler2D samplerDepth;
 layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
 layout (set = 0, binding = 2) uniform sampler2D samplerAlbedo;
-layout (set = 0, binding = 3) uniform sampler2D samplerSpecRoughMet;
+layout (set = 0, binding = 3) uniform sampler2D samplerRoughMet;
 layout (set = 0, binding = 4) uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS+1]; } ubo;
 layout (set = 0, binding = 5) uniform sampler2D ssaoBlurSampler;
 layout (set = 0, binding = 6) uniform sampler2D ssrSampler;
@@ -60,12 +60,12 @@ void main()
 	vec3 normal = texture(samplerNormal, inUV).xyz;
 	vec4 albedo = texture(samplerAlbedo, inUV);
 	float oclusion = texture(ssaoBlurSampler, inUV).x;
-	vec3 specRoughMet = texture(samplerSpecRoughMet, inUV).xyz;
+	vec3 roughMet = texture(samplerRoughMet, inUV).xyz;
 
 	Material material;
 	material.albedo = albedo.xyz;
-	material.roughness = 1.0 - specRoughMet.y; // for pbr .obj models only, else the "1.0 - " should not be there
-	material.metallic = 1.0 - specRoughMet.z; // for pbr .obj models only, else the "1.0 - " should not be there
+	material.roughness = roughMet.y;
+	material.metallic = roughMet.z;
 	material.F0 = mix(vec3(0.04f), material.albedo, material.metallic);
 
 	// Ambient
@@ -75,19 +75,19 @@ void main()
 	if (screenSpace.effect.x > 0.5f)
 		fragColor *= oclusion;
 
-	fragColor += BRDFShadows(material, fragPos, normal, 0);
-	//fragColor += calculateShadow(0, fragPos, normal, albedo.xyz, specRoughMet.x);
+	//fragColor += BRDFShadows(material, fragPos, normal, 0);
+	fragColor += calculateShadow(0, fragPos, normal, albedo.xyz, (1.0 - roughMet.y)*roughMet.z);
 
 	for(int i = 1; i < NUM_LIGHTS+1; ++i){
 		fragColor += BRDF(material, fragPos, normal, i);
-		//fragColor += calculateColor(i, fragPos, normal, albedo.xyz, specRoughMet.x);
+		//fragColor += calculateColor(i, fragPos, normal, albedo.xyz, roughMet.x);
 	}
 
 	outColor = vec4(fragColor, albedo.a);
 
 	// SSR
 	if (screenSpace.effect.y > 0.5)
-		outColor += vec4(texture(ssrSampler, inUV).xyz, 0.0) * specRoughMet.x;
+		outColor += vec4(texture(ssrSampler, inUV).xyz, 0.0) * (1.0 - material.roughness);
 	
 	outComposition = outColor;
 }
@@ -243,8 +243,8 @@ vec3 BRDFShadows(Material material, vec3 fragPos, vec3 normal, int light)
 
 	// calculate per-light radiance
 	vec3 N = normalize(normal);
-    vec3 V = normalize(ubo.camPos.xyz - fragPos);
-	vec3 L = normalize(ubo.lights[light].position.xyz - fragPos);
+    vec3 V = -normalize(ubo.camPos.xyz - fragPos);
+	vec3 L = -normalize(ubo.lights[light].position.xyz - fragPos);
 	vec3 H = normalize(V + L);
 	vec3 radiance     = ubo.lights[light].color.xyz;        
 	
@@ -254,10 +254,10 @@ vec3 BRDFShadows(Material material, vec3 fragPos, vec3 normal, int light)
 	vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), material.F0);       
 	
 	vec3 kS = F;
-	vec3 kD = vec3(1.0) - kS;
+	vec3 kD = vec3(1.0);// - kS;
 	kD *= 1.0 - material.metallic;	  
 	
-	vec3 numerator    = NDF * G * F;
+	vec3 numerator    = NDF * G * (material.metallic) * vec3(1.0); //F;
 	float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0);
 	vec3 specular     = numerator / max(denominator, 0.001);  
 	    

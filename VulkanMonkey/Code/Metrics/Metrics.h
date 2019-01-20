@@ -9,6 +9,8 @@ namespace vm {
 		
 		Metrics();
 		~Metrics();
+		void start(vk::CommandBuffer& cmd);
+		void end();
 		void initQueryPool();
 		float getGPUFrameTime();
 		void destroy();
@@ -18,5 +20,6 @@ namespace vm {
 
 	private:
 		vk::PhysicalDeviceProperties gpuProps;
+		vk::CommandBuffer _cmd;
 	};
 }

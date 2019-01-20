@@ -25,6 +25,7 @@
 #include "../Compute/Compute.h"
 #include "../Forward/Forward.h"
 #include "../Metrics/Metrics.h"
+#include "../Script/Script.h"
 #include <vector>
 #include <tuple>
 #include <map>
@@ -81,8 +82,11 @@ namespace vm {
 		// CAMERAS
 		std::vector<Camera> camera{};
 
-		//Metrics
+		// Metrics
 		Metrics metrics;
+
+		// Scripts
+		std::vector<std::unique_ptr<Script>> scripts{};
 
 		void initVulkanContext();
 		void initRendering();

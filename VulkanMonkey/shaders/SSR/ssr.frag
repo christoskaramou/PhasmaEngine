@@ -29,7 +29,7 @@ void main()
 {
 	vec3 position = getViewPosFromUV(inUV);
 	vec4 normal = ubo.view * vec4(texture(normalSampler, inUV).xyz, 0.0);
-	float spec = texture(specRoughMetSampler, inUV).x;
+	float spec = 1.0 - texture(specRoughMetSampler, inUV).z;
 
 	outColor = vec4(ScreenSpaceReflections(position, normalize(normal.xyz)) * spec , 1.0);
 }

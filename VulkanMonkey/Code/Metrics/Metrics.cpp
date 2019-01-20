@@ -10,6 +10,18 @@ Metrics::~Metrics()
 {
 }
 
+void vm::Metrics::start(vk::CommandBuffer& cmd)
+{
+	_cmd = cmd;
+	_cmd.resetQueryPool(queryPool, 0, 2);
+	_cmd.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, queryPool, 0);
+}
+
+void vm::Metrics::end()
+{
+	_cmd.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, queryPool, 1);
+}
+
 void Metrics::initQueryPool()
 {
 	gpuProps = vulkan->gpu.getProperties();
@@ -17,16 +29,16 @@ void Metrics::initQueryPool()
 
 	vk::QueryPoolCreateInfo qpci;
 	qpci.queryType = vk::QueryType::eTimestamp;
-	qpci.queryCount = 6;
+	qpci.queryCount = 2;
 
 	queryPool = vulkan->device.createQueryPool(qpci);
 
-	queryTimes.resize(6, 0);
+	queryTimes.resize(2, 0);
 }
 
 float Metrics::getGPUFrameTime()
 {
-	vulkan->device.getQueryPoolResults<uint64_t>(queryPool, 0, 6, queryTimes, sizeof(uint64_t), vk::QueryResultFlagBits::e64);
+	vulkan->device.getQueryPoolResults<uint64_t>(queryPool, 0, 2, queryTimes, sizeof(uint64_t), vk::QueryResultFlagBits::e64);
 	return float(queryTimes[1] - queryTimes[0]) * gpuProps.limits.timestampPeriod * 1e-6f;
 }
 

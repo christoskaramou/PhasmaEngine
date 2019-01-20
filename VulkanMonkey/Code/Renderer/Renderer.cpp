@@ -23,7 +23,6 @@ Renderer::Renderer(SDL_Window* window)
 Renderer::~Renderer()
 {
 	ctx.vulkan.device.waitIdle();
-
 	if (Context::models.size() == 0) {
 		if (Model::descriptorSetLayout) {
 			ctx.vulkan.device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
@@ -52,8 +51,11 @@ Renderer::~Renderer()
 	ctx.destroyVkContext();
 }
 
-void Renderer::update()
+void Renderer::update(float delta)
 {
+	for (auto& s : ctx.scripts)
+		s->Update(delta);
+
 	// TODO: make an other command pool for multithreading
 	for (int i = static_cast<int>(Queue::loadModel.size()) - 1; i >= 0; i--) {
 		Queue::func.push_back( std::async( std::launch::async, [](std::tuple<std::string, std::string>& temp) {
@@ -78,11 +80,17 @@ void Renderer::update()
 	for (auto &model : Context::models) {
 		model.render = GUI::render_models;
 		if (model.render) {
-			const mat4 pvm[3]{ proj, view, model.transform };
+			mat4 pvm[4];
+			pvm[0] = proj;
+			pvm[1] = view;
+			pvm[2] = model.transform;
 			ctx.camera_main.ExtractFrustum(model.transform);
 			for (auto &mesh : model.meshes) {
 				mesh.cull = !ctx.camera_main.SphereInFrustum(mesh.boundingSphere);
 				if (!mesh.cull) {
+					pvm[3][0] = mesh.gltfMaterial.baseColorFactor;
+					pvm[3][1] = vec4(mesh.gltfMaterial.emissiveFactor, 1.f);
+					pvm[3][2] = vec4(mesh.gltfMaterial.metallicFactor, mesh.gltfMaterial.roughnessFactor, mesh.gltfMaterial.alphaCutoff, mesh.hasAlphaMap? 1.f : 0.f);
 					memcpy(model.uniformBuffer.data, &pvm, sizeof(pvm));
 				}
 			}
@@ -150,7 +158,7 @@ void Renderer::update()
 	//}
 	// SKYBOX
 	//if (ctx.skyBox.render) {
-	//	const mat4 pvm[2]{ projection, view };
+	//	const mat4 pvm[2]{ proj, view };
 	//	memcpy(ctx.skyBox.uniformBuffer.data, &pvm, sizeof(pvm));
 	//}
 
@@ -196,34 +204,37 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
 
-	ctx.vulkan.dynamicCmdBuffer.begin(beginInfo);
-	ctx.vulkan.dynamicCmdBuffer.resetQueryPool(ctx.metrics.queryPool, 0, 2);
-	ctx.vulkan.dynamicCmdBuffer.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, ctx.metrics.queryPool, 0);
-	ctx.vulkan.dynamicCmdBuffer.setViewport(0, ctx.camera_main.renderArea.viewport);
-	ctx.vulkan.dynamicCmdBuffer.setScissor(0, ctx.camera_main.renderArea.scissor);
+	auto& cmd = ctx.vulkan.dynamicCmdBuffer;
+	cmd.begin(beginInfo);
 
-	ctx.vulkan.dynamicCmdBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+	ctx.metrics.start(cmd);
+	
+	cmd.setViewport(0, ctx.camera_main.renderArea.viewport);
+	cmd.setScissor(0, ctx.camera_main.renderArea.scissor);
+
+	cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
 	// MODELS
 	for (uint32_t m = 0; m < Context::models.size(); m++)
-		Context::models[m].draw(ctx.forward.pipeline, ctx.vulkan.dynamicCmdBuffer, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
+		Context::models[m].draw(ctx.forward.pipeline, cmd, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
 
 	for (auto& cam : ctx.camera) {
 		cam.renderArea.update(winPos + winSize * .7f, winSize * .2f, 0.f, 0.5f);
-		ctx.vulkan.dynamicCmdBuffer.setViewport(0, cam.renderArea.viewport);
-		ctx.vulkan.dynamicCmdBuffer.setScissor(0, cam.renderArea.scissor);
+		cmd.setViewport(0, cam.renderArea.viewport);
+		cmd.setScissor(0, cam.renderArea.scissor);
 
 		// MODELS
 		for (uint32_t m = 0; m < Context::models.size(); m++)
-			Context::models[m].draw(ctx.forward.pipeline, ctx.vulkan.dynamicCmdBuffer, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
+			Context::models[m].draw(ctx.forward.pipeline, cmd, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
 	}
-	ctx.vulkan.dynamicCmdBuffer.endRenderPass();
+	cmd.endRenderPass();
 
 	// GUI
-	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.gui.pipeline, ctx.vulkan.dynamicCmdBuffer);
+	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.gui.pipeline, cmd);
+	
+	ctx.metrics.end();
 
-	ctx.vulkan.dynamicCmdBuffer.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, ctx.metrics.queryPool, 1);
-	ctx.vulkan.dynamicCmdBuffer.end();
+	cmd.end();
 }
 
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
@@ -253,18 +264,22 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
 
-	ctx.vulkan.dynamicCmdBuffer.begin(beginInfo);
-	ctx.vulkan.dynamicCmdBuffer.resetQueryPool(ctx.metrics.queryPool, 0, 2);
-	ctx.vulkan.dynamicCmdBuffer.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, ctx.metrics.queryPool, 0);
-	ctx.vulkan.dynamicCmdBuffer.setViewport(0, ctx.camera_main.renderArea.viewport);
-	ctx.vulkan.dynamicCmdBuffer.setScissor(0, ctx.camera_main.renderArea.scissor);
+	auto& cmd = ctx.vulkan.dynamicCmdBuffer;
+	cmd.begin(beginInfo);
+
+	ctx.metrics.start(cmd);
+
+	cmd.setViewport(0, ctx.camera_main.renderArea.viewport);
+	cmd.setScissor(0, ctx.camera_main.renderArea.scissor);
 
 	if (Context::models.size() > 0) {
-		ctx.vulkan.dynamicCmdBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+		cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 		// MODELS
 		for (uint32_t m = 0; m < Context::models.size(); m++)
-			Context::models[m].draw(ctx.deferred.pipeline, ctx.vulkan.dynamicCmdBuffer, m, true);
-		ctx.vulkan.dynamicCmdBuffer.endRenderPass();
+			Context::models[m].draw(ctx.deferred.pipeline, cmd, m, true);
+		// SKYBOX
+		//ctx.skyBox.draw(cmd);
+		cmd.endRenderPass();
 
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao)
@@ -283,9 +298,11 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	}
 
 	// GUI
-	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.gui.pipeline, ctx.vulkan.dynamicCmdBuffer);
-	ctx.vulkan.dynamicCmdBuffer.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, ctx.metrics.queryPool, 1);
-	ctx.vulkan.dynamicCmdBuffer.end();
+	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.gui.pipeline, cmd);
+
+	ctx.metrics.end();
+
+	cmd.end();
 }
 
 void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
@@ -304,31 +321,32 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 		.setClearValueCount(static_cast<uint32_t>(clearValuesShadows.size()))
 		.setPClearValues(clearValuesShadows.data());
 
-	ctx.vulkan.shadowCmdBuffer.begin(beginInfoShadows);
-	ctx.vulkan.shadowCmdBuffer.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
-	ctx.vulkan.shadowCmdBuffer.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
+	auto& cmd = ctx.vulkan.shadowCmdBuffer;
+	cmd.begin(beginInfoShadows);
+	cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
+	cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 
 	vk::DeviceSize offset = vk::DeviceSize();
 
-	ctx.vulkan.shadowCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
 
 	for (uint32_t m = 0; m < Context::models.size(); m++) {
 		if (Context::models[m].render) {
-			ctx.vulkan.shadowCmdBuffer.bindVertexBuffers(0, Context::models[m].vertexBuffer.buffer, offset);
-			ctx.vulkan.shadowCmdBuffer.bindIndexBuffer(Context::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
+			cmd.bindVertexBuffers(0, Context::models[m].vertexBuffer.buffer, offset);
+			cmd.bindIndexBuffer(Context::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
 			const uint32_t dOffsets =  m * sizeof(ShadowsUBO);
-			ctx.vulkan.shadowCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, ctx.shadows.descriptorSet, dOffsets);
+			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, ctx.shadows.descriptorSet, dOffsets);
 
 			for (auto& mesh : Context::models[m].meshes) {
 				if (mesh.render)
-					ctx.vulkan.shadowCmdBuffer.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
+					cmd.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
 			}
 		}
 	}
 
-	ctx.vulkan.shadowCmdBuffer.endRenderPass();
-	ctx.vulkan.shadowCmdBuffer.end();
+	cmd.endRenderPass();
+	cmd.end();
 }
 
 void Renderer::present()

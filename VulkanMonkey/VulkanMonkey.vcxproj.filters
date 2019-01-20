@@ -201,6 +201,9 @@
     <ClInclude Include="Code\Metrics\Metrics.h">
       <Filter>Code\Metrics</Filter>
     </ClInclude>
+    <ClInclude Include="Code\Script\Script.h">
+      <Filter>Code\Script</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -310,6 +313,9 @@
     </ClCompile>
     <ClCompile Include="Code\Metrics\Metrics.cpp">
       <Filter>Code\Metrics</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Script\Script.cpp">
+      <Filter>Code\Script</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -450,6 +456,9 @@
     </Filter>
     <Filter Include="Code\Metrics">
       <UniqueIdentifier>{258cb5d3-a50f-46b3-84e1-e87a6fd2f915}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Script">
+      <UniqueIdentifier>{2a274700-667e-4e3b-a38d-ec83ffa8a13d}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

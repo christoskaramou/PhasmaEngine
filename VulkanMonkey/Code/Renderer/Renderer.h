@@ -4,6 +4,7 @@
 #include "../Queue/Queue.h"
 #include "../Math/Math.h"
 #include "../Timer/Timer.h"
+#include <iostream>
 
 namespace vm {
 	class Renderer
@@ -11,7 +12,7 @@ namespace vm {
 	public:
 		Renderer(SDL_Window* window);
 		~Renderer();
-		void update();
+		void update(float delta);
 		void present();
 
 		Context ctx;
