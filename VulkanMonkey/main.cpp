@@ -16,11 +16,11 @@ int main(int argc, char* argv[])
 		Timer timer;
 		timer.minFrameTime(1.f / (float)GUI::fps);
 
-		if (!Window::processEvents(timer.getDelta()))
+		if (!Window::processEvents(timer.getDelta(GUI::timeScale)))
 			break;
 
 		for (auto& renderer : Window::renderer) {
-			renderer->update(timer.getDelta());
+			renderer->update(timer.getDelta(GUI::timeScale));
 			renderer->present();
 		}
 		if (timer.intervalsOf(0.25f)) {

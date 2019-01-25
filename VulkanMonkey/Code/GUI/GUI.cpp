@@ -21,6 +21,7 @@ std::array<float, 4>		GUI::clearColor = { 0.0f, 0.31f, 0.483f, 0.0f };
 float						GUI::cpuTime = 0;
 float						GUI::cpuWaitingTime = 0;
 float						GUI::gpuTime = 0;
+float						GUI::timeScale = 1.f;
 
 vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
 SDL_Window*					GUI::g_Window = nullptr;
@@ -77,6 +78,7 @@ void GUI::setWindows()
 	ImGui::InputFloat("Depth Bias", &depthBias[0], 0.00001f, 0.0002f, 5);
 	ImGui::InputFloat("Depth Clamp", &depthBias[1], 0.00001f, 0.0002f, 5);
 	ImGui::InputFloat("Depth Slope", &depthBias[2], 0.15f, 0.5f, 5);
+	ImGui::InputFloat("Time Scale", &timeScale, 0.05f, 0.2f);
 	mlPanelPos = ImGui::GetWindowPos();
 	mlPanelSize = ImGui::GetWindowSize();
 	ImGui::End();

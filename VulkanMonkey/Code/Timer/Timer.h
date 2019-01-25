@@ -10,7 +10,7 @@ namespace vm {
 		Timer();
 		~Timer();
 
-		float getDelta();
+		float getDelta(float timeScale = 1.0f);
 		unsigned getFPS();
 		bool intervalsOf(float seconds);
 		void minFrameTime(float seconds);

@@ -55,7 +55,6 @@ void Renderer::update(float delta)
 {
 	for (auto& s : ctx.scripts)
 		s->Update(delta);
-
 	// TODO: make an other command pool for multithreading
 	for (int i = static_cast<int>(Queue::loadModel.size()) - 1; i >= 0; i--) {
 		Queue::func.push_back( std::async( std::launch::async, [](std::tuple<std::string, std::string>& temp) {
@@ -80,11 +79,12 @@ void Renderer::update(float delta)
 	for (auto &model : Context::models) {
 		model.render = GUI::render_models;
 		if (model.render) {
+			Transform trans = ctx.scripts[0]->getValue<Transform>("transform");
 			mat4 pvm[4];
 			pvm[0] = proj;
 			pvm[1] = view;
-			pvm[2] = model.transform;
-			ctx.camera_main.ExtractFrustum(model.transform);
+			pvm[2] = trans.matrix() * model.transform;
+			ctx.camera_main.ExtractFrustum(pvm[2]);
 			for (auto &mesh : model.meshes) {
 				mesh.cull = !ctx.camera_main.SphereInFrustum(mesh.boundingSphere);
 				if (!mesh.cull) {

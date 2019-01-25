@@ -47,6 +47,7 @@ bool Window::processEvents(float delta)
 	static bool right = false;
 	static int xMove = 0;
 	static int yMove = 0;
+	static float lastTimeScale = GUI::timeScale;
 
 	auto& info = renderer[0]->ctx;
 	bool combineDirections = false;
@@ -83,6 +84,7 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_s) down = true;
 			if (event.key.keysym.sym == SDLK_a) left = true;
 			if (event.key.keysym.sym == SDLK_d) right = true;
+			if (event.key.keysym.sym == SDLK_p) { if (GUI::timeScale) lastTimeScale = GUI::timeScale; GUI::timeScale = 0.0f; }
 		}
 		else if (event.type == SDL_KEYUP) {
 			int key = event.key.keysym.scancode;
@@ -97,6 +99,7 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_s) down = false;
 			if (event.key.keysym.sym == SDLK_a) left = false;
 			if (event.key.keysym.sym == SDLK_d) right = false;
+			if (event.key.keysym.sym == SDLK_p) GUI::timeScale = lastTimeScale;
 		}
 		if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
 			if (isInsideRenderWindow(event.motion.x, event.motion.y)) {

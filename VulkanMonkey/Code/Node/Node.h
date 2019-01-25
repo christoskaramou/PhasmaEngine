@@ -4,14 +4,6 @@
 #include <any>
 
 namespace vm {
-
-	struct Transform {
-		vec3 position;
-		quat rotation;
-		vec3 scale;
-		mat4 transform;
-	};
-
 	struct Node
 	{
 		Node();
@@ -36,7 +28,6 @@ namespace vm {
 		void removeChildren();
 
 	private:
-		Transform transform;
 		std::any component_ptr;
 		Node* parent;
 		std::vector<Node*> children;

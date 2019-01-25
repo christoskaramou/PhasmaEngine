@@ -1,10 +1,11 @@
 using System;
- 
-namespace MonoScript
+using System.Runtime.InteropServices;
+using Microsoft.Xna.Framework;
+
+[StructLayout(LayoutKind.Sequential)]
+public struct Transform
 {
-	public class Transform
-	{
-		Matrix matrix1 = new Matrix(5, 10, 15, 20, 25, 30);
-		Matrix matrix2 = new Matrix(2, 4, 6, 8, 10, 12);
-	}
+    public Vector3 scale;// = Vector3.One;
+    public Quaternion rotation;// = Quaternion.Identity;
+    public Vector3 position;// = Vector3.Zero;
 }

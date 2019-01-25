@@ -90,9 +90,11 @@ void Context::initRendering()
 	metrics.initQueryPool();
 }
 
-static void Sample()
+static void LoadModel(MonoObject* folderPath, MonoObject* modelName)
 {
-	std::cout << "Hello!\n";
+	std::string path(mono_string_to_utf8(mono_object_to_string(folderPath, nullptr)));
+	std::string name(mono_string_to_utf8(mono_object_to_string(modelName, nullptr)));
+	Queue::loadModel.push_back({ path, name });
 }
 
 void Context::loadResources()
@@ -108,11 +110,8 @@ void Context::loadResources()
 	//models.push_back(Model(&vulkan));
 	//models.back().loadModel("objects/sponza/", "sponza.obj");
 	Script::Init();
-	Script::addCallback("Ext::Sample", Sample);
-	scripts.push_back(std::make_unique<Script>("Entity"));
+	Script::addCallback("Ext::LoadModel", LoadModel);
 	scripts.push_back(std::make_unique<Script>("Test"));
-	scripts.push_back(std::make_unique<Script>("TestCSharp"));
-	scripts.push_back(std::make_unique<Script>("TestCSharp1"));
 }
 
 void Context::createUniforms()

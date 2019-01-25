@@ -1,28 +1,22 @@
 using System;
- 
-namespace MonoScript
-{
-  public class Test
-  {
- 
-    public Test()
-    {
-      System.Console.WriteLine("Test constructed");
-    }
- 
-    ~Test()
-    {
-      System.Console.WriteLine("Test destructed");
-    }
+using Microsoft.Xna.Framework;
 
-	public void Start()
+public class Test
+{
+    public Transform transform;
+    private float s = 0.0f;
+
+	public Test()
 	{
-		
+		Ext.LoadModel("objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf");
 	}
 	
 	public void Update(float delta)
 	{
-		System.Console.WriteLine("Test Update call! delta = " + delta);
+        s += delta;
+		float r = (float)Math.Sin(s);
+		transform.position = new Vector3(0.0f, 0.0f, r * 5.0f);
+		transform.rotation = Quaternion.CreateFromYawPitchRoll(s, 0.0f, 0.0f);
+        transform.scale = Vector3.One;
 	}
-  }
 }

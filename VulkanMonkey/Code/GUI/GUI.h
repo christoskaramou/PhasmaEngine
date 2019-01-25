@@ -31,6 +31,7 @@ namespace vm {
 		static float		cpuTime;
 		static float		cpuWaitingTime;
 		static float		gpuTime;
+		static float		timeScale;
 
 		static SDL_Window*  g_Window;
 		static Uint64       g_Time;

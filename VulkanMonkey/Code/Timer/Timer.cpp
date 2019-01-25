@@ -42,9 +42,9 @@ Timer::~Timer()
     instances--;
 }
 
-float Timer::getDelta()
+float Timer::getDelta(float timeScale)
 {
-    return delta;
+    return delta * timeScale;
 }
 
 unsigned Timer::getFPS()

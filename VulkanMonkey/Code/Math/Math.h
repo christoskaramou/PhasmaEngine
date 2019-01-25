@@ -244,4 +244,19 @@ namespace vm {
 	vec3 maximum(cvec3& v1, cvec3& v2);
 	float rand(cfloat x1, cfloat x2);
 	float lerp(cfloat a, cfloat b, cfloat f);
+
+	struct Transform
+	{
+	private:
+		vec3 _scale;
+		quat _rotation;
+		vec3 _position;
+	public:
+		mat4 matrix() {
+			mat4 t = translate(mat4::identity(), _position);
+			mat4 r = _rotation.matrix();
+			mat4 s = scale(mat4::identity(), _scale);
+			return t * r * s;
+		}
+	};
 }

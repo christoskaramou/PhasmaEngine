@@ -5,6 +5,7 @@
 #include <mono/metadata/mono-config.h>
 #include <mono/metadata/debug-helpers.h>
 #include <vector>
+#include "../Code/Math/Math.h"
 
 namespace vm {
 	struct Script
@@ -20,6 +21,8 @@ namespace vm {
 		MonoMethod* ctor;
 		MonoMethod* dtor;
 		MonoMethod* update;
+		std::vector<MonoClassField*> fields{};
+		MonoClassField* transform;
 
 		static bool initialized;
 
@@ -39,6 +42,13 @@ namespace vm {
 			MonoClassField* idField = mono_class_get_field_from_name(entityClass, name);
 			mono_field_get_value(entityInstance, idField, &value);
 			return value;
+		}
+
+		template<class T>
+		void getValue(T* value, const char* name)
+		{
+			MonoClassField* idField = mono_class_get_field_from_name(entityClass, name);
+			mono_field_get_value(entityInstance, idField, value);
 		}
 
 		template<class T>
