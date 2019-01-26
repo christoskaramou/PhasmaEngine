@@ -118,8 +118,14 @@ void Renderer::update(float delta)
 	const vec3 right = normalize(cross(front, ctx.camera_main.worldUp()));
 	const vec3 up = normalize(cross(right, front));
 	std::vector<ShadowsUBO> shadows_UBO(Context::models.size());
-	for (uint32_t i = 0; i < Context::models.size(); i++)
-		shadows_UBO[i] = { ortho(-40.f, 40.f, -40.f, 40.f, 500.f, 0.005f), lookAt(pos, front, right, up), Context::models[i].script->getValue<Transform>("transform").matrix() * Context::models[i].transform, Shadows::shadowCast ? 1.0f : 0.0f };
+	for (uint32_t i = 0; i < Context::models.size(); i++) {
+		shadows_UBO[i] = {
+			ortho(-40.f, 40.f, -40.f, 40.f, 500.f, 0.005f),
+			lookAt(pos, front, right, up),
+			Context::models[i].script ? Context::models[i].script->getValue<Transform>("transform").matrix() * Context::models[i].transform : Context::models[i].transform,
+			Shadows::shadowCast ? 1.0f : 0.0f
+		};
+	}
 	memcpy(ctx.shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
 
 	// GUI
