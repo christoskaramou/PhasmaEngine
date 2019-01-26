@@ -5,7 +5,9 @@
 #include "../Mesh/Mesh.h"
 #include "../Shadows/Shadows.h"
 #include "../Pipeline/Pipeline.h"
+#include "../Script/Script.h"
 #include <map>
+#include <utility>
 
 namespace vm {
 	struct Model
@@ -24,6 +26,7 @@ namespace vm {
 		Buffer uniformBuffer;
 		uint32_t numberOfVertices = 0, numberOfIndices = 0;
 		vec4 boundingSphere;
+		std::unique_ptr<Script> script;
 
 		void draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows = nullptr, vk::DescriptorSet* DSLights = nullptr);
 		vec4 getBoundingSphere();

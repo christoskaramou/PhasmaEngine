@@ -57,16 +57,22 @@ void Renderer::update(float delta)
 		s->Update(delta);
 	// TODO: make an other command pool for multithreading
 	for (int i = static_cast<int>(Queue::loadModel.size()) - 1; i >= 0; i--) {
-		Queue::func.push_back( std::async( std::launch::async, [](std::tuple<std::string, std::string>& temp) {
-			VulkanContext::getVulkanContext().device.waitIdle();
-			std::string path = std::get<0>(temp);
-			std::string name = std::get<1>(temp);
-			Context::models.push_back(Model());
-			Context::models.back().loadModel(path, name);
-		}, Queue::loadModel[i]));
-		Queue::func.back().get();
+		//Queue::func.push_back( std::async( std::launch::async, [](std::tuple<std::string, std::string>& temp) {
+		//	VulkanContext::getVulkanContext().device.waitIdle();
+		//	std::string path = std::get<0>(temp);
+		//	std::string name = std::get<1>(temp);
+		//	Context::models.push_back(Model());
+		//	Context::models.back().loadModel(path, name);
+		//}, Queue::loadModel[i]));
+		//Queue::func.back().get();
+		//Queue::func.pop_back();
+		VulkanContext::getVulkanContext().device.waitIdle();
+		std::string path = std::get<0>(Queue::loadModel[i]);
+		std::string name = std::get<1>(Queue::loadModel[i]);
+		Context::models.push_back(Model());
+		Context::models.back().loadModel(path, name);
+		Context::models.back().script = std::make_unique<Script>(Context::models.back().name.substr(0, Context::models.back().name.find_last_of(".")));
 		Queue::loadModel.pop_back();
-		Queue::func.pop_back();
 	}
 
 	ctx.camera_main.update();
@@ -79,7 +85,8 @@ void Renderer::update(float delta)
 	for (auto &model : Context::models) {
 		model.render = GUI::render_models;
 		if (model.render) {
-			Transform trans = ctx.scripts[0]->getValue<Transform>("transform");
+			model.script->Update(delta);
+			Transform trans = model.script->getValue<Transform>("transform");
 			mat4 pvm[4];
 			pvm[0] = proj;
 			pvm[1] = view;
@@ -105,7 +112,7 @@ void Renderer::update(float delta)
 	const vec3 up = normalize(cross(right, front));
 	std::vector<ShadowsUBO> shadows_UBO(Context::models.size());
 	for (uint32_t i = 0; i < Context::models.size(); i++)
-		shadows_UBO[i] = { ortho(-40.f, 40.f, -40.f, 40.f, 500.f, 0.005f), lookAt(pos, front, right, up), Context::models[i].transform, Shadows::shadowCast ? 1.0f : 0.0f };
+		shadows_UBO[i] = { ortho(-40.f, 40.f, -40.f, 40.f, 500.f, 0.005f), lookAt(pos, front, right, up), Context::models[i].script->getValue<Transform>("transform").matrix() * Context::models[i].transform, Shadows::shadowCast ? 1.0f : 0.0f };
 	memcpy(ctx.shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
 
 	// GUI

@@ -1338,4 +1338,16 @@ namespace vm {
 	{
 		return a + f * (b - a);
 	}
+
+	Transform::Transform() : _scale(1.0f), _rotation(quat::identity()), _position(0.0f)
+	{ }
+
+	vm::mat4 Transform::matrix()
+	{
+		return 
+			translate(mat4::identity(), _position) *
+			_rotation.matrix() *
+			scale(mat4::identity(), _scale);
+	}
+
 }

@@ -90,10 +90,10 @@ void Context::initRendering()
 	metrics.initQueryPool();
 }
 
-static void LoadModel(MonoObject* folderPath, MonoObject* modelName)
+static void LoadModel(MonoString* folderPath, MonoString* modelName)
 {
-	std::string path(mono_string_to_utf8(mono_object_to_string(folderPath, nullptr)));
-	std::string name(mono_string_to_utf8(mono_object_to_string(modelName, nullptr)));
+	std::string path(mono_string_to_utf8(folderPath));
+	std::string name(mono_string_to_utf8(modelName));
 	Queue::loadModel.push_back({ path, name });
 }
 
@@ -111,7 +111,7 @@ void Context::loadResources()
 	//models.back().loadModel("objects/sponza/", "sponza.obj");
 	Script::Init();
 	Script::addCallback("Ext::LoadModel", LoadModel);
-	scripts.push_back(std::make_unique<Script>("Test"));
+	scripts.push_back(std::make_unique<Script>("Load"));
 }
 
 void Context::createUniforms()

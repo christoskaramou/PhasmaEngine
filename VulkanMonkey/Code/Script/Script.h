@@ -22,7 +22,6 @@ namespace vm {
 		MonoMethod* dtor;
 		MonoMethod* update;
 		std::vector<MonoClassField*> fields{};
-		MonoClassField* transform;
 
 		static bool initialized;
 

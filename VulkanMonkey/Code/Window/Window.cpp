@@ -124,7 +124,7 @@ bool Window::processEvents(float delta)
 	}
 
 	if ((up || down) && (left || right)) combineDirections = true;
-	float velocity = combineDirections ? GUI::cameraSpeed * delta * 0.707f : GUI::cameraSpeed * delta;
+	float velocity = combineDirections ? GUI::cameraSpeed * Timer::delta * 0.707f : GUI::cameraSpeed * Timer::delta;
 	if (up) info.camera_main.move(Camera::RelativeDirection::FORWARD, velocity);
 	if (down) info.camera_main.move(Camera::RelativeDirection::BACKWARD, velocity);
 	if (left) info.camera_main.move(Camera::RelativeDirection::LEFT, velocity);

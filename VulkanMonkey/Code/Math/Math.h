@@ -252,11 +252,7 @@ namespace vm {
 		quat _rotation;
 		vec3 _position;
 	public:
-		mat4 matrix() {
-			mat4 t = translate(mat4::identity(), _position);
-			mat4 r = _rotation.matrix();
-			mat4 s = scale(mat4::identity(), _scale);
-			return t * r * s;
-		}
+		Transform();
+		mat4 matrix();
 	};
 }

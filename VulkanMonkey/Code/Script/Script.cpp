@@ -10,7 +10,6 @@ constexpr uint32_t PUBLIC_FLAG = 0x0006;
 
 Script::Script(std::string file, std::string extension)
 {
-	transform = nullptr;
 	ctor = nullptr;
 	dtor = nullptr;
 	update = nullptr;
@@ -25,14 +24,14 @@ Script::Script(std::string file, std::string extension)
 	while (MonoClassField* f = mono_class_get_fields(entityClass, &iter))
 		fields.push_back(f);
 
-	for (auto& f : fields) {
-		if (mono_field_get_flags(f) & PUBLIC_FLAG) { // get only public fields
-			std::string fieldName(mono_field_get_name(f));
-			uint32_t mtype = mono_type_get_type(mono_field_get_type(f));
-			if (fieldName == "transform" && mtype & MONO_TYPE_CLASS)
-					transform = f;
-		}
-	}
+	//for (auto& f : fields) {
+	//	if (mono_field_get_flags(f) & PUBLIC_FLAG) { // get only public fields
+	//		std::string fieldName(mono_field_get_name(f));
+	//		uint32_t mtype = mono_type_get_type(mono_field_get_type(f));
+	//		if (fieldName == "transform" && mtype & MONO_TYPE_CLASS)
+	//				transform = f;
+	//	}
+	//}
 
 	// functions
 	void* it = NULL;
@@ -45,7 +44,7 @@ Script::Script(std::string file, std::string extension)
 			if (methodName == ".ctor") {
 				void** args = nullptr;
 				MonoObject* exception = nullptr;
-				mono_runtime_invoke(m, entityInstance, args, &exception);
+				//mono_runtime_invoke(m, entityInstance, args, &exception);
 				ctor = m;
 			}
 			else if (methodName == "Finalize")
