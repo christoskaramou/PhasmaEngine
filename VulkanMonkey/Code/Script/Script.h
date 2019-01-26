@@ -41,22 +41,25 @@ namespace vm {
 		{
 			T value;
 			MonoClassField* idField = mono_class_get_field_from_name(entityClass, name);
-			mono_field_get_value(entityInstance, idField, &value);
+			if (idField)
+				mono_field_get_value(entityInstance, idField, &value);
 			return value;
 		}
 
 		template<class T>
-		void getValue(T* value, const char* name)
+		void getValue(T& valuePtr, const char* name)
 		{
 			MonoClassField* idField = mono_class_get_field_from_name(entityClass, name);
-			mono_field_get_value(entityInstance, idField, value);
+			if (idField)
+				mono_field_get_value(entityInstance, idField, &valuePtr);
 		}
 
 		template<class T>
 		void setValue(T& value, const char* name)
 		{
 			MonoClassField* idField = mono_class_get_field_from_name(entityClass, name);
-			mono_field_set_value(entityInstance, idField, &value);
+			if (idField)
+				mono_field_set_value(entityInstance, idField, &value);
 		}
 	};
 }

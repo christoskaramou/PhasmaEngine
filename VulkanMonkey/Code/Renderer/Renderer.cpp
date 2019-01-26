@@ -92,7 +92,7 @@ void Renderer::update(float delta)
 			Transform trans;
 			if (model.script) {
 				model.script->Update(delta);
-				trans = model.script->getValue<Transform>("transform");
+				model.script->getValue(trans, "transform");
 			}
 			mat4 pvm[4];
 			pvm[0] = proj;
