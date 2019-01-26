@@ -89,9 +89,11 @@ void Renderer::update(float delta)
 	for (auto &model : Context::models) {
 		model.render = GUI::render_models;
 		if (model.render) {
-			if (model.script)
+			Transform trans;
+			if (model.script) {
 				model.script->Update(delta);
-			Transform trans = model.script->getValue<Transform>("transform");
+				trans = model.script->getValue<Transform>("transform");
+			}
 			mat4 pvm[4];
 			pvm[0] = proj;
 			pvm[1] = view;
