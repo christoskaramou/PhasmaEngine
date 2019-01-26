@@ -1,11 +1,12 @@
 #pragma once
 
+#include "../Code/Math/Math.h"
 #include <mono/jit/jit.h>
 #include <mono/metadata/assembly.h>
 #include <mono/metadata/mono-config.h>
 #include <mono/metadata/debug-helpers.h>
 #include <vector>
-#include "../Code/Math/Math.h"
+#include <filesystem>
 
 namespace vm {
 	struct Script
@@ -26,6 +27,7 @@ namespace vm {
 		static bool initialized;
 
 	public:
+		static std::vector<std::string> dlls;
 		static void Init();
 		static void Cleanup();
 		static void addCallback(const char* target, const void* staticFunction);

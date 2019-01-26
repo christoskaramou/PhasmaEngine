@@ -4,6 +4,7 @@
 using namespace vm;
 
 MonoDomain* Script::monoDomain = nullptr;
+std::vector<std::string> Script::dlls{};
 bool Script::initialized = false;
 
 constexpr uint32_t PUBLIC_FLAG = 0x0006;
@@ -63,6 +64,14 @@ Script::~Script()
 	mono_runtime_invoke(dtor, entityInstance, args, &exception);
 }
 
+bool endsWithValue(const std::string &mainStr, const std::string &toMatch)
+{
+	if (mainStr.size() >= toMatch.size() &&
+		mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
+		return true;
+	else
+		return false;
+}
 void Script::Init()
 {
 	if (initialized)
@@ -70,6 +79,30 @@ void Script::Init()
 	mono_set_dirs("include/Mono/lib", "include/Mono/etc");
 	mono_config_parse(nullptr);
 	monoDomain = mono_jit_init("VMonkey");
+
+	for (auto& file : std::filesystem::directory_iterator("Scripts"))
+	{
+		std::string name = file.path().string();
+		if (endsWithValue(name, ".dll")) {
+			name = name.substr(0, name.find_last_of("."));
+			dlls.push_back(name.substr(name.rfind('\\') + 1));	//	Scripts\\example.dll --> Scripts\\example --> example
+		}
+	}
+
+//	#include <fstream>
+//	#include <iostream>
+//	#include <filesystem>
+//	namespace fs = std::filesystem;
+//
+//	int main()
+//	{
+//		fs::create_directories("sandbox/a/b");
+//			std::ofstream("sandbox/file1.txt");
+//		std::ofstream("sandbox/file2.txt");
+//		for (auto& p : fs::directory_iterator("sandbox"))
+//			std::cout << p.path() << '\n';
+//		fs::remove_all("sandbox");
+//	}
 
 	initialized = true;
 }

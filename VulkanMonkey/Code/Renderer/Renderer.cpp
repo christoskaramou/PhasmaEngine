@@ -71,7 +71,11 @@ void Renderer::update(float delta)
 		std::string name = std::get<1>(Queue::loadModel[i]);
 		Context::models.push_back(Model());
 		Context::models.back().loadModel(path, name);
-		Context::models.back().script = std::make_unique<Script>(Context::models.back().name.substr(0, Context::models.back().name.find_last_of(".")));
+		for (auto& dll : Script::dlls) {
+			std::string mName = Context::models.back().name.substr(0, Context::models.back().name.find_last_of("."));
+			if (dll == mName)
+				Context::models.back().script = std::make_unique<Script>(dll);
+		}
 		Queue::loadModel.pop_back();
 	}
 
@@ -85,7 +89,8 @@ void Renderer::update(float delta)
 	for (auto &model : Context::models) {
 		model.render = GUI::render_models;
 		if (model.render) {
-			model.script->Update(delta);
+			if (model.script)
+				model.script->Update(delta);
 			Transform trans = model.script->getValue<Transform>("transform");
 			mat4 pvm[4];
 			pvm[0] = proj;
