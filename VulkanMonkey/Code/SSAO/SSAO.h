@@ -7,6 +7,7 @@
 #include "../Image/Image.h"
 #include "../Surface/Surface.h"
 #include "../GUI/GUI.h"
+#include "../Camera/Camera.h"
 #include <map>
 
 namespace vm {
@@ -24,6 +25,7 @@ namespace vm {
 		vk::DescriptorSetLayout DSLayoutSSAO, DSLayoutSSAOBlur;
 		vk::DescriptorSet DSssao, DSssaoBlur;
 
+		void update(Camera& camera);
 		void createSSAOUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void draw(uint32_t imageIndex, const vec2 UVOffset[2]);

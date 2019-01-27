@@ -150,3 +150,13 @@ void MotionBlur::destroy()
 	UBmotionBlur.destroy();
 	pipeline.destroy();
 }
+
+void vm::MotionBlur::update(Camera& camera)
+{
+	if (GUI::show_motionBlur) {
+		static mat4 previousView = camera.view;
+		mat4 motionBlurInput[4]{ camera.projection, camera.view, previousView, camera.invViewProjection };
+		memcpy(UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
+		previousView = camera.view;
+	}
+}

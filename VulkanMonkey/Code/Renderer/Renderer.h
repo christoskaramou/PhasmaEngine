@@ -12,6 +12,7 @@ namespace vm {
 	public:
 		Renderer(SDL_Window* window);
 		~Renderer();
+		void checkQueue();
 		void update(float delta);
 		void present();
 

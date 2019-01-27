@@ -14,15 +14,12 @@ namespace vm {
 		// Data
 		static ImVec2		winPos;
 		static ImVec2		winSize;
-		static bool			p_open;
-		static bool			console_open;
 		static bool			lock_render_window;
 		static bool			deferred_rendering;
 		static bool			show_ssr;
 		static bool			show_ssao;
 		static bool			show_motionBlur;
 		static bool			shadow_cast;
-		static bool			render_models;
 		static bool			randomize_lights;
 		static int			fps;
 		static float		cameraSpeed;
@@ -33,6 +30,11 @@ namespace vm {
 		static float		gpuTime;
 		static float		timeScale;
 		static std::vector<std::string> fileList;
+		static std::vector<std::string> modelList;
+		static ImVec2		tlPanelPos;
+		static ImVec2		tlPanelSize;
+		static ImVec2		mlPanelPos;
+		static ImVec2		mlPanelSize;
 
 		static SDL_Window*  g_Window;
 		static Uint64       g_Time;
@@ -51,10 +53,17 @@ namespace vm {
 		Pipeline pipeline;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
+		void update();
 		void loadGUI(const std::string textureName = "", bool show = true);
 		void draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Pipeline& pipeline, const vk::CommandBuffer & cmd);
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();
+		void showMetrics();
+		void showOptions();
+		void showConsole();
+		void showScripts();
+		void showModels();
+		void showRenderingWindow();
 		void createVertexBuffer(size_t vertex_size);
 		void createIndexBuffer(size_t index_size);
 		void createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout);

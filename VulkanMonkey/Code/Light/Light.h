@@ -3,6 +3,8 @@
 #include "../VulkanContext/VulkanContext.h"
 #include "../Math/Math.h"
 #include "../Buffer/Buffer.h"
+#include "../Camera/Camera.h"
+#include "../GUI/GUI.h"
 
 namespace vm {
 	constexpr auto MAX_LIGHTS = 20;
@@ -33,6 +35,7 @@ namespace vm {
 		vk::DescriptorSet descriptorSet;
 		vk::DescriptorSetLayout descriptorSetLayout;
 
+		void update(Camera& camera);
 		void createLightUniforms();
 		void destroy();
 	};

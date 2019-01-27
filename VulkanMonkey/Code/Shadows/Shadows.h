@@ -27,7 +27,6 @@ namespace vm {
 		void destroy();
 	};
 
-
 	struct ShadowsUBO
 	{
 		mat4 projection, view, model;

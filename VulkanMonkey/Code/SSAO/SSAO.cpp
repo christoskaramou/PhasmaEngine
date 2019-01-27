@@ -333,3 +333,11 @@ void SSAO::destroy()
 		DSLayoutSSAOBlur = nullptr;
 	}
 }
+
+void SSAO::update(Camera& camera)
+{
+	if (GUI::show_ssao) {
+		mat4 pvm[3]{ camera.projection, camera.view, camera.invProjection };
+		memcpy(UBssaoPVM.data, pvm, sizeof(pvm));
+	}
+}

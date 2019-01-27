@@ -5,15 +5,12 @@
 using namespace vm;
 ImVec2						GUI::winPos = ImVec2();
 ImVec2						GUI::winSize = ImVec2();
-bool						GUI::p_open = true;
-bool						GUI::console_open = true;
 bool						GUI::lock_render_window = true;
 bool						GUI::deferred_rendering = true;
 bool						GUI::show_ssr = true;
 bool						GUI::show_ssao = true;
 bool						GUI::show_motionBlur = true;
 bool						GUI::shadow_cast = true;
-bool						GUI::render_models = true;
 bool						GUI::randomize_lights = false;
 int							GUI::fps = 60;
 float						GUI::cameraSpeed = 10.f;
@@ -24,6 +21,11 @@ float						GUI::cpuWaitingTime = 0;
 float						GUI::gpuTime = 0;
 float						GUI::timeScale = 1.f;
 std::vector<std::string>	GUI::fileList{};
+std::vector<std::string>	GUI::modelList{};
+ImVec2						GUI::tlPanelPos = ImVec2();
+ImVec2						GUI::tlPanelSize = ImVec2();
+ImVec2						GUI::mlPanelPos = ImVec2();
+ImVec2						GUI::mlPanelSize = ImVec2();
 
 vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
 SDL_Window*					GUI::g_Window = nullptr;
@@ -43,19 +45,20 @@ bool endsWithExt(const std::string &mainStr, const std::string &toMatch)
 
 void GUI::setWindows()
 {
-	static bool active = true;
+	showMetrics();
+	showOptions();
+	showConsole();
+	showScripts();
+	showModels();
+	showRenderingWindow();
+}
 
-	static ImVec2 tlPanelPos;
-	static ImVec2 tlPanelSize;
-	static ImVec2 mlPanelPos;
-	static ImVec2 mlPanelSize;
-
-	ImGuiStyle* style = &ImGui::GetStyle();
-
-	// Top Left Panel
+void GUI::showMetrics()
+{
+	static bool metrics_open = true;
 	ImGui::SetNextWindowPos(ImVec2(0.f, 1.f));
 	ImGui::SetNextWindowSize(ImVec2(282.f, 111.f));
-	ImGui::Begin("Metrics", &p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+	ImGui::Begin("Metrics", &metrics_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
 	ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
@@ -65,11 +68,15 @@ void GUI::setWindows()
 	tlPanelPos = ImGui::GetWindowPos();
 	tlPanelSize = ImGui::GetWindowSize();
 	ImGui::End();
+}
 
-	// Middle Left Panel
+void GUI::showOptions()
+{
+
+	static bool	options_open = true;
 	ImGui::SetNextWindowPos(ImVec2(0.f, tlPanelSize.y));
 	ImGui::SetNextWindowSize(ImVec2(tlPanelSize.x, HEIGHT_f - 279.f - tlPanelSize.y));
-	ImGui::Begin("Testing", &p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+	ImGui::Begin("Options", &options_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGui::Checkbox("Lock Render Window", &lock_render_window);
 	ImGui::Checkbox("Deffered", &deferred_rendering);
 	if (deferred_rendering) {
@@ -77,7 +84,6 @@ void GUI::setWindows()
 		ImGui::Checkbox("SSAO", &show_ssao);
 		ImGui::Checkbox("Motion Blur", &show_motionBlur);
 	}
-	ImGui::Checkbox("Models", &render_models);
 	ImGui::Checkbox("Sun Light", &shadow_cast);
 	ImGui::Separator();
 	if (ImGui::Button("Randomize Lights"))
@@ -93,16 +99,21 @@ void GUI::setWindows()
 	mlPanelPos = ImGui::GetWindowPos();
 	mlPanelSize = ImGui::GetWindowSize();
 	ImGui::End();
+}
 
-	// Console
+void GUI::showConsole()
+{
+	static bool console_open = true;
 	static Console console;
-	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - 279.f), ImVec2(WIDTH_f / 2.f, 279.f));
+	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - 279.f), ImVec2(WIDTH_f / 3.f, 279.f));
+}
 
-	// Scripts show
-	static bool scriptsOpen = true;
-	ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 2.f, HEIGHT_f - 279.f));
-	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 2.f, 279.f));
-	ImGui::Begin("Scripts Folder", &scriptsOpen, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+void GUI::showScripts()
+{
+	static bool scripts_open = true;
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 3.f, HEIGHT_f - 279.f));
+	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, 279.f));
+	ImGui::Begin("Scripts Folder", &scripts_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	for (auto& file : fileList)
 	{
 		if (endsWithExt(file, ".cs"))
@@ -111,8 +122,23 @@ void GUI::setWindows()
 			ImGui::TextColored(ImVec4(.3f, .3f, .3f, 1.f), file.c_str());
 	}
 	ImGui::End();
+}
 
-	// Rendering window
+void GUI::showModels()
+{
+	static bool models_open = true;
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 2.f / 3.f, HEIGHT_f - 279.f));
+	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, 279.f));
+	ImGui::Begin("Models Loaded", &models_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+	for (auto& model : modelList)
+		ImGui::Text(model.c_str());
+	ImGui::End();
+}
+
+void GUI::showRenderingWindow()
+{
+	static bool active = true;
+	ImGuiStyle* style = &ImGui::GetStyle();
 	style->Colors[ImGuiCol_WindowBg].w = 0.0f;
 	int flags = ImGuiWindowFlags_NoTitleBar;
 	if (lock_render_window) {
@@ -622,4 +648,10 @@ void GUI::destroy()
 		vulkan->device.destroyDescriptorSetLayout(GUI::descriptorSetLayout);
 		GUI::descriptorSetLayout = nullptr;
 	}
+}
+
+void vm::GUI::update()
+{
+	if (render)
+		newFrame();
 }

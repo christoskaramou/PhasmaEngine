@@ -6,6 +6,7 @@
 #include "../Shadows/Shadows.h"
 #include "../Pipeline/Pipeline.h"
 #include "../Script/Script.h"
+#include "../Camera/Camera.h"
 #include <map>
 #include <utility>
 
@@ -29,6 +30,7 @@ namespace vm {
 		std::unique_ptr<Script> script;
 
 		void draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows = nullptr, vk::DescriptorSet* DSLights = nullptr);
+		void update(Camera& camera, float delta);
 		vec4 getBoundingSphere();
 		void loadModel(const std::string& folderPath, const std::string& modelName, bool show = true);
 		void createVertexBuffer();

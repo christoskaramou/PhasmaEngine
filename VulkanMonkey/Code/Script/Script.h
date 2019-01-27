@@ -21,7 +21,7 @@ namespace vm {
 		std::vector<MonoMethod*> methods{};
 		MonoMethod* ctor;
 		MonoMethod* dtor;
-		MonoMethod* update;
+		MonoMethod* updateFunc;
 		std::vector<MonoClassField*> fields{};
 
 		static bool initialized;
@@ -34,7 +34,7 @@ namespace vm {
 		Script(std::string file, std::string extension = "dll");
 		~Script();
 
-		void Update(float delta);
+		void update(float delta);
 
 		template<class T>
 		T getValue(const char* name)

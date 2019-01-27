@@ -205,6 +205,32 @@ void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& mod
 	}
 }
 
+void Model::update(Camera& camera, float delta)
+{
+	//render = GUI::render_models;
+	if (render) {
+		Transform trans;
+		if (script) {
+			script->update(delta);
+			script->getValue(trans, "transform");
+		}
+		mat4 pvm[4];
+		pvm[0] = camera.projection;
+		pvm[1] = camera.view;
+		pvm[2] = trans.matrix() * transform;
+		camera.ExtractFrustum(pvm[2]);
+		for (auto &mesh : meshes) {
+			mesh.cull = !camera.SphereInFrustum(mesh.boundingSphere);
+			if (!mesh.cull) {
+				pvm[3][0] = mesh.gltfMaterial.baseColorFactor;
+				pvm[3][1] = vec4(mesh.gltfMaterial.emissiveFactor, 1.f);
+				pvm[3][2] = vec4(mesh.gltfMaterial.metallicFactor, mesh.gltfMaterial.roughnessFactor, mesh.gltfMaterial.alphaCutoff, mesh.hasAlphaMap ? 1.f : 0.f);
+				memcpy(uniformBuffer.data, &pvm, sizeof(pvm));
+			}
+		}
+	}
+}
+
 // position x, y, z and radius w
 vec4 Model::getBoundingSphere()
 {

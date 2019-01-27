@@ -8,6 +8,7 @@
 #include "../Swapchain/Swapchain.h"
 #include "../GUI/GUI.h"
 #include "../Timer/Timer.h"
+#include "../Camera/Camera.h"
 #include <vector>
 #include <string>
 #include <map>
@@ -24,6 +25,7 @@ namespace vm {
 		vk::DescriptorSet DSMotionBlur;
 		vk::DescriptorSetLayout DSLayoutMotionBlur;
 		
+		void update(Camera& camera);
 		void createMotionBlurFrameBuffers();
 		void createMotionBlurUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);

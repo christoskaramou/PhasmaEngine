@@ -172,3 +172,18 @@ void SSR::destroy()
 	UBReflection.destroy();
 	pipeline.destroy();
 }
+
+void SSR::update(Camera& camera)
+{
+	if (GUI::show_ssr) {
+		mat4 reflectionInput[4];
+		reflectionInput[0][0] = vec4(camera.position, 1.0f);
+		reflectionInput[0][1] = vec4(camera.front, 1.0f);
+		reflectionInput[0][2] = vec4(WIDTH_f, HEIGHT_f, 0.f, 0.f);
+		reflectionInput[0][3] = vec4();
+		reflectionInput[1] = camera.projection;
+		reflectionInput[2] = camera.view;
+		reflectionInput[3] = camera.invProjection;
+		memcpy(UBReflection.data, &reflectionInput, sizeof(reflectionInput));
+	}
+}

@@ -7,6 +7,7 @@
 #include "../Surface/Surface.h"
 #include "../Math/Math.h"
 #include "../GUI/GUI.h"
+#include "../Camera/Camera.h"
 #include <vector>
 #include <map>
 
@@ -22,6 +23,7 @@ namespace vm {
 		vk::DescriptorSet DSReflection;
 		vk::DescriptorSetLayout DSLayoutReflection;
 
+		void update(Camera& camera);
 		void createSSRUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void draw(uint32_t imageIndex, const vec2 UVOffset[2]);

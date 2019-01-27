@@ -51,11 +51,8 @@ Renderer::~Renderer()
 	ctx.destroyVkContext();
 }
 
-void Renderer::update(float delta)
+void Renderer::checkQueue()
 {
-	// TODO: make these updates prettier
-	for (auto& s : ctx.scripts)
-		s->Update(delta);
 	// TODO: make an other command pool for multithreading
 	for (int i = static_cast<int>(Queue::loadModel.size()) - 1; i >= 0; i--) {
 		VulkanContext::getVulkanContext().device.waitIdle();
@@ -63,6 +60,7 @@ void Renderer::update(float delta)
 		std::string name = std::get<1>(Queue::loadModel[i]);
 		Context::models.push_back(Model());
 		Context::models.back().loadModel(path, name);
+		GUI::modelList.push_back(name);
 		for (auto& dll : Script::dlls) {
 			std::string mName = Context::models.back().name.substr(0, Context::models.back().name.find_last_of("."));
 			if (dll == mName)
@@ -70,38 +68,38 @@ void Renderer::update(float delta)
 		}
 		Queue::loadModel.pop_back();
 	}
+}
 
+void Renderer::update(float delta)
+{
+	// check for commands in queue
+	checkQueue();
+
+	// universal scripts
+	for (auto& s : ctx.scripts)
+		s->update(delta);
+
+	// update camera matrices
 	ctx.camera_main.update();
-	const mat4 &proj = ctx.camera_main.projection;
-	const mat4 &view = ctx.camera_main.view;
-	const mat4 &invProj = ctx.camera_main.invProjection;
-	const mat4 &invViewProj = ctx.camera_main.invViewProjection;
 
 	// MODELS
-	for (auto &model : Context::models) {
-		model.render = GUI::render_models;
-		if (model.render) {
-			Transform trans;
-			if (model.script) {
-				model.script->Update(delta);
-				model.script->getValue(trans, "transform");
-			}
-			mat4 pvm[4];
-			pvm[0] = proj;
-			pvm[1] = view;
-			pvm[2] = trans.matrix() * model.transform;
-			ctx.camera_main.ExtractFrustum(pvm[2]);
-			for (auto &mesh : model.meshes) {
-				mesh.cull = !ctx.camera_main.SphereInFrustum(mesh.boundingSphere);
-				if (!mesh.cull) {
-					pvm[3][0] = mesh.gltfMaterial.baseColorFactor;
-					pvm[3][1] = vec4(mesh.gltfMaterial.emissiveFactor, 1.f);
-					pvm[3][2] = vec4(mesh.gltfMaterial.metallicFactor, mesh.gltfMaterial.roughnessFactor, mesh.gltfMaterial.alphaCutoff, mesh.hasAlphaMap? 1.f : 0.f);
-					memcpy(model.uniformBuffer.data, &pvm, sizeof(pvm));
-				}
-			}
-		}
-	}
+	for (auto &model : Context::models)
+		model.update(ctx.camera_main ,delta);
+
+	// GUI
+	ctx.gui.update();
+
+	// LIGHTS
+	ctx.lightUniforms.update(ctx.camera_main);
+
+	// SSAO
+	ctx.ssao.update(ctx.camera_main);
+
+	// SSR
+	ctx.ssr.update(ctx.camera_main);
+
+	// MOTION BLUR
+	ctx.motionBlur.update(ctx.camera_main);
 
 	// SHADOWS
 	Shadows::shadowCast = GUI::shadow_cast;
@@ -119,49 +117,6 @@ void Renderer::update(float delta)
 		};
 	}
 	memcpy(ctx.shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
-
-	// GUI
-	if (ctx.gui.render)
-		ctx.gui.newFrame();
-
-	// LIGHTS
-	if (GUI::randomize_lights) {
-		GUI::randomize_lights = false;
-		LightsUBO lubo;
-		lubo.camPos = vec4(ctx.camera_main.position, 1.0f);
-		memcpy(ctx.lightUniforms.uniform.data, &lubo, sizeof(lubo));
-	}
-	else {
-		vec4 camPos(ctx.camera_main.position, 1.0f);
-		memcpy(ctx.lightUniforms.uniform.data, &camPos, sizeof(camPos));
-	}
-
-	// SSAO
-	if (GUI::show_ssao) {
-		mat4 pvm[3]{ proj, view, invProj };
-		memcpy(ctx.ssao.UBssaoPVM.data, pvm, sizeof(pvm));
-	}
-
-	// SSR
-	if (GUI::show_ssr) {
-		mat4 reflectionInput[4];
-		reflectionInput[0][0] = vec4(ctx.camera_main.position, 1.0f);
-		reflectionInput[0][1] = vec4(ctx.camera_main.front, 1.0f);
-		reflectionInput[0][2] = vec4(WIDTH_f, HEIGHT_f, 0.f, 0.f);
-		reflectionInput[0][3] = vec4();
-		reflectionInput[1] = proj;
-		reflectionInput[2] = view;
-		reflectionInput[3] = invProj;
-		memcpy(ctx.ssr.UBReflection.data, &reflectionInput, sizeof(reflectionInput));
-	}
-
-	// MOTION BLUR
-	if (GUI::show_motionBlur) {
-		static mat4 previousView = view;
-		mat4 motionBlurInput[4]{ proj, view, previousView, invViewProj };
-		memcpy(ctx.motionBlur.UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
-		previousView = view;
-	}
 
 	//TERRAIN
 	//if (ctx.terrain.render) {

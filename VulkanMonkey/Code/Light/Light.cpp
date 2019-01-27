@@ -56,3 +56,17 @@ void LightUniforms::destroy()
 		descriptorSetLayout = nullptr;
 	}
 }
+
+void LightUniforms::update(Camera& camera)
+{
+	if (GUI::randomize_lights) {
+		GUI::randomize_lights = false;
+		LightsUBO lubo;
+		lubo.camPos = vec4(camera.position, 1.0f);
+		memcpy(uniform.data, &lubo, sizeof(lubo));
+	}
+	else {
+		vec4 camPos(camera.position, 1.0f);
+		memcpy(uniform.data, &camPos, sizeof(camPos));
+	}
+}

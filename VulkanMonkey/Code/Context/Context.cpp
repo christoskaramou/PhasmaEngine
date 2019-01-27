@@ -123,7 +123,7 @@ void Context::createUniforms()
 	// DESCRIPTOR SETS FOR SKYBOX
 	//skyBox.createDescriptorSet(SkyBox::getDescriptorSetLayout(vulkan.device));
 	// DESCRIPTOR SETS FOR SHADOWS
-	shadows.createDynamicUniformBuffer(10); // TODO: Fix to dynamic add or remove memory
+	shadows.createDynamicUniformBuffer(256); // TODO: Fix to dynamic add or remove memory
 	shadows.createDescriptorSet();
 	// DESCRIPTOR SETS FOR LIGHTS
 	lightUniforms.createLightUniforms();
