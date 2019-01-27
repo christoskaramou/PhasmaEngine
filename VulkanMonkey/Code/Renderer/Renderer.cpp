@@ -53,19 +53,11 @@ Renderer::~Renderer()
 
 void Renderer::update(float delta)
 {
+	// TODO: make these updates prettier
 	for (auto& s : ctx.scripts)
 		s->Update(delta);
 	// TODO: make an other command pool for multithreading
 	for (int i = static_cast<int>(Queue::loadModel.size()) - 1; i >= 0; i--) {
-		//Queue::func.push_back( std::async( std::launch::async, [](std::tuple<std::string, std::string>& temp) {
-		//	VulkanContext::getVulkanContext().device.waitIdle();
-		//	std::string path = std::get<0>(temp);
-		//	std::string name = std::get<1>(temp);
-		//	Context::models.push_back(Model());
-		//	Context::models.back().loadModel(path, name);
-		//}, Queue::loadModel[i]));
-		//Queue::func.back().get();
-		//Queue::func.pop_back();
 		VulkanContext::getVulkanContext().device.waitIdle();
 		std::string path = std::get<0>(Queue::loadModel[i]);
 		std::string name = std::get<1>(Queue::loadModel[i]);

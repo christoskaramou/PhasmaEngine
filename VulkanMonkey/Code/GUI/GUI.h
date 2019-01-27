@@ -32,6 +32,7 @@ namespace vm {
 		static float		cpuWaitingTime;
 		static float		gpuTime;
 		static float		timeScale;
+		static std::vector<std::string> fileList;
 
 		static SDL_Window*  g_Window;
 		static Uint64       g_Time;

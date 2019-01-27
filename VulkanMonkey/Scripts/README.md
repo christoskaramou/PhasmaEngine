@@ -1,4 +1,6 @@
-Scripts can be attached to models or meshes or they can be independent like Load.cs
+Scripts must have the same file and class name contained: e.g. DamagedHelmet.cs -> public class DamagedHelmet
+
+Scripts can be attached to models or they can be independent like Load.cs
 
 To compile scripts:
 	1. 	Run the _monoCmd.bat

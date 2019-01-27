@@ -16,8 +16,8 @@ namespace vm {
 
 		MonoAssembly* assembly;
 		MonoImage* monoImage;
-		MonoClass* entityClass;
-		MonoObject* entityInstance;
+		MonoClass* scriptClass;
+		MonoObject* scriptInstance;
 		std::vector<MonoMethod*> methods{};
 		MonoMethod* ctor;
 		MonoMethod* dtor;
@@ -40,26 +40,26 @@ namespace vm {
 		T getValue(const char* name)
 		{
 			T value;
-			MonoClassField* idField = mono_class_get_field_from_name(entityClass, name);
+			MonoClassField* idField = mono_class_get_field_from_name(scriptClass, name);
 			if (idField)
-				mono_field_get_value(entityInstance, idField, &value);
+				mono_field_get_value(scriptInstance, idField, &value);
 			return value;
 		}
 
 		template<class T>
-		void getValue(T& valuePtr, const char* name)
+		void getValue(T& object, const char* name)
 		{
-			MonoClassField* idField = mono_class_get_field_from_name(entityClass, name);
+			MonoClassField* idField = mono_class_get_field_from_name(scriptClass, name);
 			if (idField)
-				mono_field_get_value(entityInstance, idField, &valuePtr);
+				mono_field_get_value(scriptInstance, idField, &object);
 		}
 
 		template<class T>
 		void setValue(T& value, const char* name)
 		{
-			MonoClassField* idField = mono_class_get_field_from_name(entityClass, name);
+			MonoClassField* idField = mono_class_get_field_from_name(scriptClass, name);
 			if (idField)
-				mono_field_set_value(entityInstance, idField, &value);
+				mono_field_set_value(scriptInstance, idField, &value);
 		}
 	};
 }

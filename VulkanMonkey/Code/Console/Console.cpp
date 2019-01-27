@@ -65,30 +65,12 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 
 	// TODO: display items starting from the bottom
 	ClearLog();
-	//if (ImGui::SmallButton("TextureCoordinateTest")) { Queue::loadModel.push_back({ "objects/TextureCoordinateTest/glTF/", "TextureCoordinateTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("TextureSettingsTest")) { Queue::loadModel.push_back({ "objects/TextureSettingsTest/glTF/", "TextureSettingsTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("TextureTransformTest")) { Queue::loadModel.push_back({ "objects/TextureTransformTest/glTF/", "TextureTransformTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("VertexColorTest")) { Queue::loadModel.push_back({ "objects/VertexColorTest/glTF/", "VertexColorTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("MorphPrimitivesTest")) { Queue::loadModel.push_back({ "objects/MorphPrimitivesTest/glTF/", "MorphPrimitivesTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("MultiUVTest")) { Queue::loadModel.push_back({ "objects/MultiUVTest/glTF/", "MultiUVTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("NormalTangentMirrorTest")) { Queue::loadModel.push_back({ "objects/NormalTangentMirrorTest/glTF/", "NormalTangentMirrorTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("NormalTangentTest")) { Queue::loadModel.push_back({ "objects/NormalTangentTest/glTF/", "NormalTangentTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("OrientationTest")) { Queue::loadModel.push_back({ "objects/OrientationTest/glTF/", "OrientationTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("AlphaBlendModeTest")) { Queue::loadModel.push_back({ "objects/AlphaBlendModeTest/glTF/", "AlphaBlendModeTest.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/", "sponza.obj" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load Sponza PBR")) { Queue::loadModel.push_back({ "objects/sponza/", "sponzaPBR.obj" }); AddLog("loading..."); } ImGui::SameLine();
 	if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/glTF/", "Sponza.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 	if (ImGui::SmallButton("Load Suzanne")) { Queue::loadModel.push_back({ "objects/Suzanne/glTF/", "Suzanne.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 	if (ImGui::SmallButton("Load Corset")) { Queue::loadModel.push_back({ "objects/Corset/glTF/", "Corset.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load BoomBox")) { Queue::loadModel.push_back({ "objects/BoomBoxWithAxes/glTF/", "BoomBoxWithAxes.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 	if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load MetalRoughSpheres")) { Queue::loadModel.push_back({ "objects/MetalRoughSpheres/glTF/", "MetalRoughSpheres.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	//if (ImGui::SmallButton("Load Bugatti")) { Queue::loadModel.push_back({ "objects/bugatti/", "bugatti.obj" }); AddLog("loading..."); } ImGui::SameLine();
 	
 	if (ImGui::SmallButton("Clear")) { ClearLog(); } ImGui::SameLine();
-	//bool copy_to_clipboard = ImGui::SmallButton("Copy"); ImGui::SameLine();
-	//if (ImGui::SmallButton("Scroll to bottom")) ScrollToBottom = true;
-	//static float t = 0.0f; if (ImGui::GetTime() - t > 0.02f) { t = ImGui::GetTime(); AddLog("Spam %f", t); }
 
 	ImGui::Separator();
 

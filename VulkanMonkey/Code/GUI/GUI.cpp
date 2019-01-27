@@ -1,5 +1,6 @@
 #include "GUI.h"
 #include <iostream>
+#include <filesystem>
 
 using namespace vm;
 ImVec2						GUI::winPos = ImVec2();
@@ -22,6 +23,7 @@ float						GUI::cpuTime = 0;
 float						GUI::cpuWaitingTime = 0;
 float						GUI::gpuTime = 0;
 float						GUI::timeScale = 1.f;
+std::vector<std::string>	GUI::fileList{};
 
 vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
 SDL_Window*					GUI::g_Window = nullptr;
@@ -29,6 +31,15 @@ Uint64						GUI::g_Time = 0;
 bool						GUI::g_MousePressed[3] = { false, false, false };
 SDL_Cursor*					GUI::g_MouseCursors[ImGuiMouseCursor_COUNT] = { 0 };
 char*						GUI::g_ClipboardTextData = nullptr;
+
+bool endsWithExt(const std::string &mainStr, const std::string &toMatch)
+{
+	if (mainStr.size() >= toMatch.size() &&
+		mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
+		return true;
+	else
+		return false;
+}
 
 void GUI::setWindows()
 {
@@ -85,7 +96,21 @@ void GUI::setWindows()
 
 	// Console
 	static Console console;
-	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - 279.f), ImVec2(WIDTH_f, 279.f));
+	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - 279.f), ImVec2(WIDTH_f / 2.f, 279.f));
+
+	// Scripts show
+	static bool scriptsOpen = true;
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 2.f, HEIGHT_f - 279.f));
+	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 2.f, 279.f));
+	ImGui::Begin("Scripts Folder", &scriptsOpen, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+	for (auto& file : fileList)
+	{
+		if (endsWithExt(file, ".cs"))
+			ImGui::TextColored(ImVec4(.5f, 0.f, .5f, 1.f), file.c_str());
+		else
+			ImGui::TextColored(ImVec4(.3f, .3f, .3f, 1.f), file.c_str());
+	}
+	ImGui::End();
 
 	// Rendering window
 	style->Colors[ImGuiCol_WindowBg].w = 0.0f;
@@ -139,6 +164,11 @@ void GUI::ImGui_ImplSDL2_SetClipboardText(void*, const char* text)
 
 void GUI::initImGui()
 {
+	for (auto& file : std::filesystem::directory_iterator("Scripts")) {
+		auto pathStr = file.path().string();
+		fileList.push_back(pathStr.substr(pathStr.rfind('\\') + 1).c_str());
+	}
+
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 
