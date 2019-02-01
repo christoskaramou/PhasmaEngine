@@ -2,5 +2,5 @@
 
 using namespace vm;
 
-std::vector<std::tuple<std::string, std::string>> Queue::loadModel{};
-std::vector<std::future<void>> Queue::func{};
+std::deque<std::tuple<std::string, std::string>> Queue::loadModel{};
+std::deque<std::future<void>> Queue::func{};

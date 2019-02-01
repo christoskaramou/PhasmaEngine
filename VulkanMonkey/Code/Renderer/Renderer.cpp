@@ -54,19 +54,17 @@ Renderer::~Renderer()
 void Renderer::checkQueue()
 {
 	// TODO: make an other command pool for multithreading
-	for (int i = static_cast<int>(Queue::loadModel.size()) - 1; i >= 0; i--) {
+	for (auto& queue : Queue::loadModel) {
 		VulkanContext::getVulkanContext().device.waitIdle();
-		std::string path = std::get<0>(Queue::loadModel[i]);
-		std::string name = std::get<1>(Queue::loadModel[i]);
 		Context::models.push_back(Model());
-		Context::models.back().loadModel(path, name);
-		GUI::modelList.push_back(name);
+		Context::models.back().loadModel(std::get<0>(queue), std::get<1>(queue)); // path, name
+		GUI::modelList.push_back(std::get<1>(queue));
 		for (auto& dll : Script::dlls) {
 			std::string mName = Context::models.back().name.substr(0, Context::models.back().name.find_last_of("."));
 			if (dll == mName)
 				Context::models.back().script = std::make_unique<Script>(dll);
 		}
-		Queue::loadModel.pop_back();
+		Queue::loadModel.pop_front();
 	}
 }
 
