@@ -1,6 +1,5 @@
 #include "Mesh.h"
 #include "../Buffer/Buffer.h"
-#include <iostream>
 
 using namespace vm;
 

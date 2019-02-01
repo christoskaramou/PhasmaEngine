@@ -1,5 +1,4 @@
 #include "Window.h"
-#include <iostream>
 
 using namespace vm;
 

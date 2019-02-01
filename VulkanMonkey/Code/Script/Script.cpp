@@ -1,5 +1,4 @@
 #include "Script.h"
-#include <iostream>
 
 using namespace vm;
 

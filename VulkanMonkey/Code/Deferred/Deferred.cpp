@@ -1,5 +1,4 @@
 #include "Deferred.h"
-#include <iostream>
 
 using namespace vm;
 

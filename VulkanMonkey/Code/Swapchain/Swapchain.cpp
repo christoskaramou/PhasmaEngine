@@ -1,5 +1,4 @@
 #include "Swapchain.h"
-#include <iostream>
 
 using namespace vm;
 

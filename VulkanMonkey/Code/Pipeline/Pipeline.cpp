@@ -1,5 +1,4 @@
 #include "Pipeline.h"
-#include <iostream>
 
 using namespace vm;
 

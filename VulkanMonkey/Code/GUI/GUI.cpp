@@ -1,5 +1,4 @@
 #include "GUI.h"
-#include <iostream>
 #include <filesystem>
 
 using namespace vm;

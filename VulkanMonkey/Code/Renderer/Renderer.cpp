@@ -1,7 +1,4 @@
 #include "Renderer.h"
-#include <iostream>
-#include <random>
-#include <chrono>
 
 using namespace vm;
 
