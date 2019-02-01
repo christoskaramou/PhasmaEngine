@@ -12,9 +12,9 @@ namespace vm {
 
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
-		void generateTerrain(const std::string path, bool show = true);
+		void generateTerrain(const std::string& path, bool show = true);
 		void draw(const vk::CommandBuffer& cmd);
-		void loadTexture(const std::string path);
+		void loadTexture(const std::string& path);
 		void destroy();
 	};
 }

@@ -7,6 +7,7 @@
 #include <mono/metadata/debug-helpers.h>
 #include <vector>
 #include <filesystem>
+#include <string>
 
 namespace vm {
 	struct Script
@@ -31,7 +32,7 @@ namespace vm {
 		static void Init();
 		static void Cleanup();
 		static void addCallback(const char* target, const void* staticFunction);
-		Script(std::string file, std::string extension = "dll");
+		Script(const char* file, const char* extension = "dll");
 		~Script();
 
 		void update(float delta);

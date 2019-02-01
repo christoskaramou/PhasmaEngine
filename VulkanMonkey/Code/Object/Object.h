@@ -21,7 +21,7 @@ namespace vm {
 
 		virtual void createVertexBuffer();
 		virtual void createUniformBuffer(size_t size);
-		virtual void loadTexture(const std::string path);
+		virtual void loadTexture(const std::string& path);
 		virtual void createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout);
 		virtual void destroy();
 	};

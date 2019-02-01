@@ -8,15 +8,15 @@ bool Script::initialized = false;
 
 constexpr uint32_t PUBLIC_FLAG = 0x0006;
 
-Script::Script(std::string file, std::string extension)
+Script::Script(const char* file, const char* extension)
 {
 	if(!initialized) Init();
 	ctor = nullptr;
 	dtor = nullptr;
 	updateFunc = nullptr;
-	assembly = mono_domain_assembly_open(monoDomain, std::string("Scripts/" + file + "." + extension).c_str()); // "Scripts/file.extension"
+	assembly = mono_domain_assembly_open(monoDomain, std::string("Scripts/" + std::string(file) + "." + std::string(extension)).c_str()); // "Scripts/file.extension"
 	monoImage = mono_assembly_get_image(assembly);
-	scriptClass = mono_class_from_name(monoImage, "", file.c_str());
+	scriptClass = mono_class_from_name(monoImage, "", file);
 	scriptInstance = mono_object_new(monoDomain, scriptClass);
 	mono_runtime_object_init(scriptInstance);
 

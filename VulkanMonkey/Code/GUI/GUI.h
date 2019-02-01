@@ -54,7 +54,7 @@ namespace vm {
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
 		void update();
-		void loadGUI(const std::string textureName = "", bool show = true);
+		void loadGUI(const std::string& textureName = "", bool show = true);
 		void draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Pipeline& pipeline, const vk::CommandBuffer & cmd);
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();
@@ -66,7 +66,7 @@ namespace vm {
 		void showRenderingWindow();
 		void createVertexBuffer(size_t vertex_size);
 		void createIndexBuffer(size_t index_size);
-		void createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout);
-		void destroy();
+		void createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout) override;
+		void destroy() override;
 	};
 }

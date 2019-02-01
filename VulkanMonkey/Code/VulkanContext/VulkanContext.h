@@ -1,6 +1,5 @@
 #pragma once
 
-#include <vector>
 #include "../../include/Vulkan.h"
 #include "../../include/SDL.h"
 

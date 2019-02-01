@@ -339,7 +339,7 @@ void GUI::initImGui()
 	stagingBuffer.destroy();
 }
 
-void GUI::loadGUI(const std::string textureName, bool show)
+void GUI::loadGUI(const std::string& textureName, bool show)
 {
 	//                   counter clock wise
 	// x, y, z coords orientation   // u, v coords orientation

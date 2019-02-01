@@ -59,7 +59,7 @@ void Renderer::checkQueue()
 		for (auto& dll : Script::dlls) {
 			std::string mName = Context::models.back().name.substr(0, Context::models.back().name.find_last_of("."));
 			if (dll == mName)
-				Context::models.back().script = std::make_unique<Script>(dll);
+				Context::models.back().script = std::make_unique<Script>(dll.c_str());
 		}
 		Queue::loadModel.pop_front();
 	}
@@ -143,11 +143,11 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 
 void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 {
-	vec2 surfSize(WIDTH_f, HEIGHT_f);
+	//vec2 surfSize(WIDTH_f, HEIGHT_f);
 	vec2 winPos((float*)&GUI::winPos);
 	vec2 winSize((float*)&GUI::winSize);
 
-	vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
+	//vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
 
 	ctx.camera_main.renderArea.update(winPos, winSize, 0.f, 1.f);
 

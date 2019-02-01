@@ -2,19 +2,12 @@
 
 using namespace vm;
 
-Node::Node()
-{
-	component_ptr = nullptr;
-	parent = nullptr;
-	children = {};
-}
+Node::Node() : component_ptr(nullptr), parent(nullptr), children{}
+{}
 
 Node::Node(std::any component_ptr, Node* parent, std::vector<Node*>& children)
-{
-	this->component_ptr = component_ptr;
-	this->parent = parent;
-	this->children = children;
-}
+	: component_ptr(component_ptr), parent(parent), children(children)
+{}
 
 Node::~Node()
 {

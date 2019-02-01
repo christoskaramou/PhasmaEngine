@@ -11,7 +11,7 @@ Vertex::Vertex() :
 	color()
 { }
 
-Vertex::Vertex(vec3 pos, vec2 uv, vec3 norm, vec3 tang, vec3 bitang, vec4 color) :
+Vertex::Vertex(vec3& pos, vec2& uv, vec3& norm, vec3& tang, vec3& bitang, vec4& color) :
 	position(pos),
 	uv(uv),
 	normals(norm),

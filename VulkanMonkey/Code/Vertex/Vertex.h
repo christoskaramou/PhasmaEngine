@@ -7,7 +7,7 @@ namespace vm {
 	struct Vertex
 	{
 		Vertex();
-		Vertex(vec3 pos, vec2 uv, vec3 norm, vec3 tang, vec3 bitang, vec4 color);
+		Vertex(vec3& pos, vec2& uv, vec3& norm, vec3& tang, vec3& bitang, vec4& color);
 
 		bool operator==(const Vertex& other) const;
 		static std::vector<vk::VertexInputBindingDescription> getBindingDescriptionGeneral();

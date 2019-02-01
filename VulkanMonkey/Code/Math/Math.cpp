@@ -123,7 +123,7 @@ namespace vm {
 
 	float& vec2::operator[](unsigned i)
 	{
-		assert(i >= 0 && i < 2);
+		assert(i < 2);
 		return (&x)[i];
 	}
 
@@ -260,7 +260,7 @@ namespace vm {
 
 	float & vec3::operator[](unsigned i)
 	{
-		assert(i >= 0 && i < 3);
+		assert(i < 3);
 		return (&x)[i];
 	}
 
@@ -410,7 +410,7 @@ namespace vm {
 
 	float & vec4::operator[](unsigned i)
 	{
-		assert(i >= 0 && i < 4);
+		assert(i < 4);
 		return (&x)[i];
 	}
 
@@ -647,7 +647,7 @@ namespace vm {
 
 	vec4 & mat4::operator[](unsigned i)
 	{
-		assert(i >= 0 && i < 4);
+		assert(i < 4);
 		return _v[i];
 	}
 
@@ -879,7 +879,7 @@ namespace vm {
 
 	float & quat::operator[](unsigned i)
 	{
-		assert(i >= 0 && i < 4);
+		assert(i < 4);
 		return (&x)[i];
 	}
 

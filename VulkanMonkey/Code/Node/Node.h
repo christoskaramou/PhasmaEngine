@@ -1,6 +1,5 @@
 #pragma once
 #include "../Math/Math.h"
-#include <vector>
 #include <any>
 
 namespace vm {

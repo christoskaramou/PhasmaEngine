@@ -1,8 +1,4 @@
 #include "Code/Window/Window.h"
-#include "Code/Timer/Timer.h"
-#include <iostream>
-#include <cstring>
-#include <string>
 
 using namespace vm;
 

@@ -92,16 +92,16 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 			const aiMesh& mesh = *scene->mMeshes[node->mMeshes[i]];
 			for (unsigned int j = 0; j < mesh.mNumVertices; j++) {
 				myMesh.vertices.push_back({
-					reinterpret_cast<float*>(&(mesh.HasPositions() ? mesh.mVertices[j] : aiVector3D(0.f, 0.f, 0.f))),
-					reinterpret_cast<float*>(&(mesh.HasTextureCoords(0) ? mesh.mTextureCoords[0][j] : aiVector3D(0.f, 0.f, 0.f))),
-					reinterpret_cast<float*>(&(mesh.HasNormals() ? mesh.mNormals[j] : aiVector3D(0.f, 0.f, 0.f))),
-					reinterpret_cast<float*>(&(mesh.HasTangentsAndBitangents() ? mesh.mTangents[j] : aiVector3D(0.f, 0.f, 0.f))),
-					reinterpret_cast<float*>(&(mesh.HasTangentsAndBitangents() ? mesh.mBitangents[j] : aiVector3D(0.f, 0.f, 0.f))),
-					reinterpret_cast<float*>(&(mesh.HasVertexColors(0) ? mesh.mColors[0][j] : aiColor4D(1.f, 1.f, 1.f, 1.f)))
+					vec3(reinterpret_cast<float*>(&(mesh.HasPositions() ? mesh.mVertices[j] : aiVector3D(0.f, 0.f, 0.f)))),
+					vec2(reinterpret_cast<float*>(&(mesh.HasTextureCoords(0) ? mesh.mTextureCoords[0][j] : aiVector3D(0.f, 0.f, 0.f)))),
+					vec3(reinterpret_cast<float*>(&(mesh.HasNormals() ? mesh.mNormals[j] : aiVector3D(0.f, 0.f, 0.f)))),
+					vec3(reinterpret_cast<float*>(&(mesh.HasTangentsAndBitangents() ? mesh.mTangents[j] : aiVector3D(0.f, 0.f, 0.f)))),
+					vec3(reinterpret_cast<float*>(&(mesh.HasTangentsAndBitangents() ? mesh.mBitangents[j] : aiVector3D(0.f, 0.f, 0.f)))),
+					vec4(reinterpret_cast<float*>(&(mesh.HasVertexColors(0) ? mesh.mColors[0][j] : aiColor4D(1.f, 1.f, 1.f, 1.f))))
 					});
 			}
-			for (unsigned int i = 0; i < mesh.mNumFaces; i++) {
-				const aiFace& Face = mesh.mFaces[i];
+			for (unsigned int n = 0; n < mesh.mNumFaces; n++) {
+				const aiFace& Face = mesh.mFaces[n];
 				assert(Face.mNumIndices == 3);
 				myMesh.indices.push_back(Face.mIndices[0]);
 				myMesh.indices.push_back(Face.mIndices[1]);
@@ -341,11 +341,11 @@ void Model::createDescriptorSets()
 		gltfModel = true;
 
 	for (auto& mesh : meshes) {
-		auto const allocateInfo = vk::DescriptorSetAllocateInfo()
+		auto const allocateInfo2 = vk::DescriptorSetAllocateInfo()
 			.setDescriptorPool(vulkan->descriptorPool)
 			.setDescriptorSetCount(1)
 			.setPSetLayouts(&mesh.descriptorSetLayout);
-		mesh.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
+		mesh.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo2)[0];
 
 		// Texture
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(6);

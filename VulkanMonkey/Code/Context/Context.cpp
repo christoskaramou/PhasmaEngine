@@ -1878,7 +1878,7 @@ Pipeline Context::createSSRPipeline()
 	};
 
 	// Dynamic state
-	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	//std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
@@ -2103,7 +2103,7 @@ Pipeline Context::createSSAOPipeline()
 	};
 
 	// Dynamic state
-	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	//std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 	//&vk::PipelineDynamicStateCreateInfo{
 	//		vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
@@ -2333,7 +2333,7 @@ Pipeline Context::createSSAOBlurPipeline()
 	};
 
 	// Dynamic state
-	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	//std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout

@@ -24,7 +24,7 @@ void Object::createUniformBuffer(size_t size)
 	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 }
 
-void Object::loadTexture(const std::string path)
+void Object::loadTexture(const std::string& path)
 {
 	// Texture Load
 	int texWidth, texHeight, texChannels;

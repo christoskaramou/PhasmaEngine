@@ -31,7 +31,7 @@ vk::DescriptorSetLayout Terrain::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-void Terrain::generateTerrain(const std::string path, bool show)
+void Terrain::generateTerrain(const std::string& path, bool show)
 {
 	auto size = 100.f;
 
@@ -62,7 +62,7 @@ void Terrain::draw(const vk::CommandBuffer & cmd)
 	}
 }
 
-void Terrain::loadTexture(const std::string path)
+void Terrain::loadTexture(const std::string& path)
 {
 	// Texture Load
 	int texWidth, texHeight, texChannels;
