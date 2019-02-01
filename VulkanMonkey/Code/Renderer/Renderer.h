@@ -12,7 +12,6 @@ namespace vm {
 	public:
 		Renderer(SDL_Window* window);
 		~Renderer();
-		void checkQueue();
 		void update(float delta);
 		void present();
 
@@ -23,6 +22,7 @@ namespace vm {
 		bool useCompute = false;
 
 	private:
+		void checkQueue();
 		void recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ);
 		void recordForwardCmds(const uint32_t& imageIndex);
 		void recordDeferredCmds(const uint32_t& imageIndex);

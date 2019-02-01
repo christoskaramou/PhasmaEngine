@@ -5,9 +5,10 @@
 #include "../Buffer/Buffer.h"
 #include "../Camera/Camera.h"
 #include "../GUI/GUI.h"
+#include <vector>
 
 namespace vm {
-	constexpr auto MAX_LIGHTS = 20;
+	constexpr auto MAX_LIGHTS = 0;
 
 	struct Light
 	{
@@ -24,7 +25,8 @@ namespace vm {
 	{
 		vec4 camPos;
 		Light sun = Light::sun();
-		Light lights[MAX_LIGHTS];
+		std::vector<Light> lights{};
+		//Light lights[MAX_LIGHTS];
 	};
 
 	struct LightUniforms : Light

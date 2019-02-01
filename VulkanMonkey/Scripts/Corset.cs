@@ -9,7 +9,7 @@ public class Corset
     public Corset()
     {
         transform.scale = new Vector3(20.0f);
-        transform.position = new Vector3(0.0f, -0.5f, 0.0f);
+        transform.position = new Vector3(0.0f, 0.0f, 0.0f);
     }
 
     public void Update(float delta)

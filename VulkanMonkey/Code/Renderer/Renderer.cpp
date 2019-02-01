@@ -101,6 +101,7 @@ void Renderer::update(float delta)
 	// MOTION BLUR
 	ctx.motionBlur.update(ctx.camera_main);
 
+	//TODO: rework shadows
 	// SHADOWS
 	Shadows::shadowCast = GUI::shadow_cast;
 	const vec3 pos = Light::sun().position;
@@ -110,7 +111,7 @@ void Renderer::update(float delta)
 	std::vector<ShadowsUBO> shadows_UBO(Context::models.size());
 	for (uint32_t i = 0; i < Context::models.size(); i++) {
 		shadows_UBO[i] = {
-			ortho(-40.f, 40.f, -40.f, 40.f, 500.f, 0.005f),
+			ortho(-20.f, 20.f, -20.f, 20.f, 500.f, 0.005f),
 			lookAt(pos, front, right, up),
 			Context::models[i].script ? Context::models[i].script->getValue<Transform>("transform").matrix() * Context::models[i].transform : Context::models[i].transform,
 			Shadows::shadowCast ? 1.0f : 0.0f
