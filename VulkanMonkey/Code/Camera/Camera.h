@@ -1,8 +1,6 @@
 #pragma once
-#include "../Math/Math.h"
-#include "../GUI/GUI.h"
-#include "../Mesh/Mesh.h"
-#include "../../include/Vulkan.h"
+#include "../Math/Math.h"  // for vec3, mat4, vec2, vec4, quat
+#include "../../include/Vulkan.h"              // for Rect2D, Viewport
 
 namespace vm {
 	struct Camera

@@ -35,7 +35,7 @@ void LightUniforms::createLightUniforms()
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
+	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 	auto writeSet = vk::WriteDescriptorSet()
 		.setDstSet(descriptorSet)								// DescriptorSet dstSet;
 		.setDstBinding(0)										// uint32_t dstBinding;

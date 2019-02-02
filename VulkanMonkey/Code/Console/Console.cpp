@@ -1,4 +1,5 @@
 #include "Console.h"
+#include "../Queue/Queue.h"  // for Queue, Queue::loadModel
 
 using namespace vm;
 

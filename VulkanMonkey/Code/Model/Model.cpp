@@ -320,7 +320,7 @@ void Model::createDescriptorSets()
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
+	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
 	// Model MVP
 	auto const mvpWriteSet = vk::WriteDescriptorSet()
@@ -345,7 +345,7 @@ void Model::createDescriptorSets()
 			.setDescriptorPool(vulkan->descriptorPool)
 			.setDescriptorSetCount(1)
 			.setPSetLayouts(&mesh.descriptorSetLayout);
-		mesh.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo2)[0];
+		mesh.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
 
 		// Texture
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(6);

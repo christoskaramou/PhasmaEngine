@@ -613,7 +613,7 @@ void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout)
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
+	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
 
 	// texture sampler

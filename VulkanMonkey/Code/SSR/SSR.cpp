@@ -11,7 +11,7 @@ void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&DSLayoutReflection);
-	DSReflection = vulkan->device.allocateDescriptorSets(allocateInfo2)[0];
+	DSReflection = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
 
 	std::vector<vk::WriteDescriptorSet> textureWriteSets(5);
 	// Albedo

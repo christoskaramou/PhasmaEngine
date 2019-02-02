@@ -1,4 +1,5 @@
 #include "Camera.h"
+#include "../GUI/GUI.h"                                   // for GUI, GUI::winPos, GUI::winSize
 
 using namespace vm;
 

@@ -1,4 +1,5 @@
 #include "Context.h"
+#include "../Queue/Queue.h"
 #include <iostream>
 #include <fstream>
 
@@ -29,8 +30,8 @@ void Context::initVulkanContext()
 	vulkan.commandPool = createCommandPool();
 	vulkan.commandPoolCompute = createComputeCommadPool();
 	vulkan.descriptorPool = createDescriptorPool(2000); // max number of all descriptor sets to allocate
-	vulkan.dynamicCmdBuffer = createCmdBuffers()[0];
-	vulkan.shadowCmdBuffer = createCmdBuffers()[0];
+	vulkan.dynamicCmdBuffer = createCmdBuffers().at(0);
+	vulkan.shadowCmdBuffer = createCmdBuffers().at(0);
 	vulkan.computeCmdBuffer = createComputeCmdBuffer();
 	vulkan.depth = new Image(createDepthResources());
 }
@@ -1471,7 +1472,7 @@ Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -1729,7 +1730,7 @@ Pipeline Context::createCompositionPipeline()
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -1954,7 +1955,7 @@ Pipeline Context::createSSRPipeline()
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -2184,7 +2185,7 @@ Pipeline Context::createSSAOPipeline()
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -2378,7 +2379,7 @@ Pipeline Context::createSSAOBlurPipeline()
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -2586,7 +2587,7 @@ Pipeline Context::createMotionBlurPipeline()
 	// Base Pipeline Index
 	_pipeline.pipeinfo.basePipelineIndex = -1;
 
-	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo)[0];
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(vertModule);
@@ -2640,7 +2641,7 @@ Pipeline Context::createComputePipeline()
 	_pipeline.compinfo.layout = vulkan.device.createPipelineLayout(
 		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() } );
 
-	_pipeline.pipeline = vulkan.device.createComputePipelines(nullptr, _pipeline.compinfo)[0];
+	_pipeline.pipeline = vulkan.device.createComputePipelines(nullptr, _pipeline.compinfo).at(0);
 
 	// destroy Shader Modules
 	vulkan.device.destroyShaderModule(compModule);

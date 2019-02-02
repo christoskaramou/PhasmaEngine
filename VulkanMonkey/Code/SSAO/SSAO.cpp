@@ -50,7 +50,7 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 		1,										//uint32_t descriptorSetCount;
 		&DSLayoutSSAO						//const DescriptorSetLayout* pSetLayouts;
 	};
-	DSssao = vulkan->device.allocateDescriptorSets(allocInfoSSAO)[0];
+	DSssao = vulkan->device.allocateDescriptorSets(allocInfoSSAO).at(0);
 
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
 		renderTargets["depth"].sampler,		//Sampler sampler;
@@ -142,7 +142,7 @@ void SSAO::createSSAOUniforms(std::map<std::string, Image>& renderTargets)
 		&DSLayoutSSAOBlur					//const DescriptorSetLayout* pSetLayouts;
 	};
 
-	DSssaoBlur = vulkan->device.allocateDescriptorSets(allocInfoSSAOBlur)[0];
+	DSssaoBlur = vulkan->device.allocateDescriptorSets(allocInfoSSAOBlur).at(0);
 
 	std::vector<vk::WriteDescriptorSet> writeDescriptorSetsSSAOBlur = {
 		// Binding 0: Position texture target

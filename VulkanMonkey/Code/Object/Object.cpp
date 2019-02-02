@@ -66,7 +66,7 @@ void Object::createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout)
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&descriptorSetLayout);
-	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
+	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
 
 	std::vector<vk::WriteDescriptorSet> textureWriteSets(2);

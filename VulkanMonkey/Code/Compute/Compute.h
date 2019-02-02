@@ -1,9 +1,8 @@
 #pragma once
 
-#include "../VulkanContext/VulkanContext.h"
 #include "../Buffer/Buffer.h"
 #include "../Pipeline/Pipeline.h"
-#include <vector>
+#include "../VulkanContext/VulkanContext.h"  // for VulkanContext
 
 namespace vm {
 	struct Compute

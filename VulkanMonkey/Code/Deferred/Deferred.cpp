@@ -9,7 +9,7 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 	1,										//uint32_t descriptorSetCount;
 	&DSLayoutComposition				//const DescriptorSetLayout* pSetLayouts;
 	};
-	DSComposition = vulkan->device.allocateDescriptorSets(allocInfo)[0];
+	DSComposition = vulkan->device.allocateDescriptorSets(allocInfo).at(0);
 
 	// Image descriptors for the offscreen color attachments
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{

@@ -44,7 +44,7 @@ void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size)
 		.setLevel(vk::CommandBufferLevel::ePrimary)
 		.setCommandPool(vulkan->commandPool)
 		.setCommandBufferCount(1);
-	vk::CommandBuffer copyCmd = vulkan->device.allocateCommandBuffers(cbai)[0];
+	vk::CommandBuffer copyCmd = vulkan->device.allocateCommandBuffers(cbai).at(0);
 
 	copyCmd.begin(vk::CommandBufferBeginInfo());
 

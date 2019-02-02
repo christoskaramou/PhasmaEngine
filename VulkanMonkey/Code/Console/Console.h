@@ -1,10 +1,11 @@
 #pragma once
 
 #include "../../include/imgui/imgui.h"
-#include "../Queue/Queue.h"
 #include <ctype.h> 
 #include <stdlib.h>
 #include <stdio.h>
+#include "string.h"                     // for strlen
+#include "vcruntime_string.h"           // for memcpy
 
 namespace vm {
 	// Demonstrate creating a simple console window, with scrolling, filtering, completion and history.

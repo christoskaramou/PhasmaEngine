@@ -18,7 +18,7 @@ void Compute::createComputeUniforms()
 		1,										//uint32_t descriptorSetCount;
 		&DSLayoutCompute					//const DescriptorSetLayout* pSetLayouts;
 	};
-	DSCompute = vulkan->device.allocateDescriptorSets(allocCompInfo)[0];
+	DSCompute = vulkan->device.allocateDescriptorSets(allocCompInfo).at(0);
 	std::vector<vk::WriteDescriptorSet> writeCompDescriptorSets = {
 		// Binding 0 (in out)
 		vk::WriteDescriptorSet{

@@ -66,7 +66,7 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 		.setCommandPool(vulkan->commandPool);
 
 	vk::CommandBuffer commandBuffer;
-	commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo)[0];
+	commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
@@ -160,7 +160,7 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y,
 		.setCommandBufferCount(1)
 		.setCommandPool(vulkan->commandPool);
 
-	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo)[0];
+	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
@@ -196,7 +196,7 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 		.setCommandBufferCount(1)
 		.setCommandPool(vulkan->commandPool);
 
-	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo)[0];
+	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
 	auto const beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);

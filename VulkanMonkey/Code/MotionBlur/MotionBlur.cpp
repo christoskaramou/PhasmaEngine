@@ -30,7 +30,7 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&DSLayoutMotionBlur);
-	DSMotionBlur = vulkan->device.allocateDescriptorSets(allocateInfo)[0];
+	DSMotionBlur = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
 	std::vector<vk::WriteDescriptorSet> textureWriteSets(3);
 	// Composition image

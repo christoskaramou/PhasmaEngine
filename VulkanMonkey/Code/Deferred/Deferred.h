@@ -7,7 +7,6 @@
 #include "../GUI/GUI.h"
 #include "../Shadows/Shadows.h"
 #include <map>
-#include <vector>
 
 namespace vm {
 	struct Deferred
