@@ -1,8 +1,10 @@
 #include "Window.h"
+#include <algorithm>
 
 using namespace vm;
 
-std::vector<std::unique_ptr<Renderer>> Window::renderer = {};
+std::vector<std::unique_ptr<Renderer>> Window::renderer{};
+std::vector<int> Window::keyDown{};
 
 Window::Window() {}
 
@@ -25,6 +27,8 @@ void Window::create(std::string title, Uint32 flags) // flags = SDL_WINDOW_MAXIM
 		+ ")";
 
 	SDL_SetWindowTitle(window, _title.c_str());
+
+	keyDown.reserve(64);
 }
 
 void Window::destroyAll()
@@ -75,6 +79,8 @@ bool Window::processEvents(float delta)
 			io.AddInputCharactersUTF8(event.text.text);
 
 		if (event.type == SDL_KEYDOWN) {
+			if (std::find(Window::keyDown.begin(), Window::keyDown.end(), event.key.keysym.scancode) == Window::keyDown.end())
+				Window::keyDown.push_back(event.key.keysym.scancode);
 			int key = event.key.keysym.scancode;
 			IM_ASSERT(key >= 0 && key < IM_ARRAYSIZE(io.KeysDown));
 			io.KeysDown[key] = true;
@@ -83,9 +89,11 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_s) down = true;
 			if (event.key.keysym.sym == SDLK_a) left = true;
 			if (event.key.keysym.sym == SDLK_d) right = true;
-			if (event.key.keysym.sym == SDLK_p) { if (GUI::timeScale) lastTimeScale = GUI::timeScale; GUI::timeScale = 0.0f; }
 		}
 		else if (event.type == SDL_KEYUP) {
+			auto result = std::find(Window::keyDown.begin(), Window::keyDown.end(), event.key.keysym.scancode);
+			if (result != Window::keyDown.end())
+				Window::keyDown.erase(result);
 			int key = event.key.keysym.scancode;
 			IM_ASSERT(key >= 0 && key < IM_ARRAYSIZE(io.KeysDown));
 			io.KeysDown[key] = false;
@@ -98,7 +106,6 @@ bool Window::processEvents(float delta)
 			if (event.key.keysym.sym == SDLK_s) down = false;
 			if (event.key.keysym.sym == SDLK_a) left = false;
 			if (event.key.keysym.sym == SDLK_d) right = false;
-			if (event.key.keysym.sym == SDLK_p) GUI::timeScale = lastTimeScale;
 		}
 		if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
 			if (isInsideRenderWindow(event.motion.x, event.motion.y)) {

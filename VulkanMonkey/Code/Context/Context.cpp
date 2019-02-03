@@ -2,6 +2,7 @@
 #include "../Queue/Queue.h"
 #include <iostream>
 #include <fstream>
+#include "../Window/Window.h"
 
 using namespace vm;
 
@@ -98,6 +99,19 @@ static void LoadModel(MonoString* folderPath, MonoString* modelName)
 	Queue::loadModel.push_back({ path, name });
 }
 
+static bool IsKeyDown(int key)
+{
+	if (std::find(Window::keyDown.begin(), Window::keyDown.end(), key) != Window::keyDown.end())
+		return true;
+	else
+		return false;
+}
+
+static void SetTimeScale(float timeScale)
+{
+	GUI::timeScale = timeScale;
+}
+
 void Context::loadResources()
 {
 	// SKYBOX LOAD
@@ -111,7 +125,9 @@ void Context::loadResources()
 	//models.push_back(Model(&vulkan));
 	//models.back().loadModel("objects/sponza/", "sponza.obj");
 	Script::Init();
-	Script::addCallback("Ext::LoadModel", LoadModel);
+	Script::addCallback("Global::LoadModel", LoadModel);
+	Script::addCallback("Global::IsKeyDown", IsKeyDown);
+	Script::addCallback("Global::SetTimeScale", SetTimeScale);
 	scripts.push_back(std::make_unique<Script>("Load"));
 }
 

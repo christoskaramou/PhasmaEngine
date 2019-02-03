@@ -12,6 +12,7 @@ namespace vm {
 		static bool isInsideRenderWindow(int32_t x, int32_t y);
 
 		static std::vector<std::unique_ptr<Renderer>> renderer; // window pointer is also stored in here
+		static std::vector<int> keyDown;
 	private:
 		Window();
 		~Window();
