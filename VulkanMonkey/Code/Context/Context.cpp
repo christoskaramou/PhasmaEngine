@@ -6,7 +6,7 @@
 
 using namespace vm;
 
-std::vector<Model> Context::models = {};
+//std::vector<Model> Context::models = {};
 
 void Context::initVulkanContext()
 {

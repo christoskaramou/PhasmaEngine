@@ -8,6 +8,7 @@
 using namespace vm;
 
 vk::DescriptorSetLayout Model::descriptorSetLayout = nullptr;
+std::vector<Model> Model::models{};
 
 mat4 aiMatrix4x4ToMat4(const aiMatrix4x4& m)
 {
@@ -57,6 +58,19 @@ bool endsWith(const std::string &mainStr, const std::string &toMatch)
 
 void Model::loadModel(const std::string& folderPath, const std::string& modelName, bool show)
 {
+	for (auto& m : models) {
+		if (m.name == modelName) {
+			name = m.name;
+			render = show;
+			vertexBuffer = m.vertexBuffer;
+			indexBuffer = m.indexBuffer;
+			meshes = m.meshes;
+			createUniformBuffers();
+			createDescriptorSets();
+			return;
+		}
+	}
+
 	bool gltfModel = false;
 	if (endsWith(modelName, ".gltf"))
 		gltfModel = true;

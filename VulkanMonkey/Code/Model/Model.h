@@ -7,8 +7,6 @@
 #include "../Pipeline/Pipeline.h"
 #include "../Script/Script.h"
 #include "../Camera/Camera.h"
-#include <map>
-#include <utility>
 
 namespace vm {
 	struct Model
@@ -16,6 +14,7 @@ namespace vm {
 		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		bool render = true;
+		static std::vector<Model> models;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
 		vk::DescriptorSet descriptorSet;

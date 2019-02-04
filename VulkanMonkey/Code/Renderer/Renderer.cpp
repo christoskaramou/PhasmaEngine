@@ -20,7 +20,7 @@ Renderer::Renderer(SDL_Window* window)
 Renderer::~Renderer()
 {
 	ctx.vulkan.device.waitIdle();
-	if (Context::models.size() == 0) {
+	if (Model::models.size() == 0) {
 		if (Model::descriptorSetLayout) {
 			ctx.vulkan.device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
 			Model::descriptorSetLayout = nullptr;
@@ -31,7 +31,7 @@ Renderer::~Renderer()
 			Mesh::descriptorSetLayout = nullptr;
 		}
 	}
-	for (auto &model : Context::models)
+	for (auto &model : Model::models)
 		model.destroy();
 	ctx.shadows.destroy();
 	ctx.compute.destroy();
@@ -53,13 +53,13 @@ void Renderer::checkQueue()
 	// TODO: make an other command pool for multithreading
 	for (auto& queue : Queue::loadModel) {
 		VulkanContext::getVulkanContext().device.waitIdle();
-		Context::models.push_back(Model());
-		Context::models.back().loadModel(std::get<0>(queue), std::get<1>(queue)); // path, name
+		Model::models.push_back(Model());
+		Model::models.back().loadModel(std::get<0>(queue), std::get<1>(queue)); // path, name
 		GUI::modelList.push_back(std::get<1>(queue));
 		for (auto& dll : Script::dlls) {
-			std::string mName = Context::models.back().name.substr(0, Context::models.back().name.find_last_of("."));
+			std::string mName = Model::models.back().name.substr(0, Model::models.back().name.find_last_of("."));
 			if (dll == mName)
-				Context::models.back().script = std::make_unique<Script>(dll.c_str());
+				Model::models.back().script = std::make_unique<Script>(dll.c_str());
 		}
 		Queue::loadModel.pop_front();
 	}
@@ -78,7 +78,7 @@ void Renderer::update(float delta)
 	ctx.camera_main.update();
 
 	// MODELS
-	for (auto &model : Context::models)
+	for (auto &model : Model::models)
 		model.update(ctx.camera_main ,delta);
 
 	// GUI
@@ -103,12 +103,12 @@ void Renderer::update(float delta)
 	const vec3 front = normalize(-pos);
 	const vec3 right = normalize(cross(front, ctx.camera_main.worldUp()));
 	const vec3 up = normalize(cross(right, front));
-	std::vector<ShadowsUBO> shadows_UBO(Context::models.size());
-	for (uint32_t i = 0; i < Context::models.size(); i++) {
+	std::vector<ShadowsUBO> shadows_UBO(Model::models.size());
+	for (uint32_t i = 0; i < Model::models.size(); i++) {
 		shadows_UBO[i] = {
 			ortho(-20.f, 20.f, -20.f, 20.f, 500.f, 0.005f),
 			lookAt(pos, front, right, up),
-			Context::models[i].script ? Context::models[i].script->getValue<Transform>("transform").matrix() * Context::models[i].transform : Context::models[i].transform,
+			Model::models[i].script ? Model::models[i].script->getValue<Transform>("transform").matrix() * Model::models[i].transform : Model::models[i].transform,
 			Shadows::shadowCast ? 1.0f : 0.0f
 		};
 	}
@@ -178,8 +178,8 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 	cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
 	// MODELS
-	for (uint32_t m = 0; m < Context::models.size(); m++)
-		Context::models[m].draw(ctx.forward.pipeline, cmd, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
+	for (uint32_t m = 0; m < Model::models.size(); m++)
+		Model::models[m].draw(ctx.forward.pipeline, cmd, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
 
 	for (auto& cam : ctx.camera) {
 		cam.renderArea.update(winPos + winSize * .7f, winSize * .2f, 0.f, 0.5f);
@@ -187,8 +187,8 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 		cmd.setScissor(0, cam.renderArea.scissor);
 
 		// MODELS
-		for (uint32_t m = 0; m < Context::models.size(); m++)
-			Context::models[m].draw(ctx.forward.pipeline, cmd, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
+		for (uint32_t m = 0; m < Model::models.size(); m++)
+			Model::models[m].draw(ctx.forward.pipeline, cmd, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
 	}
 	cmd.endRenderPass();
 
@@ -235,11 +235,11 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	cmd.setViewport(0, ctx.camera_main.renderArea.viewport);
 	cmd.setScissor(0, ctx.camera_main.renderArea.scissor);
 
-	if (Context::models.size() > 0) {
+	if (Model::models.size() > 0) {
 		cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 		// MODELS
-		for (uint32_t m = 0; m < Context::models.size(); m++)
-			Context::models[m].draw(ctx.deferred.pipeline, cmd, m, true);
+		for (uint32_t m = 0; m < Model::models.size(); m++)
+			Model::models[m].draw(ctx.deferred.pipeline, cmd, m, true);
 		// SKYBOX
 		//ctx.skyBox.draw(cmd);
 		cmd.endRenderPass();
@@ -293,15 +293,15 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
 
-	for (uint32_t m = 0; m < Context::models.size(); m++) {
-		if (Context::models[m].render) {
-			cmd.bindVertexBuffers(0, Context::models[m].vertexBuffer.buffer, offset);
-			cmd.bindIndexBuffer(Context::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
+	for (uint32_t m = 0; m < Model::models.size(); m++) {
+		if (Model::models[m].render) {
+			cmd.bindVertexBuffers(0, Model::models[m].vertexBuffer.buffer, offset);
+			cmd.bindIndexBuffer(Model::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
 			const uint32_t dOffsets =  m * sizeof(ShadowsUBO);
 			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, ctx.shadows.descriptorSet, dOffsets);
 
-			for (auto& mesh : Context::models[m].meshes) {
+			for (auto& mesh : Model::models[m].meshes) {
 				if (mesh.render)
 					cmd.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
 			}
