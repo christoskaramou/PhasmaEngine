@@ -60,6 +60,7 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 {
 	for (auto& m : models) {
 		if (m.name == modelName) {
+			isCopy = true;
 			name = m.name;
 			render = show;
 			vertexBuffer = m.vertexBuffer;
@@ -454,8 +455,10 @@ void Model::destroy()
 		texture.second.destroy();
 	Mesh::uniqueTextures.clear();
 
-	vertexBuffer.destroy();
-	indexBuffer.destroy();
+	if (!isCopy) {
+		vertexBuffer.destroy();
+		indexBuffer.destroy();
+	}
 	uniformBuffer.destroy();
 
 	if (Model::descriptorSetLayout) {

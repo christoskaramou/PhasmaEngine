@@ -77,8 +77,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\VulkanSDK\1.1.92.1\Include;include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\VulkanSDK\1.1.92.1\Lib;Libs;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\VulkanSDK\1.1.97.0\Include;include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\VulkanSDK\1.1.97.0\Lib;Libs;$(LibraryPath)</LibraryPath>
     <ReferencePath>$(VC_ReferencesPath_x64);</ReferencePath>
     <SourcePath>$(SourcePath)</SourcePath>
   </PropertyGroup>
@@ -93,8 +93,8 @@
     <RunCodeAnalysis>false</RunCodeAnalysis>
     <EnableCppCoreCheck>true</EnableCppCoreCheck>
     <EnableExperimentalCppCoreCheck>true</EnableExperimentalCppCoreCheck>
-    <IncludePath>C:\VulkanSDK\1.1.92.1\Include;include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\VulkanSDK\1.1.92.1\Lib;Libs;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\VulkanSDK\1.1.97.0\Include;include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\VulkanSDK\1.1.97.0\Lib;Libs;$(LibraryPath)</LibraryPath>
     <ReferencePath>$(VC_ReferencesPath_x64);</ReferencePath>
     <SourcePath>$(SourcePath)</SourcePath>
   </PropertyGroup>
@@ -119,7 +119,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>include\Mono\include\mono-2.0;C:\VulkanSDK\1.1.92.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include\Mono\include\mono-2.0;C:\VulkanSDK\1.1.97.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ControlFlowGuard>false</ControlFlowGuard>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <AssemblerListingLocation>Debug/</AssemblerListingLocation>
@@ -129,7 +129,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <AdditionalDependencies>mono-2.0-sgen.lib;assimp-vc140-mt.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Program Files\Mono\lib;C:\VulkanSDK\1.1.92.1\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Program Files\Mono\lib;C:\VulkanSDK\1.1.97.0\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <ProjectReference>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
@@ -164,7 +164,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>include\Mono\include\mono-2.0;C:\VulkanSDK\1.1.92.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include\Mono\include\mono-2.0;C:\VulkanSDK\1.1.97.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>OldStyle</DebugInformationFormat>
       <EnablePREfast>false</EnablePREfast>
       <LanguageStandard>stdcpplatest</LanguageStandard>
@@ -176,7 +176,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalDependencies>mono-2.0-sgen.lib;assimp-vc140-mt.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\Program Files\Mono\lib;C:\VulkanSDK\1.1.92.1\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Program Files\Mono\lib;C:\VulkanSDK\1.1.97.0\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Windows</SubSystem>
       <AdditionalOptions>/ENTRY:"mainCRTStartup" %(AdditionalOptions)</AdditionalOptions>
       <Profile>true</Profile>

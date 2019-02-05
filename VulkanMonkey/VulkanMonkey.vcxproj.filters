@@ -442,9 +442,6 @@
     <Filter Include="Shaders\Shadows">
       <UniqueIdentifier>{f760e029-558a-492c-9891-59413013f1cb}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Shaders\SkyBox">
-      <UniqueIdentifier>{bee13345-00eb-4f8d-a682-9be4e28155c9}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Shaders\SSAO">
       <UniqueIdentifier>{cdaf21c9-57e3-4aeb-b055-f3ba5309a371}</UniqueIdentifier>
     </Filter>
@@ -459,6 +456,9 @@
     </Filter>
     <Filter Include="Code\Script">
       <UniqueIdentifier>{2a274700-667e-4e3b-a38d-ec83ffa8a13d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\SkyBox">
+      <UniqueIdentifier>{bee13345-00eb-4f8d-a682-9be4e28155c9}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

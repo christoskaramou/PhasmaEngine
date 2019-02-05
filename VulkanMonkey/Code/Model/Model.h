@@ -14,6 +14,7 @@ namespace vm {
 		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
 		bool render = true;
+		bool isCopy = false;
 		static std::vector<Model> models;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
