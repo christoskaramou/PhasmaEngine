@@ -99,12 +99,31 @@ static void LoadModel(MonoString* folderPath, MonoString* modelName)
 	Queue::loadModel.push_back({ path, name });
 }
 
-static bool IsKeyDown(int key)
+static bool KeyDown(uint32_t key)
 {
-	if (std::find(Window::keyDown.begin(), Window::keyDown.end(), key) != Window::keyDown.end())
-		return true;
-	else
-		return false;
+	return ImGui::GetIO().KeysDown[key];
+}
+
+static bool MouseButtonDown(uint32_t button)
+{
+	return ImGui::GetIO().MouseDown[button];
+}
+
+static vec2 GetMousePos()
+{
+	int x, y;
+	SDL_GetMouseState(&x, &y);
+	return vec2(static_cast<float>(x), static_cast<float>(y));
+}
+
+static void SetMousePos(float x, float y)
+{
+	SDL_WarpMouseInWindow(VulkanContext::getVulkanContext().window, static_cast<int>(x), static_cast<int>(y));
+}
+
+static float GetMouseWheel()
+{
+	return ImGui::GetIO().MouseWheel;
 }
 
 static void SetTimeScale(float timeScale)
@@ -126,8 +145,12 @@ void Context::loadResources()
 	//models.back().loadModel("objects/sponza/", "sponza.obj");
 	Script::Init();
 	Script::addCallback("Global::LoadModel", LoadModel);
-	Script::addCallback("Global::IsKeyDown", IsKeyDown);
+	Script::addCallback("Global::KeyDown", KeyDown);
 	Script::addCallback("Global::SetTimeScale", SetTimeScale);
+	Script::addCallback("Global::MouseButtonDown", MouseButtonDown);
+	Script::addCallback("Global::GetMousePos", GetMousePos);
+	Script::addCallback("Global::SetMousePos", SetMousePos);
+	Script::addCallback("Global::GetMouseWheel", GetMouseWheel);
 	scripts.push_back(std::make_unique<Script>("Load"));
 }
 

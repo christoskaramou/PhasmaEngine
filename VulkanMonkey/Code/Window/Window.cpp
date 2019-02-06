@@ -1,10 +1,8 @@
 #include "Window.h"
-#include <algorithm>
 
 using namespace vm;
 
 std::vector<std::unique_ptr<Renderer>> Window::renderer{};
-std::vector<int> Window::keyDown{};
 
 Window::Window() {}
 
@@ -27,8 +25,6 @@ void Window::create(std::string title, Uint32 flags) // flags = SDL_WINDOW_MAXIM
 		+ ")";
 
 	SDL_SetWindowTitle(window, _title.c_str());
-
-	keyDown.reserve(64);
 }
 
 void Window::destroyAll()
@@ -79,21 +75,11 @@ bool Window::processEvents(float delta)
 			io.AddInputCharactersUTF8(event.text.text);
 
 		if (event.type == SDL_KEYDOWN) {
-			if (std::find(Window::keyDown.begin(), Window::keyDown.end(), event.key.keysym.scancode) == Window::keyDown.end())
-				Window::keyDown.push_back(event.key.keysym.scancode);
 			int key = event.key.keysym.scancode;
 			IM_ASSERT(key >= 0 && key < IM_ARRAYSIZE(io.KeysDown));
 			io.KeysDown[key] = true;
-			if (event.key.keysym.sym == SDLK_ESCAPE) return false;
-			if (event.key.keysym.sym == SDLK_w) up = true;
-			if (event.key.keysym.sym == SDLK_s) down = true;
-			if (event.key.keysym.sym == SDLK_a) left = true;
-			if (event.key.keysym.sym == SDLK_d) right = true;
 		}
 		else if (event.type == SDL_KEYUP) {
-			auto result = std::find(Window::keyDown.begin(), Window::keyDown.end(), event.key.keysym.scancode);
-			if (result != Window::keyDown.end())
-				Window::keyDown.erase(result);
 			int key = event.key.keysym.scancode;
 			IM_ASSERT(key >= 0 && key < IM_ARRAYSIZE(io.KeysDown));
 			io.KeysDown[key] = false;
@@ -101,11 +87,6 @@ bool Window::processEvents(float delta)
 			io.KeyCtrl = ((SDL_GetModState() & KMOD_CTRL) != 0);
 			io.KeyAlt = ((SDL_GetModState() & KMOD_ALT) != 0);
 			io.KeySuper = ((SDL_GetModState() & KMOD_GUI) != 0);
-
-			if (event.key.keysym.sym == SDLK_w) up = false;
-			if (event.key.keysym.sym == SDLK_s) down = false;
-			if (event.key.keysym.sym == SDLK_a) left = false;
-			if (event.key.keysym.sym == SDLK_d) right = false;
 		}
 		if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
 			if (isInsideRenderWindow(event.motion.x, event.motion.y)) {
@@ -129,12 +110,16 @@ bool Window::processEvents(float delta)
 		}
 	}
 
-	if ((up || down) && (left || right)) combineDirections = true;
+	if (io.KeysDown[SDL_SCANCODE_ESCAPE]) return false;
+
+	if ((io.KeysDown[SDL_SCANCODE_W] || io.KeysDown[SDL_SCANCODE_S]) &&
+		(io.KeysDown[SDL_SCANCODE_A] || io.KeysDown[SDL_SCANCODE_D]))
+		combineDirections = true;
 	float velocity = combineDirections ? GUI::cameraSpeed * Timer::delta * 0.707f : GUI::cameraSpeed * Timer::delta;
-	if (up) info.camera_main.move(Camera::RelativeDirection::FORWARD, velocity);
-	if (down) info.camera_main.move(Camera::RelativeDirection::BACKWARD, velocity);
-	if (left) info.camera_main.move(Camera::RelativeDirection::LEFT, velocity);
-	if (right) info.camera_main.move(Camera::RelativeDirection::RIGHT, velocity);
+	if (io.KeysDown[SDL_SCANCODE_W]) info.camera_main.move(Camera::RelativeDirection::FORWARD, velocity);
+	if (io.KeysDown[SDL_SCANCODE_S]) info.camera_main.move(Camera::RelativeDirection::BACKWARD, velocity);
+	if (io.KeysDown[SDL_SCANCODE_A]) info.camera_main.move(Camera::RelativeDirection::LEFT, velocity);
+	if (io.KeysDown[SDL_SCANCODE_D]) info.camera_main.move(Camera::RelativeDirection::RIGHT, velocity);
 
 	return true;
 }

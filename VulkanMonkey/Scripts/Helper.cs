@@ -9,6 +9,20 @@ public struct Transform
     public Vector3 position;// = Vector3.Zero;
 }
 
+[StructLayout(LayoutKind.Sequential)]
+public struct Mouse
+{
+    public float x;
+    public float y;
+}
+
+public enum MouseButton
+{
+    Left = 0,
+    Right = 1,
+    Middle = 2,
+}
+
 public enum Key
 {
     UNKNOWN = 0,

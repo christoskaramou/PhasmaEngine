@@ -21,7 +21,7 @@ namespace vm {
 		{
 			static VulkanContext VkCTX[VULKAN_CONTEXT_INSTANCES];
 
-			assert(index < VULKAN_CONTEXT_INSTANCES);
+			//assert(index < VULKAN_CONTEXT_INSTANCES);
 			return VkCTX[index];
 		}
 
