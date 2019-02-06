@@ -40,13 +40,8 @@ bool Window::processEvents(float delta)
 {
 	if (!renderer[0]->prepared) return false;
 	if (Console::close_app) return false;
-	static bool up = false;
-	static bool down = false;
-	static bool left = false;
-	static bool right = false;
 	static int xMove = 0;
 	static int yMove = 0;
-	static float lastTimeScale = GUI::timeScale;
 
 	auto& info = renderer[0]->ctx;
 	bool combineDirections = false;
