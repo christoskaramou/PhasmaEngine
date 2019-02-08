@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 public class Global
 {
     [MethodImpl(MethodImplOptions.InternalCall)]
-    public static extern void LoadModel(string folderPath, string modelName);
+    public static extern void LoadModel(string folderPath, string modelName, uint instances = 1);
 
     [MethodImpl(MethodImplOptions.InternalCall)]
     public static extern bool KeyDown(Key key);

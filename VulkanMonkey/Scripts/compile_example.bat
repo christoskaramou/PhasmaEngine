@@ -1,0 +1,5 @@
+C:\Windows\System32\cmd.exe /c "..\include\Mono\\bin\setmonopath.bat"
+C:\Windows\System32\cmd.exe /c "mcs -t:library Load.cs CPPcallbacks.cs Helper.cs -r:MonoGame.Framework.dll"
+C:\Windows\System32\cmd.exe /c "mcs -t:library Duck.cs Helper.cs -r:MonoGame.Framework.dll"
+C:\Windows\System32\cmd.exe /c "mcs -t:library Corset.cs Helper.cs -r:MonoGame.Framework.dll"
+C:\Windows\System32\cmd.exe /k "mcs -t:library DamagedHelmet.cs Helper.cs -r:MonoGame.Framework.dll"

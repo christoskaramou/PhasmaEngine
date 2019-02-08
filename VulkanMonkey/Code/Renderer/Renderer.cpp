@@ -79,7 +79,7 @@ void Renderer::update(float delta)
 
 	// MODELS
 	for (auto &model : Model::models)
-		model.update(ctx.camera_main ,delta);
+		model.update(ctx.camera_main, delta);
 
 	// GUI
 	ctx.gui.update();
@@ -98,21 +98,7 @@ void Renderer::update(float delta)
 
 	//TODO: rework shadows
 	// SHADOWS
-	Shadows::shadowCast = GUI::shadow_cast;
-	const vec3 pos = Light::sun().position;
-	const vec3 front = normalize(-pos);
-	const vec3 right = normalize(cross(front, ctx.camera_main.worldUp()));
-	const vec3 up = normalize(cross(right, front));
-	std::vector<ShadowsUBO> shadows_UBO(Model::models.size());
-	for (uint32_t i = 0; i < Model::models.size(); i++) {
-		shadows_UBO[i] = {
-			ortho(-20.f, 20.f, -20.f, 20.f, 500.f, 0.005f),
-			lookAt(pos, front, right, up),
-			Model::models[i].script ? Model::models[i].script->getValue<Transform>("transform").matrix() * Model::models[i].transform : Model::models[i].transform,
-			Shadows::shadowCast ? 1.0f : 0.0f
-		};
-	}
-	memcpy(ctx.shadows.uniformBuffer.data, shadows_UBO.data(), sizeof(ShadowsUBO)*shadows_UBO.size());
+	ctx.shadows.update(ctx.camera_main);
 
 	//TERRAIN
 	//if (ctx.terrain.render) {
@@ -297,9 +283,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 		if (Model::models[m].render) {
 			cmd.bindVertexBuffers(0, Model::models[m].vertexBuffer.buffer, offset);
 			cmd.bindIndexBuffer(Model::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
-
-			const uint32_t dOffsets =  m * sizeof(ShadowsUBO);
-			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, ctx.shadows.descriptorSet, dOffsets);
+			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSet, Model::models[m].descriptorSet }, nullptr);
 
 			for (auto& mesh : Model::models[m].meshes) {
 				if (mesh.render)
@@ -332,7 +316,7 @@ void Renderer::present()
 	uint32_t imageIndex;
 
 	// if using shadows use the semaphore[0], record and submit the shadow commands, else use the semaphore[1]
-	if (Shadows::shadowCast) {
+	if (GUI::shadow_cast) {
 		imageIndex = ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[0], vk::Fence()).value;
 
 		recordShadowsCmds(imageIndex);

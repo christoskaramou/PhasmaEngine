@@ -10,10 +10,13 @@ layout(location = 5) in vec4 inColor;
 layout( set = 0, binding = 0 ) uniform UniformBuffer {
 	mat4 projection;
 	mat4 lightView;
-	mat4 model;
-	mat4 dummy;
+	float dummy[16];
 }ubo;
 
+layout( set = 1, binding = 0 ) uniform UniformBuffer2 {
+	mat4 model;
+}ubo2;
+
 void main() {
-	gl_Position = ubo.projection * ubo.lightView * ubo.model * vec4(inPosition, 1.0);
+	gl_Position = ubo.projection * ubo.lightView * ubo2.model * vec4(inPosition, 1.0);
 }

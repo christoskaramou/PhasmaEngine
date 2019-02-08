@@ -30,7 +30,7 @@ void Context::initVulkanContext()
 	vulkan.swapchain = new Swapchain(createSwapchain());
 	vulkan.commandPool = createCommandPool();
 	vulkan.commandPoolCompute = createComputeCommadPool();
-	vulkan.descriptorPool = createDescriptorPool(2000); // max number of all descriptor sets to allocate
+	vulkan.descriptorPool = createDescriptorPool(20000); // max number of all descriptor sets to allocate
 	vulkan.dynamicCmdBuffer = createCmdBuffers().at(0);
 	vulkan.shadowCmdBuffer = createCmdBuffers().at(0);
 	vulkan.computeCmdBuffer = createComputeCmdBuffer();
@@ -92,11 +92,12 @@ void Context::initRendering()
 	metrics.initQueryPool();
 }
 
-static void LoadModel(MonoString* folderPath, MonoString* modelName)
+static void LoadModel(MonoString* folderPath, MonoString* modelName, uint32_t instances)
 {
 	std::string path(mono_string_to_utf8(folderPath));
 	std::string name(mono_string_to_utf8(modelName));
-	Queue::loadModel.push_back({ path, name });
+	for (; instances > 0; instances--)
+		Queue::loadModel.push_back({ path, name });
 }
 
 static bool KeyDown(uint32_t key)
@@ -109,16 +110,14 @@ static bool MouseButtonDown(uint32_t button)
 	return ImGui::GetIO().MouseDown[button];
 }
 
-static vec2 GetMousePos()
+static ImVec2 GetMousePos()
 {
-	int x, y;
-	SDL_GetMouseState(&x, &y);
-	return vec2(static_cast<float>(x), static_cast<float>(y));
+	return ImGui::GetIO().MousePos;
 }
 
 static void SetMousePos(float x, float y)
 {
-	SDL_WarpMouseInWindow(VulkanContext::getVulkanContext().window, static_cast<int>(x), static_cast<int>(y));
+	SDL_WarpMouseInWindow(GUI::g_Window, static_cast<int>(x), static_cast<int>(y));
 }
 
 static float GetMouseWheel()
@@ -163,7 +162,7 @@ void Context::createUniforms()
 	// DESCRIPTOR SETS FOR SKYBOX
 	//skyBox.createDescriptorSet(SkyBox::getDescriptorSetLayout(vulkan.device));
 	// DESCRIPTOR SETS FOR SHADOWS
-	shadows.createDynamicUniformBuffer(256); // TODO: Fix to dynamic add or remove memory
+	shadows.createUniformBuffer();
 	shadows.createDescriptorSet();
 	// DESCRIPTOR SETS FOR LIGHTS
 	lightUniforms.createLightUniforms();
@@ -2990,7 +2989,7 @@ PipelineInfo Context::getPipelineSpecificationsShadows()
 	shadowsSpecific.viewportSize = { Shadows::imageSize, Shadows::imageSize };
 	shadowsSpecific.useBlendState = false;
 	shadowsSpecific.sampleCount = vk::SampleCountFlagBits::e1;
-	shadowsSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(vulkan.device) };
+	shadowsSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(vulkan.device), Model::descriptorSetLayout };
 	shadowsSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	shadowsSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	shadowsSpecific.pushConstantRange = vk::PushConstantRange();

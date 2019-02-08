@@ -274,8 +274,7 @@ void Deferred::draw(uint32_t imageIndex, Shadows& shadows, mat4& invViewProj, ve
 
 	vulkan->dynamicCmdBuffer.pushConstants(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(screenSpace), &screenSpace);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline);
-	uint32_t ofsets = 0;
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo.layout, 0, { DSComposition, shadows.descriptorSet }, ofsets);
+	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo.layout, 0, { DSComposition, shadows.descriptorSet }, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
 	// End Composition

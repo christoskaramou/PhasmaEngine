@@ -1,9 +1,10 @@
 #include "Shadows.h"
+#include "../GUI/GUI.h"
+#include "../Light/Light.h"
 
 using namespace vm;
 
 vk::DescriptorSetLayout		Shadows::descriptorSetLayout = nullptr;
-bool						Shadows::shadowCast = true;
 uint32_t					Shadows::imageSize = 4096;
 
 void Shadows::createDescriptorSet()
@@ -21,7 +22,7 @@ void Shadows::createDescriptorSet()
 		.setDstBinding(0)												// uint32_t dstBinding;
 		.setDstArrayElement(0)											// uint32_t dstArrayElement;
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eUniformBufferDynamic)	// DescriptorType descriptorType;
+		.setDescriptorType(vk::DescriptorType::eUniformBuffer)			// DescriptorType descriptorType;
 		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorBufferInfo* pBufferInfo;
 			.setBuffer(uniformBuffer.buffer)							// Buffer buffer;
 			.setOffset(0)													// DeviceSize offset;
@@ -50,7 +51,7 @@ vk::DescriptorSetLayout Shadows::getDescriptorSetLayout(vk::Device device)
 		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
 			.setBinding(0) // binding number in shader stages
 			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eUniformBufferDynamic)
+			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
 			.setStageFlags(vk::ShaderStageFlagBits::eVertex)); // which pipeline shader stages can access
 
 		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
@@ -68,13 +69,9 @@ vk::DescriptorSetLayout Shadows::getDescriptorSetLayout(vk::Device device)
 	return descriptorSetLayout;
 }
 
-void Shadows::createDynamicUniformBuffer(size_t num_of_objects)
+void Shadows::createUniformBuffer()
 {
-	if (num_of_objects > 256) {
-		exit(-21);
-	}
-	size_t size = num_of_objects * 256;
-	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniformBuffer.createBuffer(sizeof(ShadowsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 }
 
@@ -91,4 +88,32 @@ void Shadows::destroy()
 		vulkan->device.destroyFramebuffer(fb);
 	uniformBuffer.destroy();
 	pipeline.destroy();
+}
+
+void Shadows::update(Camera& camera)
+{
+	static ShadowsUBO shadows_UBO = {
+			ortho(-20.f, 20.f, -20.f, 20.f, 500.f, 0.005f),
+			lookAt(camera.position, camera.front, camera.right, camera.up),
+			0.0f
+	};
+
+	if (GUI::shadow_cast) {
+		const vec3 pos = Light::sun().position;
+		const vec3 front = normalize(-pos);
+		const vec3 right = normalize(cross(front, camera.worldUp()));
+		const vec3 up = normalize(cross(right, front));
+
+		shadows_UBO = {
+			ortho(-20.f, 20.f, -20.f, 20.f, 500.f, 0.005f),
+			lookAt(pos, front, right, up),
+			1.0f
+		};
+		memcpy(uniformBuffer.data, &shadows_UBO, sizeof(ShadowsUBO));
+	}
+	else
+	{
+		shadows_UBO.castShadows = 0.f;
+		memcpy(uniformBuffer.data, &shadows_UBO, sizeof(ShadowsUBO));
+	}
 }

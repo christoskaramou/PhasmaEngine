@@ -211,8 +211,7 @@ void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& mod
 					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, { descriptorSet, mesh.descriptorSet }, nullptr);
 				}
 				else {
-					const uint32_t dOffsets = modelID * sizeof(ShadowsUBO);
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, { shadows->descriptorSet, mesh.descriptorSet, descriptorSet, *DSLights }, dOffsets);
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, { shadows->descriptorSet, mesh.descriptorSet, descriptorSet, *DSLights }, nullptr);
 				}
 				cmd.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
 			}

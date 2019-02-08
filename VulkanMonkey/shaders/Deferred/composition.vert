@@ -3,8 +3,8 @@
 layout(set = 1, binding = 0) uniform shadowBufferObject {
 	mat4 projection;
 	mat4 view;
-	mat4 model;
 	float castShadows;
+	float dummy[15];
 }sun;
 
 layout (location = 0) out vec2 outUV;

@@ -5,13 +5,13 @@
 #include "../Image/Image.h"
 #include "../Pipeline/Pipeline.h"
 #include "../Math/Math.h"
+#include "../Camera/Camera.h"
 
 namespace vm {
 	struct Shadows
 	{
 		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
 
-		static bool shadowCast;
 		static uint32_t imageSize;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
@@ -22,14 +22,15 @@ namespace vm {
 		Buffer uniformBuffer;
 		Pipeline pipeline;
 
-		void createDynamicUniformBuffer(size_t num_of_objects);
+		void update(Camera& camera);
+		void createUniformBuffer();
 		void createDescriptorSet();
 		void destroy();
 	};
 
 	struct ShadowsUBO
 	{
-		mat4 projection, view, model;
-		float castShadows, dummy[15]; // for 256 bytes align
+		mat4 projection, view;
+		float castShadows, dummy[15];
 	};
 }

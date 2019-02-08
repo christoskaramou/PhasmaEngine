@@ -71,12 +71,10 @@ bool Window::processEvents(float delta)
 
 		if (event.type == SDL_KEYDOWN) {
 			int key = event.key.keysym.scancode;
-			IM_ASSERT(key >= 0 && key < IM_ARRAYSIZE(io.KeysDown));
 			io.KeysDown[key] = true;
 		}
 		else if (event.type == SDL_KEYUP) {
 			int key = event.key.keysym.scancode;
-			IM_ASSERT(key >= 0 && key < IM_ARRAYSIZE(io.KeysDown));
 			io.KeysDown[key] = false;
 			io.KeyShift = ((SDL_GetModState() & KMOD_SHIFT) != 0);
 			io.KeyCtrl = ((SDL_GetModState() & KMOD_CTRL) != 0);
