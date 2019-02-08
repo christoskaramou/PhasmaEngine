@@ -13,8 +13,11 @@ layout( set = 0, binding = 0 ) uniform UniformBuffer {
 	float dummy[16];
 }ubo;
 
-layout( set = 1, binding = 0 ) uniform UniformBuffer2 {
+layout( set = 1, binding = 0 ) uniform UniformBuffer2 {	
+	mat4 dummy1;
+	mat4 dummy2;
 	mat4 model;
+	mat4 dummy3;
 }ubo2;
 
 void main() {

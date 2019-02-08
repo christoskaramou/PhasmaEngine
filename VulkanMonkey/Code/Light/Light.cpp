@@ -28,7 +28,7 @@ void LightUniforms::createLightUniforms()
 	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	uniform.data = vulkan->device.mapMemory(uniform.memory, 0, uniform.size);
 	LightsUBO lubo;
-	lubo.lights.resize(MAX_LIGHTS);
+	//lubo.lights.resize(MAX_LIGHTS);
 	memcpy(uniform.data, &lubo, uniform.size);
 
 	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
@@ -64,7 +64,7 @@ void LightUniforms::update(Camera& camera)
 		GUI::randomize_lights = false;
 		LightsUBO lubo;
 		lubo.camPos = vec4(camera.position, 1.0f);
-		lubo.lights.resize(MAX_LIGHTS);
+		//lubo.lights.resize(MAX_LIGHTS);
 		memcpy(uniform.data, &lubo, sizeof(lubo));
 	}
 	else {

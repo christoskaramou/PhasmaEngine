@@ -165,7 +165,7 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 
 	// MODELS
 	for (uint32_t m = 0; m < Model::models.size(); m++)
-		Model::models[m].draw(ctx.forward.pipeline, cmd, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
+		Model::models[m].draw(ctx.forward.pipeline, cmd, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
 
 	for (auto& cam : ctx.camera) {
 		cam.renderArea.update(winPos + winSize * .7f, winSize * .2f, 0.f, 0.5f);
@@ -174,7 +174,7 @@ void Renderer::recordForwardCmds(const uint32_t& imageIndex)
 
 		// MODELS
 		for (uint32_t m = 0; m < Model::models.size(); m++)
-			Model::models[m].draw(ctx.forward.pipeline, cmd, m, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
+			Model::models[m].draw(ctx.forward.pipeline, cmd, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
 	}
 	cmd.endRenderPass();
 
@@ -225,7 +225,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 		// MODELS
 		for (uint32_t m = 0; m < Model::models.size(); m++)
-			Model::models[m].draw(ctx.deferred.pipeline, cmd, m, true);
+			Model::models[m].draw(ctx.deferred.pipeline, cmd, true);
 		// SKYBOX
 		//ctx.skyBox.draw(cmd);
 		cmd.endRenderPass();

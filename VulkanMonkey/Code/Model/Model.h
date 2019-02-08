@@ -29,7 +29,7 @@ namespace vm {
 		vec4 boundingSphere;
 		std::unique_ptr<Script> script;
 
-		void draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows = nullptr, vk::DescriptorSet* DSLights = nullptr);
+		void draw(Pipeline& pipeline, vk::CommandBuffer& cmd, bool deferredRenderer, Shadows* shadows = nullptr, vk::DescriptorSet* DSLights = nullptr);
 		void update(Camera& camera, float delta);
 		vec4 getBoundingSphere();
 		void loadModel(const std::string& folderPath, const std::string& modelName, bool show = true);

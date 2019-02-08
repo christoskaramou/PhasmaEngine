@@ -30,7 +30,7 @@ void Context::initVulkanContext()
 	vulkan.swapchain = new Swapchain(createSwapchain());
 	vulkan.commandPool = createCommandPool();
 	vulkan.commandPoolCompute = createComputeCommadPool();
-	vulkan.descriptorPool = createDescriptorPool(20000); // max number of all descriptor sets to allocate
+	vulkan.descriptorPool = createDescriptorPool(10000); // max number of all descriptor sets to allocate
 	vulkan.dynamicCmdBuffer = createCmdBuffers().at(0);
 	vulkan.shadowCmdBuffer = createCmdBuffers().at(0);
 	vulkan.computeCmdBuffer = createComputeCmdBuffer();

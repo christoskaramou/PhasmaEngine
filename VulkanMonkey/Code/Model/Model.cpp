@@ -195,7 +195,7 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 	createDescriptorSets();
 }
 
-void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, const uint32_t& modelID, bool deferredRenderer, Shadows* shadows, vk::DescriptorSet* DSLights)
+void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, bool deferredRenderer, Shadows* shadows, vk::DescriptorSet* DSLights)
 {
 	if (render)
 	{

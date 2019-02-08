@@ -99,13 +99,18 @@ void Shadows::update(Camera& camera)
 	};
 
 	if (GUI::shadow_cast) {
-		const vec3 pos = Light::sun().position;
-		const vec3 front = normalize(-pos);
+		// far/cos(x) = the side size
+		const float sideSizeOfPyramid = camera.nearPlane / cos(radians(camera.FOV * .5f)); // near plane is actually the far plane (they are reversed)
+		const vec3 centerOfPyramid = (camera.front * (sideSizeOfPyramid * .5f)) / 10.f;
+		const vec3 p = Light::sun().position;
+		const vec3 pos = p + camera.position + centerOfPyramid;
+		const vec3 front = normalize(camera.position + centerOfPyramid - pos);
 		const vec3 right = normalize(cross(front, camera.worldUp()));
 		const vec3 up = normalize(cross(right, front));
 
+		const float orthoSide = (sideSizeOfPyramid * .5f) / 10.f;
 		shadows_UBO = {
-			ortho(-20.f, 20.f, -20.f, 20.f, 500.f, 0.005f),
+			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, 500.f, 0.005f),
 			lookAt(pos, front, right, up),
 			1.0f
 		};
