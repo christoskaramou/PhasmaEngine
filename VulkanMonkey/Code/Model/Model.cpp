@@ -211,7 +211,7 @@ void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, bool deferredRender
 					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, { descriptorSet, mesh.descriptorSet }, nullptr);
 				}
 				else {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, { shadows->descriptorSet, mesh.descriptorSet, descriptorSet, *DSLights }, nullptr);
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, { mesh.descriptorSet, descriptorSet, *DSLights, shadows->descriptorSets[0], shadows->descriptorSets[1], shadows->descriptorSets[2] }, nullptr);
 				}
 				cmd.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
 			}

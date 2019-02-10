@@ -33,12 +33,16 @@ layout (set = 0, binding = 3) uniform sampler2D samplerRoughMet;
 layout (set = 0, binding = 4) uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS+1]; } ubo;
 layout (set = 0, binding = 5) uniform sampler2D ssaoBlurSampler;
 layout (set = 0, binding = 6) uniform sampler2D ssrSampler;
-layout (set = 1, binding = 1) uniform sampler2DShadow shadowMapSampler;
+layout (set = 1, binding = 1) uniform sampler2DShadow shadowMapSampler0;
+layout (set = 2, binding = 1) uniform sampler2DShadow shadowMapSampler1;
+layout (set = 3, binding = 1) uniform sampler2DShadow shadowMapSampler2;
 
 
 layout (location = 0) in vec2 inUV;
 layout (location = 1) in float castShadows;
-layout (location = 2) in mat4 shadow_coords;
+layout (location = 2) in mat4 shadow_coords0; // small area
+layout (location = 6) in mat4 shadow_coords1; // medium area
+layout (location = 10) in mat4 shadow_coords2; // large area
 
 layout (location = 0) out vec4 outColor;
 layout (location = 1) out vec4 outComposition;
@@ -105,13 +109,35 @@ vec3 getWorldPosFromUV(vec2 UV)
 }
 
 vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular)
-{
-	vec4 s_coords =  shadow_coords * vec4(fragPos, 1.0);
-	s_coords.xy = s_coords.xy * 0.5 + 0.5;
-	s_coords = s_coords / s_coords.w;
+{		
+	vec4 s_coords0 =  shadow_coords0 * vec4(fragPos, 1.0);
+	s_coords0.xy = s_coords0.xy * 0.5 + 0.5;
+	s_coords0 = s_coords0 / s_coords0.w;
+	vec4 s_coords1 =  shadow_coords1 * vec4(fragPos, 1.0);
+	s_coords1.xy = s_coords1.xy * 0.5 + 0.5;
+	s_coords1 = s_coords1 / s_coords1.w;
+	vec4 s_coords2 =  shadow_coords2 * vec4(fragPos, 1.0);
+	s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
+	s_coords2 = s_coords2 / s_coords2.w;
+
 	float lit = 0.0;
-	for (int i = 0; i < 4 * castShadows; i++)
-		lit += 0.25 * (texture( shadowMapSampler, vec3( s_coords.xy + poissonDisk[i]*0.0008, s_coords.z+0.0001 )));
+	float dist = distance(fragPos, vec3(ubo.camPos));
+	if (dist < 10.0) {
+		for (int i = 0; i < 4 * castShadows; i++){
+			float value = mix(texture( shadowMapSampler0, vec3( s_coords0.xy + poissonDisk[i]*0.0008, s_coords0.z+0.0001 )), texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z+0.0001 )), (dist*dist)/100.0);
+			lit += 0.25 * value;
+		}
+	}
+	else if (dist < 50.0) {
+		for (int i = 0; i < 4 * castShadows; i++){
+			float value = mix(texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z+0.0001 )), texture( shadowMapSampler2, vec3( s_coords2.xy + poissonDisk[i]*0.0008, s_coords2.z+0.0001 )), (dist*dist)/2500.0);
+			lit += 0.25 * value;
+		}
+	}
+	else {
+		for (int i = 0; i < 4 * castShadows; i++)
+			lit += 0.25 * (texture( shadowMapSampler2, vec3( s_coords2.xy + poissonDisk[i]*0.0008, s_coords2.z+0.0001 )));
+	}
 
 	// Light to fragment
 	vec3 L = ubo.lights[mainLight].position.xyz - fragPos;
@@ -234,12 +260,12 @@ vec3 BRDF(Material material, vec3 fragPos, vec3 normal, int light)
 
 vec3 BRDFShadows(Material material, vec3 fragPos, vec3 normal, int light)
 {
-	vec4 s_coords =  shadow_coords * vec4(fragPos, 1.0);
+	vec4 s_coords =  shadow_coords0 * vec4(fragPos, 1.0);
 	s_coords.xy = s_coords.xy * 0.5 + 0.5;
 	s_coords = s_coords / s_coords.w;
 	float lit = 0.0;
 	for (int i = 0; i < 4 * castShadows; i++)
-		lit += 0.25 * (texture( shadowMapSampler, vec3( s_coords.xy + poissonDisk[i]*0.0008, s_coords.z+0.0001 )));
+		lit += 0.25 * (texture( shadowMapSampler0, vec3( s_coords.xy + poissonDisk[i]*0.0008, s_coords.z+0.0001 ))); // FIX THIS
 
 	// calculate per-light radiance
 	vec3 N = normalize(normal);

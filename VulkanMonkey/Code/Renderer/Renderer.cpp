@@ -258,41 +258,43 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 {
 	// Render Pass (shadows mapping) (outputs the depth image with the light POV)
 
-	std::array<vk::ClearValue, 1> clearValuesShadows = {};
-	clearValuesShadows[0].setDepthStencil({ 0.0f, 0 });
-	auto beginInfoShadows = vk::CommandBufferBeginInfo()
-		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
-		.setPInheritanceInfo(nullptr);
-	auto renderPassInfoShadows = vk::RenderPassBeginInfo()
-		.setRenderPass(ctx.shadows.renderPass)
-		.setFramebuffer(ctx.shadows.frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 },{ ctx.shadows.imageSize, ctx.shadows.imageSize } })
-		.setClearValueCount(static_cast<uint32_t>(clearValuesShadows.size()))
-		.setPClearValues(clearValuesShadows.data());
+	vk::DeviceSize offset = vk::DeviceSize();
+	std::array<vk::ClearValue, 1> clearValuesShadows{};
+	clearValuesShadows[0].depthStencil = { 0.0f, 0 };
+
+	vk::CommandBufferBeginInfo beginInfoShadows;
+	beginInfoShadows.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+
+	vk::RenderPassBeginInfo renderPassInfoShadows;
+	renderPassInfoShadows.renderPass = ctx.shadows.renderPass;
+	renderPassInfoShadows.renderArea = { { 0, 0 },{ Shadows::imageSize, Shadows::imageSize } };
+	renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
+	renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
 	auto& cmd = ctx.vulkan.shadowCmdBuffer;
 	cmd.begin(beginInfoShadows);
 	cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
-	cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 
-	vk::DeviceSize offset = vk::DeviceSize();
+	for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
+		// depth[i] image ===========================================================
+		renderPassInfoShadows.framebuffer = ctx.shadows.frameBuffers[i * ctx.vulkan.swapchain->images.size() + imageIndex]; // e.g. for 2 swapchain images - 1st(0,2,4) and 2nd(1,3,5)
+		cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
+		for (uint32_t m = 0; m < Model::models.size(); m++) {
+			if (Model::models[m].render) {
+				cmd.bindVertexBuffers(0, Model::models[m].vertexBuffer.buffer, offset);
+				cmd.bindIndexBuffer(Model::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
+				cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSets[i], Model::models[m].descriptorSet }, nullptr);
 
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
-
-	for (uint32_t m = 0; m < Model::models.size(); m++) {
-		if (Model::models[m].render) {
-			cmd.bindVertexBuffers(0, Model::models[m].vertexBuffer.buffer, offset);
-			cmd.bindIndexBuffer(Model::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
-			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSet, Model::models[m].descriptorSet }, nullptr);
-
-			for (auto& mesh : Model::models[m].meshes) {
-				if (mesh.render)
-					cmd.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
+				for (auto& mesh : Model::models[m].meshes) {
+					if (mesh.render)
+						cmd.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
+				}
 			}
 		}
+		cmd.endRenderPass();
+		// ==========================================================================
 	}
-
-	cmd.endRenderPass();
 	cmd.end();
 }
 

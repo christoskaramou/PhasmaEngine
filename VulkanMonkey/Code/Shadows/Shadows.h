@@ -16,15 +16,15 @@ namespace vm {
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
 		vk::RenderPass renderPass;
-		Image texture;
-		vk::DescriptorSet descriptorSet;
-		std::vector<vk::Framebuffer> frameBuffers;
-		Buffer uniformBuffer;
+		std::vector <Image> textures{};
+		std::vector <vk::DescriptorSet> descriptorSets{};
+		std::vector <vk::Framebuffer> frameBuffers{};
+		std::vector <Buffer> uniformBuffers{};
 		Pipeline pipeline;
 
 		void update(Camera& camera);
-		void createUniformBuffer();
-		void createDescriptorSet();
+		void createUniformBuffers();
+		void createDescriptorSets();
 		void destroy();
 	};
 

@@ -162,8 +162,8 @@ void Context::createUniforms()
 	// DESCRIPTOR SETS FOR SKYBOX
 	//skyBox.createDescriptorSet(SkyBox::getDescriptorSetLayout(vulkan.device));
 	// DESCRIPTOR SETS FOR SHADOWS
-	shadows.createUniformBuffer();
-	shadows.createDescriptorSet();
+	shadows.createUniformBuffers();
+	shadows.createDescriptorSets();
 	// DESCRIPTOR SETS FOR LIGHTS
 	lightUniforms.createLightUniforms();
 	// DESCRIPTOR SETS FOR SSAO
@@ -1274,34 +1274,37 @@ std::vector<vk::Framebuffer> Context::createGUIFrameBuffers()
 
 std::vector<vk::Framebuffer> Context::createShadowsFrameBuffers()
 {
-	std::vector<vk::Framebuffer> _frameBuffers(vulkan.swapchain->images.size());
+	shadows.textures.resize(3);
+	for (uint32_t i = 0; i < shadows.textures.size(); i++)
+	{
+		shadows.textures[i].format				= vulkan.depth->format;
+		shadows.textures[i].initialLayout		= vk::ImageLayout::eUndefined;
+		shadows.textures[i].addressMode			= vk::SamplerAddressMode::eClampToEdge;
+		shadows.textures[i].maxAnisotropy		= 1.f;
+		shadows.textures[i].borderColor			= vk::BorderColor::eFloatOpaqueWhite;
+		shadows.textures[i].samplerCompareEnable = VK_TRUE;
+		shadows.textures[i].compareOp			= vk::CompareOp::eGreaterOrEqual;
+		shadows.textures[i].samplerMipmapMode	= vk::SamplerMipmapMode::eLinear;
 
-	shadows.texture.format = vulkan.depth->format;
-	shadows.texture.initialLayout = vk::ImageLayout::eUndefined;
-	shadows.texture.createImage(shadows.imageSize, shadows.imageSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		shadows.textures[i].createImage(Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		shadows.textures[i].createImageView(vk::ImageAspectFlagBits::eDepth);
+		shadows.textures[i].createSampler();
+	}
 
-	shadows.texture.createImageView(vk::ImageAspectFlagBits::eDepth);
-
-	shadows.texture.addressMode = vk::SamplerAddressMode::eClampToEdge;
-	shadows.texture.maxAnisotropy = 1.f;
-	shadows.texture.borderColor = vk::BorderColor::eFloatOpaqueWhite;
-	shadows.texture.samplerCompareEnable = VK_TRUE;
-	shadows.texture.compareOp = vk::CompareOp::eGreaterOrEqual;
-	shadows.texture.samplerMipmapMode = vk::SamplerMipmapMode::eLinear;
-	shadows.texture.createSampler();
-
+	std::vector<vk::Framebuffer> _frameBuffers(vulkan.swapchain->images.size() * shadows.textures.size());
 	for (uint32_t i = 0; i < _frameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			shadows.texture.view
+			shadows.textures[i / vulkan.swapchain->images.size()].view // e.g. framebuffer[0,1,2,3,4,5] -> texture[0,0,1,1,2,2].view
 		};
 
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(shadows.renderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(shadows.imageSize)
-			.setHeight(shadows.imageSize)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass			= shadows.renderPass;
+		fbci.attachmentCount	= static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments		= attachments.data();
+		fbci.width				= Shadows::imageSize;
+		fbci.height				= Shadows::imageSize;
+		fbci.layers				= 1;
+
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1749,7 +1752,11 @@ Pipeline Context::createCompositionPipeline()
 		deferred.DSLayoutComposition  = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { deferred.DSLayoutComposition, Shadows::getDescriptorSetLayout(vulkan.device) };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = {
+		deferred.DSLayoutComposition,
+		Shadows::getDescriptorSetLayout(vulkan.device),
+		Shadows::getDescriptorSetLayout(vulkan.device),
+		Shadows::getDescriptorSetLayout(vulkan.device) };
 
 	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 6 * sizeof(vec4) };
 
@@ -2964,7 +2971,13 @@ PipelineInfo Context::getPipelineSpecificationsModel()
 	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
 	generalSpecific.renderPass = forward.renderPass;
 	generalSpecific.viewportSize = { WIDTH, HEIGHT };
-	generalSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(vulkan.device), Mesh::getDescriptorSetLayout(vulkan.device), Model::getDescriptorSetLayout(vulkan.device), getDescriptorSetLayoutLights() };
+	generalSpecific.descriptorSetLayouts = {
+		Mesh::getDescriptorSetLayout(vulkan.device),
+		Model::getDescriptorSetLayout(vulkan.device),
+		getDescriptorSetLayoutLights(),
+		Shadows::getDescriptorSetLayout(vulkan.device),
+		Shadows::getDescriptorSetLayout(vulkan.device),
+		Shadows::getDescriptorSetLayout(vulkan.device), };
 	generalSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	generalSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	generalSpecific.pushConstantRange = vk::PushConstantRange();
