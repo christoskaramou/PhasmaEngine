@@ -8,8 +8,8 @@ public class DamagedHelmet
 
     public DamagedHelmet()
     {
-        transform.scale = new Vector3(0.25f);
-        transform.position = new Vector3(0.0f, 1.15f, 0.0f);
+        transform.scale = new Vector3(0.5f);
+        transform.position = new Vector3(0.0f, 0.0f, 0.0f);
     }
 
     public void Update(float delta)

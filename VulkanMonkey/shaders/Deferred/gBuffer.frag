@@ -15,11 +15,13 @@ layout (location = 4) in vec3 inColor;
 layout (location = 5) in vec4 baseColorFactor;
 layout (location = 6) in vec3 emissiveFactor;
 layout (location = 7) in vec4 metRoughAlphacut;
+layout (location = 8) in vec4 velocity;
 
 layout (location = 0) out float outDepth;
 layout (location = 1) out vec3 outNormal;
 layout (location = 2) out vec4 outAlbedo;
 layout (location = 3) out vec3 outRoughMet;
+layout (location = 4) out vec4 outVelocity;
 
 void main() {
 	float alpha = metRoughAlphacut.a > 0.5 ? texture(alphaSampler, inUV).r : texture(tSampler, inUV).a;
@@ -39,4 +41,5 @@ void main() {
 	outAlbedo = vec4(texture(tSampler, inUV).xyz * ao, alpha) * baseColorFactor
 				+ vec4(texture(e_sampler, inUV).xyz * emissiveFactor, 0.0);
 	outRoughMet = vec3(0.0, texture(rm_Sampler, inUV).z * metRoughAlphacut.y, texture(rm_Sampler, inUV).y * metRoughAlphacut.x);
+	outVelocity = velocity;
 }

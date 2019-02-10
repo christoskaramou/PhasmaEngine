@@ -31,6 +31,9 @@ namespace vm {
 	struct ShadowsUBO
 	{
 		mat4 projection, view;
-		float castShadows, dummy[15];
+		float castShadows;
+		float maxCascadeDist0;
+		float maxCascadeDist1;
+		float maxCascadeDist2;
 	};
 }

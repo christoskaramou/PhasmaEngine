@@ -32,7 +32,7 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 		.setPSetLayouts(&DSLayoutMotionBlur);
 	DSMotionBlur = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
-	std::vector<vk::WriteDescriptorSet> textureWriteSets(3);
+	std::vector<vk::WriteDescriptorSet> textureWriteSets(4);
 	// Composition image
 	textureWriteSets[0] = vk::WriteDescriptorSet()
 		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
@@ -44,7 +44,7 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 			.setSampler(renderTargets["composition"].sampler)					// Sampler sampler;
 			.setImageView(renderTargets["composition"].view)					// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Positions
+	// Depth image
 	textureWriteSets[1] = vk::WriteDescriptorSet()
 		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
 		.setDstBinding(1)												// uint32_t dstBinding;
@@ -56,10 +56,22 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 			.setImageView(renderTargets["depth"].view)				// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
 
-		// Uniform variables
+	// Velocity image
 	textureWriteSets[2] = vk::WriteDescriptorSet()
 		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
 		.setDstBinding(2)												// uint32_t dstBinding;
+		.setDstArrayElement(0)											// uint32_t dstArrayElement;
+		.setDescriptorCount(1)											// uint32_t descriptorCount;
+		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+			.setSampler(renderTargets["velocity"].sampler)				// Sampler sampler;
+			.setImageView(renderTargets["velocity"].view)				// ImageView imageView;
+			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
+
+	// Uniform variables
+	textureWriteSets[3] = vk::WriteDescriptorSet()
+		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
+		.setDstBinding(3)												// uint32_t dstBinding;
 		.setDstArrayElement(0)											// uint32_t dstArrayElement;
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
 		.setDescriptorType(vk::DescriptorType::eUniformBuffer)			// DescriptorType descriptorType;
@@ -73,8 +85,8 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 
 void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
-	std::vector<vk::WriteDescriptorSet> textureWriteSets(3);
-	// Composition
+	std::vector<vk::WriteDescriptorSet> textureWriteSets(4);
+	// Composition image
 	textureWriteSets[0] = vk::WriteDescriptorSet()
 		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
 		.setDstBinding(0)												// uint32_t dstBinding;
@@ -85,7 +97,7 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 			.setSampler(renderTargets["composition"].sampler)					// Sampler sampler;
 			.setImageView(renderTargets["composition"].view)					// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Positions
+	// Depth image
 	textureWriteSets[1] = vk::WriteDescriptorSet()
 		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
 		.setDstBinding(1)												// uint32_t dstBinding;
@@ -97,10 +109,22 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 			.setImageView(renderTargets["depth"].view)				// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
 
-		// Uniform variables
+	// Velocity image
 	textureWriteSets[2] = vk::WriteDescriptorSet()
 		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
 		.setDstBinding(2)												// uint32_t dstBinding;
+		.setDstArrayElement(0)											// uint32_t dstArrayElement;
+		.setDescriptorCount(1)											// uint32_t descriptorCount;
+		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+			.setSampler(renderTargets["velocity"].sampler)				// Sampler sampler;
+			.setImageView(renderTargets["velocity"].view)				// ImageView imageView;
+			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
+
+	// Uniform variables
+	textureWriteSets[3] = vk::WriteDescriptorSet()
+		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
+		.setDstBinding(3)												// uint32_t dstBinding;
 		.setDstArrayElement(0)											// uint32_t dstArrayElement;
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
 		.setDescriptorType(vk::DescriptorType::eUniformBuffer)			// DescriptorType descriptorType;

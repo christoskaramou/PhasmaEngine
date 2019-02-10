@@ -228,10 +228,11 @@ void Model::update(Camera& camera, float delta)
 			script->update(delta);
 			script->getValue(trans, "transform");
 		}
-		mat4 pvm[4];
+		mat4 pvm[5];
 		pvm[0] = camera.projection;
 		pvm[1] = camera.view;
 		pvm[2] = trans.matrix() * transform;
+		pvm[4] = previousTransform;
 		camera.ExtractFrustum(pvm[2]);
 		for (auto &mesh : meshes) {
 			mesh.cull = !camera.SphereInFrustum(mesh.boundingSphere);
@@ -242,6 +243,7 @@ void Model::update(Camera& camera, float delta)
 				memcpy(uniformBuffer.data, &pvm, sizeof(pvm));
 			}
 		}
+		previousTransform = pvm[2];
 	}
 }
 
@@ -323,8 +325,7 @@ void Model::createIndexBuffer()
 
 void Model::createUniformBuffers()
 {
-	// since the uniform buffers are unique for each model, they are not bigger than 256 in size
-	uniformBuffer.createBuffer(256, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniformBuffer.createBuffer(320, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 }
 

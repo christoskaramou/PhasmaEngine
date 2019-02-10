@@ -22,6 +22,7 @@ namespace vm {
 		std::vector<Mesh> meshes{};
 		std::string name;
 		mat4 transform = mat4(1.0f);
+		mat4 previousTransform = mat4(1.0f);
 		Buffer vertexBuffer;
 		Buffer indexBuffer;
 		Buffer uniformBuffer;

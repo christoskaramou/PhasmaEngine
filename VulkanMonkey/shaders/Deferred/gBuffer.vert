@@ -11,6 +11,7 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 	float alphaCutoff;
 	float hasAlphaMap;
 	vec4 dummy;
+	mat4 previousModel;
 } ubo;
 
 layout(location = 0) in vec3 inPosition;
@@ -28,6 +29,7 @@ layout (location = 4) out vec3 outColor;
 layout (location = 5) out vec4 baseColorFactor;
 layout (location = 6) out vec3 emissiveFactor;
 layout (location = 7) out vec4 metRoughAlphacut;
+layout (location = 8) out vec4 velocity;
 
 void main() 
 {
@@ -55,4 +57,8 @@ void main()
 	baseColorFactor = ubo.baseColorFactor;
 	emissiveFactor = ubo.emissiveFactor.xyz;
 	metRoughAlphacut = vec4(ubo.metallicFactor, ubo.roughnessFactor, ubo.alphaCutoff, ubo.hasAlphaMap);
+
+	// Velocity
+	velocity = (ubo.model * inPos) - (ubo.previousModel * inPos);
+	velocity.w = 1.0;
 }

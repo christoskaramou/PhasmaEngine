@@ -47,6 +47,7 @@ void Context::initRendering()
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("velocity", vk::Format::eR32G32B32A32Sfloat);
 
 	// render passes
 	forward.renderPass = createRenderPass();
@@ -554,9 +555,9 @@ vk::RenderPass Context::createRenderPass()
 
 vk::RenderPass Context::createDeferredRenderPass()
 {
-	std::array<vk::AttachmentDescription, 5> attachments{};
+	std::array<vk::AttachmentDescription, 6> attachments{};
 	// Deferred targets
-	// Position
+	// Depth store
 	attachments[0].format = renderTargets["depth"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
@@ -592,16 +593,25 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[3].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[3].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[3].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	// Depth
-	attachments[4].format = vulkan.depth->format;
+	// Velocity
+	attachments[4].format = renderTargets["velocity"].format;
 	attachments[4].samples = vk::SampleCountFlagBits::e1;
 	attachments[4].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[4].storeOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[4].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[4].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[4].stencilStoreOp = vk::AttachmentStoreOp::eStore;
+	attachments[4].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[4].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[4].finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+	attachments[4].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+	// Depth
+	attachments[5].format = vulkan.depth->format;
+	attachments[5].samples = vk::SampleCountFlagBits::e1;
+	attachments[5].loadOp = vk::AttachmentLoadOp::eClear;
+	attachments[5].storeOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[5].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+	attachments[5].stencilStoreOp = vk::AttachmentStoreOp::eStore;
+	attachments[5].initialLayout = vk::ImageLayout::eUndefined;
+	attachments[5].finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
 	std::array<vk::SubpassDescription, 1> subpassDescriptions{};
 
@@ -609,9 +619,10 @@ vk::RenderPass Context::createDeferredRenderPass()
 		{ 0, vk::ImageLayout::eColorAttachmentOptimal },
 		{ 1, vk::ImageLayout::eColorAttachmentOptimal },
 		{ 2, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 3, vk::ImageLayout::eColorAttachmentOptimal }
+		{ 3, vk::ImageLayout::eColorAttachmentOptimal },
+		{ 4, vk::ImageLayout::eColorAttachmentOptimal }
 	};
-	vk::AttachmentReference depthReference = { 4, vk::ImageLayout::eDepthStencilAttachmentOptimal };
+	vk::AttachmentReference depthReference = { 5, vk::ImageLayout::eDepthStencilAttachmentOptimal };
 
 	subpassDescriptions[0].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
 	subpassDescriptions[0].colorAttachmentCount = static_cast<uint32_t>(colorReferences.size());
@@ -1123,6 +1134,7 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 			renderTargets["normal"].view,
 			renderTargets["albedo"].view,
 			renderTargets["srm"].view,
+			renderTargets["velocity"].view,
 			vulkan.depth->view
 		};
 
@@ -2588,7 +2600,7 @@ Pipeline Context::createMotionBlurPipeline()
 				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
 				nullptr										//const Sampler* pImmutableSamplers;
 			},
-			// Binding 1: Positions image sampler  
+			// Binding 1: Depth image sampler  
 			vk::DescriptorSetLayoutBinding{
 				1,											//uint32_t binding;
 				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
@@ -2596,9 +2608,17 @@ Pipeline Context::createMotionBlurPipeline()
 				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
 				nullptr										//const Sampler* pImmutableSamplers;
 			},
-			// Binding 4: Matrix Uniforms
+			// Binding 2: Velocity image sampler  
 			vk::DescriptorSetLayoutBinding{
 				2,											//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			},
+			// Binding 3: Matrix Uniforms
+			vk::DescriptorSetLayoutBinding{
+				3,											//uint32_t binding;
 				vk::DescriptorType::eUniformBuffer,			//DescriptorType descriptorType;
 				1,											//uint32_t descriptorCount;
 				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
@@ -2902,6 +2922,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("velocity", vk::Format::eR32G32B32A32Sfloat);
 
 
 	forward.renderPass = createRenderPass();
@@ -3112,6 +3133,7 @@ PipelineInfo Context::getPipelineSpecificationsDeferred()
 	deferredSpecific.specializationInfo = vk::SpecializationInfo();
 	deferredSpecific.blendAttachmentStates[0].blendEnable = VK_FALSE;
 	deferredSpecific.blendAttachmentStates = {
+		deferredSpecific.blendAttachmentStates[0],
 		deferredSpecific.blendAttachmentStates[0],
 		deferredSpecific.blendAttachmentStates[0],
 		deferredSpecific.blendAttachmentStates[0],

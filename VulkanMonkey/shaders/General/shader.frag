@@ -34,9 +34,12 @@ layout (location = 3) in vec3 inTangent;
 layout (location = 4) in vec3 inBitangent;
 layout (location = 5) in vec3 inColor;
 layout (location = 6) in float castShadows;
-layout (location = 7) in mat4 shadow_coords0; // small area
-layout (location = 11) in mat4 shadow_coords1; // medium area
-layout (location = 15) in mat4 shadow_coords2; // large area
+layout (location = 7) in float maxCascadeDist0;
+layout (location = 8) in float maxCascadeDist1;
+layout (location = 9) in float maxCascadeDist2;
+layout (location = 10) in mat4 shadow_coords0; // small area
+layout (location = 14) in mat4 shadow_coords1; // medium area
+layout (location = 18) in mat4 shadow_coords2; // large area
 
 layout(location = 0) out vec4 outColor;
 
@@ -84,15 +87,15 @@ vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, floa
 
 	float lit = 0.0;
 	float dist = distance(fragPos, vec3(ubo.camPos));
-	if (dist < 10.0) {
+	if (dist < maxCascadeDist0) {
 		for (int i = 0; i < 4 * castShadows; i++){
-			float value = mix(texture( shadowMapSampler0, vec3( s_coords0.xy + poissonDisk[i]*0.0008, s_coords0.z+0.0001 )), texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z+0.0001 )), (dist*dist)/100.0);
+			float value = mix(texture( shadowMapSampler0, vec3( s_coords0.xy + poissonDisk[i]*0.0008, s_coords0.z+0.0001 )), texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z+0.0001 )), (dist*dist)/(maxCascadeDist0*maxCascadeDist0));
 			lit += 0.25 * value;
 		}
 	}
-	else if (dist < 50.0) {
+	else if (dist < maxCascadeDist1) {
 		for (int i = 0; i < 4 * castShadows; i++){
-			float value = mix(texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z+0.0001 )), texture( shadowMapSampler2, vec3( s_coords2.xy + poissonDisk[i]*0.0008, s_coords2.z+0.0001 )), (dist*dist)/2500.0);
+			float value = mix(texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z+0.0001 )), texture( shadowMapSampler2, vec3( s_coords2.xy + poissonDisk[i]*0.0008, s_coords2.z+0.0001 )), (dist*dist)/(maxCascadeDist1*maxCascadeDist1));
 			lit += 0.25 * value;
 		}
 	}

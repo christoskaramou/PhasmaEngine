@@ -40,9 +40,12 @@ layout (set = 3, binding = 1) uniform sampler2DShadow shadowMapSampler2;
 
 layout (location = 0) in vec2 inUV;
 layout (location = 1) in float castShadows;
-layout (location = 2) in mat4 shadow_coords0; // small area
-layout (location = 6) in mat4 shadow_coords1; // medium area
-layout (location = 10) in mat4 shadow_coords2; // large area
+layout (location = 2) in float maxCascadeDist0;
+layout (location = 3) in float maxCascadeDist1;
+layout (location = 4) in float maxCascadeDist2;
+layout (location = 5) in mat4 shadow_coords0; // small area
+layout (location = 9) in mat4 shadow_coords1; // medium area
+layout (location = 13) in mat4 shadow_coords2; // large area
 
 layout (location = 0) out vec4 outColor;
 layout (location = 1) out vec4 outComposition;
@@ -122,15 +125,15 @@ vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, floa
 
 	float lit = 0.0;
 	float dist = distance(fragPos, vec3(ubo.camPos));
-	if (dist < 10.0) {
+	if (dist < maxCascadeDist0) {
 		for (int i = 0; i < 4 * castShadows; i++){
-			float value = mix(texture( shadowMapSampler0, vec3( s_coords0.xy + poissonDisk[i]*0.0008, s_coords0.z+0.0001 )), texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z+0.0001 )), (dist*dist)/100.0);
+			float value = mix(texture( shadowMapSampler0, vec3( s_coords0.xy + poissonDisk[i]*0.0008, s_coords0.z+0.0001 )), texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z+0.0001 )), (dist*dist)/(maxCascadeDist0*maxCascadeDist0));
 			lit += 0.25 * value;
 		}
 	}
-	else if (dist < 50.0) {
+	else if (dist < maxCascadeDist1) {
 		for (int i = 0; i < 4 * castShadows; i++){
-			float value = mix(texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z+0.0001 )), texture( shadowMapSampler2, vec3( s_coords2.xy + poissonDisk[i]*0.0008, s_coords2.z+0.0001 )), (dist*dist)/2500.0);
+			float value = mix(texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z+0.0001 )), texture( shadowMapSampler2, vec3( s_coords2.xy + poissonDisk[i]*0.0008, s_coords2.z+0.0001 )), (dist*dist)/(maxCascadeDist1*maxCascadeDist1));
 			lit += 0.25 * value;
 		}
 	}

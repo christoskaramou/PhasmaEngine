@@ -117,7 +117,10 @@ void Shadows::update(Camera& camera)
 		shadows_UBO = {
 			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, 500.f, 0.005f),
 			lookAt(pos, front, right, up),
-			1.0f
+			1.0f,
+			sideSizeOfPyramid * .02f,
+			sideSizeOfPyramid * .1f,
+			sideSizeOfPyramid
 		};
 		memcpy(uniformBuffers[0].data, &shadows_UBO, sizeof(ShadowsUBO));
 
@@ -130,7 +133,10 @@ void Shadows::update(Camera& camera)
 		shadows_UBO = {
 			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, 500.f, 0.005f),
 			lookAt(pos, front, right, up),
-			1.0f
+			1.0f,
+			sideSizeOfPyramid * .02f,
+			sideSizeOfPyramid * .1f,
+			sideSizeOfPyramid 
 		};
 		memcpy(uniformBuffers[1].data, &shadows_UBO, sizeof(ShadowsUBO));
 
@@ -143,7 +149,10 @@ void Shadows::update(Camera& camera)
 		shadows_UBO = {
 			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, 500.f, 0.005f),
 			lookAt(pos, front, right, up),
-			1.0f
+			1.0f,
+			sideSizeOfPyramid * .02f,
+			sideSizeOfPyramid * .1f,
+			sideSizeOfPyramid
 		};
 		memcpy(uniformBuffers[2].data, &shadows_UBO, sizeof(ShadowsUBO));
 	}

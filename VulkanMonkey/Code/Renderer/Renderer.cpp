@@ -205,6 +205,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		vk::ClearColorValue().setFloat32(GUI::clearColor),
 		vk::ClearColorValue().setFloat32(GUI::clearColor),
 		vk::ClearColorValue().setFloat32(GUI::clearColor),
+		vk::ClearColorValue().setFloat32(GUI::clearColor),
 		vk::ClearDepthStencilValue({ 0.0f, 0 }) };
 	auto renderPassInfo = vk::RenderPassBeginInfo()
 		.setRenderPass(ctx.deferred.renderPass)
