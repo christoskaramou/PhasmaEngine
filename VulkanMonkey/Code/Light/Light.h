@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace vm {
-	constexpr auto MAX_LIGHTS = 0;
+	constexpr auto MAX_LIGHTS = 25;
 
 	struct Light
 	{

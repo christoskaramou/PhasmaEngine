@@ -2,7 +2,7 @@
 
 using namespace vm;
 
-Light::Light() : 
+Light::Light() :
 	color(rand(0.f, 1.f), rand(0.0f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f)),
 	position(rand(-5.5f, 5.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 1.f),
 	attenuation(1.05f, 1.f, 1.f, 1.f)
