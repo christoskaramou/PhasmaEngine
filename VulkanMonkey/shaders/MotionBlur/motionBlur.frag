@@ -32,7 +32,7 @@ void main()
 	vec3 velocitySample = texture(velocitySampler, UV).xyz;
 	vec3 worldPos = getWorldPosFromUV(UV);
 	vec3 currentPos = (ubo.view * vec4(worldPos, 1.0)).xyz;
-	vec3 previousPos = (ubo.previousView * vec4(worldPos-velocitySample, 1.0)).xyz;
+	vec3 previousPos = (ubo.previousView * vec4(worldPos+velocitySample*3.0, 1.0)).xyz;
 	vec3 viewVelocity = currentPos - previousPos;
 
 	vec2 velocity = (ubo.projection * vec4(viewVelocity, 1.0)).xy;

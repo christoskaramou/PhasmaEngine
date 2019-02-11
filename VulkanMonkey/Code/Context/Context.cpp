@@ -47,7 +47,7 @@ void Context::initRendering()
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("velocity", vk::Format::eR32G32B32A32Sfloat);
+	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
 
 	// render passes
 	forward.renderPass = createRenderPass();
@@ -2922,7 +2922,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("velocity", vk::Format::eR32G32B32A32Sfloat);
+	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
 
 
 	forward.renderPass = createRenderPass();
