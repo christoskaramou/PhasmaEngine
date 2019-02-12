@@ -70,6 +70,7 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 	if (ImGui::SmallButton("Load Suzanne")) { Queue::loadModel.push_back({ "objects/Suzanne/glTF/", "Suzanne.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 	if (ImGui::SmallButton("Load Corset")) { Queue::loadModel.push_back({ "objects/Corset/glTF/", "Corset.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 	if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	if (ImGui::SmallButton("Load MetalRoughSpheres")) { Queue::loadModel.push_back({ "objects/MetalRoughSpheres/glTF/", "MetalRoughSpheres.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 	
 	if (ImGui::SmallButton("Clear")) { ClearLog(); } ImGui::SameLine();
 

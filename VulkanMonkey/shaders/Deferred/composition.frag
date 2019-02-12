@@ -53,7 +53,7 @@ layout (location = 0) out vec4 outColor;
 layout (location = 1) out vec4 outComposition;
 
 vec3 compute_point_light(int index, Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal);
-vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular);
+vec3 calculateShadow(int mainLight, Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal);
 vec3 getWorldPosFromUV(vec2 UV);
 
 void main() 
@@ -66,8 +66,8 @@ void main()
 
 	Material material;
 	material.albedo = albedo.xyz;
-	material.roughness = roughMet.y;
-	material.metallic = roughMet.z;
+	material.roughness = roughMet.z;
+	material.metallic = roughMet.y;
 	material.F0 = mix(vec3(0.04f), material.albedo, material.metallic);
 
 	// Ambient
@@ -77,7 +77,7 @@ void main()
 	if (screenSpace.effect.x > 0.5f)
 		fragColor *= oclusion;
 
-	fragColor += calculateShadow(0, fragPos, normal, albedo.xyz, (1.0 - roughMet.y)*roughMet.z);
+	fragColor += calculateShadow(0, material, fragPos, ubo.camPos.xyz, normal);
 
 	for(int i = 1; i < NUM_LIGHTS+1; ++i){
 		fragColor += compute_point_light(i, material, fragPos, ubo.camPos.xyz, normal);
@@ -104,20 +104,20 @@ vec3 getWorldPosFromUV(vec2 UV)
 	return (clipPos / clipPos.w).xyz;
 }
 
-vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, float specular)
+vec3 calculateShadow(int mainLight, Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal)
 {		
-	vec4 s_coords0 =  shadow_coords0 * vec4(fragPos, 1.0);
+	vec4 s_coords0 =  shadow_coords0 * vec4(world_pos, 1.0);
 	s_coords0.xy = s_coords0.xy * 0.5 + 0.5;
 	s_coords0 = s_coords0 / s_coords0.w;
-	vec4 s_coords1 =  shadow_coords1 * vec4(fragPos, 1.0);
+	vec4 s_coords1 =  shadow_coords1 * vec4(world_pos, 1.0);
 	s_coords1.xy = s_coords1.xy * 0.5 + 0.5;
 	s_coords1 = s_coords1 / s_coords1.w;
-	vec4 s_coords2 =  shadow_coords2 * vec4(fragPos, 1.0);
+	vec4 s_coords2 =  shadow_coords2 * vec4(world_pos, 1.0);
 	s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
 	s_coords2 = s_coords2 / s_coords2.w;
 
 	float lit = 0.0;
-	float dist = distance(fragPos, vec3(ubo.camPos));
+	float dist = distance(world_pos, camera_pos);
 	if (dist < maxCascadeDist0) {
 		for (int i = 0; i < 4 * castShadows; i++){
 			float value = mix(texture( shadowMapSampler0, vec3( s_coords0.xy + poissonDisk[i]*0.0008, s_coords0.z+0.0001 )), texture( shadowMapSampler1, vec3( s_coords1.xy + poissonDisk[i]*0.0008, s_coords1.z+0.0001 )), (dist*dist)/(maxCascadeDist0*maxCascadeDist0));
@@ -135,25 +135,33 @@ vec3 calculateShadow(int mainLight, vec3 fragPos, vec3 normal, vec3 albedo, floa
 			lit += 0.25 * (texture( shadowMapSampler2, vec3( s_coords2.xy + poissonDisk[i]*0.0008, s_coords2.z+0.0001 )));
 	}
 
-	// Light to fragment
-	vec3 L = ubo.lights[mainLight].position.xyz - fragPos;
+	float roughness = material.roughness * 0.75 + 0.25;
 
-	// Viewer to fragment
-	vec3 V = ubo.camPos.xyz - fragPos;
+	// Compute directional light.
+	vec3 light_dir_full = ubo.lights[mainLight].position.xyz;
+	vec3 light_dir = normalize(light_dir_full);
+	vec3 L = light_dir;
+	vec3 V = normalize(camera_pos - world_pos);
+	vec3 H = normalize(V + L);
+	vec3 N = material_normal;
 
-	// Diffuse part
-	vec3 diff = ubo.lights[mainLight].color.xyz * albedo.xyz * ubo.lights[mainLight].color.a;
+	float NoV = clamp(dot(N, V), 0.001, 1.0);
+	float NoL = clamp(dot(N, L), 0.001, 1.0);
+	float HoV = clamp(dot(H, V), 0.001, 1.0);
+	float LoV = clamp(dot(L, V), 0.001, 1.0);
 
-	// Specular part
-	L = normalize(L);
-	vec3 N = normalize(normal);
-	vec3 R = reflect(-L, N);
-	V = normalize(V);
-	float RdotV = max(0.0, dot(R, V));
-	vec3 spec = ubo.lights[mainLight].color.xyz * specular * pow(RdotV, 32.0);
+	vec3 F0 = compute_F0(material.albedo, material.metallic);
+	vec3 specular_fresnel = fresnel(F0, HoV);
+	vec3 specref = ubo.lights[mainLight].color.xyz * NoL * lit * cook_torrance_specular(N, H, NoL, NoV, specular_fresnel, roughness);
+	vec3 diffref = ubo.lights[mainLight].color.xyz * NoL * lit * (1.0 - specular_fresnel) * (1.0 / PI);
 
-	lit *= dot(N, L);
-	return lit * (diff + spec);
+	//diffref += 0.1 * material_ambient_factor;
+
+	vec3 reflected_light = specref;
+	vec3 diffuse_light = diffref * material.albedo * (1.0 - material.metallic);
+	vec3 lighting = reflected_light + diffuse_light;
+
+	return lighting * 3.0;
 }
 
 vec3 compute_point_light(int index, Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal)

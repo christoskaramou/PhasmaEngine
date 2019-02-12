@@ -3,7 +3,7 @@
 layout (set = 0, binding = 0) uniform sampler2D albedoSampler;
 layout (set = 0, binding = 1) uniform sampler2D depthSampler;
 layout (set = 0, binding = 2) uniform sampler2D normalSampler;
-layout (set = 0, binding = 3) uniform sampler2D specRoughMetSampler;
+layout (set = 0, binding = 3) uniform sampler2D specRoughMetSampler; // TODO: remove this
 layout (set = 0, binding = 4) uniform WorldCameraPos{ vec4 camPos; vec4 camFront; vec4 size; vec4 dummy1; mat4 projection; mat4 view; mat4 invProj; } ubo;
 layout(push_constant) uniform Position { vec4 offset; } pos;
 
@@ -29,9 +29,8 @@ void main()
 {
 	vec3 position = getViewPosFromUV(inUV);
 	vec4 normal = ubo.view * vec4(texture(normalSampler, inUV).xyz, 0.0);
-	float spec = 1.0 - texture(specRoughMetSampler, inUV).z;
 
-	outColor = vec4(ScreenSpaceReflections(position, normalize(normal.xyz)) * spec , 1.0);
+	outColor = vec4(ScreenSpaceReflections(position, normalize(normal.xyz)) , 1.0);
 }
 
 // Screen space reflections

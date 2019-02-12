@@ -204,6 +204,9 @@
     <ClInclude Include="Code\Script\Script.h">
       <Filter>Code\Script</Filter>
     </ClInclude>
+    <ClInclude Include="Code\Event\Event.h">
+      <Filter>Code\Event</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -316,6 +319,9 @@
     </ClCompile>
     <ClCompile Include="Code\Script\Script.cpp">
       <Filter>Code\Script</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Event\Event.cpp">
+      <Filter>Code\Event</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -459,6 +465,9 @@
     </Filter>
     <Filter Include="Shaders\SkyBox">
       <UniqueIdentifier>{bee13345-00eb-4f8d-a682-9be4e28155c9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Event">
+      <UniqueIdentifier>{0d0018b5-264c-424d-b0aa-461fa224b07d}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

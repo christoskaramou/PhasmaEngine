@@ -40,6 +40,6 @@ void main() {
 	outNormal = TBN * normSampler;
 	outAlbedo = vec4(texture(tSampler, inUV).xyz * ao, alpha) * baseColorFactor
 				+ vec4(texture(e_sampler, inUV).xyz * emissiveFactor, 0.0);
-	outRoughMet = vec3(0.0, texture(rm_Sampler, inUV).z * metRoughAlphacut.y, texture(rm_Sampler, inUV).y * metRoughAlphacut.x);
+	outRoughMet = vec3(0.0, texture(rm_Sampler, inUV).z, texture(rm_Sampler, inUV).y);
 	outVelocity = velocity;
 }

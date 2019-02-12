@@ -213,6 +213,7 @@
     <ClInclude Include="Code\Console\Console.h" />
     <ClInclude Include="Code\Context\Context.h" />
     <ClInclude Include="Code\Deferred\Deferred.h" />
+    <ClInclude Include="Code\Event\Event.h" />
     <ClInclude Include="Code\Forward\Forward.h" />
     <ClInclude Include="Code\GUI\GUI.h" />
     <ClInclude Include="Code\Image\Image.h" />
@@ -260,6 +261,7 @@
     <ClCompile Include="Code\Console\Console.cpp" />
     <ClCompile Include="Code\Context\Context.cpp" />
     <ClCompile Include="Code\Deferred\Deferred.cpp" />
+    <ClCompile Include="Code\Event\Event.cpp" />
     <ClCompile Include="Code\Forward\Forward.cpp" />
     <ClCompile Include="Code\GUI\GUI.cpp" />
     <ClCompile Include="Code\Image\Image.cpp" />
