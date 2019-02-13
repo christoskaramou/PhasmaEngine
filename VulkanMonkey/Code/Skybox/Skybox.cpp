@@ -1,4 +1,5 @@
 #include "Skybox.h"
+#include "../GUI/GUI.h"
 
 using namespace vm;
 
@@ -33,7 +34,7 @@ vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(vk::Device device)
 
 void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, bool show)
 {
-	float SIZE = static_cast<float>(imageSideSize);
+	float SIZE = 1.f;
 	vertices = {
 		-SIZE,  SIZE, -SIZE, 0.0f,
 		-SIZE, -SIZE, -SIZE, 0.0f,
@@ -82,16 +83,40 @@ void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t
 	render = show;
 }
 
-void SkyBox::draw(const vk::CommandBuffer & cmd)
+void SkyBox::update(Camera& camera)
 {
-	if (render)
-	{
-		vk::DeviceSize offset{ 0 };
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSet, nullptr);
-		cmd.bindVertexBuffers(0, vertexBuffer.buffer, offset);
-		cmd.draw(static_cast<uint32_t>(vertices.size() * 0.25f), 1, 0, 0);
-	}
+	if (!render) return;
+
+	// projection matrix correction here, because the given has reversed near and far
+	mat4 projection = camera.projection;
+	projection[2][2] = camera.nearPlane / (camera.nearPlane - camera.farPlane)*camera.worldOrientation.z;
+	projection[3][2] = -(camera.nearPlane * camera.farPlane) / (camera.nearPlane - camera.farPlane);
+	const mat4 pvm[2]{ projection, camera.view };
+	memcpy(uniformBuffer.data, &pvm, sizeof(pvm));
+}
+
+void SkyBox::draw(uint32_t imageIndex)
+{
+	if (!render) return;
+
+	std::vector<vk::ClearValue> clearValues = {
+		vk::ClearColorValue().setFloat32(GUI::clearColor)
+	};
+	vk::RenderPassBeginInfo renderPassInfo;
+	renderPassInfo.renderPass = renderPass;
+	renderPassInfo.framebuffer = frameBuffers[imageIndex];
+	renderPassInfo.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
+	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+	renderPassInfo.pClearValues = clearValues.data();
+
+	auto& cmd = vulkan->dynamicCmdBuffer;
+	cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+	vk::DeviceSize offset{ 0 };
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSet, nullptr);
+	cmd.bindVertexBuffers(0, vertexBuffer.buffer, offset);
+	cmd.draw(static_cast<uint32_t>(vertices.size() * 0.25f), 1, 0, 0);
+	cmd.endRenderPass();
 }
 
 // images must be squared and the image size must be the real else the assertion will fail
@@ -142,5 +167,14 @@ void SkyBox::destroy()
 	if (SkyBox::descriptorSetLayout) {
 		vulkan->device.destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
 		SkyBox::descriptorSetLayout = nullptr;
+	}
+	if (renderPass) {
+		vulkan->device.destroyRenderPass(renderPass);
+		renderPass = nullptr;
+	}
+	for (auto &frameBuffer : frameBuffers) {
+		if (frameBuffer) {
+			vulkan->device.destroyFramebuffer(frameBuffer);
+		}
 	}
 }

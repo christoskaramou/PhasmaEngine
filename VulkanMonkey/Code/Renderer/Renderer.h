@@ -24,7 +24,6 @@ namespace vm {
 	private:
 		void checkQueue();
 		void recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ);
-		void recordForwardCmds(const uint32_t& imageIndex);
 		void recordDeferredCmds(const uint32_t& imageIndex);
 		void recordShadowsCmds(const uint32_t& imageIndex);
 	};

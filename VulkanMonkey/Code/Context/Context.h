@@ -23,7 +23,6 @@
 #include "../MotionBlur/MotionBlur.h"
 #include "../Deferred/Deferred.h"
 #include "../Compute/Compute.h"
-#include "../Forward/Forward.h"
 #include "../Metrics/Metrics.h"
 #include "../Script/Script.h"
 #include <vector>
@@ -48,9 +47,6 @@ namespace vm {
 
 		// COMPUTE
 		Compute compute;
-
-		// FORWARD
-		Forward forward;
 
 		// DEFERRED
 		Deferred deferred;
@@ -95,7 +91,6 @@ namespace vm {
 		void destroyVkContext();
 		void resizeViewport(uint32_t width, uint32_t height);
 
-		PipelineInfo getPipelineSpecificationsModel();
 		PipelineInfo getPipelineSpecificationsShadows();
 		PipelineInfo getPipelineSpecificationsSkyBox();
 		PipelineInfo getPipelineSpecificationsTerrain();
@@ -133,6 +128,7 @@ namespace vm {
 		vk::RenderPass createMotionBlurRenderPass();
 		vk::RenderPass createGUIRenderPass();
 		vk::RenderPass createShadowsRenderPass();
+		vk::RenderPass createSkyboxRenderPass();
 		Image createDepthResources();
 		std::vector<vk::Framebuffer> createFrameBuffers();
 		std::vector<vk::Framebuffer> createDeferredFrameBuffers();
@@ -143,6 +139,7 @@ namespace vm {
 		std::vector<vk::Framebuffer> createMotionBlurFrameBuffers();
 		std::vector<vk::Framebuffer> createGUIFrameBuffers();
 		std::vector<vk::Framebuffer> createShadowsFrameBuffers();
+		std::vector<vk::Framebuffer> createSkyboxFrameBuffers();
 		std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount = 1);
 		vk::CommandBuffer createComputeCmdBuffer();
 		Pipeline createPipeline(const PipelineInfo& specificInfo);

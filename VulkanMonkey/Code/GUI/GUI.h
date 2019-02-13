@@ -15,12 +15,12 @@ namespace vm {
 		static ImVec2		winPos;
 		static ImVec2		winSize;
 		static bool			lock_render_window;
-		static bool			deferred_rendering;
 		static bool			show_ssr;
 		static bool			show_ssao;
 		static bool			show_motionBlur;
 		static bool			shadow_cast;
 		static bool			randomize_lights;
+		static std::array<float, 3>	sun_position;
 		static int			fps;
 		static float		cameraSpeed;
 		static std::array<float, 3>	depthBias;
@@ -55,7 +55,7 @@ namespace vm {
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
 		void update();
 		void loadGUI(const std::string& textureName = "", bool show = true);
-		void draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Pipeline& pipeline, const vk::CommandBuffer & cmd);
+		void draw(uint32_t imageIndex);
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();
 		void showMetrics();

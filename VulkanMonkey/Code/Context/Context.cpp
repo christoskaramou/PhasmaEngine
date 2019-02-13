@@ -39,6 +39,8 @@ void Context::initVulkanContext()
 
 void Context::initRendering()
 {
+	// similar init with resize
+
 	addRenderTarget("depth", vk::Format::eR32Sfloat);
 	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat); // increased precision for some banding errors
 	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
@@ -50,7 +52,6 @@ void Context::initRendering()
 	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
 
 	// render passes
-	forward.renderPass = createRenderPass();
 	deferred.renderPass = createDeferredRenderPass();
 	deferred.compositionRenderPass = createCompositionRenderPass();
 	ssao.renderPass = createSSAORenderPass();
@@ -61,7 +62,6 @@ void Context::initRendering()
 	shadows.renderPass = createShadowsRenderPass();
 
 	// frame buffers
-	forward.frameBuffers = createFrameBuffers();
 	deferred.frameBuffers = createDeferredFrameBuffers();
 	deferred.compositionFrameBuffers = createCompositionFrameBuffers();
 	ssao.frameBuffers = createSSAOFrameBuffers();
@@ -72,12 +72,7 @@ void Context::initRendering()
 	shadows.frameBuffers = createShadowsFrameBuffers();
 
 	// pipelines
-	PipelineInfo gpi = getPipelineSpecificationsModel();
-	gpi.specializationInfo = vk::SpecializationInfo{ 1, &vk::SpecializationMapEntry{ 0, 0, sizeof(MAX_LIGHTS) }, sizeof(MAX_LIGHTS), &MAX_LIGHTS };
-
-	forward.pipeline = createPipeline(gpi);
 	//terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
-	//skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
 	gui.pipeline = createPipeline(getPipelineSpecificationsGUI());
 	deferred.pipeline = createPipeline(getPipelineSpecificationsDeferred());
 	deferred.pipelineComposition = createCompositionPipeline();
@@ -87,6 +82,10 @@ void Context::initRendering()
 	motionBlur.pipeline = createMotionBlurPipeline();
 	compute.pipeline = createComputePipeline();
 	shadows.pipeline = createPipeline(getPipelineSpecificationsShadows());
+
+	skyBox.renderPass = createSkyboxRenderPass();
+	skyBox.frameBuffers = createSkyboxFrameBuffers();
+	skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
 
 	//camera.push_back(Camera());
 
@@ -135,7 +134,14 @@ void Context::loadResources()
 {
 	// SKYBOX LOAD
 	//std::array<std::string, 6> skyTextures = { "objects/sky/right.png", "objects/sky/left.png", "objects/sky/top.png", "objects/sky/bottom.png", "objects/sky/back.png", "objects/sky/front.png" };
-	//skyBox.loadSkyBox(skyTextures, 1024);
+	std::array<std::string, 6> skyTextures = { 
+		"objects/lmcity/lmcity_rt.png",
+		"objects/lmcity/lmcity_lf.png",
+		"objects/lmcity/lmcity_up.png",
+		"objects/lmcity/lmcity_dn.png",
+		"objects/lmcity/lmcity_bk.png",
+		"objects/lmcity/lmcity_ft.png" };
+	skyBox.loadSkyBox(skyTextures, 512);
 	// GUI LOAD
 	gui.loadGUI();
 	// TERRAIN LOAD
@@ -161,11 +167,13 @@ void Context::createUniforms()
 	// DESCRIPTOR SETS FOR TERRAIN
 	//terrain.createDescriptorSet(Terrain::getDescriptorSetLayout(vulkan.device));
 	// DESCRIPTOR SETS FOR SKYBOX
-	//skyBox.createDescriptorSet(SkyBox::getDescriptorSetLayout(vulkan.device));
+	skyBox.createUniformBuffer(2 * sizeof(mat4));
+	skyBox.createDescriptorSet(SkyBox::getDescriptorSetLayout(vulkan.device));
 	// DESCRIPTOR SETS FOR SHADOWS
 	shadows.createUniformBuffers();
 	shadows.createDescriptorSets();
 	// DESCRIPTOR SETS FOR LIGHTS
+	getDescriptorSetLayoutLights();
 	lightUniforms.createLightUniforms();
 	// DESCRIPTOR SETS FOR SSAO
 	ssao.createSSAOUniforms(renderTargets);
@@ -669,7 +677,7 @@ vk::RenderPass Context::createCompositionRenderPass()
 	// Color target
 	attachments[0].format = vulkan.surface->formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
@@ -848,7 +856,7 @@ vk::RenderPass Context::createMotionBlurRenderPass()
 	// Color attachment
 	attachments[0].format = vulkan.surface->formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
@@ -1057,6 +1065,61 @@ vk::RenderPass Context::createShadowsRenderPass()
 	return vulkan.device.createRenderPass(rpci);
 }
 
+vk::RenderPass vm::Context::createSkyboxRenderPass()
+{
+	std::array<vk::AttachmentDescription, 1> attachments{};
+	// Color attachment
+	attachments[0].format = vulkan.surface->formatKHR.format;//renderTargets["albedo"].format;
+	attachments[0].samples = vk::SampleCountFlagBits::e1;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
+	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+
+	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
+
+	vk::SubpassDescription subpassDescription;
+	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+	subpassDescription.colorAttachmentCount = 1;
+	subpassDescription.pColorAttachments = &colorReference;
+	subpassDescription.pDepthStencilAttachment = nullptr;
+
+	// Subpass dependencies for layout transitions
+	std::vector<vk::SubpassDependency> dependencies{
+		vk::SubpassDependency{
+			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
+			0,														// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		},
+		vk::SubpassDependency{
+			0,														// uint32_t srcSubpass;
+			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		}
+	};
+
+	vk::RenderPassCreateInfo renderPassInfo = {};
+	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+	renderPassInfo.pAttachments = attachments.data();
+	renderPassInfo.subpassCount = 1;
+	renderPassInfo.pSubpasses = &subpassDescription;
+	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	renderPassInfo.pDependencies = dependencies.data();
+
+	return vulkan.device.createRenderPass(renderPassInfo);
+}
+
 Image Context::createDepthResources()
 {
 	Image _image = Image();
@@ -1085,43 +1148,6 @@ Image Context::createDepthResources()
 	_image.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
 	return _image;
-}
-
-std::vector<vk::Framebuffer> Context::createFrameBuffers()
-{
-	assert((VkSampleCountFlags(vulkan.gpuProperties.limits.framebufferColorSampleCounts) >= VkSampleCountFlags(vulkan.sampleCount))
-		&& (VkSampleCountFlags(vulkan.gpuProperties.limits.framebufferDepthSampleCounts) >= VkSampleCountFlags(vulkan.sampleCount)));
-
-	forward.MSColorImage.format = vulkan.surface->formatKHR.format;
-	forward.MSColorImage.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment, vk::MemoryPropertyFlagBits::eLazilyAllocated, vulkan.sampleCount);
-	forward.MSColorImage.createImageView(vk::ImageAspectFlagBits::eColor);
-
-	forward.MSDepthImage.format = vulkan.depth->format;
-	forward.MSDepthImage.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eLazilyAllocated, vulkan.sampleCount);
-	forward.MSDepthImage.createImageView(vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
-
-	std::vector<vk::Framebuffer> _frameBuffers(vulkan.swapchain->images.size());
-
-	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
-		std::array<vk::ImageView, 4> attachments = {
-			forward.MSColorImage.view,
-			vulkan.swapchain->images[i].view,
-			forward.MSDepthImage.view,
-			vulkan.depth->view
-		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(forward.renderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
-		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
-	}
-
-	return _frameBuffers;
 }
 
 std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
@@ -1317,6 +1343,28 @@ std::vector<vk::Framebuffer> Context::createShadowsFrameBuffers()
 		fbci.height				= Shadows::imageSize;
 		fbci.layers				= 1;
 
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
+	}
+
+	return _frameBuffers;
+}
+
+std::vector<vk::Framebuffer> vm::Context::createSkyboxFrameBuffers()
+{
+	std::vector<vk::Framebuffer> _frameBuffers(vulkan.swapchain->images.size());
+
+	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
+		std::vector<vk::ImageView> attachments = {
+			vulkan.swapchain->images[i].view //renderTargets["albedo"].view
+		};
+
+		auto const fbci = vk::FramebufferCreateInfo()
+			.setRenderPass(skyBox.renderPass)
+			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+			.setPAttachments(attachments.data())
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
+			.setLayers(1);
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1752,7 +1800,7 @@ Pipeline Context::createCompositionPipeline()
 				1,										//uint32_t descriptorCount;
 				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
 				nullptr									//const Sampler* pImmutableSamplers;
-			}
+			},
 		};
 
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
@@ -1768,7 +1816,8 @@ Pipeline Context::createCompositionPipeline()
 		deferred.DSLayoutComposition,
 		Shadows::getDescriptorSetLayout(vulkan.device),
 		Shadows::getDescriptorSetLayout(vulkan.device),
-		Shadows::getDescriptorSetLayout(vulkan.device) };
+		Shadows::getDescriptorSetLayout(vulkan.device),
+		SkyBox::getDescriptorSetLayout(vulkan.device) };
 
 	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 6 * sizeof(vec4) };
 
@@ -2823,9 +2872,6 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 		RT.second.destroy();
 	renderTargets.clear();
 
-	// forward
-	forward.destroy();
-
 	// GUI
 	if (gui.renderPass) {
 		vulkan.device.destroyRenderPass(gui.renderPass);
@@ -2903,11 +2949,19 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	terrain.pipeline.destroy();
 	
 	// skybox
+	if (skyBox.renderPass) {
+		vulkan.device.destroyRenderPass(skyBox.renderPass);
+	}
+	for (auto &frameBuffer : skyBox.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
 	skyBox.pipeline.destroy();
 
 	vulkan.depth->destroy();
 	vulkan.swapchain->destroy();
-	//---------------------------------------
+	//- Free resources end ------------------
 
 	//- Recreate resources ------------------
 	vulkan.surface->actualExtent = { width, height };
@@ -2923,13 +2977,6 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
-
-
-	forward.renderPass = createRenderPass();
-	forward.frameBuffers = createFrameBuffers();
-	PipelineInfo gpi = getPipelineSpecificationsModel();
-	gpi.specializationInfo = vk::SpecializationInfo{ 1, &vk::SpecializationMapEntry{ 0, 0, sizeof(MAX_LIGHTS) }, sizeof(MAX_LIGHTS), &MAX_LIGHTS };
-	forward.pipeline = createPipeline(gpi);
 
 	deferred.renderPass = createDeferredRenderPass();
 	deferred.compositionRenderPass = createCompositionRenderPass();
@@ -2957,15 +3004,17 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	ssao.pipelineBlur = createSSAOBlurPipeline();
 	ssao.updateDescriptorSets(renderTargets);
 
-
 	gui.renderPass = createGUIRenderPass();
 	gui.frameBuffers = createGUIFrameBuffers();
 	gui.pipeline = createPipeline(getPipelineSpecificationsGUI());
 
-	//terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
 
-	//skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
-	//---------------------------------------
+	skyBox.renderPass = createSkyboxRenderPass();
+	skyBox.frameBuffers = createSkyboxFrameBuffers();
+	skyBox.pipeline = createPipeline(getPipelineSpecificationsSkyBox());
+	
+	//terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
+	//- Recreate resources end --------------
 }
 
 vk::DescriptorSetLayout Context::getDescriptorSetLayoutLights()
@@ -2984,34 +3033,6 @@ vk::DescriptorSetLayout Context::getDescriptorSetLayoutLights()
 		lightUniforms.descriptorSetLayout = vulkan.device.createDescriptorSetLayout(createInfo);
 	}
 	return lightUniforms.descriptorSetLayout;
-}
-PipelineInfo Context::getPipelineSpecificationsModel()
-{
-	// General Pipeline
-	static PipelineInfo generalSpecific;
-	generalSpecific.shaders = { "shaders/General/vert.spv", "shaders/General/frag.spv" };
-	generalSpecific.renderPass = forward.renderPass;
-	generalSpecific.viewportSize = { WIDTH, HEIGHT };
-	generalSpecific.descriptorSetLayouts = {
-		Mesh::getDescriptorSetLayout(vulkan.device),
-		Model::getDescriptorSetLayout(vulkan.device),
-		getDescriptorSetLayoutLights(),
-		Shadows::getDescriptorSetLayout(vulkan.device),
-		Shadows::getDescriptorSetLayout(vulkan.device),
-		Shadows::getDescriptorSetLayout(vulkan.device), };
-	generalSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
-	generalSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
-	generalSpecific.pushConstantRange = vk::PushConstantRange();
-	generalSpecific.specializationInfo = vk::SpecializationInfo();
-	generalSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	generalSpecific.dynamicStateInfo = {
-		vk::PipelineDynamicStateCreateFlags(),
-		static_cast<uint32_t>(generalSpecific.dynamicStates.size()),
-		generalSpecific.dynamicStates.data()
-	};
-	generalSpecific.blendAttachmentStates = { generalSpecific.blendAttachmentStates[0] };
-
-	return generalSpecific;
 }
 
 PipelineInfo Context::getPipelineSpecificationsShadows()
@@ -3046,7 +3067,7 @@ PipelineInfo Context::getPipelineSpecificationsSkyBox()
 	// SkyBox Pipeline
 	static PipelineInfo skyBoxSpecific;
 	skyBoxSpecific.shaders = { "shaders/SkyBox/vert.spv", "shaders/SkyBox/frag.spv" };
-	skyBoxSpecific.renderPass = deferred.renderPass;
+	skyBoxSpecific.renderPass = skyBox.renderPass;
 	skyBoxSpecific.viewportSize = { WIDTH, HEIGHT };
 	skyBoxSpecific.descriptorSetLayouts = { SkyBox::getDescriptorSetLayout(vulkan.device) };
 	skyBoxSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionSkyBox();
@@ -3058,9 +3079,6 @@ PipelineInfo Context::getPipelineSpecificationsSkyBox()
 	skyBoxSpecific.blendAttachmentStates[0].blendEnable = VK_FALSE;
 	skyBoxSpecific.blendAttachmentStates = {
 		skyBoxSpecific.blendAttachmentStates[0],
-		skyBoxSpecific.blendAttachmentStates[0],
-		skyBoxSpecific.blendAttachmentStates[0],
-		skyBoxSpecific.blendAttachmentStates[0]
 	};
 	skyBoxSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	skyBoxSpecific.dynamicStateInfo = {
@@ -3078,7 +3096,7 @@ PipelineInfo Context::getPipelineSpecificationsTerrain()
 	// Terrain Pipeline
 	static PipelineInfo terrainSpecific;
 	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
-	terrainSpecific.renderPass = forward.renderPass;
+	//terrainSpecific.renderPass = forward.renderPass;
 	terrainSpecific.viewportSize = { WIDTH, HEIGHT };
 	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(vulkan.device) };
 	terrainSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();

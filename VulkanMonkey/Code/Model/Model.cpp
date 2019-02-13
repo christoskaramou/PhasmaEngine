@@ -4,11 +4,13 @@
 #include "../../include/assimp/postprocess.h"     // Post processing flags
 #include "../../include/assimp/DefaultLogger.hpp"
 #include "../../include/assimp/pbrmaterial.h"
+#include "../GUI/GUI.h"
 
 using namespace vm;
 
 vk::DescriptorSetLayout Model::descriptorSetLayout = nullptr;
 std::vector<Model> Model::models{};
+Pipeline* Model::pipeline = nullptr;
 
 mat4 aiMatrix4x4ToMat4(const aiMatrix4x4& m)
 {
@@ -195,26 +197,45 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 	createDescriptorSets();
 }
 
-void Model::draw(Pipeline& pipeline, vk::CommandBuffer& cmd, bool deferredRenderer, Shadows* shadows, vk::DescriptorSet* DSLights)
+void vm::Model::batchStart(uint32_t imageIndex, Deferred& deferred)
 {
-	if (render)
-	{
-		const vk::DeviceSize offset{ 0 };
+	std::vector<vk::ClearValue> clearValues = {
+	vk::ClearColorValue().setFloat32(GUI::clearColor),
+	vk::ClearColorValue().setFloat32(GUI::clearColor),
+	vk::ClearColorValue().setFloat32(GUI::clearColor),
+	vk::ClearColorValue().setFloat32(GUI::clearColor),
+	vk::ClearColorValue().setFloat32(GUI::clearColor),
+	vk::ClearDepthStencilValue({ 0.0f, 0 }) };
+	auto renderPassInfo = vk::RenderPassBeginInfo()
+		.setRenderPass(deferred.renderPass)
+		.setFramebuffer(deferred.frameBuffers[imageIndex])
+		.setRenderArea({ { 0, 0 }, VulkanContext::getVulkanContext().surface->actualExtent })
+		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
+		.setPClearValues(clearValues.data());
 
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-		cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
-		cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
+	VulkanContext::getVulkanContext().dynamicCmdBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+	Model::pipeline = &deferred.pipeline;
+}
 
-		for (auto& mesh : meshes) {
-			if (mesh.render && !mesh.cull) {
-				if (deferredRenderer) {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, { descriptorSet, mesh.descriptorSet }, nullptr);
-				}
-				else {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, { mesh.descriptorSet, descriptorSet, *DSLights, shadows->descriptorSets[0], shadows->descriptorSets[1], shadows->descriptorSets[2] }, nullptr);
-				}
-				cmd.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
-			}
+void vm::Model::batchEnd()
+{
+	VulkanContext::getVulkanContext().dynamicCmdBuffer.endRenderPass();
+	Model::pipeline = nullptr;
+}
+
+void Model::draw()
+{
+	if (!render) return;
+	auto& cmd = vulkan->dynamicCmdBuffer;
+	const vk::DeviceSize offset{ 0 };
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeline);
+	cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
+	cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
+
+	for (auto& mesh : meshes) {
+		if (mesh.render && !mesh.cull) {
+			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { descriptorSet, mesh.descriptorSet }, nullptr);
+			cmd.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
 		}
 	}
 }

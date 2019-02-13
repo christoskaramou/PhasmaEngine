@@ -1,5 +1,3 @@
-glslangValidator.exe -V General/shader.vert -o General/vert.spv
-glslangValidator.exe -V General/shader.frag -o General/frag.spv
 glslangValidator.exe -V GUI/shaderGUI.vert -o GUI/vert.spv
 glslangValidator.exe -V GUI/shaderGUI.frag -o GUI/frag.spv
 glslangValidator.exe -V Shadows/shaderShadows.vert -o Shadows/vert.spv

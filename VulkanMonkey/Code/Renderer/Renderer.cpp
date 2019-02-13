@@ -35,7 +35,6 @@ Renderer::~Renderer()
 		model.destroy();
 	ctx.shadows.destroy();
 	ctx.compute.destroy();
-	ctx.forward.destroy();
 	ctx.deferred.destroy();
 	ctx.ssao.destroy();
 	ctx.ssr.destroy();
@@ -100,17 +99,14 @@ void Renderer::update(float delta)
 	// SHADOWS
 	ctx.shadows.update(ctx.camera_main);
 
+	// SKYBOX
+	ctx.skyBox.update(ctx.camera_main);
+
 	//TERRAIN
 	//if (ctx.terrain.render) {
 	//	const mat4 pvm[3]{ projection, view };
 	//	memcpy(ctx.terrain.uniformBuffer.data, &pvm, sizeof(pvm));
 	//}
-	// SKYBOX
-	//if (ctx.skyBox.render) {
-	//	const mat4 pvm[2]{ proj, view };
-	//	memcpy(ctx.skyBox.uniformBuffer.data, &pvm, sizeof(pvm));
-	//}
-
 }
 
 void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
@@ -127,65 +123,6 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 	ctx.vulkan.computeCmdBuffer.end();
 }
 
-void Renderer::recordForwardCmds(const uint32_t& imageIndex)
-{
-	//vec2 surfSize(WIDTH_f, HEIGHT_f);
-	vec2 winPos((float*)&GUI::winPos);
-	vec2 winSize((float*)&GUI::winSize);
-
-	//vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
-
-	ctx.camera_main.renderArea.update(winPos, winSize, 0.f, 1.f);
-
-	// Render Pass (color)
-	std::vector<vk::ClearValue> clearValues = {
-		vk::ClearColorValue().setFloat32(GUI::clearColor),
-		vk::ClearColorValue().setFloat32(GUI::clearColor),
-		vk::ClearDepthStencilValue({ 0.0f, 0 }) };
-
-	auto beginInfo = vk::CommandBufferBeginInfo()
-		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
-		.setPInheritanceInfo(nullptr);
-	auto renderPassInfo = vk::RenderPassBeginInfo()
-		.setRenderPass(ctx.forward.renderPass)
-		.setFramebuffer(ctx.forward.frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
-		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
-		.setPClearValues(clearValues.data());
-
-	auto& cmd = ctx.vulkan.dynamicCmdBuffer;
-	cmd.begin(beginInfo);
-
-	ctx.metrics.start(cmd);
-	
-	cmd.setViewport(0, ctx.camera_main.renderArea.viewport);
-	cmd.setScissor(0, ctx.camera_main.renderArea.scissor);
-
-	cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-
-	// MODELS
-	for (uint32_t m = 0; m < Model::models.size(); m++)
-		Model::models[m].draw(ctx.forward.pipeline, cmd, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
-
-	for (auto& cam : ctx.camera) {
-		cam.renderArea.update(winPos + winSize * .7f, winSize * .2f, 0.f, 0.5f);
-		cmd.setViewport(0, cam.renderArea.viewport);
-		cmd.setScissor(0, cam.renderArea.scissor);
-
-		// MODELS
-		for (uint32_t m = 0; m < Model::models.size(); m++)
-			Model::models[m].draw(ctx.forward.pipeline, cmd, false, &ctx.shadows, &ctx.lightUniforms.descriptorSet);
-	}
-	cmd.endRenderPass();
-
-	// GUI
-	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.gui.pipeline, cmd);
-	
-	ctx.metrics.end();
-
-	cmd.end();
-}
-
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 {
 	vec2 surfSize(WIDTH_f, HEIGHT_f);
@@ -200,36 +137,21 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
 
-	std::vector<vk::ClearValue> clearValues = {
-		vk::ClearColorValue().setFloat32(GUI::clearColor),
-		vk::ClearColorValue().setFloat32(GUI::clearColor),
-		vk::ClearColorValue().setFloat32(GUI::clearColor),
-		vk::ClearColorValue().setFloat32(GUI::clearColor),
-		vk::ClearColorValue().setFloat32(GUI::clearColor),
-		vk::ClearDepthStencilValue({ 0.0f, 0 }) };
-	auto renderPassInfo = vk::RenderPassBeginInfo()
-		.setRenderPass(ctx.deferred.renderPass)
-		.setFramebuffer(ctx.deferred.frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, ctx.vulkan.surface->actualExtent })
-		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
-		.setPClearValues(clearValues.data());
-
 	auto& cmd = ctx.vulkan.dynamicCmdBuffer;
 	cmd.begin(beginInfo);
-
 	ctx.metrics.start(cmd);
-
 	cmd.setViewport(0, ctx.camera_main.renderArea.viewport);
 	cmd.setScissor(0, ctx.camera_main.renderArea.scissor);
 
+	// SKYBOX
+	ctx.skyBox.draw(imageIndex);
+
 	if (Model::models.size() > 0) {
-		cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 		// MODELS
+		Model::batchStart(imageIndex, ctx.deferred);
 		for (uint32_t m = 0; m < Model::models.size(); m++)
-			Model::models[m].draw(ctx.deferred.pipeline, cmd, true);
-		// SKYBOX
-		//ctx.skyBox.draw(cmd);
-		cmd.endRenderPass();
+			Model::models[m].draw();
+		Model::batchEnd();
 
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao)
@@ -240,7 +162,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 			ctx.ssr.draw(imageIndex, UVOffset);
 
 		// COMPOSITION
-		ctx.deferred.draw(imageIndex, ctx.shadows, ctx.camera_main.invViewProjection, UVOffset);
+		ctx.deferred.draw(imageIndex, ctx.shadows, ctx.skyBox, ctx.camera_main.invViewProjection, UVOffset);
 		
 		// MOTION BLUR
 		if (GUI::show_motionBlur)
@@ -248,7 +170,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	}
 
 	// GUI
-	ctx.gui.draw(ctx.gui.renderPass, ctx.gui.frameBuffers[imageIndex], ctx.gui.pipeline, cmd);
+	ctx.gui.draw(imageIndex);
 
 	ctx.metrics.end();
 
@@ -337,10 +259,7 @@ void Renderer::present()
 	else
 		imageIndex = ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[1], vk::Fence()).value;
 
-	if (GUI::deferred_rendering) 
-		recordDeferredCmds(imageIndex);
-	else
-		recordForwardCmds(imageIndex);
+	recordDeferredCmds(imageIndex);
 
 	// submit the command buffer
 	auto const si = vk::SubmitInfo()

@@ -5,12 +5,12 @@ using namespace vm;
 ImVec2						GUI::winPos = ImVec2();
 ImVec2						GUI::winSize = ImVec2();
 bool						GUI::lock_render_window = true;
-bool						GUI::deferred_rendering = true;
 bool						GUI::show_ssr = true;
 bool						GUI::show_ssao = true;
 bool						GUI::show_motionBlur = true;
 bool						GUI::shadow_cast = true;
 bool						GUI::randomize_lights = false;
+std::array<float, 3>		GUI::sun_position = { 0.0f, 300.0f, 50.0f };
 int							GUI::fps = 60;
 float						GUI::cameraSpeed = 3.5f;
 std::array<float, 3>		GUI::depthBias = { 0.0f, 0.0f, -6.2f };
@@ -77,17 +77,15 @@ void GUI::showOptions()
 	ImGui::SetNextWindowSize(ImVec2(tlPanelSize.x, HEIGHT_f - 279.f - tlPanelSize.y));
 	ImGui::Begin("Options", &options_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGui::Checkbox("Lock Render Window", &lock_render_window);
-	ImGui::Checkbox("Deffered", &deferred_rendering);
-	if (deferred_rendering) {
-		ImGui::Checkbox("SSR", &show_ssr);
-		ImGui::Checkbox("SSAO", &show_ssao);
-		ImGui::Checkbox("Motion Blur", &show_motionBlur);
-	}
+	ImGui::Checkbox("SSR", &show_ssr);
+	ImGui::Checkbox("SSAO", &show_ssao);
+	ImGui::Checkbox("Motion Blur", &show_motionBlur);
 	ImGui::Checkbox("Sun Light", &shadow_cast);
 	ImGui::Separator();
 	if (ImGui::Button("Randomize Lights"))
 		randomize_lights = true;
 	ImGui::Separator();
+	ImGui::InputFloat3("Sun Position", (float*)sun_position.data(), 1);
 	ImGui::InputInt("FPS", &fps, 1, 15); if (fps < 10) fps = 10;
 	ImGui::InputFloat("Camera Speed", &cameraSpeed, 0.1f, 1.f, 3);
 	ImGui::SliderFloat4("Clear Color", (float*)clearColor.data(), 0.0f, 1.0f);
@@ -356,7 +354,7 @@ void GUI::loadGUI(const std::string& textureName, bool show)
 	initImGui();
 }
 
-void GUI::draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Pipeline& pipeline, const vk::CommandBuffer & cmd)
+void GUI::draw(uint32_t imageIndex)
 {
 	auto draw_data = ImGui::GetDrawData();
 	if (render && draw_data->TotalVtxCount > 0)
@@ -366,10 +364,12 @@ void GUI::draw(vk::RenderPass renderPass, vk::Framebuffer guiFrameBuffer, Pipeli
 			vk::ClearDepthStencilValue({ 1.0f, 0 }) };
 		auto renderPassInfo2 = vk::RenderPassBeginInfo()
 			.setRenderPass(renderPass)
-			.setFramebuffer(guiFrameBuffer)
+			.setFramebuffer(frameBuffers[imageIndex])
 			.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
 			.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 			.setPClearValues(clearValues.data());
+
+		auto& cmd = vulkan->dynamicCmdBuffer;
 		cmd.beginRenderPass(renderPassInfo2, vk::SubpassContents::eInline);
 
 		vk::DeviceSize offset{ 0 };

@@ -18,7 +18,7 @@ Light Light::sun()
 {
 	return Light(
 		vec4(1.f, 1.f, 1.f, .5f),
-		vec4(0.f, 300.f, 10.f, 1.f),
+		vec4(GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2], 1.0f),
 		vec4(0.f, 0.f, 1.f, 1.f)
 	);
 }

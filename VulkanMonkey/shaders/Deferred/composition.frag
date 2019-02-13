@@ -38,6 +38,7 @@ layout (set = 0, binding = 6) uniform sampler2D ssrSampler;
 layout (set = 1, binding = 1) uniform sampler2DShadow shadowMapSampler0;
 layout (set = 2, binding = 1) uniform sampler2DShadow shadowMapSampler1;
 layout (set = 3, binding = 1) uniform sampler2DShadow shadowMapSampler2;
+layout (set = 4, binding = 1) uniform samplerCube cubemapSampler;
 
 
 layout (location = 0) in vec2 inUV;
@@ -70,8 +71,12 @@ void main()
 	material.metallic = roughMet.y;
 	material.F0 = mix(vec3(0.04f), material.albedo, material.metallic);
 
-	// Ambient
-	vec3 fragColor = 0.3 * albedo.xyz;
+	// Ambient	
+	float ratio = 1.00 / 1.52;
+	vec3 I = normalize(fragPos - ubo.camPos.xyz);
+    vec3 R = reflect(I, normalize(normal));
+	vec3 envColor = (texture(cubemapSampler, R).xyz * (1.0 - material.roughness) * material.metallic); // very fake enviroment reflectance
+	vec3 fragColor = 0.3 * albedo.xyz + 0.2 * envColor;
 
 	// SSAO
 	if (screenSpace.effect.x > 0.5f)
@@ -154,8 +159,6 @@ vec3 calculateShadow(int mainLight, Material material, vec3 world_pos, vec3 came
 	vec3 specular_fresnel = fresnel(F0, HoV);
 	vec3 specref = ubo.lights[mainLight].color.xyz * NoL * lit * cook_torrance_specular(N, H, NoL, NoV, specular_fresnel, roughness);
 	vec3 diffref = ubo.lights[mainLight].color.xyz * NoL * lit * (1.0 - specular_fresnel) * (1.0 / PI);
-
-	//diffref += 0.1 * material_ambient_factor;
 
 	vec3 reflected_light = specref;
 	vec3 diffuse_light = diffref * material.albedo * (1.0 - material.metallic);

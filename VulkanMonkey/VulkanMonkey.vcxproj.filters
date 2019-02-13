@@ -120,9 +120,6 @@
     <ClInclude Include="Code\Deferred\Deferred.h">
       <Filter>Code\Deferred</Filter>
     </ClInclude>
-    <ClInclude Include="Code\Forward\Forward.h">
-      <Filter>Code\Forward</Filter>
-    </ClInclude>
     <ClInclude Include="Code\GUI\GUI.h">
       <Filter>Code\GUI</Filter>
     </ClInclude>
@@ -226,9 +223,6 @@
     </ClCompile>
     <ClCompile Include="Code\Deferred\Deferred.cpp">
       <Filter>Code\Deferred</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Forward\Forward.cpp">
-      <Filter>Code\Forward</Filter>
     </ClCompile>
     <ClCompile Include="Code\GUI\GUI.cpp">
       <Filter>Code\GUI</Filter>
@@ -354,9 +348,6 @@
     </Filter>
     <Filter Include="Code\Deferred">
       <UniqueIdentifier>{60004d75-1983-4a33-a3ec-281c712ef8d7}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Code\Forward">
-      <UniqueIdentifier>{9e537224-81e6-404d-96a0-f7890facefcf}</UniqueIdentifier>
     </Filter>
     <Filter Include="Code\GUI">
       <UniqueIdentifier>{9ffdd4d7-c58f-4753-8b0c-b6b4b4b35bce}</UniqueIdentifier>
