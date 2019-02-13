@@ -1,6 +1,7 @@
 # VulkanMonkey3D
 
 
+![Screenshot](example_image2.png)
 ![Screenshot](example_image1.png)
 
 VulkanMonkey3D is intended as a project for learning 3D graphics and techniques, using the Vulkan API. Until now these are the most important features VulkanMonkey3D has:
