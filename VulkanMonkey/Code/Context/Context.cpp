@@ -1612,7 +1612,7 @@ Pipeline Context::createCompositionPipeline()
 		vertModule = vulkan.device.createShaderModule(vsmci);
 		fragModule = vulkan.device.createShaderModule(fsmci);
 	}
-
+	auto max_lights = MAX_LIGHTS;
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{
 		vk::PipelineShaderStageCreateInfo{
 			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
@@ -1631,9 +1631,9 @@ Pipeline Context::createCompositionPipeline()
 				&vk::SpecializationMapEntry{			// const SpecializationMapEntry* pMapEntries;
 					0,										// uint32_t constantID;
 					0,										// uint32_t offset;
-					sizeof(MAX_LIGHTS) },					// size_t size;
-				sizeof(MAX_LIGHTS),						// size_t dataSize;
-				&MAX_LIGHTS								// const void* pData;
+					sizeof(max_lights) },					// size_t size;
+				sizeof(max_lights),						// size_t dataSize;
+				&max_lights								// const void* pData;
 			}
 		}
 	};

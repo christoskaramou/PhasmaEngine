@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace vm {
-	constexpr auto MAX_LIGHTS = 0;
+	#define MAX_LIGHTS 50
 
 	struct Light
 	{
@@ -25,8 +25,13 @@ namespace vm {
 	{
 		vec4 camPos;
 		Light sun = Light::sun();
-		//std::array<Light, MAX_LIGHTS> lights{};
+#ifdef MAX_LIGHTS
+	#if MAX_LIGHTS == 0 // to avoid warnings when 0 lights are set
+		std::array<Light, MAX_LIGHTS> lights{};
+	#else
 		Light lights[MAX_LIGHTS];
+	#endif
+#endif
 	};
 
 	struct LightUniforms : Light

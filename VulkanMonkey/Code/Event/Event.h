@@ -2,27 +2,44 @@
 
 #include <vector>
 #include <map>
-#include <functional>
-#include <cstdarg>
 
 namespace vm {
-	struct Event
-	{
-		static Event& get() {
-			static Event instance;
-			return instance;
-		}
 
-		typedef std::function<void(void*, uint32_t)> subscriber;
-		typedef std::function<void*(void*, uint32_t)> subscriber_return;
+#define SUBSCRIBE_TO_EVENT(eventType, func) EventSystem::get().subscribe(eventType, func)
+#define FIRE_EVENT(eventType, pData) EventSystem::get().fire(eventType, pData)
+#define UNSUBSCRIBE_FROM_EVENT(eventType, ID) EventSystem::get().unsubscribe(eventType, ID)
+
+	constexpr auto BITSET(uint32_t x) { return 1 << x; }
+	enum struct EventType
+	{
+		QUIT = BITSET(0),
+		KEY_DOWN = BITSET(1),
+		KEY_UP = BITSET(2),
+		RANDOM1 = BITSET(3),
+		RANDOM2 = BITSET(4),
+		RANDOM3 = BITSET(5)
+	};
+
+	typedef void(*Func_t)(void*);
+	struct Func {
+		Func_t func;
+		uint32_t ID;
+	};
+
+	struct EventSystem
+	{
+		static EventSystem& get();
+
+		uint32_t subscribe(EventType eventType, Func_t func);
+		void unsubscribe(EventType eventType, uint32_t ID);
+		void fire(EventType eventType, void* pData = nullptr);
 
 	private:
-		std::map<int, std::vector<subscriber>> m_subscribers{};
-		std::map<int, std::vector<subscriber_return>> m_subscribers_return{};
+		std::map<EventType, std::vector<Func>> m_subscribers{};
 
-		Event() {};
-		Event(Event const&) {};
-		Event& operator=(Event const&) {};
-		~Event() {};
+		EventSystem() {};
+		EventSystem(EventSystem const&) {};
+		EventSystem& operator=(EventSystem const&) {};
+		~EventSystem() {};
 	};
 }
