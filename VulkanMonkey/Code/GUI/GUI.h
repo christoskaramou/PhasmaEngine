@@ -54,7 +54,7 @@ namespace vm {
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
 		void update();
-		void loadGUI(const std::string& textureName = "", bool show = true);
+		void loadGUI(bool show = true);
 		void draw(uint32_t imageIndex);
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();

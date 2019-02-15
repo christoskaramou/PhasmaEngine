@@ -1,4 +1,5 @@
 #include "Window.h"
+#include "../Event/Event.h"
 
 using namespace vm;
 
@@ -7,6 +8,8 @@ std::vector<std::unique_ptr<Renderer>> Window::renderer{};
 Window::Window() {}
 
 Window::~Window() {}
+
+static auto exitFuncID = SUBSCRIBE_TO_EVENT(Event::OnExit, [](std::any) { Window::destroyAll(); });
 
 void Window::create(std::string title, Uint32 flags) // flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN
 {
@@ -51,7 +54,10 @@ bool Window::processEvents(float delta)
 	SDL_Event event;
 	while (SDL_PollEvent(&event))
 	{
-		if (event.type == SDL_QUIT) return false;
+		if (event.type == SDL_QUIT) {
+			FIRE_EVENT(Event::OnExit);
+			return false;
+		}
 
 		if (event.type == SDL_MOUSEWHEEL) {
 			if (event.wheel.x > 0) io.MouseWheelH += 1;
@@ -103,8 +109,10 @@ bool Window::processEvents(float delta)
 		}
 	}
 
-	if (io.KeysDown[SDL_SCANCODE_ESCAPE]) return false;
-
+	if (io.KeysDown[SDL_SCANCODE_ESCAPE]) {
+		FIRE_EVENT(Event::OnExit);
+		return false;
+	}
 	if ((io.KeysDown[SDL_SCANCODE_W] || io.KeysDown[SDL_SCANCODE_S]) &&
 		(io.KeysDown[SDL_SCANCODE_A] || io.KeysDown[SDL_SCANCODE_D]))
 		combineDirections = true;

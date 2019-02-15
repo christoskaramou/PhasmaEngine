@@ -1,4 +1,5 @@
 #include "Renderer.h"
+#include "../Event/Event.h"
 
 using namespace vm;
 
@@ -57,8 +58,10 @@ void Renderer::checkQueue()
 		GUI::modelList.push_back(std::get<1>(queue));
 		for (auto& dll : Script::dlls) {
 			std::string mName = Model::models.back().name.substr(0, Model::models.back().name.find_last_of("."));
-			if (dll == mName)
+			if (dll == mName) {
 				Model::models.back().script = std::make_unique<Script>(dll.c_str());
+				break;
+			}
 		}
 		Queue::loadModel.pop_front();
 	}
@@ -66,6 +69,8 @@ void Renderer::checkQueue()
 
 void Renderer::update(float delta)
 {
+	FIRE_EVENT(Event::OnUpdate, UpdateHandle{&ctx.camera_main, delta});
+
 	// check for commands in queue
 	checkQueue();
 
@@ -95,7 +100,6 @@ void Renderer::update(float delta)
 	// MOTION BLUR
 	ctx.motionBlur.update(ctx.camera_main);
 
-	//TODO: rework shadows
 	// SHADOWS
 	ctx.shadows.update(ctx.camera_main);
 
