@@ -69,7 +69,7 @@ void Renderer::checkQueue()
 
 void Renderer::update(float delta)
 {
-	FIRE_EVENT(Event::OnUpdate, UpdateHandle{&ctx.camera_main, delta});
+	FIRE_EVENT(Event::OnUpdate);
 
 	// check for commands in queue
 	checkQueue();
