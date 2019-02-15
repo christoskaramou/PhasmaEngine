@@ -14,6 +14,8 @@ VulkanMonkey3D is intended as a project for learning 3D graphics and techniques,
 * Cascaded Shadows
 * Functional and Interactive GUI (ImGui)
 * Scripts with C# (Mono)
+* Event System
+* Frutum Culling
 
 And some other primitive implemented ideas in a certain degree like Multithreading and Compute shaders.
 
