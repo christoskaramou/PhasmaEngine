@@ -4,18 +4,21 @@
 #include <random>
 
 namespace vm {
-
-#define cfloat const float
-#define cvec2  const vec2
-#define cvec3  const vec3
-#define cvec4  const vec4
-#define cquat  const quat
-#define ccol   const col
-#define cmat4  const mat4
-#define FLT_EPSILON 1.192092896e-07F
-
+	struct vec2;
 	struct vec3;
-	struct vec4;
+	struct vec4;	
+	struct mat4;
+	struct quat;
+
+	typedef const float cfloat;
+	typedef const vec2 cvec2;
+	typedef const vec3 cvec3;
+	typedef const vec4 cvec4;
+	typedef const mat4 cmat4;
+	typedef const quat cquat;
+	typedef vec4 col;
+	typedef vec4 row;
+	typedef const col ccol;
 
 	struct vec2 {
 		vec2();
@@ -84,6 +87,15 @@ namespace vm {
 
 		float x, y, z;
 	};
+	
+	struct ivec4
+	{
+		ivec4() : x(0), y(0) ,z(0), w(0) {}
+		int& operator[](unsigned i) {
+			return (&x)[i];
+		}
+		int x, y, z, w;
+	};
 
 	struct vec4 {
 		vec4();
@@ -118,10 +130,6 @@ namespace vm {
 
 		float x, y, z, w;
 	};
-
-	struct quat;
-	typedef vec4 col;
-	typedef vec4 row;
 
 	struct mat4 {
 		mat4();
@@ -195,9 +203,23 @@ namespace vm {
 		float x, y, z, w;
 	};
 
+	struct Transform
+	{
+		Transform();
+		mat4 matrix();
+
+	private:
+		vec3 _scale;
+		quat _rotation;
+		vec3 _position;
+	};
+
+	vec2 operator*(cfloat scalar, cvec2& v);
+	vec3 operator*(cfloat scalar, cvec3& v);
+	vec4 operator*(cfloat scalar, cvec4& v);
+	quat operator*(cfloat scalar, cquat& q);
 	vec3 operator*(cvec3& v, cquat& q);
 	vec4 operator*(cvec4& v, cquat& q);
-	quat operator*(cfloat scalar, cquat& q);
 	mat4 inverse(cmat4& m);
 	quat inverse(cquat& q);
 	quat conjugate(cquat& q);
@@ -244,15 +266,4 @@ namespace vm {
 	vec3 maximum(cvec3& v1, cvec3& v2);
 	float rand(cfloat x1, cfloat x2);
 	float lerp(cfloat a, cfloat b, cfloat f);
-
-	struct Transform
-	{
-	private:
-		vec3 _scale;
-		quat _rotation;
-		vec3 _position;
-	public:
-		Transform();
-		mat4 matrix();
-	};
 }

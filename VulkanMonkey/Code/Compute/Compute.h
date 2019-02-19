@@ -7,7 +7,7 @@
 namespace vm {
 	struct Compute
 	{
-		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
+		VulkanContext* vulkan = &VulkanContext::get();
 
 		Buffer SBInOut;
 		vk::DescriptorSet DSCompute;

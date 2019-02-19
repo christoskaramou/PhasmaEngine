@@ -38,7 +38,8 @@ void main() {
 
 	outDepth = gl_FragCoord.z;
 	outNormal = TBN * normSampler;
-	outAlbedo = vec4(texture(tSampler, inUV).xyz * ao, alpha) * baseColorFactor
+	vec3 color = texture(tSampler, inUV).xyz + inColor;
+	outAlbedo = vec4(color * ao, alpha) * baseColorFactor
 				+ vec4(texture(e_sampler, inUV).xyz * emissiveFactor, 0.0);
 	outRoughMet = vec3(0.0, texture(rm_Sampler, inUV).z, texture(rm_Sampler, inUV).y);
 	outVelocity = velocity;

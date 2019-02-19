@@ -13,7 +13,7 @@
 namespace vm {
 	struct SSAO
 	{
-		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
+		VulkanContext* vulkan = &VulkanContext::get();
 
 		Buffer UBssaoKernel;
 		Buffer UBssaoPVM;

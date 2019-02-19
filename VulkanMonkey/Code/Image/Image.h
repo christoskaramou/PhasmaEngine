@@ -2,9 +2,10 @@
 #include "../VulkanContext/VulkanContext.h"
 
 namespace vm {
+	struct VulkanContext;
 	struct Image
 	{
-		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
+		const VulkanContext* vulkan = &VulkanContext::get();
 
 		vk::Image image;
 		vk::DeviceMemory memory;

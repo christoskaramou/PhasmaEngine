@@ -14,7 +14,7 @@
 namespace vm {
 	struct SSR
 	{
-		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
+		VulkanContext* vulkan = &VulkanContext::get();
 
 		Buffer UBReflection;
 		std::vector<vk::Framebuffer> frameBuffers{};

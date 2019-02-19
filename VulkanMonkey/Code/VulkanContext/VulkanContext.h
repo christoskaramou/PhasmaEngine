@@ -3,10 +3,10 @@
 #include "../../include/Vulkan.h"
 #include "../../include/SDL.h"
 
-#define VULKAN_CONTEXT_INSTANCES 2
+constexpr auto VULKAN_CONTEXT_INSTANCES = 2;
 
-#define WIDTH VulkanContext::getVulkanContext().surface->actualExtent.width
-#define HEIGHT VulkanContext::getVulkanContext().surface->actualExtent.height
+#define WIDTH VulkanContext::get().surface->actualExtent.width
+#define HEIGHT VulkanContext::get().surface->actualExtent.height
 #define WIDTH_f static_cast<float>(WIDTH)
 #define HEIGHT_f static_cast<float>(HEIGHT)
 
@@ -17,7 +17,7 @@ namespace vm {
 	struct Swapchain;
 
 	struct VulkanContext {
-		static VulkanContext& getVulkanContext(uint32_t index = 0)
+		static VulkanContext& get(uint32_t index = 0)
 		{
 			static VulkanContext VkCTX[VULKAN_CONTEXT_INSTANCES];
 

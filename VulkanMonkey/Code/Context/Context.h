@@ -34,7 +34,7 @@ namespace vm {
 	{
 	public:
 		// VULKAN CONTEXT
-		VulkanContext &vulkan = VulkanContext::getVulkanContext();
+		VulkanContext &vulkan = VulkanContext::get();
 
 		// RENDER TARGETS
 		std::map<std::string, Image> renderTargets{};

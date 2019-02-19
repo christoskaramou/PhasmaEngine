@@ -16,7 +16,7 @@
 namespace vm {
 	struct MotionBlur
 	{
-		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
+		VulkanContext* vulkan = &VulkanContext::get();
 
 		Buffer UBmotionBlur;
 		std::vector<vk::Framebuffer> frameBuffers{};

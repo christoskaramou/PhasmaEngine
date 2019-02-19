@@ -5,7 +5,7 @@
 
 namespace vm {
 	struct Metrics {
-		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
+		VulkanContext* vulkan = &VulkanContext::get();
 		
 		Metrics();
 		~Metrics();

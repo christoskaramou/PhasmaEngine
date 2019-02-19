@@ -6,7 +6,7 @@ using namespace vm;
 vk::DescriptorSetLayout Mesh::descriptorSetLayout = nullptr;
 std::map<std::string, Image> Mesh::uniqueTextures{};
 
-vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(vk::Device device)
+vk::DescriptorSetLayout Mesh::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
 		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
@@ -54,12 +54,26 @@ vk::DescriptorSetLayout Mesh::getDescriptorSetLayout(vk::Device device)
 			.setPImmutableSamplers(nullptr)
 			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
 
+		// binding for mesh factors and values
+		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
+			.setBinding(6) // binding number in shader stages
+			.setDescriptorCount(1) // number of descriptors contained
+			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
+			.setStageFlags(vk::ShaderStageFlagBits::eVertex)); // which pipeline shader stages can access
+
 		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
 			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
 			.setPBindings(descriptorSetLayoutBinding.data());
-		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
+		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(createInfo);
 	}
 	return descriptorSetLayout;
+}
+
+void Mesh::createUniformBuffer()
+{
+	size_t size = sizeof(mat4);
+	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 }
 
 void Mesh::loadTexture(TextureType type, const std::string& folderPath, const std::string& texName)
@@ -70,65 +84,65 @@ void Mesh::loadTexture(TextureType type, const std::string& folderPath, const st
 	Image* tex = nullptr;
 	switch (type)
 	{
-	case Mesh::DiffuseMap:
+	case TextureType::DiffuseMap:
 		tex = &material.textureDiffuse;
 		if (texName == "")
 			path = "objects/default.png";
 		break;
-	case Mesh::SpecularMap:
+	case TextureType::SpecularMap:
 		tex = &material.textureSpecular;
 		if (texName == "")
 			path = "objects/defaultSpecularMap.png";
 		break;
-	case Mesh::AmbientMap:
+	case TextureType::AmbientMap:
 		tex = &material.textureAmbient;
 		if (texName == "")
 			path = "objects/defaultSpecularMap.png";
 		break;
-	case Mesh::EmissiveMap:
+	case TextureType::EmissiveMap:
 		tex = &material.textureEmissive;
 		if (texName == "")
 			path = "objects/defaultSpecularMap.png";
 		break;
-	case Mesh::HeightMap:
+	case TextureType::HeightMap:
 		tex = &material.textureHeight;
 		if (texName == "")
 			path = "objects/defaultSpecularMap.png";
 		break;
-	case Mesh::NormalsMap:
+	case TextureType::NormalsMap:
 		tex = &material.textureNormals;
 		if (texName == "")
 			path = "objects/defaultNormalMap.png";
 		break;
-	case Mesh::ShininessMap:
+	case TextureType::ShininessMap:
 		tex = &material.textureShininess;
 		if (texName == "")
 			path = "objects/defaultSpecularMap.png";
 		break;
-	case Mesh::OpacityMap:
+	case TextureType::OpacityMap:
 		tex = &material.textureOpacity;
 		if (texName == "")
 			path = "objects/default.png";
 		else
 			hasAlphaMap = true;
 		break;
-	case Mesh::DisplacementMap:
+	case TextureType::DisplacementMap:
 		tex = &material.textureDisplacement;
 		if (texName == "")
 			path = "objects/defaultSpecularMap.png";
 		break;
-	case Mesh::LightMap: //Ambient Occlusion
+	case TextureType::LightMap: //Ambient Occlusion
 		tex = &material.textureLight;
 		if (texName == "")
 			path = "objects/default.png";
 		break;
-	case Mesh::ReflectionMap:
+	case TextureType::ReflectionMap:
 		tex = &material.textureReflection;
 		if (texName == "")
 			path = "objects/default.png";
 		break;
-	case Mesh::MetallicRoughness:
-		tex = &gltfMaterial.metallicRoughnessTexture;
+	case TextureType::MetallicRoughness:
+		tex = &pbrMaterial.metallicRoughnessTexture;
 		if (texName == "")
 			path = "objects/default.png";
 		break;

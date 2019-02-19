@@ -12,7 +12,7 @@
 namespace vm {
 	struct Deferred
 	{
-		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
+		VulkanContext* vulkan = &VulkanContext::get();
 
 		vk::RenderPass renderPass, compositionRenderPass;
 		std::vector<vk::Framebuffer> frameBuffers{}, compositionFrameBuffers{};

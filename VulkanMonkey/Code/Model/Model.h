@@ -7,28 +7,40 @@
 #include "../Script/Script.h"
 #include "../Camera/Camera.h"
 #include "../Deferred/Deferred.h"
+#include "../Model/Animation.h"
 
 namespace vm {
 	struct Model
 	{
-		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
+		VulkanContext* vulkan = &VulkanContext::get();
 
-		bool render = true;
-		bool isCopy = false;
 		static std::vector<Model> models;
 		static vk::DescriptorSetLayout descriptorSetLayout;
-		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
+		static vk::DescriptorSetLayout getDescriptorSetLayout();
 		static Pipeline* pipeline;
+
 		vk::DescriptorSet descriptorSet;
-		std::vector<Mesh> meshes{};
-		std::string name;
-		mat4 transform = mat4(1.0f);
-		mat4 previousTransform = mat4(1.0f);
 		Buffer vertexBuffer;
 		Buffer indexBuffer;
 		Buffer uniformBuffer;
 		uint32_t numberOfVertices = 0, numberOfIndices = 0;
+
+		// Animation ------------------
+		Animation animation;
+		// Store reference to the ASSIMP scene for accessing properties of it during animation
+		std::vector<Assimp::Importer*> importers;
+		const aiScene* scene;
+		// ----------------------------
+
+
+		mat4 transform = mat4::identity();
+		mat4 previousTransform = mat4::identity();
 		vec4 boundingSphere;
+		bool render = true;
+		bool isCopy = false;
+
+		std::string name;
+		std::vector<Mesh> meshes{};
 		std::unique_ptr<Script> script;
 
 		static void batchStart(uint32_t imageIndex, Deferred& deferred);

@@ -188,8 +188,6 @@
     <None Include="shaders\Deferred\composition.vert" />
     <None Include="shaders\Deferred\gBuffer.frag" />
     <None Include="shaders\Deferred\gBuffer.vert" />
-    <None Include="shaders\General\shader.frag" />
-    <None Include="shaders\General\shader.vert" />
     <None Include="shaders\GUI\shaderGUI.frag" />
     <None Include="shaders\GUI\shaderGUI.vert" />
     <None Include="shaders\MotionBlur\motionBlur.frag" />
@@ -221,6 +219,7 @@
     <ClInclude Include="Code\Math\Math.h" />
     <ClInclude Include="Code\Mesh\Mesh.h" />
     <ClInclude Include="Code\Metrics\Metrics.h" />
+    <ClInclude Include="Code\Model\Animation.h" />
     <ClInclude Include="Code\Model\Model.h" />
     <ClInclude Include="Code\MotionBlur\MotionBlur.h" />
     <ClInclude Include="Code\Node\Node.h" />
@@ -240,7 +239,6 @@
     <ClInclude Include="Code\Vertex\Vertex.h" />
     <ClInclude Include="Code\VulkanContext\VulkanContext.h" />
     <ClInclude Include="Code\Window\Window.h" />
-    <ClInclude Include="include\GLM.h" />
     <ClInclude Include="include\imgui\imconfig.h" />
     <ClInclude Include="include\imgui\imgui.h" />
     <ClInclude Include="include\imgui\imgui_internal.h" />
@@ -248,9 +246,10 @@
     <ClInclude Include="include\imgui\imstb_textedit.h" />
     <ClInclude Include="include\imgui\imstb_truetype.h" />
     <ClInclude Include="include\SDL.h" />
-    <ClInclude Include="include\Stbi.h" />
-    <ClInclude Include="include\stb_image\stb_image.h" />
-    <ClInclude Include="include\stb_image\stb_image_write.h" />
+    <ClInclude Include="include\tinygltf\json.hpp" />
+    <ClInclude Include="include\tinygltf\stb_image.h" />
+    <ClInclude Include="include\tinygltf\stb_image_write.h" />
+    <ClInclude Include="include\tinygltf\tiny_gltf.h" />
     <ClInclude Include="include\Vulkan.h" />
   </ItemGroup>
   <ItemGroup>
@@ -267,6 +266,7 @@
     <ClCompile Include="Code\Math\Math.cpp" />
     <ClCompile Include="Code\Mesh\Mesh.cpp" />
     <ClCompile Include="Code\Metrics\Metrics.cpp" />
+    <ClCompile Include="Code\Model\Animation.cpp" />
     <ClCompile Include="Code\Model\Model.cpp" />
     <ClCompile Include="Code\MotionBlur\MotionBlur.cpp" />
     <ClCompile Include="Code\Node\Node.cpp" />
@@ -288,8 +288,9 @@
     <ClCompile Include="include\imgui\imgui_demo.cpp" />
     <ClCompile Include="include\imgui\imgui_draw.cpp" />
     <ClCompile Include="include\imgui\imgui_widgets.cpp" />
-    <ClCompile Include="include\stb_image\stb_image.cpp" />
-    <ClCompile Include="include\stb_image\stb_image_write.cpp" />
+    <ClCompile Include="include\tinygltf\stb_image.cpp" />
+    <ClCompile Include="include\tinygltf\stb_image_write.cpp" />
+    <ClCompile Include="include\tinygltf\tiny_gltf.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

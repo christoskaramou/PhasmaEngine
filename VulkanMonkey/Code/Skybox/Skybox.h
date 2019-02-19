@@ -2,7 +2,7 @@
 #include "../VulkanContext/VulkanContext.h"
 #include "../Object/Object.h"
 #include "../Pipeline/Pipeline.h"
-#include "../../include/Stbi.h"
+#include "../../include/tinygltf/stb_image.h"
 #include "../Math/Math.h"
 #include "../Camera/Camera.h"
 

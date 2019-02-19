@@ -52,7 +52,7 @@ void Renderer::checkQueue()
 {
 	// TODO: make an other command pool for multithreading
 	for (auto& queue : Queue::loadModel) {
-		VulkanContext::getVulkanContext().device.waitIdle();
+		VulkanContext::get().device.waitIdle();
 		Model::models.push_back(Model());
 		Model::models.back().loadModel(std::get<0>(queue), std::get<1>(queue)); // path, name
 		GUI::modelList.push_back(std::get<1>(queue));
@@ -228,6 +228,8 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 void Renderer::present()
 {
 	if (!prepared) return;
+
+	FIRE_EVENT(Event::OnRender);
 
 	if (useCompute) {
 		recordComputeCmds(2, 2, 1);

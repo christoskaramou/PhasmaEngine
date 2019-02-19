@@ -26,8 +26,9 @@ FuncID EventSystem::subscribe(Event event, Func_t&& func, uint32_t priority)
 {
 	static FuncID funcID = 0;
 	if (m_subscribers.size() <= event.ID) exit(-30);
-	m_subscribers[event.ID].push_back({ std::forward<Func_t>(func), funcID, priority });
-	std::sort(m_subscribers[event.ID].begin(), m_subscribers[event.ID].end(), [](Func& f1, Func& f2) {return f1.priority < f2.priority; });
+	auto& v = m_subscribers[event.ID];
+	v.push_back({ std::forward<Func_t>(func), funcID, priority });
+	std::sort(v.begin(), v.end(), [](Func& f1, Func& f2) {return f1.priority < f2.priority; });
 	return funcID++;
 }
 

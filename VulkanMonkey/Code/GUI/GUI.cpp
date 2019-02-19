@@ -86,6 +86,15 @@ void GUI::showOptions()
 		randomize_lights = true;
 	ImGui::Separator();
 	ImGui::InputFloat3("Sun Position", (float*)sun_position.data(), 1);
+	{
+		vec3 sunDist((float*)&sun_position);
+		if (length(sunDist) > 400.f) {
+			sunDist = 400.f * normalize(sunDist);
+			sun_position[0] = sunDist.x;
+			sun_position[1] = sunDist.y;
+			sun_position[2] = sunDist.z;
+		}
+	}
 	ImGui::InputInt("FPS", &fps, 1, 15); if (fps < 10) fps = 10;
 	ImGui::InputFloat("Camera Speed", &cameraSpeed, 0.1f, 1.f, 3);
 	ImGui::SliderFloat4("Clear Color", (float*)clearColor.data(), 0.0f, 1.0f);

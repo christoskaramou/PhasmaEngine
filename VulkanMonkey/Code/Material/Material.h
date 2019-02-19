@@ -36,7 +36,7 @@ namespace vm {
 		Image textureReflection;
 	};
 
-	struct GltfMaterial
+	struct PBRMaterial
 	{
 		vec4 baseColorFactor;
 		float metallicFactor;

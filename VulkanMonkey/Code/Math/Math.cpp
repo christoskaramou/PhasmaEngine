@@ -335,7 +335,7 @@ namespace vm {
 
 	vec4 vec4::operator*(cfloat scalar) const
 	{
-		return vec4(x * scalar,y * scalar, z * scalar, w * scalar);
+		return vec4(x * scalar, y * scalar, z * scalar, w * scalar);
 	}
 
 	vec4 vec4::operator/(cvec4 & v) const
@@ -886,6 +886,21 @@ namespace vm {
 	float * quat::ptr()
 	{
 		return &x;
+	}
+
+	vec2 operator*(cfloat scalar, cvec2 & v)
+	{
+		return v * scalar;
+	}
+
+	vec3 operator*(cfloat scalar, cvec3 & v)
+	{
+		return v * scalar;
+	}
+
+	vec4 operator*(cfloat scalar, cvec4 & v)
+	{
+		return v * scalar;
 	}
 
 	vec3 operator*(cvec3 & v, cquat & q)

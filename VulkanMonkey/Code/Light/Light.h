@@ -36,7 +36,7 @@ namespace vm {
 
 	struct LightUniforms : Light
 	{
-		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
+		VulkanContext* vulkan = &VulkanContext::get();
 
 		Buffer uniform;
 		vk::DescriptorSet descriptorSet;

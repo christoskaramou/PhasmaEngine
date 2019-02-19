@@ -3,7 +3,7 @@
 #include "../Object/Object.h"
 #include "../Pipeline/Pipeline.h"
 #include "../Math/Math.h"
-#include "../../include/Stbi.h"
+#include "../../include/tinygltf/stb_image.h"
 
 namespace vm {
 	struct Terrain : Object

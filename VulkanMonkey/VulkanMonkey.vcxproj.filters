@@ -16,12 +16,6 @@
     <None Include="shaders\Deferred\gBuffer.vert">
       <Filter>Shaders\Deferred</Filter>
     </None>
-    <None Include="shaders\General\shader.frag">
-      <Filter>Shaders\General</Filter>
-    </None>
-    <None Include="shaders\General\shader.vert">
-      <Filter>Shaders\General</Filter>
-    </None>
     <None Include="shaders\GUI\shaderGUI.frag">
       <Filter>Shaders\GUI</Filter>
     </None>
@@ -69,39 +63,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\Vulkan.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\SDL.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Stbi.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\stb_image\stb_image.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui\imconfig.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui\imgui.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui\imgui_internal.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui\imstb_rectpack.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui\imstb_textedit.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\imgui\imstb_truetype.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\GLM.h">
-      <Filter>Include</Filter>
-    </ClInclude>
     <ClInclude Include="Code\Buffer\Buffer.h">
       <Filter>Code\Buffer</Filter>
     </ClInclude>
@@ -189,9 +150,6 @@
     <ClInclude Include="Code\Window\Window.h">
       <Filter>Code\Window</Filter>
     </ClInclude>
-    <ClInclude Include="include\stb_image\stb_image_write.h">
-      <Filter>Include</Filter>
-    </ClInclude>
     <ClInclude Include="Code\Material\Material.h">
       <Filter>Code\Material</Filter>
     </ClInclude>
@@ -203,6 +161,45 @@
     </ClInclude>
     <ClInclude Include="Code\Event\Event.h">
       <Filter>Code\Event</Filter>
+    </ClInclude>
+    <ClInclude Include="include\SDL.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Vulkan.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tinygltf\json.hpp">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tinygltf\stb_image.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tinygltf\stb_image_write.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tinygltf\tiny_gltf.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imconfig.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imgui.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imgui_internal.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imstb_rectpack.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imstb_textedit.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\imgui\imstb_truetype.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Model\Animation.h">
+      <Filter>Code\Model</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -287,6 +284,27 @@
     <ClCompile Include="Code\Window\Window.cpp">
       <Filter>Code\Window</Filter>
     </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Metrics\Metrics.cpp">
+      <Filter>Code\Metrics</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Script\Script.cpp">
+      <Filter>Code\Script</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Event\Event.cpp">
+      <Filter>Code\Event</Filter>
+    </ClCompile>
+    <ClCompile Include="include\tinygltf\stb_image.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\tinygltf\stb_image_write.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\tinygltf\tiny_gltf.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
     <ClCompile Include="include\imgui\imgui.cpp">
       <Filter>Include</Filter>
     </ClCompile>
@@ -299,29 +317,11 @@
     <ClCompile Include="include\imgui\imgui_widgets.cpp">
       <Filter>Include</Filter>
     </ClCompile>
-    <ClCompile Include="include\stb_image\stb_image.cpp">
-      <Filter>Include</Filter>
-    </ClCompile>
-    <ClCompile Include="main.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="include\stb_image\stb_image_write.cpp">
-      <Filter>Include</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Metrics\Metrics.cpp">
-      <Filter>Code\Metrics</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Script\Script.cpp">
-      <Filter>Code\Script</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Event\Event.cpp">
-      <Filter>Code\Event</Filter>
+    <ClCompile Include="Code\Model\Animation.cpp">
+      <Filter>Code\Model</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <Filter Include="Include">
-      <UniqueIdentifier>{75d3f8cb-453c-4353-a312-705fb0cdbe8d}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source">
       <UniqueIdentifier>{926a54e5-7fb8-4380-843e-a500bb718dc3}</UniqueIdentifier>
     </Filter>
@@ -424,9 +424,6 @@
     <Filter Include="Shaders\Deferred">
       <UniqueIdentifier>{9a6948a0-6012-4b67-8b7a-e7d77fe6a168}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Shaders\General">
-      <UniqueIdentifier>{04a14cf0-8809-4144-b74b-53ce254343f3}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Shaders\GUI">
       <UniqueIdentifier>{eadcd61f-0718-45fd-8eda-5840694e734c}</UniqueIdentifier>
     </Filter>
@@ -459,6 +456,9 @@
     </Filter>
     <Filter Include="Code\Event">
       <UniqueIdentifier>{0d0018b5-264c-424d-b0aa-461fa224b07d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Include">
+      <UniqueIdentifier>{0516456b-b8c0-4af2-8d00-952fa0c2e7f5}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

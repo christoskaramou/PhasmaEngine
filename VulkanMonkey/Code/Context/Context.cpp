@@ -3147,7 +3147,7 @@ PipelineInfo Context::getPipelineSpecificationsDeferred()
 	deferredSpecific.renderPass = deferred.renderPass;
 	deferredSpecific.viewportSize = { WIDTH, HEIGHT };
 	deferredSpecific.sampleCount = vk::SampleCountFlagBits::e1;
-	deferredSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(vulkan.device), Mesh::getDescriptorSetLayout(vulkan.device) };
+	deferredSpecific.descriptorSetLayouts = { Model::getDescriptorSetLayout(), Mesh::getDescriptorSetLayout() };
 	deferredSpecific.specializationInfo = vk::SpecializationInfo();
 	deferredSpecific.blendAttachmentStates[0].blendEnable = VK_FALSE;
 	deferredSpecific.blendAttachmentStates = {

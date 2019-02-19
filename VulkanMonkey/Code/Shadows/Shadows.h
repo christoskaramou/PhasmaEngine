@@ -10,7 +10,7 @@
 namespace vm {
 	struct Shadows
 	{
-		VulkanContext* vulkan = &VulkanContext::getVulkanContext();
+		VulkanContext* vulkan = &VulkanContext::get();
 
 		static uint32_t imageSize;
 		static vk::DescriptorSetLayout descriptorSetLayout;
