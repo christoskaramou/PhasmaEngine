@@ -251,6 +251,9 @@
     <ClInclude Include="include\tinygltf\stb_image_write.h" />
     <ClInclude Include="include\tinygltf\tiny_gltf.h" />
     <ClInclude Include="include\Vulkan.h" />
+    <ClInclude Include="shaders\Common\common.h" />
+    <ClInclude Include="shaders\Deferred\Light.h" />
+    <ClInclude Include="shaders\Deferred\Material.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp" />

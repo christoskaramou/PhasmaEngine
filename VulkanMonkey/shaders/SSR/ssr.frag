@@ -1,4 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "../Common/common.h"
 
 layout (set = 0, binding = 0) uniform sampler2D albedoSampler;
 layout (set = 0, binding = 1) uniform sampler2D depthSampler;
@@ -13,21 +16,9 @@ layout (location = 0) out vec4 outColor;
 
 vec3 ScreenSpaceReflections(vec3 position, vec3 normal);
 
-vec3 getViewPosFromUV(vec2 UV)
-{ 
-	vec2 revertedUV = (UV - pos.offset.xy) / pos.offset.zw; // floating window correction
-	vec4 ndcPos;
-	ndcPos.xy = revertedUV * 2.0 - 1.0;
-	ndcPos.z = texture(depthSampler, UV).x; // sample from the gl_FragCoord.z image
-	ndcPos.w = 1.0;
-	
-	vec4 clipPos = ubo.invProj * ndcPos;
-	return (clipPos / clipPos.w).xyz;
-}
-
 void main()
 {
-	vec3 position = getViewPosFromUV(inUV);
+	vec3 position = getPosFromUV(inUV, texture(depthSampler, inUV).x, ubo.invProj, pos.offset);
 	vec4 normal = ubo.view * vec4(texture(normalSampler, inUV).xyz, 0.0);
 
 	outColor = vec4(ScreenSpaceReflections(position, normalize(normal.xyz)) , 1.0);
@@ -39,7 +30,7 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 	vec3 reflection = reflect(position, normal);
 
 	float VdotR = max(dot(normalize(position), normalize(reflection)), 0.0);
-	float fresnel = pow(VdotR, 5);
+	float fresnel = pow(VdotR, 5); // small hack, not fresnel at all
 
 	vec3 step = reflection;
 	vec3 newPosition = position + step;
@@ -61,7 +52,7 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 		}
 
 		float currentDepth = abs(newViewPos.z);
-		float sampledDepth = abs(getViewPosFromUV(samplePosition.xy).z);
+		float sampledDepth = abs(getPosFromUV(samplePosition.xy, texture(depthSampler, samplePosition.xy).x, ubo.invProj, pos.offset).z);
 
 		float delta = abs(currentDepth - sampledDepth);
 		if(delta < 0.01f)

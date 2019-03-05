@@ -32,14 +32,14 @@ void Animation::loadBones(const aiMesh* pMesh, uint32_t vertexOffset, std::vecto
 	boneTransforms.resize(numBones);
 }
 
-void Animation::setAnimation(const aiScene* scene, uint32_t animationIndex)
+void Animation::setAnimation(uint32_t animationIndex)
 {
 	if (!scene->HasAnimations()) return;
 	assert(animationIndex < scene->mNumAnimations);
 	pAnimation = scene->mAnimations[animationIndex];
 }
 
-void Animation::bonesTransform(const aiScene* scene, float delta)
+void Animation::bonesTransform(float delta)
 {
 	if (!scene->HasAnimations()) return;
 	runningTimeSeconds += delta;

@@ -1,4 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "../Common/common.h"
 
 layout (set = 0, binding = 0) uniform sampler2D samplerDepth;
 layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
@@ -16,22 +19,10 @@ const int KERNEL_SIZE = 8;
 const float RADIUS = 0.25f;
 const float bias = 0.001;
 
-vec3 getViewPosFromUV(vec2 UV)
-{
-	vec2 revertedUV = (UV - pos.offset.xy) / pos.offset.zw; // floating window correction
-	vec4 ndcPos;
-	ndcPos.xy = revertedUV * 2.0 - 1.0;
-	ndcPos.z = texture(samplerDepth, UV).x; // sample from the gl_FragCoord.z image
-	ndcPos.w = 1.0;
-	
-	vec4 clipPos = pvm.invProjection * ndcPos;
-	return (clipPos / clipPos.w).xyz;
-}
-
 void main() 
 {
 	// Get G-Buffer values
-	vec3 fragPos = getViewPosFromUV(inUV);
+	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, pvm.invProjection, pos.offset);
 	vec4 normal = pvm.view * texture(samplerNormal, inUV);
 
 	// Get a random vector using a noise lookup
@@ -58,7 +49,7 @@ void main()
 		samplePosition.xy += pos.offset.xy; // floating window position correction
 		
 		float currentDepth = newViewPos.z;
-		float sampledDepth = getViewPosFromUV(samplePosition.xy).z;
+		float sampledDepth = getPosFromUV(samplePosition.xy, texture(samplerDepth, samplePosition.xy).x, pvm.invProjection, pos.offset).z;
 
 		// Range check
 

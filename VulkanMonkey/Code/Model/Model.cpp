@@ -99,7 +99,9 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 	);
 	if (!scene) exit(-100);
 
-	animation.setAnimation(scene, 0);
+	animation.scene = scene;
+	animation.numAnimations = scene->mNumAnimations;
+	animation.setAnimation(0);
 
 	// Setup bones
 	// One vertex bone info structure per vertex
@@ -129,7 +131,7 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 		const aiMesh& mesh = *scene->mMeshes[i];
 
 		Mesh myMesh;
-		myMesh.transform = transform;
+		//myMesh.transform = transform;
 		myMesh.hasBones = mesh.HasBones();
 		myMesh.vertexOffset = numberOfVertices;
 		myMesh.indexOffset = numberOfIndices;
@@ -166,6 +168,7 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 			myMesh.indices.push_back(Face.mIndices[2]);
 		}
 
+		// Materials
 		const aiMaterial& material = *scene->mMaterials[mesh.mMaterialIndex];
 		// factors
 		material.Get(AI_MATKEY_COLOR_DIFFUSE, *reinterpret_cast<aiColor3D*>(&myMesh.material.colorDiffuse));
@@ -194,19 +197,22 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 		myMesh.loadTexture(TextureType::LightMap, folderPath, getTextureName(material, aiTextureType_LIGHTMAP));
 		myMesh.loadTexture(TextureType::ReflectionMap, folderPath, getTextureName(material, aiTextureType_REFLECTION));
 
+		std::string metalicRoughnessName = getTextureName(material, aiTextureType_UNKNOWN);
+		myMesh.hasPBR = metalicRoughnessName != "";
+
 		// PBR -------------------------------------------------------
+		myMesh.loadTexture(TextureType::MetallicRoughness, folderPath, metalicRoughnessName);
+		std::swap(myMesh.pbrMaterial.baseColorTexture, myMesh.material.textureDiffuse);
+		std::swap(myMesh.pbrMaterial.normalTexture, myMesh.material.textureNormals);
+		std::swap(myMesh.pbrMaterial.occlusionTexture, myMesh.material.textureLight);
+		std::swap(myMesh.pbrMaterial.emissiveTexture, myMesh.material.textureEmissive);
+
 		material.Get(AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_BASE_COLOR_FACTOR, *reinterpret_cast<aiColor4D*>(&myMesh.pbrMaterial.baseColorFactor));
 		material.Get(AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_METALLIC_FACTOR, myMesh.pbrMaterial.metallicFactor);
 		material.Get(AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_ROUGHNESS_FACTOR, myMesh.pbrMaterial.roughnessFactor);
 		std::swap(myMesh.pbrMaterial.emissiveFactor, myMesh.material.colorEmissive);
 		material.Get(AI_MATKEY_GLTF_ALPHACUTOFF, myMesh.pbrMaterial.alphaCutoff);
 		std::swap(myMesh.pbrMaterial.doubleSided, myMesh.material.twoSided);
-		// textures
-		std::swap(myMesh.pbrMaterial.baseColorTexture, myMesh.material.textureDiffuse);
-		myMesh.loadTexture(TextureType::MetallicRoughness, folderPath, getTextureName(material, aiTextureType_UNKNOWN));
-		std::swap(myMesh.pbrMaterial.normalTexture, myMesh.material.textureNormals);
-		std::swap(myMesh.pbrMaterial.occlusionTexture, myMesh.material.textureLight);
-		std::swap(myMesh.pbrMaterial.emissiveTexture, myMesh.material.textureEmissive);
 		// -----------------------------------------------------------
 
 		myMesh.calculateBoundingSphere();
@@ -281,7 +287,7 @@ void Model::update(Camera& camera, float delta)
 		camera.ExtractFrustum(pvm[2]);
 
 		if (scene->HasAnimations()) {
-			animation.bonesTransform(scene, delta);
+			animation.bonesTransform(delta);
 			for (uint32_t i = 0; i < animation.boneTransforms.size(); i++)
 				pvm[i + 4] = aiMatrix4x4ToMat4(animation.boneTransforms[i]);
 		}

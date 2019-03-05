@@ -60,6 +60,7 @@ namespace vm {
 
 	struct Animation
 	{
+		const aiScene* scene;
 		// Bone related stuff
 		// Maps bone name with index
 		std::map<std::string, uint32_t> boneMapping;
@@ -80,13 +81,15 @@ namespace vm {
 		float animationSpeed = 0.75f;
 		// Currently active animation
 		aiAnimation* pAnimation;
+		// Number of animations
+		uint32_t numAnimations = 0;
 
 		// Load bone information from ASSIMP mesh
 		void loadBones(const aiMesh* pMesh, uint32_t vertexOffset, std::vector<VertexBoneData>& Bones);
 		// Set active animation by index
-		void setAnimation(const aiScene* scene, uint32_t animationIndex);
+		void setAnimation(uint32_t animationIndex);
 		// Recursive bone transformation for given animation time
-		void bonesTransform(const aiScene* scene, float delta);
+		void bonesTransform(float delta);
 		// Find animation for a given node
 		const aiNodeAnim* findNodeAnim(const aiAnimation* animation, const std::string nodeName);
 		// Returns a 4x4 matrix with interpolated translation between current and next frame

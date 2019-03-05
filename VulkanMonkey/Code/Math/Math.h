@@ -203,6 +203,12 @@ namespace vm {
 		float x, y, z, w;
 	};
 
+	struct Ray
+	{
+		vec3 o, d; // origin, direction
+		Ray(cvec3 o, cvec3 d);
+	};
+
 	struct Transform
 	{
 		Transform();

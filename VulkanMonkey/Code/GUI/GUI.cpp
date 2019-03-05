@@ -49,6 +49,7 @@ void GUI::setWindows()
 	showConsole();
 	showScripts();
 	showModels();
+	showProperties();
 	showRenderingWindow();
 }
 
@@ -56,7 +57,7 @@ void GUI::showMetrics()
 {
 	static bool metrics_open = true;
 	ImGui::SetNextWindowPos(ImVec2(0.f, 1.f));
-	ImGui::SetNextWindowSize(ImVec2(282.f, 111.f));
+	ImGui::SetNextWindowSize(ImVec2(LEFT_BORDER, 111.f));
 	ImGui::Begin("Metrics", &metrics_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
@@ -74,7 +75,7 @@ void GUI::showOptions()
 
 	static bool	options_open = true;
 	ImGui::SetNextWindowPos(ImVec2(0.f, tlPanelSize.y));
-	ImGui::SetNextWindowSize(ImVec2(tlPanelSize.x, HEIGHT_f - 279.f - tlPanelSize.y));
+	ImGui::SetNextWindowSize(ImVec2(LEFT_BORDER, HEIGHT_f - LOWER_BORDER - tlPanelSize.y));
 	ImGui::Begin("Options", &options_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGui::Checkbox("Lock Render Window", &lock_render_window);
 	ImGui::Checkbox("SSR", &show_ssr);
@@ -85,10 +86,10 @@ void GUI::showOptions()
 	if (ImGui::Button("Randomize Lights"))
 		randomize_lights = true;
 	ImGui::Separator();
-	ImGui::InputFloat3("Sun Position", (float*)sun_position.data(), 1);
+	ImGui::InputFloat3("SunPos", (float*)sun_position.data(), 1);
 	{
 		vec3 sunDist((float*)&sun_position);
-		if (length(sunDist) > 400.f) {
+		if (lengthSquared(sunDist) > 160000.f) {
 			sunDist = 400.f * normalize(sunDist);
 			sun_position[0] = sunDist.x;
 			sun_position[1] = sunDist.y;
@@ -96,12 +97,10 @@ void GUI::showOptions()
 		}
 	}
 	ImGui::InputInt("FPS", &fps, 1, 15); if (fps < 10) fps = 10;
-	ImGui::InputFloat("Camera Speed", &cameraSpeed, 0.1f, 1.f, 3);
-	ImGui::SliderFloat4("Clear Color", (float*)clearColor.data(), 0.0f, 1.0f);
-	ImGui::InputFloat("Depth Bias", &depthBias[0], 0.00001f, 0.0002f, 5);
-	ImGui::InputFloat("Depth Clamp", &depthBias[1], 0.00001f, 0.0002f, 5);
-	ImGui::InputFloat("Depth Slope", &depthBias[2], 0.15f, 0.5f, 5);
-	ImGui::InputFloat("Time Scale", &timeScale, 0.05f, 0.2f);
+	ImGui::InputFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f, 3);
+	ImGui::SliderFloat4("ClearCol", (float*)clearColor.data(), 0.0f, 1.0f);
+	ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5);
+	ImGui::InputFloat("TimeScale", &timeScale, 0.05f, 0.2f);
 	mlPanelPos = ImGui::GetWindowPos();
 	mlPanelSize = ImGui::GetWindowSize();
 	ImGui::End();
@@ -111,14 +110,14 @@ void GUI::showConsole()
 {
 	static bool console_open = true;
 	static Console console;
-	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - 279.f), ImVec2(WIDTH_f / 3.f, 279.f));
+	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - LOWER_BORDER), ImVec2(WIDTH_f / 3.f, LOWER_BORDER));
 }
 
 void GUI::showScripts()
 {
 	static bool scripts_open = true;
-	ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 3.f, HEIGHT_f - 279.f));
-	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, 279.f));
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 3.f, HEIGHT_f - LOWER_BORDER));
+	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_BORDER));
 	ImGui::Begin("Scripts Folder", &scripts_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	for (auto& file : fileList)
 	{
@@ -133,11 +132,30 @@ void GUI::showScripts()
 void GUI::showModels()
 {
 	static bool models_open = true;
-	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 2.f / 3.f, HEIGHT_f - 279.f));
-	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, 279.f));
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 2.f / 3.f, HEIGHT_f - LOWER_BORDER));
+	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_BORDER));
 	ImGui::Begin("Models Loaded", &models_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-	for (auto& model : modelList)
-		ImGui::Text(model.c_str());
+	static std::vector<bool> selected(modelList.size(), false);
+	if (selected.size() != modelList.size())
+		selected.resize(modelList.size());
+	if (ImGui::ListBoxHeader("", (int)modelList.size()))
+	{
+		for (uint32_t i = 0; i < modelList.size(); i++)
+			ImGui::Selectable(modelList[i].c_str(), selected[i]);
+		ImGui::ListBoxFooter();
+	}
+	ImGui::End();
+}
+
+void vm::GUI::showProperties()
+{
+	static bool propetries_open = true;
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f - RIGHT_BORDER, 0.0f));
+	ImGui::SetNextWindowSize(ImVec2(RIGHT_BORDER, HEIGHT_f - LOWER_BORDER));
+	ImGui::Begin("Properties", &propetries_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+
+	if (ImGui::Button("Dummy")) {}
+
 	ImGui::End();
 }
 
@@ -149,8 +167,8 @@ void GUI::showRenderingWindow()
 	int flags = ImGuiWindowFlags_NoTitleBar;
 	if (lock_render_window) {
 		flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-		ImGui::SetNextWindowPos(ImVec2(mlPanelSize.x, 0.f));
-		ImGui::SetNextWindowSize(ImVec2(WIDTH_f - tlPanelSize.x, HEIGHT_f - 279.f));
+		ImGui::SetNextWindowPos(ImVec2(LEFT_BORDER, 0.f));
+		ImGui::SetNextWindowSize(ImVec2(WIDTH_f - LEFT_BORDER - RIGHT_BORDER, HEIGHT_f - LOWER_BORDER));
 	}
 	ImGui::Begin("Rendering Window", &active, flags);
 	winPos = ImGui::GetWindowPos();

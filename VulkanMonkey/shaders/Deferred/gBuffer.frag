@@ -2,10 +2,10 @@
 
 layout (set = 1, binding = 0) uniform sampler2D tSampler; // diffuse
 layout (set = 1, binding = 1) uniform sampler2D normSampler; // normals
-layout (set = 1, binding = 2) uniform sampler2D rm_Sampler; // occlusion-roughness-metallic
+layout (set = 1, binding = 2) uniform sampler2D rm_Sampler; // roughness-metallic
 layout (set = 1, binding = 3) uniform sampler2D alphaSampler; // alpha
 layout (set = 1, binding = 4) uniform sampler2D e_sampler; // emissive
-layout (set = 1, binding = 5) uniform sampler2D AO_Sampler; // ambient or AO
+layout (set = 1, binding = 5) uniform sampler2D AO_Sampler; // AO
 
 layout (location = 0) in vec2 inUV;
 layout (location = 1) in vec3 inNormal;

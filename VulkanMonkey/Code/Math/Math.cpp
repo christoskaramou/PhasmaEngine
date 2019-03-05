@@ -888,6 +888,9 @@ namespace vm {
 		return &x;
 	}
 
+	Ray::Ray(cvec3 o, cvec3 d) : o(o), d(normalize(d))
+	{ }
+
 	vec2 operator*(cfloat scalar, cvec2 & v)
 	{
 		return v * scalar;

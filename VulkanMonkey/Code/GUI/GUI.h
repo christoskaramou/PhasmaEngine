@@ -9,6 +9,9 @@
 #include <vector>
 
 namespace vm {
+	constexpr float LOWER_BORDER = 150.f;
+	constexpr float LEFT_BORDER = 250.f;
+	constexpr float RIGHT_BORDER = 250.f;
 	struct GUI : Object
 	{
 		// Data
@@ -63,6 +66,7 @@ namespace vm {
 		void showConsole();
 		void showScripts();
 		void showModels();
+		void showProperties();
 		void showRenderingWindow();
 		void createVertexBuffer(size_t vertex_size);
 		void createIndexBuffer(size_t index_size);

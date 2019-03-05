@@ -38,7 +38,7 @@ namespace vm {
 		uint32_t vertexOffset = 0, indexOffset = 0;
 		Buffer uniformBuffer;
 
-		bool render = true, cull = false, hasAlphaMap = false, hasBones = false;
+		bool render = true, cull = false, hasAlphaMap = false, hasBones = false, hasPBR = false;
 		Mesh* parent = nullptr;
 		mat4 transform = mat4::identity();
 		vec4 boundingSphere;

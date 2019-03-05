@@ -201,6 +201,15 @@
     <ClInclude Include="Code\Model\Animation.h">
       <Filter>Code\Model</Filter>
     </ClInclude>
+    <ClInclude Include="shaders\Deferred\Light.h">
+      <Filter>Shaders\Deferred</Filter>
+    </ClInclude>
+    <ClInclude Include="shaders\Deferred\Material.h">
+      <Filter>Shaders\Deferred</Filter>
+    </ClInclude>
+    <ClInclude Include="shaders\Common\common.h">
+      <Filter>Shaders\Common</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -459,6 +468,9 @@
     </Filter>
     <Filter Include="Include">
       <UniqueIdentifier>{0516456b-b8c0-4af2-8d00-952fa0c2e7f5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Common">
+      <UniqueIdentifier>{5d60448e-2b32-4522-a38d-e6bd5a9398b2}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

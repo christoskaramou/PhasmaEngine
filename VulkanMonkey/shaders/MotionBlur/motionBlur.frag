@@ -1,4 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "../Common/common.h"
 
 layout (set = 0, binding = 0) uniform sampler2D compositionSampler;
 layout (set = 0, binding = 1) uniform sampler2D depthSampler;
@@ -13,24 +16,11 @@ layout (location = 0) out vec4 outColor;
 
 const int samples = 8;
 
-vec3 getWorldPosFromUV(vec2 UV)
-{
-	vec2 revertedUV = (UV - pushConst.offset.xy) / pushConst.offset.zw; // floating window correction
-	vec4 ndcPos;
-	ndcPos.xy = revertedUV * 2.0 - 1.0;
-	ndcPos.z = texture(depthSampler, UV).x; // sample from the gl_FragCoord.z image
-	ndcPos.w = 1.0;
-	
-	vec4 clipPos = ubo.invViewProj * ndcPos;
-	return (clipPos / clipPos.w).xyz;
-}
-
-
 void main() 
 {
 	vec2 UV = inUV;
 	vec3 velocitySample = texture(velocitySampler, UV).xyz;
-	vec3 worldPos = getWorldPosFromUV(UV);
+	vec3 worldPos = getPosFromUV(UV, texture(depthSampler, UV).x, ubo.invViewProj, pushConst.offset);
 	vec3 currentPos = (ubo.view * vec4(worldPos, 1.0)).xyz;
 	vec3 previousPos = (ubo.previousView * vec4(worldPos+velocitySample*3.0, 1.0)).xyz;
 	vec3 viewVelocity = currentPos - previousPos;
