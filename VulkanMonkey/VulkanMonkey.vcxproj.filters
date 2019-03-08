@@ -210,6 +210,9 @@
     <ClInclude Include="Code\SSDO\SSDO.h">
       <Filter>Code\SSDO</Filter>
     </ClInclude>
+    <ClInclude Include="shaders\Common\tonemapping.h">
+      <Filter>Shaders\Common</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">

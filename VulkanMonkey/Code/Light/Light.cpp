@@ -3,7 +3,7 @@
 using namespace vm;
 
 Light::Light() :
-	color(rand(0.f, 1.f), rand(0.0f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f)),
+	color(rand(0.f, 2.f), rand(0.f, 2.f), rand(0.f, 2.f), 1.f),
 	position(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 1.f),
 	attenuation(1.05f, 1.f, 1.f, 1.f)
 { }
@@ -17,7 +17,7 @@ Light::Light(const vec4& color, const vec4& position, const vec4& attenuation) :
 Light Light::sun()
 {
 	return Light(
-		vec4(1.f, 1.f, 1.f, .5f),
+		vec4(.9765f, .8431f, .9098f, 1.f) * 20.f,
 		vec4(GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2], 1.0f),
 		vec4(0.f, 0.f, 1.f, 1.f)
 	);

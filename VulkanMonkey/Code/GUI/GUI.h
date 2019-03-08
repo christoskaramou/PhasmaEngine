@@ -21,6 +21,8 @@ namespace vm {
 		static bool			show_ssr;
 		static bool			show_ssao;
 		static bool			show_ssdo;
+		static bool			show_tonemapping;
+		static float		exposure;
 		static bool			show_motionBlur;
 		static bool			shadow_cast;
 		static bool			randomize_lights;

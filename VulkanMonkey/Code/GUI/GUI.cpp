@@ -8,6 +8,8 @@ bool						GUI::lock_render_window = true;
 bool						GUI::show_ssr = true;
 bool						GUI::show_ssao = true;
 bool						GUI::show_ssdo = true;
+bool						GUI::show_tonemapping = true;
+float						GUI::exposure = 1.0f;
 bool						GUI::show_motionBlur = true;
 bool						GUI::shadow_cast = true;
 bool						GUI::randomize_lights = false;
@@ -84,6 +86,9 @@ void GUI::showOptions()
 	//ImGui::Checkbox("SSDO", &show_ssdo);
 	ImGui::Checkbox("Motion Blur", &show_motionBlur);
 	ImGui::Checkbox("Sun Light", &shadow_cast);
+	ImGui::Checkbox("Tone Mapping", &show_tonemapping);
+	//if (show_tonemapping)
+	//	ImGui::InputFloat("Exposure", &exposure, 0.005f, 0.05f, 3);
 	ImGui::Separator();
 	if (ImGui::Button("Randomize Lights"))
 		randomize_lights = true;

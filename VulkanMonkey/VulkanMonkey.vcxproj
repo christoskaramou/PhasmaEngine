@@ -252,6 +252,7 @@
     <ClInclude Include="include\tinygltf\tiny_gltf.h" />
     <ClInclude Include="include\Vulkan.h" />
     <ClInclude Include="shaders\Common\common.h" />
+    <ClInclude Include="shaders\Common\tonemapping.h" />
     <ClInclude Include="shaders\Deferred\Light.h" />
     <ClInclude Include="shaders\Deferred\Material.h" />
   </ItemGroup>

@@ -2,6 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 
 #include "../Common/common.h"
+#include "../Common/tonemapping.h"
 #include "Light.h"
 
 layout (location = 0) in vec2 inUV;
@@ -68,6 +69,12 @@ void main()
 	if (screenSpace.effect.y > 0.5)
 		outColor += vec4(texture(ssrSampler, inUV).xyz, 0.0) * (1.0 - material.roughness);
 	
+	// Tone Mapping
+	if (screenSpace.effect.z > 0.5)
+		outColor.xyz = ACESFitted(outColor.xyz);
+		//outColor.xyz = ToneMapReinhard(outColor.xyz, screenSpace.effect.w); // ToneMapReinhard(color, exposure value)
+		//outColor.xyz = Uncharted2(outColor.xyz);
+
 	outComposition = outColor;
 }
 
