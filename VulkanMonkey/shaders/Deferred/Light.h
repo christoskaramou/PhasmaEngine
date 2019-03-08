@@ -20,6 +20,7 @@ layout(set = 0, binding = 3) uniform sampler2D samplerRoughMet;
 layout(set = 0, binding = 4) uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS + 1]; } ubo;
 layout(set = 0, binding = 5) uniform sampler2D ssaoBlurSampler;
 layout(set = 0, binding = 6) uniform sampler2D ssrSampler;
+layout(set = 0, binding = 7) uniform sampler2D ssdoBlurSampler;
 layout(set = 1, binding = 1) uniform sampler2DShadow shadowMapSampler0;
 layout(set = 2, binding = 1) uniform sampler2DShadow shadowMapSampler1;
 layout(set = 3, binding = 1) uniform sampler2DShadow shadowMapSampler2;
@@ -30,7 +31,7 @@ vec3 compute_point_light(int lightIndex, Material material, vec3 world_pos, vec3
 	vec3 light_dir_full = world_pos - ubo.lights[lightIndex].position.xyz;
 	vec3 light_dir = normalize(-light_dir_full);
 	float light_dist = max(0.1, length(light_dir_full));
-	vec3 point_color = ubo.lights[lightIndex].color.xyz / (light_dist * light_dist);
+	vec3 point_color = ubo.lights[lightIndex].color.xyz / (light_dist * light_dist);// *0.5);
 
 	float roughness = material.roughness * 0.75 + 0.25;
 
@@ -51,7 +52,10 @@ vec3 compute_point_light(int lightIndex, Material material, vec3 world_pos, vec3
 
 	vec3 reflected_light = specref;
 	vec3 diffuse_light = diffref * material.albedo * (1.0 - material.metallic);
-	return point_color * (reflected_light + diffuse_light);
+
+	vec3 res = point_color * (reflected_light + diffuse_light);
+
+	return res;
 }
 
 #endif

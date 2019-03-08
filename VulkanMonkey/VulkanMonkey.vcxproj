@@ -183,6 +183,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <None Include="shaders\Common\quad.vert" />
     <None Include="shaders\Compute\shader.comp" />
     <None Include="shaders\Deferred\composition.frag" />
     <None Include="shaders\Deferred\composition.vert" />
@@ -191,16 +192,14 @@
     <None Include="shaders\GUI\shaderGUI.frag" />
     <None Include="shaders\GUI\shaderGUI.vert" />
     <None Include="shaders\MotionBlur\motionBlur.frag" />
-    <None Include="shaders\MotionBlur\motionBlur.vert" />
     <None Include="shaders\Shadows\shaderShadows.vert" />
     <None Include="shaders\SkyBox\shaderSkyBox.frag" />
     <None Include="shaders\SkyBox\shaderSkyBox.vert" />
     <None Include="shaders\SSAO\ssao.frag" />
-    <None Include="shaders\SSAO\ssao.vert" />
     <None Include="shaders\SSAO\ssaoBlur.frag" />
-    <None Include="shaders\SSAO\ssaoBlur.vert" />
+    <None Include="shaders\SSDO\ssdo.frag" />
+    <None Include="shaders\SSDO\ssdoBlur.frag" />
     <None Include="shaders\SSR\ssr.frag" />
-    <None Include="shaders\SSR\ssr.vert" />
     <None Include="shaders\Terrain\shaderTerrain.frag" />
     <None Include="shaders\Terrain\shaderTerrain.vert" />
   </ItemGroup>
@@ -231,6 +230,7 @@
     <ClInclude Include="Code\Shadows\Shadows.h" />
     <ClInclude Include="Code\Skybox\Skybox.h" />
     <ClInclude Include="Code\SSAO\SSAO.h" />
+    <ClInclude Include="Code\SSDO\SSDO.h" />
     <ClInclude Include="Code\SSR\SSR.h" />
     <ClInclude Include="Code\Surface\Surface.h" />
     <ClInclude Include="Code\Swapchain\Swapchain.h" />
@@ -281,6 +281,7 @@
     <ClCompile Include="Code\Shadows\Shadows.cpp" />
     <ClCompile Include="Code\Skybox\Skybox.cpp" />
     <ClCompile Include="Code\SSAO\SSAO.cpp" />
+    <ClCompile Include="Code\SSDO\SSDO.cpp" />
     <ClCompile Include="Code\SSR\SSR.cpp" />
     <ClCompile Include="Code\Swapchain\Swapchain.cpp" />
     <ClCompile Include="Code\Terrain\Terrain.cpp" />

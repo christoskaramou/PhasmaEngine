@@ -1,3 +1,4 @@
+glslangValidator.exe -V Common/quad.vert -o Common/vert.spv
 glslangValidator.exe -V GUI/shaderGUI.vert -o GUI/vert.spv
 glslangValidator.exe -V GUI/shaderGUI.frag -o GUI/frag.spv
 glslangValidator.exe -V Shadows/shaderShadows.vert -o Shadows/vert.spv
@@ -9,12 +10,10 @@ glslangValidator.exe -V Deferred/gBuffer.vert -o Deferred/vert.spv
 glslangValidator.exe -V Deferred/gBuffer.frag -o Deferred/frag.spv
 glslangValidator.exe -V Deferred/composition.vert -o Deferred/cvert.spv
 glslangValidator.exe -V Deferred/composition.frag -o Deferred/cfrag.spv
-glslangValidator.exe -V SSR/ssr.vert -o SSR/vert.spv
 glslangValidator.exe -V SSR/ssr.frag -o SSR/frag.spv
 glslangValidator.exe -V Compute/shader.comp -o Compute/comp.spv
-glslangValidator.exe -V SSAO/ssao.vert -o SSAO/vert.spv
 glslangValidator.exe -V SSAO/ssao.frag -o SSAO/frag.spv
-glslangValidator.exe -V SSAO/ssaoBlur.vert -o SSAO/vertBlur.spv
 glslangValidator.exe -V SSAO/ssaoBlur.frag -o SSAO/fragBlur.spv
-glslangValidator.exe -V MotionBlur/motionBlur.vert -o MotionBlur/vert.spv
+glslangValidator.exe -V SSDO/ssdo.frag -o SSDO/frag.spv
+glslangValidator.exe -V SSDO/ssdoBlur.frag -o SSDO/fragBlur.spv
 glslangValidator.exe -V MotionBlur/motionBlur.frag -o MotionBlur/frag.spv

@@ -47,6 +47,8 @@ void Context::initRendering()
 	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
 	addRenderTarget("ssao", vk::Format::eR16Unorm);
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
+	addRenderTarget("ssdo", vk::Format::eR32G32B32A32Sfloat);
+	addRenderTarget("ssdoBlur", vk::Format::eR32G32B32A32Sfloat);
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
@@ -56,6 +58,8 @@ void Context::initRendering()
 	deferred.compositionRenderPass = createCompositionRenderPass();
 	ssao.renderPass = createSSAORenderPass();
 	ssao.blurRenderPass = createSSAOBlurRenderPass();
+	ssdo.renderPass = createSSDORenderPass();
+	ssdo.blurRenderPass = createSSDOBlurRenderPass();
 	ssr.renderPass = createSSRRenderPass();
 	motionBlur.renderPass = createMotionBlurRenderPass();
 	gui.renderPass = createGUIRenderPass();
@@ -66,6 +70,8 @@ void Context::initRendering()
 	deferred.compositionFrameBuffers = createCompositionFrameBuffers();
 	ssao.frameBuffers = createSSAOFrameBuffers();
 	ssao.blurFrameBuffers = createSSAOBlurFrameBuffers();
+	ssdo.frameBuffers = createSSDOFrameBuffers();
+	ssdo.blurFrameBuffers = createSSDOBlurFrameBuffers();
 	ssr.frameBuffers = createSSRFrameBuffers();
 	motionBlur.frameBuffers = createMotionBlurFrameBuffers();
 	gui.frameBuffers = createGUIFrameBuffers();
@@ -78,6 +84,8 @@ void Context::initRendering()
 	deferred.pipelineComposition = createCompositionPipeline();
 	ssao.pipeline = createSSAOPipeline();
 	ssao.pipelineBlur = createSSAOBlurPipeline();
+	ssdo.pipeline = createSSDOPipeline();
+	ssdo.pipelineBlur = createSSDOBlurPipeline();
 	ssr.pipeline = createSSRPipeline();
 	motionBlur.pipeline = createMotionBlurPipeline();
 	compute.pipeline = createComputePipeline();
@@ -176,7 +184,9 @@ void Context::createUniforms()
 	getDescriptorSetLayoutLights();
 	lightUniforms.createLightUniforms();
 	// DESCRIPTOR SETS FOR SSAO
-	ssao.createSSAOUniforms(renderTargets);
+	ssao.createUniforms(renderTargets);
+	// DESCRIPTOR SETS FOR SSDO
+	ssdo.createUniforms(renderTargets);
 	// DESCRIPTOR SETS FOR COMPOSITION PIPELINE
 	deferred.createDeferredUniforms(renderTargets, lightUniforms);
 	// DESCRIPTOR SET FOR REFLECTION PIPELINE
@@ -850,6 +860,116 @@ vk::RenderPass Context::createSSAOBlurRenderPass()
 	return vulkan.device.createRenderPass(renderPassInfo);
 }
 
+vk::RenderPass Context::createSSDORenderPass()
+{
+	std::array<vk::AttachmentDescription, 1> attachments{};
+	// Color attachment
+	attachments[0].format = renderTargets["ssdo"].format;
+	attachments[0].samples = vk::SampleCountFlagBits::e1;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
+	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+
+	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
+
+	vk::SubpassDescription subpassDescription;
+	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+	subpassDescription.colorAttachmentCount = 1;
+	subpassDescription.pColorAttachments = &colorReference;
+	subpassDescription.pDepthStencilAttachment = nullptr;
+
+	// Subpass dependencies for layout transitions
+	std::vector<vk::SubpassDependency> dependencies{
+		vk::SubpassDependency{
+			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
+			0,														// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		},
+		vk::SubpassDependency{
+			0,														// uint32_t srcSubpass;
+			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		}
+	};
+
+	vk::RenderPassCreateInfo renderPassInfo = {};
+	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+	renderPassInfo.pAttachments = attachments.data();
+	renderPassInfo.subpassCount = 1;
+	renderPassInfo.pSubpasses = &subpassDescription;
+	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	renderPassInfo.pDependencies = dependencies.data();
+
+	return vulkan.device.createRenderPass(renderPassInfo);
+}
+
+vk::RenderPass Context::createSSDOBlurRenderPass()
+{
+	std::array<vk::AttachmentDescription, 1> attachments{};
+	// Color attachment
+	attachments[0].format = renderTargets["ssdoBlur"].format;
+	attachments[0].samples = vk::SampleCountFlagBits::e1;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
+	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
+	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+
+	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
+
+	vk::SubpassDescription subpassDescription;
+	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+	subpassDescription.colorAttachmentCount = 1;
+	subpassDescription.pColorAttachments = &colorReference;
+	subpassDescription.pDepthStencilAttachment = nullptr;
+
+	// Subpass dependencies for layout transitions
+	std::vector<vk::SubpassDependency> dependencies{
+		vk::SubpassDependency{
+			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
+			0,														// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		},
+		vk::SubpassDependency{
+			0,														// uint32_t srcSubpass;
+			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
+			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
+			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
+			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
+			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
+		}
+	};
+
+	vk::RenderPassCreateInfo renderPassInfo = {};
+	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+	renderPassInfo.pAttachments = attachments.data();
+	renderPassInfo.subpassCount = 1;
+	renderPassInfo.pSubpasses = &subpassDescription;
+	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	renderPassInfo.pDependencies = dependencies.data();
+
+	return vulkan.device.createRenderPass(renderPassInfo);
+}
+
 vk::RenderPass Context::createMotionBlurRenderPass()
 {
 	std::array<vk::AttachmentDescription, 1> attachments{};
@@ -1255,6 +1375,50 @@ std::vector<vk::Framebuffer> Context::createSSAOBlurFrameBuffers()
 
 		auto const fbci = vk::FramebufferCreateInfo()
 			.setRenderPass(ssao.blurRenderPass)
+			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+			.setPAttachments(attachments.data())
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
+			.setLayers(1);
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
+	}
+
+	return _frameBuffers;
+}
+
+std::vector<vk::Framebuffer> Context::createSSDOFrameBuffers()
+{
+	std::vector<vk::Framebuffer> _frameBuffers(vulkan.swapchain->images.size());
+
+	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
+		std::vector<vk::ImageView> attachments = {
+			renderTargets["ssdo"].view
+		};
+
+		auto const fbci = vk::FramebufferCreateInfo()
+			.setRenderPass(ssdo.renderPass)
+			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+			.setPAttachments(attachments.data())
+			.setWidth(WIDTH)
+			.setHeight(HEIGHT)
+			.setLayers(1);
+		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
+	}
+
+	return _frameBuffers;
+}
+
+std::vector<vk::Framebuffer> Context::createSSDOBlurFrameBuffers()
+{
+	std::vector<vk::Framebuffer> _frameBuffers(vulkan.swapchain->images.size());
+
+	for (size_t i = 0; i < _frameBuffers.size(); ++i) {
+		std::vector<vk::ImageView> attachments = {
+			renderTargets["ssdoBlur"].view
+		};
+
+		auto const fbci = vk::FramebufferCreateInfo()
+			.setRenderPass(ssdo.blurRenderPass)
 			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
 			.setPAttachments(attachments.data())
 			.setWidth(WIDTH)
@@ -1801,6 +1965,14 @@ Pipeline Context::createCompositionPipeline()
 				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
 				nullptr									//const Sampler* pImmutableSamplers;
 			},
+			// Binding 7: SSDO image
+			vk::DescriptorSetLayoutBinding{
+				7,										//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
+				1,										//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
+				nullptr									//const Sampler* pImmutableSamplers;
+			},
 		};
 
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
@@ -1859,7 +2031,7 @@ Pipeline Context::createSSRPipeline()
 	vk::ShaderModule vertModule;
 	vk::ShaderModule fragModule;
 	{
-		vertCode = readFile("shaders/SSR/vert.spv");
+		vertCode = readFile("shaders/Common/vert.spv");
 		fragCode = readFile("shaders/SSR/frag.spv");
 
 		vsmci = vk::ShaderModuleCreateInfo{
@@ -2084,7 +2256,7 @@ Pipeline Context::createSSAOPipeline()
 	vk::ShaderModule vertModule;
 	vk::ShaderModule fragModule;
 	{
-		vertCode = readFile("shaders/SSAO/vert.spv");
+		vertCode = readFile("shaders/Common/vert.spv");
 		fragCode = readFile("shaders/SSAO/frag.spv");
 
 		vsmci = vk::ShaderModuleCreateInfo{
@@ -2219,7 +2391,7 @@ Pipeline Context::createSSAOPipeline()
 	//};
 
 	// Pipeline Layout
-	if (!ssao.DSLayoutSSAO)
+	if (!ssao.DSLayout)
 	{// DescriptorSetLayout
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
 		{
@@ -2271,10 +2443,10 @@ Pipeline Context::createSSAOPipeline()
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
 
-		ssao.DSLayoutSSAO = vulkan.device.createDescriptorSetLayout(descriptorLayout);
+		ssao.DSLayout = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayoutSSAO };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayout };
 	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
 	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
 		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants } );
@@ -2314,7 +2486,7 @@ Pipeline Context::createSSAOBlurPipeline()
 	vk::ShaderModule vertModule;
 	vk::ShaderModule fragModule;
 	{
-		vertCode = readFile("shaders/SSAO/vertBlur.spv");
+		vertCode = readFile("shaders/Common/vert.spv");
 		fragCode = readFile("shaders/SSAO/fragBlur.spv");
 
 		vsmci = vk::ShaderModuleCreateInfo{
@@ -2444,7 +2616,7 @@ Pipeline Context::createSSAOBlurPipeline()
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
-	if (!ssao.DSLayoutSSAOBlur)
+	if (!ssao.DSLayoutBlur)
 	{// DescriptorSetLayout
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
 		{
@@ -2464,17 +2636,449 @@ Pipeline Context::createSSAOBlurPipeline()
 			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
 		};
 
-		ssao.DSLayoutSSAOBlur = vulkan.device.createDescriptorSetLayout(descriptorLayout);
+		ssao.DSLayoutBlur = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 
 	}
 
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayoutSSAOBlur };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayoutBlur };
 	vk::PushConstantRange pConstants = vk::PushConstantRange();//{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
 	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
 		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &pConstants } );
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = ssao.blurRenderPass;
+
+	// Subpass (Index of subpass this pipeline will be used in)
+	_pipeline.pipeinfo.subpass = 0;
+
+	// Base Pipeline Handle
+	_pipeline.pipeinfo.basePipelineHandle = nullptr;
+
+	// Base Pipeline Index
+	_pipeline.pipeinfo.basePipelineIndex = -1;
+
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo).at(0);
+
+	// destroy Shader Modules
+	vulkan.device.destroyShaderModule(vertModule);
+	vulkan.device.destroyShaderModule(fragModule);
+
+	return _pipeline;
+}
+
+Pipeline Context::createSSDOPipeline()
+{
+	Pipeline _pipeline;
+
+	// Shader stages
+	std::vector<char> vertCode{};
+	std::vector<char> fragCode{};
+
+	vk::ShaderModuleCreateInfo vsmci;
+	vk::ShaderModuleCreateInfo fsmci;
+
+	vk::ShaderModule vertModule;
+	vk::ShaderModule fragModule;
+	{
+		vertCode = readFile("shaders/Common/vert.spv");
+		fragCode = readFile("shaders/SSDO/frag.spv");
+
+		vsmci = vk::ShaderModuleCreateInfo{
+			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
+			vertCode.size(),									// size_t codeSize;
+			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
+		};
+		fsmci = vk::ShaderModuleCreateInfo{
+			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
+			fragCode.size(),									// size_t codeSize;
+			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
+		};
+		vertModule = vulkan.device.createShaderModule(vsmci);
+		fragModule = vulkan.device.createShaderModule(fsmci);
+	}
+
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{
+		vk::PipelineShaderStageCreateInfo{
+			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
+			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
+			vertModule,								// ShaderModule module;
+			"main",									// const char* pName;
+			nullptr									// const SpecializationInfo* pSpecializationInfo;
+		},
+		vk::PipelineShaderStageCreateInfo{
+			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
+			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
+			fragModule,								// ShaderModule module;
+			"main",									// const char* pName;
+			nullptr									// const SpecializationInfo* pSpecializationInfo;
+		}
+	};
+	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
+	_pipeline.pipeinfo.pStages = stages.data();
+
+	// Vertex Input state
+	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+
+	// Input Assembly stage
+	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
+		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
+		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
+		VK_FALSE										// Bool32 primitiveRestartEnable;
+	};
+
+	// Viewports and Scissors
+	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
+		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
+		1,													// uint32_t viewportCount;
+		&vk::Viewport{										// const Viewport* pViewports;
+			0.0f,												// float x;
+			0.0f,												// float y;
+			WIDTH_f,											// float width;
+			HEIGHT_f,											// float height;
+			0.0f,												// float minDepth;
+			1.0f },												// float maxDepth;
+		1,													// uint32_t scissorCount;
+		&vk::Rect2D{										// const Rect2D* pScissors;
+			vk::Offset2D(),										// Offset2D offset;
+			vulkan.surface->actualExtent }								// Extent2D extent;
+	};
+
+	// Rasterization state
+	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
+		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
+		VK_FALSE,										// Bool32 depthClampEnable;
+		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
+		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
+		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
+		vk::FrontFace::eClockwise,						// FrontFace frontFace;
+		VK_FALSE,										// Bool32 depthBiasEnable;
+		0.0f,											// float depthBiasConstantFactor;
+		0.0f,											// float depthBiasClamp;
+		0.0f,											// float depthBiasSlopeFactor;
+		1.0f											// float lineWidth;
+	};
+
+	// Multisample state
+	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
+		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
+		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
+		VK_FALSE,									// Bool32 sampleShadingEnable;
+		1.0f,										// float minSampleShading;
+		nullptr,									// const SampleMask* pSampleMask;
+		VK_FALSE,									// Bool32 alphaToCoverageEnable;
+		VK_FALSE									// Bool32 alphaToOneEnable;
+	};
+
+	// Depth and stencil state
+	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
+		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
+		VK_TRUE,													// Bool32 depthTestEnable;
+		VK_TRUE,													// Bool32 depthWriteEnable;
+		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
+		VK_FALSE,													// Bool32 depthBoundsTestEnable;
+		VK_FALSE,													// Bool32 stencilTestEnable;
+		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
+		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
+		0.0f,														// float minDepthBounds;
+		0.0f														// float maxDepthBounds;
+	};
+
+	// Color Blending state
+	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
+		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
+		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
+		vk::LogicOp::eCopy,										// LogicOp logicOp;
+		1,														// uint32_t attachmentCount;
+		&vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
+			VK_TRUE,												// Bool32 blendEnable;
+			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
+			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
+			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
+			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
+			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
+			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
+			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
+			vk::ColorComponentFlagBits::eG |
+			vk::ColorComponentFlagBits::eB |
+			vk::ColorComponentFlagBits::eA
+		},
+		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
+	};
+
+	// Dynamic state
+	//std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	_pipeline.pipeinfo.pDynamicState = nullptr;
+	//&vk::PipelineDynamicStateCreateInfo{
+	//		vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
+	//		static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
+	//		dynamicStates.data()							//const DynamicState* pDynamicStates;
+	//};
+
+	// Pipeline Layout
+	if (!ssdo.DSLayout)
+	{// DescriptorSetLayout
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
+		{
+			// Binding 0: Positions image sampler  
+			vk::DescriptorSetLayoutBinding{
+				0,											//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			},
+			// Binding 1: Normals image sampler  
+			vk::DescriptorSetLayoutBinding{
+				1,											//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			},
+			// Binding 2: Noise image sampler  
+			vk::DescriptorSetLayoutBinding{
+				2,											//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			},
+			// Binding 3: Kernel Uniform
+			vk::DescriptorSetLayoutBinding{
+				3,											//uint32_t binding;
+				vk::DescriptorType::eUniformBuffer,			//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			},
+			// Binding 4: PVM Uniform
+			vk::DescriptorSetLayoutBinding{
+				4,											//uint32_t binding;
+				vk::DescriptorType::eUniformBuffer,			//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			}
+		};
+
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
+			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
+			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
+			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		};
+
+		ssdo.DSLayout = vulkan.device.createDescriptorSetLayout(descriptorLayout);
+	}
+
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssdo.DSLayout };
+	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
+
+	// Render Pass
+	_pipeline.pipeinfo.renderPass = ssdo.renderPass;
+
+	// Subpass (Index of subpass this pipeline will be used in)
+	_pipeline.pipeinfo.subpass = 0;
+
+	// Base Pipeline Handle
+	_pipeline.pipeinfo.basePipelineHandle = nullptr;
+
+	// Base Pipeline Index
+	_pipeline.pipeinfo.basePipelineIndex = -1;
+
+	_pipeline.pipeline = vulkan.device.createGraphicsPipelines(nullptr, _pipeline.pipeinfo).at(0);
+
+	// destroy Shader Modules
+	vulkan.device.destroyShaderModule(vertModule);
+	vulkan.device.destroyShaderModule(fragModule);
+
+	return _pipeline;
+}
+
+Pipeline Context::createSSDOBlurPipeline()
+{
+	Pipeline _pipeline;
+
+	// Shader stages
+	std::vector<char> vertCode{};
+	std::vector<char> fragCode{};
+
+	vk::ShaderModuleCreateInfo vsmci;
+	vk::ShaderModuleCreateInfo fsmci;
+
+	vk::ShaderModule vertModule;
+	vk::ShaderModule fragModule;
+	{
+		vertCode = readFile("shaders/Common/vert.spv");
+		fragCode = readFile("shaders/SSDO/fragBlur.spv");
+
+		vsmci = vk::ShaderModuleCreateInfo{
+			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
+			vertCode.size(),									// size_t codeSize;
+			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
+		};
+		fsmci = vk::ShaderModuleCreateInfo{
+			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
+			fragCode.size(),									// size_t codeSize;
+			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
+		};
+		vertModule = vulkan.device.createShaderModule(vsmci);
+		fragModule = vulkan.device.createShaderModule(fsmci);
+	}
+
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{
+		vk::PipelineShaderStageCreateInfo{
+			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
+			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
+			vertModule,								// ShaderModule module;
+			"main",									// const char* pName;
+			nullptr									// const SpecializationInfo* pSpecializationInfo;
+		},
+		vk::PipelineShaderStageCreateInfo{
+			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
+			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
+			fragModule,								// ShaderModule module;
+			"main",									// const char* pName;
+			nullptr									// const SpecializationInfo* pSpecializationInfo;
+		}
+	};
+	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
+	_pipeline.pipeinfo.pStages = stages.data();
+
+	// Vertex Input state
+	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+
+	// Input Assembly stage
+	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
+		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
+		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
+		VK_FALSE										// Bool32 primitiveRestartEnable;
+	};
+
+	// Viewports and Scissors
+	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
+		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
+		1,													// uint32_t viewportCount;
+		&vk::Viewport{										// const Viewport* pViewports;
+			0.0f,												// float x;
+			0.0f,												// float y;
+			WIDTH_f, 											// float width;
+			HEIGHT_f,											// float height;
+			0.0f,												// float minDepth;
+			1.0f },												// float maxDepth;
+		1,													// uint32_t scissorCount;
+		&vk::Rect2D{										// const Rect2D* pScissors;
+			vk::Offset2D(),										// Offset2D offset;
+			vulkan.surface->actualExtent }								// Extent2D extent;
+	};
+
+	// Rasterization state
+	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
+		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
+		VK_FALSE,										// Bool32 depthClampEnable;
+		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
+		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
+		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
+		vk::FrontFace::eClockwise,						// FrontFace frontFace;
+		VK_FALSE,										// Bool32 depthBiasEnable;
+		0.0f,											// float depthBiasConstantFactor;
+		0.0f,											// float depthBiasClamp;
+		0.0f,											// float depthBiasSlopeFactor;
+		1.0f											// float lineWidth;
+	};
+
+	// Multisample state
+	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
+		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
+		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
+		VK_FALSE,									// Bool32 sampleShadingEnable;
+		1.0f,										// float minSampleShading;
+		nullptr,									// const SampleMask* pSampleMask;
+		VK_FALSE,									// Bool32 alphaToCoverageEnable;
+		VK_FALSE									// Bool32 alphaToOneEnable;
+	};
+
+	// Depth and stencil state
+	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
+		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
+		VK_TRUE,													// Bool32 depthTestEnable;
+		VK_TRUE,													// Bool32 depthWriteEnable;
+		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
+		VK_FALSE,													// Bool32 depthBoundsTestEnable;
+		VK_FALSE,													// Bool32 stencilTestEnable;
+		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
+		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
+		0.0f,														// float minDepthBounds;
+		0.0f														// float maxDepthBounds;
+	};
+
+	// Color Blending state
+	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
+		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
+		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
+		vk::LogicOp::eCopy,										// LogicOp logicOp;
+		1,														// uint32_t attachmentCount;
+		&vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
+			VK_TRUE,												// Bool32 blendEnable;
+			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
+			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
+			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
+			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
+			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
+			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
+			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
+			vk::ColorComponentFlagBits::eG |
+			vk::ColorComponentFlagBits::eB |
+			vk::ColorComponentFlagBits::eA
+		},
+		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
+	};
+
+	// Dynamic state
+	//std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	_pipeline.pipeinfo.pDynamicState = nullptr;
+
+	// Pipeline Layout
+	if (!ssdo.DSLayoutBlur)
+	{// DescriptorSetLayout
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
+		{
+			// Binding 0: SSDO image sampler  
+			vk::DescriptorSetLayoutBinding{
+				0,											//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			},
+			// Binding 1: Normal image sampler  
+			vk::DescriptorSetLayoutBinding{
+				1,											//uint32_t binding;
+				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
+				1,											//uint32_t descriptorCount;
+				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
+				nullptr										//const Sampler* pImmutableSamplers;
+			}
+		};
+
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
+			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
+			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
+			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		};
+
+		ssdo.DSLayoutBlur = vulkan.device.createDescriptorSetLayout(descriptorLayout);
+
+	}
+
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssdo.DSLayoutBlur };
+	vk::PushConstantRange pConstants = vk::PushConstantRange();//{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &pConstants });
+
+	// Render Pass
+	_pipeline.pipeinfo.renderPass = ssdo.blurRenderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	_pipeline.pipeinfo.subpass = 0;
@@ -2508,7 +3112,7 @@ Pipeline Context::createMotionBlurPipeline()
 	vk::ShaderModule vertModule;
 	vk::ShaderModule fragModule;
 	{
-		vertCode = readFile("shaders/MotionBlur/vert.spv");
+		vertCode = readFile("shaders/Common/vert.spv");
 		fragCode = readFile("shaders/MotionBlur/frag.spv");
 
 		vsmci = vk::ShaderModuleCreateInfo{
@@ -2945,6 +3549,26 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	ssao.pipeline.destroy();
 	ssao.pipelineBlur.destroy();
 
+	// SSDO
+	if (ssdo.renderPass) {
+		vulkan.device.destroyRenderPass(ssdo.renderPass);
+	}
+	if (ssdo.blurRenderPass) {
+		vulkan.device.destroyRenderPass(ssdo.blurRenderPass);
+	}
+	for (auto &frameBuffer : ssdo.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	for (auto &frameBuffer : ssdo.blurFrameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	ssdo.pipeline.destroy();
+	ssdo.pipelineBlur.destroy();
+
 	// terrain
 	terrain.pipeline.destroy();
 	
@@ -2974,6 +3598,8 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
 	addRenderTarget("ssao", vk::Format::eR16Unorm);
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
+	addRenderTarget("ssdo", vk::Format::eR32G32B32A32Sfloat);
+	addRenderTarget("ssdoBlur", vk::Format::eR32G32B32A32Sfloat);
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
@@ -3003,6 +3629,14 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	ssao.pipeline = createSSAOPipeline();
 	ssao.pipelineBlur = createSSAOBlurPipeline();
 	ssao.updateDescriptorSets(renderTargets);
+
+	ssdo.renderPass = createSSDORenderPass();
+	ssdo.blurRenderPass = createSSDOBlurRenderPass();
+	ssdo.frameBuffers = createSSDOFrameBuffers();
+	ssdo.blurFrameBuffers = createSSDOBlurFrameBuffers();
+	ssdo.pipeline = createSSDOPipeline();
+	ssdo.pipelineBlur = createSSDOBlurPipeline();
+	ssdo.updateDescriptorSets(renderTargets);
 
 	gui.renderPass = createGUIRenderPass();
 	gui.frameBuffers = createGUIFrameBuffers();

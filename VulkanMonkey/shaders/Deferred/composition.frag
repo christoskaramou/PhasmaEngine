@@ -23,7 +23,9 @@ void main()
 	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj, screenSpace.size);
 	vec3 normal = texture(samplerNormal, inUV).xyz;
 	vec4 albedo = texture(samplerAlbedo, inUV);
-	float oclusion = texture(ssaoBlurSampler, inUV).x;
+	float ssao = texture(ssaoBlurSampler, inUV).x;
+	vec3 ssdo = texture(ssdoBlurSampler, inUV).xyz;
+	
 	vec3 roughMet = texture(samplerRoughMet, inUV).xyz;
 
 	Material material;
@@ -41,11 +43,23 @@ void main()
 
 	// SSAO
 	if (screenSpace.effect.x > 0.5f)
-		fragColor *= oclusion;
-	fragColor += calculateShadowAndDirectLight(material, fragPos, ubo.camPos.xyz, normal);
+		fragColor *= ssao;
+
+	// SSDO
+	float light_occlusion = 1.0;
+	//if (screenSpace.effect.z > 0.5){
+	//	vec3 lightDir = normalize(-ubo.lights[0].position.xyz);
+	//	light_occlusion = 1.0-clamp(dot(lightDir, ssdo), 0.0, 1.0);
+	//}
+	fragColor += calculateShadowAndDirectLight(material, fragPos, ubo.camPos.xyz, normal) * light_occlusion;
 
 	for(int i = 1; i < NUM_LIGHTS+1; ++i){
-		fragColor += compute_point_light(i, material, fragPos, ubo.camPos.xyz, normal);
+		light_occlusion = 1.0;
+		//if (screenSpace.effect.z > 0.5){
+		//	vec3 lightDir = ubo.lights[i].position.xyz - fragPos;
+		//	light_occlusion = 1.0-clamp(dot(lightDir, ssdo), 0.0, 1.0);
+		//}
+		fragColor += compute_point_light(i, material, fragPos, ubo.camPos.xyz, normal) * light_occlusion;
 	}
 
 	outColor = vec4(fragColor, albedo.a);
@@ -122,5 +136,5 @@ vec3 calculateShadowAndDirectLight(Material material, vec3 world_pos, vec3 camer
 	vec3 diffuse_light = diffref * material.albedo * (1.0 - material.metallic);
 	vec3 lighting = reflected_light + diffuse_light;
 
-	return lighting * 3.0;
+	return lighting;
 }

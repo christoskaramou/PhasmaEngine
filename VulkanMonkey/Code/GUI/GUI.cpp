@@ -7,6 +7,7 @@ ImVec2						GUI::winSize = ImVec2();
 bool						GUI::lock_render_window = true;
 bool						GUI::show_ssr = true;
 bool						GUI::show_ssao = true;
+bool						GUI::show_ssdo = true;
 bool						GUI::show_motionBlur = true;
 bool						GUI::shadow_cast = true;
 bool						GUI::randomize_lights = false;
@@ -80,6 +81,7 @@ void GUI::showOptions()
 	ImGui::Checkbox("Lock Render Window", &lock_render_window);
 	ImGui::Checkbox("SSR", &show_ssr);
 	ImGui::Checkbox("SSAO", &show_ssao);
+	//ImGui::Checkbox("SSDO", &show_ssdo);
 	ImGui::Checkbox("Motion Blur", &show_motionBlur);
 	ImGui::Checkbox("Sun Light", &shadow_cast);
 	ImGui::Separator();

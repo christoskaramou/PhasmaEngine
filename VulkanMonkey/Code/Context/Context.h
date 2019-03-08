@@ -19,6 +19,7 @@
 #include "../Model/Model.h"
 #include "../Camera/Camera.h"
 #include "../SSAO/SSAO.h"
+#include "../SSDO/SSDO.h"
 #include "../SSR/SSR.h"
 #include "../MotionBlur/MotionBlur.h"
 #include "../Deferred/Deferred.h"
@@ -53,6 +54,9 @@ namespace vm {
 
 		// SSAO
 		SSAO ssao;
+
+		// SSDO
+		SSDO ssdo;
 
 		// SSR
 		SSR ssr;
@@ -124,6 +128,8 @@ namespace vm {
 		vk::RenderPass createCompositionRenderPass();
 		vk::RenderPass createSSAORenderPass();
 		vk::RenderPass createSSAOBlurRenderPass();
+		vk::RenderPass createSSDORenderPass();
+		vk::RenderPass createSSDOBlurRenderPass();
 		vk::RenderPass createSSRRenderPass();
 		vk::RenderPass createMotionBlurRenderPass();
 		vk::RenderPass createGUIRenderPass();
@@ -136,6 +142,8 @@ namespace vm {
 		std::vector<vk::Framebuffer> createSSRFrameBuffers();
 		std::vector<vk::Framebuffer> createSSAOFrameBuffers();
 		std::vector<vk::Framebuffer> createSSAOBlurFrameBuffers();
+		std::vector<vk::Framebuffer> createSSDOFrameBuffers();
+		std::vector<vk::Framebuffer> createSSDOBlurFrameBuffers();
 		std::vector<vk::Framebuffer> createMotionBlurFrameBuffers();
 		std::vector<vk::Framebuffer> createGUIFrameBuffers();
 		std::vector<vk::Framebuffer> createShadowsFrameBuffers();
@@ -147,6 +155,8 @@ namespace vm {
 		Pipeline createSSRPipeline();
 		Pipeline createSSAOPipeline();
 		Pipeline createSSAOBlurPipeline();
+		Pipeline createSSDOPipeline();
+		Pipeline createSSDOBlurPipeline();
 		Pipeline createMotionBlurPipeline();
 		Pipeline createComputePipeline();
 		vk::DescriptorPool createDescriptorPool(const uint32_t maxDescriptorSets);

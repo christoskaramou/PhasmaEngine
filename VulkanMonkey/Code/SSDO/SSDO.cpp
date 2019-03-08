@@ -1,8 +1,8 @@
-#include "SSAO.h"
+#include "SSDO.h"
 
 using namespace vm;
 
-void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
+void SSDO::createUniforms(std::map<std::string, Image>& renderTargets)
 {
 	// kernel buffer
 	std::vector<vec4> kernel{};
@@ -63,8 +63,8 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
 	vk::DescriptorImageInfo texDescriptor = vk::DescriptorImageInfo{
-		renderTargets["ssao"].sampler,			//Sampler sampler;
-		renderTargets["ssao"].view,				//ImageView imageView;
+		renderTargets["ssdo"].sampler,			//Sampler sampler;
+		renderTargets["ssdo"].view,				//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
 	std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
@@ -90,7 +90,7 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
 		},
-		// Binding 2: SSAO Noise Image
+		// Binding 2: SSDO Noise Image
 		vk::WriteDescriptorSet{
 			DSet,								//DescriptorSet dstSet;
 			2,										//uint32_t dstBinding;
@@ -104,7 +104,7 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
 		},
-		// Binding 3: SSAO Kernel
+		// Binding 3: SSDO Kernel
 		vk::WriteDescriptorSet{
 			DSet,								//DescriptorSet dstSet;
 			3,										//uint32_t dstBinding;
@@ -135,7 +135,7 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	};
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 
-	// DESCRIPTOR SET FOR SSAO BLUR
+	// DESCRIPTOR SET FOR SSDO BLUR
 	vk::DescriptorSetAllocateInfo allocInfoBlur = vk::DescriptorSetAllocateInfo{
 		vulkan->descriptorPool,						//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
@@ -155,12 +155,23 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 			&texDescriptor,					//const DescriptorImageInfo* pImageInfo;
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
+		},
+		// Binding 1: Normals texture
+		vk::WriteDescriptorSet{
+			DSBlur,									//DescriptorSet dstSet;
+			1,										//uint32_t dstBinding;
+			0,										//uint32_t dstArrayElement;
+			1,										//uint32_t descriptorCount_;
+			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
+			&texDescriptorNormal,					//const DescriptorImageInfo* pImageInfo;
+			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
+			nullptr									//const BufferView* pTexelBufferView;
 		}
 	};
 	vulkan->device.updateDescriptorSets(writeDescriptorSetsBlur, nullptr);
 }
 
-void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
+void SSDO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
 	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
 		renderTargets["depth"].sampler,		//Sampler sampler;
@@ -173,8 +184,8 @@ void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
 	vk::DescriptorImageInfo texDescriptor = vk::DescriptorImageInfo{
-		renderTargets["ssao"].sampler,			//Sampler sampler;
-		renderTargets["ssao"].view,				//ImageView imageView;
+		renderTargets["ssdo"].sampler,			//Sampler sampler;
+		renderTargets["ssdo"].view,				//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
 	std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
@@ -200,7 +211,7 @@ void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
 		},
-		// Binding 2: SSAO Noise Image
+		// Binding 2: SSDO Noise Image
 		vk::WriteDescriptorSet{
 			DSet,								//DescriptorSet dstSet;
 			2,										//uint32_t dstBinding;
@@ -214,7 +225,7 @@ void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
 		},
-		// Binding 3: SSAO Kernel
+		// Binding 3: SSDO Kernel
 		vk::WriteDescriptorSet{
 			DSet,								//DescriptorSet dstSet;
 			3,										//uint32_t dstBinding;
@@ -247,14 +258,25 @@ void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 
 
 	std::vector<vk::WriteDescriptorSet> writeDescriptorSetsBlur = {
-		// Binding 0: Position texture target
+		// Binding 0: SSDO texture
 		vk::WriteDescriptorSet{
-			DSBlur,							//DescriptorSet dstSet;
+			DSBlur,									//DescriptorSet dstSet;
 			0,										//uint32_t dstBinding;
 			0,										//uint32_t dstArrayElement;
 			1,										//uint32_t descriptorCount_;
 			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptor,					//const DescriptorImageInfo* pImageInfo;
+			&texDescriptor,							//const DescriptorImageInfo* pImageInfo;
+			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
+			nullptr									//const BufferView* pTexelBufferView;
+		},
+		// Binding 1: Normals texture
+		vk::WriteDescriptorSet{
+			DSBlur,									//DescriptorSet dstSet;
+			1,										//uint32_t dstBinding;
+			0,										//uint32_t dstArrayElement;
+			1,										//uint32_t descriptorCount_;
+			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
+			&texDescriptorNormal,					//const DescriptorImageInfo* pImageInfo;
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
 		}
@@ -262,81 +284,9 @@ void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	vulkan->device.updateDescriptorSets(writeDescriptorSetsBlur, nullptr);
 }
 
-void SSAO::draw(uint32_t imageIndex, const vec2 UVOffset[2])
+void SSDO::update(Camera& camera)
 {
-	// SSAO image
-	std::vector<vk::ClearValue> clearValues = {
-		vk::ClearColorValue().setFloat32(GUI::clearColor)
-	};
-	auto renderPassInfo = vk::RenderPassBeginInfo()
-		.setRenderPass(renderPass)
-		.setFramebuffer(frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
-		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
-		.setPClearValues(clearValues.data());
-	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vec2), UVOffset);
-	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-	const vk::DescriptorSet descriptorSets = { DSet };
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSets, nullptr);
-	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
-	vulkan->dynamicCmdBuffer.endRenderPass();
-
-	// new blurry SSAO image
-	std::vector<vk::ClearValue> clearValuesBlur = {
-	vk::ClearColorValue().setFloat32(GUI::clearColor) };
-	auto renderPassInfoBlur = vk::RenderPassBeginInfo()
-		.setRenderPass(blurRenderPass)
-		.setFramebuffer(blurFrameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
-		.setClearValueCount(static_cast<uint32_t>(clearValuesBlur.size()))
-		.setPClearValues(clearValuesBlur.data());
-	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfoBlur, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeline);
-	const vk::DescriptorSet descriptorSetsBlur = { DSBlur };
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeinfo.layout, 0, descriptorSetsBlur, nullptr);
-	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
-	vulkan->dynamicCmdBuffer.endRenderPass();
-}
-
-void SSAO::destroy()
-{
-	UB_Kernel.destroy();
-	UB_PVM.destroy();
-	noiseTex.destroy();
-	if (renderPass) {
-		vulkan->device.destroyRenderPass(renderPass);
-		renderPass = nullptr;
-	}
-	if (blurRenderPass) {
-		vulkan->device.destroyRenderPass(blurRenderPass);
-		blurRenderPass = nullptr;
-	}
-	for (auto &frameBuffer : frameBuffers) {
-		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	for (auto &frameBuffer : blurFrameBuffers) {
-		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	pipeline.destroy();
-	pipelineBlur.destroy();
-	if (DSLayout) {
-		vulkan->device.destroyDescriptorSetLayout(DSLayout);
-		DSLayout = nullptr;
-	}
-	if (DSLayoutBlur) {
-		vulkan->device.destroyDescriptorSetLayout(DSLayoutBlur);
-		DSLayoutBlur = nullptr;
-	}
-}
-
-void SSAO::update(Camera& camera)
-{
-	if (GUI::show_ssao) {
+	if (GUI::show_ssdo) {
 		mat4 pvm[3]{ camera.projection, camera.view, camera.invProjection };
 		memcpy(UB_PVM.data, pvm, sizeof(pvm));
 	}

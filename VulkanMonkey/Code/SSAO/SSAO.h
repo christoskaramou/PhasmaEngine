@@ -15,18 +15,18 @@ namespace vm {
 	{
 		VulkanContext* vulkan = &VulkanContext::get();
 
-		Buffer UBssaoKernel;
-		Buffer UBssaoPVM;
-		Image ssaoNoise;
+		Buffer UB_Kernel;
+		Buffer UB_PVM;
+		Image noiseTex;
 		vk::RenderPass renderPass, blurRenderPass;
 		std::vector<vk::Framebuffer> frameBuffers{}, blurFrameBuffers{};
 		Pipeline pipeline;
 		Pipeline pipelineBlur;
-		vk::DescriptorSetLayout DSLayoutSSAO, DSLayoutSSAOBlur;
-		vk::DescriptorSet DSssao, DSssaoBlur;
+		vk::DescriptorSetLayout DSLayout, DSLayoutBlur;
+		vk::DescriptorSet DSet, DSBlur;
 
 		void update(Camera& camera);
-		void createSSAOUniforms(std::map<std::string, Image>& renderTargets);
+		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void draw(uint32_t imageIndex, const vec2 UVOffset[2]);
 		void destroy();

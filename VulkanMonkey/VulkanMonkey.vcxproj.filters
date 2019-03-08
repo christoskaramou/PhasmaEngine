@@ -25,9 +25,6 @@
     <None Include="shaders\MotionBlur\motionBlur.frag">
       <Filter>Shaders\MotionBlur</Filter>
     </None>
-    <None Include="shaders\MotionBlur\motionBlur.vert">
-      <Filter>Shaders\MotionBlur</Filter>
-    </None>
     <None Include="shaders\Shadows\shaderShadows.vert">
       <Filter>Shaders\Shadows</Filter>
     </None>
@@ -40,19 +37,10 @@
     <None Include="shaders\SSAO\ssao.frag">
       <Filter>Shaders\SSAO</Filter>
     </None>
-    <None Include="shaders\SSAO\ssao.vert">
-      <Filter>Shaders\SSAO</Filter>
-    </None>
     <None Include="shaders\SSAO\ssaoBlur.frag">
       <Filter>Shaders\SSAO</Filter>
     </None>
-    <None Include="shaders\SSAO\ssaoBlur.vert">
-      <Filter>Shaders\SSAO</Filter>
-    </None>
     <None Include="shaders\SSR\ssr.frag">
-      <Filter>Shaders\SSR</Filter>
-    </None>
-    <None Include="shaders\SSR\ssr.vert">
       <Filter>Shaders\SSR</Filter>
     </None>
     <None Include="shaders\Terrain\shaderTerrain.frag">
@@ -60,6 +48,15 @@
     </None>
     <None Include="shaders\Terrain\shaderTerrain.vert">
       <Filter>Shaders\Terrain</Filter>
+    </None>
+    <None Include="shaders\Common\quad.vert">
+      <Filter>Shaders\Common</Filter>
+    </None>
+    <None Include="shaders\SSDO\ssdo.frag">
+      <Filter>Shaders\SSDO</Filter>
+    </None>
+    <None Include="shaders\SSDO\ssdoBlur.frag">
+      <Filter>Shaders\SSDO</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -210,6 +207,9 @@
     <ClInclude Include="shaders\Common\common.h">
       <Filter>Shaders\Common</Filter>
     </ClInclude>
+    <ClInclude Include="Code\SSDO\SSDO.h">
+      <Filter>Code\SSDO</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -328,6 +328,9 @@
     </ClCompile>
     <ClCompile Include="Code\Model\Animation.cpp">
       <Filter>Code\Model</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\SSDO\SSDO.cpp">
+      <Filter>Code\SSDO</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -471,6 +474,12 @@
     </Filter>
     <Filter Include="Shaders\Common">
       <UniqueIdentifier>{5d60448e-2b32-4522-a38d-e6bd5a9398b2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\SSDO">
+      <UniqueIdentifier>{7af4491f-6706-430d-a1b2-c4bbf11a2826}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\SSDO">
+      <UniqueIdentifier>{d0a507f4-8ecb-4f58-aca4-9b4573e1998d}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

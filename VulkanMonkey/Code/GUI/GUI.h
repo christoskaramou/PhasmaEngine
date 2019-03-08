@@ -20,6 +20,7 @@ namespace vm {
 		static bool			lock_render_window;
 		static bool			show_ssr;
 		static bool			show_ssao;
+		static bool			show_ssdo;
 		static bool			show_motionBlur;
 		static bool			shadow_cast;
 		static bool			randomize_lights;

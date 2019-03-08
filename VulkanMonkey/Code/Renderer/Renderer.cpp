@@ -38,6 +38,7 @@ Renderer::~Renderer()
 	ctx.compute.destroy();
 	ctx.deferred.destroy();
 	ctx.ssao.destroy();
+	ctx.ssdo.destroy();
 	ctx.ssr.destroy();
 	ctx.motionBlur.destroy();
 	ctx.skyBox.destroy();
@@ -93,6 +94,9 @@ void Renderer::update(float delta)
 
 	// SSAO
 	ctx.ssao.update(ctx.camera_main);
+
+	// SSDO
+	//ctx.ssdo.update(ctx.camera_main);
 
 	// SSR
 	ctx.ssr.update(ctx.camera_main);
@@ -160,6 +164,10 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao)
 			ctx.ssao.draw(imageIndex, UVOffset);
+
+		// SCREEN SPACE DIRECTIONAL OCCLUSION
+		//if (GUI::show_ssdo)
+		//	ctx.ssdo.draw(imageIndex, UVOffset);
 
 		// SCREEN SPACE REFLECTIONS
 		if (GUI::show_ssr)
