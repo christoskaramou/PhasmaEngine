@@ -13,6 +13,10 @@ bool						GUI::show_tonemapping = true;
 float						GUI::exposure = 1.0f;
 bool						GUI::show_FXAA = true;
 bool						GUI::show_Bloom = true;
+float						GUI::Bloom_Inv_brightness = 5.0f;
+float						GUI::Bloom_intensity = 3.0f;
+float						GUI::Bloom_range = 1.0f;
+float						GUI::Bloom_exposure = 1.1f;
 bool						GUI::dSetNeedsUpdate = false;
 bool						GUI::show_motionBlur = true;
 bool						GUI::shadow_cast = true;
@@ -95,6 +99,12 @@ void GUI::showOptions()
 		dSetNeedsUpdate = true;
 	if (ImGui::Checkbox("Bloom", &show_Bloom))
 		dSetNeedsUpdate = true;
+	if (show_Bloom) {
+		ImGui::InputFloat("Inv Brightness", &Bloom_Inv_brightness, 0.01f, 0.1f, 3);
+		ImGui::InputFloat("Intensity", &Bloom_intensity, 0.01f, 0.1f, 3);
+		ImGui::InputFloat("Range", &Bloom_range, 0.1f, 0.5f, 3);
+		ImGui::InputFloat("Exposure", &Bloom_exposure, 0.01f, 0.2f, 3);
+	}
 	ImGui::Separator();
 	if (ImGui::Button("Randomize Lights"))
 		randomize_lights = true;

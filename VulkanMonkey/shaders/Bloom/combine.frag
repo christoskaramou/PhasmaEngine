@@ -1,7 +1,11 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "../Common/tonemapping.glsl"
 
 layout (set = 0, binding = 0) uniform sampler2D compositionSampler;
 layout (set = 0, binding = 1) uniform sampler2D gaussianVerticalSampler;
+layout(push_constant) uniform Constants { float brightness; float intensity; float range; float exposure; } values;
 
 layout (location = 0) in vec2 inUV;
 
@@ -13,6 +17,7 @@ void main()
 	vec4 sceneColor = texture(compositionSampler, inUV);
 	vec4 bloom = vec4(texture(gaussianVerticalSampler, inUV).xyz, 0.0);
 
-	outColor = sceneColor + bloom * 0.2;
+	outColor = sceneColor + bloom * values.intensity;
+	outColor.xyz = ToneMapReinhard(outColor.xyz, values.exposure);
 	outComposition = outColor;
 }

@@ -25,6 +25,10 @@ namespace vm {
 		static float		exposure;
 		static bool			show_FXAA;
 		static bool			show_Bloom;
+		static float		Bloom_Inv_brightness;
+		static float		Bloom_intensity;
+		static float		Bloom_range;
+		static float		Bloom_exposure;
 		static bool			dSetNeedsUpdate;
 		static bool			show_motionBlur;
 		static bool			shadow_cast;

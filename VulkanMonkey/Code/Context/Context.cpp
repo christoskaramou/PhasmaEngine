@@ -2979,9 +2979,9 @@ Pipeline vm::Context::createBrightFilterPipeline()
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { bloom.DSLayoutBrightFilter };
-	vk::PushConstantRange pConstants = vk::PushConstantRange(); // { vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
+	vk::PushConstantRange pConstants = { vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
 	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &pConstants });
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = bloom.renderPassBrightFilter;
@@ -3175,9 +3175,9 @@ Pipeline vm::Context::createGaussianBlurHorizontalPipeline()
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { bloom.DSLayoutGaussianBlurHorizontal };
-	vk::PushConstantRange pConstants = vk::PushConstantRange();//{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
+	vk::PushConstantRange pConstants = { vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
 	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &pConstants });
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = bloom.renderPassGaussianBlur;
@@ -3371,9 +3371,9 @@ Pipeline vm::Context::createGaussianBlurVerticalPipeline()
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { bloom.DSLayoutGaussianBlurVertical };
-	vk::PushConstantRange pConstants = vk::PushConstantRange();//{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
+	vk::PushConstantRange pConstants = { vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
 	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &pConstants });
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = bloom.renderPassGaussianBlur;
@@ -3588,9 +3588,9 @@ Pipeline vm::Context::createCombinePipeline()
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { bloom.DSLayoutCombine };
-	vk::PushConstantRange pConstants = vk::PushConstantRange();//{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
+	vk::PushConstantRange pConstants = { vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
 	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &pConstants });
+		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = bloom.renderPassCombine;

@@ -177,6 +177,7 @@ void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[
 {
 	std::vector<vk::ClearValue> clearValues = {
 	vk::ClearColorValue().setFloat32(GUI::clearColor) };
+	vec4 values{ GUI::Bloom_Inv_brightness, GUI::Bloom_intensity, GUI::Bloom_range, GUI::Bloom_exposure };
 
 	auto renderPassInfo = vk::RenderPassBeginInfo()
 		.setRenderPass(renderPassBrightFilter)
@@ -185,8 +186,7 @@ void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-	//vec4 pos{UVOffset[0].x, UVOffset[0].y, UVOffset[1].x, UVOffset[1].y};
-	//vulkan->dynamicCmdBuffer.pushConstants(pipelineBrightFilter.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vec4), &pos);
+	vulkan->dynamicCmdBuffer.pushConstants(pipelineBrightFilter.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vec4), &values);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo.layout, 0, DSBrightFilter, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
@@ -199,6 +199,7 @@ void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+	vulkan->dynamicCmdBuffer.pushConstants(pipelineGaussianBlurHorizontal.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vec4), &values);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurHorizontal.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo.layout, 0, DSGaussianBlurHorizontal, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
@@ -211,6 +212,7 @@ void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[
 		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
 		.setPClearValues(clearValues.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+	vulkan->dynamicCmdBuffer.pushConstants(pipelineGaussianBlurVertical.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vec4), &values);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurVertical.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurVertical.pipeinfo.layout, 0, DSGaussianBlurVertical, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
@@ -226,6 +228,7 @@ void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[
 		.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
 		.setPClearValues(clearValues1.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+	vulkan->dynamicCmdBuffer.pushConstants(pipelineCombine.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(vec4), &values);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeinfo.layout, 0, DSCombine, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);

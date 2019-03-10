@@ -1,6 +1,7 @@
 #version 450
 
 layout (set = 0, binding = 0) uniform sampler2D gaussianBlurHorizontalSampler;
+layout(push_constant) uniform Constants { float brightness; float intensity; float range; float exposure; } values;
 
 layout (location = 0) in vec2 inUV;
 
@@ -9,7 +10,7 @@ layout (location = 0) out vec4 outColor;
 void main() 
 {
 	ivec2 texDim = textureSize(gaussianBlurHorizontalSampler, 0);
-	float texelSize = 8.0 / float(texDim.y);
+	float texelSize = values.range / float(texDim.y);
 	
 	vec2 coords[11];
 	for (int i=-5; i<= 5; i++){
