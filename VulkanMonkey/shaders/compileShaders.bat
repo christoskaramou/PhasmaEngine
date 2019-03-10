@@ -16,4 +16,9 @@ glslangValidator.exe -V SSAO/ssao.frag -o SSAO/frag.spv
 glslangValidator.exe -V SSAO/ssaoBlur.frag -o SSAO/fragBlur.spv
 glslangValidator.exe -V SSDO/ssdo.frag -o SSDO/frag.spv
 glslangValidator.exe -V SSDO/ssdoBlur.frag -o SSDO/fragBlur.spv
+glslangValidator.exe -V FXAA/FXAA.frag -o FXAA/frag.spv
+glslangValidator.exe -V Bloom/brightFilter.frag -o Bloom/fragBrightFilter.spv
+glslangValidator.exe -V Bloom/gaussianBlurHorizontal.frag -o Bloom/fragGaussianBlurHorizontal.spv
+glslangValidator.exe -V Bloom/gaussianBlurVertical.frag -o Bloom/fragGaussianBlurVertical.spv
+glslangValidator.exe -V Bloom/combine.frag -o Bloom/fragCombine.spv
 glslangValidator.exe -V MotionBlur/motionBlur.frag -o MotionBlur/frag.spv

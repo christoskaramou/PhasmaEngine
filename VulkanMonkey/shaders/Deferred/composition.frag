@@ -1,9 +1,9 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 
-#include "../Common/common.h"
-#include "../Common/tonemapping.h"
-#include "Light.h"
+#include "../Common/common.glsl"
+#include "../Common/tonemapping.glsl"
+#include "Light.glsl"
 
 layout (location = 0) in vec2 inUV;
 layout (location = 1) in float castShadows;
@@ -23,44 +23,30 @@ void main()
 {
 	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj, screenSpace.size);
 	vec3 normal = texture(samplerNormal, inUV).xyz;
-	vec4 albedo = texture(samplerAlbedo, inUV);
 	float ssao = texture(ssaoBlurSampler, inUV).x;
-	vec3 ssdo = texture(ssdoBlurSampler, inUV).xyz;
-	
 	vec3 roughMet = texture(samplerRoughMet, inUV).xyz;
-
+	vec4 albedo = texture(samplerAlbedo, inUV);
+	
 	Material material;
 	material.albedo = albedo.xyz;
 	material.roughness = roughMet.z;
 	material.metallic = roughMet.y;
 	material.F0 = mix(vec3(0.04f), material.albedo, material.metallic);
 
-	// Ambient	
-	float ratio = 1.00 / 1.52;
+	// Ambient
 	vec3 I = normalize(fragPos - ubo.camPos.xyz);
     vec3 R = reflect(I, normalize(normal));
 	vec3 envColor = (texture(cubemapSampler, R).xyz * (1.0 - material.roughness) * material.metallic); // very fake enviroment reflectance
-	vec3 fragColor = 0.3 * albedo.xyz + 0.2 * envColor;
+	vec3 fragColor = 0.3 * material.albedo.xyz + 0.2 * envColor;
 
 	// SSAO
 	if (screenSpace.effect.x > 0.5f)
 		fragColor *= ssao;
 
-	// SSDO
-	float light_occlusion = 1.0;
-	//if (screenSpace.effect.z > 0.5){
-	//	vec3 lightDir = normalize(-ubo.lights[0].position.xyz);
-	//	light_occlusion = 1.0-clamp(dot(lightDir, ssdo), 0.0, 1.0);
-	//}
-	fragColor += calculateShadowAndDirectLight(material, fragPos, ubo.camPos.xyz, normal) * light_occlusion;
+	fragColor += calculateShadowAndDirectLight(material, fragPos, ubo.camPos.xyz, normal);
 
 	for(int i = 1; i < NUM_LIGHTS+1; ++i){
-		light_occlusion = 1.0;
-		//if (screenSpace.effect.z > 0.5){
-		//	vec3 lightDir = ubo.lights[i].position.xyz - fragPos;
-		//	light_occlusion = 1.0-clamp(dot(lightDir, ssdo), 0.0, 1.0);
-		//}
-		fragColor += compute_point_light(i, material, fragPos, ubo.camPos.xyz, normal) * light_occlusion;
+		fragColor += compute_point_light(i, material, fragPos, ubo.camPos.xyz, normal);
 	}
 
 	outColor = vec4(fragColor, albedo.a);
@@ -71,8 +57,10 @@ void main()
 	
 	// Tone Mapping
 	if (screenSpace.effect.z > 0.5)
-		outColor.xyz = ACESFitted(outColor.xyz);
-		//outColor.xyz = ToneMapReinhard(outColor.xyz, screenSpace.effect.w); // ToneMapReinhard(color, exposure value)
+		//outColor.xyz = ACESFilm(outColor.xyz);
+		//outColor.xyz = TonemapFilmic(outColor.xyz);
+		//outColor.xyz = ACESFitted(outColor.xyz);
+		outColor.xyz = ToneMapReinhard(outColor.xyz, 1.0); // ToneMapReinhard(color, exposure value)
 		//outColor.xyz = Uncharted2(outColor.xyz);
 
 	outComposition = outColor;

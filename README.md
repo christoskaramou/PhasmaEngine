@@ -1,8 +1,9 @@
 # VulkanMonkey3D
 
 
+![Screenshot](VulkanMonkey/Images/example_image3.png)
 ![Screenshot](VulkanMonkey/Images/example_image2.png)
-![Screenshot](VulkanMonkey/Images/example_image1.png)
+![Screenshot](VulkanMonkey/Images/example_image6.png)
 
 VulkanMonkey3D is intended as a project for learning 3D graphics and techniques, using the Vulkan API. Until now these are the most important features VulkanMonkey3D has:
 
@@ -10,6 +11,9 @@ VulkanMonkey3D is intended as a project for learning 3D graphics and techniques,
 * Physical Based Rendering
 * Screen Space Reflections
 * Screen Space Ambient Occlusion
+* Tone Mapping - HDR
+* FXAA
+* Bloom
 * Motion Blur
 * Cascaded Shadows
 * Functional and Interactive GUI (ImGui)
@@ -17,8 +21,8 @@ VulkanMonkey3D is intended as a project for learning 3D graphics and techniques,
 * Event System
 * Frutum Culling
 * Animation
-* Tone Mapping - HDR
 * Cube Map Reflections
+* Dynamic Skybox (Day/Night)
 * CPU/GPU Metrics
 
 And some other primitive implemented ideas in a certain degree like Compute shaders.

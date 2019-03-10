@@ -4,31 +4,25 @@
 #include "../Buffer/Buffer.h"
 #include "../Pipeline/Pipeline.h"
 #include "../Image/Image.h"
-#include "../Surface/Surface.h"
-#include "../Swapchain/Swapchain.h"
 #include "../GUI/GUI.h"
-#include "../Timer/Timer.h"
-#include "../Camera/Camera.h"
 #include <vector>
-#include <string>
 #include <map>
+#include <string>
 
 namespace vm {
-	struct MotionBlur
+	struct FXAA
 	{
 		VulkanContext* vulkan = &VulkanContext::get();
 
-		Buffer UBmotionBlur;
 		std::vector<vk::Framebuffer> frameBuffers{};
 		Pipeline pipeline;
 		vk::RenderPass renderPass;
-		vk::DescriptorSet DSMotionBlur;
-		vk::DescriptorSetLayout DSLayoutMotionBlur;
-		
-		void update(Camera& camera);
-		void createMotionBlurUniforms(std::map<std::string, Image>& renderTargets);
+		vk::DescriptorSet DSet;
+		vk::DescriptorSetLayout DSLayout;
+
+		void createFXAAUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(uint32_t imageIndex, const vec2 UVOffset[2]);
+		void draw(uint32_t imageIndex);
 		void destroy();
 	};
 }

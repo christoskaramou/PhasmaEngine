@@ -21,6 +21,8 @@
 #include "../SSAO/SSAO.h"
 #include "../SSDO/SSDO.h"
 #include "../SSR/SSR.h"
+#include "../FXAA/FXAA.h"
+#include "../Bloom/Bloom.h"
 #include "../MotionBlur/MotionBlur.h"
 #include "../Deferred/Deferred.h"
 #include "../Compute/Compute.h"
@@ -61,11 +63,18 @@ namespace vm {
 		// SSR
 		SSR ssr;
 
+		// FXAA
+		FXAA fxaa;
+
+		// BLOOM
+		Bloom bloom;
+
 		// MOTION BLUR
 		MotionBlur motionBlur;
 
-		// SKYBOX
-		SkyBox skyBox;
+		// SKYBOXES
+		SkyBox skyBoxDay;
+		SkyBox skyBoxNight;
 
 		// TERRAIN
 		Terrain terrain;
@@ -96,14 +105,14 @@ namespace vm {
 		void resizeViewport(uint32_t width, uint32_t height);
 
 		PipelineInfo getPipelineSpecificationsShadows();
-		PipelineInfo getPipelineSpecificationsSkyBox();
+		PipelineInfo getPipelineSpecificationsSkyBox(SkyBox& skybox);
 		PipelineInfo getPipelineSpecificationsTerrain();
 		PipelineInfo getPipelineSpecificationsGUI();
 		PipelineInfo getPipelineSpecificationsDeferred();
 
 		vk::DescriptorSetLayout getDescriptorSetLayoutLights();
 
-	private:
+	public:
 		vk::Instance createInstance();
 		Surface createSurface();
 		int getGraphicsFamilyId();
@@ -131,12 +140,15 @@ namespace vm {
 		vk::RenderPass createSSDORenderPass();
 		vk::RenderPass createSSDOBlurRenderPass();
 		vk::RenderPass createSSRRenderPass();
+		vk::RenderPass createFXAARenderPass();
+		vk::RenderPass createBrightFilterRenderPass();
+		vk::RenderPass createGaussianBlurRenderPass();
+		vk::RenderPass createCombineRenderPass();
 		vk::RenderPass createMotionBlurRenderPass();
 		vk::RenderPass createGUIRenderPass();
 		vk::RenderPass createShadowsRenderPass();
 		vk::RenderPass createSkyboxRenderPass();
 		Image createDepthResources();
-		std::vector<vk::Framebuffer> createFrameBuffers();
 		std::vector<vk::Framebuffer> createDeferredFrameBuffers();
 		std::vector<vk::Framebuffer> createCompositionFrameBuffers();
 		std::vector<vk::Framebuffer> createSSRFrameBuffers();
@@ -144,15 +156,22 @@ namespace vm {
 		std::vector<vk::Framebuffer> createSSAOBlurFrameBuffers();
 		std::vector<vk::Framebuffer> createSSDOFrameBuffers();
 		std::vector<vk::Framebuffer> createSSDOBlurFrameBuffers();
+		std::vector<vk::Framebuffer> createFXAAFrameBuffers();
+		std::vector<vk::Framebuffer> createBloomFrameBuffers();
 		std::vector<vk::Framebuffer> createMotionBlurFrameBuffers();
 		std::vector<vk::Framebuffer> createGUIFrameBuffers();
 		std::vector<vk::Framebuffer> createShadowsFrameBuffers();
-		std::vector<vk::Framebuffer> createSkyboxFrameBuffers();
+		std::vector<vk::Framebuffer> createSkyboxFrameBuffers(SkyBox& skybox);
 		std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount = 1);
 		vk::CommandBuffer createComputeCmdBuffer();
 		Pipeline createPipeline(const PipelineInfo& specificInfo);
 		Pipeline createCompositionPipeline();
 		Pipeline createSSRPipeline();
+		Pipeline createFXAAPipeline();
+		Pipeline createBrightFilterPipeline();
+		Pipeline createGaussianBlurHorizontalPipeline();
+		Pipeline createGaussianBlurVerticalPipeline();
+		Pipeline createCombinePipeline();
 		Pipeline createSSAOPipeline();
 		Pipeline createSSAOBlurPipeline();
 		Pipeline createSSDOPipeline();

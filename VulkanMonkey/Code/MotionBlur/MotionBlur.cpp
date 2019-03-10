@@ -2,25 +2,6 @@
 
 using namespace vm;
 
-void MotionBlur::createMotionBlurFrameBuffers()
-{
-	frameBuffers.resize(vulkan->swapchain->images.size());
-	for (size_t i = 0; i < frameBuffers.size(); ++i) {
-		std::vector<vk::ImageView> attachments = {
-			vulkan->swapchain->images[i].view
-		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(renderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
-		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
-	}
-}
-
 void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTargets)
 {
 	UBmotionBlur.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
@@ -85,6 +66,10 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 
 void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
+	std::string comp = "composition";
+	if ((GUI::show_FXAA && !GUI::show_Bloom) || (!GUI::show_FXAA && GUI::show_Bloom))
+		comp = "composition2";
+
 	std::vector<vk::WriteDescriptorSet> textureWriteSets(4);
 	// Composition image
 	textureWriteSets[0] = vk::WriteDescriptorSet()
@@ -94,8 +79,8 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 		.setDescriptorCount(1)											// uint32_t descriptorCount;
 		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
 		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["composition"].sampler)					// Sampler sampler;
-			.setImageView(renderTargets["composition"].view)					// ImageView imageView;
+			.setSampler(renderTargets[comp].sampler)					// Sampler sampler;
+			.setImageView(renderTargets[comp].view)						// ImageView imageView;
 			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
 	// Depth image
 	textureWriteSets[1] = vk::WriteDescriptorSet()

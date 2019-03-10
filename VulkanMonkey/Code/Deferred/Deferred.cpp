@@ -42,11 +42,6 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 		renderTargets["ssr"].view,					//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
-	vk::DescriptorImageInfo texDescriptorSSDO = vk::DescriptorImageInfo{
-		renderTargets["ssdoBlur"].sampler,			//Sampler sampler;
-		renderTargets["ssdoBlur"].view,				//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
 
 	std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
 		// Binding 0: Position texture target
@@ -129,17 +124,6 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
 		},
-		// Binding 7: SSDO Image
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			7,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorSSDO,						//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		}
 	};
 
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
@@ -176,11 +160,6 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 	vk::DescriptorImageInfo texDescriptorSSR = vk::DescriptorImageInfo{
 		renderTargets["ssr"].sampler,				//Sampler sampler;
 		renderTargets["ssr"].view,					//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptorSSDO = vk::DescriptorImageInfo{
-		renderTargets["ssdoBlur"].sampler,			//Sampler sampler;
-		renderTargets["ssdoBlur"].view,				//ImageView imageView;
 		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
 	};
 
@@ -265,17 +244,6 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
 			nullptr									//const BufferView* pTexelBufferView;
 		},
-		// Binding 7: SSDO Image
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			7,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorSSDO,						//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		}
 	};
 
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
@@ -297,7 +265,7 @@ void Deferred::draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4&
 	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo0, vk::SubpassContents::eInline);
 
 	vec4 screenSpace[6];
-	screenSpace[0] = { GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, GUI::show_tonemapping ? 1.f : 0.f, GUI::exposure };
+	screenSpace[0] = { GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, GUI::show_tonemapping ? 1.f : 0.f, GUI::show_FXAA ? 1.f : 0.f };
 	screenSpace[1] = { UVOffset[0].x, UVOffset[0].y, UVOffset[1].x, UVOffset[1].y };
 	screenSpace[2] = { invViewProj[0] };
 	screenSpace[3] = { invViewProj[1] };

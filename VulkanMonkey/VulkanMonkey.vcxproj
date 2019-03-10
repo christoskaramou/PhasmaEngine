@@ -183,12 +183,22 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <None Include="shaders\Bloom\brightFilter.frag" />
+    <None Include="shaders\Bloom\combine.frag" />
+    <None Include="shaders\Bloom\gaussianBlurHorizontal.frag" />
+    <None Include="shaders\Bloom\gaussianBlurVertical.frag" />
+    <None Include="shaders\Common\common.glsl" />
     <None Include="shaders\Common\quad.vert" />
+    <None Include="shaders\Common\tonemapping.glsl" />
     <None Include="shaders\Compute\shader.comp" />
     <None Include="shaders\Deferred\composition.frag" />
     <None Include="shaders\Deferred\composition.vert" />
     <None Include="shaders\Deferred\gBuffer.frag" />
     <None Include="shaders\Deferred\gBuffer.vert" />
+    <None Include="shaders\Deferred\Light.glsl" />
+    <None Include="shaders\Deferred\Material.glsl" />
+    <None Include="shaders\FXAA\FXAA.frag" />
+    <None Include="shaders\FXAA\FXAA.glsl" />
     <None Include="shaders\GUI\shaderGUI.frag" />
     <None Include="shaders\GUI\shaderGUI.vert" />
     <None Include="shaders\MotionBlur\motionBlur.frag" />
@@ -204,6 +214,7 @@
     <None Include="shaders\Terrain\shaderTerrain.vert" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Code\Bloom\Bloom.h" />
     <ClInclude Include="Code\Buffer\Buffer.h" />
     <ClInclude Include="Code\Camera\Camera.h" />
     <ClInclude Include="Code\Compute\Compute.h" />
@@ -211,6 +222,7 @@
     <ClInclude Include="Code\Context\Context.h" />
     <ClInclude Include="Code\Deferred\Deferred.h" />
     <ClInclude Include="Code\Event\Event.h" />
+    <ClInclude Include="Code\FXAA\FXAA.h" />
     <ClInclude Include="Code\GUI\GUI.h" />
     <ClInclude Include="Code\Image\Image.h" />
     <ClInclude Include="Code\Light\Light.h" />
@@ -251,12 +263,9 @@
     <ClInclude Include="include\tinygltf\stb_image_write.h" />
     <ClInclude Include="include\tinygltf\tiny_gltf.h" />
     <ClInclude Include="include\Vulkan.h" />
-    <ClInclude Include="shaders\Common\common.h" />
-    <ClInclude Include="shaders\Common\tonemapping.h" />
-    <ClInclude Include="shaders\Deferred\Light.h" />
-    <ClInclude Include="shaders\Deferred\Material.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Code\Bloom\Bloom.cpp" />
     <ClCompile Include="Code\Buffer\Buffer.cpp" />
     <ClCompile Include="Code\Camera\Camera.cpp" />
     <ClCompile Include="Code\Compute\Compute.cpp" />
@@ -264,6 +273,7 @@
     <ClCompile Include="Code\Context\Context.cpp" />
     <ClCompile Include="Code\Deferred\Deferred.cpp" />
     <ClCompile Include="Code\Event\Event.cpp" />
+    <ClCompile Include="Code\FXAA\FXAA.cpp" />
     <ClCompile Include="Code\GUI\GUI.cpp" />
     <ClCompile Include="Code\Image\Image.cpp" />
     <ClCompile Include="Code\Light\Light.cpp" />

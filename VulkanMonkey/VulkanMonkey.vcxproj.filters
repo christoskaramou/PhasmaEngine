@@ -58,6 +58,36 @@
     <None Include="shaders\SSDO\ssdoBlur.frag">
       <Filter>Shaders\SSDO</Filter>
     </None>
+    <None Include="shaders\FXAA\FXAA.frag">
+      <Filter>Shaders\FXAA</Filter>
+    </None>
+    <None Include="shaders\FXAA\FXAA.glsl">
+      <Filter>Shaders\FXAA</Filter>
+    </None>
+    <None Include="shaders\Common\common.glsl">
+      <Filter>Shaders\Common</Filter>
+    </None>
+    <None Include="shaders\Common\tonemapping.glsl">
+      <Filter>Shaders\Common</Filter>
+    </None>
+    <None Include="shaders\Deferred\Light.glsl">
+      <Filter>Shaders\Deferred</Filter>
+    </None>
+    <None Include="shaders\Deferred\Material.glsl">
+      <Filter>Shaders\Deferred</Filter>
+    </None>
+    <None Include="shaders\Bloom\brightFilter.frag">
+      <Filter>Shaders\Bloom</Filter>
+    </None>
+    <None Include="shaders\Bloom\combine.frag">
+      <Filter>Shaders\Bloom</Filter>
+    </None>
+    <None Include="shaders\Bloom\gaussianBlurHorizontal.frag">
+      <Filter>Shaders\Bloom</Filter>
+    </None>
+    <None Include="shaders\Bloom\gaussianBlurVertical.frag">
+      <Filter>Shaders\Bloom</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Code\Buffer\Buffer.h">
@@ -198,20 +228,14 @@
     <ClInclude Include="Code\Model\Animation.h">
       <Filter>Code\Model</Filter>
     </ClInclude>
-    <ClInclude Include="shaders\Deferred\Light.h">
-      <Filter>Shaders\Deferred</Filter>
-    </ClInclude>
-    <ClInclude Include="shaders\Deferred\Material.h">
-      <Filter>Shaders\Deferred</Filter>
-    </ClInclude>
-    <ClInclude Include="shaders\Common\common.h">
-      <Filter>Shaders\Common</Filter>
-    </ClInclude>
     <ClInclude Include="Code\SSDO\SSDO.h">
       <Filter>Code\SSDO</Filter>
     </ClInclude>
-    <ClInclude Include="shaders\Common\tonemapping.h">
-      <Filter>Shaders\Common</Filter>
+    <ClInclude Include="Code\FXAA\FXAA.h">
+      <Filter>Code\FXAA</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Bloom\Bloom.h">
+      <Filter>Code\Bloom</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -334,6 +358,12 @@
     </ClCompile>
     <ClCompile Include="Code\SSDO\SSDO.cpp">
       <Filter>Code\SSDO</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\FXAA\FXAA.cpp">
+      <Filter>Code\FXAA</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Bloom\Bloom.cpp">
+      <Filter>Code\Bloom</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -483,6 +513,18 @@
     </Filter>
     <Filter Include="Shaders\SSDO">
       <UniqueIdentifier>{d0a507f4-8ecb-4f58-aca4-9b4573e1998d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\FXAA">
+      <UniqueIdentifier>{aefd9808-d361-415b-8f3b-e98ba0c3f33e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\FXAA">
+      <UniqueIdentifier>{dfa65f66-da2f-4747-a210-f660a948a336}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Bloom">
+      <UniqueIdentifier>{9c98f29a-d48d-44d5-ad4f-9d7a97970d85}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Bloom">
+      <UniqueIdentifier>{0ba63104-9f28-417c-802b-6561674880b8}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

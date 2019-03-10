@@ -38,10 +38,12 @@ Renderer::~Renderer()
 	ctx.compute.destroy();
 	ctx.deferred.destroy();
 	ctx.ssao.destroy();
-	ctx.ssdo.destroy();
 	ctx.ssr.destroy();
+	ctx.fxaa.destroy();
+	ctx.bloom.destroy();
 	ctx.motionBlur.destroy();
-	ctx.skyBox.destroy();
+	ctx.skyBoxDay.destroy();
+	ctx.skyBoxNight.destroy();
 	ctx.terrain.destroy();
 	ctx.gui.destroy();
 	ctx.lightUniforms.destroy();
@@ -107,8 +109,11 @@ void Renderer::update(float delta)
 	// SHADOWS
 	ctx.shadows.update(ctx.camera_main);
 
-	// SKYBOX
-	ctx.skyBox.update(ctx.camera_main);
+	// SKYBOXES
+	if (GUI::shadow_cast)
+		ctx.skyBoxDay.update(ctx.camera_main);
+	else
+		ctx.skyBoxNight.update(ctx.camera_main);
 
 	//TERRAIN
 	//if (ctx.terrain.render) {
@@ -133,6 +138,17 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 {
+	// TODO: Fire event to update descriptor sets based on what post proccess effects are on
+	if (GUI::dSetNeedsUpdate) {
+		ctx.vulkan.device.waitIdle();
+		ctx.bloom.updateDescriptorSets(ctx.renderTargets);
+		for (auto& fb : ctx.bloom.frameBuffers)
+			ctx.vulkan.device.destroyFramebuffer(fb);
+		ctx.bloom.frameBuffers = ctx.createBloomFrameBuffers();
+		ctx.motionBlur.updateDescriptorSets(ctx.renderTargets);
+		GUI::dSetNeedsUpdate = false;
+	}
+
 	vec2 surfSize(WIDTH_f, HEIGHT_f);
 	vec2 winPos((float*)&GUI::winPos);
 	vec2 winSize((float*)&GUI::winSize);
@@ -152,7 +168,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	cmd.setScissor(0, ctx.camera_main.renderArea.scissor);
 
 	// SKYBOX
-	ctx.skyBox.draw(imageIndex);
+	SkyBox& skybox = GUI::shadow_cast ? ctx.skyBoxDay : ctx.skyBoxNight;
+	skybox.draw(imageIndex);
 
 	if (Model::models.size() > 0) {
 		// MODELS
@@ -165,17 +182,21 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		if (GUI::show_ssao)
 			ctx.ssao.draw(imageIndex, UVOffset);
 
-		// SCREEN SPACE DIRECTIONAL OCCLUSION
-		//if (GUI::show_ssdo)
-		//	ctx.ssdo.draw(imageIndex, UVOffset);
-
 		// SCREEN SPACE REFLECTIONS
 		if (GUI::show_ssr)
 			ctx.ssr.draw(imageIndex, UVOffset);
 
 		// COMPOSITION
-		ctx.deferred.draw(imageIndex, ctx.shadows, ctx.skyBox, ctx.camera_main.invViewProjection, UVOffset);
-		
+		ctx.deferred.draw(imageIndex, ctx.shadows, skybox, ctx.camera_main.invViewProjection, UVOffset);
+
+		// FXAA
+		if (GUI::show_FXAA)
+			ctx.fxaa.draw(imageIndex);
+
+		// BLOOM
+		if (GUI::show_Bloom)
+			ctx.bloom.draw(imageIndex, (uint32_t)ctx.vulkan.swapchain->images.size(), UVOffset);
+
 		// MOTION BLUR
 		if (GUI::show_motionBlur)
 			ctx.motionBlur.draw(imageIndex, UVOffset);
