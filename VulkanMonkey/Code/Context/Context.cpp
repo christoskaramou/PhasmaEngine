@@ -32,7 +32,7 @@ void Context::initVulkanContext()
 	vulkan.commandPoolCompute = createComputeCommadPool();
 	vulkan.descriptorPool = createDescriptorPool(10000); // max number of all descriptor sets to allocate
 	vulkan.dynamicCmdBuffer = createCmdBuffers().at(0);
-	vulkan.shadowCmdBuffer = createCmdBuffers().at(0);
+	vulkan.shadowCmdBuffer = createCmdBuffers(3);
 	vulkan.computeCmdBuffer = createComputeCmdBuffer();
 	vulkan.depth = new Image(createDepthResources());
 }
@@ -174,8 +174,7 @@ void Context::loadResources()
 	// TERRAIN LOAD
 	//terrain.generateTerrain("");
 	// MODELS LOAD
-	//models.push_back(Model(&vulkan));
-	//models.back().loadModel("objects/sponza/", "sponza.obj");
+	
 	Script::Init();
 	Script::addCallback("Global::LoadModel", LoadModel);
 	Script::addCallback("Global::KeyDown", KeyDown);

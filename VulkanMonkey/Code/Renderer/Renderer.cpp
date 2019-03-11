@@ -227,11 +227,11 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 	renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
 	renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
-	auto& cmd = ctx.vulkan.shadowCmdBuffer;
-	cmd.begin(beginInfoShadows);
-	cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
-
 	for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
+		auto& cmd = ctx.vulkan.shadowCmdBuffer[i];
+		cmd.begin(beginInfoShadows);
+		cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
+
 		// depth[i] image ===========================================================
 		renderPassInfoShadows.framebuffer = ctx.shadows.frameBuffers[i * ctx.vulkan.swapchain->images.size() + imageIndex]; // e.g. for 2 swapchain images - 1st(0,2,4) and 2nd(1,3,5)
 		cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
@@ -250,8 +250,8 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 		}
 		cmd.endRenderPass();
 		// ==========================================================================
+		cmd.end();
 	}
-	cmd.end();
 }
 
 void Renderer::present()
@@ -285,8 +285,8 @@ void Renderer::present()
 			.setWaitSemaphoreCount(1)
 			.setPWaitSemaphores(&ctx.vulkan.semaphores[0])
 			.setPWaitDstStageMask(waitStages)
-			.setCommandBufferCount(1)
-			.setPCommandBuffers(&ctx.vulkan.shadowCmdBuffer)
+			.setCommandBufferCount(static_cast<uint32_t>(ctx.vulkan.shadowCmdBuffer.size()))
+			.setPCommandBuffers(ctx.vulkan.shadowCmdBuffer.data())
 			.setSignalSemaphoreCount(1)
 			.setPSignalSemaphores(&ctx.vulkan.semaphores[1]);
 		ctx.vulkan.graphicsQueue.submit(siShadows, nullptr);

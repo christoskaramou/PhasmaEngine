@@ -38,7 +38,8 @@ namespace vm {
 		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
 		Swapchain* swapchain;
 		Image* depth;
-		vk::CommandBuffer dynamicCmdBuffer, computeCmdBuffer, shadowCmdBuffer;
+		vk::CommandBuffer dynamicCmdBuffer, computeCmdBuffer;
+		std::vector<vk::CommandBuffer> shadowCmdBuffer{};
 		vk::DescriptorPool descriptorPool;
 		std::vector<vk::Fence> fences{};
 		std::vector<vk::Semaphore> semaphores{};
