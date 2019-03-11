@@ -1,10 +1,16 @@
 #ifndef TONEMAPPING_H_
 #define TONEMAPPING_H_
 
+vec3 SRGBtoLINEAR(vec3 srgbIn)
+{
+	vec3 bLess = step(vec3(0.04045),srgbIn);
+	vec3 linOut = mix( srgbIn/vec3(12.92), pow((srgbIn+vec3(0.055))/vec3(1.055),vec3(2.4)), bLess );
+	return linOut;
+}
+
 vec3 ToneMapReinhard(vec3 color, float exposure)
 {
 	return vec3(1.0) - exp(-color * exposure);
-	//return color / (vec3(1.0) + color);
 }
 
 const float A = 0.15;
@@ -14,20 +20,15 @@ const float D = 0.20;
 const float E = 0.02;
 const float F = 0.30;
 const float W = 11.2;
-
 vec3 Uncharted2(vec3 x)
 {
     return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
 }
 
-float Uncharted2(float x)
+vec3 TonemapFilmic(vec3 color, float exposure)
 {
-	return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
-}
-
-vec3 TonemapFilmic(vec3 color)
-{
-	return Uncharted2(color) * (1.0 / Uncharted2(2.0));
+	vec3 col = Uncharted2(color * exposure) * (1.0 / Uncharted2(vec3(W)));
+	return pow(col, vec3(1.0f / 2.2f));
 }
 
 //== ACESFitted ===========================

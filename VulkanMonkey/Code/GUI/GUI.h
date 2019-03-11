@@ -28,6 +28,7 @@ namespace vm {
 		static float		Bloom_Inv_brightness;
 		static float		Bloom_intensity;
 		static float		Bloom_range;
+		static bool			use_tonemap;
 		static float		Bloom_exposure;
 		static bool			dSetNeedsUpdate;
 		static bool			show_motionBlur;

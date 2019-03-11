@@ -72,7 +72,7 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 	if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 	if (ImGui::SmallButton("Load MetalRoughSpheres")) { Queue::loadModel.push_back({ "objects/MetalRoughSpheres/glTF/", "MetalRoughSpheres.gltf" }); AddLog("loading..."); }
 	if (ImGui::SmallButton("Load Bob Animated")) { Queue::loadModel.push_back({ "objects/Bob/", "Bob.md5mesh" }); AddLog("loading..."); } ImGui::SameLine();
-	
+
 	if (ImGui::SmallButton("Clear")) { ClearLog(); } ImGui::SameLine();
 
 	ImGui::Separator();

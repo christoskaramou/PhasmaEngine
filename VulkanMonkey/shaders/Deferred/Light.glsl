@@ -11,7 +11,7 @@ struct Light {
 };
 
 
-layout(push_constant) uniform SS { vec4 effect; vec4 size; mat4 invViewProj; } screenSpace;
+layout(push_constant) uniform SS { vec4 effect; vec4 size; mat4 invViewProj; vec4 effect2; } screenSpace;
 layout(constant_id = 0) const int NUM_LIGHTS = 1;
 layout(set = 0, binding = 0) uniform sampler2D samplerDepth;
 layout(set = 0, binding = 1) uniform sampler2D samplerNormal;

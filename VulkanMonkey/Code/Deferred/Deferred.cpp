@@ -264,13 +264,14 @@ void Deferred::draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4&
 		.setPClearValues(clearValues0.data());
 	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo0, vk::SubpassContents::eInline);
 
-	vec4 screenSpace[6];
+	vec4 screenSpace[7];
 	screenSpace[0] = { GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, GUI::show_tonemapping ? 1.f : 0.f, GUI::show_FXAA ? 1.f : 0.f };
 	screenSpace[1] = { UVOffset[0].x, UVOffset[0].y, UVOffset[1].x, UVOffset[1].y };
 	screenSpace[2] = { invViewProj[0] };
 	screenSpace[3] = { invViewProj[1] };
 	screenSpace[4] = { invViewProj[2] };
 	screenSpace[5] = { invViewProj[3] };
+	screenSpace[6] = { GUI::exposure, 0.f, 0.f, 0.f };
 
 	vulkan->dynamicCmdBuffer.pushConstants(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(screenSpace), &screenSpace);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline);

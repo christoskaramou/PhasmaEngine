@@ -58,10 +58,9 @@ void main()
 	// Tone Mapping
 	if (screenSpace.effect.z > 0.5)
 		//outColor.xyz = ACESFilm(outColor.xyz);
-		//outColor.xyz = TonemapFilmic(outColor.xyz);
+		outColor.xyz = SRGBtoLINEAR(TonemapFilmic(outColor.xyz, screenSpace.effect2.x));
 		//outColor.xyz = ACESFitted(outColor.xyz);
-		outColor.xyz = ToneMapReinhard(outColor.xyz, 1.0); // ToneMapReinhard(color, exposure value)
-		//outColor.xyz = Uncharted2(outColor.xyz);
+		//outColor.xyz = ToneMapReinhard(outColor.xyz, screenSpace.effect2.x); // ToneMapReinhard(color, exposure value)
 
 	outComposition = outColor;
 }

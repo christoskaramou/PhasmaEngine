@@ -87,64 +87,64 @@ void Mesh::loadTexture(TextureType type, const std::string& folderPath, const st
 	case TextureType::DiffuseMap:
 		tex = &material.textureDiffuse;
 		if (texName == "")
-			path = "objects/default.png";
+			path = "objects/black.png";
 		break;
 	case TextureType::SpecularMap:
 		tex = &material.textureSpecular;
 		if (texName == "")
-			path = "objects/defaultSpecularMap.png";
+			path = "objects/black.png";
 		break;
 	case TextureType::AmbientMap:
 		tex = &material.textureAmbient;
 		if (texName == "")
-			path = "objects/defaultSpecularMap.png";
+			path = "objects/black.png";
 		break;
 	case TextureType::EmissiveMap:
 		tex = &material.textureEmissive;
 		if (texName == "")
-			path = "objects/defaultSpecularMap.png";
+			path = "objects/black.png";
 		break;
 	case TextureType::HeightMap:
 		tex = &material.textureHeight;
 		if (texName == "")
-			path = "objects/defaultSpecularMap.png";
+			path = "objects/black.png";
 		break;
 	case TextureType::NormalsMap:
 		tex = &material.textureNormals;
 		if (texName == "")
-			path = "objects/defaultNormalMap.png";
+			path = "objects/normal.png";
 		break;
 	case TextureType::ShininessMap:
 		tex = &material.textureShininess;
 		if (texName == "")
-			path = "objects/defaultSpecularMap.png";
+			path = "objects/black.png";
 		break;
 	case TextureType::OpacityMap:
 		tex = &material.textureOpacity;
 		if (texName == "")
-			path = "objects/default.png";
+			path = "objects/white.png";
 		else
 			hasAlphaMap = true;
 		break;
 	case TextureType::DisplacementMap:
 		tex = &material.textureDisplacement;
 		if (texName == "")
-			path = "objects/defaultSpecularMap.png";
+			path = "objects/black.png";
 		break;
 	case TextureType::LightMap: //Ambient Occlusion
 		tex = &material.textureLight;
 		if (texName == "")
-			path = "objects/default.png";
+			path = "objects/white.png";
 		break;
 	case TextureType::ReflectionMap:
 		tex = &material.textureReflection;
 		if (texName == "")
-			path = "objects/default.png";
+			path = "objects/white.png";
 		break;
 	case TextureType::MetallicRoughness:
 		tex = &pbrMaterial.metallicRoughnessTexture;
 		if (texName == "")
-			path = "objects/default.png";
+			path = "objects/white.png";
 		break;
 	default:
 		exit(-19);
