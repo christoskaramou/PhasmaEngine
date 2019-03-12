@@ -47,7 +47,8 @@ Renderer::~Renderer()
 	ctx.terrain.destroy();
 	ctx.gui.destroy();
 	ctx.lightUniforms.destroy();
-	ctx.metrics.destroy();
+	for (auto& metric : ctx.metrics)
+		metric.destroy();
 	ctx.destroyVkContext();
 }
 
@@ -163,49 +164,72 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	auto& cmd = ctx.vulkan.dynamicCmdBuffer;
 	cmd.begin(beginInfo);
-	ctx.metrics.start(cmd);
+	ctx.metrics[0].start(cmd);
 	cmd.setViewport(0, ctx.camera_main.renderArea.viewport);
 	cmd.setScissor(0, ctx.camera_main.renderArea.scissor);
 
 	// SKYBOX
 	SkyBox& skybox = GUI::shadow_cast ? ctx.skyBoxDay : ctx.skyBoxNight;
+	ctx.metrics[1].start(cmd);
 	skybox.draw(imageIndex);
+	ctx.metrics[1].end(&GUI::metrics[1]);
 
 	if (Model::models.size() > 0) {
 		// MODELS
+		ctx.metrics[2].start(cmd);
 		Model::batchStart(imageIndex, ctx.deferred);
 		for (uint32_t m = 0; m < Model::models.size(); m++)
 			Model::models[m].draw();
 		Model::batchEnd();
+		ctx.metrics[2].end(&GUI::metrics[2]);
 
 		// SCREEN SPACE AMBIENT OCCLUSION
-		if (GUI::show_ssao)
+		if (GUI::show_ssao) {
+			ctx.metrics[3].start(cmd);
 			ctx.ssao.draw(imageIndex, UVOffset);
+			ctx.metrics[3].end(&GUI::metrics[3]);
+		}
 
 		// SCREEN SPACE REFLECTIONS
-		if (GUI::show_ssr)
+		if (GUI::show_ssr) {
+			ctx.metrics[4].start(cmd);
 			ctx.ssr.draw(imageIndex, UVOffset);
+			ctx.metrics[4].end(&GUI::metrics[4]);
+		}
 
 		// COMPOSITION
+		ctx.metrics[5].start(cmd);
 		ctx.deferred.draw(imageIndex, ctx.shadows, skybox, ctx.camera_main.invViewProjection, UVOffset);
+		ctx.metrics[5].end(&GUI::metrics[5]);
 
 		// FXAA
-		if (GUI::show_FXAA)
+		if (GUI::show_FXAA) {
+			ctx.metrics[6].start(cmd);
 			ctx.fxaa.draw(imageIndex);
+			ctx.metrics[6].end(&GUI::metrics[6]);
+		}
 
 		// BLOOM
-		if (GUI::show_Bloom)
+		if (GUI::show_Bloom) {
+			ctx.metrics[7].start(cmd);
 			ctx.bloom.draw(imageIndex, (uint32_t)ctx.vulkan.swapchain->images.size(), UVOffset);
+			ctx.metrics[7].end(&GUI::metrics[7]);
+		}
 
 		// MOTION BLUR
-		if (GUI::show_motionBlur)
+		if (GUI::show_motionBlur) {
+			ctx.metrics[8].start(cmd);
 			ctx.motionBlur.draw(imageIndex, UVOffset);
+			ctx.metrics[8].end(&GUI::metrics[8]);
+		}
 	}
 
 	// GUI
+	ctx.metrics[9].start(cmd);
 	ctx.gui.draw(imageIndex);
+	ctx.metrics[9].end(&GUI::metrics[9]);
 
-	ctx.metrics.end();
+	ctx.metrics[0].end(&GUI::metrics[0]);
 
 	cmd.end();
 }
@@ -230,6 +254,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 	for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
 		auto& cmd = ctx.vulkan.shadowCmdBuffer[i];
 		cmd.begin(beginInfoShadows);
+		ctx.metrics[10+i].start(cmd);
 		cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
 		// depth[i] image ===========================================================
@@ -249,6 +274,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 			}
 		}
 		cmd.endRenderPass();
+		ctx.metrics[10+i].end(&GUI::metrics[10+i]);
 		// ==========================================================================
 		cmd.end();
 	}

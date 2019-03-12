@@ -106,9 +106,9 @@ void Context::initRendering()
 	skyBoxNight.frameBuffers = createSkyboxFrameBuffers(skyBoxNight);
 	skyBoxNight.pipeline = createPipeline(getPipelineSpecificationsSkyBox(skyBoxNight));
 
-	//camera.push_back(Camera());
-
-	metrics.initQueryPool();
+	metrics.resize(20);
+	for (auto& metric : metrics)
+		metric.initQueryPool();
 }
 
 static void LoadModel(MonoString* folderPath, MonoString* modelName, uint32_t instances)

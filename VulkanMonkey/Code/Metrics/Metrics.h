@@ -10,9 +10,9 @@ namespace vm {
 		Metrics();
 		~Metrics();
 		void start(vk::CommandBuffer& cmd);
-		void end();
+		void end(float* res = nullptr);
 		void initQueryPool();
-		float getGPUFrameTime();
+		float getTime();
 		void destroy();
 
 		vk::QueryPool queryPool;

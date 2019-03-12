@@ -31,6 +31,8 @@ float						GUI::cpuTime = 0;
 float						GUI::cpuWaitingTime = 0;
 float						GUI::gpuTime = 0;
 float						GUI::timeScale = 1.f;
+std::array<float, 20>		GUI::metrics = {};
+std::array<float, 20>		GUI::stats = {};
 std::vector<std::string>	GUI::fileList{};
 std::vector<std::string>	GUI::modelList{};
 ImVec2						GUI::tlPanelPos = ImVec2();
@@ -57,81 +59,61 @@ bool endsWithExt(const std::string &mainStr, const std::string &toMatch)
 void GUI::setWindows()
 {
 	showMetrics();
-	showOptions();
+	showProperties();
 	showConsole();
 	showScripts();
 	showModels();
-	showProperties();
 	showRenderingWindow();
 }
 
 void GUI::showMetrics()
 {
+	int totalPasses = 0;
+	float totalTime = 0.f;
+
 	static bool metrics_open = true;
 	ImGui::SetNextWindowPos(ImVec2(0.f, 1.f));
-	ImGui::SetNextWindowSize(ImVec2(LEFT_BORDER, 130.f));
+	ImGui::SetNextWindowSize(ImVec2(LEFT_BORDER, HEIGHT_f - LOWER_BORDER - 1.0f));
 	ImGui::Begin("Metrics", &metrics_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
 	ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-	ImGui::Text("CPU: %.3f (waited %.3f) ms", cpuTime, cpuWaitingTime);
-	ImGui::Text("GPU: %.3f ms", gpuTime);
 	ImGui::InputInt("FPS", &fps, 1, 15); if (fps < 10) fps = 10;
+	ImGui::Text("CPU Total: %.3f (waited %.3f) ms", cpuTime, cpuWaitingTime);
+	ImGui::Text("GPU Total: %.3f ms", stats[0] + stats[10] + stats[11] + stats[11]);
 	ImGui::Separator();
-	tlPanelPos = ImGui::GetWindowPos();
-	tlPanelSize = ImGui::GetWindowSize();
-	ImGui::End();
-}
-
-void GUI::showOptions()
-{
-
-	static bool	options_open = true;
-	ImGui::SetNextWindowPos(ImVec2(0.f, tlPanelSize.y));
-	ImGui::SetNextWindowSize(ImVec2(LEFT_BORDER, HEIGHT_f - LOWER_BORDER - tlPanelSize.y));
-	ImGui::Begin("Options", &options_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-	ImGui::Checkbox("Lock Render Window", &lock_render_window);
-	ImGui::Checkbox("SSR", &show_ssr);
-	ImGui::Checkbox("SSAO", &show_ssao);
-	ImGui::Checkbox("Motion Blur", &show_motionBlur);
-	ImGui::Checkbox("Tone Mapping", &show_tonemapping);
-	if (show_tonemapping) {
-		ImGui::SliderFloat("Exposure", &exposure, 0.01f, 10.f); ImGui::Separator(); ImGui::Separator();
-	}
-	if (ImGui::Checkbox("FXAA", &show_FXAA))
-		dSetNeedsUpdate = true;
-	if (ImGui::Checkbox("Bloom", &show_Bloom))
-		dSetNeedsUpdate = true;
-	if (show_Bloom) {
-		ImGui::SliderFloat("Inv Brightness", &Bloom_Inv_brightness, 0.01f, 20.f);
-		ImGui::SliderFloat("Intensity", &Bloom_intensity, 0.01f, 10.f);
-		ImGui::SliderFloat("Range", &Bloom_range, 0.1f, 20.f);
-		ImGui::Checkbox("Bloom Tone Mapping", &use_tonemap);
-		if (use_tonemap)
-			ImGui::SliderFloat("Bloom Exposure", &Bloom_exposure, 0.01f, 10.f);
-		ImGui::Separator(); ImGui::Separator();
-	}
-	ImGui::Checkbox("Sun Light", &shadow_cast);
-	if (shadow_cast){
-		ImGui::InputFloat3("SunPos", (float*)sun_position.data(), 1);
-		ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5); ImGui::Separator(); ImGui::Separator();
-		{
-			vec3 sunDist((float*)&sun_position);
-			if (lengthSquared(sunDist) > 160000.f) {
-				sunDist = 400.f * normalize(sunDist);
-				sun_position[0] = sunDist.x;
-				sun_position[1] = sunDist.y;
-				sun_position[2] = sunDist.z;
-			}
+	ImGui::Text("Render Passes:");
+	ImGui::Text("   Skybox: %.3f ms", stats[1]); totalPasses++;
+	if (modelList.size() > 0) {
+		if (shadow_cast) {
+			ImGui::Text("   Depth: %.3f ms", stats[10]); totalPasses++; totalTime += stats[10];
+			ImGui::Text("   Depth: %.3f ms", stats[11]); totalPasses++; totalTime += stats[11];
+			ImGui::Text("   Depth: %.3f ms", stats[12]); totalPasses++; totalTime += stats[12];
+		}
+		ImGui::Text("   GBuffer: %.3f ms", stats[2]); totalPasses++; totalTime += stats[2];
+		if (show_ssao) {
+			ImGui::Text("   SSAO: %.3f ms", stats[3]); totalPasses++; totalTime += stats[3];
+		}
+		if (show_ssr) {
+			ImGui::Text("   SSR: %.3f ms", stats[4]); totalPasses++; totalTime += stats[4];
+		}
+		ImGui::Text("   Lights: %.3f ms", stats[5]); totalPasses++; totalTime += stats[5];
+		if (show_FXAA) {
+			ImGui::Text("   FXAA: %.3f ms", stats[6]); totalPasses++; totalTime += stats[6];
+		}
+		if (show_Bloom) {
+			ImGui::Text("   Bloom: %.3f ms", stats[7]); totalPasses++; totalTime += stats[7];
+		}
+		if (show_motionBlur) {
+			ImGui::Text("   Motion Blur: %.3f ms", stats[8]); totalPasses++; totalTime += stats[8];
 		}
 	}
-	ImGui::InputFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f, 3);
-	ImGui::SliderFloat4("ClearCol", (float*)clearColor.data(), 0.0f, 1.0f);
-	ImGui::InputFloat("TimeScale", &timeScale, 0.05f, 0.2f); ImGui::Separator(); ImGui::Separator();
-	if (ImGui::Button("Randomize Lights"))
-		randomize_lights = true;
-	mlPanelPos = ImGui::GetWindowPos();
-	mlPanelSize = ImGui::GetWindowSize();
+	ImGui::Text("   GUI: %.3f ms", stats[9]); totalPasses++; totalTime += stats[9];
+	ImGui::Separator();
+	ImGui::Separator();
+	ImGui::Text("Total: %i (%.3f ms)", totalPasses, totalTime);
+	tlPanelPos = ImGui::GetWindowPos();
+	tlPanelSize = ImGui::GetWindowSize();
 	ImGui::End();
 }
 
@@ -178,13 +160,52 @@ void GUI::showModels()
 
 void vm::GUI::showProperties()
 {
-	static bool propetries_open = true;
+	static bool	propetries_open = true;
 	ImGui::SetNextWindowPos(ImVec2(WIDTH_f - RIGHT_BORDER, 0.0f));
 	ImGui::SetNextWindowSize(ImVec2(RIGHT_BORDER, HEIGHT_f - LOWER_BORDER));
-	ImGui::Begin("Properties", &propetries_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-
-	if (ImGui::Button("Dummy")) {}
-
+	ImGui::Begin("Global Properties", &propetries_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+	ImGui::Checkbox("Lock Render Window", &lock_render_window);
+	ImGui::Checkbox("SSR", &show_ssr);
+	ImGui::Checkbox("SSAO", &show_ssao);
+	ImGui::Checkbox("Motion Blur", &show_motionBlur);
+	ImGui::Checkbox("Tone Mapping", &show_tonemapping);
+	if (show_tonemapping) {
+		ImGui::SliderFloat("Exposure", &exposure, 0.01f, 10.f); ImGui::Separator(); ImGui::Separator();
+	}
+	if (ImGui::Checkbox("FXAA", &show_FXAA))
+		dSetNeedsUpdate = true;
+	if (ImGui::Checkbox("Bloom", &show_Bloom))
+		dSetNeedsUpdate = true;
+	if (show_Bloom) {
+		ImGui::SliderFloat("Inv Brightness", &Bloom_Inv_brightness, 0.01f, 20.f);
+		ImGui::SliderFloat("Intensity", &Bloom_intensity, 0.01f, 10.f);
+		ImGui::SliderFloat("Range", &Bloom_range, 0.1f, 20.f);
+		ImGui::Checkbox("Bloom Tone Mapping", &use_tonemap);
+		if (use_tonemap)
+			ImGui::SliderFloat("Bloom Exposure", &Bloom_exposure, 0.01f, 10.f);
+		ImGui::Separator(); ImGui::Separator();
+	}
+	ImGui::Checkbox("Sun Light", &shadow_cast);
+	if (shadow_cast) {
+		ImGui::InputFloat3("SunPos", (float*)sun_position.data(), 1);
+		ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5); ImGui::Separator(); ImGui::Separator();
+		{
+			vec3 sunDist((float*)&sun_position);
+			if (lengthSquared(sunDist) > 160000.f) {
+				sunDist = 400.f * normalize(sunDist);
+				sun_position[0] = sunDist.x;
+				sun_position[1] = sunDist.y;
+				sun_position[2] = sunDist.z;
+			}
+		}
+	}
+	ImGui::InputFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f, 3);
+	ImGui::SliderFloat4("ClearCol", (float*)clearColor.data(), 0.0f, 1.0f);
+	ImGui::InputFloat("TimeScale", &timeScale, 0.05f, 0.2f); ImGui::Separator(); ImGui::Separator();
+	if (ImGui::Button("Randomize Lights"))
+		randomize_lights = true;
+	mlPanelPos = ImGui::GetWindowPos();
+	mlPanelSize = ImGui::GetWindowSize();
 	ImGui::End();
 }
 

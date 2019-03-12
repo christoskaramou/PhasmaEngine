@@ -92,7 +92,7 @@ namespace vm {
 		std::vector<Camera> camera{};
 
 		// Metrics
-		Metrics metrics;
+		std::vector<Metrics> metrics{};
 
 		// Scripts
 		std::vector<std::unique_ptr<Script>> scripts{};

@@ -43,6 +43,8 @@ namespace vm {
 		static float		cpuWaitingTime;
 		static float		gpuTime;
 		static float		timeScale;
+		static std::array<float, 20> metrics;
+		static std::array<float, 20> stats;
 		static std::vector<std::string> fileList;
 		static std::vector<std::string> modelList;
 		static ImVec2		tlPanelPos;
@@ -73,7 +75,6 @@ namespace vm {
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();
 		void showMetrics();
-		void showOptions();
 		void showConsole();
 		void showScripts();
 		void showModels();
