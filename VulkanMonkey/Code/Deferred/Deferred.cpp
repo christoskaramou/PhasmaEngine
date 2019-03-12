@@ -271,7 +271,7 @@ void Deferred::draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4&
 	screenSpace[3] = { invViewProj[1] };
 	screenSpace[4] = { invViewProj[2] };
 	screenSpace[5] = { invViewProj[3] };
-	screenSpace[6] = { GUI::exposure, 0.f, 0.f, 0.f };
+	screenSpace[6] = { GUI::exposure, GUI::lights_intensity, GUI::lights_range, 0.f };
 
 	vulkan->dynamicCmdBuffer.pushConstants(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(screenSpace), &screenSpace);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline);

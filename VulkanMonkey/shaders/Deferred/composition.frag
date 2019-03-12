@@ -37,7 +37,7 @@ void main()
 	vec3 I = normalize(fragPos - ubo.camPos.xyz);
     vec3 R = reflect(I, normalize(normal));
 	vec3 envColor = (texture(cubemapSampler, R).xyz * (1.0 - material.roughness) * material.metallic); // very fake enviroment reflectance
-	vec3 fragColor = 0.3 * material.albedo.xyz + 0.2 * envColor;
+	vec3 fragColor = 0.1 * material.albedo.xyz + 0.2 * envColor;
 
 	// SSAO
 	if (screenSpace.effect.x > 0.5f)

@@ -20,8 +20,11 @@ bool						GUI::use_tonemap = true;
 float						GUI::Bloom_exposure = 3.5f;
 bool						GUI::dSetNeedsUpdate = false;
 bool						GUI::show_motionBlur = true;
-bool						GUI::shadow_cast = true;
 bool						GUI::randomize_lights = false;
+float						GUI::lights_intensity = 2.5f;
+float						GUI::lights_range = 7.0f;
+bool						GUI::shadow_cast = true;
+float						GUI::sun_intensity = 20.f;
 std::array<float, 3>		GUI::sun_position = { 0.0f, 300.0f, 50.0f };
 int							GUI::fps = 60;
 float						GUI::cameraSpeed = 3.5f;
@@ -187,6 +190,7 @@ void vm::GUI::showProperties()
 	}
 	ImGui::Checkbox("Sun Light", &shadow_cast);
 	if (shadow_cast) {
+		ImGui::SliderFloat("Sun Intst", &sun_intensity, 0.1f, 50.f);
 		ImGui::InputFloat3("SunPos", (float*)sun_position.data(), 1);
 		ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5); ImGui::Separator(); ImGui::Separator();
 		{
@@ -204,6 +208,8 @@ void vm::GUI::showProperties()
 	ImGui::InputFloat("TimeScale", &timeScale, 0.05f, 0.2f); ImGui::Separator(); ImGui::Separator();
 	if (ImGui::Button("Randomize Lights"))
 		randomize_lights = true;
+	ImGui::SliderFloat("Light Intst", &lights_intensity, 0.01f, 30.f);
+	ImGui::SliderFloat("Light Rng", &lights_range, 0.1f, 30.f);
 	mlPanelPos = ImGui::GetWindowPos();
 	mlPanelSize = ImGui::GetWindowSize();
 	ImGui::End();

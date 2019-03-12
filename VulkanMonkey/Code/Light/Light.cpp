@@ -3,32 +3,20 @@
 using namespace vm;
 
 Light::Light() :
-	color(rand(0.f, 2.f), rand(0.f, 2.f), rand(0.f, 2.f), 1.f),
-	position(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 1.f),
-	attenuation(1.05f, 1.f, 1.f, 1.f)
+	color(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f),
+	position(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 1.f)
 { }
 
-Light::Light(const vec4& color, const vec4& position, const vec4& attenuation) :
+Light::Light(const vec4& color, const vec4& position) :
 	color(color),
-	position(position),
-	attenuation(attenuation)
+	position(position)
 { }
-
-Light Light::sun()
-{
-	return Light(
-		vec4(.9765f, .8431f, .9098f, 1.f) * 20.f,
-		vec4(GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2], 1.0f),
-		vec4(0.f, 0.f, 1.f, 1.f)
-	);
-}
 
 void LightUniforms::createLightUniforms()
 {
 	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	uniform.data = vulkan->device.mapMemory(uniform.memory, 0, uniform.size);
 	LightsUBO lubo;
-	//lubo.lights.resize(MAX_LIGHTS);
 	memcpy(uniform.data, &lubo, uniform.size);
 
 	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
@@ -64,11 +52,15 @@ void LightUniforms::update(Camera& camera)
 		GUI::randomize_lights = false;
 		LightsUBO lubo;
 		lubo.camPos = vec4(camera.position, 1.0f);
-		//lubo.lights.resize(MAX_LIGHTS);
 		memcpy(uniform.data, &lubo, sizeof(lubo));
 	}
 	else {
-		vec4 camPos(camera.position, 1.0f);
-		memcpy(uniform.data, &camPos, sizeof(camPos));
+		vec4 values[3] = {
+			{ camera.position, 1.0f },
+			{ .9765f, .8431f, .9098f, 1.f },
+			{ GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2], 1.0f }
+		};
+		values[1] *= GUI::sun_intensity;
+		memcpy(uniform.data, values, sizeof(values));
 	}
 }

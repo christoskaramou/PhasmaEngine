@@ -7,7 +7,6 @@
 struct Light {
 	vec4 color;
 	vec4 position;
-	vec4 attenuation;
 };
 
 
@@ -29,9 +28,14 @@ layout(set = 4, binding = 1) uniform samplerCube cubemapSampler;
 vec3 compute_point_light(int lightIndex, Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal)
 {
 	vec3 light_dir_full = world_pos - ubo.lights[lightIndex].position.xyz;
-	vec3 light_dir = normalize(-light_dir_full);
 	float light_dist = max(0.1, length(light_dir_full));
-	vec3 point_color = ubo.lights[lightIndex].color.xyz / (light_dist * light_dist);// *0.5);
+	if (light_dist > screenSpace.effect2.z) // max range
+		return vec3(0.0);
+
+	vec3 light_dir = normalize(-light_dir_full);
+	float attenuation = light_dist * light_dist;
+	vec3 point_color = ubo.lights[lightIndex].color.xyz / attenuation;
+	point_color *= screenSpace.effect2.y; // intensity
 
 	float roughness = material.roughness * 0.75 + 0.25;
 

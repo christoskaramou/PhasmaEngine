@@ -32,8 +32,11 @@ namespace vm {
 		static float		Bloom_exposure;
 		static bool			dSetNeedsUpdate;
 		static bool			show_motionBlur;
-		static bool			shadow_cast;
 		static bool			randomize_lights;
+		static float		lights_intensity;
+		static float		lights_range;
+		static bool			shadow_cast;
+		static float		sun_intensity;
 		static std::array<float, 3>	sun_position;
 		static int			fps;
 		static float		cameraSpeed;
