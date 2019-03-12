@@ -60,6 +60,7 @@ void Renderer::checkQueue()
 		Model::models.push_back(Model());
 		Model::models.back().loadModel(std::get<0>(queue), std::get<1>(queue)); // path, name
 		GUI::modelList.push_back(std::get<1>(queue));
+#ifdef USE_SCRIPTS
 		for (auto& dll : Script::dlls) {
 			std::string mName = Model::models.back().name.substr(0, Model::models.back().name.find_last_of("."));
 			if (dll == mName) {
@@ -67,6 +68,7 @@ void Renderer::checkQueue()
 				break;
 			}
 		}
+#endif
 		Queue::loadModel.pop_front();
 	}
 }
@@ -78,9 +80,11 @@ void Renderer::update(float delta)
 	// check for commands in queue
 	checkQueue();
 
+#ifdef USE_SCRIPTS
 	// universal scripts
 	for (auto& s : ctx.scripts)
 		s->update(delta);
+#endif
 
 	// update camera matrices
 	ctx.camera_main.update();

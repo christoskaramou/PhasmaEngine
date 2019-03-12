@@ -111,6 +111,225 @@ void Context::initRendering()
 		metric.initQueryPool();
 }
 
+void Context::resizeViewport(uint32_t width, uint32_t height)
+{
+	vulkan.device.waitIdle();
+
+	//- Free resources ----------------------
+	// render targets
+	for (auto& RT : renderTargets)
+		RT.second.destroy();
+	renderTargets.clear();
+
+	// GUI
+	if (gui.renderPass) {
+		vulkan.device.destroyRenderPass(gui.renderPass);
+	}
+	for (auto &frameBuffer : gui.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	gui.pipeline.destroy();
+
+	// deferred
+	if (deferred.renderPass) {
+		vulkan.device.destroyRenderPass(deferred.renderPass);
+	}
+	if (deferred.compositionRenderPass) {
+		vulkan.device.destroyRenderPass(deferred.compositionRenderPass);
+	}
+	for (auto &frameBuffer : deferred.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	for (auto &frameBuffer : deferred.compositionFrameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	deferred.pipeline.destroy();
+	deferred.pipelineComposition.destroy();
+
+	// SSR
+	for (auto &frameBuffer : ssr.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	if (ssr.renderPass) {
+		vulkan.device.destroyRenderPass(ssr.renderPass);
+	}
+	ssr.pipeline.destroy();
+
+	// FXAA
+	for (auto &frameBuffer : fxaa.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	if (fxaa.renderPass) {
+		vulkan.device.destroyRenderPass(fxaa.renderPass);
+	}
+	fxaa.pipeline.destroy();
+
+	// Bloom
+	for (auto &frameBuffer : bloom.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	if (bloom.renderPassBrightFilter) {
+		vulkan.device.destroyRenderPass(bloom.renderPassBrightFilter);
+	}
+	if (bloom.renderPassGaussianBlur) {
+		vulkan.device.destroyRenderPass(bloom.renderPassGaussianBlur);
+	}
+	if (bloom.renderPassCombine) {
+		vulkan.device.destroyRenderPass(bloom.renderPassCombine);
+	}
+	bloom.pipelineBrightFilter.destroy();
+	bloom.pipelineGaussianBlurHorizontal.destroy();
+	bloom.pipelineGaussianBlurVertical.destroy();
+	bloom.pipelineCombine.destroy();
+
+	// Motion blur
+	for (auto &frameBuffer : motionBlur.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	if (motionBlur.renderPass) {
+		vulkan.device.destroyRenderPass(motionBlur.renderPass);
+	}
+	motionBlur.pipeline.destroy();
+
+	// SSAO
+	if (ssao.renderPass) {
+		vulkan.device.destroyRenderPass(ssao.renderPass);
+	}
+	if (ssao.blurRenderPass) {
+		vulkan.device.destroyRenderPass(ssao.blurRenderPass);
+	}
+	for (auto &frameBuffer : ssao.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	for (auto &frameBuffer : ssao.blurFrameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	ssao.pipeline.destroy();
+	ssao.pipelineBlur.destroy();
+
+	// terrain
+	terrain.pipeline.destroy();
+
+	// skyboxes
+	if (skyBoxDay.renderPass) {
+		vulkan.device.destroyRenderPass(skyBoxDay.renderPass);
+	}
+	for (auto &frameBuffer : skyBoxDay.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	skyBoxDay.pipeline.destroy();
+
+	if (skyBoxNight.renderPass) {
+		vulkan.device.destroyRenderPass(skyBoxNight.renderPass);
+	}
+	for (auto &frameBuffer : skyBoxNight.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	skyBoxNight.pipeline.destroy();
+
+	vulkan.depth->destroy();
+	vulkan.swapchain->destroy();
+	//- Free resources end ------------------
+
+	//- Recreate resources ------------------
+	vulkan.surface->actualExtent = { width, height };
+	*vulkan.swapchain = createSwapchain();
+	*vulkan.depth = createDepthResources();
+
+	addRenderTarget("depth", vk::Format::eR32Sfloat);
+	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat); // increased precision for some banding errors
+	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
+	addRenderTarget("ssao", vk::Format::eR16Unorm);
+	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
+	addRenderTarget("ssdo", vk::Format::eR32G32B32A32Sfloat);
+	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("composition2", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("brightFilter", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("gaussianBlurHorizontal", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("gaussianBlurVertical", vk::Format::eR8G8B8A8Unorm);
+
+	deferred.renderPass = createDeferredRenderPass();
+	deferred.compositionRenderPass = createCompositionRenderPass();
+	deferred.frameBuffers = createDeferredFrameBuffers();
+	deferred.compositionFrameBuffers = createCompositionFrameBuffers();
+	deferred.pipeline = createPipeline(getPipelineSpecificationsDeferred());
+	deferred.pipelineComposition = createCompositionPipeline();
+	deferred.updateDescriptorSets(renderTargets, lightUniforms);
+
+	ssr.renderPass = createSSRRenderPass();
+	ssr.frameBuffers = createSSRFrameBuffers();
+	ssr.pipeline = createSSRPipeline();
+	ssr.updateDescriptorSets(renderTargets);
+
+	fxaa.renderPass = createFXAARenderPass();
+	fxaa.frameBuffers = createFXAAFrameBuffers();
+	fxaa.pipeline = createFXAAPipeline();
+	fxaa.updateDescriptorSets(renderTargets);
+
+	bloom.renderPassBrightFilter = createBrightFilterRenderPass();
+	bloom.renderPassGaussianBlur = createGaussianBlurRenderPass();
+	bloom.renderPassCombine = createCombineRenderPass();
+	bloom.frameBuffers = createBloomFrameBuffers();
+	bloom.pipelineBrightFilter = createBrightFilterPipeline();
+	bloom.pipelineGaussianBlurHorizontal = createGaussianBlurHorizontalPipeline();
+	bloom.pipelineGaussianBlurVertical = createGaussianBlurVerticalPipeline();
+	bloom.pipelineCombine = createCombinePipeline();
+	bloom.updateDescriptorSets(renderTargets);
+
+	motionBlur.renderPass = createMotionBlurRenderPass();
+	motionBlur.frameBuffers = createMotionBlurFrameBuffers();
+	motionBlur.pipeline = createMotionBlurPipeline();
+	motionBlur.updateDescriptorSets(renderTargets);
+
+	ssao.renderPass = createSSAORenderPass();
+	ssao.blurRenderPass = createSSAOBlurRenderPass();
+	ssao.frameBuffers = createSSAOFrameBuffers();
+	ssao.blurFrameBuffers = createSSAOBlurFrameBuffers();
+	ssao.pipeline = createSSAOPipeline();
+	ssao.pipelineBlur = createSSAOBlurPipeline();
+	ssao.updateDescriptorSets(renderTargets);
+
+	gui.renderPass = createGUIRenderPass();
+	gui.frameBuffers = createGUIFrameBuffers();
+	gui.pipeline = createPipeline(getPipelineSpecificationsGUI());
+
+	skyBoxDay.renderPass = createSkyboxRenderPass();
+	skyBoxDay.frameBuffers = createSkyboxFrameBuffers(skyBoxDay);
+	skyBoxDay.pipeline = createPipeline(getPipelineSpecificationsSkyBox(skyBoxDay));
+	skyBoxNight.renderPass = createSkyboxRenderPass();
+	skyBoxNight.frameBuffers = createSkyboxFrameBuffers(skyBoxNight);
+	skyBoxNight.pipeline = createPipeline(getPipelineSpecificationsSkyBox(skyBoxNight));
+
+	//terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
+	//- Recreate resources end --------------
+}
+
+// Callbacks for scripts -------------------
 static void LoadModel(MonoString* folderPath, MonoString* modelName, uint32_t instances)
 {
 	std::string path(mono_string_to_utf8(folderPath));
@@ -148,6 +367,7 @@ static void SetTimeScale(float timeScale)
 {
 	GUI::timeScale = timeScale;
 }
+// ----------------------------------------
 
 void Context::loadResources()
 {
@@ -174,7 +394,7 @@ void Context::loadResources()
 	// TERRAIN LOAD
 	//terrain.generateTerrain("");
 	// MODELS LOAD
-	
+#ifdef USE_SCRIPTS
 	Script::Init();
 	Script::addCallback("Global::LoadModel", LoadModel);
 	Script::addCallback("Global::KeyDown", KeyDown);
@@ -184,6 +404,7 @@ void Context::loadResources()
 	Script::addCallback("Global::SetMousePos", SetMousePos);
 	Script::addCallback("Global::GetMouseWheel", GetMouseWheel);
 	scripts.push_back(std::make_unique<Script>("Load"));
+#endif
 }
 
 void Context::createUniforms()
@@ -4834,224 +5055,6 @@ void Context::destroyVkContext()
 	if (vulkan.instance) {
 		vulkan.instance.destroy();
 	}
-}
-
-void Context::resizeViewport(uint32_t width, uint32_t height)
-{
-	vulkan.device.waitIdle();
-
-	//- Free resources ----------------------
-	// render targets
-	for (auto& RT : renderTargets)
-		RT.second.destroy();
-	renderTargets.clear();
-
-	// GUI
-	if (gui.renderPass) {
-		vulkan.device.destroyRenderPass(gui.renderPass);
-	}
-	for (auto &frameBuffer : gui.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	gui.pipeline.destroy();
-
-	// deferred
-	if (deferred.renderPass) {
-		vulkan.device.destroyRenderPass(deferred.renderPass);
-	}
-	if (deferred.compositionRenderPass) {
-		vulkan.device.destroyRenderPass(deferred.compositionRenderPass);
-	}
-	for (auto &frameBuffer : deferred.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	for (auto &frameBuffer : deferred.compositionFrameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	deferred.pipeline.destroy();
-	deferred.pipelineComposition.destroy();
-
-	// SSR
-	for (auto &frameBuffer : ssr.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	if (ssr.renderPass) {
-		vulkan.device.destroyRenderPass(ssr.renderPass);
-	}
-	ssr.pipeline.destroy();
-
-	// FXAA
-	for (auto &frameBuffer : fxaa.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	if (fxaa.renderPass) {
-		vulkan.device.destroyRenderPass(fxaa.renderPass);
-	}
-	fxaa.pipeline.destroy();
-
-	// Bloom
-	for (auto &frameBuffer : bloom.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	if (bloom.renderPassBrightFilter) {
-		vulkan.device.destroyRenderPass(bloom.renderPassBrightFilter);
-	}
-	if (bloom.renderPassGaussianBlur) {
-		vulkan.device.destroyRenderPass(bloom.renderPassGaussianBlur);
-	}
-	if (bloom.renderPassCombine) {
-		vulkan.device.destroyRenderPass(bloom.renderPassCombine);
-	}
-	bloom.pipelineBrightFilter.destroy();
-	bloom.pipelineGaussianBlurHorizontal.destroy();
-	bloom.pipelineGaussianBlurVertical.destroy();
-	bloom.pipelineCombine.destroy();
-
-	// Motion blur
-	for (auto &frameBuffer : motionBlur.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	if (motionBlur.renderPass) {
-		vulkan.device.destroyRenderPass(motionBlur.renderPass);
-	}
-	motionBlur.pipeline.destroy();
-
-	// SSAO
-	if (ssao.renderPass) {
-		vulkan.device.destroyRenderPass(ssao.renderPass);
-	}
-	if (ssao.blurRenderPass) {
-		vulkan.device.destroyRenderPass(ssao.blurRenderPass);
-	}
-	for (auto &frameBuffer : ssao.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	for (auto &frameBuffer : ssao.blurFrameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	ssao.pipeline.destroy();
-	ssao.pipelineBlur.destroy();
-
-	// terrain
-	terrain.pipeline.destroy();
-	
-	// skyboxes
-	if (skyBoxDay.renderPass) {
-		vulkan.device.destroyRenderPass(skyBoxDay.renderPass);
-	}
-	for (auto &frameBuffer : skyBoxDay.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	skyBoxDay.pipeline.destroy();
-
-	if (skyBoxNight.renderPass) {
-		vulkan.device.destroyRenderPass(skyBoxNight.renderPass);
-	}
-	for (auto &frameBuffer : skyBoxNight.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	skyBoxNight.pipeline.destroy();
-
-	vulkan.depth->destroy();
-	vulkan.swapchain->destroy();
-	//- Free resources end ------------------
-
-	//- Recreate resources ------------------
-	vulkan.surface->actualExtent = { width, height };
-	*vulkan.swapchain = createSwapchain();
-	*vulkan.depth = createDepthResources();
-
-	addRenderTarget("depth", vk::Format::eR32Sfloat);
-	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat); // increased precision for some banding errors
-	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
-	addRenderTarget("ssao", vk::Format::eR16Unorm);
-	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
-	addRenderTarget("ssdo", vk::Format::eR32G32B32A32Sfloat);
-	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("composition2", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
-	addRenderTarget("brightFilter", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("gaussianBlurHorizontal", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("gaussianBlurVertical", vk::Format::eR8G8B8A8Unorm);
-
-	deferred.renderPass = createDeferredRenderPass();
-	deferred.compositionRenderPass = createCompositionRenderPass();
-	deferred.frameBuffers = createDeferredFrameBuffers();
-	deferred.compositionFrameBuffers = createCompositionFrameBuffers();
-	deferred.pipeline = createPipeline(getPipelineSpecificationsDeferred());
-	deferred.pipelineComposition = createCompositionPipeline();
-	deferred.updateDescriptorSets(renderTargets, lightUniforms);
-
-	ssr.renderPass = createSSRRenderPass();
-	ssr.frameBuffers = createSSRFrameBuffers();
-	ssr.pipeline = createSSRPipeline();
-	ssr.updateDescriptorSets(renderTargets);
-
-	fxaa.renderPass = createFXAARenderPass();
-	fxaa.frameBuffers = createFXAAFrameBuffers();
-	fxaa.pipeline = createFXAAPipeline();
-	fxaa.updateDescriptorSets(renderTargets);
-
-	bloom.renderPassBrightFilter = createBrightFilterRenderPass();
-	bloom.renderPassGaussianBlur = createGaussianBlurRenderPass();
-	bloom.renderPassCombine = createCombineRenderPass();
-	bloom.frameBuffers = createBloomFrameBuffers();
-	bloom.pipelineBrightFilter = createBrightFilterPipeline();
-	bloom.pipelineGaussianBlurHorizontal = createGaussianBlurHorizontalPipeline();
-	bloom.pipelineGaussianBlurVertical = createGaussianBlurVerticalPipeline();
-	bloom.pipelineCombine = createCombinePipeline();
-	bloom.updateDescriptorSets(renderTargets);
-
-	motionBlur.renderPass = createMotionBlurRenderPass();
-	motionBlur.frameBuffers = createMotionBlurFrameBuffers();
-	motionBlur.pipeline = createMotionBlurPipeline();
-	motionBlur.updateDescriptorSets(renderTargets);
-
-	ssao.renderPass = createSSAORenderPass();
-	ssao.blurRenderPass = createSSAOBlurRenderPass();
-	ssao.frameBuffers = createSSAOFrameBuffers();
-	ssao.blurFrameBuffers = createSSAOBlurFrameBuffers();
-	ssao.pipeline = createSSAOPipeline();
-	ssao.pipelineBlur = createSSAOBlurPipeline();
-	ssao.updateDescriptorSets(renderTargets);
-
-	gui.renderPass = createGUIRenderPass();
-	gui.frameBuffers = createGUIFrameBuffers();
-	gui.pipeline = createPipeline(getPipelineSpecificationsGUI());
-
-	skyBoxDay.renderPass = createSkyboxRenderPass();
-	skyBoxDay.frameBuffers = createSkyboxFrameBuffers(skyBoxDay);
-	skyBoxDay.pipeline = createPipeline(getPipelineSpecificationsSkyBox(skyBoxDay));
-	skyBoxNight.renderPass = createSkyboxRenderPass();
-	skyBoxNight.frameBuffers = createSkyboxFrameBuffers(skyBoxNight);
-	skyBoxNight.pipeline = createPipeline(getPipelineSpecificationsSkyBox(skyBoxNight));
-	
-	//terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
-	//- Recreate resources end --------------
 }
 
 vk::DescriptorSetLayout Context::getDescriptorSetLayoutLights()

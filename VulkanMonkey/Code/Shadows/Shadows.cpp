@@ -1,6 +1,5 @@
 #include "Shadows.h"
 #include "../GUI/GUI.h"
-#include "../Light/Light.h"
 
 using namespace vm;
 
@@ -21,7 +20,7 @@ void Shadows::createDescriptorSets()
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 		// MVP
 		textureWriteSets[0] = vk::WriteDescriptorSet()
-			.setDstSet(descriptorSets[i])										// DescriptorSet dstSet;
+			.setDstSet(descriptorSets[i])									// DescriptorSet dstSet;
 			.setDstBinding(0)												// uint32_t dstBinding;
 			.setDstArrayElement(0)											// uint32_t dstArrayElement;
 			.setDescriptorCount(1)											// uint32_t descriptorCount;
@@ -32,7 +31,7 @@ void Shadows::createDescriptorSets()
 				.setRange(sizeof(ShadowsUBO)));									// DeviceSize range;
 		// sampler
 		textureWriteSets[1] = vk::WriteDescriptorSet()
-			.setDstSet(descriptorSets[i])										// DescriptorSet dstSet;
+			.setDstSet(descriptorSets[i])									// DescriptorSet dstSet;
 			.setDstBinding(1)												// uint32_t dstBinding;
 			.setDstArrayElement(0)											// uint32_t dstArrayElement;
 			.setDescriptorCount(1)											// uint32_t descriptorCount;

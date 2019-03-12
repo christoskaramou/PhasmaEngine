@@ -32,6 +32,8 @@
 #include <tuple>
 #include <map>
 
+#define USE_SCRIPTS
+
 namespace vm {
 	struct Context
 	{
@@ -41,9 +43,6 @@ namespace vm {
 
 		// RENDER TARGETS
 		std::map<std::string, Image> renderTargets{};
-
-		// MODELS
-		//static std::vector<Model> models;
 
 		// SHADOWS
 		Shadows shadows;
@@ -93,9 +92,10 @@ namespace vm {
 
 		// Metrics
 		std::vector<Metrics> metrics{};
-
+#ifdef USE_SCRIPTS
 		// Scripts
 		std::vector<std::unique_ptr<Script>> scripts{};
+#endif
 
 		void initVulkanContext();
 		void initRendering();
