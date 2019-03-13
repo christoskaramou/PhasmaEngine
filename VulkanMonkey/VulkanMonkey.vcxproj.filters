@@ -237,6 +237,9 @@
     <ClInclude Include="Code\Bloom\Bloom.h">
       <Filter>Code\Bloom</Filter>
     </ClInclude>
+    <ClInclude Include="include\TinyFileDialogs\tinyfiledialogs.h">
+      <Filter>Include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -364,6 +367,9 @@
     </ClCompile>
     <ClCompile Include="Code\Bloom\Bloom.cpp">
       <Filter>Code\Bloom</Filter>
+    </ClCompile>
+    <ClCompile Include="include\TinyFileDialogs\tinyfiledialogs.c">
+      <Filter>Include</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -1,6 +1,8 @@
 #include "GUI.h"
 #include <filesystem>
 #include "../Event/Event.h"
+#include "../include/TinyFileDialogs/tinyfiledialogs.h"
+#include "../Queue/Queue.h"
 
 using namespace vm;
 ImVec2						GUI::winPos = ImVec2();
@@ -67,6 +69,29 @@ void GUI::setWindows()
 	showScripts();
 	showModels();
 	showRenderingWindow();
+	showMenu();
+}
+
+void GUI::showMenu()
+{
+	if (ImGui::BeginMainMenuBar())
+	{
+		if (ImGui::BeginMenu("File"))
+		{
+			if (ImGui::MenuItem("Load...")) {
+				// TODO: Add checks for all file types
+				std::string path(tinyfd_openFileDialog("Choose Model", "", 0, NULL, "", 0));
+				std::string folderPath = path.substr(0, path.find_last_of("\\") + 1);
+				std::string modelName = path.substr(path.find_last_of("\\") + 1);
+				Queue::loadModel.push_back({ folderPath, modelName });
+			}
+			if (ImGui::MenuItem("Exit")) {
+				
+			}
+			ImGui::EndMenu();
+		}
+		ImGui::EndMainMenuBar();
+	}
 }
 
 void GUI::showMetrics()
@@ -75,8 +100,8 @@ void GUI::showMetrics()
 	float totalTime = 0.f;
 
 	static bool metrics_open = true;
-	ImGui::SetNextWindowPos(ImVec2(0.f, 1.f));
-	ImGui::SetNextWindowSize(ImVec2(LEFT_BORDER, HEIGHT_f - LOWER_BORDER - 1.0f));
+	ImGui::SetNextWindowPos(ImVec2(0.f, MENU_PADDING));
+	ImGui::SetNextWindowSize(ImVec2(LEFT_BORDER, HEIGHT_f - LOWER_BORDER - MENU_PADDING));
 	ImGui::Begin("Metrics", &metrics_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
@@ -115,6 +140,7 @@ void GUI::showMetrics()
 	ImGui::Separator();
 	ImGui::Separator();
 	ImGui::Text("Total: %i (%.3f ms)", totalPasses, totalTime);
+
 	tlPanelPos = ImGui::GetWindowPos();
 	tlPanelSize = ImGui::GetWindowSize();
 	ImGui::End();
@@ -164,8 +190,8 @@ void GUI::showModels()
 void vm::GUI::showProperties()
 {
 	static bool	propetries_open = true;
-	ImGui::SetNextWindowPos(ImVec2(WIDTH_f - RIGHT_BORDER, 0.0f));
-	ImGui::SetNextWindowSize(ImVec2(RIGHT_BORDER, HEIGHT_f - LOWER_BORDER));
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f - RIGHT_BORDER, MENU_PADDING));
+	ImGui::SetNextWindowSize(ImVec2(RIGHT_BORDER, HEIGHT_f - LOWER_BORDER - MENU_PADDING));
 	ImGui::Begin("Global Properties", &propetries_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGui::Checkbox("Lock Render Window", &lock_render_window);
 	ImGui::Checkbox("SSR", &show_ssr);
@@ -223,8 +249,8 @@ void GUI::showRenderingWindow()
 	int flags = ImGuiWindowFlags_NoTitleBar;
 	if (lock_render_window) {
 		flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-		ImGui::SetNextWindowPos(ImVec2(LEFT_BORDER, 0.f));
-		ImGui::SetNextWindowSize(ImVec2(WIDTH_f - LEFT_BORDER - RIGHT_BORDER, HEIGHT_f - LOWER_BORDER));
+		ImGui::SetNextWindowPos(ImVec2(LEFT_BORDER, MENU_PADDING));
+		ImGui::SetNextWindowSize(ImVec2(WIDTH_f - LEFT_BORDER - RIGHT_BORDER, HEIGHT_f - LOWER_BORDER - MENU_PADDING));
 	}
 	ImGui::Begin("Rendering Window", &active, flags);
 	winPos = ImGui::GetWindowPos();

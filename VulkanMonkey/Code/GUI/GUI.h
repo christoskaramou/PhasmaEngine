@@ -12,6 +12,7 @@ namespace vm {
 	constexpr float LOWER_BORDER = 150.f;
 	constexpr float LEFT_BORDER = 250.f;
 	constexpr float RIGHT_BORDER = 250.f;
+	constexpr float MENU_PADDING = 16.f;
 	struct GUI : Object
 	{
 		// Data
@@ -77,6 +78,7 @@ namespace vm {
 		void draw(uint32_t imageIndex);
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();
+		void showMenu();
 		void showMetrics();
 		void showConsole();
 		void showScripts();

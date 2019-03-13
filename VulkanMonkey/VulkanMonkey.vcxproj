@@ -258,6 +258,7 @@
     <ClInclude Include="include\imgui\imstb_textedit.h" />
     <ClInclude Include="include\imgui\imstb_truetype.h" />
     <ClInclude Include="include\SDL.h" />
+    <ClInclude Include="include\TinyFileDialogs\tinyfiledialogs.h" />
     <ClInclude Include="include\tinygltf\json.hpp" />
     <ClInclude Include="include\tinygltf\stb_image.h" />
     <ClInclude Include="include\tinygltf\stb_image_write.h" />
@@ -303,6 +304,7 @@
     <ClCompile Include="include\imgui\imgui_demo.cpp" />
     <ClCompile Include="include\imgui\imgui_draw.cpp" />
     <ClCompile Include="include\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="include\TinyFileDialogs\tinyfiledialogs.c" />
     <ClCompile Include="include\tinygltf\stb_image.cpp" />
     <ClCompile Include="include\tinygltf\stb_image_write.cpp" />
     <ClCompile Include="include\tinygltf\tiny_gltf.cpp" />
