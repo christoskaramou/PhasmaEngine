@@ -270,7 +270,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 				cmd.bindVertexBuffers(0, Model::models[m].vertexBuffer.buffer, offset);
 				cmd.bindIndexBuffer(Model::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
-				for (auto& node : Model::models[m].nodes) {
+				for (auto& node : Model::models[m].linearNodes) {
 					if (node->mesh) {
 						cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet }, nullptr);
 						for (auto& primitive : node->mesh->primitives) {
