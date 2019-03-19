@@ -240,6 +240,9 @@
     <ClInclude Include="include\TinyFileDialogs\tinyfiledialogs.h">
       <Filter>Include</Filter>
     </ClInclude>
+    <ClInclude Include="Code\Model\StreamReader.h">
+      <Filter>Code\Model</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -369,6 +372,69 @@
       <Filter>Code\Bloom</Filter>
     </ClCompile>
     <ClCompile Include="include\TinyFileDialogs\tinyfiledialogs.c">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\Schema.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\Maths.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\Version.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\Validation.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\Serialize.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\SchemaValidation.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\ResourceWriter.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\MicrosoftGeneratorVersion.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\PBRUtils.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\MeshPrimitiveUtils.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\GLTFResourceWriter.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\GLBResourceWriter.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\GLBResourceReader.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\ExtensionsKHR.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\ExtensionHandlers.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\Extension.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\Document.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\Deserialize.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\Color.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\BufferBuilder.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GLTFSDK\AnimationUtils.cpp">
       <Filter>Include</Filter>
     </ClCompile>
   </ItemGroup>

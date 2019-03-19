@@ -1252,6 +1252,11 @@ namespace vm {
 		return f1 + a * (f2 - f1);
 	}
 
+	vec4 mix(cvec4 v1, cvec4 v2, cfloat a)
+	{
+		return v1 + (a * (v2 - v1));
+	}
+
 	quat mix(cquat & q1, cquat & q2, cfloat a)
 	{
 		cfloat cosTheta = dot(q1, q2);

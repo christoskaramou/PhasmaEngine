@@ -7,7 +7,7 @@ namespace vm {
 	struct Vertex
 	{
 		Vertex();
-		Vertex(vec3& pos, vec2& uv, vec3& norm, vec3& tang, vec3& bitang, vec4& color, ivec4& bonesIDs, vec4& weights);
+		Vertex(vec3& pos, vec2& uv, vec3& norm, vec4& color, ivec4& bonesIDs, vec4& weights);
 
 		static std::vector<vk::VertexInputBindingDescription> getBindingDescriptionGeneral();
 		static std::vector<vk::VertexInputBindingDescription> getBindingDescriptionGUI();
@@ -19,8 +19,6 @@ namespace vm {
 		vec3 position;
 		vec2 uv;
 		vec3 normals;
-		vec3 tangents;
-		vec3 bitangents;
 		vec4 color;
 		ivec4 bonesIDs;
 		vec4 weights;

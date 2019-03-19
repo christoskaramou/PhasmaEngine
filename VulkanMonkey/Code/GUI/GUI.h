@@ -9,10 +9,10 @@
 #include <vector>
 
 namespace vm {
-	constexpr float LOWER_BORDER = 150.f;
-	constexpr float LEFT_BORDER = 250.f;
-	constexpr float RIGHT_BORDER = 250.f;
-	constexpr float MENU_PADDING = 16.f;
+	constexpr float LOWER_PANEL_HEIGHT = 150.f;
+	constexpr float LEFT_PANEL_WIDTH = 250.f;
+	constexpr float RIGHT_PANEL_WIDTH = 250.f;
+	constexpr float MENU_HEIGHT = 19.f;
 	struct GUI : Object
 	{
 		// Data
@@ -78,13 +78,16 @@ namespace vm {
 		void draw(uint32_t imageIndex);
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();
-		void showMenu();
-		void showMetrics();
-		void showConsole();
-		void showScripts();
-		void showModels();
-		void showProperties();
-		void showRenderingWindow();
+		void LeftPanel();
+		void RightPanel();
+		void BottomPanel();
+		void Menu();
+		void Metrics();
+		void ConsoleWindow();
+		void Scripts();
+		void Models();
+		void Properties();
+		void RenderingWindowBox();
 		void createVertexBuffer(size_t vertex_size);
 		void createIndexBuffer(size_t index_size);
 		void createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout) override;

@@ -65,13 +65,13 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 	}
 
 	// TODO: display items starting from the bottom
-	ClearLog();
-	if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/glTF/", "Sponza.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	if (ImGui::SmallButton("Load Suzanne")) { Queue::loadModel.push_back({ "objects/Suzanne/glTF/", "Suzanne.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	if (ImGui::SmallButton("Load Corset")) { Queue::loadModel.push_back({ "objects/Corset/glTF/", "Corset.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
-	if (ImGui::SmallButton("Load MetalRoughSpheres")) { Queue::loadModel.push_back({ "objects/MetalRoughSpheres/glTF/", "MetalRoughSpheres.gltf" }); AddLog("loading..."); }
-	if (ImGui::SmallButton("Load Bob Animated")) { Queue::loadModel.push_back({ "objects/Bob/", "Bob.md5mesh" }); AddLog("loading..."); } ImGui::SameLine();
+	//ClearLog();
+	//if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/glTF/", "Sponza.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load Suzanne")) { Queue::loadModel.push_back({ "objects/Suzanne/glTF/", "Suzanne.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load Corset")) { Queue::loadModel.push_back({ "objects/Corset/glTF/", "Corset.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
+	//if (ImGui::SmallButton("Load MetalRoughSpheres")) { Queue::loadModel.push_back({ "objects/MetalRoughSpheres/glTF/", "MetalRoughSpheres.gltf" }); AddLog("loading..."); }
+	//if (ImGui::SmallButton("Load Bob Animated")) { Queue::loadModel.push_back({ "objects/Bob/", "Bob.md5mesh" }); AddLog("loading..."); } ImGui::SameLine();
 
 	if (ImGui::SmallButton("Clear")) { ClearLog(); } ImGui::SameLine();
 

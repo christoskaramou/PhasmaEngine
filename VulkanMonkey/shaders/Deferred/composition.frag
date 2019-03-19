@@ -24,13 +24,13 @@ void main()
 	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj, screenSpace.size);
 	vec3 normal = texture(samplerNormal, inUV).xyz;
 	float ssao = texture(ssaoBlurSampler, inUV).x;
-	vec3 roughMet = texture(samplerRoughMet, inUV).xyz;
+	vec3 metRough = texture(samplerMetRough, inUV).xyz;
 	vec4 albedo = texture(samplerAlbedo, inUV);
 	
 	Material material;
 	material.albedo = albedo.xyz;
-	material.roughness = roughMet.z;
-	material.metallic = roughMet.y;
+	material.roughness = metRough.y;
+	material.metallic = metRough.z;
 	material.F0 = mix(vec3(0.04f), material.albedo, material.metallic);
 
 	// Ambient

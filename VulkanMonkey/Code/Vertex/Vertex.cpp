@@ -6,19 +6,15 @@ Vertex::Vertex() :
 	position(),
 	uv(),
 	normals(),
-	tangents(),
-	bitangents(),
 	color(),
 	bonesIDs(),
 	weights()
 { }
 
-Vertex::Vertex(vec3& pos, vec2& uv, vec3& norm, vec3& tang, vec3& bitang, vec4& color, ivec4& bonesIDs, vec4& weights) :
+Vertex::Vertex(vec3& pos, vec2& uv, vec3& norm, vec4& color, ivec4& bonesIDs, vec4& weights) :
 	position(pos),
 	uv(uv),
 	normals(norm),
-	tangents(tang),
-	bitangents(bitang),
 	color(color),
 	bonesIDs(bonesIDs),
 	weights(weights)
@@ -56,7 +52,7 @@ std::vector<vk::VertexInputBindingDescription> Vertex::getBindingDescriptionSkyB
 
 std::vector<vk::VertexInputAttributeDescription> Vertex::getAttributeDescriptionGeneral()
 {
-	std::vector<vk::VertexInputAttributeDescription> vInputAttrDesc(8);
+	std::vector<vk::VertexInputAttributeDescription> vInputAttrDesc(6);
 	vInputAttrDesc[0] = vk::VertexInputAttributeDescription()
 		.setBinding(0)										// index of the binding to get per-vertex data
 		.setLocation(0)										// location directive of the input in the vertex shader
@@ -75,28 +71,18 @@ std::vector<vk::VertexInputAttributeDescription> Vertex::getAttributeDescription
 	vInputAttrDesc[3] = vk::VertexInputAttributeDescription()
 		.setBinding(0)
 		.setLocation(3)
-		.setFormat(vk::Format::eR32G32B32Sfloat)	//vec3
+		.setFormat(vk::Format::eR32G32B32A32Sfloat)	//vec4
 		.setOffset(8 * sizeof(float));
 	vInputAttrDesc[4] = vk::VertexInputAttributeDescription()
 		.setBinding(0)
 		.setLocation(4)
-		.setFormat(vk::Format::eR32G32B32Sfloat)	//vec3
-		.setOffset(11 * sizeof(float));
+		.setFormat(vk::Format::eR32G32B32A32Sint)	//ivec4
+		.setOffset(12 * sizeof(float));
 	vInputAttrDesc[5] = vk::VertexInputAttributeDescription()
 		.setBinding(0)
 		.setLocation(5)
 		.setFormat(vk::Format::eR32G32B32A32Sfloat)	//vec4
-		.setOffset(14 * sizeof(float));
-	vInputAttrDesc[6] = vk::VertexInputAttributeDescription()
-		.setBinding(0)
-		.setLocation(6)
-		.setFormat(vk::Format::eR32G32B32A32Sint)	//ivec4
-		.setOffset(18 * sizeof(float));
-	vInputAttrDesc[7] = vk::VertexInputAttributeDescription()
-		.setBinding(0)
-		.setLocation(7)
-		.setFormat(vk::Format::eR32G32B32A32Sfloat)	//vec4
-		.setOffset(22 * sizeof(float));
+		.setOffset(16 * sizeof(float));
 
 	return vInputAttrDesc;
 }

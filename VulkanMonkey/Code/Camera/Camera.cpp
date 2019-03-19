@@ -45,11 +45,13 @@ void vm::Camera::update()
 	front = orientation * worldFront();
 	right = orientation * worldRight();
 	up = orientation * worldUp();
+	previousView = view;
 	updatePerspective();
 	updateView();
 	invView = inverse(view);
 	invProjection = inverse(projection);
 	invViewProjection = invView * invProjection;
+	ExtractFrustum();
 }
 
 void vm::Camera::updatePerspective()
@@ -120,41 +122,67 @@ vec3 Camera::worldFront() const
 	return vec3(0.f, 0.f, worldOrientation.z);
 }
 
-void Camera::ExtractFrustum(const mat4& model)
+void Camera::ExtractFrustum()
 {
-	mat4 pvm = transpose(projection * view * model);
+	// transpose just to make the calculations look simpler
+	mat4 pvm = transpose(projection * view);
+	vec4 temp;
 
 	/* Extract the numbers for the RIGHT plane */
-	frustum[0] = pvm[3] - pvm[0];
-	frustum[0] /= length(vec3(frustum[0]));
+	temp = pvm[3] - pvm[0];
+	temp /= length(vec3(temp));
+
+	frustum[0].normal = vec3(temp);
+	frustum[0].d = temp.w;
 
 	/* Extract the numbers for the LEFT plane */
-	frustum[1] = pvm[3] + pvm[0];
-	frustum[1] /= length(vec3(frustum[1]));
+	temp = pvm[3] + pvm[0];
+	temp /= length(vec3(temp));
+
+	frustum[1].normal = vec3(temp);
+	frustum[1].d = temp.w;
 
 	/* Extract the BOTTOM plane */
-	frustum[2] = pvm[3] + pvm[1];
-	frustum[2] /= length(vec3(frustum[2]));
+	temp = pvm[3] + pvm[1];
+	temp /= length(vec3(temp));
+
+	frustum[2].normal = vec3(temp);
+	frustum[2].d = temp.w;
 
 	/* Extract the TOP plane */
-	frustum[3] = pvm[3] - pvm[1];
-	frustum[3] /= length(vec3(frustum[3]));
+	temp = pvm[3] - pvm[1];
+	temp /= length(vec3(temp));
+
+	frustum[3].normal = vec3(temp);
+	frustum[3].d = temp.w;
 
 	/* Extract the FAR plane */
-	frustum[4] = pvm[3] - pvm[2];
-	frustum[4] /= length(vec3(frustum[4]));
+	temp = pvm[3] - pvm[2];
+	temp /= length(vec3(temp));
+
+	frustum[4].normal = vec3(temp);
+	frustum[4].d = temp.w;
 
 	/* Extract the NEAR plane */
-	frustum[5] = pvm[3] + pvm[2];
-	frustum[5] /= length(vec3(frustum[5]));
+	temp = pvm[3] + pvm[2];
+	temp /= length(vec3(temp));
+
+	frustum[5].normal = vec3(temp);
+	frustum[5].d = temp.w;
 }
 
 // center x,y,z - radius w 
 bool Camera::SphereInFrustum(const vec4& boundingSphere) const
 {
-	for (unsigned i = 0; i < 6; i++)
-		if (dot(vec3(frustum[i]), vec3(boundingSphere)) + frustum[i].w <= -boundingSphere.w)
+	for (unsigned i = 0; i < 6; i++) {
+		float dist = dot(frustum[i].normal, vec3(boundingSphere)) + frustum[i].d;
+
+		if (dist < -boundingSphere.w)
 			return false;
+
+		if (fabs(dist) < boundingSphere.w)
+			return true;
+	}
 	return true;
 }
 

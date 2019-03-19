@@ -15,7 +15,7 @@ layout(constant_id = 0) const int NUM_LIGHTS = 1;
 layout(set = 0, binding = 0) uniform sampler2D samplerDepth;
 layout(set = 0, binding = 1) uniform sampler2D samplerNormal;
 layout(set = 0, binding = 2) uniform sampler2D samplerAlbedo;
-layout(set = 0, binding = 3) uniform sampler2D samplerRoughMet;
+layout(set = 0, binding = 3) uniform sampler2D samplerMetRough;
 layout(set = 0, binding = 4) uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS + 1]; } ubo;
 layout(set = 0, binding = 5) uniform sampler2D ssaoBlurSampler;
 layout(set = 0, binding = 6) uniform sampler2D ssrSampler;

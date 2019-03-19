@@ -1,6 +1,6 @@
 #pragma once
-#include "../Math/Math.h"  // for vec3, mat4, vec2, vec4, quat
-#include "../../include/Vulkan.h"              // for Rect2D, Viewport
+#include "../Math/Math.h"
+#include "../../include/Vulkan.h"
 
 namespace vm {
 	struct Camera
@@ -17,7 +17,14 @@ namespace vm {
 			void update(const vec2& position, const vec2& size, float minDepth = 0.f, float maxDepth = 1.f);
 		};
 
+		struct Plane
+		{
+			vec3 normal;
+			float d;
+		};
+
 		mat4 view;
+		mat4 previousView;
 		mat4 projection;
 		mat4 invView;
 		mat4 invProjection;
@@ -27,7 +34,7 @@ namespace vm {
 		vec3 front, right, up;
 		float nearPlane, farPlane, FOV, speed, rotationSpeed;
 		SurfaceTargetArea renderArea;
-		vec4 frustum[6];
+		Plane frustum[6];
 
 		Camera();
 		void update();
@@ -38,7 +45,7 @@ namespace vm {
 		vec3 worldUp() const;
 		void move(RelativeDirection direction, float velocity);
 		void rotate(float xoffset, float yoffset);
-		void ExtractFrustum(const mat4& model);
+		void ExtractFrustum();
 		bool SphereInFrustum(const vec4& boundingSphere) const;
 	};
 }

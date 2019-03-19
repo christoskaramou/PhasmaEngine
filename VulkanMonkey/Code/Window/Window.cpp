@@ -110,8 +110,13 @@ bool Window::processEvents(float delta)
 	}
 
 	if (io.KeysDown[SDL_SCANCODE_ESCAPE]) {
-		FIRE_EVENT(Event::OnExit);
-		return false;
+		const SDL_MessageBoxButtonData buttons[] = { { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "cancel" },{ SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes" } };
+		const SDL_MessageBoxColorScheme colorScheme = { {{ 255,   0,   0 }, {   0, 255,   0 }, { 255, 255,   0 }, {   0,   0, 255 }, { 255,   0, 255 }} };
+		const SDL_MessageBoxData messageboxdata = { SDL_MESSAGEBOX_INFORMATION, NULL,"Exit", "Are you sure you want to exit?",SDL_arraysize(buttons),buttons, &colorScheme };
+		int buttonid;
+		SDL_ShowMessageBox(&messageboxdata, &buttonid);
+		if (buttonid == 1)
+			return false;
 	}
 	if ((io.KeysDown[SDL_SCANCODE_W] || io.KeysDown[SDL_SCANCODE_S]) &&
 		(io.KeysDown[SDL_SCANCODE_A] || io.KeysDown[SDL_SCANCODE_D]))

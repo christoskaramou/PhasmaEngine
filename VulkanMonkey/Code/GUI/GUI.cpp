@@ -63,16 +63,31 @@ bool endsWithExt(const std::string &mainStr, const std::string &toMatch)
 
 void GUI::setWindows()
 {
-	showMetrics();
-	showProperties();
-	showConsole();
-	showScripts();
-	showModels();
-	showRenderingWindow();
-	showMenu();
+	Menu();
+	LeftPanel();
+	RenderingWindowBox();
+	RightPanel();
+	BottomPanel();
 }
 
-void GUI::showMenu()
+void GUI::LeftPanel()
+{
+	Metrics();
+}
+
+void GUI::RightPanel()
+{
+	Properties();
+}
+
+void GUI::BottomPanel()
+{
+	ConsoleWindow();
+	Scripts();
+	Models();
+}
+
+void GUI::Menu()
 {
 	if (ImGui::BeginMainMenuBar())
 	{
@@ -86,7 +101,16 @@ void GUI::showMenu()
 				Queue::loadModel.push_back({ folderPath, modelName });
 			}
 			if (ImGui::MenuItem("Exit")) {
-				
+				const SDL_MessageBoxButtonData buttons[] = { { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "cancel" },{ SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes" } };
+				const SDL_MessageBoxColorScheme colorScheme = { {{ 255,   0,   0 }, {   0, 255,   0 }, { 255, 255,   0 }, {   0,   0, 255 }, { 255,   0, 255 }} };
+				const SDL_MessageBoxData messageboxdata = { SDL_MESSAGEBOX_INFORMATION, NULL,"Exit", "Are you sure you want to exit?",SDL_arraysize(buttons),buttons, &colorScheme };
+				int buttonid;
+				SDL_ShowMessageBox(&messageboxdata, &buttonid);
+				if (buttonid == 1) {
+					SDL_Event sdlevent;
+					sdlevent.type = SDL_QUIT;
+					SDL_PushEvent(&sdlevent);
+				}
 			}
 			ImGui::EndMenu();
 		}
@@ -94,14 +118,14 @@ void GUI::showMenu()
 	}
 }
 
-void GUI::showMetrics()
+void GUI::Metrics()
 {
 	int totalPasses = 0;
 	float totalTime = 0.f;
 
 	static bool metrics_open = true;
-	ImGui::SetNextWindowPos(ImVec2(0.f, MENU_PADDING));
-	ImGui::SetNextWindowSize(ImVec2(LEFT_BORDER, HEIGHT_f - LOWER_BORDER - MENU_PADDING));
+	ImGui::SetNextWindowPos(ImVec2(0.f, MENU_HEIGHT));
+	ImGui::SetNextWindowSize(ImVec2(LEFT_PANEL_WIDTH, HEIGHT_f - LOWER_PANEL_HEIGHT - MENU_HEIGHT));
 	ImGui::Begin("Metrics", &metrics_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
@@ -146,18 +170,18 @@ void GUI::showMetrics()
 	ImGui::End();
 }
 
-void GUI::showConsole()
+void GUI::ConsoleWindow()
 {
 	static bool console_open = true;
 	static Console console;
-	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - LOWER_BORDER), ImVec2(WIDTH_f / 3.f, LOWER_BORDER));
+	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - LOWER_PANEL_HEIGHT), ImVec2(WIDTH_f / 3.f, LOWER_PANEL_HEIGHT));
 }
 
-void GUI::showScripts()
+void GUI::Scripts()
 {
 	static bool scripts_open = true;
-	ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 3.f, HEIGHT_f - LOWER_BORDER));
-	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_BORDER));
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 3.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
+	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_PANEL_HEIGHT));
 	ImGui::Begin("Scripts Folder", &scripts_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	for (auto& file : fileList)
 	{
@@ -169,11 +193,11 @@ void GUI::showScripts()
 	ImGui::End();
 }
 
-void GUI::showModels()
+void GUI::Models()
 {
 	static bool models_open = true;
-	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 2.f / 3.f, HEIGHT_f - LOWER_BORDER));
-	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_BORDER));
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 2.f / 3.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
+	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_PANEL_HEIGHT));
 	ImGui::Begin("Models Loaded", &models_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	static std::vector<bool> selected(modelList.size(), false);
 	if (selected.size() != modelList.size())
@@ -187,11 +211,11 @@ void GUI::showModels()
 	ImGui::End();
 }
 
-void vm::GUI::showProperties()
+void vm::GUI::Properties()
 {
 	static bool	propetries_open = true;
-	ImGui::SetNextWindowPos(ImVec2(WIDTH_f - RIGHT_BORDER, MENU_PADDING));
-	ImGui::SetNextWindowSize(ImVec2(RIGHT_BORDER, HEIGHT_f - LOWER_BORDER - MENU_PADDING));
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f - RIGHT_PANEL_WIDTH, MENU_HEIGHT));
+	ImGui::SetNextWindowSize(ImVec2(RIGHT_PANEL_WIDTH, HEIGHT_f - LOWER_PANEL_HEIGHT - MENU_HEIGHT));
 	ImGui::Begin("Global Properties", &propetries_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGui::Checkbox("Lock Render Window", &lock_render_window);
 	ImGui::Checkbox("SSR", &show_ssr);
@@ -241,7 +265,7 @@ void vm::GUI::showProperties()
 	ImGui::End();
 }
 
-void GUI::showRenderingWindow()
+void GUI::RenderingWindowBox()
 {
 	static bool active = true;
 	ImGuiStyle* style = &ImGui::GetStyle();
@@ -249,8 +273,8 @@ void GUI::showRenderingWindow()
 	int flags = ImGuiWindowFlags_NoTitleBar;
 	if (lock_render_window) {
 		flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-		ImGui::SetNextWindowPos(ImVec2(LEFT_BORDER, MENU_PADDING));
-		ImGui::SetNextWindowSize(ImVec2(WIDTH_f - LEFT_BORDER - RIGHT_BORDER, HEIGHT_f - LOWER_BORDER - MENU_PADDING));
+		ImGui::SetNextWindowPos(ImVec2(LEFT_PANEL_WIDTH, MENU_HEIGHT));
+		ImGui::SetNextWindowSize(ImVec2(WIDTH_f - LEFT_PANEL_WIDTH - RIGHT_PANEL_WIDTH, HEIGHT_f - LOWER_PANEL_HEIGHT - MENU_HEIGHT));
 	}
 	ImGui::Begin("Rendering Window", &active, flags);
 	winPos = ImGui::GetWindowPos();
@@ -671,7 +695,7 @@ void GUI::windowStyle(ImGuiStyle* dst)
 	style->Colors[ImGuiCol_TitleBg] = style->Colors[ImGuiCol_WindowBg];
 	style->Colors[ImGuiCol_TitleBgActive] = style->Colors[ImGuiCol_WindowBg];
 	style->Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
-	style->Colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+	style->Colors[ImGuiCol_MenuBarBg] = ImVec4(0.0f, 0.5f, 0.85f, 1.00f);
 	style->Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
 	style->Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
 	style->Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);

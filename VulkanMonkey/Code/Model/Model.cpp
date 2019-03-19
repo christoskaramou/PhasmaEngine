@@ -1,48 +1,20 @@
 #include "Model.h"
 #include "../GUI/GUI.h"
+#include "../../include/GLTFSDK/GLTF.h"
+#include "../../include/GLTFSDK/GLTFResourceReader.h"
+#include "../../include/GLTFSDK/GLBResourceReader.h"
+#include "../../include/GLTFSDK/Deserialize.h"
+#include "StreamReader.h"
+#include <fstream>
+#include <sstream>
+#include <iostream>
 
 using namespace vm;
+using namespace Microsoft;
 
-vk::DescriptorSetLayout Model::descriptorSetLayout = nullptr;
+//vk::DescriptorSetLayout Model::descriptorSetLayout = nullptr;
 std::vector<Model> Model::models{};
 Pipeline* Model::pipeline = nullptr;
-
-mat4 aiMatrix4x4ToMat4(const aiMatrix4x4& m)
-{
-	return transpose(mat4((float*)&m));
-}
-
-void getNodes(aiNode* root, std::vector<aiNode*>& allNodes)
-{
-	for (uint32_t i = 0; i < root->mNumChildren; i++)
-		getNodes(root->mChildren[i], allNodes);
-	if (root) allNodes.push_back(root);
-}
-
-std::vector<aiNode*> getAllNodes(aiNode* root)
-{
-	std::vector<aiNode*> allNodes;
-	getNodes(root, allNodes);
-	return allNodes;
-}
-
-mat4 getTranform(aiNode& node)
-{
-	mat4 transform = aiMatrix4x4ToMat4(node.mTransformation);
-	aiNode* tranformNode = &node;
-	while (tranformNode->mParent) {
-		transform = aiMatrix4x4ToMat4(tranformNode->mParent->mTransformation) * transform;
-		tranformNode = tranformNode->mParent;
-	}
-	return transform;
-}
-
-std::string getTextureName(const aiMaterial& material, const aiTextureType& type)
-{
-	aiString aiTexName;
-	material.GetTexture(type, 0, &aiTexName);
-	return aiTexName.C_Str();
-}
 
 bool endsWith(const std::string &mainStr, const std::string &toMatch)
 {
@@ -53,171 +25,278 @@ bool endsWith(const std::string &mainStr, const std::string &toMatch)
 		return false;
 }
 
+void Model::readGltf(const std::filesystem::path& file)
+{
+	// Pass the absolute path, without the filename, to the stream reader
+	auto streamReader = std::make_unique<StreamReader>(file.parent_path());
+	std::filesystem::path pathFile = file.filename();
+	// Pass a UTF-8 encoded filename to GetInputString
+	auto gltfStream = streamReader->GetInputStream(pathFile.u8string());
+	resourceReader = new glTF::GLTFResourceReader(std::move(streamReader));
+	if (!resourceReader) throw std::runtime_error("Path filename extension must be .gltf");
+	// Read the contents of the glTF file into a std::stringstream
+	std::stringstream manifestStream;
+	manifestStream << gltfStream->rdbuf();
+
+	//std::cout << manifestStream.str();
+
+	try
+	{
+		document = glTF::Deserialize(manifestStream.str());
+	}
+	catch (const glTF::GLTFException& ex)
+	{
+		std::stringstream ss;
+
+		ss << "Microsoft::glTF::Deserialize failed: ";
+		ss << ex.what();
+
+		throw std::runtime_error(ss.str());
+	}
+}
+
+Microsoft::glTF::Image* Model::getImage(const std::string& textureID) {
+	return textureID.empty() ? nullptr :
+		const_cast<Microsoft::glTF::Image*>
+		(&document.images.Get(document.textures.Get(textureID).imageId));
+}
+
+void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string& folderPath)
+{
+	if (!node || meshID.empty()) return;
+	const auto& mesh = document.meshes.Get(meshID);
+
+	Mesh* myMesh = new Mesh();
+
+	const glTF::Accessor* accessorPos;
+	const glTF::Accessor* accessorTex;
+	const glTF::Accessor* accessorNor;
+	const glTF::Accessor* accessorCol;
+	const glTF::Accessor* accessorJoi;
+	const glTF::Accessor* accessorWei;
+	const glTF::Accessor* accessorInd;
+
+	for (const auto& primitive : mesh.primitives)
+	{
+		std::vector<float> positions{};
+		std::vector<float> uvs{};
+		std::vector<float> normals{};
+		std::vector<float> colors{};
+		std::vector<int> bonesIDs{};
+		std::vector<float> weights{};
+		std::vector<uint32_t> indices{};
+
+		std::string accessorId;
+
+		// ------------ Vertices ------------
+		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_POSITION, accessorId))
+		{
+			accessorPos = &document.accessors.Get(accessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(document, *accessorPos);
+			positions.insert(positions.end(), data.begin(), data.end());
+			
+		}
+		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_TEXCOORD_0, accessorId))
+		{
+			accessorTex = &document.accessors.Get(accessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(document, *accessorTex);
+			uvs.insert(uvs.end(), data.begin(), data.end());
+		}
+		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_NORMAL, accessorId))
+		{
+			accessorNor = &document.accessors.Get(accessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(document, *accessorNor);
+			normals.insert(normals.end(), data.begin(), data.end());
+		}
+		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_COLOR_0, accessorId))
+		{
+			accessorCol = &document.accessors.Get(accessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(document, *accessorNor);
+			colors.insert(colors.end(), data.begin(), data.end());
+		}
+		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_JOINTS_0, accessorId))
+		{
+			accessorJoi = &document.accessors.Get(accessorId);
+			switch (accessorJoi->componentType)
+			{
+			case glTF::COMPONENT_BYTE: {
+				const auto data = resourceReader->ReadBinaryData<int8_t>(document, *accessorJoi);
+				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
+				break;
+			}
+			case glTF::COMPONENT_UNSIGNED_BYTE: {
+				const auto data = resourceReader->ReadBinaryData<uint8_t>(document, *accessorJoi);
+				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
+				break;
+			}
+			case glTF::COMPONENT_SHORT: {
+				const auto data = resourceReader->ReadBinaryData<int16_t>(document, *accessorJoi);
+				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
+				break;
+			}
+			case glTF::COMPONENT_UNSIGNED_SHORT: {
+				const auto data = resourceReader->ReadBinaryData<uint16_t>(document, *accessorJoi);
+				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
+				break;
+			}
+			case glTF::COMPONENT_UNSIGNED_INT: {
+				const auto data = resourceReader->ReadBinaryData<uint32_t>(document, *accessorJoi);
+				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
+				break;
+			}
+			default:
+				throw glTF::GLTFException("Unsupported accessor ComponentType");
+			}
+		}
+		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_WEIGHTS_0, accessorId))
+		{
+			accessorWei = &document.accessors.Get(accessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(document, *accessorWei);
+			weights.insert(weights.end(), data.begin(), data.end());
+		}
+
+		// ------------ Indices ------------
+		if (primitive.indicesAccessorId != "")
+		{
+			accessorInd = &document.accessors.Get(primitive.indicesAccessorId);
+			switch (accessorInd->componentType)
+			{
+			case glTF::COMPONENT_BYTE: {
+				const auto data = resourceReader->ReadBinaryData<int8_t>(document, *accessorInd);
+				for (int i = 0; i < data.size(); i++)
+					indices.push_back((uint32_t)data[i]);
+				//indices.insert(indices.end(), data.begin(), data.end());
+				break;
+			}
+			case glTF::COMPONENT_UNSIGNED_BYTE: {
+				const auto data = resourceReader->ReadBinaryData<uint8_t>(document, *accessorInd);
+				for (int i = 0; i < data.size(); i++)
+					indices.push_back((uint32_t)data[i]);
+				//indices.insert(indices.end(), data.begin(), data.end());
+				break;
+			}
+			case glTF::COMPONENT_SHORT: {
+				const auto data = resourceReader->ReadBinaryData<int16_t>(document, *accessorInd);
+				for (int i = 0; i < data.size(); i++)
+					indices.push_back((uint32_t)data[i]);
+				//indices.insert(indices.end(), data.begin(), data.end());
+				break;
+			}
+			case glTF::COMPONENT_UNSIGNED_SHORT: {
+				const auto data = resourceReader->ReadBinaryData<uint16_t>(document, *accessorInd);
+				for (int i = 0; i < data.size(); i++)
+					indices.push_back((uint32_t)data[i]);
+				//indices.insert(indices.end(), data.begin(), data.end());
+				break;
+			}
+			case glTF::COMPONENT_UNSIGNED_INT: {
+				const auto data = resourceReader->ReadBinaryData<uint32_t>(document, *accessorInd);
+				for (int i = 0; i < data.size(); i++)
+					indices.push_back((uint32_t)data[i]);
+				//indices.insert(indices.end(), data.begin(), data.end());
+				break;
+			}
+			default:
+				throw glTF::GLTFException("Unsupported accessor ComponentType");
+			}
+		}
+
+		Primitive myPrimitive;
+
+		// ------------ Materials ------------
+		const auto& material = document.materials.Get(primitive.materialId);
+
+		// factors
+		myPrimitive.pbrMaterial.alphaCutoff = material.alphaCutoff;
+		myPrimitive.pbrMaterial.alphaMode = material.alphaMode;
+		myPrimitive.pbrMaterial.baseColorFactor = vec4(&material.metallicRoughness.baseColorFactor.r);
+		myPrimitive.pbrMaterial.doubleSided = material.doubleSided;
+		myPrimitive.pbrMaterial.emissiveFactor = vec3(&material.emissiveFactor.r);
+		myPrimitive.pbrMaterial.metallicFactor = material.metallicRoughness.metallicFactor;
+		myPrimitive.pbrMaterial.roughnessFactor = material.metallicRoughness.roughnessFactor;
+
+		// textures
+		const auto baseColorImage = getImage(material.metallicRoughness.baseColorTexture.textureId);
+		const auto metallicRoughnessImage = getImage(material.metallicRoughness.metallicRoughnessTexture.textureId);
+		const auto normalImage = getImage(material.normalTexture.textureId);
+		const auto occlusionImage = getImage(material.occlusionTexture.textureId);
+		const auto emissiveImage = getImage(material.emissiveTexture.textureId);
+		myPrimitive.loadTexture(TextureType::BaseColor, folderPath, baseColorImage, &document, resourceReader);
+		myPrimitive.loadTexture(TextureType::MetallicRoughness, folderPath, metallicRoughnessImage, &document, resourceReader);
+		myPrimitive.loadTexture(TextureType::Normal, folderPath, normalImage, &document, resourceReader);
+		myPrimitive.loadTexture(TextureType::Occlusion, folderPath, occlusionImage, &document, resourceReader);
+		myPrimitive.loadTexture(TextureType::Emissive, folderPath, emissiveImage, &document, resourceReader);
+
+
+		myPrimitive.vertexOffset = (uint32_t)myMesh->vertices.size();
+		myPrimitive.verticesSize = (uint32_t)accessorPos->count;
+		myPrimitive.indexOffset = (uint32_t)myMesh->indices.size();
+		myPrimitive.indicesSize = (uint32_t)indices.size();
+		myPrimitive.min = vec3(&accessorPos->min[0]);
+		myPrimitive.max = vec3(&accessorPos->max[0]);
+		myPrimitive.calculateBoundingSphere();
+		myPrimitive.hasBones = bonesIDs.size() && weights.size();
+
+		myMesh->primitives.push_back(myPrimitive);
+		for (size_t i = 0; i < accessorPos->count; i++) {
+			Vertex vertex;
+			vertex.position = positions.size() > 0 ? vec3(&positions[i * 3]) : vec3();
+			vertex.uv = uvs.size() > 0 ? vec2(&uvs[i * 2]) : vec2();
+			vertex.normals = normals.size() > 0 ? vec3(&normals[i * 3]) : vec3();
+			vertex.color = colors.size() > 0 ? vec4(&colors[i * 4]) : vec4();
+			vertex.bonesIDs = bonesIDs.size() > 0 ? ivec4((int*)&bonesIDs[i * 4]) : ivec4();
+			vertex.weights = weights.size() > 0 ? vec4(&weights[i * 4]) : vec4();
+			myMesh->vertices.push_back(vertex);
+		}
+		for (size_t i = 0; i < indices.size(); i++) {
+			myMesh->indices.push_back(indices[i]);
+		}
+	}
+	node->mesh = myMesh;
+}
+
+void Model::loadModelGltf(const std::string& folderPath, const std::string& modelName, bool show)
+{
+	// reads and gets the document and resourceReader objects
+	readGltf(std::filesystem::path(folderPath + modelName));
+	for (auto& node : document.GetDefaultScene().nodes)
+	{
+		loadNode(nullptr, document.nodes.Get(node), folderPath);
+	}
+	loadAnimations();
+	loadSkins();
+
+	for (auto node : linearNodes) {
+		// Assign skins
+		if (node->skinIndex > -1) {
+			node->skin = skins[node->skinIndex];
+		}
+	}
+}
+
 void Model::loadModel(const std::string& folderPath, const std::string& modelName, bool show)
 {
-	for (auto& m : models) {
-		if (m.name == modelName) {
-			animation = m.animation;
-			animation.runningTimeSeconds = 0.f;
-			importers = m.importers;
-			scene = m.scene;
-			transform = m.transform;
-			isCopy = true;
-			name = m.name;
-			render = show;
-			vertexBuffer = m.vertexBuffer;
-			indexBuffer = m.indexBuffer;
-			meshes = m.meshes;
-			createUniformBuffers();
-			createDescriptorSets();
-			return;
-		}
-	}
+	//for (auto& m : models) {
+	//	if (m.name == modelName) {
+	//		animation = m.animation;
+	//		animation.runningTimeSeconds = 0.f;
+	//		importers = m.importers;
+	//		scene = m.scene;
+	//		transform = m.transform;
+	//		isCopy = true;
+	//		name = m.name;
+	//		render = show;
+	//		vertexBuffer = m.vertexBuffer;
+	//		indexBuffer = m.indexBuffer;
+	//		meshes = m.meshes;
+	//		createUniformBuffers();
+	//		createDescriptorSets();
+	//		return;
+	//	}
+	//}
 
-	//bool gltfModel = false;
-	//if (endsWith(modelName, ".gltf"))
-	//	gltfModel = true;
-	// Materials, Vertices and Indices load
-	Assimp::Logger::LogSeverity severity = Assimp::Logger::VERBOSE;
-	// Create a logger instance for Console Output
-	Assimp::DefaultLogger::create("", severity, aiDefaultLogStream_STDOUT);
-
-	importers.push_back(new Assimp::Importer());
-	scene = importers.back()->ReadFile(folderPath + modelName,
-		//aiProcess_MakeLeftHanded |
-		//aiProcess_FlipUVs |
-		//aiProcess_FlipWindingOrder |
-		aiProcess_ConvertToLeftHanded |
-		aiProcess_JoinIdenticalVertices |
-		aiProcess_Triangulate |
-		aiProcess_GenSmoothNormals |
-		aiProcess_CalcTangentSpace |
-		//aiProcess_ImproveCacheLocality |
-		//aiProcess_OptimizeMeshes |
-		//aiProcess_OptimizeGraph |
-		0
-	);
-	if (!scene) exit(-100);
-
-	animation.scene = scene;
-	animation.numAnimations = scene->mNumAnimations;
-	animation.setAnimation(0);
-
-	// Setup bones
-	// One vertex bone info structure per vertex
-	uint32_t vertexCount(0);
-	for (uint32_t m = 0; m < scene->mNumMeshes; m++) {
-		vertexCount += scene->mMeshes[m]->mNumVertices;
-	};
-	animation.bones.resize(vertexCount);
-	// Store global inverse transform matrix of root node 
-	animation.globalInverseTransform = scene->mRootNode->mTransformation;
-	transform = aiMatrix4x4ToMat4(animation.globalInverseTransform);
-	animation.globalInverseTransform.Inverse();
-
-	// Load bones (weights and IDs)
-	uint32_t vertexBase(0);
-	for (uint32_t m = 0; m < scene->mNumMeshes; m++) {
-		aiMesh *paiMesh = scene->mMeshes[m];
-		if (paiMesh->mNumBones > 0) {
-			animation.loadBones(paiMesh, vertexBase, animation.bones);
-		}
-		vertexBase += scene->mMeshes[m]->mNumVertices;
-	}
-
-	meshes.reserve(scene->mNumMeshes);
-	for (unsigned int i = 0; i < scene->mNumMeshes; i++) {
-
-		const aiMesh& mesh = *scene->mMeshes[i];
-
-		Mesh myMesh;
-		//myMesh.transform = transform;
-		myMesh.hasBones = mesh.HasBones();
-		myMesh.vertexOffset = numberOfVertices;
-		myMesh.indexOffset = numberOfIndices;
-		numberOfVertices += mesh.mNumVertices;
-		numberOfIndices += mesh.mNumFaces * 3;
-
-
-		// Vertices
-		myMesh.vertices.reserve(mesh.mNumVertices);
-		for (unsigned int j = 0; j < mesh.mNumVertices; j++) {
-			Vertex vertex;
-			vertex.position = vec3(reinterpret_cast<float*>(&(mesh.HasPositions() ? mesh.mVertices[j] : aiVector3D(0.f, 0.f, 0.f))));
-			vertex.uv = vec2(reinterpret_cast<float*>(&(mesh.HasTextureCoords(0) ? mesh.mTextureCoords[0][j] : aiVector3D(0.f, 0.f, 0.f))));
-			vertex.normals = vec3(reinterpret_cast<float*>(&(mesh.HasNormals() ? mesh.mNormals[j] : aiVector3D(0.f, 0.f, 0.f))));
-			vertex.tangents = vec3(reinterpret_cast<float*>(&(mesh.HasTangentsAndBitangents() ? mesh.mTangents[j] : aiVector3D(0.f, 0.f, 0.f))));
-			vertex.bitangents = vec3(reinterpret_cast<float*>(&(mesh.HasTangentsAndBitangents() ? mesh.mBitangents[j] : aiVector3D(0.f, 0.f, 0.f))));
-			vertex.color = vec4(reinterpret_cast<float*>(&(mesh.HasVertexColors(0) ? mesh.mColors[0][j] : aiColor4D(0.f, 0.f, 0.f, 0.f))));
-			if (myMesh.hasBones) {
-				for (uint32_t b = 0; b < MAX_BONES_PER_VERTEX; b++) {
-					vertex.weights[b] = animation.bones[myMesh.vertexOffset + j].weights[b];
-					vertex.bonesIDs[b] = animation.bones[myMesh.vertexOffset + j].IDs[b];
-				}
-			}
-			myMesh.vertices.push_back(vertex);
-		}
-
-		// Indices
-		myMesh.indices.reserve(mesh.mNumFaces);
-		for (unsigned int n = 0; n < mesh.mNumFaces; n++) {
-			const aiFace& Face = mesh.mFaces[n];
-			assert(Face.mNumIndices == 3);
-			myMesh.indices.push_back(Face.mIndices[0]);
-			myMesh.indices.push_back(Face.mIndices[1]);
-			myMesh.indices.push_back(Face.mIndices[2]);
-		}
-
-		// Materials
-		const aiMaterial& material = *scene->mMaterials[mesh.mMaterialIndex];
-		// factors
-		material.Get(AI_MATKEY_COLOR_DIFFUSE, *reinterpret_cast<aiColor3D*>(&myMesh.material.colorDiffuse));
-		material.Get(AI_MATKEY_COLOR_SPECULAR, *reinterpret_cast<aiColor3D*>(&myMesh.material.colorSpecular));
-		material.Get(AI_MATKEY_COLOR_AMBIENT, *reinterpret_cast<aiColor3D*>(&myMesh.material.colorAmbient));
-		material.Get(AI_MATKEY_COLOR_EMISSIVE, *reinterpret_cast<aiColor3D*>(&myMesh.material.colorEmissive));
-		material.Get(AI_MATKEY_COLOR_TRANSPARENT, *reinterpret_cast<aiColor3D*>(&myMesh.material.colorTransparent));
-		material.Get(AI_MATKEY_ENABLE_WIREFRAME, myMesh.material.wireframe);
-		material.Get(AI_MATKEY_TWOSIDED, myMesh.material.twoSided);
-		material.Get(AI_MATKEY_SHADING_MODEL, myMesh.material.shadingModel);
-		material.Get(AI_MATKEY_BLEND_FUNC, myMesh.material.blendFunc);
-		material.Get(AI_MATKEY_OPACITY, myMesh.material.opacity);
-		material.Get(AI_MATKEY_SHININESS, myMesh.material.shininess);
-		material.Get(AI_MATKEY_SHININESS_STRENGTH, myMesh.material.shininessStrength);
-		material.Get(AI_MATKEY_REFRACTI, myMesh.material.refraction);
-		// textures
-		myMesh.loadTexture(TextureType::DiffuseMap, folderPath, getTextureName(material, aiTextureType_DIFFUSE));
-		myMesh.loadTexture(TextureType::SpecularMap, folderPath, getTextureName(material, aiTextureType_SPECULAR));
-		myMesh.loadTexture(TextureType::AmbientMap, folderPath, getTextureName(material, aiTextureType_AMBIENT)); // metalic
-		myMesh.loadTexture(TextureType::EmissiveMap, folderPath, getTextureName(material, aiTextureType_EMISSIVE));
-		myMesh.loadTexture(TextureType::HeightMap, folderPath, getTextureName(material, aiTextureType_HEIGHT)); // normals
-		myMesh.loadTexture(TextureType::NormalsMap, folderPath, getTextureName(material, aiTextureType_NORMALS));
-		myMesh.loadTexture(TextureType::ShininessMap, folderPath, getTextureName(material, aiTextureType_SHININESS)); // roughness
-		myMesh.loadTexture(TextureType::OpacityMap, folderPath, getTextureName(material, aiTextureType_OPACITY));
-		myMesh.loadTexture(TextureType::DisplacementMap, folderPath, getTextureName(material, aiTextureType_DISPLACEMENT));
-		myMesh.loadTexture(TextureType::LightMap, folderPath, getTextureName(material, aiTextureType_LIGHTMAP));
-		myMesh.loadTexture(TextureType::ReflectionMap, folderPath, getTextureName(material, aiTextureType_REFLECTION));
-
-		std::string metalicRoughnessName = getTextureName(material, aiTextureType_UNKNOWN);
-		myMesh.hasPBR = metalicRoughnessName != "";
-
-		// PBR -------------------------------------------------------
-		myMesh.loadTexture(TextureType::MetallicRoughness, folderPath, metalicRoughnessName);
-		std::swap(myMesh.pbrMaterial.baseColorTexture, myMesh.material.textureDiffuse);
-		std::swap(myMesh.pbrMaterial.normalTexture, myMesh.material.textureNormals);
-		std::swap(myMesh.pbrMaterial.occlusionTexture, myMesh.material.textureLight);
-		std::swap(myMesh.pbrMaterial.emissiveTexture, myMesh.material.textureEmissive);
-
-		material.Get(AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_BASE_COLOR_FACTOR, *reinterpret_cast<aiColor4D*>(&myMesh.pbrMaterial.baseColorFactor));
-		material.Get(AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_METALLIC_FACTOR, myMesh.pbrMaterial.metallicFactor);
-		material.Get(AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_ROUGHNESS_FACTOR, myMesh.pbrMaterial.roughnessFactor);
-		std::swap(myMesh.pbrMaterial.emissiveFactor, myMesh.material.colorEmissive);
-		material.Get(AI_MATKEY_GLTF_ALPHACUTOFF, myMesh.pbrMaterial.alphaCutoff);
-		std::swap(myMesh.pbrMaterial.doubleSided, myMesh.material.twoSided);
-		// -----------------------------------------------------------
-
-		myMesh.calculateBoundingSphere();
-		meshes.push_back(myMesh);
-	}
+	if (endsWith(modelName, ".gltf") || endsWith(modelName, ".glb"))
+		loadModelGltf(folderPath, modelName, show);
 
 	name = modelName;
 	render = show;
@@ -261,16 +340,44 @@ void Model::draw()
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeline);
 	cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
 	cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
-
-	for (auto& mesh : meshes) {
-		if (mesh.render && !mesh.cull) {
-			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { descriptorSet, mesh.descriptorSet }, nullptr);
-			cmd.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
+	//ALPHA_OPAQUE
+	for (auto& node : linearNodes) {
+		if (node->mesh) {
+			for (auto &primitive : node->mesh->primitives) {
+				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 1) {
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet }, nullptr);
+					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
+				}
+			}
+		}
+	}
+	// ALPHA_MASK
+	for (auto& node : linearNodes) {
+		if (node->mesh) {
+			for (auto &primitive : node->mesh->primitives) {
+				// ALPHA CUT
+				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 2) {
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet }, nullptr);
+					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
+				}
+			}
+		}
+	}
+	// ALPHA_BLEND
+	for (auto& node : linearNodes) {
+		if (node->mesh) {
+			for (auto &primitive : node->mesh->primitives) {
+				// ALPHA CUT
+				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 3) {
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet }, nullptr);
+					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
+				}
+			}
 		}
 	}
 }
 
-void Model::update(Camera& camera, float delta)
+void Model::update(vm::Camera& camera, float delta)
 {
 	//render = GUI::render_models;
 	if (render) {
@@ -279,84 +386,268 @@ void Model::update(Camera& camera, float delta)
 			script->update(delta);
 			script->getValue(trans, "transform");
 		}
-		mat4 pvm[4 + MAX_BONES];
-		pvm[0] = camera.projection;
-		pvm[1] = camera.view;
-		pvm[2] = trans.matrix() * transform;
-		pvm[3] = previousTransform;
-		camera.ExtractFrustum(pvm[2]);
 
-		if (scene->HasAnimations()) {
-			animation.bonesTransform(delta);
-			for (uint32_t i = 0; i < animation.boneTransforms.size(); i++)
-				pvm[i + 4] = aiMatrix4x4ToMat4(animation.boneTransforms[i]);
+		if (animations.size() > 0) {
+			animationTimer += delta;
+			if (animationTimer > animations[animationIndex].end) {
+				animationTimer -= animations[animationIndex].end;
+			}
+			updateAnimation(animationIndex, animationTimer);
 		}
 
-		memcpy(uniformBuffer.data, pvm, sizeof(pvm));
-		previousTransform = pvm[2];
-		for (auto &mesh : meshes) {
-			mesh.cull = !camera.SphereInFrustum(mesh.boundingSphere);
-			if (!mesh.cull) {
-				mat4 factors;
-				factors[0] = mesh.pbrMaterial.baseColorFactor != vec4(0.f) ? mesh.pbrMaterial.baseColorFactor : vec4(1.f);
-				factors[1] = vec4(mesh.pbrMaterial.emissiveFactor, 1.f);
-				factors[2] = vec4(mesh.pbrMaterial.metallicFactor, mesh.pbrMaterial.roughnessFactor, mesh.pbrMaterial.alphaCutoff, mesh.hasAlphaMap ? 1.f : 0.f);
-				factors[3][0] = (float)mesh.hasBones;
-				memcpy(mesh.uniformBuffer.data, &factors, sizeof(factors));
-			}
+		for (auto& node : linearNodes) {
+			if (node->mesh)
+				node->update(camera);
 		}
 	}
 }
 
+void Model::updateAnimation(uint32_t index, float time)
+{
+	if (index > static_cast<uint32_t>(animations.size()) - 1) {
+		std::cout << "No animation with index " << index << std::endl;
+		return;
+	}
+	Animation &animation = animations[index];
+
+	for (auto& channel : animation.channels) {
+		vm::AnimationSampler &sampler = animation.samplers[channel.samplerIndex];
+		if (sampler.inputs.size() > sampler.outputsVec4.size())
+			continue;
+
+		for (size_t i = 0; i < sampler.inputs.size() - 1; i++) {
+			if ((time >= sampler.inputs[i]) && (time <= sampler.inputs[i + 1])) {
+				float u = std::max(0.0f, time - sampler.inputs[i]) / (sampler.inputs[i + 1] - sampler.inputs[i]);
+				if (u <= 1.0f) {
+					switch (channel.path) {
+					case vm::AnimationChannel::PathType::TRANSLATION: {
+						cvec4 trans = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
+						channel.node->translation = vec3(trans);
+						break;
+					}
+					case vm::AnimationChannel::PathType::SCALE: {
+						cvec4 trans = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
+						channel.node->scale = vec3(trans);
+						break;
+					}
+					case vm::AnimationChannel::PathType::ROTATION: {
+						cquat q1(&sampler.outputsVec4[i].x);
+						cquat q2(&sampler.outputsVec4[i + 1].x);
+						channel.node->rotation = normalize(slerp(q1, q2, u));
+						break;
+					}
+					}
+				}
+			}
+		}
+	}
+}
 // position x, y, z and radius w
 vec4 Model::getBoundingSphere()
 {
-	for (auto& mesh : meshes) {
-		for (auto& vertex : mesh.vertices) {
-			float temp = length(vertex.position);
-			if (temp > boundingSphere.w)
-				boundingSphere.w = temp;
+	for (auto& node : linearNodes) {
+		if (node->mesh) {
+			for (auto &primitive : node->mesh->primitives) {
+				for (auto& vertex : node->mesh->vertices) {
+					float temp = length(vertex.position);
+					if (temp > boundingSphere.w)
+						boundingSphere.w = temp;
+				}
+			}
 		}
 	}
 	return boundingSphere; // unscaled bounding sphere with 0,0,0 origin
 }
 
-vk::DescriptorSetLayout Model::getDescriptorSetLayout()
+void Model::loadNode(vm::Node* parent, const Microsoft::glTF::Node& node, const std::string& folderPath)
 {
-	if (!descriptorSetLayout) {
-		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
+	vm::Node *newNode = new vm::Node{};
+	newNode->index = !node.id.empty() ? (uint32_t)document.nodes.GetIndex(node.id) : -1;
+	newNode->parent = parent;
+	newNode->name = node.name;
+	newNode->skinIndex = !node.skinId.empty() ? (int32_t)document.skins.GetIndex(node.skinId) : -1;
 
-		// binding for model mvp matrix
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(0) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
-			.setStageFlags(vk::ShaderStageFlagBits::eVertex)); // which pipeline shader stages can access
+	// Generate local node matrix
+	if (!node.HasValidTransformType()) throw glTF::InvalidGLTFException("Node " + node.name + " has Invalid TransformType");
+	newNode->transformationType = (TransformationType)node.GetTransformationType();
+	newNode->translation = vec3(&node.translation.x);
+	newNode->scale = vec3(&node.scale.x);
+	newNode->rotation = quat(&node.rotation.x);
+	newNode->matrix = mat4(&node.matrix.values[0]);
 
-		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
-			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
-			.setPBindings(descriptorSetLayoutBinding.data());
-		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(createInfo);
+	// Node with children
+	for (auto& child : node.children) {
+		loadNode(newNode, document.nodes.Get(child), folderPath);
 	}
-	return descriptorSetLayout;
+	getMesh(newNode, node.meshId, folderPath);
+	if (parent)
+		parent->children.push_back(newNode);
+	else
+		nodes.push_back(newNode);
+	linearNodes.push_back(newNode);
+}
+
+void vm::Model::loadAnimations()
+{
+	auto getNode = [](std::vector<Node*>& linearNodes, size_t index) -> Node* {
+		for (auto& node : linearNodes) {
+			if (node->index == index)
+				return node;
+		}
+		return nullptr;
+	};
+
+	for (auto& anim : document.animations.Elements()) {
+		vm::Animation animation{};
+		animation.name = anim.name;
+		if (anim.name.empty()) {
+			animation.name = std::to_string(animations.size());
+		}
+
+		// Samplers
+		for (auto &samp : anim.samplers.Elements()) {
+			vm::AnimationSampler sampler{};
+			if (samp.interpolation == glTF::INTERPOLATION_LINEAR) {
+				sampler.interpolation = AnimationSampler::InterpolationType::LINEAR;
+			}
+			if (samp.interpolation == glTF::INTERPOLATION_STEP) {
+				sampler.interpolation = AnimationSampler::InterpolationType::STEP;
+			}
+			if (samp.interpolation == glTF::INTERPOLATION_CUBICSPLINE) {
+				sampler.interpolation = AnimationSampler::InterpolationType::CUBICSPLINE;
+			}
+			// Read sampler input time values
+			{
+				const glTF::Accessor &accessor = document.accessors.Get(samp.inputAccessorId);
+				if (accessor.componentType != glTF::COMPONENT_FLOAT)
+					throw std::runtime_error("Animation componentType is not equal to float");
+				const auto data = resourceReader->ReadBinaryData<float>(document, accessor);
+				sampler.inputs.insert(sampler.inputs.end(), data.begin(), data.end());
+
+				for (auto input : sampler.inputs) {
+					if (input < animation.start) {
+						animation.start = input;
+					};
+					if (input > animation.end) {
+						animation.end = input;
+					}
+				}
+			}
+			// Read sampler output T/R/S values 
+			{
+				const glTF::Accessor &accessor = document.accessors.Get(samp.outputAccessorId);
+				if (accessor.componentType != glTF::COMPONENT_FLOAT)
+					throw std::runtime_error("Animation componentType is not equal to float");
+				const auto data = resourceReader->ReadBinaryData<float>(document, accessor);
+
+				switch (accessor.type) {
+				case glTF::AccessorType::TYPE_VEC3: {
+					for (size_t i = 0; i < accessor.count; i++) {
+						vec3 v3(&data[i * 3]);
+						sampler.outputsVec4.push_back(vec4(v3, 0.0f));
+					}
+					break;
+				}
+				case glTF::AccessorType::TYPE_VEC4: {
+					for (size_t i = 0; i < accessor.count; i++) {
+						sampler.outputsVec4.push_back(vec4(&data[i * 4]));
+					}
+					break;
+				}
+				default: {
+					std::cout << "unknown type" << std::endl;
+					break;
+				}
+				}
+			}
+			animation.samplers.push_back(sampler);
+		}
+
+		// Channels
+		for (auto &source : anim.channels.Elements()) {
+			vm::AnimationChannel channel{};
+
+			if (source.target.path == glTF::TARGET_ROTATION) {
+				channel.path = AnimationChannel::PathType::ROTATION;
+			}
+			if (source.target.path == glTF::TARGET_TRANSLATION) {
+				channel.path = AnimationChannel::PathType::TRANSLATION;
+			}
+			if (source.target.path == glTF::TARGET_SCALE) {
+				channel.path = AnimationChannel::PathType::SCALE;
+			}
+			if (source.target.path == glTF::TARGET_WEIGHTS) {
+				std::cout << "weights not yet supported, skipping channel" << std::endl;
+				continue;
+			}
+			channel.samplerIndex = (uint32_t)anim.samplers.GetIndex(source.samplerId);
+			channel.node = getNode(linearNodes, document.nodes.GetIndex(source.target.nodeId));
+			if (!channel.node) {
+				continue;
+			}
+			animation.channels.push_back(channel);
+		}
+		animations.push_back(animation);
+	}
+}
+
+void vm::Model::loadSkins()
+{
+	auto getNode = [](std::vector<Node*>& linearNodes, size_t index) -> Node* {
+		for (auto& node : linearNodes) {
+			if (node->index == index)
+				return node;
+		}
+		return nullptr;
+	};
+	for (auto& source : document.skins.Elements()) {
+		Skin *newSkin = new Skin();
+		newSkin->name = source.name;
+
+		// Find skeleton root node
+		if (!source.skeletonId.empty()) {
+			newSkin->skeletonRoot = getNode(linearNodes, document.nodes.GetIndex(source.skeletonId));
+		}
+
+		// Find joint nodes
+		for (auto& jointID : source.jointIds) {
+			Node* node = !jointID.empty() ? getNode(linearNodes, document.nodes.GetIndex(jointID)) : nullptr;
+			if (node) {
+				newSkin->joints.push_back(node);
+			}
+		}
+
+		// Get inverse bind matrices
+		if (!source.inverseBindMatricesAccessorId.empty()) {
+			const glTF::Accessor &accessor = document.accessors.Get(source.inverseBindMatricesAccessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(document, accessor);
+			newSkin->inverseBindMatrices.resize(accessor.count);
+			memcpy(newSkin->inverseBindMatrices.data(), data.data(), accessor.GetByteLength());
+		}
+		skins.push_back(newSkin);
+	}
 }
 
 void Model::createVertexBuffer()
 {
 	std::vector<Vertex> vertices{};
-	for (auto& mesh : meshes) {
-		for (auto& vertex : mesh.vertices)
-			vertices.push_back(vertex);
+	for (auto& node : linearNodes) {
+		if (node->mesh) {
+			node->mesh->vertexOffset = (uint32_t)vertices.size();
+			for (auto& vertex : node->mesh->vertices) {
+				vertices.push_back(vertex);
+			}
+		}
 	}
-
-	vertexBuffer.createBuffer(sizeof(Vertex)*vertices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	numberOfVertices = (uint32_t)vertices.size();
+	vertexBuffer.createBuffer(sizeof(Vertex)*numberOfVertices, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer
 	Buffer staging;
-	staging.createBuffer(sizeof(Vertex)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	staging.createBuffer(sizeof(Vertex)*numberOfVertices, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 	staging.data = vulkan->device.mapMemory(staging.memory, 0, staging.size);
-	memcpy(staging.data, vertices.data(), sizeof(Vertex)*vertices.size());
+	memcpy(staging.data, vertices.data(), sizeof(Vertex)*numberOfVertices);
 	vulkan->device.unmapMemory(staging.memory);
 
 	vertexBuffer.copyBuffer(staging.buffer, staging.size);
@@ -366,18 +657,23 @@ void Model::createVertexBuffer()
 void Model::createIndexBuffer()
 {
 	std::vector<uint32_t> indices{};
-	for (auto& mesh : meshes) {
-		for (auto& index : mesh.indices)
-			indices.push_back(index);
+	for (auto& node : linearNodes) {
+		if (node->mesh) {
+			node->mesh->indexOffset = (uint32_t)indices.size();
+			for (auto& index : node->mesh->indices) {
+				indices.push_back(index);
+			}
+		}
 	}
-	indexBuffer.createBuffer(sizeof(uint32_t)*indices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	numberOfIndices = (uint32_t)indices.size();
+	indexBuffer.createBuffer(sizeof(uint32_t)*numberOfIndices, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer
 	Buffer staging;
-	staging.createBuffer(sizeof(uint32_t)*indices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	staging.createBuffer(sizeof(uint32_t)*numberOfIndices, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 	staging.data = vulkan->device.mapMemory(staging.memory, 0, staging.size);
-	memcpy(staging.data, indices.data(), sizeof(uint32_t)*indices.size());
+	memcpy(staging.data, indices.data(), sizeof(uint32_t)*numberOfIndices);
 	vulkan->device.unmapMemory(staging.memory);
 
 	indexBuffer.copyBuffer(staging.buffer, staging.size);
@@ -386,154 +682,134 @@ void Model::createIndexBuffer()
 
 void Model::createUniformBuffers()
 {
-	size_t size = (4 + MAX_BONES) * sizeof(mat4);
-	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
-
-	for (auto& mesh : meshes)
-		mesh.createUniformBuffer();
+	for (auto& node : linearNodes) {
+		if (node->mesh) {
+			node->mesh->createUniformBuffers();
+		}
+	}
 }
 
 void Model::createDescriptorSets()
 {
-	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(vulkan->descriptorPool)
-		.setDescriptorSetCount(1)
-		.setPSetLayouts(&descriptorSetLayout);
-	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
-
-	auto const mvpWriteSet = vk::WriteDescriptorSet()
-		.setDstSet(descriptorSet)								// DescriptorSet dstSet;
-		.setDstBinding(0)										// uint32_t dstBinding;
-		.setDstArrayElement(0)									// uint32_t dstArrayElement;
-		.setDescriptorCount(1)									// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eUniformBuffer)	// DescriptorType descriptorType;
-		.setPBufferInfo(&vk::DescriptorBufferInfo()				// const DescriptorBufferInfo* pBufferInfo;
-			.setBuffer(uniformBuffer.buffer)						// Buffer buffer;
-			.setOffset(0)											// DeviceSize offset;
-			.setRange(uniformBuffer.size));							// DeviceSize range;
-
-	vulkan->device.updateDescriptorSets(mvpWriteSet, nullptr);
-
-	//bool gltfModel = false;
-	//if (endsWith(name, ".gltf"))
-	//	gltfModel = true;
-
-	for (auto& mesh : meshes) {
-		auto const allocateInfo2 = vk::DescriptorSetAllocateInfo()
+	for (auto& node : linearNodes) {
+		if (!node->mesh) continue;
+		auto const allocateInfo = vk::DescriptorSetAllocateInfo()
 			.setDescriptorPool(vulkan->descriptorPool)
 			.setDescriptorSetCount(1)
-			.setPSetLayouts(&mesh.descriptorSetLayout);
-		mesh.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
+			.setPSetLayouts(&Mesh::descriptorSetLayout);
+		node->mesh->descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
-		// Texture
-		std::vector<vk::WriteDescriptorSet> textureWriteSets(7);
-
-		//Image& baseColor = gltfModel ? mesh.pbrMaterial.baseColorTexture : mesh.material.textureDiffuse;
-		//Image& normals = gltfModel ? mesh.pbrMaterial.normalTexture : mesh.material.textureHeight;
-		//Image& specORroughMetal = gltfModel ? mesh.pbrMaterial.metallicRoughnessTexture : mesh.material.textureSpecular;
-		//Image& opacity = mesh.material.textureOpacity;
-		//Image& shininessOremissive = gltfModel ? mesh.pbrMaterial.emissiveTexture : mesh.material.textureShininess;
-		//Image& ambientORao = gltfModel ? mesh.pbrMaterial.occlusionTexture : mesh.material.textureAmbient;
-
-		Image& baseColor = mesh.pbrMaterial.baseColorTexture;
-		Image& normals = mesh.pbrMaterial.normalTexture;
-		Image& metallicRoughnes = mesh.pbrMaterial.metallicRoughnessTexture;
-		Image& opacity = mesh.material.textureOpacity;
-		Image& emissive = mesh.pbrMaterial.emissiveTexture;
-		Image& occlusion = mesh.pbrMaterial.occlusionTexture;
-
-		textureWriteSets[0] = vk::WriteDescriptorSet()
-			.setDstSet(mesh.descriptorSet)									// DescriptorSet dstSet;
-			.setDstBinding(0)												// uint32_t dstBinding;
-			.setDstArrayElement(0)											// uint32_t dstArrayElement;
-			.setDescriptorCount(1)											// uint32_t descriptorCount;
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(baseColor.sampler)									// Sampler sampler;
-				.setImageView(baseColor.view)									// ImageView imageView;
-				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
-
-		textureWriteSets[1] = vk::WriteDescriptorSet()
-			.setDstSet(mesh.descriptorSet)									// DescriptorSet dstSet;
-			.setDstBinding(1)												// uint32_t dstBinding;
-			.setDstArrayElement(0)											// uint32_t dstArrayElement;
-			.setDescriptorCount(1)											// uint32_t descriptorCount;
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(normals.sampler)									// Sampler sampler;
-				.setImageView(normals.view)										// ImageView imageView;
-				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
-
-		textureWriteSets[2] = vk::WriteDescriptorSet()
-			.setDstSet(mesh.descriptorSet)									// DescriptorSet dstSet;
-			.setDstBinding(2)												// uint32_t dstBinding;
-			.setDstArrayElement(0)											// uint32_t dstArrayElement;
-			.setDescriptorCount(1)											// uint32_t descriptorCount;
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(metallicRoughnes.sampler)							// Sampler sampler;
-				.setImageView(metallicRoughnes.view)							// ImageView imageView;
-				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
-
-		textureWriteSets[3] = vk::WriteDescriptorSet()
-			.setDstSet(mesh.descriptorSet)									// DescriptorSet dstSet;
-			.setDstBinding(3)												// uint32_t dstBinding;
-			.setDstArrayElement(0)											// uint32_t dstArrayElement;
-			.setDescriptorCount(1)											// uint32_t descriptorCount;
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(opacity.sampler)									// Sampler sampler;
-				.setImageView(opacity.view)										// ImageView imageView;
-				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
-
-		textureWriteSets[4] = vk::WriteDescriptorSet()
-			.setDstSet(mesh.descriptorSet)									// DescriptorSet dstSet;
-			.setDstBinding(4)												// uint32_t dstBinding;
-			.setDstArrayElement(0)											// uint32_t dstArrayElement;
-			.setDescriptorCount(1)											// uint32_t descriptorCount;
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(emissive.sampler)									// Sampler sampler;
-				.setImageView(emissive.view)									// ImageView imageView;
-				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
-
-		textureWriteSets[5] = vk::WriteDescriptorSet()
-			.setDstSet(mesh.descriptorSet)									// DescriptorSet dstSet;
-			.setDstBinding(5)												// uint32_t dstBinding;
-			.setDstArrayElement(0)											// uint32_t dstArrayElement;
-			.setDescriptorCount(1)											// uint32_t descriptorCount;
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(occlusion.sampler)									// Sampler sampler;
-				.setImageView(occlusion.view)									// ImageView imageView;
-				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
-
-		textureWriteSets[6] = vk::WriteDescriptorSet()
-			.setDstSet(mesh.descriptorSet)								// DescriptorSet dstSet;
-			.setDstBinding(6)										// uint32_t dstBinding;
+		auto const mvpWriteSet = vk::WriteDescriptorSet()
+			.setDstSet(node->mesh->descriptorSet)					// DescriptorSet dstSet;
+			.setDstBinding(0)										// uint32_t dstBinding;
 			.setDstArrayElement(0)									// uint32_t dstArrayElement;
 			.setDescriptorCount(1)									// uint32_t descriptorCount;
 			.setDescriptorType(vk::DescriptorType::eUniformBuffer)	// DescriptorType descriptorType;
 			.setPBufferInfo(&vk::DescriptorBufferInfo()				// const DescriptorBufferInfo* pBufferInfo;
-				.setBuffer(mesh.uniformBuffer.buffer)						// Buffer buffer;
+				.setBuffer(node->mesh->uniformBuffer.buffer)			// Buffer buffer;
 				.setOffset(0)											// DeviceSize offset;
-				.setRange(mesh.uniformBuffer.size));							// DeviceSize range;
+				.setRange(node->mesh->uniformBuffer.size));				// DeviceSize range;
 
-		vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+		vulkan->device.updateDescriptorSets(mvpWriteSet, nullptr);
+		for (auto& primitive :node->mesh->primitives) {
+
+			Image& baseColor = primitive.pbrMaterial.baseColorTexture;
+			Image& metallicRoughnes = primitive.pbrMaterial.metallicRoughnessTexture;
+			Image& normals = primitive.pbrMaterial.normalTexture;
+			Image& occlusion = primitive.pbrMaterial.occlusionTexture;
+			Image& emissive = primitive.pbrMaterial.emissiveTexture;
+
+			auto const allocateInfo2 = vk::DescriptorSetAllocateInfo()
+				.setDescriptorPool(vulkan->descriptorPool)
+				.setDescriptorSetCount(1)
+				.setPSetLayouts(&primitive.descriptorSetLayout);
+			primitive.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
+
+			std::vector<vk::WriteDescriptorSet> textureWriteSets(6);
+			textureWriteSets[0] = vk::WriteDescriptorSet()
+				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+				.setDstBinding(0)												// uint32_t dstBinding;
+				.setDstArrayElement(0)											// uint32_t dstArrayElement;
+				.setDescriptorCount(1)											// uint32_t descriptorCount;
+				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+				.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+					.setSampler(baseColor.sampler)									// Sampler sampler;
+					.setImageView(baseColor.view)									// ImageView imageView;
+					.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+
+			textureWriteSets[1] = vk::WriteDescriptorSet()
+				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+				.setDstBinding(1)												// uint32_t dstBinding;
+				.setDstArrayElement(0)											// uint32_t dstArrayElement;
+				.setDescriptorCount(1)											// uint32_t descriptorCount;
+				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+				.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+					.setSampler(metallicRoughnes.sampler)							// Sampler sampler;
+					.setImageView(metallicRoughnes.view)							// ImageView imageView;
+					.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+
+			textureWriteSets[2] = vk::WriteDescriptorSet()
+				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+				.setDstBinding(2)												// uint32_t dstBinding;
+				.setDstArrayElement(0)											// uint32_t dstArrayElement;
+				.setDescriptorCount(1)											// uint32_t descriptorCount;
+				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+				.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+					.setSampler(normals.sampler)									// Sampler sampler;
+					.setImageView(normals.view)										// ImageView imageView;
+					.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+
+			textureWriteSets[3] = vk::WriteDescriptorSet()
+				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+				.setDstBinding(3)												// uint32_t dstBinding;
+				.setDstArrayElement(0)											// uint32_t dstArrayElement;
+				.setDescriptorCount(1)											// uint32_t descriptorCount;
+				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+				.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+					.setSampler(occlusion.sampler)									// Sampler sampler;
+					.setImageView(occlusion.view)									// ImageView imageView;
+					.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+
+			textureWriteSets[4] = vk::WriteDescriptorSet()
+				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+				.setDstBinding(4)												// uint32_t dstBinding;
+				.setDstArrayElement(0)											// uint32_t dstArrayElement;
+				.setDescriptorCount(1)											// uint32_t descriptorCount;
+				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+				.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+					.setSampler(emissive.sampler)									// Sampler sampler;
+					.setImageView(emissive.view)									// ImageView imageView;
+					.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+
+			textureWriteSets[5] = vk::WriteDescriptorSet()
+				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+				.setDstBinding(5)												// uint32_t dstBinding;
+				.setDstArrayElement(0)											// uint32_t dstArrayElement;
+				.setDescriptorCount(1)											// uint32_t descriptorCount;
+				.setDescriptorType(vk::DescriptorType::eUniformBuffer)			// DescriptorType descriptorType;
+				.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorBufferInfo* pBufferInfo;
+					.setBuffer(primitive.uniformBuffer.buffer)						// Buffer buffer;
+					.setOffset(0)													// DeviceSize offset;
+					.setRange(primitive.uniformBuffer.size));						// DeviceSize range;
+
+			vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+		}
 	}
 }
 
 void Model::destroy()
 {
-	for (auto& mesh : meshes) {
-		mesh.vertices.clear();
-		mesh.vertices.shrink_to_fit();
-		mesh.indices.clear();
-		mesh.indices.shrink_to_fit();
-		mesh.uniformBuffer.destroy();
+	delete resourceReader;
+	for (auto& node : linearNodes) {
+		if (node->mesh) {
+			node->mesh->destroy();
+			delete node->mesh;
+		}
+		delete node;
 	}
-
+	for (auto& skin : skins) {
+		delete skin;
+	}
 	for (auto& texture : Mesh::uniqueTextures)
 		texture.second.destroy();
 	Mesh::uniqueTextures.clear();
@@ -542,15 +818,10 @@ void Model::destroy()
 		vertexBuffer.destroy();
 		indexBuffer.destroy();
 	}
-	uniformBuffer.destroy();
+	//uniformBuffer.destroy();
 
-	if (Model::descriptorSetLayout) {
-		vulkan->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
-		Model::descriptorSetLayout = nullptr;
-	}
-
-	if (Mesh::descriptorSetLayout) {
-		vulkan->device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
-		Mesh::descriptorSetLayout = nullptr;
-	}
+	//if (Model::descriptorSetLayout) {
+	//	vulkan->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
+	//	Model::descriptorSetLayout = nullptr;
+	//}
 }

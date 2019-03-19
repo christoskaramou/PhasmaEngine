@@ -6,51 +6,84 @@
 #include "../Material/Material.h"
 #include "../Buffer/Buffer.h"
 #include "../../include/tinygltf/stb_image.h"
+#include "../../include/GLTFSDK/GLTF.h"
+#include "../../include/GLTFSDK/Document.h"
+#include "../../include/GLTFSDK/GLTFResourceReader.h"
 #include <map>
 
-namespace vm {
+#undef min
+#undef max
 
+constexpr auto MAX_NUM_JOINTS = 128u;
+
+namespace vm {
 	enum TextureType
 	{
-		DiffuseMap,
-		SpecularMap,
-		AmbientMap,
-		EmissiveMap,
-		HeightMap,
-		NormalsMap,
-		ShininessMap,
-		OpacityMap,
-		DisplacementMap,
-		LightMap,
-		ReflectionMap,
-		MetallicRoughness
+		BaseColor,
+		MetallicRoughness,
+		Normal,
+		Occlusion,
+		Emissive
 	};
-	struct VulkanContext;
+
+	struct Primitive {
+		Primitive() {}
+
+		static vk::DescriptorSetLayout descriptorSetLayout;
+		static vk::DescriptorSetLayout getDescriptorSetLayout();
+		vk::DescriptorSet descriptorSet;
+		Buffer uniformBuffer;
+
+		bool render = true, cull = false;
+		uint32_t vertexOffset = 0, indexOffset = 0;
+		uint32_t verticesSize = 0, indicesSize = 0;
+		PBRMaterial pbrMaterial;
+		vec3 min;
+		vec3 max;
+		vec4 boundingSphere;
+		bool hasBones = false;
+		void calculateBoundingSphere() {
+			vec3 center = (max + min) * .5f;
+			float sphereRadius = length(max - center);
+			boundingSphere = vec4(center, sphereRadius);
+		}
+		void loadTexture(TextureType type,
+			const std::string& folderPath,
+			const Microsoft::glTF::Image* image = nullptr,
+			const Microsoft::glTF::Document* document = nullptr,
+			const Microsoft::glTF::GLTFResourceReader* resourceReader = nullptr);
+	};
+
 	struct Mesh
 	{
 		VulkanContext* vulkan = &VulkanContext::get();
 
+		bool render = true, cull = false;
+
+		struct UBOMesh {
+			mat4 matrix;
+			mat4 view;
+			mat4 projection;
+			mat4 previousMatrix;
+			mat4 jointMatrix[MAX_NUM_JOINTS];
+			float jointcount{ 0 };
+			float dummy[3];
+		} ubo;
+
 		static std::map<std::string, Image> uniqueTextures;
+		std::vector<Primitive> primitives{};
+
 		static vk::DescriptorSetLayout descriptorSetLayout;
+		static vk::DescriptorSetLayout getDescriptorSetLayout();
 		vk::DescriptorSet descriptorSet;
+		Buffer uniformBuffer;
 		std::vector<Vertex> vertices{};
 		std::vector<uint32_t> indices{};
 		uint32_t vertexOffset = 0, indexOffset = 0;
-		Buffer uniformBuffer;
-
-		bool render = true, cull = false, hasAlphaMap = false, hasBones = false, hasPBR = false;
-		Mesh* parent = nullptr;
-		mat4 transform = mat4::identity();
 		vec4 boundingSphere;
 
-		Material material;
-		PBRMaterial pbrMaterial;
-
-		static vk::DescriptorSetLayout getDescriptorSetLayout();
-		void createUniformBuffer();
+		void createUniformBuffers();
 		void calculateBoundingSphere();
-		vec4 getBoundingSphere() const;
-		void loadTexture(TextureType type, const std::string& folderPath, const std::string& texName);
 		void destroy();
 	};
 }

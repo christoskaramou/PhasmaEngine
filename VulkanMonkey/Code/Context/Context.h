@@ -32,7 +32,7 @@
 #include <tuple>
 #include <map>
 
-#define USE_SCRIPTS
+//#define USE_SCRIPTS
 
 namespace vm {
 	struct Context

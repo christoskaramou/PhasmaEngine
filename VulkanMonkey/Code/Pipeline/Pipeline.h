@@ -31,7 +31,7 @@ namespace vm {
 				vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
 				vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
 				vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-				vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
+				vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor srcAlphaBlendFactor;
 				vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
 				vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
 				vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;

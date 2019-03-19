@@ -44,7 +44,7 @@ void Terrain::generateTerrain(const std::string& path, bool show)
 		-size, -0.1f,  size, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f,
 		 size, -0.1f,  size, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f
 	};
-	std::string texPath = path == "" ? "objects/defaultTerrainMap.png" : path;
+	std::string texPath = path.empty() ? "objects/defaultTerrainMap.png" : path;
 	loadTexture(texPath);
 	createVertexBuffer();
 	render = show;

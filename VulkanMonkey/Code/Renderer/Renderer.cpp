@@ -22,14 +22,14 @@ Renderer::~Renderer()
 {
 	ctx.vulkan.device.waitIdle();
 	if (Model::models.size() == 0) {
-		if (Model::descriptorSetLayout) {
-			ctx.vulkan.device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
-			Model::descriptorSetLayout = nullptr;
-		}
-
 		if (Mesh::descriptorSetLayout) {
 			ctx.vulkan.device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
 			Mesh::descriptorSetLayout = nullptr;
+		}
+
+		if (Primitive::descriptorSetLayout) {
+			ctx.vulkan.device.destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
+			Primitive::descriptorSetLayout = nullptr;
 		}
 	}
 	for (auto &model : Model::models)
@@ -269,11 +269,15 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 			if (Model::models[m].render) {
 				cmd.bindVertexBuffers(0, Model::models[m].vertexBuffer.buffer, offset);
 				cmd.bindIndexBuffer(Model::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
-				cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSets[i], Model::models[m].descriptorSet }, nullptr);
 
-				for (auto& mesh : Model::models[m].meshes) {
-					if (mesh.render)
-						cmd.drawIndexed(static_cast<uint32_t>(mesh.indices.size()), 1, mesh.indexOffset, mesh.vertexOffset, 0);
+				for (auto& node : Model::models[m].nodes) {
+					if (node->mesh) {
+						cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet }, nullptr);
+						for (auto& primitive : node->mesh->primitives) {
+							if (primitive.render)
+								cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
+						}
+					}
 				}
 			}
 		}

@@ -2,94 +2,68 @@
 
 using namespace vm;
 
-Node::Node() : component_ptr(nullptr), parent(nullptr), children{}
-{}
-
-Node::Node(std::any component_ptr, Node* parent, std::vector<Node*>& children)
-	: component_ptr(component_ptr), parent(parent), children(children)
-{}
-
-Node::~Node()
+mat4 Node::localMatrix()
 {
-	component_ptr.reset();
-	parent = nullptr;
-	children.clear();
-}
-
-Node * Node::getParent()
-{
-	return parent;
-}
-
-std::vector<Node*>& Node::getChildren()
-{
-	return children;
-}
-
-bool Node::hasComponent()
-{
-	return component_ptr.has_value();
-}
-
-bool Node::hasParent()
-{
-	return parent ? true : false;
-}
-
-bool Node::hasChildren()
-{
-	return children.size() > 0 ? true : false;
-}
-
-bool Node::hasValidChildren()
-{
-	for (auto& child : children)
-		if (!child) return false;
-	return true;
-}
-
-void Node::setComponent(std::any component_ptr)
-{
-	this->component_ptr = component_ptr;
-}
-
-void Node::removeComponent()
-{
-	component_ptr.reset();
-}
-
-void Node::setParent(Node * parent)
-{
-	this->parent = parent;
-}
-
-void Node::removeParent()
-{
-	parent = nullptr;
-}
-
-void Node::addChild(Node * child)
-{
-	children.push_back(child);
-}
-
-void Node::removeChild(Node * child)
-{
-	int i = 0;
-	for (auto& ch : children) {
-		if (ch = child)
-			children.erase(children.begin() + i);
-		i++;
+	switch (transformationType)
+	{
+	case TRANSFORMATION_MATRIX: 
+		return matrix;
+	case TRANSFORMATION_TRS:
+		return translate(mat4(1.0f), translation) * rotation.matrix() * vm::scale(mat4(1.0f), scale);
+	case TRANSFORMATION_IDENTITY:
+	default:
+		return mat4::identity();
 	}
 }
 
-void Node::addChildren(std::vector<Node*>& children)
+mat4 Node::getMatrix()
 {
-	for (auto& child : children)
-		this->children.push_back(child);
+	mat4 m = localMatrix();
+	Node *p = parent;
+	while (p) {
+		m = p->localMatrix() * m;
+		p = p->parent;
+	}
+	return m;
 }
 
-void Node::removeChildren()
+void Node::update(Camera& camera)
 {
-	children.clear();
+	if (mesh) {
+		mesh->ubo.previousMatrix = mesh->ubo.matrix;
+		mesh->ubo.matrix = getMatrix();
+		mesh->ubo.view = camera.view;
+		mesh->ubo.projection = camera.projection;
+
+		for (auto& primitive : mesh->primitives) {
+			vec4 bs = mesh->ubo.matrix * vec4(vec3(primitive.boundingSphere), 1.0f);
+			bs.w = primitive.boundingSphere.w * mesh->ubo.matrix[0][0]; // scale 
+			primitive.cull = !camera.SphereInFrustum(bs);
+		}
+
+		if (skin) {
+			// TODO: these calculations are heavy
+			// TODO: use primitive uniforms, so calculations are done only once
+			// TODO: size vs calculation speed :(
+
+			// Update join matrices
+			mat4 inverseTransform = inverse(mesh->ubo.matrix);
+			size_t numJoints = std::min((uint32_t)skin->joints.size(), MAX_NUM_JOINTS);
+			for (size_t i = 0; i < numJoints; i++) {
+				Node *jointNode = skin->joints[i];
+				mat4 jointMat = jointNode->getMatrix() * skin->inverseBindMatrices[i];
+				jointMat = inverseTransform * jointMat;
+				mesh->ubo.jointMatrix[i] = jointMat;
+			}
+			mesh->ubo.jointcount = (float)numJoints;
+			memcpy(mesh->uniformBuffer.data, &mesh->ubo, sizeof(mesh->ubo));
+		}
+		else {
+			memcpy(mesh->uniformBuffer.data, &mesh->ubo, 4 * sizeof(mat4));
+		}
+	}
+
+	//for (auto& child : children) {
+	//	child->update(camera);
+	//}
 }

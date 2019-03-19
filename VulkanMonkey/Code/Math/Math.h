@@ -91,6 +91,7 @@ namespace vm {
 	struct ivec4
 	{
 		ivec4() : x(0), y(0) ,z(0), w(0) {}
+		ivec4(const int* v) { x = v[0]; y = v[1]; z = v[2]; w = v[3]; }
 		int& operator[](unsigned i) {
 			return (&x)[i];
 		}
@@ -261,6 +262,7 @@ namespace vm {
 	float degrees(cfloat radians);
 	vec3 reflect(cvec3& v, cvec3& normal);
 	float mix(cfloat f1, cfloat f2, cfloat a);
+	vec4 mix(cvec4 v1, cvec4 v2, cfloat a);
 	quat mix(cquat& q1, cquat& q2, cfloat a);
 	quat lerp(cquat& q1, cquat& q2, cfloat a);
 	quat slerp(cquat& q1, cquat& q2, cfloat a);
