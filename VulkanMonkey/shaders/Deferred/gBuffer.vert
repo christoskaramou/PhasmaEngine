@@ -4,8 +4,6 @@ const int MAX_NUM_JOINTS = 128;
 
 layout(set = 0, binding = 0) uniform UniformBufferObject {
 	mat4 matrix;
-	mat4 view;
-	mat4 projection;
 	mat4 previousMatrix;
 	mat4 jointMatrix[MAX_NUM_JOINTS];
 	float jointCount;
@@ -22,6 +20,13 @@ layout(set = 1, binding = 5) uniform UniformBufferObject2 {
 	float hasBones;
 	float dummy[3];
 } uboPrimitive;
+
+layout(set = 2, binding = 0) uniform UniformBufferObject3 {
+	mat4 matrix;
+	mat4 view;
+	mat4 projection;
+	mat4 previousMatrix;
+} uboModel;
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec2 inTexCoords;
@@ -52,7 +57,7 @@ void main()
 	
 	vec4 inPos = vec4(inPosition, 1.0f);
 	
-	mat3 mNormal = transpose(inverse(mat3(uboMesh.matrix * boneTransform)));
+	mat3 mNormal = transpose(inverse(mat3(uboModel.matrix * uboMesh.matrix * boneTransform)));
 	
 	// UV
 	outUV = inTexCoords;
@@ -69,11 +74,11 @@ void main()
 	metRoughAlphacutOcl = vec4(uboPrimitive.metallicFactor, uboPrimitive.roughnessFactor, uboPrimitive.alphaCutoff, uboPrimitive.occlusionlMetalRoughness);
 
 	// Velocity
-	velocity = (uboMesh.matrix * inPos) - (uboMesh.previousMatrix * inPos);
+	velocity = (uboModel.matrix * uboMesh.matrix * inPos) - (uboModel.previousMatrix * uboMesh.previousMatrix * inPos);
 	velocity.w = 1.0;
 
 	// WorldPos
-	outWorldPos = uboMesh.matrix * boneTransform * inPos;
+	outWorldPos = uboModel.matrix * uboMesh.matrix * boneTransform * inPos;
 
-	gl_Position = uboMesh.projection * uboMesh.view * outWorldPos;
+	gl_Position = uboModel.projection * uboModel.view * outWorldPos;
 }

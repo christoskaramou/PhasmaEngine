@@ -28,6 +28,16 @@ namespace vm {
 
 		static std::vector<Model> models;
 		static Pipeline* pipeline;
+		static vk::DescriptorSetLayout descriptorSetLayout;
+		static vk::DescriptorSetLayout getDescriptorSetLayout();
+		vk::DescriptorSet descriptorSet;
+		Buffer uniformBuffer;
+		struct UBOModel {
+			mat4 matrix = mat4::identity();
+			mat4 view;
+			mat4 projection;
+			mat4 previousMatrix;
+		} ubo;
 
 		mat4 transform = mat4::identity();
 		vec4 boundingSphere;

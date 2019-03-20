@@ -5084,7 +5084,7 @@ PipelineInfo Context::getPipelineSpecificationsShadows()
 	shadowsSpecific.viewportSize = { Shadows::imageSize, Shadows::imageSize };
 	shadowsSpecific.useBlendState = false;
 	shadowsSpecific.sampleCount = vk::SampleCountFlagBits::e1;
-	shadowsSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(vulkan.device), Mesh::descriptorSetLayout };
+	shadowsSpecific.descriptorSetLayouts = { Shadows::getDescriptorSetLayout(vulkan.device), Mesh::getDescriptorSetLayout() , Model::getDescriptorSetLayout() };
 	shadowsSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
 	shadowsSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
 	shadowsSpecific.pushConstantRange = vk::PushConstantRange();
@@ -5189,7 +5189,7 @@ PipelineInfo Context::getPipelineSpecificationsDeferred()
 	deferredSpecific.cull = vk::CullModeFlagBits::eFront;
 	deferredSpecific.face = vk::FrontFace::eClockwise;
 	deferredSpecific.sampleCount = vk::SampleCountFlagBits::e1;
-	deferredSpecific.descriptorSetLayouts = { Mesh::getDescriptorSetLayout(), Primitive::getDescriptorSetLayout() };
+	deferredSpecific.descriptorSetLayouts = { Mesh::getDescriptorSetLayout(), Primitive::getDescriptorSetLayout(), Model::getDescriptorSetLayout() };
 	deferredSpecific.specializationInfo = vk::SpecializationInfo();
 	deferredSpecific.blendAttachmentStates[0].blendEnable = VK_FALSE;
 	deferredSpecific.blendAttachmentStates = {

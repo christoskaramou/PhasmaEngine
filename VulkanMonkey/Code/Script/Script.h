@@ -38,21 +38,19 @@ namespace vm {
 		void update(float delta);
 
 		template<class T>
-		T getValue(const char* name)
+		void getValue(T& value, const char* name)
 		{
-			T value;
 			MonoClassField* idField = mono_class_get_field_from_name(scriptClass, name);
 			if (idField)
 				mono_field_get_value(scriptInstance, idField, &value);
-			return value;
 		}
 
 		template<class T>
-		void getValue(T& object, const char* name)
+		T getValue(const char* name)
 		{
-			MonoClassField* idField = mono_class_get_field_from_name(scriptClass, name);
-			if (idField)
-				mono_field_get_value(scriptInstance, idField, &object);
+			T value;
+			getValue(value, name);
+			return value;
 		}
 
 		template<class T>

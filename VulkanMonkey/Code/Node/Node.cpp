@@ -32,8 +32,6 @@ void Node::update(Camera& camera)
 	if (mesh) {
 		mesh->ubo.previousMatrix = mesh->ubo.matrix;
 		mesh->ubo.matrix = getMatrix();
-		mesh->ubo.view = camera.view;
-		mesh->ubo.projection = camera.projection;
 
 		for (auto& primitive : mesh->primitives) {
 			vec4 bs = mesh->ubo.matrix * vec4(vec3(primitive.boundingSphere), 1.0f);
@@ -59,7 +57,7 @@ void Node::update(Camera& camera)
 			memcpy(mesh->uniformBuffer.data, &mesh->ubo, sizeof(mesh->ubo));
 		}
 		else {
-			memcpy(mesh->uniformBuffer.data, &mesh->ubo, 4 * sizeof(mat4));
+			memcpy(mesh->uniformBuffer.data, &mesh->ubo, 2 * sizeof(mat4));
 		}
 	}
 

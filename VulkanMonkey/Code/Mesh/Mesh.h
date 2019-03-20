@@ -62,8 +62,6 @@ namespace vm {
 
 		struct UBOMesh {
 			mat4 matrix;
-			mat4 view;
-			mat4 projection;
 			mat4 previousMatrix;
 			mat4 jointMatrix[MAX_NUM_JOINTS];
 			float jointcount{ 0 };

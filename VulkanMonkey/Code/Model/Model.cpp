@@ -12,7 +12,7 @@
 using namespace vm;
 using namespace Microsoft;
 
-//vk::DescriptorSetLayout Model::descriptorSetLayout = nullptr;
+vk::DescriptorSetLayout Model::descriptorSetLayout = nullptr;
 std::vector<Model> Model::models{};
 Pipeline* Model::pipeline = nullptr;
 
@@ -311,6 +311,26 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 	createDescriptorSets();
 }
 
+vk::DescriptorSetLayout Model::getDescriptorSetLayout()
+{
+	if (!descriptorSetLayout) {
+		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
+
+		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
+			.setBinding(0) // binding number in shader stages
+			.setDescriptorCount(1) // number of descriptors contained
+			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
+			.setPImmutableSamplers(nullptr)
+			.setStageFlags(vk::ShaderStageFlagBits::eVertex)); // which pipeline shader stages can access
+
+		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
+			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
+			.setPBindings(descriptorSetLayoutBinding.data());
+		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(createInfo);
+	}
+	return descriptorSetLayout;
+}
+
 void vm::Model::batchStart(uint32_t imageIndex, Deferred& deferred)
 {
 	std::vector<vk::ClearValue> clearValues = {
@@ -350,7 +370,7 @@ void Model::draw()
 		if (node->mesh) {
 			for (auto &primitive : node->mesh->primitives) {
 				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 1) {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet }, nullptr);
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
 					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 				}
 			}
@@ -362,7 +382,7 @@ void Model::draw()
 			for (auto &primitive : node->mesh->primitives) {
 				// ALPHA CUT
 				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 2) {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet }, nullptr);
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
 					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 				}
 			}
@@ -374,7 +394,7 @@ void Model::draw()
 			for (auto &primitive : node->mesh->primitives) {
 				// ALPHA CUT
 				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 3) {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet }, nullptr);
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
 					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 				}
 			}
@@ -385,11 +405,17 @@ void Model::draw()
 void Model::update(vm::Camera& camera, float delta)
 {
 	if (render) {
-		Transform trans;
+		ubo.previousMatrix = ubo.matrix;
+		ubo.view = camera.view;
+		ubo.projection = camera.projection;
 		if (script) {
 			script->update(delta);
-			script->getValue(trans, "transform");
+			ubo.matrix = script->getValue<Transform>("transform").matrix() * transform;
 		}
+		else {
+			ubo.matrix = transform;
+		}
+		memcpy(uniformBuffer.data, &ubo, sizeof(ubo));
 
 		if (animations.size() > 0) {
 			animationTimer += delta;
@@ -686,117 +712,141 @@ void Model::createIndexBuffer()
 
 void Model::createUniformBuffers()
 {
-	for (auto& node : linearNodes) {
-		if (node->mesh) {
-			node->mesh->createUniformBuffers();
+	uniformBuffer.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
+	if (!isCopy) {
+		for (auto& node : linearNodes) {
+			if (node->mesh) {
+				node->mesh->createUniformBuffers();
+			}
 		}
 	}
 }
 
 void Model::createDescriptorSets()
 {
-	for (auto& node : linearNodes) {
-		if (!node->mesh) continue;
-		auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-			.setDescriptorPool(vulkan->descriptorPool)
-			.setDescriptorSetCount(1)
-			.setPSetLayouts(&Mesh::descriptorSetLayout);
-		node->mesh->descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+	auto const allocateInfo0 = vk::DescriptorSetAllocateInfo()
+		.setDescriptorPool(vulkan->descriptorPool)
+		.setDescriptorSetCount(1)
+		.setPSetLayouts(&Model::descriptorSetLayout);
+	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo0).at(0);
 
-		auto const mvpWriteSet = vk::WriteDescriptorSet()
-			.setDstSet(node->mesh->descriptorSet)					// DescriptorSet dstSet;
-			.setDstBinding(0)										// uint32_t dstBinding;
-			.setDstArrayElement(0)									// uint32_t dstArrayElement;
-			.setDescriptorCount(1)									// uint32_t descriptorCount;
-			.setDescriptorType(vk::DescriptorType::eUniformBuffer)	// DescriptorType descriptorType;
-			.setPBufferInfo(&vk::DescriptorBufferInfo()				// const DescriptorBufferInfo* pBufferInfo;
-				.setBuffer(node->mesh->uniformBuffer.buffer)			// Buffer buffer;
-				.setOffset(0)											// DeviceSize offset;
-				.setRange(node->mesh->uniformBuffer.size));				// DeviceSize range;
+	auto const modelWriteSet = vk::WriteDescriptorSet()
+		.setDstSet(descriptorSet)								// DescriptorSet dstSet;
+		.setDstBinding(0)										// uint32_t dstBinding;
+		.setDstArrayElement(0)									// uint32_t dstArrayElement;
+		.setDescriptorCount(1)									// uint32_t descriptorCount;
+		.setDescriptorType(vk::DescriptorType::eUniformBuffer)	// DescriptorType descriptorType;
+		.setPBufferInfo(&vk::DescriptorBufferInfo()				// const DescriptorBufferInfo* pBufferInfo;
+			.setBuffer(uniformBuffer.buffer)						// Buffer buffer;
+			.setOffset(0)											// DeviceSize offset;
+			.setRange(uniformBuffer.size));							// DeviceSize range;
 
-		vulkan->device.updateDescriptorSets(mvpWriteSet, nullptr);
-		for (auto& primitive :node->mesh->primitives) {
-
-			Image& baseColor = primitive.pbrMaterial.baseColorTexture;
-			Image& metallicRoughnes = primitive.pbrMaterial.metallicRoughnessTexture;
-			Image& normals = primitive.pbrMaterial.normalTexture;
-			Image& occlusion = primitive.pbrMaterial.occlusionTexture;
-			Image& emissive = primitive.pbrMaterial.emissiveTexture;
-
-			auto const allocateInfo2 = vk::DescriptorSetAllocateInfo()
+	vulkan->device.updateDescriptorSets(modelWriteSet, nullptr);
+	if (!isCopy) {
+		for (auto& node : linearNodes) {
+			if (!node->mesh) continue;
+			auto const allocateInfo = vk::DescriptorSetAllocateInfo()
 				.setDescriptorPool(vulkan->descriptorPool)
 				.setDescriptorSetCount(1)
-				.setPSetLayouts(&primitive.descriptorSetLayout);
-			primitive.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
+				.setPSetLayouts(&Mesh::descriptorSetLayout);
+			node->mesh->descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
-			std::vector<vk::WriteDescriptorSet> textureWriteSets(6);
-			textureWriteSets[0] = vk::WriteDescriptorSet()
-				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
-				.setDstBinding(0)												// uint32_t dstBinding;
-				.setDstArrayElement(0)											// uint32_t dstArrayElement;
-				.setDescriptorCount(1)											// uint32_t descriptorCount;
-				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-				.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-					.setSampler(baseColor.sampler)									// Sampler sampler;
-					.setImageView(baseColor.view)									// ImageView imageView;
-					.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+			auto const mvpWriteSet = vk::WriteDescriptorSet()
+				.setDstSet(node->mesh->descriptorSet)					// DescriptorSet dstSet;
+				.setDstBinding(0)										// uint32_t dstBinding;
+				.setDstArrayElement(0)									// uint32_t dstArrayElement;
+				.setDescriptorCount(1)									// uint32_t descriptorCount;
+				.setDescriptorType(vk::DescriptorType::eUniformBuffer)	// DescriptorType descriptorType;
+				.setPBufferInfo(&vk::DescriptorBufferInfo()				// const DescriptorBufferInfo* pBufferInfo;
+					.setBuffer(node->mesh->uniformBuffer.buffer)			// Buffer buffer;
+					.setOffset(0)											// DeviceSize offset;
+					.setRange(node->mesh->uniformBuffer.size));				// DeviceSize range;
 
-			textureWriteSets[1] = vk::WriteDescriptorSet()
-				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
-				.setDstBinding(1)												// uint32_t dstBinding;
-				.setDstArrayElement(0)											// uint32_t dstArrayElement;
-				.setDescriptorCount(1)											// uint32_t descriptorCount;
-				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-				.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-					.setSampler(metallicRoughnes.sampler)							// Sampler sampler;
-					.setImageView(metallicRoughnes.view)							// ImageView imageView;
-					.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+			vulkan->device.updateDescriptorSets(mvpWriteSet, nullptr);
+			for (auto& primitive : node->mesh->primitives) {
 
-			textureWriteSets[2] = vk::WriteDescriptorSet()
-				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
-				.setDstBinding(2)												// uint32_t dstBinding;
-				.setDstArrayElement(0)											// uint32_t dstArrayElement;
-				.setDescriptorCount(1)											// uint32_t descriptorCount;
-				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-				.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-					.setSampler(normals.sampler)									// Sampler sampler;
-					.setImageView(normals.view)										// ImageView imageView;
-					.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+				Image& baseColor = primitive.pbrMaterial.baseColorTexture;
+				Image& metallicRoughnes = primitive.pbrMaterial.metallicRoughnessTexture;
+				Image& normals = primitive.pbrMaterial.normalTexture;
+				Image& occlusion = primitive.pbrMaterial.occlusionTexture;
+				Image& emissive = primitive.pbrMaterial.emissiveTexture;
 
-			textureWriteSets[3] = vk::WriteDescriptorSet()
-				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
-				.setDstBinding(3)												// uint32_t dstBinding;
-				.setDstArrayElement(0)											// uint32_t dstArrayElement;
-				.setDescriptorCount(1)											// uint32_t descriptorCount;
-				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-				.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-					.setSampler(occlusion.sampler)									// Sampler sampler;
-					.setImageView(occlusion.view)									// ImageView imageView;
-					.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+				auto const allocateInfo2 = vk::DescriptorSetAllocateInfo()
+					.setDescriptorPool(vulkan->descriptorPool)
+					.setDescriptorSetCount(1)
+					.setPSetLayouts(&primitive.descriptorSetLayout);
+				primitive.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
 
-			textureWriteSets[4] = vk::WriteDescriptorSet()
-				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
-				.setDstBinding(4)												// uint32_t dstBinding;
-				.setDstArrayElement(0)											// uint32_t dstArrayElement;
-				.setDescriptorCount(1)											// uint32_t descriptorCount;
-				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-				.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-					.setSampler(emissive.sampler)									// Sampler sampler;
-					.setImageView(emissive.view)									// ImageView imageView;
-					.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+				std::vector<vk::WriteDescriptorSet> textureWriteSets(6);
+				textureWriteSets[0] = vk::WriteDescriptorSet()
+					.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+					.setDstBinding(0)												// uint32_t dstBinding;
+					.setDstArrayElement(0)											// uint32_t dstArrayElement;
+					.setDescriptorCount(1)											// uint32_t descriptorCount;
+					.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+					.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+						.setSampler(baseColor.sampler)									// Sampler sampler;
+						.setImageView(baseColor.view)									// ImageView imageView;
+						.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
-			textureWriteSets[5] = vk::WriteDescriptorSet()
-				.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
-				.setDstBinding(5)												// uint32_t dstBinding;
-				.setDstArrayElement(0)											// uint32_t dstArrayElement;
-				.setDescriptorCount(1)											// uint32_t descriptorCount;
-				.setDescriptorType(vk::DescriptorType::eUniformBuffer)			// DescriptorType descriptorType;
-				.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorBufferInfo* pBufferInfo;
-					.setBuffer(primitive.uniformBuffer.buffer)						// Buffer buffer;
-					.setOffset(0)													// DeviceSize offset;
-					.setRange(primitive.uniformBuffer.size));						// DeviceSize range;
+				textureWriteSets[1] = vk::WriteDescriptorSet()
+					.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+					.setDstBinding(1)												// uint32_t dstBinding;
+					.setDstArrayElement(0)											// uint32_t dstArrayElement;
+					.setDescriptorCount(1)											// uint32_t descriptorCount;
+					.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+					.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+						.setSampler(metallicRoughnes.sampler)							// Sampler sampler;
+						.setImageView(metallicRoughnes.view)							// ImageView imageView;
+						.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
 
-			vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+				textureWriteSets[2] = vk::WriteDescriptorSet()
+					.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+					.setDstBinding(2)												// uint32_t dstBinding;
+					.setDstArrayElement(0)											// uint32_t dstArrayElement;
+					.setDescriptorCount(1)											// uint32_t descriptorCount;
+					.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+					.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+						.setSampler(normals.sampler)									// Sampler sampler;
+						.setImageView(normals.view)										// ImageView imageView;
+						.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+
+				textureWriteSets[3] = vk::WriteDescriptorSet()
+					.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+					.setDstBinding(3)												// uint32_t dstBinding;
+					.setDstArrayElement(0)											// uint32_t dstArrayElement;
+					.setDescriptorCount(1)											// uint32_t descriptorCount;
+					.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+					.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+						.setSampler(occlusion.sampler)									// Sampler sampler;
+						.setImageView(occlusion.view)									// ImageView imageView;
+						.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+
+				textureWriteSets[4] = vk::WriteDescriptorSet()
+					.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+					.setDstBinding(4)												// uint32_t dstBinding;
+					.setDstArrayElement(0)											// uint32_t dstArrayElement;
+					.setDescriptorCount(1)											// uint32_t descriptorCount;
+					.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
+					.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
+						.setSampler(emissive.sampler)									// Sampler sampler;
+						.setImageView(emissive.view)									// ImageView imageView;
+						.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+
+				textureWriteSets[5] = vk::WriteDescriptorSet()
+					.setDstSet(primitive.descriptorSet)								// DescriptorSet dstSet;
+					.setDstBinding(5)												// uint32_t dstBinding;
+					.setDstArrayElement(0)											// uint32_t dstArrayElement;
+					.setDescriptorCount(1)											// uint32_t descriptorCount;
+					.setDescriptorType(vk::DescriptorType::eUniformBuffer)			// DescriptorType descriptorType;
+					.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorBufferInfo* pBufferInfo;
+						.setBuffer(primitive.uniformBuffer.buffer)						// Buffer buffer;
+						.setOffset(0)													// DeviceSize offset;
+						.setRange(primitive.uniformBuffer.size));						// DeviceSize range;
+
+				vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+			}
 		}
 	}
 }
@@ -804,31 +854,31 @@ void Model::createDescriptorSets()
 void Model::destroy()
 {
 	delete resourceReader;
-	for (auto& node : linearNodes) {
-		if (node->mesh) {
-			node->mesh->destroy();
-			delete node->mesh;
-			node->mesh = nullptr;
-		}
-		delete node;
-		node = nullptr;
-	}
-	for (auto& skin : skins) {
-		delete skin;
-		skin = nullptr;
-	}
-	for (auto& texture : Mesh::uniqueTextures)
-		texture.second.destroy();
-	Mesh::uniqueTextures.clear();
-
+	uniformBuffer.destroy();
 	if (!isCopy) {
+		if (Model::descriptorSetLayout) {
+			vulkan->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
+			Model::descriptorSetLayout = nullptr;
+		}
+
+		for (auto& node : linearNodes) {
+			if (node->mesh) {
+				node->mesh->destroy();
+				delete node->mesh;
+				node->mesh = nullptr;
+			}
+			delete node;
+			node = nullptr;
+		}
+		for (auto& skin : skins) {
+			delete skin;
+			skin = nullptr;
+		}
+		for (auto& texture : Mesh::uniqueTextures)
+			texture.second.destroy();
+		Mesh::uniqueTextures.clear();
+
 		vertexBuffer.destroy();
 		indexBuffer.destroy();
 	}
-	//uniformBuffer.destroy();
-
-	//if (Model::descriptorSetLayout) {
-	//	vulkan->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
-	//	Model::descriptorSetLayout = nullptr;
-	//}
 }

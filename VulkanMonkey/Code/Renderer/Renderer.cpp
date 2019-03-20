@@ -272,7 +272,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 
 				for (auto& node : Model::models[m].linearNodes) {
 					if (node->mesh) {
-						cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet }, nullptr);
+						cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet, Model::models[m].descriptorSet }, nullptr);
 						for (auto& primitive : node->mesh->primitives) {
 							if (primitive.render)
 								cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
