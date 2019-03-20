@@ -5113,7 +5113,7 @@ PipelineInfo Context::getPipelineSpecificationsSkyBox(SkyBox& skybox)
 	skyBoxSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionSkyBox();
 	skyBoxSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionSkyBox();
 	skyBoxSpecific.cull = vk::CullModeFlagBits::eFront;
-	skyBoxSpecific.face = vk::FrontFace::eCounterClockwise;
+	skyBoxSpecific.face = vk::FrontFace::eClockwise;
 	skyBoxSpecific.sampleCount = vk::SampleCountFlagBits::e1;
 	skyBoxSpecific.pushConstantRange = vk::PushConstantRange();
 	skyBoxSpecific.blendAttachmentStates[0].blendEnable = VK_FALSE;
@@ -5186,6 +5186,8 @@ PipelineInfo Context::getPipelineSpecificationsDeferred()
 	deferredSpecific.shaders = { "shaders/Deferred/vert.spv", "shaders/Deferred/frag.spv" };
 	deferredSpecific.renderPass = deferred.renderPass;
 	deferredSpecific.viewportSize = { WIDTH, HEIGHT };
+	deferredSpecific.cull = vk::CullModeFlagBits::eFront;
+	deferredSpecific.face = vk::FrontFace::eClockwise;
 	deferredSpecific.sampleCount = vk::SampleCountFlagBits::e1;
 	deferredSpecific.descriptorSetLayouts = { Mesh::getDescriptorSetLayout(), Primitive::getDescriptorSetLayout() };
 	deferredSpecific.specializationInfo = vk::SpecializationInfo();

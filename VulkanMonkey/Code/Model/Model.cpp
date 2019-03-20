@@ -276,24 +276,29 @@ void Model::loadModelGltf(const std::string& folderPath, const std::string& mode
 
 void Model::loadModel(const std::string& folderPath, const std::string& modelName, bool show)
 {
-	//for (auto& m : models) {
-	//	if (m.name == modelName) {
-	//		animation = m.animation;
-	//		animation.runningTimeSeconds = 0.f;
-	//		importers = m.importers;
-	//		scene = m.scene;
-	//		transform = m.transform;
-	//		isCopy = true;
-	//		name = m.name;
-	//		render = show;
-	//		vertexBuffer = m.vertexBuffer;
-	//		indexBuffer = m.indexBuffer;
-	//		meshes = m.meshes;
-	//		createUniformBuffers();
-	//		createDescriptorSets();
-	//		return;
-	//	}
-	//}
+	for (auto& model : models) {
+		if (modelName == model.name) {
+			transform = model.transform;
+			boundingSphere = model.boundingSphere;
+			render = show;
+			isCopy = true;
+			name = model.name;
+			nodes = model.nodes;
+			linearNodes = model.linearNodes;
+			skins = model.skins;
+			animations = model.animations;
+			extensions = model.extensions;
+			animationTimer = 0.f;
+			animationIndex = model.animationIndex;
+			numberOfVertices = model.numberOfVertices;
+			numberOfIndices = model.numberOfIndices;
+			vertexBuffer = model.vertexBuffer;
+			indexBuffer = model.indexBuffer;
+			createUniformBuffers();
+			createDescriptorSets();
+			return;
+		}
+	}
 
 	if (endsWith(modelName, ".gltf") || endsWith(modelName, ".glb"))
 		loadModelGltf(folderPath, modelName, show);
@@ -379,7 +384,6 @@ void Model::draw()
 
 void Model::update(vm::Camera& camera, float delta)
 {
-	//render = GUI::render_models;
 	if (render) {
 		Transform trans;
 		if (script) {
@@ -804,11 +808,14 @@ void Model::destroy()
 		if (node->mesh) {
 			node->mesh->destroy();
 			delete node->mesh;
+			node->mesh = nullptr;
 		}
 		delete node;
+		node = nullptr;
 	}
 	for (auto& skin : skins) {
 		delete skin;
+		skin = nullptr;
 	}
 	for (auto& texture : Mesh::uniqueTextures)
 		texture.second.destroy();

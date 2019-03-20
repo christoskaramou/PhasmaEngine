@@ -1,26 +1,18 @@
 #include "Camera.h"
-#include "../GUI/GUI.h"                                   // for GUI, GUI::winPos, GUI::winSize
+#include "../GUI/GUI.h"
 
 using namespace vm;
 
 Camera::Camera()
 {
-	// normalized device coordinates (ndc) of the API and left handed corrdinate system comparison
-
-	//	LEFT HANDED		     	VULKAN NDC	
-	//	+y /|  /|				|  /|				
-	//	    | /  +z				| /  +z				
-	//	    |/					|/					
-	//  --------|-------->			--------|-------->			
-	//         /|	    +x			       /|	+x			
-	//	  / |				      /	|					
-	//	 /  |   			     /  |/ +y
-	worldOrientation = vec3(1.f, -1.f, 1.f);
+	// gltf is right handed, reversing the x orientation makes the models left handed
+	// reversing the y axis to match the vulkan y axis too
+	worldOrientation = vec3(-1.f, -1.f, 1.f);
 
 	// total pitch, yaw, roll
-	euler = vec3(0.f, 0.f, 0.f);
+	euler = vec3(0.f, radians(180.f), 0.f);
 	orientation = quat(euler);
-	position = vec3(0.f, 0.f, -3.f);
+	position = vec3(0.f, 0.f, 3.f);
 
 	nearPlane = 500.0f;
 	farPlane = 0.005f;
