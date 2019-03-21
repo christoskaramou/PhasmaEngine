@@ -276,13 +276,15 @@ void Model::loadModelGltf(const std::string& folderPath, const std::string& mode
 
 void Model::loadModel(const std::string& folderPath, const std::string& modelName, bool show)
 {
+	// TODO: Copy the actual nodes and not the pointers
 	for (auto& model : models) {
-		if (modelName == model.name) {
+		if (model.fullPathName == folderPath + modelName) {
 			transform = model.transform;
 			boundingSphere = model.boundingSphere;
 			render = show;
 			isCopy = true;
 			name = model.name;
+			fullPathName = model.fullPathName;
 			nodes = model.nodes;
 			linearNodes = model.linearNodes;
 			skins = model.skins;
@@ -304,6 +306,7 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 		loadModelGltf(folderPath, modelName, show);
 
 	name = modelName;
+	fullPathName = folderPath + modelName;
 	render = show;
 	createVertexBuffer();
 	createIndexBuffer();
@@ -426,8 +429,14 @@ void Model::update(vm::Camera& camera, float delta)
 		}
 
 		for (auto& node : linearNodes) {
-			if (node->mesh)
+			if (node->mesh) {
 				node->update(camera);
+				for (auto& primitive : node->mesh->primitives) {
+					vec4 bs = ubo.matrix * node->mesh->ubo.matrix * vec4(vec3(primitive.boundingSphere), 1.0f);
+					bs.w = primitive.boundingSphere.w * node->mesh->ubo.matrix[0][0]; // scale 
+					primitive.cull = !camera.SphereInFrustum(bs);
+				}
+			}
 		}
 	}
 }
@@ -451,13 +460,13 @@ void Model::updateAnimation(uint32_t index, float time)
 				if (u <= 1.0f) {
 					switch (channel.path) {
 					case vm::AnimationChannel::PathType::TRANSLATION: {
-						cvec4 trans = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
-						channel.node->translation = vec3(trans);
+						cvec4 t = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
+						channel.node->translation = vec3(t);
 						break;
 					}
 					case vm::AnimationChannel::PathType::SCALE: {
-						cvec4 trans = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
-						channel.node->scale = vec3(trans);
+						cvec4 s = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
+						channel.node->scale = vec3(s);
 						break;
 					}
 					case vm::AnimationChannel::PathType::ROTATION: {
@@ -585,8 +594,7 @@ void vm::Model::loadAnimations()
 					break;
 				}
 				default: {
-					std::cout << "unknown type" << std::endl;
-					break;
+					throw glTF::GLTFException("unknown accessor type for TRS");
 				}
 				}
 			}

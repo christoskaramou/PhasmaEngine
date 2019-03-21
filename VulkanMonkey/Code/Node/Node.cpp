@@ -8,8 +8,9 @@ mat4 Node::localMatrix()
 	{
 	case TRANSFORMATION_MATRIX: 
 		return matrix;
-	case TRANSFORMATION_TRS:
-		return translate(mat4(1.0f), translation) * rotation.matrix() * vm::scale(mat4(1.0f), scale);
+	case TRANSFORMATION_TRS: {
+		return transform(rotation, scale, translation);
+	}
 	case TRANSFORMATION_IDENTITY:
 	default:
 		return mat4::identity();
@@ -32,12 +33,6 @@ void Node::update(Camera& camera)
 	if (mesh) {
 		mesh->ubo.previousMatrix = mesh->ubo.matrix;
 		mesh->ubo.matrix = getMatrix();
-
-		for (auto& primitive : mesh->primitives) {
-			vec4 bs = mesh->ubo.matrix * vec4(vec3(primitive.boundingSphere), 1.0f);
-			bs.w = primitive.boundingSphere.w * mesh->ubo.matrix[0][0]; // scale 
-			primitive.cull = !camera.SphereInFrustum(bs);
-		}
 
 		if (skin) {
 			// TODO: these calculations are heavy

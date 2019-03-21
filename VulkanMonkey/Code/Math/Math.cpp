@@ -1054,6 +1054,18 @@ namespace vm {
 		return q * quat(c, axisNorm.x * s, axisNorm.y * s, axisNorm.z * s);
 	}
 
+	// rotation, scale, translation
+	mat4 transform(cquat& r, cvec3 s, cvec3 t)
+	{
+		mat4 m = r.matrix();
+		return mat4(
+			m[0] * s.x,
+			m[1] * s.y,
+			m[2] * s.z,
+			col(t, 1.0f)
+		);
+	}
+
 	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar)
 	{
 		cfloat tanHalfFovy = tan(fovy / 2.f);
@@ -1367,10 +1379,6 @@ namespace vm {
 
 	vm::mat4 Transform::matrix()
 	{
-		return 
-			translate(mat4::identity(), _position) *
-			_rotation.matrix() *
-			scale(mat4::identity(), _scale);
+		return transform(_rotation, _scale, _position);
 	}
-
 }

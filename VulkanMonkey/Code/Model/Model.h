@@ -45,6 +45,7 @@ namespace vm {
 		bool isCopy = false;
 
 		std::string name;
+		std::string fullPathName;
 		std::vector<Node*> nodes;
 		std::vector<Node*> linearNodes;
 		std::vector<Skin*> skins;

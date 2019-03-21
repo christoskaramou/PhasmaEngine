@@ -235,6 +235,7 @@ namespace vm {
 	mat4 scale(cmat4& m, cvec3& v);
 	mat4 rotate(cmat4& m, cfloat angle, cvec3& axis);
 	quat rotate(cquat& q, cfloat angle, cvec3& axis);
+	mat4 transform(cquat& r, cvec3 s, cvec3 t);
 	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar);
 	mat4 ortho(cfloat left, cfloat right, cfloat bottom, cfloat top, cfloat zNear, cfloat zFar);
 	mat4 lookAt(cvec3& eye, cvec3& front, cvec3& right, cvec3& up);
