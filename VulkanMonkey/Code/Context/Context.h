@@ -94,7 +94,7 @@ namespace vm {
 		std::vector<Metrics> metrics{};
 #ifdef USE_SCRIPTS
 		// Scripts
-		std::vector<std::unique_ptr<Script>> scripts{};
+		std::vector<Script*> scripts{};
 #endif
 
 		void initVulkanContext();

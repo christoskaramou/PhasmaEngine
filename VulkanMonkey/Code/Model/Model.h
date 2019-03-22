@@ -23,8 +23,8 @@ namespace vm {
 		VulkanContext* vulkan = &VulkanContext::get();
 
 		// Document holds all info about the gltf model
-		Microsoft::glTF::Document document;
-		Microsoft::glTF::GLTFResourceReader* resourceReader;
+		Microsoft::glTF::Document* document = nullptr;
+		Microsoft::glTF::GLTFResourceReader* resourceReader = nullptr;
 
 		static std::vector<Model> models;
 		static Pipeline* pipeline;
@@ -46,16 +46,16 @@ namespace vm {
 
 		std::string name;
 		std::string fullPathName;
-		std::vector<Node*> nodes;
-		std::vector<Node*> linearNodes;
-		std::vector<Skin*> skins;
-		std::vector<Animation> animations;
-		std::vector<std::string> extensions;
+		std::vector<Node*> nodes{};
+		std::vector<Node*> linearNodes{};
+		std::vector<Skin*> skins{};
+		std::vector<Animation> animations{};
+		std::vector<std::string> extensions{};
 
 		int32_t animationIndex = 0;
 		float animationTimer = 0.0f;
 
-		std::unique_ptr<Script> script;
+		Script* script = nullptr;
 
 		Buffer vertexBuffer;
 		Buffer indexBuffer;

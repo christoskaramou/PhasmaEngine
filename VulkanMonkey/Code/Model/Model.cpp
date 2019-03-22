@@ -28,22 +28,36 @@ bool endsWith(const std::string &mainStr, const std::string &toMatch)
 
 void Model::readGltf(const std::filesystem::path& file)
 {
+	if (file.extension() != ".gltf" && file.extension() !=  ".glb")
+		throw glTF::GLTFException("Model type not supported");
+
+	std::string manifest;
+
 	// Pass the absolute path, without the filename, to the stream reader
 	auto streamReader = std::make_unique<StreamReader>(file.parent_path());
 	std::filesystem::path pathFile = file.filename();
 	// Pass a UTF-8 encoded filename to GetInputString
 	auto gltfStream = streamReader->GetInputStream(pathFile.u8string());
-	resourceReader = new glTF::GLTFResourceReader(std::move(streamReader));
-	if (!resourceReader) throw std::runtime_error("Path filename extension must be .gltf");
-	// Read the contents of the glTF file into a std::stringstream
-	std::stringstream manifestStream;
-	manifestStream << gltfStream->rdbuf();
+	if (file.extension() == ".gltf") {
+		resourceReader = new glTF::GLTFResourceReader(std::move(streamReader));
+		// Read the contents of the glTF file into a std::stringstream
+		std::stringstream manifestStream;
+		manifestStream << gltfStream->rdbuf();
+		manifest = manifestStream.str();
+	}
+	else {
+		Microsoft::glTF::GLBResourceReader* resourceReaderGLB;
+		resourceReaderGLB = new glTF::GLBResourceReader(std::move(streamReader), std::move(gltfStream));
+		manifest = resourceReaderGLB->GetJson();
+		resourceReader = resourceReaderGLB;
+	}
 
-	//std::cout << manifestStream.str();
+	//std::cout << manifest;
 
 	try
 	{
-		document = glTF::Deserialize(manifestStream.str());
+		document = new Microsoft::glTF::Document();
+		*document = glTF::Deserialize(manifest);
 	}
 	catch (const glTF::GLTFException& ex)
 	{
@@ -59,13 +73,13 @@ void Model::readGltf(const std::filesystem::path& file)
 Microsoft::glTF::Image* Model::getImage(const std::string& textureID) {
 	return textureID.empty() ? nullptr :
 		const_cast<Microsoft::glTF::Image*>
-		(&document.images.Get(document.textures.Get(textureID).imageId));
+		(&document->images.Get(document->textures.Get(textureID).imageId));
 }
 
 void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string& folderPath)
 {
 	if (!node || meshID.empty()) return;
-	const auto& mesh = document.meshes.Get(meshID);
+	const auto& mesh = document->meshes.Get(meshID);
 
 	Mesh* myMesh = new Mesh();
 
@@ -92,56 +106,56 @@ void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string
 		// ------------ Vertices ------------
 		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_POSITION, accessorId))
 		{
-			accessorPos = &document.accessors.Get(accessorId);
-			const auto data = resourceReader->ReadBinaryData<float>(document, *accessorPos);
+			accessorPos = &document->accessors.Get(accessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessorPos);
 			positions.insert(positions.end(), data.begin(), data.end());
 			
 		}
 		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_TEXCOORD_0, accessorId))
 		{
-			accessorTex = &document.accessors.Get(accessorId);
-			const auto data = resourceReader->ReadBinaryData<float>(document, *accessorTex);
+			accessorTex = &document->accessors.Get(accessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessorTex);
 			uvs.insert(uvs.end(), data.begin(), data.end());
 		}
 		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_NORMAL, accessorId))
 		{
-			accessorNor = &document.accessors.Get(accessorId);
-			const auto data = resourceReader->ReadBinaryData<float>(document, *accessorNor);
+			accessorNor = &document->accessors.Get(accessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessorNor);
 			normals.insert(normals.end(), data.begin(), data.end());
 		}
 		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_COLOR_0, accessorId))
 		{
-			accessorCol = &document.accessors.Get(accessorId);
-			const auto data = resourceReader->ReadBinaryData<float>(document, *accessorNor);
+			accessorCol = &document->accessors.Get(accessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessorNor);
 			colors.insert(colors.end(), data.begin(), data.end());
 		}
 		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_JOINTS_0, accessorId))
 		{
-			accessorJoi = &document.accessors.Get(accessorId);
+			accessorJoi = &document->accessors.Get(accessorId);
 			switch (accessorJoi->componentType)
 			{
 			case glTF::COMPONENT_BYTE: {
-				const auto data = resourceReader->ReadBinaryData<int8_t>(document, *accessorJoi);
+				const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessorJoi);
 				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
 				break;
 			}
 			case glTF::COMPONENT_UNSIGNED_BYTE: {
-				const auto data = resourceReader->ReadBinaryData<uint8_t>(document, *accessorJoi);
+				const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessorJoi);
 				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
 				break;
 			}
 			case glTF::COMPONENT_SHORT: {
-				const auto data = resourceReader->ReadBinaryData<int16_t>(document, *accessorJoi);
+				const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessorJoi);
 				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
 				break;
 			}
 			case glTF::COMPONENT_UNSIGNED_SHORT: {
-				const auto data = resourceReader->ReadBinaryData<uint16_t>(document, *accessorJoi);
+				const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessorJoi);
 				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
 				break;
 			}
 			case glTF::COMPONENT_UNSIGNED_INT: {
-				const auto data = resourceReader->ReadBinaryData<uint32_t>(document, *accessorJoi);
+				const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessorJoi);
 				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
 				break;
 			}
@@ -151,47 +165,47 @@ void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string
 		}
 		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_WEIGHTS_0, accessorId))
 		{
-			accessorWei = &document.accessors.Get(accessorId);
-			const auto data = resourceReader->ReadBinaryData<float>(document, *accessorWei);
+			accessorWei = &document->accessors.Get(accessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessorWei);
 			weights.insert(weights.end(), data.begin(), data.end());
 		}
 
 		// ------------ Indices ------------
 		if (primitive.indicesAccessorId != "")
 		{
-			accessorInd = &document.accessors.Get(primitive.indicesAccessorId);
+			accessorInd = &document->accessors.Get(primitive.indicesAccessorId);
 			switch (accessorInd->componentType)
 			{
 			case glTF::COMPONENT_BYTE: {
-				const auto data = resourceReader->ReadBinaryData<int8_t>(document, *accessorInd);
+				const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessorInd);
 				for (int i = 0; i < data.size(); i++)
 					indices.push_back((uint32_t)data[i]);
 				//indices.insert(indices.end(), data.begin(), data.end());
 				break;
 			}
 			case glTF::COMPONENT_UNSIGNED_BYTE: {
-				const auto data = resourceReader->ReadBinaryData<uint8_t>(document, *accessorInd);
+				const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessorInd);
 				for (int i = 0; i < data.size(); i++)
 					indices.push_back((uint32_t)data[i]);
 				//indices.insert(indices.end(), data.begin(), data.end());
 				break;
 			}
 			case glTF::COMPONENT_SHORT: {
-				const auto data = resourceReader->ReadBinaryData<int16_t>(document, *accessorInd);
+				const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessorInd);
 				for (int i = 0; i < data.size(); i++)
 					indices.push_back((uint32_t)data[i]);
 				//indices.insert(indices.end(), data.begin(), data.end());
 				break;
 			}
 			case glTF::COMPONENT_UNSIGNED_SHORT: {
-				const auto data = resourceReader->ReadBinaryData<uint16_t>(document, *accessorInd);
+				const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessorInd);
 				for (int i = 0; i < data.size(); i++)
 					indices.push_back((uint32_t)data[i]);
 				//indices.insert(indices.end(), data.begin(), data.end());
 				break;
 			}
 			case glTF::COMPONENT_UNSIGNED_INT: {
-				const auto data = resourceReader->ReadBinaryData<uint32_t>(document, *accessorInd);
+				const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessorInd);
 				for (int i = 0; i < data.size(); i++)
 					indices.push_back((uint32_t)data[i]);
 				//indices.insert(indices.end(), data.begin(), data.end());
@@ -205,7 +219,7 @@ void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string
 		Primitive myPrimitive;
 
 		// ------------ Materials ------------
-		const auto& material = document.materials.Get(primitive.materialId);
+		const auto& material = document->materials.Get(primitive.materialId);
 
 		// factors
 		myPrimitive.pbrMaterial.alphaCutoff = material.alphaCutoff;
@@ -222,11 +236,11 @@ void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string
 		const auto normalImage = getImage(material.normalTexture.textureId);
 		const auto occlusionImage = getImage(material.occlusionTexture.textureId);
 		const auto emissiveImage = getImage(material.emissiveTexture.textureId);
-		myPrimitive.loadTexture(TextureType::BaseColor, folderPath, baseColorImage, &document, resourceReader);
-		myPrimitive.loadTexture(TextureType::MetallicRoughness, folderPath, metallicRoughnessImage, &document, resourceReader);
-		myPrimitive.loadTexture(TextureType::Normal, folderPath, normalImage, &document, resourceReader);
-		myPrimitive.loadTexture(TextureType::Occlusion, folderPath, occlusionImage, &document, resourceReader);
-		myPrimitive.loadTexture(TextureType::Emissive, folderPath, emissiveImage, &document, resourceReader);
+		myPrimitive.loadTexture(TextureType::BaseColor, folderPath, baseColorImage, document, resourceReader);
+		myPrimitive.loadTexture(TextureType::MetallicRoughness, folderPath, metallicRoughnessImage, document, resourceReader);
+		myPrimitive.loadTexture(TextureType::Normal, folderPath, normalImage, document, resourceReader);
+		myPrimitive.loadTexture(TextureType::Occlusion, folderPath, occlusionImage, document, resourceReader);
+		myPrimitive.loadTexture(TextureType::Emissive, folderPath, emissiveImage, document, resourceReader);
 
 
 		myPrimitive.vertexOffset = (uint32_t)myMesh->vertices.size();
@@ -260,9 +274,9 @@ void Model::loadModelGltf(const std::string& folderPath, const std::string& mode
 {
 	// reads and gets the document and resourceReader objects
 	readGltf(std::filesystem::path(folderPath + modelName));
-	for (auto& node : document.GetDefaultScene().nodes)
+	for (auto& node : document->GetDefaultScene().nodes)
 	{
-		loadNode(nullptr, document.nodes.Get(node), folderPath);
+		loadNode(nullptr, document->nodes.Get(node), folderPath);
 	}
 	loadAnimations();
 	loadSkins();
@@ -280,31 +294,17 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 	// TODO: Copy the actual nodes and not the pointers
 	for (auto& model : models) {
 		if (model.fullPathName == folderPath + modelName) {
-			transform = model.transform;
-			boundingSphere = model.boundingSphere;
+			*this = model;
 			render = show;
 			isCopy = true;
-			name = model.name;
-			fullPathName = model.fullPathName;
-			nodes = model.nodes;
-			linearNodes = model.linearNodes;
-			skins = model.skins;
-			animations = model.animations;
-			extensions = model.extensions;
 			animationTimer = 0.f;
-			animationIndex = model.animationIndex;
-			numberOfVertices = model.numberOfVertices;
-			numberOfIndices = model.numberOfIndices;
-			vertexBuffer = model.vertexBuffer;
-			indexBuffer = model.indexBuffer;
 			createUniformBuffers();
 			createDescriptorSets();
 			return;
 		}
 	}
 
-	if (endsWith(modelName, ".gltf") || endsWith(modelName, ".glb"))
-		loadModelGltf(folderPath, modelName, show);
+	loadModelGltf(folderPath, modelName, show);
 
 	name = modelName;
 	fullPathName = folderPath + modelName;
@@ -531,10 +531,10 @@ vec4 Model::getBoundingSphere()
 void Model::loadNode(vm::Node* parent, const Microsoft::glTF::Node& node, const std::string& folderPath)
 {
 	vm::Node *newNode = new vm::Node{};
-	newNode->index = !node.id.empty() ? (uint32_t)document.nodes.GetIndex(node.id) : -1;
+	newNode->index = !node.id.empty() ? (uint32_t)document->nodes.GetIndex(node.id) : -1;
 	newNode->parent = parent;
 	newNode->name = node.name;
-	newNode->skinIndex = !node.skinId.empty() ? (int32_t)document.skins.GetIndex(node.skinId) : -1;
+	newNode->skinIndex = !node.skinId.empty() ? (int32_t)document->skins.GetIndex(node.skinId) : -1;
 
 	// Generate local node matrix
 	if (!node.HasValidTransformType()) throw glTF::InvalidGLTFException("Node " + node.name + " has Invalid TransformType");
@@ -546,7 +546,7 @@ void Model::loadNode(vm::Node* parent, const Microsoft::glTF::Node& node, const 
 
 	// Node with children
 	for (auto& child : node.children) {
-		loadNode(newNode, document.nodes.Get(child), folderPath);
+		loadNode(newNode, document->nodes.Get(child), folderPath);
 	}
 	getMesh(newNode, node.meshId, folderPath);
 	if (parent)
@@ -566,7 +566,7 @@ void vm::Model::loadAnimations()
 		return nullptr;
 	};
 
-	for (auto& anim : document.animations.Elements()) {
+	for (auto& anim : document->animations.Elements()) {
 		vm::Animation animation{};
 		animation.name = anim.name;
 		if (anim.name.empty()) {
@@ -587,10 +587,10 @@ void vm::Model::loadAnimations()
 			}
 			// Read sampler input time values
 			{
-				const glTF::Accessor &accessor = document.accessors.Get(samp.inputAccessorId);
+				const glTF::Accessor &accessor = document->accessors.Get(samp.inputAccessorId);
 				if (accessor.componentType != glTF::COMPONENT_FLOAT)
 					throw std::runtime_error("Animation componentType is not equal to float");
-				const auto data = resourceReader->ReadBinaryData<float>(document, accessor);
+				const auto data = resourceReader->ReadBinaryData<float>(*document, accessor);
 				sampler.inputs.insert(sampler.inputs.end(), data.begin(), data.end());
 
 				for (auto input : sampler.inputs) {
@@ -604,10 +604,10 @@ void vm::Model::loadAnimations()
 			}
 			// Read sampler output T/R/S values 
 			{
-				const glTF::Accessor &accessor = document.accessors.Get(samp.outputAccessorId);
+				const glTF::Accessor &accessor = document->accessors.Get(samp.outputAccessorId);
 				if (accessor.componentType != glTF::COMPONENT_FLOAT)
 					throw std::runtime_error("Animation componentType is not equal to float");
-				const auto data = resourceReader->ReadBinaryData<float>(document, accessor);
+				const auto data = resourceReader->ReadBinaryData<float>(*document, accessor);
 
 				switch (accessor.type) {
 				case glTF::AccessorType::TYPE_VEC3: {
@@ -649,7 +649,7 @@ void vm::Model::loadAnimations()
 				continue;
 			}
 			channel.samplerIndex = (uint32_t)anim.samplers.GetIndex(source.samplerId);
-			channel.node = getNode(linearNodes, document.nodes.GetIndex(source.target.nodeId));
+			channel.node = getNode(linearNodes, document->nodes.GetIndex(source.target.nodeId));
 			if (!channel.node) {
 				continue;
 			}
@@ -668,18 +668,18 @@ void vm::Model::loadSkins()
 		}
 		return nullptr;
 	};
-	for (auto& source : document.skins.Elements()) {
+	for (auto& source : document->skins.Elements()) {
 		Skin *newSkin = new Skin();
 		newSkin->name = source.name;
 
 		// Find skeleton root node
 		if (!source.skeletonId.empty()) {
-			newSkin->skeletonRoot = getNode(linearNodes, document.nodes.GetIndex(source.skeletonId));
+			newSkin->skeletonRoot = getNode(linearNodes, document->nodes.GetIndex(source.skeletonId));
 		}
 
 		// Find joint nodes
 		for (auto& jointID : source.jointIds) {
-			Node* node = !jointID.empty() ? getNode(linearNodes, document.nodes.GetIndex(jointID)) : nullptr;
+			Node* node = !jointID.empty() ? getNode(linearNodes, document->nodes.GetIndex(jointID)) : nullptr;
 			if (node) {
 				newSkin->joints.push_back(node);
 			}
@@ -687,8 +687,8 @@ void vm::Model::loadSkins()
 
 		// Get inverse bind matrices
 		if (!source.inverseBindMatricesAccessorId.empty()) {
-			const glTF::Accessor &accessor = document.accessors.Get(source.inverseBindMatricesAccessorId);
-			const auto data = resourceReader->ReadBinaryData<float>(document, accessor);
+			const glTF::Accessor &accessor = document->accessors.Get(source.inverseBindMatricesAccessorId);
+			const auto data = resourceReader->ReadBinaryData<float>(*document, accessor);
 			newSkin->inverseBindMatrices.resize(accessor.count);
 			memcpy(newSkin->inverseBindMatrices.data(), data.data(), accessor.GetByteLength());
 		}
@@ -891,14 +891,18 @@ void Model::createDescriptorSets()
 
 void Model::destroy()
 {
-	delete resourceReader;
+	if (script) {
+		delete script;
+		script = nullptr;
+	}
 	uniformBuffer.destroy();
 	if (!isCopy) {
+		delete document;
+		delete resourceReader;
 		if (Model::descriptorSetLayout) {
 			vulkan->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
 			Model::descriptorSetLayout = nullptr;
 		}
-
 		for (auto& node : linearNodes) {
 			if (node->mesh) {
 				node->mesh->destroy();
@@ -915,7 +919,6 @@ void Model::destroy()
 		for (auto& texture : Mesh::uniqueTextures)
 			texture.second.destroy();
 		Mesh::uniqueTextures.clear();
-
 		vertexBuffer.destroy();
 		indexBuffer.destroy();
 	}

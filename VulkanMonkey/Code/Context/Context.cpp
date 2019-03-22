@@ -403,7 +403,7 @@ void Context::loadResources()
 	Script::addCallback("Global::GetMousePos", GetMousePos);
 	Script::addCallback("Global::SetMousePos", SetMousePos);
 	Script::addCallback("Global::GetMouseWheel", GetMouseWheel);
-	scripts.push_back(std::make_unique<Script>("Load"));
+	scripts.push_back(new Script("Load"));
 #endif
 }
 

@@ -32,6 +32,8 @@ Renderer::~Renderer()
 			Primitive::descriptorSetLayout = nullptr;
 		}
 	}
+	for (auto& script : ctx.scripts)
+		delete script;
 	for (auto &model : Model::models)
 		model.destroy();
 	ctx.shadows.destroy();
@@ -57,18 +59,19 @@ void Renderer::checkQueue()
 	// TODO: make an other command pool for multithreading
 	for (auto& queue : Queue::loadModel) {
 		VulkanContext::get().device.waitIdle();
-		Model::models.push_back(Model());
-		Model::models.back().loadModel(std::get<0>(queue), std::get<1>(queue)); // path, name
+		Model model;
+		model.loadModel(std::get<0>(queue), std::get<1>(queue)); // path, name
 		GUI::modelList.push_back(std::get<1>(queue));
 #ifdef USE_SCRIPTS
 		for (auto& dll : Script::dlls) {
-			std::string mName = Model::models.back().name.substr(0, Model::models.back().name.find_last_of("."));
+			std::string mName = model.name.substr(0, model.name.find_last_of("."));
 			if (dll == mName) {
-				Model::models.back().script = std::make_unique<Script>(dll.c_str());
+				model.script = new Script(dll.c_str());
 				break;
 			}
 		}
 #endif
+		Model::models.push_back(std::move(model));
 		Queue::loadModel.pop_front();
 	}
 }
