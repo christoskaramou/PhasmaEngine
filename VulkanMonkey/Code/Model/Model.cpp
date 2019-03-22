@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <future>
 
 using namespace vm;
 using namespace Microsoft;
@@ -405,6 +406,33 @@ void Model::draw()
 	}
 }
 
+void frustumCheckAsync(mat4& modelMatrix, Mesh* mesh, Camera& camera, uint32_t index)
+{
+	vec4 bs = modelMatrix * mesh->ubo.matrix * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
+	bs.w = mesh->primitives[index].boundingSphere.w * mesh->ubo.matrix[0][0]; // scale 
+	mesh->primitives[index].cull = !camera.SphereInFrustum(bs);
+}
+
+void updateNodeAsync(mat4& modelMatrix, Node* node, Camera& camera)
+{
+	if (node->mesh) {
+		node->update(camera);
+
+		// async calls should be at least bigger than a number, else this will be slower
+		if (node->mesh->primitives.size() > 3) {
+			std::vector<std::future<void>> futures(node->mesh->primitives.size());
+			for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
+				futures[i] = std::async(std::launch::async, frustumCheckAsync, modelMatrix, node->mesh, camera, i);
+			for (auto& f : futures)
+				f.get();
+		}
+		else {
+			for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
+				frustumCheckAsync(modelMatrix, node->mesh, camera, i);
+		}
+	}
+}
+
 void Model::update(vm::Camera& camera, float delta)
 {
 	if (render) {
@@ -428,15 +456,17 @@ void Model::update(vm::Camera& camera, float delta)
 			updateAnimation(animationIndex, animationTimer);
 		}
 
-		for (auto& node : linearNodes) {
-			if (node->mesh) {
-				node->update(camera);
-				for (auto& primitive : node->mesh->primitives) {
-					vec4 bs = ubo.matrix * node->mesh->ubo.matrix * vec4(vec3(primitive.boundingSphere), 1.0f);
-					bs.w = primitive.boundingSphere.w * node->mesh->ubo.matrix[0][0]; // scale 
-					primitive.cull = !camera.SphereInFrustum(bs);
-				}
-			}
+		// async calls should be at least bigger than a number, else this will be slower
+		if (linearNodes.size() > 3) {
+			std::vector<std::future<void>> futureNodes(linearNodes.size());
+			for (uint32_t i = 0; i < linearNodes.size(); i++)
+				futureNodes[i] = std::async(std::launch::async, updateNodeAsync, ubo.matrix, linearNodes[i], camera);
+			for (auto& f : futureNodes)
+				f.get();
+		}
+		else {
+			for (uint32_t i = 0; i < linearNodes.size(); i++)
+				updateNodeAsync(ubo.matrix, linearNodes[i], camera);
 		}
 	}
 }

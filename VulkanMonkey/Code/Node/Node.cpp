@@ -1,4 +1,5 @@
 #include "Node.h"
+#include <future>
 
 using namespace vm;
 
@@ -28,6 +29,11 @@ mat4 Node::getMatrix()
 	return m;
 }
 
+void calculateMeshJointMatrixAsync(Mesh* mesh, const Skin* skin, const mat4& inverseTransform, const size_t index)
+{
+	mesh->ubo.jointMatrix[index] = inverseTransform * skin->joints[index]->getMatrix() * skin->inverseBindMatrices[index];
+}
+
 void Node::update(Camera& camera)
 {
 	if (mesh) {
@@ -35,19 +41,23 @@ void Node::update(Camera& camera)
 		mesh->ubo.matrix = getMatrix();
 
 		if (skin) {
-			// TODO: these calculations are heavy
-			// TODO: use primitive uniforms, so calculations are done only once
-			// TODO: size vs calculation speed :(
-
 			// Update join matrices
 			mat4 inverseTransform = inverse(mesh->ubo.matrix);
 			size_t numJoints = std::min((uint32_t)skin->joints.size(), MAX_NUM_JOINTS);
-			for (size_t i = 0; i < numJoints; i++) {
-				Node *jointNode = skin->joints[i];
-				mat4 jointMat = jointNode->getMatrix() * skin->inverseBindMatrices[i];
-				jointMat = inverseTransform * jointMat;
-				mesh->ubo.jointMatrix[i] = jointMat;
+
+			// async calls should be at least bigger than a number, else this will be slower
+			if (numJoints > 3) {
+				std::vector<std::future<void>> futures(numJoints);
+				for (size_t i = 0; i < numJoints; i++)
+					futures[i] = std::async(std::launch::async, calculateMeshJointMatrixAsync, mesh, skin, inverseTransform, i);
+				for (auto& f : futures)
+					f.get();
 			}
+			else {
+				for (size_t i = 0; i < numJoints; i++)
+					calculateMeshJointMatrixAsync(mesh, skin, inverseTransform, i);
+			}
+
 			mesh->ubo.jointcount = (float)numJoints;
 			memcpy(mesh->uniformBuffer.data, &mesh->ubo, sizeof(mesh->ubo));
 		}
