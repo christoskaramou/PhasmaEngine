@@ -282,7 +282,6 @@
     <ClCompile Include="Code\Math\Math.cpp" />
     <ClCompile Include="Code\Mesh\Mesh.cpp" />
     <ClCompile Include="Code\Metrics\Metrics.cpp" />
-    <ClCompile Include="Code\Model\Animation.cpp" />
     <ClCompile Include="Code\Model\Model.cpp" />
     <ClCompile Include="Code\MotionBlur\MotionBlur.cpp" />
     <ClCompile Include="Code\Node\Node.cpp" />

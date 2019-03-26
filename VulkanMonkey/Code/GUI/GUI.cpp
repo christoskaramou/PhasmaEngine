@@ -27,11 +27,11 @@ float						GUI::lights_intensity = 2.5f;
 float						GUI::lights_range = 7.0f;
 bool						GUI::shadow_cast = true;
 float						GUI::sun_intensity = 20.f;
-std::array<float, 3>		GUI::sun_position = { 0.0f, 300.0f, 50.0f };
+std::array<float, 3>		GUI::sun_position{ 0.0f, 300.0f, 50.0f };
 int							GUI::fps = 60;
 float						GUI::cameraSpeed = 3.5f;
-std::array<float, 3>		GUI::depthBias = { 0.0f, 0.0f, -6.2f };
-std::array<float, 4>		GUI::clearColor = { 0.0f, 0.31f, 0.483f, 0.0f };
+std::array<float, 3>		GUI::depthBias{ 0.0f, 0.0f, -6.2f };
+std::array<float, 4>		GUI::clearColor{ 0.0f, 0.31f, 0.483f, 0.0f };
 float						GUI::cpuTime = 0;
 float						GUI::cpuWaitingTime = 0;
 float						GUI::gpuTime = 0;
@@ -40,6 +40,10 @@ std::array<float, 20>		GUI::metrics = {};
 std::array<float, 20>		GUI::stats = {};
 std::vector<std::string>	GUI::fileList{};
 std::vector<std::string>	GUI::modelList{};
+std::vector <std::array<float, 3>> GUI::model_scale{};
+std::vector <std::array<float, 3>> GUI::model_pos{};
+std::vector <std::array<float, 3>> GUI::model_rot{};
+int							GUI::modelItemSelected = -1;
 ImVec2						GUI::tlPanelPos = ImVec2();
 ImVec2						GUI::tlPanelSize = ImVec2();
 ImVec2						GUI::mlPanelPos = ImVec2();
@@ -95,10 +99,13 @@ void GUI::Menu()
 		{
 			if (ImGui::MenuItem("Load...")) {
 				// TODO: Add checks for all file types
-				std::string path(tinyfd_openFileDialog("Choose Model", "", 0, NULL, "", 0));
-				std::string folderPath = path.substr(0, path.find_last_of("\\") + 1);
-				std::string modelName = path.substr(path.find_last_of("\\") + 1);
-				Queue::loadModel.push_back({ folderPath, modelName });
+				const char* result = tinyfd_openFileDialog("Choose Model", "", 0, NULL, "", 0);
+				if (result) {
+					std::string path(result);
+					std::string folderPath = path.substr(0, path.find_last_of("\\") + 1);
+					std::string modelName = path.substr(path.find_last_of("\\") + 1);
+					Queue::loadModel.push_back({ folderPath, modelName });
+				}
 			}
 			if (ImGui::MenuItem("Exit")) {
 				const SDL_MessageBoxButtonData buttons[] = { { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "cancel" },{ SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes" } };
@@ -183,12 +190,18 @@ void GUI::Scripts()
 	ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 3.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
 	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_PANEL_HEIGHT));
 	ImGui::Begin("Scripts Folder", &scripts_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-	for (auto& file : fileList)
+	for (uint32_t i = 0; i < fileList.size(); i++)
 	{
-		if (endsWithExt(file, ".cs"))
-			ImGui::TextColored(ImVec4(.5f, 0.f, .5f, 1.f), file.c_str());
-		else
-			ImGui::TextColored(ImVec4(.3f, .3f, .3f, 1.f), file.c_str());
+		if (endsWithExt(fileList[i], ".cs")) {
+			//ImGui::TextColored(ImVec4(.5f, 0.f, .5f, 1.f), file.c_str());
+			std::string name = fileList[i] + "##" + std::to_string(i);
+			if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
+				if (ImGui::IsMouseDoubleClicked(0)) {
+					std::string s = "Scripts\\" + fileList[i];
+					system(s.c_str());
+				}
+			}
+		}
 	}
 	ImGui::End();
 }
@@ -199,15 +212,13 @@ void GUI::Models()
 	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 2.f / 3.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
 	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_PANEL_HEIGHT));
 	ImGui::Begin("Models Loaded", &models_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-	static std::vector<bool> selected(modelList.size(), false);
-	if (selected.size() != modelList.size())
-		selected.resize(modelList.size());
-	if (ImGui::ListBoxHeader("", (int)modelList.size()))
-	{
-		for (uint32_t i = 0; i < modelList.size(); i++)
-			ImGui::Selectable(modelList[i].c_str(), selected[i]);
-		ImGui::ListBoxFooter();
+
+	for (uint32_t i = 0; i < modelList.size(); i++) {
+		std::string s = modelList[i] + "##" + std::to_string(i);
+		if (ImGui::Selectable(s.c_str(), false))
+			modelItemSelected = i;
 	}
+
 	ImGui::End();
 }
 
@@ -260,6 +271,36 @@ void vm::GUI::Properties()
 		randomize_lights = true;
 	ImGui::SliderFloat("Light Intst", &lights_intensity, 0.01f, 30.f);
 	ImGui::SliderFloat("Light Rng", &lights_range, 0.1f, 30.f);
+
+	// Model properties
+	ImGui::Separator();
+	ImGui::Separator();
+	ImGui::Separator();
+	ImGui::LabelText("", "Model Properties");
+	if (modelItemSelected > -1) {
+		std::string toStr = std::to_string(modelItemSelected);
+		std::string name = modelList[modelItemSelected].substr(0, modelList[modelItemSelected].find_last_of(".")) + " ID[" + toStr + "]";
+		ImGui::LabelText("", name.c_str());
+		ImGui::Separator();
+		std::string s = "Scale##" + toStr;
+		std::string p = "Position##" + toStr;
+		std::string r = "Rotation##" + toStr;
+		ImGui::InputFloat3(s.c_str(), (float*)model_scale[modelItemSelected].data(), 3);
+		ImGui::InputFloat3(p.c_str(), (float*)model_pos[modelItemSelected].data(), 3);
+		ImGui::InputFloat3(r.c_str(), (float*)model_rot[modelItemSelected].data(), 3);
+
+		ImGui::Separator();
+		ImGui::Separator();
+		if (ImGui::Button("Add Script")) {
+			const char* result = tinyfd_openFileDialog("Choose Script", "", 0, NULL, "", 0);
+			if (result) {
+				std::string path(result);
+				path = path.substr(0, path.find_last_of("."));
+				Queue::addScript.push_back({ modelItemSelected, path.substr(path.find_last_of("\\") + 1) });
+			}
+		}
+	}
+
 	mlPanelPos = ImGui::GetWindowPos();
 	mlPanelSize = ImGui::GetWindowSize();
 	ImGui::End();

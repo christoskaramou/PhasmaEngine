@@ -38,7 +38,9 @@ namespace vm {
 			mat4 projection;
 			mat4 previousMatrix;
 		} ubo;
-
+		vec3 scale = vec3(1.0f);
+		vec3 pos = vec3(0.0f);
+		vec3 rot = vec3(0.0f); // euler angles
 		mat4 transform = mat4::identity();
 		vec4 boundingSphere;
 		bool render = true;
@@ -66,7 +68,7 @@ namespace vm {
 		void draw();
 		void update(Camera& camera, float delta);
 		void updateAnimation(uint32_t index, float time);
-		vec4 getBoundingSphere();
+		void calculateBoundingSphere();
 		void loadNode(vm::Node* parent, const Microsoft::glTF::Node& node, const std::string& folderPath);
 		void loadAnimations();
 		void loadSkins();

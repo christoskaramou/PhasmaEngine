@@ -359,9 +359,6 @@
     <ClCompile Include="include\imgui\imgui_widgets.cpp">
       <Filter>Include</Filter>
     </ClCompile>
-    <ClCompile Include="Code\Model\Animation.cpp">
-      <Filter>Code\Model</Filter>
-    </ClCompile>
     <ClCompile Include="Code\SSDO\SSDO.cpp">
       <Filter>Code\SSDO</Filter>
     </ClCompile>

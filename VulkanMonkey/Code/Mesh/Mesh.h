@@ -78,10 +78,10 @@ namespace vm {
 		std::vector<Vertex> vertices{};
 		std::vector<uint32_t> indices{};
 		uint32_t vertexOffset = 0, indexOffset = 0;
-		vec4 boundingSphere;
+		//vec4 boundingSphere;
 
 		void createUniformBuffers();
-		void calculateBoundingSphere();
+		//void calculateBoundingSphere();
 		void destroy();
 	};
 }

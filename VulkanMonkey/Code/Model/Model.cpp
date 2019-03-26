@@ -1,10 +1,5 @@
 #include "Model.h"
 #include "../GUI/GUI.h"
-#include "../../include/GLTFSDK/GLTF.h"
-#include "../../include/GLTFSDK/GLTFResourceReader.h"
-#include "../../include/GLTFSDK/GLBResourceReader.h"
-#include "../../include/GLTFSDK/Deserialize.h"
-#include "StreamReader.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -46,17 +41,17 @@ void Model::readGltf(const std::filesystem::path& file)
 		manifest = manifestStream.str();
 	}
 	else {
-		Microsoft::glTF::GLBResourceReader* resourceReaderGLB;
-		resourceReaderGLB = new glTF::GLBResourceReader(std::move(streamReader), std::move(gltfStream));
+		// GLBResourceReader derives from GLTFResourceReader
+		glTF::GLBResourceReader* resourceReaderGLB = new glTF::GLBResourceReader(std::move(streamReader), std::move(gltfStream));
 		manifest = resourceReaderGLB->GetJson();
-		resourceReader = resourceReaderGLB;
+		resourceReader = (glTF::GLTFResourceReader*)resourceReaderGLB;
 	}
 
 	//std::cout << manifest;
 
 	try
 	{
-		document = new Microsoft::glTF::Document();
+		document = new glTF::Document();
 		*document = glTF::Deserialize(manifest);
 	}
 	catch (const glTF::GLTFException& ex)
@@ -70,9 +65,9 @@ void Model::readGltf(const std::filesystem::path& file)
 	}
 }
 
-Microsoft::glTF::Image* Model::getImage(const std::string& textureID) {
+glTF::Image* Model::getImage(const std::string& textureID) {
 	return textureID.empty() ? nullptr :
-		const_cast<Microsoft::glTF::Image*>
+		const_cast<glTF::Image*>
 		(&document->images.Get(document->textures.Get(textureID).imageId));
 }
 
@@ -274,6 +269,7 @@ void Model::loadModelGltf(const std::string& folderPath, const std::string& mode
 {
 	// reads and gets the document and resourceReader objects
 	readGltf(std::filesystem::path(folderPath + modelName));
+	auto& x = document->GetDefaultScene().nodes;
 	for (auto& node : document->GetDefaultScene().nodes)
 	{
 		loadNode(nullptr, document->nodes.Get(node), folderPath);
@@ -305,7 +301,7 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 	}
 
 	loadModelGltf(folderPath, modelName, show);
-
+	//calculateBoundingSphere();
 	name = modelName;
 	fullPathName = folderPath + modelName;
 	render = show;
@@ -408,8 +404,9 @@ void Model::draw()
 
 void frustumCheckAsync(mat4& modelMatrix, Mesh* mesh, Camera& camera, uint32_t index)
 {
-	vec4 bs = modelMatrix * mesh->ubo.matrix * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
-	bs.w = mesh->primitives[index].boundingSphere.w * mesh->ubo.matrix[0][0]; // scale 
+	cmat4 trans = modelMatrix * mesh->ubo.matrix;
+	vec4 bs = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
+	bs.w = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale 
 	mesh->primitives[index].cull = !camera.SphereInFrustum(bs);
 }
 
@@ -446,6 +443,7 @@ void Model::update(vm::Camera& camera, float delta)
 		else {
 			ubo.matrix = transform;
 		}
+		ubo.matrix = vm::transform(quat(rot), scale, pos) * ubo.matrix;
 		memcpy(uniformBuffer.data, &ubo, sizeof(ubo));
 
 		if (animations.size() > 0) {
@@ -512,23 +510,32 @@ void Model::updateAnimation(uint32_t index, float time)
 	}
 }
 // position x, y, z and radius w
-vec4 Model::getBoundingSphere()
+void Model::calculateBoundingSphere()
 {
+	vec4 centerMax(0.f);
+	vec4 centerMin(FLT_MAX);
+
 	for (auto& node : linearNodes) {
 		if (node->mesh) {
 			for (auto &primitive : node->mesh->primitives) {
-				for (auto& vertex : node->mesh->vertices) {
-					float temp = length(vertex.position);
-					if (temp > boundingSphere.w)
-						boundingSphere.w = temp;
-				}
+				cvec3 center = vec3(primitive.boundingSphere);
+
+				float lenMax = length(center) + primitive.boundingSphere.w;
+				if (lenMax > centerMax.w)
+					centerMax = vec4(center, lenMax);
+
+				float lenMin = lenMax - 2.f * primitive.boundingSphere.w;
+				if (lenMin < centerMin.w)
+					centerMin = vec4(center, lenMin);
 			}
 		}
 	}
-	return boundingSphere; // unscaled bounding sphere with 0,0,0 origin
+	vec3 center = (vec3(centerMax) + vec3(centerMin)) * .5f;
+	float sphereRadius = length(vec3(centerMax) - center);
+	boundingSphere = vec4(center, sphereRadius);
 }
 
-void Model::loadNode(vm::Node* parent, const Microsoft::glTF::Node& node, const std::string& folderPath)
+void Model::loadNode(vm::Node* parent, const glTF::Node& node, const std::string& folderPath)
 {
 	vm::Node *newNode = new vm::Node{};
 	newNode->index = !node.id.empty() ? (uint32_t)document->nodes.GetIndex(node.id) : -1;

@@ -194,18 +194,18 @@ void Primitive::loadTexture(
 	}
 }
 
-void Mesh::calculateBoundingSphere()
-{
-	vec3 _max(-FLT_MAX);
-	vec3 _min(FLT_MAX);
-	for (auto& vertex : vertices) {
-		_max = maximum(_max, vertex.position);
-		_min = minimum(_min, vertex.position);
-	}
-	vec3 center = (_max + _min) * .5f;
-	float sphereRadius = length(_max - center);
-	boundingSphere = vec4(center, sphereRadius);
-}
+//void Mesh::calculateBoundingSphere()
+//{
+//	vec3 _max(-FLT_MAX);
+//	vec3 _min(FLT_MAX);
+//	for (auto& vertex : vertices) {
+//		_max = maximum(_max, vertex.position);
+//		_min = minimum(_min, vertex.position);
+//	}
+//	vec3 center = (_max + _min) * .5f;
+//	float sphereRadius = length(_max - center);
+//	boundingSphere = vec4(center, sphereRadius);
+//}
 
 void Mesh::destroy()
 {

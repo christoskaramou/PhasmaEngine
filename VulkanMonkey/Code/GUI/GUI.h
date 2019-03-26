@@ -51,6 +51,10 @@ namespace vm {
 		static std::array<float, 20> stats;
 		static std::vector<std::string> fileList;
 		static std::vector<std::string> modelList;
+		static int			modelItemSelected;
+		static std::vector <std::array<float, 3>> model_scale;
+		static std::vector <std::array<float, 3>> model_pos;
+		static std::vector <std::array<float, 3>> model_rot;
 		static ImVec2		tlPanelPos;
 		static ImVec2		tlPanelSize;
 		static ImVec2		mlPanelPos;

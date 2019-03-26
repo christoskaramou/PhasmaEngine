@@ -62,18 +62,18 @@ void Renderer::checkQueue()
 		Model model;
 		model.loadModel(std::get<0>(queue), std::get<1>(queue)); // path, name
 		GUI::modelList.push_back(std::get<1>(queue));
-#ifdef USE_SCRIPTS
-		for (auto& dll : Script::dlls) {
-			std::string mName = model.name.substr(0, model.name.find_last_of("."));
-			if (dll == mName) {
-				model.script = new Script(dll.c_str());
-				break;
-			}
-		}
-#endif
+		GUI::model_scale.push_back({1.f, 1.f, 1.f});
+		GUI::model_pos.push_back({0.f, 0.f, 0.f});
+		GUI::model_rot.push_back({0.f, 0.f, 0.f});
 		Model::models.push_back(std::move(model));
 		Queue::loadModel.pop_front();
 	}
+#ifdef USE_SCRIPTS
+	for (auto& queue : Queue::addScript) {
+		Model::models[std::get<0>(queue)].script = new Script(std::get<1>(queue).c_str());
+		Queue::addScript.pop_front();
+	}
+#endif
 }
 
 void Renderer::update(float delta)
@@ -93,8 +93,14 @@ void Renderer::update(float delta)
 	ctx.camera_main.update();
 
 	// MODELS
-	for (auto &model : Model::models)
+	if (GUI::modelItemSelected > -1) {
+		Model::models[GUI::modelItemSelected].scale = vec3(GUI::model_scale[GUI::modelItemSelected].data());
+		Model::models[GUI::modelItemSelected].pos = vec3(GUI::model_pos[GUI::modelItemSelected].data());
+		Model::models[GUI::modelItemSelected].rot = vec3(GUI::model_rot[GUI::modelItemSelected].data());
+	}
+	for (auto &model : Model::models) {
 		model.update(ctx.camera_main, delta);
+	}
 
 	// GUI
 	ctx.gui.update();
