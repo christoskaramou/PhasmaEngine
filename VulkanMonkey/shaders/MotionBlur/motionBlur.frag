@@ -14,7 +14,7 @@ layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out vec4 outColor;
 
-const int samples = 8;
+const int samples = 32;
 
 void main() 
 {
@@ -22,7 +22,7 @@ void main()
 	vec3 velocitySample = texture(velocitySampler, UV).xyz;
 	vec3 worldPos = getPosFromUV(UV, texture(depthSampler, UV).x, ubo.invViewProj, pushConst.offset);
 	vec3 currentPos = (ubo.view * vec4(worldPos, 1.0)).xyz;
-	vec3 previousPos = (ubo.previousView * vec4(worldPos+velocitySample*3.0, 1.0)).xyz;
+	vec3 previousPos = (ubo.previousView * vec4(worldPos-velocitySample, 1.0)).xyz;
 	vec3 viewVelocity = currentPos - previousPos;
 
 	vec2 velocity = (ubo.projection * vec4(viewVelocity, 1.0)).xy;
@@ -30,13 +30,13 @@ void main()
 	velocity *= pushConst.offset.zw; // floating window velocity aspect correction
 	velocity /= 1.0 + (currentPos.z + previousPos.z) * 0.5; // "1 + depth" division, so far pixels wont blur so much
 	velocity *= pushConst.fps.x; // fix for low and high fps for giving different velocities
-	velocity *= 0.002; // scale the effect
+	velocity *= 0.001; // scale the effect
 
-	vec4 color = vec4(0.0);
+	vec3 color = vec3(0.0);
 	for (int i = 0; i < samples; i++, UV += velocity)
 	{
 		UV = clamp(UV, pushConst.offset.xy + 0.0005, pushConst.offset.xy + pushConst.offset.zw - 0.0005);
-		color += texture(compositionSampler, UV);
+		color += texture(compositionSampler, UV).xyz;
 	}
-	outColor = color / samples;
+	outColor = vec4(color / samples, texture(compositionSampler, inUV).w);
 }
