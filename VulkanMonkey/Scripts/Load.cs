@@ -23,9 +23,9 @@ public class Load
         //    instances++;
         //}
         //
-        if (Global.KeyDown(Key.P))
-            Global.SetTimeScale(0.0f);
-        else
-            Global.SetTimeScale(1.0f);
+        //if (Global.KeyDown(Key.P))
+        //    Global.SetTimeScale(0.0f);
+        //else
+        //    Global.SetTimeScale(1.0f);
     }
 }

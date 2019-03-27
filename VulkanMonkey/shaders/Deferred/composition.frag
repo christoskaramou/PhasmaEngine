@@ -87,23 +87,25 @@ vec3 calculateShadowAndDirectLight(Material material, vec3 world_pos, vec3 camer
 	s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
 	s_coords2 = s_coords2 / s_coords2.w;
 
+	const float bias = 0.0007;
+	const float mixFactor = 15.0;
 	float lit = 0.0;
 	float dist = distance(world_pos, camera_pos);
 	if (dist < maxCascadeDist0) {
 		for (int i = 0; i < 4 * castShadows; i++) {
-			float value = mix(texture(shadowMapSampler0, vec3(s_coords0.xy + poissonDisk[i] * 0.0008, s_coords0.z + 0.0001)), texture(shadowMapSampler1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + 0.0001)), (dist*dist) / (maxCascadeDist0*maxCascadeDist0));
+			float value = mix(texture(shadowMapSampler0, vec3(s_coords0.xy + poissonDisk[i] * 0.0008, s_coords0.z + bias)), texture(shadowMapSampler1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias)), pow(dist, mixFactor) / pow(maxCascadeDist0, mixFactor));
 			lit += 0.25 * value;
 		}
 	}
 	else if (dist < maxCascadeDist1) {
 		for (int i = 0; i < 4 * castShadows; i++) {
-			float value = mix(texture(shadowMapSampler1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + 0.0001)), texture(shadowMapSampler2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + 0.0001)), (dist*dist) / (maxCascadeDist1*maxCascadeDist1));
+			float value = mix(texture(shadowMapSampler1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias)), texture(shadowMapSampler2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias)), pow(dist, mixFactor) / pow(maxCascadeDist1, mixFactor));
 			lit += 0.25 * value;
 		}
 	}
 	else {
 		for (int i = 0; i < 4 * castShadows; i++)
-			lit += 0.25 * (texture(shadowMapSampler2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + 0.0001)));
+			lit += 0.25 * (texture(shadowMapSampler2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias)));
 	}
 
 	float roughness = material.roughness * 0.75 + 0.25;
