@@ -14,8 +14,9 @@ vec3 FXAA(sampler2D uInput, vec2 vUV)
 	vec3 rgbNE = textureOffset(uInput, vUV, ivec2(+1, -1)).rgb;
 	vec3 rgbSW = textureOffset(uInput, vUV, ivec2(-1, +1)).rgb;
 	vec3 rgbSE = textureOffset(uInput, vUV, ivec2(+1, +1)).rgb;
+
 	vec3 texColor = texture(uInput, vUV).rgb;
-	const vec3 luma = vec3(0.299, 0.587, 0.114);
+	const vec3 luma = vec3(0.2627, 0.678, 0.0593);
 	float lumaNW = dot(rgbNW, luma);
 	float lumaNE = dot(rgbNE, luma);
 	float lumaSW = dot(rgbSW, luma);
