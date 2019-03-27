@@ -2,6 +2,7 @@
 #include "../Queue/Queue.h"
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 #include "../Window/Window.h"
 
 using namespace vm;
@@ -332,10 +333,11 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 // Callbacks for scripts -------------------
 static void LoadModel(MonoString* folderPath, MonoString* modelName, uint32_t instances)
 {
+	std::string curPath = std::filesystem::current_path().string() + "\\";
 	std::string path(mono_string_to_utf8(folderPath));
 	std::string name(mono_string_to_utf8(modelName));
 	for (; instances > 0; instances--)
-		Queue::loadModel.push_back({ path, name });
+		Queue::loadModel.push_back({ curPath + path, name });
 }
 
 static bool KeyDown(uint32_t key)

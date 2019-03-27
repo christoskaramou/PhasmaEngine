@@ -14,7 +14,7 @@ public class DamagedHelmet
 
     public void Update(float delta)
 	{
-        s += delta;
+        s += delta*15.0f;
 		transform.rotation = Quaternion.CreateFromYawPitchRoll(s, 0.0f, 0.0f);
 	}
 }

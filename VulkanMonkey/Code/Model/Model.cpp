@@ -71,20 +71,108 @@ glTF::Image* Model::getImage(const std::string& textureID) {
 		(&document->images.Get(document->textures.Get(textureID).imageId));
 }
 
+template <typename T>
+void Model::getVertexData(std::vector<T>& vec, const std::string& accessorName, const glTF::MeshPrimitive& primitive)
+{
+	std::string accessorId;
+	const glTF::Accessor* accessor = nullptr;
+	if (primitive.TryGetAttributeAccessorId(accessorName, accessorId))
+	{
+		accessor = &document->accessors.Get(accessorId);
+		switch (accessor->componentType)
+		{
+		case glTF::COMPONENT_FLOAT: {
+			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessor);
+			for (int i = 0; i < data.size(); i++)
+				vec.push_back((T)data[i]);
+			break;
+		}
+		case glTF::COMPONENT_BYTE: {
+			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
+			for (int i = 0; i < data.size(); i++)
+				vec.push_back((T)data[i]);
+			break;
+		}
+		case glTF::COMPONENT_UNSIGNED_BYTE: {
+			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
+			for (int i = 0; i < data.size(); i++)
+				vec.push_back((T)data[i]);
+			break;
+		}
+		case glTF::COMPONENT_SHORT: {
+			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
+			for (int i = 0; i < data.size(); i++)
+				vec.push_back((T)data[i]);
+			break;
+		}
+		case glTF::COMPONENT_UNSIGNED_SHORT: {
+			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
+			for (int i = 0; i < data.size(); i++)
+				vec.push_back((T)data[i]);
+			break;
+		}
+		case glTF::COMPONENT_UNSIGNED_INT: {
+			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
+			for (int i = 0; i < data.size(); i++)
+				vec.push_back((T)data[i]);
+			break;
+		}
+		default:
+			throw glTF::GLTFException("Unsupported accessor ComponentType");
+		}
+	}
+}
+
+void Model::getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::MeshPrimitive& primitive)
+{
+	if (primitive.indicesAccessorId != "")
+	{
+		const glTF::Accessor* accessor;
+		accessor = &document->accessors.Get(primitive.indicesAccessorId);
+		switch (accessor->componentType)
+		{
+		case glTF::COMPONENT_BYTE: {
+			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
+			for (int i = 0; i < data.size(); i++)
+				vec.push_back((uint32_t)data[i]);
+			break;
+		}
+		case glTF::COMPONENT_UNSIGNED_BYTE: {
+			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
+			for (int i = 0; i < data.size(); i++)
+				vec.push_back((uint32_t)data[i]);
+			break;
+		}
+		case glTF::COMPONENT_SHORT: {
+			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
+			for (int i = 0; i < data.size(); i++)
+				vec.push_back((uint32_t)data[i]);
+			break;
+		}
+		case glTF::COMPONENT_UNSIGNED_SHORT: {
+			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
+			for (int i = 0; i < data.size(); i++)
+				vec.push_back((uint32_t)data[i]);
+			break;
+		}
+		case glTF::COMPONENT_UNSIGNED_INT: {
+			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
+			for (int i = 0; i < data.size(); i++)
+				vec.push_back((uint32_t)data[i]);
+			break;
+		}
+		default:
+			throw glTF::GLTFException("Unsupported accessor ComponentType");
+		}
+	}
+}
+
 void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string& folderPath)
 {
 	if (!node || meshID.empty()) return;
 	const auto& mesh = document->meshes.Get(meshID);
 
 	Mesh* myMesh = new Mesh();
-
-	const glTF::Accessor* accessorPos;
-	const glTF::Accessor* accessorTex;
-	const glTF::Accessor* accessorNor;
-	const glTF::Accessor* accessorCol;
-	const glTF::Accessor* accessorJoi;
-	const glTF::Accessor* accessorWei;
-	const glTF::Accessor* accessorInd;
 
 	for (const auto& primitive : mesh.primitives)
 	{
@@ -96,125 +184,20 @@ void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string
 		std::vector<float> weights{};
 		std::vector<uint32_t> indices{};
 
-		std::string accessorId;
-
 		// ------------ Vertices ------------
-		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_POSITION, accessorId))
-		{
-			accessorPos = &document->accessors.Get(accessorId);
-			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessorPos);
-			positions.insert(positions.end(), data.begin(), data.end());
-			
-		}
-		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_TEXCOORD_0, accessorId))
-		{
-			accessorTex = &document->accessors.Get(accessorId);
-			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessorTex);
-			uvs.insert(uvs.end(), data.begin(), data.end());
-		}
-		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_NORMAL, accessorId))
-		{
-			accessorNor = &document->accessors.Get(accessorId);
-			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessorNor);
-			normals.insert(normals.end(), data.begin(), data.end());
-		}
-		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_COLOR_0, accessorId))
-		{
-			accessorCol = &document->accessors.Get(accessorId);
-			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessorNor);
-			colors.insert(colors.end(), data.begin(), data.end());
-		}
-		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_JOINTS_0, accessorId))
-		{
-			accessorJoi = &document->accessors.Get(accessorId);
-			switch (accessorJoi->componentType)
-			{
-			case glTF::COMPONENT_BYTE: {
-				const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessorJoi);
-				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
-				break;
-			}
-			case glTF::COMPONENT_UNSIGNED_BYTE: {
-				const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessorJoi);
-				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
-				break;
-			}
-			case glTF::COMPONENT_SHORT: {
-				const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessorJoi);
-				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
-				break;
-			}
-			case glTF::COMPONENT_UNSIGNED_SHORT: {
-				const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessorJoi);
-				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
-				break;
-			}
-			case glTF::COMPONENT_UNSIGNED_INT: {
-				const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessorJoi);
-				bonesIDs.insert(bonesIDs.end(), data.begin(), data.end());
-				break;
-			}
-			default:
-				throw glTF::GLTFException("Unsupported accessor ComponentType");
-			}
-		}
-		if (primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_WEIGHTS_0, accessorId))
-		{
-			accessorWei = &document->accessors.Get(accessorId);
-			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessorWei);
-			weights.insert(weights.end(), data.begin(), data.end());
-		}
+		getVertexData(positions, glTF::ACCESSOR_POSITION, primitive);
+		getVertexData(uvs, glTF::ACCESSOR_TEXCOORD_0, primitive);
+		getVertexData(normals, glTF::ACCESSOR_NORMAL, primitive);
+		getVertexData(colors, glTF::ACCESSOR_COLOR_0, primitive);
+		getVertexData(bonesIDs, glTF::ACCESSOR_JOINTS_0, primitive);
+		getVertexData(weights, glTF::ACCESSOR_WEIGHTS_0, primitive);
 
 		// ------------ Indices ------------
-		if (primitive.indicesAccessorId != "")
-		{
-			accessorInd = &document->accessors.Get(primitive.indicesAccessorId);
-			switch (accessorInd->componentType)
-			{
-			case glTF::COMPONENT_BYTE: {
-				const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessorInd);
-				for (int i = 0; i < data.size(); i++)
-					indices.push_back((uint32_t)data[i]);
-				//indices.insert(indices.end(), data.begin(), data.end());
-				break;
-			}
-			case glTF::COMPONENT_UNSIGNED_BYTE: {
-				const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessorInd);
-				for (int i = 0; i < data.size(); i++)
-					indices.push_back((uint32_t)data[i]);
-				//indices.insert(indices.end(), data.begin(), data.end());
-				break;
-			}
-			case glTF::COMPONENT_SHORT: {
-				const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessorInd);
-				for (int i = 0; i < data.size(); i++)
-					indices.push_back((uint32_t)data[i]);
-				//indices.insert(indices.end(), data.begin(), data.end());
-				break;
-			}
-			case glTF::COMPONENT_UNSIGNED_SHORT: {
-				const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessorInd);
-				for (int i = 0; i < data.size(); i++)
-					indices.push_back((uint32_t)data[i]);
-				//indices.insert(indices.end(), data.begin(), data.end());
-				break;
-			}
-			case glTF::COMPONENT_UNSIGNED_INT: {
-				const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessorInd);
-				for (int i = 0; i < data.size(); i++)
-					indices.push_back((uint32_t)data[i]);
-				//indices.insert(indices.end(), data.begin(), data.end());
-				break;
-			}
-			default:
-				throw glTF::GLTFException("Unsupported accessor ComponentType");
-			}
-		}
-
-		Primitive myPrimitive;
+		getIndexData(indices, primitive);
 
 		// ------------ Materials ------------
 		const auto& material = document->materials.Get(primitive.materialId);
+		Primitive myPrimitive;
 
 		// factors
 		myPrimitive.pbrMaterial.alphaCutoff = material.alphaCutoff;
@@ -238,6 +221,9 @@ void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string
 		myPrimitive.loadTexture(TextureType::Emissive, folderPath, emissiveImage, document, resourceReader);
 
 
+		std::string accessorId;
+		primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_POSITION, accessorId);
+		const glTF::Accessor* accessorPos = &document->accessors.Get(accessorId);
 		myPrimitive.vertexOffset = (uint32_t)myMesh->vertices.size();
 		myPrimitive.verticesSize = (uint32_t)accessorPos->count;
 		myPrimitive.indexOffset = (uint32_t)myMesh->indices.size();
@@ -254,7 +240,7 @@ void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string
 			vertex.uv = uvs.size() > 0 ? vec2(&uvs[i * 2]) : vec2();
 			vertex.normals = normals.size() > 0 ? vec3(&normals[i * 3]) : vec3();
 			vertex.color = colors.size() > 0 ? vec4(&colors[i * 4]) : vec4();
-			vertex.bonesIDs = bonesIDs.size() > 0 ? ivec4((int*)&bonesIDs[i * 4]) : ivec4();
+			vertex.bonesIDs = bonesIDs.size() > 0 ? ivec4(&bonesIDs[i * 4]) : ivec4();
 			vertex.weights = weights.size() > 0 ? vec4(&weights[i * 4]) : vec4();
 			myMesh->vertices.push_back(vertex);
 		}
@@ -269,11 +255,9 @@ void Model::loadModelGltf(const std::string& folderPath, const std::string& mode
 {
 	// reads and gets the document and resourceReader objects
 	readGltf(std::filesystem::path(folderPath + modelName));
-	auto& x = document->GetDefaultScene().nodes;
+
 	for (auto& node : document->GetDefaultScene().nodes)
-	{
 		loadNode(nullptr, document->nodes.Get(node), folderPath);
-	}
 	loadAnimations();
 	loadSkins();
 

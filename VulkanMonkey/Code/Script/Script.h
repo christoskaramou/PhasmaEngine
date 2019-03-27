@@ -5,6 +5,8 @@
 #include <mono/metadata/assembly.h>
 #include <mono/metadata/mono-config.h>
 #include <mono/metadata/debug-helpers.h>
+#include <mono/metadata/threads.h>
+#include <mono/metadata/mono-debug.h>
 #include <vector>
 #include <filesystem>
 #include <string>
@@ -13,7 +15,8 @@ namespace vm {
 	struct Script
 	{
 	private:
-		static MonoDomain* monoDomain;
+		static MonoDomain* domain;
+		MonoDomain* child;
 
 		MonoAssembly* assembly;
 		MonoImage* monoImage;
@@ -28,6 +31,10 @@ namespace vm {
 		static bool initialized;
 
 	public:
+		std::string name;
+		std::string ext; // .dll, .exe
+		std::vector<std::string> includes{"CPPcallbacks.cs", "Helper.cs", "MonoGame.Framework.dll"}; // include scripts and libs
+
 		static std::vector<std::string> dlls;
 		static void Init();
 		static void Cleanup();

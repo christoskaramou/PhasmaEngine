@@ -98,8 +98,8 @@ void GUI::Menu()
 		if (ImGui::BeginMenu("File"))
 		{
 			if (ImGui::MenuItem("Load...")) {
-				// TODO: Add checks for all file types
-				const char* result = tinyfd_openFileDialog("Choose Model", "", 0, NULL, "", 0);
+				std::vector<const char*> filter{ "*.gltf", "*.glb" };
+				const char* result = tinyfd_openFileDialog("Choose Model", "", (int)filter.size(), filter.data(), "", 0);
 				if (result) {
 					std::string path(result);
 					std::string folderPath = path.substr(0, path.find_last_of("\\") + 1);
@@ -190,10 +190,24 @@ void GUI::Scripts()
 	ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 3.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
 	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_PANEL_HEIGHT));
 	ImGui::Begin("Scripts Folder", &scripts_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+	if (ImGui::Button("Create New Script")) {
+		const char* result = tinyfd_inputBox("Script", "Give a name followed by the extension .cs", "");
+		if (result) {
+			std::string res = result;
+			res = res.substr(0, res.find_last_of(".cs") + 1);
+			if (std::find(fileList.begin(), fileList.end(), res) == fileList.end()) {
+				std::string cmd = "type nul > Scripts\\" + res;
+				system(cmd.c_str());
+				fileList.push_back(res);
+			}
+			else {
+				SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Script not created", "Script name already exists", g_Window);
+			}
+		}
+	}
 	for (uint32_t i = 0; i < fileList.size(); i++)
 	{
 		if (endsWithExt(fileList[i], ".cs")) {
-			//ImGui::TextColored(ImVec4(.5f, 0.f, .5f, 1.f), file.c_str());
 			std::string name = fileList[i] + "##" + std::to_string(i);
 			if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
 				if (ImGui::IsMouseDoubleClicked(0)) {
@@ -212,7 +226,16 @@ void GUI::Models()
 	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 2.f / 3.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
 	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_PANEL_HEIGHT));
 	ImGui::Begin("Models Loaded", &models_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-
+	if (ImGui::Button("Add New Model")) {
+		std::vector<const char*> filter{ "*.gltf", "*.glb" };
+		const char* result = tinyfd_openFileDialog("Choose Model", "", (int)filter.size(), filter.data(), "", 0);
+		if (result) {
+			std::string path(result);
+			std::string folderPath = path.substr(0, path.find_last_of("\\") + 1);
+			std::string modelName = path.substr(path.find_last_of("\\") + 1);
+			Queue::loadModel.push_back({ folderPath, modelName });
+		}
+	}
 	for (uint32_t i = 0; i < modelList.size(); i++) {
 		std::string s = modelList[i] + "##" + std::to_string(i);
 		if (ImGui::Selectable(s.c_str(), false))
@@ -279,8 +302,8 @@ void vm::GUI::Properties()
 	ImGui::LabelText("", "Model Properties");
 	if (modelItemSelected > -1) {
 		std::string toStr = std::to_string(modelItemSelected);
-		std::string name = modelList[modelItemSelected].substr(0, modelList[modelItemSelected].find_last_of(".")) + " ID[" + toStr + "]";
-		ImGui::LabelText("", name.c_str());
+		std::string id = " ID[" + toStr + "]";
+		ImGui::TextColored(ImVec4(.6f, 1.f, .5f, 1.f), (modelList[modelItemSelected] + id).c_str());
 		ImGui::Separator();
 		std::string s = "Scale##" + toStr;
 		std::string p = "Position##" + toStr;
@@ -292,12 +315,17 @@ void vm::GUI::Properties()
 		ImGui::Separator();
 		ImGui::Separator();
 		if (ImGui::Button("Add Script")) {
-			const char* result = tinyfd_openFileDialog("Choose Script", "", 0, NULL, "", 0);
+			std::vector<const char*> filter{ "*.cs" };
+			const char* result = tinyfd_openFileDialog("Choose Script", "", (int)filter.size(), filter.data(), "", 0);
 			if (result) {
 				std::string path(result);
 				path = path.substr(0, path.find_last_of("."));
 				Queue::addScript.push_back({ modelItemSelected, path.substr(path.find_last_of("\\") + 1) });
 			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Compile Script")) {
+			Queue::compileScript.push_back(modelItemSelected);
 		}
 	}
 
@@ -363,7 +391,8 @@ void GUI::initImGui()
 {
 	for (auto& file : std::filesystem::directory_iterator("Scripts")) {
 		auto pathStr = file.path().string();
-		fileList.push_back(pathStr.substr(pathStr.rfind('\\') + 1).c_str());
+		if (endsWithExt(pathStr, ".cs"))
+			fileList.push_back(pathStr.substr(pathStr.find_last_of('\\') + 1));
 	}
 
 	ImGui::CreateContext();

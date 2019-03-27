@@ -70,8 +70,21 @@ void Renderer::checkQueue()
 	}
 #ifdef USE_SCRIPTS
 	for (auto& queue : Queue::addScript) {
+		if (Model::models[std::get<0>(queue)].script)
+			delete Model::models[std::get<0>(queue)].script;
 		Model::models[std::get<0>(queue)].script = new Script(std::get<1>(queue).c_str());
 		Queue::addScript.pop_front();
+	}
+	for (auto& modelIndex : Queue::compileScript) {
+		std::string name;
+		if (Model::models[modelIndex].script) {
+			name = Model::models[modelIndex].script->name;
+			delete Model::models[modelIndex].script;
+			//std::string cmd = "del Scripts\\" + name + ".dll";
+			//system(cmd.c_str());
+			Model::models[modelIndex].script = new Script(name.c_str());
+		}
+		Queue::compileScript.pop_front();
 	}
 #endif
 }

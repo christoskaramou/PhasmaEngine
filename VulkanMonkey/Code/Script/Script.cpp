@@ -1,23 +1,76 @@
 #include "Script.h"
+#include <fstream>
 
 using namespace vm;
 
-MonoDomain* Script::monoDomain = nullptr;
+MonoDomain* Script::domain = nullptr;
+
 std::vector<std::string> Script::dlls{};
 bool Script::initialized = false;
 
 constexpr uint32_t PUBLIC_FLAG = 0x0006;
 
+bool endsWithValue(const std::string &mainStr, const std::string &toMatch)
+{
+	if (mainStr.size() >= toMatch.size() &&
+		mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
+		return true;
+	else
+		return false;
+}
+
+std::vector<char> readDll(const std::string& filename)
+{
+	std::ifstream file(filename, std::ios::ate | std::ios::binary);
+	if (!file.is_open()) {
+		throw std::runtime_error("failed to open file!");
+	}
+	size_t fileSize = (size_t)file.tellg();
+	std::vector<char> buffer(fileSize);
+	file.seekg(0);
+	file.read(buffer.data(), fileSize);
+	file.close();
+
+	return buffer;
+}
+
 Script::Script(const char* file, const char* extension)
 {
-	if(!initialized) Init();
+	if (!initialized) Init();
+
+	name = file;
+	ext = extension;
+	std::string cmd = "C:\\Windows\\System32\\cmd.exe /c \"include\\Mono\\bin\\mcs -t:library Scripts\\" + name + ".cs";
+	for (auto& incl : includes) {
+		if (endsWithValue(incl, ".cs"))
+			cmd = cmd + " Scripts\\" + incl;
+		else if (endsWithValue(incl, ".dll"))
+			cmd = cmd + " -r:Scripts\\" + incl;
+	}
+	system(cmd.c_str());
+
+	dlls.clear();
+	dlls.shrink_to_fit();
+	for (auto& f : std::filesystem::directory_iterator("Scripts"))
+	{
+		std::string n = f.path().string();
+		if (endsWithValue(n, ".dll")) {
+			n = n.substr(0, n.find_last_of("."));
+			dlls.push_back(n.substr(n.rfind('\\') + 1));	//	Scripts\\example.dll --> Scripts\\example --> example
+		}
+	}
+	if (std::find(dlls.begin(), dlls.end(), name) == dlls.end())
+		throw std::runtime_error("error creating script dll");
+
 	ctor = nullptr;
 	dtor = nullptr;
 	updateFunc = nullptr;
-	assembly = mono_domain_assembly_open(monoDomain, std::string("Scripts/" + std::string(file) + "." + std::string(extension)).c_str()); // "Scripts/file.extension"
+	child = mono_domain_create_appdomain(const_cast<char*>(name.c_str()), NULL);
+	mono_domain_set(child, false);
+	assembly = mono_domain_assembly_open(mono_domain_get(), std::string("Scripts\\" + name + "." + ext).c_str()); // "Scripts/file.extension"
 	monoImage = mono_assembly_get_image(assembly);
 	scriptClass = mono_class_from_name(monoImage, "", file);
-	scriptInstance = mono_object_new(monoDomain, scriptClass);
+	scriptInstance = mono_object_new(mono_domain_get(), scriptClass);
 	mono_runtime_object_init(scriptInstance);
 
 	// variables
@@ -41,31 +94,31 @@ Script::Script(const char* file, const char* extension)
 				updateFunc = m;
 		}
 	}
+	mono_domain_set(mono_get_root_domain(), false);
 }
 
 Script::~Script()
 {
-	if (!dtor) return;
-	void** args = nullptr;
-	MonoObject* exception = nullptr;
-	mono_runtime_invoke(dtor, scriptInstance, args, &exception);
+	if (dtor) {
+		void** args = nullptr;
+		MonoObject* exception = nullptr;
+		mono_runtime_invoke(dtor, scriptInstance, args, &exception);
+	}
+	mono_domain_unload(child);
 }
 
-bool endsWithValue(const std::string &mainStr, const std::string &toMatch)
-{
-	if (mainStr.size() >= toMatch.size() &&
-		mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
-		return true;
-	else
-		return false;
-}
 void Script::Init()
 {
 	if (initialized)
 		return;
+#if _DEBUG
+	//char* options = "--debugger- agent=transport=dt_socket,address=localhost:12345,server=y,suspend=y";
+	mono_jit_parse_options(0, NULL);
+	mono_debug_init(MONO_DEBUG_FORMAT_MONO);
+#endif
 	mono_set_dirs("include/Mono/lib", "include/Mono/etc"); // move to a universal dir
 	mono_config_parse(nullptr);
-	monoDomain = mono_jit_init("VMonkey");
+	domain = mono_jit_init("VMonkey");
 
 	for (auto& file : std::filesystem::directory_iterator("Scripts"))
 	{
@@ -81,7 +134,10 @@ void Script::Init()
 
 void Script::Cleanup()
 {
-	mono_jit_cleanup(monoDomain);
+	if (domain)
+		mono_jit_cleanup(domain);
+	domain = nullptr;
+	initialized = false;
 }
 
 void Script::addCallback(const char * target, const void * staticFunction)

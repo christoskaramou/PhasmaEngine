@@ -15,6 +15,6 @@ public class Corset
     public void Update(float delta)
 	{
         s += delta;
-		transform.rotation = Quaternion.CreateFromYawPitchRoll(s, 0.0f, 0.0f);
+		transform.rotation = Quaternion.CreateFromYawPitchRoll(s, 0.0f, s);
 	}
 }
