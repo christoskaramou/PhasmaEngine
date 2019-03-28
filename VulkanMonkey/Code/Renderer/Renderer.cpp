@@ -124,9 +124,6 @@ void Renderer::update(float delta)
 	// SSAO
 	ctx.ssao.update(ctx.camera_main);
 
-	// SSDO
-	//ctx.ssdo.update(ctx.camera_main);
-
 	// SSR
 	ctx.ssr.update(ctx.camera_main);
 

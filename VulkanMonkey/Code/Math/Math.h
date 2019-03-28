@@ -261,6 +261,8 @@ namespace vm {
 	float inversesqrt(cfloat x);
 	float radians(cfloat degrees);
 	float degrees(cfloat radians);
+	vec3 radians(cvec3& v);
+	vec3 degrees(cvec3& v);
 	vec3 reflect(cvec3& v, cvec3& normal);
 	float mix(cfloat f1, cfloat f2, cfloat a);
 	vec4 mix(cvec4 v1, cvec4 v2, cfloat a);

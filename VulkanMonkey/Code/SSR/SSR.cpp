@@ -1,4 +1,5 @@
 #include "SSR.h"
+#include <deque>
 
 using namespace vm;
 
@@ -13,126 +14,29 @@ void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 		.setPSetLayouts(&DSLayoutReflection);
 	DSReflection = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
 
-	std::vector<vk::WriteDescriptorSet> textureWriteSets(5);
-	// Albedo
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSReflection)									// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["albedo"].sampler)					// Sampler sampler;
-			.setImageView(renderTargets["albedo"].view)					// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Positions
-	textureWriteSets[1] = vk::WriteDescriptorSet()
-		.setDstSet(DSReflection)									// DescriptorSet dstSet;
-		.setDstBinding(1)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["depth"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["depth"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Normals
-	textureWriteSets[2] = vk::WriteDescriptorSet()
-		.setDstSet(DSReflection)									// DescriptorSet dstSet;
-		.setDstBinding(2)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["normal"].sampler)					// Sampler sampler;
-			.setImageView(renderTargets["normal"].view)					// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Specular
-	textureWriteSets[3] = vk::WriteDescriptorSet()
-		.setDstSet(DSReflection)									// DescriptorSet dstSet;
-		.setDstBinding(3)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["srm"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["srm"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Uniform variables
-	textureWriteSets[4] = vk::WriteDescriptorSet()
-		.setDstSet(DSReflection)									// DescriptorSet dstSet;
-		.setDstBinding(4)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eUniformBuffer)			// DescriptorType descriptorType;
-		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setBuffer(UBReflection.buffer)								// Buffer buffer;
-			.setOffset(0)													// DeviceSize offset;
-			.setRange(UBReflection.size));									// DeviceSize range;
-
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+	updateDescriptorSets(renderTargets);
 }
 
 void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
+	std::deque<vk::DescriptorImageInfo> dsii{};
+	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eColorAttachmentOptimal });
+		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
+	};
+	std::deque<vk::DescriptorBufferInfo> dsbi{};
+	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		dsbi.push_back({ buffer.buffer, 0, buffer.size });
+		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
+	};
 
-	std::vector<vk::WriteDescriptorSet> textureWriteSets(5);
-	// Albedo
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSReflection)									// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["albedo"].sampler)					// Sampler sampler;
-			.setImageView(renderTargets["albedo"].view)					// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Positions
-	textureWriteSets[1] = vk::WriteDescriptorSet()
-		.setDstSet(DSReflection)									// DescriptorSet dstSet;
-		.setDstBinding(1)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["depth"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["depth"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Normals
-	textureWriteSets[2] = vk::WriteDescriptorSet()
-		.setDstSet(DSReflection)									// DescriptorSet dstSet;
-		.setDstBinding(2)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["normal"].sampler)					// Sampler sampler;
-			.setImageView(renderTargets["normal"].view)					// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Specular
-	textureWriteSets[3] = vk::WriteDescriptorSet()
-		.setDstSet(DSReflection)									// DescriptorSet dstSet;
-		.setDstBinding(3)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["srm"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["srm"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Uniform variables
-	textureWriteSets[4] = vk::WriteDescriptorSet()
-		.setDstSet(DSReflection)									// DescriptorSet dstSet;
-		.setDstBinding(4)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eUniformBuffer)			// DescriptorType descriptorType;
-		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setBuffer(UBReflection.buffer)								// Buffer buffer;
-			.setOffset(0)													// DeviceSize offset;
-			.setRange(UBReflection.size));									// DeviceSize range;
-
+	std::vector<vk::WriteDescriptorSet> textureWriteSets{
+		wSetImage(DSReflection, 0, renderTargets["albedo"]),
+		wSetImage(DSReflection, 1, renderTargets["depth"]),
+		wSetImage(DSReflection, 2, renderTargets["normal"]),
+		wSetImage(DSReflection, 3, renderTargets["srm"]),
+		wSetBuffer(DSReflection, 4, UBReflection)
+	};
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 

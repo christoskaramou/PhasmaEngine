@@ -1,4 +1,5 @@
 #include "Deferred.h"
+#include <deque>
 
 using namespace vm;
 
@@ -11,239 +12,31 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 	};
 	DSComposition = vulkan->device.allocateDescriptorSets(allocInfo).at(0);
 
-	// Image descriptors for the offscreen color attachments
-	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
-		renderTargets["depth"].sampler,				//Sampler sampler;
-		renderTargets["depth"].view,				//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptorNormal = vk::DescriptorImageInfo{
-		renderTargets["normal"].sampler,			//Sampler sampler;
-		renderTargets["normal"].view,				//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptorAlbedo = vk::DescriptorImageInfo{
-		renderTargets["albedo"].sampler,			//Sampler sampler;
-		renderTargets["albedo"].view,				//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptorSRM = vk::DescriptorImageInfo{
-		renderTargets["srm"].sampler,				//Sampler sampler;
-		renderTargets["srm"].view,					//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptorSSAOBlur = vk::DescriptorImageInfo{
-		renderTargets["ssaoBlur"].sampler,			//Sampler sampler;
-		renderTargets["ssaoBlur"].view,				//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptorSSR = vk::DescriptorImageInfo{
-		renderTargets["ssr"].sampler,				//Sampler sampler;
-		renderTargets["ssr"].view,					//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-
-	std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
-		// Binding 0: Position texture target
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			0,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorPosition,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 1: Normals texture target
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			1,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorNormal,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 2: Albedo texture target
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			2,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorAlbedo,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 3: Specula Roughness Metallic texture target
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			3,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorSRM,						//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 4: Fragment shader lights
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			4,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eUniformBuffer,		//DescriptorType descriptorType;
-			nullptr,								//const DescriptorImageInfo* pImageInfo;
-			&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
-				.setBuffer(lightUniforms.uniform.buffer)// Buffer buffer;
-				.setOffset(0)						// DeviceSize offset;
-				.setRange(lightUniforms.uniform.size),// DeviceSize range;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 5: SSAO Blurred Image
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			5,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorSSAOBlur,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 6: SSR Image
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			6,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorSSR,						//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-	};
-
-	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
+	updateDescriptorSets(renderTargets, lightUniforms);
 }
 
 void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 {
-	// Image descriptors for the offscreen color attachments
-	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
-		renderTargets["depth"].sampler,				//Sampler sampler;
-		renderTargets["depth"].view,				//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
+	std::deque<vk::DescriptorImageInfo> dsii{};
+	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eColorAttachmentOptimal });
+		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 	};
-	vk::DescriptorImageInfo texDescriptorNormal = vk::DescriptorImageInfo{
-		renderTargets["normal"].sampler,			//Sampler sampler;
-		renderTargets["normal"].view,				//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptorAlbedo = vk::DescriptorImageInfo{
-		renderTargets["albedo"].sampler,			//Sampler sampler;
-		renderTargets["albedo"].view,				//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptorSRM = vk::DescriptorImageInfo{
-		renderTargets["srm"].sampler,				//Sampler sampler;
-		renderTargets["srm"].view,					//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptorSSAOBlur = vk::DescriptorImageInfo{
-		renderTargets["ssaoBlur"].sampler,			//Sampler sampler;
-		renderTargets["ssaoBlur"].view,				//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptorSSR = vk::DescriptorImageInfo{
-		renderTargets["ssr"].sampler,				//Sampler sampler;
-		renderTargets["ssr"].view,					//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
+	std::deque<vk::DescriptorBufferInfo> dsbi{};
+	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		dsbi.push_back({ buffer.buffer, 0, buffer.size });
+		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 	};
 
 	std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
-		// Binding 0: Position texture target
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			0,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorPosition,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 1: Normals texture target
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			1,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorNormal,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 2: Albedo texture target
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			2,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorAlbedo,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 3: Specular Roughness Metallic target
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			3,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorSRM,						//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 4: Fragment shader lights
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			4,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eUniformBuffer,		//DescriptorType descriptorType;
-			nullptr,								//const DescriptorImageInfo* pImageInfo;
-			&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
-				.setBuffer(lightUniforms.uniform.buffer)// Buffer buffer;
-				.setOffset(0)							// DeviceSize offset;
-				.setRange(lightUniforms.uniform.size),	// DeviceSize range;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 5: SSAO Blurred Image
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			5,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorSSAOBlur,						//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 6: SSR Image
-		vk::WriteDescriptorSet{
-			DSComposition,							//DescriptorSet dstSet;
-			6,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorSSR,						//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
+		wSetImage(DSComposition, 0, renderTargets["depth"]),
+		wSetImage(DSComposition, 1, renderTargets["normal"]),
+		wSetImage(DSComposition, 2, renderTargets["albedo"]),
+		wSetImage(DSComposition, 3, renderTargets["srm"]),
+		wSetBuffer(DSComposition, 4, lightUniforms.uniform),
+		wSetImage(DSComposition, 5, renderTargets["ssaoBlur"]),
+		wSetImage(DSComposition, 6, renderTargets["ssr"]),
+		wSetImage(DSComposition, 7, renderTargets["emissive"])
 	};
 
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);

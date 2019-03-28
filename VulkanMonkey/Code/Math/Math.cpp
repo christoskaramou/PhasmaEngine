@@ -1254,6 +1254,16 @@ namespace vm {
 		return radians * 57.295779513082320876798154814105f;
 	}
 
+	vec3 radians(cvec3 & v)
+	{
+		return v * 0.01745329251994329576923690768489f;
+	}
+
+	vec3 degrees(cvec3 & v)
+	{
+		return v * 57.295779513082320876798154814105f;
+	}
+
 	vec3 reflect(cvec3 & v, cvec3 & normal)
 	{
 		return v - normal * dot(normal, v) * 2.f;

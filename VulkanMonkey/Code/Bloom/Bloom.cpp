@@ -1,5 +1,6 @@
 #include "Bloom.h"
 #include "../GUI/GUI.h"
+#include <deque>
 
 using namespace vm;
 
@@ -16,39 +17,12 @@ void Bloom::createUniforms(std::map<std::string, Image>& renderTargets)
 		.setPSetLayouts(&DSLayoutBrightFilter);
 	DSBrightFilter = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
-	std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSBrightFilter)										// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["composition"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["composition"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
-
 	// Bright Filter image to Gaussian Blur Horizontal shader
 	allocateInfo = vk::DescriptorSetAllocateInfo()
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&DSLayoutGaussianBlurHorizontal);
 	DSGaussianBlurHorizontal = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
-
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSGaussianBlurHorizontal)							// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["brightFilter"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["brightFilter"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 
 	// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
 	allocateInfo = vk::DescriptorSetAllocateInfo()
@@ -57,19 +31,6 @@ void Bloom::createUniforms(std::map<std::string, Image>& renderTargets)
 		.setPSetLayouts(&DSLayoutGaussianBlurVertical);
 	DSGaussianBlurVertical = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSGaussianBlurVertical)								// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["gaussianBlurHorizontal"].sampler)	// Sampler sampler;
-			.setImageView(renderTargets["gaussianBlurHorizontal"].view)		// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
-
 	// Gaussian Blur Vertical image to Combine shader
 	allocateInfo = vk::DescriptorSetAllocateInfo()
 		.setDescriptorPool(vulkan->descriptorPool)
@@ -77,100 +38,33 @@ void Bloom::createUniforms(std::map<std::string, Image>& renderTargets)
 		.setPSetLayouts(&DSLayoutCombine);
 	DSCombine = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
-	std::vector<vk::WriteDescriptorSet> textureWriteSets2(2);
-	textureWriteSets2[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSCombine)											// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["composition"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["composition"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-
-	textureWriteSets2[1] = vk::WriteDescriptorSet()
-		.setDstSet(DSCombine)											// DescriptorSet dstSet;
-		.setDstBinding(1)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["gaussianBlurVertical"].sampler)		// Sampler sampler;
-			.setImageView(renderTargets["gaussianBlurVertical"].view)		// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-
-	vulkan->device.updateDescriptorSets(textureWriteSets2, nullptr);
+	updateDescriptorSets(renderTargets);
 }
 
 void Bloom::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
+	std::deque<vk::DescriptorImageInfo> dsii{};
+	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eColorAttachmentOptimal });
+		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
+	};
+	std::deque<vk::DescriptorBufferInfo> dsbi{};
+	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		dsbi.push_back({ buffer.buffer, 0, buffer.size });
+		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
+	};
+
 	std::string comp = "composition";
 	if (GUI::show_FXAA) comp = "composition2";
 
-	// Composition image to Bright Filter shader
-	std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSBrightFilter)										// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets[comp].sampler)						// Sampler sampler;
-			.setImageView(renderTargets[comp].view)							// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
+	std::vector<vk::WriteDescriptorSet> textureWriteSets{
+		wSetImage(DSBrightFilter, 0, renderTargets[comp]),
+		wSetImage(DSGaussianBlurHorizontal, 0, renderTargets["brightFilter"]),
+		wSetImage(DSGaussianBlurVertical, 0, renderTargets["gaussianBlurHorizontal"]),
+		wSetImage(DSCombine, 0, renderTargets[comp]),
+		wSetImage(DSCombine, 1, renderTargets["gaussianBlurVertical"])
+	};
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
-
-	// Bright Filter image to Gaussian Blur Horizontal shader
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSGaussianBlurHorizontal)							// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["brightFilter"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["brightFilter"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
-
-	// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSGaussianBlurVertical)								// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["gaussianBlurHorizontal"].sampler)	// Sampler sampler;
-			.setImageView(renderTargets["gaussianBlurHorizontal"].view)		// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
-
-	// Gaussian Blur Vertical image to Combine shader
-	std::vector<vk::WriteDescriptorSet> textureWriteSets2(2);
-	textureWriteSets2[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSCombine)											// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets[comp].sampler)						// Sampler sampler;
-			.setImageView(renderTargets[comp].view)							// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	textureWriteSets2[1] = vk::WriteDescriptorSet()
-		.setDstSet(DSCombine)											// DescriptorSet dstSet;
-		.setDstBinding(1)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["gaussianBlurVertical"].sampler)		// Sampler sampler;
-			.setImageView(renderTargets["gaussianBlurVertical"].view)		// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	vulkan->device.updateDescriptorSets(textureWriteSets2, nullptr);
 }
 
 void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[2])

@@ -243,7 +243,6 @@
     <ClInclude Include="Code\Shadows\Shadows.h" />
     <ClInclude Include="Code\Skybox\Skybox.h" />
     <ClInclude Include="Code\SSAO\SSAO.h" />
-    <ClInclude Include="Code\SSDO\SSDO.h" />
     <ClInclude Include="Code\SSR\SSR.h" />
     <ClInclude Include="Code\Surface\Surface.h" />
     <ClInclude Include="Code\Swapchain\Swapchain.h" />
@@ -293,7 +292,6 @@
     <ClCompile Include="Code\Shadows\Shadows.cpp" />
     <ClCompile Include="Code\Skybox\Skybox.cpp" />
     <ClCompile Include="Code\SSAO\SSAO.cpp" />
-    <ClCompile Include="Code\SSDO\SSDO.cpp" />
     <ClCompile Include="Code\SSR\SSR.cpp" />
     <ClCompile Include="Code\Swapchain\Swapchain.cpp" />
     <ClCompile Include="Code\Terrain\Terrain.cpp" />

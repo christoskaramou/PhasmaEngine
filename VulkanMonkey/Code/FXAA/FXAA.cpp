@@ -11,25 +11,11 @@ void FXAA::createFXAAUniforms(std::map<std::string, Image>& renderTargets)
 		.setPSetLayouts(&DSLayout);
 	DSet = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
 
-	std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
-	// Composition sampler
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSet)												// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["composition"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["composition"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+	updateDescriptorSets(renderTargets);
 }
 
 void FXAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
-
 	std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
 	// Composition sampler
 	textureWriteSets[0] = vk::WriteDescriptorSet()

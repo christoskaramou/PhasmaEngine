@@ -1,4 +1,5 @@
 #include "MotionBlur.h"
+#include <deque>
 
 using namespace vm;
 
@@ -12,112 +13,33 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&DSLayoutMotionBlur);
 	DSMotionBlur = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
-
-	std::vector<vk::WriteDescriptorSet> textureWriteSets(4);
-	// Composition image
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["composition"].sampler)					// Sampler sampler;
-			.setImageView(renderTargets["composition"].view)					// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Depth image
-	textureWriteSets[1] = vk::WriteDescriptorSet()
-		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
-		.setDstBinding(1)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["depth"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["depth"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-
-	// Velocity image
-	textureWriteSets[2] = vk::WriteDescriptorSet()
-		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
-		.setDstBinding(2)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["velocity"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["velocity"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-
-	// Uniform variables
-	textureWriteSets[3] = vk::WriteDescriptorSet()
-		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
-		.setDstBinding(3)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eUniformBuffer)			// DescriptorType descriptorType;
-		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setBuffer(UBmotionBlur.buffer)								// Buffer buffer;
-			.setOffset(0)													// DeviceSize offset;
-			.setRange(UBmotionBlur.size));									// DeviceSize range;
-
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+	
+	updateDescriptorSets(renderTargets);
 }
 
 void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
+	std::deque<vk::DescriptorImageInfo> dsii{};
+	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eColorAttachmentOptimal });
+		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
+	};
+	std::deque<vk::DescriptorBufferInfo> dsbi{};
+	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		dsbi.push_back({ buffer.buffer, 0, buffer.size });
+		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
+	};
+
 	std::string comp = "composition";
 	if ((GUI::show_FXAA && !GUI::show_Bloom) || (!GUI::show_FXAA && GUI::show_Bloom))
 		comp = "composition2";
 
-	std::vector<vk::WriteDescriptorSet> textureWriteSets(4);
-	// Composition image
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets[comp].sampler)					// Sampler sampler;
-			.setImageView(renderTargets[comp].view)						// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-	// Depth image
-	textureWriteSets[1] = vk::WriteDescriptorSet()
-		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
-		.setDstBinding(1)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["depth"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["depth"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-
-	// Velocity image
-	textureWriteSets[2] = vk::WriteDescriptorSet()
-		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
-		.setDstBinding(2)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(renderTargets["velocity"].sampler)				// Sampler sampler;
-			.setImageView(renderTargets["velocity"].view)				// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eColorAttachmentOptimal));		// ImageLayout imageLayout;
-
-	// Uniform variables
-	textureWriteSets[3] = vk::WriteDescriptorSet()
-		.setDstSet(DSMotionBlur)									// DescriptorSet dstSet;
-		.setDstBinding(3)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eUniformBuffer)			// DescriptorType descriptorType;
-		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setBuffer(UBmotionBlur.buffer)								// Buffer buffer;
-			.setOffset(0)													// DeviceSize offset;
-			.setRange(UBmotionBlur.size));									// DeviceSize range;
-
+	std::vector<vk::WriteDescriptorSet> textureWriteSets{
+		wSetImage(DSMotionBlur, 0, renderTargets[comp]),
+		wSetImage(DSMotionBlur, 1, renderTargets["depth"]),
+		wSetImage(DSMotionBlur, 2, renderTargets["velocity"]),
+		wSetBuffer(DSMotionBlur, 3, UBmotionBlur)
+	};
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 

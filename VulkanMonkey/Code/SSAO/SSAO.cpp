@@ -1,4 +1,5 @@
 #include "SSAO.h"
+#include <deque>
 
 using namespace vm;
 
@@ -45,221 +46,47 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	UB_PVM.createBuffer(3 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UB_PVM.data = vulkan->device.mapMemory(UB_PVM.memory, 0, UB_PVM.size);
 
+	// DESCRIPTOR SET FOR SSAO
 	vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
-		vulkan->descriptorPool,						//DescriptorPool descriptorPool;
+		vulkan->descriptorPool,					//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
-		&DSLayout						//const DescriptorSetLayout* pSetLayouts;
+		&DSLayout								//const DescriptorSetLayout* pSetLayouts;
 	};
 	DSet = vulkan->device.allocateDescriptorSets(allocInfo).at(0);
 
-	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
-		renderTargets["depth"].sampler,		//Sampler sampler;
-		renderTargets["depth"].view,			//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptorNormal = vk::DescriptorImageInfo{
-		renderTargets["normal"].sampler,			//Sampler sampler;
-		renderTargets["normal"].view,			//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	vk::DescriptorImageInfo texDescriptor = vk::DescriptorImageInfo{
-		renderTargets["ssao"].sampler,			//Sampler sampler;
-		renderTargets["ssao"].view,				//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
-		// Binding 0: Position texture target
-		vk::WriteDescriptorSet{
-			DSet,								//DescriptorSet dstSet;
-			0,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorPosition,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 1: Normals texture target
-		vk::WriteDescriptorSet{
-			DSet,								//DescriptorSet dstSet;
-			1,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorNormal,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 2: SSAO Noise Image
-		vk::WriteDescriptorSet{
-			DSet,								//DescriptorSet dstSet;
-			2,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&vk::DescriptorImageInfo()				//const DescriptorImageInfo* pImageInfo;
-				.setSampler(noiseTex.sampler)
-				.setImageView(noiseTex.view)
-				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal),
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 3: SSAO Kernel
-		vk::WriteDescriptorSet{
-			DSet,								//DescriptorSet dstSet;
-			3,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eUniformBuffer,		//DescriptorType descriptorType;
-			nullptr,								//const DescriptorImageInfo* pImageInfo;
-			&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
-				.setBuffer(UB_Kernel.buffer)		// Buffer buffer;
-				.setOffset(0)							// DeviceSize offset;
-				.setRange(UB_Kernel.size),		// DeviceSize range;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 4: Projection, View, InvProj
-		vk::WriteDescriptorSet{
-			DSet,								//DescriptorSet dstSet;
-			4,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eUniformBuffer,		//DescriptorType descriptorType;
-			nullptr,								//const DescriptorImageInfo* pImageInfo;
-			&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
-				.setBuffer(UB_PVM.buffer)		// Buffer buffer;
-				.setOffset(0)							// DeviceSize offset;
-				.setRange(UB_PVM.size),			// DeviceSize range;
-			nullptr									//const BufferView* pTexelBufferView;
-		}
-	};
-	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
-
 	// DESCRIPTOR SET FOR SSAO BLUR
 	vk::DescriptorSetAllocateInfo allocInfoBlur = vk::DescriptorSetAllocateInfo{
-		vulkan->descriptorPool,						//DescriptorPool descriptorPool;
+		vulkan->descriptorPool,					//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
-		&DSLayoutBlur					//const DescriptorSetLayout* pSetLayouts;
+		&DSLayoutBlur							//const DescriptorSetLayout* pSetLayouts;
 	};
-
 	DSBlur = vulkan->device.allocateDescriptorSets(allocInfoBlur).at(0);
 
-	std::vector<vk::WriteDescriptorSet> writeDescriptorSetsBlur = {
-		// Binding 0: Position texture target
-		vk::WriteDescriptorSet{
-			DSBlur,							//DescriptorSet dstSet;
-			0,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptor,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		}
-	};
-	vulkan->device.updateDescriptorSets(writeDescriptorSetsBlur, nullptr);
+	updateDescriptorSets(renderTargets);
 }
 
 void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
-	vk::DescriptorImageInfo texDescriptorPosition = vk::DescriptorImageInfo{
-		renderTargets["depth"].sampler,		//Sampler sampler;
-		renderTargets["depth"].view,			//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
+	std::deque<vk::DescriptorImageInfo> dsii{};
+	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout imageLayout = vk::ImageLayout::eColorAttachmentOptimal) {
+		dsii.push_back({ image.sampler, image.view, imageLayout });
+		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 	};
-	vk::DescriptorImageInfo texDescriptorNormal = vk::DescriptorImageInfo{
-		renderTargets["normal"].sampler,			//Sampler sampler;
-		renderTargets["normal"].view,			//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
+	std::deque<vk::DescriptorBufferInfo> dsbi{};
+	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		dsbi.push_back({ buffer.buffer, 0, buffer.size });
+		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 	};
-	vk::DescriptorImageInfo texDescriptor = vk::DescriptorImageInfo{
-		renderTargets["ssao"].sampler,			//Sampler sampler;
-		renderTargets["ssao"].view,				//ImageView imageView;
-		vk::ImageLayout::eColorAttachmentOptimal	//ImageLayout imageLayout;
-	};
-	std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
-		// Binding 0: Position texture target
-		vk::WriteDescriptorSet{
-			DSet,								//DescriptorSet dstSet;
-			0,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorPosition,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 1: Normals texture target
-		vk::WriteDescriptorSet{
-			DSet,								//DescriptorSet dstSet;
-			1,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptorNormal,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 2: SSAO Noise Image
-		vk::WriteDescriptorSet{
-			DSet,								//DescriptorSet dstSet;
-			2,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&vk::DescriptorImageInfo()				//const DescriptorImageInfo* pImageInfo;
-				.setSampler(noiseTex.sampler)
-				.setImageView(noiseTex.view)
-				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal),
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 3: SSAO Kernel
-		vk::WriteDescriptorSet{
-			DSet,								//DescriptorSet dstSet;
-			3,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eUniformBuffer,		//DescriptorType descriptorType;
-			nullptr,								//const DescriptorImageInfo* pImageInfo;
-			&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
-				.setBuffer(UB_Kernel.buffer)		// Buffer buffer;
-				.setOffset(0)							// DeviceSize offset;
-				.setRange(UB_Kernel.size),		// DeviceSize range;
-			nullptr									//const BufferView* pTexelBufferView;
-		},
-		// Binding 4: Projection View Size
-		vk::WriteDescriptorSet{
-			DSet,								//DescriptorSet dstSet;
-			4,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eUniformBuffer,		//DescriptorType descriptorType;
-			nullptr,								//const DescriptorImageInfo* pImageInfo;
-			&vk::DescriptorBufferInfo()				//const DescriptorBufferInfo* pBufferInfo;
-				.setBuffer(UB_PVM.buffer)		// Buffer buffer;
-				.setOffset(0)							// DeviceSize offset;
-				.setRange(UB_PVM.size),			// DeviceSize range;
-			nullptr									//const BufferView* pTexelBufferView;
-		}
+
+	std::vector<vk::WriteDescriptorSet> writeDescriptorSets{
+		wSetImage(DSet, 0, renderTargets["depth"]),
+		wSetImage(DSet, 1, renderTargets["normal"]),
+		wSetImage(DSet, 2, noiseTex, vk::ImageLayout::eShaderReadOnlyOptimal),
+		wSetBuffer(DSet, 3, UB_Kernel),
+		wSetBuffer(DSet, 4, UB_PVM),
+		wSetImage(DSBlur, 0, renderTargets["ssao"])
 	};
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
-
-
-	std::vector<vk::WriteDescriptorSet> writeDescriptorSetsBlur = {
-		// Binding 0: Position texture target
-		vk::WriteDescriptorSet{
-			DSBlur,							//DescriptorSet dstSet;
-			0,										//uint32_t dstBinding;
-			0,										//uint32_t dstArrayElement;
-			1,										//uint32_t descriptorCount_;
-			vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-			&texDescriptor,					//const DescriptorImageInfo* pImageInfo;
-			nullptr,								//const DescriptorBufferInfo* pBufferInfo;
-			nullptr									//const BufferView* pTexelBufferView;
-		}
-	};
-	vulkan->device.updateDescriptorSets(writeDescriptorSetsBlur, nullptr);
 }
 
 void SSAO::draw(uint32_t imageIndex, const vec2 UVOffset[2])

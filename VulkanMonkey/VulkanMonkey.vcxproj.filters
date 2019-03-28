@@ -228,9 +228,6 @@
     <ClInclude Include="Code\Model\Animation.h">
       <Filter>Code\Model</Filter>
     </ClInclude>
-    <ClInclude Include="Code\SSDO\SSDO.h">
-      <Filter>Code\SSDO</Filter>
-    </ClInclude>
     <ClInclude Include="Code\FXAA\FXAA.h">
       <Filter>Code\FXAA</Filter>
     </ClInclude>
@@ -358,9 +355,6 @@
     </ClCompile>
     <ClCompile Include="include\imgui\imgui_widgets.cpp">
       <Filter>Include</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\SSDO\SSDO.cpp">
-      <Filter>Code\SSDO</Filter>
     </ClCompile>
     <ClCompile Include="Code\FXAA\FXAA.cpp">
       <Filter>Code\FXAA</Filter>
@@ -576,9 +570,6 @@
     </Filter>
     <Filter Include="Shaders\Common">
       <UniqueIdentifier>{5d60448e-2b32-4522-a38d-e6bd5a9398b2}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Code\SSDO">
-      <UniqueIdentifier>{7af4491f-6706-430d-a1b2-c4bbf11a2826}</UniqueIdentifier>
     </Filter>
     <Filter Include="Shaders\SSDO">
       <UniqueIdentifier>{d0a507f4-8ecb-4f58-aca4-9b4573e1998d}</UniqueIdentifier>
