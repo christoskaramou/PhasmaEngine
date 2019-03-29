@@ -49,7 +49,7 @@ void main()
 		fragColor += compute_point_light(i, material, fragPos, ubo.camPos.xyz, normal);
 	}
 
-	outColor = vec4(fragColor, albedo.a);
+	outColor = vec4(fragColor, albedo.a) + texture(emiSampler, inUV);
 
 	// SSR
 	if (screenSpace.effect.y > 0.5)

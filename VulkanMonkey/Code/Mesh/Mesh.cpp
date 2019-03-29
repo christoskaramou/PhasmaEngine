@@ -139,7 +139,7 @@ void Primitive::loadTexture(
 	case TextureType::Emissive:
 		tex = &pbrMaterial.emissiveTexture;
 		if (!image || image->uri.empty())
-			path = "objects/white.png";
+			path = "objects/black.png";
 		break;
 	default:
 		exit(-19);

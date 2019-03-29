@@ -43,7 +43,7 @@ void Context::initRendering()
 	// similar init with resize
 
 	addRenderTarget("depth", vk::Format::eR32Sfloat);
-	addRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
 	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
 	addRenderTarget("ssao", vk::Format::eR16Unorm);
@@ -260,7 +260,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	*vulkan.depth = createDepthResources();
 
 	addRenderTarget("depth", vk::Format::eR32Sfloat);
-	addRenderTarget("normal", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
 	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
 	addRenderTarget("ssao", vk::Format::eR16Unorm);
@@ -818,7 +818,7 @@ vk::RenderPass Context::createRenderPass()
 
 vk::RenderPass Context::createDeferredRenderPass()
 {
-	std::array<vk::AttachmentDescription, 6> attachments{};
+	std::array<vk::AttachmentDescription, 7> attachments{};
 	// Deferred targets
 	// Depth store
 	attachments[0].format = renderTargets["depth"].format;
@@ -865,16 +865,25 @@ vk::RenderPass Context::createDeferredRenderPass()
 	attachments[4].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[4].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[4].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	// Depth
-	attachments[5].format = vulkan.depth->format;
+	// Emissive
+	attachments[5].format = renderTargets["emissive"].format;
 	attachments[5].samples = vk::SampleCountFlagBits::e1;
 	attachments[5].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[5].storeOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[5].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[5].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[5].stencilStoreOp = vk::AttachmentStoreOp::eStore;
+	attachments[5].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[5].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[5].finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+	attachments[5].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+	// Depth
+	attachments[6].format = vulkan.depth->format;
+	attachments[6].samples = vk::SampleCountFlagBits::e1;
+	attachments[6].loadOp = vk::AttachmentLoadOp::eClear;
+	attachments[6].storeOp = vk::AttachmentStoreOp::eDontCare;
+	attachments[6].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+	attachments[6].stencilStoreOp = vk::AttachmentStoreOp::eStore;
+	attachments[6].initialLayout = vk::ImageLayout::eUndefined;
+	attachments[6].finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
 	std::array<vk::SubpassDescription, 1> subpassDescriptions{};
 
@@ -883,9 +892,10 @@ vk::RenderPass Context::createDeferredRenderPass()
 		{ 1, vk::ImageLayout::eColorAttachmentOptimal },
 		{ 2, vk::ImageLayout::eColorAttachmentOptimal },
 		{ 3, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 4, vk::ImageLayout::eColorAttachmentOptimal }
+		{ 4, vk::ImageLayout::eColorAttachmentOptimal },
+		{ 5, vk::ImageLayout::eColorAttachmentOptimal }
 	};
-	vk::AttachmentReference depthReference = { 5, vk::ImageLayout::eDepthStencilAttachmentOptimal };
+	vk::AttachmentReference depthReference = { 6, vk::ImageLayout::eDepthStencilAttachmentOptimal };
 
 	subpassDescriptions[0].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
 	subpassDescriptions[0].colorAttachmentCount = static_cast<uint32_t>(colorReferences.size());
@@ -1659,6 +1669,7 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 			renderTargets["albedo"].view,
 			renderTargets["srm"].view,
 			renderTargets["velocity"].view,
+			renderTargets["emissive"].view,
 			vulkan.depth->view
 		};
 
@@ -2334,7 +2345,7 @@ Pipeline Context::createCompositionPipeline()
 	{// DescriptorSetLayout
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
 		{
-			// Binding 0: Position input attachment 
+			// Binding 0: Depth input attachment 
 			vk::DescriptorSetLayoutBinding{
 				0,										//uint32_t binding;
 				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
@@ -2390,7 +2401,7 @@ Pipeline Context::createCompositionPipeline()
 				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
 				nullptr									//const Sampler* pImmutableSamplers;
 			},
-			// Binding 7: SSDO image
+			// Binding 7: Emissive image
 			vk::DescriptorSetLayoutBinding{
 				7,										//uint32_t binding;
 				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
@@ -4613,7 +4624,8 @@ PipelineInfo Context::getPipelineSpecificationsDeferred()
 		deferredSpecific.blendAttachmentStates[0],
 		deferredSpecific.blendAttachmentStates[0],
 		deferredSpecific.blendAttachmentStates[0],
-		deferredSpecific.blendAttachmentStates[0]
+		deferredSpecific.blendAttachmentStates[0],
+		deferredSpecific.blendAttachmentStates[0],
 	};
 	deferredSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	deferredSpecific.dynamicStateInfo = {

@@ -23,6 +23,7 @@ layout (location = 1) out vec3 outNormal;
 layout (location = 2) out vec4 outAlbedo;
 layout (location = 3) out vec3 outMetRough;
 layout (location = 4) out vec4 outVelocity;
+layout (location = 5) out vec4 outEmissive;
 
 void main() {
 	float alpha = texture(bcSampler, inUV).a;
@@ -35,8 +36,8 @@ void main() {
 	outDepth = gl_FragCoord.z;
 	outNormal = getNormal(inWorldPos.xyz, nSampler, inNormal, inUV);
 	vec3 color = texture(bcSampler, inUV).xyz + inColor;
-	outAlbedo = vec4(color * ao, alpha) * baseColorFactor
-				+ vec4(texture(eSampler, inUV).xyz * emissiveFactor, 0.0);
+	outAlbedo = vec4(color * ao, alpha) * baseColorFactor;
 	outMetRough = vec3(0.0, texture(mrSampler, inUV).y, texture(mrSampler, inUV).z);
 	outVelocity = velocity;
+	outEmissive = vec4(texture(eSampler, inUV).xyz * emissiveFactor, 0.0);
 }
