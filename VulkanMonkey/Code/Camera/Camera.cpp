@@ -12,7 +12,7 @@ Camera::Camera()
 	// total pitch, yaw, roll
 	euler = vec3(0.f, radians(180.f), 0.f);
 	orientation = quat(euler);
-	position = vec3(0.f, 0.f, 3.f);
+	position = vec3(0.f, 0.f, 0.f);
 
 	nearPlane = 500.0f;
 	farPlane = 0.005f;

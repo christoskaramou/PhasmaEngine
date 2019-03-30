@@ -11,14 +11,14 @@ bool						GUI::lock_render_window = true;
 bool						GUI::show_ssr = true;
 bool						GUI::show_ssao = true;
 bool						GUI::show_ssdo = true;
-bool						GUI::show_tonemapping = true;
+bool						GUI::show_tonemapping = false;
 float						GUI::exposure = 4.5f;
 bool						GUI::show_FXAA = true;
 bool						GUI::show_Bloom = false;
-float						GUI::Bloom_Inv_brightness = 5.0f;
-float						GUI::Bloom_intensity = 3.0f;
-float						GUI::Bloom_range = 1.0f;
-bool						GUI::use_tonemap = true;
+float						GUI::Bloom_Inv_brightness = 20.0f;
+float						GUI::Bloom_intensity = 1.5f;
+float						GUI::Bloom_range = 2.5f;
+bool						GUI::use_tonemap = false;
 float						GUI::Bloom_exposure = 3.5f;
 bool						GUI::dSetNeedsUpdate = false;
 bool						GUI::show_motionBlur = true;
@@ -26,7 +26,7 @@ bool						GUI::randomize_lights = false;
 float						GUI::lights_intensity = 2.5f;
 float						GUI::lights_range = 7.0f;
 bool						GUI::shadow_cast = true;
-float						GUI::sun_intensity = 20.f;
+float						GUI::sun_intensity = 7.f;
 std::array<float, 3>		GUI::sun_position{ 0.0f, 300.0f, 50.0f };
 int							GUI::fps = 60;
 float						GUI::cameraSpeed = 3.5f;
@@ -264,7 +264,7 @@ void vm::GUI::Properties()
 	if (ImGui::Checkbox("Bloom", &show_Bloom))
 		dSetNeedsUpdate = true;
 	if (show_Bloom) {
-		ImGui::SliderFloat("Inv Brightness", &Bloom_Inv_brightness, 0.01f, 20.f);
+		ImGui::SliderFloat("Inv Brightness", &Bloom_Inv_brightness, 0.01f, 50.f);
 		ImGui::SliderFloat("Intensity", &Bloom_intensity, 0.01f, 10.f);
 		ImGui::SliderFloat("Range", &Bloom_range, 0.1f, 20.f);
 		ImGui::Checkbox("Bloom Tone Mapping", &use_tonemap);

@@ -8,4 +8,5 @@ layout(location = 0) out vec4 color;
 
 void main() {
 	color = texture(cubemapSampler, tex_coords);
+	color.w = 1.0;
 }

@@ -573,7 +573,7 @@ vk::SurfaceFormatKHR Context::getSurfaceFormat()
 	std::vector<vk::SurfaceFormatKHR> formats = vulkan.gpu.getSurfaceFormatsKHR(vulkan.surface->surface);
 
 	for (const auto& i : formats) {
-		if (i.format == vk::Format::eR8G8B8A8Unorm && i.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+		if (i.format == vk::Format::eB8G8R8A8Unorm && i.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
 			return i;
 	}
 

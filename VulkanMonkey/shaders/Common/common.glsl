@@ -33,4 +33,43 @@ vec3 getNormal(vec3 inWorldPos, sampler2D normalMap, vec3 inNormal, vec2 inUV)
 	return normalize(TBN * tangentNormal);
 }
 
+// Return average velocity
+vec3 dilate_Average(sampler2D samplerVelocity, vec2 texCoord)
+{
+	ivec2 texDim = textureSize(samplerVelocity, 0);
+	float dx = 2.0f * float(texDim.x);
+	float dy = 2.0f * float(texDim.y);
+	
+	vec3 tl = texture(samplerVelocity, texCoord + vec2(-dx, -dy)).xyz;
+	vec3 tr = texture(samplerVelocity, texCoord + vec2(+dx, -dy)).xyz;
+	vec3 bl = texture(samplerVelocity, texCoord + vec2(-dx, +dy)).xyz;
+	vec3 br = texture(samplerVelocity, texCoord + vec2(+dx, +dy)).xyz;
+	vec3 ce = texture(samplerVelocity, texCoord).xyz;
+	
+	return (tl + tr + bl + br + ce) * 0.2;
+}
+
+// Returns velocity with closest depth
+vec3 dilate_Depth3X3(sampler2D samplerVelocity, sampler2D samplerDepth, vec2 texCoord)
+{
+	ivec2 texDim = textureSize(samplerDepth, 0);
+	vec2 texelSize = 1.0 / vec2(float(texDim.x), float(texDim.y));
+	float closestDepth = 0.0;
+	vec2 closestTexCoord = texCoord;
+    for(int y = -1; y <= 1; ++y)
+    {
+        for(int x = -1; x <= 1; ++x)
+        {
+			vec2 offset = vec2(x, y) * texelSize;
+			float depth = texture(samplerDepth, texCoord + offset).r;
+			if(depth > closestDepth) // using ">" because depth is reversed
+			{
+				closestTexCoord	= texCoord + offset;
+			}
+        }
+	}
+
+	return texture(samplerVelocity, closestTexCoord).xyz;
+}
+
 #endif

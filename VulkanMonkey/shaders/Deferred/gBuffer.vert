@@ -65,7 +65,7 @@ void main()
 	// Normal in world space
 	outNormal = normalize(mNormal * inNormal);
 
-	// Color (not in use)	
+	// Color
 	outColor = inColor.rgb;
 
 	// Factors
