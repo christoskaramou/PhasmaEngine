@@ -57,5 +57,5 @@ void main()
 			count++;
 		}
 	}
-	outColor = vec4(color / samples, texture(compositionSampler, inUV).w);
+	outColor = vec4(color / count, texture(compositionSampler, inUV).w);
 }
