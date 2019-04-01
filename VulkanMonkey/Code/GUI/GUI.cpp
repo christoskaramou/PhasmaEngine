@@ -304,6 +304,11 @@ void vm::GUI::Properties()
 		std::string id = " ID[" + toStr + "]";
 		ImGui::TextColored(ImVec4(.6f, 1.f, .5f, 1.f), (modelList[modelItemSelected] + id).c_str());
 		ImGui::Separator();
+		if (ImGui::Button("Unload Model")) {
+			Queue::unloadModel.push_back(modelItemSelected);
+			modelItemSelected = -1;
+		}
+		ImGui::Separator();
 		std::string s = "Scale##" + toStr;
 		std::string p = "Position##" + toStr;
 		std::string r = "Rotation##" + toStr;
@@ -326,11 +331,9 @@ void vm::GUI::Properties()
 		if (ImGui::Button("Compile Script")) {
 			Queue::compileScript.push_back(modelItemSelected);
 		}
-		ImGui::Separator();
-		ImGui::Separator();
-		if (ImGui::Button("Unload Model")) {
-			Queue::unloadModel.push_back(modelItemSelected);
-			modelItemSelected = -1;
+
+		if (ImGui::Button("Remove Script")) {
+			Queue::removeScript.push_back(modelItemSelected);
 		}
 	}
 

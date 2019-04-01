@@ -72,14 +72,14 @@ void Renderer::checkQueue()
 		Model::models.push_back(std::move(model));
 		Queue::loadModel.pop_front();
 	}
-	for (auto& queue : Queue::unloadModel) {
+	for (auto& modelIndex : Queue::unloadModel) {
 		VulkanContext::get().device.waitIdle();
-		Model::models[queue].destroy();
-		Model::models.erase(Model::models.begin() + queue);
-		GUI::modelList.erase(GUI::modelList.begin() + queue);
-		GUI::model_scale.erase(GUI::model_scale.begin() + queue);
-		GUI::model_pos.erase(GUI::model_pos.begin() + queue);
-		GUI::model_rot.erase(GUI::model_rot.begin() + queue);
+		Model::models[modelIndex].destroy();
+		Model::models.erase(Model::models.begin() + modelIndex);
+		GUI::modelList.erase(GUI::modelList.begin() + modelIndex);
+		GUI::model_scale.erase(GUI::model_scale.begin() + modelIndex);
+		GUI::model_pos.erase(GUI::model_pos.begin() + modelIndex);
+		GUI::model_rot.erase(GUI::model_rot.begin() + modelIndex);
 		Queue::unloadModel.pop_front();
 	}
 #ifdef USE_SCRIPTS
@@ -89,13 +89,18 @@ void Renderer::checkQueue()
 		Model::models[std::get<0>(queue)].script = new Script(std::get<1>(queue).c_str());
 		Queue::addScript.pop_front();
 	}
+	for (auto& modelIndex : Queue::removeScript) {
+		if (Model::models[modelIndex].script) {
+			delete Model::models[modelIndex].script;
+			Model::models[modelIndex].script = nullptr;
+		}
+		Queue::removeScript.pop_front();
+	}
 	for (auto& modelIndex : Queue::compileScript) {
 		std::string name;
 		if (Model::models[modelIndex].script) {
 			name = Model::models[modelIndex].script->name;
 			delete Model::models[modelIndex].script;
-			//std::string cmd = "del Scripts\\" + name + ".dll";
-			//system(cmd.c_str());
 			Model::models[modelIndex].script = new Script(name.c_str());
 		}
 		Queue::compileScript.pop_front();

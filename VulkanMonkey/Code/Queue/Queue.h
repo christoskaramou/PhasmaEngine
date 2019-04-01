@@ -12,6 +12,7 @@ namespace vm {
 		static std::deque<std::tuple<std::string, std::string>> loadModel;
 		static std::deque<int> unloadModel;
 		static std::deque<std::tuple<int, std::string>> addScript;
+		static std::deque<int> removeScript;
 		static std::deque<int> compileScript;
 		static std::deque<std::future<void>> func;
 	};
