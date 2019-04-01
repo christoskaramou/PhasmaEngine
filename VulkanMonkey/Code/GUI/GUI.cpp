@@ -8,12 +8,11 @@ using namespace vm;
 ImVec2						GUI::winPos = ImVec2();
 ImVec2						GUI::winSize = ImVec2();
 bool						GUI::lock_render_window = true;
-bool						GUI::show_ssr = true;
-bool						GUI::show_ssao = true;
-bool						GUI::show_ssdo = true;
+bool						GUI::show_ssr = false;
+bool						GUI::show_ssao = false;
 bool						GUI::show_tonemapping = false;
 float						GUI::exposure = 4.5f;
-bool						GUI::show_FXAA = true;
+bool						GUI::show_FXAA = false;
 bool						GUI::show_Bloom = false;
 float						GUI::Bloom_Inv_brightness = 20.0f;
 float						GUI::Bloom_intensity = 1.5f;
@@ -21,11 +20,11 @@ float						GUI::Bloom_range = 2.5f;
 bool						GUI::use_tonemap = false;
 float						GUI::Bloom_exposure = 3.5f;
 bool						GUI::dSetNeedsUpdate = false;
-bool						GUI::show_motionBlur = true;
+bool						GUI::show_motionBlur = false;
 bool						GUI::randomize_lights = false;
 float						GUI::lights_intensity = 2.5f;
 float						GUI::lights_range = 7.0f;
-bool						GUI::shadow_cast = true;
+bool						GUI::shadow_cast = false;
 float						GUI::sun_intensity = 7.f;
 std::array<float, 3>		GUI::sun_position{ 0.0f, 300.0f, 50.0f };
 int							GUI::fps = 60;
@@ -326,6 +325,12 @@ void vm::GUI::Properties()
 		ImGui::SameLine();
 		if (ImGui::Button("Compile Script")) {
 			Queue::compileScript.push_back(modelItemSelected);
+		}
+		ImGui::Separator();
+		ImGui::Separator();
+		if (ImGui::Button("Unload Model")) {
+			Queue::unloadModel.push_back(modelItemSelected);
+			modelItemSelected = -1;
 		}
 	}
 
@@ -801,13 +806,13 @@ void GUI::windowStyle(ImGuiStyle* dst)
 void GUI::createVertexBuffer(size_t vertex_size)
 {
 	vertexBuffer.destroy();
-	vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
+	vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
 }
 
 void GUI::createIndexBuffer(size_t index_size)
 {
 	indexBuffer.destroy();
-	indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
+	indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
 }
 
 void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout)

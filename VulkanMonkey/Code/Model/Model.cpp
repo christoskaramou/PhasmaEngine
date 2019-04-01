@@ -771,7 +771,7 @@ void Model::createDescriptorSets()
 	auto const allocateInfo0 = vk::DescriptorSetAllocateInfo()
 		.setDescriptorPool(vulkan->descriptorPool)
 		.setDescriptorSetCount(1)
-		.setPSetLayouts(&Model::descriptorSetLayout);
+		.setPSetLayouts(&Model::getDescriptorSetLayout());
 	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo0).at(0);
 
 	vulkan->device.updateDescriptorSets(wSetBuffer(descriptorSet, 0, uniformBuffer), nullptr);
@@ -786,7 +786,7 @@ void Model::createDescriptorSets()
 			auto const allocateInfo = vk::DescriptorSetAllocateInfo()
 				.setDescriptorPool(vulkan->descriptorPool)
 				.setDescriptorSetCount(1)
-				.setPSetLayouts(&Mesh::descriptorSetLayout);
+				.setPSetLayouts(&Mesh::getDescriptorSetLayout());
 			mesh.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
 			vulkan->device.updateDescriptorSets(wSetBuffer(mesh.descriptorSet, 0, mesh.uniformBuffer), nullptr);
@@ -797,7 +797,7 @@ void Model::createDescriptorSets()
 				auto const allocateInfo2 = vk::DescriptorSetAllocateInfo()
 					.setDescriptorPool(vulkan->descriptorPool)
 					.setDescriptorSetCount(1)
-					.setPSetLayouts(&primitive.descriptorSetLayout);
+					.setPSetLayouts(&Primitive::getDescriptorSetLayout());
 				primitive.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
 
 				std::vector<vk::WriteDescriptorSet> textureWriteSets{
@@ -841,9 +841,9 @@ void Model::destroy()
 			delete skin;
 			skin = nullptr;
 		}
-		for (auto& texture : Mesh::uniqueTextures)
-			texture.second.destroy();
-		Mesh::uniqueTextures.clear();
+		//for (auto& texture : Mesh::uniqueTextures)
+		//	texture.second.destroy();
+		//Mesh::uniqueTextures.clear();
 		vertexBuffer.destroy();
 		indexBuffer.destroy();
 	}

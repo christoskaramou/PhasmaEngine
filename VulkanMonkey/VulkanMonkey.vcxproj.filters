@@ -52,12 +52,6 @@
     <None Include="shaders\Common\quad.vert">
       <Filter>Shaders\Common</Filter>
     </None>
-    <None Include="shaders\SSDO\ssdo.frag">
-      <Filter>Shaders\SSDO</Filter>
-    </None>
-    <None Include="shaders\SSDO\ssdoBlur.frag">
-      <Filter>Shaders\SSDO</Filter>
-    </None>
     <None Include="shaders\FXAA\FXAA.frag">
       <Filter>Shaders\FXAA</Filter>
     </None>
@@ -570,9 +564,6 @@
     </Filter>
     <Filter Include="Shaders\Common">
       <UniqueIdentifier>{5d60448e-2b32-4522-a38d-e6bd5a9398b2}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Shaders\SSDO">
-      <UniqueIdentifier>{d0a507f4-8ecb-4f58-aca4-9b4573e1998d}</UniqueIdentifier>
     </Filter>
     <Filter Include="Shaders\FXAA">
       <UniqueIdentifier>{aefd9808-d361-415b-8f3b-e98ba0c3f33e}</UniqueIdentifier>

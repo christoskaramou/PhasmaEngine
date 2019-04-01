@@ -36,6 +36,10 @@ Renderer::~Renderer()
 		delete script;
 	for (auto &model : Model::models)
 		model.destroy();
+	for (auto& texture : Mesh::uniqueTextures)
+		texture.second.destroy();
+	Mesh::uniqueTextures.clear();
+
 	ctx.shadows.destroy();
 	ctx.compute.destroy();
 	ctx.deferred.destroy();
@@ -67,6 +71,16 @@ void Renderer::checkQueue()
 		GUI::model_rot.push_back({0.f, 0.f, 0.f});
 		Model::models.push_back(std::move(model));
 		Queue::loadModel.pop_front();
+	}
+	for (auto& queue : Queue::unloadModel) {
+		VulkanContext::get().device.waitIdle();
+		Model::models[queue].destroy();
+		Model::models.erase(Model::models.begin() + queue);
+		GUI::modelList.erase(GUI::modelList.begin() + queue);
+		GUI::model_scale.erase(GUI::model_scale.begin() + queue);
+		GUI::model_pos.erase(GUI::model_pos.begin() + queue);
+		GUI::model_rot.erase(GUI::model_rot.begin() + queue);
+		Queue::unloadModel.pop_front();
 	}
 #ifdef USE_SCRIPTS
 	for (auto& queue : Queue::addScript) {

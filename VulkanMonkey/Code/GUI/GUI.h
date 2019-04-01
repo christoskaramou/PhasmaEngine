@@ -21,7 +21,6 @@ namespace vm {
 		static bool			lock_render_window;
 		static bool			show_ssr;
 		static bool			show_ssao;
-		static bool			show_ssdo;
 		static bool			show_tonemapping;
 		static float		exposure;
 		static bool			show_FXAA;
