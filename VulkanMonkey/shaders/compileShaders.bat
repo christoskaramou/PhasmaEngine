@@ -4,8 +4,6 @@ glslangValidator.exe -V GUI/shaderGUI.frag -o GUI/frag.spv
 glslangValidator.exe -V Shadows/shaderShadows.vert -o Shadows/vert.spv
 glslangValidator.exe -V SkyBox/shaderSkyBox.vert -o SkyBox/vert.spv
 glslangValidator.exe -V SkyBox/shaderSkyBox.frag -o SkyBox/frag.spv
-glslangValidator.exe -V Terrain/shaderTerrain.vert -o Terrain/vert.spv
-glslangValidator.exe -V Terrain/shaderTerrain.frag -o Terrain/frag.spv
 glslangValidator.exe -V Deferred/gBuffer.vert -o Deferred/vert.spv
 glslangValidator.exe -V Deferred/gBuffer.frag -o Deferred/frag.spv
 glslangValidator.exe -V Deferred/composition.vert -o Deferred/cvert.spv
@@ -14,8 +12,6 @@ glslangValidator.exe -V SSR/ssr.frag -o SSR/frag.spv
 glslangValidator.exe -V Compute/shader.comp -o Compute/comp.spv
 glslangValidator.exe -V SSAO/ssao.frag -o SSAO/frag.spv
 glslangValidator.exe -V SSAO/ssaoBlur.frag -o SSAO/fragBlur.spv
-glslangValidator.exe -V SSDO/ssdo.frag -o SSDO/frag.spv
-glslangValidator.exe -V SSDO/ssdoBlur.frag -o SSDO/fragBlur.spv
 glslangValidator.exe -V FXAA/FXAA.frag -o FXAA/frag.spv
 glslangValidator.exe -V Bloom/brightFilter.frag -o Bloom/fragBrightFilter.spv
 glslangValidator.exe -V Bloom/gaussianBlurHorizontal.frag -o Bloom/fragGaussianBlurHorizontal.spv

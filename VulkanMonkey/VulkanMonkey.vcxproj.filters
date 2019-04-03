@@ -156,9 +156,6 @@
     <ClInclude Include="Code\Swapchain\Swapchain.h">
       <Filter>Code\Swapchain</Filter>
     </ClInclude>
-    <ClInclude Include="Code\Terrain\Terrain.h">
-      <Filter>Code\Terrain</Filter>
-    </ClInclude>
     <ClInclude Include="Code\Timer\Timer.h">
       <Filter>Code\Timer</Filter>
     </ClInclude>
@@ -304,9 +301,6 @@
     </ClCompile>
     <ClCompile Include="Code\Swapchain\Swapchain.cpp">
       <Filter>Code\Swapchain</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Terrain\Terrain.cpp">
-      <Filter>Code\Terrain</Filter>
     </ClCompile>
     <ClCompile Include="Code\Timer\Timer.cpp">
       <Filter>Code\Timer</Filter>
@@ -507,9 +501,6 @@
     </Filter>
     <Filter Include="Code\Swapchain">
       <UniqueIdentifier>{b7feefc7-c3d2-4d95-b645-20fc805ee63a}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Code\Terrain">
-      <UniqueIdentifier>{2b06e4f1-0cb8-4ee8-a3d7-7c92bed17031}</UniqueIdentifier>
     </Filter>
     <Filter Include="Code\Timer">
       <UniqueIdentifier>{d272beee-5cc8-4088-8772-3db2042daf80}</UniqueIdentifier>

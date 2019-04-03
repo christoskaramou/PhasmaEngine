@@ -12,7 +12,6 @@
 #include "../Object/Object.h"
 #include "../GUI/GUI.h"
 #include "../Skybox/Skybox.h"
-#include "../Terrain/Terrain.h"
 #include "../Shadows/Shadows.h"
 #include "../Light/Light.h"
 #include "../Mesh/Mesh.h"
@@ -70,9 +69,6 @@ namespace vm {
 		// SKYBOXES
 		SkyBox skyBoxDay;
 		SkyBox skyBoxNight;
-
-		// TERRAIN
-		Terrain terrain;
 
 		// GUI
 		GUI gui;

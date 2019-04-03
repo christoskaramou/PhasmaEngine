@@ -50,7 +50,6 @@ Renderer::~Renderer()
 	ctx.motionBlur.destroy();
 	ctx.skyBoxDay.destroy();
 	ctx.skyBoxNight.destroy();
-	ctx.terrain.destroy();
 	ctx.gui.destroy();
 	ctx.lightUniforms.destroy();
 	for (auto& metric : ctx.metrics)
@@ -157,12 +156,6 @@ void Renderer::update(float delta)
 		ctx.skyBoxDay.update(ctx.camera_main);
 	else
 		ctx.skyBoxNight.update(ctx.camera_main);
-
-	//TERRAIN
-	//if (ctx.terrain.render) {
-	//	const mat4 pvm[3]{ projection, view };
-	//	memcpy(ctx.terrain.uniformBuffer.data, &pvm, sizeof(pvm));
-	//}
 }
 
 void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)

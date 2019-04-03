@@ -15,9 +15,9 @@ layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out float outColor;
 
-const int KERNEL_SIZE = 8;
-const float RADIUS = 0.25f;
-const float bias = 0.001;
+const int KERNEL_SIZE =	16;
+const float RADIUS = 0.5f;
+const float bias = -0.001;
 
 void main() 
 {

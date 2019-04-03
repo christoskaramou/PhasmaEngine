@@ -84,7 +84,6 @@ void Context::initRendering()
 	bloom.frameBuffers = createBloomFrameBuffers();
 
 	// pipelines
-	//terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
 	gui.pipeline = createPipeline(getPipelineSpecificationsGUI());
 	deferred.pipeline = createPipeline(getPipelineSpecificationsDeferred());
 	deferred.pipelineComposition = createCompositionPipeline();
@@ -226,9 +225,6 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	ssao.pipeline.destroy();
 	ssao.pipelineBlur.destroy();
 
-	// terrain
-	terrain.pipeline.destroy();
-
 	// skyboxes
 	if (skyBoxDay.renderPass) {
 		vulkan.device.destroyRenderPass(skyBoxDay.renderPass);
@@ -325,8 +321,6 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	skyBoxNight.renderPass = createSkyboxRenderPass();
 	skyBoxNight.frameBuffers = createSkyboxFrameBuffers(skyBoxNight);
 	skyBoxNight.pipeline = createPipeline(getPipelineSpecificationsSkyBox(skyBoxNight));
-
-	//terrain.pipeline = createPipeline(getPipelineSpecificationsTerrain());
 	//- Recreate resources end --------------
 }
 
@@ -393,8 +387,7 @@ void Context::loadResources()
 
 	// GUI LOAD
 	gui.loadGUI();
-	// TERRAIN LOAD
-	//terrain.generateTerrain("");
+
 	// MODELS LOAD
 #ifdef USE_SCRIPTS
 	Script::Init();
@@ -413,8 +406,6 @@ void Context::createUniforms()
 {
 	// DESCRIPTOR SETS FOR GUI
 	gui.createDescriptorSet(GUI::getDescriptorSetLayout(vulkan.device));
-	// DESCRIPTOR SETS FOR TERRAIN
-	//terrain.createDescriptorSet(Terrain::getDescriptorSetLayout(vulkan.device));
 	// DESCRIPTOR SETS FOR SKYBOX
 	skyBoxDay.createUniformBuffer(2 * sizeof(mat4));
 	skyBoxDay.createDescriptorSet(SkyBox::getDescriptorSetLayout(vulkan.device));
@@ -640,7 +631,7 @@ vk::Queue Context::getPresentQueue()
 
 vk::Queue Context::getComputeQueue()
 {
-	return vulkan.device.getQueue(vulkan.computeFamilyId, 0);;
+	return vulkan.device.getQueue(vulkan.computeFamilyId, 0);
 }
 
 Swapchain Context::createSwapchain()
@@ -4556,27 +4547,6 @@ PipelineInfo Context::getPipelineSpecificationsSkyBox(SkyBox& skybox)
 
 
 	return skyBoxSpecific;
-}
-
-PipelineInfo Context::getPipelineSpecificationsTerrain()
-{
-	// Terrain Pipeline
-	static PipelineInfo terrainSpecific;
-	terrainSpecific.shaders = { "shaders/Terrain/vert.spv", "shaders/Terrain/frag.spv" };
-	//terrainSpecific.renderPass = forward.renderPass;
-	terrainSpecific.viewportSize = { WIDTH, HEIGHT };
-	terrainSpecific.descriptorSetLayouts = { Terrain::getDescriptorSetLayout(vulkan.device) };
-	terrainSpecific.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
-	terrainSpecific.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
-	terrainSpecific.pushConstantRange = vk::PushConstantRange();
-	terrainSpecific.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	terrainSpecific.dynamicStateInfo = {
-		vk::PipelineDynamicStateCreateFlags(),
-		static_cast<uint32_t>(terrainSpecific.dynamicStates.size()),
-		terrainSpecific.dynamicStates.data()
-	};
-
-	return terrainSpecific;
 }
 
 PipelineInfo Context::getPipelineSpecificationsGUI()
