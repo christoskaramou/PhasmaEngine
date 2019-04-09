@@ -9,6 +9,7 @@
 #include "../Deferred/Deferred.h"
 #include "../Model/Animation.h"
 #include "../Node/Node.h"
+#include "../Compute/Compute.h"
 #include "../../include/GLTFSDK/GLTF.h"
 #include "../../include/GLTFSDK/GLTFResourceReader.h"
 #include "../../include/GLTFSDK/GLBResourceReader.h"
@@ -65,7 +66,7 @@ namespace vm {
 
 		static void batchStart(uint32_t imageIndex, Deferred& deferred);
 		static void batchEnd();
-		void draw();
+		void draw(Buffer* occlusionBuffer = nullptr);
 		void update(Camera& camera, float delta);
 		void updateAnimation(uint32_t index, float time);
 		void calculateBoundingSphere();

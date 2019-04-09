@@ -343,14 +343,31 @@ void vm::Model::batchEnd()
 	Model::pipeline = nullptr;
 }
 
-void Model::draw()
+void Model::draw(Buffer* occlusionBuffer)
 {
 	if (!render) return;
+
 	auto& cmd = vulkan->dynamicCmdBuffer;
 	const vk::DeviceSize offset{ 0 };
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeline);
 	cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
 	cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
+
+	if (GUI::use_compute && occlusionBuffer) {
+		for (auto& node : linearNodes) {
+			if (node->mesh) {
+				for (auto &primitive : node->mesh->primitives)
+					primitive.cull = true;
+			}
+		}
+		uint32_t primitiveCount = (uint32_t)occlusionBuffer->size / sizeof(SBOOut);
+		for (uint32_t i = 0; i < primitiveCount; i++) {
+			if (((SBOOut*)occlusionBuffer->data)[i].pRight) {
+				Primitive* primitive = Primitive::packPointer(((SBOOut*)occlusionBuffer->data)[i].pLeft, ((SBOOut*)occlusionBuffer->data)[i].pRight);
+				primitive->cull = false;
+			}
+		}
+	}
 	//ALPHA_OPAQUE
 	for (auto& node : linearNodes) {
 		if (node->mesh) {
@@ -394,6 +411,8 @@ void frustumCheckAsync(mat4& modelMatrix, Mesh* mesh, Camera& camera, uint32_t i
 	vec4 bs = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
 	bs.w = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale 
 	mesh->primitives[index].cull = !camera.SphereInFrustum(bs);
+	mesh->primitives[index].transformedBS = bs;
+	Primitive::unpackPointer(&mesh->primitives[index]);
 }
 
 void updateNodeAsync(mat4& modelMatrix, Node* node, Camera& camera)

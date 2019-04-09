@@ -98,7 +98,6 @@ namespace vm {
 
 		PipelineInfo getPipelineSpecificationsShadows();
 		PipelineInfo getPipelineSpecificationsSkyBox(SkyBox& skybox);
-		PipelineInfo getPipelineSpecificationsTerrain();
 		PipelineInfo getPipelineSpecificationsGUI();
 		PipelineInfo getPipelineSpecificationsDeferred();
 
@@ -151,7 +150,7 @@ namespace vm {
 		std::vector<vk::Framebuffer> createShadowsFrameBuffers();
 		std::vector<vk::Framebuffer> createSkyboxFrameBuffers(SkyBox& skybox);
 		std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount = 1);
-		vk::CommandBuffer createComputeCmdBuffer();
+		std::vector<vk::CommandBuffer> createComputeCmdBuffer(const uint32_t bufferCount = 1);
 		Pipeline createPipeline(const PipelineInfo& specificInfo);
 		Pipeline createCompositionPipeline();
 		Pipeline createSSRPipeline();

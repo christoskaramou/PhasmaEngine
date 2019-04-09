@@ -79,6 +79,7 @@ void Renderer::checkQueue()
 		GUI::model_scale.erase(GUI::model_scale.begin() + modelIndex);
 		GUI::model_pos.erase(GUI::model_pos.begin() + modelIndex);
 		GUI::model_rot.erase(GUI::model_rot.begin() + modelIndex);
+		GUI::modelItemSelected = -1;
 		Queue::unloadModel.pop_front();
 	}
 #ifdef USE_SCRIPTS
@@ -129,9 +130,8 @@ void Renderer::update(float delta)
 		Model::models[GUI::modelItemSelected].pos = vec3(GUI::model_pos[GUI::modelItemSelected].data());
 		Model::models[GUI::modelItemSelected].rot = vec3(GUI::model_rot[GUI::modelItemSelected].data());
 	}
-	for (auto &model : Model::models) {
+	for (auto &model : Model::models)
 		model.update(ctx.camera_main, delta);
-	}
 
 	// GUI
 	ctx.gui.update();
@@ -163,13 +163,17 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 	auto beginInfo = vk::CommandBufferBeginInfo()
 		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 		.setPInheritanceInfo(nullptr);
-	ctx.vulkan.computeCmdBuffer.begin(beginInfo);
 
-	ctx.vulkan.computeCmdBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.pipeline);
-	ctx.vulkan.computeCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.compinfo.layout, 0, ctx.compute.DSCompute, nullptr);
+	auto& cmd = ctx.vulkan.computeCmdBuffer;
+	cmd.begin(beginInfo);
 
-	ctx.vulkan.computeCmdBuffer.dispatch(sizeX, sizeY, sizeZ);
-	ctx.vulkan.computeCmdBuffer.end();
+	ctx.metrics[13].start(cmd);
+	cmd.bindPipeline(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.compinfo.layout, 0, ctx.compute.DSCompute, nullptr);
+	cmd.dispatch(sizeX, sizeY, sizeZ);
+	ctx.metrics[13].end(&GUI::metrics[13]);
+
+	cmd.end();
 }
 
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
@@ -214,7 +218,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		ctx.metrics[2].start(cmd);
 		Model::batchStart(imageIndex, ctx.deferred);
 		for (uint32_t m = 0; m < Model::models.size(); m++)
-			Model::models[m].draw();
+			Model::models[m].draw(&ctx.compute.SBOut);
 		Model::batchEnd();
 		ctx.metrics[2].end(&GUI::metrics[2]);
 
@@ -325,7 +329,7 @@ void Renderer::present()
 
 	FIRE_EVENT(Event::OnRender);
 
-	if (useCompute) {
+	if (GUI::use_compute) {
 		recordComputeCmds(2, 2, 1);
 		auto const siCompute = vk::SubmitInfo()
 			.setCommandBufferCount(1)

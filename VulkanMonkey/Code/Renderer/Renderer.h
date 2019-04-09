@@ -19,7 +19,6 @@ namespace vm {
 		float waitingTime = 0.f; // ms
 		bool prepared = false;
 		bool overloadedGPU = false;
-		bool useCompute = false;
 
 	private:
 		void checkQueue();

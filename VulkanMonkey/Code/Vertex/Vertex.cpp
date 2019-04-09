@@ -2,6 +2,8 @@
 
 using namespace vm;
 
+#define VertexOffset(x) offsetof(Vertex, x)
+
 Vertex::Vertex() :
 	position(),
 	uv(),
@@ -22,101 +24,43 @@ Vertex::Vertex(vec3& pos, vec2& uv, vec3& norm, vec4& color, ivec4& bonesIDs, ve
 
 std::vector<vk::VertexInputBindingDescription> Vertex::getBindingDescriptionGeneral()
 {
-	std::vector<vk::VertexInputBindingDescription> vInputBindDesc(1);
-	vInputBindDesc[0].binding = 0;
-	vInputBindDesc[0].stride = sizeof(Vertex);
-	vInputBindDesc[0].inputRate = vk::VertexInputRate::eVertex;
-
-	return vInputBindDesc;
+	return { { 0, sizeof(Vertex), vk::VertexInputRate::eVertex } };
 }
 
 std::vector<vk::VertexInputBindingDescription> Vertex::getBindingDescriptionGUI()
 {
-	std::vector<vk::VertexInputBindingDescription> vInputBindDesc(1);
-	vInputBindDesc[0].binding = 0;
-	vInputBindDesc[0].stride = sizeof(ImDrawVert); //5 * sizeof(float);
-	vInputBindDesc[0].inputRate = vk::VertexInputRate::eVertex;
-
-	return vInputBindDesc;
+	return { { 0, sizeof(ImDrawVert), vk::VertexInputRate::eVertex } };
 }
 
 std::vector<vk::VertexInputBindingDescription> Vertex::getBindingDescriptionSkyBox()
 {
-	std::vector<vk::VertexInputBindingDescription> vInputBindDesc(1);
-	vInputBindDesc[0].binding = 0;
-	vInputBindDesc[0].stride = 4 * sizeof(float);
-	vInputBindDesc[0].inputRate = vk::VertexInputRate::eVertex;
-
-	return vInputBindDesc;
+	return { { 0, sizeof(vec4), vk::VertexInputRate::eVertex } };
 }
 
 std::vector<vk::VertexInputAttributeDescription> Vertex::getAttributeDescriptionGeneral()
 {
-	std::vector<vk::VertexInputAttributeDescription> vInputAttrDesc(6);
-	vInputAttrDesc[0] = vk::VertexInputAttributeDescription()
-		.setBinding(0)										// index of the binding to get per-vertex data
-		.setLocation(0)										// location directive of the input in the vertex shader
-		.setFormat(vk::Format::eR32G32B32Sfloat)	//vec3
-		.setOffset(0);
-	vInputAttrDesc[1] = vk::VertexInputAttributeDescription()
-		.setBinding(0)
-		.setLocation(1)
-		.setFormat(vk::Format::eR32G32Sfloat)		//vec2
-		.setOffset(3 * sizeof(float));
-	vInputAttrDesc[2] = vk::VertexInputAttributeDescription()
-		.setBinding(0)
-		.setLocation(2)
-		.setFormat(vk::Format::eR32G32B32Sfloat)	//vec3
-		.setOffset(5 * sizeof(float));
-	vInputAttrDesc[3] = vk::VertexInputAttributeDescription()
-		.setBinding(0)
-		.setLocation(3)
-		.setFormat(vk::Format::eR32G32B32A32Sfloat)	//vec4
-		.setOffset(8 * sizeof(float));
-	vInputAttrDesc[4] = vk::VertexInputAttributeDescription()
-		.setBinding(0)
-		.setLocation(4)
-		.setFormat(vk::Format::eR32G32B32A32Sint)	//ivec4
-		.setOffset(12 * sizeof(float));
-	vInputAttrDesc[5] = vk::VertexInputAttributeDescription()
-		.setBinding(0)
-		.setLocation(5)
-		.setFormat(vk::Format::eR32G32B32A32Sfloat)	//vec4
-		.setOffset(16 * sizeof(float));
-
-	return vInputAttrDesc;
+	return {
+		{ 0, 0, vk::Format::eR32G32B32Sfloat,		VertexOffset(position) },	// vec3
+		{ 1, 0, vk::Format::eR32G32Sfloat,			VertexOffset(uv) },			// vec2
+		{ 2, 0, vk::Format::eR32G32B32Sfloat,		VertexOffset(normals) },	// vec3
+		{ 3, 0, vk::Format::eR32G32B32A32Sfloat,	VertexOffset(color) },		// vec4
+		{ 4, 0, vk::Format::eR32G32B32A32Sint,		VertexOffset(bonesIDs) },	// ivec4
+		{ 5, 0, vk::Format::eR32G32B32A32Sfloat,	VertexOffset(weights) }		// vec4
+	};
 }
 
 std::vector<vk::VertexInputAttributeDescription> Vertex::getAttributeDescriptionGUI()
 {
-	std::vector<vk::VertexInputAttributeDescription> vInputAttrDesc(3);
-	vInputAttrDesc[0] = vk::VertexInputAttributeDescription()
-		.setBinding(0)										// index of the binding to get per-vertex data
-		.setLocation(0)										// location directive of the input in the vertex shader
-		.setFormat(vk::Format::eR32G32Sfloat)		//vec2
-		.setOffset(IM_OFFSETOF(ImDrawVert, pos));
-	vInputAttrDesc[1] = vk::VertexInputAttributeDescription()
-		.setBinding(0)
-		.setLocation(1)
-		.setFormat(vk::Format::eR32G32Sfloat)		//vec2
-		.setOffset(IM_OFFSETOF(ImDrawVert, uv));
-	vInputAttrDesc[2] = vk::VertexInputAttributeDescription()
-		.setBinding(0)
-		.setLocation(2)
-		.setFormat(vk::Format::eR8G8B8A8Unorm)		//unsigned integer
-		.setOffset(IM_OFFSETOF(ImDrawVert, col));
-
-	return vInputAttrDesc;
+	return {
+		{ 0, 0, vk::Format::eR32G32Sfloat, IM_OFFSETOF(ImDrawVert, pos)},				// vec2
+		{ 1, 0, vk::Format::eR32G32Sfloat, IM_OFFSETOF(ImDrawVert, uv)},				// vec2
+		{ 2, 0, vk::Format::eR8G8B8A8Unorm, IM_OFFSETOF(ImDrawVert, ImDrawVert::col)}	// color packed to uint
+	};
 }
 
 std::vector<vk::VertexInputAttributeDescription> Vertex::getAttributeDescriptionSkyBox()
 {
-	std::vector<vk::VertexInputAttributeDescription> vInputAttrDesc(1);
-	vInputAttrDesc[0] = vk::VertexInputAttributeDescription()
-		.setBinding(0)										// index of the binding to get per-vertex data
-		.setLocation(0)										// location directive of the input in the vertex shader
-		.setFormat(vk::Format::eR32G32B32A32Sfloat)	//vec4
-		.setOffset(0);
-
-	return vInputAttrDesc;
+	return {
+		{ 0, 0, vk::Format::eR32G32B32A32Sfloat, 0 }	// vec4
+	};
 }

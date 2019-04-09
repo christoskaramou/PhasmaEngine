@@ -34,7 +34,7 @@ void Context::initVulkanContext()
 	vulkan.descriptorPool = createDescriptorPool(10000); // max number of all descriptor sets to allocate
 	vulkan.dynamicCmdBuffer = createCmdBuffers().at(0);
 	vulkan.shadowCmdBuffer = createCmdBuffers(3);
-	vulkan.computeCmdBuffer = createComputeCmdBuffer();
+	vulkan.computeCmdBuffer = createComputeCmdBuffer().at(0);
 	vulkan.depth = new Image(createDepthResources());
 }
 
@@ -236,6 +236,9 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	}
 	skyBoxDay.pipeline.destroy();
 
+	// Compute
+	compute.pipeline.destroy();
+
 	if (skyBoxNight.renderPass) {
 		vulkan.device.destroyRenderPass(skyBoxNight.renderPass);
 	}
@@ -321,6 +324,9 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	skyBoxNight.renderPass = createSkyboxRenderPass();
 	skyBoxNight.frameBuffers = createSkyboxFrameBuffers(skyBoxNight);
 	skyBoxNight.pipeline = createPipeline(getPipelineSpecificationsSkyBox(skyBoxNight));
+
+	compute.pipeline = createComputePipeline();
+	compute.updateDescriptorSets(renderTargets);
 	//- Recreate resources end --------------
 }
 
@@ -430,7 +436,7 @@ void Context::createUniforms()
 	// DESCRIPTOR SET FOR MOTIONBLUR PIPELINE
 	motionBlur.createMotionBlurUniforms(renderTargets);
 	// DESCRIPTOR SET FOR COMPUTE PIPELINE
-	compute.createComputeUniforms();
+	compute.createComputeUniforms(sizeof(SBOIn), renderTargets);
 }
 
 vk::Instance Context::createInstance()
@@ -601,15 +607,27 @@ vk::Device Context::createDevice()
 		if (std::string(i.extensionName) == VK_KHR_SWAPCHAIN_EXTENSION_NAME)
 			deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 	}
-
 	float priorities[]{ 1.0f }; // range : [0.0, 1.0]
-	auto const queueCreateInfo = vk::DeviceQueueCreateInfo()
-		.setQueueFamilyIndex(vulkan.graphicsFamilyId)
-		.setQueueCount(1)
-		.setPQueuePriorities(priorities);
+
+	std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos{};
+
+	// graphics queue
+	queueCreateInfos.push_back({});
+	queueCreateInfos.back().queueFamilyIndex = vulkan.graphicsFamilyId;
+	queueCreateInfos.back().queueCount = 1;
+	queueCreateInfos.back().pQueuePriorities = priorities;
+
+	// compute queue
+	if (vulkan.computeFamilyId != vulkan.graphicsFamilyId) {
+		queueCreateInfos.push_back({});
+		queueCreateInfos.back().queueFamilyIndex = vulkan.computeFamilyId;
+		queueCreateInfos.back().queueCount = 1;
+		queueCreateInfos.back().pQueuePriorities = priorities;
+	}
+
 	auto const deviceCreateInfo = vk::DeviceCreateInfo()
-		.setQueueCreateInfoCount(1)
-		.setPQueueCreateInfos(&queueCreateInfo)
+		.setQueueCreateInfoCount((uint32_t)queueCreateInfos.size())
+		.setPQueueCreateInfos(queueCreateInfos.data())
 		.setEnabledLayerCount(0)
 		.setPpEnabledLayerNames(nullptr)
 		.setEnabledExtensionCount((uint32_t)deviceExtensions.size())
@@ -1972,15 +1990,15 @@ std::vector<vk::CommandBuffer> Context::createCmdBuffers(const uint32_t bufferCo
 	return vulkan.device.allocateCommandBuffers(cbai);
 }
 
-vk::CommandBuffer Context::createComputeCmdBuffer()
+std::vector<vk::CommandBuffer> Context::createComputeCmdBuffer(const uint32_t bufferCount)
 {
 	vk::CommandBuffer _cmdBuffer;
 	auto const cbai = vk::CommandBufferAllocateInfo()
 		.setCommandPool(vulkan.commandPoolCompute)
 		.setLevel(vk::CommandBufferLevel::ePrimary)
-		.setCommandBufferCount(1);
+		.setCommandBufferCount(bufferCount);
 
-	return vulkan.device.allocateCommandBuffers(cbai)[0];
+	return vulkan.device.allocateCommandBuffers(cbai);
 }
 
 std::vector<char> readFile(const std::string& filename)
@@ -4344,27 +4362,7 @@ Pipeline Context::createComputePipeline()
 	_pipeline.compinfo.stage.pName = "main";
 	_pipeline.compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
 
-	{// DescriptorSetLayout
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0 (in)
-			vk::DescriptorSetLayoutBinding{
-				0,										//uint32_t binding;
-				vk::DescriptorType::eStorageBuffer,		//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eCompute,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			}
-		};
-
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo {
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
-		};
-		compute.DSLayoutCompute = vulkan.device.createDescriptorSetLayout(descriptorLayout);
-	}
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { compute.DSLayoutCompute };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { Compute::getDescriptorLayout() };
 	_pipeline.compinfo.layout = vulkan.device.createPipelineLayout(
 		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() } );
 
@@ -4436,11 +4434,13 @@ void Context::destroyVkContext()
 	for (auto& fence : vulkan.fences) {
 		if (fence) {
 			vulkan.device.destroyFence(fence);
+			fence = nullptr;
 		}
 	}
 	for (auto &semaphore : vulkan.semaphores) {
 		if (semaphore) {
 			vulkan.device.destroySemaphore(semaphore);
+			semaphore = nullptr;
 		}
 	}
 	for (auto& rt : renderTargets)

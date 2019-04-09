@@ -13,7 +13,7 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 		.setDescriptorSetCount(1)
 		.setPSetLayouts(&DSLayoutMotionBlur);
 	DSMotionBlur = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
-	
+
 	updateDescriptorSets(renderTargets);
 }
 

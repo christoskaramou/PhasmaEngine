@@ -34,13 +34,26 @@ namespace vm {
 		vk::DescriptorSet descriptorSet;
 		Buffer uniformBuffer;
 
-		bool render = true, cull = false;
+		// these two will be used to store the object pointer to pass in shaders
+		// since glsl cant have 64 bit variables without extensions
+		uint32_t pLeft = 0;
+		uint32_t pRight = 0;
+		static void unpackPointer(Primitive* ptr) {
+			ptr->pRight = (uint32_t)reinterpret_cast<uint64_t>(ptr);
+			ptr->pLeft = (uint32_t)(reinterpret_cast<uint64_t>(ptr) >> 32);
+		}
+		static Primitive* packPointer(uint32_t pLeft, uint32_t pRight) {
+			return reinterpret_cast<Primitive*>(((uint64_t)pLeft) << 32 | pRight);
+		}
+
+		bool render = true, cull = true;
 		uint32_t vertexOffset = 0, indexOffset = 0;
 		uint32_t verticesSize = 0, indicesSize = 0;
 		PBRMaterial pbrMaterial;
 		vec3 min;
 		vec3 max;
 		vec4 boundingSphere;
+		vec4 transformedBS;
 		bool hasBones = false;
 		void calculateBoundingSphere() {
 			vec3 center = (max + min) * .5f;

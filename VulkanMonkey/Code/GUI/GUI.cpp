@@ -18,6 +18,7 @@ float						GUI::Bloom_Inv_brightness = 20.0f;
 float						GUI::Bloom_intensity = 1.5f;
 float						GUI::Bloom_range = 2.5f;
 bool						GUI::use_tonemap = false;
+bool						GUI::use_compute = false;
 float						GUI::Bloom_exposure = 3.5f;
 bool						GUI::dSetNeedsUpdate = false;
 bool						GUI::show_motionBlur = false;
@@ -138,9 +139,12 @@ void GUI::Metrics()
 	ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
 	ImGui::InputInt("FPS", &fps, 1, 15); if (fps < 10) fps = 10;
 	ImGui::Text("CPU Total: %.3f (waited %.3f) ms", cpuTime, cpuWaitingTime);
-	ImGui::Text("GPU Total: %.3f ms", stats[0] + stats[10] + stats[11] + stats[11]);
+	ImGui::Text("GPU Total: %.3f ms", stats[0] + (shadow_cast ? stats[10] + stats[11] + stats[12] : 0.f) + (use_compute ? stats[13] : 0.f));
 	ImGui::Separator();
 	ImGui::Text("Render Passes:");
+	//if (use_compute) {
+	//	ImGui::Text("   Compute: %.3f ms", stats[13]); totalPasses++;
+	//}
 	ImGui::Text("   Skybox: %.3f ms", stats[1]); totalPasses++;
 	if (modelList.size() > 0) {
 		if (shadow_cast) {
@@ -255,6 +259,7 @@ void vm::GUI::Properties()
 	ImGui::Checkbox("SSAO", &show_ssao);
 	ImGui::Checkbox("Motion Blur", &show_motionBlur);
 	ImGui::Checkbox("Tone Mapping", &show_tonemapping);
+	//ImGui::Checkbox("Compute shaders", &use_compute);
 	if (show_tonemapping) {
 		ImGui::SliderFloat("Exposure", &exposure, 0.01f, 10.f); ImGui::Separator(); ImGui::Separator();
 	}
@@ -303,11 +308,11 @@ void vm::GUI::Properties()
 		std::string toStr = std::to_string(modelItemSelected);
 		std::string id = " ID[" + toStr + "]";
 		ImGui::TextColored(ImVec4(.6f, 1.f, .5f, 1.f), (modelList[modelItemSelected] + id).c_str());
+
 		ImGui::Separator();
-		if (ImGui::Button("Unload Model")) {
+		if (ImGui::Button("Unload Model"))
 			Queue::unloadModel.push_back(modelItemSelected);
-			modelItemSelected = -1;
-		}
+
 		ImGui::Separator();
 		std::string s = "Scale##" + toStr;
 		std::string p = "Position##" + toStr;
@@ -567,6 +572,8 @@ void GUI::loadGUI(bool show)
 
 void GUI::draw(uint32_t imageIndex)
 {
+	if (!render) return;
+
 	auto draw_data = ImGui::GetDrawData();
 	if (render && draw_data->TotalVtxCount > 0)
 	{
@@ -808,12 +815,14 @@ void GUI::windowStyle(ImGuiStyle* dst)
 
 void GUI::createVertexBuffer(size_t vertex_size)
 {
+	vulkan->presentQueue.waitIdle();
 	vertexBuffer.destroy();
 	vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
 }
 
 void GUI::createIndexBuffer(size_t index_size)
 {
+	vulkan->presentQueue.waitIdle();
 	indexBuffer.destroy();
 	indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
 }
