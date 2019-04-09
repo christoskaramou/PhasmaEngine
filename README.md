@@ -21,6 +21,8 @@ VulkanMonkey3D is intended as a project for learning 3D graphics and techniques,
 * Dynamic Skybox (Day/Night)
 * CPU/GPU Metrics
 
+Here is a [demo video](https://www.youtube.com/watch?v=Dj1CpDCSy_k) with some of these features
+
 And some other primitive implemented ideas in a certain degree like Compute shaders.
 
 ![Screenshot](VulkanMonkey/Images/example_image3.png)
