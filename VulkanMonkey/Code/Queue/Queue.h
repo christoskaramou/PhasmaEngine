@@ -4,6 +4,8 @@
 #include <tuple>
 #include <thread>
 #include <deque>
+#include <any>
+#include <atomic>
 
 namespace vm {
 	struct Queue
@@ -14,6 +16,6 @@ namespace vm {
 		static std::deque<std::tuple<int, std::string>> addScript;
 		static std::deque<int> removeScript;
 		static std::deque<int> compileScript;
-		static std::deque<std::future<void>> func;
+		static std::deque<std::future<std::any>> loadModelFutures;
 	};
 }

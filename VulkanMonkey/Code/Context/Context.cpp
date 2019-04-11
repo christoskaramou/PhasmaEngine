@@ -2318,17 +2318,17 @@ Pipeline Context::createCompositionPipeline()
 
 	// Color Blending state
 	vk::PipelineColorBlendAttachmentState colorBlendAttachment{
-				VK_TRUE,												// Bool32 blendEnable;
-				vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-				vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-				vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-				vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-				vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-				vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-				vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-				vk::ColorComponentFlagBits::eG |
-				vk::ColorComponentFlagBits::eB |
-				vk::ColorComponentFlagBits::eA
+		VK_TRUE,												// Bool32 blendEnable;
+		vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
+		vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
+		vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
+		vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
+		vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
+		vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
+		vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
+		vk::ColorComponentFlagBits::eG |
+		vk::ColorComponentFlagBits::eB |
+		vk::ColorComponentFlagBits::eA
 	};
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment, colorBlendAttachment };
 	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{

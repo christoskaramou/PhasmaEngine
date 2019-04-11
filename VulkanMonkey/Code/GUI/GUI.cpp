@@ -3,6 +3,7 @@
 #include "../Event/Event.h"
 #include "../include/TinyFileDialogs/tinyfiledialogs.h"
 #include "../Queue/Queue.h"
+#include "../Timer/Timer.h"
 
 using namespace vm;
 ImVec2						GUI::winPos = ImVec2();
@@ -246,6 +247,31 @@ void GUI::Models()
 	}
 
 	ImGui::End();
+
+	if (Queue::loadModelFutures.size() > 0) {
+		static bool loading = true;
+		static float time = 0.f;
+		ImGuiStyle* style = &ImGui::GetStyle();
+		ImVec4 temp = style->Colors[ImGuiCol_WindowBg];
+		style->Colors[ImGuiCol_WindowBg] = ImVec4(.5f, .5f, .5f, 1.f);
+		ImGui::SetNextWindowPos(ImVec2(WIDTH_f * .5f - 44.f, HEIGHT_f * .5f - 10.f));
+		ImGui::SetNextWindowSize(ImVec2(88.f, 20.f));
+		ImGui::Begin("Loading", &loading, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+
+		if (time < 1.f)
+			ImGui::Text("Loading");
+		else if (time < 2.f)
+			ImGui::Text("Loading.");
+		else if (time < 3.f)
+			ImGui::Text("Loading..");
+		else if (time < 4.f)
+			ImGui::Text("Loading...");
+		else
+			time = 0.f;
+		ImGui::End();
+		time += Timer::delta;
+		style->Colors[ImGuiCol_WindowBg] = temp;
+	}
 }
 
 void vm::GUI::Properties()

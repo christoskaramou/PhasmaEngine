@@ -59,52 +59,65 @@ Renderer::~Renderer()
 
 void Renderer::checkQueue()
 {
-	// TODO: make an other command pool for multithreading
-	for (auto& queue : Queue::loadModel) {
+	for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();) {
 		VulkanContext::get().device.waitIdle();
-		Model model;
-		model.loadModel(std::get<0>(queue), std::get<1>(queue)); // path, name
-		GUI::modelList.push_back(std::get<1>(queue));
-		GUI::model_scale.push_back({1.f, 1.f, 1.f});
-		GUI::model_pos.push_back({0.f, 0.f, 0.f});
-		GUI::model_rot.push_back({0.f, 0.f, 0.f});
-		Model::models.push_back(std::move(model));
-		Queue::loadModel.pop_front();
+		Queue::loadModelFutures.push_back(std::async(std::launch::async, [](const std::string& folderPath, const std::string& modelName, bool show = true) {
+				Model model;
+				model.loadModel(folderPath, modelName, show);
+				return std::move(std::any(std::move(model)));
+			}, std::get<0>(*it), std::get<1>(*it), true));
+		it = Queue::loadModel.erase(it);
 	}
-	for (auto& modelIndex : Queue::unloadModel) {
+
+	for (auto it = Queue::loadModelFutures.begin(); it != Queue::loadModelFutures.end();) {
+		if (it->wait_for(std::chrono::seconds(0)) != std::future_status::timeout) {
+			Model::models.push_back(std::move(std::any_cast<Model>(it->get())));
+			GUI::modelList.push_back(Model::models.back().name);
+			GUI::model_scale.push_back({ 1.f, 1.f, 1.f });
+			GUI::model_pos.push_back({ 0.f, 0.f, 0.f });
+			GUI::model_rot.push_back({ 0.f, 0.f, 0.f });
+			it = Queue::loadModelFutures.erase(it);
+		}
+		else
+			it++;
+	}
+
+	for (auto it = Queue::unloadModel.begin(); it != Queue::unloadModel.end();) {
 		VulkanContext::get().device.waitIdle();
-		Model::models[modelIndex].destroy();
-		Model::models.erase(Model::models.begin() + modelIndex);
-		GUI::modelList.erase(GUI::modelList.begin() + modelIndex);
-		GUI::model_scale.erase(GUI::model_scale.begin() + modelIndex);
-		GUI::model_pos.erase(GUI::model_pos.begin() + modelIndex);
-		GUI::model_rot.erase(GUI::model_rot.begin() + modelIndex);
+		Model::models[*it].destroy();
+		Model::models.erase(Model::models.begin() + *it);
+		GUI::modelList.erase(GUI::modelList.begin() + *it);
+		GUI::model_scale.erase(GUI::model_scale.begin() + *it);
+		GUI::model_pos.erase(GUI::model_pos.begin() + *it);
+		GUI::model_rot.erase(GUI::model_rot.begin() + *it);
 		GUI::modelItemSelected = -1;
-		Queue::unloadModel.pop_front();
+		it = Queue::unloadModel.erase(it);
 	}
 #ifdef USE_SCRIPTS
-	for (auto& queue : Queue::addScript) {
-		if (Model::models[std::get<0>(queue)].script)
-			delete Model::models[std::get<0>(queue)].script;
-		Model::models[std::get<0>(queue)].script = new Script(std::get<1>(queue).c_str());
-		Queue::addScript.pop_front();
+	for (auto it = Queue::addScript.begin(); it != Queue::addScript.end();) {
+		if (Model::models[std::get<0>(*it)].script)
+			delete Model::models[std::get<0>(*it)].script;
+		Model::models[std::get<0>(*it)].script = new Script(std::get<1>(*it).c_str());
+		it = Queue::addScript.erase(it);
 	}
-	for (auto& modelIndex : Queue::removeScript) {
-		if (Model::models[modelIndex].script) {
-			delete Model::models[modelIndex].script;
-			Model::models[modelIndex].script = nullptr;
+	for (auto it = Queue::removeScript.begin(); it != Queue::removeScript.end();) {
+		if (Model::models[*it].script) {
+			delete Model::models[*it].script;
+			Model::models[*it].script = nullptr;
 		}
-		Queue::removeScript.pop_front();
+		it = Queue::removeScript.erase(it);
 	}
-	for (auto& modelIndex : Queue::compileScript) {
+
+	for (auto it = Queue::compileScript.begin(); it != Queue::compileScript.end();) {
 		std::string name;
-		if (Model::models[modelIndex].script) {
-			name = Model::models[modelIndex].script->name;
-			delete Model::models[modelIndex].script;
-			Model::models[modelIndex].script = new Script(name.c_str());
+		if (Model::models[*it].script) {
+			name = Model::models[*it].script->name;
+			delete Model::models[*it].script;
+			Model::models[*it].script = new Script(name.c_str());
 		}
-		Queue::compileScript.pop_front();
+		it = Queue::compileScript.erase(it);
 	}
+
 #endif
 }
 
