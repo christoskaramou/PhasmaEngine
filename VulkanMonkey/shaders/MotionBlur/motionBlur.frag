@@ -48,6 +48,7 @@ void main()
 
 	vec3 color = vec3(0.0);
 	int count = 0;
+	UV -= velocity * 0.5; // make samples centered from (UV-velocity/2) to (UV+velocity/2) instead of (UV) to (UV+velocity)
 	for (int i = 0; i < samples; i++, UV += velocity / samples)
 	{
 		UV = clamp(UV, pushConst.offset.xy + 0.0005, pushConst.offset.xy + pushConst.offset.zw - 0.0005);
