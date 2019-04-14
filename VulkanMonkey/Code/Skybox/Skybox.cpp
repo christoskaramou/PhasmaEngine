@@ -138,9 +138,9 @@ void SkyBox::loadTextures(const std::array<std::string, 6>& paths, uint32_t imag
 		assert(imageSideSize == texWidth && imageSideSize == texHeight);
 
 		vk::DeviceSize imageSize = texWidth * texHeight * 4;
-		if (!pixels) {
-			exit(-19);
-		}
+		if (!pixels)
+			throw std::runtime_error("No pixel data loaded");
+
 		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 		staging.data = vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize);

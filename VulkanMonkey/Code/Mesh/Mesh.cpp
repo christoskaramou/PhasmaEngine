@@ -142,7 +142,7 @@ void Primitive::loadTexture(
 			path = "objects/black.png";
 		break;
 	default:
-		exit(-19);
+		throw std::runtime_error("Load texture invalid texture type");
 	}
 
 	// Check if it is already loaded
@@ -161,9 +161,8 @@ void Primitive::loadTexture(
 			pixels = stbi_load_from_memory(data.data(), (int)data.size(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		}
 
-		if (!pixels) {
-			exit(-19);
-		}
+		if (!pixels)
+			throw std::runtime_error("No pixel data loaded");
 
 		vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 

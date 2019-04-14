@@ -22,9 +22,7 @@ void Buffer::createBuffer(const vk::DeviceSize size, const vk::BufferUsageFlags 
 		}
 	}
 	if (memTypeIndex == UINT32_MAX)
-	{
-		exit(-1);
-	}
+		throw std::runtime_error("Could not create buffer, memTypeIndex not valid");
 
 	if (this->size < memRequirements.size)
 		this->size = memRequirements.size;

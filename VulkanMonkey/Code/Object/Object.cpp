@@ -32,9 +32,8 @@ void Object::loadTexture(const std::string& path)
 	stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 	vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
-	if (!pixels) {
-		exit(-19);
-	}
+	if (!pixels)
+		throw std::runtime_error("No pixel data loaded");
 
 	Buffer staging;
 	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);

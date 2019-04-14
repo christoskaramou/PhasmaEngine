@@ -15,9 +15,8 @@ Timer::Timer()
 {
 	_minFrameTime = 0.0f;
     if (++instances > 1)
-    {
-        exit(-1);
-    }
+		throw std::runtime_error("Only one active instance of timer is allowed");
+
     start = std::chrono::high_resolution_clock::now();
 	frameStart = start;
 }

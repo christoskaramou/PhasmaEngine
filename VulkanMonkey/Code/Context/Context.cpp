@@ -443,16 +443,12 @@ vk::Instance Context::createInstance()
 {
 	unsigned extCount;
 	if (!SDL_Vulkan_GetInstanceExtensions(vulkan.window, &extCount, nullptr))
-	{
-		std::cout << SDL_GetError();
-		exit(-1);
-	}
+		throw std::runtime_error(SDL_GetError());
+
 	std::vector<const char*> instanceExtensions(extCount);
 	if (!SDL_Vulkan_GetInstanceExtensions(vulkan.window, &extCount, instanceExtensions.data()))
-	{
-		std::cout << SDL_GetError();
-		exit(-1);
-	}
+		throw std::runtime_error(SDL_GetError());
+
 	std::vector<const char*> instanceLayers{};
 #ifdef _DEBUG
 	instanceLayers.push_back("VK_LAYER_LUNARG_standard_validation");
@@ -480,10 +476,8 @@ Surface Context::createSurface()
 {
 	VkSurfaceKHR _vkSurface;
 	if (!SDL_Vulkan_CreateSurface(vulkan.window, VkInstance(vulkan.instance), &_vkSurface))
-	{
-		std::cout << SDL_GetError();
-		exit(-2);
-	}
+		throw std::runtime_error(SDL_GetError());
+
 	Surface _surface;
 	int width, height;
 	SDL_GL_GetDrawableSize(vulkan.window, &width, &height);
@@ -1650,9 +1644,8 @@ Image Context::createDepthResources()
 		}
 	}
 	if (_image.format == vk::Format::eUndefined)
-	{
-		exit(-9);
-	}
+		throw std::runtime_error("Depth format is undefined");
+
 	_image.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	_image.createImageView(vk::ImageAspectFlagBits::eDepth);
 
@@ -2053,7 +2046,7 @@ Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 		}
 	}
 	else
-		exit(-22);
+		throw std::runtime_error("could not find shader info for PipelineShaderStageCreateInfo");
 
 	_pipeline.pipeinfo.stageCount = (uint32_t)specificInfo.shaders.size();
 

@@ -25,7 +25,7 @@ Event vm::EventSystem::createEvent()
 FuncID EventSystem::subscribe(Event event, Func_t&& func, uint32_t priority)
 {
 	static FuncID funcID = 0;
-	if (m_subscribers.size() <= event.ID) exit(-30);
+	if (m_subscribers.size() <= event.ID) throw std::runtime_error("Event ID is not valid");
 	auto& v = m_subscribers[event.ID];
 	v.push_back({ std::forward<Func_t>(func), funcID, priority });
 	std::sort(v.begin(), v.end(), [](Func& f1, Func& f2) {return f1.priority < f2.priority; });
@@ -35,7 +35,7 @@ FuncID EventSystem::subscribe(Event event, Func_t&& func, uint32_t priority)
 // funcID is the stored value of the subscribe function return
 void EventSystem::unsubscribe(Event event, FuncID funcID)
 {
-	if (m_subscribers.size() <= event.ID) exit(-30);
+	if (m_subscribers.size() <= event.ID) throw std::runtime_error("Event ID is not valid");
 	auto& v = m_subscribers[event.ID];
 	for (auto& it = v.begin(); it != v.end(); ++it)
 		if (it->ID == funcID) {

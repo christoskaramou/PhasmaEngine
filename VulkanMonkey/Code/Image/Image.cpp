@@ -133,7 +133,7 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 		dstStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
 	}
 	else {
-		exit(-1);
+		throw std::runtime_error("Transition image layout invalid combination of layouts");
 	}
 
 	commandBuffer.pipelineBarrier(
