@@ -5,6 +5,9 @@ using namespace vm;
 
 int main(int argc, char* argv[])
 {
+	freopen("log.txt", "w", stdout);
+	freopen("errors.txt", "w", stderr);
+
 	Window::create();
 
 	while (true)

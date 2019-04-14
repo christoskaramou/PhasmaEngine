@@ -261,5 +261,6 @@ paket-files/
 __pycache__/
 *.pyc
 
-#copy bat
-VulkanMonkey/Scripts/compileScripts.bat
+# LOGS
+VulkanMonkey/errors.txt
+VulkanMonkey/log.txt

@@ -142,7 +142,7 @@ void Primitive::loadTexture(
 			path = "objects/black.png";
 		break;
 	default:
-		throw std::runtime_error("Load texture invalid texture type");
+		throw std::runtime_error("Load texture invalid type");
 	}
 
 	// Check if it is already loaded
