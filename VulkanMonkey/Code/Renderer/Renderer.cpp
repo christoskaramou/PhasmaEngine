@@ -231,7 +231,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		ctx.metrics[2].start(cmd);
 		Model::batchStart(imageIndex, ctx.deferred);
 		for (uint32_t m = 0; m < Model::models.size(); m++)
-			Model::models[m].draw(&ctx.compute.SBOut);
+			Model::models[m].draw();
 		Model::batchEnd();
 		ctx.metrics[2].end(&GUI::metrics[2]);
 
@@ -319,7 +319,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 				cmd.bindIndexBuffer(Model::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
 				for (auto& node : Model::models[m].linearNodes) {
-					if (node->mesh) {
+					if (node->mesh.get()) {
 						cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet, Model::models[m].descriptorSet }, nullptr);
 						for (auto& primitive : node->mesh->primitives) {
 							if (primitive.render)

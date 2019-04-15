@@ -21,26 +21,26 @@ mat4 Node::localMatrix()
 mat4 Node::getMatrix()
 {
 	mat4 m = localMatrix();
-	Node *p = parent;
-	while (p) {
+	Pointer<Node> p = parent;
+	while (p.get()) {
 		m = p->localMatrix() * m;
 		p = p->parent;
 	}
 	return m;
 }
 
-void calculateMeshJointMatrixAsync(Mesh* mesh, const Skin* skin, const mat4& inverseTransform, const size_t index)
+void calculateMeshJointMatrixAsync(Pointer<Mesh>& mesh, Pointer<Skin>& skin, const mat4& inverseTransform, const size_t index)
 {
 	mesh->ubo.jointMatrix[index] = inverseTransform * skin->joints[index]->getMatrix() * skin->inverseBindMatrices[index];
 }
 
 void Node::update(Camera& camera)
 {
-	if (mesh) {
+	if (mesh.get()) {
 		mesh->ubo.previousMatrix = mesh->ubo.matrix;
 		mesh->ubo.matrix = getMatrix();
 
-		if (skin) {
+		if (skin.get()) {
 			// Update join matrices
 			mat4 inverseTransform = inverse(mesh->ubo.matrix);
 			size_t numJoints = std::min((uint32_t)skin->joints.size(), MAX_NUM_JOINTS);
@@ -65,8 +65,4 @@ void Node::update(Camera& camera)
 			memcpy(mesh->uniformBuffer.data, &mesh->ubo, 2 * sizeof(mat4));
 		}
 	}
-
-	//for (auto& child : children) {
-	//	child->update(camera);
-	//}
 }

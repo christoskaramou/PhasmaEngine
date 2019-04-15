@@ -231,6 +231,9 @@
     <ClInclude Include="Code\Model\StreamReader.h">
       <Filter>Code\Model</Filter>
     </ClInclude>
+    <ClInclude Include="Code\Pointer\Pointer.h">
+      <Filter>Code\Pointer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -567,6 +570,9 @@
     </Filter>
     <Filter Include="Shaders\Bloom">
       <UniqueIdentifier>{0ba63104-9f28-417c-802b-6561674880b8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Pointer">
+      <UniqueIdentifier>{ba175b70-ca58-4045-a039-f79d9af62918}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

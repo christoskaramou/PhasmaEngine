@@ -96,7 +96,7 @@ void Context::initRendering()
 	bloom.pipelineGaussianBlurVertical = createGaussianBlurVerticalPipeline();
 	bloom.pipelineCombine = createCombinePipeline();
 	motionBlur.pipeline = createMotionBlurPipeline();
-	compute.pipeline = createComputePipeline();
+	//compute.pipeline = createComputePipeline();
 	shadows.pipeline = createPipeline(getPipelineSpecificationsShadows());
 
 	skyBoxDay.renderPass = createSkyboxRenderPass();
@@ -325,8 +325,8 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	skyBoxNight.frameBuffers = createSkyboxFrameBuffers(skyBoxNight);
 	skyBoxNight.pipeline = createPipeline(getPipelineSpecificationsSkyBox(skyBoxNight));
 
-	compute.pipeline = createComputePipeline();
-	compute.updateDescriptorSets(renderTargets);
+	//compute.pipeline = createComputePipeline();
+	//compute.updateDescriptorSets();
 	//- Recreate resources end --------------
 }
 
@@ -436,7 +436,7 @@ void Context::createUniforms()
 	// DESCRIPTOR SET FOR MOTIONBLUR PIPELINE
 	motionBlur.createMotionBlurUniforms(renderTargets);
 	// DESCRIPTOR SET FOR COMPUTE PIPELINE
-	compute.createComputeUniforms(sizeof(SBOIn), renderTargets);
+	//compute.createComputeUniforms(sizeof(SBOIn));
 }
 
 vk::Instance Context::createInstance()

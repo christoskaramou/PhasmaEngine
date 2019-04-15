@@ -235,6 +235,7 @@
     <ClInclude Include="Code\Node\Node.h" />
     <ClInclude Include="Code\Object\Object.h" />
     <ClInclude Include="Code\Pipeline\Pipeline.h" />
+    <ClInclude Include="Code\Pointer\Pointer.h" />
     <ClInclude Include="Code\Queue\Queue.h" />
     <ClInclude Include="Code\Renderer\Renderer.h" />
     <ClInclude Include="Code\Script\Script.h" />

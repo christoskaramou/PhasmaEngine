@@ -2,15 +2,16 @@
 #include "../Math/Math.h"
 #include "../Mesh/Mesh.h"
 #include "../Camera/Camera.h"
+#include "../Pointer/Pointer.h"
 
 namespace vm {
 	struct Node;
 
 	struct Skin {
 		std::string name;
-		Node *skeletonRoot = nullptr;
+		Pointer<Node> skeletonRoot;
 		std::vector<mat4> inverseBindMatrices;
-		std::vector<Node*> joints;
+		std::vector<Pointer<Node>> joints;
 	};
 
 	// It is invalid to have both 'matrix' and any of 'translation'/'rotation'/'scale'
@@ -24,13 +25,13 @@ namespace vm {
 
 	struct Node
 	{
-		Node *parent;
+		Pointer<Node> parent;
 		uint32_t index;
-		std::vector<Node*> children;
+		std::vector<Pointer<Node>> children;
 		mat4 matrix;
 		std::string name;
-		Mesh *mesh;
-		Skin *skin;
+		Pointer<Mesh> mesh;
+		Pointer<Skin> skin;
 		int32_t skinIndex = -1;
 		vec3 translation;
 		vec3 scale;

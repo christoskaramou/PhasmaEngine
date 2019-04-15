@@ -4,14 +4,14 @@
 #include <vector>
 #include <limits>
 #include <string>
+#include "../Node/Node.h"
 
 namespace vm {
 
-	struct Node;
 	struct AnimationChannel {
 		enum PathType { TRANSLATION, ROTATION, SCALE };
 		PathType path;
-		Node *node;
+		Pointer<Node> node;
 		int32_t samplerIndex;
 	};
 
