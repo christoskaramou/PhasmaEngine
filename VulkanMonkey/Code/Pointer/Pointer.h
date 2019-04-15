@@ -1,8 +1,9 @@
 #pragma once
+#include <type_traits>
 
 namespace vm {
 
-	template<typename T>
+	template<typename T, typename std::enable_if<!std::is_pointer<T>::value >::type* = 0>
 	struct Pointer
 	{
 		uint32_t hLeft;
