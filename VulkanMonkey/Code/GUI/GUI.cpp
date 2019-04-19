@@ -564,13 +564,20 @@ void GUI::initImGui()
 	// Store our identifier
 	io.Fonts->TexID = (ImTextureID)(intptr_t)(VkImage)texture.image;
 
+	vk::FenceCreateInfo fi;
+	vk::Fence fence = vulkan->device.createFence(fi);
+
 	vk::SubmitInfo end_info = {};
 	end_info.commandBufferCount = 1;
 	end_info.pCommandBuffers = &vulkan->dynamicCmdBuffer;
 	vulkan->dynamicCmdBuffer.end();
-	vulkan->graphicsQueue.submit(end_info, nullptr);
+	vulkan->graphicsQueue.submit(end_info, fence);
 
-	vulkan->device.waitIdle();
+	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+	vulkan->device.resetFences(fence);
+
+	vulkan->device.destroyFence(fence);
+	//vulkan->device.waitIdle();
 	stagingBuffer.destroy();
 }
 

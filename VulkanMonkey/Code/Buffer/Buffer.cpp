@@ -40,7 +40,7 @@ void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size)
 {
 	vk::CommandBufferAllocateInfo cbai;
 	cbai.level = vk::CommandBufferLevel::ePrimary;
-	cbai.commandPool = vulkan->commandPool;
+	cbai.commandPool = vulkan->commandPool2;
 	cbai.commandBufferCount = 1;
 	vk::CommandBuffer copyCmd = vulkan->device.allocateCommandBuffers(cbai).at(0);
 
@@ -55,14 +55,19 @@ void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size)
 
 	copyCmd.end();
 
+	vk::FenceCreateInfo fi;
+	vk::Fence fence = vulkan->device.createFence(fi);
+
 	vk::SubmitInfo si;
 	si.commandBufferCount = 1;
 	si.pCommandBuffers = &copyCmd;
-	vulkan->graphicsQueue.submit(si, nullptr);
+	vulkan->graphicsQueue.submit(si, fence);
 
-	vulkan->graphicsQueue.waitIdle();
+	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+	vulkan->device.resetFences(fence);
 
-	vulkan->device.freeCommandBuffers(vulkan->commandPool, copyCmd);
+	vulkan->device.destroyFence(fence);
+	vulkan->device.freeCommandBuffers(vulkan->commandPool2, copyCmd);
 }
 
 void Buffer::destroy()

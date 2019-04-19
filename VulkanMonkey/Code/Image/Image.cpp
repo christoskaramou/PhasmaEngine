@@ -63,7 +63,7 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
 	allocInfo.commandBufferCount = 1;
-	allocInfo.commandPool = vulkan->commandPool;
+	allocInfo.commandPool = vulkan->commandPool2;
 
 	vk::CommandBuffer commandBuffer;
 	commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
@@ -137,12 +137,19 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 
 	commandBuffer.end();
 
+	vk::FenceCreateInfo fi;
+	vk::Fence fence = vulkan->device.createFence(fi);
+
 	vk::SubmitInfo submitInfo;
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &commandBuffer;
-	vulkan->graphicsQueue.submit(submitInfo, nullptr);
+	vulkan->graphicsQueue.submit(submitInfo, fence);
 
-	vulkan->graphicsQueue.waitIdle();
+	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+	vulkan->device.resetFences(fence);
+
+	vulkan->device.destroyFence(fence);
+	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
 }
 
 void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y, const int width, const int height, const uint32_t baseLayer)
@@ -150,7 +157,7 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y,
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
 	allocInfo.commandBufferCount = 1;
-	allocInfo.commandPool = vulkan->commandPool;
+	allocInfo.commandPool = vulkan->commandPool2;
 
 	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
@@ -173,12 +180,19 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y,
 
 	commandBuffer.end();
 
+	vk::FenceCreateInfo fi;
+	vk::Fence fence = vulkan->device.createFence(fi);
+
 	vk::SubmitInfo submitInfo;
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &commandBuffer;
-	vulkan->graphicsQueue.submit(submitInfo, nullptr);
+	vulkan->graphicsQueue.submit(submitInfo, fence);
 
-	vulkan->graphicsQueue.waitIdle();
+	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+	vulkan->device.resetFences(fence);
+
+	vulkan->device.destroyFence(fence);
+	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
 }
 
 void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
@@ -186,7 +200,7 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
 	allocInfo.commandBufferCount = 1;
-	allocInfo.commandPool = vulkan->commandPool;
+	allocInfo.commandPool = vulkan->commandPool2;
 
 	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
@@ -271,12 +285,19 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 
 	commandBuffer.end();
 
+	vk::FenceCreateInfo fi;
+	vk::Fence fence = vulkan->device.createFence(fi);
+
 	vk::SubmitInfo submitInfo;
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &commandBuffer;
-	vulkan->graphicsQueue.submit(submitInfo, nullptr);
+	vulkan->graphicsQueue.submit(submitInfo, fence);
 
-	vulkan->graphicsQueue.waitIdle();
+	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+	vulkan->device.resetFences(fence);
+
+	vulkan->device.destroyFence(fence);
+	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
 }
 
 void Image::createSampler()

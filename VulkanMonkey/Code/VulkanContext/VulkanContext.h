@@ -35,6 +35,7 @@ namespace vm {
 		vk::Device device;
 		vk::Queue graphicsQueue, presentQueue, computeQueue;
 		vk::CommandPool commandPool;
+		vk::CommandPool commandPool2;
 		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
 		Swapchain* swapchain;
 		Image* depth;
