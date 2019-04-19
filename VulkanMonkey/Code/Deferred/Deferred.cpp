@@ -19,7 +19,7 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 {
 	std::deque<vk::DescriptorImageInfo> dsii{};
 	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
-		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eColorAttachmentOptimal });
+		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal });
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 	};
 	std::deque<vk::DescriptorBufferInfo> dsbi{};
@@ -45,17 +45,18 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 void Deferred::draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj, vec2 UVOffset[2])
 {
 	// Begin Composition
-	std::vector<vk::ClearValue> clearValues0 = {
-		vk::ClearColorValue().setFloat32(GUI::clearColor),
-		vk::ClearColorValue().setFloat32(GUI::clearColor) };
+	vk::ClearColorValue clearColor;
+	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
-	auto renderPassInfo0 = vk::RenderPassBeginInfo()
-		.setRenderPass(compositionRenderPass)
-		.setFramebuffer(compositionFrameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
-		.setClearValueCount(static_cast<uint32_t>(clearValues0.size()))
-		.setPClearValues(clearValues0.data());
-	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo0, vk::SubpassContents::eInline);
+	std::vector<vk::ClearValue> clearValues = { clearColor, clearColor };
+
+	vk::RenderPassBeginInfo rpi;
+	rpi.renderPass = compositionRenderPass;
+	rpi.framebuffer = compositionFrameBuffers[imageIndex];
+	rpi.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
+	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
+	rpi.pClearValues = clearValues.data();
+	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 	vec4 screenSpace[7];
 	screenSpace[0] = { GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, GUI::show_tonemapping ? 1.f : 0.f, GUI::show_FXAA ? 1.f : 0.f };

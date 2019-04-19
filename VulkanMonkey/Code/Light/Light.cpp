@@ -19,21 +19,24 @@ void LightUniforms::createLightUniforms()
 	LightsUBO lubo;
 	memcpy(uniform.data, &lubo, uniform.size);
 
-	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(vulkan->descriptorPool)
-		.setDescriptorSetCount(1)
-		.setPSetLayouts(&descriptorSetLayout);
+	vk::DescriptorSetAllocateInfo allocateInfo;
+	allocateInfo.descriptorPool = vulkan->descriptorPool;
+	allocateInfo.descriptorSetCount = 1;
+	allocateInfo.pSetLayouts = &descriptorSetLayout;
 	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
-	auto writeSet = vk::WriteDescriptorSet()
-		.setDstSet(descriptorSet)								// DescriptorSet dstSet;
-		.setDstBinding(0)										// uint32_t dstBinding;
-		.setDstArrayElement(0)									// uint32_t dstArrayElement;
-		.setDescriptorCount(1)									// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eUniformBuffer)	// DescriptorType descriptorType;
-		.setPBufferInfo(&vk::DescriptorBufferInfo()				// const DescriptorBufferInfo* pBufferInfo;
-			.setBuffer(uniform.buffer)							// Buffer buffer;
-			.setOffset(0)											// DeviceSize offset;
-			.setRange(uniform.size));							// DeviceSize range;
+
+	vk::DescriptorBufferInfo dbi;
+	dbi.buffer = uniform.buffer;
+	dbi.offset = 0;
+	dbi.range = uniform.size;
+
+	vk::WriteDescriptorSet writeSet;
+	writeSet.dstSet = descriptorSet;
+	writeSet.dstBinding = 0;
+	writeSet.dstArrayElement = 0;
+	writeSet.descriptorCount = 1;
+	writeSet.descriptorType = vk::DescriptorType::eUniformBuffer;
+	writeSet.pBufferInfo = &dbi;							// DeviceSize range;
 	vulkan->device.updateDescriptorSets(writeSet, nullptr);
 }
 

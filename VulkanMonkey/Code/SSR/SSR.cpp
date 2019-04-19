@@ -8,10 +8,10 @@ void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 	UBReflection.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UBReflection.data = vulkan->device.mapMemory(UBReflection.memory, 0, UBReflection.size);
 
-	auto const allocateInfo2 = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(vulkan->descriptorPool)
-		.setDescriptorSetCount(1)
-		.setPSetLayouts(&DSLayoutReflection);
+	vk::DescriptorSetAllocateInfo allocateInfo2;
+	allocateInfo2.descriptorPool = vulkan->descriptorPool;
+	allocateInfo2.descriptorSetCount = 1;
+	allocateInfo2.pSetLayouts = &DSLayoutReflection;
 	DSReflection = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
 
 	updateDescriptorSets(renderTargets);
@@ -21,7 +21,7 @@ void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
 	std::deque<vk::DescriptorImageInfo> dsii{};
 	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
-		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eColorAttachmentOptimal });
+		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal });
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 	};
 	std::deque<vk::DescriptorBufferInfo> dsbi{};
@@ -42,15 +42,19 @@ void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 
 void SSR::draw(uint32_t imageIndex, const vec2 UVOffset[2])
 {
-	std::vector<vk::ClearValue> clearValues1 = {
-	vk::ClearColorValue().setFloat32(GUI::clearColor) };
-	auto renderPassInfo1 = vk::RenderPassBeginInfo()
-		.setRenderPass(renderPass)
-		.setFramebuffer(frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
-		.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
-		.setPClearValues(clearValues1.data());
-	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfo1, vk::SubpassContents::eInline);
+	vk::ClearColorValue clearColor;
+	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
+
+	std::vector<vk::ClearValue> clearValues = { clearColor };
+
+	vk::RenderPassBeginInfo renderPassInfo;
+	renderPassInfo.renderPass = renderPass;
+	renderPassInfo.framebuffer = frameBuffers[imageIndex];
+	renderPassInfo.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
+	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+	renderPassInfo.pClearValues = clearValues.data();
+
+	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
 	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vec2), UVOffset);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSReflection, nullptr);

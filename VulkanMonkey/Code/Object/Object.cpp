@@ -59,36 +59,39 @@ void Object::loadTexture(const std::string& path)
 
 void Object::createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout)
 {
-	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(vulkan->descriptorPool)
-		.setDescriptorSetCount(1)
-		.setPSetLayouts(&descriptorSetLayout);
+	vk::DescriptorSetAllocateInfo allocateInfo;
+	allocateInfo.descriptorPool = vulkan->descriptorPool;
+	allocateInfo.descriptorSetCount = 1;
+	allocateInfo.pSetLayouts = &descriptorSetLayout;
 	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
 
 	std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 	// MVP
-	textureWriteSets[0] = vk::WriteDescriptorSet()
-		.setDstSet(descriptorSet)										// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eUniformBuffer)	        // DescriptorType descriptorType;
-		.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorBufferInfo* pBufferInfo;
-			.setBuffer(uniformBuffer.buffer)							// Buffer buffer;
-			.setOffset(0)													// DeviceSize offset;
-			.setRange(uniformBuffer.size));									// DeviceSize range;
+	vk::DescriptorBufferInfo dbi;
+	dbi.buffer = uniformBuffer.buffer;
+	dbi.offset = 0;
+	dbi.range = uniformBuffer.size;
+
+	textureWriteSets[0].dstSet = descriptorSet;
+	textureWriteSets[0].dstBinding = 0;
+	textureWriteSets[0].dstArrayElement = 0;
+	textureWriteSets[0].descriptorCount = 1;
+	textureWriteSets[0].descriptorType = vk::DescriptorType::eUniformBuffer;
+	textureWriteSets[0].pBufferInfo = &dbi;
+
 	// texture sampler
-	textureWriteSets[1] = vk::WriteDescriptorSet()
-		.setDstSet(descriptorSet)										// DescriptorSet dstSet;
-		.setDstBinding(1)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(texture.sampler)									// Sampler sampler;
-			.setImageView(texture.view)										// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
+	vk::DescriptorImageInfo dii;
+	dii.sampler = texture.sampler;
+	dii.imageView = texture.view;
+	dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+	textureWriteSets[1].dstSet = descriptorSet;
+	textureWriteSets[1].dstBinding = 1;
+	textureWriteSets[1].dstArrayElement = 0;
+	textureWriteSets[1].descriptorCount = 1;
+	textureWriteSets[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+	textureWriteSets[1].pImageInfo = &dii;
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 

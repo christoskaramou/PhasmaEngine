@@ -4,18 +4,18 @@ using namespace vm;
 
 void Image::createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples)
 {
-	auto const imageInfo = vk::ImageCreateInfo()
-		.setFlags(imageCreateFlags)
-		.setImageType(vk::ImageType::e2D)
-		.setFormat(format)
-		.setExtent({ width, height, 1 })
-		.setMipLevels(mipLevels)
-		.setArrayLayers(arrayLayers)
-		.setSamples(samples)
-		.setTiling(tiling)
-		.setUsage(usage)
-		.setSharingMode(vk::SharingMode::eExclusive)
-		.setInitialLayout(initialLayout);
+	vk::ImageCreateInfo imageInfo;
+	imageInfo.flags = imageCreateFlags;
+	imageInfo.imageType = vk::ImageType::e2D;
+	imageInfo.format = format;
+	imageInfo.extent = { width, height, 1 };
+	imageInfo.mipLevels = mipLevels;
+	imageInfo.arrayLayers = arrayLayers;
+	imageInfo.samples = samples;
+	imageInfo.tiling = tiling;
+	imageInfo.usage = usage;
+	imageInfo.sharingMode = vk::SharingMode::eExclusive;
+	imageInfo.initialLayout = initialLayout;
 	//vk::ImageFormatProperties imageFormatProperties = vulkan->gpu.getImageFormatProperties(format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
 
 	image = vulkan->device.createImage(imageInfo);
@@ -39,9 +39,9 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 		}
 	}
 
-	auto const allocInfo = vk::MemoryAllocateInfo()
-		.setAllocationSize(memRequirements.size)
-		.setMemoryTypeIndex(memTypeIndex);
+	vk::MemoryAllocateInfo allocInfo;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = memTypeIndex;
 
 	memory = vulkan->device.allocateMemory(allocInfo);
 	vulkan->device.bindImageMemory(image, memory, 0);
@@ -49,85 +49,77 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 
 void Image::createImageView(const vk::ImageAspectFlags aspectFlags)
 {
-	auto const viewInfo = vk::ImageViewCreateInfo()
-		.setImage(image)
-		.setViewType(viewType)
-		.setFormat(format)
-		.setSubresourceRange({ aspectFlags, 0, mipLevels, 0, arrayLayers });
+	vk::ImageViewCreateInfo viewInfo;
+	viewInfo.image = image;
+	viewInfo.viewType = viewType;
+	viewInfo.format = format;
+	viewInfo.subresourceRange = { aspectFlags, 0, mipLevels, 0, arrayLayers };
 
 	view = vulkan->device.createImageView(viewInfo);
 }
 
 void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout)
 {
-	auto const allocInfo = vk::CommandBufferAllocateInfo()
-		.setLevel(vk::CommandBufferLevel::ePrimary)
-		.setCommandBufferCount(1)
-		.setCommandPool(vulkan->commandPool);
+	vk::CommandBufferAllocateInfo allocInfo;
+	allocInfo.level = vk::CommandBufferLevel::ePrimary;
+	allocInfo.commandBufferCount = 1;
+	allocInfo.commandPool = vulkan->commandPool;
 
 	vk::CommandBuffer commandBuffer;
 	commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
-	auto const beginInfo = vk::CommandBufferBeginInfo()
-		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+	vk::CommandBufferBeginInfo beginInfo;
+	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 	commandBuffer.begin(beginInfo);
 
-	auto barrier = vk::ImageMemoryBarrier()
-		.setOldLayout(oldLayout)
-		.setNewLayout(newLayout)
-		.setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-		.setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-		.setImage(image);
+	vk::ImageMemoryBarrier barrier;
+	barrier.oldLayout = oldLayout;
+	barrier.newLayout = newLayout;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.image = image;
 
 	vk::PipelineStageFlags srcStage;
 	vk::PipelineStageFlags dstStage;
 
 	// Subresource aspectMask
 	if (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
-		barrier.setSubresourceRange({ vk::ImageAspectFlagBits::eDepth, 0, mipLevels, 0, arrayLayers });
+		barrier.subresourceRange = { vk::ImageAspectFlagBits::eDepth, 0, mipLevels, 0, arrayLayers };
 		if (format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint) {
 			barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eStencil;
 		}
 	}
-	else barrier.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, mipLevels, 0, arrayLayers });
+	else barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, mipLevels, 0, arrayLayers };
 
 	// Src, Dst AccessMasks and Pipeline Stages for pipelineBarrier
 	if (oldLayout == vk::ImageLayout::ePreinitialized && newLayout == vk::ImageLayout::eTransferSrcOptimal) {
-		barrier
-			.setSrcAccessMask(vk::AccessFlagBits::eHostWrite)
-			.setDstAccessMask(vk::AccessFlagBits::eTransferRead);
+		barrier.srcAccessMask = vk::AccessFlagBits::eHostWrite;
+		barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
 
 		srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
 		dstStage = vk::PipelineStageFlagBits::eTransfer;
 	}
 	else if (oldLayout == vk::ImageLayout::ePreinitialized && newLayout == vk::ImageLayout::eTransferDstOptimal) {
-		barrier
-			.setSrcAccessMask(vk::AccessFlags())
-			.setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
+		barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
 
 		srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
 		dstStage = vk::PipelineStageFlagBits::eTransfer;
 	}
 	else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
-		barrier
-			.setSrcAccessMask(vk::AccessFlags())
-			.setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
+		barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
 
 		srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
 		dstStage = vk::PipelineStageFlagBits::eTransfer;
 	}
 	else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
-		barrier
-			.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
-			.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+		barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+		barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
 		srcStage = vk::PipelineStageFlagBits::eTransfer;
 		dstStage = vk::PipelineStageFlagBits::eFragmentShader;
 	}
 	else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
-		barrier
-			.setSrcAccessMask(vk::AccessFlags())
-			.setDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+		barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
 
 		srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
 		dstStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
@@ -145,9 +137,9 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 
 	commandBuffer.end();
 
-	auto const submitInfo = vk::SubmitInfo()
-		.setCommandBufferCount(1)
-		.setPCommandBuffers(&commandBuffer);
+	vk::SubmitInfo submitInfo;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &commandBuffer;
 	vulkan->graphicsQueue.submit(submitInfo, nullptr);
 
 	vulkan->graphicsQueue.waitIdle();
@@ -155,15 +147,15 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 
 void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y, const int width, const int height, const uint32_t baseLayer)
 {
-	auto const allocInfo = vk::CommandBufferAllocateInfo()
-		.setLevel(vk::CommandBufferLevel::ePrimary)
-		.setCommandBufferCount(1)
-		.setCommandPool(vulkan->commandPool);
+	vk::CommandBufferAllocateInfo allocInfo;
+	allocInfo.level = vk::CommandBufferLevel::ePrimary;
+	allocInfo.commandBufferCount = 1;
+	allocInfo.commandPool = vulkan->commandPool;
 
 	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
-	auto const beginInfo = vk::CommandBufferBeginInfo()
-		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+	vk::CommandBufferBeginInfo beginInfo;
+	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 	commandBuffer.begin(beginInfo);
 
 	vk::BufferImageCopy region;
@@ -181,9 +173,9 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y,
 
 	commandBuffer.end();
 
-	auto const submitInfo = vk::SubmitInfo()
-		.setCommandBufferCount(1)
-		.setPCommandBuffers(&commandBuffer);
+	vk::SubmitInfo submitInfo;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &commandBuffer;
 	vulkan->graphicsQueue.submit(submitInfo, nullptr);
 
 	vulkan->graphicsQueue.waitIdle();
@@ -191,15 +183,15 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y,
 
 void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 {
-	auto const allocInfo = vk::CommandBufferAllocateInfo()
-		.setLevel(vk::CommandBufferLevel::ePrimary)
-		.setCommandBufferCount(1)
-		.setCommandPool(vulkan->commandPool);
+	vk::CommandBufferAllocateInfo allocInfo;
+	allocInfo.level = vk::CommandBufferLevel::ePrimary;
+	allocInfo.commandBufferCount = 1;
+	allocInfo.commandPool = vulkan->commandPool;
 
 	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
-	auto const beginInfo = vk::CommandBufferBeginInfo()
-		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+	vk::CommandBufferBeginInfo beginInfo;
+	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 	commandBuffer.begin(beginInfo);
 
 	vk::ImageMemoryBarrier barrier = {};
@@ -279,9 +271,9 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 
 	commandBuffer.end();
 
-	auto const submitInfo = vk::SubmitInfo()
-		.setCommandBufferCount(1)
-		.setPCommandBuffers(&commandBuffer);
+	vk::SubmitInfo submitInfo;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &commandBuffer;
 	vulkan->graphicsQueue.submit(submitInfo, nullptr);
 
 	vulkan->graphicsQueue.waitIdle();
@@ -289,22 +281,22 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 
 void Image::createSampler()
 {
-	auto const samplerInfo = vk::SamplerCreateInfo()
-		.setMagFilter(filter)
-		.setMinFilter(filter)
-		.setMipmapMode(samplerMipmapMode)
-		.setMinLod(minLod)
-		.setMaxLod(maxLod)
-		.setMipLodBias(0.f)
-		.setAddressModeU(addressMode)
-		.setAddressModeV(addressMode)
-		.setAddressModeW(addressMode)
-		.setAnisotropyEnable(anisotropyEnabled)
-		.setMaxAnisotropy(maxAnisotropy)
-		.setCompareEnable(samplerCompareEnable)
-		.setCompareOp(compareOp)
-		.setBorderColor(borderColor)
-		.setUnnormalizedCoordinates(VK_FALSE);
+	vk::SamplerCreateInfo samplerInfo;
+	samplerInfo.magFilter = filter;
+	samplerInfo.minFilter = filter;
+	samplerInfo.mipmapMode = samplerMipmapMode;
+	samplerInfo.minLod = minLod;
+	samplerInfo.maxLod = maxLod;
+	samplerInfo.mipLodBias = 0.f;
+	samplerInfo.addressModeU = addressMode;
+	samplerInfo.addressModeV = addressMode;
+	samplerInfo.addressModeW = addressMode;
+	samplerInfo.anisotropyEnable = anisotropyEnabled;
+	samplerInfo.maxAnisotropy = maxAnisotropy;
+	samplerInfo.compareEnable = samplerCompareEnable;
+	samplerInfo.compareOp = compareOp;
+	samplerInfo.borderColor = borderColor;
+	samplerInfo.unnormalizedCoordinates = VK_FALSE;
 	sampler = vulkan->device.createSampler(samplerInfo);
 }
 

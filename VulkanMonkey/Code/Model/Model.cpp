@@ -299,41 +299,40 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 vk::DescriptorSetLayout Model::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
-		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
 
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(0) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
-			.setPImmutableSamplers(nullptr)
-			.setStageFlags(vk::ShaderStageFlagBits::eVertex)); // which pipeline shader stages can access
+		vk::DescriptorSetLayoutBinding dslb;
+		dslb.binding = 0;
+		dslb.descriptorCount = 1; // number of descriptors contained
+		dslb.descriptorType = vk::DescriptorType::eUniformBuffer;
+		dslb.stageFlags = vk::ShaderStageFlagBits::eVertex;
 
-		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
-			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
-			.setPBindings(descriptorSetLayoutBinding.data());
-		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(createInfo);
+		vk::DescriptorSetLayoutCreateInfo dslci;
+		dslci.bindingCount = 1;
+		dslci.pBindings = &dslb;
+		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(dslci);
 	}
 	return descriptorSetLayout;
 }
 
 void vm::Model::batchStart(uint32_t imageIndex, Deferred& deferred)
 {
-	std::vector<vk::ClearValue> clearValues = {
-	vk::ClearColorValue().setFloat32(GUI::clearColor),
-	vk::ClearColorValue().setFloat32(GUI::clearColor),
-	vk::ClearColorValue().setFloat32(GUI::clearColor),
-	vk::ClearColorValue().setFloat32(GUI::clearColor),
-	vk::ClearColorValue().setFloat32(GUI::clearColor),
-	vk::ClearColorValue().setFloat32(GUI::clearColor),
-	vk::ClearDepthStencilValue({ 0.0f, 0 }) };
-	auto renderPassInfo = vk::RenderPassBeginInfo()
-		.setRenderPass(deferred.renderPass)
-		.setFramebuffer(deferred.frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, VulkanContext::get().surface->actualExtent })
-		.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
-		.setPClearValues(clearValues.data());
+	vk::ClearColorValue clearColor;
+	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
-	VulkanContext::get().dynamicCmdBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+	vk::ClearDepthStencilValue depthStencil;
+	depthStencil.depth = 0.f;
+	depthStencil.stencil = 0;
+
+	std::vector<vk::ClearValue> clearValues = { clearColor, clearColor, clearColor, clearColor, clearColor, clearColor, depthStencil };
+
+	vk::RenderPassBeginInfo rpi;
+	rpi.renderPass = deferred.renderPass;
+	rpi.framebuffer = deferred.frameBuffers[imageIndex];
+	rpi.renderArea = { { 0, 0 }, VulkanContext::get().surface->actualExtent };
+	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
+	rpi.pClearValues = clearValues.data();
+
+	VulkanContext::get().dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
 	Model::pipeline = &deferred.pipeline;
 }
 
@@ -771,10 +770,10 @@ void Model::createDescriptorSets()
 	};
 
 	// model dSet
-	auto const allocateInfo0 = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(vulkan->descriptorPool)
-		.setDescriptorSetCount(1)
-		.setPSetLayouts(&Model::getDescriptorSetLayout());
+	vk::DescriptorSetAllocateInfo allocateInfo0;
+	allocateInfo0.descriptorPool = vulkan->descriptorPool;
+	allocateInfo0.descriptorSetCount = 1;
+	allocateInfo0.pSetLayouts = &Model::getDescriptorSetLayout();
 	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo0).at(0);
 
 	vulkan->device.updateDescriptorSets(wSetBuffer(descriptorSet, 0, uniformBuffer), nullptr);
@@ -786,10 +785,10 @@ void Model::createDescriptorSets()
 			if (!node->mesh) continue;
 			auto& mesh = *node->mesh.get();
 
-			auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-				.setDescriptorPool(vulkan->descriptorPool)
-				.setDescriptorSetCount(1)
-				.setPSetLayouts(&Mesh::getDescriptorSetLayout());
+			vk::DescriptorSetAllocateInfo allocateInfo;
+			allocateInfo.descriptorPool = vulkan->descriptorPool;
+			allocateInfo.descriptorSetCount = 1;
+			allocateInfo.pSetLayouts = &Mesh::getDescriptorSetLayout();
 			mesh.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
 			vulkan->device.updateDescriptorSets(wSetBuffer(mesh.descriptorSet, 0, mesh.uniformBuffer), nullptr);
@@ -797,10 +796,10 @@ void Model::createDescriptorSets()
 			// primitive dSets
 			for (auto& primitive : mesh.primitives) {
 
-				auto const allocateInfo2 = vk::DescriptorSetAllocateInfo()
-					.setDescriptorPool(vulkan->descriptorPool)
-					.setDescriptorSetCount(1)
-					.setPSetLayouts(&Primitive::getDescriptorSetLayout());
+				vk::DescriptorSetAllocateInfo allocateInfo2;
+				allocateInfo2.descriptorPool = vulkan->descriptorPool;
+				allocateInfo2.descriptorSetCount = 1;
+				allocateInfo2.pSetLayouts = &Primitive::getDescriptorSetLayout();
 				primitive.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
 
 				std::vector<vk::WriteDescriptorSet> textureWriteSets{

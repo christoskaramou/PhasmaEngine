@@ -10,55 +10,21 @@ std::map<std::string, Image> Mesh::uniqueTextures{};
 vk::DescriptorSetLayout Primitive::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
-		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
-
-		// binding for mesh texture
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(0) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-			.setPImmutableSamplers(nullptr)
-			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
-
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(1) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-			.setPImmutableSamplers(nullptr)
-			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
-
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(2) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-			.setPImmutableSamplers(nullptr)
-			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
-
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(3) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-			.setPImmutableSamplers(nullptr)
-			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
-
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(4) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-			.setPImmutableSamplers(nullptr)
-			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
-
-		// binding for mesh factors and values
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(5) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
-			.setStageFlags(vk::ShaderStageFlagBits::eVertex)); // which pipeline shader stages can access
-
-		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
-			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
-			.setPBindings(descriptorSetLayoutBinding.data());
-		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(createInfo);
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, vk::ShaderStageFlags stageFlag) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlag, nullptr };
+		};
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
+			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
+			layoutBinding(2, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
+			layoutBinding(3, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
+			layoutBinding(4, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
+			layoutBinding(5, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex),
+		};
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
+		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
 	}
 	return descriptorSetLayout;
 }
@@ -66,19 +32,16 @@ vk::DescriptorSetLayout Primitive::getDescriptorSetLayout()
 vk::DescriptorSetLayout vm::Mesh::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
-		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
-
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(0) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
-			.setPImmutableSamplers(nullptr)
-			.setStageFlags(vk::ShaderStageFlagBits::eVertex)); // which pipeline shader stages can access
-
-		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
-			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
-			.setPBindings(descriptorSetLayoutBinding.data());
-		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(createInfo);
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eVertex, nullptr };
+		};
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eUniformBuffer),
+		};
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
+		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
 	}
 	return descriptorSetLayout;
 }

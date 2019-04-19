@@ -39,14 +39,14 @@ namespace vm {
 		// VULKAN CONTEXT
 		VulkanContext &vulkan = VulkanContext::get();
 
+		// COMPUTE
+		ComputePool& computePool = ComputePool::get();
+
 		// RENDER TARGETS
 		std::map<std::string, Image> renderTargets{};
 
 		// SHADOWS
 		Shadows shadows;
-
-		// COMPUTE
-		Compute compute;
 
 		// DEFERRED
 		Deferred deferred;
@@ -84,6 +84,7 @@ namespace vm {
 
 		// Metrics
 		std::vector<Metrics> metrics{};
+
 #ifdef USE_SCRIPTS
 		// Scripts
 		std::vector<Script*> scripts{};
@@ -121,9 +122,7 @@ namespace vm {
 		vk::Queue getComputeQueue();
 		Swapchain createSwapchain();
 		vk::CommandPool createCommandPool();
-		vk::CommandPool createComputeCommadPool();
 		void addRenderTarget(const std::string& name, vk::Format format);
-		vk::RenderPass createRenderPass();
 		vk::RenderPass createDeferredRenderPass();
 		vk::RenderPass createCompositionRenderPass();
 		vk::RenderPass createSSAORenderPass();
@@ -150,7 +149,6 @@ namespace vm {
 		std::vector<vk::Framebuffer> createShadowsFrameBuffers();
 		std::vector<vk::Framebuffer> createSkyboxFrameBuffers(SkyBox& skybox);
 		std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount = 1);
-		std::vector<vk::CommandBuffer> createComputeCmdBuffer(const uint32_t bufferCount = 1);
 		Pipeline createPipeline(const PipelineInfo& specificInfo);
 		Pipeline createCompositionPipeline();
 		Pipeline createSSRPipeline();
@@ -162,7 +160,6 @@ namespace vm {
 		Pipeline createSSAOPipeline();
 		Pipeline createSSAOBlurPipeline();
 		Pipeline createMotionBlurPipeline();
-		Pipeline createComputePipeline();
 		vk::DescriptorPool createDescriptorPool(const uint32_t maxDescriptorSets);
 		std::vector<vk::Fence> createFences(const uint32_t fenceCount);
 		std::vector<vk::Semaphore> createSemaphores(const uint32_t semaphoresCount);

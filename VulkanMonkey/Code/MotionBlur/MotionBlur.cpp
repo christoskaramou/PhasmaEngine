@@ -8,10 +8,10 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 	UBmotionBlur.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UBmotionBlur.data = vulkan->device.mapMemory(UBmotionBlur.memory, 0, UBmotionBlur.size);
 
-	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(vulkan->descriptorPool)
-		.setDescriptorSetCount(1)
-		.setPSetLayouts(&DSLayoutMotionBlur);
+	vk::DescriptorSetAllocateInfo allocateInfo;
+	allocateInfo.descriptorPool = vulkan->descriptorPool;
+	allocateInfo.descriptorSetCount = 1;
+	allocateInfo.pSetLayouts = &DSLayoutMotionBlur;
 	DSMotionBlur = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
 	updateDescriptorSets(renderTargets);
@@ -21,7 +21,7 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 {
 	std::deque<vk::DescriptorImageInfo> dsii{};
 	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
-		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eColorAttachmentOptimal });
+		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal });
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 	};
 	std::deque<vk::DescriptorBufferInfo> dsbi{};
@@ -45,16 +45,19 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 
 void MotionBlur::draw(uint32_t imageIndex, const vec2 UVOffset[2])
 {
-	std::vector<vk::ClearValue> clearValues1 = {
-	vk::ClearColorValue().setFloat32(GUI::clearColor) };
+	vk::ClearColorValue clearColor;
+	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
-	auto renderPassInfo1 = vk::RenderPassBeginInfo()
-		.setRenderPass(renderPass)
-		.setFramebuffer(frameBuffers[imageIndex])
-		.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
-		.setClearValueCount(static_cast<uint32_t>(clearValues1.size()))
-		.setPClearValues(clearValues1.data());
-	vulkan->dynamicCmdBuffer.beginRenderPass(renderPassInfo1, vk::SubpassContents::eInline);
+	std::vector<vk::ClearValue> clearValues = { clearColor };
+
+	vk::RenderPassBeginInfo rpi;
+	rpi.renderPass = renderPass;
+	rpi.framebuffer = frameBuffers[imageIndex];
+	rpi.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
+	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
+	rpi.pClearValues = clearValues.data();
+	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
+
 	vec4 fps[2]{ {1.f / Timer::delta}, {UVOffset[0].x, UVOffset[0].y, UVOffset[1].x, UVOffset[1].y} };
 	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vec4), &fps);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);

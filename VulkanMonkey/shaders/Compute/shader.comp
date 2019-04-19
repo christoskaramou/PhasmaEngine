@@ -1,53 +1,15 @@
 #version 450
-#extension GL_GOOGLE_include_directive : require
 
-#define dFdx // avoiding the dFdx in common.glsl because it is for fragment shaders only
-#define dFdy // avoiding the dFdy in common.glsl because it is for fragment shaders only
-#include "../Common/common.glsl"
-
-struct SBOIn {
-	uint pLeft;
-	uint pRight;
-	uint dummy[2];
-	vec4 boundingSphere; };
-
-struct SBOOut {
+struct SBO {
 	uint pLeft;
 	uint pRight;
 	uint dummy[2]; };
 
 layout (local_size_x = 32, local_size_y = 32) in;
-layout(std430, binding = 0) readonly buffer dataIn { SBOIn data_in[]; };
-layout(std430, binding = 1) writeonly buffer dataOut { SBOOut data_out[]; };
-layout(binding = 2) uniform UBO { mat4 invViewProj; vec4 data; vec4 size;} ubo;
-layout(binding = 3) uniform sampler2D samplerDepth;
+layout(std430, binding = 0) readonly buffer dataIn { SBO data_in[]; };
+layout(std430, binding = 1) writeonly buffer dataOut { SBO data_out[]; };
 
-bool hit(vec3 worldPos, vec4 bs);
 
 void main() {
-	ivec2 texDim = textureSize(samplerDepth, 0);
-	if (gl_GlobalInvocationID.x > texDim.x || gl_GlobalInvocationID.y > texDim.y)
-		return;
-
-	vec2 texelSize = 1.0 / vec2(float(texDim.x), float(texDim.y));
-	vec2 UV = vec2(float(gl_GlobalInvocationID.x), float(gl_GlobalInvocationID.y)) * texelSize;
-	vec3 worldPos = getPosFromUV(UV, texture(samplerDepth, UV).x, ubo.invViewProj, ubo.size);
-	vec3 camPos = vec3(ubo.data.x, ubo.data.y, ubo.data.z);
-
-	int primitiveCount = int(ubo.data.w);
-	for (int i = 0; i < primitiveCount; i++){
-		if (hit(worldPos, data_in[i].boundingSphere)){
-			data_out[i].pLeft = data_in[i].pLeft;
-			data_out[i].pRight = data_in[i].pRight;
-		}
-	}
-}
-
-bool hit(vec3 worldPos, vec4 bs) {
-	vec3 center = vec3(bs.x, bs.y, bs.z);
-	float radius = bs.w;
-	vec3 dist = worldPos - center;
-	if (dot(dist, dist) < radius * radius)
-		return true;
-	return false;
+	
 }

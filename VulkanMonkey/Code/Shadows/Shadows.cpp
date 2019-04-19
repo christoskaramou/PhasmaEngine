@@ -8,10 +8,10 @@ uint32_t					Shadows::imageSize = 4096;
 
 void Shadows::createDescriptorSets()
 {
-	auto allocateInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(vulkan->descriptorPool)
-		.setDescriptorSetCount(1)
-		.setPSetLayouts(&descriptorSetLayout);
+	vk::DescriptorSetAllocateInfo allocateInfo;
+	allocateInfo.descriptorPool = vulkan->descriptorPool;
+	allocateInfo.descriptorSetCount = 1;
+	allocateInfo.pSetLayouts = &descriptorSetLayout;
 
 	descriptorSets.resize(3); // size of wanted number of cascaded shadows
 	for (uint32_t i = 0; i < 3; i++) {
@@ -19,27 +19,30 @@ void Shadows::createDescriptorSets()
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 		// MVP
-		textureWriteSets[0] = vk::WriteDescriptorSet()
-			.setDstSet(descriptorSets[i])									// DescriptorSet dstSet;
-			.setDstBinding(0)												// uint32_t dstBinding;
-			.setDstArrayElement(0)											// uint32_t dstArrayElement;
-			.setDescriptorCount(1)											// uint32_t descriptorCount;
-			.setDescriptorType(vk::DescriptorType::eUniformBuffer)			// DescriptorType descriptorType;
-			.setPBufferInfo(&vk::DescriptorBufferInfo()						// const DescriptorBufferInfo* pBufferInfo;
-				.setBuffer(uniformBuffers[i].buffer)							// Buffer buffer;
-				.setOffset(0)													// DeviceSize offset;
-				.setRange(sizeof(ShadowsUBO)));									// DeviceSize range;
+		vk::DescriptorBufferInfo dbi;
+		dbi.buffer = uniformBuffers[i].buffer;
+		dbi.offset = 0;
+		dbi.range = sizeof(ShadowsUBO);
+
+		textureWriteSets[0].dstSet = descriptorSets[i];
+		textureWriteSets[0].dstBinding = 0;
+		textureWriteSets[0].dstArrayElement = 0;
+		textureWriteSets[0].descriptorCount = 1;
+		textureWriteSets[0].descriptorType = vk::DescriptorType::eUniformBuffer;
+		textureWriteSets[0].pBufferInfo = &dbi;
+
 		// sampler
-		textureWriteSets[1] = vk::WriteDescriptorSet()
-			.setDstSet(descriptorSets[i])									// DescriptorSet dstSet;
-			.setDstBinding(1)												// uint32_t dstBinding;
-			.setDstArrayElement(0)											// uint32_t dstArrayElement;
-			.setDescriptorCount(1)											// uint32_t descriptorCount;
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-			.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-				.setSampler(textures[i].sampler)									// Sampler sampler;
-				.setImageView(textures[i].view)										// ImageView imageView;
-				.setImageLayout(vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal));// ImageLayout imageLayout;
+		vk::DescriptorImageInfo dii;
+		dii.sampler = textures[i].sampler;
+		dii.imageView = textures[i].view;
+		dii.imageLayout = vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal;
+
+		textureWriteSets[1].dstSet = descriptorSets[i];
+		textureWriteSets[1].dstBinding = 1;
+		textureWriteSets[1].dstArrayElement = 0;
+		textureWriteSets[1].descriptorCount = 1;
+		textureWriteSets[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+		textureWriteSets[1].pImageInfo = &dii;
 
 		vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 	}
@@ -48,26 +51,17 @@ void Shadows::createDescriptorSets()
 vk::DescriptorSetLayout Shadows::getDescriptorSetLayout(vk::Device device)
 {
 	if (!descriptorSetLayout) {
-		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
-
-		// binding for model mvp matrix
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(0) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
-			.setStageFlags(vk::ShaderStageFlagBits::eVertex)); // which pipeline shader stages can access
-
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(1) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-			.setPImmutableSamplers(nullptr)
-			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
-
-		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
-			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
-			.setPBindings(descriptorSetLayoutBinding.data());
-		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, vk::ShaderStageFlags stageFlags) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlags, nullptr };
+		};
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex),
+			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler,vk::ShaderStageFlagBits::eFragment),
+		};
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
+		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
 	}
 	return descriptorSetLayout;
 }

@@ -34,11 +34,11 @@ namespace vm {
 		vk::PhysicalDeviceFeatures gpuFeatures;
 		vk::Device device;
 		vk::Queue graphicsQueue, presentQueue, computeQueue;
-		vk::CommandPool commandPool, commandPoolCompute;
+		vk::CommandPool commandPool;
 		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
 		Swapchain* swapchain;
 		Image* depth;
-		vk::CommandBuffer dynamicCmdBuffer, computeCmdBuffer;
+		vk::CommandBuffer dynamicCmdBuffer;
 		std::vector<vk::CommandBuffer> shadowCmdBuffer{};
 		vk::DescriptorPool descriptorPool;
 		std::vector<vk::Fence> fences{};

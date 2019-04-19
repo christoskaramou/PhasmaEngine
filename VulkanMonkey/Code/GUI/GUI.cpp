@@ -394,20 +394,16 @@ void GUI::RenderingWindowBox()
 vk::DescriptorSetLayout GUI::getDescriptorSetLayout(vk::Device device)
 {
 	if (!descriptorSetLayout) {
-		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
-
 		// binding for gui texture
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(0) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-			.setPImmutableSamplers(nullptr)
-			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
+		vk::DescriptorSetLayoutBinding descriptorSetLayoutBinding;
+		descriptorSetLayoutBinding.binding = 0;
+		descriptorSetLayoutBinding.descriptorCount = 1;
+		descriptorSetLayoutBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+		descriptorSetLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-
-		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
-			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
-			.setPBindings(descriptorSetLayoutBinding.data());
+		vk::DescriptorSetLayoutCreateInfo createInfo;
+		createInfo.bindingCount = 1;
+		createInfo.pBindings = &descriptorSetLayoutBinding;
 		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
 	}
 	return descriptorSetLayout;
@@ -489,9 +485,8 @@ void GUI::initImGui()
 #endif
 	windowStyle();
 
-	auto beginInfo = vk::CommandBufferBeginInfo()
-		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
-		.setPInheritanceInfo(nullptr);
+	vk::CommandBufferBeginInfo beginInfo;
+	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 	vulkan->dynamicCmdBuffer.begin(beginInfo);
 
 	// Create fonts texture
@@ -603,18 +598,24 @@ void GUI::draw(uint32_t imageIndex)
 	auto draw_data = ImGui::GetDrawData();
 	if (render && draw_data->TotalVtxCount > 0)
 	{
-		std::vector<vk::ClearValue> clearValues = {
-			vk::ClearColorValue().setFloat32(GUI::clearColor),
-			vk::ClearDepthStencilValue({ 1.0f, 0 }) };
-		auto renderPassInfo2 = vk::RenderPassBeginInfo()
-			.setRenderPass(renderPass)
-			.setFramebuffer(frameBuffers[imageIndex])
-			.setRenderArea({ { 0, 0 }, vulkan->surface->actualExtent })
-			.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
-			.setPClearValues(clearValues.data());
+		vk::ClearColorValue clearColor;
+		memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
+
+		vk::ClearDepthStencilValue depthStencil;
+		depthStencil.depth = 1.f;
+		depthStencil.stencil = 0;
+
+		std::vector<vk::ClearValue> clearValues = { clearColor, depthStencil };
+
+		vk::RenderPassBeginInfo rpi;
+		rpi.renderPass = renderPass;
+		rpi.framebuffer = frameBuffers[imageIndex];
+		rpi.renderArea = { { 0, 0 }, VulkanContext::get().surface->actualExtent };
+		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
+		rpi.pClearValues = clearValues.data();
 
 		auto& cmd = vulkan->dynamicCmdBuffer;
-		cmd.beginRenderPass(renderPassInfo2, vk::SubpassContents::eInline);
+		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 		vk::DeviceSize offset{ 0 };
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
@@ -622,14 +623,13 @@ void GUI::draw(uint32_t imageIndex)
 		cmd.bindVertexBuffers(0, vertexBuffer.buffer, offset);
 		cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint16);
 
-		vk::Viewport viewport{
-			0,							// viewport.x =
-			0,							// viewport.y =
-			draw_data->DisplaySize.x,	// viewport.width =
-			draw_data->DisplaySize.y,	// viewport.height =
-			0.0f,						// viewport.minDepth =
-			1.0f						// viewport.maxDepth =
-		};
+		vk::Viewport viewport;
+		viewport.x = 0.f;
+		viewport.y = 0.f;
+		viewport.width = draw_data->DisplaySize.x;
+		viewport.height = draw_data->DisplaySize.y;
+		viewport.minDepth = 0.f;
+		viewport.maxDepth = 1.f;
 		cmd.setViewport(0, 1, &viewport);
 
 		float data[4];
@@ -855,25 +855,26 @@ void GUI::createIndexBuffer(size_t index_size)
 
 void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout)
 {
-	auto const allocateInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(vulkan->descriptorPool)
-		.setDescriptorSetCount(1)
-		.setPSetLayouts(&descriptorSetLayout);
+	vk::DescriptorSetAllocateInfo allocateInfo;
+	allocateInfo.descriptorPool = vulkan->descriptorPool;
+	allocateInfo.descriptorSetCount = 1;
+	allocateInfo.pSetLayouts = &descriptorSetLayout;
 	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
-
 	// texture sampler
-	vk::WriteDescriptorSet textureWriteSets = vk::WriteDescriptorSet()
-		.setDstSet(descriptorSet)										// DescriptorSet dstSet;
-		.setDstBinding(0)												// uint32_t dstBinding;
-		.setDstArrayElement(0)											// uint32_t dstArrayElement;
-		.setDescriptorCount(1)											// uint32_t descriptorCount;
-		.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)	// DescriptorType descriptorType;
-		.setPImageInfo(&vk::DescriptorImageInfo()						// const DescriptorImageInfo* pImageInfo;
-			.setSampler(texture.sampler)									// Sampler sampler;
-			.setImageView(texture.view)										// ImageView imageView;
-			.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal));		// ImageLayout imageLayout;
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+	vk::DescriptorImageInfo dii;
+	dii.sampler = texture.sampler;
+	dii.imageView = texture.view;
+	dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+	vk::WriteDescriptorSet textureWriteSet;
+	textureWriteSet.dstSet = descriptorSet;
+	textureWriteSet.dstBinding = 0;
+	textureWriteSet.dstArrayElement = 0;
+	textureWriteSet.descriptorCount = 1;
+	textureWriteSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+	textureWriteSet.pImageInfo = &dii;
+	vulkan->device.updateDescriptorSets(textureWriteSet, nullptr);
 }
 
 void GUI::destroy()

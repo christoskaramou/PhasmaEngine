@@ -30,11 +30,9 @@ void Context::initVulkanContext()
 	vulkan.fences = createFences(2);
 	vulkan.swapchain = new Swapchain(createSwapchain());
 	vulkan.commandPool = createCommandPool();
-	vulkan.commandPoolCompute = createComputeCommadPool();
 	vulkan.descriptorPool = createDescriptorPool(10000); // max number of all descriptor sets to allocate
 	vulkan.dynamicCmdBuffer = createCmdBuffers().at(0);
 	vulkan.shadowCmdBuffer = createCmdBuffers(3);
-	vulkan.computeCmdBuffer = createComputeCmdBuffer().at(0);
 	vulkan.depth = new Image(createDepthResources());
 }
 
@@ -96,7 +94,6 @@ void Context::initRendering()
 	bloom.pipelineGaussianBlurVertical = createGaussianBlurVerticalPipeline();
 	bloom.pipelineCombine = createCombinePipeline();
 	motionBlur.pipeline = createMotionBlurPipeline();
-	//compute.pipeline = createComputePipeline();
 	shadows.pipeline = createPipeline(getPipelineSpecificationsShadows());
 
 	skyBoxDay.renderPass = createSkyboxRenderPass();
@@ -105,6 +102,8 @@ void Context::initRendering()
 	skyBoxNight.renderPass = createSkyboxRenderPass();
 	skyBoxNight.frameBuffers = createSkyboxFrameBuffers(skyBoxNight);
 	skyBoxNight.pipeline = createPipeline(getPipelineSpecificationsSkyBox(skyBoxNight));
+
+	computePool.Init(5);
 
 	metrics.resize(20);
 	for (auto& metric : metrics)
@@ -235,9 +234,6 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 		}
 	}
 	skyBoxDay.pipeline.destroy();
-
-	// Compute
-	compute.pipeline.destroy();
 
 	if (skyBoxNight.renderPass) {
 		vulkan.device.destroyRenderPass(skyBoxNight.renderPass);
@@ -451,23 +447,21 @@ vk::Instance Context::createInstance()
 
 	std::vector<const char*> instanceLayers{};
 #ifdef _DEBUG
-	instanceLayers.push_back("VK_LAYER_LUNARG_standard_validation");
+	instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
 	instanceLayers.push_back("VK_LAYER_LUNARG_assistant_layer");
 #endif
 
-	auto const appInfo = vk::ApplicationInfo()
-		.setPApplicationName("VulkanMonkey3D")
-		.setApplicationVersion(0)
-		.setPEngineName("VulkanMonkey3D")
-		.setEngineVersion(0)
-		.setApiVersion(VK_MAKE_VERSION(1, 1, 0));
-	auto const instInfo = vk::InstanceCreateInfo()
-		.setPApplicationInfo(&appInfo)
-		.setEnabledLayerCount(static_cast<uint32_t>(instanceLayers.size()))
-		.setPpEnabledLayerNames(instanceLayers.data())
-		.setEnabledExtensionCount((uint32_t)(instanceExtensions.size()))
-		.setPpEnabledExtensionNames(instanceExtensions.data())
-		.setPNext(nullptr);
+	vk::ApplicationInfo appInfo;
+	appInfo.pApplicationName = "VulkanMonkey3D";
+	appInfo.pEngineName = "VulkanMonkey3D";
+	appInfo.apiVersion = VK_MAKE_VERSION(1, 1, 0);
+
+	vk::InstanceCreateInfo instInfo;
+	instInfo.pApplicationInfo = &appInfo;
+	instInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
+	instInfo.ppEnabledLayerNames = instanceLayers.data();
+	instInfo.enabledExtensionCount = (uint32_t)(instanceExtensions.size());
+	instInfo.ppEnabledExtensionNames = instanceExtensions.data();
 
 	return vk::createInstance(instInfo);
 }
@@ -619,14 +613,12 @@ vk::Device Context::createDevice()
 		queueCreateInfos.back().pQueuePriorities = priorities;
 	}
 
-	auto const deviceCreateInfo = vk::DeviceCreateInfo()
-		.setQueueCreateInfoCount((uint32_t)queueCreateInfos.size())
-		.setPQueueCreateInfos(queueCreateInfos.data())
-		.setEnabledLayerCount(0)
-		.setPpEnabledLayerNames(nullptr)
-		.setEnabledExtensionCount((uint32_t)deviceExtensions.size())
-		.setPpEnabledExtensionNames(deviceExtensions.data())
-		.setPEnabledFeatures(&vulkan.gpuFeatures);
+	vk::DeviceCreateInfo deviceCreateInfo;
+	deviceCreateInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
+	deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
+	deviceCreateInfo.enabledExtensionCount = (uint32_t)deviceExtensions.size();
+	deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
+	deviceCreateInfo.pEnabledFeatures = &vulkan.gpuFeatures;
 
 	return vulkan.gpu.createDevice(deviceCreateInfo);
 }
@@ -659,19 +651,19 @@ Swapchain Context::createSwapchain()
 	}
 
 	vk::SwapchainKHR oldSwapchain = _swapchain.swapchain;
-	auto const swapchainCreateInfo = vk::SwapchainCreateInfoKHR()
-		.setSurface(vulkan.surface->surface)
-		.setMinImageCount(swapchainImageCount)
-		.setImageFormat(vulkan.surface->formatKHR.format)
-		.setImageColorSpace(vulkan.surface->formatKHR.colorSpace)
-		.setImageExtent(extent)
-		.setImageArrayLayers(1)
-		.setImageUsage(vk::ImageUsageFlagBits::eColorAttachment)
-		.setPreTransform(vulkan.surface->capabilities.currentTransform)
-		.setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
-		.setPresentMode(vulkan.surface->presentModeKHR)
-		.setClipped(VK_TRUE)
-		.setOldSwapchain(oldSwapchain);
+	vk::SwapchainCreateInfoKHR swapchainCreateInfo;
+	swapchainCreateInfo.surface = vulkan.surface->surface;
+	swapchainCreateInfo.minImageCount = swapchainImageCount;
+	swapchainCreateInfo.imageFormat = vulkan.surface->formatKHR.format;
+	swapchainCreateInfo.imageColorSpace = vulkan.surface->formatKHR.colorSpace;
+	swapchainCreateInfo.imageExtent = extent;
+	swapchainCreateInfo.imageArrayLayers = 1;
+	swapchainCreateInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
+	swapchainCreateInfo.preTransform = vulkan.surface->capabilities.currentTransform;
+	swapchainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+	swapchainCreateInfo.presentMode = vulkan.surface->presentModeKHR;
+	swapchainCreateInfo.clipped = VK_TRUE;
+	swapchainCreateInfo.oldSwapchain = oldSwapchain;
 
 	// new swapchain with old create info
 	vk::SwapchainKHR newSwapchain = vulkan.device.createSwapchainKHR(swapchainCreateInfo);
@@ -689,21 +681,11 @@ Swapchain Context::createSwapchain()
 
 	// create image views for each swapchain image
 	for (auto &image : _swapchain.images) {
-		auto const imageViewCreateInfo = vk::ImageViewCreateInfo()
-			.setImage(image.image)
-			.setViewType(vk::ImageViewType::e2D)
-			.setFormat(vulkan.surface->formatKHR.format)
-			.setComponents(vk::ComponentMapping()
-				.setR(vk::ComponentSwizzle::eIdentity)
-				.setG(vk::ComponentSwizzle::eIdentity)
-				.setB(vk::ComponentSwizzle::eIdentity)
-				.setA(vk::ComponentSwizzle::eIdentity))
-			.setSubresourceRange(vk::ImageSubresourceRange()
-				.setAspectMask(vk::ImageAspectFlagBits::eColor)
-				.setBaseMipLevel(0)
-				.setLevelCount(1)
-				.setBaseArrayLayer(0)
-				.setLayerCount(1));
+		vk::ImageViewCreateInfo imageViewCreateInfo;
+		imageViewCreateInfo.image = image.image;
+		imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
+		imageViewCreateInfo.format = vulkan.surface->formatKHR.format;
+		imageViewCreateInfo.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
 		image.view = vulkan.device.createImageView(imageViewCreateInfo);
 	}
 
@@ -712,18 +694,9 @@ Swapchain Context::createSwapchain()
 
 vk::CommandPool Context::createCommandPool()
 {
-	auto const cpci = vk::CommandPoolCreateInfo()
-		.setQueueFamilyIndex(vulkan.graphicsFamilyId)
-		.setFlags(vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
-
-	return vulkan.device.createCommandPool(cpci);
-}
-
-vk::CommandPool Context::createComputeCommadPool()
-{
-	auto const cpci = vk::CommandPoolCreateInfo()
-		.setQueueFamilyIndex(vulkan.computeFamilyId)
-		.setFlags(vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
+	vk::CommandPoolCreateInfo cpci;
+	cpci.queueFamilyIndex = vulkan.graphicsFamilyId;
+	cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
 
 	return vulkan.device.createCommandPool(cpci);
 }
@@ -741,82 +714,6 @@ void Context::addRenderTarget(const std::string& name, vk::Format format)
 		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	renderTargets[name].createImageView(vk::ImageAspectFlagBits::eColor);
 	renderTargets[name].createSampler();
-}
-
-vk::RenderPass Context::createRenderPass()
-{
-	std::array<vk::AttachmentDescription, 4> attachments = {};
-
-	// for Multisampling
-	attachments[0] = vk::AttachmentDescription() // color attachment disc
-		.setFormat(vulkan.surface->formatKHR.format)
-		.setSamples(vulkan.sampleCount)
-		.setLoadOp(vk::AttachmentLoadOp::eClear)
-		.setStoreOp(vk::AttachmentStoreOp::eStore)
-		.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
-		.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
-		.setInitialLayout(vk::ImageLayout::eUndefined)
-		.setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
-
-	// the multisampled image will be resolved to this image and presented to swapchain
-	attachments[1] = vk::AttachmentDescription() // color attachment disc
-		.setFormat(vulkan.surface->formatKHR.format)
-		.setSamples(vk::SampleCountFlagBits::e1)
-		.setLoadOp(vk::AttachmentLoadOp::eDontCare)
-		.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
-		.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
-		.setStoreOp(vk::AttachmentStoreOp::eStore)
-		.setInitialLayout(vk::ImageLayout::eUndefined)
-		.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
-
-	// multisampled depth
-	attachments[2] = vk::AttachmentDescription()
-		.setFormat(vulkan.depth->format)
-		.setSamples(vulkan.sampleCount)
-		.setLoadOp(vk::AttachmentLoadOp::eClear)
-		.setStoreOp(vk::AttachmentStoreOp::eStore)
-		.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
-		.setStencilStoreOp(vk::AttachmentStoreOp::eStore)
-		.setInitialLayout(vk::ImageLayout::eUndefined)
-		.setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
-
-	// Depth resolve
-	attachments[3] = vk::AttachmentDescription()
-		.setFormat(vulkan.depth->format)
-		.setSamples(vk::SampleCountFlagBits::e1)
-		.setLoadOp(vk::AttachmentLoadOp::eDontCare)
-		.setStoreOp(vk::AttachmentStoreOp::eStore)
-		.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
-		.setStencilStoreOp(vk::AttachmentStoreOp::eStore)
-		.setInitialLayout(vk::ImageLayout::eUndefined)
-		.setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
-
-	auto const colorRef = vk::AttachmentReference() // color attachment ref
-		.setAttachment(0)
-		.setLayout(vk::ImageLayout::eColorAttachmentOptimal);
-
-	auto const resolveRef = vk::AttachmentReference()
-		.setAttachment(1)
-		.setLayout(vk::ImageLayout::eColorAttachmentOptimal);
-
-	auto const depthAttachmentRef = vk::AttachmentReference()
-		.setAttachment(2)
-		.setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
-
-	auto const subpassDesc = vk::SubpassDescription() // subpass desc (there can be multiple subpasses)
-		.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
-		.setColorAttachmentCount(1)
-		.setPColorAttachments(&colorRef)
-		.setPResolveAttachments(&resolveRef)
-		.setPDepthStencilAttachment(&depthAttachmentRef);
-
-	auto const rpci = vk::RenderPassCreateInfo()
-		.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-		.setPAttachments(attachments.data())
-		.setSubpassCount(1)
-		.setPSubpasses(&subpassDesc);
-
-	return vulkan.device.createRenderPass(rpci);
 }
 
 vk::RenderPass Context::createDeferredRenderPass()
@@ -907,26 +804,21 @@ vk::RenderPass Context::createDeferredRenderPass()
 
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -976,26 +868,21 @@ vk::RenderPass Context::createCompositionRenderPass()
 
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1021,7 +908,6 @@ vk::RenderPass Context::createSSAORenderPass()
 	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
-
 	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
 
 	vk::SubpassDescription subpassDescription;
@@ -1031,26 +917,21 @@ vk::RenderPass Context::createSSAORenderPass()
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		}
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1086,26 +967,21 @@ vk::RenderPass Context::createSSAOBlurRenderPass()
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		}
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1140,26 +1016,21 @@ vk::RenderPass Context::createMotionBlurRenderPass()
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		}
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1195,26 +1066,21 @@ vk::RenderPass Context::createSSRRenderPass()
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		}
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1261,26 +1127,21 @@ vk::RenderPass vm::Context::createFXAARenderPass()
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		}
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1316,26 +1177,21 @@ vk::RenderPass vm::Context::createBrightFilterRenderPass()
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		}
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1371,26 +1227,21 @@ vk::RenderPass vm::Context::createGaussianBlurRenderPass()
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		}
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1438,26 +1289,21 @@ vk::RenderPass vm::Context::createCombineRenderPass()
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		}
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1492,26 +1338,21 @@ vk::RenderPass Context::createGUIRenderPass()
 	subpassDescriptions[0].pColorAttachments = &colorReference;
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		}
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1527,51 +1368,47 @@ vk::RenderPass Context::createGUIRenderPass()
 
 vk::RenderPass Context::createShadowsRenderPass()
 {
-	auto attachment = vk::AttachmentDescription()
-		.setFormat(vulkan.depth->format)
-		.setSamples(vk::SampleCountFlagBits::e1)
-		.setLoadOp(vk::AttachmentLoadOp::eClear)
-		.setStoreOp(vk::AttachmentStoreOp::eStore)
-		.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
-		.setStencilStoreOp(vk::AttachmentStoreOp::eStore)
-		.setInitialLayout(vk::ImageLayout::eUndefined)
-		.setFinalLayout(vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal);
+	vk::AttachmentDescription attachment;
+	attachment.format = vulkan.depth->format;
+	attachment.samples = vk::SampleCountFlagBits::e1;
+	attachment.loadOp = vk::AttachmentLoadOp::eClear;
+	attachment.storeOp = vk::AttachmentStoreOp::eStore;
+	attachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+	attachment.stencilStoreOp = vk::AttachmentStoreOp::eStore;
+	attachment.initialLayout = vk::ImageLayout::eUndefined;
+	attachment.finalLayout = vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal;
 
-	auto const depthAttachmentRef = vk::AttachmentReference()
-		.setAttachment(0)
-		.setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+	vk::AttachmentReference depthAttachmentRef;
+	depthAttachmentRef.attachment = 0;
+	depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
-	auto const subpassDesc = vk::SubpassDescription() // subpass desc (there can be multiple subpasses)
-		.setPDepthStencilAttachment(&depthAttachmentRef);
+	vk::SubpassDescription subpassDesc;
+	subpassDesc.pDepthStencilAttachment = &depthAttachmentRef;
 
-	std::vector<vk::SubpassDependency> spDependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,
-			0,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			vk::PipelineStageFlagBits::eLateFragmentTests,
-			vk::AccessFlagBits::eMemoryRead,
-			vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite,
-			vk::DependencyFlagBits::eByRegion
-		},
-		vk::SubpassDependency{
-			0,
-			VK_SUBPASS_EXTERNAL,
-			vk::PipelineStageFlagBits::eLateFragmentTests,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite,
-			vk::AccessFlagBits::eMemoryRead,
-			vk::DependencyFlagBits::eByRegion
-		}
-	};
+	// Subpass dependencies for layout transitions
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
-	auto const rpci = vk::RenderPassCreateInfo()
-		.setAttachmentCount(1)
-		.setPAttachments(&attachment)
-		.setSubpassCount(1)
-		.setPSubpasses(&subpassDesc)
-		.setDependencyCount((uint32_t)spDependencies.size())
-		.setPDependencies(spDependencies.data());
+	vk::RenderPassCreateInfo rpci;
+	rpci.attachmentCount = 1;
+	rpci.pAttachments = &attachment;
+	rpci.subpassCount = 1;
+	rpci.pSubpasses = &subpassDesc;
+	rpci.dependencyCount = (uint32_t)dependencies.size();
+	rpci.pDependencies = dependencies.data();
 
 	return vulkan.device.createRenderPass(rpci);
 }
@@ -1599,26 +1436,21 @@ vk::RenderPass vm::Context::createSkyboxRenderPass()
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
 	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies{
-		vk::SubpassDependency{
-			VK_SUBPASS_EXTERNAL,									// uint32_t srcSubpass;
-			0,														// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		},
-		vk::SubpassDependency{
-			0,														// uint32_t srcSubpass;
-			VK_SUBPASS_EXTERNAL,									// uint32_t dstSubpass;
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,		// PipelineStageFlags srcStageMask;
-			vk::PipelineStageFlagBits::eBottomOfPipe,				// PipelineStageFlags dstStageMask;
-			vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,	// AccessFlags srcAccessMask;
-			vk::AccessFlagBits::eMemoryRead,						// AccessFlags dstAccessMask;
-			vk::DependencyFlagBits::eByRegion						// DependencyFlags dependencyFlags;
-		}
-	};
+	std::vector<vk::SubpassDependency> dependencies(2);
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1674,14 +1506,13 @@ std::vector<vk::Framebuffer> Context::createDeferredFrameBuffers()
 			renderTargets["emissive"].view,
 			vulkan.depth->view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(deferred.renderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = deferred.renderPass;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1697,14 +1528,13 @@ std::vector<vk::Framebuffer> Context::createCompositionFrameBuffers()
 			vulkan.swapchain->images[i].view,
 			renderTargets["composition"].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(deferred.compositionRenderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = deferred.compositionRenderPass;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1719,14 +1549,13 @@ std::vector<vk::Framebuffer> Context::createSSRFrameBuffers()
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["ssr"].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(ssr.renderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = ssr.renderPass;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1741,14 +1570,13 @@ std::vector<vk::Framebuffer> Context::createSSAOFrameBuffers()
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["ssao"].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(ssao.renderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = ssao.renderPass;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1763,14 +1591,13 @@ std::vector<vk::Framebuffer> Context::createSSAOBlurFrameBuffers()
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["ssaoBlur"].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(ssao.blurRenderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = ssao.blurRenderPass;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1786,14 +1613,13 @@ std::vector<vk::Framebuffer> vm::Context::createFXAAFrameBuffers()
 			vulkan.swapchain->images[i].view,
 			renderTargets["composition2"].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(fxaa.renderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = fxaa.renderPass;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1808,14 +1634,13 @@ std::vector<vk::Framebuffer> vm::Context::createBloomFrameBuffers()
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["brightFilter"].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(bloom.renderPassBrightFilter)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = bloom.renderPassBrightFilter;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1823,14 +1648,13 @@ std::vector<vk::Framebuffer> vm::Context::createBloomFrameBuffers()
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["gaussianBlurHorizontal"].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(bloom.renderPassGaussianBlur)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = bloom.renderPassGaussianBlur;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1838,14 +1662,13 @@ std::vector<vk::Framebuffer> vm::Context::createBloomFrameBuffers()
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["gaussianBlurVertical"].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(bloom.renderPassGaussianBlur)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = bloom.renderPassGaussianBlur;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1854,14 +1677,13 @@ std::vector<vk::Framebuffer> vm::Context::createBloomFrameBuffers()
 			vulkan.swapchain->images[i - vulkan.swapchain->images.size() * 3].view,
 			GUI::show_FXAA ? renderTargets["composition"].view : renderTargets["composition2"].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(bloom.renderPassCombine)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = bloom.renderPassCombine;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1876,14 +1698,13 @@ std::vector<vk::Framebuffer> Context::createMotionBlurFrameBuffers()
 		std::vector<vk::ImageView> attachments = {
 			vulkan.swapchain->images[i].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(motionBlur.renderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = motionBlur.renderPass;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1898,14 +1719,13 @@ std::vector<vk::Framebuffer> Context::createGUIFrameBuffers()
 		std::vector<vk::ImageView> attachments = {
 			vulkan.swapchain->images[i].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(gui.renderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = gui.renderPass;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1959,14 +1779,13 @@ std::vector<vk::Framebuffer> vm::Context::createSkyboxFrameBuffers(SkyBox& skybo
 		std::vector<vk::ImageView> attachments = {
 			vulkan.swapchain->images[i].view //renderTargets["albedo"].view
 		};
-
-		auto const fbci = vk::FramebufferCreateInfo()
-			.setRenderPass(skybox.renderPass)
-			.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-			.setPAttachments(attachments.data())
-			.setWidth(WIDTH)
-			.setHeight(HEIGHT)
-			.setLayers(1);
+		vk::FramebufferCreateInfo fbci;
+		fbci.renderPass = skybox.renderPass;
+		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		fbci.pAttachments = attachments.data();
+		fbci.width = WIDTH;
+		fbci.height = HEIGHT;
+		fbci.layers = 1;
 		_frameBuffers[i] = vulkan.device.createFramebuffer(fbci);
 	}
 
@@ -1975,21 +1794,10 @@ std::vector<vk::Framebuffer> vm::Context::createSkyboxFrameBuffers(SkyBox& skybo
 
 std::vector<vk::CommandBuffer> Context::createCmdBuffers(const uint32_t bufferCount)
 {
-	auto const cbai = vk::CommandBufferAllocateInfo()
-		.setCommandPool(vulkan.commandPool)
-		.setLevel(vk::CommandBufferLevel::ePrimary)
-		.setCommandBufferCount(bufferCount);
-
-	return vulkan.device.allocateCommandBuffers(cbai);
-}
-
-std::vector<vk::CommandBuffer> Context::createComputeCmdBuffer(const uint32_t bufferCount)
-{
-	vk::CommandBuffer _cmdBuffer;
-	auto const cbai = vk::CommandBufferAllocateInfo()
-		.setCommandPool(vulkan.commandPoolCompute)
-		.setLevel(vk::CommandBufferLevel::ePrimary)
-		.setCommandBufferCount(bufferCount);
+	vk::CommandBufferAllocateInfo cbai;
+	cbai.commandPool = vulkan.commandPool;
+	cbai.level = vk::CommandBufferLevel::ePrimary;
+	cbai.commandBufferCount = bufferCount;
 
 	return vulkan.device.allocateCommandBuffers(cbai);
 }
@@ -2028,17 +1836,12 @@ Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 		if (specificInfo.shaders.size() > 1)
 			fragCode = readFile(specificInfo.shaders[1]);
 
-		vsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			vertCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-		};
+		vsmci.codeSize = vertCode.size();
+		vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+
 		if (specificInfo.shaders.size() > 1) {
-			fsmci = vk::ShaderModuleCreateInfo{
-				vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-				fragCode.size(),									// size_t codeSize;
-				reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-			};
+			fsmci.codeSize = fragCode.size();
+			fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
 		}
 		vertModule = vulkan.device.createShaderModule(vsmci);
 		if (specificInfo.shaders.size() > 1) {
@@ -2066,88 +1869,85 @@ Pipeline Context::createPipeline(const PipelineInfo& specificInfo)
 	_pipeline.pipeinfo.pStages = stages.data();
 
 	// Vertex Input state
-	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo{
-		vk::PipelineVertexInputStateCreateFlags(),
-		(uint32_t)specificInfo.vertexInputBindingDescriptions.size(),
-		specificInfo.vertexInputBindingDescriptions.data(),
-		(uint32_t)specificInfo.vertexInputAttributeDescriptions.size(),
-		specificInfo.vertexInputAttributeDescriptions.data()
-	};
+	vk::PipelineVertexInputStateCreateInfo pvisci;
+	pvisci.vertexBindingDescriptionCount = (uint32_t)specificInfo.vertexInputBindingDescriptions.size();
+	pvisci.pVertexBindingDescriptions = specificInfo.vertexInputBindingDescriptions.data();
+	pvisci.vertexAttributeDescriptionCount = (uint32_t)specificInfo.vertexInputAttributeDescriptions.size();
+	pvisci.pVertexAttributeDescriptions = specificInfo.vertexInputAttributeDescriptions.data();
+	_pipeline.pipeinfo.pVertexInputState = &pvisci;
 
 	// Input Assembly stage
-	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
-		vk::PipelineInputAssemblyStateCreateFlags(),		// PipelineInputAssemblyStateCreateFlags flags;
-		vk::PrimitiveTopology::eTriangleList,				// PrimitiveTopology topology;
-		VK_FALSE											// Bool32 primitiveRestartEnable;
-	};
+	vk::PipelineInputAssemblyStateCreateInfo piasci;
+	piasci.topology = vk::PrimitiveTopology::eTriangleList;
+	piasci.primitiveRestartEnable = VK_FALSE;
+	_pipeline.pipeinfo.pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
-	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
-		vk::PipelineViewportStateCreateFlags(),					// PipelineViewportStateCreateFlags flags;
-		1,														// uint32_t viewportCount;
-		&vk::Viewport{											// const Viewport* pViewports;
-			0.0f,													// float x;
-			0.0f,													// float y;
-			(float)specificInfo.viewportSize.width, 				// float width;
-			(float)specificInfo.viewportSize.height,				// float height;
-			specificInfo.depth.x,									// float minDepth;
-			specificInfo.depth.y },									// float maxDepth;
-		1,														// uint32_t scissorCount;
-		&vk::Rect2D{											// const Rect2D* pScissors;
-			vk::Offset2D(),											// Offset2D offset;
-			specificInfo.viewportSize }								// Extent2D extent;
-	};
+	vk::Viewport vp;
+	vp.x = 0.0f;
+	vp.y = 0.0f;
+	vp.width = (float)specificInfo.viewportSize.width;
+	vp.height = (float)specificInfo.viewportSize.height;
+	vp.minDepth = specificInfo.depth.x;
+	vp.maxDepth = specificInfo.depth.y;
+
+	vk::Rect2D r2d;
+	r2d.extent = specificInfo.viewportSize;
+
+	vk::PipelineViewportStateCreateInfo pvsci;
+	pvsci.viewportCount = 1;
+	pvsci.pViewports = &vp;
+	pvsci.scissorCount = 1;
+	pvsci.pScissors = &r2d;
+	_pipeline.pipeinfo.pViewportState = &pvsci;
 
 	// Rasterization state
-	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
-		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
-		VK_FALSE,										// Bool32 depthClampEnable;
-		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
-		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		specificInfo.cull,								// CullModeFlags cullMode;
-		specificInfo.face,								// FrontFace frontFace;
-		specificInfo.depthBiasEnable,					// Bool32 depthBiasEnable;
-		0.0f,											// float depthBiasConstantFactor;
-		0.0f,											// float depthBiasClamp;
-		0.0f,											// float depthBiasSlopeFactor;
-		1.0f											// float lineWidth;
-	};
+	vk::PipelineRasterizationStateCreateInfo prsci;
+	prsci.depthClampEnable = VK_FALSE;
+	prsci.rasterizerDiscardEnable = VK_FALSE;
+	prsci.polygonMode = vk::PolygonMode::eFill;
+	prsci.cullMode = specificInfo.cull;
+	prsci.frontFace = specificInfo.face;
+	prsci.depthBiasEnable = specificInfo.depthBiasEnable;
+	prsci.depthBiasConstantFactor = 0.0f;
+	prsci.depthBiasClamp = 0.0f;
+	prsci.depthBiasSlopeFactor = 0.0f;
+	prsci.lineWidth = 1.0f;
+	_pipeline.pipeinfo.pRasterizationState = &prsci;
 
 	// Multisample state
-	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
-		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
-		specificInfo.sampleCount,					// SampleCountFlagBits rasterizationSamples;
-		VK_FALSE,									// Bool32 sampleShadingEnable;
-		1.0f,										// float minSampleShading;
-		nullptr,									// const SampleMask* pSampleMask;
-		VK_FALSE,									// Bool32 alphaToCoverageEnable;
-		VK_FALSE									// Bool32 alphaToOneEnable;
-	};
+	vk::PipelineMultisampleStateCreateInfo pmsci;
+	pmsci.rasterizationSamples = specificInfo.sampleCount;
+	pmsci.sampleShadingEnable = VK_FALSE;
+	pmsci.minSampleShading = 1.0f;
+	pmsci.pSampleMask = nullptr;
+	pmsci.alphaToCoverageEnable = VK_FALSE;
+	pmsci.alphaToOneEnable = VK_FALSE;
+	_pipeline.pipeinfo.pMultisampleState = &pmsci;
 
-	// Depth ans stencil state
-	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
-		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
-		VK_TRUE,													// Bool32 depthTestEnable;
-		VK_TRUE,													// Bool32 depthWriteEnable;
-		specificInfo.compareOp,										// CompareOp depthCompareOp;
-		VK_FALSE,													// Bool32 depthBoundsTestEnable;
-		VK_FALSE,													// Bool32 stencilTestEnable;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
-		0.0f,														// float minDepthBounds;
-		0.0f														// float maxDepthBounds;
-	};
+	// Depth stencil state
+	vk::PipelineDepthStencilStateCreateInfo pdssci;
+	pdssci.depthTestEnable = VK_TRUE;
+	pdssci.depthWriteEnable = VK_TRUE;
+	pdssci.depthCompareOp = specificInfo.compareOp;
+	pdssci.depthBoundsTestEnable = VK_FALSE;
+	pdssci.stencilTestEnable = VK_FALSE;
+	pdssci.front.compareOp = vk::CompareOp::eAlways;
+	pdssci.back.compareOp = vk::CompareOp::eAlways;
+	pdssci.minDepthBounds = 0.0f;
+	pdssci.maxDepthBounds = 0.0f;
+	_pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
 	if (specificInfo.useBlendState) {
-		_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
-			vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-			VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
-			vk::LogicOp::eCopy,										// LogicOp logicOp;
-			(uint32_t)specificInfo.blendAttachmentStates.size(),	// uint32_t attachmentCount;
-			specificInfo.blendAttachmentStates.data(),				// const PipelineColorBlendAttachmentState* pAttachments;
-			{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
-		};
+		vk::PipelineColorBlendStateCreateInfo pcbsci;
+		pcbsci.logicOpEnable = VK_FALSE;
+		pcbsci.logicOp = vk::LogicOp::eCopy;
+		pcbsci.attachmentCount = (uint32_t)specificInfo.blendAttachmentStates.size();
+		pcbsci.pAttachments = specificInfo.blendAttachmentStates.data();
+		float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+		_pipeline.pipeinfo.pColorBlendState = &pcbsci;
 	}
 	else
 		_pipeline.pipeinfo.pColorBlendState = nullptr;
@@ -2189,236 +1989,151 @@ Pipeline Context::createCompositionPipeline()
 	Pipeline _pipeline;
 
 	// Shader stages
-	std::vector<char> vertCode{};
-	std::vector<char> fragCode{};
-
+	std::vector<char> vertCode = readFile("shaders/Deferred/cvert.spv");
 	vk::ShaderModuleCreateInfo vsmci;
+	vsmci.codeSize = vertCode.size();
+	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vk::ShaderModule vertModule = vulkan.device.createShaderModule(vsmci);
+
+	std::vector<char> fragCode = readFile("shaders/Deferred/cfrag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
+	fsmci.codeSize = fragCode.size();
+	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	vk::ShaderModule fragModule = vulkan.device.createShaderModule(fsmci);
 
-	vk::ShaderModule vertModule;
-	vk::ShaderModule fragModule;
-	{
-		vertCode = readFile("shaders/Deferred/cvert.spv");
-		fragCode = readFile("shaders/Deferred/cfrag.spv");
+	vk::PipelineShaderStageCreateInfo pssci1;
+	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
+	pssci1.module = vertModule;
+	pssci1.pName = "main";
 
-		vsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			vertCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-		};
-		fsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			fragCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-		};
-		vertModule = vulkan.device.createShaderModule(vsmci);
-		fragModule = vulkan.device.createShaderModule(fsmci);
-	}
 	auto max_lights = MAX_LIGHTS;
-	std::vector<vk::PipelineShaderStageCreateInfo> stages{
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
-			vertModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		},
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
-			fragModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			&vk::SpecializationInfo{				// const SpecializationInfo* pSpecializationInfo;
-				1,										// uint32_t mapEntryCount;
-				&vk::SpecializationMapEntry{			// const SpecializationMapEntry* pMapEntries;
-					0,										// uint32_t constantID;
-					0,										// uint32_t offset;
-					sizeof(max_lights) },					// size_t size;
-				sizeof(max_lights),						// size_t dataSize;
-				&max_lights								// const void* pData;
-			}
-		}
-	};
+	vk::SpecializationMapEntry sme;
+	sme.size = sizeof(max_lights);
+	vk::SpecializationInfo si;
+	si.mapEntryCount = 1;
+	si.pMapEntries = &sme;
+	si.dataSize = sizeof(max_lights);
+	si.pData = &max_lights;
+
+	vk::PipelineShaderStageCreateInfo pssci2;
+	pssci2.stage = vk::ShaderStageFlagBits::eFragment;
+	pssci2.module = fragModule;
+	pssci2.pName = "main";
+	pssci2.pSpecializationInfo = &si;
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
 	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
 	_pipeline.pipeinfo.pStages = stages.data();
 
 	// Vertex Input state
-	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+	vk::PipelineVertexInputStateCreateInfo pvisci;
+	_pipeline.pipeinfo.pVertexInputState = &pvisci;
 
 	// Input Assembly stage
-	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
-		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
-		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
-		VK_FALSE										// Bool32 primitiveRestartEnable;
-	};
+	vk::PipelineInputAssemblyStateCreateInfo piasci;
+	piasci.topology = vk::PrimitiveTopology::eTriangleList;
+	piasci.primitiveRestartEnable = VK_FALSE;
+	_pipeline.pipeinfo.pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
-	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
-		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
-		1,													// uint32_t viewportCount;
-		&vk::Viewport{										// const Viewport* pViewports;
-			0.0f,												// float x;
-			0.0f,												// float y;
-			WIDTH_f, 											// float width;
-			HEIGHT_f,											// float height;
-			0.0f,												// float minDepth;
-			1.0f },												// float maxDepth;
-		1,													// uint32_t scissorCount;
-		&vk::Rect2D{										// const Rect2D* pScissors;
-			vk::Offset2D(),										// Offset2D offset;
-			vulkan.surface->actualExtent }								// Extent2D extent;
-	};
+	vk::Viewport vp;
+	vp.x = 0.0f;
+	vp.y = 0.0f;
+	vp.width = WIDTH_f;
+	vp.height = HEIGHT_f;
+	vp.minDepth = 0.0f;
+	vp.maxDepth = 1.0f;
+
+	vk::Rect2D r2d;
+	r2d.extent = vulkan.surface->actualExtent;
+
+	vk::PipelineViewportStateCreateInfo pvsci;
+	pvsci.viewportCount = 1;
+	pvsci.pViewports = &vp;
+	pvsci.scissorCount = 1;
+	pvsci.pScissors = &r2d;
+	_pipeline.pipeinfo.pViewportState = &pvsci;
 
 	// Rasterization state
-	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
-		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
-		VK_FALSE,										// Bool32 depthClampEnable;
-		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
-		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eClockwise,						// FrontFace frontFace;
-		VK_FALSE,										// Bool32 depthBiasEnable;
-		0.0f,											// float depthBiasConstantFactor;
-		0.0f,											// float depthBiasClamp;
-		0.0f,											// float depthBiasSlopeFactor;
-		1.0f											// float lineWidth;
-	};
+	vk::PipelineRasterizationStateCreateInfo prsci;
+	prsci.depthClampEnable = VK_FALSE;
+	prsci.rasterizerDiscardEnable = VK_FALSE;
+	prsci.polygonMode = vk::PolygonMode::eFill;
+	prsci.cullMode = vk::CullModeFlagBits::eBack;
+	prsci.frontFace = vk::FrontFace::eClockwise;
+	prsci.depthBiasEnable = VK_FALSE;
+	prsci.depthBiasConstantFactor = 0.0f;
+	prsci.depthBiasClamp = 0.0f;
+	prsci.depthBiasSlopeFactor = 0.0f;
+	prsci.lineWidth = 1.0f;
+	_pipeline.pipeinfo.pRasterizationState = &prsci;
 
 	// Multisample state
-	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
-		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
-		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
-		VK_FALSE,									// Bool32 sampleShadingEnable;
-		1.0f,										// float minSampleShading;
-		nullptr,									// const SampleMask* pSampleMask;
-		VK_FALSE,									// Bool32 alphaToCoverageEnable;
-		VK_FALSE									// Bool32 alphaToOneEnable;
-	};
+	vk::PipelineMultisampleStateCreateInfo pmsci;
+	pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
+	pmsci.sampleShadingEnable = VK_FALSE;
+	pmsci.minSampleShading = 1.0f;
+	pmsci.pSampleMask = nullptr;
+	pmsci.alphaToCoverageEnable = VK_FALSE;
+	pmsci.alphaToOneEnable = VK_FALSE;
+	_pipeline.pipeinfo.pMultisampleState = &pmsci;
 
-	// Depth and stencil state
-	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
-		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
-		VK_TRUE,													// Bool32 depthTestEnable;
-		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,									// CompareOp depthCompareOp;
-		VK_FALSE,													// Bool32 depthBoundsTestEnable;
-		VK_FALSE,													// Bool32 stencilTestEnable;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
-		0.0f,														// float minDepthBounds;
-		0.0f														// float maxDepthBounds;
-	};
+	// Depth stencil state
+	vk::PipelineDepthStencilStateCreateInfo pdssci;
+	pdssci.depthTestEnable = VK_TRUE;
+	pdssci.depthWriteEnable = VK_TRUE;
+	pdssci.depthCompareOp = vk::CompareOp::eGreater;
+	pdssci.depthBoundsTestEnable = VK_FALSE;
+	pdssci.stencilTestEnable = VK_FALSE;
+	pdssci.front.compareOp = vk::CompareOp::eAlways;
+	pdssci.back.compareOp = vk::CompareOp::eAlways;
+	pdssci.minDepthBounds = 0.0f;
+	pdssci.maxDepthBounds = 0.0f;
+	_pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	vk::PipelineColorBlendAttachmentState colorBlendAttachment{
-		VK_TRUE,												// Bool32 blendEnable;
-		vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-		vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-		vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-		vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-		vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-		vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-		vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-		vk::ColorComponentFlagBits::eG |
-		vk::ColorComponentFlagBits::eB |
-		vk::ColorComponentFlagBits::eA
-	};
-	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment, colorBlendAttachment };
-	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
-		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
-		vk::LogicOp::eCopy,										// LogicOp logicOp;
-		(uint32_t)colorBlendAttachments.size(),					// uint32_t attachmentCount;
-		colorBlendAttachments.data(),							// const PipelineColorBlendAttachmentState* pAttachments;
-		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
-	};
+	vk::PipelineColorBlendAttachmentState cba;
+	cba.blendEnable = VK_TRUE;
+	cba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+	cba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	cba.colorBlendOp = vk::BlendOp::eAdd;
+	cba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+	cba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+	cba.alphaBlendOp = vk::BlendOp::eAdd;
+	cba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { cba, cba };
+
+	vk::PipelineColorBlendStateCreateInfo pcbsci;
+	pcbsci.logicOpEnable = VK_FALSE;
+	pcbsci.logicOp = vk::LogicOp::eCopy;
+	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.pAttachments = colorBlendAttachments.data();
+	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+	_pipeline.pipeinfo.pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eDepthBias };
-	vk::PipelineDynamicStateCreateInfo dynamicStateInfo = {
-		vk::PipelineDynamicStateCreateFlags(),
-		static_cast<uint32_t>(dynamicStates.size()),
-		dynamicStates.data()
-	};
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!deferred.DSLayoutComposition)
-	{// DescriptorSetLayout
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0: Depth input attachment 
-			vk::DescriptorSetLayoutBinding{
-				0,										//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			},
-			// Binding 1: Normal input attachment 
-			vk::DescriptorSetLayoutBinding{
-				1,										//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			},
-			// Binding 2: Albedo input attachment 
-			vk::DescriptorSetLayoutBinding{
-				2,										//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			},
-			// Binding 3: Specular input attachment 
-			vk::DescriptorSetLayoutBinding{
-				3,										//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			},
-			// Binding 4: Light positions
-			vk::DescriptorSetLayoutBinding{
-				4,										//uint32_t binding;
-				vk::DescriptorType::eUniformBuffer,		//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			},
-			// Binding 5: SSAO image
-			vk::DescriptorSetLayoutBinding{
-				5,										//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			},
-			// Binding 6: SSR image
-			vk::DescriptorSetLayoutBinding{
-				6,										//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			},
-			// Binding 7: Emissive image
-			vk::DescriptorSetLayoutBinding{
-				7,										//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			},
+	{
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
 		};
-
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(4, vk::DescriptorType::eUniformBuffer),
+			layoutBinding(5, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(6, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(7, vk::DescriptorType::eCombinedImageSampler),
 		};
-
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
 		deferred.DSLayoutComposition  = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
@@ -2429,10 +2144,17 @@ Pipeline Context::createCompositionPipeline()
 		Shadows::getDescriptorSetLayout(vulkan.device),
 		SkyBox::getDescriptorSetLayout(vulkan.device) };
 
-	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 7 * sizeof(vec4) };
-
-	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
+	vk::PushConstantRange pConstants;
+	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
+	pConstants.offset = 0;
+	pConstants.size = 7 * sizeof(vec4);
+	
+	vk::PipelineLayoutCreateInfo plci;
+	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.pSetLayouts = descriptorSetLayouts.data();
+	plci.pushConstantRangeCount = 1;
+	plci.pPushConstantRanges = &pConstants;
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(plci);
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = deferred.compositionRenderPass;
@@ -2460,204 +2182,155 @@ Pipeline Context::createSSRPipeline()
 	Pipeline _pipeline;
 
 	// Shader stages
-	std::vector<char> vertCode{};
-	std::vector<char> fragCode{};
-
+	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
 	vk::ShaderModuleCreateInfo vsmci;
+	vsmci.codeSize = vertCode.size();
+	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vk::ShaderModule vertModule = vulkan.device.createShaderModule(vsmci);
+
+	std::vector<char> fragCode = readFile("shaders/SSR/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
+	fsmci.codeSize = fragCode.size();
+	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	vk::ShaderModule fragModule = vulkan.device.createShaderModule(fsmci);
 
-	vk::ShaderModule vertModule;
-	vk::ShaderModule fragModule;
-	{
-		vertCode = readFile("shaders/Common/vert.spv");
-		fragCode = readFile("shaders/SSR/frag.spv");
+	vk::PipelineShaderStageCreateInfo pssci1;
+	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
+	pssci1.module = vertModule;
+	pssci1.pName = "main";
 
-		vsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			vertCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-		};
-		fsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			fragCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-		};
-		vertModule = vulkan.device.createShaderModule(vsmci);
-		fragModule = vulkan.device.createShaderModule(fsmci);
-	}
+	vk::PipelineShaderStageCreateInfo pssci2;
+	pssci2.stage = vk::ShaderStageFlagBits::eFragment;
+	pssci2.module = fragModule;
+	pssci2.pName = "main";
 
-	std::vector<vk::PipelineShaderStageCreateInfo> stages{
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
-			vertModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		},
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
-			fragModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		}
-	};
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
 	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
 	_pipeline.pipeinfo.pStages = stages.data();
 
 	// Vertex Input state
-	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+	vk::PipelineVertexInputStateCreateInfo pvisci;
+	_pipeline.pipeinfo.pVertexInputState = &pvisci;
 
 	// Input Assembly stage
-	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
-		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
-		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
-		VK_FALSE										// Bool32 primitiveRestartEnable;
-	};
+	vk::PipelineInputAssemblyStateCreateInfo piasci;
+	piasci.topology = vk::PrimitiveTopology::eTriangleList;
+	piasci.primitiveRestartEnable = VK_FALSE;
+	_pipeline.pipeinfo.pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
-	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
-		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
-		1,													// uint32_t viewportCount;
-		&vk::Viewport{										// const Viewport* pViewports;
-			0.0f,												// float x;
-			0.0f,												// float y;
-			WIDTH_f, 											// float width;
-			HEIGHT_f,											// float height;
-			0.0f,												// float minDepth;
-			1.0f },												// float maxDepth;
-		1,													// uint32_t scissorCount;
-		&vk::Rect2D{										// const Rect2D* pScissors;
-			vk::Offset2D(),										// Offset2D offset;
-			vulkan.surface->actualExtent }								// Extent2D extent;
-	};
+	vk::Viewport vp;
+	vp.x = 0.0f;
+	vp.y = 0.0f;
+	vp.width = WIDTH_f;
+	vp.height = HEIGHT_f;
+	vp.minDepth = 0.0f;
+	vp.maxDepth = 1.0f;
+
+	vk::Rect2D r2d;
+	r2d.extent = vulkan.surface->actualExtent;
+
+	vk::PipelineViewportStateCreateInfo pvsci;
+	pvsci.viewportCount = 1;
+	pvsci.pViewports = &vp;
+	pvsci.scissorCount = 1;
+	pvsci.pScissors = &r2d;
+	_pipeline.pipeinfo.pViewportState = &pvsci;
 
 	// Rasterization state
-	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
-		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
-		VK_FALSE,										// Bool32 depthClampEnable;
-		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
-		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eClockwise,						// FrontFace frontFace;
-		VK_FALSE,										// Bool32 depthBiasEnable;
-		0.0f,											// float depthBiasConstantFactor;
-		0.0f,											// float depthBiasClamp;
-		0.0f,											// float depthBiasSlopeFactor;
-		1.0f											// float lineWidth;
-	};
+	vk::PipelineRasterizationStateCreateInfo prsci;
+	prsci.depthClampEnable = VK_FALSE;
+	prsci.rasterizerDiscardEnable = VK_FALSE;
+	prsci.polygonMode = vk::PolygonMode::eFill;
+	prsci.cullMode = vk::CullModeFlagBits::eBack;
+	prsci.frontFace = vk::FrontFace::eClockwise;
+	prsci.depthBiasEnable = VK_FALSE;
+	prsci.depthBiasConstantFactor = 0.0f;
+	prsci.depthBiasClamp = 0.0f;
+	prsci.depthBiasSlopeFactor = 0.0f;
+	prsci.lineWidth = 1.0f;
+	_pipeline.pipeinfo.pRasterizationState = &prsci;
 
 	// Multisample state
-	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
-		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
-		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
-		VK_FALSE,									// Bool32 sampleShadingEnable;
-		1.0f,										// float minSampleShading;
-		nullptr,									// const SampleMask* pSampleMask;
-		VK_FALSE,									// Bool32 alphaToCoverageEnable;
-		VK_FALSE									// Bool32 alphaToOneEnable;
-	};
+	vk::PipelineMultisampleStateCreateInfo pmsci;
+	pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
+	pmsci.sampleShadingEnable = VK_FALSE;
+	pmsci.minSampleShading = 1.0f;
+	pmsci.pSampleMask = nullptr;
+	pmsci.alphaToCoverageEnable = VK_FALSE;
+	pmsci.alphaToOneEnable = VK_FALSE;
+	_pipeline.pipeinfo.pMultisampleState = &pmsci;
 
-	// Depth and stencil state
-	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
-		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
-		VK_TRUE,													// Bool32 depthTestEnable;
-		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
-		VK_FALSE,													// Bool32 depthBoundsTestEnable;
-		VK_FALSE,													// Bool32 stencilTestEnable;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
-		0.0f,														// float minDepthBounds;
-		0.0f														// float maxDepthBounds;
-	};
+	// Depth stencil state
+	vk::PipelineDepthStencilStateCreateInfo pdssci;
+	pdssci.depthTestEnable = VK_TRUE;
+	pdssci.depthWriteEnable = VK_TRUE;
+	pdssci.depthCompareOp = vk::CompareOp::eGreater;
+	pdssci.depthBoundsTestEnable = VK_FALSE;
+	pdssci.stencilTestEnable = VK_FALSE;
+	pdssci.front.compareOp = vk::CompareOp::eAlways;
+	pdssci.back.compareOp = vk::CompareOp::eAlways;
+	pdssci.minDepthBounds = 0.0f;
+	pdssci.maxDepthBounds = 0.0f;
+	_pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
-		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
-		vk::LogicOp::eCopy,										// LogicOp logicOp;
-		1,														// uint32_t attachmentCount;
-		&vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
-			VK_TRUE,												// Bool32 blendEnable;
-			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-		},
-		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
-	};
+	vk::PipelineColorBlendAttachmentState cba;
+	cba.blendEnable = VK_TRUE;
+	cba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+	cba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	cba.colorBlendOp = vk::BlendOp::eAdd;
+	cba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+	cba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+	cba.alphaBlendOp = vk::BlendOp::eAdd;
+	cba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { cba };
+
+	vk::PipelineColorBlendStateCreateInfo pcbsci;
+	pcbsci.logicOpEnable = VK_FALSE;
+	pcbsci.logicOp = vk::LogicOp::eCopy;
+	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.pAttachments = colorBlendAttachments.data();
+	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+	_pipeline.pipeinfo.pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	//std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!ssr.DSLayoutReflection)
-	{// DescriptorSetLayout
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0: Albedo image Sampler 
-			vk::DescriptorSetLayoutBinding{
-				0,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 1: Positions image sampler  
-			vk::DescriptorSetLayoutBinding{
-				1,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 2: Normals image sampler  
-			vk::DescriptorSetLayoutBinding{
-				2,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 3: Depth image sampler  
-			vk::DescriptorSetLayoutBinding{
-				3,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 4: Camera Position
-			vk::DescriptorSetLayoutBinding{
-				4,											//uint32_t binding;
-				vk::DescriptorType::eUniformBuffer,			//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			}
+	{
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
 		};
-
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(4, vk::DescriptorType::eUniformBuffer),
 		};
-
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
 		ssr.DSLayoutReflection = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssr.DSLayoutReflection };
-	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
-	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants } );
+
+	vk::PushConstantRange pConstants;
+	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
+	pConstants.offset = 0;
+	pConstants.size = 4 * sizeof(vec4);
+	
+	vk::PipelineLayoutCreateInfo plci;
+	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.pSetLayouts = descriptorSetLayouts.data();
+	plci.pushConstantRangeCount = 1;
+	plci.pPushConstantRanges = &pConstants;
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(plci);
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = ssr.renderPass;
@@ -2685,188 +2358,144 @@ Pipeline vm::Context::createFXAAPipeline()
 	Pipeline _pipeline;
 
 	// Shader stages
-	std::vector<char> vertCode{};
-	std::vector<char> fragCode{};
-
+	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
 	vk::ShaderModuleCreateInfo vsmci;
+	vsmci.codeSize = vertCode.size();
+	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vk::ShaderModule vertModule = vulkan.device.createShaderModule(vsmci);
+
+	std::vector<char> fragCode = readFile("shaders/FXAA/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
+	fsmci.codeSize = fragCode.size();
+	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	vk::ShaderModule fragModule = vulkan.device.createShaderModule(fsmci);
 
-	vk::ShaderModule vertModule;
-	vk::ShaderModule fragModule;
-	{
-		vertCode = readFile("shaders/Common/vert.spv");
-		fragCode = readFile("shaders/FXAA/frag.spv");
+	vk::PipelineShaderStageCreateInfo pssci1;
+	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
+	pssci1.module = vertModule;
+	pssci1.pName = "main";
 
-		vsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			vertCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-		};
-		fsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			fragCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-		};
-		vertModule = vulkan.device.createShaderModule(vsmci);
-		fragModule = vulkan.device.createShaderModule(fsmci);
-	}
+	vk::PipelineShaderStageCreateInfo pssci2;
+	pssci2.stage = vk::ShaderStageFlagBits::eFragment;
+	pssci2.module = fragModule;
+	pssci2.pName = "main";
 
-	std::vector<vk::PipelineShaderStageCreateInfo> stages{
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
-			vertModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		},
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
-			fragModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		}
-	};
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
 	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
 	_pipeline.pipeinfo.pStages = stages.data();
 
 	// Vertex Input state
-	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+	vk::PipelineVertexInputStateCreateInfo pvisci;
+	_pipeline.pipeinfo.pVertexInputState = &pvisci;
 
 	// Input Assembly stage
-	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
-		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
-		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
-		VK_FALSE										// Bool32 primitiveRestartEnable;
-	};
+	vk::PipelineInputAssemblyStateCreateInfo piasci;
+	piasci.topology = vk::PrimitiveTopology::eTriangleList;
+	piasci.primitiveRestartEnable = VK_FALSE;
+	_pipeline.pipeinfo.pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
-	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
-		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
-		1,													// uint32_t viewportCount;
-		&vk::Viewport{										// const Viewport* pViewports;
-			0.0f,												// float x;
-			0.0f,												// float y;
-			WIDTH_f,											// float width;
-			HEIGHT_f,											// float height;
-			0.0f,												// float minDepth;
-			1.0f },												// float maxDepth;
-		1,													// uint32_t scissorCount;
-		&vk::Rect2D{										// const Rect2D* pScissors;
-			vk::Offset2D(),										// Offset2D offset;
-			vulkan.surface->actualExtent }						// Extent2D extent;
-	};
+	vk::Viewport vp;
+	vp.x = 0.0f;
+	vp.y = 0.0f;
+	vp.width = WIDTH_f;
+	vp.height = HEIGHT_f;
+	vp.minDepth = 0.0f;
+	vp.maxDepth = 1.0f;
+
+	vk::Rect2D r2d;
+	r2d.extent = vulkan.surface->actualExtent;
+
+	vk::PipelineViewportStateCreateInfo pvsci;
+	pvsci.viewportCount = 1;
+	pvsci.pViewports = &vp;
+	pvsci.scissorCount = 1;
+	pvsci.pScissors = &r2d;
+	_pipeline.pipeinfo.pViewportState = &pvsci;
 
 	// Rasterization state
-	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
-		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
-		VK_FALSE,										// Bool32 depthClampEnable;
-		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
-		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eClockwise,						// FrontFace frontFace;
-		VK_FALSE,										// Bool32 depthBiasEnable;
-		0.0f,											// float depthBiasConstantFactor;
-		0.0f,											// float depthBiasClamp;
-		0.0f,											// float depthBiasSlopeFactor;
-		1.0f											// float lineWidth;
-	};
+	vk::PipelineRasterizationStateCreateInfo prsci;
+	prsci.depthClampEnable = VK_FALSE;
+	prsci.rasterizerDiscardEnable = VK_FALSE;
+	prsci.polygonMode = vk::PolygonMode::eFill;
+	prsci.cullMode = vk::CullModeFlagBits::eBack;
+	prsci.frontFace = vk::FrontFace::eClockwise;
+	prsci.depthBiasEnable = VK_FALSE;
+	prsci.depthBiasConstantFactor = 0.0f;
+	prsci.depthBiasClamp = 0.0f;
+	prsci.depthBiasSlopeFactor = 0.0f;
+	prsci.lineWidth = 1.0f;
+	_pipeline.pipeinfo.pRasterizationState = &prsci;
 
 	// Multisample state
-	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
-		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
-		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
-		VK_FALSE,									// Bool32 sampleShadingEnable;
-		1.0f,										// float minSampleShading;
-		nullptr,									// const SampleMask* pSampleMask;
-		VK_FALSE,									// Bool32 alphaToCoverageEnable;
-		VK_FALSE									// Bool32 alphaToOneEnable;
-	};
+	vk::PipelineMultisampleStateCreateInfo pmsci;
+	pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
+	pmsci.sampleShadingEnable = VK_FALSE;
+	pmsci.minSampleShading = 1.0f;
+	pmsci.pSampleMask = nullptr;
+	pmsci.alphaToCoverageEnable = VK_FALSE;
+	pmsci.alphaToOneEnable = VK_FALSE;
+	_pipeline.pipeinfo.pMultisampleState = &pmsci;
 
-	// Depth and stencil state
-	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
-		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
-		VK_TRUE,													// Bool32 depthTestEnable;
-		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,									// CompareOp depthCompareOp;
-		VK_FALSE,													// Bool32 depthBoundsTestEnable;
-		VK_FALSE,													// Bool32 stencilTestEnable;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
-		0.0f,														// float minDepthBounds;
-		0.0f														// float maxDepthBounds;
-	};
-
-	std::vector<vk::PipelineColorBlendAttachmentState> blendState = {
-		vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
-			VK_TRUE,												// Bool32 blendEnable;
-			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-		},
-		vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
-			VK_TRUE,												// Bool32 blendEnable;
-			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-		},
-	};
+	// Depth stencil state
+	vk::PipelineDepthStencilStateCreateInfo pdssci;
+	pdssci.depthTestEnable = VK_TRUE;
+	pdssci.depthWriteEnable = VK_TRUE;
+	pdssci.depthCompareOp = vk::CompareOp::eGreater;
+	pdssci.depthBoundsTestEnable = VK_FALSE;
+	pdssci.stencilTestEnable = VK_FALSE;
+	pdssci.front.compareOp = vk::CompareOp::eAlways;
+	pdssci.back.compareOp = vk::CompareOp::eAlways;
+	pdssci.minDepthBounds = 0.0f;
+	pdssci.maxDepthBounds = 0.0f;
+	_pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
-		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
-		vk::LogicOp::eCopy,										// LogicOp logicOp;
-		static_cast<uint32_t>(blendState.size()),				// uint32_t attachmentCount;
-		blendState.data(),										// const PipelineColorBlendAttachmentState* pAttachments;
-		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
-	};
+	vk::PipelineColorBlendAttachmentState cba;
+	cba.blendEnable = VK_TRUE;
+	cba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+	cba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	cba.colorBlendOp = vk::BlendOp::eAdd;
+	cba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+	cba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+	cba.alphaBlendOp = vk::BlendOp::eAdd;
+	cba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { cba, cba };
+
+	vk::PipelineColorBlendStateCreateInfo pcbsci;
+	pcbsci.logicOpEnable = VK_FALSE;
+	pcbsci.logicOp = vk::LogicOp::eCopy;
+	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.pAttachments = colorBlendAttachments.data();
+	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+	_pipeline.pipeinfo.pColorBlendState = &pcbsci;
 
 	// Dynamic state
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!fxaa.DSLayout)
-	{// DescriptorSetLayout
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0: Composition image sampler  
-			vk::DescriptorSetLayoutBinding{
-				0,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			}
+	{
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
 		};
-
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 		};
-
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
 		fxaa.DSLayout = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { fxaa.DSLayout };
-	vk::PushConstantRange pConstants = vk::PushConstantRange();//{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
-	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &pConstants });
+
+	vk::PipelineLayoutCreateInfo plci;
+	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.pSetLayouts = descriptorSetLayouts.data();
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(plci);
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = fxaa.renderPass;
@@ -2894,175 +2523,151 @@ Pipeline vm::Context::createBrightFilterPipeline()
 	Pipeline _pipeline;
 
 	// Shader stages
-	std::vector<char> vertCode{};
-	std::vector<char> fragCode{};
-
+	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
 	vk::ShaderModuleCreateInfo vsmci;
+	vsmci.codeSize = vertCode.size();
+	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vk::ShaderModule vertModule = vulkan.device.createShaderModule(vsmci);
+
+	std::vector<char> fragCode = readFile("shaders/Bloom/fragBrightFilter.spv");
 	vk::ShaderModuleCreateInfo fsmci;
+	fsmci.codeSize = fragCode.size();
+	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	vk::ShaderModule fragModule = vulkan.device.createShaderModule(fsmci);
 
-	vk::ShaderModule vertModule;
-	vk::ShaderModule fragModule;
-	{
-		vertCode = readFile("shaders/Common/vert.spv");
-		fragCode = readFile("shaders/Bloom/fragBrightFilter.spv");
+	vk::PipelineShaderStageCreateInfo pssci1;
+	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
+	pssci1.module = vertModule;
+	pssci1.pName = "main";
 
-		vsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			vertCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-		};
-		fsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			fragCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-		};
-		vertModule = vulkan.device.createShaderModule(vsmci);
-		fragModule = vulkan.device.createShaderModule(fsmci);
-	}
+	vk::PipelineShaderStageCreateInfo pssci2;
+	pssci2.stage = vk::ShaderStageFlagBits::eFragment;
+	pssci2.module = fragModule;
+	pssci2.pName = "main";
 
-	std::vector<vk::PipelineShaderStageCreateInfo> stages{
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
-			vertModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		},
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
-			fragModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		}
-	};
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
 	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
 	_pipeline.pipeinfo.pStages = stages.data();
 
 	// Vertex Input state
-	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+	vk::PipelineVertexInputStateCreateInfo pvisci;
+	_pipeline.pipeinfo.pVertexInputState = &pvisci;
 
 	// Input Assembly stage
-	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
-		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
-		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
-		VK_FALSE										// Bool32 primitiveRestartEnable;
-	};
+	vk::PipelineInputAssemblyStateCreateInfo piasci;
+	piasci.topology = vk::PrimitiveTopology::eTriangleList;
+	piasci.primitiveRestartEnable = VK_FALSE;
+	_pipeline.pipeinfo.pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
-	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
-		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
-		1,													// uint32_t viewportCount;
-		&vk::Viewport{										// const Viewport* pViewports;
-			0.0f,												// float x;
-			0.0f,												// float y;
-			WIDTH_f,											// float width;
-			HEIGHT_f,											// float height;
-			0.0f,												// float minDepth;
-			1.0f },												// float maxDepth;
-		1,													// uint32_t scissorCount;
-		&vk::Rect2D{										// const Rect2D* pScissors;
-			vk::Offset2D(),										// Offset2D offset;
-			vulkan.surface->actualExtent }						// Extent2D extent;
-	};
+	vk::Viewport vp;
+	vp.x = 0.0f;
+	vp.y = 0.0f;
+	vp.width = WIDTH_f;
+	vp.height = HEIGHT_f;
+	vp.minDepth = 0.0f;
+	vp.maxDepth = 1.0f;
+
+	vk::Rect2D r2d;
+	r2d.extent = vulkan.surface->actualExtent;
+
+	vk::PipelineViewportStateCreateInfo pvsci;
+	pvsci.viewportCount = 1;
+	pvsci.pViewports = &vp;
+	pvsci.scissorCount = 1;
+	pvsci.pScissors = &r2d;
+	_pipeline.pipeinfo.pViewportState = &pvsci;
 
 	// Rasterization state
-	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
-		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
-		VK_FALSE,										// Bool32 depthClampEnable;
-		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
-		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eClockwise,						// FrontFace frontFace;
-		VK_FALSE,										// Bool32 depthBiasEnable;
-		0.0f,											// float depthBiasConstantFactor;
-		0.0f,											// float depthBiasClamp;
-		0.0f,											// float depthBiasSlopeFactor;
-		1.0f											// float lineWidth;
-	};
+	vk::PipelineRasterizationStateCreateInfo prsci;
+	prsci.depthClampEnable = VK_FALSE;
+	prsci.rasterizerDiscardEnable = VK_FALSE;
+	prsci.polygonMode = vk::PolygonMode::eFill;
+	prsci.cullMode = vk::CullModeFlagBits::eBack;
+	prsci.frontFace = vk::FrontFace::eClockwise;
+	prsci.depthBiasEnable = VK_FALSE;
+	prsci.depthBiasConstantFactor = 0.0f;
+	prsci.depthBiasClamp = 0.0f;
+	prsci.depthBiasSlopeFactor = 0.0f;
+	prsci.lineWidth = 1.0f;
+	_pipeline.pipeinfo.pRasterizationState = &prsci;
 
 	// Multisample state
-	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
-		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
-		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
-		VK_FALSE,									// Bool32 sampleShadingEnable;
-		1.0f,										// float minSampleShading;
-		nullptr,									// const SampleMask* pSampleMask;
-		VK_FALSE,									// Bool32 alphaToCoverageEnable;
-		VK_FALSE									// Bool32 alphaToOneEnable;
-	};
+	vk::PipelineMultisampleStateCreateInfo pmsci;
+	pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
+	pmsci.sampleShadingEnable = VK_FALSE;
+	pmsci.minSampleShading = 1.0f;
+	pmsci.pSampleMask = nullptr;
+	pmsci.alphaToCoverageEnable = VK_FALSE;
+	pmsci.alphaToOneEnable = VK_FALSE;
+	_pipeline.pipeinfo.pMultisampleState = &pmsci;
 
-	// Depth and stencil state
-	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
-		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
-		VK_TRUE,													// Bool32 depthTestEnable;
-		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,									// CompareOp depthCompareOp;
-		VK_FALSE,													// Bool32 depthBoundsTestEnable;
-		VK_FALSE,													// Bool32 stencilTestEnable;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
-		0.0f,														// float minDepthBounds;
-		0.0f														// float maxDepthBounds;
-	};
-
-	std::vector<vk::PipelineColorBlendAttachmentState> blendState = {
-		vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
-			VK_TRUE,												// Bool32 blendEnable;
-			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-		}
-	};
+	// Depth stencil state
+	vk::PipelineDepthStencilStateCreateInfo pdssci;
+	pdssci.depthTestEnable = VK_TRUE;
+	pdssci.depthWriteEnable = VK_TRUE;
+	pdssci.depthCompareOp = vk::CompareOp::eGreater;
+	pdssci.depthBoundsTestEnable = VK_FALSE;
+	pdssci.stencilTestEnable = VK_FALSE;
+	pdssci.front.compareOp = vk::CompareOp::eAlways;
+	pdssci.back.compareOp = vk::CompareOp::eAlways;
+	pdssci.minDepthBounds = 0.0f;
+	pdssci.maxDepthBounds = 0.0f;
+	_pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
-		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
-		vk::LogicOp::eCopy,										// LogicOp logicOp;
-		static_cast<uint32_t>(blendState.size()),				// uint32_t attachmentCount;
-		blendState.data(),										// const PipelineColorBlendAttachmentState* pAttachments;
-		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
-	};
+	vk::PipelineColorBlendAttachmentState cba;
+	cba.blendEnable = VK_TRUE;
+	cba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+	cba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	cba.colorBlendOp = vk::BlendOp::eAdd;
+	cba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+	cba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+	cba.alphaBlendOp = vk::BlendOp::eAdd;
+	cba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { cba };
+
+	vk::PipelineColorBlendStateCreateInfo pcbsci;
+	pcbsci.logicOpEnable = VK_FALSE;
+	pcbsci.logicOp = vk::LogicOp::eCopy;
+	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.pAttachments = colorBlendAttachments.data();
+	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+	_pipeline.pipeinfo.pColorBlendState = &pcbsci;
 
 	// Dynamic state
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!bloom.DSLayoutBrightFilter)
-	{// DescriptorSetLayout
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0: Composition image sampler  
-			vk::DescriptorSetLayoutBinding{
-				0,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			}
+	{
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
 		};
-
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 		};
-
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
 		bloom.DSLayoutBrightFilter = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { bloom.DSLayoutBrightFilter };
-	vk::PushConstantRange pConstants = { vk::ShaderStageFlagBits::eFragment, 0, 5 * sizeof(float) };
-	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
+
+	vk::PushConstantRange pConstants;
+	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
+	pConstants.offset = 0;
+	pConstants.size = 5 * sizeof(vec4);
+
+	vk::PipelineLayoutCreateInfo plci;
+	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.pSetLayouts = descriptorSetLayouts.data();
+	plci.pushConstantRangeCount = 1;
+	plci.pPushConstantRanges = &pConstants;
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(plci);
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = bloom.renderPassBrightFilter;
@@ -3090,175 +2695,151 @@ Pipeline vm::Context::createGaussianBlurHorizontalPipeline()
 	Pipeline _pipeline;
 
 	// Shader stages
-	std::vector<char> vertCode{};
-	std::vector<char> fragCode{};
-
+	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
 	vk::ShaderModuleCreateInfo vsmci;
+	vsmci.codeSize = vertCode.size();
+	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vk::ShaderModule vertModule = vulkan.device.createShaderModule(vsmci);
+
+	std::vector<char> fragCode = readFile("shaders/Bloom/fragGaussianBlurHorizontal.spv");
 	vk::ShaderModuleCreateInfo fsmci;
+	fsmci.codeSize = fragCode.size();
+	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	vk::ShaderModule fragModule = vulkan.device.createShaderModule(fsmci);
 
-	vk::ShaderModule vertModule;
-	vk::ShaderModule fragModule;
-	{
-		vertCode = readFile("shaders/Common/vert.spv");
-		fragCode = readFile("shaders/Bloom/fragGaussianBlurHorizontal.spv");
+	vk::PipelineShaderStageCreateInfo pssci1;
+	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
+	pssci1.module = vertModule;
+	pssci1.pName = "main";
 
-		vsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			vertCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-		};
-		fsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			fragCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-		};
-		vertModule = vulkan.device.createShaderModule(vsmci);
-		fragModule = vulkan.device.createShaderModule(fsmci);
-	}
+	vk::PipelineShaderStageCreateInfo pssci2;
+	pssci2.stage = vk::ShaderStageFlagBits::eFragment;
+	pssci2.module = fragModule;
+	pssci2.pName = "main";
 
-	std::vector<vk::PipelineShaderStageCreateInfo> stages{
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
-			vertModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		},
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
-			fragModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		}
-	};
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
 	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
 	_pipeline.pipeinfo.pStages = stages.data();
 
 	// Vertex Input state
-	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+	vk::PipelineVertexInputStateCreateInfo pvisci;
+	_pipeline.pipeinfo.pVertexInputState = &pvisci;
 
 	// Input Assembly stage
-	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
-		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
-		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
-		VK_FALSE										// Bool32 primitiveRestartEnable;
-	};
+	vk::PipelineInputAssemblyStateCreateInfo piasci;
+	piasci.topology = vk::PrimitiveTopology::eTriangleList;
+	piasci.primitiveRestartEnable = VK_FALSE;
+	_pipeline.pipeinfo.pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
-	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
-		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
-		1,													// uint32_t viewportCount;
-		&vk::Viewport{										// const Viewport* pViewports;
-			0.0f,												// float x;
-			0.0f,												// float y;
-			WIDTH_f,											// float width;
-			HEIGHT_f,											// float height;
-			0.0f,												// float minDepth;
-			1.0f },												// float maxDepth;
-		1,													// uint32_t scissorCount;
-		&vk::Rect2D{										// const Rect2D* pScissors;
-			vk::Offset2D(),										// Offset2D offset;
-			vulkan.surface->actualExtent }						// Extent2D extent;
-	};
+	vk::Viewport vp;
+	vp.x = 0.0f;
+	vp.y = 0.0f;
+	vp.width = WIDTH_f;
+	vp.height = HEIGHT_f;
+	vp.minDepth = 0.0f;
+	vp.maxDepth = 1.0f;
+
+	vk::Rect2D r2d;
+	r2d.extent = vulkan.surface->actualExtent;
+
+	vk::PipelineViewportStateCreateInfo pvsci;
+	pvsci.viewportCount = 1;
+	pvsci.pViewports = &vp;
+	pvsci.scissorCount = 1;
+	pvsci.pScissors = &r2d;
+	_pipeline.pipeinfo.pViewportState = &pvsci;
 
 	// Rasterization state
-	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
-		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
-		VK_FALSE,										// Bool32 depthClampEnable;
-		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
-		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eClockwise,						// FrontFace frontFace;
-		VK_FALSE,										// Bool32 depthBiasEnable;
-		0.0f,											// float depthBiasConstantFactor;
-		0.0f,											// float depthBiasClamp;
-		0.0f,											// float depthBiasSlopeFactor;
-		1.0f											// float lineWidth;
-	};
+	vk::PipelineRasterizationStateCreateInfo prsci;
+	prsci.depthClampEnable = VK_FALSE;
+	prsci.rasterizerDiscardEnable = VK_FALSE;
+	prsci.polygonMode = vk::PolygonMode::eFill;
+	prsci.cullMode = vk::CullModeFlagBits::eBack;
+	prsci.frontFace = vk::FrontFace::eClockwise;
+	prsci.depthBiasEnable = VK_FALSE;
+	prsci.depthBiasConstantFactor = 0.0f;
+	prsci.depthBiasClamp = 0.0f;
+	prsci.depthBiasSlopeFactor = 0.0f;
+	prsci.lineWidth = 1.0f;
+	_pipeline.pipeinfo.pRasterizationState = &prsci;
 
 	// Multisample state
-	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
-		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
-		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
-		VK_FALSE,									// Bool32 sampleShadingEnable;
-		1.0f,										// float minSampleShading;
-		nullptr,									// const SampleMask* pSampleMask;
-		VK_FALSE,									// Bool32 alphaToCoverageEnable;
-		VK_FALSE									// Bool32 alphaToOneEnable;
-	};
+	vk::PipelineMultisampleStateCreateInfo pmsci;
+	pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
+	pmsci.sampleShadingEnable = VK_FALSE;
+	pmsci.minSampleShading = 1.0f;
+	pmsci.pSampleMask = nullptr;
+	pmsci.alphaToCoverageEnable = VK_FALSE;
+	pmsci.alphaToOneEnable = VK_FALSE;
+	_pipeline.pipeinfo.pMultisampleState = &pmsci;
 
-	// Depth and stencil state
-	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
-		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
-		VK_TRUE,													// Bool32 depthTestEnable;
-		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,									// CompareOp depthCompareOp;
-		VK_FALSE,													// Bool32 depthBoundsTestEnable;
-		VK_FALSE,													// Bool32 stencilTestEnable;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
-		0.0f,														// float minDepthBounds;
-		0.0f														// float maxDepthBounds;
-	};
-
-	std::vector<vk::PipelineColorBlendAttachmentState> blendState = {
-		vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
-			VK_TRUE,												// Bool32 blendEnable;
-			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-		}
-	};
+	// Depth stencil state
+	vk::PipelineDepthStencilStateCreateInfo pdssci;
+	pdssci.depthTestEnable = VK_TRUE;
+	pdssci.depthWriteEnable = VK_TRUE;
+	pdssci.depthCompareOp = vk::CompareOp::eGreater;
+	pdssci.depthBoundsTestEnable = VK_FALSE;
+	pdssci.stencilTestEnable = VK_FALSE;
+	pdssci.front.compareOp = vk::CompareOp::eAlways;
+	pdssci.back.compareOp = vk::CompareOp::eAlways;
+	pdssci.minDepthBounds = 0.0f;
+	pdssci.maxDepthBounds = 0.0f;
+	_pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
-		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
-		vk::LogicOp::eCopy,										// LogicOp logicOp;
-		static_cast<uint32_t>(blendState.size()),				// uint32_t attachmentCount;
-		blendState.data(),										// const PipelineColorBlendAttachmentState* pAttachments;
-		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
-	};
+	vk::PipelineColorBlendAttachmentState cba;
+	cba.blendEnable = VK_TRUE;
+	cba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+	cba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	cba.colorBlendOp = vk::BlendOp::eAdd;
+	cba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+	cba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+	cba.alphaBlendOp = vk::BlendOp::eAdd;
+	cba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { cba };
+
+	vk::PipelineColorBlendStateCreateInfo pcbsci;
+	pcbsci.logicOpEnable = VK_FALSE;
+	pcbsci.logicOp = vk::LogicOp::eCopy;
+	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.pAttachments = colorBlendAttachments.data();
+	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+	_pipeline.pipeinfo.pColorBlendState = &pcbsci;
 
 	// Dynamic state
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!bloom.DSLayoutGaussianBlurHorizontal)
-	{// DescriptorSetLayout
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0: Bright Filter image sampler  
-			vk::DescriptorSetLayoutBinding{
-				0,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			}
+	{
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
 		};
-
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 		};
-
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
 		bloom.DSLayoutGaussianBlurHorizontal = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { bloom.DSLayoutGaussianBlurHorizontal };
-	vk::PushConstantRange pConstants = { vk::ShaderStageFlagBits::eFragment, 0, 5 * sizeof(float) };
-	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
+
+	vk::PushConstantRange pConstants;
+	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
+	pConstants.offset = 0;
+	pConstants.size = 5 * sizeof(vec4);
+
+	vk::PipelineLayoutCreateInfo plci;
+	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.pSetLayouts = descriptorSetLayouts.data();
+	plci.pushConstantRangeCount = 1;
+	plci.pPushConstantRanges = &pConstants;
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(plci);
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = bloom.renderPassGaussianBlur;
@@ -3286,175 +2867,150 @@ Pipeline vm::Context::createGaussianBlurVerticalPipeline()
 	Pipeline _pipeline;
 
 	// Shader stages
-	std::vector<char> vertCode{};
-	std::vector<char> fragCode{};
-
+	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
 	vk::ShaderModuleCreateInfo vsmci;
+	vsmci.codeSize = vertCode.size();
+	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vk::ShaderModule vertModule = vulkan.device.createShaderModule(vsmci);
+
+	std::vector<char> fragCode = readFile("shaders/Bloom/fragGaussianBlurVertical.spv");
 	vk::ShaderModuleCreateInfo fsmci;
+	fsmci.codeSize = fragCode.size();
+	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	vk::ShaderModule fragModule = vulkan.device.createShaderModule(fsmci);
 
-	vk::ShaderModule vertModule;
-	vk::ShaderModule fragModule;
-	{
-		vertCode = readFile("shaders/Common/vert.spv");
-		fragCode = readFile("shaders/Bloom/fragGaussianBlurVertical.spv");
+	vk::PipelineShaderStageCreateInfo pssci1;
+	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
+	pssci1.module = vertModule;
+	pssci1.pName = "main";
 
-		vsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			vertCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-		};
-		fsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			fragCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-		};
-		vertModule = vulkan.device.createShaderModule(vsmci);
-		fragModule = vulkan.device.createShaderModule(fsmci);
-	}
+	vk::PipelineShaderStageCreateInfo pssci2;
+	pssci2.stage = vk::ShaderStageFlagBits::eFragment;
+	pssci2.module = fragModule;
+	pssci2.pName = "main";
 
-	std::vector<vk::PipelineShaderStageCreateInfo> stages{
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
-			vertModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		},
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
-			fragModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		}
-	};
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
 	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
 	_pipeline.pipeinfo.pStages = stages.data();
 
 	// Vertex Input state
-	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+	vk::PipelineVertexInputStateCreateInfo pvisci;
+	_pipeline.pipeinfo.pVertexInputState = &pvisci;
 
 	// Input Assembly stage
-	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
-		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
-		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
-		VK_FALSE										// Bool32 primitiveRestartEnable;
-	};
+	vk::PipelineInputAssemblyStateCreateInfo piasci;
+	piasci.topology = vk::PrimitiveTopology::eTriangleList;
+	piasci.primitiveRestartEnable = VK_FALSE;
+	_pipeline.pipeinfo.pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
-	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
-		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
-		1,													// uint32_t viewportCount;
-		&vk::Viewport{										// const Viewport* pViewports;
-			0.0f,												// float x;
-			0.0f,												// float y;
-			WIDTH_f,											// float width;
-			HEIGHT_f,											// float height;
-			0.0f,												// float minDepth;
-			1.0f },												// float maxDepth;
-		1,													// uint32_t scissorCount;
-		&vk::Rect2D{										// const Rect2D* pScissors;
-			vk::Offset2D(),										// Offset2D offset;
-			vulkan.surface->actualExtent }						// Extent2D extent;
-	};
+	vk::Viewport vp;
+	vp.x = 0.0f;
+	vp.y = 0.0f;
+	vp.width = WIDTH_f;
+	vp.height = HEIGHT_f;
+	vp.minDepth = 0.0f;
+	vp.maxDepth = 1.0f;
+
+	vk::Rect2D r2d;
+	r2d.extent = vulkan.surface->actualExtent;
+
+	vk::PipelineViewportStateCreateInfo pvsci;
+	pvsci.viewportCount = 1;
+	pvsci.pViewports = &vp;
+	pvsci.scissorCount = 1;
+	pvsci.pScissors = &r2d;
+	_pipeline.pipeinfo.pViewportState = &pvsci;
 
 	// Rasterization state
-	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
-		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
-		VK_FALSE,										// Bool32 depthClampEnable;
-		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
-		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eClockwise,						// FrontFace frontFace;
-		VK_FALSE,										// Bool32 depthBiasEnable;
-		0.0f,											// float depthBiasConstantFactor;
-		0.0f,											// float depthBiasClamp;
-		0.0f,											// float depthBiasSlopeFactor;
-		1.0f											// float lineWidth;
-	};
+	vk::PipelineRasterizationStateCreateInfo prsci;
+	prsci.depthClampEnable = VK_FALSE;
+	prsci.rasterizerDiscardEnable = VK_FALSE;
+	prsci.polygonMode = vk::PolygonMode::eFill;
+	prsci.cullMode = vk::CullModeFlagBits::eBack;
+	prsci.frontFace = vk::FrontFace::eClockwise;
+	prsci.depthBiasEnable = VK_FALSE;
+	prsci.depthBiasConstantFactor = 0.0f;
+	prsci.depthBiasClamp = 0.0f;
+	prsci.depthBiasSlopeFactor = 0.0f;
+	prsci.lineWidth = 1.0f;
+	_pipeline.pipeinfo.pRasterizationState = &prsci;
 
 	// Multisample state
-	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
-		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
-		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
-		VK_FALSE,									// Bool32 sampleShadingEnable;
-		1.0f,										// float minSampleShading;
-		nullptr,									// const SampleMask* pSampleMask;
-		VK_FALSE,									// Bool32 alphaToCoverageEnable;
-		VK_FALSE									// Bool32 alphaToOneEnable;
-	};
+	vk::PipelineMultisampleStateCreateInfo pmsci;
+	pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
+	pmsci.sampleShadingEnable = VK_FALSE;
+	pmsci.minSampleShading = 1.0f;
+	pmsci.pSampleMask = nullptr;
+	pmsci.alphaToCoverageEnable = VK_FALSE;
+	pmsci.alphaToOneEnable = VK_FALSE;
+	_pipeline.pipeinfo.pMultisampleState = &pmsci;
 
-	// Depth and stencil state
-	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
-		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
-		VK_TRUE,													// Bool32 depthTestEnable;
-		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,									// CompareOp depthCompareOp;
-		VK_FALSE,													// Bool32 depthBoundsTestEnable;
-		VK_FALSE,													// Bool32 stencilTestEnable;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
-		0.0f,														// float minDepthBounds;
-		0.0f														// float maxDepthBounds;
-	};
-
-	std::vector<vk::PipelineColorBlendAttachmentState> blendState = {
-		vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
-			VK_TRUE,												// Bool32 blendEnable;
-			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-		}
-	};
+	// Depth stencil state
+	vk::PipelineDepthStencilStateCreateInfo pdssci;
+	pdssci.depthTestEnable = VK_TRUE;
+	pdssci.depthWriteEnable = VK_TRUE;
+	pdssci.depthCompareOp = vk::CompareOp::eGreater;
+	pdssci.depthBoundsTestEnable = VK_FALSE;
+	pdssci.stencilTestEnable = VK_FALSE;
+	pdssci.front.compareOp = vk::CompareOp::eAlways;
+	pdssci.back.compareOp = vk::CompareOp::eAlways;
+	pdssci.minDepthBounds = 0.0f;
+	pdssci.maxDepthBounds = 0.0f;
+	_pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
-		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
-		vk::LogicOp::eCopy,										// LogicOp logicOp;
-		static_cast<uint32_t>(blendState.size()),				// uint32_t attachmentCount;
-		blendState.data(),										// const PipelineColorBlendAttachmentState* pAttachments;
-		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
-	};
+	vk::PipelineColorBlendAttachmentState cba;
+	cba.blendEnable = VK_TRUE;
+	cba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+	cba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	cba.colorBlendOp = vk::BlendOp::eAdd;
+	cba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+	cba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+	cba.alphaBlendOp = vk::BlendOp::eAdd;
+	cba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { cba };
+
+	vk::PipelineColorBlendStateCreateInfo pcbsci;
+	pcbsci.logicOpEnable = VK_FALSE;
+	pcbsci.logicOp = vk::LogicOp::eCopy;
+	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.pAttachments = colorBlendAttachments.data();
+	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+	_pipeline.pipeinfo.pColorBlendState = &pcbsci;
 
 	// Dynamic state
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!bloom.DSLayoutGaussianBlurVertical)
-	{// DescriptorSetLayout
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0: Gaussian Blur Horizontal image sampler
-			vk::DescriptorSetLayoutBinding{
-				0,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			}
+	{
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
 		};
-
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 		};
-
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
 		bloom.DSLayoutGaussianBlurVertical = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { bloom.DSLayoutGaussianBlurVertical };
-	vk::PushConstantRange pConstants = { vk::ShaderStageFlagBits::eFragment, 0, 5 * sizeof(float) };
-	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
+	vk::PushConstantRange pConstants;
+	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
+	pConstants.offset = 0;
+	pConstants.size = 5 * sizeof(vec4);
+
+	vk::PipelineLayoutCreateInfo plci;
+	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.pSetLayouts = descriptorSetLayouts.data();
+	plci.pushConstantRangeCount = 1;
+	plci.pPushConstantRanges = &pConstants;
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(plci);
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = bloom.renderPassGaussianBlur;
@@ -3482,196 +3038,152 @@ Pipeline vm::Context::createCombinePipeline()
 	Pipeline _pipeline;
 
 	// Shader stages
-	std::vector<char> vertCode{};
-	std::vector<char> fragCode{};
-
+	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
 	vk::ShaderModuleCreateInfo vsmci;
+	vsmci.codeSize = vertCode.size();
+	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vk::ShaderModule vertModule = vulkan.device.createShaderModule(vsmci);
+
+	std::vector<char> fragCode = readFile("shaders/Bloom/fragCombine.spv");
 	vk::ShaderModuleCreateInfo fsmci;
+	fsmci.codeSize = fragCode.size();
+	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	vk::ShaderModule fragModule = vulkan.device.createShaderModule(fsmci);
 
-	vk::ShaderModule vertModule;
-	vk::ShaderModule fragModule;
-	{
-		vertCode = readFile("shaders/Common/vert.spv");
-		fragCode = readFile("shaders/Bloom/fragCombine.spv");
+	vk::PipelineShaderStageCreateInfo pssci1;
+	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
+	pssci1.module = vertModule;
+	pssci1.pName = "main";
 
-		vsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			vertCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-		};
-		fsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			fragCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-		};
-		vertModule = vulkan.device.createShaderModule(vsmci);
-		fragModule = vulkan.device.createShaderModule(fsmci);
-	}
+	vk::PipelineShaderStageCreateInfo pssci2;
+	pssci2.stage = vk::ShaderStageFlagBits::eFragment;
+	pssci2.module = fragModule;
+	pssci2.pName = "main";
 
-	std::vector<vk::PipelineShaderStageCreateInfo> stages{
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
-			vertModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		},
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
-			fragModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		}
-	};
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
 	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
 	_pipeline.pipeinfo.pStages = stages.data();
 
 	// Vertex Input state
-	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+	vk::PipelineVertexInputStateCreateInfo pvisci;
+	_pipeline.pipeinfo.pVertexInputState = &pvisci;
 
 	// Input Assembly stage
-	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
-		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
-		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
-		VK_FALSE										// Bool32 primitiveRestartEnable;
-	};
+	vk::PipelineInputAssemblyStateCreateInfo piasci;
+	piasci.topology = vk::PrimitiveTopology::eTriangleList;
+	piasci.primitiveRestartEnable = VK_FALSE;
+	_pipeline.pipeinfo.pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
-	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
-		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
-		1,													// uint32_t viewportCount;
-		&vk::Viewport{										// const Viewport* pViewports;
-			0.0f,												// float x;
-			0.0f,												// float y;
-			WIDTH_f,											// float width;
-			HEIGHT_f,											// float height;
-			0.0f,												// float minDepth;
-			1.0f },												// float maxDepth;
-		1,													// uint32_t scissorCount;
-		&vk::Rect2D{										// const Rect2D* pScissors;
-			vk::Offset2D(),										// Offset2D offset;
-			vulkan.surface->actualExtent }						// Extent2D extent;
-	};
+	vk::Viewport vp;
+	vp.x = 0.0f;
+	vp.y = 0.0f;
+	vp.width = WIDTH_f;
+	vp.height = HEIGHT_f;
+	vp.minDepth = 0.0f;
+	vp.maxDepth = 1.0f;
+
+	vk::Rect2D r2d;
+	r2d.extent = vulkan.surface->actualExtent;
+
+	vk::PipelineViewportStateCreateInfo pvsci;
+	pvsci.viewportCount = 1;
+	pvsci.pViewports = &vp;
+	pvsci.scissorCount = 1;
+	pvsci.pScissors = &r2d;
+	_pipeline.pipeinfo.pViewportState = &pvsci;
 
 	// Rasterization state
-	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
-		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
-		VK_FALSE,										// Bool32 depthClampEnable;
-		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
-		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eClockwise,						// FrontFace frontFace;
-		VK_FALSE,										// Bool32 depthBiasEnable;
-		0.0f,											// float depthBiasConstantFactor;
-		0.0f,											// float depthBiasClamp;
-		0.0f,											// float depthBiasSlopeFactor;
-		1.0f											// float lineWidth;
-	};
+	vk::PipelineRasterizationStateCreateInfo prsci;
+	prsci.depthClampEnable = VK_FALSE;
+	prsci.rasterizerDiscardEnable = VK_FALSE;
+	prsci.polygonMode = vk::PolygonMode::eFill;
+	prsci.cullMode = vk::CullModeFlagBits::eBack;
+	prsci.frontFace = vk::FrontFace::eClockwise;
+	prsci.depthBiasEnable = VK_FALSE;
+	prsci.depthBiasConstantFactor = 0.0f;
+	prsci.depthBiasClamp = 0.0f;
+	prsci.depthBiasSlopeFactor = 0.0f;
+	prsci.lineWidth = 1.0f;
+	_pipeline.pipeinfo.pRasterizationState = &prsci;
 
 	// Multisample state
-	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
-		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
-		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
-		VK_FALSE,									// Bool32 sampleShadingEnable;
-		1.0f,										// float minSampleShading;
-		nullptr,									// const SampleMask* pSampleMask;
-		VK_FALSE,									// Bool32 alphaToCoverageEnable;
-		VK_FALSE									// Bool32 alphaToOneEnable;
-	};
+	vk::PipelineMultisampleStateCreateInfo pmsci;
+	pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
+	pmsci.sampleShadingEnable = VK_FALSE;
+	pmsci.minSampleShading = 1.0f;
+	pmsci.pSampleMask = nullptr;
+	pmsci.alphaToCoverageEnable = VK_FALSE;
+	pmsci.alphaToOneEnable = VK_FALSE;
+	_pipeline.pipeinfo.pMultisampleState = &pmsci;
 
-	// Depth and stencil state
-	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
-		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
-		VK_TRUE,													// Bool32 depthTestEnable;
-		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,									// CompareOp depthCompareOp;
-		VK_FALSE,													// Bool32 depthBoundsTestEnable;
-		VK_FALSE,													// Bool32 stencilTestEnable;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
-		0.0f,														// float minDepthBounds;
-		0.0f														// float maxDepthBounds;
-	};
-
-	std::vector<vk::PipelineColorBlendAttachmentState> blendState = {
-		vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
-			VK_TRUE,												// Bool32 blendEnable;
-			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-		},
-		vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
-			VK_TRUE,												// Bool32 blendEnable;
-			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-		},
-	};
+	// Depth stencil state
+	vk::PipelineDepthStencilStateCreateInfo pdssci;
+	pdssci.depthTestEnable = VK_TRUE;
+	pdssci.depthWriteEnable = VK_TRUE;
+	pdssci.depthCompareOp = vk::CompareOp::eGreater;
+	pdssci.depthBoundsTestEnable = VK_FALSE;
+	pdssci.stencilTestEnable = VK_FALSE;
+	pdssci.front.compareOp = vk::CompareOp::eAlways;
+	pdssci.back.compareOp = vk::CompareOp::eAlways;
+	pdssci.minDepthBounds = 0.0f;
+	pdssci.maxDepthBounds = 0.0f;
+	_pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
-		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
-		vk::LogicOp::eCopy,										// LogicOp logicOp;
-		static_cast<uint32_t>(blendState.size()),				// uint32_t attachmentCount;
-		blendState.data(),										// const PipelineColorBlendAttachmentState* pAttachments;
-		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
-	};
+	vk::PipelineColorBlendAttachmentState cba;
+	cba.blendEnable = VK_TRUE;
+	cba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+	cba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	cba.colorBlendOp = vk::BlendOp::eAdd;
+	cba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+	cba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+	cba.alphaBlendOp = vk::BlendOp::eAdd;
+	cba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { cba, cba };
+
+	vk::PipelineColorBlendStateCreateInfo pcbsci;
+	pcbsci.logicOpEnable = VK_FALSE;
+	pcbsci.logicOp = vk::LogicOp::eCopy;
+	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.pAttachments = colorBlendAttachments.data();
+	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+	_pipeline.pipeinfo.pColorBlendState = &pcbsci;
 
 	// Dynamic state
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!bloom.DSLayoutCombine)
-	{// DescriptorSetLayout
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0: Composition image sampler  
-			vk::DescriptorSetLayoutBinding{
-				0,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 1: Gaussian Blur image sampler  
-			vk::DescriptorSetLayoutBinding{
-				1,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			}
+	{
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
 		};
-
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
 		};
-
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
 		bloom.DSLayoutCombine = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { bloom.DSLayoutCombine };
-	vk::PushConstantRange pConstants = { vk::ShaderStageFlagBits::eFragment, 0, 5 * sizeof(float) };
-	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants });
+
+	vk::PushConstantRange pConstants;
+	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
+	pConstants.offset = 0;
+	pConstants.size = 5 * sizeof(vec4);
+
+	vk::PipelineLayoutCreateInfo plci;
+	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.pSetLayouts = descriptorSetLayouts.data();
+	plci.pushConstantRangeCount = 1;
+	plci.pPushConstantRanges = &pConstants;
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(plci);
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = bloom.renderPassCombine;
@@ -3699,209 +3211,155 @@ Pipeline Context::createSSAOPipeline()
 	Pipeline _pipeline;
 
 	// Shader stages
-	std::vector<char> vertCode{};
-	std::vector<char> fragCode{};
-
+	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
 	vk::ShaderModuleCreateInfo vsmci;
+	vsmci.codeSize = vertCode.size();
+	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vk::ShaderModule vertModule = vulkan.device.createShaderModule(vsmci);
+
+	std::vector<char> fragCode = readFile("shaders/SSAO/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
+	fsmci.codeSize = fragCode.size();
+	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	vk::ShaderModule fragModule = vulkan.device.createShaderModule(fsmci);
 
-	vk::ShaderModule vertModule;
-	vk::ShaderModule fragModule;
-	{
-		vertCode = readFile("shaders/Common/vert.spv");
-		fragCode = readFile("shaders/SSAO/frag.spv");
+	vk::PipelineShaderStageCreateInfo pssci1;
+	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
+	pssci1.module = vertModule;
+	pssci1.pName = "main";
 
-		vsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			vertCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-		};
-		fsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			fragCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-		};
-		vertModule = vulkan.device.createShaderModule(vsmci);
-		fragModule = vulkan.device.createShaderModule(fsmci);
-	}
+	vk::PipelineShaderStageCreateInfo pssci2;
+	pssci2.stage = vk::ShaderStageFlagBits::eFragment;
+	pssci2.module = fragModule;
+	pssci2.pName = "main";
 
-	std::vector<vk::PipelineShaderStageCreateInfo> stages{
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
-			vertModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		},
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
-			fragModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		}
-	};
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
 	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
 	_pipeline.pipeinfo.pStages = stages.data();
 
 	// Vertex Input state
-	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+	vk::PipelineVertexInputStateCreateInfo pvisci;
+	_pipeline.pipeinfo.pVertexInputState = &pvisci;
 
 	// Input Assembly stage
-	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
-		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
-		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
-		VK_FALSE										// Bool32 primitiveRestartEnable;
-	};
+	vk::PipelineInputAssemblyStateCreateInfo piasci;
+	piasci.topology = vk::PrimitiveTopology::eTriangleList;
+	piasci.primitiveRestartEnable = VK_FALSE;
+	_pipeline.pipeinfo.pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
-	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
-		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
-		1,													// uint32_t viewportCount;
-		&vk::Viewport{										// const Viewport* pViewports;
-			0.0f,												// float x;
-			0.0f,												// float y;
-			WIDTH_f,											// float width;
-			HEIGHT_f,											// float height;
-			0.0f,												// float minDepth;
-			1.0f },												// float maxDepth;
-		1,													// uint32_t scissorCount;
-		&vk::Rect2D{										// const Rect2D* pScissors;
-			vk::Offset2D(),										// Offset2D offset;
-			vulkan.surface->actualExtent }								// Extent2D extent;
-	};
+	vk::Viewport vp;
+	vp.x = 0.0f;
+	vp.y = 0.0f;
+	vp.width = WIDTH_f;
+	vp.height = HEIGHT_f;
+	vp.minDepth = 0.0f;
+	vp.maxDepth = 1.0f;
+
+	vk::Rect2D r2d;
+	r2d.extent = vulkan.surface->actualExtent;
+
+	vk::PipelineViewportStateCreateInfo pvsci;
+	pvsci.viewportCount = 1;
+	pvsci.pViewports = &vp;
+	pvsci.scissorCount = 1;
+	pvsci.pScissors = &r2d;
+	_pipeline.pipeinfo.pViewportState = &pvsci;
 
 	// Rasterization state
-	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
-		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
-		VK_FALSE,										// Bool32 depthClampEnable;
-		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
-		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eClockwise,						// FrontFace frontFace;
-		VK_FALSE,										// Bool32 depthBiasEnable;
-		0.0f,											// float depthBiasConstantFactor;
-		0.0f,											// float depthBiasClamp;
-		0.0f,											// float depthBiasSlopeFactor;
-		1.0f											// float lineWidth;
-	};
+	vk::PipelineRasterizationStateCreateInfo prsci;
+	prsci.depthClampEnable = VK_FALSE;
+	prsci.rasterizerDiscardEnable = VK_FALSE;
+	prsci.polygonMode = vk::PolygonMode::eFill;
+	prsci.cullMode = vk::CullModeFlagBits::eBack;
+	prsci.frontFace = vk::FrontFace::eClockwise;
+	prsci.depthBiasEnable = VK_FALSE;
+	prsci.depthBiasConstantFactor = 0.0f;
+	prsci.depthBiasClamp = 0.0f;
+	prsci.depthBiasSlopeFactor = 0.0f;
+	prsci.lineWidth = 1.0f;
+	_pipeline.pipeinfo.pRasterizationState = &prsci;
 
 	// Multisample state
-	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
-		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
-		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
-		VK_FALSE,									// Bool32 sampleShadingEnable;
-		1.0f,										// float minSampleShading;
-		nullptr,									// const SampleMask* pSampleMask;
-		VK_FALSE,									// Bool32 alphaToCoverageEnable;
-		VK_FALSE									// Bool32 alphaToOneEnable;
-	};
+	vk::PipelineMultisampleStateCreateInfo pmsci;
+	pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
+	pmsci.sampleShadingEnable = VK_FALSE;
+	pmsci.minSampleShading = 1.0f;
+	pmsci.pSampleMask = nullptr;
+	pmsci.alphaToCoverageEnable = VK_FALSE;
+	pmsci.alphaToOneEnable = VK_FALSE;
+	_pipeline.pipeinfo.pMultisampleState = &pmsci;
 
-	// Depth and stencil state
-	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
-		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
-		VK_TRUE,													// Bool32 depthTestEnable;
-		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
-		VK_FALSE,													// Bool32 depthBoundsTestEnable;
-		VK_FALSE,													// Bool32 stencilTestEnable;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
-		0.0f,														// float minDepthBounds;
-		0.0f														// float maxDepthBounds;
-	};
+	// Depth stencil state
+	vk::PipelineDepthStencilStateCreateInfo pdssci;
+	pdssci.depthTestEnable = VK_TRUE;
+	pdssci.depthWriteEnable = VK_TRUE;
+	pdssci.depthCompareOp = vk::CompareOp::eGreater;
+	pdssci.depthBoundsTestEnable = VK_FALSE;
+	pdssci.stencilTestEnable = VK_FALSE;
+	pdssci.front.compareOp = vk::CompareOp::eAlways;
+	pdssci.back.compareOp = vk::CompareOp::eAlways;
+	pdssci.minDepthBounds = 0.0f;
+	pdssci.maxDepthBounds = 0.0f;
+	_pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
-		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
-		vk::LogicOp::eCopy,										// LogicOp logicOp;
-		1,														// uint32_t attachmentCount;
-		&vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
-			VK_TRUE,												// Bool32 blendEnable;
-			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-		},
-		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
-	};
+	vk::PipelineColorBlendAttachmentState cba;
+	cba.blendEnable = VK_TRUE;
+	cba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+	cba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	cba.colorBlendOp = vk::BlendOp::eAdd;
+	cba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+	cba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+	cba.alphaBlendOp = vk::BlendOp::eAdd;
+	cba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { cba };
+
+	vk::PipelineColorBlendStateCreateInfo pcbsci;
+	pcbsci.logicOpEnable = VK_FALSE;
+	pcbsci.logicOp = vk::LogicOp::eCopy;
+	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.pAttachments = colorBlendAttachments.data();
+	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+	_pipeline.pipeinfo.pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	//std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	_pipeline.pipeinfo.pDynamicState = nullptr;
-	//&vk::PipelineDynamicStateCreateInfo{
-	//		vk::PipelineDynamicStateCreateFlags(),			//PipelineDynamicStateCreateFlags flags;
-	//		static_cast<uint32_t>(dynamicStates.size()),	//uint32_t dynamicStateCount;
-	//		dynamicStates.data()							//const DynamicState* pDynamicStates;
-	//};
 
 	// Pipeline Layout
 	if (!ssao.DSLayout)
-	{// DescriptorSetLayout
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0: Positions image sampler  
-			vk::DescriptorSetLayoutBinding{
-				0,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 1: Normals image sampler  
-			vk::DescriptorSetLayoutBinding{
-				1,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 2: Noise image sampler  
-			vk::DescriptorSetLayoutBinding{
-				2,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 3: Kernel Uniform
-			vk::DescriptorSetLayoutBinding{
-				3,											//uint32_t binding;
-				vk::DescriptorType::eUniformBuffer,			//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 4: PVM Uniform
-			vk::DescriptorSetLayoutBinding{
-				4,											//uint32_t binding;
-				vk::DescriptorType::eUniformBuffer,			//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			}
+	{
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
 		};
-
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(3, vk::DescriptorType::eUniformBuffer),
+			layoutBinding(4, vk::DescriptorType::eUniformBuffer),
 		};
-
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
 		ssao.DSLayout = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayout };
-	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
-	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants } );
+
+	vk::PushConstantRange pConstants;
+	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
+	pConstants.offset = 0;
+	pConstants.size = 4 * sizeof(vec4);
+
+	vk::PipelineLayoutCreateInfo plci;
+	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.pSetLayouts = descriptorSetLayouts.data();
+	plci.pushConstantRangeCount = 1;
+	plci.pPushConstantRanges = &pConstants;
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(plci);
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = ssao.renderPass;
@@ -3929,173 +3387,145 @@ Pipeline Context::createSSAOBlurPipeline()
 	Pipeline _pipeline;
 
 	// Shader stages
-	std::vector<char> vertCode{};
-	std::vector<char> fragCode{};
-
+	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
 	vk::ShaderModuleCreateInfo vsmci;
+	vsmci.codeSize = vertCode.size();
+	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vk::ShaderModule vertModule = vulkan.device.createShaderModule(vsmci);
+
+	std::vector<char> fragCode = readFile("shaders/SSAO/fragBlur.spv");
 	vk::ShaderModuleCreateInfo fsmci;
+	fsmci.codeSize = fragCode.size();
+	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	vk::ShaderModule fragModule = vulkan.device.createShaderModule(fsmci);
 
-	vk::ShaderModule vertModule;
-	vk::ShaderModule fragModule;
-	{
-		vertCode = readFile("shaders/Common/vert.spv");
-		fragCode = readFile("shaders/SSAO/fragBlur.spv");
+	vk::PipelineShaderStageCreateInfo pssci1;
+	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
+	pssci1.module = vertModule;
+	pssci1.pName = "main";
 
-		vsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			vertCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-		};
-		fsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			fragCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-		};
-		vertModule = vulkan.device.createShaderModule(vsmci);
-		fragModule = vulkan.device.createShaderModule(fsmci);
-	}
+	vk::PipelineShaderStageCreateInfo pssci2;
+	pssci2.stage = vk::ShaderStageFlagBits::eFragment;
+	pssci2.module = fragModule;
+	pssci2.pName = "main";
 
-	std::vector<vk::PipelineShaderStageCreateInfo> stages{
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
-			vertModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		},
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
-			fragModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		}
-	};
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
 	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
 	_pipeline.pipeinfo.pStages = stages.data();
 
 	// Vertex Input state
-	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+	vk::PipelineVertexInputStateCreateInfo pvisci;
+	_pipeline.pipeinfo.pVertexInputState = &pvisci;
 
 	// Input Assembly stage
-	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
-		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
-		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
-		VK_FALSE										// Bool32 primitiveRestartEnable;
-	};
+	vk::PipelineInputAssemblyStateCreateInfo piasci;
+	piasci.topology = vk::PrimitiveTopology::eTriangleList;
+	piasci.primitiveRestartEnable = VK_FALSE;
+	_pipeline.pipeinfo.pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
-	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
-		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
-		1,													// uint32_t viewportCount;
-		&vk::Viewport{										// const Viewport* pViewports;
-			0.0f,												// float x;
-			0.0f,												// float y;
-			WIDTH_f, 											// float width;
-			HEIGHT_f,											// float height;
-			0.0f,												// float minDepth;
-			1.0f },												// float maxDepth;
-		1,													// uint32_t scissorCount;
-		&vk::Rect2D{										// const Rect2D* pScissors;
-			vk::Offset2D(),										// Offset2D offset;
-			vulkan.surface->actualExtent }								// Extent2D extent;
-	};
+	vk::Viewport vp;
+	vp.x = 0.0f;
+	vp.y = 0.0f;
+	vp.width = WIDTH_f;
+	vp.height = HEIGHT_f;
+	vp.minDepth = 0.0f;
+	vp.maxDepth = 1.0f;
+
+	vk::Rect2D r2d;
+	r2d.extent = vulkan.surface->actualExtent;
+
+	vk::PipelineViewportStateCreateInfo pvsci;
+	pvsci.viewportCount = 1;
+	pvsci.pViewports = &vp;
+	pvsci.scissorCount = 1;
+	pvsci.pScissors = &r2d;
+	_pipeline.pipeinfo.pViewportState = &pvsci;
 
 	// Rasterization state
-	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
-		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
-		VK_FALSE,										// Bool32 depthClampEnable;
-		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
-		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eClockwise,						// FrontFace frontFace;
-		VK_FALSE,										// Bool32 depthBiasEnable;
-		0.0f,											// float depthBiasConstantFactor;
-		0.0f,											// float depthBiasClamp;
-		0.0f,											// float depthBiasSlopeFactor;
-		1.0f											// float lineWidth;
-	};
+	vk::PipelineRasterizationStateCreateInfo prsci;
+	prsci.depthClampEnable = VK_FALSE;
+	prsci.rasterizerDiscardEnable = VK_FALSE;
+	prsci.polygonMode = vk::PolygonMode::eFill;
+	prsci.cullMode = vk::CullModeFlagBits::eBack;
+	prsci.frontFace = vk::FrontFace::eClockwise;
+	prsci.depthBiasEnable = VK_FALSE;
+	prsci.depthBiasConstantFactor = 0.0f;
+	prsci.depthBiasClamp = 0.0f;
+	prsci.depthBiasSlopeFactor = 0.0f;
+	prsci.lineWidth = 1.0f;
+	_pipeline.pipeinfo.pRasterizationState = &prsci;
 
 	// Multisample state
-	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
-		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
-		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
-		VK_FALSE,									// Bool32 sampleShadingEnable;
-		1.0f,										// float minSampleShading;
-		nullptr,									// const SampleMask* pSampleMask;
-		VK_FALSE,									// Bool32 alphaToCoverageEnable;
-		VK_FALSE									// Bool32 alphaToOneEnable;
-	};
+	vk::PipelineMultisampleStateCreateInfo pmsci;
+	pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
+	pmsci.sampleShadingEnable = VK_FALSE;
+	pmsci.minSampleShading = 1.0f;
+	pmsci.pSampleMask = nullptr;
+	pmsci.alphaToCoverageEnable = VK_FALSE;
+	pmsci.alphaToOneEnable = VK_FALSE;
+	_pipeline.pipeinfo.pMultisampleState = &pmsci;
 
-	// Depth and stencil state
-	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
-		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
-		VK_TRUE,													// Bool32 depthTestEnable;
-		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,								// CompareOp depthCompareOp;
-		VK_FALSE,													// Bool32 depthBoundsTestEnable;
-		VK_FALSE,													// Bool32 stencilTestEnable;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
-		0.0f,														// float minDepthBounds;
-		0.0f														// float maxDepthBounds;
-	};
+	// Depth stencil state
+	vk::PipelineDepthStencilStateCreateInfo pdssci;
+	pdssci.depthTestEnable = VK_TRUE;
+	pdssci.depthWriteEnable = VK_TRUE;
+	pdssci.depthCompareOp = vk::CompareOp::eGreater;
+	pdssci.depthBoundsTestEnable = VK_FALSE;
+	pdssci.stencilTestEnable = VK_FALSE;
+	pdssci.front.compareOp = vk::CompareOp::eAlways;
+	pdssci.back.compareOp = vk::CompareOp::eAlways;
+	pdssci.minDepthBounds = 0.0f;
+	pdssci.maxDepthBounds = 0.0f;
+	_pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
-		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
-		vk::LogicOp::eCopy,										// LogicOp logicOp;
-		1,														// uint32_t attachmentCount;
-		&vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
-			VK_TRUE,												// Bool32 blendEnable;
-			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-		},
-		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
-	};
+	vk::PipelineColorBlendAttachmentState cba;
+	cba.blendEnable = VK_TRUE;
+	cba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+	cba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	cba.colorBlendOp = vk::BlendOp::eAdd;
+	cba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+	cba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+	cba.alphaBlendOp = vk::BlendOp::eAdd;
+	cba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { cba };
+
+	vk::PipelineColorBlendStateCreateInfo pcbsci;
+	pcbsci.logicOpEnable = VK_FALSE;
+	pcbsci.logicOp = vk::LogicOp::eCopy;
+	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.pAttachments = colorBlendAttachments.data();
+	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+	_pipeline.pipeinfo.pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	//std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!ssao.DSLayoutBlur)
-	{// DescriptorSetLayout
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0: SSAO image sampler  
-			vk::DescriptorSetLayoutBinding{
-				0,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			}
+	{
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
 		};
-
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 		};
-
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
 		ssao.DSLayoutBlur = vulkan.device.createDescriptorSetLayout(descriptorLayout);
-
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { ssao.DSLayoutBlur };
-	vk::PushConstantRange pConstants = vk::PushConstantRange();//{ vk::ShaderStageFlagBits::eFragment, 0, 4 * sizeof(float) };
-	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &pConstants } );
+
+	vk::PipelineLayoutCreateInfo plci;
+	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.pSetLayouts = descriptorSetLayouts.data();
+
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(plci);
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = ssao.blurRenderPass;
@@ -4123,195 +3553,154 @@ Pipeline Context::createMotionBlurPipeline()
 	Pipeline _pipeline;
 
 	// Shader stages
-	std::vector<char> vertCode{};
-	std::vector<char> fragCode{};
-
+	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
 	vk::ShaderModuleCreateInfo vsmci;
+	vsmci.codeSize = vertCode.size();
+	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vk::ShaderModule vertModule = vulkan.device.createShaderModule(vsmci);
+
+	std::vector<char> fragCode = readFile("shaders/MotionBlur/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
+	fsmci.codeSize = fragCode.size();
+	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	vk::ShaderModule fragModule = vulkan.device.createShaderModule(fsmci);
 
-	vk::ShaderModule vertModule;
-	vk::ShaderModule fragModule;
-	{
-		vertCode = readFile("shaders/Common/vert.spv");
-		fragCode = readFile("shaders/MotionBlur/frag.spv");
+	vk::PipelineShaderStageCreateInfo pssci1;
+	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
+	pssci1.module = vertModule;
+	pssci1.pName = "main";
 
-		vsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			vertCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(vertCode.data())	// const uint32_t* pCode;
-		};
-		fsmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),						// ShaderModuleCreateFlags flags;
-			fragCode.size(),									// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(fragCode.data())	// const uint32_t* pCode;
-		};
-		vertModule = vulkan.device.createShaderModule(vsmci);
-		fragModule = vulkan.device.createShaderModule(fsmci);
-	}
+	vk::PipelineShaderStageCreateInfo pssci2;
+	pssci2.stage = vk::ShaderStageFlagBits::eFragment;
+	pssci2.module = fragModule;
+	pssci2.pName = "main";
 
-	std::vector<vk::PipelineShaderStageCreateInfo> stages{
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eVertex,		// ShaderStageFlagBits stage;
-			vertModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		},
-		vk::PipelineShaderStageCreateInfo{
-			vk::PipelineShaderStageCreateFlags(),	// PipelineShaderStageCreateFlags flags;
-			vk::ShaderStageFlagBits::eFragment,		// ShaderStageFlagBits stage;
-			fragModule,								// ShaderModule module;
-			"main",									// const char* pName;
-			nullptr									// const SpecializationInfo* pSpecializationInfo;
-		}
-	};
+	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
 	_pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
 	_pipeline.pipeinfo.pStages = stages.data();
 
 	// Vertex Input state
-	_pipeline.pipeinfo.pVertexInputState = &vk::PipelineVertexInputStateCreateInfo();
+	vk::PipelineVertexInputStateCreateInfo pvisci;
+	_pipeline.pipeinfo.pVertexInputState = &pvisci;
 
 	// Input Assembly stage
-	_pipeline.pipeinfo.pInputAssemblyState = &vk::PipelineInputAssemblyStateCreateInfo{
-		vk::PipelineInputAssemblyStateCreateFlags(),	// PipelineInputAssemblyStateCreateFlags flags;
-		vk::PrimitiveTopology::eTriangleList,			// PrimitiveTopology topology;
-		VK_FALSE										// Bool32 primitiveRestartEnable;
-	};
+	vk::PipelineInputAssemblyStateCreateInfo piasci;
+	piasci.topology = vk::PrimitiveTopology::eTriangleList;
+	piasci.primitiveRestartEnable = VK_FALSE;
+	_pipeline.pipeinfo.pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
-	_pipeline.pipeinfo.pViewportState = &vk::PipelineViewportStateCreateInfo{
-		vk::PipelineViewportStateCreateFlags(),				// PipelineViewportStateCreateFlags flags;
-		1,													// uint32_t viewportCount;
-		&vk::Viewport{										// const Viewport* pViewports;
-			0.0f,												// float x;
-			0.0f,												// float y;
-			WIDTH_f, 											// float width;
-			HEIGHT_f,											// float height;
-			0.0f,												// float minDepth;
-			1.0f },												// float maxDepth;
-		1,													// uint32_t scissorCount;
-		&vk::Rect2D{										// const Rect2D* pScissors;
-			vk::Offset2D(),										// Offset2D offset;
-			vulkan.surface->actualExtent }								// Extent2D extent;
-	};
+	vk::Viewport vp;
+	vp.x = 0.0f;
+	vp.y = 0.0f;
+	vp.width = WIDTH_f;
+	vp.height = HEIGHT_f;
+	vp.minDepth = 0.0f;
+	vp.maxDepth = 1.0f;
+
+	vk::Rect2D r2d;
+	r2d.extent = vulkan.surface->actualExtent;
+
+	vk::PipelineViewportStateCreateInfo pvsci;
+	pvsci.viewportCount = 1;
+	pvsci.pViewports = &vp;
+	pvsci.scissorCount = 1;
+	pvsci.pScissors = &r2d;
+	_pipeline.pipeinfo.pViewportState = &pvsci;
 
 	// Rasterization state
-	_pipeline.pipeinfo.pRasterizationState = &vk::PipelineRasterizationStateCreateInfo{
-		vk::PipelineRasterizationStateCreateFlags(),	// PipelineRasterizationStateCreateFlags flags;
-		VK_FALSE,										// Bool32 depthClampEnable;
-		VK_FALSE,										// Bool32 rasterizerDiscardEnable;
-		vk::PolygonMode::eFill,							// PolygonMode polygonMode;
-		vk::CullModeFlagBits::eBack,					// CullModeFlags cullMode;
-		vk::FrontFace::eClockwise,						// FrontFace frontFace;
-		VK_FALSE,										// Bool32 depthBiasEnable;
-		0.0f,											// float depthBiasConstantFactor;
-		0.0f,											// float depthBiasClamp;
-		0.0f,											// float depthBiasSlopeFactor;
-		1.0f											// float lineWidth;
-	};
+	vk::PipelineRasterizationStateCreateInfo prsci;
+	prsci.depthClampEnable = VK_FALSE;
+	prsci.rasterizerDiscardEnable = VK_FALSE;
+	prsci.polygonMode = vk::PolygonMode::eFill;
+	prsci.cullMode = vk::CullModeFlagBits::eBack;
+	prsci.frontFace = vk::FrontFace::eClockwise;
+	prsci.depthBiasEnable = VK_FALSE;
+	prsci.depthBiasConstantFactor = 0.0f;
+	prsci.depthBiasClamp = 0.0f;
+	prsci.depthBiasSlopeFactor = 0.0f;
+	prsci.lineWidth = 1.0f;
+	_pipeline.pipeinfo.pRasterizationState = &prsci;
 
 	// Multisample state
-	_pipeline.pipeinfo.pMultisampleState = &vk::PipelineMultisampleStateCreateInfo{
-		vk::PipelineMultisampleStateCreateFlags(),	// PipelineMultisampleStateCreateFlags flags;
-		vk::SampleCountFlagBits::e1,				// SampleCountFlagBits rasterizationSamples;
-		VK_FALSE,									// Bool32 sampleShadingEnable;
-		1.0f,										// float minSampleShading;
-		nullptr,									// const SampleMask* pSampleMask;
-		VK_FALSE,									// Bool32 alphaToCoverageEnable;
-		VK_FALSE									// Bool32 alphaToOneEnable;
-	};
+	vk::PipelineMultisampleStateCreateInfo pmsci;
+	pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
+	pmsci.sampleShadingEnable = VK_FALSE;
+	pmsci.minSampleShading = 1.0f;
+	pmsci.pSampleMask = nullptr;
+	pmsci.alphaToCoverageEnable = VK_FALSE;
+	pmsci.alphaToOneEnable = VK_FALSE;
+	_pipeline.pipeinfo.pMultisampleState = &pmsci;
 
-	// Depth and stencil state
-	_pipeline.pipeinfo.pDepthStencilState = &vk::PipelineDepthStencilStateCreateInfo{
-		vk::PipelineDepthStencilStateCreateFlags{},					// PipelineDepthStencilStateCreateFlags flags;
-		VK_TRUE,													// Bool32 depthTestEnable;
-		VK_TRUE,													// Bool32 depthWriteEnable;
-		vk::CompareOp::eGreater,									// CompareOp depthCompareOp;
-		VK_FALSE,													// Bool32 depthBoundsTestEnable;
-		VK_FALSE,													// Bool32 stencilTestEnable;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState front;
-		vk::StencilOpState().setCompareOp(vk::CompareOp::eAlways),	// StencilOpState back;
-		0.0f,														// float minDepthBounds;
-		0.0f														// float maxDepthBounds;
-	};
+	// Depth stencil state
+	vk::PipelineDepthStencilStateCreateInfo pdssci;
+	pdssci.depthTestEnable = VK_TRUE;
+	pdssci.depthWriteEnable = VK_TRUE;
+	pdssci.depthCompareOp = vk::CompareOp::eGreater;
+	pdssci.depthBoundsTestEnable = VK_FALSE;
+	pdssci.stencilTestEnable = VK_FALSE;
+	pdssci.front.compareOp = vk::CompareOp::eAlways;
+	pdssci.back.compareOp = vk::CompareOp::eAlways;
+	pdssci.minDepthBounds = 0.0f;
+	pdssci.maxDepthBounds = 0.0f;
+	_pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	_pipeline.pipeinfo.pColorBlendState = &vk::PipelineColorBlendStateCreateInfo{
-		vk::PipelineColorBlendStateCreateFlags{},				// PipelineColorBlendStateCreateFlags flags;
-		VK_FALSE,												// Bool32 logicOpEnable; // this must be false is we want alpha blend
-		vk::LogicOp::eCopy,										// LogicOp logicOp;
-		1,														// uint32_t attachmentCount;
-		&vk::PipelineColorBlendAttachmentState{					// const PipelineColorBlendAttachmentState* pAttachments;
-			VK_TRUE,												// Bool32 blendEnable;
-			vk::BlendFactor::eSrcAlpha,								// BlendFactor srcColorBlendFactor;
-			vk::BlendFactor::eOneMinusSrcAlpha,						// BlendFactor dstColorBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp colorBlendOp;
-			vk::BlendFactor::eOne,									// BlendFactor srcAlphaBlendFactor;
-			vk::BlendFactor::eZero,									// BlendFactor dstAlphaBlendFactor;
-			vk::BlendOp::eAdd,										// BlendOp alphaBlendOp;
-			vk::ColorComponentFlagBits::eR |						// ColorComponentFlags colorWriteMask;
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-		},
-		{0.0f, 0.0f, 0.0f, 0.0f}								// float blendConstants[4];
-	};
+	vk::PipelineColorBlendAttachmentState cba;
+	cba.blendEnable = VK_TRUE;
+	cba.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+	cba.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	cba.colorBlendOp = vk::BlendOp::eAdd;
+	cba.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+	cba.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+	cba.alphaBlendOp = vk::BlendOp::eAdd;
+	cba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { cba };
+
+	vk::PipelineColorBlendStateCreateInfo pcbsci;
+	pcbsci.logicOpEnable = VK_FALSE;
+	pcbsci.logicOp = vk::LogicOp::eCopy;
+	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.pAttachments = colorBlendAttachments.data();
+	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+	_pipeline.pipeinfo.pColorBlendState = &pcbsci;
 
 	// Dynamic state
 	_pipeline.pipeinfo.pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!motionBlur.DSLayoutMotionBlur)
-	{// DescriptorSetLayout
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0: Composition image Sampler 
-			vk::DescriptorSetLayoutBinding{
-				0,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 1: Depth image sampler  
-			vk::DescriptorSetLayoutBinding{
-				1,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 2: Velocity image sampler  
-			vk::DescriptorSetLayoutBinding{
-				2,											//uint32_t binding;
-				vk::DescriptorType::eCombinedImageSampler,	//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			},
-			// Binding 3: Matrix Uniforms
-			vk::DescriptorSetLayoutBinding{
-				3,											//uint32_t binding;
-				vk::DescriptorType::eUniformBuffer,			//DescriptorType descriptorType;
-				1,											//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eFragment,			//ShaderStageFlags stageFlags;
-				nullptr										//const Sampler* pImmutableSamplers;
-			}
+	{
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
 		};
-
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout = vk::DescriptorSetLayoutCreateInfo{
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(3, vk::DescriptorType::eUniformBuffer),
 		};
-
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
 		motionBlur.DSLayoutMotionBlur = vulkan.device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { motionBlur.DSLayoutMotionBlur };
-	vk::PushConstantRange pConstants = vk::PushConstantRange{ vk::ShaderStageFlagBits::eFragment, 0, 8 * sizeof(float) };
-	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 1, &pConstants } );
+
+	vk::PushConstantRange pConstants;
+	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
+	pConstants.offset = 0;
+	pConstants.size = 8 * sizeof(vec4);
+
+	vk::PipelineLayoutCreateInfo plci;
+	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.pSetLayouts = descriptorSetLayouts.data();
+	plci.pushConstantRangeCount = 1;
+	plci.pPushConstantRanges = &pConstants;
+	_pipeline.pipeinfo.layout = vulkan.device.createPipelineLayout(plci);
 
 	// Render Pass
 	_pipeline.pipeinfo.renderPass = motionBlur.renderPass;
@@ -4334,66 +3723,22 @@ Pipeline Context::createMotionBlurPipeline()
 	return _pipeline;
 }
 
-Pipeline Context::createComputePipeline()
-{
-	Pipeline _pipeline;
-
-	// Shader stages
-	std::vector<char> compCode{};
-	vk::ShaderModuleCreateInfo csmci;
-	vk::ShaderModule compModule;
-	{
-		compCode = readFile("shaders/Compute/comp.spv");
-		csmci = vk::ShaderModuleCreateInfo{
-			vk::ShaderModuleCreateFlags(),							// ShaderModuleCreateFlags flags;
-			compCode.size(),										// size_t codeSize;
-			reinterpret_cast<const uint32_t*>(compCode.data()) };	// const uint32_t* pCode;
-		compModule = vulkan.device.createShaderModule(csmci);
-	}
-
-	_pipeline.compinfo.stage.module = compModule;
-	_pipeline.compinfo.stage.pName = "main";
-	_pipeline.compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
-
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { Compute::getDescriptorLayout() };
-	_pipeline.compinfo.layout = vulkan.device.createPipelineLayout(
-		vk::PipelineLayoutCreateInfo{ vk::PipelineLayoutCreateFlags(), (uint32_t)descriptorSetLayouts.size(), descriptorSetLayouts.data(), 0, &vk::PushConstantRange() } );
-
-	_pipeline.pipeline = vulkan.device.createComputePipelines(nullptr, _pipeline.compinfo).at(0);
-
-	// destroy Shader Modules
-	vulkan.device.destroyShaderModule(compModule);
-
-	return _pipeline;
-}
-
 vk::DescriptorPool Context::createDescriptorPool(uint32_t maxDescriptorSets)
 {
-	std::vector<vk::DescriptorPoolSize> descPoolsize = {};
-	// mvp
-	descPoolsize.push_back(vk::DescriptorPoolSize()
-		.setType(vk::DescriptorType::eUniformBuffer)					//descriptor type
-		.setDescriptorCount(maxDescriptorSets));
+	std::vector<vk::DescriptorPoolSize> descPoolsize(4);
+	descPoolsize[0].type = vk::DescriptorType::eUniformBuffer;
+	descPoolsize[0].descriptorCount =  maxDescriptorSets;
+	descPoolsize[1].type = vk::DescriptorType::eStorageBuffer;
+	descPoolsize[1].descriptorCount = maxDescriptorSets;
+	descPoolsize[2].type = vk::DescriptorType::eInputAttachment;
+	descPoolsize[2].descriptorCount = maxDescriptorSets;
+	descPoolsize[3].type = vk::DescriptorType::eCombinedImageSampler;
+	descPoolsize[3].descriptorCount = maxDescriptorSets;
 
-	// texture sampler2D
-	descPoolsize.push_back(vk::DescriptorPoolSize()
-		.setType(vk::DescriptorType::eCombinedImageSampler)				//descriptor type
-		.setDescriptorCount(maxDescriptorSets));
-
-	// input attachment
-	descPoolsize.push_back(vk::DescriptorPoolSize()
-		.setType(vk::DescriptorType::eInputAttachment)					//descriptor type
-		.setDescriptorCount(maxDescriptorSets));
-
-	// storage buffer
-	descPoolsize.push_back(vk::DescriptorPoolSize()
-		.setType(vk::DescriptorType::eStorageBuffer)					//descriptor type
-		.setDescriptorCount(maxDescriptorSets));
-
-	auto const createInfo = vk::DescriptorPoolCreateInfo()
-		.setPoolSizeCount((uint32_t)descPoolsize.size())
-		.setPPoolSizes(descPoolsize.data())
-		.setMaxSets(maxDescriptorSets);
+	vk::DescriptorPoolCreateInfo createInfo;
+	createInfo.poolSizeCount = (uint32_t)descPoolsize.size();
+	createInfo.pPoolSizes = descPoolsize.data();
+	createInfo.maxSets = maxDescriptorSets;
 
 	return vulkan.device.createDescriptorPool(createInfo);
 }
@@ -4401,7 +3746,7 @@ vk::DescriptorPool Context::createDescriptorPool(uint32_t maxDescriptorSets)
 std::vector<vk::Fence> Context::createFences(const uint32_t fenceCount)
 {
 	std::vector<vk::Fence> _fences(fenceCount);
-	auto const fi = vk::FenceCreateInfo();
+	vk::FenceCreateInfo fi;
 
 	for (uint32_t i = 0; i < fenceCount; i++) {
 		_fences[i] = vulkan.device.createFence(fi);
@@ -4413,7 +3758,7 @@ std::vector<vk::Fence> Context::createFences(const uint32_t fenceCount)
 std::vector<vk::Semaphore> Context::createSemaphores(const uint32_t semaphoresCount)
 {
 	std::vector<vk::Semaphore> _semaphores(semaphoresCount);
-	auto const si = vk::SemaphoreCreateInfo();
+	vk::SemaphoreCreateInfo si;
 
 	for (uint32_t i = 0; i < semaphoresCount; i++) {
 		_semaphores[i] = vulkan.device.createSemaphore(si);
@@ -4448,9 +3793,6 @@ void Context::destroyVkContext()
 	if (vulkan.commandPool) {
 		vulkan.device.destroyCommandPool(vulkan.commandPool);
 	}
-	if (vulkan.commandPoolCompute) {
-		vulkan.device.destroyCommandPool(vulkan.commandPoolCompute);
-	}
 
 	vulkan.swapchain->destroy();
 	delete vulkan.swapchain;
@@ -4472,15 +3814,16 @@ vk::DescriptorSetLayout Context::getDescriptorSetLayoutLights()
 {
 	// binding for model mvp matrix
 	if (!lightUniforms.descriptorSetLayout) {
-		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(0) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
-			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
-		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
-			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
-			.setPBindings(descriptorSetLayoutBinding.data());
+		vk::DescriptorSetLayoutBinding descriptorSetLayoutBinding;
+		descriptorSetLayoutBinding.binding = 0;
+		descriptorSetLayoutBinding.descriptorCount = 1;
+		descriptorSetLayoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
+		descriptorSetLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+		vk::DescriptorSetLayoutCreateInfo createInfo;
+		createInfo.bindingCount = 1;
+		createInfo.pBindings = &descriptorSetLayoutBinding;
+
 		lightUniforms.descriptorSetLayout = vulkan.device.createDescriptorSetLayout(createInfo);
 	}
 	return lightUniforms.descriptorSetLayout;

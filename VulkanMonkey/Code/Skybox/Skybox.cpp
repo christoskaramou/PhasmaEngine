@@ -8,26 +8,17 @@ vk::DescriptorSetLayout SkyBox::descriptorSetLayout = nullptr;
 vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(vk::Device device)
 {
 	if (!descriptorSetLayout) {
-		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBinding{};
-
-		// binding for model mvp matrix
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(0) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
-			.setStageFlags(vk::ShaderStageFlagBits::eVertex)); // which pipeline shader stages can access
-
-		descriptorSetLayoutBinding.push_back(vk::DescriptorSetLayoutBinding()
-			.setBinding(1) // binding number in shader stages
-			.setDescriptorCount(1) // number of descriptors contained
-			.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-			.setPImmutableSamplers(nullptr)
-			.setStageFlags(vk::ShaderStageFlagBits::eFragment)); // which pipeline shader stages can access
-
-		auto const createInfo = vk::DescriptorSetLayoutCreateInfo()
-			.setBindingCount((uint32_t)descriptorSetLayoutBinding.size())
-			.setPBindings(descriptorSetLayoutBinding.data());
-		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
+		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, vk::ShaderStageFlags stageFlags) {
+			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlags, nullptr };
+		};
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+			layoutBinding(0, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex),
+			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler,vk::ShaderStageFlagBits::eFragment),
+		};
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.pBindings = setLayoutBindings.data();
+		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
 	}
 	return descriptorSetLayout;
 }
@@ -99,9 +90,11 @@ void SkyBox::draw(uint32_t imageIndex)
 {
 	if (!render) return;
 
-	std::vector<vk::ClearValue> clearValues = {
-		vk::ClearColorValue().setFloat32(GUI::clearColor)
-	};
+	vk::ClearColorValue clearColor;
+	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
+
+	std::vector<vk::ClearValue> clearValues = { clearColor };
+
 	vk::RenderPassBeginInfo renderPassInfo;
 	renderPassInfo.renderPass = renderPass;
 	renderPassInfo.framebuffer = frameBuffers[imageIndex];

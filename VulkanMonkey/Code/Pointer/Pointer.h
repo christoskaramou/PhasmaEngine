@@ -8,7 +8,7 @@ namespace vm {
 	{
 		uint32_t hLeft;
 		uint32_t hRight;
-		T* ptr = nullptr;
+		T* ptr;
 
 		Pointer() : hLeft(0), hRight(0), ptr(nullptr)
 		{}

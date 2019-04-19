@@ -41,7 +41,6 @@ Renderer::~Renderer()
 	Mesh::uniqueTextures.clear();
 
 	ctx.shadows.destroy();
-	ctx.compute.destroy();
 	ctx.deferred.destroy();
 	ctx.ssao.destroy();
 	ctx.ssr.destroy();
@@ -173,20 +172,20 @@ void Renderer::update(float delta)
 
 void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
 {
-	auto beginInfo = vk::CommandBufferBeginInfo()
-		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
-		.setPInheritanceInfo(nullptr);
-
-	auto& cmd = ctx.vulkan.computeCmdBuffer;
-	cmd.begin(beginInfo);
-
-	ctx.metrics[13].start(cmd);
-	cmd.bindPipeline(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.pipeline);
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.compinfo.layout, 0, ctx.compute.DSCompute, nullptr);
-	cmd.dispatch(sizeX, sizeY, sizeZ);
-	ctx.metrics[13].end(&GUI::metrics[13]);
-
-	cmd.end();
+	//auto beginInfo = vk::CommandBufferBeginInfo()
+	//	.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
+	//	.setPInheritanceInfo(nullptr);
+	//
+	//auto& cmd = ctx.vulkan.computeCmdBuffer;
+	//cmd.begin(beginInfo);
+	//
+	//ctx.metrics[13].start(cmd);
+	//cmd.bindPipeline(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.pipeline);
+	//cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.compinfo.layout, 0, ctx.compute.DSCompute, nullptr);
+	//cmd.dispatch(sizeX, sizeY, sizeZ);
+	//ctx.metrics[13].end(&GUI::metrics[13]);
+	//
+	//cmd.end();
 }
 
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
@@ -210,9 +209,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	ctx.camera_main.renderArea.update(winPos, winSize);
 
-	auto beginInfo = vk::CommandBufferBeginInfo()
-		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
-		.setPInheritanceInfo(nullptr);
+	vk::CommandBufferBeginInfo beginInfo;
+	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
 	auto& cmd = ctx.vulkan.dynamicCmdBuffer;
 	cmd.begin(beginInfo);
@@ -343,13 +341,13 @@ void Renderer::present()
 	FIRE_EVENT(Event::OnRender);
 
 	if (GUI::use_compute) {
-		recordComputeCmds(2, 2, 1);
-		auto const siCompute = vk::SubmitInfo()
-			.setCommandBufferCount(1)
-			.setPCommandBuffers(&ctx.vulkan.computeCmdBuffer);
-		ctx.vulkan.computeQueue.submit(siCompute, ctx.vulkan.fences[1]);
-		ctx.vulkan.device.waitForFences(ctx.vulkan.fences[1], VK_TRUE, UINT64_MAX);
-		ctx.vulkan.device.resetFences(ctx.vulkan.fences[1]);
+		//recordComputeCmds(2, 2, 1);
+		//vk::SubmitInfo siCompute;
+		//siCompute.commandBufferCount = 1;
+		//siCompute.setPCommandBuffers = &ctx.vulkan.computeCmdBuffer;
+		//ctx.vulkan.computeQueue.submit(siCompute, ctx.vulkan.fences[1]);
+		//ctx.vulkan.device.waitForFences(ctx.vulkan.fences[1], VK_TRUE, UINT64_MAX);
+		//ctx.vulkan.device.resetFences(ctx.vulkan.fences[1]);
 	}
 
 	// what stage of a pipeline at a command buffer to wait for the semaphores to be done until keep going
@@ -363,14 +361,14 @@ void Renderer::present()
 
 		recordShadowsCmds(imageIndex);
 
-		auto const siShadows = vk::SubmitInfo()
-			.setWaitSemaphoreCount(1)
-			.setPWaitSemaphores(&ctx.vulkan.semaphores[0])
-			.setPWaitDstStageMask(waitStages)
-			.setCommandBufferCount(static_cast<uint32_t>(ctx.vulkan.shadowCmdBuffer.size()))
-			.setPCommandBuffers(ctx.vulkan.shadowCmdBuffer.data())
-			.setSignalSemaphoreCount(1)
-			.setPSignalSemaphores(&ctx.vulkan.semaphores[1]);
+		vk::SubmitInfo siShadows;
+		siShadows.waitSemaphoreCount = 1;
+		siShadows.pWaitSemaphores = &ctx.vulkan.semaphores[0];
+		siShadows.pWaitDstStageMask = waitStages;
+		siShadows.commandBufferCount = static_cast<uint32_t>(ctx.vulkan.shadowCmdBuffer.size());
+		siShadows.pCommandBuffers = ctx.vulkan.shadowCmdBuffer.data();
+		siShadows.signalSemaphoreCount = 1;
+		siShadows.pSignalSemaphores = &ctx.vulkan.semaphores[1];
 		ctx.vulkan.graphicsQueue.submit(siShadows, nullptr);
 	}
 	else
@@ -379,24 +377,23 @@ void Renderer::present()
 	recordDeferredCmds(imageIndex);
 
 	// submit the command buffer
-	auto const si = vk::SubmitInfo()
-		.setWaitSemaphoreCount(1)
-		.setPWaitSemaphores(&ctx.vulkan.semaphores[1])
-		.setPWaitDstStageMask(waitStages)
-		.setCommandBufferCount(1)
-		.setPCommandBuffers(&ctx.vulkan.dynamicCmdBuffer)
-		.setSignalSemaphoreCount(1)
-		.setPSignalSemaphores(&ctx.vulkan.semaphores[2]);
+	vk::SubmitInfo si;
+	si.waitSemaphoreCount = 1;
+	si.pWaitSemaphores = &ctx.vulkan.semaphores[1];
+	si.pWaitDstStageMask = waitStages;
+	si.commandBufferCount = 1;
+	si.pCommandBuffers = &ctx.vulkan.dynamicCmdBuffer;
+	si.signalSemaphoreCount = 1;
+	si.pSignalSemaphores = &ctx.vulkan.semaphores[2];
 	ctx.vulkan.graphicsQueue.submit(si, ctx.vulkan.fences[0]);
 
 	// Presentation
-	auto const pi = vk::PresentInfoKHR()
-		.setWaitSemaphoreCount(1)
-		.setPWaitSemaphores(&ctx.vulkan.semaphores[2])
-		.setSwapchainCount(1)
-		.setPSwapchains(&ctx.vulkan.swapchain->swapchain)
-		.setPImageIndices(&imageIndex)
-		.setPResults(nullptr); //optional
+	vk::PresentInfoKHR pi;
+	pi.waitSemaphoreCount = 1;
+	pi.pWaitSemaphores = &ctx.vulkan.semaphores[2];
+	pi.swapchainCount = 1;
+	pi.pSwapchains = &ctx.vulkan.swapchain->swapchain;
+	pi.pImageIndices = &imageIndex;
 	ctx.vulkan.presentQueue.presentKHR(pi);
 
 	std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();

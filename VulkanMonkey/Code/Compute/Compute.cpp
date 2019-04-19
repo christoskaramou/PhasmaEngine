@@ -1,46 +1,70 @@
 #include "Compute.h"
 #include <deque>
+#include <fstream>
 
 using namespace vm;
 
 vk::DescriptorSetLayout Compute::DSLayoutCompute = nullptr;
 
-vk::DescriptorSetLayout vm::Compute::getDescriptorLayout()
+vk::DescriptorSetLayout Compute::getDescriptorLayout()
 {
 	if (!DSLayoutCompute) {
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings =
-		{
-			// Binding 0 (in)
-			vk::DescriptorSetLayoutBinding{
-				0,										//uint32_t binding;
-				vk::DescriptorType::eStorageBuffer,		//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eCompute,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			},
-			// Binding 1 (out)
-			vk::DescriptorSetLayoutBinding{
-				1,										//uint32_t binding;
-				vk::DescriptorType::eStorageBuffer,		//DescriptorType descriptorType;
-				1,										//uint32_t descriptorCount;
-				vk::ShaderStageFlagBits::eCompute,		//ShaderStageFlags stageFlags;
-				nullptr									//const Sampler* pImmutableSamplers;
-			},
+		auto setLayoutBinding = [](uint32_t binding) {
+			return vk::DescriptorSetLayoutBinding{ binding, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute, nullptr };
+		};
+		
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+			setLayoutBinding(0), // in
+			setLayoutBinding(1)  // out
 		};
 
-		vk::DescriptorSetLayoutCreateInfo dlci = vk::DescriptorSetLayoutCreateInfo{
-			vk::DescriptorSetLayoutCreateFlags(),		//DescriptorSetLayoutCreateFlags flags;
-			(uint32_t)setLayoutBindings.size(),			//uint32_t bindingCount;
-			setLayoutBindings.data()					//const DescriptorSetLayoutBinding* pBindings;
-		};
+		vk::DescriptorSetLayoutCreateInfo dlci;
+		dlci.bindingCount = (uint32_t)setLayoutBindings.size();
+		dlci.pBindings = setLayoutBindings.data();
 		DSLayoutCompute = VulkanContext::get().device.createDescriptorSetLayout(dlci);
 	}
 	return DSLayoutCompute;
 }
 
-void vm::Compute::update()
+void Compute::setUpdate(std::function<void()>&& func)
 {
+	updateFunc = std::forward<std::function<void()>>(func);
+}
 
+void Compute::update()
+{
+	if (updateFunc)
+		updateFunc();
+}
+
+void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
+{
+	vk::CommandBufferBeginInfo beginInfo;
+	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+
+	auto& cmd = commandBuffer;
+	cmd.begin(beginInfo);
+
+	//ctx.metrics[13].start(cmd);
+	cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.compinfo.layout, 0, DSCompute, nullptr);
+	cmd.dispatch(sizeX, sizeY, sizeZ);
+	//ctx.metrics[13].end(&GUI::metrics[13]);
+
+	cmd.end();
+
+	vk::SubmitInfo siCompute;
+	siCompute.commandBufferCount = 1;
+	siCompute.pCommandBuffers = &cmd;
+	vulkan->computeQueue.submit(siCompute, fence);
+}
+
+void vm::Compute::waitFence()
+{
+	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+	vulkan->device.resetFences(fence);
+
+	ready = true;
 }
 
 void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
@@ -52,13 +76,18 @@ void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
 	SBOut.createBuffer(sizeOut, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	SBOut.data = vulkan->device.mapMemory(SBOut.memory, 0, SBOut.size);
 	memset(SBOut.data, 0, SBOut.size);
-
-	DSCompute = vulkan->device.allocateDescriptorSets({ vulkan->descriptorPool, 1, &DSLayoutCompute }).at(0);
-
-	updateDescriptorSets();
 }
 
-void vm::Compute::updateDescriptorSets()
+void Compute::createDescriptorSet()
+{
+	vk::DescriptorSetAllocateInfo allocInfo;
+	allocInfo.descriptorPool = vulkan->descriptorPool;
+	allocInfo.descriptorSetCount = 1;
+	allocInfo.pSetLayouts = &Compute::getDescriptorLayout();
+	DSCompute = vulkan->device.allocateDescriptorSets(allocInfo).at(0);
+}
+
+void vm::Compute::updateDescriptorSet()
 {
 	std::deque<vk::DescriptorBufferInfo> dsbi{};
 	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer, vk::DescriptorType type) {
@@ -72,6 +101,41 @@ void vm::Compute::updateDescriptorSets()
 	vulkan->device.updateDescriptorSets(writeCompDescriptorSets, nullptr);
 }
 
+std::vector<char> read(const std::string& filename)
+{
+	std::ifstream file(filename, std::ios::ate | std::ios::binary);
+	if (!file.is_open()) {
+		throw std::runtime_error("failed to open file!");
+	}
+	size_t fileSize = (size_t)file.tellg();
+	std::vector<char> buffer(fileSize);
+	file.seekg(0);
+	file.read(buffer.data(), fileSize);
+	file.close();
+
+	return buffer;
+}
+
+void Compute::createPipeline()
+{
+	std::vector<char> compCode = read("shaders/Compute/comp.spv");
+	vk::ShaderModuleCreateInfo csmci;
+	csmci.codeSize = compCode.size();
+	csmci.pCode = reinterpret_cast<const uint32_t*>(compCode.data());
+
+	vk::PipelineLayoutCreateInfo plci;
+	plci.setLayoutCount = 1;
+	plci.pSetLayouts = &Compute::getDescriptorLayout();
+
+	auto sm = vulkan->device.createShaderModuleUnique(csmci);
+
+	pipeline.compinfo.stage.module = sm.get();
+	pipeline.compinfo.stage.pName = "main";
+	pipeline.compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
+	pipeline.compinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipeline.pipeline = vulkan->device.createComputePipelines(nullptr, pipeline.compinfo).at(0);
+}
+
 void Compute::destroy()
 {
 	SBIn.destroy();
@@ -81,4 +145,52 @@ void Compute::destroy()
 		vulkan->device.destroyDescriptorSetLayout(Compute::DSLayoutCompute);
 		Compute::DSLayoutCompute = nullptr;
 	}
+}
+
+void ComputePool::Init(uint32_t cmdBuffersCount)
+{
+	vk::CommandPoolCreateInfo cpci;
+	cpci.queueFamilyIndex = VulkanContext::get().computeFamilyId;
+	cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+	commandPool = VulkanContext::get().device.createCommandPool(cpci);
+
+	vk::CommandBufferAllocateInfo cbai;
+	cbai.commandPool = commandPool;
+	cbai.level = vk::CommandBufferLevel::ePrimary;
+	cbai.commandBufferCount = cmdBuffersCount;
+	auto const cmds = VulkanContext::get().device.allocateCommandBuffers(cbai);
+
+	for (auto& cmd : cmds) {
+		compute.push_back({});
+		compute.back().commandBuffer = cmd;
+		compute.back().createPipeline();
+		compute.back().createDescriptorSet();
+		compute.back().createComputeStorageBuffers(8000, 8000);
+		compute.back().updateDescriptorSet();
+		compute.back().fence = VulkanContext::get().device.createFence(vk::FenceCreateInfo());
+	}
+}
+
+Compute& ComputePool::getNext()
+{
+	for (auto& comp : compute) {
+		if (comp.ready) {
+			comp.ready = false;
+			return comp;
+		}
+	}
+
+	// if a free compute is not found create one
+	vk::CommandBufferAllocateInfo cbai;
+	cbai.commandPool = commandPool;
+	cbai.level = vk::CommandBufferLevel::ePrimary;
+	cbai.commandBufferCount = 1;
+
+	compute.push_back({});
+	compute.back().commandBuffer = VulkanContext::get().device.allocateCommandBuffers(cbai).at(0);
+	compute.back().createPipeline();
+	compute.back().createDescriptorSet();
+	compute.back().createComputeStorageBuffers(8000, 8000);
+	compute.back().updateDescriptorSet();
+	return compute.back();
 }
