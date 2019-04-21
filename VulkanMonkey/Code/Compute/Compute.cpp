@@ -141,6 +141,10 @@ void Compute::destroy()
 	SBIn.destroy();
 	SBOut.destroy();
 	pipeline.destroy();
+	if (fence) {
+		vulkan->device.destroyFence(fence);
+		fence = nullptr;
+	}
 	if (Compute::DSLayoutCompute) {
 		vulkan->device.destroyDescriptorSetLayout(Compute::DSLayoutCompute);
 		Compute::DSLayoutCompute = nullptr;
@@ -193,4 +197,14 @@ Compute& ComputePool::getNext()
 	compute.back().createComputeStorageBuffers(8000, 8000);
 	compute.back().updateDescriptorSet();
 	return compute.back();
+}
+
+void ComputePool::destroy()
+{
+	for (auto& comp : compute)
+		comp.destroy();
+	if (commandPool) {
+		VulkanContext::get().device.destroyCommandPool(commandPool);
+		commandPool = nullptr;
+	}
 }

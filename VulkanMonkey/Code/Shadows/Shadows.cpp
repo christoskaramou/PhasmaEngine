@@ -35,7 +35,7 @@ void Shadows::createDescriptorSets()
 		vk::DescriptorImageInfo dii;
 		dii.sampler = textures[i].sampler;
 		dii.imageView = textures[i].view;
-		dii.imageLayout = vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal;
+		dii.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
 
 		textureWriteSets[1].dstSet = descriptorSets[i];
 		textureWriteSets[1].dstBinding = 1;

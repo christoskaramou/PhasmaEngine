@@ -18,9 +18,9 @@ namespace vm {
 		Context ctx;
 		float waitingTime = 0.f; // ms
 		bool prepared = false;
-		bool overloadedGPU = false;
 
 	private:
+		void changeLayout(Image& image, LayoutState state);
 		void checkQueue();
 		void recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ);
 		void recordDeferredCmds(const uint32_t& imageIndex);

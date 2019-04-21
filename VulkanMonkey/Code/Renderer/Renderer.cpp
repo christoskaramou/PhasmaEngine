@@ -40,6 +40,7 @@ Renderer::~Renderer()
 		texture.second.destroy();
 	Mesh::uniqueTextures.clear();
 
+	ctx.computePool.destroy();
 	ctx.shadows.destroy();
 	ctx.deferred.destroy();
 	ctx.ssao.destroy();
@@ -54,6 +55,47 @@ Renderer::~Renderer()
 	for (auto& metric : ctx.metrics)
 		metric.destroy();
 	ctx.destroyVkContext();
+}
+
+void vm::Renderer::changeLayout(Image& image, LayoutState state)
+{
+	static auto transition = [](Image& image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::ImageAspectFlags aspectFlags) {
+		vk::ImageMemoryBarrier barrier;
+		barrier.image = image.image;
+		barrier.oldLayout = oldLayout;
+		barrier.newLayout = newLayout;
+		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.subresourceRange = { aspectFlags, 0, image.mipLevels, 0, image.arrayLayers };
+		if (image.format == vk::Format::eD32SfloatS8Uint || image.format == vk::Format::eD24UnormS8Uint) {
+			barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eStencil;
+		}
+
+		VulkanContext::get().dynamicCmdBuffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTopOfPipe,
+			aspectFlags == vk::ImageAspectFlagBits::eColor ? vk::PipelineStageFlagBits::eFragmentShader : vk::PipelineStageFlagBits::eEarlyFragmentTests,
+			vk::DependencyFlagBits::eByRegion,
+			nullptr,
+			nullptr,
+			barrier
+		);
+	};
+	if (state != image.layoutState) {
+		if (state == LayoutState::Read) {
+			transition(image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor);
+		}
+		else if (state == LayoutState::Write) {
+			transition(image, vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageAspectFlagBits::eColor);
+		}
+		else if (state == LayoutState::DepthRead) {
+			transition(image, vk::ImageLayout::eDepthStencilAttachmentOptimal, vk::ImageLayout::eDepthStencilReadOnlyOptimal, vk::ImageAspectFlagBits::eDepth);
+		}
+		else if (state == LayoutState::DepthWrite) {
+			transition(image, vk::ImageLayout::eDepthStencilReadOnlyOptimal, vk::ImageLayout::eDepthStencilAttachmentOptimal, vk::ImageAspectFlagBits::eDepth);
+		}
+		image.layoutState = state;
+	}
+
 }
 
 void Renderer::checkQueue()
@@ -233,36 +275,58 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		Model::batchEnd();
 		ctx.metrics[2].end(&GUI::metrics[2]);
 
+		changeLayout(ctx.renderTargets["albedo"], LayoutState::Read);
+		changeLayout(ctx.renderTargets["depth"], LayoutState::Read);
+		changeLayout(ctx.renderTargets["normal"], LayoutState::Read);
+		changeLayout(ctx.renderTargets["srm"], LayoutState::Read);
+		changeLayout(ctx.renderTargets["emissive"], LayoutState::Read);
+		changeLayout(ctx.renderTargets["ssr"], LayoutState::Read);
+		changeLayout(ctx.renderTargets["ssaoBlur"], LayoutState::Read);
+		changeLayout(ctx.renderTargets["velocity"], LayoutState::Read);
+		for (auto& image : ctx.shadows.textures)
+			changeLayout(image, LayoutState::DepthRead);
+
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao) {
 			ctx.metrics[3].start(cmd);
-			ctx.ssao.draw(imageIndex, UVOffset);
+			changeLayout(ctx.renderTargets["ssaoBlur"], LayoutState::Write);
+			auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2);
+			ctx.ssao.draw(imageIndex, UVOffset, changeLayoutFunc, ctx.renderTargets["ssao"]);
+			changeLayout(ctx.renderTargets["ssaoBlur"], LayoutState::Read);
 			ctx.metrics[3].end(&GUI::metrics[3]);
 		}
 
 		// SCREEN SPACE REFLECTIONS
 		if (GUI::show_ssr) {
 			ctx.metrics[4].start(cmd);
+			changeLayout(ctx.renderTargets["ssr"], LayoutState::Write);
 			ctx.ssr.draw(imageIndex, UVOffset);
+			changeLayout(ctx.renderTargets["ssr"], LayoutState::Read);
 			ctx.metrics[4].end(&GUI::metrics[4]);
 		}
 
 		// COMPOSITION
 		ctx.metrics[5].start(cmd);
+		changeLayout(ctx.renderTargets["composition"], LayoutState::Write);
 		ctx.deferred.draw(imageIndex, ctx.shadows, skybox, ctx.camera_main.invViewProjection, UVOffset);
+		changeLayout(ctx.renderTargets["composition"], LayoutState::Read);
 		ctx.metrics[5].end(&GUI::metrics[5]);
+
 
 		// FXAA
 		if (GUI::show_FXAA) {
 			ctx.metrics[6].start(cmd);
+			changeLayout(ctx.renderTargets["composition2"], LayoutState::Write);
 			ctx.fxaa.draw(imageIndex);
+			changeLayout(ctx.renderTargets["composition2"], LayoutState::Read);
 			ctx.metrics[6].end(&GUI::metrics[6]);
 		}
 
 		// BLOOM
 		if (GUI::show_Bloom) {
 			ctx.metrics[7].start(cmd);
-			ctx.bloom.draw(imageIndex, (uint32_t)ctx.vulkan.swapchain->images.size(), UVOffset);
+			auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2);
+			ctx.bloom.draw(imageIndex, (uint32_t)ctx.vulkan.swapchain->images.size(), UVOffset, changeLayoutFunc, ctx.renderTargets);
 			ctx.metrics[7].end(&GUI::metrics[7]);
 		}
 
@@ -272,6 +336,17 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 			ctx.motionBlur.draw(imageIndex, UVOffset);
 			ctx.metrics[8].end(&GUI::metrics[8]);
 		}
+
+		changeLayout(ctx.renderTargets["albedo"], LayoutState::Write);
+		changeLayout(ctx.renderTargets["depth"], LayoutState::Write);
+		changeLayout(ctx.renderTargets["normal"], LayoutState::Write);
+		changeLayout(ctx.renderTargets["srm"], LayoutState::Write);
+		changeLayout(ctx.renderTargets["emissive"], LayoutState::Write);
+		changeLayout(ctx.renderTargets["ssr"], LayoutState::Write);
+		changeLayout(ctx.renderTargets["ssaoBlur"], LayoutState::Write);
+		changeLayout(ctx.renderTargets["velocity"], LayoutState::Write);
+		for (auto& image : ctx.shadows.textures)
+			changeLayout(image, LayoutState::DepthWrite);
 	}
 
 	// GUI
@@ -402,8 +477,6 @@ void Renderer::present()
 	ctx.vulkan.device.waitForFences(ctx.vulkan.fences[0], VK_TRUE, UINT64_MAX);
 	ctx.vulkan.device.resetFences(ctx.vulkan.fences[0]);
 
-	if (overloadedGPU)
-		ctx.vulkan.presentQueue.waitIdle(); // user set, when GPU can't catch the CPU commands 
 	duration = std::chrono::high_resolution_clock::now() - start;
 	waitingTime = duration.count();
 }

@@ -5,6 +5,7 @@
 #include "../Pipeline/Pipeline.h"
 #include "../Image/Image.h"
 #include <map>
+#include <functional>
 
 namespace vm {
 	struct Bloom
@@ -31,7 +32,7 @@ namespace vm {
 		void update();
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[2]);
+		void draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[2], std::function<void(Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets);
 		void destroy();
 	};
 }

@@ -41,6 +41,7 @@ namespace vm {
 		std::deque<Compute> compute{};
 		void Init(uint32_t cmdBuffersCount);
 		Compute& getNext();
+		void destroy();
 
 		static ComputePool& get() { static ComputePool cp; return cp; }
 	private:

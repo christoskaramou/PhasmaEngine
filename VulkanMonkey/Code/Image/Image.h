@@ -2,6 +2,12 @@
 #include "../VulkanContext/VulkanContext.h"
 
 namespace vm {
+	enum struct LayoutState {
+		Read,
+		Write,
+		DepthRead,
+		DepthWrite
+	};
 	struct VulkanContext;
 	struct Image
 	{
@@ -14,6 +20,7 @@ namespace vm {
 		std::string name;
 
 		// values
+		LayoutState layoutState = LayoutState::Write;
 		vk::Format format;
 		vk::ImageLayout initialLayout = vk::ImageLayout::ePreinitialized;
 		uint32_t mipLevels = 1;

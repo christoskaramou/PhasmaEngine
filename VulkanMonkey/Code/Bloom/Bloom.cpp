@@ -59,7 +59,7 @@ void Bloom::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
-void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[2])
+void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[2], std::function<void(Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets)
 {
 	vk::ClearColorValue clearColor;
 	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -75,42 +75,56 @@ void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[
 	rpi.clearValueCount = 1;
 	rpi.pClearValues = clearValues.data();
 
+	changeLayout(renderTargets["brightFilter"], LayoutState::Write);
 	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
 	vulkan->dynamicCmdBuffer.pushConstants(pipelineBrightFilter.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(values), values);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo.layout, 0, DSBrightFilter, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
+	changeLayout(renderTargets["brightFilter"], LayoutState::Read);
 
 	rpi.renderPass = renderPassGaussianBlur;
 	rpi.framebuffer = frameBuffers[totalImages + imageIndex];
 
+	changeLayout(renderTargets["gaussianBlurHorizontal"], LayoutState::Write);
 	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
 	vulkan->dynamicCmdBuffer.pushConstants(pipelineGaussianBlurHorizontal.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(values), values);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurHorizontal.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo.layout, 0, DSGaussianBlurHorizontal, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
+	changeLayout(renderTargets["gaussianBlurHorizontal"], LayoutState::Read);
 
 	rpi.framebuffer = frameBuffers[totalImages * 2 + imageIndex];
 
+	changeLayout(renderTargets["gaussianBlurVertical"], LayoutState::Write);
 	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
 	vulkan->dynamicCmdBuffer.pushConstants(pipelineGaussianBlurVertical.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(values), values);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurVertical.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurVertical.pipeinfo.layout, 0, DSGaussianBlurVertical, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
+	changeLayout(renderTargets["gaussianBlurVertical"], LayoutState::Read);
 
 	rpi.renderPass = renderPassCombine;
 	rpi.framebuffer = frameBuffers[totalImages * 3 + imageIndex];
 	rpi.clearValueCount = 2;
 
+	if (GUI::show_FXAA)
+		changeLayout(renderTargets["composition"], LayoutState::Write);
+	else
+		changeLayout(renderTargets["composition2"], LayoutState::Write);
 	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
 	vulkan->dynamicCmdBuffer.pushConstants(pipelineCombine.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(values), values);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeinfo.layout, 0, DSCombine, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
+	if (GUI::show_FXAA)
+		changeLayout(renderTargets["composition"], LayoutState::Read);
+	else
+		changeLayout(renderTargets["composition2"], LayoutState::Read);
 }
 
 void Bloom::destroy()

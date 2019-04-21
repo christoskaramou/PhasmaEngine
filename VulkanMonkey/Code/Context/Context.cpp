@@ -31,7 +31,7 @@ void Context::initVulkanContext()
 	vulkan.swapchain = new Swapchain(createSwapchain());
 	vulkan.commandPool = createCommandPool();
 	vulkan.commandPool2 = createCommandPool();
-	vulkan.descriptorPool = createDescriptorPool(10000); // max number of all descriptor sets to allocate
+	vulkan.descriptorPool = createDescriptorPool(15000); // max number of all descriptor sets to allocate
 	vulkan.dynamicCmdBuffer = createCmdBuffers().at(0);
 	vulkan.shadowCmdBuffer = createCmdBuffers(3);
 	vulkan.depth = new Image(createDepthResources());
@@ -713,6 +713,7 @@ void Context::addRenderTarget(const std::string& name, vk::Format format)
 	renderTargets[name].initialLayout = vk::ImageLayout::eUndefined;
 	renderTargets[name].createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	renderTargets[name].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
 	renderTargets[name].createImageView(vk::ImageAspectFlagBits::eColor);
 	renderTargets[name].createSampler();
 }
@@ -1377,7 +1378,7 @@ vk::RenderPass Context::createShadowsRenderPass()
 	attachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachment.stencilStoreOp = vk::AttachmentStoreOp::eStore;
 	attachment.initialLayout = vk::ImageLayout::eUndefined;
-	attachment.finalLayout = vk::ImageLayout::eDepthAttachmentStencilReadOnlyOptimal;
+	attachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
 	vk::AttachmentReference depthAttachmentRef;
 	depthAttachmentRef.attachment = 0;
@@ -1748,6 +1749,7 @@ std::vector<vk::Framebuffer> Context::createShadowsFrameBuffers()
 		shadows.textures[i].samplerMipmapMode	= vk::SamplerMipmapMode::eLinear;
 
 		shadows.textures[i].createImage(Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		shadows.textures[i].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 		shadows.textures[i].createImageView(vk::ImageAspectFlagBits::eDepth);
 		shadows.textures[i].createSampler();
 	}
@@ -3793,6 +3795,9 @@ void Context::destroyVkContext()
 	}
 	if (vulkan.commandPool) {
 		vulkan.device.destroyCommandPool(vulkan.commandPool);
+	}
+	if (vulkan.commandPool2) {
+		vulkan.device.destroyCommandPool(vulkan.commandPool2);
 	}
 
 	vulkan.swapchain->destroy();

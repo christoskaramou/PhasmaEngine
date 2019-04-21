@@ -89,11 +89,12 @@ void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void SSAO::draw(uint32_t imageIndex, const vec2 UVOffset[2])
+void SSAO::draw(uint32_t imageIndex, const vec2 UVOffset[2], std::function<void(Image&, LayoutState)>&& changeLayout, Image& image)
 {
 	// SSAO image
 	vk::ClearColorValue clearColor;
 	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
+
 
 	std::vector<vk::ClearValue> clearValues = { clearColor };
 
@@ -104,6 +105,7 @@ void SSAO::draw(uint32_t imageIndex, const vec2 UVOffset[2])
 	rpi.clearValueCount = 1;
 	rpi.pClearValues = clearValues.data();
 
+	changeLayout(image, LayoutState::Write);
 	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
 	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vec2), UVOffset);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
@@ -111,6 +113,7 @@ void SSAO::draw(uint32_t imageIndex, const vec2 UVOffset[2])
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSets, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
+	changeLayout(image, LayoutState::Read);
 
 	// new blurry SSAO image
 	rpi.renderPass = blurRenderPass;
