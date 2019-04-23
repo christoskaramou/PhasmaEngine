@@ -27,8 +27,7 @@ layout (location = 5) out vec4 outEmissive;
 
 void main() {
 	float alpha = texture(bcSampler, inUV).a;
-	//if(alpha < metRoughAlphacutOcl.z)
-	if(alpha < 0.9)
+	if(alpha < metRoughAlphacutOcl.z)
 		discard;
 
 	float ao = texture(oSampler, inUV).r;

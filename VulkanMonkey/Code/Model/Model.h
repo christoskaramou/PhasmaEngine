@@ -64,8 +64,6 @@ namespace vm {
 		Buffer indexBuffer;
 		uint32_t numberOfVertices = 0, numberOfIndices = 0;
 
-		static void batchStart(uint32_t imageIndex, Deferred& deferred);
-		static void batchEnd();
 		void draw();
 		void update(Camera& camera, float delta);
 		void updateAnimation(uint32_t index, float time);

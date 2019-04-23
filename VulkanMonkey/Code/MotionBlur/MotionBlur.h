@@ -26,6 +26,9 @@ namespace vm {
 		vk::DescriptorSetLayout DSLayoutMotionBlur;
 		
 		void update(Camera& camera);
+		void createRenderPass();
+		void createFrameBuffers();
+		void createPipeline();
 		void createMotionBlurUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void draw(uint32_t imageIndex, const vec2 UVOffset[2]);

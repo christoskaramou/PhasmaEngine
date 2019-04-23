@@ -101,24 +101,9 @@ void vm::Compute::updateDescriptorSet()
 	vulkan->device.updateDescriptorSets(writeCompDescriptorSets, nullptr);
 }
 
-std::vector<char> read(const std::string& filename)
-{
-	std::ifstream file(filename, std::ios::ate | std::ios::binary);
-	if (!file.is_open()) {
-		throw std::runtime_error("failed to open file!");
-	}
-	size_t fileSize = (size_t)file.tellg();
-	std::vector<char> buffer(fileSize);
-	file.seekg(0);
-	file.read(buffer.data(), fileSize);
-	file.close();
-
-	return buffer;
-}
-
 void Compute::createPipeline()
 {
-	std::vector<char> compCode = read("shaders/Compute/comp.spv");
+	std::vector<char> compCode = readFile("shaders/Compute/comp.spv");
 	vk::ShaderModuleCreateInfo csmci;
 	csmci.codeSize = compCode.size();
 	csmci.pCode = reinterpret_cast<const uint32_t*>(compCode.data());

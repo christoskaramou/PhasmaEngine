@@ -673,7 +673,7 @@ private:
 		size_t size = 0;
 	};
 	Buffer current_buffer;
-	char stack_buffer[StackSize];
+	char stack_buffer[StackSize]{};
 	SmallVector<Buffer> saved_buffers;
 
 	void append(const char *s, size_t len)

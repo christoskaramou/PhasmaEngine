@@ -30,6 +30,16 @@ namespace vm {
 		vk::DescriptorSetLayout DSLayoutCombine;
 
 		void update();
+		void createRenderPasses(std::map<std::string, Image>& renderTargets);
+		void createBrightFilterRenderPass(std::map<std::string, Image>& renderTargets);
+		void createGaussianBlurRenderPass(std::map<std::string, Image>& renderTargets);
+		void createCombineRenderPass(std::map<std::string, Image>& renderTargets);
+		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createPipelines(std::map<std::string, Image>& renderTargets);
+		void createBrightFilterPipeline(std::map<std::string, Image>& renderTargets);
+		void createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& renderTargets);
+		void createGaussianBlurVerticalPipeline(std::map<std::string, Image>& renderTargets);
+		void createCombinePipeline(std::map<std::string, Image>& renderTargets);
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[2], std::function<void(Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets);

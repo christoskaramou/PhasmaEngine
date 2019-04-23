@@ -22,6 +22,10 @@ Renderer::~Renderer()
 {
 	ctx.vulkan.device.waitIdle();
 	if (Model::models.size() == 0) {
+		if (Model::descriptorSetLayout) {
+			ctx.vulkan.device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
+			Model::descriptorSetLayout = nullptr;
+		}
 		if (Mesh::descriptorSetLayout) {
 			ctx.vulkan.device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
 			Mesh::descriptorSetLayout = nullptr;
@@ -238,7 +242,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		ctx.bloom.updateDescriptorSets(ctx.renderTargets);
 		for (auto& fb : ctx.bloom.frameBuffers)
 			ctx.vulkan.device.destroyFramebuffer(fb);
-		ctx.bloom.frameBuffers = ctx.createBloomFrameBuffers();
+		ctx.bloom.createFrameBuffers(ctx.renderTargets);
 		ctx.motionBlur.updateDescriptorSets(ctx.renderTargets);
 		GUI::dSetNeedsUpdate = false;
 	}
@@ -269,10 +273,10 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	if (Model::models.size() > 0) {
 		// MODELS
 		ctx.metrics[2].start(cmd);
-		Model::batchStart(imageIndex, ctx.deferred);
+		ctx.deferred.batchStart(imageIndex);
 		for (uint32_t m = 0; m < Model::models.size(); m++)
 			Model::models[m].draw();
-		Model::batchEnd();
+		ctx.deferred.batchEnd();
 		ctx.metrics[2].end(&GUI::metrics[2]);
 
 		changeLayout(ctx.renderTargets["albedo"], LayoutState::Read);
@@ -379,7 +383,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 	for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
 		auto& cmd = ctx.vulkan.shadowCmdBuffer[i];
 		cmd.begin(beginInfoShadows);
-		ctx.metrics[10+i].start(cmd);
+		ctx.metrics[10+ (size_t)i].start(cmd);
 		cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
 		// depth[i] image ===========================================================
@@ -403,7 +407,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 			}
 		}
 		cmd.endRenderPass();
-		ctx.metrics[10+i].end(&GUI::metrics[10+i]);
+		ctx.metrics[10+ (size_t)i].end(&GUI::metrics[10+ (size_t)i]);
 		// ==========================================================================
 		cmd.end();
 	}

@@ -38,7 +38,8 @@ namespace vm {
 
 		Buffer uniform;
 		vk::DescriptorSet descriptorSet;
-		vk::DescriptorSetLayout descriptorSetLayout;
+		static vk::DescriptorSetLayout descriptorSetLayout;
+		static vk::DescriptorSetLayout getDescriptorSetLayout();
 
 		void update(Camera& camera);
 		void createLightUniforms();

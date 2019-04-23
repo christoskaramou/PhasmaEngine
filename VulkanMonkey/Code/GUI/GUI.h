@@ -6,6 +6,8 @@
 #include "../Surface/Surface.h"
 #include "../Pipeline/Pipeline.h"
 #include "../../include/SDL.h"
+#include "../Vertex/Vertex.h"
+#include "../Swapchain/Swapchain.h"
 #include <vector>
 
 namespace vm {
@@ -95,6 +97,9 @@ namespace vm {
 		void createVertexBuffer(size_t vertex_size);
 		void createIndexBuffer(size_t index_size);
 		void createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout) override;
+		void createRenderPass();
+		void createFrameBuffers();
+		void createPipeline();
 		void destroy() override;
 	};
 }

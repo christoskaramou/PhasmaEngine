@@ -25,6 +25,9 @@ namespace vm {
 		void update(Camera& camera);
 		void createUniformBuffers();
 		void createDescriptorSets();
+		void createRenderPass();
+		void createFrameBuffers();
+		void createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayout model);
 		void destroy();
 	};
 

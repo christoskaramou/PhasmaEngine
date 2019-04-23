@@ -314,75 +314,41 @@ vk::DescriptorSetLayout Model::getDescriptorSetLayout()
 	return descriptorSetLayout;
 }
 
-void vm::Model::batchStart(uint32_t imageIndex, Deferred& deferred)
+void Model::updateAnimation(uint32_t index, float time)
 {
-	vk::ClearColorValue clearColor;
-	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
-
-	vk::ClearDepthStencilValue depthStencil;
-	depthStencil.depth = 0.f;
-	depthStencil.stencil = 0;
-
-	std::vector<vk::ClearValue> clearValues = { clearColor, clearColor, clearColor, clearColor, clearColor, clearColor, depthStencil };
-
-	vk::RenderPassBeginInfo rpi;
-	rpi.renderPass = deferred.renderPass;
-	rpi.framebuffer = deferred.frameBuffers[imageIndex];
-	rpi.renderArea = { { 0, 0 }, VulkanContext::get().surface->actualExtent };
-	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
-	rpi.pClearValues = clearValues.data();
-
-	VulkanContext::get().dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
-	Model::pipeline = &deferred.pipeline;
-}
-
-void vm::Model::batchEnd()
-{
-	VulkanContext::get().dynamicCmdBuffer.endRenderPass();
-	Model::pipeline = nullptr;
-}
-
-void Model::draw()
-{
-	if (!render) return;
-
-	auto& cmd = vulkan->dynamicCmdBuffer;
-	const vk::DeviceSize offset{ 0 };
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeline);
-	cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
-	cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
-
-	//ALPHA_OPAQUE
-	for (auto& node : linearNodes) {
-		if (node->mesh.get()) {
-			for (auto &primitive : node->mesh->primitives) {
-				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 1) {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
-					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
-				}
-			}
-		}
+	if (index > static_cast<uint32_t>(animations.size()) - 1) {
+		std::cout << "No animation with index " << index << std::endl;
+		return;
 	}
-	// ALPHA_MASK
-	for (auto& node : linearNodes) {
-		if (node->mesh.get()) {
-			for (auto &primitive : node->mesh->primitives) {
-				// ALPHA CUT
-				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 2) {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
-					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
-				}
-			}
-		}
-	}
-	// ALPHA_BLEND
-	for (auto& node : linearNodes) {
-		if (node->mesh.get()) {
-			for (auto &primitive : node->mesh->primitives) {
-				// ALPHA CUT
-				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 3) {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
-					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
+	Animation &animation = animations[index];
+
+	for (auto& channel : animation.channels) {
+		vm::AnimationSampler &sampler = animation.samplers[channel.samplerIndex];
+		if (sampler.inputs.size() > sampler.outputsVec4.size())
+			continue;
+
+		for (size_t i = 0; i < sampler.inputs.size() - 1; i++) {
+			if ((time >= sampler.inputs[i]) && (time <= sampler.inputs[i + 1])) {
+				float u = std::max(0.0f, time - sampler.inputs[i]) / (sampler.inputs[i + 1] - sampler.inputs[i]);
+				if (u <= 1.0f) {
+					switch (channel.path) {
+					case vm::AnimationChannel::PathType::TRANSLATION: {
+						cvec4 t = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
+						channel.node->translation = vec3(t);
+						break;
+					}
+					case vm::AnimationChannel::PathType::SCALE: {
+						cvec4 s = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
+						channel.node->scale = vec3(s);
+						break;
+					}
+					case vm::AnimationChannel::PathType::ROTATION: {
+						cquat q1(&sampler.outputsVec4[i].x);
+						cquat q2(&sampler.outputsVec4[i + 1].x);
+						channel.node->rotation = normalize(slerp(q1, q2, u));
+						break;
+					}
+					}
 				}
 			}
 		}
@@ -457,46 +423,53 @@ void Model::update(vm::Camera& camera, float delta)
 	}
 }
 
-void Model::updateAnimation(uint32_t index, float time)
+void Model::draw()
 {
-	if (index > static_cast<uint32_t>(animations.size()) - 1) {
-		std::cout << "No animation with index " << index << std::endl;
-		return;
+	if (!render || !Model::pipeline) return;
+
+	auto& cmd = vulkan->dynamicCmdBuffer;
+	const vk::DeviceSize offset{ 0 };
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeline);
+	cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
+	cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
+
+	//ALPHA_OPAQUE
+	for (auto& node : linearNodes) {
+		if (node->mesh.get()) {
+			for (auto &primitive : node->mesh->primitives) {
+				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 1) {
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
+					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
+				}
+			}
+		}
 	}
-	Animation &animation = animations[index];
-
-	for (auto& channel : animation.channels) {
-		vm::AnimationSampler &sampler = animation.samplers[channel.samplerIndex];
-		if (sampler.inputs.size() > sampler.outputsVec4.size())
-			continue;
-
-		for (size_t i = 0; i < sampler.inputs.size() - 1; i++) {
-			if ((time >= sampler.inputs[i]) && (time <= sampler.inputs[i + 1])) {
-				float u = std::max(0.0f, time - sampler.inputs[i]) / (sampler.inputs[i + 1] - sampler.inputs[i]);
-				if (u <= 1.0f) {
-					switch (channel.path) {
-					case vm::AnimationChannel::PathType::TRANSLATION: {
-						cvec4 t = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
-						channel.node->translation = vec3(t);
-						break;
-					}
-					case vm::AnimationChannel::PathType::SCALE: {
-						cvec4 s = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
-						channel.node->scale = vec3(s);
-						break;
-					}
-					case vm::AnimationChannel::PathType::ROTATION: {
-						cquat q1(&sampler.outputsVec4[i].x);
-						cquat q2(&sampler.outputsVec4[i + 1].x);
-						channel.node->rotation = normalize(slerp(q1, q2, u));
-						break;
-					}
-					}
+	// ALPHA_MASK
+	for (auto& node : linearNodes) {
+		if (node->mesh.get()) {
+			for (auto &primitive : node->mesh->primitives) {
+				// ALPHA CUT
+				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 2) {
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
+					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
+				}
+			}
+		}
+	}
+	// ALPHA_BLEND
+	for (auto& node : linearNodes) {
+		if (node->mesh.get()) {
+			for (auto &primitive : node->mesh->primitives) {
+				// ALPHA CUT
+				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 3) {
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
+					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 				}
 			}
 		}
 	}
 }
+
 // position x, y, z and radius w
 void Model::calculateBoundingSphere()
 {

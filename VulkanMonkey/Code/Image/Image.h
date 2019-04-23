@@ -21,7 +21,7 @@ namespace vm {
 
 		// values
 		LayoutState layoutState = LayoutState::Write;
-		vk::Format format;
+		vk::Format format{};
 		vk::ImageLayout initialLayout = vk::ImageLayout::ePreinitialized;
 		uint32_t mipLevels = 1;
 		uint32_t arrayLayers = 1;
@@ -35,6 +35,7 @@ namespace vm {
 		vk::Bool32 samplerCompareEnable = VK_FALSE;
 		vk::CompareOp compareOp = vk::CompareOp::eLess;
 		vk::SamplerMipmapMode samplerMipmapMode = vk::SamplerMipmapMode::eLinear;
+		vk::PipelineColorBlendAttachmentState blentAttachment;
 
 		void createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1);
 		void createImageView(const vk::ImageAspectFlags aspectFlags);

@@ -937,7 +937,7 @@ struct SPIRConstant : IVariant
 	{
 		ConstantVector c[4];
 		// If != 0, this column is a specialization constant, and we should keep track of it as such.
-		uint32_t id[4];
+		uint32_t id[4]{};
 		uint32_t columns = 1;
 
 		// Workaround for MSVC 2013, initializing an array breaks.

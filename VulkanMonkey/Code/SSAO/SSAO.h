@@ -27,6 +27,15 @@ namespace vm {
 		vk::DescriptorSet DSet, DSBlur;
 
 		void update(Camera& camera);
+		void createRenderPasses(std::map<std::string, Image>& renderTargets);
+		void createSSAORenderPass(std::map<std::string, Image>& renderTargets);
+		void createSSAOBlurRenderPass(std::map<std::string, Image>& renderTargets);
+		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createSSAOFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createSSAOBlurFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createPipelines(std::map<std::string, Image>& renderTargets);
+		void createPipeline(std::map<std::string, Image>& renderTargets);
+		void createBlurPipeline(std::map<std::string, Image>& renderTargets);
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void draw(uint32_t imageIndex, const vec2 UVOffset[2], std::function<void(Image&, LayoutState)>&& changeLayout, Image& image);

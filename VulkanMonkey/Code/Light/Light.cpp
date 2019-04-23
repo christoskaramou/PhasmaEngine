@@ -2,6 +2,8 @@
 
 using namespace vm;
 
+vk::DescriptorSetLayout LightUniforms::descriptorSetLayout = nullptr;
+
 Light::Light() :
 	color(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f),
 	position(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 1.f)
@@ -14,6 +16,8 @@ Light::Light(const vec4& color, const vec4& position) :
 
 void LightUniforms::createLightUniforms()
 {
+	getDescriptorSetLayout();
+
 	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	uniform.data = vulkan->device.mapMemory(uniform.memory, 0, uniform.size);
 	LightsUBO lubo;
@@ -66,4 +70,23 @@ void LightUniforms::update(Camera& camera)
 		values[1] *= GUI::sun_intensity;
 		memcpy(uniform.data, values, sizeof(values));
 	}
+}
+
+vk::DescriptorSetLayout LightUniforms::getDescriptorSetLayout()
+{
+	// binding for model mvp matrix
+	if (!descriptorSetLayout) {
+		vk::DescriptorSetLayoutBinding descriptorSetLayoutBinding;
+		descriptorSetLayoutBinding.binding = 0;
+		descriptorSetLayoutBinding.descriptorCount = 1;
+		descriptorSetLayoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
+		descriptorSetLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+		vk::DescriptorSetLayoutCreateInfo createInfo;
+		createInfo.bindingCount = 1;
+		createInfo.pBindings = &descriptorSetLayoutBinding;
+
+		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(createInfo);
+	}
+	return descriptorSetLayout;
 }

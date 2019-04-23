@@ -20,9 +20,12 @@ namespace vm {
 		vk::DescriptorSet DSet;
 		vk::DescriptorSetLayout DSLayout;
 
-		void createFXAAUniforms(std::map<std::string, Image>& renderTargets);
+		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void draw(uint32_t imageIndex);
+		void createRenderPass(std::map<std::string, Image>& renderTargets);
+		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createPipeline(std::map<std::string, Image>& renderTargets);
 		void destroy();
 	};
 }

@@ -1,4 +1,5 @@
 #include "Timer.h"
+#include <stdexcept>
 
 using namespace vm;
 
@@ -19,6 +20,7 @@ Timer::Timer()
 
     start = std::chrono::high_resolution_clock::now();
 	frameStart = start;
+	duration = {};
 }
 
 Timer::~Timer()

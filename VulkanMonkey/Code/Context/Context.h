@@ -97,13 +97,6 @@ namespace vm {
 		void destroyVkContext();
 		void resizeViewport(uint32_t width, uint32_t height);
 
-		PipelineInfo getPipelineSpecificationsShadows();
-		PipelineInfo getPipelineSpecificationsSkyBox(SkyBox& skybox);
-		PipelineInfo getPipelineSpecificationsGUI();
-		PipelineInfo getPipelineSpecificationsDeferred();
-
-		vk::DescriptorSetLayout getDescriptorSetLayoutLights();
-
 	public:
 		vk::Instance createInstance();
 		Surface createSurface();
@@ -122,46 +115,11 @@ namespace vm {
 		vk::Queue getComputeQueue();
 		Swapchain createSwapchain();
 		vk::CommandPool createCommandPool();
-		void addRenderTarget(const std::string& name, vk::Format format);
-		vk::RenderPass createDeferredRenderPass();
-		vk::RenderPass createCompositionRenderPass();
-		vk::RenderPass createSSAORenderPass();
-		vk::RenderPass createSSAOBlurRenderPass();
-		vk::RenderPass createSSRRenderPass();
-		vk::RenderPass createFXAARenderPass();
-		vk::RenderPass createBrightFilterRenderPass();
-		vk::RenderPass createGaussianBlurRenderPass();
-		vk::RenderPass createCombineRenderPass();
-		vk::RenderPass createMotionBlurRenderPass();
-		vk::RenderPass createGUIRenderPass();
-		vk::RenderPass createShadowsRenderPass();
-		vk::RenderPass createSkyboxRenderPass();
 		Image createDepthResources();
-		std::vector<vk::Framebuffer> createDeferredFrameBuffers();
-		std::vector<vk::Framebuffer> createCompositionFrameBuffers();
-		std::vector<vk::Framebuffer> createSSRFrameBuffers();
-		std::vector<vk::Framebuffer> createSSAOFrameBuffers();
-		std::vector<vk::Framebuffer> createSSAOBlurFrameBuffers();
-		std::vector<vk::Framebuffer> createFXAAFrameBuffers();
-		std::vector<vk::Framebuffer> createBloomFrameBuffers();
-		std::vector<vk::Framebuffer> createMotionBlurFrameBuffers();
-		std::vector<vk::Framebuffer> createGUIFrameBuffers();
-		std::vector<vk::Framebuffer> createShadowsFrameBuffers();
-		std::vector<vk::Framebuffer> createSkyboxFrameBuffers(SkyBox& skybox);
 		std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount = 1);
-		Pipeline createPipeline(const PipelineInfo& specificInfo);
-		Pipeline createCompositionPipeline();
-		Pipeline createSSRPipeline();
-		Pipeline createFXAAPipeline();
-		Pipeline createBrightFilterPipeline();
-		Pipeline createGaussianBlurHorizontalPipeline();
-		Pipeline createGaussianBlurVerticalPipeline();
-		Pipeline createCombinePipeline();
-		Pipeline createSSAOPipeline();
-		Pipeline createSSAOBlurPipeline();
-		Pipeline createMotionBlurPipeline();
 		vk::DescriptorPool createDescriptorPool(const uint32_t maxDescriptorSets);
 		std::vector<vk::Fence> createFences(const uint32_t fenceCount);
 		std::vector<vk::Semaphore> createSemaphores(const uint32_t semaphoresCount);
+		void addRenderTarget(const std::string& name, vk::Format format);
 	};
 }

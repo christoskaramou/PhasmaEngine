@@ -503,7 +503,7 @@ protected:
 		if (!instr.length)
 			return nullptr;
 
-		if (instr.offset + instr.length > ir.spirv.size())
+		if (instr.offset + instr.length > (uint32_t)ir.spirv.size())
 			SPIRV_CROSS_THROW("Compiler::stream() out of range.");
 		return &ir.spirv[instr.offset];
 	}

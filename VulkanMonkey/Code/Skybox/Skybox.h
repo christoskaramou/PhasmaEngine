@@ -19,6 +19,9 @@ namespace vm {
 		void update(Camera& camera);
 		void draw(uint32_t imageIndex);
 		void loadTextures(const std::array<std::string, 6>& paths, uint32_t imageSideSize);
+		void createRenderPass();
+		void createFrameBuffers();
+		void createPipeline();
 		void destroy();
 	};
 }

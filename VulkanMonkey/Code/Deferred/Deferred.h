@@ -7,6 +7,10 @@
 #include "../GUI/GUI.h"
 #include "../Shadows/Shadows.h"
 #include "../SkyBox/Skybox.h"
+#include "../Vertex/Vertex.h"
+#include "../Model/Model.h"
+#include "../Mesh/Mesh.h"
+#include "../Swapchain/Swapchain.h"
 #include <map>
 
 namespace vm {
@@ -21,9 +25,20 @@ namespace vm {
 		Pipeline pipeline;
 		Pipeline pipelineComposition;
 
+		void batchStart(uint32_t imageIndex);
+		void batchEnd();
 		void createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
 		void draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj, vec2 UVOffset[2]);
+		void createRenderPasses(std::map<std::string, Image>& renderTargets);
+		void createGBufferRenderPasses(std::map<std::string, Image>& renderTargets);
+		void createCompositionRenderPass(std::map<std::string, Image>& renderTargets);
+		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createGBufferFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createCompositionFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createPipelines(std::map<std::string, Image>& renderTargets);
+		void createGBufferPipeline(std::map<std::string, Image>& renderTargets);
+		void createCompositionPipeline(std::map<std::string, Image>& renderTargets);
 		void destroy();
 	};
 }

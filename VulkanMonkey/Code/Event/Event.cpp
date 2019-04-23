@@ -1,5 +1,7 @@
 #include "Event.h"
 #include <algorithm>
+#include <stdexcept>
+
 using namespace vm;
 
 Event Event::FrameStart = CREATE_EVENT();
