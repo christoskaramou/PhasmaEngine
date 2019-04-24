@@ -14,7 +14,7 @@ namespace vm {
 
 		static uint32_t imageSize;
 		static vk::DescriptorSetLayout descriptorSetLayout;
-		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
+		static vk::DescriptorSetLayout getDescriptorSetLayout();
 		vk::RenderPass renderPass;
 		std::vector <Image> textures{};
 		std::vector <vk::DescriptorSet> descriptorSets{};

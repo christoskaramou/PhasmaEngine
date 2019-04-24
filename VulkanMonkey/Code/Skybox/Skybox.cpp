@@ -5,7 +5,7 @@ using namespace vm;
 
 vk::DescriptorSetLayout SkyBox::descriptorSetLayout = nullptr;
 
-vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(vk::Device device)
+vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
 		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, vk::ShaderStageFlags stageFlags) {
@@ -25,6 +25,9 @@ vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout(vk::Device device)
 
 void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, bool show)
 {
+	loadTextures(textureNames, imageSideSize);
+	render = show;
+#ifdef RENDER_SKYBOX
 	float SIZE = 1.f;
 	vertices = {
 		-SIZE,  SIZE, -SIZE, 0.0f,
@@ -69,47 +72,8 @@ void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t
 		-SIZE, -SIZE,  SIZE, 0.0f,
 		 SIZE, -SIZE,  SIZE, 0.0f
 	};
-	loadTextures(textureNames, imageSideSize);
 	createVertexBuffer();
-	render = show;
-}
-
-void SkyBox::update(Camera& camera)
-{
-	if (!render) return;
-
-	// projection matrix correction here, because the given has reversed near and far
-	mat4 projection = camera.projection;
-	projection[2][2] = camera.nearPlane / (camera.nearPlane - camera.farPlane)*camera.worldOrientation.z;
-	projection[3][2] = -(camera.nearPlane * camera.farPlane) / (camera.nearPlane - camera.farPlane);
-	const mat4 pvm[2]{ projection, camera.view };
-	memcpy(uniformBuffer.data, &pvm, sizeof(pvm));
-}
-
-void SkyBox::draw(uint32_t imageIndex)
-{
-	if (!render) return;
-
-	vk::ClearColorValue clearColor;
-	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
-
-	std::vector<vk::ClearValue> clearValues = { clearColor };
-
-	vk::RenderPassBeginInfo renderPassInfo;
-	renderPassInfo.renderPass = renderPass;
-	renderPassInfo.framebuffer = frameBuffers[imageIndex];
-	renderPassInfo.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
-	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-	renderPassInfo.pClearValues = clearValues.data();
-
-	auto& cmd = vulkan->dynamicCmdBuffer;
-	cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-	vk::DeviceSize offset{ 0 };
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSet, nullptr);
-	cmd.bindVertexBuffers(0, vertexBuffer.buffer, offset);
-	cmd.draw(static_cast<uint32_t>(vertices.size() * 0.25f), 1, 0, 0);
-	cmd.endRenderPass();
+#endif
 }
 
 // images must be squared and the image size must be the real else the assertion will fail
@@ -130,7 +94,7 @@ void SkyBox::loadTextures(const std::array<std::string, 6>& paths, uint32_t imag
 		stbi_uc* pixels = stbi_load(paths[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		assert(imageSideSize == texWidth && imageSideSize == texHeight);
 
-		vk::DeviceSize imageSize = texWidth * texHeight * 4;
+		vk::DeviceSize imageSize = (size_t)texWidth * (size_t)texHeight * 4;
 		if (!pixels)
 			throw std::runtime_error("No pixel data loaded");
 
@@ -153,6 +117,65 @@ void SkyBox::loadTextures(const std::array<std::string, 6>& paths, uint32_t imag
 	texture.createSampler();
 }
 
+void SkyBox::destroy()
+{
+	Object::destroy();
+	pipeline.destroy();
+	if (SkyBox::descriptorSetLayout) {
+		vulkan->device.destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
+		SkyBox::descriptorSetLayout = nullptr;
+	}
+	if (renderPass) {
+		vulkan->device.destroyRenderPass(renderPass);
+		renderPass = nullptr;
+	}
+	for (auto& frameBuffer : frameBuffers) {
+		if (frameBuffer) {
+			vulkan->device.destroyFramebuffer(frameBuffer);
+		}
+	}
+}
+
+
+#ifdef RENDER_SKYBOX
+void SkyBox::update(Camera& camera)
+{
+	if (!render) return;
+
+	// projection matrix correction here, because the given has reversed near and far
+	mat4 projection = camera.projection;
+	projection[2][2] = camera.nearPlane / (camera.nearPlane - camera.farPlane) * camera.worldOrientation.z;
+	projection[3][2] = -(camera.nearPlane * camera.farPlane) / (camera.nearPlane - camera.farPlane);
+	const mat4 pvm[2]{ projection, camera.view };
+	memcpy(uniformBuffer.data, &pvm, sizeof(pvm));
+}
+
+void SkyBox::draw(uint32_t imageIndex)
+{
+	if (!render) return;
+
+	vk::ClearValue clearColor;
+	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
+
+	std::vector<vk::ClearValue> clearValues = { clearColor };
+
+	vk::RenderPassBeginInfo renderPassInfo;
+	renderPassInfo.renderPass = renderPass;
+	renderPassInfo.framebuffer = frameBuffers[imageIndex];
+	renderPassInfo.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
+	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+	renderPassInfo.pClearValues = clearValues.data();
+
+	auto& cmd = vulkan->dynamicCmdBuffer;
+	cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+	vk::DeviceSize offset{ 0 };
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSet, nullptr);
+	cmd.bindVertexBuffers(0, vertexBuffer.buffer, offset);
+	cmd.draw(static_cast<uint32_t>(vertices.size() * 0.25f), 1, 0, 0);
+	cmd.endRenderPass();
+}
+
 void vm::SkyBox::createRenderPass()
 {
 	std::array<vk::AttachmentDescription, 1> attachments{};
@@ -164,7 +187,7 @@ void vm::SkyBox::createRenderPass()
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+	attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
 
 
 	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
@@ -197,8 +220,8 @@ void vm::SkyBox::createRenderPass()
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
-	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	renderPassInfo.pDependencies = dependencies.data();
+	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	//renderPassInfo.pDependencies = dependencies.data();
 
 	renderPass = vulkan->device.createRenderPass(renderPassInfo);
 }
@@ -345,7 +368,7 @@ void vm::SkyBox::createPipeline()
 	pipeline.pipeinfo.pDynamicState = &dsi;
 
 	// Pipeline Layout
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ SkyBox::getDescriptorSetLayout(vulkan->device) };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ SkyBox::getDescriptorSetLayout() };
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
 	plci.pSetLayouts = descriptorSetLayouts.data();
@@ -369,22 +392,4 @@ void vm::SkyBox::createPipeline()
 	vulkan->device.destroyShaderModule(vertModule);
 	vulkan->device.destroyShaderModule(fragModule);
 }
-
-void SkyBox::destroy()
-{
-	Object::destroy();
-	pipeline.destroy();
-	if (SkyBox::descriptorSetLayout) {
-		vulkan->device.destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
-		SkyBox::descriptorSetLayout = nullptr;
-	}
-	if (renderPass) {
-		vulkan->device.destroyRenderPass(renderPass);
-		renderPass = nullptr;
-	}
-	for (auto &frameBuffer : frameBuffers) {
-		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
-		}
-	}
-}
+#endif // RENDER_SKYBOX

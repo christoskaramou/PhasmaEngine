@@ -53,40 +53,46 @@ void Context::initRendering()
 	addRenderTarget("emissive", vk::Format::eR8G8B8A8Unorm);
 
 	// render passes
-	deferred.createRenderPasses(renderTargets);
-	ssao.createRenderPasses(renderTargets);
-	ssr.createRenderPass(renderTargets);
-	fxaa.createRenderPass(renderTargets);
-	motionBlur.createRenderPass();
-	gui.createRenderPass();
-	shadows.createRenderPass();
-	bloom.createRenderPasses(renderTargets);
+#ifdef RENDER_SKYBOX
 	skyBoxDay.createRenderPass();
 	skyBoxNight.createRenderPass();
+#endif
+	shadows.createRenderPass();
+	ssao.createRenderPasses(renderTargets);
+	ssr.createRenderPass(renderTargets);
+	deferred.createRenderPasses(renderTargets);
+	fxaa.createRenderPass(renderTargets);
+	bloom.createRenderPasses(renderTargets);
+	motionBlur.createRenderPass();
+	gui.createRenderPass();
 
 	// frame buffers
-	deferred.createFrameBuffers(renderTargets);
-	ssao.createFrameBuffers(renderTargets);
-	ssr.createFrameBuffers(renderTargets);
-	fxaa.createFrameBuffers(renderTargets);
-	motionBlur.createFrameBuffers();
-	gui.createFrameBuffers();
-	shadows.createFrameBuffers();
-	bloom.createFrameBuffers(renderTargets);
+#ifdef RENDER_SKYBOX
 	skyBoxDay.createFrameBuffers();
 	skyBoxNight.createFrameBuffers();
+#endif
+	shadows.createFrameBuffers();
+	ssao.createFrameBuffers(renderTargets);
+	ssr.createFrameBuffers(renderTargets);
+	deferred.createFrameBuffers(renderTargets);
+	fxaa.createFrameBuffers(renderTargets);
+	bloom.createFrameBuffers(renderTargets);
+	motionBlur.createFrameBuffers();
+	gui.createFrameBuffers();
 
 	// pipelines
-	gui.createPipeline();
-	deferred.createPipelines(renderTargets);
+#ifdef RENDER_SKYBOX
+	skyBoxDay.createPipeline();
+	skyBoxNight.createPipeline();
+#endif
+	shadows.createPipeline(Mesh::getDescriptorSetLayout(), Model::getDescriptorSetLayout());
 	ssao.createPipelines(renderTargets);
 	ssr.createPipeline(renderTargets);
+	deferred.createPipelines(renderTargets);
 	fxaa.createPipeline(renderTargets);
 	bloom.createPipelines(renderTargets);
 	motionBlur.createPipeline();
-	shadows.createPipeline(Mesh::getDescriptorSetLayout(), Model::getDescriptorSetLayout());
-	skyBoxDay.createPipeline();
-	skyBoxNight.createPipeline();
+	gui.createPipeline();
 
 	computePool.Init(5);
 
@@ -288,12 +294,14 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	gui.createFrameBuffers();
 	gui.createPipeline();
 
+#ifdef RENDER_SKYBOX
 	skyBoxDay.createRenderPass();
 	skyBoxDay.createFrameBuffers();
 	skyBoxDay.createPipeline();
 	skyBoxNight.createRenderPass();
 	skyBoxNight.createFrameBuffers();
 	skyBoxNight.createPipeline();
+#endif
 
 	//compute.pipeline = createComputePipeline();
 	//compute.updateDescriptorSets();
@@ -384,9 +392,9 @@ void Context::createUniforms()
 	gui.createDescriptorSet(GUI::getDescriptorSetLayout(vulkan.device));
 	// DESCRIPTOR SETS FOR SKYBOX
 	skyBoxDay.createUniformBuffer(2 * sizeof(mat4));
-	skyBoxDay.createDescriptorSet(SkyBox::getDescriptorSetLayout(vulkan.device));
+	skyBoxDay.createDescriptorSet(SkyBox::getDescriptorSetLayout());
 	skyBoxNight.createUniformBuffer(2 * sizeof(mat4));
-	skyBoxNight.createDescriptorSet(SkyBox::getDescriptorSetLayout(vulkan.device));
+	skyBoxNight.createDescriptorSet(SkyBox::getDescriptorSetLayout());
 	// DESCRIPTOR SETS FOR SHADOWS
 	shadows.createUniformBuffers();
 	shadows.createDescriptorSets();

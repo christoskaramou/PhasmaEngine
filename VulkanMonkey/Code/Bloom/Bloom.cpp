@@ -59,8 +59,8 @@ void vm::Bloom::createBrightFilterRenderPass(std::map<std::string, Image>& rende
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
-	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	renderPassInfo.pDependencies = dependencies.data();
+	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	//renderPassInfo.pDependencies = dependencies.data();
 
 	renderPassBrightFilter = vulkan->device.createRenderPass(renderPassInfo);
 }
@@ -299,8 +299,8 @@ void Bloom::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 
 void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, const vec2 UVOffset[2], std::function<void(Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets)
 {
-	vk::ClearColorValue clearColor;
-	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
+	vk::ClearValue clearColor;
+	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
 	std::vector<vk::ClearValue> clearValues = { clearColor, clearColor };
 
@@ -937,6 +937,7 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	pipelineCombine.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
+	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_FALSE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
 		vulkan->swapchain->images[0].blentAttachment,
 		GUI::show_FXAA ? renderTargets["composition"].blentAttachment : renderTargets["composition2"].blentAttachment

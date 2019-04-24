@@ -45,8 +45,8 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 
 void MotionBlur::draw(uint32_t imageIndex, const vec2 UVOffset[2])
 {
-	vk::ClearColorValue clearColor;
-	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
+	vk::ClearValue clearColor;
+	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
 	std::vector<vk::ClearValue> clearValues = { clearColor };
 
@@ -138,8 +138,8 @@ void vm::MotionBlur::createRenderPass()
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
-	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	renderPassInfo.pDependencies = dependencies.data();
+	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	//renderPassInfo.pDependencies = dependencies.data();
 
 	renderPass = vulkan->device.createRenderPass(renderPassInfo);
 }
@@ -259,6 +259,7 @@ void MotionBlur::createPipeline()
 	pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
+	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_FALSE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
 		vulkan->swapchain->images[0].blentAttachment
 	};

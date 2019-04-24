@@ -32,7 +32,7 @@ std::array<float, 3>		GUI::sun_position{ 0.0f, 300.0f, 50.0f };
 int							GUI::fps = 60;
 float						GUI::cameraSpeed = 3.5f;
 std::array<float, 3>		GUI::depthBias{ 0.0f, 0.0f, -6.2f };
-std::array<float, 4>		GUI::clearColor{ 0.0f, 0.31f, 0.483f, 0.0f };
+std::array<float, 4>		GUI::clearColor{ 0.0f, 0.0f, 0.0f, 1.0f };
 float						GUI::cpuTime = 0;
 float						GUI::cpuWaitingTime = 0;
 float						GUI::gpuTime = 0;
@@ -605,8 +605,8 @@ void GUI::draw(uint32_t imageIndex)
 	auto draw_data = ImGui::GetDrawData();
 	if (render && draw_data->TotalVtxCount > 0)
 	{
-		vk::ClearColorValue clearColor;
-		memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
+		vk::ClearValue clearColor;
+		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
 		vk::ClearDepthStencilValue depthStencil;
 		depthStencil.depth = 1.f;
@@ -927,8 +927,8 @@ void vm::GUI::createRenderPass()
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 	renderPassInfo.pSubpasses = subpassDescriptions.data();
-	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	renderPassInfo.pDependencies = dependencies.data();
+	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	//renderPassInfo.pDependencies = dependencies.data();
 
 	renderPass = vulkan->device.createRenderPass(renderPassInfo);
 }
@@ -1054,19 +1054,9 @@ void GUI::createPipeline()
 	pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	vk::PipelineColorBlendAttachmentState pcbas;
-	pcbas.blendEnable = VK_TRUE;
-	pcbas.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-	pcbas.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-	pcbas.colorBlendOp = vk::BlendOp::eAdd;
-	pcbas.srcAlphaBlendFactor = vk::BlendFactor::eOne;
-	pcbas.dstAlphaBlendFactor = vk::BlendFactor::eZero;
-	pcbas.alphaBlendOp = vk::BlendOp::eAdd;
-	pcbas.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-
+	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_TRUE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
-		pcbas
-		//vulkan->swapchain->images[0].blentAttachment
+		vulkan->swapchain->images[0].blentAttachment
 	};
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;

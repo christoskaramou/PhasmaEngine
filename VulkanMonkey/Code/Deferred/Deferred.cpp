@@ -5,8 +5,8 @@ using namespace vm;
 
 void Deferred::batchStart(uint32_t imageIndex)
 {
-	vk::ClearColorValue clearColor;
-	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
+	vk::ClearValue clearColor;
+	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
 	vk::ClearDepthStencilValue depthStencil;
 	depthStencil.depth = 0.f;
@@ -73,8 +73,8 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 void Deferred::draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj, vec2 UVOffset[2])
 {
 	// Begin Composition
-	vk::ClearColorValue clearColor;
-	memcpy(clearColor.float32, GUI::clearColor.data(), 4 * sizeof(float));
+	vk::ClearValue clearColor;
+	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
 	std::vector<vk::ClearValue> clearValues = { clearColor, clearColor };
 
@@ -217,8 +217,8 @@ void vm::Deferred::createGBufferRenderPasses(std::map<std::string, Image>& rende
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 	renderPassInfo.pSubpasses = subpassDescriptions.data();
-	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	renderPassInfo.pDependencies = dependencies.data();
+	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	//renderPassInfo.pDependencies = dependencies.data();
 
 	renderPass = vulkan->device.createRenderPass(renderPassInfo);
 }
@@ -229,7 +229,7 @@ void vm::Deferred::createCompositionRenderPass(std::map<std::string, Image>& ren
 	// Color target
 	attachments[0].format = vulkan->surface->formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
@@ -281,8 +281,8 @@ void vm::Deferred::createCompositionRenderPass(std::map<std::string, Image>& ren
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 	renderPassInfo.pSubpasses = subpassDescriptions.data();
-	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	renderPassInfo.pDependencies = dependencies.data();
+	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	//renderPassInfo.pDependencies = dependencies.data();
 
 	compositionRenderPass = vulkan->device.createRenderPass(renderPassInfo);
 }
@@ -445,6 +445,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
+	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_TRUE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { 
 			renderTargets["depth"].blentAttachment,
 			renderTargets["normal"].blentAttachment,
@@ -642,10 +643,10 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = {
 		DSLayoutComposition,
-		Shadows::getDescriptorSetLayout(vulkan->device),
-		Shadows::getDescriptorSetLayout(vulkan->device),
-		Shadows::getDescriptorSetLayout(vulkan->device),
-		SkyBox::getDescriptorSetLayout(vulkan->device) };
+		Shadows::getDescriptorSetLayout(),
+		Shadows::getDescriptorSetLayout(),
+		Shadows::getDescriptorSetLayout(),
+		SkyBox::getDescriptorSetLayout() };
 
 	vk::PushConstantRange pConstants;
 	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;

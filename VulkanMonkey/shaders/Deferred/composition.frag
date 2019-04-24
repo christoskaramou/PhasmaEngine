@@ -20,8 +20,14 @@ layout (location = 1) out vec4 outComposition;
 vec3 calculateShadowAndDirectLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal);
 
 void main() 
-{
+{ 
 	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj, screenSpace.size);
+	if (texture(samplerDepth, inUV).x == 0.0) 
+	{
+		outColor = vec4(texture(cubemapSampler, normalize(fragPos - ubo.camPos.xyz)).xyz, 1.0);
+		outComposition = outColor;
+		return;
+	}
 	vec3 normal = texture(samplerNormal, inUV).xyz;
 	float ssao = texture(ssaoBlurSampler, inUV).x;
 	vec3 metRough = texture(samplerMetRough, inUV).xyz;

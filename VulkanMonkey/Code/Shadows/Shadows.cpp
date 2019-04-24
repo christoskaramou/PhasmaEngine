@@ -89,8 +89,8 @@ void vm::Shadows::createRenderPass()
 	rpci.pAttachments = &attachment;
 	rpci.subpassCount = 1;
 	rpci.pSubpasses = &subpassDesc;
-	rpci.dependencyCount = (uint32_t)dependencies.size();
-	rpci.pDependencies = dependencies.data();
+	//rpci.dependencyCount = (uint32_t)dependencies.size();
+	//rpci.pDependencies = dependencies.data();
 
 	renderPass = vulkan->device.createRenderPass(rpci);
 }
@@ -244,7 +244,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	pipeline.pipeinfo.pDynamicState = &dsi;
 
 	// Pipeline Layout
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ getDescriptorSetLayout(vulkan->device), mesh, model };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ getDescriptorSetLayout(), mesh, model };
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
 	plci.pSetLayouts = descriptorSetLayouts.data();
@@ -268,7 +268,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	vulkan->device.destroyShaderModule(vertModule);
 }
 
-vk::DescriptorSetLayout Shadows::getDescriptorSetLayout(vk::Device device)
+vk::DescriptorSetLayout Shadows::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
 		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, vk::ShaderStageFlags stageFlags) {
