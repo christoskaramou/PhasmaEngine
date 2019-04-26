@@ -89,7 +89,7 @@ void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void SSAO::draw(uint32_t imageIndex, const vec2 UVOffset[2], std::function<void(Image&, LayoutState)>&& changeLayout, Image& image)
+void SSAO::draw(uint32_t imageIndex, const std::vector<vec2>& UVOffset, std::function<void(Image&, LayoutState)>&& changeLayout, Image& image)
 {
 	// SSAO image
 	vk::ClearValue clearColor;
@@ -107,7 +107,7 @@ void SSAO::draw(uint32_t imageIndex, const vec2 UVOffset[2], std::function<void(
 
 	changeLayout(image, LayoutState::Write);
 	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vec2), UVOffset);
+	vulkan->dynamicCmdBuffer.pushConstants<vec2>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, UVOffset);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	const vk::DescriptorSet descriptorSets = { DSet };
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSets, nullptr);

@@ -31,7 +31,7 @@ namespace vm {
 		void createPipeline();
 		void createMotionBlurUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(uint32_t imageIndex, const vec2 UVOffset[2]);
+		void draw(uint32_t imageIndex, const std::vector<vec2>& UVOffset);
 		void destroy();
 	};
 }

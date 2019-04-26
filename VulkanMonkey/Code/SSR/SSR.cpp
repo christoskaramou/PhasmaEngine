@@ -56,7 +56,7 @@ void SSR::update(Camera& camera)
 }
 
 
-void SSR::draw(uint32_t imageIndex, const vec2 UVOffset[2])
+void SSR::draw(uint32_t imageIndex, const std::vector<vec2>& UVOffset)
 {
 	vk::ClearValue clearColor;
 	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -71,7 +71,7 @@ void SSR::draw(uint32_t imageIndex, const vec2 UVOffset[2])
 	renderPassInfo.pClearValues = clearValues.data();
 
 	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vec2), UVOffset);
+	vulkan->dynamicCmdBuffer.pushConstants<vec2>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, UVOffset);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSReflection, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);

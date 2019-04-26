@@ -43,7 +43,7 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
-void MotionBlur::draw(uint32_t imageIndex, const vec2 UVOffset[2])
+void MotionBlur::draw(uint32_t imageIndex, const std::vector<vec2>& UVOffset)
 {
 	vk::ClearValue clearColor;
 	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -58,8 +58,8 @@ void MotionBlur::draw(uint32_t imageIndex, const vec2 UVOffset[2])
 	rpi.pClearValues = clearValues.data();
 	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-	vec4 fps[2]{ {1.f / Timer::delta}, {UVOffset[0].x, UVOffset[0].y, UVOffset[1].x, UVOffset[1].y} };
-	vulkan->dynamicCmdBuffer.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, 2 * sizeof(vec4), &fps);
+	std::vector<vec4> fps{ {1.f / Timer::delta}, {UVOffset[0].x, UVOffset[0].y, UVOffset[1].x, UVOffset[1].y} };
+	vulkan->dynamicCmdBuffer.pushConstants<vec4>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, fps);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSMotionBlur, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);

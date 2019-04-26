@@ -253,7 +253,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	vec2 winPos((float*)&GUI::winPos);
 	vec2 winSize((float*)&GUI::winSize);
 
-	vec2 UVOffset[2] = { winPos / surfSize, winSize / surfSize };
+	std::vector<vec2> UVOffset{ winPos / surfSize, winSize / surfSize };
 
 	ctx.camera_main.renderArea.update(winPos, winSize);
 
@@ -333,7 +333,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	if (GUI::show_Bloom) {
 		ctx.metrics[7].start(cmd);
 		auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2);
-		ctx.bloom.draw(imageIndex, (uint32_t)ctx.vulkan.swapchain->images.size(), UVOffset, changeLayoutFunc, ctx.renderTargets);
+		ctx.bloom.draw(imageIndex, (uint32_t)ctx.vulkan.swapchain->images.size(), changeLayoutFunc, ctx.renderTargets);
 		ctx.metrics[7].end(&GUI::metrics[7]);
 	}
 	

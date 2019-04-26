@@ -146,31 +146,31 @@ void GUI::Metrics()
 	//if (use_compute) {
 	//	ImGui::Text("   Compute: %.3f ms", stats[13]); totalPasses++;
 	//}
-	ImGui::Text("   Skybox: %.3f ms", stats[1]); totalPasses++;
-	if (modelList.size() > 0) {
-		if (shadow_cast) {
-			ImGui::Text("   Depth: %.3f ms", stats[10]); totalPasses++; totalTime += stats[10];
-			ImGui::Text("   Depth: %.3f ms", stats[11]); totalPasses++; totalTime += stats[11];
-			ImGui::Text("   Depth: %.3f ms", stats[12]); totalPasses++; totalTime += stats[12];
-		}
-		ImGui::Text("   GBuffer: %.3f ms", stats[2]); totalPasses++; totalTime += stats[2];
-		if (show_ssao) {
-			ImGui::Text("   SSAO: %.3f ms", stats[3]); totalPasses++; totalTime += stats[3];
-		}
-		if (show_ssr) {
-			ImGui::Text("   SSR: %.3f ms", stats[4]); totalPasses++; totalTime += stats[4];
-		}
-		ImGui::Text("   Lights: %.3f ms", stats[5]); totalPasses++; totalTime += stats[5];
-		if (show_FXAA) {
-			ImGui::Text("   FXAA: %.3f ms", stats[6]); totalPasses++; totalTime += stats[6];
-		}
-		if (show_Bloom) {
-			ImGui::Text("   Bloom: %.3f ms", stats[7]); totalPasses++; totalTime += stats[7];
-		}
-		if (show_motionBlur) {
-			ImGui::Text("   Motion Blur: %.3f ms", stats[8]); totalPasses++; totalTime += stats[8];
-		}
+	//ImGui::Text("   Skybox: %.3f ms", stats[1]); totalPasses++;
+	
+	if (shadow_cast) {
+		ImGui::Text("   Depth: %.3f ms", stats[10]); totalPasses++; totalTime += stats[10];
+		ImGui::Text("   Depth: %.3f ms", stats[11]); totalPasses++; totalTime += stats[11];
+		ImGui::Text("   Depth: %.3f ms", stats[12]); totalPasses++; totalTime += stats[12];
 	}
+	ImGui::Text("   GBuffer: %.3f ms", stats[2]); totalPasses++; totalTime += stats[2];
+	if (show_ssao) {
+		ImGui::Text("   SSAO: %.3f ms", stats[3]); totalPasses++; totalTime += stats[3];
+	}
+	if (show_ssr) {
+		ImGui::Text("   SSR: %.3f ms", stats[4]); totalPasses++; totalTime += stats[4];
+	}
+	ImGui::Text("   Lights: %.3f ms", stats[5]); totalPasses++; totalTime += stats[5];
+	if (show_FXAA) {
+		ImGui::Text("   FXAA: %.3f ms", stats[6]); totalPasses++; totalTime += stats[6];
+	}
+	if (show_Bloom) {
+		ImGui::Text("   Bloom: %.3f ms", stats[7]); totalPasses++; totalTime += stats[7];
+	}
+	if (show_motionBlur) {
+		ImGui::Text("   Motion Blur: %.3f ms", stats[8]); totalPasses++; totalTime += stats[8];
+	}
+
 	ImGui::Text("   GUI: %.3f ms", stats[9]); totalPasses++; totalTime += stats[9];
 	ImGui::Separator();
 	ImGui::Separator();
@@ -545,7 +545,7 @@ void GUI::initImGui()
 		region.imageExtent.width = width;
 		region.imageExtent.height = height;
 		region.imageExtent.depth = 1;
-		vulkan->dynamicCmdBuffer.copyBufferToImage(stagingBuffer.buffer, texture.image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
+		vulkan->dynamicCmdBuffer.copyBufferToImage(stagingBuffer.buffer, texture.image, vk::ImageLayout::eTransferDstOptimal, region);
 
 		vk::ImageMemoryBarrier use_barrier = {};
 		use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -637,14 +637,14 @@ void GUI::draw(uint32_t imageIndex)
 		viewport.height = draw_data->DisplaySize.y;
 		viewport.minDepth = 0.f;
 		viewport.maxDepth = 1.f;
-		cmd.setViewport(0, 1, &viewport);
+		cmd.setViewport(0, viewport);
 
-		float data[4];
+		std::vector<float> data(4);
 		data[0] = 2.0f / draw_data->DisplaySize.x;				// scale
 		data[1] = 2.0f / draw_data->DisplaySize.y;				// scale
 		data[2] = -1.0f - draw_data->DisplayPos.x * data[0];	// transform
 		data[3] = -1.0f - draw_data->DisplayPos.y * data[1];	// transform
-		cmd.pushConstants(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4, data);
+		cmd.pushConstants<float>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eVertex, 0, data);
 
 		// Render the command lists:
 		int vtx_offset = 0;
@@ -669,7 +669,7 @@ void GUI::draw(uint32_t imageIndex)
 					scissor.offset.y = (int32_t)(pcmd->ClipRect.y - display_pos.y) > 0 ? (int32_t)(pcmd->ClipRect.y - display_pos.y) : 0;
 					scissor.extent.width = (uint32_t)(pcmd->ClipRect.z - pcmd->ClipRect.x);
 					scissor.extent.height = (uint32_t)(pcmd->ClipRect.w - pcmd->ClipRect.y + 1); // FIXME: Why +1 here?
-					cmd.setScissor(0, 1, &scissor);
+					cmd.setScissor(0, scissor);
 
 					// Draw
 					cmd.drawIndexed(pcmd->ElemCount, 1, idx_offset, vtx_offset, 0);
