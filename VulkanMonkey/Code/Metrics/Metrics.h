@@ -9,7 +9,7 @@ namespace vm {
 		
 		Metrics();
 		~Metrics();
-		void start(vk::CommandBuffer& cmd);
+		void start(const vk::CommandBuffer& cmd);
 		void end(float* res = nullptr);
 		void initQueryPool();
 		float getTime();

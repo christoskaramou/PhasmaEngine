@@ -22,7 +22,7 @@ mat4 Node::getMatrix()
 {
 	mat4 m = localMatrix();
 	Pointer<Node> p = parent;
-	while (p.get()) {
+	while (p) {
 		m = p->localMatrix() * m;
 		p = p->parent;
 	}
@@ -36,12 +36,12 @@ void calculateMeshJointMatrixAsync(Pointer<Mesh>& mesh, Pointer<Skin>& skin, con
 
 void Node::update(Camera& camera)
 {
-	if (mesh.get()) {
+	if (mesh) {
 		mesh->ubo.previousMatrix = mesh->ubo.matrix;
 		mesh->ubo.matrix = getMatrix();
 
-		if (skin.get()) {
-			// Update join matrices
+		if (skin) {
+			// Update joint matrices
 			mat4 inverseTransform = inverse(mesh->ubo.matrix);
 			size_t numJoints = std::min((uint32_t)skin->joints.size(), MAX_NUM_JOINTS);
 

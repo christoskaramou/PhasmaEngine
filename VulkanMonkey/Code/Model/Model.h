@@ -49,7 +49,7 @@ namespace vm {
 
 		std::string name;
 		std::string fullPathName;
-		std::vector<Pointer<vm::Node>> nodes{};
+		//std::vector<Pointer<vm::Node>> nodes{};
 		std::vector<Pointer<vm::Node>> linearNodes{};
 		std::vector<Pointer<Skin>> skins{};
 		std::vector<Animation> animations{};

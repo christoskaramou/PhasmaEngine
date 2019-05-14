@@ -44,8 +44,8 @@ namespace vm {
 		vec4 transformedBS;
 		bool hasBones = false;
 		void calculateBoundingSphere() {
-			vec3 center = (max + min) * .5f;
-			float sphereRadius = length(max - center);
+			const vec3 center = (max + min) * .5f;
+			const float sphereRadius = length(max - center);
 			boundingSphere = vec4(center, sphereRadius);
 		}
 		void loadTexture(TextureType type,

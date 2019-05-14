@@ -366,7 +366,7 @@ void frustumCheckAsync(mat4& modelMatrix, Pointer<Mesh>& mesh, Camera& camera, u
 
 void updateNodeAsync(mat4& modelMatrix, Pointer<Node>& node, Camera& camera)
 {
-	if (node->mesh.get()) {
+	if (node->mesh) {
 		node->update(camera);
 
 		// async calls should be at least bigger than a number, else this will be slower
@@ -435,7 +435,7 @@ void Model::draw()
 
 	//ALPHA_OPAQUE
 	for (auto& node : linearNodes) {
-		if (node->mesh.get()) {
+		if (node->mesh) {
 			for (auto &primitive : node->mesh->primitives) {
 				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 1) {
 					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
@@ -446,7 +446,7 @@ void Model::draw()
 	}
 	// ALPHA_MASK
 	for (auto& node : linearNodes) {
-		if (node->mesh.get()) {
+		if (node->mesh) {
 			for (auto &primitive : node->mesh->primitives) {
 				// ALPHA CUT
 				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 2) {
@@ -458,7 +458,7 @@ void Model::draw()
 	}
 	// ALPHA_BLEND
 	for (auto& node : linearNodes) {
-		if (node->mesh.get()) {
+		if (node->mesh) {
 			for (auto &primitive : node->mesh->primitives) {
 				// ALPHA CUT
 				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 3) {
@@ -477,7 +477,7 @@ void Model::calculateBoundingSphere()
 	vec4 centerMin(FLT_MAX);
 
 	for (auto& node : linearNodes) {
-		if (node->mesh.get()) {
+		if (node->mesh) {
 			for (auto &primitive : node->mesh->primitives) {
 				cvec3 center = vec3(primitive.boundingSphere);
 
@@ -517,16 +517,16 @@ void Model::loadNode(Pointer<vm::Node> parent, const glTF::Node& node, const std
 		loadNode(newNode, document->nodes.Get(child), folderPath);
 	}
 	getMesh(newNode, node.meshId, folderPath);
-	if (parent.get())
+	if (parent)
 		parent->children.push_back(newNode);
-	else
-		nodes.push_back(newNode);
+	//else
+	//	nodes.push_back(newNode);
 	linearNodes.push_back(newNode);
 }
 
 void vm::Model::loadAnimations()
 {
-	auto getNode = [](std::vector<Pointer<Node>>& linearNodes, size_t index) -> Pointer<Node> {
+	const auto getNode = [](std::vector<Pointer<Node>>& linearNodes, size_t index) -> Pointer<Node> {
 		for (auto& node : linearNodes) {
 			if (node->index == index)
 				return node;
@@ -580,7 +580,7 @@ void vm::Model::loadAnimations()
 				switch (accessor.type) {
 				case glTF::AccessorType::TYPE_VEC3: {
 					for (size_t i = 0; i < accessor.count; i++) {
-						vec3 v3(&data[i * 3]);
+						const vec3 v3(&data[i * 3]);
 						sampler.outputsVec4.push_back(vec4(v3, 0.0f));
 					}
 					break;
@@ -629,7 +629,7 @@ void vm::Model::loadAnimations()
 
 void vm::Model::loadSkins()
 {
-	auto getNode = [](std::vector<Pointer<Node>>& linearNodes, size_t index) -> Pointer<Node> {
+	const auto getNode = [](std::vector<Pointer<Node>>& linearNodes, size_t index) -> Pointer<Node> {
 		for (auto& node : linearNodes) {
 			if (node->index == index)
 				return node;
@@ -648,7 +648,7 @@ void vm::Model::loadSkins()
 		// Find joint nodes
 		for (auto& jointID : source.jointIds) {
 			Pointer<Node> node = !jointID.empty() ? getNode(linearNodes, document->nodes.GetIndex(jointID)) : nullptr;
-			if (node.get()) {
+			if (node) {
 				newSkin->joints.push_back(node);
 			}
 		}
@@ -668,7 +668,7 @@ void Model::createVertexBuffer()
 {
 	std::vector<Vertex> vertices{};
 	for (auto& node : linearNodes) {
-		if (node->mesh.get()) {
+		if (node->mesh) {
 			node->mesh->vertexOffset = (uint32_t)vertices.size();
 			for (auto& vertex : node->mesh->vertices) {
 				vertices.push_back(vertex);
@@ -694,7 +694,7 @@ void Model::createIndexBuffer()
 {
 	std::vector<uint32_t> indices{};
 	for (auto& node : linearNodes) {
-		if (node->mesh.get()) {
+		if (node->mesh) {
 			node->mesh->indexOffset = (uint32_t)indices.size();
 			for (auto& index : node->mesh->indices) {
 				indices.push_back(index);
@@ -722,7 +722,7 @@ void Model::createUniformBuffers()
 	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 	if (!isCopy) {
 		for (auto& node : linearNodes) {
-			if (node->mesh.get()) {
+			if (node->mesh) {
 				node->mesh->createUniformBuffers();
 			}
 		}
@@ -756,18 +756,18 @@ void Model::createDescriptorSets()
 		for (auto& node : linearNodes) {
 
 			if (!node->mesh) continue;
-			auto& mesh = *node->mesh.get();
+			auto& mesh = node->mesh;
 
 			vk::DescriptorSetAllocateInfo allocateInfo;
 			allocateInfo.descriptorPool = vulkan->descriptorPool;
 			allocateInfo.descriptorSetCount = 1;
 			allocateInfo.pSetLayouts = &Mesh::getDescriptorSetLayout();
-			mesh.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+			mesh->descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
-			vulkan->device.updateDescriptorSets(wSetBuffer(mesh.descriptorSet, 0, mesh.uniformBuffer), nullptr);
+			vulkan->device.updateDescriptorSets(wSetBuffer(mesh->descriptorSet, 0, mesh->uniformBuffer), nullptr);
 
 			// primitive dSets
-			for (auto& primitive : mesh.primitives) {
+			for (auto& primitive : mesh->primitives) {
 
 				vk::DescriptorSetAllocateInfo allocateInfo2;
 				allocateInfo2.descriptorPool = vulkan->descriptorPool;
@@ -804,17 +804,17 @@ void Model::destroy()
 			Model::descriptorSetLayout = nullptr;
 		}
 		for (auto& node : linearNodes) {
-			if (node->mesh.get()) {
+			if (node->mesh) {
 				node->mesh->destroy();
 				delete node->mesh.get();
-				node->mesh = nullptr;
+				node->mesh = {};
 			}
 			delete node.get();
-			node = nullptr;
+			node = {};
 		}
 		for (auto& skin : skins) {
 			delete skin.get();
-			skin = nullptr;
+			skin = {};
 		}
 		//for (auto& texture : Mesh::uniqueTextures)
 		//	texture.second.destroy();

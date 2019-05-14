@@ -48,13 +48,13 @@ void vm::Camera::update()
 
 void vm::Camera::updatePerspective()
 {
-	float aspect = renderArea.viewport.width / renderArea.viewport.height;
-	float tanHalfFovy = tan(radians(FOV) * .5f);
-	float m00 = 1.f / (aspect * tanHalfFovy);
-	float m11 = 1.f / (tanHalfFovy);
-	float m22 = farPlane / (farPlane - nearPlane) * worldOrientation.z;
-	float m23 = worldOrientation.z;
-	float m32 = -(farPlane * nearPlane) / (farPlane - nearPlane);
+	const float aspect = renderArea.viewport.width / renderArea.viewport.height;
+	const float tanHalfFovy = tan(radians(FOV) * .5f);
+	const float m00 = 1.f / (aspect * tanHalfFovy);
+	const float m11 = 1.f / (tanHalfFovy);
+	const float m22 = farPlane / (farPlane - nearPlane) * worldOrientation.z;
+	const float m23 = worldOrientation.z;
+	const float m32 = -(farPlane * nearPlane) / (farPlane - nearPlane);
 	projection = mat4(
 		m00, 0.f, 0.f, 0.f,
 		0.f, m11, 0.f, 0.f,
@@ -65,13 +65,13 @@ void vm::Camera::updatePerspective()
 
 void vm::Camera::updateView()
 {
-	vec3 &f = front;
-	vec3 &r = right;
-	vec3 &u = up;
+	const vec3& r = right;
+	const vec3& u = up;
+	const vec3& f = front;
 
-	float m30 = -dot(r, position);
-	float m31 = -dot(u, position);
-	float m32 = -dot(f, position);
+	const float m30 = -dot(r, position);
+	const float m31 = -dot(u, position);
+	const float m32 = -dot(f, position);
 
 	view = mat4(
 		r.x, u.x, f.x, 0.f,
@@ -167,7 +167,7 @@ void Camera::ExtractFrustum()
 bool Camera::SphereInFrustum(const vec4& boundingSphere) const
 {
 	for (unsigned i = 0; i < 6; i++) {
-		float dist = dot(frustum[i].normal, vec3(boundingSphere)) + frustum[i].d;
+		const float dist = dot(frustum[i].normal, vec3(boundingSphere)) + frustum[i].d;
 
 		if (dist < -boundingSphere.w)
 			return false;

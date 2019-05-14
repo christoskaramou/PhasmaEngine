@@ -328,7 +328,7 @@ void Shadows::update(Camera& camera)
 		vec3 up = normalize(cross(right, front));
 		float orthoSide = sideSizeOfPyramid * .01f; // small area
 		shadows_UBO = {
-			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, 500.f, 0.005f),
+			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
 			lookAt(pos, front, right, up),
 			1.0f,
 			sideSizeOfPyramid * .02f,
@@ -344,7 +344,7 @@ void Shadows::update(Camera& camera)
 		up = normalize(cross(right, front));
 		orthoSide = sideSizeOfPyramid * .05f; // medium area
 		shadows_UBO = {
-			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, 500.f, 0.005f),
+			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
 			lookAt(pos, front, right, up),
 			1.0f,
 			sideSizeOfPyramid * .02f,
@@ -360,7 +360,7 @@ void Shadows::update(Camera& camera)
 		up = normalize(cross(right, front));
 		orthoSide = sideSizeOfPyramid * .5f; // large area
 		shadows_UBO = {
-			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, 500.f, 0.005f),
+			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
 			lookAt(pos, front, right, up),
 			1.0f,
 			sideSizeOfPyramid * .02f,

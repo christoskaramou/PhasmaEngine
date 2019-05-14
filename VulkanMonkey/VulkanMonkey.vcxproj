@@ -23,7 +23,7 @@
     <ProjectGuid>{1410E0DC-281C-49F1-8D69-138F52674EB8}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>VulkanMonkey</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -168,7 +168,7 @@
       <DebugInformationFormat>OldStyle</DebugInformationFormat>
       <EnablePREfast>false</EnablePREfast>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <ShowIncludes>false</ShowIncludes>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
     </ClCompile>
@@ -257,22 +257,6 @@
     <ClInclude Include="include\imgui\imstb_textedit.h" />
     <ClInclude Include="include\imgui\imstb_truetype.h" />
     <ClInclude Include="include\SDL.h" />
-    <ClInclude Include="include\SPIRVCross\spirv.h" />
-    <ClInclude Include="include\SPIRVCross\spirv.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_cfg.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_common.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_cpp.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_cross.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_cross_c.h" />
-    <ClInclude Include="include\SPIRVCross\spirv_cross_containers.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_cross_error_handling.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_cross_parsed_ir.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_cross_util.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_glsl.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_hlsl.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_msl.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_parser.hpp" />
-    <ClInclude Include="include\SPIRVCross\spirv_reflect.hpp" />
     <ClInclude Include="include\TinyFileDialogs\tinyfiledialogs.h" />
     <ClInclude Include="include\tinygltf\json.hpp" />
     <ClInclude Include="include\tinygltf\stb_image.h" />
@@ -337,17 +321,6 @@
     <ClCompile Include="include\imgui\imgui_demo.cpp" />
     <ClCompile Include="include\imgui\imgui_draw.cpp" />
     <ClCompile Include="include\imgui\imgui_widgets.cpp" />
-    <ClCompile Include="include\SPIRVCross\spirv_cfg.cpp" />
-    <ClCompile Include="include\SPIRVCross\spirv_cpp.cpp" />
-    <ClCompile Include="include\SPIRVCross\spirv_cross.cpp" />
-    <ClCompile Include="include\SPIRVCross\spirv_cross_c.cpp" />
-    <ClCompile Include="include\SPIRVCross\spirv_cross_parsed_ir.cpp" />
-    <ClCompile Include="include\SPIRVCross\spirv_cross_util.cpp" />
-    <ClCompile Include="include\SPIRVCross\spirv_glsl.cpp" />
-    <ClCompile Include="include\SPIRVCross\spirv_hlsl.cpp" />
-    <ClCompile Include="include\SPIRVCross\spirv_msl.cpp" />
-    <ClCompile Include="include\SPIRVCross\spirv_parser.cpp" />
-    <ClCompile Include="include\SPIRVCross\spirv_reflect.cpp" />
     <ClCompile Include="include\TinyFileDialogs\tinyfiledialogs.c" />
     <ClCompile Include="include\tinygltf\stb_image.cpp" />
     <ClCompile Include="include\tinygltf\stb_image_write.cpp" />

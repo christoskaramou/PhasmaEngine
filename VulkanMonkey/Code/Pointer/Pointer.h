@@ -28,11 +28,15 @@ namespace vm {
 		}
 
 		T* operator->() {
+			// if (!ptr) throw std::runtime_error("reference to a null pointer");
 			return ptr;
+		}
+		operator bool() {
+			return ptr != nullptr && hLeft + hRight != 0;
 		}
 
 		bool operator!() {
-			return hLeft + hRight == 0;
+			return !operator bool();
 		}
 
 		T* get() {

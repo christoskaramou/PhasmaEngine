@@ -9,8 +9,8 @@
 namespace vm {
 	struct Compute
 	{
-		void setUpdate(std::function<void()>&& func);
-		void update();
+		Buffer& getIn();
+		Buffer& getOut();
 		void dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ);
 		void waitFence();
 	private:
@@ -28,7 +28,6 @@ namespace vm {
 		vk::CommandBuffer commandBuffer;
 
 		static vk::DescriptorSetLayout getDescriptorLayout();
-		std::function<void()> updateFunc;
 		void createPipeline();
 		void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
 		void createDescriptorSet();
@@ -41,13 +40,16 @@ namespace vm {
 		std::deque<Compute> compute{};
 		void Init(uint32_t cmdBuffersCount);
 		Compute& getNext();
+		void waitFences();
 		void destroy();
 
-		static ComputePool& get() { static ComputePool cp; return cp; }
+		static ComputePool& get() noexcept { static ComputePool cp; return cp; }
 	private:
-		ComputePool() {};
-		ComputePool(ComputePool const&) {};
-		ComputePool& operator=(ComputePool const&) {};
-		~ComputePool() {};
+		ComputePool() {};								// default constructor
+		ComputePool(ComputePool const&) {};				// copy constructor
+		ComputePool operator=(ComputePool const&) {};	// copy assignment
+		ComputePool(ComputePool&&) {};					// move constructor
+		ComputePool operator=(ComputePool&&) {};		// move assignment
+		~ComputePool() {};								// destructor
 	};
 }

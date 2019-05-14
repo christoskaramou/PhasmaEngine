@@ -26,15 +26,14 @@ vk::DescriptorSetLayout Compute::getDescriptorLayout()
 	return DSLayoutCompute;
 }
 
-void Compute::setUpdate(std::function<void()>&& func)
+Buffer& Compute::getIn()
 {
-	updateFunc = std::forward<std::function<void()>>(func);
+	return SBIn;
 }
 
-void Compute::update()
+Buffer& Compute::getOut()
 {
-	if (updateFunc)
-		updateFunc();
+	return SBOut;
 }
 
 void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
@@ -182,6 +181,24 @@ Compute& ComputePool::getNext()
 	compute.back().createComputeStorageBuffers(8000, 8000);
 	compute.back().updateDescriptorSet();
 	return compute.back();
+}
+
+void ComputePool::waitFences()
+{
+	std::vector<vk::Fence> fences{};
+	fences.reserve(compute.size());
+
+	for (auto& comp : compute) {
+		if (!comp.ready)
+			fences.push_back(comp.fence);
+	}
+
+	VulkanContext::get().device.waitForFences(fences, VK_TRUE, UINT64_MAX);
+	VulkanContext::get().device.resetFences(fences);
+
+	for (auto& comp : compute) {
+		comp.ready = true;
+	}
 }
 
 void ComputePool::destroy()

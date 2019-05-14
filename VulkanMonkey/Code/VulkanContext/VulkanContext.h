@@ -6,8 +6,6 @@
 #include <vector>
 #include <string>
 
-constexpr auto VULKAN_CONTEXT_INSTANCES = 2;
-
 #define WIDTH VulkanContext::get().surface->actualExtent.width
 #define HEIGHT VulkanContext::get().surface->actualExtent.height
 #define WIDTH_f static_cast<float>(WIDTH)
@@ -20,14 +18,6 @@ namespace vm {
 	struct Swapchain;
 
 	struct VulkanContext {
-		static VulkanContext& get(uint32_t index = 0)
-		{
-			static VulkanContext VkCTX[VULKAN_CONTEXT_INSTANCES];
-
-			assert(index < VULKAN_CONTEXT_INSTANCES);
-			return VkCTX[index];
-		}
-
 		SDL_Window* window = nullptr;
 		vk::Instance instance;
 		Surface* surface = nullptr;
@@ -48,11 +38,15 @@ namespace vm {
 		std::vector<vk::Fence> fences{};
 		std::vector<vk::Semaphore> semaphores{};
 
+		static VulkanContext& get() noexcept { static VulkanContext VkCTX; return VkCTX; }
+		static const VulkanContext& getSafe() noexcept { return get(); }
 	private:
-		VulkanContext() {};
-		VulkanContext(VulkanContext const&) {};
-		VulkanContext& operator=(VulkanContext const&) {};
-		~VulkanContext() {};
+		VulkanContext() {};									// default constructor
+		VulkanContext(VulkanContext const&) {};				// copy constructor
+		VulkanContext operator=(VulkanContext const&) {};	// copy assignment
+		VulkanContext(VulkanContext&&) {};					// move constructor
+		VulkanContext operator=(VulkanContext&&) {};		// move assignment
+		~VulkanContext() {};								// destructor
 	};
 
 	static std::vector<char> readFile(const std::string& filename)
@@ -61,7 +55,7 @@ namespace vm {
 		if (!file.is_open()) {
 			throw std::runtime_error("failed to open file!");
 		}
-		size_t fileSize = (size_t)file.tellg();
+		const size_t fileSize = (size_t)file.tellg();
 		std::vector<char> buffer(fileSize);
 		file.seekg(0);
 		file.read(buffer.data(), fileSize);

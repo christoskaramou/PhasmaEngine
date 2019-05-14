@@ -37,7 +37,7 @@ namespace vm {
 	{
 	public:
 		// VULKAN CONTEXT
-		VulkanContext &vulkan = VulkanContext::get();
+		VulkanContext& vulkan = VulkanContext::get();
 
 		// COMPUTE
 		ComputePool& computePool = ComputePool::get();
