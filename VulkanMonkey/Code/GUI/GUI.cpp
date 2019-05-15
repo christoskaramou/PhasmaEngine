@@ -100,7 +100,7 @@ void GUI::Menu()
 		{
 			if (ImGui::MenuItem("Load...")) {
 				std::vector<const char*> filter{ "*.gltf", "*.glb" };
-				const char* result = tinyfd_openFileDialog("Choose Model", "", (int)filter.size(), filter.data(), "", 0);
+				const char* result = tinyfd_openFileDialog("Choose Model", "", static_cast<int>(filter.size()), filter.data(), "", 0);
 				if (result) {
 					std::string path(result);
 					std::string folderPath = path.substr(0, path.find_last_of("\\") + 1);
@@ -232,7 +232,7 @@ void GUI::Models()
 	ImGui::Begin("Models Loaded", &models_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	if (ImGui::Button("Add New Model")) {
 		std::vector<const char*> filter{ "*.gltf", "*.glb" };
-		const char* result = tinyfd_openFileDialog("Choose Model", "", (int)filter.size(), filter.data(), "", 0);
+		const char* result = tinyfd_openFileDialog("Choose Model", "", static_cast<int>(filter.size()), filter.data(), "", 0);
 		if (result) {
 			std::string path(result);
 			std::string folderPath = path.substr(0, path.find_last_of("\\") + 1);
@@ -305,10 +305,10 @@ void vm::GUI::Properties()
 	ImGui::Checkbox("Sun Light", &shadow_cast);
 	if (shadow_cast) {
 		ImGui::SliderFloat("Sun Intst", &sun_intensity, 0.1f, 50.f);
-		ImGui::InputFloat3("SunPos", (float*)sun_position.data(), 1);
+		ImGui::InputFloat3("SunPos", sun_position.data(), 1);
 		ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5); ImGui::Separator(); ImGui::Separator();
 		{
-			vec3 sunDist((float*)&sun_position);
+			vec3 sunDist(&sun_position[0]);
 			if (lengthSquared(sunDist) > 160000.f) {
 				sunDist = 400.f * normalize(sunDist);
 				sun_position[0] = sunDist.x;
@@ -318,7 +318,7 @@ void vm::GUI::Properties()
 		}
 	}
 	ImGui::InputFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f, 3);
-	ImGui::SliderFloat4("ClearCol", (float*)clearColor.data(), 0.0f, 1.0f);
+	ImGui::SliderFloat4("ClearCol", clearColor.data(), 0.0f, 1.0f);
 	ImGui::InputFloat("TimeScale", &timeScale, 0.05f, 0.2f); ImGui::Separator(); ImGui::Separator();
 	if (ImGui::Button("Randomize Lights"))
 		randomize_lights = true;
@@ -343,15 +343,15 @@ void vm::GUI::Properties()
 		std::string s = "Scale##" + toStr;
 		std::string p = "Position##" + toStr;
 		std::string r = "Rotation##" + toStr;
-		ImGui::InputFloat3(s.c_str(), (float*)model_scale[modelItemSelected].data(), 3);
-		ImGui::InputFloat3(p.c_str(), (float*)model_pos[modelItemSelected].data(), 3);
-		ImGui::InputFloat3(r.c_str(), (float*)model_rot[modelItemSelected].data(), 3);
+		ImGui::InputFloat3(s.c_str(), model_scale[modelItemSelected].data(), 3);
+		ImGui::InputFloat3(p.c_str(), model_pos[modelItemSelected].data(), 3);
+		ImGui::InputFloat3(r.c_str(), model_rot[modelItemSelected].data(), 3);
 
 		ImGui::Separator();
 		ImGui::Separator();
 		if (ImGui::Button("Add Script")) {
 			std::vector<const char*> filter{ "*.cs" };
-			const char* result = tinyfd_openFileDialog("Choose Script", "", (int)filter.size(), filter.data(), "", 0);
+			const char* result = tinyfd_openFileDialog("Choose Script", "", static_cast<int>(filter.size()), filter.data(), "", 0);
 			if (result) {
 				std::string path(result);
 				path = path.substr(0, path.find_last_of("."));
@@ -665,10 +665,10 @@ void GUI::draw(uint32_t imageIndex)
 					// Apply scissor/clipping rectangle
 					// FIXME: We could clamp width/height based on clamped min/max values.
 					vk::Rect2D scissor;
-					scissor.offset.x = (int32_t)(pcmd->ClipRect.x - display_pos.x) > 0 ? (int32_t)(pcmd->ClipRect.x - display_pos.x) : 0;
-					scissor.offset.y = (int32_t)(pcmd->ClipRect.y - display_pos.y) > 0 ? (int32_t)(pcmd->ClipRect.y - display_pos.y) : 0;
-					scissor.extent.width = (uint32_t)(pcmd->ClipRect.z - pcmd->ClipRect.x);
-					scissor.extent.height = (uint32_t)(pcmd->ClipRect.w - pcmd->ClipRect.y + 1); // FIXME: Why +1 here?
+					scissor.offset.x = static_cast<int32_t>(pcmd->ClipRect.x - display_pos.x) > 0 ? static_cast<int32_t>(pcmd->ClipRect.x - display_pos.x) : 0;
+					scissor.offset.y = static_cast<int32_t>(pcmd->ClipRect.y - display_pos.y) > 0 ? static_cast<int32_t>(pcmd->ClipRect.y - display_pos.y) : 0;
+					scissor.extent.width = static_cast<uint32_t>(pcmd->ClipRect.z - pcmd->ClipRect.x);
+					scissor.extent.height = static_cast<uint32_t>(pcmd->ClipRect.w - pcmd->ClipRect.y + 1); // FIXME: Why +1 here?
 					cmd.setScissor(0, scissor);
 
 					// Draw
@@ -692,18 +692,18 @@ void GUI::newFrame()
 	int display_w, display_h;
 	SDL_GetWindowSize(vulkan->window, &w, &h);
 	SDL_GL_GetDrawableSize(vulkan->window, &display_w, &display_h);
-	io.DisplaySize = ImVec2((float)w, (float)h);
-	io.DisplayFramebufferScale = ImVec2(w > 0 ? ((float)display_w / w) : 0, h > 0 ? ((float)display_h / h) : 0);
+	io.DisplaySize = ImVec2(static_cast<float>(w), static_cast<float>(h));
+	io.DisplayFramebufferScale = ImVec2(w > 0 ? (static_cast<float>(display_w / w)) : 0, h > 0 ? (static_cast<float>(display_h / h)) : 0);
 
 	// Setup time step (we don't use SDL_GetTicks() because it is using millisecond resolution)
 	static Uint64 frequency = SDL_GetPerformanceFrequency();
 	Uint64 current_time = SDL_GetPerformanceCounter();
-	io.DeltaTime = g_Time > 0 ? (float)((double)(current_time - g_Time) / frequency) : (float)(1.0f / 60.0f);
+	io.DeltaTime = g_Time > 0 ? static_cast<float>((double)(current_time - g_Time) / frequency) : static_cast<float>(1.0f / 60.0f);
 	g_Time = current_time;
 
 	// Set OS mouse position if requested (rarely used, only when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
 	if (io.WantSetMousePos)
-		SDL_WarpMouseInWindow(g_Window, (int)io.MousePos.x, (int)io.MousePos.y);
+		SDL_WarpMouseInWindow(g_Window, static_cast<int>(io.MousePos.x), static_cast<int>(io.MousePos.y));
 	else
 		io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
 
@@ -725,7 +725,7 @@ void GUI::newFrame()
 		SDL_GetGlobalMouseState(&mx, &my);
 		mx -= wx;
 		my -= wy;
-		io.MousePos = ImVec2((float)mx, (float)my);
+		io.MousePos = ImVec2(static_cast<float>(mx), static_cast<float>(my));
 	}
 
 	// SDL_CaptureMouse() let the OS know e.g. that our imgui drag outside the SDL window boundaries shouldn't e.g. trigger the OS window resize cursor. 
@@ -734,7 +734,7 @@ void GUI::newFrame()
 	SDL_CaptureMouse(any_mouse_button_down ? SDL_TRUE : SDL_FALSE);
 #else
 	if (SDL_GetWindowFlags(g_Window) & SDL_WINDOW_INPUT_FOCUS)
-		io.MousePos = ImVec2((float)mx, (float)my);
+		io.MousePos = ImVec2(static_cast<float>(mx), static_cast<float>(my));
 #endif
 	if (io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange)
 		return;
@@ -985,9 +985,9 @@ void GUI::createPipeline()
 	auto vibd = Vertex::getBindingDescriptionGUI();
 	auto viad = Vertex::getAttributeDescriptionGUI();
 	vk::PipelineVertexInputStateCreateInfo pvisci;
-	pvisci.vertexBindingDescriptionCount = (uint32_t)vibd.size();
+	pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(vibd.size());
 	pvisci.pVertexBindingDescriptions = vibd.data();
-	pvisci.vertexAttributeDescriptionCount = (uint32_t)viad.size();
+	pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(viad.size());
 	pvisci.pVertexAttributeDescriptions = viad.data();
 	pipeline.pipeinfo.pVertexInputState = &pvisci;
 
@@ -1061,7 +1061,7 @@ void GUI::createPipeline()
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
 	pcbsci.logicOp = vk::LogicOp::eCopy;
-	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
@@ -1070,7 +1070,7 @@ void GUI::createPipeline()
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates{ vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	vk::PipelineDynamicStateCreateInfo dsi;
-	dsi.dynamicStateCount = (uint32_t)dynamicStates.size();
+	dsi.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 	dsi.pDynamicStates = dynamicStates.data();
 	pipeline.pipeinfo.pDynamicState = &dsi;
 
@@ -1082,7 +1082,7 @@ void GUI::createPipeline()
 	// Pipeline Layout
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ getDescriptorSetLayout(vulkan->device) };
 	vk::PipelineLayoutCreateInfo plci;
-	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pcr;

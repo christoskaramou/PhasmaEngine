@@ -249,9 +249,9 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		GUI::dSetNeedsUpdate = false;
 	}
 
-	vec2 surfSize(WIDTH_f, HEIGHT_f);
-	vec2 winPos((float*)&GUI::winPos);
-	vec2 winSize((float*)&GUI::winSize);
+	const vec2 surfSize(WIDTH_f, HEIGHT_f);
+	const vec2 winPos(&GUI::winPos.x);
+	const vec2 winSize(&GUI::winSize.x);
 
 	std::vector<vec2> UVOffset{ winPos / surfSize, winSize / surfSize };
 
@@ -260,7 +260,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
-	auto& cmd = ctx.vulkan.dynamicCmdBuffer;
+	const auto& cmd = ctx.vulkan.dynamicCmdBuffer;
 	cmd.begin(beginInfo);
 	ctx.metrics[0].start(cmd);
 	cmd.setViewport(0, ctx.camera_main.renderArea.viewport);
@@ -297,7 +297,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	if (GUI::show_ssao) {
 		ctx.metrics[3].start(cmd);
 		changeLayout(ctx.renderTargets["ssaoBlur"], LayoutState::Write);
-		auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2);
+		const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2);
 		ctx.ssao.draw(imageIndex, UVOffset, changeLayoutFunc, ctx.renderTargets["ssao"]);
 		changeLayout(ctx.renderTargets["ssaoBlur"], LayoutState::Read);
 		ctx.metrics[3].end(&GUI::metrics[3]);
@@ -332,8 +332,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	// BLOOM
 	if (GUI::show_Bloom) {
 		ctx.metrics[7].start(cmd);
-		auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2);
-		ctx.bloom.draw(imageIndex, (uint32_t)ctx.vulkan.swapchain->images.size(), changeLayoutFunc, ctx.renderTargets);
+		const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2);
+		ctx.bloom.draw(imageIndex, static_cast<uint32_t>(ctx.vulkan.swapchain->images.size()), changeLayoutFunc, ctx.renderTargets);
 		ctx.metrics[7].end(&GUI::metrics[7]);
 	}
 	
@@ -370,7 +370,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 {
 	// Render Pass (shadows mapping) (outputs the depth image with the light POV)
 
-	vk::DeviceSize offset = vk::DeviceSize();
+	const vk::DeviceSize offset = vk::DeviceSize();
 	std::array<vk::ClearValue, 1> clearValuesShadows{};
 	clearValuesShadows[0].depthStencil = { 0.0f, 0 };
 
@@ -386,7 +386,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 	for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
 		auto& cmd = ctx.vulkan.shadowCmdBuffer[i];
 		cmd.begin(beginInfoShadows);
-		ctx.metrics[10+ (size_t)i].start(cmd);
+		ctx.metrics[10 + static_cast<size_t>(i)].start(cmd);
 		cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
 		// depth[i] image ===========================================================
@@ -410,7 +410,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 			}
 		}
 		cmd.endRenderPass();
-		ctx.metrics[10+ (size_t)i].end(&GUI::metrics[10+ (size_t)i]);
+		ctx.metrics[10 + static_cast<size_t>(i)].end(&GUI::metrics[10 + static_cast<size_t>(i)]);
 		// ==========================================================================
 		cmd.end();
 	}

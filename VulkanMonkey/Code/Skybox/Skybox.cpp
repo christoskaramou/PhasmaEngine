@@ -16,7 +16,7 @@ vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout()
 			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler,vk::ShaderStageFlagBits::eFragment),
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
 		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
 	}
@@ -278,9 +278,9 @@ void vm::SkyBox::createPipeline()
 	auto vibd = Vertex::getBindingDescriptionSkyBox();
 	auto viad = Vertex::getAttributeDescriptionSkyBox();
 	vk::PipelineVertexInputStateCreateInfo pvisci;
-	pvisci.vertexBindingDescriptionCount = (uint32_t)vibd.size();
+	pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(vibd.size());
 	pvisci.pVertexBindingDescriptions = vibd.data();
-	pvisci.vertexAttributeDescriptionCount = (uint32_t)viad.size();
+	pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(viad.size());
 	pvisci.pVertexAttributeDescriptions = viad.data();
 	pipeline.pipeinfo.pVertexInputState = &pvisci;
 
@@ -354,7 +354,7 @@ void vm::SkyBox::createPipeline()
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
 	pcbsci.logicOp = vk::LogicOp::eCopy;
-	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
@@ -363,14 +363,14 @@ void vm::SkyBox::createPipeline()
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates{ vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	vk::PipelineDynamicStateCreateInfo dsi;
-	dsi.dynamicStateCount = (uint32_t)dynamicStates.size();
+	dsi.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 	dsi.pDynamicStates = dynamicStates.data();
 	pipeline.pipeinfo.pDynamicState = &dsi;
 
 	// Pipeline Layout
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ SkyBox::getDescriptorSetLayout() };
 	vk::PipelineLayoutCreateInfo plci;
-	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
 

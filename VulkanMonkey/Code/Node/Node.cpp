@@ -43,7 +43,7 @@ void Node::update(Camera& camera)
 		if (skin) {
 			// Update joint matrices
 			mat4 inverseTransform = inverse(mesh->ubo.matrix);
-			size_t numJoints = std::min((uint32_t)skin->joints.size(), MAX_NUM_JOINTS);
+			size_t numJoints = std::min(static_cast<uint32_t>(skin->joints.size()), MAX_NUM_JOINTS);
 
 			// async calls should be at least bigger than a number, else this will be slower
 			if (numJoints > 3) {
@@ -58,7 +58,7 @@ void Node::update(Camera& camera)
 					calculateMeshJointMatrixAsync(mesh, skin, inverseTransform, i);
 			}
 
-			mesh->ubo.jointcount = (float)numJoints;
+			mesh->ubo.jointcount = static_cast<float>(numJoints);
 			memcpy(mesh->uniformBuffer.data, &mesh->ubo, sizeof(mesh->ubo));
 		}
 		else {

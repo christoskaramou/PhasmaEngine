@@ -304,7 +304,7 @@ void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, std::function<void(I
 
 	std::vector<vk::ClearValue> clearValues = { clearColor, clearColor };
 
-	std::vector<float> values{ GUI::Bloom_Inv_brightness, GUI::Bloom_intensity, GUI::Bloom_range, GUI::Bloom_exposure, (float)GUI::use_tonemap };
+	std::vector<float> values{ GUI::Bloom_Inv_brightness, GUI::Bloom_intensity, GUI::Bloom_range, GUI::Bloom_exposure, static_cast<float>(GUI::use_tonemap) };
 
 	vk::RenderPassBeginInfo rpi;
 	rpi.renderPass = renderPassBrightFilter;
@@ -467,7 +467,7 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
 	pcbsci.logicOp = vk::LogicOp::eCopy;
-	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
@@ -486,7 +486,7 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
 		DSLayoutBrightFilter = vulkan->device.createDescriptorSetLayout(descriptorLayout);
 	}
@@ -499,7 +499,7 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 	pConstants.size = 5 * sizeof(vec4);
 
 	vk::PipelineLayoutCreateInfo plci;
-	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;
@@ -626,7 +626,7 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
 	pcbsci.logicOp = vk::LogicOp::eCopy;
-	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
@@ -645,7 +645,7 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
 		DSLayoutGaussianBlurHorizontal = vulkan->device.createDescriptorSetLayout(descriptorLayout);
 	}
@@ -658,7 +658,7 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 	pConstants.size = 5 * sizeof(vec4);
 
 	vk::PipelineLayoutCreateInfo plci;
-	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;
@@ -785,7 +785,7 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
 	pcbsci.logicOp = vk::LogicOp::eCopy;
-	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
@@ -804,7 +804,7 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 			layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
 		DSLayoutGaussianBlurVertical = vulkan->device.createDescriptorSetLayout(descriptorLayout);
 	}
@@ -816,7 +816,7 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 	pConstants.size = 5 * sizeof(vec4);
 
 	vk::PipelineLayoutCreateInfo plci;
-	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;
@@ -945,7 +945,7 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
 	pcbsci.logicOp = vk::LogicOp::eCopy;
-	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
@@ -965,7 +965,7 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
 		DSLayoutCombine = vulkan->device.createDescriptorSetLayout(descriptorLayout);
 	}
@@ -978,7 +978,7 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	pConstants.size = 5 * sizeof(vec4);
 
 	vk::PipelineLayoutCreateInfo plci;
-	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;

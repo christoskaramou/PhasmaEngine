@@ -441,7 +441,7 @@ vk::Instance Context::createInstance()
 	instInfo.pApplicationInfo = &appInfo;
 	instInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
 	instInfo.ppEnabledLayerNames = instanceLayers.data();
-	instInfo.enabledExtensionCount = (uint32_t)(instanceExtensions.size());
+	instInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
 	instInfo.ppEnabledExtensionNames = instanceExtensions.data();
 
 	return vk::createInstance(instInfo);
@@ -595,9 +595,9 @@ vk::Device Context::createDevice()
 	}
 
 	vk::DeviceCreateInfo deviceCreateInfo;
-	deviceCreateInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
+	deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 	deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
-	deviceCreateInfo.enabledExtensionCount = (uint32_t)deviceExtensions.size();
+	deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 	deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
 	deviceCreateInfo.pEnabledFeatures = &vulkan.gpuFeatures;
 
@@ -769,7 +769,7 @@ vk::DescriptorPool Context::createDescriptorPool(uint32_t maxDescriptorSets)
 	descPoolsize[3].descriptorCount = maxDescriptorSets;
 
 	vk::DescriptorPoolCreateInfo createInfo;
-	createInfo.poolSizeCount = (uint32_t)descPoolsize.size();
+	createInfo.poolSizeCount = static_cast<uint32_t>(descPoolsize.size());
 	createInfo.pPoolSizes = descPoolsize.data();
 	createInfo.maxSets = maxDescriptorSets;
 

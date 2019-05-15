@@ -94,7 +94,7 @@ bool Window::processEvents(float delta)
 				if (event.type == SDL_MOUSEMOTION) {
 					xMove = event.motion.x - static_cast<int>(GUI::winSize.x * .5f + GUI::winPos.x);
 					yMove = event.motion.y - static_cast<int>(GUI::winSize.y * .5f + GUI::winPos.y);
-					info.camera_main.rotate((float)xMove, (float)yMove);
+					info.camera_main.rotate(static_cast<float>(xMove), static_cast<float>(yMove));
 				}
 			}
 		}

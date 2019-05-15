@@ -89,7 +89,7 @@ void vm::Shadows::createRenderPass()
 	rpci.pAttachments = &attachment;
 	rpci.subpassCount = 1;
 	rpci.pSubpasses = &subpassDesc;
-	//rpci.dependencyCount = (uint32_t)dependencies.size();
+	//rpci.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	//rpci.pDependencies = dependencies.data();
 
 	renderPass = vulkan->device.createRenderPass(rpci);
@@ -155,9 +155,9 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	auto vibd = Vertex::getBindingDescriptionGeneral();
 	auto viad = Vertex::getAttributeDescriptionGeneral();
 	vk::PipelineVertexInputStateCreateInfo pvisci;
-	pvisci.vertexBindingDescriptionCount = (uint32_t)vibd.size();
+	pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(vibd.size());
 	pvisci.pVertexBindingDescriptions = vibd.data();
-	pvisci.vertexAttributeDescriptionCount = (uint32_t)viad.size();
+	pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(viad.size());
 	pvisci.pVertexAttributeDescriptions = viad.data();
 	pipeline.pipeinfo.pVertexInputState = &pvisci;
 
@@ -171,8 +171,8 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	vk::Viewport vp;
 	vp.x = 0.0f;
 	vp.y = 0.0f;
-	vp.width = (float)Shadows::imageSize;
-	vp.height = (float)Shadows::imageSize;
+	vp.width = static_cast<float>(Shadows::imageSize);
+	vp.height = static_cast<float>(Shadows::imageSize);
 	vp.minDepth = 0.f;
 	vp.maxDepth = 1.f;
 
@@ -230,7 +230,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
 	pcbsci.logicOp = vk::LogicOp::eCopy;
-	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
@@ -239,14 +239,14 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates{ vk::DynamicState::eDepthBias };
 	vk::PipelineDynamicStateCreateInfo dsi;
-	dsi.dynamicStateCount = (uint32_t)dynamicStates.size();
+	dsi.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 	dsi.pDynamicStates = dynamicStates.data();
 	pipeline.pipeinfo.pDynamicState = &dsi;
 
 	// Pipeline Layout
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ getDescriptorSetLayout(), mesh, model };
 	vk::PipelineLayoutCreateInfo plci;
-	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
 
@@ -279,7 +279,7 @@ vk::DescriptorSetLayout Shadows::getDescriptorSetLayout()
 			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler,vk::ShaderStageFlagBits::eFragment),
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
 		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
 	}
@@ -319,7 +319,7 @@ void Shadows::update(Camera& camera)
 	if (GUI::shadow_cast) {
 		// far/cos(x) = the side size
 		float sideSizeOfPyramid = camera.nearPlane / cos(radians(camera.FOV * .5f)); // near plane is actually the far plane (they are reversed)
-		vec3 p = (float*)&GUI::sun_position;
+		vec3 p = &GUI::sun_position[0];
 
 		vec3 pointOnPyramid = camera.front * (sideSizeOfPyramid * .01f);
 		vec3 pos = p + camera.position + pointOnPyramid; // sun position will be moved, so its angle to the lookat position is the same always

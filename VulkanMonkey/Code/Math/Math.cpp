@@ -98,12 +98,12 @@ namespace vm {
 
 	bool vec2::operator==(cvec2 * v) const
 	{
-		return operator==((float*)v);
+		return operator==(&v->x);
 	}
 
 	bool vec2::operator==(cvec2 & v) const
 	{
-		return operator==((float*)&v);
+		return operator==(&v.x);
 	}
 
 	bool vec2::operator!=(cfloat * v) const
@@ -235,12 +235,12 @@ namespace vm {
 
 	bool vec3::operator==(cvec3 * v) const
 	{
-		return operator==((float*)v);
+		return operator==(&v->x);
 	}
 
 	bool vec3::operator==(cvec3 & v) const
 	{
-		return operator==((float*)&v);
+		return operator==(&v.x);
 	}
 
 	bool vec3::operator!=(cfloat * v) const
@@ -385,12 +385,12 @@ namespace vm {
 
 	bool vec4::operator==(cvec4 * v) const
 	{
-		return operator==((float*)v);
+		return operator==(&v->x);
 	}
 
 	bool vec4::operator==(cvec4 & v) const
 	{
-		return operator==((float*)&v);
+		return operator==(&v.x);
 	}
 
 	bool vec4::operator!=(cfloat * v) const
@@ -622,12 +622,12 @@ namespace vm {
 
 	bool mat4::operator==(cmat4 * m) const
 	{
-		return operator==((float*)m);
+		return operator==(&m->_v[0].x);
 	}
 
 	bool mat4::operator==(cmat4 & m) const
 	{
-		return operator==((float*)&m);
+		return operator==(&m._v[0].x);
 	}
 
 	bool mat4::operator!=(cfloat * m) const

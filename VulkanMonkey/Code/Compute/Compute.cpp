@@ -19,7 +19,7 @@ vk::DescriptorSetLayout Compute::getDescriptorLayout()
 		};
 
 		vk::DescriptorSetLayoutCreateInfo dlci;
-		dlci.bindingCount = (uint32_t)setLayoutBindings.size();
+		dlci.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		dlci.pBindings = setLayoutBindings.data();
 		DSLayoutCompute = VulkanContext::get().device.createDescriptorSetLayout(dlci);
 	}

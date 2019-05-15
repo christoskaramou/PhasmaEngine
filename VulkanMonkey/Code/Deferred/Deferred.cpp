@@ -376,9 +376,9 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	auto vibd = Vertex::getBindingDescriptionGeneral();
 	auto viad = Vertex::getAttributeDescriptionGeneral();
 	vk::PipelineVertexInputStateCreateInfo pvisci;
-	pvisci.vertexBindingDescriptionCount = (uint32_t)vibd.size();
+	pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(vibd.size());
 	pvisci.pVertexBindingDescriptions = vibd.data();
-	pvisci.vertexAttributeDescriptionCount = (uint32_t)viad.size();
+	pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(viad.size());
 	pvisci.pVertexAttributeDescriptions = viad.data();
 	pipeline.pipeinfo.pVertexInputState = &pvisci;
 
@@ -457,7 +457,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
 	pcbsci.logicOp = vk::LogicOp::eCopy;
-	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
@@ -466,14 +466,14 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates{ vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	vk::PipelineDynamicStateCreateInfo dsi;
-	dsi.dynamicStateCount = (uint32_t)dynamicStates.size();
+	dsi.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 	dsi.pDynamicStates = dynamicStates.data();
 	pipeline.pipeinfo.pDynamicState = &dsi;
 
 	// Pipeline Layout
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ Mesh::getDescriptorSetLayout(), Primitive::getDescriptorSetLayout(), Model::getDescriptorSetLayout() };
 	vk::PipelineLayoutCreateInfo plci;
-	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
 
@@ -610,7 +610,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
 	pcbsci.logicOp = vk::LogicOp::eAnd;
-	pcbsci.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
@@ -636,7 +636,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 			layoutBinding(7, vk::DescriptorType::eCombinedImageSampler),
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
 		DSLayoutComposition = vulkan->device.createDescriptorSetLayout(descriptorLayout);
 	}
@@ -654,7 +654,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	pConstants.size = 7 * sizeof(vec4);
 
 	vk::PipelineLayoutCreateInfo plci;
-	plci.setLayoutCount = (uint32_t)descriptorSetLayouts.size();
+	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;

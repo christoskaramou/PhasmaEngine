@@ -22,7 +22,7 @@ vk::DescriptorSetLayout Primitive::getDescriptorSetLayout()
 			layoutBinding(5, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex),
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
 		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
 	}
@@ -39,7 +39,7 @@ vk::DescriptorSetLayout vm::Mesh::getDescriptorSetLayout()
 			layoutBinding(0, vk::DescriptorType::eUniformBuffer),
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-		descriptorLayout.bindingCount = (uint32_t)setLayoutBindings.size();
+		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
 		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
 	}
@@ -59,7 +59,7 @@ void Mesh::createUniformBuffers()
 		factors[0] = primitive.pbrMaterial.baseColorFactor != vec4(0.f) ? primitive.pbrMaterial.baseColorFactor : vec4(1.f);
 		factors[1] = vec4(primitive.pbrMaterial.emissiveFactor, 1.f);
 		factors[2] = vec4(primitive.pbrMaterial.metallicFactor, primitive.pbrMaterial.roughnessFactor, primitive.pbrMaterial.alphaCutoff, 0.f);
-		factors[3][0] = (float)primitive.hasBones;
+		factors[3][0] = static_cast<float>(primitive.hasBones);
 		memcpy(primitive.uniformBuffer.data, &factors, sizeof(factors));
 	}
 }
@@ -121,7 +121,7 @@ void Primitive::loadTexture(
 		else
 		{
 			const auto data = resourceReader->ReadBinaryData(*document, *image);
-			pixels = stbi_load_from_memory(data.data(), (int)data.size(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+			pixels = stbi_load_from_memory(data.data(), static_cast<int>(data.size()), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		}
 
 		if (!pixels)
@@ -147,7 +147,7 @@ void Primitive::loadTexture(
 		tex->copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight);
 		tex->generateMipMaps(texWidth, texHeight);
 		tex->createImageView(vk::ImageAspectFlagBits::eColor);
-		tex->maxLod = (float)tex->mipLevels;
+		tex->maxLod = static_cast<float>(tex->mipLevels);
 		tex->createSampler();
 
 		staging.destroy();

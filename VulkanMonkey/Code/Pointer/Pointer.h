@@ -17,8 +17,8 @@ namespace vm {
 		{
 			this->ptr = ptr;
 			if (ptr) {
-				hLeft = (uint32_t)reinterpret_cast<uint64_t>(ptr);
-				hRight = (uint32_t)(reinterpret_cast<uint64_t>(ptr) >> 32);
+				hLeft = static_cast<uint32_t>(reinterpret_cast<uint64_t>(ptr));
+				hRight = static_cast<uint32_t>(reinterpret_cast<uint64_t>(ptr) >> 32);
 			}
 			else
 			{
@@ -45,11 +45,11 @@ namespace vm {
 
 		static Pointer split(const T* ptr) {
 			if (!ptr) return{};
-			return { (uint32_t)reinterpret_cast<uint64_t>(ptr), (uint32_t)(reinterpret_cast<uint64_t>(ptr) >> 32), ptr };
+			return { static_cast<uint32_t>(reinterpret_cast<uint64_t>(ptr)), static_cast<uint32_t>(reinterpret_cast<uint64_t>(ptr) >> 32), ptr };
 		}
 		static T* join(const Pointer& ptr) {
 			if (!ptr) return nullptr;
-			return reinterpret_cast<T*>(((uint64_t)hLeft) << 32 | hRight);
+			return reinterpret_cast<T*>((static_cast<uint64_t>(hLeft)) << 32 | hRight);
 		}
 	};
 }

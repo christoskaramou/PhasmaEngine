@@ -135,31 +135,31 @@ void Model::getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::Mesh
 		case glTF::COMPONENT_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
 			for (int i = 0; i < data.size(); i++)
-				vec.push_back((uint32_t)data[i]);
+				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
 			for (int i = 0; i < data.size(); i++)
-				vec.push_back((uint32_t)data[i]);
+				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
 			for (int i = 0; i < data.size(); i++)
-				vec.push_back((uint32_t)data[i]);
+				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
 			for (int i = 0; i < data.size(); i++)
-				vec.push_back((uint32_t)data[i]);
+				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_INT: {
 			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
 			for (int i = 0; i < data.size(); i++)
-				vec.push_back((uint32_t)data[i]);
+				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		default:
@@ -225,10 +225,10 @@ void Model::getMesh(Pointer<vm::Node>& node, const std::string& meshID, const st
 		std::string accessorId;
 		primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_POSITION, accessorId);
 		const glTF::Accessor* accessorPos = &document->accessors.Get(accessorId);
-		myPrimitive.vertexOffset = (uint32_t)myMesh->vertices.size();
-		myPrimitive.verticesSize = (uint32_t)accessorPos->count;
-		myPrimitive.indexOffset = (uint32_t)myMesh->indices.size();
-		myPrimitive.indicesSize = (uint32_t)indices.size();
+		myPrimitive.vertexOffset = static_cast<uint32_t>(myMesh->vertices.size());
+		myPrimitive.verticesSize = static_cast<uint32_t>(accessorPos->count);
+		myPrimitive.indexOffset = static_cast<uint32_t>(myMesh->indices.size());
+		myPrimitive.indicesSize = static_cast<uint32_t>(indices.size());
 		myPrimitive.min = vec3(&accessorPos->min[0]);
 		myPrimitive.max = vec3(&accessorPos->max[0]);
 		myPrimitive.calculateBoundingSphere();
@@ -499,10 +499,10 @@ void Model::calculateBoundingSphere()
 void Model::loadNode(Pointer<vm::Node> parent, const glTF::Node& node, const std::string& folderPath)
 {
 	Pointer<vm::Node> newNode = new vm::Node{};
-	newNode->index = !node.id.empty() ? (uint32_t)document->nodes.GetIndex(node.id) : -1;
+	newNode->index = !node.id.empty() ? static_cast<uint32_t>(document->nodes.GetIndex(node.id)) : -1;
 	newNode->parent = parent;
 	newNode->name = node.name;
-	newNode->skinIndex = !node.skinId.empty() ? (int32_t)document->skins.GetIndex(node.skinId) : -1;
+	newNode->skinIndex = !node.skinId.empty() ? static_cast<int32_t>(document->skins.GetIndex(node.skinId)) : -1;
 
 	// Generate local node matrix
 	if (!node.HasValidTransformType()) throw glTF::InvalidGLTFException("Node " + node.name + " has Invalid TransformType");
@@ -616,7 +616,7 @@ void vm::Model::loadAnimations()
 				std::cout << "weights not yet supported, skipping channel" << std::endl;
 				continue;
 			}
-			channel.samplerIndex = (uint32_t)anim.samplers.GetIndex(source.samplerId);
+			channel.samplerIndex = static_cast<uint32_t>(anim.samplers.GetIndex(source.samplerId));
 			channel.node = getNode(linearNodes, document->nodes.GetIndex(source.target.nodeId));
 			if (!channel.node) {
 				continue;
@@ -669,13 +669,13 @@ void Model::createVertexBuffer()
 	std::vector<Vertex> vertices{};
 	for (auto& node : linearNodes) {
 		if (node->mesh) {
-			node->mesh->vertexOffset = (uint32_t)vertices.size();
+			node->mesh->vertexOffset = static_cast<uint32_t>(vertices.size());
 			for (auto& vertex : node->mesh->vertices) {
 				vertices.push_back(vertex);
 			}
 		}
 	}
-	numberOfVertices = (uint32_t)vertices.size();
+	numberOfVertices = static_cast<uint32_t>(vertices.size());
 	vertexBuffer.createBuffer(sizeof(Vertex)*numberOfVertices, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer
@@ -695,13 +695,13 @@ void Model::createIndexBuffer()
 	std::vector<uint32_t> indices{};
 	for (auto& node : linearNodes) {
 		if (node->mesh) {
-			node->mesh->indexOffset = (uint32_t)indices.size();
+			node->mesh->indexOffset = static_cast<uint32_t>(indices.size());
 			for (auto& index : node->mesh->indices) {
 				indices.push_back(index);
 			}
 		}
 	}
-	numberOfIndices = (uint32_t)indices.size();
+	numberOfIndices = static_cast<uint32_t>(indices.size());
 	indexBuffer.createBuffer(sizeof(uint32_t)*numberOfIndices, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer

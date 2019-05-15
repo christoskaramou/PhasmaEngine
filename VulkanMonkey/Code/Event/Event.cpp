@@ -20,7 +20,7 @@ EventSystem& EventSystem::get() {
 Event vm::EventSystem::createEvent()
 {
 	m_subscribers.push_back({});
-	return { (uint32_t)m_subscribers.size() - 1, false };
+	return { static_cast<uint32_t>(m_subscribers.size()) - 1, false };
 }
 
 // if func ID is needed, the return of subscribe should be stored

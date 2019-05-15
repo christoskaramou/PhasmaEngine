@@ -26,10 +26,10 @@ Camera::Camera()
 	renderArea.viewport.height = GUI::winSize.y;
 	renderArea.viewport.minDepth = 0.f;
 	renderArea.viewport.maxDepth = 1.f;
-	renderArea.scissor.offset.x = (int32_t)GUI::winPos.x;
-	renderArea.scissor.offset.y = (int32_t)GUI::winPos.y;
-	renderArea.scissor.extent.width = (int32_t)GUI::winSize.x;
-	renderArea.scissor.extent.height = (int32_t)GUI::winSize.y;
+	renderArea.scissor.offset.x = static_cast<int32_t>(GUI::winPos.x);
+	renderArea.scissor.offset.y = static_cast<int32_t>(GUI::winPos.y);
+	renderArea.scissor.extent.width = static_cast<int32_t>(GUI::winSize.x);
+	renderArea.scissor.extent.height = static_cast<int32_t>(GUI::winSize.y);
 }
 
 void vm::Camera::update()
@@ -187,8 +187,8 @@ void Camera::SurfaceTargetArea::update(const vec2& position, const vec2& size, f
 	viewport.minDepth = minDepth;
 	viewport.maxDepth = maxDepth;
 
-	scissor.offset.x = (int32_t)position.x;
-	scissor.offset.y = (int32_t)position.y;
-	scissor.extent.width = (int32_t)size.x;
-	scissor.extent.height = (int32_t)size.y;
+	scissor.offset.x = static_cast<int32_t>(position.x);
+	scissor.offset.y = static_cast<int32_t>(position.y);
+	scissor.extent.width = static_cast<int32_t>(size.x);
+	scissor.extent.height = static_cast<int32_t>(size.y);
 }

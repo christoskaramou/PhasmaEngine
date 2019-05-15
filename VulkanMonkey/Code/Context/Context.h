@@ -76,10 +76,10 @@ namespace vm {
 		// LIGHTS
 		LightUniforms lightUniforms;
 
-		// MAIN CAMERA
-		Camera camera_main;
-
 		// CAMERAS
+		// main camera
+		Camera camera_main;
+		// other cameras
 		std::vector<Camera> camera{};
 
 		// Metrics

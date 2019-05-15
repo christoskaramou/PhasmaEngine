@@ -14,7 +14,7 @@ int main(int argc, char* argv[])
 	{
 		Timer timer;
 		FIRE_EVENT(Event::FrameStart);
-		timer.minFrameTime(1.f / (float)GUI::fps);
+		timer.minFrameTime(1.f / static_cast<float>(GUI::fps));
 
 		if (!Window::processEvents(timer.getDelta(GUI::timeScale)))
 			break;
