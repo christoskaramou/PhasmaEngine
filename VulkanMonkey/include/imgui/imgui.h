@@ -1594,7 +1594,7 @@ struct ImDrawCmd
 
 // Vertex index (override with '#define ImDrawIdx unsigned int' inside in imconfig.h)
 #ifndef ImDrawIdx
-typedef unsigned short ImDrawIdx;
+typedef unsigned int ImDrawIdx;
 #endif
 
 // Vertex layout

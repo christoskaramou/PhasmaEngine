@@ -20,7 +20,7 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 
 	image = vulkan->device.createImage(imageInfo);
 
-	uint32_t memTypeIndex = UINT32_MAX; ///////////////////
+	uint32_t memTypeIndex = UINT32_MAX;
 	auto const memRequirements = vulkan->device.getImageMemoryRequirements(image);
 	auto const memProperties = vulkan->gpu.getMemoryProperties();
 	for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
@@ -118,6 +118,12 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 		srcStage = vk::PipelineStageFlagBits::eTransfer;
 		dstStage = vk::PipelineStageFlagBits::eFragmentShader;
 	}
+	else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+		barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+		srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+		dstStage = vk::PipelineStageFlagBits::eFragmentShader;
+	}
 	else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
 		barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
 
@@ -133,11 +139,13 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 	}
 
 	commandBuffer.pipelineBarrier(
-		srcStage, dstStage,
-		vk::DependencyFlags(),
-		0, nullptr,
-		0, nullptr,
-		1, &barrier);
+		srcStage,
+		dstStage,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
 
 	commandBuffer.end();
 
@@ -234,9 +242,9 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 		commandBuffer.pipelineBarrier(
 			vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer,
 			vk::DependencyFlagBits(),
-			0, nullptr,
-			0, nullptr,
-			1, &barrier);
+			nullptr,
+			nullptr,
+			barrier);
 
 		vk::ImageBlit blit = {};
 		blit.srcOffsets[0] = { 0, 0, 0 };
@@ -253,10 +261,13 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 		blit.dstSubresource.layerCount = 1;
 
 		commandBuffer.blitImage(
-			image, vk::ImageLayout::eTransferSrcOptimal,
-			image, vk::ImageLayout::eTransferDstOptimal,
-			1, &blit,
-			vk::Filter::eLinear);
+			image,
+			vk::ImageLayout::eTransferSrcOptimal,
+			image,
+			vk::ImageLayout::eTransferDstOptimal,
+			blit,
+			vk::Filter::eLinear
+		);
 
 		barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
 		barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
@@ -264,11 +275,13 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 		barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
 		commandBuffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
-			vk::DependencyFlagBits(),
-			0, nullptr,
-			0, nullptr,
-			1, &barrier);
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eFragmentShader,
+			vk::DependencyFlagBits::eByRegion,
+			nullptr,
+			nullptr,
+			barrier
+		);
 
 		if (mipWidth > 1) mipWidth /= 2;
 		if (mipHeight > 1) mipHeight /= 2;
@@ -281,11 +294,13 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 	barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
 	commandBuffer.pipelineBarrier(
-		vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
-		vk::DependencyFlagBits(),
-		0, nullptr,
-		0, nullptr,
-		1, &barrier);
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
 
 	commandBuffer.end();
 

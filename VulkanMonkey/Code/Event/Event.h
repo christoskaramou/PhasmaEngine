@@ -43,9 +43,11 @@ namespace vm {
 	private:
 		std::vector<std::vector<Func>> m_subscribers{};
 
-		EventSystem() {};
-		EventSystem(EventSystem const&) {};
-		EventSystem& operator=(EventSystem const&) {};
-		~EventSystem() {};
+		EventSystem() {};								// default constructor
+		EventSystem(EventSystem const&) {};				// copy constructor
+		EventSystem operator=(EventSystem const&) {};	// copy assignment
+		EventSystem(EventSystem&&) {};					// move constructor
+		EventSystem operator=(EventSystem&&) {};		// move assignment
+		~EventSystem() {};								// destructor
 	};
 }

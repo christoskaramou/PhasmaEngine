@@ -25,7 +25,9 @@ namespace vm {
 		static bool			show_ssao;
 		static bool			show_tonemapping;
 		static float		exposure;
-		static bool			show_FXAA;
+		static bool			use_AntiAliasing;
+		static bool			use_FXAA;
+		static bool			use_TAA;
 		static bool			show_Bloom;
 		static float		Bloom_Inv_brightness;
 		static float		Bloom_intensity;
@@ -76,6 +78,8 @@ namespace vm {
 		std::string	name;
 		vk::RenderPass renderPass;
 		std::vector<vk::Framebuffer> frameBuffers{};
+		vk::CommandBuffer cmdBuf;
+		vk::Fence fenceUpload;
 		Pipeline pipeline;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);

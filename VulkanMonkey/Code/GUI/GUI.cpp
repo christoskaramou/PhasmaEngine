@@ -13,7 +13,9 @@ bool						GUI::show_ssr = false;
 bool						GUI::show_ssao = false;
 bool						GUI::show_tonemapping = false;
 float						GUI::exposure = 4.5f;
-bool						GUI::show_FXAA = false;
+bool						GUI::use_AntiAliasing = true;
+bool						GUI::use_FXAA = false;
+bool						GUI::use_TAA = false;
 bool						GUI::show_Bloom = false;
 float						GUI::Bloom_Inv_brightness = 20.0f;
 float						GUI::Bloom_intensity = 1.5f;
@@ -147,31 +149,32 @@ void GUI::Metrics()
 	//	ImGui::Text("   Compute: %.3f ms", stats[13]); totalPasses++;
 	//}
 	//ImGui::Text("   Skybox: %.3f ms", stats[1]); totalPasses++;
-	
+	ImGui::Indent(16.0f);
 	if (shadow_cast) {
-		ImGui::Text("   Depth: %.3f ms", stats[10]); totalPasses++; totalTime += stats[10];
-		ImGui::Text("   Depth: %.3f ms", stats[11]); totalPasses++; totalTime += stats[11];
-		ImGui::Text("   Depth: %.3f ms", stats[12]); totalPasses++; totalTime += stats[12];
+		ImGui::Text("Depth: %.3f ms", stats[10]); totalPasses++; totalTime += stats[10];
+		ImGui::Text("Depth: %.3f ms", stats[11]); totalPasses++; totalTime += stats[11];
+		ImGui::Text("Depth: %.3f ms", stats[12]); totalPasses++; totalTime += stats[12];
 	}
-	ImGui::Text("   GBuffer: %.3f ms", stats[2]); totalPasses++; totalTime += stats[2];
+	ImGui::Text("GBuffer: %.3f ms", stats[2]); totalPasses++; totalTime += stats[2];
 	if (show_ssao) {
-		ImGui::Text("   SSAO: %.3f ms", stats[3]); totalPasses++; totalTime += stats[3];
+		ImGui::Text("SSAO: %.3f ms", stats[3]); totalPasses++; totalTime += stats[3];
 	}
 	if (show_ssr) {
-		ImGui::Text("   SSR: %.3f ms", stats[4]); totalPasses++; totalTime += stats[4];
+		ImGui::Text("SSR: %.3f ms", stats[4]); totalPasses++; totalTime += stats[4];
 	}
-	ImGui::Text("   Lights: %.3f ms", stats[5]); totalPasses++; totalTime += stats[5];
-	if (show_FXAA) {
-		ImGui::Text("   FXAA: %.3f ms", stats[6]); totalPasses++; totalTime += stats[6];
+	ImGui::Text("Lights: %.3f ms", stats[5]); totalPasses++; totalTime += stats[5];
+	if ((use_FXAA || use_TAA) && use_AntiAliasing) {
+		ImGui::Text("Anti aliasing: %.3f ms", stats[6]); totalPasses++; totalTime += stats[6];
 	}
 	if (show_Bloom) {
-		ImGui::Text("   Bloom: %.3f ms", stats[7]); totalPasses++; totalTime += stats[7];
+		ImGui::Text("Bloom: %.3f ms", stats[7]); totalPasses++; totalTime += stats[7];
 	}
 	if (show_motionBlur) {
-		ImGui::Text("   Motion Blur: %.3f ms", stats[8]); totalPasses++; totalTime += stats[8];
+		ImGui::Text("Motion Blur: %.3f ms", stats[8]); totalPasses++; totalTime += stats[8];
 	}
 
-	ImGui::Text("   GUI: %.3f ms", stats[9]); totalPasses++; totalTime += stats[9];
+	ImGui::Text("GUI: %.3f ms", stats[9]); totalPasses++; totalTime += stats[9];
+	ImGui::Unindent(16.0f);
 	ImGui::Separator();
 	ImGui::Separator();
 	ImGui::Text("Total: %i (%.3f ms)", totalPasses, totalTime);
@@ -287,23 +290,42 @@ void vm::GUI::Properties()
 	ImGui::Checkbox("Tone Mapping", &show_tonemapping);
 	//ImGui::Checkbox("Compute shaders", &use_compute);
 	if (show_tonemapping) {
-		ImGui::SliderFloat("Exposure", &exposure, 0.01f, 10.f); ImGui::Separator(); ImGui::Separator();
+		ImGui::Indent(16.0f);
+		ImGui::SliderFloat("Exposure", &exposure, 0.01f, 10.f);
+		ImGui::Unindent(16.0f);
+		ImGui::Separator(); ImGui::Separator();
 	}
-	if (ImGui::Checkbox("FXAA", &show_FXAA))
-		dSetNeedsUpdate = true;
+	ImGui::Checkbox("Anti aliasing", &use_AntiAliasing);
+	if (use_AntiAliasing) {
+		ImGui::Indent(16.0f);
+		if (ImGui::Checkbox("FXAA", &use_FXAA)) {
+			use_TAA = false;
+			dSetNeedsUpdate = true;
+		}
+		if (ImGui::Checkbox("TAA", &use_TAA)) {
+			use_FXAA = false;
+			dSetNeedsUpdate = true;
+		}
+		ImGui::Unindent(16.0f);
+		ImGui::Separator(); ImGui::Separator();
+	}
+
 	if (ImGui::Checkbox("Bloom", &show_Bloom))
 		dSetNeedsUpdate = true;
 	if (show_Bloom) {
+		ImGui::Indent(16.0f);
 		ImGui::SliderFloat("Inv Brightness", &Bloom_Inv_brightness, 0.01f, 50.f);
 		ImGui::SliderFloat("Intensity", &Bloom_intensity, 0.01f, 10.f);
 		ImGui::SliderFloat("Range", &Bloom_range, 0.1f, 20.f);
 		ImGui::Checkbox("Bloom Tone Mapping", &use_tonemap);
 		if (use_tonemap)
 			ImGui::SliderFloat("Bloom Exposure", &Bloom_exposure, 0.01f, 10.f);
+		ImGui::Unindent(16.0f);
 		ImGui::Separator(); ImGui::Separator();
 	}
 	ImGui::Checkbox("Sun Light", &shadow_cast);
 	if (shadow_cast) {
+		ImGui::Indent(16.0f);
 		ImGui::SliderFloat("Sun Intst", &sun_intensity, 0.1f, 50.f);
 		ImGui::InputFloat3("SunPos", sun_position.data(), 1);
 		ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5); ImGui::Separator(); ImGui::Separator();
@@ -316,6 +338,7 @@ void vm::GUI::Properties()
 				sun_position[2] = sunDist.z;
 			}
 		}
+		ImGui::Unindent(16.0f);
 	}
 	ImGui::InputFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f, 3);
 	ImGui::SliderFloat4("ClearCol", clearColor.data(), 0.0f, 1.0f);
@@ -424,6 +447,15 @@ void GUI::ImGui_ImplSDL2_SetClipboardText(void*, const char* text)
 
 void GUI::initImGui()
 {
+	vk::CommandBufferAllocateInfo cbai;
+	cbai.commandPool = vulkan->commandPool;
+	cbai.level = vk::CommandBufferLevel::ePrimary;
+	cbai.commandBufferCount = 1;
+	cmdBuf = vulkan->device.allocateCommandBuffers(cbai).at(0);
+
+	vk::FenceCreateInfo fiu;
+	fenceUpload = vulkan->device.createFence(fiu);
+
 	for (auto& file : std::filesystem::directory_iterator("Scripts")) {
 		auto pathStr = file.path().string();
 		if (endsWithExt(pathStr, ".cs"))
@@ -537,7 +569,14 @@ void GUI::initImGui()
 		copy_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 		copy_barrier.subresourceRange.levelCount = 1;
 		copy_barrier.subresourceRange.layerCount = 1;
-		vulkan->dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer, vk::DependencyFlags(), nullptr, nullptr, copy_barrier);
+		vulkan->dynamicCmdBuffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eHost,
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::DependencyFlagBits::eByRegion,
+			nullptr,
+			nullptr,
+			copy_barrier
+		);
 
 		vk::BufferImageCopy region = {};
 		region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
@@ -558,7 +597,14 @@ void GUI::initImGui()
 		use_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 		use_barrier.subresourceRange.levelCount = 1;
 		use_barrier.subresourceRange.layerCount = 1;
-		vulkan->dynamicCmdBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, vk::DependencyFlags(), nullptr, nullptr, use_barrier);
+		vulkan->dynamicCmdBuffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eFragmentShader,
+			vk::DependencyFlagBits::eByRegion,
+			nullptr,
+			nullptr,
+			use_barrier
+		);
 	}
 
 	// Store our identifier
@@ -602,7 +648,7 @@ void GUI::draw(uint32_t imageIndex)
 {
 	if (!render) return;
 
-	auto draw_data = ImGui::GetDrawData();
+	const auto draw_data = ImGui::GetDrawData();
 	if (render && draw_data->TotalVtxCount > 0)
 	{
 		vk::ClearValue clearColor;
@@ -621,14 +667,15 @@ void GUI::draw(uint32_t imageIndex)
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		rpi.pClearValues = clearValues.data();
 
-		auto& cmd = vulkan->dynamicCmdBuffer;
+		const auto& cmd = vulkan->dynamicCmdBuffer;
+
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-		vk::DeviceSize offset{ 0 };
+		const vk::DeviceSize offset{ 0 };
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSet, nullptr);
 		cmd.bindVertexBuffers(0, vertexBuffer.buffer, offset);
-		cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint16);
+		cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
 		vk::Viewport viewport;
 		viewport.x = 0.f;
@@ -760,39 +807,63 @@ void GUI::newFrame()
 
 	ImGui::Render();
 
-	auto draw_data = ImGui::GetDrawData();
+	const ImDrawData* draw_data = ImGui::GetDrawData();
 	if (draw_data->TotalVtxCount < 1)
 		return;
-	size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
-	size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
+	const size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
+	const size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
 	if (!vertexBuffer.buffer || vertexBuffer.size < vertex_size)
 		createVertexBuffer(vertex_size);
 	if (!indexBuffer.buffer || indexBuffer.size < index_size)
 		createIndexBuffer(index_size);
 
-	// Upload Vertex and index Data:
-	{
-		ImDrawVert* vtx_dst = NULL;
-		ImDrawIdx* idx_dst = NULL;
-		vtx_dst = (ImDrawVert*)vulkan->device.mapMemory(vertexBuffer.memory, 0, vertex_size);
-		idx_dst = (ImDrawIdx*)vulkan->device.mapMemory(indexBuffer.memory, 0, index_size);
-		for (int n = 0; n < draw_data->CmdListsCount; n++)
-		{
-			const ImDrawList* cmd_list = draw_data->CmdLists[n];
-			memcpy(vtx_dst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
-			memcpy(idx_dst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
-			vtx_dst += cmd_list->VtxBuffer.Size;
-			idx_dst += cmd_list->IdxBuffer.Size;
-		}
-		vk::MappedMemoryRange range[2] = {};
-		range[0].memory = vertexBuffer.memory;
-		range[0].size = VK_WHOLE_SIZE;
-		range[1].memory = indexBuffer.memory;
-		range[1].size = VK_WHOLE_SIZE;
-		vulkan->device.flushMappedMemoryRanges(2, range);
-		vulkan->device.unmapMemory(vertexBuffer.memory);
-		vulkan->device.unmapMemory(indexBuffer.memory);
+	//// Upload Vertex and index Data:
+	//{
+	//	ImDrawVert* vtx_dst = NULL;
+	//	ImDrawIdx* idx_dst = NULL;
+	//	vtx_dst = (ImDrawVert*)vulkan->device.mapMemory(vertexBuffer.memory, 0, vertex_size);
+	//	idx_dst = (ImDrawIdx*)vulkan->device.mapMemory(indexBuffer.memory, 0, index_size);
+	//	for (int n = 0; n < draw_data->CmdListsCount; n++)
+	//	{
+	//		const ImDrawList* cmd_list = draw_data->CmdLists[n];
+	//		memcpy(vtx_dst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
+	//		memcpy(idx_dst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+	//		vtx_dst += cmd_list->VtxBuffer.Size;
+	//		idx_dst += cmd_list->IdxBuffer.Size;
+	//	}
+	//	vk::MappedMemoryRange range[2] = {};
+	//	range[0].memory = vertexBuffer.memory;
+	//	range[0].size = VK_WHOLE_SIZE;
+	//	range[1].memory = indexBuffer.memory;
+	//	range[1].size = VK_WHOLE_SIZE;
+	//	vulkan->device.flushMappedMemoryRanges(2, range);
+	//	vulkan->device.unmapMemory(vertexBuffer.memory);
+	//	vulkan->device.unmapMemory(indexBuffer.memory);
+	//}
+	
+	vk::CommandBufferBeginInfo beginInfo;
+	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+	cmdBuf.begin(beginInfo);
+	vk::DeviceSize vOffset = 0;
+	vk::DeviceSize iOffset = 0;
+	for (int n = 0; n < draw_data->CmdListsCount; n++) {
+		const ImDrawList* cmd_list = draw_data->CmdLists[n];
+		cmdBuf.updateBuffer(vertexBuffer.buffer, vOffset, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert), cmd_list->VtxBuffer.Data);
+		cmdBuf.updateBuffer(indexBuffer.buffer, iOffset, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx), cmd_list->IdxBuffer.Data);
+		vOffset += cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
+		iOffset += cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
 	}
+	cmdBuf.end();
+
+	vk::SubmitInfo si;
+	si.waitSemaphoreCount = 0;
+	si.pWaitSemaphores = nullptr;
+	si.pWaitDstStageMask = nullptr;
+	si.commandBufferCount = 1;
+	si.pCommandBuffers = &cmdBuf;
+	si.signalSemaphoreCount = 0;
+	si.pSignalSemaphores = nullptr;
+	vulkan->graphicsQueue.submit(si, fenceUpload);
 }
 
 void GUI::windowStyle(ImGuiStyle* dst)
@@ -850,14 +921,16 @@ void GUI::createVertexBuffer(size_t vertex_size)
 {
 	vulkan->presentQueue.waitIdle();
 	vertexBuffer.destroy();
-	vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
+	vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	//vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
 }
 
 void GUI::createIndexBuffer(size_t index_size)
 {
 	vulkan->presentQueue.waitIdle();
 	indexBuffer.destroy();
-	indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
+	indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	//indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
 }
 
 void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout)

@@ -234,6 +234,9 @@
     <ClInclude Include="Code\Pointer\Pointer.h">
       <Filter>Code\Pointer</Filter>
     </ClInclude>
+    <ClInclude Include="Code\TAA\TAA.h">
+      <Filter>Code\TAA</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -419,6 +422,9 @@
     <ClCompile Include="include\GLTFSDK\AnimationUtils.cpp">
       <Filter>Include</Filter>
     </ClCompile>
+    <ClCompile Include="Code\TAA\TAA.cpp">
+      <Filter>Code\TAA</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source">
@@ -573,6 +579,9 @@
     </Filter>
     <Filter Include="Code\Pointer">
       <UniqueIdentifier>{ba175b70-ca58-4045-a039-f79d9af62918}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\TAA">
+      <UniqueIdentifier>{d357fa6e-71f6-48bd-bde4-65d94eb8cf07}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

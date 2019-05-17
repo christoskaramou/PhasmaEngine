@@ -45,7 +45,7 @@ void Context::initRendering()
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("composition2", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("composition2", vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eTransferSrc);
 	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
 	addRenderTarget("brightFilter", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("gaussianBlurHorizontal", vk::Format::eR8G8B8A8Unorm);
@@ -95,6 +95,8 @@ void Context::initRendering()
 	gui.createPipeline();
 
 	computePool.Init(5);
+
+	taa.Init();
 
 	metrics.resize(20);
 	for (auto& metric : metrics)
@@ -253,7 +255,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("composition2", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("composition2", vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eTransferSrc);
 	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
 	addRenderTarget("brightFilter", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("gaussianBlurHorizontal", vk::Format::eR8G8B8A8Unorm);
@@ -691,7 +693,7 @@ vk::CommandPool Context::createCommandPool()
 	return vulkan.device.createCommandPool(cpci);
 }
 
-void Context::addRenderTarget(const std::string& name, vk::Format format)
+void Context::addRenderTarget(const std::string& name, vk::Format format, vk::ImageUsageFlags additionalFlags)
 {
 	if (renderTargets.find(name) != renderTargets.end()) {
 		std::cout << "Render Target already exists\n";
@@ -700,8 +702,13 @@ void Context::addRenderTarget(const std::string& name, vk::Format format)
 	renderTargets[name] = Image();
 	renderTargets[name].format = format;
 	renderTargets[name].initialLayout = vk::ImageLayout::eUndefined;
-	renderTargets[name].createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	renderTargets[name].createImage(
+		WIDTH,
+		HEIGHT,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | additionalFlags,
+		vk::MemoryPropertyFlagBits::eDeviceLocal
+	);
 	renderTargets[name].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
 	renderTargets[name].createImageView(vk::ImageAspectFlagBits::eColor);
 	renderTargets[name].createSampler();

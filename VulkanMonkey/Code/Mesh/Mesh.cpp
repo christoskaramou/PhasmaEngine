@@ -29,7 +29,7 @@ vk::DescriptorSetLayout Primitive::getDescriptorSetLayout()
 	return descriptorSetLayout;
 }
 
-vk::DescriptorSetLayout vm::Mesh::getDescriptorSetLayout()
+vk::DescriptorSetLayout Mesh::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
 		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {

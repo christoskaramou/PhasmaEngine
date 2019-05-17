@@ -20,6 +20,7 @@
 #include "../SSAO/SSAO.h"
 #include "../SSR/SSR.h"
 #include "../FXAA/FXAA.h"
+#include "../TAA/TAA.h"
 #include "../Bloom/Bloom.h"
 #include "../MotionBlur/MotionBlur.h"
 #include "../Deferred/Deferred.h"
@@ -59,6 +60,9 @@ namespace vm {
 
 		// FXAA
 		FXAA fxaa;
+
+		// TAA
+		TAA taa;
 
 		// BLOOM
 		Bloom bloom;
@@ -120,6 +124,6 @@ namespace vm {
 		vk::DescriptorPool createDescriptorPool(const uint32_t maxDescriptorSets);
 		std::vector<vk::Fence> createFences(const uint32_t fenceCount);
 		std::vector<vk::Semaphore> createSemaphores(const uint32_t semaphoresCount);
-		void addRenderTarget(const std::string& name, vk::Format format);
+		void addRenderTarget(const std::string& name, vk::Format format, vk::ImageUsageFlags additionalFlags = vk::ImageUsageFlags());
 	};
 }

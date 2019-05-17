@@ -246,6 +246,7 @@
     <ClInclude Include="Code\SSR\SSR.h" />
     <ClInclude Include="Code\Surface\Surface.h" />
     <ClInclude Include="Code\Swapchain\Swapchain.h" />
+    <ClInclude Include="Code\TAA\TAA.h" />
     <ClInclude Include="Code\Timer\Timer.h" />
     <ClInclude Include="Code\Vertex\Vertex.h" />
     <ClInclude Include="Code\VulkanContext\VulkanContext.h" />
@@ -293,6 +294,7 @@
     <ClCompile Include="Code\SSAO\SSAO.cpp" />
     <ClCompile Include="Code\SSR\SSR.cpp" />
     <ClCompile Include="Code\Swapchain\Swapchain.cpp" />
+    <ClCompile Include="Code\TAA\TAA.cpp" />
     <ClCompile Include="Code\Timer\Timer.cpp" />
     <ClCompile Include="Code\Vertex\Vertex.cpp" />
     <ClCompile Include="Code\Window\Window.cpp" />

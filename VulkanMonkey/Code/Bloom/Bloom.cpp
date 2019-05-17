@@ -121,7 +121,7 @@ void vm::Bloom::createCombineRenderPass(std::map<std::string, Image>& renderTarg
 	// Swapchain attachment
 	attachments[0].format = vulkan->surface->formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
@@ -225,7 +225,7 @@ void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	for (size_t i = vulkan->swapchain->images.size() * 3; i < vulkan->swapchain->images.size() * 4; ++i) {
 		std::vector<vk::ImageView> attachments = {
 			vulkan->swapchain->images[i - vulkan->swapchain->images.size() * 3].view,
-			GUI::show_FXAA ? renderTargets["composition"].view : renderTargets["composition2"].view
+			GUI::use_FXAA || GUI::use_TAA ? renderTargets["composition"].view : renderTargets["composition2"].view
 		};
 		vk::FramebufferCreateInfo fbci;
 		fbci.renderPass = renderPassCombine;
@@ -285,7 +285,7 @@ void Bloom::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	};
 
 	std::string comp = "composition";
-	if (GUI::show_FXAA) comp = "composition2";
+	if (GUI::use_FXAA || GUI::use_TAA) comp = "composition2";
 
 	std::vector<vk::WriteDescriptorSet> textureWriteSets{
 		wSetImage(DSBrightFilter, 0, renderTargets[comp]),
@@ -349,7 +349,7 @@ void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, std::function<void(I
 	rpi.framebuffer = frameBuffers[(size_t)totalImages * 3 + (size_t)imageIndex];
 	rpi.clearValueCount = 2;
 
-	if (GUI::show_FXAA)
+	if (GUI::use_FXAA || GUI::use_TAA)
 		changeLayout(renderTargets["composition"], LayoutState::Write);
 	else
 		changeLayout(renderTargets["composition2"], LayoutState::Write);
@@ -359,7 +359,7 @@ void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, std::function<void(I
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeinfo.layout, 0, DSCombine, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
-	if (GUI::show_FXAA)
+	if (GUI::use_FXAA || GUI::use_TAA)
 		changeLayout(renderTargets["composition"], LayoutState::Read);
 	else
 		changeLayout(renderTargets["composition2"], LayoutState::Read);
@@ -940,7 +940,7 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_FALSE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
 		vulkan->swapchain->images[0].blentAttachment,
-		GUI::show_FXAA ? renderTargets["composition"].blentAttachment : renderTargets["composition2"].blentAttachment
+		GUI::use_FXAA || GUI::use_TAA ? renderTargets["composition"].blentAttachment : renderTargets["composition2"].blentAttachment
 	};
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;

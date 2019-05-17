@@ -238,6 +238,10 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 {
+	// wait for vertex and index data to be ready on gui buffers
+	ctx.vulkan.device.waitForFences(ctx.gui.fenceUpload, VK_TRUE, UINT64_MAX);
+	ctx.vulkan.device.resetFences(ctx.gui.fenceUpload);
+
 	// TODO: Fire event to update descriptor sets based on what post proccess effects are on
 	if (GUI::dSetNeedsUpdate) {
 		ctx.vulkan.device.waitIdle();
@@ -319,16 +323,26 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	changeLayout(ctx.renderTargets["composition"], LayoutState::Read);
 	ctx.metrics[5].end(&GUI::metrics[5]);
 	
-	
-	// FXAA
-	if (GUI::show_FXAA) {
-		ctx.metrics[6].start(cmd);
-		changeLayout(ctx.renderTargets["composition2"], LayoutState::Write);
-		ctx.fxaa.draw(imageIndex);
-		changeLayout(ctx.renderTargets["composition2"], LayoutState::Read);
-		ctx.metrics[6].end(&GUI::metrics[6]);
+	if (GUI::use_AntiAliasing) {
+		// TAA
+		if (GUI::use_TAA) {
+			ctx.metrics[6].start(cmd);
+			changeLayout(ctx.renderTargets["composition2"], LayoutState::Write);
+			ctx.taa.draw(imageIndex);
+			ctx.taa.copyImage(cmd, ctx.renderTargets["composition2"]);
+			changeLayout(ctx.renderTargets["composition2"], LayoutState::Read);
+			ctx.metrics[6].end(&GUI::metrics[6]);
+		}
+		// FXAA
+		else if (GUI::use_FXAA) {
+			ctx.metrics[6].start(cmd);
+			changeLayout(ctx.renderTargets["composition2"], LayoutState::Write);
+			ctx.fxaa.draw(imageIndex);
+			changeLayout(ctx.renderTargets["composition2"], LayoutState::Read);
+			ctx.metrics[6].end(&GUI::metrics[6]);
+		}
 	}
-	
+
 	// BLOOM
 	if (GUI::show_Bloom) {
 		ctx.metrics[7].start(cmd);
@@ -354,7 +368,6 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	changeLayout(ctx.renderTargets["velocity"], LayoutState::Write);
 	for (auto& image : ctx.shadows.textures)
 		changeLayout(image, LayoutState::DepthWrite);
-
 
 	// GUI
 	ctx.metrics[9].start(cmd);

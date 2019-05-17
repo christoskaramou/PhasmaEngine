@@ -31,7 +31,7 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 	};
 
 	std::string comp = "composition";
-	if ((GUI::show_FXAA && !GUI::show_Bloom) || (!GUI::show_FXAA && GUI::show_Bloom))
+	if (((GUI::use_FXAA || GUI::use_TAA) && !GUI::show_Bloom) || (!(GUI::use_FXAA || GUI::use_TAA) && GUI::show_Bloom))
 		comp = "composition2";
 
 	std::vector<vk::WriteDescriptorSet> textureWriteSets{
@@ -101,7 +101,7 @@ void vm::MotionBlur::createRenderPass()
 	// Color attachment
 	attachments[0].format = vulkan->surface->formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;

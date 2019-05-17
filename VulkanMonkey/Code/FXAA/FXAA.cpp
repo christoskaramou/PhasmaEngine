@@ -60,7 +60,7 @@ void vm::FXAA::createRenderPass(std::map<std::string, Image>& renderTargets)
 	// Swapchain attachment
 	attachments[0].format = vulkan->surface->formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
