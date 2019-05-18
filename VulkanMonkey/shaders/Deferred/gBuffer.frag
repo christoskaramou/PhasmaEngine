@@ -15,14 +15,15 @@ layout (location = 2) in vec3 inColor;
 layout (location = 3) in vec4 baseColorFactor;
 layout (location = 4) in vec3 emissiveFactor;
 layout (location = 5) in vec4 metRoughAlphacutOcl;
-layout (location = 6) in vec4 velocity;
-layout (location = 7) in vec4 inWorldPos;
+layout (location = 6) in vec4 posProj;
+layout (location = 7) in vec4 posLastProj;
+layout (location = 8) in vec4 inWorldPos;
 
 layout (location = 0) out float outDepth;
 layout (location = 1) out vec3 outNormal;
 layout (location = 2) out vec4 outAlbedo;
 layout (location = 3) out vec3 outMetRough;
-layout (location = 4) out vec4 outVelocity;
+layout (location = 4) out vec2 outVelocity;
 layout (location = 5) out vec4 outEmissive;
 
 void main() {
@@ -37,6 +38,6 @@ void main() {
 	vec3 color = texture(bcSampler, inUV).xyz + inColor;
 	outAlbedo = vec4(color * ao, alpha) * baseColorFactor;
 	outMetRough = vec3(0.0, texture(mrSampler, inUV).y, texture(mrSampler, inUV).z);
-	outVelocity = velocity;
+	outVelocity = (posProj.xy / posProj.w - posLastProj.xy / posLastProj.w) * vec2(0.5, 0.5); // ndc space
 	outEmissive = vec4(texture(eSampler, inUV).xyz * emissiveFactor, 0.0);
 }

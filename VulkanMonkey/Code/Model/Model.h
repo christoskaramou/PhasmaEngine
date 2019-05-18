@@ -38,6 +38,7 @@ namespace vm {
 			mat4 view;
 			mat4 projection;
 			mat4 previousMatrix;
+			mat4 previousView;
 		} ubo;
 		vec3 scale = vec3(1.0f);
 		vec3 pos = vec3(0.0f);

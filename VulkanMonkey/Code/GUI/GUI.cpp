@@ -16,6 +16,8 @@ float						GUI::exposure = 4.5f;
 bool						GUI::use_AntiAliasing = true;
 bool						GUI::use_FXAA = false;
 bool						GUI::use_TAA = false;
+float						GUI::TAA_jitter_scale = 3.0f;
+float						GUI::TAA_feedback = 0.08f;
 bool						GUI::show_Bloom = false;
 float						GUI::Bloom_Inv_brightness = 20.0f;
 float						GUI::Bloom_intensity = 1.5f;
@@ -306,8 +308,18 @@ void vm::GUI::Properties()
 			use_FXAA = false;
 			dSetNeedsUpdate = true;
 		}
+		if (use_TAA) {
+			ImGui::Indent(16.0f);
+			ImGui::InputFloat("Jitter", &TAA_jitter_scale, 0.01f, 0.1f, 5);
+			ImGui::InputFloat("Feedback", &TAA_feedback, 0.01f, 0.1f, 2);
+			ImGui::Unindent(16.0f);
+		}
 		ImGui::Unindent(16.0f);
 		ImGui::Separator(); ImGui::Separator();
+	}
+	else {
+		use_TAA = false;
+		use_FXAA = false;
 	}
 
 	if (ImGui::Checkbox("Bloom", &show_Bloom))
@@ -1196,6 +1208,10 @@ void GUI::destroy()
 	if (GUI::descriptorSetLayout) {
 		vulkan->device.destroyDescriptorSetLayout(GUI::descriptorSetLayout);
 		GUI::descriptorSetLayout = nullptr;
+	}
+	if (fenceUpload) {
+		vulkan->device.destroyFence(fenceUpload);
+		fenceUpload = nullptr;
 	}
 }
 

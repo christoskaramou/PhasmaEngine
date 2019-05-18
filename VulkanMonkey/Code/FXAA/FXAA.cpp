@@ -4,7 +4,6 @@ using namespace vm;
 
 void FXAA::createUniforms(std::map<std::string, Image>& renderTargets)
 {
-
 	vk::DescriptorSetAllocateInfo allocateInfo2;
 	allocateInfo2.descriptorPool = vulkan->descriptorPool;
 	allocateInfo2.descriptorSetCount = 1;
@@ -231,7 +230,6 @@ void FXAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-
 	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_FALSE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
 		vulkan->swapchain->images[0].blentAttachment,

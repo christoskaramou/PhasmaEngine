@@ -389,6 +389,7 @@ void Model::update(vm::Camera& camera, float delta)
 	if (render) {
 		ubo.previousMatrix = ubo.matrix;
 		ubo.view = camera.view;
+		ubo.previousView = camera.previousView;
 		ubo.projection = camera.projection;
 		if (script) {
 			script->update(delta);
@@ -718,7 +719,7 @@ void Model::createIndexBuffer()
 
 void Model::createUniformBuffers()
 {
-	uniformBuffer.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 	if (!isCopy) {
 		for (auto& node : linearNodes) {

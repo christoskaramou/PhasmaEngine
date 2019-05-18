@@ -82,6 +82,15 @@
     <None Include="shaders\Bloom\gaussianBlurVertical.frag">
       <Filter>Shaders\Bloom</Filter>
     </None>
+    <None Include="shaders\TAA\TAA.frag">
+      <Filter>Shaders\TAA</Filter>
+    </None>
+    <None Include="shaders\TAA\TAA.glsl">
+      <Filter>Shaders\TAA</Filter>
+    </None>
+    <None Include="shaders\TAA\reprojection.glsl">
+      <Filter>Shaders\TAA</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Code\Buffer\Buffer.h">
@@ -582,6 +591,9 @@
     </Filter>
     <Filter Include="Code\TAA">
       <UniqueIdentifier>{d357fa6e-71f6-48bd-bde4-65d94eb8cf07}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\TAA">
+      <UniqueIdentifier>{e7e47c1c-fdb2-4121-9c07-737ad56bb448}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

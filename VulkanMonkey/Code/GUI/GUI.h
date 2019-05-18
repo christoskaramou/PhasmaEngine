@@ -28,6 +28,8 @@ namespace vm {
 		static bool			use_AntiAliasing;
 		static bool			use_FXAA;
 		static bool			use_TAA;
+		static float		TAA_jitter_scale;
+		static float		TAA_feedback;
 		static bool			show_Bloom;
 		static float		Bloom_Inv_brightness;
 		static float		Bloom_intensity;

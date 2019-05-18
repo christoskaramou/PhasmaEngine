@@ -46,11 +46,13 @@ void Context::initRendering()
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition2", vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eTransferSrc);
-	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("velocity", vk::Format::eR16G16Sfloat);
 	addRenderTarget("brightFilter", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("gaussianBlurHorizontal", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("gaussianBlurVertical", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("emissive", vk::Format::eR8G8B8A8Unorm);
+
+	taa.Init();
 
 	// render passes
 #ifdef RENDER_SKYBOX
@@ -62,6 +64,7 @@ void Context::initRendering()
 	ssr.createRenderPass(renderTargets);
 	deferred.createRenderPasses(renderTargets);
 	fxaa.createRenderPass(renderTargets);
+	taa.createRenderPass(renderTargets);
 	bloom.createRenderPasses(renderTargets);
 	motionBlur.createRenderPass();
 	gui.createRenderPass();
@@ -76,6 +79,7 @@ void Context::initRendering()
 	ssr.createFrameBuffers(renderTargets);
 	deferred.createFrameBuffers(renderTargets);
 	fxaa.createFrameBuffers(renderTargets);
+	taa.createFrameBuffers(renderTargets);
 	bloom.createFrameBuffers(renderTargets);
 	motionBlur.createFrameBuffers();
 	gui.createFrameBuffers();
@@ -90,13 +94,12 @@ void Context::initRendering()
 	ssr.createPipeline(renderTargets);
 	deferred.createPipelines(renderTargets);
 	fxaa.createPipeline(renderTargets);
+	taa.createPipeline(renderTargets);
 	bloom.createPipelines(renderTargets);
 	motionBlur.createPipeline();
 	gui.createPipeline();
 
 	computePool.Init(5);
-
-	taa.Init();
 
 	metrics.resize(20);
 	for (auto& metric : metrics)
@@ -165,6 +168,18 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 		vulkan.device.destroyRenderPass(fxaa.renderPass);
 	}
 	fxaa.pipeline.destroy();
+
+	// TAA
+	taa.previous.destroy();
+	for (auto& frameBuffer : taa.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	if (taa.renderPass) {
+		vulkan.device.destroyRenderPass(taa.renderPass);
+	}
+	taa.pipeline.destroy();
 
 	// Bloom
 	for (auto &frameBuffer : bloom.frameBuffers) {
@@ -256,7 +271,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("composition2", vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eTransferSrc);
-	addRenderTarget("velocity", vk::Format::eR16G16B16A16Sfloat);
+	addRenderTarget("velocity", vk::Format::eR16G16Sfloat);
 	addRenderTarget("brightFilter", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("gaussianBlurHorizontal", vk::Format::eR8G8B8A8Unorm);
 	addRenderTarget("gaussianBlurVertical", vk::Format::eR8G8B8A8Unorm);
@@ -276,6 +291,12 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	fxaa.createFrameBuffers(renderTargets);
 	fxaa.createPipeline(renderTargets);
 	fxaa.updateDescriptorSets(renderTargets);
+
+	taa.Init();
+	taa.createRenderPass(renderTargets);
+	taa.createFrameBuffers(renderTargets);
+	taa.createPipeline(renderTargets);
+	taa.updateDescriptorSets(renderTargets);
 
 	bloom.createRenderPasses(renderTargets);
 	bloom.createFrameBuffers(renderTargets);
@@ -410,6 +431,8 @@ void Context::createUniforms()
 	ssr.createSSRUniforms(renderTargets);
 	// DESCRIPTOR SET FOR FXAA PIPELINE
 	fxaa.createUniforms(renderTargets);
+	// DESCRIPTOR SET FOR TAA PIPELINE
+	taa.createUniforms(renderTargets);
 	// DESCRIPTOR SET FOR BLOOM PIPELINEs
 	bloom.createUniforms(renderTargets);
 	// DESCRIPTOR SET FOR MOTIONBLUR PIPELINE

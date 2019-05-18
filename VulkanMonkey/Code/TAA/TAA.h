@@ -4,6 +4,8 @@
 #include "../Pipeline/Pipeline.h"
 #include "../Image/Image.h"
 #include "../GUI/GUI.h"
+#include "../Math/Math.h"
+#include "../Camera/Camera.h"
 #include <vector>
 #include <map>
 #include <string>
@@ -19,15 +21,21 @@ namespace vm {
 		vk::DescriptorSet DSet;
 		vk::DescriptorSetLayout DSLayout;
 		Image previous;
-		bool initialized = false;
+
+		struct UBO {
+			mat4 invVP;
+			mat4 previousPV;
+			vec4 values; }ubo;
+		Buffer uniform;
 
 		void Init();
+		void update(const Camera& camera);
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void draw(uint32_t imageIndex);
-		void createRenderPasses(std::map<std::string, Image>& renderTargets);
+		void createRenderPass(std::map<std::string, Image>& renderTargets);
 		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
-		void createPipelines(std::map<std::string, Image>& renderTargets);
+		void createPipeline(std::map<std::string, Image>& renderTargets);
 		void copyImage(const vk::CommandBuffer& cmd, Image& source);
 		void destroy();
 	};

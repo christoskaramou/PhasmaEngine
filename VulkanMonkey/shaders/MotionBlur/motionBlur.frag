@@ -20,26 +20,27 @@ void main()
 {
 	vec2 UV = inUV;
 
-	vec3 modelVelocity = (ubo.view * vec4(dilate_Average(velocitySampler, UV), 0.0)).xyz;
-	//vec3 modelVelocity = (ubo.view * vec4(dilate_Depth3X3(velocitySampler, depthSampler, UV), 0.0)).xyz;
-
-	vec3 worldPos = getPosFromUV(UV, texture(depthSampler, UV).x, ubo.invViewProj, pushConst.offset);
-	vec3 currentPos = (ubo.view * vec4(worldPos, 1.0)).xyz;
-	vec3 previousPos = (ubo.previousView * vec4(worldPos, 1.0)).xyz;
-	vec3 viewVelocity = currentPos - previousPos;
+	//vec3 modelVelocity = (ubo.view * vec4(dilate_Average(velocitySampler, UV), 0.0)).xyz;
+	////vec3 modelVelocity = (ubo.view * vec4(dilate_Depth3X3(velocitySampler, depthSampler, UV), 0.0)).xyz;
+	//
+	//vec3 worldPos = getPosFromUV(UV, texture(depthSampler, UV).x, ubo.invViewProj, pushConst.offset);
+	//vec3 currentPos = (ubo.view * vec4(worldPos, 1.0)).xyz;
+	//vec3 previousPos = (ubo.previousView * vec4(worldPos, 1.0)).xyz;
+	//vec3 viewVelocity = currentPos - previousPos;
 	
-	vec2 velocity = (viewVelocity + modelVelocity).xy;
+	//vec2 velocity = (viewVelocity + modelVelocity).xy;
+	vec2 velocity = texture(velocitySampler, UV).xy;
 	
 	if (velocity.x + velocity.y == 0.0){
 		outColor = texture(compositionSampler, UV);
 		return;
 	}	
 
-	velocity *= 0.5; // -0.5 to 0.5;
+	//velocity *= 0.5; // -0.5 to 0.5;
 	velocity *= pushConst.offset.zw; // floating window velocity aspect correction
-	velocity /= 1.0 + (currentPos.z + previousPos.z) * 0.5; // "1 + depth" division, so far pixels wont blur so much
-	velocity *= pushConst.fps.x; // fix for low and high fps for giving different velocities
-	velocity *= 0.05; // scale the effect
+	//velocity *= texture(depthSampler, UV).x; // far pixels must not blur so much
+	velocity *= pushConst.fps.x; // fix for low and high fps giving different velocities
+	velocity *= 0.01666666; // scale the effect 1/60
 
 	ivec2 texDim = textureSize(velocitySampler, 0);
 	vec2 size = vec2(float(texDim.x), float(texDim.y));

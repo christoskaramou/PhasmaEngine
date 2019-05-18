@@ -26,6 +26,7 @@ layout(set = 2, binding = 0) uniform UniformBufferObject3 {
 	mat4 view;
 	mat4 projection;
 	mat4 previousMatrix;
+	mat4 previousView;
 } uboModel;
 
 layout(location = 0) in vec3 inPosition;
@@ -41,8 +42,9 @@ layout (location = 2) out vec3 outColor;
 layout (location = 3) out vec4 baseColorFactor;
 layout (location = 4) out vec3 emissiveFactor;
 layout (location = 5) out vec4 metRoughAlphacutOcl;
-layout (location = 6) out vec4 velocity;
-layout (location = 7) out vec4 outWorldPos;
+layout (location = 6) out vec4 posProj;
+layout (location = 7) out vec4 posLastProj;
+layout (location = 8) out vec4 outWorldPos;
 
 void main() 
 {
@@ -74,8 +76,11 @@ void main()
 	metRoughAlphacutOcl = vec4(uboPrimitive.metallicFactor, uboPrimitive.roughnessFactor, uboPrimitive.alphaCutoff, uboPrimitive.occlusionlMetalRoughness);
 
 	// Velocity
-	velocity = (uboModel.matrix * uboMesh.matrix * inPos) - (uboModel.previousMatrix * uboMesh.previousMatrix * inPos);
-	velocity.w = 1.0;
+	mat4 projectionNoJitter = uboModel.projection;
+	projectionNoJitter[2][0] = 0.0;
+	projectionNoJitter[2][1] = 0.0;
+	posProj = projectionNoJitter * uboModel.view * uboModel.matrix * uboMesh.matrix * inPos; // clip space
+	posLastProj = projectionNoJitter * uboModel.previousView * uboModel.previousMatrix * uboMesh.previousMatrix * inPos; // clip space
 
 	// WorldPos
 	outWorldPos = uboModel.matrix * uboMesh.matrix * boneTransform * inPos;

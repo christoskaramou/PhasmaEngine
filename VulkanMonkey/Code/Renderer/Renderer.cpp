@@ -36,8 +36,10 @@ Renderer::~Renderer()
 			Primitive::descriptorSetLayout = nullptr;
 		}
 	}
+#ifdef USE_SCRIPTS
 	for (auto& script : ctx.scripts)
 		delete script;
+#endif
 	for (auto &model : Model::models)
 		model.destroy();
 	for (auto& texture : Mesh::uniqueTextures)
@@ -50,6 +52,7 @@ Renderer::~Renderer()
 	ctx.ssao.destroy();
 	ctx.ssr.destroy();
 	ctx.fxaa.destroy();
+	ctx.taa.destroy();
 	ctx.bloom.destroy();
 	ctx.motionBlur.destroy();
 	ctx.skyBoxDay.destroy();
@@ -202,6 +205,9 @@ void Renderer::update(float delta)
 
 	// SSR
 	ctx.ssr.update(ctx.camera_main);
+
+	// TAA
+	ctx.taa.update(ctx.camera_main);
 
 	// MOTION BLUR
 	ctx.motionBlur.update(ctx.camera_main);

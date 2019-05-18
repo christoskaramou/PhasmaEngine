@@ -1,6 +1,8 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+#define PI 3.1415926535897932384626433832795
+
 vec3 getPosFromUV(vec2 UV, float depth, mat4 mat, vec4 windowSize)
 {
 	vec2 revertedUV = (UV - windowSize.xy) / windowSize.zw; // floating window correction
@@ -71,5 +73,8 @@ vec3 dilate_Depth3X3(sampler2D samplerVelocity, sampler2D samplerDepth, vec2 tex
 
 	return texture(samplerVelocity, closestTexCoord).xyz;
 }
+
+bool is_saturated(float value) 	{ return value == clamp(value, 0.0, 1.0); }
+bool is_saturated(vec2 value) { return is_saturated(value.x) && is_saturated(value.y); }
 
 #endif

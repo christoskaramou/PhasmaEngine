@@ -1,7 +1,61 @@
 #include "Camera.h"
 #include "../GUI/GUI.h"
+#include "../VulkanContext/VulkanContext.h"
 
 using namespace vm;
+
+const std::vector<vec2> halton{
+	vec2(0.53125f, 0.9259259259259259f),
+	vec2(0.28125f, 0.07407407407407407f),
+	vec2(0.78125f, 0.4074074074074074f),
+	vec2(0.15625f, 0.7407407407407407f),
+	vec2(0.65625f, 0.18518518518518517f),
+	vec2(0.40625f, 0.5185185185185185f),
+	vec2(0.90625f, 0.8518518518518519f),
+	vec2(0.09375f, 0.2962962962962963f),
+	vec2(0.59375f, 0.6296296296296297f),
+	vec2(0.34375f, 0.9629629629629629f),
+	vec2(0.84375f, 0.012345679012345678f),
+	vec2(0.21875f, 0.345679012345679f),
+	vec2(0.71875f, 0.6790123456790124f),
+	vec2(0.46875f, 0.12345679012345678f),
+	vec2(0.96875f, 0.4567901234567901f),
+	vec2(0.015625f, 0.7901234567901234f),
+	vec2(0.515625f, 0.2345679012345679f),
+	vec2(0.265625f, 0.5679012345679012f),
+	vec2(0.765625f, 0.9012345679012346f),
+	vec2(0.140625f, 0.04938271604938271f),
+	vec2(0.640625f, 0.38271604938271603f),
+	vec2(0.390625f, 0.7160493827160493f),
+	vec2(0.890625f, 0.16049382716049382f),
+	vec2(0.078125f, 0.49382716049382713f),
+	vec2(0.578125f, 0.8271604938271605f),
+	vec2(0.328125f, 0.2716049382716049f),
+	vec2(0.828125f, 0.6049382716049383f),
+	vec2(0.203125f, 0.9382716049382716f),
+	vec2(0.703125f, 0.08641975308641975f),
+	vec2(0.453125f, 0.41975308641975306f),
+	vec2(0.953125f, 0.7530864197530864f),
+	vec2(0.046875f, 0.19753086419753085f),
+	vec2(0.546875f, 0.5308641975308642f),
+	vec2(0.296875f, 0.8641975308641975f),
+	vec2(0.796875f, 0.30864197530864196f),
+	vec2(0.171875f, 0.6419753086419753f),
+	vec2(0.671875f, 0.9753086419753086f),
+	vec2(0.421875f, 0.024691358024691357f),
+	vec2(0.921875f, 0.35802469135802467f),
+	vec2(0.109375f, 0.691358024691358f),
+	vec2(0.609375f, 0.13580246913580246f),
+	vec2(0.359375f, 0.4691358024691358f),
+	vec2(0.859375f, 0.8024691358024691f),
+	vec2(0.234375f, 0.24691358024691357f),
+	vec2(0.734375f, 0.5802469135802469f),
+	vec2(0.484375f, 0.9135802469135802f),
+	vec2(0.984375f, 0.06172839506172839f),
+	vec2(0.0078125f, 0.3950617283950617f),
+	vec2(0.5078125f, 0.7283950617283951f),
+	vec2(0.2578125f, 0.1728395061728395f),
+};
 
 Camera::Camera()
 {
@@ -38,6 +92,16 @@ void vm::Camera::update()
 	right = orientation * worldRight();
 	up = orientation * worldUp();
 	previousView = view;
+	previousProjection = projection; 
+	projOffsetPrevious = projOffset;
+	if (GUI::use_TAA) {
+		static uint32_t haltonCounter = 0;
+		projOffset.x = ((halton[haltonCounter].x - 0.5f) / WIDTH_f) * GUI::TAA_jitter_scale;
+		projOffset.y = ((halton[haltonCounter].y - 0.5f) / HEIGHT_f) * GUI::TAA_jitter_scale;
+		haltonCounter = (++haltonCounter) % halton.size();
+	}
+	else
+		projOffset = { 0.0f, 0.0f };
 	updatePerspective();
 	updateView();
 	invView = inverse(view);
@@ -55,10 +119,12 @@ void vm::Camera::updatePerspective()
 	const float m22 = farPlane / (farPlane - nearPlane) * worldOrientation.z;
 	const float m23 = worldOrientation.z;
 	const float m32 = -(farPlane * nearPlane) / (farPlane - nearPlane);
+	const float m20 = projOffset.x;
+	const float m21 = projOffset.y;
 	projection = mat4(
 		m00, 0.f, 0.f, 0.f,
 		0.f, m11, 0.f, 0.f,
-		0.f, 0.f, m22, m23,
+		m20, m21, m22, m23,
 		0.f, 0.f, m32, 0.f
 	);
 }

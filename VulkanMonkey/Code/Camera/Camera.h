@@ -26,6 +26,7 @@ namespace vm {
 		mat4 view;
 		mat4 previousView;
 		mat4 projection;
+		mat4 previousProjection;
 		mat4 invView;
 		mat4 invProjection;
 		mat4 invViewProjection;
@@ -33,6 +34,7 @@ namespace vm {
 		vec3 position, euler, worldOrientation;
 		vec3 front, right, up;
 		float nearPlane, farPlane, FOV, speed, rotationSpeed;
+		vec2 projOffset, projOffsetPrevious;
 		SurfaceTargetArea renderArea;
 		Plane frustum[6];
 
