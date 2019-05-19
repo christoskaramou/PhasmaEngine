@@ -721,6 +721,7 @@ void Model::createUniformBuffers()
 {
 	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
+	memset(uniformBuffer.data, 0, uniformBuffer.size);
 	if (!isCopy) {
 		for (auto& node : linearNodes) {
 			if (node->mesh) {

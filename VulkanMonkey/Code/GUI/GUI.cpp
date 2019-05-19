@@ -635,7 +635,6 @@ void GUI::initImGui()
 	vulkan->device.resetFences(fence);
 
 	vulkan->device.destroyFence(fence);
-	//vulkan->device.waitIdle();
 	stagingBuffer.destroy();
 }
 

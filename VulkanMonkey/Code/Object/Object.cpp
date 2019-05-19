@@ -22,6 +22,7 @@ void Object::createUniformBuffer(size_t size)
 {
 	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
+	memset(uniformBuffer.data, 0, uniformBuffer.size);
 }
 
 void Object::loadTexture(const std::string& path)

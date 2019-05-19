@@ -50,6 +50,7 @@ void Mesh::createUniformBuffers()
 {
 	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
+	memset(uniformBuffer.data, 0, uniformBuffer.size);
 	size_t size = sizeof(mat4);
 	for (auto& primitive : primitives) {
 		primitive.uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
@@ -129,6 +130,9 @@ void Primitive::loadTexture(
 
 		vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
+		while (VulkanContext::submiting) {}
+		VulkanContext::submiting = true;
+
 		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
@@ -151,6 +155,8 @@ void Primitive::loadTexture(
 		tex->createSampler();
 
 		staging.destroy();
+
+		VulkanContext::submiting = false;
 
 		Mesh::uniqueTextures[path] = *tex;
 	}

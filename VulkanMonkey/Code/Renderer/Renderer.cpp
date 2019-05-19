@@ -126,8 +126,9 @@ void Renderer::checkQueue()
 			GUI::model_rot.push_back({ 0.f, 0.f, 0.f });
 			it = Queue::loadModelFutures.erase(it);
 		}
-		else
+		else {
 			it++;
+		}
 	}
 
 	for (auto it = Queue::unloadModel.begin(); it != Queue::unloadModel.end();) {
@@ -477,6 +478,9 @@ void Renderer::present()
 
 	recordDeferredCmds(imageIndex);
 
+	while (VulkanContext::submiting) {}
+	VulkanContext::submiting = true;
+
 	// submit the command buffer
 	vk::SubmitInfo si;
 	si.waitSemaphoreCount = 1;
@@ -502,6 +506,8 @@ void Renderer::present()
 	Timer::noWaitDelta = duration.count();
 	ctx.vulkan.device.waitForFences(ctx.vulkan.fences[0], VK_TRUE, UINT64_MAX);
 	ctx.vulkan.device.resetFences(ctx.vulkan.fences[0]);
+
+	VulkanContext::submiting = false;
 
 	duration = std::chrono::high_resolution_clock::now() - start;
 	waitingTime = duration.count();

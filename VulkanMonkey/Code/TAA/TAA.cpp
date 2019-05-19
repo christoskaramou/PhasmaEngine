@@ -30,6 +30,7 @@ void TAA::createUniforms(std::map<std::string, Image>& renderTargets)
 {
 	uniform.createBuffer(sizeof(UBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	uniform.data = vulkan->device.mapMemory(uniform.memory, 0, uniform.size);
+	memset(uniform.data, 0, uniform.size);
 
 	vk::DescriptorSetAllocateInfo allocateInfo2;
 	allocateInfo2.descriptorPool = vulkan->descriptorPool;

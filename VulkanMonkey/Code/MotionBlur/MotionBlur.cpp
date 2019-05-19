@@ -7,6 +7,7 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 {
 	UBmotionBlur.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UBmotionBlur.data = vulkan->device.mapMemory(UBmotionBlur.memory, 0, UBmotionBlur.size);
+	memset(UBmotionBlur.data, 0, UBmotionBlur.size);
 
 	vk::DescriptorSetAllocateInfo allocateInfo;
 	allocateInfo.descriptorPool = vulkan->descriptorPool;

@@ -45,6 +45,7 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	// pvm uniform
 	UB_PVM.createBuffer(3 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UB_PVM.data = vulkan->device.mapMemory(UB_PVM.memory, 0, UB_PVM.size);
+	memset(UB_PVM.data, 0, UB_PVM.size);
 
 	// DESCRIPTOR SET FOR SSAO
 	vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{

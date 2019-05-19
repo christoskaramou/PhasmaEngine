@@ -5,6 +5,7 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <atomic>
 
 #define WIDTH VulkanContext::get().surface->actualExtent.width
 #define HEIGHT VulkanContext::get().surface->actualExtent.height
@@ -37,6 +38,9 @@ namespace vm {
 		vk::DescriptorPool descriptorPool;
 		std::vector<vk::Fence> fences{};
 		std::vector<vk::Semaphore> semaphores{};
+
+		// Helper
+		static inline std::atomic_bool submiting = false;
 
 		static VulkanContext& get() noexcept { static VulkanContext VkCTX; return VkCTX; }
 		static const VulkanContext& getSafe() noexcept { return get(); }
