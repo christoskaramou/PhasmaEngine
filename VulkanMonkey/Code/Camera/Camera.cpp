@@ -96,8 +96,8 @@ void vm::Camera::update()
 	projOffsetPrevious = projOffset;
 	if (GUI::use_TAA) {
 		static uint32_t haltonCounter = 0;
-		projOffset.x = ((halton[haltonCounter].x - 0.5f) / WIDTH_f) * GUI::TAA_jitter_scale;
-		projOffset.y = ((halton[haltonCounter].y - 0.5f) / HEIGHT_f) * GUI::TAA_jitter_scale;
+		projOffset.x = ((halton[haltonCounter].x * 2.0f - 1.0f) / WIDTH_f) * GUI::TAA_jitter_scale;
+		projOffset.y = ((halton[haltonCounter].y * 2.0f - 1.0f) / HEIGHT_f) * GUI::TAA_jitter_scale;
 		haltonCounter = (++haltonCounter) % halton.size();
 	}
 	else

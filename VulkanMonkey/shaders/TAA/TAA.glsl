@@ -4,8 +4,8 @@
 #extension GL_GOOGLE_include_directive : require
 #include "../Common/common.glsl"
 
-const float g_blendMin = 0.1f;
-const float g_blendMax = 3.0f;
+const float g_blendMin = 0.05f;
+const float g_blendMax = 0.95f;
 
 // TODO: This can be improved further by weighting the blend factor from unbiased luminance diff
 
@@ -21,10 +21,11 @@ vec4 ReinhardInverse(vec4 color)
 	return -color / (color - 1);
 }
 
-vec4 ResolveTAA(vec2 texCoord, sampler2D tex_history, sampler2D tex_current, sampler2D tex_velocity, sampler2D tex_depth)
+vec4 ResolveTAA(vec2 texCoord, sampler2D tex_history, sampler2D tex_current, sampler2D tex_velocity, sampler2D tex_depth, vec4 sizes)
 {
 	// Reproject
 	vec2 velocity = dilate_Depth3X3(tex_velocity, tex_depth, texCoord).xy;
+	velocity *= sizes.zw; // floating window size correction --> rendering_window_size / window_size
 	vec2 texCoord_history = texCoord - velocity;
 	
 	// Get current and history colors
@@ -32,7 +33,7 @@ vec4 ResolveTAA(vec2 texCoord, sampler2D tex_history, sampler2D tex_current, sam
 	vec4 color_history 	= Reinhard(texture(tex_history, texCoord_history));
 
 	ivec2 texDim = textureSize(tex_depth, 0);
-	vec2 g_texelSize = 1.0 / vec2(float(texDim.x), float(texDim.y));
+	vec2 g_texelSize = (1.0 / vec2(float(texDim.x), float(texDim.y))) * sizes.zw;
 	//= Clamp out too different history colors (for non-existing and lighting change cases) =========================
 	vec2 du = vec2(g_texelSize.x, 0.0f);
 	vec2 dv = vec2(0.0f, g_texelSize.y);
@@ -54,10 +55,20 @@ vec4 ResolveTAA(vec2 texCoord, sampler2D tex_history, sampler2D tex_current, sam
 	//===============================================================================================================
 	
 	//= Compute blend factor ==========================================================================
-	float factor_subpixel = abs(sin(fract(length(velocity)) * PI)); // Decrease if motion is sub-pixel
-	float blendfactor = mix(g_blendMin, g_blendMax, clamp(factor_subpixel, 0.0, 1.0));
+	//float factor_subpixel =  clamp(abs(sin(fract(length(velocity)) * PI)), 0.0, 1.0); // Decrease if motion is sub-pixel
+	//float blendfactor = mix(g_blendMin, g_blendMax,factor_subpixel);
+
+	float factor_subpixel = clamp(length(velocity * 0.5) / length(g_texelSize), 0.0, 1.0);
+	//float blendfactor = mix(g_blendMin, g_blendMax, factor_subpixel);
+
+	vec4 dmax = color_max - color_history;
+	vec4 dmin = color_history - color_min;
+	float factor_color = clamp(min((dmax.r + dmax.g + dmax.b + dmax.a) * 0.25, (dmin.r + dmin.g + dmin.b + dmin.a) * 0.25) * 10.0, 0.0, 1.0);
+	
+	float blendfactor = mix(g_blendMin, g_blendMax, factor_color * factor_subpixel);
+
 	// Don't resolve when re-projected texcoord is out of screen
-	blendfactor = is_saturated(texCoord_history) ? blendfactor : g_blendMax;
+	blendfactor = all(greaterThan(texCoord_history, vec2(sizes.x, sizes.y))) && all(lessThan(texCoord_history, vec2(sizes.x + sizes.w, sizes.y + sizes.a))) ? blendfactor : g_blendMax;
 	//=================================================================================================
 	
 	vec4 resolved_tonemapped 	= mix(color_history, color_current, blendfactor);

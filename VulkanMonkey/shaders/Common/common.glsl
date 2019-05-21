@@ -74,7 +74,10 @@ vec3 dilate_Depth3X3(sampler2D samplerVelocity, sampler2D samplerDepth, vec2 tex
 	return texture(samplerVelocity, closestTexCoord).xyz;
 }
 
-bool is_saturated(float value) 	{ return value == clamp(value, 0.0, 1.0); }
-bool is_saturated(vec2 value) { return is_saturated(value.x) && is_saturated(value.y); }
+bool is_saturated(float x) 	{ return x == clamp(x, 0.0, 1.0); }
+bool is_saturated(vec2 x) { return is_saturated(x.x) && is_saturated(x.y); }
+
+float length2(vec2 x) { return dot(x, x); }
+float length2(vec3 x) { return dot(x, x); }
 
 #endif

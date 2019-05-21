@@ -17,12 +17,10 @@ void TAA::Init()
 void TAA::update(const Camera& camera)
 {
 	if (GUI::use_TAA) {
-		static uint32_t haltonCounter = 0;
 		ubo.invVP = camera.invViewProjection;
 		ubo.previousPV = camera.projection * camera.previousView;
-		ubo.values = { GUI::TAA_jitter_scale, GUI::TAA_jitter_scale, GUI::TAA_feedback, GUI::TAA_feedback };
+		ubo.values = { GUI::winPos.x / WIDTH_f, GUI::winPos.y / HEIGHT_f, GUI::winSize.x / WIDTH_f, GUI::winSize.y / HEIGHT_f };
 		memcpy(uniform.data, &ubo, sizeof(ubo));
-		haltonCounter++;
 	}
 }
 
