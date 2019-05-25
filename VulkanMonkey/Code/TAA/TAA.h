@@ -9,34 +9,38 @@
 #include <vector>
 #include <map>
 #include <string>
+#include <functional>
 
 namespace vm {
 	struct TAA
 	{
 		VulkanContext* vulkan = &VulkanContext::get();
 
-		std::vector<vk::Framebuffer> frameBuffers{};
-		Pipeline pipeline;
-		vk::RenderPass renderPass;
-		vk::DescriptorSet DSet;
-		vk::DescriptorSetLayout DSLayout;
+		std::vector<vk::Framebuffer> frameBuffers{}, frameBuffersSharpen{};
+		Pipeline pipeline, pipelineSharpen;
+		vk::RenderPass renderPass, renderPassSharpen;
+		vk::DescriptorSet DSet, DSetSharpen;
+		vk::DescriptorSetLayout DSLayout, DSLayoutSharpen;
 		Image previous;
+		Image frameImage;
 
-		struct UBO {
-			mat4 invVP;
-			mat4 previousPV;
-			vec4 values; }ubo;
+		struct UBO { vec4 sharpenValues; }ubo;
 		Buffer uniform;
 
 		void Init();
 		void update(const Camera& camera);
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(uint32_t imageIndex);
+		void draw(uint32_t imageIndex, std::function<void(Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets);
 		void createRenderPass(std::map<std::string, Image>& renderTargets);
+		void createRenderPassSharpen(std::map<std::string, Image>& renderTargets);
+		void createRenderPasses(std::map<std::string, Image>& renderTargets);
 		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
 		void createPipeline(std::map<std::string, Image>& renderTargets);
-		void copyImage(const vk::CommandBuffer& cmd, Image& source);
+		void createPipelineSharpen(std::map<std::string, Image>& renderTargets);
+		void createPipelines(std::map<std::string, Image>& renderTargets);
+		void copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex);
+		void saveImage(const vk::CommandBuffer& cmd, Image& source);
 		void destroy();
 	};
 }

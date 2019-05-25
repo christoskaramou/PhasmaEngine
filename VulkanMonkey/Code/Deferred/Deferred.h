@@ -29,7 +29,7 @@ namespace vm {
 		void batchEnd();
 		void createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
-		void draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj, const std::vector<vec2>& UVOffset);
+		void draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj);
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
 		void createGBufferRenderPasses(std::map<std::string, Image>& renderTargets);
 		void createCompositionRenderPass(std::map<std::string, Image>& renderTargets);

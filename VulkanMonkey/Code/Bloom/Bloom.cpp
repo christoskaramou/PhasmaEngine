@@ -4,8 +4,105 @@
 
 using namespace vm;
 
-void Bloom::update()
+void Bloom::Init()
 {
+	frameImage.format = vulkan->surface->formatKHR.format;
+	frameImage.initialLayout = vk::ImageLayout::eUndefined;
+	frameImage.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
+	frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
+	frameImage.createSampler();
+}
+
+void Bloom::copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex)
+{
+	Image& s_chain_Image = VulkanContext::getSafe().swapchain->images[imageIndex];
+
+	// change image layouts for copy
+	vk::ImageMemoryBarrier barrier;
+	barrier.image = frameImage.image;
+	barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+	barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, frameImage.mipLevels, 0, frameImage.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+
+	barrier.image = s_chain_Image.image;
+	barrier.oldLayout = vk::ImageLayout::ePresentSrcKHR;
+	barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, s_chain_Image.mipLevels, 0, s_chain_Image.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+
+	// copy the image
+	vk::ImageCopy region;
+	region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+	region.srcSubresource.layerCount = 1;
+	region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+	region.dstSubresource.layerCount = 1;
+	region.extent.width = WIDTH;
+	region.extent.height = HEIGHT;
+	region.extent.depth = 1;
+
+	cmd.copyImage(
+		s_chain_Image.image,
+		vk::ImageLayout::eTransferSrcOptimal,
+		frameImage.image,
+		vk::ImageLayout::eTransferDstOptimal,
+		region
+	);
+
+	// change image layouts back to shader read
+	barrier.image = frameImage.image;
+	barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+	barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, frameImage.mipLevels, 0, frameImage.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+
+	barrier.image = s_chain_Image.image;
+	barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+	barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, s_chain_Image.mipLevels, 0, s_chain_Image.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
 }
 
 void vm::Bloom::createRenderPasses(std::map<std::string, Image>& renderTargets)
@@ -28,7 +125,6 @@ void vm::Bloom::createBrightFilterRenderPass(std::map<std::string, Image>& rende
 	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
-
 	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
 
 	vk::SubpassDescription subpassDescription;
@@ -37,30 +133,11 @@ void vm::Bloom::createBrightFilterRenderPass(std::map<std::string, Image>& rende
 	subpassDescription.pColorAttachments = &colorReference;
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
-	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies(2);
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
-	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	//renderPassInfo.pDependencies = dependencies.data();
 
 	renderPassBrightFilter = vulkan->device.createRenderPass(renderPassInfo);
 }
@@ -78,7 +155,6 @@ void vm::Bloom::createGaussianBlurRenderPass(std::map<std::string, Image>& rende
 	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
-
 	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
 
 	vk::SubpassDescription subpassDescription;
@@ -87,37 +163,18 @@ void vm::Bloom::createGaussianBlurRenderPass(std::map<std::string, Image>& rende
 	subpassDescription.pColorAttachments = &colorReference;
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
-	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies(2);
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
-	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	renderPassInfo.pDependencies = dependencies.data();
 
 	renderPassGaussianBlur = vulkan->device.createRenderPass(renderPassInfo);
 }
 
 void vm::Bloom::createCombineRenderPass(std::map<std::string, Image>& renderTargets)
 {
-	std::array<vk::AttachmentDescription, 2> attachments{};
+	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Swapchain attachment
 	attachments[0].format = vulkan->surface->formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
@@ -127,20 +184,9 @@ void vm::Bloom::createCombineRenderPass(std::map<std::string, Image>& renderTarg
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
-	// Color attachment
-	attachments[1].format = renderTargets["composition"].format;
-	attachments[1].samples = vk::SampleCountFlagBits::e1;
-	attachments[1].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[1].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[1].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[1].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[1].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[1].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
 
 	std::vector<vk::AttachmentReference> colorReferences{
-		{ 0, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 1, vk::ImageLayout::eColorAttachmentOptimal }
+		{ 0, vk::ImageLayout::eColorAttachmentOptimal }
 	};
 
 	vk::SubpassDescription subpassDescription;
@@ -149,30 +195,11 @@ void vm::Bloom::createCombineRenderPass(std::map<std::string, Image>& renderTarg
 	subpassDescription.pColorAttachments = colorReferences.data();
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
-	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies(2);
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
-	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	renderPassInfo.pDependencies = dependencies.data();
 
 	renderPassCombine = vulkan->device.createRenderPass(renderPassInfo);
 }
@@ -224,8 +251,7 @@ void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 
 	for (size_t i = vulkan->swapchain->images.size() * 3; i < vulkan->swapchain->images.size() * 4; ++i) {
 		std::vector<vk::ImageView> attachments = {
-			vulkan->swapchain->images[i - vulkan->swapchain->images.size() * 3].view,
-			GUI::use_FXAA || GUI::use_TAA ? renderTargets["composition"].view : renderTargets["composition2"].view
+			vulkan->swapchain->images[i - vulkan->swapchain->images.size() * 3].view
 		};
 		vk::FramebufferCreateInfo fbci;
 		fbci.renderPass = renderPassCombine;
@@ -284,14 +310,11 @@ void Bloom::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 	};
 
-	std::string comp = "composition";
-	if (GUI::use_FXAA || GUI::use_TAA) comp = "composition2";
-
 	std::vector<vk::WriteDescriptorSet> textureWriteSets{
-		wSetImage(DSBrightFilter, 0, renderTargets[comp]),
+		wSetImage(DSBrightFilter, 0, frameImage),
 		wSetImage(DSGaussianBlurHorizontal, 0, renderTargets["brightFilter"]),
 		wSetImage(DSGaussianBlurVertical, 0, renderTargets["gaussianBlurHorizontal"]),
-		wSetImage(DSCombine, 0, renderTargets[comp]),
+		wSetImage(DSCombine, 0, frameImage),
 		wSetImage(DSCombine, 1, renderTargets["gaussianBlurVertical"])
 	};
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
@@ -302,7 +325,7 @@ void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, std::function<void(I
 	vk::ClearValue clearColor;
 	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
-	std::vector<vk::ClearValue> clearValues = { clearColor, clearColor };
+	std::vector<vk::ClearValue> clearValues = { clearColor };
 
 	std::vector<float> values{ GUI::Bloom_Inv_brightness, GUI::Bloom_intensity, GUI::Bloom_range, GUI::Bloom_exposure, static_cast<float>(GUI::use_tonemap) };
 
@@ -347,22 +370,13 @@ void Bloom::draw(uint32_t imageIndex, uint32_t totalImages, std::function<void(I
 
 	rpi.renderPass = renderPassCombine;
 	rpi.framebuffer = frameBuffers[(size_t)totalImages * 3 + (size_t)imageIndex];
-	rpi.clearValueCount = 2;
 
-	if (GUI::use_FXAA || GUI::use_TAA)
-		changeLayout(renderTargets["composition"], LayoutState::Write);
-	else
-		changeLayout(renderTargets["composition2"], LayoutState::Write);
 	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
 	vulkan->dynamicCmdBuffer.pushConstants<float>(pipelineCombine.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeinfo.layout, 0, DSCombine, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
-	if (GUI::use_FXAA || GUI::use_TAA)
-		changeLayout(renderTargets["composition"], LayoutState::Read);
-	else
-		changeLayout(renderTargets["composition2"], LayoutState::Read);
 }
 
 void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTargets)
@@ -939,8 +953,7 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	// Color Blending state
 	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_FALSE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
-		vulkan->swapchain->images[0].blentAttachment,
-		GUI::use_FXAA || GUI::use_TAA ? renderTargets["composition"].blentAttachment : renderTargets["composition2"].blentAttachment
+		vulkan->swapchain->images[0].blentAttachment
 	};
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
@@ -1038,6 +1051,7 @@ void Bloom::destroy()
 		vulkan->device.destroyDescriptorSetLayout(DSLayoutCombine);
 		DSLayoutCombine = nullptr;
 	}
+	frameImage.destroy();
 	pipelineBrightFilter.destroy();
 	pipelineGaussianBlurHorizontal.destroy();
 	pipelineGaussianBlurVertical.destroy();

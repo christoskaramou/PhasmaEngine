@@ -43,12 +43,6 @@
     <None Include="shaders\SSR\ssr.frag">
       <Filter>Shaders\SSR</Filter>
     </None>
-    <None Include="shaders\Terrain\shaderTerrain.frag">
-      <Filter>Shaders\Terrain</Filter>
-    </None>
-    <None Include="shaders\Terrain\shaderTerrain.vert">
-      <Filter>Shaders\Terrain</Filter>
-    </None>
     <None Include="shaders\Common\quad.vert">
       <Filter>Shaders\Common</Filter>
     </None>
@@ -88,7 +82,7 @@
     <None Include="shaders\TAA\TAA.glsl">
       <Filter>Shaders\TAA</Filter>
     </None>
-    <None Include="shaders\TAA\reprojection.glsl">
+    <None Include="shaders\TAA\TAASharpen.frag">
       <Filter>Shaders\TAA</Filter>
     </None>
   </ItemGroup>
@@ -540,9 +534,6 @@
     </Filter>
     <Filter Include="Shaders\MotionBlur">
       <UniqueIdentifier>{69023f3c-933b-41e8-bccc-7f3fd33f3dbc}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Shaders\Terrain">
-      <UniqueIdentifier>{6c46ff52-319a-42e7-84e7-1e0d88448f0a}</UniqueIdentifier>
     </Filter>
     <Filter Include="Shaders\Shadows">
       <UniqueIdentifier>{f760e029-558a-492c-9891-59413013f1cb}</UniqueIdentifier>

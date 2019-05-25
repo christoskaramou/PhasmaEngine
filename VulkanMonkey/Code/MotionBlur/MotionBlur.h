@@ -24,14 +24,17 @@ namespace vm {
 		vk::RenderPass renderPass;
 		vk::DescriptorSet DSMotionBlur;
 		vk::DescriptorSetLayout DSLayoutMotionBlur;
+		Image frameImage;
 		
+		void Init();
 		void update(Camera& camera);
 		void createRenderPass();
 		void createFrameBuffers();
 		void createPipeline();
+		void copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex);
 		void createMotionBlurUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(uint32_t imageIndex, const std::vector<vec2>& UVOffset);
+		void draw(uint32_t imageIndex);
 		void destroy();
 	};
 }

@@ -9,6 +9,8 @@
 #include "../Vertex/Vertex.h"
 #include "../Swapchain/Swapchain.h"
 #include <vector>
+#include <map>
+#include <functional>
 
 namespace vm {
 	constexpr float LOWER_PANEL_HEIGHT = 150.f;
@@ -30,6 +32,9 @@ namespace vm {
 		static bool			use_TAA;
 		static float		TAA_jitter_scale;
 		static float		TAA_feedback;
+		static float		TAA_sharp_strength;
+		static float		TAA_sharp_clamp;
+		static float		TAA_sharp_offset_bias;
 		static bool			show_Bloom;
 		static float		Bloom_Inv_brightness;
 		static float		Bloom_intensity;
@@ -37,7 +42,6 @@ namespace vm {
 		static bool			use_tonemap;
 		static bool			use_compute;
 		static float		Bloom_exposure;
-		static bool			dSetNeedsUpdate;
 		static bool			show_motionBlur;
 		static bool			randomize_lights;
 		static float		lights_intensity;
@@ -83,10 +87,13 @@ namespace vm {
 		vk::CommandBuffer cmdBuf;
 		vk::Fence fenceUpload;
 		Pipeline pipeline;
+		Image guiScaled;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
+		void Init();
 		void update();
 		void loadGUI(bool show = true);
+		void scaleToRenderArea(vk::CommandBuffer cmd, uint32_t imageIndex);
 		void draw(uint32_t imageIndex);
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();
@@ -103,6 +110,7 @@ namespace vm {
 		void createVertexBuffer(size_t vertex_size);
 		void createIndexBuffer(size_t index_size);
 		void createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout) override;
+		void updateDescriptorSets();
 		void createRenderPass();
 		void createFrameBuffers();
 		void createPipeline();

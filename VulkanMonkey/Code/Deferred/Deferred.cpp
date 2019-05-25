@@ -70,7 +70,7 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void Deferred::draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj, const std::vector<vec2>& UVOffset)
+void Deferred::draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj)
 {
 	// Begin Composition
 	vk::ClearValue clearColor;
@@ -88,7 +88,7 @@ void Deferred::draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4&
 
 	std::vector<vec4> screenSpace(7);
 	screenSpace[0] = { GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, GUI::show_tonemapping ? 1.f : 0.f, GUI::use_AntiAliasing ? 1.f : 0.f };
-	screenSpace[1] = { UVOffset[0].x, UVOffset[0].y, UVOffset[1].x, UVOffset[1].y };
+	screenSpace[1] = { };
 	screenSpace[2] = { invViewProj[0] };
 	screenSpace[3] = { invViewProj[1] };
 	screenSpace[4] = { invViewProj[2] };
@@ -166,7 +166,6 @@ void vm::Deferred::createGBufferRenderPasses(std::map<std::string, Image>& rende
 	attachments[5].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[5].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[5].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
 	// Depth
 	attachments[6].format = vulkan->depth->format;
 	attachments[6].samples = vk::SampleCountFlagBits::e1;
@@ -194,38 +193,18 @@ void vm::Deferred::createGBufferRenderPasses(std::map<std::string, Image>& rende
 	subpassDescriptions[0].pColorAttachments = colorReferences.data();
 	subpassDescriptions[0].pDepthStencilAttachment = &depthReference;
 
-
-	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies(2);
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 	renderPassInfo.pSubpasses = subpassDescriptions.data();
-	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	//renderPassInfo.pDependencies = dependencies.data();
 
 	renderPass = vulkan->device.createRenderPass(renderPassInfo);
 }
 
 void vm::Deferred::createCompositionRenderPass(std::map<std::string, Image>& renderTargets)
 {
-	std::array<vk::AttachmentDescription, 2> attachments{};
+	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color target
 	attachments[0].format = vulkan->surface->formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
@@ -236,53 +215,21 @@ void vm::Deferred::createCompositionRenderPass(std::map<std::string, Image>& ren
 	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
 
-	// Composition out Image
-	attachments[1].format = renderTargets["composition"].format;
-	attachments[1].samples = vk::SampleCountFlagBits::e1;
-	attachments[1].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[1].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[1].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[1].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[1].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[1].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	std::array<vk::SubpassDescription, 1> subpassDescriptions{};
-
 	std::vector<vk::AttachmentReference> colorReferences{
-		{ 0, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 1, vk::ImageLayout::eColorAttachmentOptimal }
+		{ 0, vk::ImageLayout::eColorAttachmentOptimal }
 	};
 
+	std::array<vk::SubpassDescription, 1> subpassDescriptions{};
 	subpassDescriptions[0].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
 	subpassDescriptions[0].colorAttachmentCount = static_cast<uint32_t>(colorReferences.size());
 	subpassDescriptions[0].pColorAttachments = colorReferences.data();
 	subpassDescriptions[0].pDepthStencilAttachment = nullptr;
-
-
-	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies(2);
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 	renderPassInfo.pSubpasses = subpassDescriptions.data();
-	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	//renderPassInfo.pDependencies = dependencies.data();
 
 	compositionRenderPass = vulkan->device.createRenderPass(renderPassInfo);
 }
@@ -323,8 +270,7 @@ void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& rende
 
 	for (size_t i = 0; i < compositionFrameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			vulkan->swapchain->images[i].view,
-			renderTargets["composition"].view
+			vulkan->swapchain->images[i].view
 		};
 		vk::FramebufferCreateInfo fbci;
 		fbci.renderPass = compositionRenderPass;
@@ -464,7 +410,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	pipeline.pipeinfo.pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	std::vector<vk::DynamicState> dynamicStates{ vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	std::vector<vk::DynamicState> dynamicStates{};//vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	vk::PipelineDynamicStateCreateInfo dsi;
 	dsi.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 	dsi.pDynamicStates = dynamicStates.data();
@@ -604,8 +550,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	// Color Blending state
 	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_FALSE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { 
-		vulkan->swapchain->images[0].blentAttachment,
-		renderTargets["composition"].blentAttachment
+		vulkan->swapchain->images[0].blentAttachment
 	};
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;

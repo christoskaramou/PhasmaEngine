@@ -57,7 +57,7 @@ void SSR::update(Camera& camera)
 }
 
 
-void SSR::draw(uint32_t imageIndex, const std::vector<vec2>& UVOffset)
+void SSR::draw(uint32_t imageIndex)
 {
 	vk::ClearValue clearColor;
 	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -72,7 +72,6 @@ void SSR::draw(uint32_t imageIndex, const std::vector<vec2>& UVOffset)
 	renderPassInfo.pClearValues = clearValues.data();
 
 	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.pushConstants<vec2>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, UVOffset);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSReflection, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
@@ -279,16 +278,16 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutReflection };
 
-	vk::PushConstantRange pConstants;
-	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
-	pConstants.offset = 0;
-	pConstants.size = 4 * sizeof(vec4);
+	//vk::PushConstantRange pConstants;
+	//pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
+	//pConstants.offset = 0;
+	//pConstants.size = 4 * sizeof(vec4);
 
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	plci.pushConstantRangeCount = 1;
-	plci.pPushConstantRanges = &pConstants;
+	plci.pushConstantRangeCount = 0;
+	plci.pPushConstantRanges = nullptr;
 	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
 
 	// Render Pass

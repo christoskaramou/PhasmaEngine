@@ -3,16 +3,14 @@
 
 #include "FXAA.glsl"
 
-layout (set = 0, binding = 0) uniform sampler2D compositionSampler;
+layout (set = 0, binding = 0) uniform sampler2D frameSampler;
 
 layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out vec4 outColor;
-layout (location = 1) out vec4 outComposition;
 
 void main() 
 {
-	outColor.xyz = FXAA(compositionSampler, inUV);
-	outColor.w = texture(compositionSampler, inUV).w;
-	outComposition = outColor;
+	outColor.xyz = FXAA(frameSampler, inUV);
+	outColor.w = texture(frameSampler, inUV).w;
 }

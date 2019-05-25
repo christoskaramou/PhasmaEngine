@@ -19,13 +19,16 @@ namespace vm {
 		vk::RenderPass renderPass;
 		vk::DescriptorSet DSet;
 		vk::DescriptorSetLayout DSLayout;
+		Image frameImage;
 
+		void Init();
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void draw(uint32_t imageIndex);
 		void createRenderPass(std::map<std::string, Image>& renderTargets);
 		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
 		void createPipeline(std::map<std::string, Image>& renderTargets);
+		void copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex);
 		void destroy();
 	};
 }

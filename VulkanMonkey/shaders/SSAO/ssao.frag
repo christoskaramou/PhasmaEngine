@@ -8,7 +8,6 @@ layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
 layout (set = 0, binding = 2) uniform sampler2D samplerNoise;
 layout (set = 0, binding = 3) uniform UniformBufferObject { vec4 samples[64]; } kernel;
 layout (set = 0, binding = 4) uniform UniformBufferPVM { mat4 projection; mat4 view; mat4 invProjection; } pvm;
-layout(push_constant) uniform Position { vec4 offset; } pos;
 
 
 layout (location = 0) in vec2 inUV;
@@ -22,7 +21,7 @@ const float bias = -0.001;
 void main() 
 {
 	// Get G-Buffer values
-	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, pvm.invProjection, pos.offset);
+	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, pvm.invProjection);
 	vec4 normal = pvm.view * texture(samplerNormal, inUV);
 
 	// Get a random vector using a noise lookup
@@ -45,11 +44,9 @@ void main()
 		vec4 samplePosition = pvm.projection * newViewPos;
 		samplePosition.xy /= samplePosition.w;
 		samplePosition.xy = samplePosition.xy * 0.5f + 0.5f;
-		samplePosition.xy *= pos.offset.zw; // floating window size correction
-		samplePosition.xy += pos.offset.xy; // floating window position correction
 		
 		float currentDepth = newViewPos.z;
-		float sampledDepth = getPosFromUV(samplePosition.xy, texture(samplerDepth, samplePosition.xy).x, pvm.invProjection, pos.offset).z;
+		float sampledDepth = getPosFromUV(samplePosition.xy, texture(samplerDepth, samplePosition.xy).x, pvm.invProjection).z;
 
 		// Range check
 

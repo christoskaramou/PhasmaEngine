@@ -20,7 +20,6 @@ layout(set = 0, binding = 4) uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS 
 layout(set = 0, binding = 5) uniform sampler2D ssaoBlurSampler;
 layout(set = 0, binding = 6) uniform sampler2D ssrSampler;
 layout(set = 0, binding = 7) uniform sampler2D emiSampler;
-//layout(set = 0, binding = 7) uniform sampler2D ssdoBlurSampler;
 layout(set = 1, binding = 1) uniform sampler2DShadow shadowMapSampler0;
 layout(set = 2, binding = 1) uniform sampler2DShadow shadowMapSampler1;
 layout(set = 3, binding = 1) uniform sampler2DShadow shadowMapSampler2;

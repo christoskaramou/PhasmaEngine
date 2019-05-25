@@ -90,7 +90,7 @@ void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void SSAO::draw(uint32_t imageIndex, const std::vector<vec2>& UVOffset, std::function<void(Image&, LayoutState)>&& changeLayout, Image& image)
+void SSAO::draw(uint32_t imageIndex, std::function<void(Image&, LayoutState)>&& changeLayout, Image& image)
 {
 	// SSAO image
 	vk::ClearValue clearColor;
@@ -108,7 +108,6 @@ void SSAO::draw(uint32_t imageIndex, const std::vector<vec2>& UVOffset, std::fun
 
 	changeLayout(image, LayoutState::Write);
 	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.pushConstants<vec2>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, UVOffset);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	const vk::DescriptorSet descriptorSets = { DSet };
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSets, nullptr);
@@ -458,16 +457,16 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout };
 
-	vk::PushConstantRange pConstants;
-	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
-	pConstants.offset = 0;
-	pConstants.size = 4 * sizeof(vec4);
+	//vk::PushConstantRange pConstants;
+	//pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
+	//pConstants.offset = 0;
+	//pConstants.size = 4 * sizeof(vec4);
 
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	plci.pushConstantRangeCount = 1;
-	plci.pPushConstantRanges = &pConstants;
+	plci.pushConstantRangeCount = 0;
+	plci.pPushConstantRanges = nullptr;
 	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
 
 	// Render Pass

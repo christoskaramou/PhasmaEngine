@@ -249,33 +249,14 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	ctx.vulkan.device.waitForFences(ctx.gui.fenceUpload, VK_TRUE, UINT64_MAX);
 	ctx.vulkan.device.resetFences(ctx.gui.fenceUpload);
 
-	// TODO: Fire event to update descriptor sets based on what post proccess effects are on
-	if (GUI::dSetNeedsUpdate) {
-		ctx.vulkan.device.waitIdle();
-		ctx.bloom.updateDescriptorSets(ctx.renderTargets);
-		for (auto& fb : ctx.bloom.frameBuffers)
-			ctx.vulkan.device.destroyFramebuffer(fb);
-		ctx.bloom.createFrameBuffers(ctx.renderTargets);
-		ctx.motionBlur.updateDescriptorSets(ctx.renderTargets);
-		GUI::dSetNeedsUpdate = false;
-	}
-
-	const vec2 surfSize(WIDTH_f, HEIGHT_f);
-	const vec2 winPos(&GUI::winPos.x);
-	const vec2 winSize(&GUI::winSize.x);
-
-	std::vector<vec2> UVOffset{ winPos / surfSize, winSize / surfSize };
-
-	ctx.camera_main.renderArea.update(winPos, winSize);
-
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
 	const auto& cmd = ctx.vulkan.dynamicCmdBuffer;
 	cmd.begin(beginInfo);
 	ctx.metrics[0].start(cmd);
-	cmd.setViewport(0, ctx.camera_main.renderArea.viewport);
-	cmd.setScissor(0, ctx.camera_main.renderArea.scissor);
+	//cmd.setViewport(0, ctx.camera_main.renderArea.viewport);
+	//cmd.setScissor(0, ctx.camera_main.renderArea.scissor);
 
 	// SKYBOX
 	SkyBox& skybox = GUI::shadow_cast ? ctx.skyBoxDay : ctx.skyBoxNight;
@@ -301,6 +282,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	changeLayout(ctx.renderTargets["ssr"], LayoutState::Read);
 	changeLayout(ctx.renderTargets["ssaoBlur"], LayoutState::Read);
 	changeLayout(ctx.renderTargets["velocity"], LayoutState::Read);
+	changeLayout(ctx.renderTargets["taa"], LayoutState::Read);
 	for (auto& image : ctx.shadows.textures)
 		changeLayout(image, LayoutState::DepthRead);
 	
@@ -309,7 +291,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		ctx.metrics[3].start(cmd);
 		changeLayout(ctx.renderTargets["ssaoBlur"], LayoutState::Write);
 		const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2);
-		ctx.ssao.draw(imageIndex, UVOffset, changeLayoutFunc, ctx.renderTargets["ssao"]);
+		ctx.ssao.draw(imageIndex, changeLayoutFunc, ctx.renderTargets["ssao"]);
 		changeLayout(ctx.renderTargets["ssaoBlur"], LayoutState::Read);
 		ctx.metrics[3].end(&GUI::metrics[3]);
 	}
@@ -318,34 +300,31 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	if (GUI::show_ssr) {
 		ctx.metrics[4].start(cmd);
 		changeLayout(ctx.renderTargets["ssr"], LayoutState::Write);
-		ctx.ssr.draw(imageIndex, UVOffset);
+		ctx.ssr.draw(imageIndex);
 		changeLayout(ctx.renderTargets["ssr"], LayoutState::Read);
 		ctx.metrics[4].end(&GUI::metrics[4]);
 	}
 	
 	// COMPOSITION
 	ctx.metrics[5].start(cmd);
-	changeLayout(ctx.renderTargets["composition"], LayoutState::Write);
-	ctx.deferred.draw(imageIndex, ctx.shadows, skybox, ctx.camera_main.invViewProjection, UVOffset);
-	changeLayout(ctx.renderTargets["composition"], LayoutState::Read);
+	ctx.deferred.draw(imageIndex, ctx.shadows, skybox, ctx.camera_main.invViewProjection);
 	ctx.metrics[5].end(&GUI::metrics[5]);
 	
 	if (GUI::use_AntiAliasing) {
 		// TAA
 		if (GUI::use_TAA) {
 			ctx.metrics[6].start(cmd);
-			changeLayout(ctx.renderTargets["composition2"], LayoutState::Write);
-			ctx.taa.draw(imageIndex);
-			ctx.taa.copyImage(cmd, ctx.renderTargets["composition2"]);
-			changeLayout(ctx.renderTargets["composition2"], LayoutState::Read);
+			ctx.taa.copyFrameImage(cmd, imageIndex);
+			const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2);
+			ctx.taa.draw(imageIndex, changeLayoutFunc, ctx.renderTargets);
+			ctx.taa.saveImage(cmd, ctx.renderTargets["taa"]);
 			ctx.metrics[6].end(&GUI::metrics[6]);
 		}
 		// FXAA
 		else if (GUI::use_FXAA) {
 			ctx.metrics[6].start(cmd);
-			changeLayout(ctx.renderTargets["composition2"], LayoutState::Write);
+			ctx.fxaa.copyFrameImage(cmd, imageIndex);
 			ctx.fxaa.draw(imageIndex);
-			changeLayout(ctx.renderTargets["composition2"], LayoutState::Read);
 			ctx.metrics[6].end(&GUI::metrics[6]);
 		}
 	}
@@ -353,6 +332,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	// BLOOM
 	if (GUI::show_Bloom) {
 		ctx.metrics[7].start(cmd);
+		ctx.bloom.copyFrameImage(cmd, imageIndex);
 		const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2);
 		ctx.bloom.draw(imageIndex, static_cast<uint32_t>(ctx.vulkan.swapchain->images.size()), changeLayoutFunc, ctx.renderTargets);
 		ctx.metrics[7].end(&GUI::metrics[7]);
@@ -361,7 +341,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	// MOTION BLUR
 	if (GUI::show_motionBlur) {
 		ctx.metrics[8].start(cmd);
-		ctx.motionBlur.draw(imageIndex, UVOffset);
+		ctx.motionBlur.copyFrameImage(cmd, imageIndex);
+		ctx.motionBlur.draw(imageIndex);
 		ctx.metrics[8].end(&GUI::metrics[8]);
 	}
 	
@@ -373,11 +354,13 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	changeLayout(ctx.renderTargets["ssr"], LayoutState::Write);
 	changeLayout(ctx.renderTargets["ssaoBlur"], LayoutState::Write);
 	changeLayout(ctx.renderTargets["velocity"], LayoutState::Write);
+	changeLayout(ctx.renderTargets["taa"], LayoutState::Write);
 	for (auto& image : ctx.shadows.textures)
 		changeLayout(image, LayoutState::DepthWrite);
 
 	// GUI
 	ctx.metrics[9].start(cmd);
+	ctx.gui.scaleToRenderArea(cmd, imageIndex);
 	ctx.gui.draw(imageIndex);
 	ctx.metrics[9].end(&GUI::metrics[9]);
 

@@ -15,17 +15,15 @@ layout (location = 9) in mat4 shadow_coords1; // medium area
 layout (location = 13) in mat4 shadow_coords2; // large area
 
 layout (location = 0) out vec4 outColor;
-layout (location = 1) out vec4 outComposition;
 
 vec3 calculateShadowAndDirectLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal);
 
 void main() 
 { 
-	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj, screenSpace.size);
+	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj);
 	if (texture(samplerDepth, inUV).x == 0.0) 
 	{
 		outColor = vec4(texture(cubemapSampler, normalize(fragPos - ubo.camPos.xyz)).xyz, 1.0);
-		outComposition = outColor;
 		return;
 	}
 	vec3 normal = texture(samplerNormal, inUV).xyz;
@@ -67,8 +65,6 @@ void main()
 		outColor.xyz = SRGBtoLINEAR(TonemapFilmic(outColor.xyz, screenSpace.effect2.x));
 		//outColor.xyz = ACESFitted(outColor.xyz);
 		//outColor.xyz = ToneMapReinhard(outColor.xyz, screenSpace.effect2.x); // ToneMapReinhard(color, exposure value)
-
-	outComposition = outColor;
 }
 
 vec2 poissonDisk[8] = vec2[](

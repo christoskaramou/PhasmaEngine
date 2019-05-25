@@ -3,11 +3,11 @@
 
 #include "../Common/common.glsl"
 
-layout (set = 0, binding = 0) uniform sampler2D compositionSampler;
+layout (set = 0, binding = 0) uniform sampler2D frameSampler;
 layout (set = 0, binding = 1) uniform sampler2D depthSampler;
 layout (set = 0, binding = 2) uniform sampler2D velocitySampler;
 layout (set = 0, binding = 3) uniform UniformBufferObject { mat4 projection; mat4 view; mat4 previousView; mat4 invViewProj; } ubo;
-layout(push_constant) uniform Constants { vec4 fps; vec4 offset; } pushConst;
+layout(push_constant) uniform Constants { vec4 fps; } pushConst;
 
 
 layout (location = 0) in vec2 inUV;
@@ -19,45 +19,30 @@ const int max_samples = 16;
 void main() 
 {
 	vec2 UV = inUV;
-
-	//vec3 modelVelocity = (ubo.view * vec4(dilate_Average(velocitySampler, UV), 0.0)).xyz;
-	////vec3 modelVelocity = (ubo.view * vec4(dilate_Depth3X3(velocitySampler, depthSampler, UV), 0.0)).xyz;
-	//
-	//vec3 worldPos = getPosFromUV(UV, texture(depthSampler, UV).x, ubo.invViewProj, pushConst.offset);
-	//vec3 currentPos = (ubo.view * vec4(worldPos, 1.0)).xyz;
-	//vec3 previousPos = (ubo.previousView * vec4(worldPos, 1.0)).xyz;
-	//vec3 viewVelocity = currentPos - previousPos;
-	
-	//vec2 velocity = (viewVelocity + modelVelocity).xy;
-	vec2 velocity = texture(velocitySampler, UV).xy;
+	vec2 velocity = dilate_Average(velocitySampler, UV).xy;
 	
 	if (velocity.x + velocity.y == 0.0){
-		outColor = texture(compositionSampler, UV);
+		outColor = texture(frameSampler, UV);
 		return;
 	}	
 
-	//velocity *= 0.5; // -0.5 to 0.5;
-	velocity *= pushConst.offset.zw; // floating window velocity aspect correction
-	//velocity *= texture(depthSampler, UV).x; // far pixels must not blur so much
 	velocity *= pushConst.fps.x; // fix for low and high fps giving different velocities
 	velocity *= 0.01666666; // scale the effect 1/60
-
-	ivec2 texDim = textureSize(velocitySampler, 0);
-	vec2 size = vec2(float(texDim.x), float(texDim.y));
-	float speed = length(velocity * size);
-	int samples = clamp(int(speed), 1, max_samples);
 
 	vec3 color = vec3(0.0);
 	int count = 0;
 	UV -= velocity * 0.5; // make samples centered from (UV-velocity/2) to (UV+velocity/2) instead of (UV) to (UV+velocity)
-	for (int i = 0; i < samples; i++, UV += velocity / samples)
+	for (int i = 0; i < max_samples; i++, UV += velocity / max_samples)
 	{
-		UV = clamp(UV, pushConst.offset.xy + 0.0005, pushConst.offset.xy + pushConst.offset.zw - 0.0005);
-		if (texture(compositionSampler, UV).a > 0.001) // ignore transparent samples
+		if (!is_saturated(UV))
 		{
-			color += texture(compositionSampler, UV).xyz;
+			continue;
+		}
+		if (texture(frameSampler, UV).a > 0.001) // ignore transparent samples
+		{
+			color += texture(frameSampler, UV).xyz;
 			count++;
 		}
 	}
-	outColor = vec4(color / count, texture(compositionSampler, inUV).w);
+	outColor = vec4(color / count, texture(frameSampler, inUV).w);
 }

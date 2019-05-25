@@ -18,6 +18,9 @@ bool						GUI::use_FXAA = false;
 bool						GUI::use_TAA = false;
 float						GUI::TAA_jitter_scale = 1.0f;
 float						GUI::TAA_feedback = 0.08f;
+float						GUI::TAA_sharp_strength = 1.0f;
+float						GUI::TAA_sharp_clamp = 0.35f;
+float						GUI::TAA_sharp_offset_bias = 1.0f;
 bool						GUI::show_Bloom = false;
 float						GUI::Bloom_Inv_brightness = 20.0f;
 float						GUI::Bloom_intensity = 1.5f;
@@ -25,7 +28,6 @@ float						GUI::Bloom_range = 2.5f;
 bool						GUI::use_tonemap = false;
 bool						GUI::use_compute = false;
 float						GUI::Bloom_exposure = 3.5f;
-bool						GUI::dSetNeedsUpdate = false;
 bool						GUI::show_motionBlur = false;
 bool						GUI::randomize_lights = false;
 float						GUI::lights_intensity = 2.5f;
@@ -279,7 +281,7 @@ void GUI::Models()
 	}
 }
 
-void vm::GUI::Properties()
+void GUI::Properties()
 {
 	static bool	propetries_open = true;
 	ImGui::SetNextWindowPos(ImVec2(WIDTH_f - RIGHT_PANEL_WIDTH, MENU_HEIGHT));
@@ -302,16 +304,17 @@ void vm::GUI::Properties()
 		ImGui::Indent(16.0f);
 		if (ImGui::Checkbox("FXAA", &use_FXAA)) {
 			use_TAA = false;
-			dSetNeedsUpdate = true;
 		}
 		if (ImGui::Checkbox("TAA", &use_TAA)) {
 			use_FXAA = false;
-			dSetNeedsUpdate = true;
 		}
 		if (use_TAA) {
 			ImGui::Indent(16.0f);
 			ImGui::InputFloat("Jitter", &TAA_jitter_scale, 0.01f, 0.1f, 5);
 			//ImGui::InputFloat("Feedback", &TAA_feedback, 0.01f, 0.1f, 2);
+			ImGui::InputFloat("Strength", &TAA_sharp_strength, 0.1f, 0.2f, 2);
+			ImGui::InputFloat("Clamp", &TAA_sharp_clamp, 0.01f, 0.05f, 3);
+			ImGui::InputFloat("Bias", &TAA_sharp_offset_bias, 0.1f, 0.3f, 1);
 			ImGui::Unindent(16.0f);
 		}
 		ImGui::Unindent(16.0f);
@@ -322,8 +325,7 @@ void vm::GUI::Properties()
 		use_FXAA = false;
 	}
 
-	if (ImGui::Checkbox("Bloom", &show_Bloom))
-		dSetNeedsUpdate = true;
+	ImGui::Checkbox("Bloom", &show_Bloom);
 	if (show_Bloom) {
 		ImGui::Indent(16.0f);
 		ImGui::SliderFloat("Inv Brightness", &Bloom_Inv_brightness, 0.01f, 50.f);
@@ -430,18 +432,30 @@ vk::DescriptorSetLayout GUI::getDescriptorSetLayout(vk::Device device)
 {
 	if (!descriptorSetLayout) {
 		// binding for gui texture
-		vk::DescriptorSetLayoutBinding descriptorSetLayoutBinding;
-		descriptorSetLayoutBinding.binding = 0;
-		descriptorSetLayoutBinding.descriptorCount = 1;
-		descriptorSetLayoutBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-		descriptorSetLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+		std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBindings(1);
+
+		descriptorSetLayoutBindings[0].binding = 0;
+		descriptorSetLayoutBindings[0].descriptorCount = 1;
+		descriptorSetLayoutBindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+		descriptorSetLayoutBindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
 		vk::DescriptorSetLayoutCreateInfo createInfo;
-		createInfo.bindingCount = 1;
-		createInfo.pBindings = &descriptorSetLayoutBinding;
+		createInfo.bindingCount = static_cast<uint32_t>(descriptorSetLayoutBindings.size());
+		createInfo.pBindings = descriptorSetLayoutBindings.data();
 		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
 	}
 	return descriptorSetLayout;
+}
+
+void GUI::Init()
+{
+	guiScaled.format = vulkan->surface->formatKHR.format;
+	guiScaled.initialLayout = vk::ImageLayout::eUndefined;
+	guiScaled.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	guiScaled.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
+	guiScaled.createImageView(vk::ImageAspectFlagBits::eColor);
+	guiScaled.createSampler();
 }
 
 const char* GUI::ImGui_ImplSDL2_GetClipboardText(void*)
@@ -650,9 +664,150 @@ void GUI::loadGUI(bool show)
 	//        /	|                   //     |
 	//       /  |/ +y               //     |/ v
 
-	render = show; 
+	render = show;
 
 	initImGui();
+}
+
+void GUI::scaleToRenderArea(vk::CommandBuffer cmd, uint32_t imageIndex)
+{
+	Image& target = guiScaled;
+	Image& s_chain_Image = VulkanContext::getSafe().swapchain->images[imageIndex];
+
+	// change image layouts
+	vk::ImageMemoryBarrier barrier;
+	barrier.image = guiScaled.image;
+	barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+	barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, guiScaled.mipLevels, 0, guiScaled.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+
+	barrier.image = s_chain_Image.image;
+	barrier.oldLayout = vk::ImageLayout::ePresentSrcKHR;
+	barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, s_chain_Image.mipLevels, 0, s_chain_Image.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+
+	vk::ImageBlit blit;
+	blit.srcOffsets[0] = { 0, 0, 0 };
+	blit.srcOffsets[1] = { static_cast<int32_t>(WIDTH), static_cast<int32_t>(HEIGHT), 1 };
+	blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+	blit.srcSubresource.layerCount = 1;
+	blit.dstOffsets[0] = { static_cast<int32_t>(winPos.x), static_cast<int32_t>(winPos.y), 0 };
+	blit.dstOffsets[1] = { static_cast<int32_t>(winPos.x) + static_cast<int32_t>(winSize.x), static_cast<int32_t>(winPos.y) + static_cast<int32_t>(winSize.y), 1 };
+	blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+	blit.dstSubresource.layerCount = 1;
+
+	cmd.blitImage(
+		s_chain_Image.image,
+		vk::ImageLayout::eTransferSrcOptimal,
+		guiScaled.image,
+		vk::ImageLayout::eTransferDstOptimal,
+		blit,
+		vk::Filter::eLinear
+	);
+
+	barrier.image = guiScaled.image;
+	barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+	barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, guiScaled.mipLevels, 0, guiScaled.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+
+	barrier.image = s_chain_Image.image;
+	barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+	barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, s_chain_Image.mipLevels, 0, s_chain_Image.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+
+	blit.srcOffsets[0] = { 0, 0, 0 };
+	blit.srcOffsets[1] = { static_cast<int32_t>(WIDTH), static_cast<int32_t>(HEIGHT), 1 };
+	blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+	blit.srcSubresource.layerCount = 1;
+	blit.dstOffsets[0] = { 0, 0, 0 };
+	blit.dstOffsets[1] = { static_cast<int32_t>(WIDTH), static_cast<int32_t>(HEIGHT), 1 };
+	blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+	blit.dstSubresource.layerCount = 1;
+
+	cmd.blitImage(
+		guiScaled.image,
+		vk::ImageLayout::eTransferSrcOptimal,
+		s_chain_Image.image,
+		vk::ImageLayout::eTransferDstOptimal,
+		blit,
+		vk::Filter::eLinear
+	);
+
+	barrier.image = guiScaled.image;
+	barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+	barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, guiScaled.mipLevels, 0, guiScaled.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+
+	barrier.image = s_chain_Image.image;
+	barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+	barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, s_chain_Image.mipLevels, 0, s_chain_Image.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
 }
 
 void GUI::draw(uint32_t imageIndex)
@@ -952,23 +1107,31 @@ void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout)
 	allocateInfo.pSetLayouts = &descriptorSetLayout;
 	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
-	// texture sampler
-	vk::DescriptorImageInfo dii;
-	dii.sampler = texture.sampler;
-	dii.imageView = texture.view;
-	dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+	updateDescriptorSets();
 
-	vk::WriteDescriptorSet textureWriteSet;
-	textureWriteSet.dstSet = descriptorSet;
-	textureWriteSet.dstBinding = 0;
-	textureWriteSet.dstArrayElement = 0;
-	textureWriteSet.descriptorCount = 1;
-	textureWriteSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-	textureWriteSet.pImageInfo = &dii;
-	vulkan->device.updateDescriptorSets(textureWriteSet, nullptr);
 }
 
-void vm::GUI::createRenderPass()
+void vm::GUI::updateDescriptorSets()
+{
+	// texture sampler
+	vk::DescriptorImageInfo dii0;
+	dii0.sampler = texture.sampler;
+	dii0.imageView = texture.view;
+	dii0.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+	std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
+
+	textureWriteSets[0].dstSet = descriptorSet;
+	textureWriteSets[0].dstBinding = 0;
+	textureWriteSets[0].dstArrayElement = 0;
+	textureWriteSets[0].descriptorCount = 1;
+	textureWriteSets[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+	textureWriteSets[0].pImageInfo = &dii0;
+
+	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+}
+
+void GUI::createRenderPass()
 {
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
@@ -1017,7 +1180,7 @@ void vm::GUI::createRenderPass()
 	renderPass = vulkan->device.createRenderPass(renderPassInfo);
 }
 
-void vm::GUI::createFrameBuffers()
+void GUI::createFrameBuffers()
 {
 	frameBuffers.resize(vulkan->swapchain->images.size());
 
@@ -1193,6 +1356,7 @@ void GUI::createPipeline()
 
 void GUI::destroy()
 {
+	guiScaled.destroy();
 	Object::destroy();
 	if (renderPass) {
 		vulkan->device.destroyRenderPass(renderPass);
@@ -1214,7 +1378,7 @@ void GUI::destroy()
 	}
 }
 
-void vm::GUI::update()
+void GUI::update()
 {
 	if (render)
 		newFrame();

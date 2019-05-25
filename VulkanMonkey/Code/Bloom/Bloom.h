@@ -28,8 +28,10 @@ namespace vm {
 		vk::DescriptorSetLayout DSLayoutGaussianBlurHorizontal;
 		vk::DescriptorSetLayout DSLayoutGaussianBlurVertical;
 		vk::DescriptorSetLayout DSLayoutCombine;
+		Image frameImage;
 
-		void update();
+		void Init();
+		void copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex);
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
 		void createBrightFilterRenderPass(std::map<std::string, Image>& renderTargets);
 		void createGaussianBlurRenderPass(std::map<std::string, Image>& renderTargets);

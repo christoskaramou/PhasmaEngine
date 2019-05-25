@@ -209,11 +209,9 @@
     <None Include="shaders\SSAO\ssao.frag" />
     <None Include="shaders\SSAO\ssaoBlur.frag" />
     <None Include="shaders\SSR\ssr.frag" />
-    <None Include="shaders\TAA\reprojection.glsl" />
     <None Include="shaders\TAA\TAA.frag" />
     <None Include="shaders\TAA\TAA.glsl" />
-    <None Include="shaders\Terrain\shaderTerrain.frag" />
-    <None Include="shaders\Terrain\shaderTerrain.vert" />
+    <None Include="shaders\TAA\TAASharpen.frag" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Code\Bloom\Bloom.h" />

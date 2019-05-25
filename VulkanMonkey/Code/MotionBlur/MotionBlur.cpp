@@ -3,6 +3,18 @@
 
 using namespace vm;
 
+
+void MotionBlur::Init()
+{
+	frameImage.format = vulkan->surface->formatKHR.format;
+	frameImage.initialLayout = vk::ImageLayout::eUndefined;
+	frameImage.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
+	frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
+	frameImage.createSampler();
+}
+
 void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTargets)
 {
 	UBmotionBlur.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
@@ -31,12 +43,8 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 	};
 
-	std::string comp = "composition";
-	if (((GUI::use_FXAA || GUI::use_TAA) && !GUI::show_Bloom) || (!(GUI::use_FXAA || GUI::use_TAA) && GUI::show_Bloom))
-		comp = "composition2";
-
 	std::vector<vk::WriteDescriptorSet> textureWriteSets{
-		wSetImage(DSMotionBlur, 0, renderTargets[comp]),
+		wSetImage(DSMotionBlur, 0, frameImage),
 		wSetImage(DSMotionBlur, 1, renderTargets["depth"]),
 		wSetImage(DSMotionBlur, 2, renderTargets["velocity"]),
 		wSetBuffer(DSMotionBlur, 3, UBmotionBlur)
@@ -44,7 +52,7 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
-void MotionBlur::draw(uint32_t imageIndex, const std::vector<vec2>& UVOffset)
+void MotionBlur::draw(uint32_t imageIndex)
 {
 	vk::ClearValue clearColor;
 	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -59,7 +67,7 @@ void MotionBlur::draw(uint32_t imageIndex, const std::vector<vec2>& UVOffset)
 	rpi.pClearValues = clearValues.data();
 	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-	std::vector<vec4> fps{ {1.f / Timer::delta}, {UVOffset[0].x, UVOffset[0].y, UVOffset[1].x, UVOffset[1].y} };
+	vec4 fps {1.f / Timer::delta};
 	vulkan->dynamicCmdBuffer.pushConstants<vec4>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, fps);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSMotionBlur, nullptr);
@@ -82,6 +90,7 @@ void MotionBlur::destroy()
 		vulkan->device.destroyDescriptorSetLayout(DSLayoutMotionBlur);
 		DSLayoutMotionBlur = nullptr;
 	}
+	frameImage.destroy();
 	UBmotionBlur.destroy();
 	pipeline.destroy();
 }
@@ -117,30 +126,11 @@ void vm::MotionBlur::createRenderPass()
 	subpassDescription.pColorAttachments = &colorReference;
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
-	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies(2);
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
-	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	//renderPassInfo.pDependencies = dependencies.data();
 
 	renderPass = vulkan->device.createRenderPass(renderPassInfo);
 }
@@ -299,7 +289,7 @@ void MotionBlur::createPipeline()
 	vk::PushConstantRange pConstants;
 	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
 	pConstants.offset = 0;
-	pConstants.size = 8 * sizeof(vec4);
+	pConstants.size = sizeof(vec4);
 
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
@@ -325,4 +315,94 @@ void MotionBlur::createPipeline()
 	// destroy Shader Modules
 	vulkan->device.destroyShaderModule(vertModule);
 	vulkan->device.destroyShaderModule(fragModule);
+}
+
+void MotionBlur::copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex)
+{
+	Image& s_chain_Image = VulkanContext::getSafe().swapchain->images[imageIndex];
+
+	// change image layouts for copy
+	vk::ImageMemoryBarrier barrier;
+	barrier.image = frameImage.image;
+	barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+	barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, frameImage.mipLevels, 0, frameImage.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+
+	barrier.image = s_chain_Image.image;
+	barrier.oldLayout = vk::ImageLayout::ePresentSrcKHR;
+	barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, s_chain_Image.mipLevels, 0, s_chain_Image.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+
+	// copy the image
+	vk::ImageCopy region;
+	region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+	region.srcSubresource.layerCount = 1;
+	region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+	region.dstSubresource.layerCount = 1;
+	region.extent.width = WIDTH;
+	region.extent.height = HEIGHT;
+	region.extent.depth = 1;
+
+	cmd.copyImage(
+		s_chain_Image.image,
+		vk::ImageLayout::eTransferSrcOptimal,
+		frameImage.image,
+		vk::ImageLayout::eTransferDstOptimal,
+		region
+	);
+
+	// change image layouts back to shader read
+	barrier.image = frameImage.image;
+	barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+	barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, frameImage.mipLevels, 0, frameImage.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+
+	barrier.image = s_chain_Image.image;
+	barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+	barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, s_chain_Image.mipLevels, 0, s_chain_Image.arrayLayers };
+
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
 }
