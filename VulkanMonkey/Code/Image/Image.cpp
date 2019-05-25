@@ -2,7 +2,7 @@
 
 using namespace vm;
 
-void Image::transitionImageLayout(const vk::CommandBuffer cmd, const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout, const vk::PipelineStageFlags oldStageMask, const vk::PipelineStageFlags newStageMask)
+void Image::transitionImageLayout(const vk::CommandBuffer cmd, const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout, const vk::PipelineStageFlags oldStageMask, const vk::PipelineStageFlags newStageMask, const vk::ImageAspectFlags aspectFlags)
 {
 	vk::ImageMemoryBarrier barrier;
 	barrier.image = image;
@@ -10,7 +10,10 @@ void Image::transitionImageLayout(const vk::CommandBuffer cmd, const vk::ImageLa
 	barrier.newLayout = newLayout;
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, mipLevels, 0, arrayLayers };
+	barrier.subresourceRange = { aspectFlags, 0, mipLevels, 0, arrayLayers };
+	if (format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint) {
+		barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eStencil;
+	}
 
 	cmd.pipelineBarrier(
 		oldStageMask,

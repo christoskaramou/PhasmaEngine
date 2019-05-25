@@ -74,7 +74,7 @@ void TAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void TAA::draw(uint32_t imageIndex, std::function<void(Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets)
+void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets)
 {
 	vk::ClearValue clearColor;
 	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -89,13 +89,13 @@ void TAA::draw(uint32_t imageIndex, std::function<void(Image&, LayoutState)>&& c
 	rpi.clearValueCount = 1;
 	rpi.pClearValues = clearValues.data();
 
-	changeLayout(renderTargets["taa"], LayoutState::Write);
+	changeLayout(cmd, renderTargets["taa"], LayoutState::Write);
 	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
 	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSet, nullptr);
 	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
 	vulkan->dynamicCmdBuffer.endRenderPass();
-	changeLayout(renderTargets["taa"], LayoutState::Read);
+	changeLayout(cmd, renderTargets["taa"], LayoutState::Read);
 
 
 	// TAA Sharpen pass

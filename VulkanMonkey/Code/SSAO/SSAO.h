@@ -38,7 +38,7 @@ namespace vm {
 		void createBlurPipeline(std::map<std::string, Image>& renderTargets);
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(uint32_t imageIndex, std::function<void(Image&, LayoutState)>&& changeLayout, Image& image);
+		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, Image& image);
 		void destroy();
 	};
 }

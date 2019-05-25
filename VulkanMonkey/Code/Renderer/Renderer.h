@@ -20,7 +20,7 @@ namespace vm {
 		bool prepared = false;
 
 	private:
-		void changeLayout(Image& image, LayoutState state);
+		void changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState state);
 		void checkQueue();
 		void recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ);
 		void recordDeferredCmds(const uint32_t& imageIndex);

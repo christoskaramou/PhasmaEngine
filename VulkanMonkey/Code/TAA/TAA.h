@@ -31,7 +31,7 @@ namespace vm {
 		void update(const Camera& camera);
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(uint32_t imageIndex, std::function<void(Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets);
+		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets);
 		void createRenderPass(std::map<std::string, Image>& renderTargets);
 		void createRenderPassSharpen(std::map<std::string, Image>& renderTargets);
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
