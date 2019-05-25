@@ -37,6 +37,7 @@ namespace vm {
 		vk::SamplerMipmapMode samplerMipmapMode = vk::SamplerMipmapMode::eLinear;
 		vk::PipelineColorBlendAttachmentState blentAttachment;
 
+		void transitionImageLayout(const vk::CommandBuffer cmd, const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout, const vk::PipelineStageFlags oldStageMask, const vk::PipelineStageFlags newStageMask);
 		void createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1);
 		void createImageView(const vk::ImageAspectFlags aspectFlags);
 		void transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout);

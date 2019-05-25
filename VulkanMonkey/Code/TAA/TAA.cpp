@@ -538,39 +538,18 @@ void TAA::copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex)
 {
 	Image& s_chain_Image = VulkanContext::getSafe().swapchain->images[imageIndex];
 
-	// change image layouts for copy
-	vk::ImageMemoryBarrier barrier;
-	barrier.image = frameImage.image;
-	barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-	barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, frameImage.mipLevels, 0, frameImage.arrayLayers };
-
-	cmd.pipelineBarrier(
+	frameImage.transitionImageLayout(
+		cmd,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::ImageLayout::eTransferDstOptimal,
 		vk::PipelineStageFlagBits::eFragmentShader,
-		vk::PipelineStageFlagBits::eTransfer,
-		vk::DependencyFlagBits::eByRegion,
-		nullptr,
-		nullptr,
-		barrier
-	);
-
-	barrier.image = s_chain_Image.image;
-	barrier.oldLayout = vk::ImageLayout::ePresentSrcKHR;
-	barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, s_chain_Image.mipLevels, 0, s_chain_Image.arrayLayers };
-
-	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer);
+	s_chain_Image.transitionImageLayout(
+		cmd,
+		vk::ImageLayout::ePresentSrcKHR,
+		vk::ImageLayout::eTransferSrcOptimal,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput,
-		vk::PipelineStageFlagBits::eTransfer,
-		vk::DependencyFlagBits::eByRegion,
-		nullptr,
-		nullptr,
-		barrier
-	);
+		vk::PipelineStageFlagBits::eTransfer);
 
 	// copy the image
 	vk::ImageCopy region;
@@ -587,78 +566,36 @@ void TAA::copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex)
 		vk::ImageLayout::eTransferSrcOptimal,
 		frameImage.image,
 		vk::ImageLayout::eTransferDstOptimal,
-		region
-	);
+		region);
 
-	// change image layouts back to shader read
-	barrier.image = frameImage.image;
-	barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-	barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, frameImage.mipLevels, 0, frameImage.arrayLayers };
-
-	cmd.pipelineBarrier(
+	frameImage.transitionImageLayout(
+		cmd,
+		vk::ImageLayout::eTransferDstOptimal,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eFragmentShader,
-		vk::DependencyFlagBits::eByRegion,
-		nullptr,
-		nullptr,
-		barrier
-	);
-
-	barrier.image = s_chain_Image.image;
-	barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
-	barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, s_chain_Image.mipLevels, 0, s_chain_Image.arrayLayers };
-
-	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eFragmentShader);
+	s_chain_Image.transitionImageLayout(
+		cmd,
+		vk::ImageLayout::eTransferSrcOptimal,
+		vk::ImageLayout::ePresentSrcKHR,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eColorAttachmentOutput,
-		vk::DependencyFlagBits::eByRegion,
-		nullptr,
-		nullptr,
-		barrier
-	);
+		vk::PipelineStageFlagBits::eColorAttachmentOutput);
 }
 
 void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source)
 {
-	// change image layouts for copy
-	vk::ImageMemoryBarrier barrier;
-	barrier.image = previous.image;
-	barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-	barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, previous.mipLevels, 0, previous.arrayLayers };
-
-	cmd.pipelineBarrier(
+	previous.transitionImageLayout(
+		cmd,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::ImageLayout::eTransferDstOptimal,
 		vk::PipelineStageFlagBits::eFragmentShader,
-		vk::PipelineStageFlagBits::eTransfer,
-		vk::DependencyFlagBits::eByRegion,
-		nullptr,
-		nullptr,
-		barrier
-	);
-
-	barrier.image = source.image;
-	barrier.oldLayout = source.layoutState == LayoutState::Read ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eColorAttachmentOptimal;
-	barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, source.mipLevels, 0, source.arrayLayers };
-
-	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer);
+	source.transitionImageLayout(
+		cmd,
+		source.layoutState == LayoutState::Read ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eColorAttachmentOptimal,
+		vk::ImageLayout::eTransferSrcOptimal,
 		source.layoutState == LayoutState::Read ? vk::PipelineStageFlagBits::eFragmentShader : vk::PipelineStageFlagBits::eColorAttachmentOutput,
-		vk::PipelineStageFlagBits::eTransfer,
-		vk::DependencyFlagBits::eByRegion,
-		nullptr,
-		nullptr,
-		barrier
-	);
+		vk::PipelineStageFlagBits::eTransfer);
 
 	// copy the image
 	vk::ImageCopy region;
@@ -678,38 +615,18 @@ void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source)
 		region
 	);
 
-	// change image layouts back to shader read
-	barrier.image = previous.image;
-	barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-	barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, previous.mipLevels, 0, previous.arrayLayers };
-
-	cmd.pipelineBarrier(
+	previous.transitionImageLayout(
+		cmd,
+		vk::ImageLayout::eTransferDstOptimal,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eFragmentShader,
-		vk::DependencyFlagBits::eByRegion,
-		nullptr,
-		nullptr,
-		barrier
-	);
-
-	barrier.image = source.image;
-	barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
-	barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, source.mipLevels, 0, source.arrayLayers };
-
-	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eFragmentShader);
+	source.transitionImageLayout(
+		cmd,
+		vk::ImageLayout::eTransferSrcOptimal,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eFragmentShader,
-		vk::DependencyFlagBits::eByRegion,
-		nullptr,
-		nullptr,
-		barrier
-	);
+		vk::PipelineStageFlagBits::eFragmentShader);
 	source.layoutState = LayoutState::Read;
 }
 

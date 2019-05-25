@@ -2,6 +2,26 @@
 
 using namespace vm;
 
+void Image::transitionImageLayout(const vk::CommandBuffer cmd, const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout, const vk::PipelineStageFlags oldStageMask, const vk::PipelineStageFlags newStageMask)
+{
+	vk::ImageMemoryBarrier barrier;
+	barrier.image = image;
+	barrier.oldLayout = oldLayout;
+	barrier.newLayout = newLayout;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, mipLevels, 0, arrayLayers };
+
+	cmd.pipelineBarrier(
+		oldStageMask,
+		newStageMask,
+		vk::DependencyFlagBits::eByRegion,
+		nullptr,
+		nullptr,
+		barrier
+	);
+}
+
 void Image::createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples)
 {
 	vk::ImageCreateInfo imageInfo;
