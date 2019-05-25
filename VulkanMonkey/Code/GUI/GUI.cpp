@@ -748,7 +748,7 @@ void GUI::scaleToRenderArea(vk::CommandBuffer cmd, uint32_t imageIndex)
 		vk::PipelineStageFlagBits::eColorAttachmentOutput);
 }
 
-void GUI::draw(uint32_t imageIndex)
+void GUI::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
 {
 	if (!render) return;
 
@@ -770,8 +770,6 @@ void GUI::draw(uint32_t imageIndex)
 		rpi.renderArea = { { 0, 0 }, VulkanContext::get().surface->actualExtent };
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		rpi.pClearValues = clearValues.data();
-
-		const auto& cmd = vulkan->dynamicCmdBuffer;
 
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 

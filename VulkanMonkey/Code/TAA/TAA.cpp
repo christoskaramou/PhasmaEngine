@@ -90,11 +90,11 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 	rpi.pClearValues = clearValues.data();
 
 	changeLayout(cmd, renderTargets["taa"], LayoutState::Write);
-	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSet, nullptr);
-	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
-	vulkan->dynamicCmdBuffer.endRenderPass();
+	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSet, nullptr);
+	cmd.draw(3, 1, 0, 0);
+	cmd.endRenderPass();
 	changeLayout(cmd, renderTargets["taa"], LayoutState::Read);
 
 
@@ -106,11 +106,11 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 	rpi2.clearValueCount = 1;
 	rpi2.pClearValues = clearValues.data();
 
-	vulkan->dynamicCmdBuffer.beginRenderPass(rpi2, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineSharpen.pipeline);
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineSharpen.pipeinfo.layout, 0, DSetSharpen, nullptr);
-	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
-	vulkan->dynamicCmdBuffer.endRenderPass();
+	cmd.beginRenderPass(rpi2, vk::SubpassContents::eInline);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineSharpen.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineSharpen.pipeinfo.layout, 0, DSetSharpen, nullptr);
+	cmd.draw(3, 1, 0, 0);
+	cmd.endRenderPass();
 }
 
 void TAA::createRenderPass(std::map<std::string, Image>& renderTargets)

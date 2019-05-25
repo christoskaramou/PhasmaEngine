@@ -295,46 +295,46 @@ void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImage
 	rpi.pClearValues = clearValues.data();
 
 	changeLayout(cmd, renderTargets["brightFilter"], LayoutState::Write);
-	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.pushConstants<float>(pipelineBrightFilter.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
-	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeline);
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo.layout, 0, DSBrightFilter, nullptr);
-	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
-	vulkan->dynamicCmdBuffer.endRenderPass();
+	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
+	cmd.pushConstants<float>(pipelineBrightFilter.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo.layout, 0, DSBrightFilter, nullptr);
+	cmd.draw(3, 1, 0, 0);
+	cmd.endRenderPass();
 	changeLayout(cmd, renderTargets["brightFilter"], LayoutState::Read);
 
 	rpi.renderPass = renderPassGaussianBlur;
 	rpi.framebuffer = frameBuffers[(size_t)totalImages + (size_t)imageIndex];
 
 	changeLayout(cmd, renderTargets["gaussianBlurHorizontal"], LayoutState::Write);
-	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.pushConstants<float>(pipelineGaussianBlurHorizontal.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
-	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurHorizontal.pipeline);
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo.layout, 0, DSGaussianBlurHorizontal, nullptr);
-	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
-	vulkan->dynamicCmdBuffer.endRenderPass();
+	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
+	cmd.pushConstants<float>(pipelineGaussianBlurHorizontal.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurHorizontal.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo.layout, 0, DSGaussianBlurHorizontal, nullptr);
+	cmd.draw(3, 1, 0, 0);
+	cmd.endRenderPass();
 	changeLayout(cmd, renderTargets["gaussianBlurHorizontal"], LayoutState::Read);
 
 	rpi.framebuffer = frameBuffers[(size_t)totalImages * 2 + (size_t)imageIndex];
 
 	changeLayout(cmd, renderTargets["gaussianBlurVertical"], LayoutState::Write);
-	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.pushConstants<float>(pipelineGaussianBlurVertical.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
-	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurVertical.pipeline);
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurVertical.pipeinfo.layout, 0, DSGaussianBlurVertical, nullptr);
-	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
-	vulkan->dynamicCmdBuffer.endRenderPass();
+	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
+	cmd.pushConstants<float>(pipelineGaussianBlurVertical.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurVertical.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurVertical.pipeinfo.layout, 0, DSGaussianBlurVertical, nullptr);
+	cmd.draw(3, 1, 0, 0);
+	cmd.endRenderPass();
 	changeLayout(cmd, renderTargets["gaussianBlurVertical"], LayoutState::Read);
 
 	rpi.renderPass = renderPassCombine;
 	rpi.framebuffer = frameBuffers[(size_t)totalImages * 3 + (size_t)imageIndex];
 
-	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.pushConstants<float>(pipelineCombine.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
-	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeline);
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeinfo.layout, 0, DSCombine, nullptr);
-	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
-	vulkan->dynamicCmdBuffer.endRenderPass();
+	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
+	cmd.pushConstants<float>(pipelineCombine.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeinfo.layout, 0, DSCombine, nullptr);
+	cmd.draw(3, 1, 0, 0);
+	cmd.endRenderPass();
 }
 
 void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTargets)

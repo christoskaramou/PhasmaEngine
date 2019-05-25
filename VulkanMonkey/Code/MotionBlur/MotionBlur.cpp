@@ -52,7 +52,7 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
-void MotionBlur::draw(uint32_t imageIndex)
+void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
 {
 	vk::ClearValue clearColor;
 	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -65,14 +65,14 @@ void MotionBlur::draw(uint32_t imageIndex)
 	rpi.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
 	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	rpi.pClearValues = clearValues.data();
-	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
+	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 	vec4 fps {1.f / Timer::delta};
-	vulkan->dynamicCmdBuffer.pushConstants<vec4>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, fps);
-	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSMotionBlur, nullptr);
-	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
-	vulkan->dynamicCmdBuffer.endRenderPass();
+	cmd.pushConstants<vec4>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, fps);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSMotionBlur, nullptr);
+	cmd.draw(3, 1, 0, 0);
+	cmd.endRenderPass();
 }
 
 void MotionBlur::destroy()

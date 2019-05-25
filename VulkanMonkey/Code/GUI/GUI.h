@@ -94,7 +94,7 @@ namespace vm {
 		void update();
 		void loadGUI(bool show = true);
 		void scaleToRenderArea(vk::CommandBuffer cmd, uint32_t imageIndex);
-		void draw(uint32_t imageIndex);
+		void draw(vk::CommandBuffer cmd, uint32_t imageIndex);
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();
 		void LeftPanel();

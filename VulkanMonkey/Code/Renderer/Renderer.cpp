@@ -269,7 +269,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	// MODELS
 	ctx.metrics[2].start(cmd);
-	ctx.deferred.batchStart(imageIndex);
+	ctx.deferred.batchStart(cmd, imageIndex);
 	for (uint32_t m = 0; m < Model::models.size(); m++)
 		Model::models[m].draw();
 	ctx.deferred.batchEnd();
@@ -301,14 +301,14 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	if (GUI::show_ssr) {
 		ctx.metrics[4].start(cmd);
 		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::Write);
-		ctx.ssr.draw(imageIndex);
+		ctx.ssr.draw(cmd, imageIndex);
 		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::Read);
 		ctx.metrics[4].end(&GUI::metrics[4]);
 	}
 	
 	// COMPOSITION
 	ctx.metrics[5].start(cmd);
-	ctx.deferred.draw(imageIndex, ctx.shadows, skybox, ctx.camera_main.invViewProjection);
+	ctx.deferred.draw(cmd, imageIndex, ctx.shadows, skybox, ctx.camera_main.invViewProjection);
 	ctx.metrics[5].end(&GUI::metrics[5]);
 	
 	if (GUI::use_AntiAliasing) {
@@ -325,7 +325,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		else if (GUI::use_FXAA) {
 			ctx.metrics[6].start(cmd);
 			ctx.fxaa.copyFrameImage(cmd, imageIndex);
-			ctx.fxaa.draw(imageIndex);
+			ctx.fxaa.draw(cmd, imageIndex);
 			ctx.metrics[6].end(&GUI::metrics[6]);
 		}
 	}
@@ -343,7 +343,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	if (GUI::show_motionBlur) {
 		ctx.metrics[8].start(cmd);
 		ctx.motionBlur.copyFrameImage(cmd, imageIndex);
-		ctx.motionBlur.draw(imageIndex);
+		ctx.motionBlur.draw(cmd, imageIndex);
 		ctx.metrics[8].end(&GUI::metrics[8]);
 	}
 	

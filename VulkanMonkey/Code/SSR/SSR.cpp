@@ -57,7 +57,7 @@ void SSR::update(Camera& camera)
 }
 
 
-void SSR::draw(uint32_t imageIndex)
+void SSR::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
 {
 	vk::ClearValue clearColor;
 	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -71,11 +71,11 @@ void SSR::draw(uint32_t imageIndex)
 	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	renderPassInfo.pClearValues = clearValues.data();
 
-	vulkan->dynamicCmdBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
-	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSReflection, nullptr);
-	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
-	vulkan->dynamicCmdBuffer.endRenderPass();
+	cmd.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSReflection, nullptr);
+	cmd.draw(3, 1, 0, 0);
+	cmd.endRenderPass();
 }
 
 void vm::SSR::createRenderPass(std::map<std::string, Image>& renderTargets)

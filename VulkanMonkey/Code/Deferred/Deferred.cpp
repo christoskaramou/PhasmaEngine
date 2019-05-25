@@ -3,7 +3,7 @@
 
 using namespace vm;
 
-void Deferred::batchStart(uint32_t imageIndex)
+void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex)
 {
 	vk::ClearValue clearColor;
 	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -21,13 +21,16 @@ void Deferred::batchStart(uint32_t imageIndex)
 	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	rpi.pClearValues = clearValues.data();
 
-	VulkanContext::get().dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
+	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
+
+	Model::commandBuffer = &cmd;
 	Model::pipeline = &pipeline;
 }
 
 void Deferred::batchEnd()
 {
-	vulkan->dynamicCmdBuffer.endRenderPass();
+	Model::commandBuffer->endRenderPass();
+	Model::commandBuffer = nullptr;
 	Model::pipeline = nullptr;
 }
 
@@ -70,7 +73,7 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void Deferred::draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj)
+void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj)
 {
 	// Begin Composition
 	vk::ClearValue clearColor;
@@ -84,7 +87,7 @@ void Deferred::draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4&
 	rpi.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
 	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	rpi.pClearValues = clearValues.data();
-	vulkan->dynamicCmdBuffer.beginRenderPass(rpi, vk::SubpassContents::eInline);
+	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 	std::vector<vec4> screenSpace(7);
 	screenSpace[0] = { GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, GUI::show_tonemapping ? 1.f : 0.f, GUI::use_AntiAliasing ? 1.f : 0.f };
@@ -95,11 +98,11 @@ void Deferred::draw(uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4&
 	screenSpace[5] = { invViewProj[3] };
 	screenSpace[6] = { GUI::exposure, GUI::lights_intensity, GUI::lights_range, 0.f };
 
-	vulkan->dynamicCmdBuffer.pushConstants<vec4>(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, screenSpace);
-	vulkan->dynamicCmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline);
-	vulkan->dynamicCmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo.layout, 0, { DSComposition, shadows.descriptorSets[0], shadows.descriptorSets[1], shadows.descriptorSets[2], skybox.descriptorSet }, nullptr);
-	vulkan->dynamicCmdBuffer.draw(3, 1, 0, 0);
-	vulkan->dynamicCmdBuffer.endRenderPass();
+	cmd.pushConstants<vec4>(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, screenSpace);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo.layout, 0, { DSComposition, shadows.descriptorSets[0], shadows.descriptorSets[1], shadows.descriptorSets[2], skybox.descriptorSet }, nullptr);
+	cmd.draw(3, 1, 0, 0);
+	cmd.endRenderPass();
 	// End Composition
 }
 

@@ -34,7 +34,7 @@ namespace vm {
 		void copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex);
 		void createMotionBlurUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(uint32_t imageIndex);
+		void draw(vk::CommandBuffer cmd, uint32_t imageIndex);
 		void destroy();
 	};
 }

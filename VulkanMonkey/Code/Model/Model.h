@@ -29,6 +29,7 @@ namespace vm {
 
 		static std::vector<Model> models;
 		static Pipeline* pipeline;
+		static vk::CommandBuffer* commandBuffer;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout();
 		vk::DescriptorSet descriptorSet;
