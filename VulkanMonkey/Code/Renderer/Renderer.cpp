@@ -362,7 +362,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	// GUI
 	ctx.metrics[9].start(cmd);
 	ctx.gui.scaleToRenderArea(cmd, imageIndex);
-	ctx.gui.draw(imageIndex);
+	ctx.gui.draw(cmd, imageIndex);
 	ctx.metrics[9].end(&GUI::metrics[9]);
 
 	ctx.metrics[0].end(&GUI::metrics[0]);
