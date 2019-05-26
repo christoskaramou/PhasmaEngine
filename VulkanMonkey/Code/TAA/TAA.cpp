@@ -1,4 +1,5 @@
 #include "TAA.h"
+#include "../Timer/Timer.h"
 #include <deque>
 
 using namespace vm;
@@ -10,7 +11,7 @@ void TAA::Init()
 	previous.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	previous.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
-	previous.createImageView(vk::ImageAspectFlagBits::eColor);
+	previous.createImageView(vk::ImageAspectFlagBits::eColor, vulkan->surface->formatKHR.format == vk::Format::eB8G8R8A8Unorm);
 	previous.createSampler();
 
 	frameImage.format = vulkan->surface->formatKHR.format;
@@ -25,7 +26,8 @@ void TAA::Init()
 void TAA::update(const Camera& camera)
 {
 	if (GUI::use_TAA) {
-		ubo.sharpenValues = { GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias , 0.0f };
+		ubo.values = { camera.projOffset.x, camera.projOffset.y, sin(Timer::getTotalTime() * 0.125f), GUI::TAA_feedback_min };
+		ubo.sharpenValues = { GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias , GUI::TAA_feedback_max };
 		memcpy(uniform.data, &ubo, sizeof(ubo));
 	}
 }
@@ -66,7 +68,7 @@ void TAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 		wSetImage(DSet, 1, frameImage),
 		wSetImage(DSet, 2, renderTargets["depth"]),
 		wSetImage(DSet, 3, renderTargets["velocity"]),
-		//wSetBuffer(DSet, 4, uniform),
+		wSetBuffer(DSet, 4, uniform),
 		wSetImage(DSetSharpen, 0, renderTargets["taa"]),
 		wSetBuffer(DSetSharpen, 1, uniform)
 	};
@@ -97,6 +99,7 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 	cmd.endRenderPass();
 	changeLayout(cmd, renderTargets["taa"], LayoutState::Read);
 
+	saveImage(cmd, renderTargets["taa"]);
 
 	// TAA Sharpen pass
 	vk::RenderPassBeginInfo rpi2;
@@ -340,7 +343,7 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 			layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
 			layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
 			layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
-			//layoutBinding(4, vk::DescriptorType::eUniformBuffer)
+			layoutBinding(4, vk::DescriptorType::eUniformBuffer)
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());

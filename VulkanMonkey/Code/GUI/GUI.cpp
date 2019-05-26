@@ -17,7 +17,8 @@ bool						GUI::use_AntiAliasing = true;
 bool						GUI::use_FXAA = false;
 bool						GUI::use_TAA = false;
 float						GUI::TAA_jitter_scale = 1.0f;
-float						GUI::TAA_feedback = 0.08f;
+float						GUI::TAA_feedback_min = 0.01f;
+float						GUI::TAA_feedback_max = 0.2f;
 float						GUI::TAA_sharp_strength = 1.0f;
 float						GUI::TAA_sharp_clamp = 0.35f;
 float						GUI::TAA_sharp_offset_bias = 1.0f;
@@ -311,7 +312,8 @@ void GUI::Properties()
 		if (use_TAA) {
 			ImGui::Indent(16.0f);
 			ImGui::InputFloat("Jitter", &TAA_jitter_scale, 0.01f, 0.1f, 5);
-			//ImGui::InputFloat("Feedback", &TAA_feedback, 0.01f, 0.1f, 2);
+			ImGui::InputFloat("FeedbackMin", &TAA_feedback_min, 0.01f, 0.1f, 2);
+			ImGui::InputFloat("FeedbackMax", &TAA_feedback_max, 0.01f, 0.1f, 2);
 			ImGui::InputFloat("Strength", &TAA_sharp_strength, 0.1f, 0.2f, 2);
 			ImGui::InputFloat("Clamp", &TAA_sharp_clamp, 0.01f, 0.05f, 3);
 			ImGui::InputFloat("Bias", &TAA_sharp_offset_bias, 0.1f, 0.3f, 1);

@@ -14,6 +14,7 @@ namespace vm {
 		unsigned getFPS();
 		bool intervalsOf(float seconds);
 		void minFrameTime(float seconds);
+		static float getTotalTime();
 		static float delta;
 		static std::chrono::high_resolution_clock::time_point frameStart;
 		static float noWaitDelta;

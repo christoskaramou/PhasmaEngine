@@ -12,7 +12,7 @@ using namespace Microsoft;
 vk::DescriptorSetLayout Model::descriptorSetLayout = nullptr;
 std::vector<Model> Model::models{};
 Pipeline* Model::pipeline = nullptr;
-vk::CommandBuffer* Model::commandBuffer = nullptr;
+vk::CommandBuffer Model::commandBuffer = nullptr;
 
 bool endsWith(const std::string &mainStr, const std::string &toMatch)
 {
@@ -429,7 +429,7 @@ void Model::draw()
 {
 	if (!render || !Model::pipeline) return;
 
-	auto& cmd = *Model::commandBuffer;
+	auto& cmd = Model::commandBuffer;
 	const vk::DeviceSize offset{ 0 };
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeline);
 	cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);

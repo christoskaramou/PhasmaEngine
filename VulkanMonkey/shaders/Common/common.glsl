@@ -2,6 +2,26 @@
 #define COMMON_H_
 
 #define PI 3.1415926535897932384626433832795
+#define FLT_EPS 0.00000001
+
+#define saturate(x) clamp(x, 0.0, 1.0)
+#define length2(x) dot(x, x)
+#define lerp(x, y, a) mix(x, y, a)
+#define frac(x) fract(x)
+#define float2 vec2
+#define float3 vec3
+#define float4 vec4
+#define int2 ivec2
+#define int3 ivec3
+#define int4 ivec4
+
+bool is_saturated(float x) 	{ return x == saturate(x); }
+bool is_saturated(vec2 x) { return is_saturated(x.x) && is_saturated(x.y); }
+
+vec4 bgra2rgba(vec4 col)
+{
+	return col.bgra;
+}
 
 vec3 getPosFromUV(vec2 UV, float depth, mat4 mat)
 {
@@ -72,16 +92,6 @@ vec3 dilate_Depth3X3(sampler2D samplerVelocity, sampler2D samplerDepth, vec2 tex
 	return texture(samplerVelocity, closestTexCoord).xyz;
 }
 
-vec3 Reinhard(vec3 color)
-{
-	return color / (1.0 + color);
-}
-
-vec3 ReinhardInverse(vec3 color)
-{
-	return -color / (color - 1.0);
-}
-
 vec3 sharpenSimple(sampler2D tex, vec2 UV)
 {
 	ivec2 texDim = textureSize(tex, 0);
@@ -136,7 +146,7 @@ vec3 LumaSharpen(sampler2D tex, vec2 UV, float sharp_strength, float sharp_clamp
 	float py = pixelSize.y;
 
 	vec3 blur_ori = texture(tex, UV + vec2(+px, -py) * 0.5f * offset_bias).rgb; // South East
-	blur_ori +=		texture(tex, UV + vec2(-px, -py) * 0.5f * offset_bias).rgb;  // South West
+	blur_ori +=		texture(tex, UV + vec2(-px, -py) * 0.5f * offset_bias).rgb; // South West
 	blur_ori +=		texture(tex, UV + vec2(+px, +py) * 0.5f * offset_bias).rgb; // North East
 	blur_ori +=		texture(tex, UV + vec2(-px, +py) * 0.5f * offset_bias).rgb; // North West
 	blur_ori *= 0.25f;  // ( /= 4) Divide by the number of texture fetches
@@ -154,11 +164,5 @@ vec3 LumaSharpen(sampler2D tex, vec2 UV, float sharp_strength, float sharp_clamp
 	colorInput.rgb = colorInput.rgb + sharp_luma;    // Add the sharpening to the input color.
 	return clamp(colorInput, 0.0f, 1.0f).rgb;
 }
-
-bool is_saturated(float x) 	{ return x == clamp(x, 0.0, 1.0); }
-bool is_saturated(vec2 x) { return is_saturated(x.x) && is_saturated(x.y); }
-
-float length2(vec2 x) { return dot(x, x); }
-float length2(vec3 x) { return dot(x, x); }
 
 #endif

@@ -31,7 +31,8 @@ namespace vm {
 		static bool			use_FXAA;
 		static bool			use_TAA;
 		static float		TAA_jitter_scale;
-		static float		TAA_feedback;
+		static float		TAA_feedback_min;
+		static float		TAA_feedback_max;
 		static float		TAA_sharp_strength;
 		static float		TAA_sharp_clamp;
 		static float		TAA_sharp_offset_bias;

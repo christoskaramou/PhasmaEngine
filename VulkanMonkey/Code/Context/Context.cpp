@@ -39,17 +39,17 @@ void Context::initRendering()
 {
 	addRenderTarget("depth", vk::Format::eR32Sfloat);
 	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
-	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
+	addRenderTarget("albedo", vulkan.surface->formatKHR.format);
+	addRenderTarget("srm", vulkan.surface->formatKHR.format); // Specular Roughness Metallic
 	addRenderTarget("ssao", vk::Format::eR16Unorm);
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
-	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("ssr", vulkan.surface->formatKHR.format);
 	addRenderTarget("velocity", vk::Format::eR16G16Sfloat);
-	addRenderTarget("brightFilter", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("gaussianBlurHorizontal", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("gaussianBlurVertical", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("emissive", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("taa", vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eTransferSrc);
+	addRenderTarget("brightFilter", vulkan.surface->formatKHR.format);
+	addRenderTarget("gaussianBlurHorizontal", vulkan.surface->formatKHR.format);
+	addRenderTarget("gaussianBlurVertical", vulkan.surface->formatKHR.format);
+	addRenderTarget("emissive", vulkan.surface->formatKHR.format);
+	addRenderTarget("taa", vulkan.surface->formatKHR.format, vk::ImageUsageFlagBits::eTransferSrc);
 
 	taa.Init();
 	bloom.Init();
@@ -282,17 +282,17 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 
 	addRenderTarget("depth", vk::Format::eR32Sfloat);
 	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
-	addRenderTarget("albedo", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("srm", vk::Format::eR8G8B8A8Unorm); // Specular Roughness Metallic
+	addRenderTarget("albedo", vulkan.surface->formatKHR.format);
+	addRenderTarget("srm", vulkan.surface->formatKHR.format); // Specular Roughness Metallic
 	addRenderTarget("ssao", vk::Format::eR16Unorm);
 	addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
-	addRenderTarget("ssr", vk::Format::eR8G8B8A8Unorm);
+	addRenderTarget("ssr", vulkan.surface->formatKHR.format);
 	addRenderTarget("velocity", vk::Format::eR16G16Sfloat);
-	addRenderTarget("brightFilter", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("gaussianBlurHorizontal", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("gaussianBlurVertical", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("emissive", vk::Format::eR8G8B8A8Unorm);
-	addRenderTarget("taa", vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eTransferSrc);
+	addRenderTarget("brightFilter", vulkan.surface->formatKHR.format);
+	addRenderTarget("gaussianBlurHorizontal", vulkan.surface->formatKHR.format);
+	addRenderTarget("gaussianBlurVertical", vulkan.surface->formatKHR.format);
+	addRenderTarget("emissive", vulkan.surface->formatKHR.format);
+	addRenderTarget("taa", vulkan.surface->formatKHR.format, vk::ImageUsageFlagBits::eTransferSrc);
 
 	deferred.createRenderPasses(renderTargets);
 	deferred.createFrameBuffers(renderTargets);
@@ -593,7 +593,7 @@ vk::SurfaceFormatKHR Context::getSurfaceFormat()
 		if (i.format == vk::Format::eB8G8R8A8Unorm && i.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
 			format = i;
 	}
-
+	
 	// Check for blit operation
 	auto fProps = vulkan.gpu.getFormatProperties(format.format);
 	if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eBlitSrc) ||

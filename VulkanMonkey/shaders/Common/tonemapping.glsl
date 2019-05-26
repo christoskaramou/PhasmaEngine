@@ -8,6 +8,18 @@ vec3 SRGBtoLINEAR(vec3 srgbIn)
 	return linOut;
 }
 
+vec3 Reinhard(vec3 hdr)
+{
+	float k = 1.0;
+	return hdr / (hdr + k);
+}
+
+vec3 ReinhardInverse(vec3 sdr)
+{
+	float k = 1.0;
+	return k * sdr / (k - sdr);
+}
+
 vec3 ToneMapReinhard(vec3 color, float exposure)
 {
 	return vec3(1.0) - exp(-color * exposure);

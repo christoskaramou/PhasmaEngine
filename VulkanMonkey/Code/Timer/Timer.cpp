@@ -47,6 +47,11 @@ float Timer::getDelta(float timeScale)
     return delta * timeScale;
 }
 
+float Timer::getTotalTime()
+{
+	return totalTime;
+}
+
 unsigned Timer::getFPS()
 {
 	float sum = 0.f;

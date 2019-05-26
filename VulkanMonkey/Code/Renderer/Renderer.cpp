@@ -318,7 +318,6 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 			ctx.taa.copyFrameImage(cmd, imageIndex);
 			const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 			ctx.taa.draw(cmd, imageIndex, changeLayoutFunc, ctx.renderTargets);
-			ctx.taa.saveImage(cmd, ctx.renderTargets["taa"]);
 			ctx.metrics[6].end(&GUI::metrics[6]);
 		}
 		// FXAA

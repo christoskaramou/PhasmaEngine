@@ -23,13 +23,13 @@ void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex)
 
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-	Model::commandBuffer = &cmd;
+	Model::commandBuffer = cmd;
 	Model::pipeline = &pipeline;
 }
 
 void Deferred::batchEnd()
 {
-	Model::commandBuffer->endRenderPass();
+	Model::commandBuffer.endRenderPass();
 	Model::commandBuffer = nullptr;
 	Model::pipeline = nullptr;
 }
