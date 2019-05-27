@@ -44,6 +44,7 @@ namespace vm {
 		static bool			use_compute;
 		static float		Bloom_exposure;
 		static bool			show_motionBlur;
+		static float		motionBlur_strength;
 		static bool			randomize_lights;
 		static float		lights_intensity;
 		static float		lights_range;

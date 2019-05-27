@@ -30,6 +30,7 @@ bool						GUI::use_tonemap = false;
 bool						GUI::use_compute = false;
 float						GUI::Bloom_exposure = 3.5f;
 bool						GUI::show_motionBlur = false;
+float						GUI::motionBlur_strength = 1.0f;
 bool						GUI::randomize_lights = false;
 float						GUI::lights_intensity = 2.5f;
 float						GUI::lights_range = 7.0f;
@@ -292,6 +293,12 @@ void GUI::Properties()
 	ImGui::Checkbox("SSR", &show_ssr);
 	ImGui::Checkbox("SSAO", &show_ssao);
 	ImGui::Checkbox("Motion Blur", &show_motionBlur);
+	if (show_motionBlur) {
+		ImGui::Indent(16.0f);
+		ImGui::InputFloat("Strength#mb", &motionBlur_strength, 0.05f, 0.2f);
+		ImGui::Unindent(16.0f);
+		ImGui::Separator(); ImGui::Separator();
+	}
 	ImGui::Checkbox("Tone Mapping", &show_tonemapping);
 	//ImGui::Checkbox("Compute shaders", &use_compute);
 	if (show_tonemapping) {

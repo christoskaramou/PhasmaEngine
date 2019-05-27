@@ -3,9 +3,10 @@
 
 #define PI 3.1415926535897932384626433832795
 #define FLT_EPS 0.00000001
-
-#define saturate(x) clamp(x, 0.0, 1.0)
 #define length2(x) dot(x, x)
+
+// some hlsl to glsl mapping
+#define saturate(x) clamp(x, 0.0, 1.0)
 #define lerp(x, y, a) mix(x, y, a)
 #define frac(x) fract(x)
 #define float2 vec2
@@ -18,11 +19,22 @@
 bool is_saturated(float x) 	{ return x == saturate(x); }
 bool is_saturated(vec2 x) { return is_saturated(x.x) && is_saturated(x.y); }
 
-vec4 bgra2rgba(vec4 col)
+// [0.0, 1.0]
+float PDnrand(vec2 n)
 {
-	return col.bgra;
+	return frac(sin(dot(n.xy, vec2(12.9898f, 78.233f)))* 43758.5453f );
 }
 
+// [-1.0, 1.0]
+float PDsrand(vec2 n)
+{
+	return PDnrand(n) * 2.0 - 1.0;
+}
+
+
+// inverse_projection gives view space
+// inverse_view_projection gives world space
+// depth is the gl_FragCoord.z
 vec3 getPosFromUV(vec2 UV, float depth, mat4 mat)
 {
 	vec4 ndcPos;

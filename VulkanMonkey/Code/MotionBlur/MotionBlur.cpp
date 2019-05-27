@@ -1,5 +1,6 @@
 #include "MotionBlur.h"
 #include <deque>
+#include "../Timer/Timer.h"
 
 using namespace vm;
 
@@ -67,8 +68,8 @@ void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
 	rpi.pClearValues = clearValues.data();
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-	vec4 fps {1.f / Timer::delta};
-	cmd.pushConstants<vec4>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, fps);
+	vec4 values {1.f / Timer::delta, sin(Timer::getTotalTime() * 0.125f), GUI::motionBlur_strength, 0.f };
+	cmd.pushConstants<vec4>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSMotionBlur, nullptr);
 	cmd.draw(3, 1, 0, 0);

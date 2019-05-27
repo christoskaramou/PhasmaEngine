@@ -28,6 +28,7 @@ void TAA::update(const Camera& camera)
 	if (GUI::use_TAA) {
 		ubo.values = { camera.projOffset.x, camera.projOffset.y, GUI::TAA_feedback_min, GUI::TAA_feedback_max };
 		ubo.sharpenValues = { GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias , sin(Timer::getTotalTime() * 0.125f) };
+		ubo.invProj = camera.invProjection;
 		memcpy(uniform.data, &ubo, sizeof(ubo));
 	}
 }

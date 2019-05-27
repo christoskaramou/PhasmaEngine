@@ -24,7 +24,7 @@ namespace vm {
 		Image previous;
 		Image frameImage;
 
-		struct UBO { vec4 values; vec4 sharpenValues; }ubo;
+		struct UBO { vec4 values; vec4 sharpenValues; mat4 invProj; }ubo;
 		Buffer uniform;
 
 		void Init();

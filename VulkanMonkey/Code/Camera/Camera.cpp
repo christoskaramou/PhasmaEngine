@@ -100,8 +100,9 @@ void vm::Camera::update()
 		const int i = static_cast<int>(floor(rand(0.0f, 15.99f)));
 
 		projOffset = vec2(&halton16[i * 2]);
-		projOffset -= vec2(0.5f);
-		projOffset /= vec2(WIDTH_f, HEIGHT_f);
+		projOffset *= vec2(2.0f);
+		projOffset -= vec2(1.0f);
+		projOffset /= vec2(renderArea.viewport.width, renderArea.viewport.height);
 		projOffset *= GUI::TAA_jitter_scale;
 	}
 	else {
