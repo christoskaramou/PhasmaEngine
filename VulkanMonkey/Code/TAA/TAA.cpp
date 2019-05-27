@@ -11,7 +11,7 @@ void TAA::Init()
 	previous.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	previous.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
-	previous.createImageView(vk::ImageAspectFlagBits::eColor, vulkan->surface->formatKHR.format == vk::Format::eB8G8R8A8Unorm);
+	previous.createImageView(vk::ImageAspectFlagBits::eColor);
 	previous.createSampler();
 
 	frameImage.format = vulkan->surface->formatKHR.format;
@@ -26,8 +26,8 @@ void TAA::Init()
 void TAA::update(const Camera& camera)
 {
 	if (GUI::use_TAA) {
-		ubo.values = { camera.projOffset.x, camera.projOffset.y, sin(Timer::getTotalTime() * 0.125f), GUI::TAA_feedback_min };
-		ubo.sharpenValues = { GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias , GUI::TAA_feedback_max };
+		ubo.values = { camera.projOffset.x, camera.projOffset.y, GUI::TAA_feedback_min, GUI::TAA_feedback_max };
+		ubo.sharpenValues = { GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias , sin(Timer::getTotalTime() * 0.125f) };
 		memcpy(uniform.data, &ubo, sizeof(ubo));
 	}
 }
