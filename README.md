@@ -8,6 +8,7 @@ VulkanMonkey3D is intended as a project for learning 3D graphics and techniques,
 * Screen Space Reflections
 * Screen Space Ambient Occlusion
 * Tone Mapping - HDR
+* TAA
 * FXAA
 * Bloom
 * Motion Blur
