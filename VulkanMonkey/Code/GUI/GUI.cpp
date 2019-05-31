@@ -699,7 +699,7 @@ void GUI::scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_
 
 	vk::ImageBlit blit;
 	blit.srcOffsets[0] = { 0, 0, 0 };
-	blit.srcOffsets[1] = { renderedImage.width, renderedImage.height, 1 };
+	blit.srcOffsets[1] = { static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 1 };
 	blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 	blit.srcSubresource.layerCount = 1;
 	blit.dstOffsets[0] = { static_cast<int32_t>(winPos.x), static_cast<int32_t>(winPos.y), 0 };

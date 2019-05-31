@@ -27,17 +27,17 @@ void Image::transitionImageLayout(const vk::CommandBuffer cmd, const vk::ImageLa
 
 void Image::createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples)
 {
-	this->width = width;
-	this->height = height;
-	width_f = static_cast<float>(width);
-	height_f = static_cast<float>(height);
-	extent = {width, height};
+	this->width = width % 2 != 0 ? width - 1 : width;
+	this->height = height % 2 != 0 ? height - 1 : height;
+	width_f = static_cast<float>(this->width);
+	height_f = static_cast<float>(this->height);
+	extent = { this->width, this->height};
 
 	vk::ImageCreateInfo imageInfo;
 	imageInfo.flags = imageCreateFlags;
 	imageInfo.imageType = vk::ImageType::e2D;
 	imageInfo.format = format;
-	imageInfo.extent = { width, height, 1 };
+	imageInfo.extent = { this->width, this->height, 1 };
 	imageInfo.mipLevels = mipLevels;
 	imageInfo.arrayLayers = arrayLayers;
 	imageInfo.samples = samples;

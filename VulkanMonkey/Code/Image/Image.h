@@ -18,8 +18,8 @@ namespace vm {
 		vk::ImageView view;
 		vk::Sampler sampler;
 		std::string name;
-		int width;
-		int height;
+		uint32_t width;
+		uint32_t height;
 		float width_f;
 		float height_f;
 		vk::Extent2D extent;
