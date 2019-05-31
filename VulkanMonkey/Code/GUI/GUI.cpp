@@ -8,6 +8,7 @@
 using namespace vm;
 ImVec2						GUI::winPos = ImVec2();
 ImVec2						GUI::winSize = ImVec2();
+float						GUI::renderTargetsScale = 1.0f;
 bool						GUI::lock_render_window = true;
 bool						GUI::show_ssr = false;
 bool						GUI::show_ssao = false;
@@ -57,7 +58,7 @@ ImVec2						GUI::tlPanelPos = ImVec2();
 ImVec2						GUI::tlPanelSize = ImVec2();
 ImVec2						GUI::mlPanelPos = ImVec2();
 ImVec2						GUI::mlPanelSize = ImVec2();
-
+uint32_t					GUI::scaleRenderTargetsEventType = SDL_RegisterEvents(1);
 vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
 SDL_Window*					GUI::g_Window = nullptr;
 Uint64						GUI::g_Time = 0;
@@ -286,9 +287,21 @@ void GUI::Models()
 void GUI::Properties()
 {
 	static bool	propetries_open = true;
+	static float rtScale = renderTargetsScale;
 	ImGui::SetNextWindowPos(ImVec2(WIDTH_f - RIGHT_PANEL_WIDTH, MENU_HEIGHT));
 	ImGui::SetNextWindowSize(ImVec2(RIGHT_PANEL_WIDTH, HEIGHT_f - LOWER_PANEL_HEIGHT - MENU_HEIGHT));
 	ImGui::Begin("Global Properties", &propetries_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+	ImGui::InputFloat("Quality.", &rtScale, 0.01f, 0.05f, 2);
+	if (ImGui::Button("Apply")) {
+		if (scaleRenderTargetsEventType != UINT32_MAX) {
+			renderTargetsScale = clamp(rtScale, 0.1f, 1.0f);
+			SDL_Event event;
+			SDL_zero(event);
+			event.type = scaleRenderTargetsEventType; // along side with window resize
+			vulkan->device.waitIdle();
+			SDL_PushEvent(&event);
+		}
+	}
 	ImGui::Checkbox("Lock Render Window", &lock_render_window);
 	ImGui::Checkbox("SSR", &show_ssr);
 	ImGui::Checkbox("SSAO", &show_ssao);
@@ -454,17 +467,6 @@ vk::DescriptorSetLayout GUI::getDescriptorSetLayout(vk::Device device)
 		descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
 	}
 	return descriptorSetLayout;
-}
-
-void GUI::Init()
-{
-	guiScaled.format = vulkan->surface->formatKHR.format;
-	guiScaled.initialLayout = vk::ImageLayout::eUndefined;
-	guiScaled.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	guiScaled.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
-	guiScaled.createImageView(vk::ImageAspectFlagBits::eColor);
-	guiScaled.createSampler();
 }
 
 const char* GUI::ImGui_ImplSDL2_GetClipboardText(void*)
@@ -678,26 +680,26 @@ void GUI::loadGUI(bool show)
 	initImGui();
 }
 
-void GUI::scaleToRenderArea(vk::CommandBuffer cmd, uint32_t imageIndex)
+void GUI::scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
 {
 	Image& s_chain_Image = VulkanContext::getSafe().swapchain->images[imageIndex];
 
-	guiScaled.transitionImageLayout(
+	renderedImage.transitionImageLayout(
 		cmd,
-		vk::ImageLayout::eShaderReadOnlyOptimal,
-		vk::ImageLayout::eTransferDstOptimal,
-		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::ImageLayout::eTransferSrcOptimal,
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
 		vk::PipelineStageFlagBits::eTransfer);
 	s_chain_Image.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::ePresentSrcKHR,
-		vk::ImageLayout::eTransferSrcOptimal,
+		vk::ImageLayout::eTransferDstOptimal,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput,
 		vk::PipelineStageFlagBits::eTransfer);
 
 	vk::ImageBlit blit;
 	blit.srcOffsets[0] = { 0, 0, 0 };
-	blit.srcOffsets[1] = { static_cast<int32_t>(WIDTH), static_cast<int32_t>(HEIGHT), 1 };
+	blit.srcOffsets[1] = { renderedImage.width, renderedImage.height, 1 };
 	blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 	blit.srcSubresource.layerCount = 1;
 	blit.dstOffsets[0] = { static_cast<int32_t>(winPos.x), static_cast<int32_t>(winPos.y), 0 };
@@ -706,49 +708,19 @@ void GUI::scaleToRenderArea(vk::CommandBuffer cmd, uint32_t imageIndex)
 	blit.dstSubresource.layerCount = 1;
 
 	cmd.blitImage(
-		s_chain_Image.image,
-		vk::ImageLayout::eTransferSrcOptimal,
-		guiScaled.image,
-		vk::ImageLayout::eTransferDstOptimal,
-		blit,
-		vk::Filter::eLinear);
-
-	guiScaled.transitionImageLayout(
-		cmd,
-		vk::ImageLayout::eTransferDstOptimal,
-		vk::ImageLayout::eTransferSrcOptimal,
-		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eTransfer);
-	s_chain_Image.transitionImageLayout(
-		cmd,
-		vk::ImageLayout::eTransferSrcOptimal,
-		vk::ImageLayout::eTransferDstOptimal,
-		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eTransfer);
-
-	blit.srcOffsets[0] = { 0, 0, 0 };
-	blit.srcOffsets[1] = { static_cast<int32_t>(WIDTH), static_cast<int32_t>(HEIGHT), 1 };
-	blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-	blit.srcSubresource.layerCount = 1;
-	blit.dstOffsets[0] = { 0, 0, 0 };
-	blit.dstOffsets[1] = { static_cast<int32_t>(WIDTH), static_cast<int32_t>(HEIGHT), 1 };
-	blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-	blit.dstSubresource.layerCount = 1;
-
-	cmd.blitImage(
-		guiScaled.image,
+		renderedImage.image,
 		vk::ImageLayout::eTransferSrcOptimal,
 		s_chain_Image.image,
 		vk::ImageLayout::eTransferDstOptimal,
 		blit,
 		vk::Filter::eLinear);
 
-	guiScaled.transitionImageLayout(
+	renderedImage.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eTransferSrcOptimal,
-		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eFragmentShader);
+		vk::PipelineStageFlagBits::eColorAttachmentOutput);
 	s_chain_Image.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eTransferDstOptimal,
@@ -1030,7 +1002,7 @@ void GUI::windowStyle(ImGuiStyle* dst)
 
 void GUI::createVertexBuffer(size_t vertex_size)
 {
-	vulkan->presentQueue.waitIdle();
+	vulkan->graphicsQueue.waitIdle();
 	vertexBuffer.destroy();
 	vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	//vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
@@ -1038,7 +1010,7 @@ void GUI::createVertexBuffer(size_t vertex_size)
 
 void GUI::createIndexBuffer(size_t index_size)
 {
-	vulkan->presentQueue.waitIdle();
+	vulkan->graphicsQueue.waitIdle();
 	indexBuffer.destroy();
 	indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	//indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
@@ -1097,30 +1069,11 @@ void GUI::createRenderPass()
 	subpassDescriptions[0].colorAttachmentCount = 1;
 	subpassDescriptions[0].pColorAttachments = &colorReference;
 
-	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies(2);
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 	renderPassInfo.pSubpasses = subpassDescriptions.data();
-	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	//renderPassInfo.pDependencies = dependencies.data();
 
 	renderPass = vulkan->device.createRenderPass(renderPassInfo);
 }
@@ -1301,7 +1254,6 @@ void GUI::createPipeline()
 
 void GUI::destroy()
 {
-	guiScaled.destroy();
 	Object::destroy();
 	if (renderPass) {
 		vulkan->device.destroyRenderPass(renderPass);

@@ -8,7 +8,10 @@ void TAA::Init()
 {
 	previous.format = vulkan->surface->formatKHR.format;
 	previous.initialLayout = vk::ImageLayout::eUndefined;
-	previous.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
+	previous.createImage(
+		static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+		static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	previous.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 	previous.createImageView(vk::ImageAspectFlagBits::eColor);
@@ -16,8 +19,12 @@ void TAA::Init()
 
 	frameImage.format = vulkan->surface->formatKHR.format;
 	frameImage.initialLayout = vk::ImageLayout::eUndefined;
-	frameImage.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	frameImage.createImage(
+		static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+		static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+		vk::MemoryPropertyFlagBits::eDeviceLocal);
 	frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 	frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 	frameImage.createSampler();
@@ -88,7 +95,8 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 	vk::RenderPassBeginInfo rpi;
 	rpi.renderPass = renderPass;
 	rpi.framebuffer = frameBuffers[imageIndex];
-	rpi.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
+	rpi.renderArea.offset = { 0, 0 };
+	rpi.renderArea.extent = renderTargets["taa"].extent;
 	rpi.clearValueCount = 1;
 	rpi.pClearValues = clearValues.data();
 
@@ -106,7 +114,8 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 	vk::RenderPassBeginInfo rpi2;
 	rpi2.renderPass = renderPassSharpen;
 	rpi2.framebuffer = frameBuffersSharpen[imageIndex];
-	rpi2.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
+	rpi2.renderArea.offset = { 0, 0 };
+	rpi2.renderArea.extent = renderTargets["viewport"].extent;
 	rpi2.clearValueCount = 1;
 	rpi2.pClearValues = clearValues.data();
 
@@ -115,6 +124,12 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineSharpen.pipeinfo.layout, 0, DSetSharpen, nullptr);
 	cmd.draw(3, 1, 0, 0);
 	cmd.endRenderPass();
+}
+
+void TAA::createRenderPasses(std::map<std::string, Image>& renderTargets)
+{
+	createRenderPass(renderTargets);
+	createRenderPassSharpen(renderTargets);
 }
 
 void TAA::createRenderPass(std::map<std::string, Image>& renderTargets)
@@ -153,14 +168,14 @@ void vm::TAA::createRenderPassSharpen(std::map<std::string, Image>& renderTarget
 {
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// swapchain image
-	attachments[0].format = vulkan->surface->formatKHR.format;
+	attachments[0].format = renderTargets["viewport"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
+	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
 	std::vector<vk::AttachmentReference> colorReferences{
 		{ 0, vk::ImageLayout::eColorAttachmentOptimal }
@@ -181,12 +196,6 @@ void vm::TAA::createRenderPassSharpen(std::map<std::string, Image>& renderTarget
 	renderPassSharpen = vulkan->device.createRenderPass(renderPassInfo);
 }
 
-void vm::TAA::createRenderPasses(std::map<std::string, Image>& renderTargets)
-{
-	createRenderPass(renderTargets);
-	createRenderPassSharpen(renderTargets);
-}
-
 void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
 	frameBuffers.resize(vulkan->swapchain->images.size());
@@ -199,8 +208,8 @@ void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.renderPass = renderPass;
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
-		fbci.width = WIDTH;
-		fbci.height = HEIGHT;
+		fbci.width = renderTargets["taa"].width;
+		fbci.height = renderTargets["taa"].height;
 		fbci.layers = 1;
 		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
 	}
@@ -209,17 +218,23 @@ void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 
 	for (size_t i = 0; i < frameBuffersSharpen.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			vulkan->swapchain->images[i].view
+			renderTargets["viewport"].view
 		};
 		vk::FramebufferCreateInfo fbci;
 		fbci.renderPass = renderPassSharpen;
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
-		fbci.width = WIDTH;
-		fbci.height = HEIGHT;
+		fbci.width = renderTargets["viewport"].width;
+		fbci.height = renderTargets["viewport"].height;
 		fbci.layers = 1;
 		frameBuffersSharpen[i] = vulkan->device.createFramebuffer(fbci);
 	}
+}
+
+void TAA::createPipelines(std::map<std::string, Image>& renderTargets)
+{
+	createPipeline(renderTargets);
+	createPipelineSharpen(renderTargets);
 }
 
 void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
@@ -265,8 +280,8 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	vk::Viewport vp;
 	vp.x = 0.0f;
 	vp.y = 0.0f;
-	vp.width = WIDTH_f;
-	vp.height = HEIGHT_f;
+	vp.width = renderTargets["taa"].width_f;
+	vp.height = renderTargets["taa"].height_f;
 	vp.minDepth = 0.0f;
 	vp.maxDepth = 1.0f;
 
@@ -421,8 +436,8 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	vk::Viewport vp;
 	vp.x = 0.0f;
 	vp.y = 0.0f;
-	vp.width = WIDTH_f;
-	vp.height = HEIGHT_f;
+	vp.width = renderTargets["viewport"].width_f;
+	vp.height = renderTargets["viewport"].height_f;
 	vp.minDepth = 0.0f;
 	vp.maxDepth = 1.0f;
 
@@ -474,9 +489,8 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	pipelineSharpen.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_FALSE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
-		vulkan->swapchain->images[0].blentAttachment
+		renderTargets["viewport"].blentAttachment
 	};
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
@@ -532,25 +546,17 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	vulkan->device.destroyShaderModule(fragModule);
 }
 
-void TAA::createPipelines(std::map<std::string, Image>& renderTargets)
+void TAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage)
 {
-	createPipeline(renderTargets);
-	createPipelineSharpen(renderTargets);
-}
-
-void TAA::copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex)
-{
-	Image& s_chain_Image = VulkanContext::getSafe().swapchain->images[imageIndex];
-
 	frameImage.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::ImageLayout::eTransferDstOptimal,
 		vk::PipelineStageFlagBits::eFragmentShader,
 		vk::PipelineStageFlagBits::eTransfer);
-	s_chain_Image.transitionImageLayout(
+	renderedImage.transitionImageLayout(
 		cmd,
-		vk::ImageLayout::ePresentSrcKHR,
+		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::ImageLayout::eTransferSrcOptimal,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput,
 		vk::PipelineStageFlagBits::eTransfer);
@@ -561,12 +567,12 @@ void TAA::copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex)
 	region.srcSubresource.layerCount = 1;
 	region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 	region.dstSubresource.layerCount = 1;
-	region.extent.width = WIDTH;
-	region.extent.height = HEIGHT;
+	region.extent.width = renderedImage.width;
+	region.extent.height = renderedImage.height;
 	region.extent.depth = 1;
 
 	cmd.copyImage(
-		s_chain_Image.image,
+		renderedImage.image,
 		vk::ImageLayout::eTransferSrcOptimal,
 		frameImage.image,
 		vk::ImageLayout::eTransferDstOptimal,
@@ -578,10 +584,10 @@ void TAA::copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex)
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
 		vk::PipelineStageFlagBits::eFragmentShader);
-	s_chain_Image.transitionImageLayout(
+	renderedImage.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eTransferSrcOptimal,
-		vk::ImageLayout::ePresentSrcKHR,
+		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput);
 }
@@ -607,8 +613,8 @@ void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source)
 	region.srcSubresource.layerCount = 1;
 	region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 	region.dstSubresource.layerCount = 1;
-	region.extent.width = WIDTH;
-	region.extent.height = HEIGHT;
+	region.extent.width = source.width;
+	region.extent.height = source.height;
 	region.extent.depth = 1;
 
 	cmd.copyImage(

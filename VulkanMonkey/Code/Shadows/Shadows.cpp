@@ -48,7 +48,7 @@ void Shadows::createDescriptorSets()
 	}
 }
 
-void vm::Shadows::createRenderPass()
+void Shadows::createRenderPass()
 {
 	vk::AttachmentDescription attachment;
 	attachment.format = vulkan->depth->format;
@@ -67,35 +67,16 @@ void vm::Shadows::createRenderPass()
 	vk::SubpassDescription subpassDesc;
 	subpassDesc.pDepthStencilAttachment = &depthAttachmentRef;
 
-	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies(2);
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
 	vk::RenderPassCreateInfo rpci;
 	rpci.attachmentCount = 1;
 	rpci.pAttachments = &attachment;
 	rpci.subpassCount = 1;
 	rpci.pSubpasses = &subpassDesc;
-	//rpci.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	//rpci.pDependencies = dependencies.data();
 
 	renderPass = vulkan->device.createRenderPass(rpci);
 }
 
-void vm::Shadows::createFrameBuffers()
+void Shadows::createFrameBuffers()
 {
 	textures.resize(3);
 	for (uint32_t i = 0; i < textures.size(); i++)

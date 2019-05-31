@@ -27,6 +27,12 @@ void Image::transitionImageLayout(const vk::CommandBuffer cmd, const vk::ImageLa
 
 void Image::createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples)
 {
+	this->width = width;
+	this->height = height;
+	width_f = static_cast<float>(width);
+	height_f = static_cast<float>(height);
+	extent = {width, height};
+
 	vk::ImageCreateInfo imageInfo;
 	imageInfo.flags = imageCreateFlags;
 	imageInfo.imageType = vk::ImageType::e2D;
@@ -156,6 +162,10 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 	else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eColorAttachmentOptimal) {
 		srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
 		dstStage = vk::PipelineStageFlagBits::eFragmentShader;
+	}
+	else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::ePresentSrcKHR) {
+		srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+		dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 	}
 	else {
 		throw std::runtime_error("Transition image layout invalid combination of layouts");

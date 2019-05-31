@@ -96,13 +96,15 @@ void vm::Camera::update()
 	previousProjection = projection; 
 	projOffsetPrevious = projOffset;
 	if (GUI::use_TAA) {
-
+		// has the aspect ratio of the render area because the projection matrix has the same aspect ratio too,
+		// doesn't matter if it renders in bigger image size,
+		// it will be scaled down to render area size before GUI pass
 		const int i = static_cast<int>(floor(rand(0.0f, 15.99f)));
-
 		projOffset = vec2(&halton16[i * 2]);
 		projOffset *= vec2(2.0f);
 		projOffset -= vec2(1.0f);
 		projOffset /= vec2(renderArea.viewport.width, renderArea.viewport.height);
+		projOffset *= GUI::renderTargetsScale;
 		projOffset *= GUI::TAA_jitter_scale;
 	}
 	else {
@@ -120,6 +122,7 @@ void vm::Camera::updatePerspective()
 {
 	const float aspect = renderArea.viewport.width / renderArea.viewport.height;
 	const float tanHalfFovy = tan(radians(FOV) * .5f);
+
 	const float m00 = 1.f / (aspect * tanHalfFovy);
 	const float m11 = 1.f / (tanHalfFovy);
 	const float m22 = farPlane / (farPlane - nearPlane) * worldOrientation.z;
@@ -127,6 +130,7 @@ void vm::Camera::updatePerspective()
 	const float m32 = -(farPlane * nearPlane) / (farPlane - nearPlane);
 	const float m20 = projOffset.x;
 	const float m21 = projOffset.y;
+
 	projection = mat4(
 		m00, 0.f, 0.f, 0.f,
 		0.f, m11, 0.f, 0.f,

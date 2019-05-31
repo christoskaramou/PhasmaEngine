@@ -269,7 +269,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	// MODELS
 	ctx.metrics[2].start(cmd);
-	ctx.deferred.batchStart(cmd, imageIndex);
+	ctx.deferred.batchStart(cmd, imageIndex, ctx.renderTargets["viewport"].extent);
 	for (uint32_t m = 0; m < Model::models.size(); m++)
 		Model::models[m].draw();
 	ctx.deferred.batchEnd();
@@ -301,21 +301,21 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	if (GUI::show_ssr) {
 		ctx.metrics[4].start(cmd);
 		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::Write);
-		ctx.ssr.draw(cmd, imageIndex);
+		ctx.ssr.draw(cmd, imageIndex, ctx.renderTargets["ssr"].extent);
 		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::Read);
 		ctx.metrics[4].end(&GUI::metrics[4]);
 	}
 	
 	// COMPOSITION
 	ctx.metrics[5].start(cmd);
-	ctx.deferred.draw(cmd, imageIndex, ctx.shadows, skybox, ctx.camera_main.invViewProjection);
+	ctx.deferred.draw(cmd, imageIndex, ctx.shadows, skybox, ctx.camera_main.invViewProjection, ctx.renderTargets["viewport"].extent);
 	ctx.metrics[5].end(&GUI::metrics[5]);
 	
 	if (GUI::use_AntiAliasing) {
 		// TAA
 		if (GUI::use_TAA) {
 			ctx.metrics[6].start(cmd);
-			ctx.taa.copyFrameImage(cmd, imageIndex);
+			ctx.taa.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
 			const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 			ctx.taa.draw(cmd, imageIndex, changeLayoutFunc, ctx.renderTargets);
 			ctx.metrics[6].end(&GUI::metrics[6]);
@@ -323,8 +323,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		// FXAA
 		else if (GUI::use_FXAA) {
 			ctx.metrics[6].start(cmd);
-			ctx.fxaa.copyFrameImage(cmd, imageIndex);
-			ctx.fxaa.draw(cmd, imageIndex);
+			ctx.fxaa.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
+			ctx.fxaa.draw(cmd, imageIndex, ctx.renderTargets["viewport"].extent);
 			ctx.metrics[6].end(&GUI::metrics[6]);
 		}
 	}
@@ -332,7 +332,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	// BLOOM
 	if (GUI::show_Bloom) {
 		ctx.metrics[7].start(cmd);
-		ctx.bloom.copyFrameImage(cmd, imageIndex);
+		ctx.bloom.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
 		const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 		ctx.bloom.draw(cmd, imageIndex, static_cast<uint32_t>(ctx.vulkan.swapchain->images.size()), changeLayoutFunc, ctx.renderTargets);
 		ctx.metrics[7].end(&GUI::metrics[7]);
@@ -341,8 +341,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	// MOTION BLUR
 	if (GUI::show_motionBlur) {
 		ctx.metrics[8].start(cmd);
-		ctx.motionBlur.copyFrameImage(cmd, imageIndex);
-		ctx.motionBlur.draw(cmd, imageIndex);
+		ctx.motionBlur.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
+		ctx.motionBlur.draw(cmd, imageIndex, ctx.renderTargets["viewport"].extent);
 		ctx.metrics[8].end(&GUI::metrics[8]);
 	}
 	
@@ -360,7 +360,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	// GUI
 	ctx.metrics[9].start(cmd);
-	ctx.gui.scaleToRenderArea(cmd, imageIndex);
+	ctx.gui.scaleToRenderArea(cmd, ctx.renderTargets["viewport"], imageIndex);
 	ctx.gui.draw(cmd, imageIndex);
 	ctx.metrics[9].end(&GUI::metrics[9]);
 
@@ -482,7 +482,7 @@ void Renderer::present()
 	pi.swapchainCount = 1;
 	pi.pSwapchains = &ctx.vulkan.swapchain->swapchain;
 	pi.pImageIndices = &imageIndex;
-	ctx.vulkan.presentQueue.presentKHR(pi);
+	ctx.vulkan.graphicsQueue.presentKHR(pi);
 
 	std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<float> duration = start - Timer::frameStart;

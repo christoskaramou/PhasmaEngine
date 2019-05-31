@@ -85,6 +85,9 @@
     <None Include="shaders\TAA\TAASharpen.frag">
       <Filter>Shaders\TAA</Filter>
     </None>
+    <None Include="shaders\Deferred\pbr.glsl">
+      <Filter>Shaders\Deferred</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Code\Buffer\Buffer.h">

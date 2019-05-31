@@ -11,10 +11,10 @@ void Context::initVulkanContext()
 {
 	vulkan.instance = createInstance();
 	vulkan.surface = new Surface(createSurface());
-	vulkan.graphicsFamilyId = getGraphicsFamilyId();
-	vulkan.presentFamilyId = getPresentFamilyId();
-	vulkan.computeFamilyId = getComputeFamilyId();
 	vulkan.gpu = findGpu();
+	vulkan.graphicsFamilyId = getGraphicsFamilyId();
+	vulkan.computeFamilyId = getComputeFamilyId();
+	vulkan.transferFamilyId = getTransferFamilyId();
 	vulkan.gpuProperties = getGPUProperties();
 	vulkan.gpuFeatures = getGPUFeatures();
 	vulkan.surface->capabilities = getSurfaceCapabilities();
@@ -22,8 +22,8 @@ void Context::initVulkanContext()
 	vulkan.surface->presentModeKHR = getPresentationMode();
 	vulkan.device = createDevice();
 	vulkan.graphicsQueue = getGraphicsQueue();
-	vulkan.presentQueue = getPresentQueue();
 	vulkan.computeQueue = getComputeQueue();
+	vulkan.transferQueue = getTransferQueue();
 	vulkan.semaphores = createSemaphores(3);
 	vulkan.fences = createFences(2);
 	vulkan.swapchain = new Swapchain(createSwapchain());
@@ -37,6 +37,9 @@ void Context::initVulkanContext()
 
 void Context::initRendering()
 {
+	for (unsigned i = 0; i < vulkan.swapchain->images.size(); i++)
+		vulkan.swapchain->images[i].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
+	addRenderTarget("viewport", vulkan.surface->formatKHR.format, vk::ImageUsageFlagBits::eTransferSrc);
 	addRenderTarget("depth", vk::Format::eR32Sfloat);
 	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
 	addRenderTarget("albedo", vulkan.surface->formatKHR.format);
@@ -55,7 +58,6 @@ void Context::initRendering()
 	bloom.Init();
 	fxaa.Init();
 	motionBlur.Init();
-	gui.Init();
 
 	// render passes
 #ifdef RENDER_SKYBOX
@@ -69,7 +71,7 @@ void Context::initRendering()
 	fxaa.createRenderPass(renderTargets);
 	taa.createRenderPasses(renderTargets);
 	bloom.createRenderPasses(renderTargets);
-	motionBlur.createRenderPass();
+	motionBlur.createRenderPass(renderTargets);
 	gui.createRenderPass();
 
 	// frame buffers
@@ -84,7 +86,7 @@ void Context::initRendering()
 	fxaa.createFrameBuffers(renderTargets);
 	taa.createFrameBuffers(renderTargets);
 	bloom.createFrameBuffers(renderTargets);
-	motionBlur.createFrameBuffers();
+	motionBlur.createFrameBuffers(renderTargets);
 	gui.createFrameBuffers();
 
 	// pipelines
@@ -99,7 +101,7 @@ void Context::initRendering()
 	fxaa.createPipeline(renderTargets);
 	taa.createPipelines(renderTargets);
 	bloom.createPipelines(renderTargets);
-	motionBlur.createPipeline();
+	motionBlur.createPipeline(renderTargets);
 	gui.createPipeline();
 
 	computePool.Init(5);
@@ -129,7 +131,6 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 		}
 	}
 	gui.pipeline.destroy();
-	gui.guiScaled.destroy();
 
 	// deferred
 	if (deferred.renderPass) {
@@ -280,6 +281,9 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	*vulkan.swapchain = createSwapchain();
 	*vulkan.depth = createDepthResources();
 
+	for (unsigned i = 0; i < vulkan.swapchain->images.size(); i++)
+		vulkan.swapchain->images[i].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
+	addRenderTarget("viewport", vulkan.surface->formatKHR.format, vk::ImageUsageFlagBits::eTransferSrc);
 	addRenderTarget("depth", vk::Format::eR32Sfloat);
 	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
 	addRenderTarget("albedo", vulkan.surface->formatKHR.format);
@@ -323,9 +327,9 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	bloom.updateDescriptorSets(renderTargets);
 
 	motionBlur.Init();
-	motionBlur.createRenderPass();
-	motionBlur.createFrameBuffers();
-	motionBlur.createPipeline();
+	motionBlur.createRenderPass(renderTargets);
+	motionBlur.createFrameBuffers(renderTargets);
+	motionBlur.createPipeline(renderTargets);
 	motionBlur.updateDescriptorSets(renderTargets);
 
 	ssao.createRenderPasses(renderTargets);
@@ -333,7 +337,6 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	ssao.createPipelines(renderTargets);
 	ssao.updateDescriptorSets(renderTargets);
 
-	gui.Init();
 	gui.createRenderPass();
 	gui.createFrameBuffers();
 	gui.createPipeline();
@@ -511,66 +514,61 @@ Surface Context::createSurface()
 
 int Context::getGraphicsFamilyId()
 {
-	std::vector<vk::PhysicalDevice> gpuList = vulkan.instance.enumeratePhysicalDevices();
-
-	for (const auto& gpu : gpuList) {
-
-		std::vector<vk::QueueFamilyProperties> properties = gpu.getQueueFamilyProperties();
-
-		for (int i = 0; i < properties.size(); i++) {
-			//find graphics queue family index
-			if (properties[i].queueFlags & vk::QueueFlagBits::eGraphics)
-				return i;
-		}
-	}
-	return -1;
-}
-
-int Context::getPresentFamilyId()
-{
-	std::vector<vk::PhysicalDevice> gpuList = vulkan.instance.enumeratePhysicalDevices();
-
-	for (const auto& gpu : gpuList) {
-
-		std::vector<vk::QueueFamilyProperties> properties = gpu.getQueueFamilyProperties();
-
-		for (uint32_t i = 0; i < properties.size(); ++i) {
-			// find present queue family index
-			if (properties[i].queueCount > 0 && gpu.getSurfaceSupportKHR(i, vulkan.surface->surface))
-				return i;
-		}
+	auto& properties = vulkan.queueFamilyProperties;
+	for (int i = 0; i < properties.size(); i++) {
+		//find graphics queue family index
+		if (properties[i].queueFlags & vk::QueueFlagBits::eGraphics && vulkan.gpu.getSurfaceSupportKHR(i, vulkan.surface->surface))
+			return i;
 	}
 	return -1;
 }
 
 int Context::getComputeFamilyId()
 {
-	std::vector<vk::PhysicalDevice> gpuList = vulkan.instance.enumeratePhysicalDevices();
+	auto& properties = vulkan.queueFamilyProperties;
+	// prefer different families for different queue types, thus the reverse check
+	for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i) {
+		//find compute queue family index
+		if (properties[i].queueFlags & vk::QueueFlagBits::eCompute)
+			return i;
+	}
+	return -1;
+}
 
-	for (const auto& gpu : gpuList) {
-		std::vector<vk::QueueFamilyProperties> properties = gpu.getQueueFamilyProperties();
-
-		for (uint32_t i = 0; i < properties.size(); ++i) {
-			//find compute queue family index
-			if (properties[i].queueFlags & vk::QueueFlagBits::eCompute)
-				return i;
-		}
+int vm::Context::getTransferFamilyId()
+{
+	auto& properties = vulkan.queueFamilyProperties;
+	// prefer different families for different queue types, thus the reverse check
+	for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i) {
+		//find transfer queue family index
+		if (properties[i].queueFlags & vk::QueueFlagBits::eTransfer)
+			return i;
 	}
 	return -1;
 }
 
 vk::PhysicalDevice Context::findGpu()
 {
-	if (vulkan.graphicsFamilyId < 0 || vulkan.presentFamilyId < 0 || vulkan.computeFamilyId < 0)
-		return nullptr;
+	//if (vulkan.graphicsFamilyId < 0 || vulkan.presentFamilyId < 0 || vulkan.computeFamilyId < 0)
+	//	return nullptr;
 	std::vector<vk::PhysicalDevice> gpuList = vulkan.instance.enumeratePhysicalDevices();
 
 	for (const auto& gpu : gpuList) {
-		std::vector<vk::QueueFamilyProperties> properties = gpu.getQueueFamilyProperties();
+		vulkan.queueFamilyProperties = gpu.getQueueFamilyProperties();
+		vk::QueueFlags flags;
 
-		if (properties[vulkan.graphicsFamilyId].queueFlags & vk::QueueFlagBits::eGraphics &&
-			gpu.getSurfaceSupportKHR(vulkan.presentFamilyId, vulkan.surface->surface) &&
-			properties[vulkan.computeFamilyId].queueFlags & vk::QueueFlagBits::eCompute)
+		for (const auto& qfp : vulkan.queueFamilyProperties) {
+			if (qfp.queueFlags & vk::QueueFlagBits::eGraphics)
+				flags |= vk::QueueFlagBits::eGraphics;
+			if (qfp.queueFlags & vk::QueueFlagBits::eCompute)
+				flags |= vk::QueueFlagBits::eCompute;
+			if (qfp.queueFlags & vk::QueueFlagBits::eTransfer)
+				flags |= vk::QueueFlagBits::eTransfer;
+		}
+
+		if (flags & vk::QueueFlagBits::eGraphics &&
+			flags & vk::QueueFlagBits::eCompute &&
+			flags & vk::QueueFlagBits::eTransfer)
 			return gpu;
 	}
 	return nullptr;
@@ -616,7 +614,7 @@ vk::PresentModeKHR Context::getPresentationMode()
 
 vk::PhysicalDeviceProperties Context::getGPUProperties()
 {
-	return vulkan.gpu.getProperties();;
+	return vulkan.gpu.getProperties();
 }
 
 vk::PhysicalDeviceFeatures Context::getGPUFeatures()
@@ -651,6 +649,14 @@ vk::Device Context::createDevice()
 		queueCreateInfos.back().pQueuePriorities = priorities;
 	}
 
+	// transer queue
+	if (vulkan.transferFamilyId != vulkan.graphicsFamilyId && vulkan.transferFamilyId != vulkan.computeFamilyId) {
+		queueCreateInfos.push_back({});
+		queueCreateInfos.back().queueFamilyIndex = vulkan.transferFamilyId;
+		queueCreateInfos.back().queueCount = 1;
+		queueCreateInfos.back().pQueuePriorities = priorities;
+	}
+
 	vk::DeviceCreateInfo deviceCreateInfo;
 	deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 	deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
@@ -666,14 +672,14 @@ vk::Queue Context::getGraphicsQueue()
 	return vulkan.device.getQueue(vulkan.graphicsFamilyId, 0);
 }
 
-vk::Queue Context::getPresentQueue()
-{
-	return vulkan.device.getQueue(vulkan.presentFamilyId, 0);
-}
-
 vk::Queue Context::getComputeQueue()
 {
 	return vulkan.device.getQueue(vulkan.computeFamilyId, 0);
+}
+
+vk::Queue vm::Context::getTransferQueue()
+{
+	return vulkan.device.getQueue(vulkan.transferFamilyId, 0);
 }
 
 Swapchain Context::createSwapchain()
@@ -696,7 +702,7 @@ Swapchain Context::createSwapchain()
 	swapchainCreateInfo.imageColorSpace = vulkan.surface->formatKHR.colorSpace;
 	swapchainCreateInfo.imageExtent = extent;
 	swapchainCreateInfo.imageArrayLayers = 1;
-	swapchainCreateInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst;
+	swapchainCreateInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
 	swapchainCreateInfo.preTransform = vulkan.surface->capabilities.currentTransform;
 	swapchainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
 	swapchainCreateInfo.presentMode = vulkan.surface->presentModeKHR;
@@ -758,8 +764,8 @@ void Context::addRenderTarget(const std::string& name, vk::Format format, vk::Im
 	renderTargets[name].format = format;
 	renderTargets[name].initialLayout = vk::ImageLayout::eUndefined;
 	renderTargets[name].createImage(
-		WIDTH,
-		HEIGHT,
+		static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+		static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | additionalFlags,
 		vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -794,7 +800,7 @@ Image Context::createDepthResources()
 	if (_image.format == vk::Format::eUndefined)
 		throw std::runtime_error("Depth format is undefined");
 
-	_image.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	_image.createImage(static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale), static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale), vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	_image.createImageView(vk::ImageAspectFlagBits::eDepth);
 
 	_image.addressMode = vk::SamplerAddressMode::eClampToEdge;

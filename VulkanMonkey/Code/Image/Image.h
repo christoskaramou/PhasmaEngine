@@ -18,6 +18,11 @@ namespace vm {
 		vk::ImageView view;
 		vk::Sampler sampler;
 		std::string name;
+		int width;
+		int height;
+		float width_f;
+		float height_f;
+		vk::Extent2D extent;
 
 		// values
 		LayoutState layoutState = LayoutState::Write;

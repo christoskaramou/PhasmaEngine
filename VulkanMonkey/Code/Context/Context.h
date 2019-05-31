@@ -105,8 +105,8 @@ namespace vm {
 		vk::Instance createInstance();
 		Surface createSurface();
 		int getGraphicsFamilyId();
-		int getPresentFamilyId();
 		int getComputeFamilyId();
+		int getTransferFamilyId();
 		vk::PhysicalDevice findGpu();
 		vk::PhysicalDeviceProperties getGPUProperties();
 		vk::PhysicalDeviceFeatures getGPUFeatures();
@@ -115,8 +115,8 @@ namespace vm {
 		vk::PresentModeKHR getPresentationMode();
 		vk::Device createDevice();
 		vk::Queue getGraphicsQueue();
-		vk::Queue getPresentQueue();
 		vk::Queue getComputeQueue();
+		vk::Queue getTransferQueue();
 		Swapchain createSwapchain();
 		vk::CommandPool createCommandPool();
 		Image createDepthResources();

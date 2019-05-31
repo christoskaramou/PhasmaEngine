@@ -198,6 +198,7 @@
     <None Include="shaders\Deferred\gBuffer.vert" />
     <None Include="shaders\Deferred\Light.glsl" />
     <None Include="shaders\Deferred\Material.glsl" />
+    <None Include="shaders\Deferred\pbr.glsl" />
     <None Include="shaders\FXAA\FXAA.frag" />
     <None Include="shaders\FXAA\FXAA.glsl" />
     <None Include="shaders\GUI\shaderGUI.frag" />

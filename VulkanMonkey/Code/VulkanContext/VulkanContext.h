@@ -22,12 +22,13 @@ namespace vm {
 		SDL_Window* window = nullptr;
 		vk::Instance instance;
 		Surface* surface = nullptr;
-		int graphicsFamilyId{}, presentFamilyId{}, computeFamilyId{};
+		int graphicsFamilyId{}, computeFamilyId{}, transferFamilyId{};
 		vk::PhysicalDevice gpu;
 		vk::PhysicalDeviceProperties gpuProperties;
 		vk::PhysicalDeviceFeatures gpuFeatures;
+		std::vector<vk::QueueFamilyProperties> queueFamilyProperties{};
 		vk::Device device;
-		vk::Queue graphicsQueue, presentQueue, computeQueue;
+		vk::Queue graphicsQueue, computeQueue, transferQueue;
 		vk::CommandPool commandPool;
 		vk::CommandPool commandPool2;
 		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;

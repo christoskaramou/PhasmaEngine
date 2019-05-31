@@ -3,7 +3,7 @@
 
 using namespace vm;
 
-void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex)
+void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
 {
 	vk::ClearValue clearColor;
 	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -17,7 +17,8 @@ void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex)
 	vk::RenderPassBeginInfo rpi;
 	rpi.renderPass = renderPass;
 	rpi.framebuffer = frameBuffers[imageIndex];
-	rpi.renderArea = { { 0, 0 }, VulkanContext::get().surface->actualExtent };
+	rpi.renderArea.offset = { 0, 0 };
+	rpi.renderArea.extent = extent;
 	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	rpi.pClearValues = clearValues.data();
 
@@ -73,7 +74,7 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj)
+void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj, const vk::Extent2D& extent)
 {
 	// Begin Composition
 	vk::ClearValue clearColor;
@@ -84,7 +85,8 @@ void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows
 	vk::RenderPassBeginInfo rpi;
 	rpi.renderPass = compositionRenderPass;
 	rpi.framebuffer = compositionFrameBuffers[imageIndex];
-	rpi.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
+	rpi.renderArea.offset = { 0, 0 };
+	rpi.renderArea.extent = extent;
 	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	rpi.pClearValues = clearValues.data();
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
@@ -209,14 +211,14 @@ void vm::Deferred::createCompositionRenderPass(std::map<std::string, Image>& ren
 {
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color target
-	attachments[0].format = vulkan->surface->formatKHR.format;
+	attachments[0].format = renderTargets["viewport"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
+	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
 	std::vector<vk::AttachmentReference> colorReferences{
 		{ 0, vk::ImageLayout::eColorAttachmentOptimal }
@@ -260,8 +262,8 @@ void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTar
 		fbci.renderPass = renderPass;
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
-		fbci.width = WIDTH;
-		fbci.height = HEIGHT;
+		fbci.width = renderTargets["albedo"].width;
+		fbci.height = renderTargets["albedo"].height;
 		fbci.layers = 1;
 		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
 	}
@@ -273,14 +275,14 @@ void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& rende
 
 	for (size_t i = 0; i < compositionFrameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			vulkan->swapchain->images[i].view
+			renderTargets["viewport"].view
 		};
 		vk::FramebufferCreateInfo fbci;
 		fbci.renderPass = compositionRenderPass;
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
-		fbci.width = WIDTH;
-		fbci.height = HEIGHT;
+		fbci.width = renderTargets["viewport"].width;
+		fbci.height = renderTargets["viewport"].height;
 		fbci.layers = 1;
 		compositionFrameBuffers[i] = vulkan->device.createFramebuffer(fbci);
 	}
@@ -341,13 +343,13 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	vk::Viewport vp;
 	vp.x = 0.0f;
 	vp.y = 0.0f;
-	vp.width = WIDTH_f;
-	vp.height = HEIGHT_f;
+	vp.width = renderTargets["albedo"].width_f;
+	vp.height = renderTargets["albedo"].height_f;
 	vp.minDepth = 0.f;
 	vp.maxDepth = 1.f;
 
 	vk::Rect2D r2d;
-	r2d.extent = { WIDTH, HEIGHT };
+	r2d.extent = { static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale), static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale) };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -498,8 +500,8 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	vk::Viewport vp;
 	vp.x = 0.0f;
 	vp.y = 0.0f;
-	vp.width = WIDTH_f;
-	vp.height = HEIGHT_f;
+	vp.width = renderTargets["viewport"].width_f;
+	vp.height = renderTargets["viewport"].height_f;
 	vp.minDepth = 0.0f;
 	vp.maxDepth = 1.0f;
 
@@ -551,9 +553,8 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	pipelineComposition.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_FALSE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { 
-		vulkan->swapchain->images[0].blentAttachment
+		renderTargets["viewport"].blentAttachment
 	};
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;

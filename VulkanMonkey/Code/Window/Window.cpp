@@ -98,10 +98,11 @@ bool Window::processEvents(float delta)
 				}
 			}
 		}
-		else
+		else {
 			SDL_ShowCursor(SDL_ENABLE);
-		if (event.type == SDL_WINDOWEVENT) {
-			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+		}
+		if (event.type == SDL_WINDOWEVENT || event.type == GUI::scaleRenderTargetsEventType) {
+			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || event.type == GUI::scaleRenderTargetsEventType) {
 				int w, h;
 				SDL_GL_GetDrawableSize(info.vulkan.window, &w, &h);
 				renderer[0]->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));

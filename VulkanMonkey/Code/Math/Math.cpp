@@ -1375,7 +1375,7 @@ namespace vm {
 	{
 		static auto seed = std::chrono::system_clock::now().time_since_epoch().count();
 		static std::default_random_engine gen(static_cast<unsigned int>(seed));
-		std::uniform_real_distribution<float> x(a, b);
+		const std::uniform_real_distribution<float> x(a, b);
 		return x(gen);
 	}
 

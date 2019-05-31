@@ -47,7 +47,7 @@ void SSR::update(Camera& camera)
 		mat4 reflectionInput[4];
 		reflectionInput[0][0] = vec4(camera.position, 1.0f);
 		reflectionInput[0][1] = vec4(camera.front, 1.0f);
-		reflectionInput[0][2] = vec4(WIDTH_f, HEIGHT_f, 0.f, 0.f);
+		reflectionInput[0][2] = vec4();
 		reflectionInput[0][3] = vec4();
 		reflectionInput[1] = camera.projection;
 		reflectionInput[2] = camera.view;
@@ -57,7 +57,7 @@ void SSR::update(Camera& camera)
 }
 
 
-void SSR::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
+void SSR::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
 {
 	vk::ClearValue clearColor;
 	memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -67,7 +67,8 @@ void SSR::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
 	vk::RenderPassBeginInfo renderPassInfo;
 	renderPassInfo.renderPass = renderPass;
 	renderPassInfo.framebuffer = frameBuffers[imageIndex];
-	renderPassInfo.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
+	renderPassInfo.renderArea.offset = { 0, 0 };
+	renderPassInfo.renderArea.extent = extent;
 	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	renderPassInfo.pClearValues = clearValues.data();
 
@@ -78,7 +79,7 @@ void SSR::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
 	cmd.endRenderPass();
 }
 
-void vm::SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
+void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 {
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
@@ -99,35 +100,16 @@ void vm::SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 	subpassDescription.pColorAttachments = &colorReference;
 	subpassDescription.pDepthStencilAttachment = nullptr;
 
-	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies(2);
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
 	vk::RenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
-	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	//renderPassInfo.pDependencies = dependencies.data();
 
 	renderPass = vulkan->device.createRenderPass(renderPassInfo);
 }
 
-void vm::SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
+void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
 	frameBuffers.resize(vulkan->swapchain->images.size());
 
@@ -139,8 +121,8 @@ void vm::SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.renderPass = renderPass;
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
-		fbci.width = WIDTH;
-		fbci.height = HEIGHT;
+		fbci.width = renderTargets["ssr"].width;
+		fbci.height = renderTargets["ssr"].height;
 		fbci.layers = 1;
 		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
 	}
@@ -189,8 +171,8 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	vk::Viewport vp;
 	vp.x = 0.0f;
 	vp.y = 0.0f;
-	vp.width = WIDTH_f;
-	vp.height = HEIGHT_f;
+	vp.width = renderTargets["ssr"].width_f;
+	vp.height = renderTargets["ssr"].height_f;
 	vp.minDepth = 0.0f;
 	vp.maxDepth = 1.0f;
 

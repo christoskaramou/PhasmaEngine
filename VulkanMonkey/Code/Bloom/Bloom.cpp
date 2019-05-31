@@ -8,26 +8,27 @@ void Bloom::Init()
 {
 	frameImage.format = vulkan->surface->formatKHR.format;
 	frameImage.initialLayout = vk::ImageLayout::eUndefined;
-	frameImage.createImage(WIDTH, HEIGHT, vk::ImageTiling::eOptimal,
+	frameImage.createImage(
+		static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+		static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 	frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 	frameImage.createSampler();
 }
 
-void Bloom::copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex)
+void Bloom::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage)
 {
-	Image& s_chain_Image = VulkanContext::getSafe().swapchain->images[imageIndex];
-
 	frameImage.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::ImageLayout::eTransferDstOptimal,
 		vk::PipelineStageFlagBits::eFragmentShader,
 		vk::PipelineStageFlagBits::eTransfer);
-	s_chain_Image.transitionImageLayout(
+	renderedImage.transitionImageLayout(
 		cmd,
-		vk::ImageLayout::ePresentSrcKHR,
+		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::ImageLayout::eTransferSrcOptimal,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput,
 		vk::PipelineStageFlagBits::eTransfer);
@@ -38,12 +39,12 @@ void Bloom::copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex)
 	region.srcSubresource.layerCount = 1;
 	region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 	region.dstSubresource.layerCount = 1;
-	region.extent.width = WIDTH;
-	region.extent.height = HEIGHT;
+	region.extent.width = renderedImage.width;
+	region.extent.height = renderedImage.height;
 	region.extent.depth = 1;
 
 	cmd.copyImage(
-		s_chain_Image.image,
+		renderedImage.image,
 		vk::ImageLayout::eTransferSrcOptimal,
 		frameImage.image,
 		vk::ImageLayout::eTransferDstOptimal,
@@ -55,10 +56,10 @@ void Bloom::copyFrameImage(const vk::CommandBuffer& cmd, uint32_t imageIndex)
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
 		vk::PipelineStageFlagBits::eFragmentShader);
-	s_chain_Image.transitionImageLayout(
+	renderedImage.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eTransferSrcOptimal,
-		vk::ImageLayout::ePresentSrcKHR,
+		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput);
 }
@@ -134,14 +135,14 @@ void vm::Bloom::createCombineRenderPass(std::map<std::string, Image>& renderTarg
 {
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Swapchain attachment
-	attachments[0].format = vulkan->surface->formatKHR.format;
+	attachments[0].format = renderTargets["viewport"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
+	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
 	std::vector<vk::AttachmentReference> colorReferences{
 		{ 0, vk::ImageLayout::eColorAttachmentOptimal }
@@ -173,8 +174,8 @@ void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.renderPass = renderPassBrightFilter;
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
-		fbci.width = WIDTH;
-		fbci.height = HEIGHT;
+		fbci.width = renderTargets["brightFilter"].width;
+		fbci.height = renderTargets["brightFilter"].height;
 		fbci.layers = 1;
 		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
 	}
@@ -187,8 +188,8 @@ void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.renderPass = renderPassGaussianBlur;
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
-		fbci.width = WIDTH;
-		fbci.height = HEIGHT;
+		fbci.width = renderTargets["gaussianBlurHorizontal"].width;
+		fbci.height = renderTargets["gaussianBlurHorizontal"].height;
 		fbci.layers = 1;
 		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
 	}
@@ -201,22 +202,22 @@ void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.renderPass = renderPassGaussianBlur;
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
-		fbci.width = WIDTH;
-		fbci.height = HEIGHT;
+		fbci.width = renderTargets["gaussianBlurVertical"].width;
+		fbci.height = renderTargets["gaussianBlurVertical"].height;
 		fbci.layers = 1;
 		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
 	}
 
 	for (size_t i = vulkan->swapchain->images.size() * 3; i < vulkan->swapchain->images.size() * 4; ++i) {
 		std::vector<vk::ImageView> attachments = {
-			vulkan->swapchain->images[i - vulkan->swapchain->images.size() * 3].view
+			renderTargets["viewport"].view
 		};
 		vk::FramebufferCreateInfo fbci;
 		fbci.renderPass = renderPassCombine;
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
-		fbci.width = WIDTH;
-		fbci.height = HEIGHT;
+		fbci.width = renderTargets["viewport"].width;
+		fbci.height = renderTargets["viewport"].height;
 		fbci.layers = 1;
 		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
 	}
@@ -290,7 +291,8 @@ void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImage
 	vk::RenderPassBeginInfo rpi;
 	rpi.renderPass = renderPassBrightFilter;
 	rpi.framebuffer = frameBuffers[imageIndex];
-	rpi.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
+	rpi.renderArea.offset = { 0, 0 };
+	rpi.renderArea.extent = renderTargets["brightFilter"].extent;
 	rpi.clearValueCount = 1;
 	rpi.pClearValues = clearValues.data();
 
@@ -380,8 +382,8 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 	vk::Viewport vp;
 	vp.x = 0.0f;
 	vp.y = 0.0f;
-	vp.width = WIDTH_f;
-	vp.height = HEIGHT_f;
+	vp.width = renderTargets["brightFilter"].width_f;
+	vp.height = renderTargets["brightFilter"].height_f;
 	vp.minDepth = 0.0f;
 	vp.maxDepth = 1.0f;
 
@@ -539,8 +541,8 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 	vk::Viewport vp;
 	vp.x = 0.0f;
 	vp.y = 0.0f;
-	vp.width = WIDTH_f;
-	vp.height = HEIGHT_f;
+	vp.width = renderTargets["gaussianBlurHorizontal"].width_f;
+	vp.height = renderTargets["gaussianBlurHorizontal"].height_f;
 	vp.minDepth = 0.0f;
 	vp.maxDepth = 1.0f;
 
@@ -698,8 +700,8 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 	vk::Viewport vp;
 	vp.x = 0.0f;
 	vp.y = 0.0f;
-	vp.width = WIDTH_f;
-	vp.height = HEIGHT_f;
+	vp.width = renderTargets["gaussianBlurVertical"].width_f;
+	vp.height = renderTargets["gaussianBlurVertical"].height_f;
 	vp.minDepth = 0.0f;
 	vp.maxDepth = 1.0f;
 
@@ -856,8 +858,8 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	vk::Viewport vp;
 	vp.x = 0.0f;
 	vp.y = 0.0f;
-	vp.width = WIDTH_f;
-	vp.height = HEIGHT_f;
+	vp.width = renderTargets["viewport"].width_f;
+	vp.height = renderTargets["viewport"].height_f;
 	vp.minDepth = 0.0f;
 	vp.maxDepth = 1.0f;
 
@@ -909,9 +911,8 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	pipelineCombine.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_FALSE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
-		vulkan->swapchain->images[0].blentAttachment
+		renderTargets["viewport"].blentAttachment
 	};
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;

@@ -22,6 +22,7 @@ namespace vm {
 		// Data
 		static ImVec2		winPos;
 		static ImVec2		winSize;
+		static float		renderTargetsScale;
 		static bool			lock_render_window;
 		static bool			show_ssr;
 		static bool			show_ssao;
@@ -72,6 +73,8 @@ namespace vm {
 		static ImVec2		mlPanelPos;
 		static ImVec2		mlPanelSize;
 
+
+		static uint32_t		scaleRenderTargetsEventType;
 		static SDL_Window*  g_Window;
 		static Uint64       g_Time;
 		static bool         g_MousePressed[3];
@@ -89,13 +92,11 @@ namespace vm {
 		vk::CommandBuffer cmdBuf;
 		vk::Fence fenceUpload;
 		Pipeline pipeline;
-		Image guiScaled;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
-		void Init();
 		void update();
 		void loadGUI(bool show = true);
-		void scaleToRenderArea(vk::CommandBuffer cmd, uint32_t imageIndex);
+		void scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex);
 		void draw(vk::CommandBuffer cmd, uint32_t imageIndex);
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();
