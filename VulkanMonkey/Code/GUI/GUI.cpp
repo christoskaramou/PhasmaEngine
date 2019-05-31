@@ -8,7 +8,7 @@
 using namespace vm;
 ImVec2						GUI::winPos = ImVec2();
 ImVec2						GUI::winSize = ImVec2();
-float						GUI::renderTargetsScale = 1.0f;
+float						GUI::renderTargetsScale = 0.71f;
 bool						GUI::lock_render_window = true;
 bool						GUI::show_ssr = false;
 bool						GUI::show_ssao = false;
@@ -332,8 +332,8 @@ void GUI::Properties()
 		if (use_TAA) {
 			ImGui::Indent(16.0f);
 			ImGui::InputFloat("Jitter", &TAA_jitter_scale, 0.01f, 0.1f, 5);
-			ImGui::InputFloat("FeedbackMin", &TAA_feedback_min, 0.01f, 0.1f, 2);
-			ImGui::InputFloat("FeedbackMax", &TAA_feedback_max, 0.01f, 0.1f, 2);
+			ImGui::InputFloat("FeedbackMin", &TAA_feedback_min, 0.005f, 0.05f, 3);
+			ImGui::InputFloat("FeedbackMax", &TAA_feedback_max, 0.005f, 0.05f, 3);
 			ImGui::InputFloat("Strength", &TAA_sharp_strength, 0.1f, 0.2f, 2);
 			ImGui::InputFloat("Clamp", &TAA_sharp_clamp, 0.01f, 0.05f, 3);
 			ImGui::InputFloat("Bias", &TAA_sharp_offset_bias, 0.1f, 0.3f, 1);

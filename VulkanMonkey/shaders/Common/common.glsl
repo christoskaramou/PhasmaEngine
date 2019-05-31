@@ -104,6 +104,15 @@ vec3 dilate_Depth3X3(sampler2D samplerVelocity, sampler2D samplerDepth, vec2 tex
 	return texture(samplerVelocity, closestTexCoord).xyz;
 }
 
+float Luminance(vec3 color)
+{
+	//vec3 PALandNTSC = vec3(0.299, 0.587, 0.114);
+	//vec3 HDTV = vec3(0.2126, 0.7152, 0.0722);
+	vec3 HDR = vec3(0.2627, 0.6780, 0.0593);
+
+	return dot(color, HDR);
+}
+
 vec3 sharpenSimple(sampler2D tex, vec2 UV)
 {
 	ivec2 texDim = textureSize(tex, 0);

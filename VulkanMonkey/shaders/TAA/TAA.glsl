@@ -11,24 +11,18 @@ vec3 clip_aabb(vec3 aabb_min, vec3 aabb_max, vec3 p, vec3 q)
 	vec3 rmax = aabb_max - p;
 	vec3 rmin = aabb_min - p;
 	
-	if (r.x > rmax.x + FLT_EPS)
-		r *= (rmax.x / r.x);
-	if (r.y > rmax.y + FLT_EPS)
-		r *= (rmax.y / r.y);
-	if (r.z > rmax.z + FLT_EPS)
-		r *= (rmax.z / r.z);
+	if (r.x > rmax.x + FLT_EPS) r *= (rmax.x / r.x);
+	if (r.y > rmax.y + FLT_EPS) r *= (rmax.y / r.y);
+	if (r.z > rmax.z + FLT_EPS) r *= (rmax.z / r.z);
 	
-	if (r.x < rmin.x - FLT_EPS)
-		r *= (rmin.x / r.x);
-	if (r.y < rmin.y - FLT_EPS)
-		r *= (rmin.y / r.y);
-	if (r.z < rmin.z - FLT_EPS)
-		r *= (rmin.z / r.z);
+	if (r.x < rmin.x - FLT_EPS) r *= (rmin.x / r.x);
+	if (r.y < rmin.y - FLT_EPS) r *= (rmin.y / r.y);
+	if (r.z < rmin.z - FLT_EPS) r *= (rmin.z / r.z);
 	
 	return p + r;
 }
 
-vec4 ResolveTAA(vec2 texCoord, sampler2D tex_history, sampler2D tex_current, sampler2D tex_velocity, sampler2D tex_depth, float g_blendMin, float g_blendMax)
+vec4 ResolveTAA(vec2 texCoord, sampler2D tex_history, sampler2D tex_current, sampler2D tex_velocity, sampler2D tex_depth, float g_blendMin, float g_blendMax, vec2 jitter)
 {
 	// Reproject
 	vec2 velocity = dilate_Depth3X3(tex_velocity, tex_depth, texCoord).xy;
@@ -61,7 +55,7 @@ vec4 ResolveTAA(vec2 texCoord, sampler2D tex_history, sampler2D tex_current, sam
 	
 	color_history = clip_aabb(color_min, color_max, clamp(color_avg, color_min, color_max), color_history);
 
-	float factor_subpixel = saturate(length(velocity * g_resolution));
+	float factor_subpixel = saturate(length(velocity * 0.1 * g_resolution));
 
 	float blendfactor = is_saturated(texCoord_history) ? lerp(g_blendMin, g_blendMax, factor_subpixel) : 1.0;
 	
