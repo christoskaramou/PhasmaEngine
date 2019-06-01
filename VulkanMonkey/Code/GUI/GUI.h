@@ -24,6 +24,7 @@ namespace vm {
 		static ImVec2		winSize;
 		static float		renderTargetsScale;
 		static bool			lock_render_window;
+		static bool			use_IBL;
 		static bool			show_ssr;
 		static bool			show_ssao;
 		static bool			show_tonemapping;

@@ -10,6 +10,7 @@ ImVec2						GUI::winPos = ImVec2();
 ImVec2						GUI::winSize = ImVec2();
 float						GUI::renderTargetsScale = 0.71f;
 bool						GUI::lock_render_window = true;
+bool						GUI::use_IBL = true;
 bool						GUI::show_ssr = false;
 bool						GUI::show_ssao = false;
 bool						GUI::show_tonemapping = false;
@@ -303,6 +304,7 @@ void GUI::Properties()
 		}
 	}
 	ImGui::Checkbox("Lock Render Window", &lock_render_window);
+	ImGui::Checkbox("IBL", &use_IBL);
 	ImGui::Checkbox("SSR", &show_ssr);
 	ImGui::Checkbox("SSAO", &show_ssao);
 	ImGui::Checkbox("Motion Blur", &show_motionBlur);

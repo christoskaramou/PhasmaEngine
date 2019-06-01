@@ -1,8 +1,6 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 
-#include "../Common/common.glsl"
-#include "../Common/tonemapping.glsl"
 #include "Light.glsl"
 
 layout (location = 0) in vec2 inUV;
@@ -16,18 +14,18 @@ layout (location = 13) in mat4 shadow_coords2; // large area
 
 layout (location = 0) out vec4 outColor;
 
-vec3 calculateShadowAndDirectLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal);
+vec3 calculateShadowAndDirectLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao);
 
 void main() 
-{ 
-	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj);
-	if (texture(samplerDepth, inUV).x == 0.0) 
-	{
+{
+	// if depth is maxmimum sample the skybox and return
+	if (texture(samplerDepth, inUV).x == 0.0) {
+		vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj);
 		outColor = vec4(texture(cubemapSampler, normalize(fragPos - ubo.camPos.xyz)).xyz, 1.0);
 		return;
 	}
+	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj);
 	vec3 normal = texture(samplerNormal, inUV).xyz;
-	float ssao = texture(ssaoBlurSampler, inUV).x;
 	vec3 metRough = texture(samplerMetRough, inUV).xyz;
 	vec4 albedo = texture(samplerAlbedo, inUV);
 	
@@ -38,20 +36,19 @@ void main()
 	material.F0 = mix(vec3(0.04f), material.albedo, material.metallic);
 
 	// Ambient
-	vec3 I = normalize(fragPos - ubo.camPos.xyz);
-    vec3 R = reflect(I, normalize(normal));
-	vec3 envColor = (texture(cubemapSampler, R).xyz * (1.0 - material.roughness) * material.metallic); // very fake enviroment reflectance
-	vec3 fragColor = 0.1 * material.albedo.xyz + 0.2 * envColor;
+	float factor_occlusion = screenSpace.effect.x > 0.5 ? texture(ssaoBlurSampler, inUV).x : 1.0;
+	float factor_sky_light = clamp(ubo.lights[0].color.a, 0.025f, 1.0f);
+	float ambient_light = factor_sky_light * factor_occlusion;
+	vec3 fragColor = vec3(0.0);// 0.1 * material.albedo.xyz;
 
-	// SSAO
-	if (screenSpace.effect.x > 0.5f)
-		fragColor *= ssao;
+	// IBL
+	if (screenSpace.effect1.x > 0.5)
+		fragColor += ImageBasedLighting(material, normal, normalize(fragPos - ubo.camPos.xyz), cubemapSampler, lutIBLSamlpler) * ambient_light;
 
-	fragColor += calculateShadowAndDirectLight(material, fragPos, ubo.camPos.xyz, normal);
+	fragColor += calculateShadowAndDirectLight(material, fragPos, ubo.camPos.xyz, normal, factor_occlusion);
 
-	for(int i = 1; i < NUM_LIGHTS+1; ++i){
-		fragColor += compute_point_light(i, material, fragPos, ubo.camPos.xyz, normal);
-	}
+	for(int i = 1; i < NUM_LIGHTS+1; ++i)
+		fragColor += compute_point_light(i, material, fragPos, ubo.camPos.xyz, normal, factor_occlusion);
 
 	outColor = vec4(fragColor, albedo.a) + texture(emiSampler, inUV);
 
@@ -62,8 +59,9 @@ void main()
 	// Tone Mapping
 	if (screenSpace.effect.z > 0.5)
 		//outColor.xyz = ACESFilm(outColor.xyz);
-		outColor.xyz = SRGBtoLINEAR(TonemapFilmic(outColor.xyz, screenSpace.effect2.x));
+		//outColor.xyz = SRGBtoLINEAR(TonemapFilmic(outColor.xyz, screenSpace.effect2.x));
 		//outColor.xyz = ACESFitted(outColor.xyz);
+		outColor.xyz = Reinhard(outColor.xyz);
 		//outColor.xyz = ToneMapReinhard(outColor.xyz, screenSpace.effect2.x); // ToneMapReinhard(color, exposure value)
 }
 
@@ -77,7 +75,7 @@ vec2 poissonDisk[8] = vec2[](
 	vec2(0.015656f, 0.749779f),
 	vec2(0.758385f, 0.49617f));
 
-vec3 calculateShadowAndDirectLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal)
+vec3 calculateShadowAndDirectLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao)
 {
 	vec4 s_coords0 = shadow_coords0 * vec4(world_pos, 1.0);
 	s_coords0.xy = s_coords0.xy * 0.5 + 0.5;

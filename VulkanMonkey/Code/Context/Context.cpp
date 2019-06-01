@@ -594,8 +594,7 @@ vk::SurfaceFormatKHR Context::getSurfaceFormat()
 	
 	// Check for blit operation
 	auto fProps = vulkan.gpu.getFormatProperties(format.format);
-	if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eBlitSrc) ||
-		!(fProps.linearTilingFeatures & vk::FormatFeatureFlagBits::eBlitDst))
+	if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eBlitSrc))
 		throw std::runtime_error("No blit operation supported");
 
 	return format;

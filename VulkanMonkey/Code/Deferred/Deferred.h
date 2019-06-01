@@ -24,6 +24,7 @@ namespace vm {
 		vk::DescriptorSetLayout DSLayoutComposition;
 		Pipeline pipeline;
 		Pipeline pipelineComposition;
+		Image ibl_brdf_lut;
 
 		void batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent);
 		void batchEnd();

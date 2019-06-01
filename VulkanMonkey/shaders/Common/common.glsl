@@ -186,4 +186,13 @@ vec3 LumaSharpen(sampler2D tex, vec2 UV, float sharp_strength, float sharp_clamp
 	return clamp(colorInput, 0.0f, 1.0f).rgb;
 }
 
+float mip_map_level(vec2 texture_coordinate) // in texel units
+{
+    vec2  dx_vtc        = dFdx(texture_coordinate);
+    vec2  dy_vtc        = dFdy(texture_coordinate);
+    float delta_max_sqr = max(dot(dx_vtc, dx_vtc), dot(dy_vtc, dy_vtc));
+    float mml = 0.5 * log2(delta_max_sqr);
+    return max( 0, mml);
+}
+
 #endif

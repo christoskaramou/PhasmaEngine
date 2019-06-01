@@ -6,7 +6,7 @@
 layout (set = 0, binding = 0) uniform sampler2D samplerDepth;
 layout (set = 0, binding = 1) uniform sampler2D samplerNormal;
 layout (set = 0, binding = 2) uniform sampler2D samplerNoise;
-layout (set = 0, binding = 3) uniform UniformBufferObject { vec4 samples[64]; } kernel;
+layout (set = 0, binding = 3) uniform UniformBufferObject { vec4 samples[16]; } kernel;
 layout (set = 0, binding = 4) uniform UniformBufferPVM { mat4 projection; mat4 view; mat4 invProjection; } pvm;
 
 
@@ -39,8 +39,13 @@ void main()
 	float occlusion = 0.0f;
 	for(int i = 0; i < KERNEL_SIZE; i++)
 	{
-		vec3 direction = TBN * kernel.samples[i].xyz * RADIUS;
-		vec4 newViewPos = vec4(fragPos + direction, 1.0);
+		vec3 offset = TBN * kernel.samples[i].xyz * RADIUS;
+		vec3 origin_to_sample = offset - fragPos.xyz;
+		if(dot(normal.xyz, origin_to_sample) < 0.0f)
+		{
+            offset *= -1.0;	
+		}
+		vec4 newViewPos = vec4(fragPos + offset, 1.0);
 		vec4 samplePosition = pvm.projection * newViewPos;
 		samplePosition.xy /= samplePosition.w;
 		samplePosition.xy = samplePosition.xy * 0.5f + 0.5f;

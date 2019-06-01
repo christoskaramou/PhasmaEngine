@@ -1,4 +1,5 @@
 #include "Light.h"
+#include "../Math/Math.h"
 
 using namespace vm;
 
@@ -55,21 +56,21 @@ void LightUniforms::destroy()
 
 void LightUniforms::update(Camera& camera)
 {
+	// uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS + 1]; } ubo;
 	if (GUI::randomize_lights) {
 		GUI::randomize_lights = false;
 		LightsUBO lubo;
 		lubo.camPos = vec4(camera.position, 1.0f);
 		memcpy(uniform.data, &lubo, sizeof(lubo));
 	}
-	else {
-		vec4 values[3] = {
-			{ camera.position, 1.0f },
-			{ .9765f, .8431f, .9098f, 1.f },
-			{ GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2], 1.0f }
-		};
-		values[1] *= GUI::sun_intensity;
-		memcpy(uniform.data, values, sizeof(values));
-	}
+	vec3 sunPos(GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2]);
+	float angle = dot(normalize(sunPos), vec3(0.f, 1.f, 0.f));
+	vec4 values[3] = { // = {camPos, suncolor, sunposition}
+		{ camera.position, 1.0f },
+		{ .9765f * GUI::sun_intensity, .8431f * GUI::sun_intensity, .9098f * GUI::sun_intensity, GUI::shadow_cast ? angle * 0.5f : angle * 0.25f},
+		{ sunPos.x, sunPos.y, sunPos.z, 1.0f }
+	};
+	memcpy(uniform.data, values, sizeof(values));
 }
 
 vk::DescriptorSetLayout LightUniforms::getDescriptorSetLayout()

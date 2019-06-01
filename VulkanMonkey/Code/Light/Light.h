@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace vm {
-	#define MAX_LIGHTS 50
+	#define MAX_LIGHTS 25
 
 	struct Light
 	{

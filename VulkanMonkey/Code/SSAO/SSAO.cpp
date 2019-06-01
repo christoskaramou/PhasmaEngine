@@ -7,15 +7,15 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 {
 	// kernel buffer
 	std::vector<vec4> kernel{};
-	for (unsigned i = 0; i < 32; i++) {
+	for (unsigned i = 0; i < 16; i++) {
 		vec3 sample(rand(-1.f, 1.f), rand(-1.f, 1.f), rand(0.f, 1.f));
 		sample = normalize(sample);
 		sample *= rand(0.f, 1.f);
-		float scale = float(i) / 32.f;
+		float scale = float(i) / 16.f;
 		scale = lerp(.1f, 1.f, scale * scale);
 		kernel.push_back(vec4(sample * scale, 0.f));
 	}
-	UB_Kernel.createBuffer(sizeof(vec4) * 32, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	UB_Kernel.createBuffer(sizeof(vec4) * 16, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UB_Kernel.data = vulkan->device.mapMemory(UB_Kernel.memory, 0, UB_Kernel.size);
 	memcpy(UB_Kernel.data, kernel.data(), UB_Kernel.size);
 	// noise image

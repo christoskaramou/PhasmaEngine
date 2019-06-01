@@ -44,6 +44,50 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 	};
 	DSComposition = vulkan->device.allocateDescriptorSets(allocInfo).at(0);
 
+	// Check if ibl_brdf_lut is already loaded
+	std::string path = "objects/ibl_brdf_lut.png";
+	if (Mesh::uniqueTextures.find(path) != Mesh::uniqueTextures.end()) {
+		ibl_brdf_lut = Mesh::uniqueTextures[path];
+	}
+	else {
+		int texWidth, texHeight, texChannels;
+		unsigned char* pixels = nullptr;
+		pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		if (!pixels)
+			throw std::runtime_error("No pixel data loaded");
+		vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
+
+		while (VulkanContext::submiting) {}
+		VulkanContext::submiting = true;
+
+		Buffer staging;
+		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+		auto * vulkan = &VulkanContext::get();
+		vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &staging.data);
+		memcpy(staging.data, pixels, static_cast<size_t>(imageSize));
+		vulkan->device.unmapMemory(staging.memory);
+
+		stbi_image_free(pixels);
+
+		ibl_brdf_lut.name = path;
+		ibl_brdf_lut.format = vk::Format::eR8G8B8A8Unorm;
+		ibl_brdf_lut.mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
+		ibl_brdf_lut.createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		ibl_brdf_lut.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
+		ibl_brdf_lut.copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight);
+		ibl_brdf_lut.generateMipMaps(texWidth, texHeight);
+		ibl_brdf_lut.createImageView(vk::ImageAspectFlagBits::eColor);
+		ibl_brdf_lut.maxLod = static_cast<float>(ibl_brdf_lut.mipLevels);
+		ibl_brdf_lut.createSampler();
+
+		staging.destroy();
+
+		VulkanContext::submiting = false;
+
+		Mesh::uniqueTextures[path] = ibl_brdf_lut;
+	}
+
 	updateDescriptorSets(renderTargets, lightUniforms);
 }
 
@@ -68,7 +112,8 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 		wSetBuffer(DSComposition, 4, lightUniforms.uniform),
 		wSetImage(DSComposition, 5, renderTargets["ssaoBlur"]),
 		wSetImage(DSComposition, 6, renderTargets["ssr"]),
-		wSetImage(DSComposition, 7, renderTargets["emissive"])
+		wSetImage(DSComposition, 7, renderTargets["emissive"]),
+		wSetImage(DSComposition, 8, ibl_brdf_lut)
 	};
 
 	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
@@ -93,7 +138,7 @@ void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows
 
 	std::vector<vec4> screenSpace(7);
 	screenSpace[0] = { GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, GUI::show_tonemapping ? 1.f : 0.f, GUI::use_AntiAliasing ? 1.f : 0.f };
-	screenSpace[1] = { };
+	screenSpace[1] = { GUI::use_IBL ? 1.f : 0.f, 0.f, 0.f, 0.f };
 	screenSpace[2] = { invViewProj[0] };
 	screenSpace[3] = { invViewProj[1] };
 	screenSpace[4] = { invViewProj[2] };
@@ -583,6 +628,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 			layoutBinding(5, vk::DescriptorType::eCombinedImageSampler),
 			layoutBinding(6, vk::DescriptorType::eCombinedImageSampler),
 			layoutBinding(7, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(8, vk::DescriptorType::eCombinedImageSampler),
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
