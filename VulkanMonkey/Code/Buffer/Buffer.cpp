@@ -12,7 +12,7 @@ void Buffer::createBuffer(const vk::DeviceSize size, const vk::BufferUsageFlags 
 	bufferInfo.sharingMode = vk::SharingMode::eExclusive;
 	buffer = vulkan->device.createBuffer(bufferInfo);
 
-	uint32_t memTypeIndex = UINT32_MAX; ///////////////////
+	uint32_t memTypeIndex = UINT32_MAX;
 	auto const memRequirements = vulkan->device.getBufferMemoryRequirements(buffer);
 	auto const memProperties = vulkan->gpu.getMemoryProperties();
 	for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
@@ -51,7 +51,7 @@ void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size)
 	vk::BufferCopy bufferCopy{};
 	bufferCopy.size = size;
 
-	copyCmd.copyBuffer(srcBuffer, buffer, 1, &bufferCopy);
+	copyCmd.copyBuffer(srcBuffer, buffer, bufferCopy);
 
 	copyCmd.end();
 
