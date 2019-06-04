@@ -514,6 +514,11 @@ Surface Context::createSurface()
 
 int Context::getGraphicsFamilyId()
 {
+#ifdef UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
+	vk::QueueFlags flags = vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eTransfer;
+#else
+	vk::QueueFlags flags = vk::QueueFlagBits::eTransfer;
+#endif
 	auto& properties = vulkan.queueFamilyProperties;
 	for (int i = 0; i < properties.size(); i++) {
 		//find graphics queue family index
@@ -523,25 +528,31 @@ int Context::getGraphicsFamilyId()
 	return -1;
 }
 
-int Context::getComputeFamilyId()
-{
-	auto& properties = vulkan.queueFamilyProperties;
-	// prefer different families for different queue types, thus the reverse check
-	for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i) {
-		//find compute queue family index
-		if (properties[i].queueFlags & vk::QueueFlagBits::eCompute)
-			return i;
-	}
-	return -1;
-}
-
 int vm::Context::getTransferFamilyId()
 {
+#ifdef UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
+	return getGraphicsFamilyId();
+#else
+	vk::QueueFlags flags = vk::QueueFlagBits::eTransfer;
 	auto& properties = vulkan.queueFamilyProperties;
 	// prefer different families for different queue types, thus the reverse check
 	for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i) {
 		//find transfer queue family index
-		if (properties[i].queueFlags & vk::QueueFlagBits::eTransfer)
+		if (properties[i].queueFlags & flags)
+			return i;
+	}
+	return -1;
+#endif
+}
+
+int Context::getComputeFamilyId()
+{
+	vk::QueueFlags flags = vk::QueueFlagBits::eCompute;
+	auto& properties = vulkan.queueFamilyProperties;
+	// prefer different families for different queue types, thus the reverse check
+	for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i) {
+		//find compute queue family index
+		if (properties[i].queueFlags & flags)
 			return i;
 	}
 	return -1;
@@ -671,14 +682,13 @@ vk::Queue Context::getGraphicsQueue()
 	return vulkan.device.getQueue(vulkan.graphicsFamilyId, 0);
 }
 
-vk::Queue Context::getComputeQueue()
-{
-	return vulkan.device.getQueue(vulkan.computeFamilyId, 0);
-}
-
 vk::Queue vm::Context::getTransferQueue()
 {
 	return vulkan.device.getQueue(vulkan.transferFamilyId, 0);
+}
+vk::Queue Context::getComputeQueue()
+{
+	return vulkan.device.getQueue(vulkan.computeFamilyId, 0);
 }
 
 Swapchain Context::createSwapchain()

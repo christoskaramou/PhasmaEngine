@@ -435,40 +435,37 @@ void Renderer::present()
 		//ctx.vulkan.device.resetFences(ctx.vulkan.fences[1]);
 	}
 
-	// what stage of a pipeline at a command buffer to wait for the semaphores to be done until keep going
-	const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+	// waitStage is a pipeline stage at which a semaphore wait will occur.
+	const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader };
 
-	uint32_t imageIndex;
+	const uint32_t imageIndex = ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[0], vk::Fence()).value;
 
-	// if using shadows use the semaphore[0], record and submit the shadow commands, else use the semaphore[1]
+	while (VulkanContext::submiting) {}
+	VulkanContext::submiting = true;
+
 	if (GUI::shadow_cast) {
-		imageIndex = ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[0], vk::Fence()).value;
-
 		recordShadowsCmds(imageIndex);
 
 		vk::SubmitInfo siShadows;
 		siShadows.waitSemaphoreCount = 1;
 		siShadows.pWaitSemaphores = &ctx.vulkan.semaphores[0];
-		siShadows.pWaitDstStageMask = waitStages;
+		siShadows.pWaitDstStageMask = &waitStages[0];
 		siShadows.commandBufferCount = static_cast<uint32_t>(ctx.vulkan.shadowCmdBuffer.size());
 		siShadows.pCommandBuffers = ctx.vulkan.shadowCmdBuffer.data();
 		siShadows.signalSemaphoreCount = 1;
 		siShadows.pSignalSemaphores = &ctx.vulkan.semaphores[1];
 		ctx.vulkan.graphicsQueue.submit(siShadows, nullptr);
 	}
-	else
-		imageIndex = ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[1], vk::Fence()).value;
 
 	recordDeferredCmds(imageIndex);
-
-	while (VulkanContext::submiting) {}
-	VulkanContext::submiting = true;
+	const vk::Semaphore& waiSemaphore = GUI::shadow_cast ? ctx.vulkan.semaphores[1] : ctx.vulkan.semaphores[0];
+	const vk::PipelineStageFlags waitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
 
 	// submit the command buffer
 	vk::SubmitInfo si;
 	si.waitSemaphoreCount = 1;
-	si.pWaitSemaphores = &ctx.vulkan.semaphores[1];
-	si.pWaitDstStageMask = waitStages;
+	si.pWaitSemaphores = &waiSemaphore;
+	si.pWaitDstStageMask = &waitStage;
 	si.commandBufferCount = 1;
 	si.pCommandBuffers = &ctx.vulkan.dynamicCmdBuffer;
 	si.signalSemaphoreCount = 1;

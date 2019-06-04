@@ -129,7 +129,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <AdditionalDependencies>mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Program Files\Mono\lib;C:\VulkanSDK\1.1.106.0\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.1.106.0\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <ProjectReference>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
@@ -177,7 +177,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalDependencies>mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\Program Files\Mono\lib;C:\VulkanSDK\1.1.106.0\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.1.106.0\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Windows</SubSystem>
       <AdditionalOptions>/ENTRY:"mainCRTStartup" %(AdditionalOptions)</AdditionalOptions>
       <Profile>true</Profile>

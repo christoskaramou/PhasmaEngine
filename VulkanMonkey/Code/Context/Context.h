@@ -32,6 +32,7 @@
 #include <map>
 
 //#define USE_SCRIPTS
+#define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
 namespace vm {
 	struct Context
@@ -105,8 +106,8 @@ namespace vm {
 		vk::Instance createInstance();
 		Surface createSurface();
 		int getGraphicsFamilyId();
-		int getComputeFamilyId();
 		int getTransferFamilyId();
+		int getComputeFamilyId();
 		vk::PhysicalDevice findGpu();
 		vk::PhysicalDeviceProperties getGPUProperties();
 		vk::PhysicalDeviceFeatures getGPUFeatures();
@@ -115,8 +116,8 @@ namespace vm {
 		vk::PresentModeKHR getPresentationMode();
 		vk::Device createDevice();
 		vk::Queue getGraphicsQueue();
-		vk::Queue getComputeQueue();
 		vk::Queue getTransferQueue();
+		vk::Queue getComputeQueue();
 		Swapchain createSwapchain();
 		vk::CommandPool createCommandPool();
 		Image createDepthResources();

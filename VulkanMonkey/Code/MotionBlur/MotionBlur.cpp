@@ -116,7 +116,7 @@ void MotionBlur::createRenderPass(std::map<std::string, Image>& renderTargets)
 	// Color attachment
 	attachments[0].format = renderTargets["viewport"].format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eDontCare;
+	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
