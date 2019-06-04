@@ -478,8 +478,13 @@ vk::Instance Context::createInstance()
 
 	std::vector<const char*> instanceLayers{};
 #ifdef _DEBUG
-	instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
-	instanceLayers.push_back("VK_LAYER_LUNARG_assistant_layer");
+	auto layers = vk::enumerateInstanceLayerProperties();
+	for (auto layer : layers) {
+		if (std::string(layer.layerName) == "VK_LAYER_KHRONOS_validation")
+			instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
+		if (std::string(layer.layerName) == "VK_LAYER_LUNARG_assistant_layer")
+			instanceLayers.push_back("VK_LAYER_LUNARG_assistant_layer");
+	}
 #endif
 
 	vk::ApplicationInfo appInfo;
