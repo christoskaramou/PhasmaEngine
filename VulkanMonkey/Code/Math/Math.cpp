@@ -1337,25 +1337,6 @@ namespace vm {
 		}
 	}
 
-	float clamp(cfloat x, cfloat minX, cfloat maxX)
-	{
-		return minimum(maximum(x, minX), maxX);
-	}
-
-	void clamp(float * const x, cfloat minX, cfloat maxX)
-	{
-		*x = clamp(*x, minX, maxX);
-	}
-
-	float minimum(cfloat a, cfloat b)
-	{
-		return (b < a) ? b : a;
-	}
-
-	float maximum(cfloat a, cfloat b)
-	{
-		return (a < b) ? b : a;
-	}
 	vec3 minimum(cvec3& v1, cvec3& v2)
 	{
 		return vec3(

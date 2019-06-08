@@ -16,7 +16,6 @@ namespace vm {
 		void present();
 
 		Context ctx;
-		float waitingTime = 0.f; // ms
 		bool prepared = false;
 
 	private:

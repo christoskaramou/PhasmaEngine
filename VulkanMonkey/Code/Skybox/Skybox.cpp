@@ -105,7 +105,7 @@ void SkyBox::loadTextures(const std::array<std::string, 6>& paths, uint32_t imag
 		vulkan->device.unmapMemory(staging.memory);
 		stbi_image_free(pixels);
 
-		texture.copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight, i);
+		texture.copyBufferToImage(staging.buffer, i);
 		staging.destroy();
 	}
 	texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);

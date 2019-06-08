@@ -6,11 +6,12 @@ using namespace vm;
 unsigned			Timer::totalCounter = 0;
 float				Timer::totalTime = 0.0f;
 float				Timer::delta = 0.0f;
+float				Timer::cleanDelta = 0.0f;
+float				Timer::waitingTime = 0.0f;
 float				Timer::time = 0.0f;
 unsigned			Timer::instances = 0;
 std::vector<float>	Timer::deltas(20, 0.f);
 std::chrono::high_resolution_clock::time_point Timer::frameStart = {};
-float				Timer::noWaitDelta = 0.f;
 
 Timer::Timer()
 {
@@ -25,9 +26,12 @@ Timer::Timer()
 
 Timer::~Timer()
 {
+    duration = std::chrono::high_resolution_clock::now() - start;
+	cleanDelta = duration.count();
+
+	// FPS limiting
     if (_minFrameTime > 0){
-        duration = std::chrono::high_resolution_clock::now() - start;
-		float delay = _minFrameTime - duration.count();
+		float delay = _minFrameTime - cleanDelta;
 		if (delay > 0.f)
 			SDL_Delay(static_cast<unsigned>(delay * 1000.f)); // not accurate but fast and not CPU cycle consuming
     }

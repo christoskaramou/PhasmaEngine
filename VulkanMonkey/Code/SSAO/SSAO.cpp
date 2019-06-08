@@ -37,7 +37,7 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	noiseTex.format = vk::Format::eR16G16B16A16Sfloat;
 	noiseTex.createImage(4, 4, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	noiseTex.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-	noiseTex.copyBufferToImage(staging.buffer, 0, 0, 4, 4);
+	noiseTex.copyBufferToImage(staging.buffer);
 	noiseTex.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 	noiseTex.createImageView(vk::ImageAspectFlagBits::eColor);
 	noiseTex.createSampler();

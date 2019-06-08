@@ -75,8 +75,8 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 		ibl_brdf_lut.mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
 		ibl_brdf_lut.createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		ibl_brdf_lut.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-		ibl_brdf_lut.copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight);
-		ibl_brdf_lut.generateMipMaps(texWidth, texHeight);
+		ibl_brdf_lut.copyBufferToImage(staging.buffer);
+		ibl_brdf_lut.generateMipMaps();
 		ibl_brdf_lut.createImageView(vk::ImageAspectFlagBits::eColor);
 		ibl_brdf_lut.maxLod = static_cast<float>(ibl_brdf_lut.mipLevels);
 		ibl_brdf_lut.createSampler();

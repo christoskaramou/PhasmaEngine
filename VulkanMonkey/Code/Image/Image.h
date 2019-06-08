@@ -46,8 +46,8 @@ namespace vm {
 		void createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1);
 		void createImageView(const vk::ImageAspectFlags aspectFlags);
 		void transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout);
-		void copyBufferToImage(const vk::Buffer buffer, const int x, const int y, const int width, const int height, const uint32_t baseLayer = 0);
-		void generateMipMaps(const int32_t texWidth, const int32_t texHeight);
+		void copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer = 0);
+		void generateMipMaps();
 		void createSampler();
 		void destroy();
 	};

@@ -35,10 +35,28 @@ namespace vm {
 		Swapchain* swapchain = nullptr;
 		Image* depth = nullptr;
 		vk::CommandBuffer dynamicCmdBuffer;
-		std::vector<vk::CommandBuffer> shadowCmdBuffer{};
+		std::vector<vk::CommandBuffer> shadowCmdBuffers{};
 		vk::DescriptorPool descriptorPool;
 		std::vector<vk::Fence> fences{};
 		std::vector<vk::Semaphore> semaphores{};
+
+		void submit(
+			vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
+			vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
+			vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
+			vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
+			const vk::Fence fence = nullptr)
+		{
+			vk::SubmitInfo si;
+			si.waitSemaphoreCount = waitSemaphores.size();
+			si.pWaitSemaphores = waitSemaphores.data();
+			si.pWaitDstStageMask = waitStages.data();
+			si.commandBufferCount = commandBuffers.size();
+			si.pCommandBuffers = commandBuffers.data();
+			si.signalSemaphoreCount = signalSemaphores.size();
+			si.pSignalSemaphores = signalSemaphores.data();
+			graphicsQueue.submit(si, fence);
+		};
 
 		// Helper
 		static inline std::atomic_bool submiting = false;

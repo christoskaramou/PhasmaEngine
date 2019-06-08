@@ -148,8 +148,8 @@ void Primitive::loadTexture(
 		tex->mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
 		tex->createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		tex->transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-		tex->copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight);
-		tex->generateMipMaps(texWidth, texHeight);
+		tex->copyBufferToImage(staging.buffer);
+		tex->generateMipMaps();
 		tex->createImageView(vk::ImageAspectFlagBits::eColor);
 		tex->maxLod = static_cast<float>(tex->mipLevels);
 		tex->createSampler();

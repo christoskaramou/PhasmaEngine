@@ -49,7 +49,7 @@ void Object::loadTexture(const std::string& path)
 	texture.mipLevels = 1;
 	texture.createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	texture.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-	texture.copyBufferToImage(staging.buffer, 0, 0, texWidth, texHeight);
+	texture.copyBufferToImage(staging.buffer);
 	texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 	texture.createImageView(vk::ImageAspectFlagBits::eColor);
 	texture.createSampler();

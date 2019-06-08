@@ -11,6 +11,7 @@ namespace vm {
 	struct quat;
 
 	typedef const float cfloat;
+	typedef const int cint;
 	typedef const vec2 cvec2;
 	typedef const vec3 cvec3;
 	typedef const vec4 cvec4;
@@ -269,12 +270,12 @@ namespace vm {
 	quat mix(cquat& q1, cquat& q2, cfloat a);
 	quat lerp(cquat& q1, cquat& q2, cfloat a);
 	quat slerp(cquat& q1, cquat& q2, cfloat a);
-	float clamp(cfloat x, cfloat minX, cfloat maxX);
-	void clamp(float* const x, cfloat minX, cfloat maxX);
-	float minimum(cfloat a, cfloat b);
-	float maximum(cfloat a, cfloat b);
 	vec3 minimum(cvec3& v1, cvec3& v2);
 	vec3 maximum(cvec3& v1, cvec3& v2);
+	template<typename T> inline T minimum(const T& a, const T& b) { return (b < a) ? b : a; };
+	template<typename T> inline T maximum(const T& a, const T& b) { return (a < b) ? b : a; };
+	template<typename T> inline T clamp(const T& x, const T& minX, const T& maxX) { return minimum(maximum(x, minX), maxX); };
+	template<typename T> inline void clamp(T* const x, const T& minX, const T& maxX) { *x = clamp(*x, minX, maxX); };
 	float rand(cfloat x1, cfloat x2);
 	float lerp(cfloat a, cfloat b, cfloat f);
 }

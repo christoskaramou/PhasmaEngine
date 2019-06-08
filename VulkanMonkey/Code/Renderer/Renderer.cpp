@@ -387,7 +387,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 	renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
 	for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
-		auto& cmd = ctx.vulkan.shadowCmdBuffer[i];
+		auto& cmd = ctx.vulkan.shadowCmdBuffers[i];
 		cmd.begin(beginInfoShadows);
 		ctx.metrics[10 + static_cast<size_t>(i)].start(cmd);
 		cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
@@ -438,7 +438,13 @@ void Renderer::present()
 	// waitStage is a pipeline stage at which a semaphore wait will occur.
 	const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader };
 
-	const uint32_t imageIndex = ctx.vulkan.device.acquireNextImageKHR(ctx.vulkan.swapchain->swapchain, UINT64_MAX, ctx.vulkan.semaphores[0], vk::Fence()).value;
+	std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
+	ctx.vulkan.device.waitForFences(ctx.vulkan.fences[0], VK_TRUE, UINT64_MAX);
+	ctx.vulkan.device.resetFences(ctx.vulkan.fences[0]);
+	std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
+	Timer::waitingTime = waitTime.count();
+
+	const uint32_t imageIndex = ctx.vulkan.swapchain->aquire(ctx.vulkan.semaphores[0], nullptr);
 
 	while (VulkanContext::submiting) {}
 	VulkanContext::submiting = true;
@@ -446,49 +452,18 @@ void Renderer::present()
 	if (GUI::shadow_cast) {
 		recordShadowsCmds(imageIndex);
 
-		vk::SubmitInfo siShadows;
-		siShadows.waitSemaphoreCount = 1;
-		siShadows.pWaitSemaphores = &ctx.vulkan.semaphores[0];
-		siShadows.pWaitDstStageMask = &waitStages[0];
-		siShadows.commandBufferCount = static_cast<uint32_t>(ctx.vulkan.shadowCmdBuffer.size());
-		siShadows.pCommandBuffers = ctx.vulkan.shadowCmdBuffer.data();
-		siShadows.signalSemaphoreCount = 1;
-		siShadows.pSignalSemaphores = &ctx.vulkan.semaphores[1];
-		ctx.vulkan.graphicsQueue.submit(siShadows, nullptr);
+		// submit the shadow command buffers
+		ctx.vulkan.submit(ctx.vulkan.shadowCmdBuffers, waitStages[0], ctx.vulkan.semaphores[0], ctx.vulkan.semaphores[1]);
 	}
 
+	// submit the main command buffer
 	recordDeferredCmds(imageIndex);
-	const vk::Semaphore& waiSemaphore = GUI::shadow_cast ? ctx.vulkan.semaphores[1] : ctx.vulkan.semaphores[0];
 	const vk::PipelineStageFlags waitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
-
-	// submit the command buffer
-	vk::SubmitInfo si;
-	si.waitSemaphoreCount = 1;
-	si.pWaitSemaphores = &waiSemaphore;
-	si.pWaitDstStageMask = &waitStage;
-	si.commandBufferCount = 1;
-	si.pCommandBuffers = &ctx.vulkan.dynamicCmdBuffer;
-	si.signalSemaphoreCount = 1;
-	si.pSignalSemaphores = &ctx.vulkan.semaphores[2];
-	ctx.vulkan.graphicsQueue.submit(si, ctx.vulkan.fences[0]);
+	const vk::Semaphore& waiSemaphore = GUI::shadow_cast ? ctx.vulkan.semaphores[1] : ctx.vulkan.semaphores[0];
+	ctx.vulkan.submit(ctx.vulkan.dynamicCmdBuffer, waitStage, waiSemaphore, ctx.vulkan.semaphores[2], ctx.vulkan.fences[0]);
 
 	// Presentation
-	vk::PresentInfoKHR pi;
-	pi.waitSemaphoreCount = 1;
-	pi.pWaitSemaphores = &ctx.vulkan.semaphores[2];
-	pi.swapchainCount = 1;
-	pi.pSwapchains = &ctx.vulkan.swapchain->swapchain;
-	pi.pImageIndices = &imageIndex;
-	ctx.vulkan.graphicsQueue.presentKHR(pi);
-
-	std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<float> duration = start - Timer::frameStart;
-	Timer::noWaitDelta = duration.count();
-	ctx.vulkan.device.waitForFences(ctx.vulkan.fences[0], VK_TRUE, UINT64_MAX);
-	ctx.vulkan.device.resetFences(ctx.vulkan.fences[0]);
+	ctx.vulkan.swapchain->present(imageIndex, ctx.vulkan.semaphores[2]);
 
 	VulkanContext::submiting = false;
-
-	duration = std::chrono::high_resolution_clock::now() - start;
-	waitingTime = duration.count();
 }

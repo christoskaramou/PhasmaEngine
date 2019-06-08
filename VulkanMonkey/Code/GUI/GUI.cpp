@@ -138,6 +138,8 @@ void GUI::Menu()
 
 void GUI::Metrics()
 {
+	static float lines[120] = { 0.0f };
+	static uint32_t count = -1;
 	int totalPasses = 0;
 	float totalTime = 0.f;
 
@@ -148,7 +150,13 @@ void GUI::Metrics()
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
 	ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-	ImGui::InputInt("FPS", &fps, 1, 15); if (fps < 10) fps = 10;
+	//for (int i = 0; i < 120; i++)
+	//	lines[i] = io.Framerate;
+	//ImVec2 plotextent(ImGui::GetContentRegionAvailWidth(), 100);
+	//ImGui::PlotLines("FPSPlot", lines, 120, 0, nullptr, 0.0f, 400.0f, plotextent);
+	ImGui::InputInt("FPS", &fps, 1, 15); fps = maximum(fps, 10);
+	ImGui::Separator(); ImGui::Separator();
+
 	ImGui::Text("CPU Total: %.3f (waited %.3f) ms", cpuTime, cpuWaitingTime);
 	ImGui::Text("GPU Total: %.3f ms", stats[0] + (shadow_cast ? stats[10] + stats[11] + stats[12] : 0.f) + (use_compute ? stats[13] : 0.f));
 	ImGui::Separator();

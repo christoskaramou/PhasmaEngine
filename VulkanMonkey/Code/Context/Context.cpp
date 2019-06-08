@@ -31,7 +31,7 @@ void Context::initVulkanContext()
 	vulkan.commandPool2 = createCommandPool();
 	vulkan.descriptorPool = createDescriptorPool(15000); // max number of all descriptor sets to allocate
 	vulkan.dynamicCmdBuffer = createCmdBuffers().at(0);
-	vulkan.shadowCmdBuffer = createCmdBuffers(3);
+	vulkan.shadowCmdBuffers = createCmdBuffers(3);
 	vulkan.depth = new Image(createDepthResources());
 }
 

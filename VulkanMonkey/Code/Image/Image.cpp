@@ -197,7 +197,7 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
 }
 
-void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y, const int width, const int height, const uint32_t baseLayer)
+void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer)
 {
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
@@ -218,8 +218,8 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y,
 	region.imageSubresource.mipLevel = 0;
 	region.imageSubresource.baseArrayLayer = baseLayer;
 	region.imageSubresource.layerCount = 1;
-	region.imageOffset = vk::Offset3D(x, y, 0);
-	region.imageExtent = vk::Extent3D(static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1);
+	region.imageOffset = vk::Offset3D(0, 0, 0);
+	region.imageExtent = vk::Extent3D(width, height, 1);
 
 	commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
 
@@ -240,7 +240,7 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const int x, const int y,
 	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
 }
 
-void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
+void Image::generateMipMaps()
 {
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
@@ -262,8 +262,8 @@ void Image::generateMipMaps(const int32_t texWidth, const int32_t texHeight)
 	barrier.subresourceRange.layerCount = 1;
 	barrier.subresourceRange.levelCount = 1;
 
-	int32_t mipWidth = texWidth;
-	int32_t mipHeight = texHeight;
+	int32_t mipWidth = static_cast<int32_t>(width);
+	int32_t mipHeight = static_cast<int32_t>(height);
 
 	for (uint32_t i = 1; i < mipLevels; i++) {
 		barrier.subresourceRange.baseMipLevel = i - 1;

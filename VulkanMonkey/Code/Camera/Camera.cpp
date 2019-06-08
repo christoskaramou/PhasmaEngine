@@ -1,6 +1,7 @@
 #include "Camera.h"
 #include "../GUI/GUI.h"
 #include "../VulkanContext/VulkanContext.h"
+#include "../Timer/Timer.h"
 
 using namespace vm;
 
@@ -159,6 +160,10 @@ void vm::Camera::updateView()
 
 void Camera::move(RelativeDirection direction, float velocity)
 {
+	// prediction of where the submit happens
+	//const float prediction = (Timer::cleanDelta - Timer::waitingTime) / Timer::cleanDelta;
+	//velocity -= velocity * prediction;
+
 	if (direction == RelativeDirection::FORWARD)	position += front * (velocity * worldOrientation.z);
 	if (direction == RelativeDirection::BACKWARD)	position -= front * (velocity * worldOrientation.z);
 	if (direction == RelativeDirection::RIGHT)		position += right * velocity;
@@ -167,10 +172,13 @@ void Camera::move(RelativeDirection direction, float velocity)
 
 void Camera::rotate(float xoffset, float yoffset)
 {
-	yoffset *= rotationSpeed;
-	xoffset *= rotationSpeed;
-	euler.x += radians(-yoffset) * worldOrientation.y;	// pitch
-	euler.y += radians(xoffset) * worldOrientation.x;	// yaw
+	// prediction of where the submit happens
+	//const float prediction = (Timer::cleanDelta - Timer::waitingTime) / Timer::cleanDelta;
+	const float x = radians(-yoffset * rotationSpeed) * worldOrientation.y;	// pitch
+	const float y = radians(xoffset * rotationSpeed) * worldOrientation.x;	// yaw
+
+	euler.x += x;
+	euler.y += y;
 
 	orientation = quat(euler);
 }

@@ -16,8 +16,9 @@ namespace vm {
 		void minFrameTime(float seconds);
 		static float getTotalTime();
 		static float delta;
+		static float cleanDelta; // delta with no delay for taget FPS
+		static float waitingTime;
 		static std::chrono::high_resolution_clock::time_point frameStart;
-		static float noWaitDelta;
 	private:
 		std::chrono::high_resolution_clock::time_point start;
 		std::chrono::duration<float> duration;

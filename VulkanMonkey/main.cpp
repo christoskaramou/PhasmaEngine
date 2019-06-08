@@ -25,8 +25,9 @@ int main(int argc, char* argv[])
 		}
 		if (timer.intervalsOf(0.75f)) {
 			FIRE_EVENT(Event::Tick);
-			GUI::cpuWaitingTime = Window::renderer[0]->waitingTime * 1000.f;
-			GUI::cpuTime = Timer::noWaitDelta * 1000.f;
+			GUI::cpuWaitingTime = Timer::waitingTime * 1000.f; // secs to ms
+			std::chrono::duration<float> dur = std::chrono::high_resolution_clock::now() - Timer::frameStart;
+			GUI::cpuTime = dur.count() * 1000.f - GUI::cpuWaitingTime;
 			for (int i = 0; i < GUI::metrics.size(); i++)
 				GUI::stats[i] = GUI::metrics[i];
 		}
