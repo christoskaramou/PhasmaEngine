@@ -438,12 +438,6 @@ void Renderer::present()
 	// waitStage is a pipeline stage at which a semaphore wait will occur.
 	const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader };
 
-	std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
-	ctx.vulkan.device.waitForFences(ctx.vulkan.fences[0], VK_TRUE, UINT64_MAX);
-	ctx.vulkan.device.resetFences(ctx.vulkan.fences[0]);
-	std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
-	Timer::waitingTime = waitTime.count();
-
 	const uint32_t imageIndex = ctx.vulkan.swapchain->aquire(ctx.vulkan.semaphores[0], nullptr);
 
 	while (VulkanContext::submiting) {}
@@ -464,6 +458,12 @@ void Renderer::present()
 
 	// Presentation
 	ctx.vulkan.swapchain->present(imageIndex, ctx.vulkan.semaphores[2]);
+
+	std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
+	ctx.vulkan.device.waitForFences(ctx.vulkan.fences[0], VK_TRUE, UINT64_MAX);
+	ctx.vulkan.device.resetFences(ctx.vulkan.fences[0]);
+	std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
+	Timer::waitingTime = waitTime.count();
 
 	VulkanContext::submiting = false;
 }
