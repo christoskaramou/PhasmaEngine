@@ -16,7 +16,6 @@ namespace vm {
 		void present();
 
 		Context ctx;
-		bool prepared = false;
 
 	private:
 		void changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState state);

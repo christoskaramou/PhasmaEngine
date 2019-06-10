@@ -6,66 +6,6 @@
 #include "../Timer/Timer.h"
 
 using namespace vm;
-ImVec2						GUI::winPos = ImVec2();
-ImVec2						GUI::winSize = ImVec2();
-float						GUI::renderTargetsScale = 0.71f;
-bool						GUI::lock_render_window = true;
-bool						GUI::use_IBL = true;
-bool						GUI::show_ssr = false;
-bool						GUI::show_ssao = false;
-bool						GUI::show_tonemapping = false;
-float						GUI::exposure = 4.5f;
-bool						GUI::use_AntiAliasing = true;
-bool						GUI::use_FXAA = false;
-bool						GUI::use_TAA = false;
-float						GUI::TAA_jitter_scale = 1.0f;
-float						GUI::TAA_feedback_min = 0.01f;
-float						GUI::TAA_feedback_max = 0.2f;
-float						GUI::TAA_sharp_strength = 1.0f;
-float						GUI::TAA_sharp_clamp = 0.35f;
-float						GUI::TAA_sharp_offset_bias = 1.0f;
-bool						GUI::show_Bloom = false;
-float						GUI::Bloom_Inv_brightness = 20.0f;
-float						GUI::Bloom_intensity = 1.5f;
-float						GUI::Bloom_range = 2.5f;
-bool						GUI::use_tonemap = false;
-bool						GUI::use_compute = false;
-float						GUI::Bloom_exposure = 3.5f;
-bool						GUI::show_motionBlur = false;
-float						GUI::motionBlur_strength = 1.0f;
-bool						GUI::randomize_lights = false;
-float						GUI::lights_intensity = 2.5f;
-float						GUI::lights_range = 7.0f;
-bool						GUI::shadow_cast = false;
-float						GUI::sun_intensity = 7.f;
-std::array<float, 3>		GUI::sun_position{ 0.0f, 300.0f, 50.0f };
-int							GUI::fps = 60;
-float						GUI::cameraSpeed = 3.5f;
-std::array<float, 3>		GUI::depthBias{ 0.0f, 0.0f, -6.2f };
-std::array<float, 4>		GUI::clearColor{ 0.0f, 0.0f, 0.0f, 1.0f };
-float						GUI::cpuTime = 0;
-float						GUI::cpuWaitingTime = 0;
-float						GUI::gpuTime = 0;
-float						GUI::timeScale = 1.f;
-std::array<float, 20>		GUI::metrics = {};
-std::array<float, 20>		GUI::stats = {};
-std::vector<std::string>	GUI::fileList{};
-std::vector<std::string>	GUI::modelList{};
-std::vector <std::array<float, 3>> GUI::model_scale{};
-std::vector <std::array<float, 3>> GUI::model_pos{};
-std::vector <std::array<float, 3>> GUI::model_rot{};
-int							GUI::modelItemSelected = -1;
-ImVec2						GUI::tlPanelPos = ImVec2();
-ImVec2						GUI::tlPanelSize = ImVec2();
-ImVec2						GUI::mlPanelPos = ImVec2();
-ImVec2						GUI::mlPanelSize = ImVec2();
-uint32_t					GUI::scaleRenderTargetsEventType = SDL_RegisterEvents(1);
-vk::DescriptorSetLayout		GUI::descriptorSetLayout = nullptr;
-SDL_Window*					GUI::g_Window = nullptr;
-Uint64						GUI::g_Time = 0;
-bool						GUI::g_MousePressed[3] = { false, false, false };
-SDL_Cursor*					GUI::g_MouseCursors[ImGuiMouseCursor_COUNT] = { 0 };
-char*						GUI::g_ClipboardTextData = nullptr;
 
 bool endsWithExt(const std::string &mainStr, const std::string &toMatch)
 {
@@ -147,11 +87,10 @@ void GUI::Metrics()
 	ImGui::SetNextWindowPos(ImVec2(0.f, MENU_HEIGHT));
 	ImGui::SetNextWindowSize(ImVec2(LEFT_PANEL_WIDTH, HEIGHT_f - LOWER_PANEL_HEIGHT - MENU_HEIGHT));
 	ImGui::Begin("Metrics", &metrics_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-	ImGuiIO& io = ImGui::GetIO();
 	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
-	ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+	ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 	//for (int i = 0; i < 120; i++)
-	//	lines[i] = io.Framerate;
+	//	lines[i] = ImGui::GetIO().Framerate;
 	//ImVec2 plotextent(ImGui::GetContentRegionAvailWidth(), 100);
 	//ImGui::PlotLines("FPSPlot", lines, 120, 0, nullptr, 0.0f, 400.0f, plotextent);
 	ImGui::InputInt("FPS", &fps, 1, 15); fps = maximum(fps, 10);

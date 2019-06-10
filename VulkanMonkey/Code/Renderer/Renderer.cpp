@@ -14,8 +14,6 @@ Renderer::Renderer(SDL_Window* window)
 	ctx.loadResources();
 	// CREATE UNIFORMS AND DESCRIPTOR SETS
 	ctx.createUniforms();
-	// init is done
-	prepared = true;
 }
 
 Renderer::~Renderer()
@@ -421,8 +419,6 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 
 void Renderer::present()
 {
-	if (!prepared) return;
-
 	FIRE_EVENT(Event::OnRender);
 
 	if (GUI::use_compute) {
@@ -444,9 +440,8 @@ void Renderer::present()
 	VulkanContext::submiting = true;
 
 	if (GUI::shadow_cast) {
-		recordShadowsCmds(imageIndex);
-
 		// submit the shadow command buffers
+		recordShadowsCmds(imageIndex);
 		ctx.vulkan.submit(ctx.vulkan.shadowCmdBuffers, waitStages[0], ctx.vulkan.semaphores[0], ctx.vulkan.semaphores[1]);
 	}
 

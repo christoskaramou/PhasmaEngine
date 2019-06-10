@@ -55,7 +55,7 @@ vec4 ResolveTAA(vec2 texCoord, sampler2D tex_history, sampler2D tex_current, sam
 	
 	color_history = clip_aabb(color_min, color_max, clamp(color_avg, color_min, color_max), color_history);
 
-	float factor_subpixel = saturate(length(velocity * 0.1 * g_resolution));
+	float factor_subpixel = saturate(length(velocity * 1.5 * g_resolution));
 
 	float blendfactor = is_saturated(texCoord_history) ? lerp(g_blendMin, g_blendMax, factor_subpixel) : 1.0;
 	

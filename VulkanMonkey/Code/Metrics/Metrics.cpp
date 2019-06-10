@@ -10,14 +10,14 @@ Metrics::~Metrics()
 {
 }
 
-void vm::Metrics::start(const vk::CommandBuffer& cmd)
+void Metrics::start(const vk::CommandBuffer& cmd)
 {
 	_cmd = cmd;
 	_cmd.resetQueryPool(queryPool, 0, 2);
 	_cmd.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, queryPool, 0);
 }
 
-void vm::Metrics::end(float* res)
+void Metrics::end(float* res)
 {
 	_cmd.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, queryPool, 1);
 	if (res)

@@ -41,7 +41,6 @@ void Window::destroyAll()
 
 bool Window::processEvents(float delta)
 {
-	if (!renderer[0]->prepared) return false;
 	if (Console::close_app) return false;
 	static int xMove = 0;
 	static int yMove = 0;

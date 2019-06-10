@@ -135,7 +135,7 @@ void Console::Draw(const char * title, bool * p_open, ImVec2 pos, ImVec2 size)
 		Strtrim(s);
 		if (s[0])
 			ExecCommand(s);
-		strcpy_s(s, 0, "");
+		memset(s, 0, strlen(s));
 		reclaim_focus = true;
 	}
 
