@@ -104,6 +104,13 @@ namespace vm {
 
 	public:
 		vk::Instance createInstance();
+		static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
+			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+			VkDebugUtilsMessageTypeFlagsEXT messageType,
+			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+			void* pUserData);
+		vk::DebugUtilsMessengerEXT createDebugMessenger();
+		void destroyDebugMessenger();
 		Surface createSurface();
 		int getGraphicsFamilyId();
 		int getTransferFamilyId();

@@ -10,6 +10,9 @@ using namespace vm;
 void Context::initVulkanContext()
 {
 	vulkan.instance = createInstance();
+#ifdef _DEBUG
+	vulkan.debugMessenger = createDebugMessenger();
+#endif
 	vulkan.surface = new Surface(createSurface());
 	vulkan.gpu = findGpu();
 	vulkan.graphicsFamilyId = getGraphicsFamilyId();
@@ -478,6 +481,12 @@ vk::Instance Context::createInstance()
 
 	std::vector<const char*> instanceLayers{};
 #ifdef _DEBUG
+	auto extensions = vk::enumerateInstanceExtensionProperties();
+	for (auto& extension : extensions) {
+		if (std::string(extension.extensionName) == "VK_EXT_debug_utils")
+			instanceExtensions.push_back("VK_EXT_debug_utils");
+	}
+
 	auto layers = vk::enumerateInstanceLayerProperties();
 	for (auto layer : layers) {
 		if (std::string(layer.layerName) == "VK_LAYER_KHRONOS_validation")
@@ -490,7 +499,7 @@ vk::Instance Context::createInstance()
 	vk::ApplicationInfo appInfo;
 	appInfo.pApplicationName = "VulkanMonkey3D";
 	appInfo.pEngineName = "VulkanMonkey3D";
-	appInfo.apiVersion = VK_MAKE_VERSION(1, 1, 0);
+	appInfo.apiVersion = vk::enumerateInstanceVersion();
 
 	vk::InstanceCreateInfo instInfo;
 	instInfo.pApplicationInfo = &appInfo;
@@ -500,6 +509,43 @@ vk::Instance Context::createInstance()
 	instInfo.ppEnabledExtensionNames = instanceExtensions.data();
 
 	return vk::createInstance(instInfo);
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL Context::messageCallback(
+	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+	VkDebugUtilsMessageTypeFlagsEXT messageType,
+	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+	void* pUserData)
+{
+	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+		std::cerr 
+			<< to_string(vk::DebugUtilsMessageTypeFlagBitsEXT(messageType)) << " "
+			<< to_string(vk::DebugUtilsMessageSeverityFlagBitsEXT(messageSeverity)) << ": "
+			<< pCallbackData->pMessage << std::endl;
+
+	return VK_FALSE;
+}
+
+vk::DebugUtilsMessengerEXT Context::createDebugMessenger()
+{
+	vk::DebugUtilsMessengerCreateInfoEXT dumci;
+	dumci.messageSeverity =
+		vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+		vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+		vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+		vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
+	dumci.messageType =
+		vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+		vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+		vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
+	dumci.pfnUserCallback = Context::messageCallback;
+
+	return vulkan.instance.createDebugUtilsMessengerEXT(dumci, nullptr, vk::DispatchLoaderDynamic(vulkan.instance));
+}
+
+void Context::destroyDebugMessenger()
+{
+	vulkan.instance.destroyDebugUtilsMessengerEXT(vulkan.debugMessenger, nullptr, vk::DispatchLoaderDynamic(vulkan.instance));
 }
 
 Surface Context::createSurface()
@@ -922,6 +968,10 @@ void Context::destroyVkContext()
 	if (vulkan.surface->surface) {
 		vulkan.instance.destroySurfaceKHR(vulkan.surface->surface);
 	}delete vulkan.surface;
+
+#ifdef _DEBUG
+	destroyDebugMessenger();
+#endif
 
 	if (vulkan.instance) {
 		vulkan.instance.destroy();

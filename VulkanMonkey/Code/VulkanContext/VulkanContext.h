@@ -21,6 +21,7 @@ namespace vm {
 	struct VulkanContext {
 		SDL_Window* window = nullptr;
 		vk::Instance instance;
+		vk::DebugUtilsMessengerEXT debugMessenger;
 		Surface* surface = nullptr;
 		int graphicsFamilyId{}, computeFamilyId{}, transferFamilyId{};
 		vk::PhysicalDevice gpu;
