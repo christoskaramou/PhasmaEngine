@@ -520,7 +520,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Context::messageCallback(
 	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
 		std::cerr 
 			<< to_string(vk::DebugUtilsMessageTypeFlagBitsEXT(messageType)) << " "
-			<< to_string(vk::DebugUtilsMessageSeverityFlagBitsEXT(messageSeverity)) << ": "
+			<< to_string(vk::DebugUtilsMessageSeverityFlagBitsEXT(messageSeverity)) << " from \""
+			<< pCallbackData->pMessageIdName << "\": "
 			<< pCallbackData->pMessage << std::endl;
 
 	return VK_FALSE;

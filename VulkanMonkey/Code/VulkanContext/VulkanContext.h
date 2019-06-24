@@ -32,7 +32,6 @@ namespace vm {
 		vk::Queue graphicsQueue, computeQueue, transferQueue;
 		vk::CommandPool commandPool;
 		vk::CommandPool commandPool2;
-		vk::SampleCountFlagBits sampleCount = vk::SampleCountFlagBits::e4;
 		Swapchain* swapchain = nullptr;
 		Image* depth = nullptr;
 		vk::CommandBuffer dynamicCmdBuffer;
@@ -59,8 +58,10 @@ namespace vm {
 			graphicsQueue.submit(si, fence);
 		};
 
-		// Helper
-		static inline std::atomic_bool submiting = false;
+		// Helpers
+		std::atomic_bool submiting = false;
+		void waitAndLockSubmits() { while (submiting) {} submiting = true; }
+		void unlockSubmits() { submiting = false; }
 
 		static VulkanContext& get() noexcept { static VulkanContext VkCTX; return VkCTX; }
 		static const VulkanContext& getSafe() noexcept { return get(); }

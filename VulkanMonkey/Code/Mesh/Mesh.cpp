@@ -130,8 +130,7 @@ void Primitive::loadTexture(
 
 		vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
-		while (VulkanContext::submiting) {}
-		VulkanContext::submiting = true;
+		vulkan->waitAndLockSubmits();
 
 		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
@@ -156,7 +155,7 @@ void Primitive::loadTexture(
 
 		staging.destroy();
 
-		VulkanContext::submiting = false;
+		vulkan->unlockSubmits();
 
 		Mesh::uniqueTextures[path] = *tex;
 	}

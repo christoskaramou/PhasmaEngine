@@ -57,8 +57,7 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 			throw std::runtime_error("No pixel data loaded");
 		vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
-		while (VulkanContext::submiting) {}
-		VulkanContext::submiting = true;
+		vulkan->waitAndLockSubmits();
 
 		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
@@ -83,7 +82,7 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 
 		staging.destroy();
 
-		VulkanContext::submiting = false;
+		vulkan->unlockSubmits();
 
 		Mesh::uniqueTextures[path] = ibl_brdf_lut;
 	}

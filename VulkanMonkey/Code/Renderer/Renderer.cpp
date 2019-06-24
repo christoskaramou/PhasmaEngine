@@ -436,8 +436,7 @@ void Renderer::present()
 
 	const uint32_t imageIndex = ctx.vulkan.swapchain->aquire(ctx.vulkan.semaphores[0], nullptr);
 
-	while (VulkanContext::submiting) {}
-	VulkanContext::submiting = true;
+	ctx.vulkan.waitAndLockSubmits();
 
 	if (GUI::shadow_cast) {
 		// submit the shadow command buffers
@@ -460,5 +459,5 @@ void Renderer::present()
 	std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
 	Timer::waitingTime = waitTime.count();
 
-	VulkanContext::submiting = false;
+	ctx.vulkan.unlockSubmits();
 }

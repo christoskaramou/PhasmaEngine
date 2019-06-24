@@ -29,6 +29,8 @@ namespace vm {
 	struct Primitive {
 		Primitive() {}
 
+		VulkanContext* vulkan = &VulkanContext::get();
+
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout();
 		vk::DescriptorSet descriptorSet;
