@@ -990,7 +990,7 @@ void GUI::createRenderPass()
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
+	attachments[0].initialLayout = vk::ImageLayout::ePresentSrcKHR;
 	attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
 
 	std::array<vk::SubpassDescription, 1> subpassDescriptions{};

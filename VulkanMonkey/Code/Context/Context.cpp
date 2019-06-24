@@ -29,9 +29,9 @@ void Context::initVulkanContext()
 	vulkan.transferQueue = getTransferQueue();
 	vulkan.semaphores = createSemaphores(3);
 	vulkan.fences = createFences(2);
-	vulkan.swapchain = new Swapchain(createSwapchain());
 	vulkan.commandPool = createCommandPool();
 	vulkan.commandPool2 = createCommandPool();
+	vulkan.swapchain = new Swapchain(createSwapchain());
 	vulkan.descriptorPool = createDescriptorPool(15000); // max number of all descriptor sets to allocate
 	vulkan.dynamicCmdBuffer = createCmdBuffers().at(0);
 	vulkan.shadowCmdBuffers = createCmdBuffers(3);
@@ -40,8 +40,6 @@ void Context::initVulkanContext()
 
 void Context::initRendering()
 {
-	for (unsigned i = 0; i < vulkan.swapchain->images.size(); i++)
-		vulkan.swapchain->images[i].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
 	addRenderTarget("viewport", vulkan.surface->formatKHR.format, vk::ImageUsageFlagBits::eTransferSrc);
 	addRenderTarget("depth", vk::Format::eR32Sfloat);
 	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
@@ -284,8 +282,6 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	*vulkan.swapchain = createSwapchain();
 	*vulkan.depth = createDepthResources();
 
-	for (unsigned i = 0; i < vulkan.swapchain->images.size(); i++)
-		vulkan.swapchain->images[i].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
 	addRenderTarget("viewport", vulkan.surface->formatKHR.format, vk::ImageUsageFlagBits::eTransferSrc);
 	addRenderTarget("depth", vk::Format::eR32Sfloat);
 	addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
@@ -783,6 +779,7 @@ Swapchain Context::createSwapchain()
 	_swapchain.images.resize(images.size());
 	for (unsigned i = 0; i < images.size(); i++) {
 		_swapchain.images[i].image = images[i]; // hold the image handlers
+		_swapchain.images[i].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
 		_swapchain.images[i].blentAttachment.blendEnable = VK_TRUE;
 		_swapchain.images[i].blentAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
 		_swapchain.images[i].blentAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
