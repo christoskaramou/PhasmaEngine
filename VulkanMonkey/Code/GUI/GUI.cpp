@@ -596,19 +596,10 @@ void GUI::initImGui()
 	// Store our identifier
 	io.Fonts->TexID = (ImTextureID)(intptr_t)(VkImage)texture.image;
 
-	vk::FenceCreateInfo fi;
-	vk::Fence fence = vulkan->device.createFence(fi);
-
-	vk::SubmitInfo end_info = {};
-	end_info.commandBufferCount = 1;
-	end_info.pCommandBuffers = &vulkan->dynamicCmdBuffer;
 	vulkan->dynamicCmdBuffer.end();
-	vulkan->graphicsQueue.submit(end_info, fence);
 
-	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
-	vulkan->device.resetFences(fence);
+	vulkan->submitAndWaitFence(vulkan->dynamicCmdBuffer, nullptr, nullptr, nullptr);
 
-	vulkan->device.destroyFence(fence);
 	stagingBuffer.destroy();
 }
 
@@ -887,15 +878,7 @@ void GUI::newFrame()
 	}
 	cmdBuf.end();
 
-	vk::SubmitInfo si;
-	si.waitSemaphoreCount = 0;
-	si.pWaitSemaphores = nullptr;
-	si.pWaitDstStageMask = nullptr;
-	si.commandBufferCount = 1;
-	si.pCommandBuffers = &cmdBuf;
-	si.signalSemaphoreCount = 0;
-	si.pSignalSemaphores = nullptr;
-	vulkan->graphicsQueue.submit(si, fenceUpload);
+	vulkan->submit(cmdBuf, nullptr, nullptr, nullptr, fenceUpload);
 }
 
 void GUI::windowStyle(ImGuiStyle* dst)

@@ -60,8 +60,7 @@ void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_
 
 void vm::Compute::waitFence()
 {
-	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
-	vulkan->device.resetFences(fence);
+	vulkan->waitFences(fence);
 
 	ready = true;
 }
@@ -193,8 +192,7 @@ void ComputePool::waitFences()
 			fences.push_back(comp.fence);
 	}
 
-	VulkanContext::get().device.waitForFences(fences, VK_TRUE, UINT64_MAX);
-	VulkanContext::get().device.resetFences(fences);
+	VulkanContext::get().waitFences(fences);
 
 	for (auto& comp : compute) {
 		comp.ready = true;

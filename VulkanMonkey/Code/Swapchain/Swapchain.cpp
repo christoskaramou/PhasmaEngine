@@ -19,7 +19,7 @@ void Swapchain::present(vk::ArrayProxy<const uint32_t> imageIndices, vk::ArrayPr
 	vk::PresentInfoKHR pi;
 	pi.waitSemaphoreCount = semaphores.size();
 	pi.pWaitSemaphores = semaphores.data();
-	pi.swapchainCount = swapchains.size();
+	pi.swapchainCount = static_cast<uint32_t>(swapchains.size());
 	pi.pSwapchains = swapchains.data();
 	pi.pImageIndices = imageIndices.data();
 	vulkan->graphicsQueue.presentKHR(pi);

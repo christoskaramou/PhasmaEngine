@@ -40,12 +40,13 @@ namespace vm {
 		std::vector<vk::Fence> fences{};
 		std::vector<vk::Semaphore> semaphores{};
 
+		// Helpers
 		void submit(
-			vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
-			vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
-			vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
-			vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
-			const vk::Fence fence = nullptr)
+			const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
+			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
+			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
+			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
+			const vk::Fence fence = nullptr) const
 		{
 			vk::SubmitInfo si;
 			si.waitSemaphoreCount = waitSemaphores.size();
@@ -58,7 +59,26 @@ namespace vm {
 			graphicsQueue.submit(si, fence);
 		};
 
-		// Helpers
+		void waitFences(const vk::ArrayProxy<const vk::Fence> fences) const {
+			device.waitForFences(fences, VK_TRUE, UINT64_MAX);
+			device.resetFences(fences);
+		}
+
+		void submitAndWaitFence(
+			const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
+			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
+			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
+			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores) const
+		{
+			vk::FenceCreateInfo fi;
+			vk::Fence fence = device.createFence(fi);
+
+			submit(commandBuffers, waitStages, waitSemaphores, signalSemaphores, fence);
+
+			device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+			device.destroyFence(fence);
+		}
+
 		std::atomic_bool submiting = false;
 		void waitAndLockSubmits() { while (submiting) {} submiting = true; }
 		void unlockSubmits() { submiting = false; }

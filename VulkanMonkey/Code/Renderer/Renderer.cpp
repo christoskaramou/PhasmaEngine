@@ -245,8 +245,7 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 {
 	// wait for vertex and index data to be ready on gui buffers
-	ctx.vulkan.device.waitForFences(ctx.gui.fenceUpload, VK_TRUE, UINT64_MAX);
-	ctx.vulkan.device.resetFences(ctx.gui.fenceUpload);
+	ctx.vulkan.waitFences(ctx.gui.fenceUpload);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -454,8 +453,7 @@ void Renderer::present()
 	ctx.vulkan.swapchain->present(imageIndex, ctx.vulkan.semaphores[2]);
 
 	std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
-	ctx.vulkan.device.waitForFences(ctx.vulkan.fences[0], VK_TRUE, UINT64_MAX);
-	ctx.vulkan.device.resetFences(ctx.vulkan.fences[0]);
+	ctx.vulkan.waitFences(ctx.vulkan.fences[0]);
 	std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
 	Timer::waitingTime = waitTime.count();
 

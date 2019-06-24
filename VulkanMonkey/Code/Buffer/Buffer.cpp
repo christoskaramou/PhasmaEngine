@@ -55,18 +55,8 @@ void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size)
 
 	copyCmd.end();
 
-	vk::FenceCreateInfo fi;
-	vk::Fence fence = vulkan->device.createFence(fi);
+	vulkan->submitAndWaitFence(copyCmd, nullptr, nullptr, nullptr);
 
-	vk::SubmitInfo si;
-	si.commandBufferCount = 1;
-	si.pCommandBuffers = &copyCmd;
-	vulkan->graphicsQueue.submit(si, fence);
-
-	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
-	vulkan->device.resetFences(fence);
-
-	vulkan->device.destroyFence(fence);
 	vulkan->device.freeCommandBuffers(vulkan->commandPool2, copyCmd);
 }
 

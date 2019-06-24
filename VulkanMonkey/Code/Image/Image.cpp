@@ -182,18 +182,8 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 
 	commandBuffer.end();
 
-	vk::FenceCreateInfo fi;
-	vk::Fence fence = vulkan->device.createFence(fi);
+	vulkan->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-	vk::SubmitInfo submitInfo;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffer;
-	vulkan->graphicsQueue.submit(submitInfo, fence);
-
-	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
-	vulkan->device.resetFences(fence);
-
-	vulkan->device.destroyFence(fence);
 	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
 }
 
@@ -225,18 +215,8 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer)
 
 	commandBuffer.end();
 
-	vk::FenceCreateInfo fi;
-	vk::Fence fence = vulkan->device.createFence(fi);
+	vulkan->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-	vk::SubmitInfo submitInfo;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffer;
-	vulkan->graphicsQueue.submit(submitInfo, fence);
-
-	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
-	vulkan->device.resetFences(fence);
-
-	vulkan->device.destroyFence(fence);
 	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
 }
 
@@ -337,18 +317,8 @@ void Image::generateMipMaps()
 
 	commandBuffer.end();
 
-	vk::FenceCreateInfo fi;
-	vk::Fence fence = vulkan->device.createFence(fi);
+	vulkan->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-	vk::SubmitInfo submitInfo;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffer;
-	vulkan->graphicsQueue.submit(submitInfo, fence);
-
-	vulkan->device.waitForFences(fence, VK_TRUE, UINT64_MAX);
-	vulkan->device.resetFences(fence);
-
-	vulkan->device.destroyFence(fence);
 	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
 }
 
