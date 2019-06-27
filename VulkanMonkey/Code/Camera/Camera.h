@@ -11,7 +11,7 @@ namespace vm {
 			LEFT,
 			RIGHT
 		};
-		struct SurfaceTargetArea {
+		struct TargetArea {
 			vk::Viewport viewport;
 			vk::Rect2D scissor;
 			void update(const vec2& position, const vec2& size, float minDepth = 0.f, float maxDepth = 1.f);
@@ -35,7 +35,7 @@ namespace vm {
 		vec3 front, right, up;
 		float nearPlane, farPlane, FOV, speed, rotationSpeed;
 		vec2 projOffset, projOffsetPrevious;
-		SurfaceTargetArea renderArea;
+		TargetArea renderArea;
 		Plane frustum[6];
 
 		Camera();

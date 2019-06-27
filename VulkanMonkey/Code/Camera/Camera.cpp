@@ -5,59 +5,6 @@
 
 using namespace vm;
 
-constexpr float halton16[]{
-	0.5f, 0.3333333333333333f,
-	0.25f, 0.6666666666666666f,
-	0.75f, 0.1111111111111111f,
-	0.125f, 0.4444444444444444f,
-	0.625f, 0.7777777777777778f,
-	0.375f, 0.2222222222222222f,
-	0.875f, 0.5555555555555556f,
-	0.0625f, 0.8888888888888888f,
-	0.5625f, 0.037037037037037035f,
-	0.3125f, 0.37037037037037035f,
-	0.8125f, 0.7037037037037037f,
-	0.1875f, 0.14814814814814814f,
-	0.6875f, 0.48148148148148145f,
-	0.4375f, 0.8148148148148148f,
-	0.9375f, 0.25925925925925924f,
-	0.03125f, 0.5925925925925926f
-};
-constexpr float halton32[]{
-	0.53125f, 0.9259259259259259f,
-	0.28125f, 0.07407407407407407f,
-	0.78125f, 0.4074074074074074f,
-	0.15625f, 0.7407407407407407f,
-	0.65625f, 0.18518518518518517f,
-	0.40625f, 0.5185185185185185f,
-	0.90625f, 0.8518518518518519f,
-	0.09375f, 0.2962962962962963f,
-	0.59375f, 0.6296296296296297f,
-	0.34375f, 0.9629629629629629f,
-	0.84375f, 0.012345679012345678f,
-	0.21875f, 0.345679012345679f,
-	0.71875f, 0.6790123456790124f,
-	0.46875f, 0.12345679012345678f,
-	0.96875f, 0.4567901234567901f,
-	0.015625f, 0.7901234567901234f,
-	0.515625f, 0.2345679012345679f,
-	0.265625f, 0.5679012345679012f,
-	0.765625f, 0.9012345679012346f,
-	0.140625f, 0.04938271604938271f,
-	0.640625f, 0.38271604938271603f,
-	0.390625f, 0.7160493827160493f,
-	0.890625f, 0.16049382716049382f,
-	0.078125f, 0.49382716049382713f,
-	0.578125f, 0.8271604938271605f,
-	0.328125f, 0.2716049382716049f,
-	0.828125f, 0.6049382716049383f,
-	0.203125f, 0.9382716049382716f,
-	0.703125f, 0.08641975308641975f,
-	0.453125f, 0.41975308641975306f,
-	0.953125f, 0.7530864197530864f,
-	0.046875f, 0.19753086419753085f
-};
-
 Camera::Camera()
 {
 	// gltf is right handed, reversing the x orientation makes the models left handed
@@ -75,21 +22,12 @@ Camera::Camera()
 	speed = 0.35f;
 	rotationSpeed = 0.05f;
 
-	renderArea.viewport.x = GUI::winPos.x;
-	renderArea.viewport.y = GUI::winPos.y;
-	renderArea.viewport.width = GUI::winSize.x;
-	renderArea.viewport.height = GUI::winSize.y;
-	renderArea.viewport.minDepth = 0.f;
-	renderArea.viewport.maxDepth = 1.f;
-	renderArea.scissor.offset.x = static_cast<int32_t>(GUI::winPos.x);
-	renderArea.scissor.offset.y = static_cast<int32_t>(GUI::winPos.y);
-	renderArea.scissor.extent.width = static_cast<int32_t>(GUI::winSize.x);
-	renderArea.scissor.extent.height = static_cast<int32_t>(GUI::winSize.y);
+	renderArea.update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
 }
 
 void vm::Camera::update()
 {
-	renderArea.update(vec2(&GUI::winPos.x), vec2(&GUI::winSize.x));
+	renderArea.update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
 	front = orientation * worldFront();
 	right = orientation * worldRight();
 	up = orientation * worldUp();
@@ -100,8 +38,9 @@ void vm::Camera::update()
 		// has the aspect ratio of the render area because the projection matrix has the same aspect ratio too,
 		// doesn't matter if it renders in bigger image size,
 		// it will be scaled down to render area size before GUI pass
-		const int i = static_cast<int>(floor(rand(0.0f, 15.99f)));
-		projOffset = vec2(&halton16[i * 2]);
+		//const int i = static_cast<int>(floor(rand(0.0f, 15.99f)));
+		//projOffset = vec2(&halton16[i * 2]);
+		projOffset = halton_2_3_next(32);
 		projOffset *= vec2(2.0f);
 		projOffset -= vec2(1.0f);
 		projOffset /= vec2(renderArea.viewport.width, renderArea.viewport.height);
@@ -262,7 +201,7 @@ bool Camera::SphereInFrustum(const vec4& boundingSphere) const
 	return true;
 }
 
-void Camera::SurfaceTargetArea::update(const vec2& position, const vec2& size, float minDepth, float maxDepth)
+void Camera::TargetArea::update(const vec2& position, const vec2& size, float minDepth, float maxDepth)
 {
 	viewport.x = position.x;
 	viewport.y = position.y;

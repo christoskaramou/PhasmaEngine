@@ -1368,8 +1368,39 @@ namespace vm {
 	Transform::Transform() : _scale(1.0f), _rotation(quat::identity()), _position(0.0f)
 	{ }
 
-	vm::mat4 Transform::matrix()
+	mat4 Transform::matrix()
 	{
 		return transform(_rotation, _scale, _position);
+	}
+
+	float halton(uint32_t index, uint32_t base)
+	{
+		float f = 1.0f;
+		float r = 0.0f;
+		for (uint32_t i = index; i > 0;) {
+			f /= static_cast<float>(base);
+			r += f * (i % base);
+			i /= base;
+		}
+		return r;
+	}
+
+	vec2 halton_2_3(uint32_t index)
+	{
+		return vec2(halton(index, 2), halton(index, 3));
+	}
+
+	vec2 halton_2_3_next(uint32_t samples)
+	{
+		static std::vector<vec2> halton_vec = [&samples]() {
+			std::vector<vec2> h;
+			for (uint32_t i = 0; i < samples; i++)
+				h.push_back(halton_2_3(i));
+			return h;
+		} ();
+
+		static uint32_t counter = 0;
+
+		return halton_vec[counter++ % samples];
 	}
 }

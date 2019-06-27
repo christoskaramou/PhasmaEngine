@@ -278,4 +278,7 @@ namespace vm {
 	template<typename T> inline void clamp(T* const x, const T& minX, const T& maxX) { *x = clamp(*x, minX, maxX); };
 	float rand(cfloat x1, cfloat x2);
 	float lerp(cfloat a, cfloat b, cfloat f);
+	float halton(uint32_t index, uint32_t base);
+	vec2 halton_2_3(uint32_t index);
+	vec2 halton_2_3_next(uint32_t samples = 16);
 }
