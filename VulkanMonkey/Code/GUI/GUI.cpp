@@ -629,13 +629,19 @@ void GUI::scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_
 		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::ImageLayout::eTransferSrcOptimal,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput,
-		vk::PipelineStageFlagBits::eTransfer);
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::AccessFlagBits::eColorAttachmentWrite,
+		vk::AccessFlagBits::eTransferRead,
+		vk::ImageAspectFlagBits::eColor);
 	s_chain_Image.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::ePresentSrcKHR,
 		vk::ImageLayout::eTransferDstOptimal,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput,
-		vk::PipelineStageFlagBits::eTransfer);
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::AccessFlagBits::eColorAttachmentRead,
+		vk::AccessFlagBits::eTransferWrite,
+		vk::ImageAspectFlagBits::eColor);
 
 	vk::ImageBlit blit;
 	blit.srcOffsets[0] = { 0, 0, 0 };
@@ -660,13 +666,19 @@ void GUI::scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_
 		vk::ImageLayout::eTransferSrcOptimal,
 		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eColorAttachmentOutput);
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::AccessFlagBits::eTransferRead,
+		vk::AccessFlagBits::eColorAttachmentWrite,
+		vk::ImageAspectFlagBits::eColor);
 	s_chain_Image.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eTransferDstOptimal,
 		vk::ImageLayout::ePresentSrcKHR,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eColorAttachmentOutput);
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::AccessFlagBits::eTransferWrite,
+		vk::AccessFlagBits::eColorAttachmentRead,
+		vk::ImageAspectFlagBits::eColor);
 }
 
 void GUI::draw(vk::CommandBuffer cmd, uint32_t imageIndex)

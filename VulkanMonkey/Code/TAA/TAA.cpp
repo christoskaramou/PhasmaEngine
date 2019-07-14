@@ -100,13 +100,13 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 	rpi.clearValueCount = 1;
 	rpi.pClearValues = clearValues.data();
 
-	changeLayout(cmd, renderTargets["taa"], LayoutState::Write);
+	changeLayout(cmd, renderTargets["taa"], LayoutState::ColorWrite);
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSet, nullptr);
 	cmd.draw(3, 1, 0, 0);
 	cmd.endRenderPass();
-	changeLayout(cmd, renderTargets["taa"], LayoutState::Read);
+	changeLayout(cmd, renderTargets["taa"], LayoutState::ColorRead);
 
 	saveImage(cmd, renderTargets["taa"]);
 
@@ -553,13 +553,19 @@ void TAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage)
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::ImageLayout::eTransferDstOptimal,
 		vk::PipelineStageFlagBits::eFragmentShader,
-		vk::PipelineStageFlagBits::eTransfer);
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::AccessFlagBits::eShaderRead,
+		vk::AccessFlagBits::eTransferWrite,
+		vk::ImageAspectFlagBits::eColor);
 	renderedImage.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::ImageLayout::eTransferSrcOptimal,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput,
-		vk::PipelineStageFlagBits::eTransfer);
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::AccessFlagBits::eColorAttachmentWrite,
+		vk::AccessFlagBits::eTransferRead,
+		vk::ImageAspectFlagBits::eColor);
 
 	// copy the image
 	vk::ImageCopy region;
@@ -583,13 +589,19 @@ void TAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage)
 		vk::ImageLayout::eTransferDstOptimal,
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eFragmentShader);
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::AccessFlagBits::eTransferWrite,
+		vk::AccessFlagBits::eShaderRead,
+		vk::ImageAspectFlagBits::eColor);
 	renderedImage.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eTransferSrcOptimal,
 		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eColorAttachmentOutput);
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::AccessFlagBits::eTransferRead,
+		vk::AccessFlagBits::eColorAttachmentWrite,
+		vk::ImageAspectFlagBits::eColor);
 }
 
 void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source)
@@ -599,13 +611,19 @@ void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source)
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::ImageLayout::eTransferDstOptimal,
 		vk::PipelineStageFlagBits::eFragmentShader,
-		vk::PipelineStageFlagBits::eTransfer);
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::AccessFlagBits::eShaderRead,
+		vk::AccessFlagBits::eTransferWrite,
+		vk::ImageAspectFlagBits::eColor);
 	source.transitionImageLayout(
 		cmd,
-		source.layoutState == LayoutState::Read ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eColorAttachmentOptimal,
+		source.layoutState == LayoutState::ColorRead ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eColorAttachmentOptimal,
 		vk::ImageLayout::eTransferSrcOptimal,
-		source.layoutState == LayoutState::Read ? vk::PipelineStageFlagBits::eFragmentShader : vk::PipelineStageFlagBits::eColorAttachmentOutput,
-		vk::PipelineStageFlagBits::eTransfer);
+		source.layoutState == LayoutState::ColorRead ? vk::PipelineStageFlagBits::eFragmentShader : vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits::eTransfer,
+		source.layoutState == LayoutState::ColorRead ? vk::AccessFlagBits::eShaderRead : vk::AccessFlagBits::eColorAttachmentWrite,
+		vk::AccessFlagBits::eTransferRead,
+		vk::ImageAspectFlagBits::eColor);
 
 	// copy the image
 	vk::ImageCopy region;
@@ -630,14 +648,20 @@ void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source)
 		vk::ImageLayout::eTransferDstOptimal,
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eFragmentShader);
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::AccessFlagBits::eTransferWrite,
+		vk::AccessFlagBits::eShaderRead,
+		vk::ImageAspectFlagBits::eColor);
 	source.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eTransferSrcOptimal,
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eFragmentShader);
-	source.layoutState = LayoutState::Read;
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::AccessFlagBits::eTransferRead,
+		vk::AccessFlagBits::eShaderRead,
+		vk::ImageAspectFlagBits::eColor);
+	source.layoutState = LayoutState::ColorRead;
 }
 
 void TAA::destroy()

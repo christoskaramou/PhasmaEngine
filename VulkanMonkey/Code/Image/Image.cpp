@@ -2,9 +2,19 @@
 
 using namespace vm;
 
-void Image::transitionImageLayout(const vk::CommandBuffer cmd, const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout, const vk::PipelineStageFlags oldStageMask, const vk::PipelineStageFlags newStageMask, const vk::ImageAspectFlags aspectFlags)
+void Image::transitionImageLayout(
+	const vk::CommandBuffer cmd,
+	const vk::ImageLayout oldLayout,
+	const vk::ImageLayout newLayout,
+	const vk::PipelineStageFlags oldStageMask,
+	const vk::PipelineStageFlags newStageMask,
+	const vk::AccessFlags srcMask,
+	const vk::AccessFlags dstMask,
+	const vk::ImageAspectFlags aspectFlags)
 {
 	vk::ImageMemoryBarrier barrier;
+	barrier.srcAccessMask = srcMask;
+	barrier.dstAccessMask = dstMask;
 	barrier.image = image;
 	barrier.oldLayout = oldLayout;
 	barrier.newLayout = newLayout;

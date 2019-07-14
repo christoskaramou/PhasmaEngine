@@ -279,13 +279,19 @@ void FXAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage)
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::ImageLayout::eTransferDstOptimal,
 		vk::PipelineStageFlagBits::eFragmentShader,
-		vk::PipelineStageFlagBits::eTransfer);
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::AccessFlagBits::eShaderRead,
+		vk::AccessFlagBits::eTransferWrite,
+		vk::ImageAspectFlagBits::eColor);
 	renderedImage.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::ImageLayout::eTransferSrcOptimal,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput,
-		vk::PipelineStageFlagBits::eTransfer);
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::AccessFlagBits::eColorAttachmentWrite,
+		vk::AccessFlagBits::eTransferRead,
+		vk::ImageAspectFlagBits::eColor);
 
 	// copy the image
 	vk::ImageCopy region;
@@ -309,13 +315,19 @@ void FXAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage)
 		vk::ImageLayout::eTransferDstOptimal,
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eFragmentShader);
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::AccessFlagBits::eTransferWrite,
+		vk::AccessFlagBits::eShaderRead,
+		vk::ImageAspectFlagBits::eColor);
 	renderedImage.transitionImageLayout(
 		cmd,
 		vk::ImageLayout::eTransferSrcOptimal,
 		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eColorAttachmentOutput);
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::AccessFlagBits::eTransferRead,
+		vk::AccessFlagBits::eColorAttachmentWrite,
+		vk::ImageAspectFlagBits::eColor);
 }
 
 void FXAA::destroy()

@@ -107,14 +107,14 @@ void SSAO::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(v
 	rpi.clearValueCount = 1;
 	rpi.pClearValues = clearValues.data();
 
-	changeLayout(cmd, image, LayoutState::Write);
+	changeLayout(cmd, image, LayoutState::ColorWrite);
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	const vk::DescriptorSet descriptorSets = { DSet };
 	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSets, nullptr);
 	cmd.draw(3, 1, 0, 0);
 	cmd.endRenderPass();
-	changeLayout(cmd, image, LayoutState::Read);
+	changeLayout(cmd, image, LayoutState::ColorRead);
 
 	// new blurry SSAO image
 	rpi.renderPass = blurRenderPass;

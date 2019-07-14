@@ -65,21 +65,29 @@ Renderer::~Renderer()
 void vm::Renderer::changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState state)
 {
 	if (state != image.layoutState) {
-		if (state == LayoutState::Read) {
+		if (state == LayoutState::ColorRead) {
 			image.transitionImageLayout(
 				cmd,
 				vk::ImageLayout::eColorAttachmentOptimal,
 				vk::ImageLayout::eShaderReadOnlyOptimal,
 				vk::PipelineStageFlagBits::eColorAttachmentOutput,
-				vk::PipelineStageFlagBits::eFragmentShader);
+				vk::PipelineStageFlagBits::eFragmentShader,
+				vk::AccessFlagBits::eColorAttachmentWrite,
+				vk::AccessFlagBits::eShaderRead,
+				vk::ImageAspectFlagBits::eColor
+				);
 		}
-		else if (state == LayoutState::Write) {
+		else if (state == LayoutState::ColorWrite) {
 			image.transitionImageLayout(
 				cmd,
 				vk::ImageLayout::eShaderReadOnlyOptimal,
 				vk::ImageLayout::eColorAttachmentOptimal,
 				vk::PipelineStageFlagBits::eFragmentShader,
-				vk::PipelineStageFlagBits::eColorAttachmentOutput);
+				vk::PipelineStageFlagBits::eColorAttachmentOutput,
+				vk::AccessFlagBits::eShaderRead,
+				vk::AccessFlagBits::eColorAttachmentWrite,
+				vk::ImageAspectFlagBits::eColor
+				);
 		}
 		else if (state == LayoutState::DepthRead) {
 			image.transitionImageLayout(
@@ -88,6 +96,8 @@ void vm::Renderer::changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState
 				vk::ImageLayout::eDepthStencilReadOnlyOptimal,
 				vk::PipelineStageFlagBits::eEarlyFragmentTests,
 				vk::PipelineStageFlagBits::eFragmentShader,
+				vk::AccessFlagBits::eDepthStencilAttachmentWrite,
+				vk::AccessFlagBits::eShaderRead,
 				vk::ImageAspectFlagBits::eDepth);
 		}
 		else if (state == LayoutState::DepthWrite) {
@@ -97,6 +107,8 @@ void vm::Renderer::changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState
 				vk::ImageLayout::eDepthStencilAttachmentOptimal,
 				vk::PipelineStageFlagBits::eFragmentShader,
 				vk::PipelineStageFlagBits::eEarlyFragmentTests,
+				vk::AccessFlagBits::eShaderRead,
+				vk::AccessFlagBits::eDepthStencilAttachmentWrite,
 				vk::ImageAspectFlagBits::eDepth);
 		}
 		image.layoutState = state;
@@ -272,34 +284,34 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	ctx.deferred.batchEnd();
 	ctx.metrics[2].end(&GUI::metrics[2]);
 	
-	changeLayout(cmd, ctx.renderTargets["albedo"], LayoutState::Read);
-	changeLayout(cmd, ctx.renderTargets["depth"], LayoutState::Read);
-	changeLayout(cmd, ctx.renderTargets["normal"], LayoutState::Read);
-	changeLayout(cmd, ctx.renderTargets["srm"], LayoutState::Read);
-	changeLayout(cmd, ctx.renderTargets["emissive"], LayoutState::Read);
-	changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::Read);
-	changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::Read);
-	changeLayout(cmd, ctx.renderTargets["velocity"], LayoutState::Read);
-	changeLayout(cmd, ctx.renderTargets["taa"], LayoutState::Read);
+	changeLayout(cmd, ctx.renderTargets["albedo"], LayoutState::ColorRead);
+	changeLayout(cmd, ctx.renderTargets["depth"], LayoutState::ColorRead);
+	changeLayout(cmd, ctx.renderTargets["normal"], LayoutState::ColorRead);
+	changeLayout(cmd, ctx.renderTargets["srm"], LayoutState::ColorRead);
+	changeLayout(cmd, ctx.renderTargets["emissive"], LayoutState::ColorRead);
+	changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::ColorRead);
+	changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::ColorRead);
+	changeLayout(cmd, ctx.renderTargets["velocity"], LayoutState::ColorRead);
+	changeLayout(cmd, ctx.renderTargets["taa"], LayoutState::ColorRead);
 	for (auto& image : ctx.shadows.textures)
 		changeLayout(cmd, image, LayoutState::DepthRead);
 	
 	// SCREEN SPACE AMBIENT OCCLUSION
 	if (GUI::show_ssao) {
 		ctx.metrics[3].start(cmd);
-		changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::Write);
+		changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::ColorWrite);
 		const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 		ctx.ssao.draw(cmd, imageIndex, changeLayoutFunc, ctx.renderTargets["ssao"]);
-		changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::Read);
+		changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::ColorRead);
 		ctx.metrics[3].end(&GUI::metrics[3]);
 	}
 	
 	// SCREEN SPACE REFLECTIONS
 	if (GUI::show_ssr) {
 		ctx.metrics[4].start(cmd);
-		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::Write);
+		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::ColorWrite);
 		ctx.ssr.draw(cmd, imageIndex, ctx.renderTargets["ssr"].extent);
-		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::Read);
+		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::ColorRead);
 		ctx.metrics[4].end(&GUI::metrics[4]);
 	}
 	
@@ -343,15 +355,15 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		ctx.metrics[8].end(&GUI::metrics[8]);
 	}
 	
-	changeLayout(cmd, ctx.renderTargets["albedo"], LayoutState::Write);
-	changeLayout(cmd, ctx.renderTargets["depth"], LayoutState::Write);
-	changeLayout(cmd, ctx.renderTargets["normal"], LayoutState::Write);
-	changeLayout(cmd, ctx.renderTargets["srm"], LayoutState::Write);
-	changeLayout(cmd, ctx.renderTargets["emissive"], LayoutState::Write);
-	changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::Write);
-	changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::Write);
-	changeLayout(cmd, ctx.renderTargets["velocity"], LayoutState::Write);
-	changeLayout(cmd, ctx.renderTargets["taa"], LayoutState::Write);
+	changeLayout(cmd, ctx.renderTargets["albedo"], LayoutState::ColorWrite);
+	changeLayout(cmd, ctx.renderTargets["depth"], LayoutState::ColorWrite);
+	changeLayout(cmd, ctx.renderTargets["normal"], LayoutState::ColorWrite);
+	changeLayout(cmd, ctx.renderTargets["srm"], LayoutState::ColorWrite);
+	changeLayout(cmd, ctx.renderTargets["emissive"], LayoutState::ColorWrite);
+	changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::ColorWrite);
+	changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::ColorWrite);
+	changeLayout(cmd, ctx.renderTargets["velocity"], LayoutState::ColorWrite);
+	changeLayout(cmd, ctx.renderTargets["taa"], LayoutState::ColorWrite);
 	for (auto& image : ctx.shadows.textures)
 		changeLayout(cmd, image, LayoutState::DepthWrite);
 
