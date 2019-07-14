@@ -40,7 +40,7 @@ void vm::Camera::update()
 		// it will be scaled down to render area size before GUI pass
 		//const int i = static_cast<int>(floor(rand(0.0f, 15.99f)));
 		//projOffset = vec2(&halton16[i * 2]);
-		projOffset = halton_2_3_next(32);
+		projOffset = halton_2_3_next(16);
 		projOffset *= vec2(2.0f);
 		projOffset -= vec2(1.0f);
 		projOffset /= vec2(renderArea.viewport.width, renderArea.viewport.height);

@@ -244,8 +244,8 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 {
-	// wait for vertex and index data to be ready on gui buffers
-	ctx.vulkan.waitFences(ctx.gui.fenceUpload);
+	//// wait for vertex and index data to be ready on gui buffers
+	//ctx.vulkan.waitFences(ctx.gui.fenceUpload);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;

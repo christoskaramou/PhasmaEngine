@@ -52,7 +52,9 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 	else {
 		int texWidth, texHeight, texChannels;
 		unsigned char* pixels = nullptr;
+		stbi_set_flip_vertically_on_load(true);
 		pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		stbi_set_flip_vertically_on_load(false);
 		if (!pixels)
 			throw std::runtime_error("No pixel data loaded");
 		vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;

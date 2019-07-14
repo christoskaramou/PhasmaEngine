@@ -22,7 +22,7 @@ namespace vm {
 		// Data
 		static inline ImVec2								winPos = ImVec2();
 		static inline ImVec2								winSize = ImVec2();
-		static inline float									renderTargetsScale = 0.71f;
+		static inline float									renderTargetsScale = 1.0f;//0.71f;
 		static inline bool									lock_render_window = true;
 		static inline bool									use_IBL = true;
 		static inline bool									show_ssr = false;
