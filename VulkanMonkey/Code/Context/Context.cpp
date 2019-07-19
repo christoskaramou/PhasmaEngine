@@ -745,7 +745,6 @@ Swapchain Context::createSwapchain()
 {
 	VkExtent2D extent = vulkan.surface->actualExtent;
 	vulkan.surface->capabilities = getSurfaceCapabilities();
-	Swapchain _swapchain;
 
 	uint32_t swapchainImageCount = vulkan.surface->capabilities.minImageCount + 1;
 	if (vulkan.surface->capabilities.maxImageCount > 0 &&
@@ -753,7 +752,6 @@ Swapchain Context::createSwapchain()
 		swapchainImageCount = vulkan.surface->capabilities.maxImageCount;
 	}
 
-	vk::SwapchainKHR oldSwapchain = _swapchain.swapchain;
 	vk::SwapchainCreateInfoKHR swapchainCreateInfo;
 	swapchainCreateInfo.surface = vulkan.surface->surface;
 	swapchainCreateInfo.minImageCount = swapchainImageCount;
@@ -766,34 +764,37 @@ Swapchain Context::createSwapchain()
 	swapchainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
 	swapchainCreateInfo.presentMode = vulkan.surface->presentModeKHR;
 	swapchainCreateInfo.clipped = VK_TRUE;
-	swapchainCreateInfo.oldSwapchain = oldSwapchain;
+	swapchainCreateInfo.oldSwapchain = vulkan.swapchain && vulkan.swapchain->swapchain ? vulkan.swapchain->swapchain : nullptr;
 
 	// new swapchain with old create info
-	vk::SwapchainKHR newSwapchain = vulkan.device.createSwapchainKHR(swapchainCreateInfo);
+	Swapchain swapchain;
+	swapchain.swapchain = vulkan.device.createSwapchainKHR(swapchainCreateInfo);
 
-	if (_swapchain.swapchain)
-		vulkan.device.destroySwapchainKHR(_swapchain.swapchain);
-	_swapchain.swapchain = newSwapchain;
+	// destroy old swapchain
+	if (vulkan.swapchain && vulkan.swapchain->swapchain) {
+		vulkan.device.destroySwapchainKHR(vulkan.swapchain->swapchain);
+		vulkan.swapchain->swapchain = nullptr;
+	}
 
 	// get the swapchain image handlers
-	std::vector<vk::Image> images = vulkan.device.getSwapchainImagesKHR(_swapchain.swapchain);
+	std::vector<vk::Image> images = vulkan.device.getSwapchainImagesKHR(swapchain.swapchain);
 
-	_swapchain.images.resize(images.size());
+	swapchain.images.resize(images.size());
 	for (unsigned i = 0; i < images.size(); i++) {
-		_swapchain.images[i].image = images[i]; // hold the image handlers
-		_swapchain.images[i].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
-		_swapchain.images[i].blentAttachment.blendEnable = VK_TRUE;
-		_swapchain.images[i].blentAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-		_swapchain.images[i].blentAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-		_swapchain.images[i].blentAttachment.colorBlendOp = vk::BlendOp::eAdd;
-		_swapchain.images[i].blentAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
-		_swapchain.images[i].blentAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
-		_swapchain.images[i].blentAttachment.alphaBlendOp = vk::BlendOp::eAdd;
-		_swapchain.images[i].blentAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+		swapchain.images[i].image = images[i]; // hold the image handlers
+		swapchain.images[i].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
+		swapchain.images[i].blentAttachment.blendEnable = VK_TRUE;
+		swapchain.images[i].blentAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+		swapchain.images[i].blentAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+		swapchain.images[i].blentAttachment.colorBlendOp = vk::BlendOp::eAdd;
+		swapchain.images[i].blentAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+		swapchain.images[i].blentAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+		swapchain.images[i].blentAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+		swapchain.images[i].blentAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
 	}
 
 	// create image views for each swapchain image
-	for (auto &image : _swapchain.images) {
+	for (auto &image : swapchain.images) {
 		vk::ImageViewCreateInfo imageViewCreateInfo;
 		imageViewCreateInfo.image = image.image;
 		imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
@@ -802,7 +803,7 @@ Swapchain Context::createSwapchain()
 		image.view = vulkan.device.createImageView(imageViewCreateInfo);
 	}
 
-	return _swapchain;
+	return swapchain;
 }
 
 vk::CommandPool Context::createCommandPool()
