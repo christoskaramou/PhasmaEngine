@@ -43,18 +43,18 @@ namespace vm {
 		vk::PipelineColorBlendAttachmentState blentAttachment;
 
 		void transitionImageLayout(
-			const vk::CommandBuffer cmd,
-			const vk::ImageLayout oldLayout,
-			const vk::ImageLayout newLayout,
-			const vk::PipelineStageFlags oldStageMask,
-			const vk::PipelineStageFlags newStageMask,
-			const vk::AccessFlags srcMask,
-			const vk::AccessFlags dstMask,
-			const vk::ImageAspectFlags aspectFlags);
-		void createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1);
-		void createImageView(const vk::ImageAspectFlags aspectFlags);
-		void transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout);
-		void copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer = 0);
+			vk::CommandBuffer cmd,
+			vk::ImageLayout oldLayout,
+			vk::ImageLayout newLayout,
+			vk::PipelineStageFlags oldStageMask,
+			vk::PipelineStageFlags newStageMask,
+			vk::AccessFlags srcMask,
+			vk::AccessFlags dstMask,
+			vk::ImageAspectFlags aspectFlags);
+		void createImage(uint32_t width, uint32_t height, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1);
+		void createImageView(vk::ImageAspectFlags aspectFlags);
+		void transitionImageLayout(vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+		void copyBufferToImage(vk::Buffer buffer, uint32_t baseLayer = 0);
 		void generateMipMaps();
 		void createSampler();
 		void destroy();

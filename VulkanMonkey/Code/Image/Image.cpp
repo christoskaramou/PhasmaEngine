@@ -104,8 +104,7 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 	allocInfo.commandBufferCount = 1;
 	allocInfo.commandPool = vulkan->commandPool2;
 
-	vk::CommandBuffer commandBuffer;
-	commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
+	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;

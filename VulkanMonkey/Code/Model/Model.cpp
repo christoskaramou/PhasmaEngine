@@ -129,8 +129,7 @@ void Model::getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::Mesh
 {
 	if (primitive.indicesAccessorId != "")
 	{
-		const glTF::Accessor* accessor;
-		accessor = &document->accessors.Get(primitive.indicesAccessorId);
+		const glTF::Accessor* accessor = &document->accessors.Get(primitive.indicesAccessorId);
 		switch (accessor->componentType)
 		{
 		case glTF::COMPONENT_BYTE: {

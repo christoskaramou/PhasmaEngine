@@ -89,7 +89,7 @@ namespace vm {
 		VulkanContext() {};									// default constructor
 		VulkanContext(VulkanContext const&) {};				// copy constructor
 		VulkanContext operator=(VulkanContext const&) {};	// copy assignment
-		VulkanContext(VulkanContext&&) {};					// move constructor
+		VulkanContext(VulkanContext&&) noexcept {};			// move constructor
 		VulkanContext operator=(VulkanContext&&) {};		// move assignment
 		~VulkanContext() {};								// destructor
 	};

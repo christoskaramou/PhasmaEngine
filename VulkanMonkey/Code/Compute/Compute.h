@@ -11,7 +11,7 @@ namespace vm {
 	{
 		Buffer& getIn();
 		Buffer& getOut();
-		void dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ);
+		void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ);
 		void waitFence();
 	private:
 		friend struct ComputePool;
@@ -48,7 +48,7 @@ namespace vm {
 		ComputePool() {};								// default constructor
 		ComputePool(ComputePool const&) {};				// copy constructor
 		ComputePool operator=(ComputePool const&) {};	// copy assignment
-		ComputePool(ComputePool&&) {};					// move constructor
+		ComputePool(ComputePool&&) noexcept {};			// move constructor
 		ComputePool operator=(ComputePool&&) {};		// move assignment
 		~ComputePool() {};								// destructor
 	};

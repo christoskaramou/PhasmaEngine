@@ -141,10 +141,9 @@ void Camera::ExtractFrustum()
 {
 	// transpose just to make the calculations look simpler
 	mat4 pvm = transpose(projection * view);
-	vec4 temp;
 
 	/* Extract the numbers for the RIGHT plane */
-	temp = pvm[3] - pvm[0];
+	vec4 temp = pvm[3] - pvm[0];
 	temp /= length(vec3(temp));
 
 	frustum[0].normal = vec3(temp);

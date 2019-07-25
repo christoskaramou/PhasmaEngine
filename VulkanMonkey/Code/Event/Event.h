@@ -46,7 +46,7 @@ namespace vm {
 		EventSystem() {};								// default constructor
 		EventSystem(EventSystem const&) {};				// copy constructor
 		EventSystem operator=(EventSystem const&) {};	// copy assignment
-		EventSystem(EventSystem&&) {};					// move constructor
+		EventSystem(EventSystem&&) noexcept {};			// move constructor
 		EventSystem operator=(EventSystem&&) {};		// move assignment
 		~EventSystem() {};								// destructor
 	};

@@ -128,10 +128,10 @@ namespace vm {
 		Swapchain createSwapchain();
 		vk::CommandPool createCommandPool();
 		Image createDepthResources();
-		std::vector<vk::CommandBuffer> createCmdBuffers(const uint32_t bufferCount = 1);
-		vk::DescriptorPool createDescriptorPool(const uint32_t maxDescriptorSets);
-		std::vector<vk::Fence> createFences(const uint32_t fenceCount);
-		std::vector<vk::Semaphore> createSemaphores(const uint32_t semaphoresCount);
+		std::vector<vk::CommandBuffer> createCmdBuffers(uint32_t bufferCount = 1);
+		vk::DescriptorPool createDescriptorPool(uint32_t maxDescriptorSets);
+		std::vector<vk::Fence> createFences(uint32_t fenceCount);
+		std::vector<vk::Semaphore> createSemaphores(uint32_t semaphoresCount);
 		void addRenderTarget(const std::string& name, vk::Format format, vk::ImageUsageFlags additionalFlags = vk::ImageUsageFlags());
 	};
 }

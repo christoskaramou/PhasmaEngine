@@ -4,13 +4,7 @@ using namespace vm;
 
 #define VertexOffset(x) offsetof(Vertex, x)
 
-Vertex::Vertex() :
-	position(),
-	uv(),
-	normals(),
-	color(),
-	bonesIDs(),
-	weights()
+Vertex::Vertex()
 { }
 
 Vertex::Vertex(vec3& pos, vec2& uv, vec3& norm, vec4& color, ivec4& bonesIDs, vec4& weights) :
