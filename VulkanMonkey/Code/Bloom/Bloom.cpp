@@ -303,7 +303,7 @@ void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImage
 	vk::RenderPassBeginInfo rpi;
 	rpi.renderPass = renderPassBrightFilter;
 	rpi.framebuffer = frameBuffers[imageIndex];
-	rpi.renderArea.offset = { 0, 0 };
+	rpi.renderArea.offset = vk::Offset2D{0, 0};
 	rpi.renderArea.extent = renderTargets["brightFilter"].extent;
 	rpi.clearValueCount = 1;
 	rpi.pClearValues = clearValues.data();

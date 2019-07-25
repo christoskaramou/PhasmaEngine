@@ -66,7 +66,7 @@ void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Exte
 	vk::RenderPassBeginInfo rpi;
 	rpi.renderPass = renderPass;
 	rpi.framebuffer = frameBuffers[imageIndex];
-	rpi.renderArea.offset = { 0, 0 };
+	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = extent;
 	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	rpi.pClearValues = clearValues.data();

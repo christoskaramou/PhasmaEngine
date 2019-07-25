@@ -158,7 +158,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	vp.maxDepth = 1.f;
 
 	vk::Rect2D r2d;
-	r2d.extent = { Shadows::imageSize, Shadows::imageSize };
+	r2d.extent = vk::Extent2D{ Shadows::imageSize, Shadows::imageSize };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;

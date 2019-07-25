@@ -102,7 +102,7 @@ void SSAO::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(v
 	vk::RenderPassBeginInfo rpi;
 	rpi.renderPass = renderPass;
 	rpi.framebuffer = frameBuffers[imageIndex];
-	rpi.renderArea.offset = { 0, 0 };
+	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = image.extent;
 	rpi.clearValueCount = 1;
 	rpi.pClearValues = clearValues.data();

@@ -384,14 +384,14 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 
 	const vk::DeviceSize offset = vk::DeviceSize();
 	std::array<vk::ClearValue, 1> clearValuesShadows{};
-	clearValuesShadows[0].depthStencil = { 0.0f, 0 };
+	clearValuesShadows[0].depthStencil = vk::ClearDepthStencilValue{ 0.0f, 0 };
 
 	vk::CommandBufferBeginInfo beginInfoShadows;
 	beginInfoShadows.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
 	vk::RenderPassBeginInfo renderPassInfoShadows;
 	renderPassInfoShadows.renderPass = ctx.shadows.renderPass;
-	renderPassInfoShadows.renderArea = { { 0, 0 },{ Shadows::imageSize, Shadows::imageSize } };
+	renderPassInfoShadows.renderArea = vk::Rect2D{ { 0, 0 },{ Shadows::imageSize, Shadows::imageSize } };
 	renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
 	renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 

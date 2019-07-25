@@ -95,7 +95,7 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 	vk::RenderPassBeginInfo rpi;
 	rpi.renderPass = renderPass;
 	rpi.framebuffer = frameBuffers[imageIndex];
-	rpi.renderArea.offset = { 0, 0 };
+	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = renderTargets["taa"].extent;
 	rpi.clearValueCount = 1;
 	rpi.pClearValues = clearValues.data();
@@ -114,7 +114,7 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 	vk::RenderPassBeginInfo rpi2;
 	rpi2.renderPass = renderPassSharpen;
 	rpi2.framebuffer = frameBuffersSharpen[imageIndex];
-	rpi2.renderArea.offset = { 0, 0 };
+	rpi2.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi2.renderArea.extent = renderTargets["viewport"].extent;
 	rpi2.clearValueCount = 1;
 	rpi2.pClearValues = clearValues.data();

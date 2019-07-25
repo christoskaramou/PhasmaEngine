@@ -41,13 +41,13 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 	this->height = height % 2 != 0 ? height - 1 : height;
 	width_f = static_cast<float>(this->width);
 	height_f = static_cast<float>(this->height);
-	extent = { this->width, this->height};
+	extent = vk::Extent2D{ this->width, this->height};
 
 	vk::ImageCreateInfo imageInfo;
 	imageInfo.flags = imageCreateFlags;
 	imageInfo.imageType = vk::ImageType::e2D;
 	imageInfo.format = format;
-	imageInfo.extent = { this->width, this->height, 1 };
+	imageInfo.extent = vk::Extent3D{ this->width, this->height, 1 };
 	imageInfo.mipLevels = mipLevels;
 	imageInfo.arrayLayers = arrayLayers;
 	imageInfo.samples = samples;
@@ -269,14 +269,14 @@ void Image::generateMipMaps()
 			barrier);
 
 		vk::ImageBlit blit = {};
-		blit.srcOffsets[0] = { 0, 0, 0 };
-		blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+		blit.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
+		blit.srcOffsets[1] = vk::Offset3D { mipWidth, mipHeight, 1 };
 		blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		blit.srcSubresource.mipLevel = i - 1;
 		blit.srcSubresource.baseArrayLayer = 0;
 		blit.srcSubresource.layerCount = 1;
-		blit.dstOffsets[0] = { 0, 0, 0 };
-		blit.dstOffsets[1] = { mipWidth / 2, mipHeight / 2, 1 };
+		blit.dstOffsets[0] = vk::Offset3D{ 0, 0, 0 };
+		blit.dstOffsets[1] = vk::Offset3D{ mipWidth / 2, mipHeight / 2, 1 };
 		blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		blit.dstSubresource.mipLevel = i;
 		blit.dstSubresource.baseArrayLayer = 0;

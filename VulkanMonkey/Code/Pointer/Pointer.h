@@ -49,7 +49,7 @@ namespace vm {
 		}
 		static T* join(const Pointer& ptr) {
 			if (!ptr) return nullptr;
-			return reinterpret_cast<T*>((static_cast<uint64_t>(hLeft)) << 32 | hRight);
+			return reinterpret_cast<T*>((static_cast<uint64_t>(ptr.hLeft)) << 32 | ptr.hRight);
 		}
 	};
 }

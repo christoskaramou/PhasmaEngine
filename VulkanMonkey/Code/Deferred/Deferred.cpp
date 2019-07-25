@@ -17,7 +17,7 @@ void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::
 	vk::RenderPassBeginInfo rpi;
 	rpi.renderPass = renderPass;
 	rpi.framebuffer = frameBuffers[imageIndex];
-	rpi.renderArea.offset = { 0, 0 };
+	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = extent;
 	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	rpi.pClearValues = clearValues.data();
@@ -131,7 +131,7 @@ void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows
 	vk::RenderPassBeginInfo rpi;
 	rpi.renderPass = compositionRenderPass;
 	rpi.framebuffer = compositionFrameBuffers[imageIndex];
-	rpi.renderArea.offset = { 0, 0 };
+	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = extent;
 	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	rpi.pClearValues = clearValues.data();
@@ -395,7 +395,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	vp.maxDepth = 1.f;
 
 	vk::Rect2D r2d;
-	r2d.extent = { static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale), static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale) };
+	r2d.extent = vk::Extent2D{ static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale), static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale) };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;

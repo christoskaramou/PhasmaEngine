@@ -554,7 +554,7 @@ Surface Context::createSurface()
 	Surface _surface;
 	int width, height;
 	SDL_GL_GetDrawableSize(vulkan.window, &width, &height);
-	_surface.actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+	_surface.actualExtent = vk::Extent2D{ static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 	_surface.surface = vk::SurfaceKHR(_vkSurface);
 
 	return _surface;

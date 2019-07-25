@@ -644,12 +644,12 @@ void GUI::scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_
 		vk::ImageAspectFlagBits::eColor);
 
 	vk::ImageBlit blit;
-	blit.srcOffsets[0] = { 0, 0, 0 };
-	blit.srcOffsets[1] = { static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 1 };
+	blit.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
+	blit.srcOffsets[1] = vk::Offset3D{ static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 1 };
 	blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 	blit.srcSubresource.layerCount = 1;
-	blit.dstOffsets[0] = { static_cast<int32_t>(winPos.x), static_cast<int32_t>(winPos.y), 0 };
-	blit.dstOffsets[1] = { static_cast<int32_t>(winPos.x) + static_cast<int32_t>(winSize.x), static_cast<int32_t>(winPos.y) + static_cast<int32_t>(winSize.y), 1 };
+	blit.dstOffsets[0] = vk::Offset3D{ static_cast<int32_t>(winPos.x), static_cast<int32_t>(winPos.y), 0 };
+	blit.dstOffsets[1] = vk::Offset3D{ static_cast<int32_t>(winPos.x) + static_cast<int32_t>(winSize.x), static_cast<int32_t>(winPos.y) + static_cast<int32_t>(winSize.y), 1 };
 	blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 	blit.dstSubresource.layerCount = 1;
 
@@ -700,7 +700,7 @@ void GUI::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = renderPass;
 		rpi.framebuffer = frameBuffers[imageIndex];
-		rpi.renderArea = { { 0, 0 }, VulkanContext::get().surface->actualExtent };
+		rpi.renderArea = vk::Rect2D{ { 0, 0 }, VulkanContext::get().surface->actualExtent };
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		rpi.pClearValues = clearValues.data();
 
@@ -1096,7 +1096,7 @@ void GUI::createPipeline()
 	vp.maxDepth = 1.f;
 
 	vk::Rect2D r2d;
-	r2d.extent = { WIDTH, HEIGHT };
+	r2d.extent = vk::Extent2D{ WIDTH, HEIGHT };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
