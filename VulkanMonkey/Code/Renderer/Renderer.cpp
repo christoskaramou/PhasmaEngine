@@ -123,14 +123,14 @@ void Renderer::checkQueue()
 		Queue::loadModelFutures.push_back(std::async(std::launch::async, [](const std::string& folderPath, const std::string& modelName, bool show = true) {
 				Model model;
 				model.loadModel(folderPath, modelName, show);
-				return std::move(std::any(std::move(model)));
+				return std::any(std::move(model));
 			}, std::get<0>(*it), std::get<1>(*it), true));
 		it = Queue::loadModel.erase(it);
 	}
 
 	for (auto it = Queue::loadModelFutures.begin(); it != Queue::loadModelFutures.end();) {
 		if (it->wait_for(std::chrono::seconds(0)) != std::future_status::timeout) {
-			Model::models.push_back(std::move(std::any_cast<Model>(it->get())));
+			Model::models.push_back(std::any_cast<Model>(it->get()));
 			GUI::modelList.push_back(Model::models.back().name);
 			GUI::model_scale.push_back({ 1.f, 1.f, 1.f });
 			GUI::model_pos.push_back({ 0.f, 0.f, 0.f });

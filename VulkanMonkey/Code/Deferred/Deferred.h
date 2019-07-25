@@ -6,7 +6,7 @@
 #include "../Light/Light.h"
 #include "../GUI/GUI.h"
 #include "../Shadows/Shadows.h"
-#include "../SkyBox/Skybox.h"
+#include "../Skybox/Skybox.h"
 #include "../Vertex/Vertex.h"
 #include "../Model/Model.h"
 #include "../Mesh/Mesh.h"

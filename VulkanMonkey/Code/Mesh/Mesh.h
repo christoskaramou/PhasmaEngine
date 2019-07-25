@@ -32,7 +32,7 @@ namespace vm {
 		VulkanContext* vulkan = &VulkanContext::get();
 
 		static vk::DescriptorSetLayout descriptorSetLayout;
-		static vk::DescriptorSetLayout getDescriptorSetLayout();
+		static vk::DescriptorSetLayout* getDescriptorSetLayout();
 		vk::DescriptorSet descriptorSet;
 		Buffer uniformBuffer;
 
@@ -75,7 +75,7 @@ namespace vm {
 		std::vector<Primitive> primitives{};
 
 		static vk::DescriptorSetLayout descriptorSetLayout;
-		static vk::DescriptorSetLayout getDescriptorSetLayout();
+		static vk::DescriptorSetLayout* getDescriptorSetLayout();
 		vk::DescriptorSet descriptorSet;
 		Buffer uniformBuffer;
 		std::vector<Vertex> vertices{};

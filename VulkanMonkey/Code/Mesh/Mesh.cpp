@@ -7,7 +7,7 @@ vk::DescriptorSetLayout Mesh::descriptorSetLayout = nullptr;
 vk::DescriptorSetLayout Primitive::descriptorSetLayout = nullptr;
 std::map<std::string, Image> Mesh::uniqueTextures{};
 
-vk::DescriptorSetLayout Primitive::getDescriptorSetLayout()
+vk::DescriptorSetLayout* Primitive::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
 		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, vk::ShaderStageFlags stageFlag) {
@@ -26,10 +26,10 @@ vk::DescriptorSetLayout Primitive::getDescriptorSetLayout()
 		descriptorLayout.pBindings = setLayoutBindings.data();
 		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
 	}
-	return descriptorSetLayout;
+	return &descriptorSetLayout;
 }
 
-vk::DescriptorSetLayout Mesh::getDescriptorSetLayout()
+vk::DescriptorSetLayout* Mesh::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
 		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
@@ -43,7 +43,7 @@ vk::DescriptorSetLayout Mesh::getDescriptorSetLayout()
 		descriptorLayout.pBindings = setLayoutBindings.data();
 		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
 	}
-	return descriptorSetLayout;
+	return &descriptorSetLayout;
 }
 
 void Mesh::createUniformBuffers()

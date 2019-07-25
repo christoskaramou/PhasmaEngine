@@ -40,14 +40,14 @@ namespace vm {
 		void unsubscribe(Event event, FuncID funcID);
 		void fire(Event eventID, std::any data = nullptr);
 
+		EventSystem(EventSystem const&) = delete;				// copy constructor
+		EventSystem(EventSystem&&) noexcept = delete;			// move constructor
+		EventSystem& operator=(EventSystem const&) = delete;	// copy assignment
+		EventSystem& operator=(EventSystem&&) = delete;			// move assignment
 	private:
-		std::vector<std::vector<Func>> m_subscribers{};
+		EventSystem() = default;								// default constructor
+		~EventSystem() = default;								// destructor
 
-		EventSystem() {};								// default constructor
-		EventSystem(EventSystem const&) {};				// copy constructor
-		EventSystem operator=(EventSystem const&) {};	// copy assignment
-		EventSystem(EventSystem&&) noexcept {};			// move constructor
-		EventSystem operator=(EventSystem&&) {};		// move assignment
-		~EventSystem() {};								// destructor
+		std::vector<std::vector<Func>> m_subscribers{};
 	};
 }

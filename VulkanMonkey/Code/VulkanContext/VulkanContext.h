@@ -85,13 +85,14 @@ namespace vm {
 
 		static VulkanContext& get() noexcept { static VulkanContext VkCTX; return VkCTX; }
 		static const VulkanContext& getSafe() noexcept { return get(); }
+
+		VulkanContext(VulkanContext const&) = delete;				// copy constructor
+		VulkanContext(VulkanContext&&) noexcept = delete;			// move constructor
+		VulkanContext& operator=(VulkanContext const&) = delete;	// copy assignment
+		VulkanContext& operator=(VulkanContext&&) = delete;			// move assignment
 	private:
-		VulkanContext() {};									// default constructor
-		VulkanContext(VulkanContext const&) {};				// copy constructor
-		VulkanContext operator=(VulkanContext const&) {};	// copy assignment
-		VulkanContext(VulkanContext&&) noexcept {};			// move constructor
-		VulkanContext operator=(VulkanContext&&) {};		// move assignment
-		~VulkanContext() {};								// destructor
+		VulkanContext() = default;									// default constructor
+		~VulkanContext() = default;									// destructor
 	};
 
 	static std::vector<char> readFile(const std::string& filename)

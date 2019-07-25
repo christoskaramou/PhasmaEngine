@@ -77,7 +77,7 @@ void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t
 }
 
 // images must be squared and the image size must be the real else the assertion will fail
-void SkyBox::loadTextures(const std::array<std::string, 6>& paths, uint32_t imageSideSize)
+void SkyBox::loadTextures(const std::array<std::string, 6>& paths, int imageSideSize)
 {
 	assert(paths.size() == 6);
 

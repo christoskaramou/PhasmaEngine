@@ -95,7 +95,7 @@ void Context::initRendering()
 	skyBoxDay.createPipeline();
 	skyBoxNight.createPipeline();
 #endif
-	shadows.createPipeline(Mesh::getDescriptorSetLayout(), Model::getDescriptorSetLayout());
+	shadows.createPipeline(*Mesh::getDescriptorSetLayout(), *Model::getDescriptorSetLayout());
 	ssao.createPipelines(renderTargets);
 	ssr.createPipeline(renderTargets);
 	deferred.createPipelines(renderTargets);
@@ -422,13 +422,13 @@ void Context::loadResources()
 	// SCRIPTS
 #ifdef USE_SCRIPTS
 	Script::Init();
-	Script::addCallback("Global::LoadModel", LoadModel);
-	Script::addCallback("Global::KeyDown", KeyDown);
-	Script::addCallback("Global::SetTimeScale", SetTimeScale);
-	Script::addCallback("Global::MouseButtonDown", MouseButtonDown);
-	Script::addCallback("Global::GetMousePos", GetMousePos);
-	Script::addCallback("Global::SetMousePos", SetMousePos);
-	Script::addCallback("Global::GetMouseWheel", GetMouseWheel);
+	Script::addCallback("Global::LoadModel", reinterpret_cast<const void*>(LoadModel));
+	Script::addCallback("Global::KeyDown", reinterpret_cast<const void*>(KeyDown));
+	Script::addCallback("Global::SetTimeScale", reinterpret_cast<const void*>(SetTimeScale));
+	Script::addCallback("Global::MouseButtonDown", reinterpret_cast<const void*>(MouseButtonDown));
+	Script::addCallback("Global::GetMousePos", reinterpret_cast<const void*>(GetMousePos));
+	Script::addCallback("Global::SetMousePos", reinterpret_cast<const void*>(SetMousePos));
+	Script::addCallback("Global::GetMouseWheel", reinterpret_cast<const void*>(GetMouseWheel));
 	scripts.push_back(new Script("Load"));
 #endif
 }
@@ -568,7 +568,7 @@ int Context::getGraphicsFamilyId()
 	vk::QueueFlags flags = vk::QueueFlagBits::eTransfer;
 #endif
 	auto& properties = vulkan.queueFamilyProperties;
-	for (int i = 0; i < properties.size(); i++) {
+	for (uint32_t i = 0; i < properties.size(); i++) {
 		//find graphics queue family index
 		if (properties[i].queueFlags & vk::QueueFlagBits::eGraphics && vulkan.gpu.getSurfaceSupportKHR(i, vulkan.surface->surface))
 			return i;

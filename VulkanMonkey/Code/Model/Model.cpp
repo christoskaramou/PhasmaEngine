@@ -85,37 +85,37 @@ void Model::getVertexData(std::vector<T>& vec, const std::string& accessorName, 
 		{
 		case glTF::COMPONENT_FLOAT: {
 			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessor);
-			for (int i = 0; i < data.size(); i++)
+			for (uint32_t i = 0; i < data.size(); i++)
 				vec.push_back((T)data[i]);
 			break;
 		}
 		case glTF::COMPONENT_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
-			for (int i = 0; i < data.size(); i++)
+			for (uint32_t i = 0; i < data.size(); i++)
 				vec.push_back((T)data[i]);
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
-			for (int i = 0; i < data.size(); i++)
+			for (uint32_t i = 0; i < data.size(); i++)
 				vec.push_back((T)data[i]);
 			break;
 		}
 		case glTF::COMPONENT_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
-			for (int i = 0; i < data.size(); i++)
+			for (uint32_t i = 0; i < data.size(); i++)
 				vec.push_back((T)data[i]);
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
-			for (int i = 0; i < data.size(); i++)
+			for (uint32_t i = 0; i < data.size(); i++)
 				vec.push_back((T)data[i]);
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_INT: {
 			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
-			for (int i = 0; i < data.size(); i++)
+			for (uint32_t i = 0; i < data.size(); i++)
 				vec.push_back((T)data[i]);
 			break;
 		}
@@ -134,31 +134,31 @@ void Model::getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::Mesh
 		{
 		case glTF::COMPONENT_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
-			for (int i = 0; i < data.size(); i++)
+			for (uint32_t i = 0; i < data.size(); i++)
 				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
-			for (int i = 0; i < data.size(); i++)
+			for (uint32_t i = 0; i < data.size(); i++)
 				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
-			for (int i = 0; i < data.size(); i++)
+			for (uint32_t i = 0; i < data.size(); i++)
 				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
-			for (int i = 0; i < data.size(); i++)
+			for (uint32_t i = 0; i < data.size(); i++)
 				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_INT: {
 			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
-			for (int i = 0; i < data.size(); i++)
+			for (uint32_t i = 0; i < data.size(); i++)
 				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
@@ -296,7 +296,7 @@ void Model::loadModel(const std::string& folderPath, const std::string& modelNam
 	createDescriptorSets();
 }
 
-vk::DescriptorSetLayout Model::getDescriptorSetLayout()
+vk::DescriptorSetLayout* Model::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
 
@@ -311,7 +311,7 @@ vk::DescriptorSetLayout Model::getDescriptorSetLayout()
 		dslci.pBindings = &dslb;
 		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(dslci);
 	}
-	return descriptorSetLayout;
+	return &descriptorSetLayout;
 }
 
 void Model::updateAnimation(uint32_t index, float time)
@@ -748,7 +748,7 @@ void Model::createDescriptorSets()
 	vk::DescriptorSetAllocateInfo allocateInfo0;
 	allocateInfo0.descriptorPool = vulkan->descriptorPool;
 	allocateInfo0.descriptorSetCount = 1;
-	allocateInfo0.pSetLayouts = &Model::getDescriptorSetLayout();
+	allocateInfo0.pSetLayouts = getDescriptorSetLayout();
 	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo0).at(0);
 
 	vulkan->device.updateDescriptorSets(wSetBuffer(descriptorSet, 0, uniformBuffer), nullptr);
@@ -763,7 +763,7 @@ void Model::createDescriptorSets()
 			vk::DescriptorSetAllocateInfo allocateInfo;
 			allocateInfo.descriptorPool = vulkan->descriptorPool;
 			allocateInfo.descriptorSetCount = 1;
-			allocateInfo.pSetLayouts = &Mesh::getDescriptorSetLayout();
+			allocateInfo.pSetLayouts = Mesh::getDescriptorSetLayout();
 			mesh->descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
 
 			vulkan->device.updateDescriptorSets(wSetBuffer(mesh->descriptorSet, 0, mesh->uniformBuffer), nullptr);
@@ -774,7 +774,7 @@ void Model::createDescriptorSets()
 				vk::DescriptorSetAllocateInfo allocateInfo2;
 				allocateInfo2.descriptorPool = vulkan->descriptorPool;
 				allocateInfo2.descriptorSetCount = 1;
-				allocateInfo2.pSetLayouts = &Primitive::getDescriptorSetLayout();
+				allocateInfo2.pSetLayouts = Primitive::getDescriptorSetLayout();
 				primitive.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
 
 				std::vector<vk::WriteDescriptorSet> textureWriteSets{

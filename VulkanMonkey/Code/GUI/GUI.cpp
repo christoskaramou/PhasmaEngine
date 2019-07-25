@@ -341,7 +341,8 @@ void GUI::Properties()
 	if (modelItemSelected > -1) {
 		std::string toStr = std::to_string(modelItemSelected);
 		std::string id = " ID[" + toStr + "]";
-		ImGui::TextColored(ImVec4(.6f, 1.f, .5f, 1.f), (modelList[modelItemSelected] + id).c_str());
+		std::string fmt = modelList[modelItemSelected] + id;
+		ImGui::TextColored(ImVec4(.6f, 1.f, .5f, 1.f), fmt.c_str());
 
 		ImGui::Separator();
 		if (ImGui::Button("Unload Model"))
@@ -941,7 +942,6 @@ void GUI::windowStyle(ImGuiStyle* dst)
 	style->Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
 	style->Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
 	style->Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
-
 }
 
 void GUI::createVertexBuffer(size_t vertex_size)

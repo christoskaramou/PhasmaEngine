@@ -468,7 +468,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	pipeline.pipeinfo.pDynamicState = &dsi;
 
 	// Pipeline Layout
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ Mesh::getDescriptorSetLayout(), Primitive::getDescriptorSetLayout(), Model::getDescriptorSetLayout() };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ *Mesh::getDescriptorSetLayout(), *Primitive::getDescriptorSetLayout(), *Model::getDescriptorSetLayout() };
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();

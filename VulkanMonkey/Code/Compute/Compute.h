@@ -27,7 +27,7 @@ namespace vm {
 		Pipeline pipeline;
 		vk::CommandBuffer commandBuffer;
 
-		static vk::DescriptorSetLayout getDescriptorLayout();
+		static vk::DescriptorSetLayout* getDescriptorLayout();
 		void createPipeline();
 		void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
 		void createDescriptorSet();

@@ -6,7 +6,7 @@ using namespace vm;
 
 vk::DescriptorSetLayout Compute::DSLayoutCompute = nullptr;
 
-vk::DescriptorSetLayout Compute::getDescriptorLayout()
+vk::DescriptorSetLayout* Compute::getDescriptorLayout()
 {
 	if (!DSLayoutCompute) {
 		auto setLayoutBinding = [](uint32_t binding) {
@@ -23,7 +23,7 @@ vk::DescriptorSetLayout Compute::getDescriptorLayout()
 		dlci.pBindings = setLayoutBindings.data();
 		DSLayoutCompute = VulkanContext::get().device.createDescriptorSetLayout(dlci);
 	}
-	return DSLayoutCompute;
+	return &DSLayoutCompute;
 }
 
 Buffer& Compute::getIn()
@@ -81,7 +81,7 @@ void Compute::createDescriptorSet()
 	vk::DescriptorSetAllocateInfo allocInfo;
 	allocInfo.descriptorPool = vulkan->descriptorPool;
 	allocInfo.descriptorSetCount = 1;
-	allocInfo.pSetLayouts = &Compute::getDescriptorLayout();
+	allocInfo.pSetLayouts = getDescriptorLayout();
 	DSCompute = vulkan->device.allocateDescriptorSets(allocInfo).at(0);
 }
 
@@ -108,7 +108,7 @@ void Compute::createPipeline()
 
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = 1;
-	plci.pSetLayouts = &Compute::getDescriptorLayout();
+	plci.pSetLayouts = getDescriptorLayout();
 
 	auto sm = vulkan->device.createShaderModuleUnique(csmci);
 

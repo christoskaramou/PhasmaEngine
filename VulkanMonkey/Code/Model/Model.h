@@ -31,7 +31,7 @@ namespace vm {
 		static Pipeline* pipeline;
 		static vk::CommandBuffer commandBuffer;
 		static vk::DescriptorSetLayout descriptorSetLayout;
-		static vk::DescriptorSetLayout getDescriptorSetLayout();
+		static vk::DescriptorSetLayout* getDescriptorSetLayout();
 		vk::DescriptorSet descriptorSet;
 		Buffer uniformBuffer;
 		struct UBOModel {
