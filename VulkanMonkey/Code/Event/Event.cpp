@@ -19,7 +19,7 @@ EventSystem& EventSystem::get() {
 // returns the eventID
 Event vm::EventSystem::createEvent()
 {
-	m_subscribers.push_back({});
+	m_subscribers.emplace_back();
 	return { static_cast<uint32_t>(m_subscribers.size()) - 1, false };
 }
 
@@ -39,7 +39,7 @@ void EventSystem::unsubscribe(Event event, FuncID funcID)
 {
 	if (m_subscribers.size() <= event.ID) throw std::runtime_error("Event ID is not valid");
 	auto& v = m_subscribers[event.ID];
-	for (auto& it = v.begin(); it != v.end(); ++it)
+	for (auto it = v.begin(); it != v.end(); ++it)
 		if (it->ID == funcID) {
 			v.erase(it);
 			v.shrink_to_fit();
@@ -47,7 +47,7 @@ void EventSystem::unsubscribe(Event event, FuncID funcID)
 		}
 }
 
-void EventSystem::fire(Event event, std::any data)
+void EventSystem::fire(Event event, const std::any& data)
 {
 	if (event.handled || m_subscribers.size() <= event.ID)
 		return;

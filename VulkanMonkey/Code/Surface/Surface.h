@@ -7,7 +7,7 @@ namespace vm {
 		vk::SurfaceKHR surface;
 		vk::Extent2D actualExtent;
 		vk::SurfaceCapabilitiesKHR capabilities;
-		vk::SurfaceFormatKHR formatKHR;
-		vk::PresentModeKHR presentModeKHR;
+		vk::SurfaceFormatKHR formatKHR{};
+		vk::PresentModeKHR presentModeKHR{};
 	};
 }

@@ -18,7 +18,7 @@ void Bloom::Init()
 	frameImage.createSampler();
 }
 
-void Bloom::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage)
+void Bloom::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
 {
 	frameImage.transitionImageLayout(
 		cmd,
@@ -271,14 +271,9 @@ void Bloom::createUniforms(std::map<std::string, Image>& renderTargets)
 void Bloom::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
 	std::deque<vk::DescriptorImageInfo> dsii{};
-	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
-		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal });
+	auto const wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		dsii.emplace_back(image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
-	};
-	std::deque<vk::DescriptorBufferInfo> dsbi{};
-	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
-		dsbi.push_back({ buffer.buffer, 0, buffer.size });
-		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 	};
 
 	std::vector<vk::WriteDescriptorSet> textureWriteSets{
@@ -318,7 +313,7 @@ void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImage
 	changeLayout(cmd, renderTargets["brightFilter"], LayoutState::ColorRead);
 
 	rpi.renderPass = renderPassGaussianBlur;
-	rpi.framebuffer = frameBuffers[(size_t)totalImages + (size_t)imageIndex];
+	rpi.framebuffer = frameBuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)];
 
 	changeLayout(cmd, renderTargets["gaussianBlurHorizontal"], LayoutState::ColorWrite);
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
@@ -329,7 +324,7 @@ void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImage
 	cmd.endRenderPass();
 	changeLayout(cmd, renderTargets["gaussianBlurHorizontal"], LayoutState::ColorRead);
 
-	rpi.framebuffer = frameBuffers[(size_t)totalImages * 2 + (size_t)imageIndex];
+	rpi.framebuffer = frameBuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)];
 
 	changeLayout(cmd, renderTargets["gaussianBlurVertical"], LayoutState::ColorWrite);
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
@@ -341,7 +336,7 @@ void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImage
 	changeLayout(cmd, renderTargets["gaussianBlurVertical"], LayoutState::ColorRead);
 
 	rpi.renderPass = renderPassCombine;
-	rpi.framebuffer = frameBuffers[(size_t)totalImages * 3 + (size_t)imageIndex];
+	rpi.framebuffer = frameBuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)];
 
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 	cmd.pushConstants<float>(pipelineCombine.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);

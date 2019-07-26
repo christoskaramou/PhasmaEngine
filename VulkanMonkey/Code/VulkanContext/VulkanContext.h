@@ -60,7 +60,8 @@ namespace vm {
 		};
 
 		void waitFences(const vk::ArrayProxy<const vk::Fence> fences) const {
-			device.waitForFences(fences, VK_TRUE, UINT64_MAX);
+			if (device.waitForFences(fences, VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
+				throw std::runtime_error("wait fences error!");
 			device.resetFences(fences);
 		}
 
@@ -70,12 +71,13 @@ namespace vm {
 			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
 			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores) const
 		{
-			vk::FenceCreateInfo fi;
-			vk::Fence fence = device.createFence(fi);
+			const vk::FenceCreateInfo fi;
+			const vk::Fence fence = device.createFence(fi);
 
 			submit(commandBuffers, waitStages, waitSemaphores, signalSemaphores, fence);
 
-			device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+			if (device.waitForFences(fence, VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
+				throw std::runtime_error("wait fences error!");
 			device.destroyFence(fence);
 		}
 
@@ -101,7 +103,7 @@ namespace vm {
 		if (!file.is_open()) {
 			throw std::runtime_error("failed to open file!");
 		}
-		const size_t fileSize = (size_t)file.tellg();
+		const size_t fileSize = static_cast<size_t>(file.tellg());
 		std::vector<char> buffer(fileSize);
 		file.seekg(0);
 		file.read(buffer.data(), fileSize);

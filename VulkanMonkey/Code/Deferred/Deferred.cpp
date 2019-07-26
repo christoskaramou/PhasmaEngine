@@ -28,7 +28,7 @@ void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::
 	Model::pipeline = &pipeline;
 }
 
-void Deferred::batchEnd()
+void Deferred::batchEnd() const
 {
 	Model::commandBuffer.endRenderPass();
 	Model::commandBuffer = nullptr;
@@ -37,7 +37,7 @@ void Deferred::batchEnd()
 
 void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 {
-	vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
+	const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
 		vulkan->descriptorPool,					//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
 		&DSLayoutComposition					//const DescriptorSetLayout* pSetLayouts;
@@ -45,19 +45,18 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 	DSComposition = vulkan->device.allocateDescriptorSets(allocInfo).at(0);
 
 	// Check if ibl_brdf_lut is already loaded
-	std::string path = "objects/ibl_brdf_lut.png";
+	const std::string path = "objects/ibl_brdf_lut.png";
 	if (Mesh::uniqueTextures.find(path) != Mesh::uniqueTextures.end()) {
 		ibl_brdf_lut = Mesh::uniqueTextures[path];
 	}
 	else {
 		int texWidth, texHeight, texChannels;
-		unsigned char* pixels = nullptr;
 		stbi_set_flip_vertically_on_load(true);
-		pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		unsigned char* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		stbi_set_flip_vertically_on_load(false);
 		if (!pixels)
 			throw std::runtime_error("No pixel data loaded");
-		vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
+		const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
 		vulkan->waitAndLockSubmits();
 
@@ -95,13 +94,13 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 {
 	std::deque<vk::DescriptorImageInfo> dsii{};
-	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
-		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal });
+	auto const wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		dsii.emplace_back(image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 	};
 	std::deque<vk::DescriptorBufferInfo> dsbi{};
-	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
-		dsbi.push_back({ buffer.buffer, 0, buffer.size });
+	auto const wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		dsbi.emplace_back(buffer.buffer, 0, buffer.size);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 	};
 

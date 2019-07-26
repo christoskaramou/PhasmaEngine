@@ -11,8 +11,8 @@ namespace vm {
 		vk::DeviceSize size = 0;
 		void *data = nullptr;
 
-		void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
-		void copyBuffer(vk::Buffer srcBuffer, vk::DeviceSize size);
+		void createBuffer(vk::DeviceSize size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties);
+		void copyBuffer(vk::Buffer srcBuffer, vk::DeviceSize size) const;
 		void destroy();
 	};
 }

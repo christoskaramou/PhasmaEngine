@@ -23,7 +23,7 @@ namespace vm {
 		vk::DescriptorSet DSReflection;
 		vk::DescriptorSetLayout DSLayoutReflection;
 
-		void update(Camera& camera);
+		void update(Camera& camera) const;
 		void createSSRUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent);

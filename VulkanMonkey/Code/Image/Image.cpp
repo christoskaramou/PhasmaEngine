@@ -3,14 +3,14 @@
 using namespace vm;
 
 void Image::transitionImageLayout(
-	const vk::CommandBuffer cmd,
-	const vk::ImageLayout oldLayout,
-	const vk::ImageLayout newLayout,
-	const vk::PipelineStageFlags oldStageMask,
-	const vk::PipelineStageFlags newStageMask,
-	const vk::AccessFlags srcMask,
-	const vk::AccessFlags dstMask,
-	const vk::ImageAspectFlags aspectFlags)
+	vk::CommandBuffer cmd,
+	vk::ImageLayout oldLayout,
+	vk::ImageLayout newLayout,
+	const vk::PipelineStageFlags& oldStageMask,
+	const vk::PipelineStageFlags& newStageMask,
+	const vk::AccessFlags& srcMask,
+	const vk::AccessFlags& dstMask,
+	const vk::ImageAspectFlags& aspectFlags) const
 {
 	vk::ImageMemoryBarrier barrier;
 	barrier.srcAccessMask = srcMask;
@@ -35,7 +35,7 @@ void Image::transitionImageLayout(
 	);
 }
 
-void Image::createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples)
+void Image::createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags& usage, const vk::MemoryPropertyFlags& properties, vk::SampleCountFlagBits samples)
 {
 	this->width = width % 2 != 0 ? width - 1 : width;
 	this->height = height % 2 != 0 ? height - 1 : height;
@@ -86,7 +86,7 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 	vulkan->device.bindImageMemory(image, memory, 0);
 }
 
-void Image::createImageView(const vk::ImageAspectFlags aspectFlags)
+void Image::createImageView(const vk::ImageAspectFlags& aspectFlags)
 {
 	vk::ImageViewCreateInfo viewInfo;
 	viewInfo.image = image;
@@ -97,14 +97,14 @@ void Image::createImageView(const vk::ImageAspectFlags aspectFlags)
 	view = vulkan->device.createImageView(viewInfo);
 }
 
-void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout)
+void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout) const
 {
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
 	allocInfo.commandBufferCount = 1;
 	allocInfo.commandPool = vulkan->commandPool2;
 
-	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
+	const vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -196,14 +196,14 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
 }
 
-void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer)
+void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer) const
 {
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
 	allocInfo.commandBufferCount = 1;
 	allocInfo.commandPool = vulkan->commandPool2;
 
-	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
+	const vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -229,14 +229,14 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer)
 	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
 }
 
-void Image::generateMipMaps()
+void Image::generateMipMaps() const
 {
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
 	allocInfo.commandBufferCount = 1;
 	allocInfo.commandPool = vulkan->commandPool2;
 
-	vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
+	const vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -251,8 +251,8 @@ void Image::generateMipMaps()
 	barrier.subresourceRange.layerCount = 1;
 	barrier.subresourceRange.levelCount = 1;
 
-	int32_t mipWidth = static_cast<int32_t>(width);
-	int32_t mipHeight = static_cast<int32_t>(height);
+	auto mipWidth = static_cast<int32_t>(width);
+	auto mipHeight = static_cast<int32_t>(height);
 
 	for (uint32_t i = 1; i < mipLevels; i++) {
 		barrier.subresourceRange.baseMipLevel = i - 1;

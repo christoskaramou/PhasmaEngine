@@ -21,7 +21,7 @@ namespace vm {
 		static std::chrono::high_resolution_clock::time_point frameStart;
 	private:
 		std::chrono::high_resolution_clock::time_point start;
-		std::chrono::duration<float> duration;
+		std::chrono::duration<float> duration{};
 		float _minFrameTime;
 	protected:
 		static unsigned totalCounter;

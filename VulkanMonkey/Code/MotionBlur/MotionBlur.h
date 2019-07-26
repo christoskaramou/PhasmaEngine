@@ -27,7 +27,7 @@ namespace vm {
 		Image frameImage;
 		
 		void Init();
-		void update(Camera& camera);
+		void update(Camera& camera) const;
 		void createRenderPass(std::map<std::string, Image>& renderTargets);
 		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
 		void createPipeline(std::map<std::string, Image>& renderTargets);

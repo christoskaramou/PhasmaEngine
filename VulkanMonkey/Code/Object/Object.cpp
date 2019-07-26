@@ -31,7 +31,7 @@ void Object::loadTexture(const std::string& path)
 	int texWidth, texHeight, texChannels;
 	//stbi_set_flip_vertically_on_load(true);
 	stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-	vk::DeviceSize imageSize = texWidth * texHeight * 4;
+	const vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
 	if (!pixels)
 		throw std::runtime_error("No pixel data loaded");
@@ -58,7 +58,7 @@ void Object::loadTexture(const std::string& path)
 	vulkan->device.freeMemory(staging.memory);
 }
 
-void Object::createDescriptorSet(vk::DescriptorSetLayout& descriptorSetLayout)
+void Object::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
 {
 	vk::DescriptorSetAllocateInfo allocateInfo;
 	allocateInfo.descriptorPool = vulkan->descriptorPool;

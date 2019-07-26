@@ -252,7 +252,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 vk::DescriptorSetLayout Shadows::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
-		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, vk::ShaderStageFlags stageFlags) {
+		const auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags) {
 			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlags, nullptr };
 		};
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
@@ -300,8 +300,8 @@ void Shadows::update(Camera& camera)
 
 	if (GUI::shadow_cast) {
 		// far/cos(x) = the side size
-		float sideSizeOfPyramid = camera.nearPlane / cos(radians(camera.FOV * .5f)); // near plane is actually the far plane (they are reversed)
-		vec3 p = &GUI::sun_position[0];
+		const float sideSizeOfPyramid = camera.nearPlane / cos(radians(camera.FOV * .5f)); // near plane is actually the far plane (they are reversed)
+		const vec3 p = &GUI::sun_position[0];
 
 		vec3 pointOnPyramid = camera.front * (sideSizeOfPyramid * .01f);
 		vec3 pos = p + camera.position + pointOnPyramid; // sun position will be moved, so its angle to the lookat position is the same always

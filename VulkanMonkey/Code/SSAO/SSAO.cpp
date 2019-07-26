@@ -13,7 +13,7 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 		sample *= rand(0.f, 1.f);
 		float scale = float(i) / 16.f;
 		scale = lerp(.1f, 1.f, scale * scale);
-		kernel.push_back(vec4(sample * scale, 0.f));
+		kernel.emplace_back(sample * scale, 0.f);
 	}
 	UB_Kernel.createBuffer(sizeof(vec4) * 16, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 	UB_Kernel.data = vulkan->device.mapMemory(UB_Kernel.memory, 0, UB_Kernel.size);
@@ -21,10 +21,10 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	// noise image
 	std::vector<vec4> noise{};
 	for (unsigned int i = 0; i < 16; i++)
-		noise.push_back(vec4(rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f, 1.f));
+		noise.emplace_back(rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f, 1.f);
 
 	Buffer staging;
-	uint64_t bufSize = sizeof(vec4) * 16;
+	const uint64_t bufSize = sizeof(vec4) * 16;
 	staging.createBuffer(bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	void* data = vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), staging.size);
 	memcpy(data, noise.data(), staging.size);
@@ -48,7 +48,7 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	memset(UB_PVM.data, 0, UB_PVM.size);
 
 	// DESCRIPTOR SET FOR SSAO
-	vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
+	const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
 		vulkan->descriptorPool,					//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
 		&DSLayout								//const DescriptorSetLayout* pSetLayouts;
@@ -56,7 +56,7 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	DSet = vulkan->device.allocateDescriptorSets(allocInfo).at(0);
 
 	// DESCRIPTOR SET FOR SSAO BLUR
-	vk::DescriptorSetAllocateInfo allocInfoBlur = vk::DescriptorSetAllocateInfo{
+	const vk::DescriptorSetAllocateInfo allocInfoBlur = vk::DescriptorSetAllocateInfo{
 		vulkan->descriptorPool,					//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
 		&DSLayoutBlur							//const DescriptorSetLayout* pSetLayouts;
@@ -69,13 +69,13 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
 	std::deque<vk::DescriptorImageInfo> dsii{};
-	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal) {
-		dsii.push_back({ image.sampler, image.view, imageLayout });
+	const auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal) {
+		dsii.emplace_back(image.sampler, image.view, imageLayout);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 	};
 	std::deque<vk::DescriptorBufferInfo> dsbi{};
-	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
-		dsbi.push_back({ buffer.buffer, 0, buffer.size });
+	const auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		dsbi.emplace_back(buffer.buffer, 0, buffer.size);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 	};
 
@@ -163,7 +163,7 @@ void SSAO::destroy()
 	}
 }
 
-void SSAO::update(Camera& camera)
+void SSAO::update(Camera& camera) const
 {
 	if (GUI::show_ssao) {
 		mat4 pvm[3]{ camera.projection, camera.view, camera.invProjection };

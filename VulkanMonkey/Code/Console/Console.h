@@ -1,10 +1,10 @@
 #pragma once
 
 #include "../../include/imgui/imgui.h"
-#include <ctype.h> 
-#include <stdlib.h>
-#include <stdio.h>
-#include "string.h"                     // for strlen
+#include <cctype>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>                     // for strlen
 #include "vcruntime_string.h"           // for memcpy
 
 namespace vm {
@@ -12,9 +12,9 @@ namespace vm {
 	// For the console example, here we are using a more C++ like approach of declaring a class to hold the data and the functions.
 	struct Console
 	{
-		char                  InputBuf[256];
+		char                  InputBuf[256]{};
 		ImVector<char*>       Items;
-		bool                  ScrollToBottom;
+		bool                  ScrollToBottom{};
 		ImVector<char*>       History;
 		int                   HistoryPos;    // -1: new line, 0..History.Size-1 browsing history.
 		ImVector<const char*> Commands;

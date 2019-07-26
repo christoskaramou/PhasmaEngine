@@ -8,7 +8,7 @@ vk::DescriptorSetLayout SkyBox::descriptorSetLayout = nullptr;
 vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
-		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, vk::ShaderStageFlags stageFlags) {
+		const auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags) {
 			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlags, nullptr };
 		};
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
@@ -94,7 +94,7 @@ void SkyBox::loadTextures(const std::array<std::string, 6>& paths, int imageSide
 		stbi_uc* pixels = stbi_load(paths[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		assert(imageSideSize == texWidth && imageSideSize == texHeight);
 
-		vk::DeviceSize imageSize = (size_t)texWidth * (size_t)texHeight * 4;
+		const vk::DeviceSize imageSize = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * 4;
 		if (!pixels)
 			throw std::runtime_error("No pixel data loaded");
 

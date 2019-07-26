@@ -103,35 +103,35 @@ namespace vm {
 		void resizeViewport(uint32_t width, uint32_t height);
 
 	public:
-		vk::Instance createInstance();
+		[[nodiscard]] vk::Instance createInstance() const;
 		static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
 			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 			VkDebugUtilsMessageTypeFlagsEXT messageType,
 			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 			void* pUserData);
-		vk::DebugUtilsMessengerEXT createDebugMessenger();
-		void destroyDebugMessenger();
-		Surface createSurface();
-		int getGraphicsFamilyId();
-		int getTransferFamilyId();
-		int getComputeFamilyId();
-		vk::PhysicalDevice findGpu();
-		vk::PhysicalDeviceProperties getGPUProperties();
-		vk::PhysicalDeviceFeatures getGPUFeatures();
-		vk::SurfaceCapabilitiesKHR getSurfaceCapabilities();
-		vk::SurfaceFormatKHR getSurfaceFormat();
-		vk::PresentModeKHR getPresentationMode();
-		vk::Device createDevice();
-		vk::Queue getGraphicsQueue();
-		vk::Queue getTransferQueue();
-		vk::Queue getComputeQueue();
-		Swapchain createSwapchain();
-		vk::CommandPool createCommandPool();
-		Image createDepthResources();
-		std::vector<vk::CommandBuffer> createCmdBuffers(uint32_t bufferCount = 1);
-		vk::DescriptorPool createDescriptorPool(uint32_t maxDescriptorSets);
-		std::vector<vk::Fence> createFences(uint32_t fenceCount);
-		std::vector<vk::Semaphore> createSemaphores(uint32_t semaphoresCount);
-		void addRenderTarget(const std::string& name, vk::Format format, vk::ImageUsageFlags additionalFlags = vk::ImageUsageFlags());
+		[[nodiscard]] vk::DebugUtilsMessengerEXT createDebugMessenger() const;
+		void destroyDebugMessenger() const;
+		[[nodiscard]] Surface createSurface() const;
+		[[nodiscard]] int getGraphicsFamilyId() const;
+		[[nodiscard]] int getTransferFamilyId() const;
+		[[nodiscard]] int getComputeFamilyId() const;
+		[[nodiscard]] vk::PhysicalDevice findGpu() const;
+		[[nodiscard]] vk::PhysicalDeviceProperties getGPUProperties() const;
+		[[nodiscard]] vk::PhysicalDeviceFeatures getGPUFeatures() const;
+		[[nodiscard]] vk::SurfaceCapabilitiesKHR getSurfaceCapabilities() const;
+		[[nodiscard]] vk::SurfaceFormatKHR getSurfaceFormat() const;
+		[[nodiscard]] vk::PresentModeKHR getPresentationMode() const;
+		[[nodiscard]] vk::Device createDevice() const;
+		[[nodiscard]] vk::Queue getGraphicsQueue() const;
+		[[nodiscard]] vk::Queue getTransferQueue() const;
+		[[nodiscard]] vk::Queue getComputeQueue() const;
+		Swapchain createSwapchain() const;
+		[[nodiscard]] vk::CommandPool createCommandPool() const;
+		[[nodiscard]] Image createDepthResources() const;
+		[[nodiscard]] std::vector<vk::CommandBuffer> createCmdBuffers(uint32_t bufferCount = 1) const;
+		[[nodiscard]] vk::DescriptorPool createDescriptorPool(uint32_t maxDescriptorSets) const;
+		[[nodiscard]] std::vector<vk::Fence> createFences(uint32_t fenceCount) const;
+		[[nodiscard]] std::vector<vk::Semaphore> createSemaphores(uint32_t semaphoresCount) const;
+		void addRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags = vk::ImageUsageFlags());
 	};
 }

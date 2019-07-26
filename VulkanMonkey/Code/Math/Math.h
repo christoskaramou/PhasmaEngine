@@ -146,18 +146,18 @@ namespace vm {
 			cfloat& x2, cfloat& y2, cfloat& z2, cfloat& w2,
 			cfloat& x3, cfloat& y3, cfloat& z3, cfloat& w3);
 		static cmat4 identity();
-		quat quaternion() const;
-		vec3 eulerAngles() const;
-		float pitch() const;
-		float yaw() const;
-		float roll() const;
-		vec3 translation();
-		vec3 scale() const;
-		quat rotation() const;
+		[[nodiscard]] quat quaternion() const;
+		[[nodiscard]] vec3 eulerAngles() const;
+		[[nodiscard]] float pitch() const;
+		[[nodiscard]] float yaw() const;
+		[[nodiscard]] float roll() const;
+		vec3 translation() const;
+		[[nodiscard]] vec3 scale() const;
+		[[nodiscard]] quat rotation() const;
 		void operator=(cmat4& m);
 		mat4 operator*(cmat4& m) const;
-		vec4 operator*(cvec4& m) const;
-		mat4 operator*(cfloat scalar);
+		vec4 operator*(cvec4& v) const;
+		mat4 operator*(cfloat scalar) const;
 		bool operator==(cfloat* m) const;
 		bool operator==(cmat4* m) const;
 		bool operator==(cmat4& m) const;
@@ -179,14 +179,14 @@ namespace vm {
 		quat(cfloat w, cfloat x, cfloat y, cfloat z);
 		quat(cvec3& u, cvec3& v);
 		quat(cvec3& eulerAngle);
-		quat(cvec4& v);
+		quat(cvec4& eulerAngle);
 		quat(cmat4& m);
 		static cquat identity();
-		mat4 matrix() const;
-		vec3 eulerAngles() const;
-		float pitch() const;
-		float yaw() const;
-		float roll() const;
+		[[nodiscard]] mat4 matrix() const;
+		[[nodiscard]] vec3 eulerAngles() const;
+		[[nodiscard]] float pitch() const;
+		[[nodiscard]] float yaw() const;
+		[[nodiscard]] float roll() const;
 		void operator=(cquat& q);
 		quat operator+(cquat& q) const;
 		quat operator-(cquat& q) const;
@@ -208,13 +208,13 @@ namespace vm {
 	struct Ray
 	{
 		vec3 o, d; // origin, direction
-		Ray(cvec3 o, cvec3 d);
+		Ray(cvec3& o, cvec3& d);
 	};
 
 	struct Transform
 	{
 		Transform();
-		mat4 matrix();
+		mat4 matrix() const;
 
 	private:
 		vec3 _scale;
@@ -236,7 +236,7 @@ namespace vm {
 	mat4 scale(cmat4& m, cvec3& v);
 	mat4 rotate(cmat4& m, cfloat angle, cvec3& axis);
 	quat rotate(cquat& q, cfloat angle, cvec3& axis);
-	mat4 transform(cquat& r, cvec3 s, cvec3 t);
+	mat4 transform(cquat& r, cvec3& s, cvec3& t);
 	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar);
 	mat4 ortho(cfloat left, cfloat right, cfloat bottom, cfloat top, cfloat zNear, cfloat zFar);
 	mat4 lookAt(cvec3& eye, cvec3& front, cvec3& right, cvec3& up);
@@ -266,7 +266,7 @@ namespace vm {
 	vec3 degrees(cvec3& v);
 	vec3 reflect(cvec3& v, cvec3& normal);
 	float mix(cfloat f1, cfloat f2, cfloat a);
-	vec4 mix(cvec4 v1, cvec4 v2, cfloat a);
+	vec4 mix(cvec4& v1, cvec4& v2, cfloat a);
 	quat mix(cquat& q1, cquat& q2, cfloat a);
 	quat lerp(cquat& q1, cquat& q2, cfloat a);
 	quat slerp(cquat& q1, cquat& q2, cfloat a);
@@ -276,7 +276,7 @@ namespace vm {
 	template<typename T> inline T maximum(const T& a, const T& b) { return (a < b) ? b : a; };
 	template<typename T> inline T clamp(const T& x, const T& minX, const T& maxX) { return minimum(maximum(x, minX), maxX); };
 	template<typename T> inline void clamp(T* const x, const T& minX, const T& maxX) { *x = clamp(*x, minX, maxX); };
-	float rand(cfloat x1, cfloat x2);
+	float rand(cfloat a, cfloat b);
 	float lerp(cfloat a, cfloat b, cfloat f);
 	float halton(uint32_t index, uint32_t base);
 	vec2 halton_2_3(uint32_t index);

@@ -9,7 +9,7 @@ vk::DescriptorSetLayout Compute::DSLayoutCompute = nullptr;
 vk::DescriptorSetLayout* Compute::getDescriptorLayout()
 {
 	if (!DSLayoutCompute) {
-		auto setLayoutBinding = [](uint32_t binding) {
+		auto const setLayoutBinding = [](uint32_t binding) {
 			return vk::DescriptorSetLayoutBinding{ binding, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute, nullptr };
 		};
 		
@@ -88,8 +88,8 @@ void Compute::createDescriptorSet()
 void vm::Compute::updateDescriptorSet()
 {
 	std::deque<vk::DescriptorBufferInfo> dsbi{};
-	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer, vk::DescriptorType type) {
-		dsbi.push_back({ buffer.buffer, 0, buffer.size });
+	auto const wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer, vk::DescriptorType type) {
+		dsbi.emplace_back(buffer.buffer, 0, buffer.size);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, type, nullptr, &dsbi.back(), nullptr };
 	};
 	std::vector<vk::WriteDescriptorSet> writeCompDescriptorSets{
@@ -148,7 +148,7 @@ void ComputePool::Init(uint32_t cmdBuffersCount)
 	auto const cmds = VulkanContext::get().device.allocateCommandBuffers(cbai);
 
 	for (auto& cmd : cmds) {
-		compute.push_back({});
+		compute.emplace_back();
 		compute.back().commandBuffer = cmd;
 		compute.back().createPipeline();
 		compute.back().createDescriptorSet();
@@ -173,7 +173,7 @@ Compute& ComputePool::getNext()
 	cbai.level = vk::CommandBufferLevel::ePrimary;
 	cbai.commandBufferCount = 1;
 
-	compute.push_back({});
+	compute.emplace_back();
 	compute.back().commandBuffer = VulkanContext::get().device.allocateCommandBuffers(cbai).at(0);
 	compute.back().createPipeline();
 	compute.back().createDescriptorSet();

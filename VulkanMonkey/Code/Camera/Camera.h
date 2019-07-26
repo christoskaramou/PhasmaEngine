@@ -19,8 +19,8 @@ namespace vm {
 
 		struct Plane
 		{
-			vec3 normal;
-			float d;
+			vec3 normal{};
+			float d{};
 		};
 
 		mat4 view;
@@ -42,12 +42,12 @@ namespace vm {
 		void update();
 		void updatePerspective();
 		void updateView();
-		vec3 worldFront() const;
-		vec3 worldRight() const;
-		vec3 worldUp() const;
+		[[nodiscard]] vec3 worldFront() const;
+		[[nodiscard]] vec3 worldRight() const;
+		[[nodiscard]] vec3 worldUp() const;
 		void move(RelativeDirection direction, float velocity);
 		void rotate(float xoffset, float yoffset);
 		void ExtractFrustum();
-		bool SphereInFrustum(const vec4& boundingSphere) const;
+		[[nodiscard]] bool SphereInFrustum(const vec4& boundingSphere) const;
 	};
 }

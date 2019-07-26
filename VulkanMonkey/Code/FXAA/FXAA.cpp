@@ -28,7 +28,7 @@ void FXAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	updateDescriptorSets(renderTargets);
 }
 
-void FXAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
+void FXAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets) const
 {
 	// Composition sampler
 	vk::DescriptorImageInfo dii;

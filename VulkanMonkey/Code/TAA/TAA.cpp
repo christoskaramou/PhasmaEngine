@@ -61,13 +61,13 @@ void TAA::createUniforms(std::map<std::string, Image>& renderTargets)
 void TAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
 	std::deque<vk::DescriptorImageInfo> dsii{};
-	auto wSetImage = [&dsii](vk::DescriptorSet & dstSet, uint32_t dstBinding, Image & image) {
-		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal });
+	const auto wSetImage = [&dsii](vk::DescriptorSet & dstSet, uint32_t dstBinding, Image & image) {
+		dsii.emplace_back(image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 	};
 	std::deque<vk::DescriptorBufferInfo> dsbi{};
-	auto wSetBuffer = [&dsbi](vk::DescriptorSet & dstSet, uint32_t dstBinding, Buffer & buffer) {
-		dsbi.push_back({ buffer.buffer, 0, buffer.size });
+	const auto wSetBuffer = [&dsbi](vk::DescriptorSet & dstSet, uint32_t dstBinding, Buffer & buffer) {
+		dsbi.emplace_back(buffer.buffer, 0, buffer.size);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 	};
 

@@ -16,10 +16,10 @@ Renderer::Renderer(SDL_Window* window)
 	ctx.createUniforms();
 }
 
-Renderer::~Renderer()
+Renderer::~Renderer() noexcept
 {
 	ctx.vulkan.device.waitIdle();
-	if (Model::models.size() == 0) {
+	if (Model::models.empty()) {
 		if (Model::descriptorSetLayout) {
 			ctx.vulkan.device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
 			Model::descriptorSetLayout = nullptr;
@@ -116,7 +116,7 @@ void vm::Renderer::changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState
 
 }
 
-void Renderer::checkQueue()
+void Renderer::checkQueue() const
 {
 	for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();) {
 		VulkanContext::get().device.waitIdle();
@@ -138,7 +138,7 @@ void Renderer::checkQueue()
 			it = Queue::loadModelFutures.erase(it);
 		}
 		else {
-			it++;
+			++it;
 		}
 	}
 
@@ -155,8 +155,7 @@ void Renderer::checkQueue()
 	}
 #ifdef USE_SCRIPTS
 	for (auto it = Queue::addScript.begin(); it != Queue::addScript.end();) {
-		if (Model::models[std::get<0>(*it)].script)
-			delete Model::models[std::get<0>(*it)].script;
+		delete Model::models[std::get<0>(*it)].script;
 		Model::models[std::get<0>(*it)].script = new Script(std::get<1>(*it).c_str());
 		it = Queue::addScript.erase(it);
 	}
@@ -464,9 +463,9 @@ void Renderer::present()
 	// Presentation
 	ctx.vulkan.swapchain->present(imageIndex, ctx.vulkan.semaphores[2]);
 
-	std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
+	const std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
 	ctx.vulkan.waitFences(ctx.vulkan.fences[0]);
-	std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
+	const std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
 	Timer::waitingTime = waitTime.count();
 
 	ctx.vulkan.unlockSubmits();

@@ -27,7 +27,7 @@ namespace vm {
 	};
 
 	struct Primitive {
-		Primitive() {}
+		Primitive(): pbrMaterial() {}
 
 		VulkanContext* vulkan = &VulkanContext::get();
 

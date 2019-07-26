@@ -38,7 +38,7 @@ namespace vm {
 		Event createEvent();
 		FuncID subscribe(Event event, Func_t&& func, uint32_t priority = -1); // priority set to max unsinged int as default
 		void unsubscribe(Event event, FuncID funcID);
-		void fire(Event eventID, std::any data = nullptr);
+		void fire(Event eventID, const std::any& data = nullptr);
 
 		EventSystem(EventSystem const&) = delete;				// copy constructor
 		EventSystem(EventSystem&&) noexcept = delete;			// move constructor

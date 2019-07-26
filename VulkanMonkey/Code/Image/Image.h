@@ -46,16 +46,16 @@ namespace vm {
 			vk::CommandBuffer cmd,
 			vk::ImageLayout oldLayout,
 			vk::ImageLayout newLayout,
-			vk::PipelineStageFlags oldStageMask,
-			vk::PipelineStageFlags newStageMask,
-			vk::AccessFlags srcMask,
-			vk::AccessFlags dstMask,
-			vk::ImageAspectFlags aspectFlags);
-		void createImage(uint32_t width, uint32_t height, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1);
-		void createImageView(vk::ImageAspectFlags aspectFlags);
-		void transitionImageLayout(vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
-		void copyBufferToImage(vk::Buffer buffer, uint32_t baseLayer = 0);
-		void generateMipMaps();
+			const vk::PipelineStageFlags& oldStageMask,
+			const vk::PipelineStageFlags& newStageMask,
+			const vk::AccessFlags& srcMask,
+			const vk::AccessFlags& dstMask,
+			const vk::ImageAspectFlags& aspectFlags) const;
+		void createImage(uint32_t width, uint32_t height, vk::ImageTiling tiling, const vk::ImageUsageFlags& usage, const vk::MemoryPropertyFlags& properties, vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1);
+		void createImageView(const vk::ImageAspectFlags& aspectFlags);
+		void transitionImageLayout(vk::ImageLayout oldLayout, vk::ImageLayout newLayout) const;
+		void copyBufferToImage(vk::Buffer buffer, uint32_t baseLayer = 0) const;
+		void generateMipMaps() const;
 		void createSampler();
 		void destroy();
 	};

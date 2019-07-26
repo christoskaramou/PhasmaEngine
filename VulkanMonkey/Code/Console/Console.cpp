@@ -195,7 +195,7 @@ void Console::ExecCommand(const char * command_line)
 
 int Console::TextEditCallbackStub(ImGuiInputTextCallbackData * data)
 {
-	Console* console = (Console*)data->UserData;
+	auto console = static_cast<Console*>(data->UserData);
 	return console->TextEditCallback(data);
 }
 

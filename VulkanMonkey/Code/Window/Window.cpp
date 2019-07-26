@@ -9,9 +9,7 @@ Window::Window() {}
 
 Window::~Window() {}
 
-static auto exitFuncID = SUBSCRIBE_TO_EVENT(Event::OnExit, [](std::any) { Window::destroyAll(); });
-
-void Window::create(std::string title, Uint32 flags) // flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN
+void Window::create(const std::string& title, Uint32 flags) // flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN
 {
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) { std::cout << SDL_GetError(); return; }
 
@@ -20,7 +18,7 @@ void Window::create(std::string title, Uint32 flags) // flags = SDL_WINDOW_MAXIM
 
 	Window::renderer.push_back(std::make_unique<Renderer>(window));
 
-	std::string _title = 
+	const std::string _title = 
 		"VulkanMonkey3D   "
 		+ std::string(Window::renderer.back()->ctx.vulkan.gpuProperties.deviceName)
 		+ " (Present Mode: "
@@ -75,18 +73,18 @@ bool Window::processEvents(float delta)
 			io.AddInputCharactersUTF8(event.text.text);
 
 		if (event.type == SDL_KEYDOWN) {
-			int key = event.key.keysym.scancode;
+			const int key = event.key.keysym.scancode;
 			io.KeysDown[key] = true;
 		}
 		else if (event.type == SDL_KEYUP) {
-			int key = event.key.keysym.scancode;
+			const int key = event.key.keysym.scancode;
 			io.KeysDown[key] = false;
 			io.KeyShift = ((SDL_GetModState() & KMOD_SHIFT) != 0);
 			io.KeyCtrl = ((SDL_GetModState() & KMOD_CTRL) != 0);
 			io.KeyAlt = ((SDL_GetModState() & KMOD_ALT) != 0);
 			io.KeySuper = ((SDL_GetModState() & KMOD_GUI) != 0);
 		}
-		if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
+		if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
 			if (isInsideRenderWindow(event.motion.x, event.motion.y)) {
 				SDL_ShowCursor(SDL_DISABLE);
 				SDL_WarpMouseInWindow(info.vulkan.window, static_cast<int>(GUI::winSize.x * .5f + GUI::winPos.x), static_cast<int>(GUI::winSize.y * .5f + GUI::winPos.y));
@@ -112,7 +110,7 @@ bool Window::processEvents(float delta)
 	if (io.KeysDown[SDL_SCANCODE_ESCAPE]) {
 		const SDL_MessageBoxButtonData buttons[] = { { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "cancel" }, { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes" } };
 		const SDL_MessageBoxColorScheme colorScheme = { {{ 255,   0,   0 }, {   0, 255,   0 }, { 255, 255,   0 }, {   0,   0, 255 }, { 255,   0, 255 }} };
-		const SDL_MessageBoxData messageboxdata = { SDL_MESSAGEBOX_INFORMATION, NULL, "Exit", "Are you sure you want to exit?", SDL_arraysize(buttons), buttons, &colorScheme };
+		const SDL_MessageBoxData messageboxdata = { SDL_MESSAGEBOX_INFORMATION, nullptr, "Exit", "Are you sure you want to exit?", SDL_arraysize(buttons), buttons, &colorScheme };
 		int buttonid;
 		SDL_ShowMessageBox(&messageboxdata, &buttonid);
 		if (buttonid == 1)
@@ -121,7 +119,7 @@ bool Window::processEvents(float delta)
 	if ((io.KeysDown[SDL_SCANCODE_W] || io.KeysDown[SDL_SCANCODE_S]) &&
 		(io.KeysDown[SDL_SCANCODE_A] || io.KeysDown[SDL_SCANCODE_D]))
 		combineDirections = true;
-	float velocity = combineDirections ? GUI::cameraSpeed * Timer::delta * 0.707f : GUI::cameraSpeed * Timer::delta;
+	const float velocity = combineDirections ? GUI::cameraSpeed * Timer::delta * 0.707f : GUI::cameraSpeed * Timer::delta;
 	if (io.KeysDown[SDL_SCANCODE_W]) info.camera_main.move(Camera::RelativeDirection::FORWARD, velocity);
 	if (io.KeysDown[SDL_SCANCODE_S]) info.camera_main.move(Camera::RelativeDirection::BACKWARD, velocity);
 	if (io.KeysDown[SDL_SCANCODE_A]) info.camera_main.move(Camera::RelativeDirection::LEFT, velocity);

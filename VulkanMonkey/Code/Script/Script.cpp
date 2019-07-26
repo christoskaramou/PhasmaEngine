@@ -15,8 +15,7 @@ bool endsWithValue(const std::string &mainStr, const std::string &toMatch)
 	if (mainStr.size() >= toMatch.size() &&
 		mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
 		return true;
-	else
-		return false;
+	return false;
 }
 
 std::vector<char> readDll(const std::string& filename)
@@ -25,7 +24,7 @@ std::vector<char> readDll(const std::string& filename)
 	if (!file.is_open()) {
 		throw std::runtime_error("failed to open file!");
 	}
-	size_t fileSize = (size_t)file.tellg();
+	const size_t fileSize = static_cast<size_t>(file.tellg());
 	std::vector<char> buffer(fileSize);
 	file.seekg(0);
 	file.read(buffer.data(), fileSize);
@@ -40,12 +39,12 @@ Script::Script(const char* file, const char* extension)
 
 	name = file;
 	ext = extension;
-	std::string cmd = "C:\\Windows\\System32\\cmd.exe /c \"include\\Mono\\bin\\mcs -t:library Scripts\\" + name + ".cs";
+	std::string cmd = R"(C:\Windows\System32\cmd.exe /c "include\Mono\bin\mcs -t:library Scripts\)" + name + ".cs";
 	for (auto& incl : includes) {
 		if (endsWithValue(incl, ".cs"))
-			cmd = cmd + " Scripts\\" + incl;
+			cmd += " Scripts\\" + incl;
 		else if (endsWithValue(incl, ".dll"))
-			cmd = cmd + " -r:Scripts\\" + incl;
+			cmd += " -r:Scripts\\" + incl;
 	}
 	system(cmd.c_str());
 
@@ -55,7 +54,7 @@ Script::Script(const char* file, const char* extension)
 	{
 		std::string n = f.path().string();
 		if (endsWithValue(n, ".dll")) {
-			n = n.substr(0, n.find_last_of("."));
+			n = n.substr(0, n.find_last_of('.'));
 			dlls.push_back(n.substr(n.rfind('\\') + 1));	//	Scripts\\example.dll --> Scripts\\example --> example
 		}
 	}
@@ -65,7 +64,7 @@ Script::Script(const char* file, const char* extension)
 	ctor = nullptr;
 	dtor = nullptr;
 	updateFunc = nullptr;
-	child = mono_domain_create_appdomain(const_cast<char*>(name.c_str()), NULL);
+	child = mono_domain_create_appdomain(const_cast<char*>(name.c_str()), nullptr);
 	mono_domain_set(child, false);
 	assembly = mono_domain_assembly_open(mono_domain_get(), std::string("Scripts\\" + name + "." + ext).c_str()); // "Scripts/file.extension"
 	monoImage = mono_assembly_get_image(assembly);
@@ -74,12 +73,12 @@ Script::Script(const char* file, const char* extension)
 	mono_runtime_object_init(scriptInstance);
 
 	// variables
-	void* iter = NULL;
+	void* iter = nullptr;
 	while (MonoClassField* f = mono_class_get_fields(scriptClass, &iter))
 		fields.push_back(f);
 
 	// functions
-	void* it = NULL;
+	void* it = nullptr;
 	while (MonoMethod* m = mono_class_get_methods(scriptClass, &it))
 		methods.push_back(m);
 
@@ -113,7 +112,7 @@ void Script::Init()
 		return;
 #if _DEBUG
 	//char* options = "--debugger- agent=transport=dt_socket,address=localhost:12345,server=y,suspend=y";
-	mono_jit_parse_options(0, NULL);
+	mono_jit_parse_options(0, nullptr);
 	mono_debug_init(MONO_DEBUG_FORMAT_MONO);
 #endif
 	mono_set_dirs("include/Mono/lib", "include/Mono/etc"); // move to a universal dir
@@ -124,7 +123,7 @@ void Script::Init()
 	{
 		std::string name = file.path().string();
 		if (endsWithValue(name, ".dll")) {
-			name = name.substr(0, name.find_last_of("."));
+			name = name.substr(0, name.find_last_of('.'));
 			dlls.push_back(name.substr(name.rfind('\\') + 1));	//	Scripts\\example.dll --> Scripts\\example --> example
 		}
 	}	
@@ -146,11 +145,11 @@ void Script::addCallback(const char * target, const void * staticFunction)
 	mono_add_internal_call(target, staticFunction);
 }
 
-void Script::update(float delta)
+void Script::update(float delta) const
 {
 	if (!updateFunc) return;
 	void* args[1];
 	args[0] = &delta;
-	MonoObject* exception = NULL;
+	MonoObject* exception = nullptr;
 	mono_runtime_invoke(updateFunc, scriptInstance, args, &exception);
 }

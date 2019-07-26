@@ -2,7 +2,7 @@
 
 using namespace vm;
 
-void Buffer::createBuffer(const vk::DeviceSize size, const vk::BufferUsageFlags usage, const vk::MemoryPropertyFlags properties)
+void Buffer::createBuffer(vk::DeviceSize size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties)
 {
 	this->size = size;
 
@@ -36,13 +36,13 @@ void Buffer::createBuffer(const vk::DeviceSize size, const vk::BufferUsageFlags 
 	vulkan->device.bindBufferMemory(buffer, memory, 0);
 }
 
-void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size)
+void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size) const
 {
 	vk::CommandBufferAllocateInfo cbai;
 	cbai.level = vk::CommandBufferLevel::ePrimary;
 	cbai.commandPool = vulkan->commandPool2;
 	cbai.commandBufferCount = 1;
-	vk::CommandBuffer copyCmd = vulkan->device.allocateCommandBuffers(cbai).at(0);
+	const vk::CommandBuffer copyCmd = vulkan->device.allocateCommandBuffers(cbai).at(0);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;

@@ -37,13 +37,13 @@ void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTa
 void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 {
 	std::deque<vk::DescriptorImageInfo> dsii{};
-	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
-		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal });
+	auto const wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		dsii.emplace_back(image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 	};
 	std::deque<vk::DescriptorBufferInfo> dsbi{};
-	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
-		dsbi.push_back({ buffer.buffer, 0, buffer.size });
+	auto const wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		dsbi.emplace_back(buffer.buffer, 0, buffer.size);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 	};
 
@@ -72,7 +72,7 @@ void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Exte
 	rpi.pClearValues = clearValues.data();
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-	vec4 values {1.f / Timer::delta, sin(Timer::getTotalTime() * 0.125f), GUI::motionBlur_strength, 0.f };
+	const vec4 values {1.f / Timer::delta, sin(Timer::getTotalTime() * 0.125f), GUI::motionBlur_strength, 0.f };
 	cmd.pushConstants<vec4>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSMotionBlur, nullptr);
@@ -100,7 +100,7 @@ void MotionBlur::destroy()
 	pipeline.destroy();
 }
 
-void MotionBlur::update(Camera& camera)
+void MotionBlur::update(Camera& camera) const
 {
 	if (GUI::show_motionBlur) {
 		static mat4 previousView = camera.view;

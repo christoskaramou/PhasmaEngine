@@ -42,7 +42,7 @@ namespace vm {
 		Script(const char* file, const char* extension = "dll");
 		~Script();
 
-		void update(float delta);
+		void update(float delta) const;
 
 		template<class T>
 		void getValue(T& value, const char* name)

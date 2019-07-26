@@ -77,7 +77,7 @@ namespace vm {
 		static inline SDL_Window*							g_Window = nullptr;
 		static inline Uint64								g_Time = 0;
 		static inline bool									g_MousePressed[3] = { false, false, false };
-		static inline SDL_Cursor*							g_MouseCursors[ImGuiMouseCursor_COUNT] = { 0 };
+		static inline SDL_Cursor*							g_MouseCursors[ImGuiMouseCursor_COUNT] = { nullptr };
 		static inline char*									g_ClipboardTextData = nullptr;
 
 		bool				show_demo_window = false;
@@ -100,20 +100,20 @@ namespace vm {
 		void draw(vk::CommandBuffer cmd, uint32_t imageIndex);
 		void windowStyle(ImGuiStyle* dst = nullptr);
 		void setWindows();
-		void LeftPanel();
-		void RightPanel();
+		void LeftPanel() const;
+		void RightPanel() const;
 		void BottomPanel();
-		void Menu();
-		void Metrics();
+		void Menu() const;
+		void Metrics() const;
 		void ConsoleWindow();
-		void Scripts();
-		void Models();
-		void Properties();
-		void RenderingWindowBox();
+		void Scripts() const;
+		void Models() const;
+		void Properties() const;
+		void RenderingWindowBox() const;
 		using Object::createVertexBuffer; void createVertexBuffer(size_t vertex_size); // using the base func so the derived func can not hide it, because they have the same name
 		void createIndexBuffer(size_t index_size);
-		void createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout) override;
-		void updateDescriptorSets();
+		void createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout) override;
+		void updateDescriptorSets() const;
 		void createRenderPass();
 		void createFrameBuffers();
 		void createPipeline();

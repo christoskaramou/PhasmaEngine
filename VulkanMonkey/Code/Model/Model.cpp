@@ -19,8 +19,7 @@ bool endsWith(const std::string &mainStr, const std::string &toMatch)
 	if (mainStr.size() >= toMatch.size() &&
 		mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
 		return true;
-	else
-		return false;
+	return false;
 }
 
 void Model::readGltf(const std::filesystem::path& file)
@@ -32,7 +31,7 @@ void Model::readGltf(const std::filesystem::path& file)
 
 	// Pass the absolute path, without the filename, to the stream reader
 	auto streamReader = std::make_unique<StreamReader>(file.parent_path());
-	std::filesystem::path pathFile = file.filename();
+	const std::filesystem::path pathFile = file.filename();
 	// Pass a UTF-8 encoded filename to GetInputString
 	auto gltfStream = streamReader->GetInputStream(pathFile.u8string());
 	if (file.extension() == ".gltf") {
@@ -46,7 +45,7 @@ void Model::readGltf(const std::filesystem::path& file)
 		// GLBResourceReader derives from GLTFResourceReader
 		glTF::GLBResourceReader* resourceReaderGLB = new glTF::GLBResourceReader(std::move(streamReader), std::move(gltfStream));
 		manifest = resourceReaderGLB->GetJson();
-		resourceReader = (glTF::GLTFResourceReader*)resourceReaderGLB;
+		resourceReader = static_cast<glTF::GLTFResourceReader*>(resourceReaderGLB);
 	}
 
 	//std::cout << manifest;
@@ -67,7 +66,8 @@ void Model::readGltf(const std::filesystem::path& file)
 	}
 }
 
-glTF::Image* Model::getImage(const std::string& textureID) {
+glTF::Image* Model::getImage(const std::string& textureID) const
+{
 	return textureID.empty() ? nullptr :
 		const_cast<glTF::Image*>
 		(&document->images.Get(document->textures.Get(textureID).imageId));
@@ -77,46 +77,45 @@ template <typename T>
 void Model::getVertexData(std::vector<T>& vec, const std::string& accessorName, const glTF::MeshPrimitive& primitive)
 {
 	std::string accessorId;
-	const glTF::Accessor* accessor = nullptr;
 	if (primitive.TryGetAttributeAccessorId(accessorName, accessorId))
 	{
-		accessor = &document->accessors.Get(accessorId);
+		const glTF::Accessor* accessor = &document->accessors.Get(accessorId);
 		switch (accessor->componentType)
 		{
 		case glTF::COMPONENT_FLOAT: {
 			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessor);
 			for (uint32_t i = 0; i < data.size(); i++)
-				vec.push_back((T)data[i]);
+				vec.push_back(static_cast<T>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
 			for (uint32_t i = 0; i < data.size(); i++)
-				vec.push_back((T)data[i]);
+				vec.push_back(static_cast<T>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
 			for (uint32_t i = 0; i < data.size(); i++)
-				vec.push_back((T)data[i]);
+				vec.push_back(static_cast<T>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
 			for (uint32_t i = 0; i < data.size(); i++)
-				vec.push_back((T)data[i]);
+				vec.push_back(static_cast<T>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
 			for (uint32_t i = 0; i < data.size(); i++)
-				vec.push_back((T)data[i]);
+				vec.push_back(static_cast<T>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_INT: {
 			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
 			for (uint32_t i = 0; i < data.size(); i++)
-				vec.push_back((T)data[i]);
+				vec.push_back(static_cast<T>(data[i]));
 			break;
 		}
 		default:
@@ -125,9 +124,9 @@ void Model::getVertexData(std::vector<T>& vec, const std::string& accessorName, 
 	}
 }
 
-void Model::getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::MeshPrimitive& primitive)
+void Model::getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::MeshPrimitive& primitive) const
 {
-	if (primitive.indicesAccessorId != "")
+	if (!primitive.indicesAccessorId.empty())
 	{
 		const glTF::Accessor* accessor = &document->accessors.Get(primitive.indicesAccessorId);
 		switch (accessor->componentType)
@@ -232,17 +231,17 @@ void Model::getMesh(Pointer<vm::Node>& node, const std::string& meshID, const st
 		myPrimitive.min = vec3(&accessorPos->min[0]);
 		myPrimitive.max = vec3(&accessorPos->max[0]);
 		myPrimitive.calculateBoundingSphere();
-		myPrimitive.hasBones = bonesIDs.size() && weights.size();
+		myPrimitive.hasBones = !bonesIDs.empty() && !weights.empty();
 
 		myMesh->primitives.push_back(myPrimitive);
 		for (size_t i = 0; i < accessorPos->count; i++) {
 			Vertex vertex;
-			vertex.position = positions.size() > 0 ? vec3(&positions[i * 3]) : vec3();
-			vertex.uv = uvs.size() > 0 ? vec2(&uvs[i * 2]) : vec2();
-			vertex.normals = normals.size() > 0 ? vec3(&normals[i * 3]) : vec3();
-			vertex.color = colors.size() > 0 ? vec4(&colors[i * 4]) : vec4();
-			vertex.bonesIDs = bonesIDs.size() > 0 ? ivec4(&bonesIDs[i * 4]) : ivec4();
-			vertex.weights = weights.size() > 0 ? vec4(&weights[i * 4]) : vec4();
+			vertex.position = !positions.empty() ? vec3(&positions[i * 3]) : vec3();
+			vertex.uv = !uvs.empty() ? vec2(&uvs[i * 2]) : vec2();
+			vertex.normals = !normals.empty() ? vec3(&normals[i * 3]) : vec3();
+			vertex.color = !colors.empty() ? vec4(&colors[i * 4]) : vec4();
+			vertex.bonesIDs = !bonesIDs.empty() ? ivec4(&bonesIDs[i * 4]) : ivec4();
+			vertex.weights = !weights.empty() ? vec4(&weights[i * 4]) : vec4();
 			myMesh->vertices.push_back(vertex);
 		}
 		for (size_t i = 0; i < indices.size(); i++) {
@@ -329,7 +328,7 @@ void Model::updateAnimation(uint32_t index, float time)
 
 		for (size_t i = 0; i < sampler.inputs.size() - 1; i++) {
 			if ((time >= sampler.inputs[i]) && (time <= sampler.inputs[i + 1])) {
-				float u = std::max(0.0f, time - sampler.inputs[i]) / (sampler.inputs[i + 1] - sampler.inputs[i]);
+				const float u = std::max(0.0f, time - sampler.inputs[i]) / (sampler.inputs[i + 1] - sampler.inputs[i]);
 				if (u <= 1.0f) {
 					switch (channel.path) {
 					case vm::AnimationChannel::PathType::TRANSLATION: {
@@ -401,7 +400,7 @@ void Model::update(vm::Camera& camera, float delta)
 		ubo.matrix = vm::transform(quat(radians(rot)), scale, pos) * ubo.matrix;
 		memcpy(uniformBuffer.data, &ubo, sizeof(ubo));
 
-		if (animations.size() > 0) {
+		if (!animations.empty()) {
 			animationTimer += delta;
 			if (animationTimer > animations[animationIndex].end) {
 				animationTimer -= animations[animationIndex].end;
@@ -482,18 +481,18 @@ void Model::calculateBoundingSphere()
 			for (auto &primitive : node->mesh->primitives) {
 				cvec3 center = vec3(primitive.boundingSphere);
 
-				float lenMax = length(center) + primitive.boundingSphere.w;
+				const float lenMax = length(center) + primitive.boundingSphere.w;
 				if (lenMax > centerMax.w)
 					centerMax = vec4(center, lenMax);
 
-				float lenMin = lenMax - 2.f * primitive.boundingSphere.w;
+				const float lenMin = lenMax - 2.f * primitive.boundingSphere.w;
 				if (lenMin < centerMin.w)
 					centerMin = vec4(center, lenMin);
 			}
 		}
 	}
-	vec3 center = (vec3(centerMax) + vec3(centerMin)) * .5f;
-	float sphereRadius = length(vec3(centerMax) - center);
+	const vec3 center = (vec3(centerMax) + vec3(centerMin)) * .5f;
+	const float sphereRadius = length(vec3(centerMax) - center);
 	boundingSphere = vec4(center, sphereRadius);
 }
 
@@ -507,7 +506,7 @@ void Model::loadNode(Pointer<vm::Node> parent, const glTF::Node& node, const std
 
 	// Generate local node matrix
 	if (!node.HasValidTransformType()) throw glTF::InvalidGLTFException("Node " + node.name + " has Invalid TransformType");
-	newNode->transformationType = (TransformationType)node.GetTransformationType();
+	newNode->transformationType = static_cast<TransformationType>(node.GetTransformationType());
 	newNode->translation = vec3(&node.translation.x);
 	newNode->scale = vec3(&node.scale.x);
 	newNode->rotation = quat(&node.rotation.x);
@@ -582,13 +581,13 @@ void vm::Model::loadAnimations()
 				case glTF::AccessorType::TYPE_VEC3: {
 					for (size_t i = 0; i < accessor.count; i++) {
 						const vec3 v3(&data[i * 3]);
-						sampler.outputsVec4.push_back(vec4(v3, 0.0f));
+						sampler.outputsVec4.emplace_back(v3, 0.0f);
 					}
 					break;
 				}
 				case glTF::AccessorType::TYPE_VEC4: {
 					for (size_t i = 0; i < accessor.count; i++) {
-						sampler.outputsVec4.push_back(vec4(&data[i * 4]));
+						sampler.outputsVec4.emplace_back(&data[i * 4]);
 					}
 					break;
 				}
@@ -734,13 +733,13 @@ void Model::createUniformBuffers()
 void Model::createDescriptorSets()
 {
 	std::deque<vk::DescriptorImageInfo> dsii{};
-	auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
-		dsii.push_back({ image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal });
+	auto const wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		dsii.emplace_back(image.sampler, image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 	};
 	std::deque<vk::DescriptorBufferInfo> dsbi{};
-	auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
-		dsbi.push_back({ buffer.buffer, 0, buffer.size });
+	auto const wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		dsbi.emplace_back(buffer.buffer, 0, buffer.size);
 		return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 	};
 

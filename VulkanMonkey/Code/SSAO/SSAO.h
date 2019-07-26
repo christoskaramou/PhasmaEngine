@@ -26,7 +26,7 @@ namespace vm {
 		vk::DescriptorSetLayout DSLayout, DSLayoutBlur;
 		vk::DescriptorSet DSet, DSBlur;
 
-		void update(Camera& camera);
+		void update(Camera& camera) const;
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
 		void createSSAORenderPass(std::map<std::string, Image>& renderTargets);
 		void createSSAOBlurRenderPass(std::map<std::string, Image>& renderTargets);

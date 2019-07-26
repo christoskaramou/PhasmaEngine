@@ -10,7 +10,7 @@ std::map<std::string, Image> Mesh::uniqueTextures{};
 vk::DescriptorSetLayout* Primitive::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
-		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, vk::ShaderStageFlags stageFlag) {
+		auto const layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlag) {
 			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlag, nullptr };
 		};
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
@@ -32,7 +32,7 @@ vk::DescriptorSetLayout* Primitive::getDescriptorSetLayout()
 vk::DescriptorSetLayout* Mesh::getDescriptorSetLayout()
 {
 	if (!descriptorSetLayout) {
-		auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
+		auto const layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 			return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eVertex, nullptr };
 		};
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
@@ -51,7 +51,7 @@ void Mesh::createUniformBuffers()
 	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 	memset(uniformBuffer.data, 0, uniformBuffer.size);
-	size_t size = sizeof(mat4);
+	const size_t size = sizeof(mat4);
 	for (auto& primitive : primitives) {
 		primitive.uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 		primitive.uniformBuffer.data = vulkan->device.mapMemory(primitive.uniformBuffer.memory, 0, primitive.uniformBuffer.size);
@@ -77,7 +77,7 @@ void Primitive::loadTexture(
 		path = folderPath + image->uri;
 
 	// get the right texture
-	Image* tex = nullptr;
+	Image* tex;
 	switch (type)
 	{
 	case TextureType::BaseColor:
@@ -115,7 +115,7 @@ void Primitive::loadTexture(
 	}
 	else {
 		int texWidth, texHeight, texChannels;
-		unsigned char* pixels = nullptr;
+		unsigned char* pixels;
 		//stbi_set_flip_vertically_on_load(true);
 		if (!image || image->bufferViewId.empty())
 			pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -128,7 +128,7 @@ void Primitive::loadTexture(
 		if (!pixels)
 			throw std::runtime_error("No pixel data loaded");
 
-		vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
+		const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
 		vulkan->waitAndLockSubmits();
 

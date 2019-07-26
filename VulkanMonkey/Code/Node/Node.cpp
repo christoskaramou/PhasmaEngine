@@ -3,7 +3,7 @@
 
 using namespace vm;
 
-mat4 Node::localMatrix()
+mat4 Node::localMatrix() const
 {
 	switch (transformationType)
 	{
@@ -43,7 +43,7 @@ void Node::update(Camera& camera)
 		if (skin) {
 			// Update joint matrices
 			mat4 inverseTransform = inverse(mesh->ubo.matrix);
-			size_t numJoints = std::min(static_cast<uint32_t>(skin->joints.size()), MAX_NUM_JOINTS);
+			const size_t numJoints = std::min(static_cast<uint32_t>(skin->joints.size()), MAX_NUM_JOINTS);
 
 			// async calls should be at least bigger than a number, else this will be slower
 			if (numJoints > 3) {

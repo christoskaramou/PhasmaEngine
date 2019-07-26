@@ -1,5 +1,5 @@
 #include "Math.h"
-#include <assert.h>
+#include <cassert>
 
 namespace vm {
 	vec2::vec2() : x(0.f), y(0.f)
@@ -541,7 +541,7 @@ namespace vm {
 		return rotation().roll();
 	}
 
-	vec3 mat4::translation()
+	vec3 mat4::translation() const
 	{
 		return vec3(_v[3]);
 	}
@@ -601,7 +601,7 @@ namespace vm {
 			_v[3] * vec4(v.w);
 	}
 
-	mat4 mat4::operator*(cfloat scalar)
+	mat4 mat4::operator*(cfloat scalar) const
 	{
 		return mat4(
 			_v[0] * scalar,
@@ -676,7 +676,7 @@ namespace vm {
 
 	quat::quat(cvec3 & u, cvec3 & v)
 	{
-		float norm_u_norm_v = sqrt(dot(u, u) * dot(v, v));
+		cfloat norm_u_norm_v = sqrt(dot(u, u) * dot(v, v));
 		float real_part = norm_u_norm_v + dot(u, v);
 		vec3 t;
 
@@ -716,10 +716,10 @@ namespace vm {
 
 	quat::quat(cmat4 & m)
 	{
-		float fourXSquaredMinus1 = m._v[0].x - m._v[1].y - m._v[2].z;
-		float fourYSquaredMinus1 = m._v[1].y - m._v[0].x - m._v[2].z;
-		float fourZSquaredMinus1 = m._v[2].z - m._v[0].x - m._v[1].y;
-		float fourWSquaredMinus1 = m._v[0].x + m._v[1].y + m._v[2].z;
+		cfloat fourXSquaredMinus1 = m._v[0].x - m._v[1].y - m._v[2].z;
+		cfloat fourYSquaredMinus1 = m._v[1].y - m._v[0].x - m._v[2].z;
+		cfloat fourZSquaredMinus1 = m._v[2].z - m._v[0].x - m._v[1].y;
+		cfloat fourWSquaredMinus1 = m._v[0].x + m._v[1].y + m._v[2].z;
 
 		int biggestIndex = 0;
 		float fourBiggestSquaredMinus1 = fourWSquaredMinus1;
@@ -739,8 +739,8 @@ namespace vm {
 			biggestIndex = 3;
 		}
 
-		float biggestVal = sqrt(fourBiggestSquaredMinus1 + 1.f) * .5f;
-		float mult = .25f / biggestVal;
+		cfloat biggestVal = sqrt(fourBiggestSquaredMinus1 + 1.f) * .5f;
+		cfloat mult = .25f / biggestVal;
 
 		switch (biggestIndex)
 		{
@@ -888,7 +888,7 @@ namespace vm {
 		return &x;
 	}
 
-	Ray::Ray(cvec3 o, cvec3 d) : o(o), d(normalize(d))
+	Ray::Ray(cvec3& o, cvec3& d) : o(o), d(normalize(d))
 	{ }
 
 	vec2 operator*(cfloat scalar, cvec2 & v)
@@ -1046,7 +1046,7 @@ namespace vm {
 
 	quat rotate(cquat & q, cfloat angle, cvec3 & axis)
 	{
-		vec3 axisNorm = normalize(axis);
+		cvec3 axisNorm = normalize(axis);
 
 		cfloat c = cos(angle * .5f);
 		cfloat s = sin(angle * .5f);
@@ -1055,7 +1055,7 @@ namespace vm {
 	}
 
 	// rotation, scale, translation
-	mat4 transform(cquat& r, cvec3 s, cvec3 t)
+	mat4 transform(cquat& r, cvec3& s, cvec3& t)
 	{
 		mat4 m = r.matrix();
 		return mat4(
@@ -1118,9 +1118,9 @@ namespace vm {
 
 	quat lookAt(cvec3& front, cvec3& right, cvec3& up)
 	{
-		cvec3 f(front);
-		cvec3 r(right);
-		cvec3 u(up);
+		cvec3& f = front;
+		cvec3& r = right;
+		cvec3& u = up;
 		cvec4 fill(0.f, 0.f, 0.f, 1.f);
 
 		return quat(
@@ -1274,7 +1274,7 @@ namespace vm {
 		return f1 + a * (f2 - f1);
 	}
 
-	vec4 mix(cvec4 v1, cvec4 v2, cfloat a)
+	vec4 mix(cvec4& v1, cvec4& v2, cfloat a)
 	{
 		return v1 + (a * (v2 - v1));
 	}
@@ -1368,7 +1368,7 @@ namespace vm {
 	Transform::Transform() : _scale(1.0f), _rotation(quat::identity()), _position(0.0f)
 	{ }
 
-	mat4 Transform::matrix()
+	mat4 Transform::matrix() const
 	{
 		return transform(_rotation, _scale, _position);
 	}

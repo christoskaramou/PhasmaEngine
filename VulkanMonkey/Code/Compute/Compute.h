@@ -44,12 +44,13 @@ namespace vm {
 		void destroy();
 
 		static ComputePool& get() noexcept { static ComputePool cp; return cp; }
+
+		ComputePool(ComputePool const&) = delete;				// copy constructor
+		ComputePool(ComputePool&&) noexcept = delete;			// move constructor
+		ComputePool& operator=(ComputePool const&) = delete;	// copy assignment
+		ComputePool& operator=(ComputePool&&) = delete;			// move assignment
 	private:
-		ComputePool() {};								// default constructor
-		ComputePool(ComputePool const&) {};				// copy constructor
-		ComputePool operator=(ComputePool const&) {};	// copy assignment
-		ComputePool(ComputePool&&) noexcept {};			// move constructor
-		ComputePool operator=(ComputePool&&) {};		// move assignment
-		~ComputePool() {};								// destructor
+		ComputePool() = default;								// default constructor
+		~ComputePool() = default;								// destructor
 	};
 }

@@ -31,7 +31,7 @@ namespace vm {
 		Image frameImage;
 
 		void Init();
-		void copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage);
+		void copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const;
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
 		void createBrightFilterRenderPass(std::map<std::string, Image>& renderTargets);
 		void createGaussianBlurRenderPass(std::map<std::string, Image>& renderTargets);

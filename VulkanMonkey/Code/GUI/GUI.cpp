@@ -12,8 +12,7 @@ bool endsWithExt(const std::string &mainStr, const std::string &toMatch)
 	if (mainStr.size() >= toMatch.size() &&
 		mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
 		return true;
-	else
-		return false;
+	return false;
 }
 
 void GUI::setWindows()
@@ -25,12 +24,12 @@ void GUI::setWindows()
 	BottomPanel();
 }
 
-void GUI::LeftPanel()
+void GUI::LeftPanel() const
 {
 	Metrics();
 }
 
-void GUI::RightPanel()
+void GUI::RightPanel() const
 {
 	Properties();
 }
@@ -42,7 +41,7 @@ void GUI::BottomPanel()
 	Models();
 }
 
-void GUI::Menu()
+void GUI::Menu() const
 {
 	if (ImGui::BeginMainMenuBar())
 	{
@@ -52,16 +51,16 @@ void GUI::Menu()
 				std::vector<const char*> filter{ "*.gltf", "*.glb" };
 				const char* result = tinyfd_openFileDialog("Choose Model", "", static_cast<int>(filter.size()), filter.data(), "", 0);
 				if (result) {
-					std::string path(result);
-					std::string folderPath = path.substr(0, path.find_last_of("\\") + 1);
-					std::string modelName = path.substr(path.find_last_of("\\") + 1);
-					Queue::loadModel.push_back({ folderPath, modelName });
+					const std::string path(result);
+					std::string folderPath = path.substr(0, path.find_last_of('\\') + 1);
+					std::string modelName = path.substr(path.find_last_of('\\') + 1);
+					Queue::loadModel.emplace_back(folderPath, modelName);
 				}
 			}
 			if (ImGui::MenuItem("Exit")) {
 				const SDL_MessageBoxButtonData buttons[] = { { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "cancel" },{ SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes" } };
 				const SDL_MessageBoxColorScheme colorScheme = { {{ 255,   0,   0 }, {   0, 255,   0 }, { 255, 255,   0 }, {   0,   0, 255 }, { 255,   0, 255 }} };
-				const SDL_MessageBoxData messageboxdata = { SDL_MESSAGEBOX_INFORMATION, NULL,"Exit", "Are you sure you want to exit?",SDL_arraysize(buttons),buttons, &colorScheme };
+				const SDL_MessageBoxData messageboxdata = { SDL_MESSAGEBOX_INFORMATION, nullptr,"Exit", "Are you sure you want to exit?",SDL_arraysize(buttons),buttons, &colorScheme };
 				int buttonid;
 				SDL_ShowMessageBox(&messageboxdata, &buttonid);
 				if (buttonid == 1) {
@@ -76,10 +75,8 @@ void GUI::Menu()
 	}
 }
 
-void GUI::Metrics()
+void GUI::Metrics() const
 {
-	static float lines[120] = { 0.0f };
-	static uint32_t count = -1;
 	int totalPasses = 0;
 	float totalTime = 0.f;
 
@@ -146,7 +143,7 @@ void GUI::ConsoleWindow()
 	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - LOWER_PANEL_HEIGHT), ImVec2(WIDTH_f / 3.f, LOWER_PANEL_HEIGHT));
 }
 
-void GUI::Scripts()
+void GUI::Scripts() const
 {
 	static bool scripts_open = true;
 	ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 3.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
@@ -158,7 +155,7 @@ void GUI::Scripts()
 			std::string res = result;
 			res = res.substr(0, res.find_last_of(".cs") + 1);
 			if (std::find(fileList.begin(), fileList.end(), res) == fileList.end()) {
-				std::string cmd = "type nul > Scripts\\" + res;
+				const std::string cmd = "type nul > Scripts\\" + res;
 				system(cmd.c_str());
 				fileList.push_back(res);
 			}
@@ -182,7 +179,7 @@ void GUI::Scripts()
 	ImGui::End();
 }
 
-void GUI::Models()
+void GUI::Models() const
 {
 	static bool models_open = true;
 	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 2.f / 3.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
@@ -192,10 +189,10 @@ void GUI::Models()
 		std::vector<const char*> filter{ "*.gltf", "*.glb" };
 		const char* result = tinyfd_openFileDialog("Choose Model", "", static_cast<int>(filter.size()), filter.data(), "", 0);
 		if (result) {
-			std::string path(result);
-			std::string folderPath = path.substr(0, path.find_last_of("\\") + 1);
-			std::string modelName = path.substr(path.find_last_of("\\") + 1);
-			Queue::loadModel.push_back({ folderPath, modelName });
+			const std::string path(result);
+			std::string folderPath = path.substr(0, path.find_last_of('\\') + 1);
+			std::string modelName = path.substr(path.find_last_of('\\') + 1);
+			Queue::loadModel.emplace_back(folderPath, modelName);
 		}
 	}
 	for (uint32_t i = 0; i < modelList.size(); i++) {
@@ -206,11 +203,11 @@ void GUI::Models()
 
 	ImGui::End();
 
-	if (Queue::loadModelFutures.size() > 0) {
+	if (!Queue::loadModelFutures.empty()) {
 		static bool loading = true;
 		static float time = 0.f;
 		ImGuiStyle* style = &ImGui::GetStyle();
-		ImVec4 temp = style->Colors[ImGuiCol_WindowBg];
+		const ImVec4 temp = style->Colors[ImGuiCol_WindowBg];
 		style->Colors[ImGuiCol_WindowBg] = ImVec4(.5f, .5f, .5f, 1.f);
 		ImGui::SetNextWindowPos(ImVec2(WIDTH_f * .5f - 44.f, HEIGHT_f * .5f - 10.f));
 		ImGui::SetNextWindowSize(ImVec2(88.f, 20.f));
@@ -232,7 +229,7 @@ void GUI::Models()
 	}
 }
 
-void GUI::Properties()
+void GUI::Properties() const
 {
 	static bool	propetries_open = true;
 	static float rtScale = renderTargetsScale;
@@ -339,9 +336,9 @@ void GUI::Properties()
 	ImGui::Separator();
 	ImGui::LabelText("", "Model Properties");
 	if (modelItemSelected > -1) {
-		std::string toStr = std::to_string(modelItemSelected);
-		std::string id = " ID[" + toStr + "]";
-		std::string fmt = modelList[modelItemSelected] + id;
+		const std::string toStr = std::to_string(modelItemSelected);
+		const std::string id = " ID[" + toStr + "]";
+		const std::string fmt = modelList[modelItemSelected] + id;
 		ImGui::TextColored(ImVec4(.6f, 1.f, .5f, 1.f), fmt.c_str());
 
 		ImGui::Separator();
@@ -349,9 +346,9 @@ void GUI::Properties()
 			Queue::unloadModel.push_back(modelItemSelected);
 
 		ImGui::Separator();
-		std::string s = "Scale##" + toStr;
-		std::string p = "Position##" + toStr;
-		std::string r = "Rotation##" + toStr;
+		 const std::string s = "Scale##" + toStr;
+		 const std::string p = "Position##" + toStr;
+		 const std::string r = "Rotation##" + toStr;
 		ImGui::InputFloat3(s.c_str(), model_scale[modelItemSelected].data(), 3);
 		ImGui::InputFloat3(p.c_str(), model_pos[modelItemSelected].data(), 3);
 		ImGui::InputFloat3(r.c_str(), model_rot[modelItemSelected].data(), 3);
@@ -363,8 +360,8 @@ void GUI::Properties()
 			const char* result = tinyfd_openFileDialog("Choose Script", "", static_cast<int>(filter.size()), filter.data(), "", 0);
 			if (result) {
 				std::string path(result);
-				path = path.substr(0, path.find_last_of("."));
-				Queue::addScript.push_back({ modelItemSelected, path.substr(path.find_last_of("\\") + 1) });
+				path = path.substr(0, path.find_last_of('.'));
+				Queue::addScript.emplace_back(modelItemSelected, path.substr(path.find_last_of('\\') + 1));
 			}
 		}
 		ImGui::SameLine();
@@ -382,7 +379,7 @@ void GUI::Properties()
 	ImGui::End();
 }
 
-void GUI::RenderingWindowBox()
+void GUI::RenderingWindowBox() const
 {
 	static bool active = true;
 	ImGuiStyle* style = &ImGui::GetStyle();
@@ -483,7 +480,7 @@ void GUI::initImGui()
 
 	io.SetClipboardTextFn = ImGui_ImplSDL2_SetClipboardText;
 	io.GetClipboardTextFn = ImGui_ImplSDL2_GetClipboardText;
-	io.ClipboardUserData = NULL;
+	io.ClipboardUserData = nullptr;
 
 	g_MouseCursors[ImGuiMouseCursor_Arrow] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
 	g_MouseCursors[ImGuiMouseCursor_TextInput] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM);
@@ -732,7 +729,7 @@ void GUI::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
 		// Render the command lists:
 		int vtx_offset = 0;
 		int idx_offset = 0;
-		ImVec2 display_pos = draw_data->DisplayPos;
+		const ImVec2 display_pos = draw_data->DisplayPos;
 		for (int n = 0; n < draw_data->CmdListsCount; n++)
 		{
 			const ImDrawList* cmd_list = draw_data->CmdLists[n];
@@ -757,7 +754,7 @@ void GUI::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
 					// Draw
 					cmd.drawIndexed(pcmd->ElemCount, 1, idx_offset, vtx_offset, 0);
 				}
-				idx_offset += pcmd->ElemCount;
+				idx_offset += static_cast<int>(pcmd->ElemCount);
 			}
 			vtx_offset += cmd_list->VtxBuffer.Size;
 		}
@@ -776,12 +773,12 @@ void GUI::newFrame()
 	SDL_GetWindowSize(vulkan->window, &w, &h);
 	SDL_GL_GetDrawableSize(vulkan->window, &display_w, &display_h);
 	io.DisplaySize = ImVec2(static_cast<float>(w), static_cast<float>(h));
-	io.DisplayFramebufferScale = ImVec2(w > 0 ? (static_cast<float>(display_w / w)) : 0, h > 0 ? (static_cast<float>(display_h / h)) : 0);
+	io.DisplayFramebufferScale = ImVec2(w > 0 ? static_cast<float>(display_w) / static_cast<float>(w) : 0, h > 0 ? static_cast<float>(display_h) / static_cast<float>(h) : 0);
 
 	// Setup time step (we don't use SDL_GetTicks() because it is using millisecond resolution)
 	static Uint64 frequency = SDL_GetPerformanceFrequency();
-	Uint64 current_time = SDL_GetPerformanceCounter();
-	io.DeltaTime = g_Time > 0 ? static_cast<float>((double)(current_time - g_Time) / frequency) : static_cast<float>(1.0f / 60.0f);
+	const Uint64 current_time = SDL_GetPerformanceCounter();
+	io.DeltaTime = g_Time > 0 ? static_cast<float>(static_cast<double>(current_time - g_Time) / frequency) : static_cast<float>(1.0f / 60.0f);
 	g_Time = current_time;
 
 	// Set OS mouse position if requested (rarely used, only when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
@@ -791,7 +788,7 @@ void GUI::newFrame()
 		io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
 
 	int mx, my;
-	Uint32 mouse_buttons = SDL_GetMouseState(&mx, &my);
+	const Uint32 mouse_buttons = SDL_GetMouseState(&mx, &my);
 	io.MouseDown[0] = g_MousePressed[0] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;  // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
 	io.MouseDown[1] = g_MousePressed[1] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
 	io.MouseDown[2] = g_MousePressed[2] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
@@ -822,7 +819,7 @@ void GUI::newFrame()
 	if (io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange)
 		return;
 
-	ImGuiMouseCursor imgui_cursor = ImGui::GetMouseCursor();
+	const ImGuiMouseCursor imgui_cursor = ImGui::GetMouseCursor();
 	if (io.MouseDrawCursor || imgui_cursor == ImGuiMouseCursor_None)
 	{
 		// Hide OS mouse cursor if imgui is drawing it or if it wants no cursor
@@ -960,7 +957,7 @@ void GUI::createIndexBuffer(size_t index_size)
 	//indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
 }
 
-void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout)
+void GUI::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
 {
 	vk::DescriptorSetAllocateInfo allocateInfo;
 	allocateInfo.descriptorPool = vulkan->descriptorPool;
@@ -972,7 +969,7 @@ void GUI::createDescriptorSet(vk::DescriptorSetLayout & descriptorSetLayout)
 
 }
 
-void vm::GUI::updateDescriptorSets()
+void vm::GUI::updateDescriptorSets() const
 {
 	// texture sampler
 	vk::DescriptorImageInfo dii0;

@@ -54,7 +54,7 @@ void LightUniforms::destroy()
 	}
 }
 
-void LightUniforms::update(Camera& camera)
+void LightUniforms::update(Camera& camera) const
 {
 	// uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS + 1]; } ubo;
 	if (GUI::randomize_lights) {
@@ -63,8 +63,8 @@ void LightUniforms::update(Camera& camera)
 		lubo.camPos = vec4(camera.position, 1.0f);
 		memcpy(uniform.data, &lubo, sizeof(lubo));
 	}
-	vec3 sunPos(GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2]);
-	float angle = dot(normalize(sunPos), vec3(0.f, 1.f, 0.f));
+	const vec3 sunPos(GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2]);
+	const float angle = dot(normalize(sunPos), vec3(0.f, 1.f, 0.f));
 	vec4 values[3] = { // = {camPos, suncolor, sunposition}
 		{ camera.position, 1.0f },
 		{ .9765f * GUI::sun_intensity, .8431f * GUI::sun_intensity, .9098f * GUI::sun_intensity, GUI::shadow_cast ? angle * 0.5f : angle * 0.25f},

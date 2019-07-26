@@ -3,7 +3,7 @@
 
 namespace vm {
 
-	template<typename T, typename std::enable_if<!std::is_pointer<T>::value >::type* = 0>
+	template<typename T, typename std::enable_if<!std::is_pointer<T>::value >::type* = nullptr>
 	struct Pointer
 	{
 		uint32_t hLeft;

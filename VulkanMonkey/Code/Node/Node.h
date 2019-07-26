@@ -38,7 +38,7 @@ namespace vm {
 		quat rotation;
 		TransformationType transformationType;
 
-		mat4 localMatrix();
+		mat4 localMatrix() const;
 		mat4 getMatrix();
 		void update(Camera& camera);
 	};

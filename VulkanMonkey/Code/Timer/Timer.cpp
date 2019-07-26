@@ -31,7 +31,7 @@ Timer::~Timer()
 
 	// FPS limiting
     if (_minFrameTime > 0){
-		float delay = _minFrameTime - cleanDelta;
+	    const float delay = _minFrameTime - cleanDelta;
 		if (delay > 0.f)
 			SDL_Delay(static_cast<unsigned>(delay * 1000.f)); // not accurate but fast and not CPU cycle consuming
     }
@@ -70,8 +70,7 @@ bool Timer::intervalsOf(float seconds)
         time = 0.0f;
         return true;
     }
-	else
-		return false;
+	return false;
 }
 
 void Timer::minFrameTime(float seconds)

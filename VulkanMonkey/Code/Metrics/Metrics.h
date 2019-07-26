@@ -13,7 +13,7 @@ namespace vm {
 		void end(float* res = nullptr);
 		void initQueryPool();
 		float getTime();
-		void destroy();
+		void destroy() const;
 
 		vk::QueryPool queryPool;
 		std::vector<uint64_t> queryTimes{};
