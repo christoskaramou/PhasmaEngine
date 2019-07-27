@@ -113,7 +113,7 @@ void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
 	frameBuffers.resize(vulkan->swapchain->images.size());
 
-	for (size_t i = 0; i < frameBuffers.size(); ++i) {
+	for (auto& frameBuffer : frameBuffers) {
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["ssr"].view
 		};
@@ -124,7 +124,7 @@ void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.width = renderTargets["ssr"].width;
 		fbci.height = renderTargets["ssr"].height;
 		fbci.layers = 1;
-		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = vulkan->device.createFramebuffer(fbci);
 	}
 }
 

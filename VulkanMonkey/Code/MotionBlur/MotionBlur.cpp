@@ -144,7 +144,7 @@ void MotionBlur::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
 	frameBuffers.resize(vulkan->swapchain->images.size());
 
-	for (size_t i = 0; i < frameBuffers.size(); ++i) {
+	for (auto& frameBuffer : frameBuffers) {
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["viewport"].view
 		};
@@ -155,7 +155,7 @@ void MotionBlur::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.width = renderTargets["viewport"].width;
 		fbci.height = renderTargets["viewport"].height;
 		fbci.layers = 1;
-		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = vulkan->device.createFramebuffer(fbci);
 	}
 }
 
@@ -321,7 +321,7 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	vulkan->device.destroyShaderModule(fragModule);
 }
 
-void MotionBlur::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage)
+void MotionBlur::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
 {
 	frameImage.transitionImageLayout(
 		cmd,

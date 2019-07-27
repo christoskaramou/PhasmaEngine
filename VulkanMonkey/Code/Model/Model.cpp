@@ -84,37 +84,37 @@ void Model::getVertexData(std::vector<T>& vec, const std::string& accessorName, 
 		{
 		case glTF::COMPONENT_FLOAT: {
 			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessor);
-			for (uint32_t i = 0; i < data.size(); i++)
-				vec.push_back(static_cast<T>(data[i]));
+			for (auto& d : data)
+				vec.push_back(static_cast<T>(d));
 			break;
 		}
 		case glTF::COMPONENT_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
-			for (uint32_t i = 0; i < data.size(); i++)
+			for (auto& d : data)
 				vec.push_back(static_cast<T>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
-			for (uint32_t i = 0; i < data.size(); i++)
+			for (auto& d : data)
 				vec.push_back(static_cast<T>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
-			for (uint32_t i = 0; i < data.size(); i++)
+			for (auto& d : data)
 				vec.push_back(static_cast<T>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
-			for (uint32_t i = 0; i < data.size(); i++)
+			for (auto& d : data)
 				vec.push_back(static_cast<T>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_INT: {
 			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
-			for (uint32_t i = 0; i < data.size(); i++)
+			for (auto& d : data)
 				vec.push_back(static_cast<T>(data[i]));
 			break;
 		}
@@ -133,31 +133,31 @@ void Model::getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::Mesh
 		{
 		case glTF::COMPONENT_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
-			for (uint32_t i = 0; i < data.size(); i++)
+			for (auto& d : data)
 				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
-			for (uint32_t i = 0; i < data.size(); i++)
+			for (auto& d : data)
 				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
-			for (uint32_t i = 0; i < data.size(); i++)
+			for (auto& d : data)
 				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
-			for (uint32_t i = 0; i < data.size(); i++)
+			for (auto& d : data)
 				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_INT: {
 			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
-			for (uint32_t i = 0; i < data.size(); i++)
+			for (auto& d : data)
 				vec.push_back(static_cast<uint32_t>(data[i]));
 			break;
 		}
@@ -244,8 +244,8 @@ void Model::getMesh(Pointer<vm::Node>& node, const std::string& meshID, const st
 			vertex.weights = !weights.empty() ? vec4(&weights[i * 4]) : vec4();
 			myMesh->vertices.push_back(vertex);
 		}
-		for (size_t i = 0; i < indices.size(); i++) {
-			myMesh->indices.push_back(indices[i]);
+		for (auto& index : indices) {
+			myMesh->indices.push_back(index);
 		}
 	}
 	node->mesh = myMesh;
@@ -417,8 +417,8 @@ void Model::update(vm::Camera& camera, float delta)
 				f.get();
 		}
 		else {
-			for (uint32_t i = 0; i < linearNodes.size(); i++)
-				updateNodeAsync(ubo.matrix, linearNodes[i], camera);
+			for (auto& linearNode : linearNodes)
+				updateNodeAsync(ubo.matrix, linearNode, camera);
 		}
 	}
 }

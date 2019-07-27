@@ -16,7 +16,7 @@ Renderer::Renderer(SDL_Window* window)
 	ctx.createUniforms();
 }
 
-Renderer::~Renderer() noexcept
+Renderer::~Renderer()
 {
 	ctx.vulkan.device.waitIdle();
 	if (Model::models.empty()) {
@@ -62,7 +62,7 @@ Renderer::~Renderer() noexcept
 	ctx.destroyVkContext();
 }
 
-void vm::Renderer::changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState state)
+void Renderer::changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState state)
 {
 	if (state != image.layoutState) {
 		if (state == LayoutState::ColorRead) {
@@ -278,8 +278,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	// MODELS
 	ctx.metrics[2].start(cmd);
 	ctx.deferred.batchStart(cmd, imageIndex, ctx.renderTargets["viewport"].extent);
-	for (uint32_t m = 0; m < Model::models.size(); m++)
-		Model::models[m].draw();
+	for (auto& model : Model::models)
+		model.draw();
 	ctx.deferred.batchEnd();
 	ctx.metrics[2].end(&GUI::metrics[2]);
 	
@@ -404,14 +404,14 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 		renderPassInfoShadows.framebuffer = ctx.shadows.frameBuffers[i * ctx.vulkan.swapchain->images.size() + imageIndex]; // e.g. for 2 swapchain images - 1st(0,2,4) and 2nd(1,3,5)
 		cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
-		for (uint32_t m = 0; m < Model::models.size(); m++) {
-			if (Model::models[m].render) {
-				cmd.bindVertexBuffers(0, Model::models[m].vertexBuffer.buffer, offset);
-				cmd.bindIndexBuffer(Model::models[m].indexBuffer.buffer, 0, vk::IndexType::eUint32);
+		for (auto& model : Model::models) {
+			if (model.render) {
+				cmd.bindVertexBuffers(0, model.vertexBuffer.buffer, offset);
+				cmd.bindIndexBuffer(model.indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
-				for (auto& node : Model::models[m].linearNodes) {
+				for (auto& node :model.linearNodes) {
 					if (node->mesh) {
-						cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet, Model::models[m].descriptorSet }, nullptr);
+						cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet, model.descriptorSet }, nullptr);
 						for (auto& primitive : node->mesh->primitives) {
 							if (primitive.render)
 								cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);

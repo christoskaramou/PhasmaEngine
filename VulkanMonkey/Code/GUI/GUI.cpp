@@ -9,10 +9,7 @@ using namespace vm;
 
 bool endsWithExt(const std::string &mainStr, const std::string &toMatch)
 {
-	if (mainStr.size() >= toMatch.size() &&
-		mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
-		return true;
-	return false;
+	return mainStr.size() >= toMatch.size() && mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0;
 }
 
 void GUI::setWindows()
@@ -339,7 +336,7 @@ void GUI::Properties() const
 		const std::string toStr = std::to_string(modelItemSelected);
 		const std::string id = " ID[" + toStr + "]";
 		const std::string fmt = modelList[modelItemSelected] + id;
-		ImGui::TextColored(ImVec4(.6f, 1.f, .5f, 1.f), fmt.c_str());
+		ImGui::TextColored(ImVec4(.6f, 1.f, .5f, 1.f), "%s", fmt.c_str());
 
 		ImGui::Separator();
 		if (ImGui::Button("Unload Model"))
@@ -592,7 +589,7 @@ void GUI::initImGui()
 	}
 
 	// Store our identifier
-	io.Fonts->TexID = (ImTextureID)(intptr_t)(VkImage)texture.image;
+	io.Fonts->TexID = reinterpret_cast<ImTextureID>(reinterpret_cast<intptr_t>(static_cast<VkImage>(texture.image)));
 
 	vulkan->dynamicCmdBuffer.end();
 

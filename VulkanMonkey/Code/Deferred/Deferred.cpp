@@ -28,7 +28,7 @@ void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::
 	Model::pipeline = &pipeline;
 }
 
-void Deferred::batchEnd() const
+void Deferred::batchEnd()
 {
 	Model::commandBuffer.endRenderPass();
 	Model::commandBuffer = nullptr;
@@ -293,7 +293,7 @@ void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
 	frameBuffers.resize(vulkan->swapchain->images.size());
-	for (size_t i = 0; i < frameBuffers.size(); ++i) {
+	for (auto& frameBuffer : frameBuffers) {
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["depth"].view,
 			renderTargets["normal"].view,
@@ -310,7 +310,7 @@ void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTar
 		fbci.width = renderTargets["albedo"].width;
 		fbci.height = renderTargets["albedo"].height;
 		fbci.layers = 1;
-		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = vulkan->device.createFramebuffer(fbci);
 	}
 }
 
@@ -318,7 +318,7 @@ void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& rende
 {
 	compositionFrameBuffers.resize(vulkan->swapchain->images.size());
 
-	for (size_t i = 0; i < compositionFrameBuffers.size(); ++i) {
+	for (auto& compositionFrameBuffer : compositionFrameBuffers) {
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["viewport"].view
 		};
@@ -329,7 +329,7 @@ void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& rende
 		fbci.width = renderTargets["viewport"].width;
 		fbci.height = renderTargets["viewport"].height;
 		fbci.layers = 1;
-		compositionFrameBuffers[i] = vulkan->device.createFramebuffer(fbci);
+		compositionFrameBuffer = vulkan->device.createFramebuffer(fbci);
 	}
 }
 

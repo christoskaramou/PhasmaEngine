@@ -12,10 +12,7 @@ constexpr uint32_t PUBLIC_FLAG = 0x0006;
 
 bool endsWithValue(const std::string &mainStr, const std::string &toMatch)
 {
-	if (mainStr.size() >= toMatch.size() &&
-		mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
-		return true;
-	return false;
+	return mainStr.size() >= toMatch.size() && mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0;
 }
 
 std::vector<char> readDll(const std::string& filename)

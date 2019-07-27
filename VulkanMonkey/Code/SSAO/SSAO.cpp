@@ -267,7 +267,7 @@ void vm::SSAO::createSSAOFrameBuffers(std::map<std::string, Image>& renderTarget
 {
 	frameBuffers.resize(vulkan->swapchain->images.size());
 
-	for (size_t i = 0; i < frameBuffers.size(); ++i) {
+	for (auto& frameBuffer : frameBuffers) {
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["ssao"].view
 		};
@@ -278,7 +278,7 @@ void vm::SSAO::createSSAOFrameBuffers(std::map<std::string, Image>& renderTarget
 		fbci.width = renderTargets["ssao"].width;
 		fbci.height = renderTargets["ssao"].height;
 		fbci.layers = 1;
-		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = vulkan->device.createFramebuffer(fbci);
 	}
 }
 
@@ -286,7 +286,7 @@ void vm::SSAO::createSSAOBlurFrameBuffers(std::map<std::string, Image>& renderTa
 {
 	blurFrameBuffers.resize(vulkan->swapchain->images.size());
 
-	for (size_t i = 0; i < blurFrameBuffers.size(); ++i) {
+	for (auto& frameBuffer : blurFrameBuffers) {
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["ssaoBlur"].view
 		};
@@ -297,7 +297,7 @@ void vm::SSAO::createSSAOBlurFrameBuffers(std::map<std::string, Image>& renderTa
 		fbci.width = renderTargets["ssaoBlur"].width;
 		fbci.height = renderTargets["ssaoBlur"].height;
 		fbci.layers = 1;
-		blurFrameBuffers[i] = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = vulkan->device.createFramebuffer(fbci);
 	}
 }
 

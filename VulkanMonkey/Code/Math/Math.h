@@ -146,14 +146,14 @@ namespace vm {
 			cfloat& x2, cfloat& y2, cfloat& z2, cfloat& w2,
 			cfloat& x3, cfloat& y3, cfloat& z3, cfloat& w3);
 		static cmat4 identity();
-		[[nodiscard]] quat quaternion() const;
-		[[nodiscard]] vec3 eulerAngles() const;
-		[[nodiscard]] float pitch() const;
-		[[nodiscard]] float yaw() const;
-		[[nodiscard]] float roll() const;
+		quat quaternion() const;
+		vec3 eulerAngles() const;
+		float pitch() const;
+		float yaw() const;
+		float roll() const;
 		vec3 translation() const;
-		[[nodiscard]] vec3 scale() const;
-		[[nodiscard]] quat rotation() const;
+		vec3 scale() const;
+		quat rotation() const;
 		void operator=(cmat4& m);
 		mat4 operator*(cmat4& m) const;
 		vec4 operator*(cvec4& v) const;
@@ -182,11 +182,11 @@ namespace vm {
 		quat(cvec4& eulerAngle);
 		quat(cmat4& m);
 		static cquat identity();
-		[[nodiscard]] mat4 matrix() const;
-		[[nodiscard]] vec3 eulerAngles() const;
-		[[nodiscard]] float pitch() const;
-		[[nodiscard]] float yaw() const;
-		[[nodiscard]] float roll() const;
+		mat4 matrix() const;
+		vec3 eulerAngles() const;
+		float pitch() const;
+		float yaw() const;
+		float roll() const;
 		void operator=(cquat& q);
 		quat operator+(cquat& q) const;
 		quat operator-(cquat& q) const;

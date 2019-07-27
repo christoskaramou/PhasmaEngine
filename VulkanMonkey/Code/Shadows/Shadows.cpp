@@ -79,21 +79,21 @@ void Shadows::createRenderPass()
 void Shadows::createFrameBuffers()
 {
 	textures.resize(3);
-	for (uint32_t i = 0; i < textures.size(); i++)
+	for (auto& texture : textures)
 	{
-		textures[i].format = vulkan->depth->format;
-		textures[i].initialLayout = vk::ImageLayout::eUndefined;
-		textures[i].addressMode = vk::SamplerAddressMode::eClampToEdge;
-		textures[i].maxAnisotropy = 1.f;
-		textures[i].borderColor = vk::BorderColor::eFloatOpaqueWhite;
-		textures[i].samplerCompareEnable = VK_TRUE;
-		textures[i].compareOp = vk::CompareOp::eGreaterOrEqual;
-		textures[i].samplerMipmapMode = vk::SamplerMipmapMode::eLinear;
+		texture.format = vulkan->depth->format;
+		texture.initialLayout = vk::ImageLayout::eUndefined;
+		texture.addressMode = vk::SamplerAddressMode::eClampToEdge;
+		texture.maxAnisotropy = 1.f;
+		texture.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+		texture.samplerCompareEnable = VK_TRUE;
+		texture.compareOp = vk::CompareOp::eGreaterOrEqual;
+		texture.samplerMipmapMode = vk::SamplerMipmapMode::eLinear;
 
-		textures[i].createImage(Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
-		textures[i].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
-		textures[i].createImageView(vk::ImageAspectFlagBits::eDepth);
-		textures[i].createSampler();
+		texture.createImage(Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		texture.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+		texture.createImageView(vk::ImageAspectFlagBits::eDepth);
+		texture.createSampler();
 	}
 
 	frameBuffers.resize(vulkan->swapchain->images.size() * textures.size());

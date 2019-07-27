@@ -200,7 +200,7 @@ void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
 	frameBuffers.resize(vulkan->swapchain->images.size());
 
-	for (size_t i = 0; i < frameBuffers.size(); ++i) {
+	for (auto& frameBuffer : frameBuffers) {
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["taa"].view
 		};
@@ -211,12 +211,12 @@ void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.width = renderTargets["taa"].width;
 		fbci.height = renderTargets["taa"].height;
 		fbci.layers = 1;
-		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = vulkan->device.createFramebuffer(fbci);
 	}
 
 	frameBuffersSharpen.resize(vulkan->swapchain->images.size());
 
-	for (size_t i = 0; i < frameBuffersSharpen.size(); ++i) {
+	for (auto& frameBuffer : frameBuffersSharpen) {
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["viewport"].view
 		};
@@ -227,7 +227,7 @@ void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.width = renderTargets["viewport"].width;
 		fbci.height = renderTargets["viewport"].height;
 		fbci.layers = 1;
-		frameBuffersSharpen[i] = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = vulkan->device.createFramebuffer(fbci);
 	}
 }
 
@@ -546,7 +546,7 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	vulkan->device.destroyShaderModule(fragModule);
 }
 
-void TAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage)
+void TAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
 {
 	frameImage.transitionImageLayout(
 		cmd,
@@ -604,7 +604,7 @@ void TAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage)
 		vk::ImageAspectFlagBits::eColor);
 }
 
-void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source)
+void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source) const
 {
 	previous.transitionImageLayout(
 		cmd,

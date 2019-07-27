@@ -22,7 +22,10 @@ Camera::Camera()
 	speed = 0.35f;
 	rotationSpeed = 0.05f;
 
+	frustum.resize(6);
+
 	renderArea.update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
+
 }
 
 void vm::Camera::update()
@@ -188,8 +191,8 @@ void Camera::ExtractFrustum()
 // center x,y,z - radius w 
 bool Camera::SphereInFrustum(const vec4& boundingSphere) const
 {
-	for (unsigned i = 0; i < 6; i++) {
-		const float dist = dot(frustum[i].normal, vec3(boundingSphere)) + frustum[i].d;
+	for (auto& plane : frustum) {
+		const float dist = dot(plane.normal, vec3(boundingSphere)) + plane.d;
 
 		if (dist < -boundingSphere.w)
 			return false;

@@ -39,7 +39,7 @@ namespace vm {
 		TransformationType transformationType;
 
 		mat4 localMatrix() const;
-		mat4 getMatrix();
+		mat4 getMatrix() const;
 		void update(Camera& camera);
 	};
 }

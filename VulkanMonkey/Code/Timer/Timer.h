@@ -10,9 +10,9 @@ namespace vm {
 		Timer();
 		~Timer();
 
-		float getDelta(float timeScale = 1.0f);
-		unsigned getFPS();
-		bool intervalsOf(float seconds);
+		static float getDelta(float timeScale = 1.0f);
+		static unsigned getFPS();
+		static bool intervalsOf(float seconds);
 		void minFrameTime(float seconds);
 		static float getTotalTime();
 		static float delta;

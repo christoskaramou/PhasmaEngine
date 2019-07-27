@@ -2,7 +2,7 @@
 
 using namespace vm;
 
-Metrics::Metrics(): gpuProps()
+Metrics::Metrics(): gpuProps({})
 {
 }
 

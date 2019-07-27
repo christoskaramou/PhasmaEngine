@@ -36,18 +36,18 @@ namespace vm {
 		float nearPlane, farPlane, FOV, speed, rotationSpeed;
 		vec2 projOffset, projOffsetPrevious;
 		TargetArea renderArea;
-		Plane frustum[6];
+		std::vector<Plane> frustum{};
 
 		Camera();
 		void update();
 		void updatePerspective();
 		void updateView();
-		[[nodiscard]] vec3 worldFront() const;
-		[[nodiscard]] vec3 worldRight() const;
-		[[nodiscard]] vec3 worldUp() const;
+		vec3 worldFront() const;
+		vec3 worldRight() const;
+		vec3 worldUp() const;
 		void move(RelativeDirection direction, float velocity);
 		void rotate(float xoffset, float yoffset);
 		void ExtractFrustum();
-		[[nodiscard]] bool SphereInFrustum(const vec4& boundingSphere) const;
+		bool SphereInFrustum(const vec4& boundingSphere) const;
 	};
 }

@@ -95,7 +95,7 @@ namespace vm {
 		std::vector<Script*> scripts{};
 #endif
 
-		void initVulkanContext();
+		void initVulkanContext() const;
 		void initRendering();
 		void loadResources();
 		void createUniforms();
@@ -103,35 +103,35 @@ namespace vm {
 		void resizeViewport(uint32_t width, uint32_t height);
 
 	public:
-		[[nodiscard]] vk::Instance createInstance() const;
+		vk::Instance createInstance() const;
 		static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
 			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 			VkDebugUtilsMessageTypeFlagsEXT messageType,
 			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 			void* pUserData);
-		[[nodiscard]] vk::DebugUtilsMessengerEXT createDebugMessenger() const;
+		vk::DebugUtilsMessengerEXT createDebugMessenger() const;
 		void destroyDebugMessenger() const;
-		[[nodiscard]] Surface createSurface() const;
-		[[nodiscard]] int getGraphicsFamilyId() const;
-		[[nodiscard]] int getTransferFamilyId() const;
-		[[nodiscard]] int getComputeFamilyId() const;
-		[[nodiscard]] vk::PhysicalDevice findGpu() const;
-		[[nodiscard]] vk::PhysicalDeviceProperties getGPUProperties() const;
-		[[nodiscard]] vk::PhysicalDeviceFeatures getGPUFeatures() const;
-		[[nodiscard]] vk::SurfaceCapabilitiesKHR getSurfaceCapabilities() const;
-		[[nodiscard]] vk::SurfaceFormatKHR getSurfaceFormat() const;
-		[[nodiscard]] vk::PresentModeKHR getPresentationMode() const;
-		[[nodiscard]] vk::Device createDevice() const;
-		[[nodiscard]] vk::Queue getGraphicsQueue() const;
-		[[nodiscard]] vk::Queue getTransferQueue() const;
-		[[nodiscard]] vk::Queue getComputeQueue() const;
+		Surface createSurface() const;
+		int getGraphicsFamilyId() const;
+		int getTransferFamilyId() const;
+		int getComputeFamilyId() const;
+		vk::PhysicalDevice findGpu() const;
+		vk::PhysicalDeviceProperties getGPUProperties() const;
+		vk::PhysicalDeviceFeatures getGPUFeatures() const;
+		vk::SurfaceCapabilitiesKHR getSurfaceCapabilities() const;
+		vk::SurfaceFormatKHR getSurfaceFormat() const;
+		vk::PresentModeKHR getPresentationMode() const;
+		vk::Device createDevice() const;
+		vk::Queue getGraphicsQueue() const;
+		vk::Queue getTransferQueue() const;
+		vk::Queue getComputeQueue() const;
 		Swapchain createSwapchain() const;
-		[[nodiscard]] vk::CommandPool createCommandPool() const;
-		[[nodiscard]] Image createDepthResources() const;
-		[[nodiscard]] std::vector<vk::CommandBuffer> createCmdBuffers(uint32_t bufferCount = 1) const;
-		[[nodiscard]] vk::DescriptorPool createDescriptorPool(uint32_t maxDescriptorSets) const;
-		[[nodiscard]] std::vector<vk::Fence> createFences(uint32_t fenceCount) const;
-		[[nodiscard]] std::vector<vk::Semaphore> createSemaphores(uint32_t semaphoresCount) const;
+		vk::CommandPool createCommandPool() const;
+		Image createDepthResources() const;
+		std::vector<vk::CommandBuffer> createCmdBuffers(uint32_t bufferCount = 1) const;
+		vk::DescriptorPool createDescriptorPool(uint32_t maxDescriptorSets) const;
+		std::vector<vk::Fence> createFences(uint32_t fenceCount) const;
+		std::vector<vk::Semaphore> createSemaphores(uint32_t semaphoresCount) const;
 		void addRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags = vk::ImageUsageFlags());
 	};
 }

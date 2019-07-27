@@ -18,7 +18,7 @@ mat4 Node::localMatrix() const
 	}
 }
 
-mat4 Node::getMatrix()
+mat4 Node::getMatrix() const
 {
 	mat4 m = localMatrix();
 	Pointer<Node> p = parent;

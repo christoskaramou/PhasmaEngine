@@ -28,7 +28,7 @@ namespace vm {
 		void createRenderPass(std::map<std::string, Image>& renderTargets);
 		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
 		void createPipeline(std::map<std::string, Image>& renderTargets);
-		void copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage);
+		void copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const;
 		void destroy();
 	};
 }

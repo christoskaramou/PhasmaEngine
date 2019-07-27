@@ -7,7 +7,7 @@ using namespace vm;
 
 //std::vector<Model> Context::models = {};
 
-void Context::initVulkanContext()
+void Context::initVulkanContext() const
 {
 	vulkan.instance = createInstance();
 #ifdef _DEBUG
