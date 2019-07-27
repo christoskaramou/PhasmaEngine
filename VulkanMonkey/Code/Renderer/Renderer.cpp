@@ -299,8 +299,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	if (GUI::show_ssao) {
 		ctx.metrics[3].start(cmd);
 		changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::ColorWrite);
-		const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-		ctx.ssao.draw(cmd, imageIndex, changeLayoutFunc, ctx.renderTargets["ssao"]);
+		//const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+		ctx.ssao.draw(cmd, imageIndex, changeLayout, ctx.renderTargets["ssao"]);
 		changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::ColorRead);
 		ctx.metrics[3].end(&GUI::metrics[3]);
 	}
@@ -324,8 +324,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		if (GUI::use_TAA) {
 			ctx.metrics[6].start(cmd);
 			ctx.taa.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-			const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-			ctx.taa.draw(cmd, imageIndex, changeLayoutFunc, ctx.renderTargets);
+			//const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+			ctx.taa.draw(cmd, imageIndex, changeLayout, ctx.renderTargets);
 			ctx.metrics[6].end(&GUI::metrics[6]);
 		}
 		// FXAA
@@ -341,8 +341,8 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	if (GUI::show_Bloom) {
 		ctx.metrics[7].start(cmd);
 		ctx.bloom.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-		const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-		ctx.bloom.draw(cmd, imageIndex, static_cast<uint32_t>(ctx.vulkan.swapchain->images.size()), changeLayoutFunc, ctx.renderTargets);
+		//const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+		ctx.bloom.draw(cmd, imageIndex, static_cast<uint32_t>(ctx.vulkan.swapchain->images.size()), changeLayout, ctx.renderTargets);
 		ctx.metrics[7].end(&GUI::metrics[7]);
 	}
 	

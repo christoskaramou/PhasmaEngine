@@ -91,31 +91,31 @@ void Model::getVertexData(std::vector<T>& vec, const std::string& accessorName, 
 		case glTF::COMPONENT_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
 			for (auto& d : data)
-				vec.push_back(static_cast<T>(data[i]));
+				vec.push_back(static_cast<T>(d));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
 			for (auto& d : data)
-				vec.push_back(static_cast<T>(data[i]));
+				vec.push_back(static_cast<T>(d));
 			break;
 		}
 		case glTF::COMPONENT_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
 			for (auto& d : data)
-				vec.push_back(static_cast<T>(data[i]));
+				vec.push_back(static_cast<T>(d));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
 			for (auto& d : data)
-				vec.push_back(static_cast<T>(data[i]));
+				vec.push_back(static_cast<T>(d));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_INT: {
 			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
 			for (auto& d : data)
-				vec.push_back(static_cast<T>(data[i]));
+				vec.push_back(static_cast<T>(d));
 			break;
 		}
 		default:
@@ -134,31 +134,31 @@ void Model::getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::Mesh
 		case glTF::COMPONENT_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
 			for (auto& d : data)
-				vec.push_back(static_cast<uint32_t>(data[i]));
+				vec.push_back(static_cast<uint32_t>(d));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_BYTE: {
 			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
 			for (auto& d : data)
-				vec.push_back(static_cast<uint32_t>(data[i]));
+				vec.push_back(static_cast<uint32_t>(d));
 			break;
 		}
 		case glTF::COMPONENT_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
 			for (auto& d : data)
-				vec.push_back(static_cast<uint32_t>(data[i]));
+				vec.push_back(static_cast<uint32_t>(d));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_SHORT: {
 			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
 			for (auto& d : data)
-				vec.push_back(static_cast<uint32_t>(data[i]));
+				vec.push_back(static_cast<uint32_t>(d));
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_INT: {
 			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
 			for (auto& d : data)
-				vec.push_back(static_cast<uint32_t>(data[i]));
+				vec.push_back(static_cast<uint32_t>(d));
 			break;
 		}
 		default:
