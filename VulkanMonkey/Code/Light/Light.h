@@ -5,7 +5,6 @@
 #include "../Buffer/Buffer.h"
 #include "../Camera/Camera.h"
 #include "../GUI/GUI.h"
-#include <vector>
 
 namespace vm {
 	#define MAX_LIGHTS 25
@@ -34,8 +33,6 @@ namespace vm {
 
 	struct LightUniforms : Light
 	{
-		VulkanContext* vulkan = &VulkanContext::get();
-
 		Buffer uniform;
 		vk::DescriptorSet descriptorSet;
 		static vk::DescriptorSetLayout descriptorSetLayout;

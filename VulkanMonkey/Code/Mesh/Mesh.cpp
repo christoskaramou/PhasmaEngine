@@ -1,5 +1,5 @@
 #include "Mesh.h"
-#include "../Buffer/Buffer.h"
+#include "../../include/tinygltf/stb_image.h"
 
 using namespace vm;
 
@@ -24,7 +24,7 @@ vk::DescriptorSetLayout* Primitive::getDescriptorSetLayout()
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
+		descriptorSetLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 	return &descriptorSetLayout;
 }
@@ -41,7 +41,7 @@ vk::DescriptorSetLayout* Mesh::getDescriptorSetLayout()
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
+		descriptorSetLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 	return &descriptorSetLayout;
 }
@@ -49,12 +49,12 @@ vk::DescriptorSetLayout* Mesh::getDescriptorSetLayout()
 void Mesh::createUniformBuffers()
 {
 	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
+	uniformBuffer.data = VulkanContext::get()->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 	memset(uniformBuffer.data, 0, uniformBuffer.size);
 	const size_t size = sizeof(mat4);
 	for (auto& primitive : primitives) {
 		primitive.uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		primitive.uniformBuffer.data = vulkan->device.mapMemory(primitive.uniformBuffer.memory, 0, primitive.uniformBuffer.size);
+		primitive.uniformBuffer.data = VulkanContext::get()->device.mapMemory(primitive.uniformBuffer.memory, 0, primitive.uniformBuffer.size);
 
 		mat4 factors;
 		factors[0] = primitive.pbrMaterial.baseColorFactor != vec4(0.f) ? primitive.pbrMaterial.baseColorFactor : vec4(1.f);
@@ -130,15 +130,14 @@ void Primitive::loadTexture(
 
 		const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
-		vulkan->waitAndLockSubmits();
+		VulkanContext::get()->waitAndLockSubmits();
 
 		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-		auto* vulkan = &VulkanContext::get();
-		vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &staging.data);
+		VulkanContext::get()->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &staging.data);
 		memcpy(staging.data, pixels, static_cast<size_t>(imageSize));
-		vulkan->device.unmapMemory(staging.memory);
+		VulkanContext::get()->device.unmapMemory(staging.memory);
 
 		stbi_image_free(pixels);
 
@@ -155,7 +154,7 @@ void Primitive::loadTexture(
 
 		staging.destroy();
 
-		vulkan->unlockSubmits();
+		VulkanContext::get()->unlockSubmits();
 
 		Mesh::uniqueTextures[path] = *tex;
 	}
@@ -178,7 +177,7 @@ void Mesh::destroy()
 {
 	uniformBuffer.destroy();
 	if (descriptorSetLayout) {
-		vulkan->device.destroyDescriptorSetLayout(descriptorSetLayout);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(descriptorSetLayout);
 		descriptorSetLayout = nullptr;
 	}
 
@@ -190,7 +189,7 @@ void Mesh::destroy()
 	indices.clear();
 	indices.shrink_to_fit();
 	if (Primitive::descriptorSetLayout) {
-		vulkan->device.destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
 		Primitive::descriptorSetLayout = nullptr;
 	}
 }

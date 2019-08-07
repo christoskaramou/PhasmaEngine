@@ -1,28 +1,19 @@
 #pragma once
-#include "../VulkanContext/VulkanContext.h"
 #include "../Buffer/Buffer.h"
 #include "../Math/Math.h"
-#include "../Mesh/Mesh.h"
 #include "../Pipeline/Pipeline.h"
 #include "../Script/Script.h"
 #include "../Camera/Camera.h"
-#include "../Deferred/Deferred.h"
 #include "../Model/Animation.h"
 #include "../Node/Node.h"
-#include "../Compute/Compute.h"
 #include "../../include/GLTFSDK/GLTF.h"
 #include "../../include/GLTFSDK/GLTFResourceReader.h"
-#include "../../include/GLTFSDK/GLBResourceReader.h"
-#include "../../include/GLTFSDK/Deserialize.h"
 #include "../../include/GLTFSDK/Document.h"
 #include "StreamReader.h"
-#include <memory>
 
 namespace vm {
 	struct Model
 	{
-		VulkanContext* vulkan = &VulkanContext::get();
-
 		// Document holds all info about the gltf model
 		Microsoft::glTF::Document* document = nullptr;
 		Microsoft::glTF::GLTFResourceReader* resourceReader = nullptr;

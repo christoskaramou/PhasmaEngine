@@ -1,7 +1,5 @@
 #include "Camera.h"
 #include "../GUI/GUI.h"
-#include "../VulkanContext/VulkanContext.h"
-#include "../Timer/Timer.h"
 
 using namespace vm;
 

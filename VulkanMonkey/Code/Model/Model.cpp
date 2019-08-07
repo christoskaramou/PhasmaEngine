@@ -1,10 +1,10 @@
 #include "Model.h"
-#include "../GUI/GUI.h"
-#include <fstream>
-#include <sstream>
+#include "../Mesh/Mesh.h"
 #include <iostream>
 #include <future>
 #include <deque>
+#include <GLTFSDK/GLBResourceReader.h>
+#include <GLTFSDK/Deserialize.h>
 
 using namespace vm;
 using namespace Microsoft;
@@ -308,7 +308,7 @@ vk::DescriptorSetLayout* Model::getDescriptorSetLayout()
 		vk::DescriptorSetLayoutCreateInfo dslci;
 		dslci.bindingCount = 1;
 		dslci.pBindings = &dslb;
-		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(dslci);
+		descriptorSetLayout = VulkanContext::get()->device.createDescriptorSetLayout(dslci);
 	}
 	return &descriptorSetLayout;
 }
@@ -682,9 +682,9 @@ void Model::createVertexBuffer()
 	Buffer staging;
 	staging.createBuffer(sizeof(Vertex)*numberOfVertices, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	staging.data = vulkan->device.mapMemory(staging.memory, 0, staging.size);
+	staging.data = VulkanContext::get()->device.mapMemory(staging.memory, 0, staging.size);
 	memcpy(staging.data, vertices.data(), sizeof(Vertex)*numberOfVertices);
-	vulkan->device.unmapMemory(staging.memory);
+	VulkanContext::get()->device.unmapMemory(staging.memory);
 
 	vertexBuffer.copyBuffer(staging.buffer, staging.size);
 	staging.destroy();
@@ -708,9 +708,9 @@ void Model::createIndexBuffer()
 	Buffer staging;
 	staging.createBuffer(sizeof(uint32_t)*numberOfIndices, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	staging.data = vulkan->device.mapMemory(staging.memory, 0, staging.size);
+	staging.data = VulkanContext::get()->device.mapMemory(staging.memory, 0, staging.size);
 	memcpy(staging.data, indices.data(), sizeof(uint32_t)*numberOfIndices);
-	vulkan->device.unmapMemory(staging.memory);
+	VulkanContext::get()->device.unmapMemory(staging.memory);
 
 	indexBuffer.copyBuffer(staging.buffer, staging.size);
 	staging.destroy();
@@ -719,7 +719,7 @@ void Model::createIndexBuffer()
 void Model::createUniformBuffers()
 {
 	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
+	uniformBuffer.data = VulkanContext::get()->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 	memset(uniformBuffer.data, 0, uniformBuffer.size);
 	if (!isCopy) {
 		for (auto& node : linearNodes) {
@@ -745,12 +745,12 @@ void Model::createDescriptorSets()
 
 	// model dSet
 	vk::DescriptorSetAllocateInfo allocateInfo0;
-	allocateInfo0.descriptorPool = vulkan->descriptorPool;
+	allocateInfo0.descriptorPool = VulkanContext::get()->descriptorPool;
 	allocateInfo0.descriptorSetCount = 1;
 	allocateInfo0.pSetLayouts = getDescriptorSetLayout();
-	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo0).at(0);
+	descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo0).at(0);
 
-	vulkan->device.updateDescriptorSets(wSetBuffer(descriptorSet, 0, uniformBuffer), nullptr);
+	VulkanContext::get()->device.updateDescriptorSets(wSetBuffer(descriptorSet, 0, uniformBuffer), nullptr);
 
 	if (!isCopy) {
 		// mesh dSets
@@ -760,21 +760,21 @@ void Model::createDescriptorSets()
 			auto& mesh = node->mesh;
 
 			vk::DescriptorSetAllocateInfo allocateInfo;
-			allocateInfo.descriptorPool = vulkan->descriptorPool;
+			allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
 			allocateInfo.descriptorSetCount = 1;
 			allocateInfo.pSetLayouts = Mesh::getDescriptorSetLayout();
-			mesh->descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+			mesh->descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
 
-			vulkan->device.updateDescriptorSets(wSetBuffer(mesh->descriptorSet, 0, mesh->uniformBuffer), nullptr);
+			VulkanContext::get()->device.updateDescriptorSets(wSetBuffer(mesh->descriptorSet, 0, mesh->uniformBuffer), nullptr);
 
 			// primitive dSets
 			for (auto& primitive : mesh->primitives) {
 
 				vk::DescriptorSetAllocateInfo allocateInfo2;
-				allocateInfo2.descriptorPool = vulkan->descriptorPool;
+				allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;
 				allocateInfo2.descriptorSetCount = 1;
 				allocateInfo2.pSetLayouts = Primitive::getDescriptorSetLayout();
-				primitive.descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
+				primitive.descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo2).at(0);
 
 				std::vector<vk::WriteDescriptorSet> textureWriteSets{
 					wSetImage(primitive.descriptorSet, 0, primitive.pbrMaterial.baseColorTexture),
@@ -784,7 +784,7 @@ void Model::createDescriptorSets()
 					wSetImage(primitive.descriptorSet, 4, primitive.pbrMaterial.emissiveTexture),
 					wSetBuffer(primitive.descriptorSet, 5, primitive.uniformBuffer)
 				};
-				vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+				VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
 			}
 		}
 	}
@@ -801,7 +801,7 @@ void Model::destroy()
 		delete document;
 		delete resourceReader;
 		if (Model::descriptorSetLayout) {
-			vulkan->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
+			VulkanContext::get()->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
 			Model::descriptorSetLayout = nullptr;
 		}
 		for (auto& node : linearNodes) {

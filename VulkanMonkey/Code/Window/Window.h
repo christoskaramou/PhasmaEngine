@@ -1,6 +1,5 @@
 #pragma once
 #include "../Renderer/Renderer.h"
-#include "../Timer/Timer.h"
 
 namespace vm {
 	class Window

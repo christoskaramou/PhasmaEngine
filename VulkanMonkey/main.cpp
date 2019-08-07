@@ -1,5 +1,6 @@
 #include "Code/Window/Window.h"
 #include "Code/Event/Event.h"
+#include "Code/Timer/Timer.h"
 
 using namespace vm;
 

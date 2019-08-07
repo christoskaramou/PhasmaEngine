@@ -1,12 +1,12 @@
 #pragma once
-#include "../VulkanContext/VulkanContext.h"
 #include "../Object/Object.h"
 #include "../Pipeline/Pipeline.h"
-#include "../../include/tinygltf/stb_image.h"
-#include "../Math/Math.h"
-#include "../Camera/Camera.h"
 
 //#define RENDER_SKYBOX
+
+#ifdef RENDER_SKYBOX
+#include "../Camera/Camera.h"
+#endif
 
 namespace vm {
 	struct SkyBox : Object

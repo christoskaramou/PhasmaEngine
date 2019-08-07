@@ -1,12 +1,15 @@
 #include "TAA.h"
 #include "../Timer/Timer.h"
 #include <deque>
+#include "../GUI/GUI.h"
+#include "../Surface/Surface.h"
+#include "../Swapchain/Swapchain.h"
 
 using namespace vm;
 
 void TAA::Init()
 {
-	previous.format = vulkan->surface->formatKHR.format;
+	previous.format = VulkanContext::get()->surface->formatKHR.format;
 	previous.initialLayout = vk::ImageLayout::eUndefined;
 	previous.createImage(
 		static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -17,7 +20,7 @@ void TAA::Init()
 	previous.createImageView(vk::ImageAspectFlagBits::eColor);
 	previous.createSampler();
 
-	frameImage.format = vulkan->surface->formatKHR.format;
+	frameImage.format = VulkanContext::get()->surface->formatKHR.format;
 	frameImage.initialLayout = vk::ImageLayout::eUndefined;
 	frameImage.createImage(
 		static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -43,17 +46,17 @@ void TAA::update(const Camera& camera)
 void TAA::createUniforms(std::map<std::string, Image>& renderTargets)
 {
 	uniform.createBuffer(sizeof(UBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	uniform.data = vulkan->device.mapMemory(uniform.memory, 0, uniform.size);
+	uniform.data = VulkanContext::get()->device.mapMemory(uniform.memory, 0, uniform.size);
 	memset(uniform.data, 0, uniform.size);
 
 	vk::DescriptorSetAllocateInfo allocateInfo2;
-	allocateInfo2.descriptorPool = vulkan->descriptorPool;
+	allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;
 	allocateInfo2.descriptorSetCount = 1;
 	allocateInfo2.pSetLayouts = &DSLayout;
-	DSet = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
+	DSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo2).at(0);
 	
 	allocateInfo2.pSetLayouts = &DSLayoutSharpen;
-	DSetSharpen = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
+	DSetSharpen = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo2).at(0);
 
 	updateDescriptorSets(renderTargets);
 }
@@ -81,7 +84,7 @@ void TAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 		wSetBuffer(DSetSharpen, 1, uniform)
 	};
 
-	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
+	VulkanContext::get()->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
 void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets)
@@ -161,7 +164,7 @@ void TAA::createRenderPass(std::map<std::string, Image>& renderTargets)
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
 
-	renderPass = vulkan->device.createRenderPass(renderPassInfo);
+	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void vm::TAA::createRenderPassSharpen(std::map<std::string, Image>& renderTargets)
@@ -193,12 +196,12 @@ void vm::TAA::createRenderPassSharpen(std::map<std::string, Image>& renderTarget
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
 
-	renderPassSharpen = vulkan->device.createRenderPass(renderPassInfo);
+	renderPassSharpen = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	frameBuffers.resize(vulkan->swapchain->images.size());
+	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
 
 	for (auto& frameBuffer : frameBuffers) {
 		std::vector<vk::ImageView> attachments = {
@@ -211,10 +214,10 @@ void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.width = renderTargets["taa"].width;
 		fbci.height = renderTargets["taa"].height;
 		fbci.layers = 1;
-		frameBuffer = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
 	}
 
-	frameBuffersSharpen.resize(vulkan->swapchain->images.size());
+	frameBuffersSharpen.resize(VulkanContext::get()->swapchain->images.size());
 
 	for (auto& frameBuffer : frameBuffersSharpen) {
 		std::vector<vk::ImageView> attachments = {
@@ -227,7 +230,7 @@ void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.width = renderTargets["viewport"].width;
 		fbci.height = renderTargets["viewport"].height;
 		fbci.layers = 1;
-		frameBuffer = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
 	}
 }
 
@@ -244,13 +247,13 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/TAA/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -286,7 +289,7 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = vulkan->surface->actualExtent;
+	r2d.extent = VulkanContext::get()->surface->actualExtent;
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -364,7 +367,7 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		DSLayout = vulkan->device.createDescriptorSetLayout(descriptorLayout);
+		DSLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout };
@@ -372,7 +375,7 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipeline.pipeinfo.renderPass = renderPass;
@@ -386,11 +389,11 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	// Base Pipeline Index
 	pipeline.pipeinfo.basePipelineIndex = -1;
 
-	pipeline.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
@@ -400,13 +403,13 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/TAA/fragSharpen.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -442,7 +445,7 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = vulkan->surface->actualExtent;
+	r2d.extent = VulkanContext::get()->surface->actualExtent;
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -517,7 +520,7 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		DSLayoutSharpen = vulkan->device.createDescriptorSetLayout(descriptorLayout);
+		DSLayoutSharpen = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutSharpen };
@@ -525,7 +528,7 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	pipelineSharpen.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipelineSharpen.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipelineSharpen.pipeinfo.renderPass = renderPassSharpen;
@@ -539,11 +542,11 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	// Base Pipeline Index
 	pipelineSharpen.pipeinfo.basePipelineIndex = -1;
 
-	pipelineSharpen.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipelineSharpen.pipeinfo).at(0);
+	pipelineSharpen.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipelineSharpen.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void TAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
@@ -671,28 +674,28 @@ void TAA::destroy()
 	frameImage.destroy();
 	for (auto& frameBuffer : frameBuffers) {
 		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
+			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
 		}
 	}
 	for (auto& frameBuffer : frameBuffersSharpen) {
 		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
+			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
 		}
 	}
 	if (renderPass) {
-		vulkan->device.destroyRenderPass(renderPass);
+		VulkanContext::get()->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
 	}
 	if (renderPassSharpen) {
-		vulkan->device.destroyRenderPass(renderPassSharpen);
+		VulkanContext::get()->device.destroyRenderPass(renderPassSharpen);
 		renderPassSharpen = nullptr;
 	}
 	if (DSLayout) {
-		vulkan->device.destroyDescriptorSetLayout(DSLayout);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayout);
 		DSLayout = nullptr;
 	}
 	if (DSLayoutSharpen) {
-		vulkan->device.destroyDescriptorSetLayout(DSLayoutSharpen);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayoutSharpen);
 		DSLayoutSharpen = nullptr;
 	}
 	pipeline.destroy();

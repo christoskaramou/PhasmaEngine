@@ -2,9 +2,8 @@
 
 #include "../Buffer/Buffer.h"
 #include "../Pipeline/Pipeline.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <functional>
 #include <deque>
+#include <memory>
 
 namespace vm {
 	struct Compute
@@ -15,7 +14,6 @@ namespace vm {
 		void waitFence();
 	private:
 		friend struct ComputePool;
-		VulkanContext* vulkan = &VulkanContext::get();
 
 		bool ready = true;
 
@@ -43,7 +41,8 @@ namespace vm {
 		void waitFences();
 		void destroy();
 
-		static ComputePool& get() noexcept { static ComputePool cp; return cp; }
+		static auto get() noexcept { static auto cp = new ComputePool(); return cp; }
+		static auto remove() noexcept { using type = decltype(get()); if (std::is_pointer<type>::value) delete get(); }
 
 		ComputePool(ComputePool const&) = delete;				// copy constructor
 		ComputePool(ComputePool&&) noexcept = delete;			// move constructor

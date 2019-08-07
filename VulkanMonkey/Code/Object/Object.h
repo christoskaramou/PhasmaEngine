@@ -1,15 +1,11 @@
 #pragma once
-#include "../VulkanContext/VulkanContext.h"
 #include "../Image/Image.h"
 #include "../Buffer/Buffer.h"
 #include "../Math/Math.h"
-#include "../../include/tinygltf/stb_image.h"
 
 namespace vm {
 	struct Object
 	{
-		VulkanContext* vulkan = &VulkanContext::get();
-
 		virtual ~Object() = default;
 		bool render = true, cull = false;
 		vk::DescriptorSet descriptorSet;

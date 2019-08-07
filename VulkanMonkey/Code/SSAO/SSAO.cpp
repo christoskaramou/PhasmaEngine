@@ -1,5 +1,8 @@
 #include "SSAO.h"
 #include <deque>
+#include "../Swapchain/Swapchain.h"
+#include "../Surface/Surface.h"
+#include "../GUI/GUI.h"
 
 using namespace vm;
 
@@ -16,7 +19,7 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 		kernel.emplace_back(sample * scale, 0.f);
 	}
 	UB_Kernel.createBuffer(sizeof(vec4) * 16, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	UB_Kernel.data = vulkan->device.mapMemory(UB_Kernel.memory, 0, UB_Kernel.size);
+	UB_Kernel.data = VulkanContext::get()->device.mapMemory(UB_Kernel.memory, 0, UB_Kernel.size);
 	memcpy(UB_Kernel.data, kernel.data(), UB_Kernel.size);
 	// noise image
 	std::vector<vec4> noise{};
@@ -26,9 +29,9 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	Buffer staging;
 	const uint64_t bufSize = sizeof(vec4) * 16;
 	staging.createBuffer(bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	void* data = vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), staging.size);
+	void* data = VulkanContext::get()->device.mapMemory(staging.memory, vk::DeviceSize(), staging.size);
 	memcpy(data, noise.data(), staging.size);
-	vulkan->device.unmapMemory(staging.memory);
+	VulkanContext::get()->device.unmapMemory(staging.memory);
 
 	noiseTex.filter = vk::Filter::eNearest;
 	noiseTex.minLod = 0.0f;
@@ -44,24 +47,24 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	staging.destroy();
 	// pvm uniform
 	UB_PVM.createBuffer(3 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	UB_PVM.data = vulkan->device.mapMemory(UB_PVM.memory, 0, UB_PVM.size);
+	UB_PVM.data = VulkanContext::get()->device.mapMemory(UB_PVM.memory, 0, UB_PVM.size);
 	memset(UB_PVM.data, 0, UB_PVM.size);
 
 	// DESCRIPTOR SET FOR SSAO
 	const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
-		vulkan->descriptorPool,					//DescriptorPool descriptorPool;
+		VulkanContext::get()->descriptorPool,					//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
 		&DSLayout								//const DescriptorSetLayout* pSetLayouts;
 	};
-	DSet = vulkan->device.allocateDescriptorSets(allocInfo).at(0);
+	DSet = VulkanContext::get()->device.allocateDescriptorSets(allocInfo).at(0);
 
 	// DESCRIPTOR SET FOR SSAO BLUR
 	const vk::DescriptorSetAllocateInfo allocInfoBlur = vk::DescriptorSetAllocateInfo{
-		vulkan->descriptorPool,					//DescriptorPool descriptorPool;
+		VulkanContext::get()->descriptorPool,					//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
 		&DSLayoutBlur							//const DescriptorSetLayout* pSetLayouts;
 	};
-	DSBlur = vulkan->device.allocateDescriptorSets(allocInfoBlur).at(0);
+	DSBlur = VulkanContext::get()->device.allocateDescriptorSets(allocInfoBlur).at(0);
 
 	updateDescriptorSets(renderTargets);
 }
@@ -87,7 +90,7 @@ void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 		wSetBuffer(DSet, 4, UB_PVM),
 		wSetImage(DSBlur, 0, renderTargets["ssao"])
 	};
-	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
+	VulkanContext::get()->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
 void SSAO::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, Image& image)
@@ -134,31 +137,31 @@ void SSAO::destroy()
 	UB_PVM.destroy();
 	noiseTex.destroy();
 	if (renderPass) {
-		vulkan->device.destroyRenderPass(renderPass);
+		VulkanContext::get()->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
 	}
 	if (blurRenderPass) {
-		vulkan->device.destroyRenderPass(blurRenderPass);
+		VulkanContext::get()->device.destroyRenderPass(blurRenderPass);
 		blurRenderPass = nullptr;
 	}
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
+			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
 		}
 	}
 	for (auto &frameBuffer : blurFrameBuffers) {
 		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
+			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
 		}
 	}
 	pipeline.destroy();
 	pipelineBlur.destroy();
 	if (DSLayout) {
-		vulkan->device.destroyDescriptorSetLayout(DSLayout);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayout);
 		DSLayout = nullptr;
 	}
 	if (DSLayoutBlur) {
-		vulkan->device.destroyDescriptorSetLayout(DSLayoutBlur);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayoutBlur);
 		DSLayoutBlur = nullptr;
 	}
 }
@@ -204,7 +207,7 @@ void vm::SSAO::createSSAORenderPass(std::map<std::string, Image>& renderTargets)
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
 
-	renderPass = vulkan->device.createRenderPass(renderPassInfo);
+	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void vm::SSAO::createSSAOBlurRenderPass(std::map<std::string, Image>& renderTargets)
@@ -254,7 +257,7 @@ void vm::SSAO::createSSAOBlurRenderPass(std::map<std::string, Image>& renderTarg
 	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	//renderPassInfo.pDependencies = dependencies.data();
 
-	blurRenderPass = vulkan->device.createRenderPass(renderPassInfo);
+	blurRenderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void vm::SSAO::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -265,7 +268,7 @@ void vm::SSAO::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 
 void vm::SSAO::createSSAOFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	frameBuffers.resize(vulkan->swapchain->images.size());
+	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
 
 	for (auto& frameBuffer : frameBuffers) {
 		std::vector<vk::ImageView> attachments = {
@@ -278,13 +281,13 @@ void vm::SSAO::createSSAOFrameBuffers(std::map<std::string, Image>& renderTarget
 		fbci.width = renderTargets["ssao"].width;
 		fbci.height = renderTargets["ssao"].height;
 		fbci.layers = 1;
-		frameBuffer = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
 	}
 }
 
 void vm::SSAO::createSSAOBlurFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	blurFrameBuffers.resize(vulkan->swapchain->images.size());
+	blurFrameBuffers.resize(VulkanContext::get()->swapchain->images.size());
 
 	for (auto& frameBuffer : blurFrameBuffers) {
 		std::vector<vk::ImageView> attachments = {
@@ -297,7 +300,7 @@ void vm::SSAO::createSSAOBlurFrameBuffers(std::map<std::string, Image>& renderTa
 		fbci.width = renderTargets["ssaoBlur"].width;
 		fbci.height = renderTargets["ssaoBlur"].height;
 		fbci.layers = 1;
-		frameBuffer = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
 	}
 }
 
@@ -314,13 +317,13 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/SSAO/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -356,7 +359,7 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = vulkan->surface->actualExtent;
+	r2d.extent = VulkanContext::get()->surface->actualExtent;
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -434,7 +437,7 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		DSLayout = vulkan->device.createDescriptorSetLayout(descriptorLayout);
+		DSLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout };
@@ -449,7 +452,7 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 0;
 	plci.pPushConstantRanges = nullptr;
-	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipeline.pipeinfo.renderPass = renderPass;
@@ -463,11 +466,11 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	// Base Pipeline Index
 	pipeline.pipeinfo.basePipelineIndex = -1;
 
-	pipeline.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
@@ -477,13 +480,13 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/SSAO/fragBlur.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -519,7 +522,7 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = vulkan->surface->actualExtent;
+	r2d.extent = VulkanContext::get()->surface->actualExtent;
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -593,7 +596,7 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		DSLayoutBlur = vulkan->device.createDescriptorSetLayout(descriptorLayout);
+		DSLayoutBlur = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutBlur };
@@ -602,7 +605,7 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 
-	pipelineBlur.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipelineBlur.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipelineBlur.pipeinfo.renderPass = blurRenderPass;
@@ -616,9 +619,9 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	// Base Pipeline Index
 	pipelineBlur.pipeinfo.basePipelineIndex = -1;
 
-	pipelineBlur.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipelineBlur.pipeinfo).at(0);
+	pipelineBlur.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipelineBlur.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }

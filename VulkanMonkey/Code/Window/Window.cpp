@@ -1,5 +1,8 @@
 #include "Window.h"
 #include "../Event/Event.h"
+#include "../Timer/Timer.h"
+#include "../Console/Console.h"
+#include <iostream>
 
 using namespace vm;
 
@@ -16,13 +19,15 @@ void Window::create(const std::string& title, Uint32 flags) // flags = SDL_WINDO
 	SDL_Window* window;
 	if (!((window = SDL_CreateWindow(title.c_str(), 50, 50, 800, 600, flags)))) { std::cout << SDL_GetError(); return; }
 
-	Window::renderer.push_back(std::make_unique<Renderer>(window));
+	renderer.push_back(std::make_unique<Renderer>(window));
+
+	auto vulkan = VulkanContext::get();
 
 	const std::string _title = 
 		"VulkanMonkey3D   "
-		+ std::string(Window::renderer.back()->ctx.vulkan.gpuProperties.deviceName)
+		+ std::string(vulkan->gpuProperties.deviceName)
 		+ " (Present Mode: "
-		+ vk::to_string(Window::renderer.back()->ctx.vulkan.surface->presentModeKHR)
+		+ vk::to_string(vulkan->surface->presentModeKHR)
 		+ ")";
 
 	SDL_SetWindowTitle(window, _title.c_str());
@@ -31,7 +36,8 @@ void Window::create(const std::string& title, Uint32 flags) // flags = SDL_WINDO
 void Window::destroyAll()
 {
 	while (!renderer.empty()) {
-		SDL_DestroyWindow(renderer.back()->ctx.vulkan.window);
+		auto vulkan = VulkanContext::get();
+		SDL_DestroyWindow(vulkan->window);
 		renderer.pop_back();
 	}
 	SDL_Quit();
@@ -44,6 +50,7 @@ bool Window::processEvents(float delta)
 	static int yMove = 0;
 
 	auto& info = renderer[0]->ctx;
+	auto vulkan = VulkanContext::get();
 	bool combineDirections = false;
 
 	ImGuiIO& io = ImGui::GetIO();
@@ -87,7 +94,7 @@ bool Window::processEvents(float delta)
 		if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
 			if (isInsideRenderWindow(event.motion.x, event.motion.y)) {
 				SDL_ShowCursor(SDL_DISABLE);
-				SDL_WarpMouseInWindow(info.vulkan.window, static_cast<int>(GUI::winSize.x * .5f + GUI::winPos.x), static_cast<int>(GUI::winSize.y * .5f + GUI::winPos.y));
+				SDL_WarpMouseInWindow(vulkan->window, static_cast<int>(GUI::winSize.x * .5f + GUI::winPos.x), static_cast<int>(GUI::winSize.y * .5f + GUI::winPos.y));
 				if (event.type == SDL_MOUSEMOTION) {
 					xMove = event.motion.x - static_cast<int>(GUI::winSize.x * .5f + GUI::winPos.x);
 					yMove = event.motion.y - static_cast<int>(GUI::winSize.y * .5f + GUI::winPos.y);
@@ -101,7 +108,7 @@ bool Window::processEvents(float delta)
 		if (event.type == SDL_WINDOWEVENT || event.type == GUI::scaleRenderTargetsEventType) {
 			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || event.type == GUI::scaleRenderTargetsEventType) {
 				int w, h;
-				SDL_GL_GetDrawableSize(info.vulkan.window, &w, &h);
+				SDL_GL_GetDrawableSize(vulkan->window, &w, &h);
 				renderer[0]->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 			}
 		}

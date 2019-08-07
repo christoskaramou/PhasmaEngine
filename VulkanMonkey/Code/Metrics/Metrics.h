@@ -5,8 +5,6 @@
 
 namespace vm {
 	struct Metrics {
-		VulkanContext* vulkan = &VulkanContext::get();
-		
 		Metrics();
 		~Metrics();
 		void start(const vk::CommandBuffer& cmd);

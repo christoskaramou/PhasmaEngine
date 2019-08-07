@@ -1,6 +1,5 @@
 #include "Compute.h"
 #include <deque>
-#include <fstream>
 
 using namespace vm;
 
@@ -21,7 +20,7 @@ vk::DescriptorSetLayout* Compute::getDescriptorLayout()
 		vk::DescriptorSetLayoutCreateInfo dlci;
 		dlci.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		dlci.pBindings = setLayoutBindings.data();
-		DSLayoutCompute = VulkanContext::get().device.createDescriptorSetLayout(dlci);
+		DSLayoutCompute = VulkanContext::get()->device.createDescriptorSetLayout(dlci);
 	}
 	return &DSLayoutCompute;
 }
@@ -55,12 +54,12 @@ void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_
 	vk::SubmitInfo siCompute;
 	siCompute.commandBufferCount = 1;
 	siCompute.pCommandBuffers = &cmd;
-	vulkan->computeQueue.submit(siCompute, fence);
+	VulkanContext::get()->computeQueue.submit(siCompute, fence);
 }
 
 void vm::Compute::waitFence()
 {
-	vulkan->waitFences(fence);
+	VulkanContext::get()->waitFences(fence);
 
 	ready = true;
 }
@@ -68,21 +67,21 @@ void vm::Compute::waitFence()
 void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
 {
 	SBIn.createBuffer(sizeIn, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	SBIn.data = vulkan->device.mapMemory(SBIn.memory, 0, SBIn.size);
+	SBIn.data = VulkanContext::get()->device.mapMemory(SBIn.memory, 0, SBIn.size);
 	memset(SBIn.data, 0, SBIn.size);
 
 	SBOut.createBuffer(sizeOut, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	SBOut.data = vulkan->device.mapMemory(SBOut.memory, 0, SBOut.size);
+	SBOut.data = VulkanContext::get()->device.mapMemory(SBOut.memory, 0, SBOut.size);
 	memset(SBOut.data, 0, SBOut.size);
 }
 
 void Compute::createDescriptorSet()
 {
 	vk::DescriptorSetAllocateInfo allocInfo;
-	allocInfo.descriptorPool = vulkan->descriptorPool;
+	allocInfo.descriptorPool = VulkanContext::get()->descriptorPool;
 	allocInfo.descriptorSetCount = 1;
 	allocInfo.pSetLayouts = getDescriptorLayout();
-	DSCompute = vulkan->device.allocateDescriptorSets(allocInfo).at(0);
+	DSCompute = VulkanContext::get()->device.allocateDescriptorSets(allocInfo).at(0);
 }
 
 void vm::Compute::updateDescriptorSet()
@@ -96,7 +95,7 @@ void vm::Compute::updateDescriptorSet()
 		wSetBuffer(DSCompute, 0, SBIn, vk::DescriptorType::eStorageBuffer),
 		wSetBuffer(DSCompute, 1, SBOut, vk::DescriptorType::eStorageBuffer),
 	};
-	vulkan->device.updateDescriptorSets(writeCompDescriptorSets, nullptr);
+	VulkanContext::get()->device.updateDescriptorSets(writeCompDescriptorSets, nullptr);
 }
 
 void Compute::createPipeline()
@@ -110,13 +109,13 @@ void Compute::createPipeline()
 	plci.setLayoutCount = 1;
 	plci.pSetLayouts = getDescriptorLayout();
 
-	auto sm = vulkan->device.createShaderModuleUnique(csmci);
+	auto sm = VulkanContext::get()->device.createShaderModuleUnique(csmci);
 
 	pipeline.compinfo.stage.module = sm.get();
 	pipeline.compinfo.stage.pName = "main";
 	pipeline.compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
-	pipeline.compinfo.layout = vulkan->device.createPipelineLayout(plci);
-	pipeline.pipeline = vulkan->device.createComputePipelines(nullptr, pipeline.compinfo).at(0);
+	pipeline.compinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
+	pipeline.pipeline = VulkanContext::get()->device.createComputePipelines(nullptr, pipeline.compinfo).at(0);
 }
 
 void Compute::destroy()
@@ -125,11 +124,11 @@ void Compute::destroy()
 	SBOut.destroy();
 	pipeline.destroy();
 	if (fence) {
-		vulkan->device.destroyFence(fence);
+		VulkanContext::get()->device.destroyFence(fence);
 		fence = nullptr;
 	}
 	if (Compute::DSLayoutCompute) {
-		vulkan->device.destroyDescriptorSetLayout(Compute::DSLayoutCompute);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(Compute::DSLayoutCompute);
 		Compute::DSLayoutCompute = nullptr;
 	}
 }
@@ -137,15 +136,15 @@ void Compute::destroy()
 void ComputePool::Init(uint32_t cmdBuffersCount)
 {
 	vk::CommandPoolCreateInfo cpci;
-	cpci.queueFamilyIndex = VulkanContext::get().computeFamilyId;
+	cpci.queueFamilyIndex = VulkanContext::get()->computeFamilyId;
 	cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-	commandPool = VulkanContext::get().device.createCommandPool(cpci);
+	commandPool = VulkanContext::get()->device.createCommandPool(cpci);
 
 	vk::CommandBufferAllocateInfo cbai;
 	cbai.commandPool = commandPool;
 	cbai.level = vk::CommandBufferLevel::ePrimary;
 	cbai.commandBufferCount = cmdBuffersCount;
-	auto const cmds = VulkanContext::get().device.allocateCommandBuffers(cbai);
+	auto const cmds = VulkanContext::get()->device.allocateCommandBuffers(cbai);
 
 	for (auto& cmd : cmds) {
 		compute.emplace_back();
@@ -154,7 +153,7 @@ void ComputePool::Init(uint32_t cmdBuffersCount)
 		compute.back().createDescriptorSet();
 		compute.back().createComputeStorageBuffers(8000, 8000);
 		compute.back().updateDescriptorSet();
-		compute.back().fence = VulkanContext::get().device.createFence(vk::FenceCreateInfo());
+		compute.back().fence = VulkanContext::get()->device.createFence(vk::FenceCreateInfo());
 	}
 }
 
@@ -174,7 +173,7 @@ Compute& ComputePool::getNext()
 	cbai.commandBufferCount = 1;
 
 	compute.emplace_back();
-	compute.back().commandBuffer = VulkanContext::get().device.allocateCommandBuffers(cbai).at(0);
+	compute.back().commandBuffer = VulkanContext::get()->device.allocateCommandBuffers(cbai).at(0);
 	compute.back().createPipeline();
 	compute.back().createDescriptorSet();
 	compute.back().createComputeStorageBuffers(8000, 8000);
@@ -192,7 +191,7 @@ void ComputePool::waitFences()
 			fences.push_back(comp.fence);
 	}
 
-	VulkanContext::get().waitFences(fences);
+	VulkanContext::get()->waitFences(fences);
 
 	for (auto& comp : compute) {
 		comp.ready = true;
@@ -204,7 +203,7 @@ void ComputePool::destroy()
 	for (auto& comp : compute)
 		comp.destroy();
 	if (commandPool) {
-		VulkanContext::get().device.destroyCommandPool(commandPool);
+		VulkanContext::get()->device.destroyCommandPool(commandPool);
 		commandPool = nullptr;
 	}
 }

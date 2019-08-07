@@ -1,19 +1,22 @@
 #include "SSR.h"
 #include <deque>
+#include "../GUI/GUI.h"
+#include "../Swapchain/Swapchain.h"
+#include "../Surface/Surface.h"
 
 using namespace vm;
 
 void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 {
 	UBReflection.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	UBReflection.data = vulkan->device.mapMemory(UBReflection.memory, 0, UBReflection.size);
+	UBReflection.data = VulkanContext::get()->device.mapMemory(UBReflection.memory, 0, UBReflection.size);
 	memset(UBReflection.data, 0, UBReflection.size);
 
 	vk::DescriptorSetAllocateInfo allocateInfo2;
-	allocateInfo2.descriptorPool = vulkan->descriptorPool;
+	allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;
 	allocateInfo2.descriptorSetCount = 1;
 	allocateInfo2.pSetLayouts = &DSLayoutReflection;
-	DSReflection = vulkan->device.allocateDescriptorSets(allocateInfo2).at(0);
+	DSReflection = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo2).at(0);
 
 	updateDescriptorSets(renderTargets);
 }
@@ -38,7 +41,7 @@ void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 		wSetImage(DSReflection, 3, renderTargets["srm"]),
 		wSetBuffer(DSReflection, 4, UBReflection)
 	};
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+	VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 void SSR::update(Camera& camera) const
@@ -106,12 +109,12 @@ void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
 
-	renderPass = vulkan->device.createRenderPass(renderPassInfo);
+	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	frameBuffers.resize(vulkan->swapchain->images.size());
+	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
 
 	for (auto& frameBuffer : frameBuffers) {
 		std::vector<vk::ImageView> attachments = {
@@ -124,7 +127,7 @@ void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.width = renderTargets["ssr"].width;
 		fbci.height = renderTargets["ssr"].height;
 		fbci.layers = 1;
-		frameBuffer = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
 	}
 }
 
@@ -135,13 +138,13 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/SSR/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -177,7 +180,7 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = vulkan->surface->actualExtent;
+	r2d.extent = VulkanContext::get()->surface->actualExtent;
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -255,7 +258,7 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		DSLayoutReflection = vulkan->device.createDescriptorSetLayout(descriptorLayout);
+		DSLayoutReflection = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutReflection };
@@ -270,7 +273,7 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 0;
 	plci.pPushConstantRanges = nullptr;
-	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipeline.pipeinfo.renderPass = renderPass;
@@ -284,26 +287,26 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	// Base Pipeline Index
 	pipeline.pipeinfo.basePipelineIndex = -1;
 
-	pipeline.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void SSR::destroy()
 {
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
+			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
 		}
 	}
 	if (renderPass) {
-		vulkan->device.destroyRenderPass(renderPass);
+		VulkanContext::get()->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
 	}
 	if (DSLayoutReflection) {
-		vulkan->device.destroyDescriptorSetLayout(DSLayoutReflection);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayoutReflection);
 		DSLayoutReflection = nullptr;
 	}
 	UBReflection.destroy();

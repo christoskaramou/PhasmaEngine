@@ -1,4 +1,9 @@
 #include "Deferred.h"
+#include "../Model/Model.h"
+#include "../Mesh/Mesh.h"
+#include "../Swapchain/Swapchain.h"
+#include "../Surface/Surface.h"
+#include "tinygltf/stb_image.h"
 #include <deque>
 
 using namespace vm;
@@ -37,6 +42,7 @@ void Deferred::batchEnd()
 
 void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 {
+	auto vulkan = VulkanContext::get();
 	const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
 		vulkan->descriptorPool,					//DescriptorPool descriptorPool;
 		1,										//uint32_t descriptorSetCount;
@@ -63,7 +69,7 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-		auto * vulkan = &VulkanContext::get();
+		auto vulkan = VulkanContext::get();
 		vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &staging.data);
 		memcpy(staging.data, pixels, static_cast<size_t>(imageSize));
 		vulkan->device.unmapMemory(staging.memory);
@@ -116,7 +122,7 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 		wSetImage(DSComposition, 8, ibl_brdf_lut)
 	};
 
-	vulkan->device.updateDescriptorSets(writeDescriptorSets, nullptr);
+	VulkanContext::get()->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
 void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj, const vk::Extent2D& extent)
@@ -217,7 +223,7 @@ void vm::Deferred::createGBufferRenderPasses(std::map<std::string, Image>& rende
 	attachments[5].initialLayout = vk::ImageLayout::eUndefined;
 	attachments[5].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
 	// Depth
-	attachments[6].format = vulkan->depth->format;
+	attachments[6].format = VulkanContext::get()->depth->format;
 	attachments[6].samples = vk::SampleCountFlagBits::e1;
 	attachments[6].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[6].storeOp = vk::AttachmentStoreOp::eDontCare;
@@ -249,7 +255,7 @@ void vm::Deferred::createGBufferRenderPasses(std::map<std::string, Image>& rende
 	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 	renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-	renderPass = vulkan->device.createRenderPass(renderPassInfo);
+	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void vm::Deferred::createCompositionRenderPass(std::map<std::string, Image>& renderTargets)
@@ -281,7 +287,7 @@ void vm::Deferred::createCompositionRenderPass(std::map<std::string, Image>& ren
 	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 	renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-	compositionRenderPass = vulkan->device.createRenderPass(renderPassInfo);
+	compositionRenderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -292,7 +298,7 @@ void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 
 void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	frameBuffers.resize(vulkan->swapchain->images.size());
+	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
 	for (auto& frameBuffer : frameBuffers) {
 		std::vector<vk::ImageView> attachments = {
 			renderTargets["depth"].view,
@@ -301,7 +307,7 @@ void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTar
 			renderTargets["srm"].view,
 			renderTargets["velocity"].view,
 			renderTargets["emissive"].view,
-			vulkan->depth->view
+			VulkanContext::get()->depth->view
 		};
 		vk::FramebufferCreateInfo fbci;
 		fbci.renderPass = renderPass;
@@ -310,13 +316,13 @@ void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTar
 		fbci.width = renderTargets["albedo"].width;
 		fbci.height = renderTargets["albedo"].height;
 		fbci.layers = 1;
-		frameBuffer = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
 	}
 }
 
 void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	compositionFrameBuffers.resize(vulkan->swapchain->images.size());
+	compositionFrameBuffers.resize(VulkanContext::get()->swapchain->images.size());
 
 	for (auto& compositionFrameBuffer : compositionFrameBuffers) {
 		std::vector<vk::ImageView> attachments = {
@@ -329,7 +335,7 @@ void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& rende
 		fbci.width = renderTargets["viewport"].width;
 		fbci.height = renderTargets["viewport"].height;
 		fbci.layers = 1;
-		compositionFrameBuffer = vulkan->device.createFramebuffer(fbci);
+		compositionFrameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
 	}
 }
 
@@ -346,13 +352,13 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/Deferred/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -441,7 +447,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_TRUE;
+	VulkanContext::get()->swapchain->images[0].blentAttachment.blendEnable = VK_TRUE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { 
 			renderTargets["depth"].blentAttachment,
 			renderTargets["normal"].blentAttachment,
@@ -471,7 +477,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipeline.pipeinfo.renderPass = renderPass;
@@ -485,11 +491,11 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	// Base Pipeline Index
 	pipeline.pipeinfo.basePipelineIndex = -1;
 
-	pipeline.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTargets)
@@ -499,13 +505,13 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/Deferred/cfrag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -551,7 +557,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = vulkan->surface->actualExtent;
+	r2d.extent = VulkanContext::get()->surface->actualExtent;
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -633,7 +639,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		DSLayoutComposition = vulkan->device.createDescriptorSetLayout(descriptorLayout);
+		DSLayoutComposition = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = {
@@ -653,7 +659,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;
-	pipelineComposition.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipelineComposition.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipelineComposition.pipeinfo.renderPass = compositionRenderPass;
@@ -667,15 +673,16 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	// Base Pipeline Index
 	pipelineComposition.pipeinfo.basePipelineIndex = -1;
 
-	pipelineComposition.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipelineComposition.pipeinfo).at(0);
+	pipelineComposition.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipelineComposition.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void Deferred::destroy()
 {
+	auto vulkan = VulkanContext::get();
 	if (renderPass) {
 		vulkan->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;

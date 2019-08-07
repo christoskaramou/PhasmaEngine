@@ -1,7 +1,6 @@
 #pragma once
 #include <chrono>
 #include <vector>
-#include "../../include/SDL.h"
 
 namespace vm {
 	class Timer

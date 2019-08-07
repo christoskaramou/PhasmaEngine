@@ -6,8 +6,6 @@
 namespace vm {
 	struct Pipeline
 	{
-		VulkanContext* vulkan = &VulkanContext::get();
-
 		vk::Pipeline pipeline;
 		vk::GraphicsPipelineCreateInfo pipeinfo;
 		vk::ComputePipelineCreateInfo compinfo;

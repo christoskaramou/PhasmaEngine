@@ -3,7 +3,6 @@
 #include "../../include/imgui/imgui.h"
 #include <cctype>
 #include <cstdlib>
-#include <cstdio>
 #include <cstring>                     // for strlen
 #include "vcruntime_string.h"           // for memcpy
 

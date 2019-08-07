@@ -1,10 +1,10 @@
 #pragma once
 #include "../Math/Math.h"
-#include "../Mesh/Mesh.h"
-#include "../Camera/Camera.h"
 #include "../Pointer/Pointer.h"
+#include "../Camera/Camera.h"
 
 namespace vm {
+	struct Mesh;
 	struct Node;
 
 	struct Skin {

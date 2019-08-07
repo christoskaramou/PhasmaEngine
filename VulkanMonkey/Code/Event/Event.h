@@ -3,13 +3,14 @@
 #include <vector>
 #include <functional>
 #include <any>
+#include <memory>
 
 namespace vm {
 
-#define CREATE_EVENT EventSystem::get().createEvent
-#define SUBSCRIBE_TO_EVENT EventSystem::get().subscribe
-#define FIRE_EVENT EventSystem::get().fire
-#define UNSUBSCRIBE_FROM_EVENT EventSystem::get().unsubscribe
+#define CREATE_EVENT EventSystem::get()->createEvent
+#define SUBSCRIBE_TO_EVENT EventSystem::get()->subscribe
+#define FIRE_EVENT EventSystem::get()->fire
+#define UNSUBSCRIBE_FROM_EVENT EventSystem::get()->unsubscribe
 	struct Event
 	{
 		uint32_t ID;
@@ -23,8 +24,8 @@ namespace vm {
 		static Event OnRender;
 	};
 
-	typedef uint32_t FuncID;
-	typedef std::function<void(std::any)> Func_t;
+	using FuncID = uint32_t;
+	using Func_t = std::function<void(const std::any&)>;
 	struct Func {
 		Func_t func;
 		FuncID ID;
@@ -33,12 +34,13 @@ namespace vm {
 
 	struct EventSystem
 	{
-		static EventSystem& get();
-
 		Event createEvent();
-		FuncID subscribe(Event event, Func_t&& func, uint32_t priority = -1); // priority set to max unsinged int as default
+		FuncID subscribe(Event event, Func_t&& func, uint32_t priority = -1); // priority set to max unsigned int as default
 		void unsubscribe(Event event, FuncID funcID);
 		void fire(Event eventID, const std::any& data = nullptr);
+
+		static auto get() { static auto instance = new EventSystem(); return instance; }
+		static auto remove() { using type = decltype(get()); if (std::is_pointer<type>::value) delete get(); }
 
 		EventSystem(EventSystem const&) = delete;				// copy constructor
 		EventSystem(EventSystem&&) noexcept = delete;			// move constructor

@@ -1,16 +1,9 @@
 #pragma once
-#include "../VulkanContext/VulkanContext.h"
 #include "../../include/imgui/imgui.h"
-#include "../Console/Console.h"
 #include "../Object/Object.h"
-#include "../Surface/Surface.h"
 #include "../Pipeline/Pipeline.h"
 #include "../../include/SDL.h"
-#include "../Vertex/Vertex.h"
-#include "../Swapchain/Swapchain.h"
 #include <vector>
-#include <map>
-#include <functional>
 
 namespace vm {
 	constexpr float LOWER_PANEL_HEIGHT = 150.f;
@@ -102,7 +95,7 @@ namespace vm {
 		void setWindows();
 		void LeftPanel() const;
 		void RightPanel() const;
-		void BottomPanel();
+		void BottomPanel() const;
 		void Menu() const;
 		void Metrics() const;
 		static void ConsoleWindow();

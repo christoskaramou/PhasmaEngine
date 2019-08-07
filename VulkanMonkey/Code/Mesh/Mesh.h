@@ -1,11 +1,7 @@
 #pragma once
-#include "../VulkanContext/VulkanContext.h"
-#include "../Math/Math.h"
 #include "../Vertex/Vertex.h"
-#include "../Image/Image.h"
 #include "../Material/Material.h"
 #include "../Buffer/Buffer.h"
-#include "../../include/tinygltf/stb_image.h"
 #include "../../include/GLTFSDK/GLTF.h"
 #include "../../include/GLTFSDK/Document.h"
 #include "../../include/GLTFSDK/GLTFResourceReader.h"
@@ -28,8 +24,6 @@ namespace vm {
 
 	struct Primitive {
 		Primitive(): pbrMaterial({}) {}
-
-		VulkanContext* vulkan = &VulkanContext::get();
 
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout* getDescriptorSetLayout();
@@ -59,8 +53,6 @@ namespace vm {
 
 	struct Mesh
 	{
-		VulkanContext* vulkan = &VulkanContext::get();
-
 		bool render = true, cull = false;
 
 		struct UBOMesh {

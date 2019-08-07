@@ -1,5 +1,6 @@
 #include "Node.h"
 #include <future>
+#include "../Mesh/Mesh.h"
 
 using namespace vm;
 

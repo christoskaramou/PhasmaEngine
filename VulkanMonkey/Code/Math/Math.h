@@ -1,6 +1,4 @@
 #pragma once
-#include <cmath>
-#include <chrono>
 #include <random>
 
 namespace vm {
@@ -10,16 +8,16 @@ namespace vm {
 	struct mat4;
 	struct quat;
 
-	typedef const float cfloat;
-	typedef const int cint;
-	typedef const vec2 cvec2;
-	typedef const vec3 cvec3;
-	typedef const vec4 cvec4;
-	typedef const mat4 cmat4;
-	typedef const quat cquat;
-	typedef vec4 col;
-	typedef vec4 row;
-	typedef const col ccol;
+	using cfloat = const float;
+	using cint = const int;
+	using cvec2 = const vec2;
+	using cvec3 = const vec3;
+	using cvec4 = const vec4;
+	using cmat4 = const mat4;
+	using cquat = const quat;
+	using col = vec4;
+	using row = vec4;
+	using ccol = const col;
 
 	struct vec2 {
 		vec2();

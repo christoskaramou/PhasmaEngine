@@ -1,21 +1,16 @@
 #pragma once
-#include "../VulkanContext/VulkanContext.h"
 #include "../Buffer/Buffer.h"
 #include "../Pipeline/Pipeline.h"
 #include "../Image/Image.h"
-#include "../GUI/GUI.h"
 #include "../Math/Math.h"
 #include "../Camera/Camera.h"
 #include <vector>
 #include <map>
-#include <string>
 #include <functional>
 
 namespace vm {
 	struct TAA
 	{
-		VulkanContext* vulkan = &VulkanContext::get();
-
 		std::vector<vk::Framebuffer> frameBuffers{}, frameBuffersSharpen{};
 		Pipeline pipeline, pipelineSharpen;
 		vk::RenderPass renderPass, renderPassSharpen;

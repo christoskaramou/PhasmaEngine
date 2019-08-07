@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <iostream>
 
 namespace vm {
 	struct StreamReader : public Microsoft::glTF::IStreamReader

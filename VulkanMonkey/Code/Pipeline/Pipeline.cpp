@@ -5,17 +5,17 @@ using namespace vm;
 void Pipeline::destroy()
 {
 	if (pipeinfo.layout) {
-		vulkan->device.destroyPipelineLayout(pipeinfo.layout);
+		VulkanContext::get()->device.destroyPipelineLayout(pipeinfo.layout);
 		pipeinfo.layout = nullptr;
 	}
 
 	if (compinfo.layout) {
-		vulkan->device.destroyPipelineLayout(compinfo.layout);
+		VulkanContext::get()->device.destroyPipelineLayout(compinfo.layout);
 		pipeinfo.layout = nullptr;
 	}
 
 	if (pipeline) {
-		vulkan->device.destroyPipeline(pipeline);
+		VulkanContext::get()->device.destroyPipeline(pipeline);
 		pipeline = nullptr;
 	}
 }

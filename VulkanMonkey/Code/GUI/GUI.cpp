@@ -1,9 +1,12 @@
 #include "GUI.h"
 #include <filesystem>
-#include "../Event/Event.h"
 #include "../include/TinyFileDialogs/tinyfiledialogs.h"
 #include "../Queue/Queue.h"
 #include "../Timer/Timer.h"
+#include "../Console/Console.h"
+#include "../Vertex/Vertex.h"
+#include "../Swapchain/Swapchain.h"
+#include "../Surface/Surface.h"
 
 using namespace vm;
 
@@ -31,7 +34,7 @@ void GUI::RightPanel() const
 	Properties();
 }
 
-void GUI::BottomPanel()
+void GUI::BottomPanel() const
 {
 	ConsoleWindow();
 	Scripts();
@@ -240,7 +243,7 @@ void GUI::Properties() const
 			SDL_Event event;
 			SDL_zero(event);
 			event.type = scaleRenderTargetsEventType; // along side with window resize
-			vulkan->device.waitIdle();
+			VulkanContext::get()->device.waitIdle();
 			SDL_PushEvent(&event);
 		}
 	}
@@ -428,6 +431,7 @@ void GUI::ImGui_ImplSDL2_SetClipboardText(void*, const char* text)
 
 void GUI::initImGui()
 {
+	auto vulkan = VulkanContext::get();
 	vk::CommandBufferAllocateInfo cbai;
 	cbai.commandPool = vulkan->commandPool;
 	cbai.level = vk::CommandBufferLevel::ePrimary;
@@ -617,7 +621,7 @@ void GUI::loadGUI(bool show)
 
 void GUI::scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
 {
-	Image& s_chain_Image = VulkanContext::getSafe().swapchain->images[imageIndex];
+	Image& s_chain_Image = VulkanContext::get()->swapchain->images[imageIndex];
 
 	renderedImage.transitionImageLayout(
 		cmd,
@@ -695,7 +699,7 @@ void GUI::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = renderPass;
 		rpi.framebuffer = frameBuffers[imageIndex];
-		rpi.renderArea = vk::Rect2D{ { 0, 0 }, VulkanContext::get().surface->actualExtent };
+		rpi.renderArea = vk::Rect2D{ { 0, 0 }, VulkanContext::get()->surface->actualExtent };
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		rpi.pClearValues = clearValues.data();
 
@@ -767,8 +771,8 @@ void GUI::newFrame()
 	// Setup display size (every frame to accommodate for window resizing)
 	int w, h;
 	int display_w, display_h;
-	SDL_GetWindowSize(vulkan->window, &w, &h);
-	SDL_GL_GetDrawableSize(vulkan->window, &display_w, &display_h);
+	SDL_GetWindowSize(VulkanContext::get()->window, &w, &h);
+	SDL_GL_GetDrawableSize(VulkanContext::get()->window, &display_w, &display_h);
 	io.DisplaySize = ImVec2(static_cast<float>(w), static_cast<float>(h));
 	io.DisplayFramebufferScale = ImVec2(w > 0 ? static_cast<float>(display_w) / static_cast<float>(w) : 0, h > 0 ? static_cast<float>(display_h) / static_cast<float>(h) : 0);
 
@@ -885,7 +889,7 @@ void GUI::newFrame()
 	}
 	cmdBuf.end();
 
-	vulkan->submit(cmdBuf, nullptr, nullptr, nullptr, fenceUpload);
+	VulkanContext::get()->submit(cmdBuf, nullptr, nullptr, nullptr, fenceUpload);
 }
 
 void GUI::windowStyle(ImGuiStyle* dst)
@@ -940,7 +944,7 @@ void GUI::windowStyle(ImGuiStyle* dst)
 
 void GUI::createVertexBuffer(size_t vertex_size)
 {
-	vulkan->graphicsQueue.waitIdle();
+	VulkanContext::get()->graphicsQueue.waitIdle();
 	vertexBuffer.destroy();
 	vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	//vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
@@ -948,7 +952,7 @@ void GUI::createVertexBuffer(size_t vertex_size)
 
 void GUI::createIndexBuffer(size_t index_size)
 {
-	vulkan->graphicsQueue.waitIdle();
+	VulkanContext::get()->graphicsQueue.waitIdle();
 	indexBuffer.destroy();
 	indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 	//indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
@@ -957,10 +961,10 @@ void GUI::createIndexBuffer(size_t index_size)
 void GUI::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
 {
 	vk::DescriptorSetAllocateInfo allocateInfo;
-	allocateInfo.descriptorPool = vulkan->descriptorPool;
+	allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
 	allocateInfo.descriptorSetCount = 1;
 	allocateInfo.pSetLayouts = &descriptorSetLayout;
-	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+	descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
 
 	updateDescriptorSets();
 
@@ -983,14 +987,14 @@ void vm::GUI::updateDescriptorSets() const
 	textureWriteSets[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 	textureWriteSets[0].pImageInfo = &dii0;
 
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+	VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 void GUI::createRenderPass()
 {
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
-	attachments[0].format = vulkan->surface->formatKHR.format;
+	attachments[0].format = VulkanContext::get()->surface->formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -1013,16 +1017,16 @@ void GUI::createRenderPass()
 	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 	renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-	renderPass = vulkan->device.createRenderPass(renderPassInfo);
+	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void GUI::createFrameBuffers()
 {
-	frameBuffers.resize(vulkan->swapchain->images.size());
+	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
 
 	for (size_t i = 0; i < frameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			vulkan->swapchain->images[i].view
+			VulkanContext::get()->swapchain->images[i].view
 		};
 		vk::FramebufferCreateInfo fbci;
 		fbci.renderPass = renderPass;
@@ -1031,7 +1035,7 @@ void GUI::createFrameBuffers()
 		fbci.width = WIDTH;
 		fbci.height = HEIGHT;
 		fbci.layers = 1;
-		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
+		frameBuffers[i] = VulkanContext::get()->device.createFramebuffer(fbci);
 	}
 }
 
@@ -1042,13 +1046,13 @@ void GUI::createPipeline()
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/GUI/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -1137,9 +1141,9 @@ void GUI::createPipeline()
 	pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_TRUE;
+	VulkanContext::get()->swapchain->images[0].blentAttachment.blendEnable = VK_TRUE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
-		vulkan->swapchain->images[0].blentAttachment
+		VulkanContext::get()->swapchain->images[0].blentAttachment
 	};
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
@@ -1163,13 +1167,13 @@ void GUI::createPipeline()
 	pcr.size = sizeof(float) * 4;
 
 	// Pipeline Layout
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ getDescriptorSetLayout(vulkan->device) };
+	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ getDescriptorSetLayout(VulkanContext::get()->device) };
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pcr;
-	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipeline.pipeinfo.renderPass = renderPass;
@@ -1183,32 +1187,32 @@ void GUI::createPipeline()
 	// Base Pipeline Index
 	pipeline.pipeinfo.basePipelineIndex = -1;
 
-	pipeline.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void GUI::destroy()
 {
 	Object::destroy();
 	if (renderPass) {
-		vulkan->device.destroyRenderPass(renderPass);
+		VulkanContext::get()->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
 	}
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
+			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
 		}
 	}
 	pipeline.destroy();
 	if (GUI::descriptorSetLayout) {
-		vulkan->device.destroyDescriptorSetLayout(GUI::descriptorSetLayout);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(GUI::descriptorSetLayout);
 		GUI::descriptorSetLayout = nullptr;
 	}
 	if (fenceUpload) {
-		vulkan->device.destroyFence(fenceUpload);
+		VulkanContext::get()->device.destroyFence(fenceUpload);
 		fenceUpload = nullptr;
 	}
 }

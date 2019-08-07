@@ -1,10 +1,5 @@
 #pragma once
 #include "../Context/Context.h"
-#include "../Node/Node.h"
-#include "../Queue/Queue.h"
-#include "../Math/Math.h"
-#include "../Timer/Timer.h"
-#include <iostream>
 
 namespace vm {
 	class Renderer

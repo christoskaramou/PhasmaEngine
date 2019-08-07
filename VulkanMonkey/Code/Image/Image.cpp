@@ -55,13 +55,13 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 	imageInfo.usage = usage;
 	imageInfo.sharingMode = vk::SharingMode::eExclusive;
 	imageInfo.initialLayout = initialLayout;
-	//vk::ImageFormatProperties imageFormatProperties = vulkan->gpu.getImageFormatProperties(format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
+	//vk::ImageFormatProperties imageFormatProperties = VulkanContext::get()->gpu.getImageFormatProperties(format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
 
-	image = vulkan->device.createImage(imageInfo);
+	image = VulkanContext::get()->device.createImage(imageInfo);
 
 	uint32_t memTypeIndex = UINT32_MAX;
-	auto const memRequirements = vulkan->device.getImageMemoryRequirements(image);
-	auto const memProperties = vulkan->gpu.getMemoryProperties();
+	auto const memRequirements = VulkanContext::get()->device.getImageMemoryRequirements(image);
+	auto const memProperties = VulkanContext::get()->gpu.getMemoryProperties();
 	for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
 		if (memRequirements.memoryTypeBits & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
 			memTypeIndex = i;
@@ -82,8 +82,8 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 	allocInfo.allocationSize = memRequirements.size;
 	allocInfo.memoryTypeIndex = memTypeIndex;
 
-	memory = vulkan->device.allocateMemory(allocInfo);
-	vulkan->device.bindImageMemory(image, memory, 0);
+	memory = VulkanContext::get()->device.allocateMemory(allocInfo);
+	VulkanContext::get()->device.bindImageMemory(image, memory, 0);
 }
 
 void Image::createImageView(const vk::ImageAspectFlags& aspectFlags)
@@ -94,7 +94,7 @@ void Image::createImageView(const vk::ImageAspectFlags& aspectFlags)
 	viewInfo.format = format;
 	viewInfo.subresourceRange = { aspectFlags, 0, mipLevels, 0, arrayLayers };
 
-	view = vulkan->device.createImageView(viewInfo);
+	view = VulkanContext::get()->device.createImageView(viewInfo);
 }
 
 void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout) const
@@ -102,9 +102,9 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
 	allocInfo.commandBufferCount = 1;
-	allocInfo.commandPool = vulkan->commandPool2;
+	allocInfo.commandPool = VulkanContext::get()->commandPool2;
 
-	const vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
+	const vk::CommandBuffer commandBuffer = VulkanContext::get()->device.allocateCommandBuffers(allocInfo).at(0);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -191,9 +191,9 @@ void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::Ima
 
 	commandBuffer.end();
 
-	vulkan->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
+	VulkanContext::get()->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
+	VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, commandBuffer);
 }
 
 void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer) const
@@ -201,9 +201,9 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer)
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
 	allocInfo.commandBufferCount = 1;
-	allocInfo.commandPool = vulkan->commandPool2;
+	allocInfo.commandPool = VulkanContext::get()->commandPool2;
 
-	const vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
+	const vk::CommandBuffer commandBuffer = VulkanContext::get()->device.allocateCommandBuffers(allocInfo).at(0);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -224,9 +224,9 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer)
 
 	commandBuffer.end();
 
-	vulkan->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
+	VulkanContext::get()->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
+	VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, commandBuffer);
 }
 
 void Image::generateMipMaps() const
@@ -234,9 +234,9 @@ void Image::generateMipMaps() const
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
 	allocInfo.commandBufferCount = 1;
-	allocInfo.commandPool = vulkan->commandPool2;
+	allocInfo.commandPool = VulkanContext::get()->commandPool2;
 
-	const vk::CommandBuffer commandBuffer = vulkan->device.allocateCommandBuffers(allocInfo).at(0);
+	const vk::CommandBuffer commandBuffer = VulkanContext::get()->device.allocateCommandBuffers(allocInfo).at(0);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -326,9 +326,9 @@ void Image::generateMipMaps() const
 
 	commandBuffer.end();
 
-	vulkan->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
+	VulkanContext::get()->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-	vulkan->device.freeCommandBuffers(vulkan->commandPool2, commandBuffer);
+	VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, commandBuffer);
 }
 
 void Image::createSampler()
@@ -349,15 +349,15 @@ void Image::createSampler()
 	samplerInfo.compareOp = compareOp;
 	samplerInfo.borderColor = borderColor;
 	samplerInfo.unnormalizedCoordinates = VK_FALSE;
-	sampler = vulkan->device.createSampler(samplerInfo);
+	sampler = VulkanContext::get()->device.createSampler(samplerInfo);
 }
 
 void Image::destroy()
 {
-	if (view) vulkan->device.destroyImageView(view);
-	if (image) vulkan->device.destroyImage(image);
-	if (memory) vulkan->device.freeMemory(memory);
-	if (sampler) vulkan->device.destroySampler(sampler);
+	if (view) VulkanContext::get()->device.destroyImageView(view);
+	if (image) VulkanContext::get()->device.destroyImage(image);
+	if (memory) VulkanContext::get()->device.freeMemory(memory);
+	if (sampler) VulkanContext::get()->device.destroySampler(sampler);
 	view = nullptr;
 	image = nullptr;
 	memory = nullptr;

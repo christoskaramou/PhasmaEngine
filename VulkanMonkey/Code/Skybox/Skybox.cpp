@@ -1,5 +1,11 @@
 #include "Skybox.h"
 #include "../GUI/GUI.h"
+#include "tinygltf/stb_image.h"
+#ifdef RENDER_SKYBOX
+#include "../Surface/Surface.h"
+#include "../Swapchain/Swapchain.h"
+#include "../Vertex/Vertex.h"
+#endif
 
 using namespace vm;
 
@@ -18,7 +24,7 @@ vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout()
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
+		descriptorSetLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 	return descriptorSetLayout;
 }
@@ -100,9 +106,9 @@ void SkyBox::loadTextures(const std::array<std::string, 6>& paths, int imageSide
 
 		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		staging.data = vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize);
+		staging.data = VulkanContext::get()->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize);
 		memcpy(staging.data, pixels, static_cast<size_t>(imageSize));
-		vulkan->device.unmapMemory(staging.memory);
+		VulkanContext::get()->device.unmapMemory(staging.memory);
 		stbi_image_free(pixels);
 
 		texture.copyBufferToImage(staging.buffer, i);
@@ -122,16 +128,16 @@ void SkyBox::destroy()
 	Object::destroy();
 	pipeline.destroy();
 	if (SkyBox::descriptorSetLayout) {
-		vulkan->device.destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
 		SkyBox::descriptorSetLayout = nullptr;
 	}
 	if (renderPass) {
-		vulkan->device.destroyRenderPass(renderPass);
+		VulkanContext::get()->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
 	}
 	for (auto& frameBuffer : frameBuffers) {
 		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
+			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
 		}
 	}
 }
@@ -162,11 +168,11 @@ void SkyBox::draw(uint32_t imageIndex)
 	vk::RenderPassBeginInfo renderPassInfo;
 	renderPassInfo.renderPass = renderPass;
 	renderPassInfo.framebuffer = frameBuffers[imageIndex];
-	renderPassInfo.renderArea = { { 0, 0 }, vulkan->surface->actualExtent };
+	renderPassInfo.renderArea = { { 0, 0 }, VulkanContext::get()->surface->actualExtent };
 	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	renderPassInfo.pClearValues = clearValues.data();
 
-	auto& cmd = vulkan->dynamicCmdBuffer;
+	auto& cmd = VulkanContext::get()->dynamicCmdBuffer;
 	cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 	vk::DeviceSize offset{ 0 };
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
@@ -180,7 +186,7 @@ void vm::SkyBox::createRenderPass()
 {
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color attachment
-	attachments[0].format = vulkan->surface->formatKHR.format;
+	attachments[0].format = VulkanContext::get()->surface->formatKHR.format;
 	attachments[0].samples = vk::SampleCountFlagBits::e1;
 	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
 	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -223,16 +229,16 @@ void vm::SkyBox::createRenderPass()
 	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	//renderPassInfo.pDependencies = dependencies.data();
 
-	renderPass = vulkan->device.createRenderPass(renderPassInfo);
+	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void vm::SkyBox::createFrameBuffers()
 {
-	frameBuffers.resize(vulkan->swapchain->images.size());
+	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
 
 	for (size_t i = 0; i < frameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			vulkan->swapchain->images[i].view //renderTargets["albedo"].view
+			VulkanContext::get()->swapchain->images[i].view //renderTargets["albedo"].view
 		};
 		vk::FramebufferCreateInfo fbci;
 		fbci.renderPass = renderPass;
@@ -241,7 +247,7 @@ void vm::SkyBox::createFrameBuffers()
 		fbci.width = WIDTH;
 		fbci.height = HEIGHT;
 		fbci.layers = 1;
-		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
+		frameBuffers[i] = VulkanContext::get()->device.createFramebuffer(fbci);
 	}
 }
 
@@ -252,13 +258,13 @@ void vm::SkyBox::createPipeline()
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/SkyBox/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -300,7 +306,7 @@ void vm::SkyBox::createPipeline()
 	vp.maxDepth = 1.f;
 
 	vk::Rect2D r2d;
-	r2d.extent = { WIDTH, HEIGHT };
+	r2d.extent = vk::Extent2D{ WIDTH, HEIGHT };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -347,9 +353,9 @@ void vm::SkyBox::createPipeline()
 	pipeline.pipeinfo.pDepthStencilState = &pdssci;
 
 	// Color Blending state
-	vulkan->swapchain->images[0].blentAttachment.blendEnable = VK_FALSE;
+	VulkanContext::get()->swapchain->images[0].blentAttachment.blendEnable = VK_FALSE;
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
-		vulkan->swapchain->images[0].blentAttachment
+		VulkanContext::get()->swapchain->images[0].blentAttachment
 	};
 	vk::PipelineColorBlendStateCreateInfo pcbsci;
 	pcbsci.logicOpEnable = VK_FALSE;
@@ -372,7 +378,7 @@ void vm::SkyBox::createPipeline()
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipeline.pipeinfo.renderPass = renderPass;
@@ -386,10 +392,10 @@ void vm::SkyBox::createPipeline()
 	// Base Pipeline Index
 	pipeline.pipeinfo.basePipelineIndex = -1;
 
-	pipeline.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 #endif // RENDER_SKYBOX

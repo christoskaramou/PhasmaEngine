@@ -1,23 +1,15 @@
 #pragma once
 
-#include "../VulkanContext/VulkanContext.h"
 #include "../Pipeline/Pipeline.h"
 #include "../Image/Image.h"
 #include "../Light/Light.h"
-#include "../GUI/GUI.h"
 #include "../Shadows/Shadows.h"
 #include "../Skybox/Skybox.h"
-#include "../Vertex/Vertex.h"
-#include "../Model/Model.h"
-#include "../Mesh/Mesh.h"
-#include "../Swapchain/Swapchain.h"
 #include <map>
 
 namespace vm {
 	struct Deferred
 	{
-		VulkanContext* vulkan = &VulkanContext::get();
-
 		vk::RenderPass renderPass, compositionRenderPass;
 		std::vector<vk::Framebuffer> frameBuffers{}, compositionFrameBuffers{};
 		vk::DescriptorSet DSComposition;

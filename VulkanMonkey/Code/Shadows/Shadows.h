@@ -1,8 +1,5 @@
 #pragma once
-#include "../VulkanContext/VulkanContext.h"
-#include "../Image/Image.h"
 #include "../Buffer/Buffer.h"
-#include "../Image/Image.h"
 #include "../Pipeline/Pipeline.h"
 #include "../Math/Math.h"
 #include "../Camera/Camera.h"
@@ -10,16 +7,14 @@
 namespace vm {
 	struct Shadows
 	{
-		VulkanContext* vulkan = &VulkanContext::get();
-
 		static uint32_t imageSize;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout();
 		vk::RenderPass renderPass;
-		std::vector <Image> textures{};
-		std::vector <vk::DescriptorSet> descriptorSets{};
-		std::vector <vk::Framebuffer> frameBuffers{};
-		std::vector <Buffer> uniformBuffers{};
+		std::vector<Image> textures{};
+		std::vector<vk::DescriptorSet> descriptorSets{};
+		std::vector<vk::Framebuffer> frameBuffers{};
+		std::vector<Buffer> uniformBuffers{};
 		Pipeline pipeline;
 
 		void update(Camera& camera);

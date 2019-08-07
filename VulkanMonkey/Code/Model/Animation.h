@@ -1,10 +1,11 @@
 #pragma once
 
 #include "../Math/Math.h"
-#include <vector>
-#include <limits>
-#include <string>
 #include "../Node/Node.h"
+#include <vector>
+#undef max
+#undef min
+#include <limits>
 
 namespace vm {
 

@@ -1,12 +1,8 @@
 #pragma once
 
-#include "../VulkanContext/VulkanContext.h"
 #include "../Buffer/Buffer.h"
 #include "../Pipeline/Pipeline.h"
 #include "../Image/Image.h"
-#include "../Surface/Surface.h"
-#include "../Math/Math.h"
-#include "../GUI/GUI.h"
 #include "../Camera/Camera.h"
 #include <vector>
 #include <map>
@@ -14,8 +10,6 @@
 namespace vm {
 	struct SSR
 	{
-		VulkanContext* vulkan = &VulkanContext::get();
-
 		Buffer UBReflection;
 		std::vector<vk::Framebuffer> frameBuffers{};
 		Pipeline pipeline;

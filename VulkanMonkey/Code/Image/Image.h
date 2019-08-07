@@ -11,8 +11,6 @@ namespace vm {
 	struct VulkanContext;
 	struct Image
 	{
-		const VulkanContext* vulkan = &VulkanContext::get();
-
 		vk::Image image;
 		vk::DeviceMemory memory;
 		vk::ImageView view;

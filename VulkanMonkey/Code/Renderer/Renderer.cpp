@@ -1,11 +1,14 @@
 #include "Renderer.h"
 #include "../Event/Event.h"
+#include "../Timer/Timer.h"
+#include "../Queue/Queue.h"
+#include "../Mesh/Mesh.h"
 
 using namespace vm;
 
 Renderer::Renderer(SDL_Window* window)
 {
-	ctx.vulkan.window = window;
+	VulkanContext::get()->window = window;
 	// INIT ALL VULKAN CONTEXT
 	ctx.initVulkanContext();
 	// INIT RENDERING
@@ -18,19 +21,19 @@ Renderer::Renderer(SDL_Window* window)
 
 Renderer::~Renderer()
 {
-	ctx.vulkan.device.waitIdle();
+	VulkanContext::get()->device.waitIdle();
 	if (Model::models.empty()) {
 		if (Model::descriptorSetLayout) {
-			ctx.vulkan.device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
+			VulkanContext::get()->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
 			Model::descriptorSetLayout = nullptr;
 		}
 		if (Mesh::descriptorSetLayout) {
-			ctx.vulkan.device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
+			VulkanContext::get()->device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
 			Mesh::descriptorSetLayout = nullptr;
 		}
 
 		if (Primitive::descriptorSetLayout) {
-			ctx.vulkan.device.destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
+			VulkanContext::get()->device.destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
 			Primitive::descriptorSetLayout = nullptr;
 		}
 	}
@@ -44,7 +47,8 @@ Renderer::~Renderer()
 		texture.second.destroy();
 	Mesh::uniqueTextures.clear();
 
-	ctx.computePool.destroy();
+	ComputePool::get()->destroy();
+	ComputePool::remove();
 	ctx.shadows.destroy();
 	ctx.deferred.destroy();
 	ctx.ssao.destroy();
@@ -60,6 +64,7 @@ Renderer::~Renderer()
 	for (auto& metric : ctx.metrics)
 		metric.destroy();
 	ctx.destroyVkContext();
+	VulkanContext::remove();
 }
 
 void Renderer::changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState state)
@@ -119,7 +124,7 @@ void Renderer::changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState sta
 void Renderer::checkQueue() const
 {
 	for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();) {
-		VulkanContext::get().device.waitIdle();
+		VulkanContext::get()->device.waitIdle();
 		Queue::loadModelFutures.push_back(std::async(std::launch::async, [](const std::string& folderPath, const std::string& modelName, bool show = true) {
 				Model model;
 				model.loadModel(folderPath, modelName, show);
@@ -143,7 +148,7 @@ void Renderer::checkQueue() const
 	}
 
 	for (auto it = Queue::unloadModel.begin(); it != Queue::unloadModel.end();) {
-		VulkanContext::get().device.waitIdle();
+		VulkanContext::get()->device.waitIdle();
 		Model::models[*it].destroy();
 		Model::models.erase(Model::models.begin() + *it);
 		GUI::modelList.erase(GUI::modelList.begin() + *it);
@@ -241,7 +246,7 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 	//	.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
 	//	.setPInheritanceInfo(nullptr);
 	//
-	//auto& cmd = ctx.vulkan.computeCmdBuffer;
+	//auto& cmd = VulkanContext::get()->computeCmdBuffer;
 	//cmd.begin(beginInfo);
 	//
 	//ctx.metrics[13].start(cmd);
@@ -256,12 +261,12 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 {
 	// wait for vertex and index data to be ready on gui buffers
-	ctx.vulkan.waitFences(ctx.gui.fenceUpload);
+	VulkanContext::get()->waitFences(ctx.gui.fenceUpload);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
-	const auto& cmd = ctx.vulkan.dynamicCmdBuffer;
+	const auto& cmd = VulkanContext::get()->dynamicCmdBuffer;
 	cmd.begin(beginInfo);
 	ctx.metrics[0].start(cmd);
 	//cmd.setViewport(0, ctx.camera_main.renderArea.viewport);
@@ -342,7 +347,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		ctx.metrics[7].start(cmd);
 		ctx.bloom.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
 		//const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-		ctx.bloom.draw(cmd, imageIndex, static_cast<uint32_t>(ctx.vulkan.swapchain->images.size()), changeLayout, ctx.renderTargets);
+		ctx.bloom.draw(cmd, imageIndex, static_cast<uint32_t>(VulkanContext::get()->swapchain->images.size()), changeLayout, ctx.renderTargets);
 		ctx.metrics[7].end(&GUI::metrics[7]);
 	}
 	
@@ -395,13 +400,13 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 	renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
 	for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
-		auto& cmd = ctx.vulkan.shadowCmdBuffers[i];
+		auto& cmd = VulkanContext::get()->shadowCmdBuffers[i];
 		cmd.begin(beginInfoShadows);
 		ctx.metrics[10 + static_cast<size_t>(i)].start(cmd);
 		cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
 		// depth[i] image ===========================================================
-		renderPassInfoShadows.framebuffer = ctx.shadows.frameBuffers[i * ctx.vulkan.swapchain->images.size() + imageIndex]; // e.g. for 2 swapchain images - 1st(0,2,4) and 2nd(1,3,5)
+		renderPassInfoShadows.framebuffer = ctx.shadows.frameBuffers[i * VulkanContext::get()->swapchain->images.size() + imageIndex]; // e.g. for 2 swapchain images - 1st(0,2,4) and 2nd(1,3,5)
 		cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
 		for (auto& model : Model::models) {
@@ -435,38 +440,38 @@ void Renderer::present()
 		//recordComputeCmds(2, 2, 1);
 		//vk::SubmitInfo siCompute;
 		//siCompute.commandBufferCount = 1;
-		//siCompute.setPCommandBuffers = &ctx.vulkan.computeCmdBuffer;
-		//ctx.vulkan.computeQueue.submit(siCompute, ctx.vulkan.fences[1]);
-		//ctx.vulkan.device.waitForFences(ctx.vulkan.fences[1], VK_TRUE, UINT64_MAX);
-		//ctx.vulkan.device.resetFences(ctx.vulkan.fences[1]);
+		//siCompute.setPCommandBuffers = &VulkanContext::get()->computeCmdBuffer;
+		//VulkanContext::get()->computeQueue.submit(siCompute, VulkanContext::get()->fences[1]);
+		//VulkanContext::get()->device.waitForFences(VulkanContext::get()->fences[1], VK_TRUE, UINT64_MAX);
+		//VulkanContext::get()->device.resetFences(VulkanContext::get()->fences[1]);
 	}
 
 	// waitStage is a pipeline stage at which a semaphore wait will occur.
 	const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader };
 
-	const uint32_t imageIndex = ctx.vulkan.swapchain->aquire(ctx.vulkan.semaphores[0], nullptr);
+	const uint32_t imageIndex = VulkanContext::get()->swapchain->aquire(VulkanContext::get()->semaphores[0], nullptr);
 
-	ctx.vulkan.waitAndLockSubmits();
+	VulkanContext::get()->waitAndLockSubmits();
 
 	if (GUI::shadow_cast) {
 		// submit the shadow command buffers
 		recordShadowsCmds(imageIndex);
-		ctx.vulkan.submit(ctx.vulkan.shadowCmdBuffers, waitStages[0], ctx.vulkan.semaphores[0], ctx.vulkan.semaphores[1]);
+		VulkanContext::get()->submit(VulkanContext::get()->shadowCmdBuffers, waitStages[0], VulkanContext::get()->semaphores[0], VulkanContext::get()->semaphores[1]);
 	}
 
 	// submit the main command buffer
 	recordDeferredCmds(imageIndex);
 	const vk::PipelineStageFlags waitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
-	const vk::Semaphore& waiSemaphore = GUI::shadow_cast ? ctx.vulkan.semaphores[1] : ctx.vulkan.semaphores[0];
-	ctx.vulkan.submit(ctx.vulkan.dynamicCmdBuffer, waitStage, waiSemaphore, ctx.vulkan.semaphores[2], ctx.vulkan.fences[0]);
+	const vk::Semaphore& waiSemaphore = GUI::shadow_cast ? VulkanContext::get()->semaphores[1] : VulkanContext::get()->semaphores[0];
+	VulkanContext::get()->submit(VulkanContext::get()->dynamicCmdBuffer, waitStage, waiSemaphore, VulkanContext::get()->semaphores[2], VulkanContext::get()->fences[0]);
 
 	// Presentation
-	ctx.vulkan.swapchain->present(imageIndex, ctx.vulkan.semaphores[2]);
+	VulkanContext::get()->swapchain->present(imageIndex, VulkanContext::get()->semaphores[2]);
 
 	const std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
-	ctx.vulkan.waitFences(ctx.vulkan.fences[0]);
+	VulkanContext::get()->waitFences(VulkanContext::get()->fences[0]);
 	const std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
 	Timer::waitingTime = waitTime.count();
 
-	ctx.vulkan.unlockSubmits();
+	VulkanContext::get()->unlockSubmits();
 }

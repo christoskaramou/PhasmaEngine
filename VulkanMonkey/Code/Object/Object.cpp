@@ -1,4 +1,5 @@
 #include "Object.h"
+#include "tinygltf/stb_image.h"
 
 using namespace vm;
 
@@ -10,9 +11,9 @@ void Object::createVertexBuffer()
 	Buffer staging;
 	staging.createBuffer(sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	staging.data = vulkan->device.mapMemory(staging.memory, 0, staging.size);
+	staging.data = VulkanContext::get()->device.mapMemory(staging.memory, 0, staging.size);
 	memcpy(staging.data, vertices.data(), sizeof(float)*vertices.size());
-	vulkan->device.unmapMemory(staging.memory);
+	VulkanContext::get()->device.unmapMemory(staging.memory);
 
 	vertexBuffer.copyBuffer(staging.buffer, staging.size);
 	staging.destroy();
@@ -21,7 +22,7 @@ void Object::createVertexBuffer()
 void Object::createUniformBuffer(size_t size)
 {
 	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	uniformBuffer.data = vulkan->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
+	uniformBuffer.data = VulkanContext::get()->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
 	memset(uniformBuffer.data, 0, uniformBuffer.size);
 }
 
@@ -39,9 +40,9 @@ void Object::loadTexture(const std::string& path)
 	Buffer staging;
 	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	void* data = vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize);
+	void* data = VulkanContext::get()->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize);
 	memcpy(data, pixels, static_cast<size_t>(imageSize));
-	vulkan->device.unmapMemory(staging.memory);
+	VulkanContext::get()->device.unmapMemory(staging.memory);
 
 	stbi_image_free(pixels);
 
@@ -54,17 +55,17 @@ void Object::loadTexture(const std::string& path)
 	texture.createImageView(vk::ImageAspectFlagBits::eColor);
 	texture.createSampler();
 
-	vulkan->device.destroyBuffer(staging.buffer);
-	vulkan->device.freeMemory(staging.memory);
+	VulkanContext::get()->device.destroyBuffer(staging.buffer);
+	VulkanContext::get()->device.freeMemory(staging.memory);
 }
 
 void Object::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
 {
 	vk::DescriptorSetAllocateInfo allocateInfo;
-	allocateInfo.descriptorPool = vulkan->descriptorPool;
+	allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
 	allocateInfo.descriptorSetCount = 1;
 	allocateInfo.pSetLayouts = &descriptorSetLayout;
-	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+	descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
 
 
 	std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
@@ -93,7 +94,7 @@ void Object::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLay
 	textureWriteSets[1].descriptorCount = 1;
 	textureWriteSets[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 	textureWriteSets[1].pImageInfo = &dii;
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+	VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 void Object::destroy()

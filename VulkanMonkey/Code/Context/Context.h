@@ -1,20 +1,13 @@
 #pragma once
 
-#include "../VulkanContext/VulkanContext.h"
-#include "../../include/SDL.h"
-#include "../Math/Math.h"
-#include "../Vertex/Vertex.h"
+#include <vector>
 #include "../Image/Image.h"
 #include "../Surface/Surface.h"
 #include "../Swapchain/Swapchain.h"
-#include "../Buffer/Buffer.h"
-#include "../Pipeline/Pipeline.h"
-#include "../Object/Object.h"
 #include "../GUI/GUI.h"
 #include "../Skybox/Skybox.h"
 #include "../Shadows/Shadows.h"
 #include "../Light/Light.h"
-#include "../Mesh/Mesh.h"
 #include "../Model/Model.h"
 #include "../Camera/Camera.h"
 #include "../SSAO/SSAO.h"
@@ -27,9 +20,6 @@
 #include "../Compute/Compute.h"
 #include "../Metrics/Metrics.h"
 #include "../Script/Script.h"
-#include <vector>
-#include <tuple>
-#include <map>
 
 #define USE_SCRIPTS
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
@@ -37,12 +27,8 @@
 namespace vm {
 	struct Context
 	{
-	public:
-		// VULKAN CONTEXT
-		VulkanContext& vulkan = VulkanContext::get();
-
-		// COMPUTE
-		ComputePool& computePool = ComputePool::get();
+		Context() = default;
+		~Context() = default;
 
 		// RENDER TARGETS
 		std::map<std::string, Image> renderTargets{};
@@ -102,7 +88,6 @@ namespace vm {
 		void destroyVkContext();
 		void resizeViewport(uint32_t width, uint32_t height);
 
-	public:
 		vk::Instance createInstance() const;
 		static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
 			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,

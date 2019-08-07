@@ -1,16 +1,15 @@
 #pragma once
 
-#include "../VulkanContext/VulkanContext.h"
-#include "../Buffer/Buffer.h"
 #include "../Pipeline/Pipeline.h"
-#include "../Image/Image.h"
 #include <map>
 #include <functional>
+#include "../Image/Image.h"
 
 namespace vm {
 	struct Bloom
 	{
-		VulkanContext* vulkan = &VulkanContext::get();
+		Bloom() = default;
+		~Bloom() = default;
 
 		std::vector<vk::Framebuffer> frameBuffers{};
 		Pipeline pipelineBrightFilter;

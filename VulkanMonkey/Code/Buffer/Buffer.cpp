@@ -4,6 +4,7 @@ using namespace vm;
 
 void Buffer::createBuffer(vk::DeviceSize size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties)
 {
+	auto vulkan = VulkanContext::get();
 	this->size = size;
 
 	vk::BufferCreateInfo bufferInfo;
@@ -40,9 +41,9 @@ void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size) c
 {
 	vk::CommandBufferAllocateInfo cbai;
 	cbai.level = vk::CommandBufferLevel::ePrimary;
-	cbai.commandPool = vulkan->commandPool2;
+	cbai.commandPool = VulkanContext::get()->commandPool2;
 	cbai.commandBufferCount = 1;
-	const vk::CommandBuffer copyCmd = vulkan->device.allocateCommandBuffers(cbai).at(0);
+	const vk::CommandBuffer copyCmd = VulkanContext::get()->device.allocateCommandBuffers(cbai).at(0);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -55,17 +56,17 @@ void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size) c
 
 	copyCmd.end();
 
-	vulkan->submitAndWaitFence(copyCmd, nullptr, nullptr, nullptr);
+	VulkanContext::get()->submitAndWaitFence(copyCmd, nullptr, nullptr, nullptr);
 
-	vulkan->device.freeCommandBuffers(vulkan->commandPool2, copyCmd);
+	VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, copyCmd);
 }
 
 void Buffer::destroy()
 {
 	if (buffer)
-		vulkan->device.destroyBuffer(buffer);
+		VulkanContext::get()->device.destroyBuffer(buffer);
 	if (memory)
-		vulkan->device.freeMemory(memory);
+		VulkanContext::get()->device.freeMemory(memory);
 	buffer = nullptr;
 	memory = nullptr;
 }

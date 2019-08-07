@@ -3,12 +3,13 @@
 #include "../../include/Vulkan.h"
 #include "../../include/SDL.h"
 #include <fstream>
-#include <vector>
-#include <string>
 #include <atomic>
+#include <vector>
+#include <memory>
+#include <type_traits>
 
-#define WIDTH VulkanContext::get().surface->actualExtent.width
-#define HEIGHT VulkanContext::get().surface->actualExtent.height
+#define WIDTH VulkanContext::get()->surface->actualExtent.width
+#define HEIGHT VulkanContext::get()->surface->actualExtent.height
 #define WIDTH_f static_cast<float>(WIDTH)
 #define HEIGHT_f static_cast<float>(HEIGHT)
 
@@ -85,16 +86,16 @@ namespace vm {
 		void waitAndLockSubmits() { while (submiting) {} submiting = true; }
 		void unlockSubmits() { submiting = false; }
 
-		static VulkanContext& get() noexcept { static VulkanContext VkCTX; return VkCTX; }
-		static const VulkanContext& getSafe() noexcept { return get(); }
+		static auto get() noexcept { static auto VkCTX = new VulkanContext(); return VkCTX; }
+		static auto remove() noexcept { using type = decltype(get()); if (std::is_pointer<type>::value) delete get(); }
 
 		VulkanContext(VulkanContext const&) = delete;				// copy constructor
 		VulkanContext(VulkanContext&&) noexcept = delete;			// move constructor
 		VulkanContext& operator=(VulkanContext const&) = delete;	// copy assignment
 		VulkanContext& operator=(VulkanContext&&) = delete;			// move assignment
 	private:
-		VulkanContext() = default;									// default constructor
 		~VulkanContext() = default;									// destructor
+		VulkanContext() = default;									// default constructor
 	};
 
 	static std::vector<char> readFile(const std::string& filename)

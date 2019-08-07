@@ -4,8 +4,6 @@
 namespace vm {
 	struct Buffer
 	{
-		VulkanContext* vulkan = &VulkanContext::get();
-
 		vk::Buffer buffer;
 		vk::DeviceMemory memory;
 		vk::DeviceSize size = 0;

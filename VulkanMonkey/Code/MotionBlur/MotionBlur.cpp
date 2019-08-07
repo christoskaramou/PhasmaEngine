@@ -1,13 +1,15 @@
 #include "MotionBlur.h"
 #include <deque>
+#include "../Surface/Surface.h"
+#include "../Swapchain/Swapchain.h"
+#include "../GUI/GUI.h"
 #include "../Timer/Timer.h"
 
 using namespace vm;
 
-
 void MotionBlur::Init()
 {
-	frameImage.format = vulkan->surface->formatKHR.format;
+	frameImage.format = VulkanContext::get()->surface->formatKHR.format;
 	frameImage.initialLayout = vk::ImageLayout::eUndefined;
 	frameImage.createImage(
 		static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -22,14 +24,14 @@ void MotionBlur::Init()
 void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTargets)
 {
 	UBmotionBlur.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	UBmotionBlur.data = vulkan->device.mapMemory(UBmotionBlur.memory, 0, UBmotionBlur.size);
+	UBmotionBlur.data = VulkanContext::get()->device.mapMemory(UBmotionBlur.memory, 0, UBmotionBlur.size);
 	memset(UBmotionBlur.data, 0, UBmotionBlur.size);
 
 	vk::DescriptorSetAllocateInfo allocateInfo;
-	allocateInfo.descriptorPool = vulkan->descriptorPool;
+	allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
 	allocateInfo.descriptorSetCount = 1;
 	allocateInfo.pSetLayouts = &DSLayoutMotionBlur;
-	DSMotionBlur = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+	DSMotionBlur = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
 
 	updateDescriptorSets(renderTargets);
 }
@@ -53,7 +55,7 @@ void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTarget
 		wSetImage(DSMotionBlur, 2, renderTargets["velocity"]),
 		wSetBuffer(DSMotionBlur, 3, UBmotionBlur)
 	};
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+	VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
@@ -84,15 +86,15 @@ void MotionBlur::destroy()
 {
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
+			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
 		}
 	}
 	if (renderPass) {
-		vulkan->device.destroyRenderPass(renderPass);
+		VulkanContext::get()->device.destroyRenderPass(renderPass);
 		renderPass = nullptr;
 	}
 	if (DSLayoutMotionBlur) {
-		vulkan->device.destroyDescriptorSetLayout(DSLayoutMotionBlur);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayoutMotionBlur);
 		DSLayoutMotionBlur = nullptr;
 	}
 	frameImage.destroy();
@@ -137,12 +139,12 @@ void MotionBlur::createRenderPass(std::map<std::string, Image>& renderTargets)
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
 
-	renderPass = vulkan->device.createRenderPass(renderPassInfo);
+	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void MotionBlur::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	frameBuffers.resize(vulkan->swapchain->images.size());
+	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
 
 	for (auto& frameBuffer : frameBuffers) {
 		std::vector<vk::ImageView> attachments = {
@@ -155,7 +157,7 @@ void MotionBlur::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 		fbci.width = renderTargets["viewport"].width;
 		fbci.height = renderTargets["viewport"].height;
 		fbci.layers = 1;
-		frameBuffer = vulkan->device.createFramebuffer(fbci);
+		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
 	}
 }
 
@@ -166,13 +168,13 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/MotionBlur/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -208,7 +210,7 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = vulkan->surface->actualExtent;
+	r2d.extent = VulkanContext::get()->surface->actualExtent;
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -285,7 +287,7 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		DSLayoutMotionBlur = vulkan->device.createDescriptorSetLayout(descriptorLayout);
+		DSLayoutMotionBlur = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutMotionBlur };
@@ -300,7 +302,7 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;
-	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipeline.pipeinfo.renderPass = renderPass;
@@ -314,11 +316,11 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	// Base Pipeline Index
 	pipeline.pipeinfo.basePipelineIndex = -1;
 
-	pipeline.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void MotionBlur::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const

@@ -1,5 +1,6 @@
 #include "Timer.h"
 #include <stdexcept>
+#include <SDL/SDL.h>
 
 using namespace vm;
 

@@ -1,12 +1,14 @@
 #include "Bloom.h"
 #include "../GUI/GUI.h"
+#include "../Swapchain/Swapchain.h"
+#include "../Surface/Surface.h"
 #include <deque>
 
 using namespace vm;
 
 void Bloom::Init()
 {
-	frameImage.format = vulkan->surface->formatKHR.format;
+	frameImage.format = VulkanContext::get()->surface->formatKHR.format;
 	frameImage.initialLayout = vk::ImageLayout::eUndefined;
 	frameImage.createImage(
 		static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -110,7 +112,7 @@ void vm::Bloom::createBrightFilterRenderPass(std::map<std::string, Image>& rende
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
 
-	renderPassBrightFilter = vulkan->device.createRenderPass(renderPassInfo);
+	renderPassBrightFilter = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void vm::Bloom::createGaussianBlurRenderPass(std::map<std::string, Image>& renderTargets)
@@ -140,7 +142,7 @@ void vm::Bloom::createGaussianBlurRenderPass(std::map<std::string, Image>& rende
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
 
-	renderPassGaussianBlur = vulkan->device.createRenderPass(renderPassInfo);
+	renderPassGaussianBlur = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void vm::Bloom::createCombineRenderPass(std::map<std::string, Image>& renderTargets)
@@ -172,11 +174,12 @@ void vm::Bloom::createCombineRenderPass(std::map<std::string, Image>& renderTarg
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpassDescription;
 
-	renderPassCombine = vulkan->device.createRenderPass(renderPassInfo);
+	renderPassCombine = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
 void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
+	auto vulkan = VulkanContext::get();
 	frameBuffers.resize(vulkan->swapchain->images.size() * 4);
 	for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
@@ -245,6 +248,7 @@ void vm::Bloom::createPipelines(std::map<std::string, Image>& renderTargets)
 
 void Bloom::createUniforms(std::map<std::string, Image>& renderTargets)
 {
+	auto vulkan = VulkanContext::get();
 	vk::DescriptorSetAllocateInfo allocateInfo;
 	allocateInfo.descriptorPool = vulkan->descriptorPool;
 	allocateInfo.descriptorSetCount = 1;
@@ -283,7 +287,7 @@ void Bloom::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 		wSetImage(DSCombine, 0, frameImage),
 		wSetImage(DSCombine, 1, renderTargets["gaussianBlurVertical"])
 	};
-	vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+	VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
 void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImages, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets)
@@ -353,13 +357,13 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/Bloom/fragBrightFilter.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -395,7 +399,7 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = vulkan->surface->actualExtent;
+	r2d.extent = VulkanContext::get()->surface->actualExtent;
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -469,7 +473,7 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		DSLayoutBrightFilter = vulkan->device.createDescriptorSetLayout(descriptorLayout);
+		DSLayoutBrightFilter = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutBrightFilter };
@@ -484,7 +488,7 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;
-	pipelineBrightFilter.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipelineBrightFilter.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipelineBrightFilter.pipeinfo.renderPass = renderPassBrightFilter;
@@ -498,11 +502,11 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 	// Base Pipeline Index
 	pipelineBrightFilter.pipeinfo.basePipelineIndex = -1;
 
-	pipelineBrightFilter.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipelineBrightFilter.pipeinfo).at(0);
+	pipelineBrightFilter.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipelineBrightFilter.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& renderTargets)
@@ -512,13 +516,13 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/Bloom/fragGaussianBlurHorizontal.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -554,7 +558,7 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = vulkan->surface->actualExtent;
+	r2d.extent = VulkanContext::get()->surface->actualExtent;
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -628,7 +632,7 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		DSLayoutGaussianBlurHorizontal = vulkan->device.createDescriptorSetLayout(descriptorLayout);
+		DSLayoutGaussianBlurHorizontal = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutGaussianBlurHorizontal };
@@ -643,7 +647,7 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;
-	pipelineGaussianBlurHorizontal.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipelineGaussianBlurHorizontal.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipelineGaussianBlurHorizontal.pipeinfo.renderPass = renderPassGaussianBlur;
@@ -657,11 +661,11 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 	// Base Pipeline Index
 	pipelineGaussianBlurHorizontal.pipeinfo.basePipelineIndex = -1;
 
-	pipelineGaussianBlurHorizontal.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipelineGaussianBlurHorizontal.pipeinfo).at(0);
+	pipelineGaussianBlurHorizontal.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipelineGaussianBlurHorizontal.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& renderTargets)
@@ -671,13 +675,13 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/Bloom/fragGaussianBlurVertical.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -713,7 +717,7 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = vulkan->surface->actualExtent;
+	r2d.extent = VulkanContext::get()->surface->actualExtent;
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -787,7 +791,7 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		DSLayoutGaussianBlurVertical = vulkan->device.createDescriptorSetLayout(descriptorLayout);
+		DSLayoutGaussianBlurVertical = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutGaussianBlurVertical };
@@ -801,7 +805,7 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;
-	pipelineGaussianBlurVertical.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipelineGaussianBlurVertical.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipelineGaussianBlurVertical.pipeinfo.renderPass = renderPassGaussianBlur;
@@ -815,11 +819,11 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 	// Base Pipeline Index
 	pipelineGaussianBlurVertical.pipeinfo.basePipelineIndex = -1;
 
-	pipelineGaussianBlurVertical.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipelineGaussianBlurVertical.pipeinfo).at(0);
+	pipelineGaussianBlurVertical.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipelineGaussianBlurVertical.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
@@ -829,13 +833,13 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	std::vector<char> fragCode = readFile("shaders/Bloom/fragCombine.spv");
 	vk::ShaderModuleCreateInfo fsmci;
 	fsmci.codeSize = fragCode.size();
 	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
-	vk::ShaderModule fragModule = vulkan->device.createShaderModule(fsmci);
+	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -871,7 +875,7 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = vulkan->surface->actualExtent;
+	r2d.extent = VulkanContext::get()->surface->actualExtent;
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -946,7 +950,7 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		DSLayoutCombine = vulkan->device.createDescriptorSetLayout(descriptorLayout);
+		DSLayoutCombine = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutCombine };
@@ -961,7 +965,7 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;
-	pipelineCombine.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipelineCombine.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipelineCombine.pipeinfo.renderPass = renderPassCombine;
@@ -975,15 +979,16 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	// Base Pipeline Index
 	pipelineCombine.pipeinfo.basePipelineIndex = -1;
 
-	pipelineCombine.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipelineCombine.pipeinfo).at(0);
+	pipelineCombine.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipelineCombine.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
-	vulkan->device.destroyShaderModule(fragModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(fragModule);
 }
 
 void Bloom::destroy()
 {
+	auto vulkan = VulkanContext::get();
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
 			vulkan->device.destroyFramebuffer(frameBuffer);

@@ -4,7 +4,7 @@ using namespace vm;
 
 uint32_t Swapchain::aquire(vk::Semaphore semaphore, vk::Fence fence) const
 {
-	return vulkan->device.acquireNextImageKHR(swapchain, UINT64_MAX, semaphore, fence).value;
+	return VulkanContext::get()->device.acquireNextImageKHR(swapchain, UINT64_MAX, semaphore, fence).value;
 }
 
 void Swapchain::present(vk::ArrayProxy<const uint32_t> imageIndices, vk::ArrayProxy<const vk::Semaphore> semaphores, vk::ArrayProxy<const vk::SwapchainKHR> additionalSwapchains) const
@@ -22,18 +22,18 @@ void Swapchain::present(vk::ArrayProxy<const uint32_t> imageIndices, vk::ArrayPr
 	pi.swapchainCount = static_cast<uint32_t>(swapchains.size());
 	pi.pSwapchains = swapchains.data();
 	pi.pImageIndices = imageIndices.data();
-	if (vulkan->graphicsQueue.presentKHR(pi) != vk::Result::eSuccess)
+	if (VulkanContext::get()->graphicsQueue.presentKHR(pi) != vk::Result::eSuccess)
 		throw std::runtime_error("Present error!");
 }
 
 void Swapchain::destroy()
 {
 	for (auto &image : images) {
-		vulkan->device.destroyImageView(image.view);
+		VulkanContext::get()->device.destroyImageView(image.view);
 		image.view = nullptr;
 	}
 	if (swapchain) {
-		vulkan->device.destroySwapchainKHR(swapchain);
+		VulkanContext::get()->device.destroySwapchainKHR(swapchain);
 		swapchain = nullptr;
 	}
 }

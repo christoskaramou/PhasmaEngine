@@ -1,5 +1,4 @@
 #include "Light.h"
-#include "../Math/Math.h"
 
 using namespace vm;
 
@@ -20,15 +19,15 @@ void LightUniforms::createLightUniforms()
 	getDescriptorSetLayout();
 
 	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	uniform.data = vulkan->device.mapMemory(uniform.memory, 0, uniform.size);
+	uniform.data = VulkanContext::get()->device.mapMemory(uniform.memory, 0, uniform.size);
 	LightsUBO lubo;
 	memcpy(uniform.data, &lubo, uniform.size);
 
 	vk::DescriptorSetAllocateInfo allocateInfo;
-	allocateInfo.descriptorPool = vulkan->descriptorPool;
+	allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
 	allocateInfo.descriptorSetCount = 1;
 	allocateInfo.pSetLayouts = &descriptorSetLayout;
-	descriptorSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+	descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
 
 	vk::DescriptorBufferInfo dbi;
 	dbi.buffer = uniform.buffer;
@@ -42,14 +41,14 @@ void LightUniforms::createLightUniforms()
 	writeSet.descriptorCount = 1;
 	writeSet.descriptorType = vk::DescriptorType::eUniformBuffer;
 	writeSet.pBufferInfo = &dbi;							// DeviceSize range;
-	vulkan->device.updateDescriptorSets(writeSet, nullptr);
+	VulkanContext::get()->device.updateDescriptorSets(writeSet, nullptr);
 }
 
 void LightUniforms::destroy()
 {
 	uniform.destroy();
 	if (descriptorSetLayout) {
-		vulkan->device.destroyDescriptorSetLayout(descriptorSetLayout);
+		VulkanContext::get()->device.destroyDescriptorSetLayout(descriptorSetLayout);
 		descriptorSetLayout = nullptr;
 	}
 }
@@ -87,7 +86,7 @@ vk::DescriptorSetLayout LightUniforms::getDescriptorSetLayout()
 		createInfo.bindingCount = 1;
 		createInfo.pBindings = &descriptorSetLayoutBinding;
 
-		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(createInfo);
+		descriptorSetLayout = VulkanContext::get()->device.createDescriptorSetLayout(createInfo);
 	}
 	return descriptorSetLayout;
 }

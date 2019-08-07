@@ -2,10 +2,8 @@
 #include <string>
 #include <future>
 #include <tuple>
-#include <thread>
 #include <deque>
 #include <any>
-#include <atomic>
 
 namespace vm {
 	struct Queue

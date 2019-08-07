@@ -1,6 +1,5 @@
 #pragma once
 #include "../../include/Vulkan.h"
-#include "../../include/imgui/imgui.h"
 #include "../Math/Math.h"
 
 namespace vm {

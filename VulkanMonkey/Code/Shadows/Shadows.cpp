@@ -1,5 +1,7 @@
 #include "Shadows.h"
 #include "../GUI/GUI.h"
+#include "../Swapchain/Swapchain.h"
+#include "../Vertex/Vertex.h"
 
 using namespace vm;
 
@@ -9,13 +11,13 @@ uint32_t					Shadows::imageSize = 4096;
 void Shadows::createDescriptorSets()
 {
 	vk::DescriptorSetAllocateInfo allocateInfo;
-	allocateInfo.descriptorPool = vulkan->descriptorPool;
+	allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
 	allocateInfo.descriptorSetCount = 1;
 	allocateInfo.pSetLayouts = &descriptorSetLayout;
 
 	descriptorSets.resize(3); // size of wanted number of cascaded shadows
 	for (uint32_t i = 0; i < 3; i++) {
-		descriptorSets[i] = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+		descriptorSets[i] = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 		// MVP
@@ -44,14 +46,14 @@ void Shadows::createDescriptorSets()
 		textureWriteSets[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 		textureWriteSets[1].pImageInfo = &dii;
 
-		vulkan->device.updateDescriptorSets(textureWriteSets, nullptr);
+		VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
 	}
 }
 
 void Shadows::createRenderPass()
 {
 	vk::AttachmentDescription attachment;
-	attachment.format = vulkan->depth->format;
+	attachment.format = VulkanContext::get()->depth->format;
 	attachment.samples = vk::SampleCountFlagBits::e1;
 	attachment.loadOp = vk::AttachmentLoadOp::eClear;
 	attachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -73,7 +75,7 @@ void Shadows::createRenderPass()
 	rpci.subpassCount = 1;
 	rpci.pSubpasses = &subpassDesc;
 
-	renderPass = vulkan->device.createRenderPass(rpci);
+	renderPass = VulkanContext::get()->device.createRenderPass(rpci);
 }
 
 void Shadows::createFrameBuffers()
@@ -81,7 +83,7 @@ void Shadows::createFrameBuffers()
 	textures.resize(3);
 	for (auto& texture : textures)
 	{
-		texture.format = vulkan->depth->format;
+		texture.format = VulkanContext::get()->depth->format;
 		texture.initialLayout = vk::ImageLayout::eUndefined;
 		texture.addressMode = vk::SamplerAddressMode::eClampToEdge;
 		texture.maxAnisotropy = 1.f;
@@ -96,10 +98,10 @@ void Shadows::createFrameBuffers()
 		texture.createSampler();
 	}
 
-	frameBuffers.resize(vulkan->swapchain->images.size() * textures.size());
+	frameBuffers.resize(VulkanContext::get()->swapchain->images.size() * textures.size());
 	for (uint32_t i = 0; i < frameBuffers.size(); ++i) {
 		std::vector<vk::ImageView> attachments = {
-			textures[i / vulkan->swapchain->images.size()].view // e.g. framebuffer[0,1,2,3,4,5] -> texture[0,0,1,1,2,2].view
+			textures[i / VulkanContext::get()->swapchain->images.size()].view // e.g. framebuffer[0,1,2,3,4,5] -> texture[0,0,1,1,2,2].view
 		};
 
 		vk::FramebufferCreateInfo fbci;
@@ -110,7 +112,7 @@ void Shadows::createFrameBuffers()
 		fbci.height = Shadows::imageSize;
 		fbci.layers = 1;
 
-		frameBuffers[i] = vulkan->device.createFramebuffer(fbci);
+		frameBuffers[i] = VulkanContext::get()->device.createFramebuffer(fbci);
 	}
 }
 
@@ -121,7 +123,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	vk::ShaderModuleCreateInfo vsmci;
 	vsmci.codeSize = vertCode.size();
 	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
-	vk::ShaderModule vertModule = vulkan->device.createShaderModule(vsmci);
+	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
 	pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -229,7 +231,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	pipeline.pipeinfo.layout = vulkan->device.createPipelineLayout(plci);
+	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
 	pipeline.pipeinfo.renderPass = renderPass;
@@ -243,10 +245,10 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	// Base Pipeline Index
 	pipeline.pipeinfo.basePipelineIndex = -1;
 
-	pipeline.pipeline = vulkan->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
 
 	// destroy Shader Modules
-	vulkan->device.destroyShaderModule(vertModule);
+	VulkanContext::get()->device.destroyShaderModule(vertModule);
 }
 
 vk::DescriptorSetLayout Shadows::getDescriptorSetLayout()
@@ -262,7 +264,7 @@ vk::DescriptorSetLayout Shadows::getDescriptorSetLayout()
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		descriptorSetLayout = VulkanContext::get().device.createDescriptorSetLayout(descriptorLayout);
+		descriptorSetLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
 	}
 	return descriptorSetLayout;
 }
@@ -272,7 +274,7 @@ void Shadows::createUniformBuffers()
 	uniformBuffers.resize(3); // 3 buffers for the 3 shadow render passes
 	for (auto& buffer : uniformBuffers) {
 		buffer.createBuffer(sizeof(ShadowsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		buffer.data = vulkan->device.mapMemory(buffer.memory, 0, buffer.size);
+		buffer.data = VulkanContext::get()->device.mapMemory(buffer.memory, 0, buffer.size);
 		memset(buffer.data, 0, buffer.size);
 	}
 }
@@ -280,15 +282,15 @@ void Shadows::createUniformBuffers()
 void Shadows::destroy()
 {
 	if (renderPass)
-		vulkan->device.destroyRenderPass(renderPass);
-	if (Shadows::descriptorSetLayout) {
-		vulkan->device.destroyDescriptorSetLayout(Shadows::descriptorSetLayout);
-		Shadows::descriptorSetLayout = nullptr;
+		VulkanContext::get()->device.destroyRenderPass(renderPass);
+	if (descriptorSetLayout) {
+		VulkanContext::get()->device.destroyDescriptorSetLayout(Shadows::descriptorSetLayout);
+		descriptorSetLayout = nullptr;
 	}
 	for (auto& texture : textures)
 		texture.destroy();
 	for (auto& fb : frameBuffers)
-		vulkan->device.destroyFramebuffer(fb);
+		VulkanContext::get()->device.destroyFramebuffer(fb);
 	for (auto& buffer : uniformBuffers)
 		buffer.destroy();
 	pipeline.destroy();

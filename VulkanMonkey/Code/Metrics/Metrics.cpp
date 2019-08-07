@@ -26,7 +26,7 @@ void Metrics::end(float* res)
 
 void Metrics::initQueryPool()
 {
-	gpuProps = vulkan->gpu.getProperties();
+	gpuProps = VulkanContext::get()->gpu.getProperties();
 	if (!gpuProps.limits.timestampComputeAndGraphics)
 		throw std::runtime_error("Timestamps not supported");
 
@@ -34,14 +34,14 @@ void Metrics::initQueryPool()
 	qpci.queryType = vk::QueryType::eTimestamp;
 	qpci.queryCount = 2;
 
-	queryPool = vulkan->device.createQueryPool(qpci);
+	queryPool = VulkanContext::get()->device.createQueryPool(qpci);
 
 	queryTimes.resize(2, 0);
 }
 
 float Metrics::getTime()
 {
-	const auto res = vulkan->device.getQueryPoolResults<uint64_t>(queryPool, 0, 2, queryTimes, sizeof(uint64_t), vk::QueryResultFlagBits::e64);
+	const auto res = VulkanContext::get()->device.getQueryPoolResults<uint64_t>(queryPool, 0, 2, queryTimes, sizeof(uint64_t), vk::QueryResultFlagBits::e64);
 	if (res != vk::Result::eSuccess)
 		throw std::runtime_error("could not get QueryPoolResults");
 	return static_cast<float>(queryTimes[1] - queryTimes[0]) * gpuProps.limits.timestampPeriod * 1e-6f;
@@ -49,5 +49,5 @@ float Metrics::getTime()
 
 void Metrics::destroy() const
 {
-	vulkan->device.destroyQueryPool(queryPool);
+	VulkanContext::get()->device.destroyQueryPool(queryPool);
 }

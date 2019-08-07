@@ -11,13 +11,8 @@ Event Event::OnExit = CREATE_EVENT();
 Event Event::OnUpdate = CREATE_EVENT();
 Event Event::OnRender = CREATE_EVENT();
 
-EventSystem& EventSystem::get() {
-	static EventSystem instance;
-	return instance;
-}
-
 // returns the eventID
-Event vm::EventSystem::createEvent()
+Event EventSystem::createEvent()
 {
 	m_subscribers.emplace_back();
 	return { static_cast<uint32_t>(m_subscribers.size()) - 1, false };
