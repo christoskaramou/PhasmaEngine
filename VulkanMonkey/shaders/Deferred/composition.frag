@@ -24,9 +24,9 @@ void main()
 		outColor = vec4(texture(cubemapSampler, normalize(fragPos - ubo.camPos.xyz)).xyz, 1.0);
 		
 		// Fog
-		if (screenSpace.effect2.w > 0.0) {
+		if (screenSpace.effects2.w > 0.0) {
 			float d = length(fragPos - ubo.camPos.xyz);
-			outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effect2.w));
+			outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effects2.w));
 		}
 
 		return;
@@ -43,13 +43,13 @@ void main()
 	material.F0 = mix(vec3(0.04f), material.albedo, material.metallic);
 
 	// Ambient
-	float factor_occlusion = screenSpace.effect.x > 0.5 ? texture(ssaoBlurSampler, inUV).x : 1.0;
+	float factor_occlusion = screenSpace.effects0.x > 0.5 ? texture(ssaoBlurSampler, inUV).x : 1.0;
 	float factor_sky_light = clamp(ubo.lights[0].color.a, 0.025f, 1.0f);
 	float ambient_light = factor_sky_light * factor_occlusion;
 	vec3 fragColor = vec3(0.0);// 0.1 * material.albedo.xyz;
 
 	// IBL
-	if (screenSpace.effect1.x > 0.5)
+	if (screenSpace.effects1.x > 0.5)
 		fragColor += ImageBasedLighting(material, normal, normalize(fragPos - ubo.camPos.xyz), cubemapSampler, lutIBLSamlpler) * ambient_light;
 
 	fragColor += calculateShadowAndDirectLight(material, fragPos, ubo.camPos.xyz, normal, factor_occlusion);
@@ -60,21 +60,21 @@ void main()
 	outColor = vec4(fragColor, albedo.a) + texture(emiSampler, inUV);
 
 	// SSR
-	if (screenSpace.effect.y > 0.5)
+	if (screenSpace.effects0.y > 0.5)
 		outColor += vec4(texture(ssrSampler, inUV).xyz, 0.0) * (1.0 - material.roughness);
 	
 	// Tone Mapping
-	if (screenSpace.effect.z > 0.5)
+	if (screenSpace.effects0.z > 0.5)
 		//outColor.xyz = ACESFilm(outColor.xyz);
-		//outColor.xyz = SRGBtoLINEAR(TonemapFilmic(outColor.xyz, screenSpace.effect2.x));
+		//outColor.xyz = SRGBtoLINEAR(TonemapFilmic(outColor.xyz, screenSpace.effects2.x));
 		//outColor.xyz = ACESFitted(outColor.xyz);
 		outColor.xyz = Reinhard(outColor.xyz);
-		//outColor.xyz = ToneMapReinhard(outColor.xyz, screenSpace.effect2.x); // ToneMapReinhard(color, exposure value)
+		//outColor.xyz = ToneMapReinhard(outColor.xyz, screenSpace.effects2.x); // ToneMapReinhard(color, exposure value)
 
 	// Fog
-	if (screenSpace.effect2.w > 0.0) {
+	if (screenSpace.effects2.w > 0.0) {
 		float d = length(fragPos - ubo.camPos.xyz);
-		outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effect2.w));
+		outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effects2.w));
 	}
 }
 

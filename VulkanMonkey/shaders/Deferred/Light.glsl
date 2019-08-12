@@ -12,7 +12,7 @@ struct Light {
 };
 
 
-layout(push_constant) uniform SS { vec4 effect; vec4 effect1; mat4 invViewProj; vec4 effect2; } screenSpace;
+layout(push_constant) uniform SS { vec4 effects0; vec4 effects1; mat4 invViewProj; vec4 effects2; } screenSpace;
 layout(constant_id = 0) const int NUM_LIGHTS = 1;
 layout(set = 0, binding = 0) uniform sampler2D samplerDepth;
 layout(set = 0, binding = 1) uniform sampler2D samplerNormal;
@@ -32,13 +32,13 @@ vec3 compute_point_light(int lightIndex, Material material, vec3 world_pos, vec3
 {
 	vec3 light_dir_full = world_pos - ubo.lights[lightIndex].position.xyz;
 	float light_dist = max(0.1, length(light_dir_full));
-	if (light_dist > screenSpace.effect2.z) // max range
+	if (light_dist > screenSpace.effects2.z) // max range
 		return vec3(0.0);
 
 	vec3 light_dir = normalize(-light_dir_full);
 	float attenuation = light_dist * light_dist;
 	vec3 point_color = ubo.lights[lightIndex].color.xyz / attenuation;
-	point_color *= screenSpace.effect2.y * ssao; // intensity
+	point_color *= screenSpace.effects2.y * ssao; // intensity
 
 	float roughness = material.roughness * 0.75 + 0.25;
 
