@@ -67,8 +67,7 @@ namespace vm {
 		void readGltf(const std::filesystem::path& file);
 		void loadModelGltf(const std::string& folderPath, const std::string& modelName, bool show = true);
 		void getMesh(Pointer<vm::Node>& node, const std::string& meshID, const std::string& folderPath);
-		template <typename T>
-		void getVertexData(std::vector<T>& vec, const std::string& accessorName, const Microsoft::glTF::MeshPrimitive& primitive);
+		template <typename T> void getVertexData(std::vector<T>& vec, const std::string& accessorName, const Microsoft::glTF::MeshPrimitive& primitive) const;
 		void getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::MeshPrimitive& primitive) const;
 		Microsoft::glTF::Image* getImage(const std::string& textureID) const;
 		void loadModel(const std::string& folderPath, const std::string& modelName, bool show = true);

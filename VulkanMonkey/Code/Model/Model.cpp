@@ -74,7 +74,7 @@ glTF::Image* Model::getImage(const std::string& textureID) const
 }
 
 template <typename T>
-void Model::getVertexData(std::vector<T>& vec, const std::string& accessorName, const glTF::MeshPrimitive& primitive)
+void Model::getVertexData(std::vector<T>& vec, const std::string& accessorName, const glTF::MeshPrimitive& primitive) const
 {
 	std::string accessorId;
 	if (primitive.TryGetAttributeAccessorId(accessorName, accessorId))
@@ -124,7 +124,7 @@ void Model::getVertexData(std::vector<T>& vec, const std::string& accessorName, 
 	}
 }
 
-void Model::getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::MeshPrimitive& primitive) const
+void Model::getIndexData(std::vector<uint32_t>& vec, const glTF::MeshPrimitive& primitive) const
 {
 	if (!primitive.indicesAccessorId.empty())
 	{

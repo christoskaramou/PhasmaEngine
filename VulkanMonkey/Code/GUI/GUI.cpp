@@ -322,6 +322,7 @@ void GUI::Properties() const
 		}
 		ImGui::Unindent(16.0f);
 	}
+	ImGui::InputFloat("Fog", &fog_intensity, 0.0001f, 0.005f, 4);
 	ImGui::InputFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f, 3);
 	ImGui::SliderFloat4("ClearCol", clearColor.data(), 0.0f, 1.0f);
 	ImGui::InputFloat("TimeScale", &timeScale, 0.05f, 0.2f); ImGui::Separator(); ImGui::Separator();

@@ -149,7 +149,7 @@ void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows
 	screenSpace[3] = { invViewProj[1] };
 	screenSpace[4] = { invViewProj[2] };
 	screenSpace[5] = { invViewProj[3] };
-	screenSpace[6] = { GUI::exposure, GUI::lights_intensity, GUI::lights_range, 0.f };
+	screenSpace[6] = { GUI::exposure, GUI::lights_intensity, GUI::lights_range, GUI::fog_intensity };
 
 	cmd.pushConstants<vec4>(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, screenSpace);
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline);

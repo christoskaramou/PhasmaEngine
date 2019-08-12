@@ -22,6 +22,13 @@ void main()
 	if (texture(samplerDepth, inUV).x == 0.0) {
 		vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj);
 		outColor = vec4(texture(cubemapSampler, normalize(fragPos - ubo.camPos.xyz)).xyz, 1.0);
+		
+		// Fog
+		if (screenSpace.effect2.w > 0.0) {
+			float d = length(fragPos - ubo.camPos.xyz);
+			outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effect2.w));
+		}
+
 		return;
 	}
 	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj);
@@ -63,6 +70,12 @@ void main()
 		//outColor.xyz = ACESFitted(outColor.xyz);
 		outColor.xyz = Reinhard(outColor.xyz);
 		//outColor.xyz = ToneMapReinhard(outColor.xyz, screenSpace.effect2.x); // ToneMapReinhard(color, exposure value)
+
+	// Fog
+	if (screenSpace.effect2.w > 0.0) {
+		float d = length(fragPos - ubo.camPos.xyz);
+		outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effect2.w));
+	}
 }
 
 vec2 poissonDisk[8] = vec2[](
