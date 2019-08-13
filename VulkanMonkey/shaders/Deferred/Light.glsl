@@ -176,13 +176,11 @@ vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj
 	vec3 dither_value = Dither_Valve(uv * vec2(float(texDim.x), float(texDim.y))) * 400;
 	ray_pos += ray_step * dither_value;
 	
-	const int cascade = 0;
-	
 	vec3 fog = vec3(0.0f);
 	for (int i = 0; i < g_vl_steps; i++)
 	{
 		// Compute position in light space
-		float4 pos_light = lightViewProj * float4(ray_pos, 1.0f);
+		vec4 pos_light = lightViewProj * vec4(ray_pos, 1.0f);
 		pos_light /= pos_light.w;
 		
 		// Compute ray uv
