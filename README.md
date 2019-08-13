@@ -9,6 +9,7 @@ VulkanMonkey3D is intended as a project for learning 3D graphics and techniques,
 * Screen Space Ambient Occlusion
 * Tone Mapping - HDR
 * Image Based Lighting
+* Volumetric Lighting
 * TAA
 * FXAA
 * Bloom
@@ -30,6 +31,7 @@ And some other primitive implemented ideas in a certain degree like Compute shad
 ![Screenshot](VulkanMonkey/Images/example_image3.png)
 ![Screenshot](VulkanMonkey/Images/example_image2.png)
 ![Screenshot](VulkanMonkey/Images/example_image6.png)
+![Screenshot](VulkanMonkey/Images/example_image7.png)
 
 **Building and Compiling**
 
