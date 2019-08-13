@@ -137,5 +137,70 @@ float3 ImageBasedLighting(Material material, float3 normal, float3 camera_to_pix
 
 	return kD * cDiffuse + cSpecular; 
 }
+// ----------------------------------------------------
+// Reference for volumetric lighting:
+// https://github.com/PanosK92/SpartanEngine/blob/master/Data/shaders/VolumetricLighting.hlsl
+
+const float g_vl_steps 			= 64;
+const float g_vl_scattering 	= 0.95f;
+
+// Mie scaterring approximated with Henyey-Greenstein phase function.
+float ComputeScattering(float v_dot_l)
+{
+	float result = 1.0f - g_vl_scattering * g_vl_scattering;
+	float e = abs(1.0f + g_vl_scattering * g_vl_scattering - (2.0f * g_vl_scattering) * v_dot_l);
+	result /= pow(e, 0.1f);
+	return result;
+}
+
+vec3 Dither_Valve(vec2 screen_pos)
+{
+	float _dot = dot(vec2(171.0, 231.0), screen_pos);
+    vec3 dither = vec3(_dot, _dot, _dot);
+    dither = fract(dither / vec3(103.0, 71.0, 97.0));
+    
+    return dither / 255.0;
+}
+
+vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj)
+{
+	vec3 pixel_to_camera 			= ubo.camPos.xyz - pos_world;
+	float pixel_to_cameral_length 	= length(pixel_to_camera);
+	vec3 ray_dir					= pixel_to_camera / pixel_to_cameral_length;
+	float step_length 				= pixel_to_cameral_length / g_vl_steps;
+	vec3 ray_step 					= ray_dir * step_length;
+	vec3 ray_pos 					= pos_world;
+
+	// Apply dithering as it will allows us to get away with a crazy low sample count ;-)
+	ivec2 texDim = textureSize(samplerAlbedo, 0);
+	vec3 dither_value = Dither_Valve(uv * vec2(float(texDim.x), float(texDim.y))) * 400;
+	ray_pos += ray_step * dither_value;
+	
+	const int cascade = 0;
+	
+	vec3 fog = vec3(0.0f);
+	for (int i = 0; i < g_vl_steps; i++)
+	{
+		// Compute position in light space
+		float4 pos_light = lightViewProj * float4(ray_pos, 1.0f);
+		pos_light /= pos_light.w;
+		
+		// Compute ray uv
+		vec2 ray_uv = pos_light.xy * vec2(0.5f, 0.5f) + 0.5f;
+		
+		// Check to see if the light can "see" the pixel		
+		float depth_delta = texture(shadowMapSampler1, vec3(ray_uv, pos_light.z)).r;
+		if (depth_delta > 0.0f)
+		{
+			fog += ComputeScattering(dot(ray_dir, normalize(-light.position.xyz)));
+		}
+		
+		ray_pos += ray_step;
+	}
+	fog /= g_vl_steps;
+
+	return fog * light.color.xyz * light.color.a;
+}
+// ----------------------------------------------------
 
 #endif

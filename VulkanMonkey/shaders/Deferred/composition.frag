@@ -29,6 +29,9 @@ void main()
 			outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effects2.w));
 		}
 
+		// Volumetric light
+		outColor.xyz += VolumetricLighting(ubo.lights[0], fragPos, inUV, shadow_coords1);
+
 		return;
 	}
 	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj);
@@ -76,6 +79,9 @@ void main()
 		float d = length(fragPos - ubo.camPos.xyz);
 		outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effects2.w));
 	}
+
+	// Volumetric light
+	outColor.xyz += VolumetricLighting(ubo.lights[0], fragPos, inUV, shadow_coords1);
 }
 
 vec2 poissonDisk[8] = vec2[](
