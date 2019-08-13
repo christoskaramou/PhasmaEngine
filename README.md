@@ -10,6 +10,7 @@ VulkanMonkey3D is intended as a project for learning 3D graphics and techniques,
 * Tone Mapping - HDR
 * Image Based Lighting
 * Volumetric Lighting
+* Fog
 * TAA
 * FXAA
 * Bloom
@@ -29,9 +30,9 @@ Here is a [demo video](https://www.youtube.com/watch?v=Dj1CpDCSy_k) with some of
 And some other primitive implemented ideas in a certain degree like Compute shaders.
 
 ![Screenshot](VulkanMonkey/Images/example_image3.png)
+![Screenshot](VulkanMonkey/Images/example_image7.png)
 ![Screenshot](VulkanMonkey/Images/example_image2.png)
 ![Screenshot](VulkanMonkey/Images/example_image6.png)
-![Screenshot](VulkanMonkey/Images/example_image7.png)
 
 **Building and Compiling**
 
