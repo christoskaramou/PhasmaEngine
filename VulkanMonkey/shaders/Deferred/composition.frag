@@ -3,41 +3,46 @@
 
 #include "Light.glsl"
 
-layout (location = 0) in vec2 inUV;
-layout (location = 1) in float castShadows;
-layout (location = 2) in float maxCascadeDist0;
-layout (location = 3) in float maxCascadeDist1;
-layout (location = 4) in float maxCascadeDist2;
+layout (location = 0) in vec2 in_UV;
+layout (location = 1) in float cast_shadows;
+layout (location = 2) in float max_cascade_dist0;
+layout (location = 3) in float max_cascade_dist1;
+layout (location = 4) in float max_cascade_dist2;
 layout (location = 5) in mat4 shadow_coords0; // small area
 layout (location = 9) in mat4 shadow_coords1; // medium area
 layout (location = 13) in mat4 shadow_coords2; // large area
 
 layout (location = 0) out vec4 outColor;
 
-vec3 calculateShadowAndDirectLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao);
+vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao);
 
 void main() 
 {
-	// if depth is maxmimum sample the skybox and return
-	if (texture(samplerDepth, inUV).x == 0.0) {
-		vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj);
-		outColor = vec4(texture(cubemapSampler, normalize(fragPos - ubo.camPos.xyz)).xyz, 1.0);
+	float depth = texture(sampler_depth, in_UV).x;
+
+	// if the depth is maximum it hits the skybox
+	if (depth == 0.0) {
+
+		// Skybox
+		vec3 fragPos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
+		outColor = vec4(texture(sampler_cube_map, normalize(fragPos - ubo.cam_pos.xyz)).xyz, 1.0);
 		
 		// Fog
-		if (screenSpace.effects2.w > 0.0) {
-			float d = length(fragPos - ubo.camPos.xyz);
+		if (screenSpace.effects2.w > 0.00001) {
+			float d = length(fragPos - ubo.cam_pos.xyz);
 			outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effects2.w));
 		}
 
 		// Volumetric light
-		outColor.xyz += VolumetricLighting(ubo.lights[0], fragPos, inUV, shadow_coords1);
+		if (screenSpace.effects1.y > 0.5)
+			outColor.xyz += VolumetricLighting(ubo.lights[0], fragPos, in_UV, shadow_coords1);
 
 		return;
 	}
-	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, screenSpace.invViewProj);
-	vec3 normal = texture(samplerNormal, inUV).xyz;
-	vec3 metRough = texture(samplerMetRough, inUV).xyz;
-	vec4 albedo = texture(samplerAlbedo, inUV);
+	vec3 fragPos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
+	vec3 normal = texture(sampler_normal, in_UV).xyz;
+	vec3 metRough = texture(sampler_met_rough, in_UV).xyz;
+	vec4 albedo = texture(sampler_albedo, in_UV);
 	
 	Material material;
 	material.albedo = albedo.xyz;
@@ -46,25 +51,25 @@ void main()
 	material.F0 = mix(vec3(0.04f), material.albedo, material.metallic);
 
 	// Ambient
-	float factor_occlusion = screenSpace.effects0.x > 0.5 ? texture(ssaoBlurSampler, inUV).x : 1.0;
+	float factor_occlusion = screenSpace.effects0.x > 0.5 ? texture(sampler_ssao_blur, in_UV).x : 1.0;
 	float factor_sky_light = clamp(ubo.lights[0].color.a, 0.025f, 1.0f);
 	float ambient_light = factor_sky_light * factor_occlusion;
 	vec3 fragColor = vec3(0.0);// 0.1 * material.albedo.xyz;
 
 	// IBL
 	if (screenSpace.effects1.x > 0.5)
-		fragColor += ImageBasedLighting(material, normal, normalize(fragPos - ubo.camPos.xyz), cubemapSampler, lutIBLSamlpler) * ambient_light;
+		fragColor += ImageBasedLighting(material, normal, normalize(fragPos - ubo.cam_pos.xyz), sampler_cube_map, sampler_lut_IBL) * ambient_light;
 
-	fragColor += calculateShadowAndDirectLight(material, fragPos, ubo.camPos.xyz, normal, factor_occlusion);
+	fragColor += directLight(material, fragPos, ubo.cam_pos.xyz, normal, factor_occlusion);
 
 	for(int i = 1; i < NUM_LIGHTS+1; ++i)
-		fragColor += compute_point_light(i, material, fragPos, ubo.camPos.xyz, normal, factor_occlusion);
+		fragColor += compute_point_light(i, material, fragPos, ubo.cam_pos.xyz, normal, factor_occlusion);
 
-	outColor = vec4(fragColor, albedo.a) + texture(emiSampler, inUV);
+	outColor = vec4(fragColor, albedo.a) + texture(sampler_emission, in_UV);
 
 	// SSR
 	if (screenSpace.effects0.y > 0.5)
-		outColor += vec4(texture(ssrSampler, inUV).xyz, 0.0) * (1.0 - material.roughness);
+		outColor += vec4(texture(sampler_ssr, in_UV).xyz, 0.0) * (1.0 - material.roughness);
 	
 	// Tone Mapping
 	if (screenSpace.effects0.z > 0.5)
@@ -75,13 +80,14 @@ void main()
 		//outColor.xyz = ToneMapReinhard(outColor.xyz, screenSpace.effects2.x); // ToneMapReinhard(color, exposure value)
 
 	// Fog
-	if (screenSpace.effects2.w > 0.0) {
-		float d = length(fragPos - ubo.camPos.xyz);
+	if (screenSpace.effects2.w > 0.00001) {
+		float d = length(fragPos - ubo.cam_pos.xyz);
 		outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effects2.w));
 	}
 
 	// Volumetric light
-	outColor.xyz += VolumetricLighting(ubo.lights[0], fragPos, inUV, shadow_coords1);
+	if (screenSpace.effects1.y > 0.5)
+		outColor.xyz += VolumetricLighting(ubo.lights[0], fragPos, in_UV, shadow_coords1);
 }
 
 vec2 poissonDisk[8] = vec2[](
@@ -94,37 +100,53 @@ vec2 poissonDisk[8] = vec2[](
 	vec2(0.015656f, 0.749779f),
 	vec2(0.758385f, 0.49617f));
 
-vec3 calculateShadowAndDirectLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao)
+vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao)
 {
+	// calculate shadow texture coords of each cascade
 	vec4 s_coords0 = shadow_coords0 * vec4(world_pos, 1.0);
 	s_coords0.xy = s_coords0.xy * 0.5 + 0.5;
 	s_coords0 = s_coords0 / s_coords0.w;
+
 	vec4 s_coords1 = shadow_coords1 * vec4(world_pos, 1.0);
 	s_coords1.xy = s_coords1.xy * 0.5 + 0.5;
 	s_coords1 = s_coords1 / s_coords1.w;
+
 	vec4 s_coords2 = shadow_coords2 * vec4(world_pos, 1.0);
 	s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
 	s_coords2 = s_coords2 / s_coords2.w;
 
 	const float bias = 0.0007;
-	const float mixFactor = 15.0;
+	const float power = 15.0;
 	float lit = 0.0;
 	float dist = distance(world_pos, camera_pos);
-	if (dist < maxCascadeDist0) {
-		for (int i = 0; i < 4 * castShadows; i++) {
-			float value = mix(texture(shadowMapSampler0, vec3(s_coords0.xy + poissonDisk[i] * 0.0008, s_coords0.z + bias)), texture(shadowMapSampler1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias)), pow(dist, mixFactor) / pow(maxCascadeDist0, mixFactor));
-			lit += 0.25 * value;
+
+	if (dist < max_cascade_dist0) {
+		for (int i = 0; i < 4 * cast_shadows; i++) {
+
+			float cascade0 = texture(sampler_shadow_map0, vec3(s_coords0.xy + poissonDisk[i] * 0.0008, s_coords0.z + bias));
+			float cascade1 = texture(sampler_shadow_map1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias));
+			float mix_factor = pow(dist / max_cascade_dist0, power);
+
+			lit += 0.25 * mix(cascade0, cascade1, mix_factor);
 		}
 	}
-	else if (dist < maxCascadeDist1) {
-		for (int i = 0; i < 4 * castShadows; i++) {
-			float value = mix(texture(shadowMapSampler1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias)), texture(shadowMapSampler2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias)), pow(dist, mixFactor) / pow(maxCascadeDist1, mixFactor));
-			lit += 0.25 * value;
+	else if (dist < max_cascade_dist1) {
+		for (int i = 0; i < 4 * cast_shadows; i++) {
+
+			float cascade1 = texture(sampler_shadow_map1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias));
+			float cascade2 = texture(sampler_shadow_map2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias));
+			float mix_factor = pow(dist / max_cascade_dist1, power);
+
+			lit += 0.25 * mix(cascade1, cascade2, mix_factor);
 		}
 	}
 	else {
-		for (int i = 0; i < 4 * castShadows; i++)
-			lit += 0.25 * (texture(shadowMapSampler2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias)));
+		for (int i = 0; i < 4 * cast_shadows; i++) {
+
+			float cascade2 = texture(sampler_shadow_map2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias));
+
+			lit += 0.25 * cascade2;
+		}
 	}
 
 	float roughness = material.roughness * 0.75 + 0.25;

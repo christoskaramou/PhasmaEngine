@@ -18,6 +18,9 @@ namespace vm {
 		static inline float									renderTargetsScale = 1.0f;//0.71f;
 		static inline bool									lock_render_window = true;
 		static inline bool									use_IBL = true;
+		static inline bool									use_Volumetric_lights = false;
+		static inline int									volumetric_steps = 64;
+		static inline int									volumetric_dither_strength = 400;
 		static inline bool									show_ssr = false;
 		static inline bool									show_ssao = false;
 		static inline bool									show_tonemapping = false;

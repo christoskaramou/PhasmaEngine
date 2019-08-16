@@ -308,6 +308,13 @@ void GUI::Properties() const
 	ImGui::Checkbox("Sun Light", &shadow_cast);
 	if (shadow_cast) {
 		ImGui::Indent(16.0f);
+		ImGui::Checkbox("Volumetric", &use_Volumetric_lights);
+		if (use_Volumetric_lights) {
+			ImGui::Indent(16.0f);
+			ImGui::InputInt("Iterations", &volumetric_steps, 1, 3);
+			ImGui::InputInt("Dither Strength", &volumetric_dither_strength, 1, 10);
+			ImGui::Unindent(16.0f);
+		}
 		ImGui::SliderFloat("Sun Intst", &sun_intensity, 0.1f, 50.f);
 		ImGui::InputFloat3("SunPos", sun_position.data(), 1);
 		ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5); ImGui::Separator(); ImGui::Separator();

@@ -14,19 +14,19 @@ struct Light {
 
 layout(push_constant) uniform SS { vec4 effects0; vec4 effects1; mat4 invViewProj; vec4 effects2; } screenSpace;
 layout(constant_id = 0) const int NUM_LIGHTS = 1;
-layout(set = 0, binding = 0) uniform sampler2D samplerDepth;
-layout(set = 0, binding = 1) uniform sampler2D samplerNormal;
-layout(set = 0, binding = 2) uniform sampler2D samplerAlbedo;
-layout(set = 0, binding = 3) uniform sampler2D samplerMetRough;
-layout(set = 0, binding = 4) uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS + 1]; } ubo;
-layout(set = 0, binding = 5) uniform sampler2D ssaoBlurSampler;
-layout(set = 0, binding = 6) uniform sampler2D ssrSampler;
-layout(set = 0, binding = 7) uniform sampler2D emiSampler;
-layout(set = 0, binding = 8) uniform sampler2D lutIBLSamlpler;
-layout(set = 1, binding = 1) uniform sampler2DShadow shadowMapSampler0;
-layout(set = 2, binding = 1) uniform sampler2DShadow shadowMapSampler1;
-layout(set = 3, binding = 1) uniform sampler2DShadow shadowMapSampler2;
-layout(set = 4, binding = 1) uniform samplerCube cubemapSampler;
+layout(set = 0, binding = 0) uniform sampler2D sampler_depth;
+layout(set = 0, binding = 1) uniform sampler2D sampler_normal;
+layout(set = 0, binding = 2) uniform sampler2D sampler_albedo;
+layout(set = 0, binding = 3) uniform sampler2D sampler_met_rough;
+layout(set = 0, binding = 4) uniform UBO { vec4 cam_pos; Light lights[NUM_LIGHTS + 1]; } ubo;
+layout(set = 0, binding = 5) uniform sampler2D sampler_ssao_blur;
+layout(set = 0, binding = 6) uniform sampler2D sampler_ssr;
+layout(set = 0, binding = 7) uniform sampler2D sampler_emission;
+layout(set = 0, binding = 8) uniform sampler2D sampler_lut_IBL;
+layout(set = 1, binding = 1) uniform sampler2DShadow sampler_shadow_map0;
+layout(set = 2, binding = 1) uniform sampler2DShadow sampler_shadow_map1;
+layout(set = 3, binding = 1) uniform sampler2DShadow sampler_shadow_map2;
+layout(set = 4, binding = 1) uniform samplerCube sampler_cube_map;
 
 vec3 compute_point_light(int lightIndex, Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao)
 {
@@ -36,8 +36,8 @@ vec3 compute_point_light(int lightIndex, Material material, vec3 world_pos, vec3
 		return vec3(0.0);
 
 	vec3 light_dir = normalize(-light_dir_full);
-	float attenuation = light_dist * light_dist;
-	vec3 point_color = ubo.lights[lightIndex].color.xyz / attenuation;
+	float attenuation = 1 / (light_dist * light_dist);
+	vec3 point_color = ubo.lights[lightIndex].color.xyz * attenuation;
 	point_color *= screenSpace.effects2.y * ssao; // intensity
 
 	float roughness = material.roughness * 0.75 + 0.25;
@@ -141,14 +141,12 @@ float3 ImageBasedLighting(Material material, float3 normal, float3 camera_to_pix
 // Reference for volumetric lighting:
 // https://github.com/PanosK92/SpartanEngine/blob/master/Data/shaders/VolumetricLighting.hlsl
 
-const float g_vl_steps 			= 64;
-const float g_vl_scattering 	= 0.95f;
-
 // Mie scaterring approximated with Henyey-Greenstein phase function.
-float ComputeScattering(float v_dot_l)
+float ComputeScattering(float dir_dot_l)
 {
-	float result = 1.0f - g_vl_scattering * g_vl_scattering;
-	float e = abs(1.0f + g_vl_scattering * g_vl_scattering - (2.0f * g_vl_scattering) * v_dot_l);
+	float scattering = 0.95f;
+	float result = 1.0f - scattering * scattering;
+	float e = abs(1.0f + scattering * scattering - (2.0f * scattering) * dir_dot_l);
 	result /= pow(e, 0.1f);
 	return result;
 }
@@ -164,20 +162,22 @@ vec3 Dither_Valve(vec2 screen_pos)
 
 vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj)
 {
-	vec3 pixel_to_camera 			= ubo.camPos.xyz - pos_world;
+	float iterations = screenSpace.effects1.z; // 64 iterations default
+
+	vec3 pixel_to_camera 			= ubo.cam_pos.xyz - pos_world;
 	float pixel_to_cameral_length 	= length(pixel_to_camera);
 	vec3 ray_dir					= pixel_to_camera / pixel_to_cameral_length;
-	float step_length 				= pixel_to_cameral_length / g_vl_steps;
+	float step_length 				= pixel_to_cameral_length / iterations;
 	vec3 ray_step 					= ray_dir * step_length;
 	vec3 ray_pos 					= pos_world;
 
 	// Apply dithering as it will allows us to get away with a crazy low sample count ;-)
-	ivec2 texDim = textureSize(samplerAlbedo, 0);
-	vec3 dither_value = Dither_Valve(uv * vec2(float(texDim.x), float(texDim.y))) * 400;
+	ivec2 texDim = textureSize(sampler_albedo, 0);
+	vec3 dither_value = Dither_Valve(uv * vec2(float(texDim.x), float(texDim.y))) * screenSpace.effects1.w; // dithering strength 400 default
 	ray_pos += ray_step * dither_value;
 	
 	vec3 fog = vec3(0.0f);
-	for (int i = 0; i < g_vl_steps; i++)
+	for (int i = 0; i < iterations; i++)
 	{
 		// Compute position in light space
 		vec4 pos_light = lightViewProj * vec4(ray_pos, 1.0f);
@@ -187,7 +187,7 @@ vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj
 		vec2 ray_uv = pos_light.xy * vec2(0.5f, 0.5f) + 0.5f;
 		
 		// Check to see if the light can "see" the pixel		
-		float depth_delta = texture(shadowMapSampler1, vec3(ray_uv, pos_light.z)).r;
+		float depth_delta = texture(sampler_shadow_map1, vec3(ray_uv, pos_light.z)).r;
 		if (depth_delta > 0.0f)
 		{
 			fog += ComputeScattering(dot(ray_dir, normalize(-light.position.xyz)));
@@ -195,7 +195,7 @@ vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj
 		
 		ray_pos += ray_step;
 	}
-	fog /= g_vl_steps;
+	fog /= iterations;
 
 	return fog * light.color.xyz * light.color.a;
 }

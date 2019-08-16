@@ -143,8 +143,8 @@ void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 	std::vector<vec4> screenSpace(7);
-	screenSpace[0] = { GUI::show_ssao ? 1.f : 0.f, GUI::show_ssr ? 1.f : 0.f, GUI::show_tonemapping ? 1.f : 0.f, GUI::use_AntiAliasing ? 1.f : 0.f };
-	screenSpace[1] = { GUI::use_IBL ? 1.f : 0.f, 0.f, 0.f, 0.f };
+	screenSpace[0] = { static_cast<float>(GUI::show_ssao), static_cast<float>(GUI::show_ssr) , static_cast<float>(GUI::show_tonemapping), static_cast<float>(GUI::use_AntiAliasing) };
+	screenSpace[1] = { static_cast<float>(GUI::use_IBL), static_cast<float>(GUI::use_Volumetric_lights), static_cast<float>(GUI::volumetric_steps), static_cast<float>(GUI::volumetric_dither_strength) };
 	screenSpace[2] = { invViewProj[0] };
 	screenSpace[3] = { invViewProj[1] };
 	screenSpace[4] = { invViewProj[2] };
