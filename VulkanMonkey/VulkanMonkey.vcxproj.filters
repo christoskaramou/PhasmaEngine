@@ -88,6 +88,12 @@
     <None Include="shaders\Deferred\pbr.glsl">
       <Filter>Shaders\Deferred</Filter>
     </None>
+    <None Include="shaders\DepthOfField\DOF.frag">
+      <Filter>Shaders\DepthOfField</Filter>
+    </None>
+    <None Include="shaders\DepthOfField\DOF.glsl">
+      <Filter>Shaders\DepthOfField</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Code\Buffer\Buffer.h">
@@ -242,6 +248,9 @@
     </ClInclude>
     <ClInclude Include="Code\TAA\TAA.h">
       <Filter>Code\TAA</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\DepthOfField\DOF.h">
+      <Filter>Code\DepthOfField</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -431,6 +440,9 @@
     <ClCompile Include="Code\TAA\TAA.cpp">
       <Filter>Code\TAA</Filter>
     </ClCompile>
+    <ClCompile Include="Code\DepthOfField\DOF.cpp">
+      <Filter>Code\DepthOfField</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source">
@@ -588,6 +600,12 @@
     </Filter>
     <Filter Include="Shaders\TAA">
       <UniqueIdentifier>{e7e47c1c-fdb2-4121-9c07-737ad56bb448}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\DepthOfField">
+      <UniqueIdentifier>{066d9d7f-cab5-463b-9e19-8c9d1305f386}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\DepthOfField">
+      <UniqueIdentifier>{a926cc9a-6519-4264-bb1c-e055123bcf86}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

@@ -60,6 +60,7 @@ void Context::initRendering()
 	bloom.Init();
 	fxaa.Init();
 	motionBlur.Init();
+	dof.Init();
 
 	// render passes
 #ifdef RENDER_SKYBOX
@@ -73,6 +74,7 @@ void Context::initRendering()
 	fxaa.createRenderPass(renderTargets);
 	taa.createRenderPasses(renderTargets);
 	bloom.createRenderPasses(renderTargets);
+	dof.createRenderPass(renderTargets);
 	motionBlur.createRenderPass(renderTargets);
 	gui.createRenderPass();
 
@@ -88,6 +90,7 @@ void Context::initRendering()
 	fxaa.createFrameBuffers(renderTargets);
 	taa.createFrameBuffers(renderTargets);
 	bloom.createFrameBuffers(renderTargets);
+	dof.createFrameBuffers(renderTargets);
 	motionBlur.createFrameBuffers(renderTargets);
 	gui.createFrameBuffers();
 
@@ -103,6 +106,7 @@ void Context::initRendering()
 	fxaa.createPipeline(renderTargets);
 	taa.createPipelines(renderTargets);
 	bloom.createPipelines(renderTargets);
+	dof.createPipeline(renderTargets);
 	motionBlur.createPipeline(renderTargets);
 	gui.createPipeline();
 
@@ -221,6 +225,17 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	bloom.pipelineCombine.destroy();
 	bloom.frameImage.destroy();
 
+	// Depth of Field
+	for (auto& frameBuffer : dof.frameBuffers) {
+		if (frameBuffer) {
+			vulkan.device.destroyFramebuffer(frameBuffer);
+		}
+	}
+	if (dof.renderPass) {
+		vulkan.device.destroyRenderPass(dof.renderPass);
+	}
+	dof.pipeline.destroy();
+
 	// Motion blur
 	for (auto &frameBuffer : motionBlur.frameBuffers) {
 		if (frameBuffer) {
@@ -326,6 +341,12 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	bloom.createFrameBuffers(renderTargets);
 	bloom.createPipelines(renderTargets);
 	bloom.updateDescriptorSets(renderTargets);
+
+	dof.Init();
+	dof.createRenderPass(renderTargets);
+	dof.createFrameBuffers(renderTargets);
+	dof.createPipeline(renderTargets);
+	dof.updateDescriptorSets(renderTargets);
 
 	motionBlur.Init();
 	motionBlur.createRenderPass(renderTargets);
@@ -459,8 +480,10 @@ void Context::createUniforms()
 	fxaa.createUniforms(renderTargets);
 	// DESCRIPTOR SET FOR TAA PIPELINE
 	taa.createUniforms(renderTargets);
-	// DESCRIPTOR SET FOR BLOOM PIPELINEs
+	// DESCRIPTOR SET FOR BLOOM PIPELINES
 	bloom.createUniforms(renderTargets);
+	// DESCRIPTOR SET FOR DEPTH OF FIELD PIPELINE
+	dof.createUniforms(renderTargets);
 	// DESCRIPTOR SET FOR MOTIONBLUR PIPELINE
 	motionBlur.createMotionBlurUniforms(renderTargets);
 	// DESCRIPTOR SET FOR COMPUTE PIPELINE

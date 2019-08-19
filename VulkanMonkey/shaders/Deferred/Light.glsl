@@ -141,16 +141,6 @@ float3 ImageBasedLighting(Material material, float3 normal, float3 camera_to_pix
 // Reference for volumetric lighting:
 // https://github.com/PanosK92/SpartanEngine/blob/master/Data/shaders/VolumetricLighting.hlsl
 
-// Mie scaterring approximated with Henyey-Greenstein phase function.
-float ComputeScattering(float dir_dot_l)
-{
-	float scattering = 0.95f;
-	float result = 1.0f - scattering * scattering;
-	float e = abs(1.0f + scattering * scattering - (2.0f * scattering) * dir_dot_l);
-	result /= pow(e, 0.1f);
-	return result;
-}
-
 vec3 Dither_Valve(vec2 screen_pos)
 {
 	float _dot = dot(vec2(171.0, 231.0), screen_pos);
@@ -160,14 +150,24 @@ vec3 Dither_Valve(vec2 screen_pos)
     return dither / 255.0;
 }
 
+// Mie scattering approximated with Henyey-Greenstein phase function.
+float ComputeScattering(float dir_dot_l)
+{
+	float scattering = 0.95f;
+	float result = 1.0f - scattering * scattering;
+	float e = abs(1.0f + scattering * scattering - (2.0f * scattering) * dir_dot_l);
+	result /= pow(e, 0.1f);
+	return result;
+}
+
 vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj)
 {
 	float iterations = screenSpace.effects1.z; // 64 iterations default
 
 	vec3 pixel_to_camera 			= ubo.cam_pos.xyz - pos_world;
-	float pixel_to_cameral_length 	= length(pixel_to_camera);
-	vec3 ray_dir					= pixel_to_camera / pixel_to_cameral_length;
-	float step_length 				= pixel_to_cameral_length / iterations;
+	float pixel_to_camera_length 	= length(pixel_to_camera);
+	vec3 ray_dir					= pixel_to_camera / pixel_to_camera_length;
+	float step_length 				= pixel_to_camera_length / iterations;
 	vec3 ray_step 					= ray_dir * step_length;
 	vec3 ray_pos 					= pos_world;
 
@@ -192,7 +192,6 @@ vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj
 		{
 			fog += ComputeScattering(dot(ray_dir, normalize(-light.position.xyz)));
 		}
-		
 		ray_pos += ray_step;
 	}
 	fog /= iterations;

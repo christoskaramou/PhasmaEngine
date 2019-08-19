@@ -56,6 +56,7 @@ Renderer::~Renderer()
 	ctx.fxaa.destroy();
 	ctx.taa.destroy();
 	ctx.bloom.destroy();
+	ctx.dof.destroy();
 	ctx.motionBlur.destroy();
 	ctx.skyBoxDay.destroy();
 	ctx.skyBoxNight.destroy();
@@ -329,7 +330,6 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		if (GUI::use_TAA) {
 			ctx.metrics[6].start(cmd);
 			ctx.taa.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-			//const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 			ctx.taa.draw(cmd, imageIndex, changeLayout, ctx.renderTargets);
 			ctx.metrics[6].end(&GUI::metrics[6]);
 		}
@@ -346,17 +346,24 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	if (GUI::show_Bloom) {
 		ctx.metrics[7].start(cmd);
 		ctx.bloom.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-		//const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 		ctx.bloom.draw(cmd, imageIndex, static_cast<uint32_t>(VulkanContext::get()->swapchain->images.size()), changeLayout, ctx.renderTargets);
 		ctx.metrics[7].end(&GUI::metrics[7]);
+	}
+
+	// Depth of Field
+	if (GUI::use_DOF) {
+		ctx.metrics[8].start(cmd);
+		ctx.dof.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
+		ctx.dof.draw(cmd, imageIndex, ctx.renderTargets);
+		ctx.metrics[8].end(&GUI::metrics[8]);
 	}
 	
 	// MOTION BLUR
 	if (GUI::show_motionBlur) {
-		ctx.metrics[8].start(cmd);
+		ctx.metrics[9].start(cmd);
 		ctx.motionBlur.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
 		ctx.motionBlur.draw(cmd, imageIndex, ctx.renderTargets["viewport"].extent);
-		ctx.metrics[8].end(&GUI::metrics[8]);
+		ctx.metrics[9].end(&GUI::metrics[9]);
 	}
 	
 	changeLayout(cmd, ctx.renderTargets["albedo"], LayoutState::ColorWrite);
@@ -372,10 +379,10 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		changeLayout(cmd, image, LayoutState::DepthWrite);
 
 	// GUI
-	ctx.metrics[9].start(cmd);
+	ctx.metrics[10].start(cmd);
 	ctx.gui.scaleToRenderArea(cmd, ctx.renderTargets["viewport"], imageIndex);
 	ctx.gui.draw(cmd, imageIndex);
-	ctx.metrics[9].end(&GUI::metrics[9]);
+	ctx.metrics[10].end(&GUI::metrics[10]);
 
 	ctx.metrics[0].end(&GUI::metrics[0]);
 
@@ -402,7 +409,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 	for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
 		auto& cmd = VulkanContext::get()->shadowCmdBuffers[i];
 		cmd.begin(beginInfoShadows);
-		ctx.metrics[10 + static_cast<size_t>(i)].start(cmd);
+		ctx.metrics[11 + static_cast<size_t>(i)].start(cmd);
 		cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
 		// depth[i] image ===========================================================
@@ -426,7 +433,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 			}
 		}
 		cmd.endRenderPass();
-		ctx.metrics[10 + static_cast<size_t>(i)].end(&GUI::metrics[10 + static_cast<size_t>(i)]);
+		ctx.metrics[11 + static_cast<size_t>(i)].end(&GUI::metrics[11 + static_cast<size_t>(i)]);
 		// ==========================================================================
 		cmd.end();
 	}

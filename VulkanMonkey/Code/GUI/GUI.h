@@ -34,6 +34,9 @@ namespace vm {
 		static inline float									TAA_sharp_strength = 2.0f;
 		static inline float									TAA_sharp_clamp = 0.35f;
 		static inline float									TAA_sharp_offset_bias = 1.0f;
+		static inline bool									use_DOF = false;
+		static inline float									DOF_focus_scale = 15.0f;
+		static inline float									DOF_blur_range = 5.0f;
 		static inline bool									show_Bloom = false;
 		static inline float									Bloom_Inv_brightness = 20.0f;
 		static inline float									Bloom_intensity = 1.5f;

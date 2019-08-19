@@ -68,8 +68,10 @@ void main()
 	outColor = vec4(fragColor, albedo.a) + texture(sampler_emission, in_UV);
 
 	// SSR
-	if (screenSpace.effects0.y > 0.5)
-		outColor += vec4(texture(sampler_ssr, in_UV).xyz, 0.0) * (1.0 - material.roughness);
+	if (screenSpace.effects0.y > 0.5) {
+		vec3 ssr = texture(sampler_ssr, in_UV).xyz;
+		outColor += vec4(ssr, 0.0) * (1.0 - material.roughness);
+	}
 	
 	// Tone Mapping
 	if (screenSpace.effects0.z > 0.5)

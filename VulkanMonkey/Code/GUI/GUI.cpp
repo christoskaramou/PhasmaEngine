@@ -94,7 +94,7 @@ void GUI::Metrics() const
 	ImGui::Separator(); ImGui::Separator();
 
 	ImGui::Text("CPU Total: %.3f (waited %.3f) ms", cpuTime, cpuWaitingTime);
-	ImGui::Text("GPU Total: %.3f ms", stats[0] + (shadow_cast ? stats[10] + stats[11] + stats[12] : 0.f) + (use_compute ? stats[13] : 0.f));
+	ImGui::Text("GPU Total: %.3f ms", stats[0] + (shadow_cast ? stats[11] + stats[12] + stats[13] : 0.f) + (use_compute ? stats[14] : 0.f));
 	ImGui::Separator();
 	ImGui::Text("Render Passes:");
 	//if (use_compute) {
@@ -103,9 +103,9 @@ void GUI::Metrics() const
 	//ImGui::Text("   Skybox: %.3f ms", stats[1]); totalPasses++;
 	ImGui::Indent(16.0f);
 	if (shadow_cast) {
-		ImGui::Text("Depth: %.3f ms", stats[10]); totalPasses++; totalTime += stats[10];
 		ImGui::Text("Depth: %.3f ms", stats[11]); totalPasses++; totalTime += stats[11];
 		ImGui::Text("Depth: %.3f ms", stats[12]); totalPasses++; totalTime += stats[12];
+		ImGui::Text("Depth: %.3f ms", stats[13]); totalPasses++; totalTime += stats[13];
 	}
 	ImGui::Text("GBuffer: %.3f ms", stats[2]); totalPasses++; totalTime += stats[2];
 	if (show_ssao) {
@@ -121,11 +121,14 @@ void GUI::Metrics() const
 	if (show_Bloom) {
 		ImGui::Text("Bloom: %.3f ms", stats[7]); totalPasses++; totalTime += stats[7];
 	}
+	if (use_DOF) {
+		ImGui::Text("Depth of Field: %.3f ms", stats[8]); totalPasses++; totalTime += stats[8];
+	}
 	if (show_motionBlur) {
-		ImGui::Text("Motion Blur: %.3f ms", stats[8]); totalPasses++; totalTime += stats[8];
+		ImGui::Text("Motion Blur: %.3f ms", stats[9]); totalPasses++; totalTime += stats[9];
 	}
 
-	ImGui::Text("GUI: %.3f ms", stats[9]); totalPasses++; totalTime += stats[9];
+	ImGui::Text("GUI: %.3f ms", stats[10]); totalPasses++; totalTime += stats[10];
 	ImGui::Unindent(16.0f);
 	ImGui::Separator();
 	ImGui::Separator();
@@ -251,6 +254,14 @@ void GUI::Properties() const
 	ImGui::Checkbox("IBL", &use_IBL);
 	ImGui::Checkbox("SSR", &show_ssr);
 	ImGui::Checkbox("SSAO", &show_ssao);
+	ImGui::Checkbox("Depth of Field", &use_DOF);
+	if (use_DOF) {
+		ImGui::Indent(16.0f);
+		ImGui::InputFloat("Scale##DOF", &DOF_focus_scale, 0.05f, 0.5f);
+		ImGui::InputFloat("Range##DOF", &DOF_blur_range, 0.05f, 0.5f);
+		ImGui::Unindent(16.0f);
+		ImGui::Separator(); ImGui::Separator();
+	}
 	ImGui::Checkbox("Motion Blur", &show_motionBlur);
 	if (show_motionBlur) {
 		ImGui::Indent(16.0f);

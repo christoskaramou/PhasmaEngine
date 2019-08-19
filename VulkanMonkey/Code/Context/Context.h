@@ -15,6 +15,7 @@
 #include "../FXAA/FXAA.h"
 #include "../TAA/TAA.h"
 #include "../Bloom/Bloom.h"
+#include "../DepthOfField/DOF.h"
 #include "../MotionBlur/MotionBlur.h"
 #include "../Deferred/Deferred.h"
 #include "../Compute/Compute.h"
@@ -53,6 +54,9 @@ namespace vm {
 
 		// BLOOM
 		Bloom bloom;
+
+		// Depth of Field
+		DOF dof;
 
 		// MOTION BLUR
 		MotionBlur motionBlur;

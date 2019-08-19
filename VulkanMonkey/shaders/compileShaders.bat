@@ -20,3 +20,4 @@ glslangValidator.exe -V Bloom/gaussianBlurHorizontal.frag -o Bloom/fragGaussianB
 glslangValidator.exe -V Bloom/gaussianBlurVertical.frag -o Bloom/fragGaussianBlurVertical.spv
 glslangValidator.exe -V Bloom/combine.frag -o Bloom/fragCombine.spv
 glslangValidator.exe -V MotionBlur/motionBlur.frag -o MotionBlur/frag.spv
+glslangValidator.exe -V DepthOfField/DOF.frag -o DepthOfField/frag.spv

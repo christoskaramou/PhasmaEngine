@@ -33,7 +33,7 @@ void Model::readGltf(const std::filesystem::path& file)
 	auto streamReader = std::make_unique<StreamReader>(file.parent_path());
 	const std::filesystem::path pathFile = file.filename();
 	// Pass a UTF-8 encoded filename to GetInputString
-	auto gltfStream = streamReader->GetInputStream(pathFile.u8string());
+	auto gltfStream = streamReader->GetInputStream(pathFile.string());
 	if (file.extension() == ".gltf") {
 		resourceReader = new glTF::GLTFResourceReader(std::move(streamReader));
 		// Read the contents of the glTF file into a std::stringstream
