@@ -10,6 +10,7 @@ VulkanMonkey3D is intended as a project for learning 3D graphics and techniques,
 * Tone Mapping - HDR
 * Image Based Lighting
 * Volumetric Lighting
+* Depth of Field
 * Fog
 * TAA
 * FXAA
