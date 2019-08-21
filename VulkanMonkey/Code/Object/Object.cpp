@@ -22,8 +22,8 @@ void Object::createVertexBuffer()
 void Object::createUniformBuffer(size_t size)
 {
 	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	uniformBuffer.data = VulkanContext::get()->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
-	memset(uniformBuffer.data, 0, uniformBuffer.size);
+	uniformBuffer.map();
+	uniformBuffer.zero();
 }
 
 void Object::loadTexture(const std::string& path)
@@ -39,10 +39,9 @@ void Object::loadTexture(const std::string& path)
 
 	Buffer staging;
 	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-	void* data = VulkanContext::get()->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize);
-	memcpy(data, pixels, static_cast<size_t>(imageSize));
-	VulkanContext::get()->device.unmapMemory(staging.memory);
+	staging.map();
+	staging.copyData(pixels);
+	staging.unmap();
 
 	stbi_image_free(pixels);
 
@@ -55,8 +54,7 @@ void Object::loadTexture(const std::string& path)
 	texture.createImageView(vk::ImageAspectFlagBits::eColor);
 	texture.createSampler();
 
-	VulkanContext::get()->device.destroyBuffer(staging.buffer);
-	VulkanContext::get()->device.freeMemory(staging.memory);
+	staging.destroy();
 }
 
 void Object::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)

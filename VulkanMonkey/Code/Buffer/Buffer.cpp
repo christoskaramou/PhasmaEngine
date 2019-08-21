@@ -37,6 +37,35 @@ void Buffer::createBuffer(vk::DeviceSize size, const vk::BufferUsageFlags& usage
 	vulkan->device.bindBufferMemory(buffer, memory, 0);
 }
 
+void Buffer::map(vk::DeviceSize offset)
+{
+	if (data)
+		throw std::runtime_error("Map called when buffer data is not null");
+	data = VulkanContext::get()->device.mapMemory(memory, offset, size, vk::MemoryMapFlags());		
+}
+
+void Buffer::unmap()
+{
+	if (!data)
+		return;
+	VulkanContext::get()->device.unmapMemory(memory);
+	data = nullptr;
+}
+
+void Buffer::zero()
+{
+	if (!data)
+		throw std::runtime_error("Buffer is not mapped");
+	memset(data, 0, size);
+}
+
+void Buffer::copyData(const void* srcData, vk::DeviceSize srcSize)
+{
+	if (!data)
+		throw std::runtime_error("Buffer is not mapped");
+	memcpy(data, srcData, srcSize ? srcSize : size);
+}
+
 void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size) const
 {
 	vk::CommandBufferAllocateInfo cbai;
@@ -59,6 +88,18 @@ void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size) c
 	VulkanContext::get()->submitAndWaitFence(copyCmd, nullptr, nullptr, nullptr);
 
 	VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, copyCmd);
+}
+
+void Buffer::flush()
+{
+	if (!data)
+		throw std::runtime_error("Buffer is not mapped");
+
+	vk::MappedMemoryRange range;
+	range.memory = memory;
+	range.size = size;
+
+	VulkanContext::get()->device.flushMappedMemoryRanges(range);
 }
 
 void Buffer::destroy()

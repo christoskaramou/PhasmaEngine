@@ -46,8 +46,8 @@ void TAA::update(const Camera& camera)
 void TAA::createUniforms(std::map<std::string, Image>& renderTargets)
 {
 	uniform.createBuffer(sizeof(UBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	uniform.data = VulkanContext::get()->device.mapMemory(uniform.memory, 0, uniform.size);
-	memset(uniform.data, 0, uniform.size);
+	uniform.map();
+	uniform.zero();
 
 	vk::DescriptorSetAllocateInfo allocateInfo2;
 	allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;

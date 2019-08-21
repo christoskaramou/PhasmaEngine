@@ -235,6 +235,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 		vulkan.device.destroyRenderPass(dof.renderPass);
 	}
 	dof.pipeline.destroy();
+	dof.frameImage.destroy();
 
 	// Motion blur
 	for (auto &frameBuffer : motionBlur.frameBuffers) {

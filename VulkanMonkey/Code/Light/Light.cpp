@@ -18,10 +18,10 @@ void LightUniforms::createLightUniforms()
 {
 	getDescriptorSetLayout();
 
-	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	uniform.data = VulkanContext::get()->device.mapMemory(uniform.memory, 0, uniform.size);
 	LightsUBO lubo;
-	memcpy(uniform.data, &lubo, uniform.size);
+	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniform.map();
+	uniform.copyData(&lubo);
 
 	vk::DescriptorSetAllocateInfo allocateInfo;
 	allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
@@ -40,7 +40,7 @@ void LightUniforms::createLightUniforms()
 	writeSet.dstArrayElement = 0;
 	writeSet.descriptorCount = 1;
 	writeSet.descriptorType = vk::DescriptorType::eUniformBuffer;
-	writeSet.pBufferInfo = &dbi;							// DeviceSize range;
+	writeSet.pBufferInfo = &dbi;
 	VulkanContext::get()->device.updateDescriptorSets(writeSet, nullptr);
 }
 
@@ -53,9 +53,8 @@ void LightUniforms::destroy()
 	}
 }
 
-void LightUniforms::update(Camera& camera) const
+void LightUniforms::update(const Camera& camera) const
 {
-	// uniform UBO { vec4 camPos; Light lights[NUM_LIGHTS + 1]; } ubo;
 	if (GUI::randomize_lights) {
 		GUI::randomize_lights = false;
 		LightsUBO lubo;

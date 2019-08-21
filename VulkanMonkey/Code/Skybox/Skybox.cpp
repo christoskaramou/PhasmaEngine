@@ -106,9 +106,10 @@ void SkyBox::loadTextures(const std::array<std::string, 6>& paths, int imageSide
 
 		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		staging.data = VulkanContext::get()->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize);
-		memcpy(staging.data, pixels, static_cast<size_t>(imageSize));
-		VulkanContext::get()->device.unmapMemory(staging.memory);
+		staging.map();
+		staging.copyData(pixels);
+		staging.unmap();
+
 		stbi_image_free(pixels);
 
 		texture.copyBufferToImage(staging.buffer, i);

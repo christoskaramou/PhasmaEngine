@@ -14,7 +14,7 @@ void Metrics::start(const vk::CommandBuffer& cmd)
 {
 	_cmd = cmd;
 	_cmd.resetQueryPool(queryPool, 0, 2);
-	_cmd.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, queryPool, 0);
+	_cmd.writeTimestamp(vk::PipelineStageFlagBits::eTopOfPipe, queryPool, 0);
 }
 
 void Metrics::end(float* res)

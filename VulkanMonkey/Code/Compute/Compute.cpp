@@ -67,12 +67,12 @@ void vm::Compute::waitFence()
 void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
 {
 	SBIn.createBuffer(sizeIn, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	SBIn.data = VulkanContext::get()->device.mapMemory(SBIn.memory, 0, SBIn.size);
-	memset(SBIn.data, 0, SBIn.size);
+	SBIn.map();
+	SBIn.zero();
 
 	SBOut.createBuffer(sizeOut, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	SBOut.data = VulkanContext::get()->device.mapMemory(SBOut.memory, 0, SBOut.size);
-	memset(SBOut.data, 0, SBOut.size);
+	SBOut.map();
+	SBOut.zero();
 }
 
 void Compute::createDescriptorSet()

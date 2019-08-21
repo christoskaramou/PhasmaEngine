@@ -19,8 +19,9 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 		kernel.emplace_back(sample * scale, 0.f);
 	}
 	UB_Kernel.createBuffer(sizeof(vec4) * 16, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	UB_Kernel.data = VulkanContext::get()->device.mapMemory(UB_Kernel.memory, 0, UB_Kernel.size);
-	memcpy(UB_Kernel.data, kernel.data(), UB_Kernel.size);
+	UB_Kernel.map();
+	UB_Kernel.copyData(kernel.data());
+
 	// noise image
 	std::vector<vec4> noise{};
 	for (unsigned int i = 0; i < 16; i++)
@@ -29,9 +30,9 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	Buffer staging;
 	const uint64_t bufSize = sizeof(vec4) * 16;
 	staging.createBuffer(bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	void* data = VulkanContext::get()->device.mapMemory(staging.memory, vk::DeviceSize(), staging.size);
-	memcpy(data, noise.data(), staging.size);
-	VulkanContext::get()->device.unmapMemory(staging.memory);
+	staging.map();
+	staging.copyData(noise.data());
+	staging.unmap();
 
 	noiseTex.filter = vk::Filter::eNearest;
 	noiseTex.minLod = 0.0f;
@@ -47,8 +48,8 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	staging.destroy();
 	// pvm uniform
 	UB_PVM.createBuffer(3 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	UB_PVM.data = VulkanContext::get()->device.mapMemory(UB_PVM.memory, 0, UB_PVM.size);
-	memset(UB_PVM.data, 0, UB_PVM.size);
+	UB_PVM.map();
+	UB_PVM.zero();
 
 	// DESCRIPTOR SET FOR SSAO
 	const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{

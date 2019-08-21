@@ -68,11 +68,9 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 
 		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-		auto vulkan = VulkanContext::get();
-		vulkan->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &staging.data);
-		memcpy(staging.data, pixels, static_cast<size_t>(imageSize));
-		vulkan->device.unmapMemory(staging.memory);
+		staging.map();
+		staging.copyData(pixels);
+		staging.unmap();
 
 		stbi_image_free(pixels);
 
@@ -159,13 +157,13 @@ void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows
 	// End Composition
 }
 
-void vm::Deferred::createRenderPasses(std::map<std::string, Image>& renderTargets)
+void Deferred::createRenderPasses(std::map<std::string, Image>& renderTargets)
 {
 	createGBufferRenderPasses(renderTargets);
 	createCompositionRenderPass(renderTargets);
 }
 
-void vm::Deferred::createGBufferRenderPasses(std::map<std::string, Image>& renderTargets)
+void Deferred::createGBufferRenderPasses(std::map<std::string, Image>& renderTargets)
 {
 	std::array<vk::AttachmentDescription, 7> attachments{};
 	// Depth store
@@ -258,7 +256,7 @@ void vm::Deferred::createGBufferRenderPasses(std::map<std::string, Image>& rende
 	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
 }
 
-void vm::Deferred::createCompositionRenderPass(std::map<std::string, Image>& renderTargets)
+void Deferred::createCompositionRenderPass(std::map<std::string, Image>& renderTargets)
 {
 	std::array<vk::AttachmentDescription, 1> attachments{};
 	// Color target

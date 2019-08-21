@@ -9,8 +9,8 @@ using namespace vm;
 void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 {
 	UBReflection.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	UBReflection.data = VulkanContext::get()->device.mapMemory(UBReflection.memory, 0, UBReflection.size);
-	memset(UBReflection.data, 0, UBReflection.size);
+	UBReflection.map();
+	UBReflection.zero();
 
 	vk::DescriptorSetAllocateInfo allocateInfo2;
 	allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;

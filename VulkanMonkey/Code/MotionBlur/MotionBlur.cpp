@@ -23,9 +23,10 @@ void MotionBlur::Init()
 
 void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTargets)
 {
-	UBmotionBlur.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
-	UBmotionBlur.data = VulkanContext::get()->device.mapMemory(UBmotionBlur.memory, 0, UBmotionBlur.size);
-	memset(UBmotionBlur.data, 0, UBmotionBlur.size);
+	auto size = 4 * sizeof(mat4);
+	UBmotionBlur.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	UBmotionBlur.map();
+	UBmotionBlur.zero();
 
 	vk::DescriptorSetAllocateInfo allocateInfo;
 	allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;

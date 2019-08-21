@@ -274,8 +274,8 @@ void Shadows::createUniformBuffers()
 	uniformBuffers.resize(3); // 3 buffers for the 3 shadow render passes
 	for (auto& buffer : uniformBuffers) {
 		buffer.createBuffer(sizeof(ShadowsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		buffer.data = VulkanContext::get()->device.mapMemory(buffer.memory, 0, buffer.size);
-		memset(buffer.data, 0, buffer.size);
+		buffer.map();
+		buffer.zero();
 	}
 }
 

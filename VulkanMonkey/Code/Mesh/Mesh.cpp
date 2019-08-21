@@ -49,19 +49,21 @@ vk::DescriptorSetLayout* Mesh::getDescriptorSetLayout()
 void Mesh::createUniformBuffers()
 {
 	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	uniformBuffer.data = VulkanContext::get()->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
-	memset(uniformBuffer.data, 0, uniformBuffer.size);
-	const size_t size = sizeof(mat4);
+	uniformBuffer.map();
+	uniformBuffer.zero();
+
 	for (auto& primitive : primitives) {
-		primitive.uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		primitive.uniformBuffer.data = VulkanContext::get()->device.mapMemory(primitive.uniformBuffer.memory, 0, primitive.uniformBuffer.size);
 
 		mat4 factors;
 		factors[0] = primitive.pbrMaterial.baseColorFactor != vec4(0.f) ? primitive.pbrMaterial.baseColorFactor : vec4(1.f);
 		factors[1] = vec4(primitive.pbrMaterial.emissiveFactor, 1.f);
 		factors[2] = vec4(primitive.pbrMaterial.metallicFactor, primitive.pbrMaterial.roughnessFactor, primitive.pbrMaterial.alphaCutoff, 0.f);
 		factors[3][0] = static_cast<float>(primitive.hasBones);
-		memcpy(primitive.uniformBuffer.data, &factors, sizeof(factors));
+
+		const size_t size = sizeof(mat4);
+		primitive.uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		primitive.uniformBuffer.map();
+		primitive.uniformBuffer.copyData(&factors);
 	}
 }
 
@@ -134,10 +136,9 @@ void Primitive::loadTexture(
 
 		Buffer staging;
 		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-		VulkanContext::get()->device.mapMemory(staging.memory, vk::DeviceSize(), imageSize, vk::MemoryMapFlags(), &staging.data);
-		memcpy(staging.data, pixels, static_cast<size_t>(imageSize));
-		VulkanContext::get()->device.unmapMemory(staging.memory);
+		staging.map();
+		staging.copyData(pixels);
+		staging.unmap();
 
 		stbi_image_free(pixels);
 

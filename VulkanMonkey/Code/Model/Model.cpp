@@ -676,15 +676,15 @@ void Model::createVertexBuffer()
 		}
 	}
 	numberOfVertices = static_cast<uint32_t>(vertices.size());
-	vertexBuffer.createBuffer(sizeof(Vertex)*numberOfVertices, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	auto size = sizeof(Vertex) * numberOfVertices;
+	vertexBuffer.createBuffer(size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer
 	Buffer staging;
-	staging.createBuffer(sizeof(Vertex)*numberOfVertices, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-	staging.data = VulkanContext::get()->device.mapMemory(staging.memory, 0, staging.size);
-	memcpy(staging.data, vertices.data(), sizeof(Vertex)*numberOfVertices);
-	VulkanContext::get()->device.unmapMemory(staging.memory);
+	staging.createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	staging.map();
+	staging.copyData(vertices.data());
+	staging.unmap();
 
 	vertexBuffer.copyBuffer(staging.buffer, staging.size);
 	staging.destroy();
@@ -702,15 +702,15 @@ void Model::createIndexBuffer()
 		}
 	}
 	numberOfIndices = static_cast<uint32_t>(indices.size());
-	indexBuffer.createBuffer(sizeof(uint32_t)*numberOfIndices, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	auto size = sizeof(uint32_t) * numberOfIndices;
+	indexBuffer.createBuffer(size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Staging buffer
 	Buffer staging;
-	staging.createBuffer(sizeof(uint32_t)*numberOfIndices, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-	staging.data = VulkanContext::get()->device.mapMemory(staging.memory, 0, staging.size);
-	memcpy(staging.data, indices.data(), sizeof(uint32_t)*numberOfIndices);
-	VulkanContext::get()->device.unmapMemory(staging.memory);
+	staging.createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	staging.map();
+	staging.copyData(indices.data());
+	staging.unmap();
 
 	indexBuffer.copyBuffer(staging.buffer, staging.size);
 	staging.destroy();
@@ -719,8 +719,8 @@ void Model::createIndexBuffer()
 void Model::createUniformBuffers()
 {
 	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	uniformBuffer.data = VulkanContext::get()->device.mapMemory(uniformBuffer.memory, 0, uniformBuffer.size);
-	memset(uniformBuffer.data, 0, uniformBuffer.size);
+	uniformBuffer.map();
+	uniformBuffer.zero();
 	if (!isCopy) {
 		for (auto& node : linearNodes) {
 			if (node->mesh) {

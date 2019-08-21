@@ -552,13 +552,10 @@ void GUI::initImGui()
 	Buffer stagingBuffer;
 	{
 		stagingBuffer.createBuffer(upload_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
-		void* map = vulkan->device.mapMemory(stagingBuffer.memory, 0, upload_size);
-		memcpy(map, pixels, upload_size);
-		vk::MappedMemoryRange range;
-		range.memory = stagingBuffer.memory;
-		range.size = upload_size;
-		vulkan->device.flushMappedMemoryRanges(range);
-		vulkan->device.unmapMemory(stagingBuffer.memory);
+		stagingBuffer.map();
+		stagingBuffer.copyData(pixels);
+		stagingBuffer.flush();
+		stagingBuffer.unmap();
 	}
 
 	// Copy to Image:
