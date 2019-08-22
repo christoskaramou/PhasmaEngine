@@ -42,6 +42,10 @@ void Deferred::batchEnd()
 
 void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 {
+	uniform.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniform.map();
+	uniform.zero();
+
 	auto vulkan = VulkanContext::get();
 	const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
 		vulkan->descriptorPool,					//DescriptorPool descriptorPool;
@@ -117,13 +121,28 @@ void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets,
 		wSetImage(DSComposition, 5, renderTargets["ssaoBlur"]),
 		wSetImage(DSComposition, 6, renderTargets["ssr"]),
 		wSetImage(DSComposition, 7, renderTargets["emissive"]),
-		wSetImage(DSComposition, 8, ibl_brdf_lut)
+		wSetImage(DSComposition, 8, ibl_brdf_lut),
+		wSetBuffer(DSComposition, 9, uniform)
 	};
 
 	VulkanContext::get()->device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj, const vk::Extent2D& extent)
+void Deferred::update(mat4& invViewProj)
+{
+	ubo.screenSpace[0] = { invViewProj[0] };
+	ubo.screenSpace[1] = { invViewProj[1] };
+	ubo.screenSpace[2] = { invViewProj[2] };
+	ubo.screenSpace[3] = { invViewProj[3] };
+	ubo.screenSpace[4] = { static_cast<float>(GUI::show_ssao), static_cast<float>(GUI::show_ssr) , static_cast<float>(GUI::show_tonemapping), static_cast<float>(GUI::use_AntiAliasing) };
+	ubo.screenSpace[5] = { static_cast<float>(GUI::use_IBL), static_cast<float>(GUI::use_Volumetric_lights), static_cast<float>(GUI::volumetric_steps), static_cast<float>(GUI::volumetric_dither_strength) };
+	ubo.screenSpace[6] = { 1.0f / GUI::fog_spread, GUI::lights_intensity, GUI::lights_range, -GUI::fog_height };
+	ubo.screenSpace[7] = { GUI::fog_intensity, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f };
+
+	uniform.copyData(&ubo);
+}
+
+void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent)
 {
 	// Begin Composition
 	vk::ClearValue clearColor;
@@ -140,16 +159,6 @@ void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows
 	rpi.pClearValues = clearValues.data();
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-	std::vector<vec4> screenSpace(7);
-	screenSpace[0] = { static_cast<float>(GUI::show_ssao), static_cast<float>(GUI::show_ssr) , static_cast<float>(GUI::show_tonemapping), static_cast<float>(GUI::use_AntiAliasing) };
-	screenSpace[1] = { static_cast<float>(GUI::use_IBL), static_cast<float>(GUI::use_Volumetric_lights), static_cast<float>(GUI::volumetric_steps), static_cast<float>(GUI::volumetric_dither_strength) };
-	screenSpace[2] = { invViewProj[0] };
-	screenSpace[3] = { invViewProj[1] };
-	screenSpace[4] = { invViewProj[2] };
-	screenSpace[5] = { invViewProj[3] };
-	screenSpace[6] = { GUI::exposure, GUI::lights_intensity, GUI::lights_range, GUI::fog_intensity };
-
-	cmd.pushConstants<vec4>(pipelineComposition.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, screenSpace);
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline);
 	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo.layout, 0, { DSComposition, shadows.descriptorSets[0], shadows.descriptorSets[1], shadows.descriptorSets[2], skybox.descriptorSet }, nullptr);
 	cmd.draw(3, 1, 0, 0);
@@ -633,6 +642,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 			layoutBinding(6, vk::DescriptorType::eCombinedImageSampler),
 			layoutBinding(7, vk::DescriptorType::eCombinedImageSampler),
 			layoutBinding(8, vk::DescriptorType::eCombinedImageSampler),
+			layoutBinding(9, vk::DescriptorType::eUniformBuffer)
 		};
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -647,16 +657,16 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 		Shadows::getDescriptorSetLayout(),
 		SkyBox::getDescriptorSetLayout() };
 
-	vk::PushConstantRange pConstants;
-	pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
-	pConstants.offset = 0;
-	pConstants.size = 7 * sizeof(vec4);
+	//vk::PushConstantRange pConstants;
+	//pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
+	//pConstants.offset = 0;
+	//pConstants.size = 7 * sizeof(vec4);
 
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	plci.pushConstantRangeCount = 1;
-	plci.pPushConstantRanges = &pConstants;
+	//plci.pushConstantRangeCount = 1;
+	//plci.pPushConstantRanges = &pConstants;
 	pipelineComposition.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
@@ -703,6 +713,7 @@ void Deferred::destroy()
 		vulkan->device.destroyDescriptorSetLayout(DSLayoutComposition);
 		DSLayoutComposition = nullptr;
 	}
+	uniform.destroy();
 	pipeline.destroy();
 	pipelineComposition.destroy();
 }

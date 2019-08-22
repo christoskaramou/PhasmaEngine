@@ -24,22 +24,30 @@ void main()
 	if (depth == 0.0) {
 
 		// Skybox
-		vec3 fragPos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
-		outColor = vec4(texture(sampler_cube_map, normalize(fragPos - ubo.cam_pos.xyz)).xyz, 1.0);
+		vec3 frag_pos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
+		outColor = vec4(texture(sampler_cube_map, normalize(frag_pos - ubo.cam_pos.xyz)).xyz, 1.0);
 		
 		// Fog
-		if (screenSpace.effects2.w > 0.00001) {
-			float d = length(fragPos - ubo.cam_pos.xyz);
-			outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effects2.w));
-		}
+		if (screenSpace.effects3.y > 0.5) {
+			// screenSpace.effects3.y -> fog on/off
+			// screenSpace.effects2.w -> fog height position
+			// screenSpace.effects2.x -> fog spread
+			// screenSpace.effects3.x -> fog intensity
 
-		// Volumetric light
-		if (screenSpace.effects1.y > 0.5)
-			outColor.xyz += VolumetricLighting(ubo.lights[0], fragPos, in_UV, shadow_coords1);
+			float d = length(frag_pos - ubo.cam_pos.xyz);
+			float fog_height_factor = frag_pos.y + screenSpace.effects2.w;
+			fog_height_factor = clamp(exp(-(fog_height_factor * fog_height_factor * screenSpace.effects2.x)), 0.0, 1.0);
+			float total_fog_factor = clamp((1.0 - 1.0/(1.0 + d * d)) * screenSpace.effects3.x * fog_height_factor, 0.0, 1.0);
+			outColor.xyz = mix(outColor.xyz, vec3(0.75), total_fog_factor);
+
+			// Volumetric light
+			if (screenSpace.effects1.y > 0.5)
+				outColor.xyz += VolumetricLighting(ubo.lights[0], frag_pos, in_UV, shadow_coords1);
+		}
 
 		return;
 	}
-	vec3 fragPos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
+	vec3 frag_pos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
 	vec3 normal = texture(sampler_normal, in_UV).xyz;
 	vec3 metRough = texture(sampler_met_rough, in_UV).xyz;
 	vec4 albedo = texture(sampler_albedo, in_UV);
@@ -58,12 +66,14 @@ void main()
 
 	// IBL
 	if (screenSpace.effects1.x > 0.5)
-		fragColor += ImageBasedLighting(material, normal, normalize(fragPos - ubo.cam_pos.xyz), sampler_cube_map, sampler_lut_IBL) * ambient_light;
+		fragColor += ImageBasedLighting(material, normal, normalize(frag_pos - ubo.cam_pos.xyz), sampler_cube_map, sampler_lut_IBL) * ambient_light;
 
-	fragColor += directLight(material, fragPos, ubo.cam_pos.xyz, normal, factor_occlusion);
+	// screenSpace.effects3.z -> shadow cast
+	if (screenSpace.effects3.z > 0.5)
+		fragColor += directLight(material, frag_pos, ubo.cam_pos.xyz, normal, factor_occlusion);
 
 	for(int i = 1; i < NUM_LIGHTS+1; ++i)
-		fragColor += compute_point_light(i, material, fragPos, ubo.cam_pos.xyz, normal, factor_occlusion);
+		fragColor += compute_point_light(i, material, frag_pos, ubo.cam_pos.xyz, normal, factor_occlusion);
 
 	outColor = vec4(fragColor, albedo.a) + texture(sampler_emission, in_UV);
 
@@ -75,21 +85,25 @@ void main()
 	
 	// Tone Mapping
 	if (screenSpace.effects0.z > 0.5)
-		//outColor.xyz = ACESFilm(outColor.xyz);
-		//outColor.xyz = SRGBtoLINEAR(TonemapFilmic(outColor.xyz, screenSpace.effects2.x));
-		//outColor.xyz = ACESFitted(outColor.xyz);
 		outColor.xyz = Reinhard(outColor.xyz);
-		//outColor.xyz = ToneMapReinhard(outColor.xyz, screenSpace.effects2.x); // ToneMapReinhard(color, exposure value)
 
 	// Fog
-	if (screenSpace.effects2.w > 0.00001) {
-		float d = length(fragPos - ubo.cam_pos.xyz);
-		outColor.xyz = mix(outColor.xyz, vec3(0.75), 1.0 - 1.0/(1.0 + d * d * screenSpace.effects2.w));
-	}
+	if (screenSpace.effects3.y > 0.5) {
+		// screenSpace.effects3.y -> fog on/off
+		// screenSpace.effects2.w -> fog height position
+		// screenSpace.effects2.x -> fog spread
+		// screenSpace.effects3.x -> fog intensity
 
-	// Volumetric light
-	if (screenSpace.effects1.y > 0.5)
-		outColor.xyz += VolumetricLighting(ubo.lights[0], fragPos, in_UV, shadow_coords1);
+		float d = length(frag_pos - ubo.cam_pos.xyz);
+		float fog_height_factor = frag_pos.y + screenSpace.effects2.w;
+		fog_height_factor = clamp(exp(-(fog_height_factor * fog_height_factor * screenSpace.effects2.x)), 0.0, 1.0);
+		float total_fog_factor = clamp((1.0 - 1.0/(1.0 + d * d)) * screenSpace.effects3.x * fog_height_factor, 0.0, 1.0);
+		outColor.xyz = mix(outColor.xyz, vec3(0.75), total_fog_factor);
+
+		// Volumetric light
+		if (screenSpace.effects1.y > 0.5)
+			outColor.xyz += VolumetricLighting(ubo.lights[0], frag_pos, in_UV, shadow_coords1);
+	}
 }
 
 vec2 poissonDisk[8] = vec2[](

@@ -11,8 +11,6 @@ struct Light {
 	vec4 position;
 };
 
-
-layout(push_constant) uniform SS { vec4 effects0; vec4 effects1; mat4 invViewProj; vec4 effects2; } screenSpace;
 layout(constant_id = 0) const int NUM_LIGHTS = 1;
 layout(set = 0, binding = 0) uniform sampler2D sampler_depth;
 layout(set = 0, binding = 1) uniform sampler2D sampler_normal;
@@ -23,6 +21,7 @@ layout(set = 0, binding = 5) uniform sampler2D sampler_ssao_blur;
 layout(set = 0, binding = 6) uniform sampler2D sampler_ssr;
 layout(set = 0, binding = 7) uniform sampler2D sampler_emission;
 layout(set = 0, binding = 8) uniform sampler2D sampler_lut_IBL;
+layout(set = 0, binding = 9) uniform SS { mat4 invViewProj; vec4 effects0; vec4 effects1; vec4 effects2; vec4 effects3;} screenSpace;
 layout(set = 1, binding = 1) uniform sampler2DShadow sampler_shadow_map0;
 layout(set = 2, binding = 1) uniform sampler2DShadow sampler_shadow_map1;
 layout(set = 3, binding = 1) uniform sampler2DShadow sampler_shadow_map2;
@@ -176,7 +175,16 @@ vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj
 	vec3 dither_value = Dither_Valve(uv * vec2(float(texDim.x), float(texDim.y))) * screenSpace.effects1.w; // dithering strength 400 default
 	ray_pos += ray_step * dither_value;
 	
+	
+	// screenSpace.effects2.w -> fog height position
+	// screenSpace.effects2.x -> fog spread
+	// screenSpace.effects3.x -> fog intensity
+
 	vec3 fog = vec3(0.0f);
+	float fog_height_factor = pos_world.y + screenSpace.effects2.w;
+	fog_height_factor = clamp(exp(-(fog_height_factor * fog_height_factor * screenSpace.effects2.x)), 0.0, 1.0);
+	fog_height_factor *= screenSpace.effects3.x * 10.0;
+
 	for (int i = 0; i < iterations; i++)
 	{
 		// Compute position in light space
@@ -196,7 +204,7 @@ vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj
 	}
 	fog /= iterations;
 
-	return fog * light.color.xyz * light.color.a;
+	return fog * light.color.xyz * light.color.a * fog_height_factor;
 }
 // ----------------------------------------------------
 

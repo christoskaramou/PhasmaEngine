@@ -18,11 +18,15 @@ namespace vm {
 		Pipeline pipelineComposition;
 		Image ibl_brdf_lut;
 
+		struct UBO { vec4 screenSpace[8]; } ubo;
+		Buffer uniform;
+
 		void batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent);
 		static void batchEnd();
 		void createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
-		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, mat4& invViewProj, const vk::Extent2D& extent);
+		void update(mat4& invViewProj);
+		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent);
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
 		void createGBufferRenderPasses(std::map<std::string, Image>& renderTargets);
 		void createCompositionRenderPass(std::map<std::string, Image>& renderTargets);

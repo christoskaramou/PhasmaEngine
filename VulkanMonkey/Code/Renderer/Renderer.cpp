@@ -232,6 +232,9 @@ void Renderer::update(float delta)
 	// SHADOWS
 	ctx.shadows.update(ctx.camera_main);
 
+	// COMPOSITION UNIFORMS
+	ctx.deferred.update(ctx.camera_main.invViewProjection);
+
 #ifdef RENDER_SKYBOX
 	// SKYBOXES
 	if (GUI::shadow_cast)
@@ -322,7 +325,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	
 	// COMPOSITION
 	ctx.metrics[5].start(cmd);
-	ctx.deferred.draw(cmd, imageIndex, ctx.shadows, skybox, ctx.camera_main.invViewProjection, ctx.renderTargets["viewport"].extent);
+	ctx.deferred.draw(cmd, imageIndex, ctx.shadows, skybox, ctx.renderTargets["viewport"].extent);
 	ctx.metrics[5].end(&GUI::metrics[5]);
 	
 	if (GUI::use_AntiAliasing) {

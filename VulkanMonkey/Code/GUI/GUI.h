@@ -49,7 +49,10 @@ namespace vm {
 		static inline bool									randomize_lights = false;
 		static inline float									lights_intensity = 2.5f;
 		static inline float									lights_range = 7.0f;
+		static inline bool									use_fog = false;
 		static inline float									fog_intensity = 0.0f;
+		static inline float									fog_spread = 0.0f;
+		static inline float									fog_height = 0.0f;
 		static inline bool									shadow_cast = false;
 		static inline float									sun_intensity = 7.f;
 		static inline std::array<float, 3>					sun_position{ 160.0f, 300.0f, -120.0f };

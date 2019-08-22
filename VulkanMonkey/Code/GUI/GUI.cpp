@@ -316,16 +316,24 @@ void GUI::Properties() const
 		ImGui::Unindent(16.0f);
 		ImGui::Separator(); ImGui::Separator();
 	}
-	ImGui::Checkbox("Sun Light", &shadow_cast);
-	if (shadow_cast) {
+	ImGui::Checkbox("Fog", &use_fog);
+	if (use_fog) {
 		ImGui::Indent(16.0f);
+		ImGui::InputFloat("Intensity", &fog_intensity, 0.01f, 0.1f, 4);
+		ImGui::InputFloat("Spread", &fog_spread, 0.1f, 1.0f, 4);
+		ImGui::InputFloat("Height", &fog_height, 0.01f, 0.1f, 4);
 		ImGui::Checkbox("Volumetric", &use_Volumetric_lights);
 		if (use_Volumetric_lights) {
 			ImGui::Indent(16.0f);
 			ImGui::InputInt("Iterations", &volumetric_steps, 1, 3);
-			ImGui::InputInt("Dither Strength", &volumetric_dither_strength, 1, 10);
+			ImGui::InputInt("Dither", &volumetric_dither_strength, 1, 10);
 			ImGui::Unindent(16.0f);
 		}
+		ImGui::Unindent(16.0f);
+	}
+	ImGui::Checkbox("Sun Light", &shadow_cast);
+	if (shadow_cast) {
+		ImGui::Indent(16.0f);
 		ImGui::SliderFloat("Sun Intst", &sun_intensity, 0.1f, 50.f);
 		ImGui::InputFloat3("SunPos", sun_position.data(), 1);
 		ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5); ImGui::Separator(); ImGui::Separator();
@@ -340,7 +348,6 @@ void GUI::Properties() const
 		}
 		ImGui::Unindent(16.0f);
 	}
-	ImGui::InputFloat("Fog", &fog_intensity, 0.0001f, 0.005f, 4);
 	ImGui::InputFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f, 3);
 	ImGui::SliderFloat4("ClearCol", clearColor.data(), 0.0f, 1.0f);
 	ImGui::InputFloat("TimeScale", &timeScale, 0.05f, 0.2f); ImGui::Separator(); ImGui::Separator();
