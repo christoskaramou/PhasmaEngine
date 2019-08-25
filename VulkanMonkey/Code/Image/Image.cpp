@@ -325,7 +325,7 @@ void Image::generateMipMaps() const
 	barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
 	barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
-	commandBuffers[0].pipelineBarrier(
+	commandBuffers.front().pipelineBarrier(
 		vk::PipelineStageFlagBits::eTransfer,
 		vk::PipelineStageFlagBits::eFragmentShader,
 		vk::DependencyFlagBits::eByRegion,
