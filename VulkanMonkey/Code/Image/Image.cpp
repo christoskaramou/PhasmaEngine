@@ -233,14 +233,16 @@ void Image::generateMipMaps() const
 {
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
-	allocInfo.commandBufferCount = 1;
+	allocInfo.commandBufferCount = mipLevels;
 	allocInfo.commandPool = VulkanContext::get()->commandPool2;
 
-	const vk::CommandBuffer commandBuffer = VulkanContext::get()->device.allocateCommandBuffers(allocInfo).at(0);
+	const auto commandBuffers = VulkanContext::get()->device.allocateCommandBuffers(allocInfo);
+
+	auto mipWidth = static_cast<int32_t>(width);
+	auto mipHeight = static_cast<int32_t>(height);
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-	commandBuffer.begin(beginInfo);
 
 	vk::ImageMemoryBarrier barrier = {};
 	barrier.image = image;
@@ -251,38 +253,41 @@ void Image::generateMipMaps() const
 	barrier.subresourceRange.layerCount = 1;
 	barrier.subresourceRange.levelCount = 1;
 
-	auto mipWidth = static_cast<int32_t>(width);
-	auto mipHeight = static_cast<int32_t>(height);
+	vk::ImageBlit blit = {};
+	blit.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
+	blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+	blit.srcSubresource.baseArrayLayer = 0;
+	blit.srcSubresource.layerCount = 1;
+	blit.dstOffsets[0] = vk::Offset3D{ 0, 0, 0 };
+	blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+	blit.dstSubresource.baseArrayLayer = 0;
+	blit.dstSubresource.layerCount = 1;
 
 	for (uint32_t i = 1; i < mipLevels; i++) {
+
+		commandBuffers[i].begin(beginInfo);
+
 		barrier.subresourceRange.baseMipLevel = i - 1;
 		barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
 		barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
 		barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
 		barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
 
-		commandBuffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer,
+		commandBuffers[i].pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eTransfer,
 			vk::DependencyFlagBits(),
 			nullptr,
 			nullptr,
 			barrier);
 
-		vk::ImageBlit blit = {};
-		blit.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
-		blit.srcOffsets[1] = vk::Offset3D { mipWidth, mipHeight, 1 };
-		blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-		blit.srcSubresource.mipLevel = i - 1;
-		blit.srcSubresource.baseArrayLayer = 0;
-		blit.srcSubresource.layerCount = 1;
-		blit.dstOffsets[0] = vk::Offset3D{ 0, 0, 0 };
-		blit.dstOffsets[1] = vk::Offset3D{ mipWidth / 2, mipHeight / 2, 1 };
-		blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-		blit.dstSubresource.mipLevel = i;
-		blit.dstSubresource.baseArrayLayer = 0;
-		blit.dstSubresource.layerCount = 1;
 
-		commandBuffer.blitImage(
+		blit.srcOffsets[1] = vk::Offset3D{ mipWidth, mipHeight, 1 };
+		blit.dstOffsets[1] = vk::Offset3D{ mipWidth / 2, mipHeight / 2, 1 };
+		blit.srcSubresource.mipLevel = i - 1;
+		blit.dstSubresource.mipLevel = i;
+
+		commandBuffers[i].blitImage(
 			image,
 			vk::ImageLayout::eTransferSrcOptimal,
 			image,
@@ -296,7 +301,7 @@ void Image::generateMipMaps() const
 		barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
 		barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
-		commandBuffer.pipelineBarrier(
+		commandBuffers[i].pipelineBarrier(
 			vk::PipelineStageFlagBits::eTransfer,
 			vk::PipelineStageFlagBits::eFragmentShader,
 			vk::DependencyFlagBits::eByRegion,
@@ -307,7 +312,12 @@ void Image::generateMipMaps() const
 
 		if (mipWidth > 1) mipWidth /= 2;
 		if (mipHeight > 1) mipHeight /= 2;
+
+		commandBuffers[i].end();
 	}
+
+	// front cmd buffer is free since the loop above starts from 1 and not 0
+	commandBuffers.front().begin(beginInfo);
 
 	barrier.subresourceRange.baseMipLevel = mipLevels - 1;
 	barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
@@ -315,7 +325,7 @@ void Image::generateMipMaps() const
 	barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
 	barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
-	commandBuffer.pipelineBarrier(
+	commandBuffers[0].pipelineBarrier(
 		vk::PipelineStageFlagBits::eTransfer,
 		vk::PipelineStageFlagBits::eFragmentShader,
 		vk::DependencyFlagBits::eByRegion,
@@ -324,11 +334,11 @@ void Image::generateMipMaps() const
 		barrier
 	);
 
-	commandBuffer.end();
+	commandBuffers.front().end();
 
-	VulkanContext::get()->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
+	VulkanContext::get()->submitAndWaitFence(commandBuffers, nullptr, nullptr, nullptr);
 
-	VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, commandBuffer);
+	VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, commandBuffers);
 }
 
 void Image::createSampler()

@@ -93,7 +93,7 @@ void main()
 		// screenSpace.effects2.w -> fog height position
 		// screenSpace.effects2.x -> fog spread
 		// screenSpace.effects3.x -> fog intensity
-
+		
 		float d = length(frag_pos - ubo.cam_pos.xyz);
 		float fog_height_factor = frag_pos.y + screenSpace.effects2.w;
 		fog_height_factor = clamp(exp(-(fog_height_factor * fog_height_factor * screenSpace.effects2.x)), 0.0, 1.0);

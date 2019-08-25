@@ -149,6 +149,32 @@ vec3 Dither_Valve(vec2 screen_pos)
     return dither / 255.0;
 }
 
+// https://www.shadertoy.com/view/MslGR8
+float3 Dither(float2 uv)
+{
+	int2 texDim = textureSize(sampler_albedo, 0);
+	float2 screen_pos = uv * float2(float(texDim.x), float(texDim.y));
+
+	// bit-depth of display. Normally 8 but some LCD monitors are 7 or even 6-bit.
+	float dither_bit = 8.0; 
+	
+	// compute grid position
+	float grid_position = frac(dot(screen_pos.xy - float2(0.5, 0.5), float2(1.0/16.0,10.0/36.0) + 0.25));
+	
+	// compute how big the shift should be
+	float dither_shift = (0.25) * (1.0 / (pow(2.0, dither_bit) - 1.0));
+	
+	// shift the individual colors differently, thus making it even harder to see the dithering pattern
+	//float3 dither_shift_RGB = float3(dither_shift, -dither_shift, dither_shift); //subpixel dithering (chromatic)
+	float3 dither_shift_RGB = float3(dither_shift, dither_shift, dither_shift); //non-chromatic dithering
+	
+	// modify shift acording to grid position.
+	dither_shift_RGB = lerp(2.0 * dither_shift_RGB, -2.0 * dither_shift_RGB, grid_position); //shift acording to grid position.
+	
+	// return dither shift
+	return 0.5/255.0 + dither_shift_RGB; 
+}
+
 // Mie scattering approximated with Henyey-Greenstein phase function.
 float ComputeScattering(float dir_dot_l)
 {
@@ -161,7 +187,7 @@ float ComputeScattering(float dir_dot_l)
 
 vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj)
 {
-	float iterations = screenSpace.effects1.z; // 64 iterations default
+	float iterations = screenSpace.effects1.z; // 32 iterations default
 
 	vec3 pixel_to_camera 			= ubo.cam_pos.xyz - pos_world;
 	float pixel_to_camera_length 	= length(pixel_to_camera);
@@ -172,10 +198,10 @@ vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj
 
 	// Apply dithering as it will allows us to get away with a crazy low sample count ;-)
 	ivec2 texDim = textureSize(sampler_albedo, 0);
-	vec3 dither_value = Dither_Valve(uv * vec2(float(texDim.x), float(texDim.y))) * screenSpace.effects1.w; // dithering strength 400 default
+	vec3 dither_value = Dither(uv * vec2(float(texDim.x), float(texDim.y))) * screenSpace.effects1.w; // dithering strength 400 default
 	ray_pos += ray_step * dither_value;
-	
-	
+
+
 	// screenSpace.effects2.w -> fog height position
 	// screenSpace.effects2.x -> fog spread
 	// screenSpace.effects3.x -> fog intensity
