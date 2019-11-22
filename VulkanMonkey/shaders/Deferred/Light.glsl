@@ -111,8 +111,11 @@ float3 EnvBRDFApprox(float3 specColor, float roughness, float NdV)
     return specColor * AB.x + AB.y;
 }
 
-float3 ImageBasedLighting(Material material, float3 normal, float3 camera_to_pixel, samplerCube tex_environment, sampler2D tex_lutIBL)
+struct IBL { float3 final_color; float3 reflectivity; };
+IBL ImageBasedLighting(Material material, float3 normal, float3 camera_to_pixel, samplerCube tex_environment, sampler2D tex_lutIBL)
 {
+	IBL ibl;
+
 	float3 reflection 	= reflect(camera_to_pixel, normal);
 	// From Sebastien Lagarde Moving Frostbite to PBR page 69
 	reflection	= GetSpecularDominantDir(normal, reflection, material.roughness);
@@ -132,9 +135,12 @@ float3 ImageBasedLighting(Material material, float3 normal, float3 camera_to_pix
 	float mipLevel 			= max(0.001f, material.roughness * material.roughness) * 11.0f; // max lod 11.0f
 	float3 prefilteredColor	= SampleEnvironment(tex_environment, reflection, mipLevel);
 	float2 envBRDF  		= texture(tex_lutIBL, float2(NdV, material.roughness)).xy;
-	float3 cSpecular 		= prefilteredColor * (F * envBRDF.x + envBRDF.y);
+	ibl.reflectivity		= F * envBRDF.x + envBRDF.y;
+	float3 cSpecular 		= prefilteredColor * ibl.reflectivity;
 
-	return kD * cDiffuse + cSpecular; 
+	ibl.final_color = kD * cDiffuse + cSpecular;
+
+	return ibl; 
 }
 // ----------------------------------------------------
 // Reference for volumetric lighting:
@@ -185,7 +191,7 @@ float ComputeScattering(float dir_dot_l)
 	return result;
 }
 
-vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj)
+vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj, float fog_factor)
 {
 	float iterations = screenSpace.effects1.z; // 32 iterations default
 
@@ -206,11 +212,7 @@ vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj
 	// screenSpace.effects2.x -> fog spread
 	// screenSpace.effects3.x -> fog intensity
 
-	vec3 fog = vec3(0.0f);
-	float fog_height_factor = pos_world.y + screenSpace.effects2.w;
-	fog_height_factor = clamp(exp(-(fog_height_factor * fog_height_factor * screenSpace.effects2.x)), 0.0, 1.0);
-	fog_height_factor *= screenSpace.effects3.x * 10.0;
-
+	vec3 volumetricFactor = vec3(0.0f);
 	for (int i = 0; i < iterations; i++)
 	{
 		// Compute position in light space
@@ -224,13 +226,13 @@ vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj
 		float depth_delta = texture(sampler_shadow_map1, vec3(ray_uv, pos_light.z)).r;
 		if (depth_delta > 0.0f)
 		{
-			fog += ComputeScattering(dot(ray_dir, normalize(-light.position.xyz)));
+			volumetricFactor += ComputeScattering(dot(ray_dir, normalize(-light.position.xyz)));
 		}
 		ray_pos += ray_step;
 	}
-	fog /= iterations;
+	volumetricFactor /= iterations;
 
-	return fog * light.color.xyz * light.color.a * fog_height_factor;
+	return volumetricFactor * light.color.xyz * light.color.a * fog_factor * 10.0;
 }
 // ----------------------------------------------------
 

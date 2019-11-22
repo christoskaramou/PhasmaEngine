@@ -68,7 +68,7 @@ void Mesh::createUniformBuffers()
 }
 
 void Primitive::loadTexture(
-	TextureType type,
+	MaterialType type,
 	const std::string& folderPath,
 	const Microsoft::glTF::Image* image,
 	const Microsoft::glTF::Document* document,
@@ -82,27 +82,27 @@ void Primitive::loadTexture(
 	Image* tex;
 	switch (type)
 	{
-	case TextureType::BaseColor:
+	case MaterialType::BaseColor:
 		tex = &pbrMaterial.baseColorTexture;
 		if (!image || image->uri.empty())
 			path = "objects/white.png";
 		break;
-	case TextureType::MetallicRoughness:
+	case MaterialType::MetallicRoughness:
 		tex = &pbrMaterial.metallicRoughnessTexture;
 		if (!image || image->uri.empty())
 			path = "objects/black.png";
 		break;
-	case TextureType::Normal:
+	case MaterialType::Normal:
 		tex = &pbrMaterial.normalTexture;
 		if (!image || image->uri.empty())
 			path = "objects/normal.png";
 		break;
-	case TextureType::Occlusion:
+	case MaterialType::Occlusion:
 		tex = &pbrMaterial.occlusionTexture;
 		if (!image || image->uri.empty())
 			path = "objects/white.png";
 		break;
-	case TextureType::Emissive:
+	case MaterialType::Emissive:
 		tex = &pbrMaterial.emissiveTexture;
 		if (!image || image->uri.empty())
 			path = "objects/black.png";

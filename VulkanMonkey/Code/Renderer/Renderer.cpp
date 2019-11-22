@@ -457,22 +457,28 @@ void Renderer::present()
 	}
 
 	// waitStage is a pipeline stage at which a semaphore wait will occur.
-	const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader };
+	static const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader };
 
+	// aquire the image
 	const uint32_t imageIndex = VulkanContext::get()->swapchain->aquire(VulkanContext::get()->semaphores[0], nullptr);
 
 	VulkanContext::get()->waitAndLockSubmits();
 
 	if (GUI::shadow_cast) {
-		// submit the shadow command buffers
+		// record the shadow command buffers
 		recordShadowsCmds(imageIndex);
+
+		// submit the shadow command buffers
 		VulkanContext::get()->submit(VulkanContext::get()->shadowCmdBuffers, waitStages[0], VulkanContext::get()->semaphores[0], VulkanContext::get()->semaphores[1]);
 	}
 
-	// submit the main command buffer
+	// record the command buffers
 	recordDeferredCmds(imageIndex);
+
 	const vk::PipelineStageFlags waitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
 	const vk::Semaphore& waiSemaphore = GUI::shadow_cast ? VulkanContext::get()->semaphores[1] : VulkanContext::get()->semaphores[0];
+
+	// submit the command buffers
 	VulkanContext::get()->submit(VulkanContext::get()->dynamicCmdBuffer, waitStage, waiSemaphore, VulkanContext::get()->semaphores[2], VulkanContext::get()->fences[0]);
 
 	// Presentation

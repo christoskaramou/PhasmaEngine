@@ -79,43 +79,45 @@ void Model::getVertexData(std::vector<T>& vec, const std::string& accessorName, 
 	std::string accessorId;
 	if (primitive.TryGetAttributeAccessorId(accessorName, accessorId))
 	{
-		const glTF::Accessor* accessor = &document->accessors.Get(accessorId);
-		switch (accessor->componentType)
+		const auto& doc = *document;
+		const auto& accessor = doc.accessors.Get(accessorId);
+
+		switch (accessor.componentType)
 		{
 		case glTF::COMPONENT_FLOAT: {
-			const auto data = resourceReader->ReadBinaryData<float>(*document, *accessor);
-			for (auto& d : data)
-				vec.push_back(static_cast<T>(d));
+			const auto data = resourceReader->ReadBinaryData<float>(doc, accessor);
+			vec.resize(data.size());
+			std::transform(data.begin(), data.end(), vec.begin(), [](float value) -> T { return static_cast<T>(value); });
 			break;
 		}
 		case glTF::COMPONENT_BYTE: {
-			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
-			for (auto& d : data)
-				vec.push_back(static_cast<T>(d));
+			const auto data = resourceReader->ReadBinaryData<int8_t>(doc, accessor);
+			vec.resize(data.size());
+			std::transform(data.begin(), data.end(), vec.begin(), [](int8_t value) -> T { return static_cast<T>(value); });
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_BYTE: {
-			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
-			for (auto& d : data)
-				vec.push_back(static_cast<T>(d));
+			const auto data = resourceReader->ReadBinaryData<uint8_t>(doc, accessor);
+			vec.resize(data.size());
+			std::transform(data.begin(), data.end(), vec.begin(), [](uint8_t value) -> T { return static_cast<T>(value); });
 			break;
 		}
 		case glTF::COMPONENT_SHORT: {
-			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
-			for (auto& d : data)
-				vec.push_back(static_cast<T>(d));
+			const auto data = resourceReader->ReadBinaryData<int16_t>(doc,accessor);
+			vec.resize(data.size());
+			std::transform(data.begin(), data.end(), vec.begin(), [](int16_t value) -> T { return static_cast<T>(value); });
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_SHORT: {
-			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
-			for (auto& d : data)
-				vec.push_back(static_cast<T>(d));
+			const auto data = resourceReader->ReadBinaryData<uint16_t>(doc, accessor);
+			vec.resize(data.size());
+			std::transform(data.begin(), data.end(), vec.begin(), [](uint16_t value) -> T { return static_cast<T>(value); });
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_INT: {
-			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
-			for (auto& d : data)
-				vec.push_back(static_cast<T>(d));
+			const auto data = resourceReader->ReadBinaryData<uint32_t>(doc, accessor);
+			vec.resize(data.size());
+			std::transform(data.begin(), data.end(), vec.begin(), [](uint32_t value) -> T { return static_cast<T>(value); });
 			break;
 		}
 		default:
@@ -128,37 +130,39 @@ void Model::getIndexData(std::vector<uint32_t>& vec, const glTF::MeshPrimitive& 
 {
 	if (!primitive.indicesAccessorId.empty())
 	{
-		const glTF::Accessor* accessor = &document->accessors.Get(primitive.indicesAccessorId);
-		switch (accessor->componentType)
+		const auto& doc = *document;
+		const auto& accessor = doc.accessors.Get(primitive.indicesAccessorId);
+
+		switch (accessor.componentType)
 		{
 		case glTF::COMPONENT_BYTE: {
-			const auto data = resourceReader->ReadBinaryData<int8_t>(*document, *accessor);
-			for (auto& d : data)
-				vec.push_back(static_cast<uint32_t>(d));
+			const auto data = resourceReader->ReadBinaryData<int8_t>(doc, accessor);
+			vec.resize(data.size());
+			std::transform(data.begin(), data.end(), vec.begin(), [](int8_t value) -> uint32_t { return static_cast<uint32_t>(value); });
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_BYTE: {
-			const auto data = resourceReader->ReadBinaryData<uint8_t>(*document, *accessor);
-			for (auto& d : data)
-				vec.push_back(static_cast<uint32_t>(d));
+			const auto data = resourceReader->ReadBinaryData<uint8_t>(doc, accessor);
+			vec.resize(data.size());
+			std::transform(data.begin(), data.end(), vec.begin(), [](uint8_t value) -> uint32_t { return static_cast<uint32_t>(value); });
 			break;
 		}
 		case glTF::COMPONENT_SHORT: {
-			const auto data = resourceReader->ReadBinaryData<int16_t>(*document, *accessor);
-			for (auto& d : data)
-				vec.push_back(static_cast<uint32_t>(d));
+			const auto data = resourceReader->ReadBinaryData<int16_t>(doc, accessor);
+			vec.resize(data.size());
+			std::transform(data.begin(), data.end(), vec.begin(), [](int16_t value) -> uint32_t { return static_cast<uint32_t>(value); });
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_SHORT: {
-			const auto data = resourceReader->ReadBinaryData<uint16_t>(*document, *accessor);
-			for (auto& d : data)
-				vec.push_back(static_cast<uint32_t>(d));
+			const auto data = resourceReader->ReadBinaryData<uint16_t>(doc, accessor);
+			vec.resize(data.size());
+			std::transform(data.begin(), data.end(), vec.begin(), [](uint16_t value) -> uint32_t { return static_cast<uint32_t>(value); });
 			break;
 		}
 		case glTF::COMPONENT_UNSIGNED_INT: {
-			const auto data = resourceReader->ReadBinaryData<uint32_t>(*document, *accessor);
-			for (auto& d : data)
-				vec.push_back(static_cast<uint32_t>(d));
+			const auto data = resourceReader->ReadBinaryData<uint32_t>(doc, accessor);
+			vec.resize(data.size());
+			std::transform(data.begin(), data.end(), vec.begin(), [](uint32_t value) -> uint32_t { return value; });
 			break;
 		}
 		default:
@@ -172,7 +176,8 @@ void Model::getMesh(Pointer<vm::Node>& node, const std::string& meshID, const st
 	if (!node || meshID.empty()) return;
 	const auto& mesh = document->meshes.Get(meshID);
 
-	Mesh* myMesh = new Mesh();
+	node->mesh = new Mesh();
+	auto& myMesh = node->mesh;
 
 	for (const auto& primitive : mesh.primitives)
 	{
@@ -197,7 +202,9 @@ void Model::getMesh(Pointer<vm::Node>& node, const std::string& meshID, const st
 
 		// ------------ Materials ------------
 		const auto& material = document->materials.Get(primitive.materialId);
-		Primitive myPrimitive;
+
+		myMesh->primitives.push_back({});
+		auto& myPrimitive = myMesh->primitives.back();
 
 		// factors
 		myPrimitive.pbrMaterial.alphaCutoff = material.alphaCutoff;
@@ -214,11 +221,11 @@ void Model::getMesh(Pointer<vm::Node>& node, const std::string& meshID, const st
 		const auto normalImage = getImage(material.normalTexture.textureId);
 		const auto occlusionImage = getImage(material.occlusionTexture.textureId);
 		const auto emissiveImage = getImage(material.emissiveTexture.textureId);
-		myPrimitive.loadTexture(TextureType::BaseColor, folderPath, baseColorImage, document, resourceReader);
-		myPrimitive.loadTexture(TextureType::MetallicRoughness, folderPath, metallicRoughnessImage, document, resourceReader);
-		myPrimitive.loadTexture(TextureType::Normal, folderPath, normalImage, document, resourceReader);
-		myPrimitive.loadTexture(TextureType::Occlusion, folderPath, occlusionImage, document, resourceReader);
-		myPrimitive.loadTexture(TextureType::Emissive, folderPath, emissiveImage, document, resourceReader);
+		myPrimitive.loadTexture(MaterialType::BaseColor, folderPath, baseColorImage, document, resourceReader);
+		myPrimitive.loadTexture(MaterialType::MetallicRoughness, folderPath, metallicRoughnessImage, document, resourceReader);
+		myPrimitive.loadTexture(MaterialType::Normal, folderPath, normalImage, document, resourceReader);
+		myPrimitive.loadTexture(MaterialType::Occlusion, folderPath, occlusionImage, document, resourceReader);
+		myPrimitive.loadTexture(MaterialType::Emissive, folderPath, emissiveImage, document, resourceReader);
 
 
 		std::string accessorId;
@@ -233,7 +240,6 @@ void Model::getMesh(Pointer<vm::Node>& node, const std::string& meshID, const st
 		myPrimitive.calculateBoundingSphere();
 		myPrimitive.hasBones = !bonesIDs.empty() && !weights.empty();
 
-		myMesh->primitives.push_back(myPrimitive);
 		for (size_t i = 0; i < accessorPos->count; i++) {
 			Vertex vertex;
 			vertex.position = !positions.empty() ? vec3(&positions[i * 3]) : vec3();
@@ -248,7 +254,6 @@ void Model::getMesh(Pointer<vm::Node>& node, const std::string& meshID, const st
 			myMesh->indices.push_back(index);
 		}
 	}
-	node->mesh = myMesh;
 }
 
 void Model::loadModelGltf(const std::string& folderPath, const std::string& modelName, bool show)

@@ -319,9 +319,9 @@ void GUI::Properties() const
 	ImGui::Checkbox("Fog", &use_fog);
 	if (use_fog) {
 		ImGui::Indent(16.0f);
-		ImGui::InputFloat("Intensity", &fog_intensity, 0.01f, 0.1f, 4);
-		ImGui::InputFloat("Spread", &fog_spread, 0.1f, 1.0f, 4);
-		ImGui::InputFloat("Height", &fog_height, 0.01f, 0.1f, 4);
+		ImGui::InputFloat("Ground Thickness", &fog_ground_thickness, 0.1f, 1.0f, 4);
+		ImGui::InputFloat("Global Thickness", &fog_global_thickness, 0.1f, 1.0f, 4);
+		ImGui::InputFloat("Max Height", &fog_max_height, 0.01f, 0.1f, 4);
 		ImGui::Checkbox("Volumetric", &use_Volumetric_lights);
 		if (use_Volumetric_lights) {
 			ImGui::Indent(16.0f);

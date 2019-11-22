@@ -591,7 +591,7 @@ int Context::getGraphicsFamilyId() const
 #ifdef UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 	const vk::QueueFlags flags = vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eTransfer;
 #else
-	const vk::QueueFlags flags = vk::QueueFlagBits::eTransfer;
+	const vk::QueueFlags flags = vk::QueueFlagBits::eGraphics;
 #endif
 	auto& properties = VulkanContext::get()->queueFamilyProperties;
 	for (uint32_t i = 0; i < properties.size(); i++) {
@@ -634,8 +634,6 @@ int Context::getComputeFamilyId() const
 
 vk::PhysicalDevice Context::findGpu() const
 {
-	//if (vulkan.graphicsFamilyId < 0 || vulkan.presentFamilyId < 0 || vulkan.computeFamilyId < 0)
-	//	return nullptr;
 	std::vector<vk::PhysicalDevice> gpuList = VulkanContext::get()->instance.enumeratePhysicalDevices();
 
 	for (const auto& gpu : gpuList) {
@@ -672,9 +670,9 @@ vk::SurfaceFormatKHR Context::getSurfaceFormat() const
 {
 	std::vector<vk::SurfaceFormatKHR> formats = VulkanContext::get()->gpu.getSurfaceFormatsKHR(VulkanContext::get()->surface->surface);
 	auto format = formats[0];
-	for (const auto& i : formats) {
-		if (i.format == vk::Format::eB8G8R8A8Unorm && i.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
-			format = i;
+	for (const auto& f : formats) {
+		if (f.format == vk::Format::eB8G8R8A8Unorm && f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+			format = f;
 	}
 	
 	// Check for blit operation
@@ -692,7 +690,10 @@ vk::PresentModeKHR Context::getPresentationMode() const
 	std::vector<vk::PresentModeKHR> presentModes = VulkanContext::get()->gpu.getSurfacePresentModesKHR(VulkanContext::get()->surface->surface);
 
 	for (const auto& i : presentModes)
-		if (i == vk::PresentModeKHR::eImmediate || i == vk::PresentModeKHR::eMailbox)
+		if (i == vk::PresentModeKHR::eImmediate)
+			return i;
+	for (const auto& i : presentModes)
+		if (i == vk::PresentModeKHR::eMailbox)
 			return i;
 
 	return vk::PresentModeKHR::eFifo;

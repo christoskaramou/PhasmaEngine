@@ -30,19 +30,30 @@ void main()
 		// Fog
 		if (screenSpace.effects3.y > 0.5) {
 			// screenSpace.effects3.y -> fog on/off
-			// screenSpace.effects2.w -> fog height position
-			// screenSpace.effects2.x -> fog spread
-			// screenSpace.effects3.x -> fog intensity
+			// screenSpace.effects2.w -> fog max height
+			// screenSpace.effects2.x -> fog global thickness
+			// screenSpace.effects3.x -> fog ground thickness
 
-			float d = length(frag_pos - ubo.cam_pos.xyz);
-			float fog_height_factor = frag_pos.y + screenSpace.effects2.w;
-			fog_height_factor = clamp(exp(-(fog_height_factor * fog_height_factor * screenSpace.effects2.x)), 0.0, 1.0);
-			float total_fog_factor = clamp((1.0 - 1.0/(1.0 + d * d)) * screenSpace.effects3.x * fog_height_factor, 0.0, 1.0);
-			outColor.xyz = mix(outColor.xyz, vec3(0.75), total_fog_factor);
+			float fogNear = 0.5;
+			float fogFar = 1000.0;
+			float depth = length(frag_pos - ubo.cam_pos.xyz);
+			float groundHeightMin = -100.0;
+			float groundHeightMax = screenSpace.effects2.w * 20.0;
+			float globalThickness = 1.0;
+			float groundThickness = 2.0;
+
+			float depthFactor = clamp(1.0 - (fogFar - depth) / (fogFar - fogNear), 0.0, 1.0);
+			float heightFactor = clamp(1.0 - (frag_pos.y - groundHeightMin) / (groundHeightMax - groundHeightMin), 0.0, 1.0);
+			float globalFactor = depthFactor * globalThickness;
+			float noiseFactor = 1.0; // texture(NoiseMap, position.xz).x;
+			float groundFactor = heightFactor * depthFactor * noiseFactor * groundThickness;
+			float fogFactor = clamp(groundFactor + globalFactor, 0.0, 1.0);
+			
+			outColor.xyz = mix(outColor.xyz, vec3(1.0), fogFactor);
 
 			// Volumetric light
 			if (screenSpace.effects1.y > 0.5)
-				outColor.xyz += VolumetricLighting(ubo.lights[0], frag_pos, in_UV, shadow_coords1);
+				outColor.xyz += VolumetricLighting(ubo.lights[0], frag_pos, in_UV, shadow_coords1, fogFactor);
 		}
 
 		return;
@@ -65,8 +76,11 @@ void main()
 	vec3 fragColor = vec3(0.0);// 0.1 * material.albedo.xyz;
 
 	// IBL
-	if (screenSpace.effects1.x > 0.5)
-		fragColor += ImageBasedLighting(material, normal, normalize(frag_pos - ubo.cam_pos.xyz), sampler_cube_map, sampler_lut_IBL) * ambient_light;
+	IBL ibl;
+	if (screenSpace.effects1.x > 0.5) {
+		ibl = ImageBasedLighting(material, normal, normalize(frag_pos - ubo.cam_pos.xyz), sampler_cube_map, sampler_lut_IBL);
+		fragColor += ibl.final_color * ambient_light;
+	}
 
 	// screenSpace.effects3.z -> shadow cast
 	if (screenSpace.effects3.z > 0.5)
@@ -79,8 +93,8 @@ void main()
 
 	// SSR
 	if (screenSpace.effects0.y > 0.5) {
-		vec3 ssr = texture(sampler_ssr, in_UV).xyz;
-		outColor += vec4(ssr, 0.0) * (1.0 - material.roughness);
+		vec3 ssr = texture(sampler_ssr, in_UV).xyz * ibl.reflectivity;
+		outColor += vec4(ssr, 0.0);// * (1.0 - material.roughness);
 	}
 	
 	// Tone Mapping
@@ -90,19 +104,30 @@ void main()
 	// Fog
 	if (screenSpace.effects3.y > 0.5) {
 		// screenSpace.effects3.y -> fog on/off
-		// screenSpace.effects2.w -> fog height position
-		// screenSpace.effects2.x -> fog spread
-		// screenSpace.effects3.x -> fog intensity
+		// screenSpace.effects2.w -> fog max height
+		// screenSpace.effects2.x -> fog global thickness
+		// screenSpace.effects3.x -> fog ground thickness
 		
-		float d = length(frag_pos - ubo.cam_pos.xyz);
-		float fog_height_factor = frag_pos.y + screenSpace.effects2.w;
-		fog_height_factor = clamp(exp(-(fog_height_factor * fog_height_factor * screenSpace.effects2.x)), 0.0, 1.0);
-		float total_fog_factor = clamp((1.0 - 1.0/(1.0 + d * d)) * screenSpace.effects3.x * fog_height_factor, 0.0, 1.0);
-		outColor.xyz = mix(outColor.xyz, vec3(0.75), total_fog_factor);
+		float fogNear = 0.5;
+		float fogFar = 1000.0;
+		float depth = length(frag_pos - ubo.cam_pos.xyz);
+		float groundHeightMin = -2.0;
+		float groundHeightMax = screenSpace.effects2.w;
+		float globalThickness = screenSpace.effects2.x;
+		float groundThickness = screenSpace.effects3.x;
+
+		float depthFactor = clamp(1.0 - (fogFar - depth) / (fogFar - fogNear), 0.0, 1.0);
+		float heightFactor = clamp(1.0 - (frag_pos.y - groundHeightMin) / (groundHeightMax - groundHeightMin), 0.0, 1.0);
+		float globalFactor = depthFactor * globalThickness;
+		float noiseFactor = 1.0; // texture(NoiseMap, position.xz).x;
+		float groundFactor = heightFactor * depthFactor * noiseFactor * groundThickness;
+		float fogFactor = clamp(groundFactor + globalFactor, 0.0, 1.0);
+		
+		outColor.xyz = mix(outColor.xyz, vec3(1.0), fogFactor);
 
 		// Volumetric light
 		if (screenSpace.effects1.y > 0.5)
-			outColor.xyz += VolumetricLighting(ubo.lights[0], frag_pos, in_UV, shadow_coords1);
+			outColor.xyz += VolumetricLighting(ubo.lights[0], frag_pos, in_UV, shadow_coords1, fogFactor);
 	}
 }
 

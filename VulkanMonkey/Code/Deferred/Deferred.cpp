@@ -136,8 +136,8 @@ void Deferred::update(mat4& invViewProj)
 	ubo.screenSpace[3] = { invViewProj[3] };
 	ubo.screenSpace[4] = { static_cast<float>(GUI::show_ssao), static_cast<float>(GUI::show_ssr) , static_cast<float>(GUI::show_tonemapping), static_cast<float>(GUI::use_AntiAliasing) };
 	ubo.screenSpace[5] = { static_cast<float>(GUI::use_IBL), static_cast<float>(GUI::use_Volumetric_lights), static_cast<float>(GUI::volumetric_steps), static_cast<float>(GUI::volumetric_dither_strength) };
-	ubo.screenSpace[6] = { 1.0f / GUI::fog_spread, GUI::lights_intensity, GUI::lights_range, -GUI::fog_height };
-	ubo.screenSpace[7] = { GUI::fog_intensity, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f };
+	ubo.screenSpace[6] = { GUI::fog_global_thickness, GUI::lights_intensity, GUI::lights_range, GUI::fog_max_height };
+	ubo.screenSpace[7] = { GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f };
 
 	uniform.copyData(&ubo);
 }

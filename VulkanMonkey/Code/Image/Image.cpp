@@ -37,6 +37,19 @@ void Image::transitionImageLayout(
 
 void Image::createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags& usage, const vk::MemoryPropertyFlags& properties, vk::SampleCountFlagBits samples)
 {
+	auto const fProps = VulkanContext::get()->gpu.getFormatProperties(format);
+	if (!fProps.optimalTilingFeatures)
+		throw std::runtime_error("createImage(): wrong format error, no optimal tiling features supported!");
+
+	auto const ifProps = VulkanContext::get()->gpu.getImageFormatProperties(format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
+	if (ifProps.maxArrayLayers < arrayLayers ||
+		ifProps.maxExtent.width < width ||
+		ifProps.maxExtent.height < height ||
+		ifProps.maxMipLevels < mipLevels ||
+		!(ifProps.sampleCounts & samples))
+		throw std::runtime_error("createImage(): image format properties error!");
+	
+
 	this->width = width % 2 != 0 ? width - 1 : width;
 	this->height = height % 2 != 0 ? height - 1 : height;
 	width_f = static_cast<float>(this->width);
@@ -55,28 +68,22 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 	imageInfo.usage = usage;
 	imageInfo.sharingMode = vk::SharingMode::eExclusive;
 	imageInfo.initialLayout = initialLayout;
-	//vk::ImageFormatProperties imageFormatProperties = VulkanContext::get()->gpu.getImageFormatProperties(format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
 
 	image = VulkanContext::get()->device.createImage(imageInfo);
 
 	uint32_t memTypeIndex = UINT32_MAX;
 	auto const memRequirements = VulkanContext::get()->device.getImageMemoryRequirements(image);
 	auto const memProperties = VulkanContext::get()->gpu.getMemoryProperties();
+
 	for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
-		if (memRequirements.memoryTypeBits & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+		if (memRequirements.memoryTypeBits & (1 << i) && memProperties.memoryTypes[i].propertyFlags & properties) {
 			memTypeIndex = i;
 			break;
 		}
 	}
+
 	if (memTypeIndex == UINT32_MAX)
-	{
-		for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
-			if (memRequirements.memoryTypeBits & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) == vk::MemoryPropertyFlagBits::eDeviceLocal) {
-				memTypeIndex = i;
-				break;
-			}
-		}
-	}
+		throw std::runtime_error("createImage(): no suitable memory type");
 
 	vk::MemoryAllocateInfo allocInfo;
 	allocInfo.allocationSize = memRequirements.size;

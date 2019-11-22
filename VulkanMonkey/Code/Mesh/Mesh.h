@@ -13,15 +13,6 @@
 constexpr auto MAX_NUM_JOINTS = 128u;
 
 namespace vm {
-	enum TextureType
-	{
-		BaseColor,
-		MetallicRoughness,
-		Normal,
-		Occlusion,
-		Emissive
-	};
-
 	struct Primitive {
 		Primitive(): pbrMaterial({}) {}
 
@@ -44,7 +35,8 @@ namespace vm {
 			const float sphereRadius = length(max - center);
 			boundingSphere = vec4(center, sphereRadius);
 		}
-		void loadTexture(TextureType type,
+		void loadTexture(
+			MaterialType type,
 			const std::string& folderPath,
 			const Microsoft::glTF::Image* image = nullptr,
 			const Microsoft::glTF::Document* document = nullptr,

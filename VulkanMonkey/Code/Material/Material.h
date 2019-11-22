@@ -4,6 +4,15 @@
 #include "../Math/Math.h"
 
 namespace vm {
+	enum MaterialType
+	{
+		BaseColor,
+		MetallicRoughness,
+		Normal,
+		Occlusion,
+		Emissive
+	};
+
 	struct PBRMaterial
 	{
 		vec4 baseColorFactor;
