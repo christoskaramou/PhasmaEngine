@@ -128,7 +128,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>shaderc_shared.lib;mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.1.114.0\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <ProjectReference>
@@ -175,7 +175,7 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>shaderc_shared.lib;mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.1.114.0\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Windows</SubSystem>
@@ -245,6 +245,7 @@
     <ClInclude Include="Code\Queue\Queue.h" />
     <ClInclude Include="Code\Renderer\Renderer.h" />
     <ClInclude Include="Code\Script\Script.h" />
+    <ClInclude Include="Code\Shader\Shader.h" />
     <ClInclude Include="Code\Shadows\Shadows.h" />
     <ClInclude Include="Code\Skybox\Skybox.h" />
     <ClInclude Include="Code\SSAO\SSAO.h" />
@@ -295,6 +296,7 @@
     <ClCompile Include="Code\Queue\Queue.cpp" />
     <ClCompile Include="Code\Renderer\Renderer.cpp" />
     <ClCompile Include="Code\Script\Script.cpp" />
+    <ClCompile Include="Code\Shader\Shader.cpp" />
     <ClCompile Include="Code\Shadows\Shadows.cpp" />
     <ClCompile Include="Code\Skybox\Skybox.cpp" />
     <ClCompile Include="Code\SSAO\SSAO.cpp" />

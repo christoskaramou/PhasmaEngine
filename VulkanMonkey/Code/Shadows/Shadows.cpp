@@ -2,6 +2,7 @@
 #include "../GUI/GUI.h"
 #include "../Swapchain/Swapchain.h"
 #include "../Vertex/Vertex.h"
+#include "../Shader/Shader.h"
 
 using namespace vm;
 
@@ -119,10 +120,11 @@ void Shadows::createFrameBuffers()
 void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayout model)
 {
 	// Shader stages
-	std::vector<char> vertCode = readFile("shaders/Shadows/vert.spv");
+	Shader vert { "shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true };
+
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vertCode.size();
-	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vsmci.codeSize = vert.size();
+	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;

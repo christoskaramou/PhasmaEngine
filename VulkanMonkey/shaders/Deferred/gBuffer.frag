@@ -11,7 +11,7 @@ layout (set = 1, binding = 4) uniform sampler2D eSampler;  // Emissive
 
 layout (location = 0) in vec2 inUV;
 layout (location = 1) in vec3 inNormal;
-layout (location = 2) in vec3 inColor;
+layout (location = 2) in vec4 inColor;
 layout (location = 3) in vec4 baseColorFactor;
 layout (location = 4) in vec3 emissiveFactor;
 layout (location = 5) in vec4 metRoughAlphacutOcl;
@@ -27,17 +27,16 @@ layout (location = 4) out vec2 outVelocity;
 layout (location = 5) out vec4 outEmissive;
 
 void main() {
-	float alpha = texture(bcSampler, inUV).a;
-	if(alpha < metRoughAlphacutOcl.z)
-		discard;
-
+	vec4 basicColor = texture(bcSampler, inUV) + inColor; 
+	if (basicColor.a < metRoughAlphacutOcl.z) discard; // needed because alpha blending is messed up when objects are not in order
+	vec3 metRough = texture(mrSampler, inUV).xyz;
+	vec3 emissive = texture(eSampler, inUV).xyz;
 	float ao = texture(oSampler, inUV).r;
 
 	outDepth = gl_FragCoord.z;
 	outNormal = getNormal(inWorldPos.xyz, nSampler, inNormal, inUV);
-	vec3 color = texture(bcSampler, inUV).xyz + inColor;
-	outAlbedo = vec4(color * ao, alpha) * baseColorFactor;
-	outMetRough = vec3(0.0, texture(mrSampler, inUV).y, texture(mrSampler, inUV).z);
+	outAlbedo = vec4(basicColor.xyz * ao, basicColor.a) * baseColorFactor;
+	outMetRough = vec3(0.0, metRough.y, metRough.z);
 	outVelocity = (posProj.xy / posProj.w - posLastProj.xy / posLastProj.w) * vec2(0.5, 0.5); // ndc space
-	outEmissive = vec4(texture(eSampler, inUV).xyz * emissiveFactor, 0.0);
+	outEmissive = vec4(emissive * emissiveFactor, 0.0);
 }

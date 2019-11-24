@@ -1,4 +1,5 @@
 #include "Compute.h"
+#include "../Shader/Shader.h"
 #include <deque>
 
 using namespace vm;
@@ -100,10 +101,10 @@ void vm::Compute::updateDescriptorSet()
 
 void Compute::createPipeline()
 {
-	std::vector<char> compCode = readFile("shaders/Compute/comp.spv");
+	Shader comp { "shaders/Compute/shader.comp", ShaderType::Compute, true  };
 	vk::ShaderModuleCreateInfo csmci;
-	csmci.codeSize = compCode.size();
-	csmci.pCode = reinterpret_cast<const uint32_t*>(compCode.data());
+	csmci.codeSize = comp.size();
+	csmci.pCode = comp.get_spriv();
 
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = 1;

@@ -2,6 +2,7 @@
 #include "../GUI/GUI.h"
 #include "../Swapchain/Swapchain.h"
 #include "../Surface/Surface.h"
+#include "../Shader/Shader.h"
 #include <deque>
 
 using namespace vm;
@@ -353,16 +354,17 @@ void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImage
 void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTargets)
 {
 	// Shader stages
-	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
+	Shader vert{ "shaders/Common/quad.vert", ShaderType::Vertex, true };
+	Shader frag{ "shaders/Bloom/brightFilter.frag", ShaderType::Fragment, true };
+
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vertCode.size();
-	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vsmci.codeSize = vert.size();
+	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
-	std::vector<char> fragCode = readFile("shaders/Bloom/fragBrightFilter.spv");
 	vk::ShaderModuleCreateInfo fsmci;
-	fsmci.codeSize = fragCode.size();
-	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	fsmci.codeSize = frag.size();
+	fsmci.pCode = frag.get_spriv();
 	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
@@ -399,7 +401,7 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = VulkanContext::get()->surface->actualExtent;
+	r2d.extent = vk::Extent2D{ static_cast<uint32_t>(vp.width), static_cast<uint32_t>(vp.height) };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -512,16 +514,17 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& renderTargets)
 {
 	// Shader stages
-	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
+	Shader vert{ "shaders/Common/quad.vert", ShaderType::Vertex, true };
+	Shader frag{ "shaders/Bloom/gaussianBlurHorizontal.frag", ShaderType::Fragment, true };
+
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vertCode.size();
-	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vsmci.codeSize = vert.size();
+	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
-	std::vector<char> fragCode = readFile("shaders/Bloom/fragGaussianBlurHorizontal.spv");
 	vk::ShaderModuleCreateInfo fsmci;
-	fsmci.codeSize = fragCode.size();
-	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	fsmci.codeSize = frag.size();
+	fsmci.pCode = frag.get_spriv();
 	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
@@ -558,7 +561,7 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = VulkanContext::get()->surface->actualExtent;
+	r2d.extent = vk::Extent2D{ static_cast<uint32_t>(vp.width), static_cast<uint32_t>(vp.height) };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -671,16 +674,17 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& renderTargets)
 {
 	// Shader stages
-	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
+	Shader vert{ "shaders/Common/quad.vert", ShaderType::Vertex, true };
+	Shader frag{ "shaders/Bloom/gaussianBlurVertical.frag", ShaderType::Fragment, true };
+
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vertCode.size();
-	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vsmci.codeSize = vert.size();
+	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
-	std::vector<char> fragCode = readFile("shaders/Bloom/fragGaussianBlurVertical.spv");
 	vk::ShaderModuleCreateInfo fsmci;
-	fsmci.codeSize = fragCode.size();
-	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	fsmci.codeSize = frag.size();
+	fsmci.pCode = frag.get_spriv();
 	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
@@ -717,7 +721,7 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = VulkanContext::get()->surface->actualExtent;
+	r2d.extent = vk::Extent2D{ static_cast<uint32_t>(vp.width), static_cast<uint32_t>(vp.height) };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -829,16 +833,17 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 {
 	// Shader stages
-	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
+	Shader vert { "shaders/Common/quad.vert", ShaderType::Vertex, true };
+	Shader frag { "shaders/Bloom/combine.frag", ShaderType::Fragment, true };
+
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vertCode.size();
-	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vsmci.codeSize = vert.size();
+	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
-	std::vector<char> fragCode = readFile("shaders/Bloom/fragCombine.spv");
 	vk::ShaderModuleCreateInfo fsmci;
-	fsmci.codeSize = fragCode.size();
-	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	fsmci.codeSize = frag.size();
+	fsmci.pCode = frag.get_spriv();
 	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
@@ -875,7 +880,7 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = VulkanContext::get()->surface->actualExtent;
+	r2d.extent = vk::Extent2D{ static_cast<uint32_t>(vp.width), static_cast<uint32_t>(vp.height) };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;

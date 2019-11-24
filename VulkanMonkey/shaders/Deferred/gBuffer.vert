@@ -38,7 +38,7 @@ layout(location = 5) in vec4 inWeights;
 
 layout (location = 0) out vec2 outUV;
 layout (location = 1) out vec3 outNormal;
-layout (location = 2) out vec3 outColor;
+layout (location = 2) out vec4 outColor;
 layout (location = 3) out vec4 baseColorFactor;
 layout (location = 4) out vec3 emissiveFactor;
 layout (location = 5) out vec4 metRoughAlphacutOcl;
@@ -68,7 +68,7 @@ void main()
 	outNormal = normalize(mNormal * inNormal);
 
 	// Color
-	outColor = inColor.rgb;
+	outColor = inColor;
 
 	// Factors
 	baseColorFactor = uboPrimitive.baseColorFactor;

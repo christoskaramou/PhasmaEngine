@@ -85,7 +85,7 @@ void Primitive::loadTexture(
 	case MaterialType::BaseColor:
 		tex = &pbrMaterial.baseColorTexture;
 		if (!image || image->uri.empty())
-			path = "objects/white.png";
+			path = "objects/black.png";
 		break;
 	case MaterialType::MetallicRoughness:
 		tex = &pbrMaterial.metallicRoughnessTexture;

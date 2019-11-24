@@ -252,6 +252,9 @@
     <ClInclude Include="Code\DepthOfField\DOF.h">
       <Filter>Code\DepthOfField</Filter>
     </ClInclude>
+    <ClInclude Include="Code\Shader\Shader.h">
+      <Filter>Code\Shader</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -443,6 +446,9 @@
     <ClCompile Include="Code\DepthOfField\DOF.cpp">
       <Filter>Code\DepthOfField</Filter>
     </ClCompile>
+    <ClCompile Include="Code\Shader\Shader.cpp">
+      <Filter>Code\Shader</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source">
@@ -606,6 +612,9 @@
     </Filter>
     <Filter Include="Shaders\DepthOfField">
       <UniqueIdentifier>{a926cc9a-6519-4264-bb1c-e055123bcf86}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Shader">
+      <UniqueIdentifier>{16500006-bc42-4858-82a6-a135c5d8234d}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

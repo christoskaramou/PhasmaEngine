@@ -2,6 +2,7 @@
 #include "../GUI/GUI.h"
 #include "../Swapchain/Swapchain.h"
 #include "../Surface/Surface.h"
+#include "../Shader/Shader.h"
 #include <deque>
 
 using namespace vm;
@@ -185,16 +186,17 @@ void DOF::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string,
 void DOF::createPipeline(std::map<std::string, Image>& renderTargets)
 {
 	// Shader stages
-	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
+	Shader vert{ "shaders/Common/quad.vert", ShaderType::Vertex, true };
+	Shader frag{ "shaders/DepthOfField/DOF.frag", ShaderType::Fragment, true };
+
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vertCode.size();
-	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vsmci.codeSize = vert.size();
+	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
-	std::vector<char> fragCode = readFile("shaders/DepthOfField/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
-	fsmci.codeSize = fragCode.size();
-	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	fsmci.codeSize = frag.size();
+	fsmci.pCode = frag.get_spriv();
 	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
@@ -231,7 +233,7 @@ void DOF::createPipeline(std::map<std::string, Image>& renderTargets)
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = VulkanContext::get()->surface->actualExtent;
+	r2d.extent = vk::Extent2D{ static_cast<uint32_t>(vp.width), static_cast<uint32_t>(vp.height) };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;

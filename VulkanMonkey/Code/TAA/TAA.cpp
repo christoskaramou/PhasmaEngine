@@ -4,6 +4,7 @@
 #include "../GUI/GUI.h"
 #include "../Surface/Surface.h"
 #include "../Swapchain/Swapchain.h"
+#include "../Shader/Shader.h"
 
 using namespace vm;
 
@@ -243,16 +244,17 @@ void TAA::createPipelines(std::map<std::string, Image>& renderTargets)
 void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 {
 	// Shader stages
-	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
+	Shader vert{ "shaders/Common/quad.vert", ShaderType::Vertex, true };
+	Shader frag{ "shaders/TAA/TAA.frag", ShaderType::Fragment, true };
+
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vertCode.size();
-	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vsmci.codeSize = vert.size();
+	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
-	std::vector<char> fragCode = readFile("shaders/TAA/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
-	fsmci.codeSize = fragCode.size();
-	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	fsmci.codeSize = frag.size();
+	fsmci.pCode = frag.get_spriv();
 	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
@@ -289,7 +291,7 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = VulkanContext::get()->surface->actualExtent;
+	r2d.extent = vk::Extent2D{ static_cast<uint32_t>(vp.width), static_cast<uint32_t>(vp.height) };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;
@@ -399,16 +401,17 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 {
 	// Shader stages
-	std::vector<char> vertCode = readFile("shaders/Common/vert.spv");
+	Shader vert{ "shaders/Common/quad.vert", ShaderType::Vertex, true };
+	Shader frag{ "shaders/TAA/TAASharpen.frag", ShaderType::Fragment, true };
+
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vertCode.size();
-	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vsmci.codeSize = vert.size();
+	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
-	std::vector<char> fragCode = readFile("shaders/TAA/fragSharpen.spv");
 	vk::ShaderModuleCreateInfo fsmci;
-	fsmci.codeSize = fragCode.size();
-	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	fsmci.codeSize = frag.size();
+	fsmci.pCode = frag.get_spriv();
 	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
@@ -445,7 +448,7 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	vp.maxDepth = 1.0f;
 
 	vk::Rect2D r2d;
-	r2d.extent = VulkanContext::get()->surface->actualExtent;
+	r2d.extent = vk::Extent2D{ static_cast<uint32_t>(vp.width), static_cast<uint32_t>(vp.height) };
 
 	vk::PipelineViewportStateCreateInfo pvsci;
 	pvsci.viewportCount = 1;

@@ -7,6 +7,7 @@
 #include "../Vertex/Vertex.h"
 #include "../Swapchain/Swapchain.h"
 #include "../Surface/Surface.h"
+#include "../Shader/Shader.h"
 
 using namespace vm;
 
@@ -242,7 +243,7 @@ void GUI::Properties() const
 	ImGui::InputFloat("Quality.", &rtScale, 0.01f, 0.05f, 2);
 	if (ImGui::Button("Apply")) {
 		if (scaleRenderTargetsEventType != UINT32_MAX) {
-			renderTargetsScale = clamp(rtScale, 0.1f, 1.0f);
+			renderTargetsScale = clamp(rtScale, 0.1f, 2.0f);
 			SDL_Event event;
 			SDL_zero(event);
 			event.type = scaleRenderTargetsEventType; // along side with window resize
@@ -1065,16 +1066,17 @@ void GUI::createFrameBuffers()
 void GUI::createPipeline()
 {
 	// Shader stages
-	std::vector<char> vertCode = readFile("shaders/GUI/vert.spv");
+	Shader vert{ "shaders/GUI/shaderGUI.vert", ShaderType::Vertex, true };
+	Shader frag{ "shaders/GUI/shaderGUI.frag", ShaderType::Fragment, true };
+
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vertCode.size();
-	vsmci.pCode = reinterpret_cast<const uint32_t*>(vertCode.data());
+	vsmci.codeSize = vert.size();
+	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
-	std::vector<char> fragCode = readFile("shaders/GUI/frag.spv");
 	vk::ShaderModuleCreateInfo fsmci;
-	fsmci.codeSize = fragCode.size();
-	fsmci.pCode = reinterpret_cast<const uint32_t*>(fragCode.data());
+	fsmci.codeSize = frag.size();
+	fsmci.pCode = frag.get_spriv();
 	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
 	vk::PipelineShaderStageCreateInfo pssci1;
