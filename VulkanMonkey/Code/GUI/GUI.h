@@ -67,6 +67,7 @@ namespace vm {
 		static inline std::array<float, 20>					metrics = {};
 		static inline std::array<float, 20>					stats = {};
 		static inline std::vector<std::string>				fileList{};
+		static inline std::vector<std::string>				shaderList{};
 		static inline std::vector<std::string>				modelList{};
 		static inline std::vector <std::array<float, 3>>	model_scale{};
 		static inline std::vector <std::array<float, 3>>	model_pos{};
@@ -77,6 +78,7 @@ namespace vm {
 		static inline ImVec2								mlPanelPos = ImVec2();
 		static inline ImVec2								mlPanelSize = ImVec2();
 		static inline uint32_t								scaleRenderTargetsEventType = SDL_RegisterEvents(1);
+		static inline uint32_t								compileShadersEventType = SDL_RegisterEvents(2);
 		static inline SDL_Window*							g_Window = nullptr;
 		static inline Uint64								g_Time = 0;
 		static inline bool									g_MousePressed[3] = { false, false, false };
@@ -110,6 +112,7 @@ namespace vm {
 		void Metrics() const;
 		static void ConsoleWindow();
 		void Scripts() const;
+		void Shaders() const;
 		void Models() const;
 		void Properties() const;
 		void RenderingWindowBox() const;

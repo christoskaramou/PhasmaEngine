@@ -379,6 +379,37 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	//- Recreate resources end --------------
 }
 
+void Context::recreatePipelines()
+{
+	shadows.pipeline.destroy();
+	ssao.pipeline.destroy();
+	ssao.pipelineBlur.destroy();
+	ssr.pipeline.destroy();
+	deferred.pipeline.destroy();
+	deferred.pipelineComposition.destroy();
+	fxaa.pipeline.destroy();
+	taa.pipeline.destroy();
+	taa.pipelineSharpen.destroy();
+	bloom.pipelineBrightFilter.destroy();
+	bloom.pipelineCombine.destroy();
+	bloom.pipelineGaussianBlurHorizontal.destroy();
+	bloom.pipelineGaussianBlurVertical.destroy();
+	dof.pipeline.destroy();
+	motionBlur.pipeline.destroy();
+	gui.pipeline.destroy();
+
+	shadows.createPipeline(*Mesh::getDescriptorSetLayout(), *Model::getDescriptorSetLayout());
+	ssao.createPipelines(renderTargets);
+	ssr.createPipeline(renderTargets);
+	deferred.createPipelines(renderTargets);
+	fxaa.createPipeline(renderTargets);
+	taa.createPipelines(renderTargets);
+	bloom.createPipelines(renderTargets);
+	dof.createPipeline(renderTargets);
+	motionBlur.createPipeline(renderTargets);
+	gui.createPipeline();
+}
+
 // Callbacks for scripts -------------------
 static void LoadModel(MonoString* folderPath, MonoString* modelName, uint32_t instances)
 {

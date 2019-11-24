@@ -112,6 +112,9 @@ bool Window::processEvents(float delta)
 				renderer[0]->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 			}
 		}
+		if (event.type == GUI::compileShadersEventType) {
+			renderer[0]->ctx.recreatePipelines();
+		}
 	}
 
 	if (io.KeysDown[SDL_SCANCODE_ESCAPE]) {

@@ -39,6 +39,7 @@ void GUI::BottomPanel() const
 {
 	ConsoleWindow();
 	Scripts();
+	Shaders();
 	Models();
 }
 
@@ -144,20 +145,19 @@ void GUI::ConsoleWindow()
 {
 	static bool console_open = true;
 	static Console console;
-	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - LOWER_PANEL_HEIGHT), ImVec2(WIDTH_f / 3.f, LOWER_PANEL_HEIGHT));
+	console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - LOWER_PANEL_HEIGHT), ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
 }
 
 void GUI::Scripts() const
 {
 	static bool scripts_open = true;
-	ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 3.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
-	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_PANEL_HEIGHT));
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 1.f / 4.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
+	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
 	ImGui::Begin("Scripts Folder", &scripts_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	if (ImGui::Button("Create New Script")) {
 		const char* result = tinyfd_inputBox("Script", "Give a name followed by the extension .cs", "");
 		if (result) {
 			std::string res = result;
-			res = res.substr(0, res.find_last_of(".cs") + 1);
 			if (std::find(fileList.begin(), fileList.end(), res) == fileList.end()) {
 				const std::string cmd = "type nul > Scripts\\" + res;
 				system(cmd.c_str());
@@ -170,13 +170,39 @@ void GUI::Scripts() const
 	}
 	for (uint32_t i = 0; i < fileList.size(); i++)
 	{
-		if (endsWithExt(fileList[i], ".cs")) {
-			std::string name = fileList[i] + "##" + std::to_string(i);
-			if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
-				if (ImGui::IsMouseDoubleClicked(0)) {
-					std::string s = "Scripts\\" + fileList[i];
-					system(s.c_str());
-				}
+		std::string name = fileList[i] + "##" + std::to_string(i);
+		if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
+			if (ImGui::IsMouseDoubleClicked(0)) {
+				std::string s = "Scripts\\" + fileList[i];
+				system(s.c_str());
+			}
+		}
+	}
+	ImGui::End();
+}
+
+void GUI::Shaders() const
+{
+	static bool shaders_open = true;
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 2.f / 4.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
+	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
+	ImGui::Begin("Shaders Folder", &shaders_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+	if (ImGui::Button("Compile Shaders")) {
+		if (compileShadersEventType != UINT32_MAX) {
+			SDL_Event event;
+			SDL_zero(event);
+			event.type = compileShadersEventType; // this event is captured to window event check routine
+			VulkanContext::get()->device.waitIdle();
+			SDL_PushEvent(&event);
+		}
+	}
+	for (uint32_t i = 0; i < shaderList.size(); i++)
+	{
+		std::string name = shaderList[i] + "##" + std::to_string(i);
+		if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
+			if (ImGui::IsMouseDoubleClicked(0)) {
+				std::string s = "Shaders\\" + shaderList[i];
+				system(s.c_str());
 			}
 		}
 	}
@@ -186,8 +212,8 @@ void GUI::Scripts() const
 void GUI::Models() const
 {
 	static bool models_open = true;
-	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 2.f / 3.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
-	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 3.f, LOWER_PANEL_HEIGHT));
+	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 3.f / 4.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
+	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
 	ImGui::Begin("Models Loaded", &models_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	if (ImGui::Button("Add New Model")) {
 		std::vector<const char*> filter{ "*.gltf", "*.glb" };
@@ -468,10 +494,17 @@ void GUI::initImGui()
 	vk::FenceCreateInfo fiu;
 	fenceUpload = vulkan->device.createFence(fiu);
 
-	for (auto& file : std::filesystem::directory_iterator("Scripts")) {
+	for (auto& file : std::filesystem::recursive_directory_iterator("Scripts")) {
 		auto pathStr = file.path().string();
 		if (endsWithExt(pathStr, ".cs"))
-			fileList.push_back(pathStr.substr(pathStr.find_last_of('\\') + 1));
+			fileList.push_back(pathStr.erase(0, 8)); // remove "Scripts\\"
+	}
+
+	for (auto& file : std::filesystem::recursive_directory_iterator("shaders")) {
+		auto pathStr = file.path().string();
+		if (endsWithExt(pathStr, ".vert") || endsWithExt(pathStr, ".frag") || endsWithExt(pathStr, ".comp") || endsWithExt(pathStr, ".glsl")) {
+			shaderList.push_back(pathStr.erase(0, 8)); // remove "shaders\\"
+		}
 	}
 
 	ImGui::CreateContext();

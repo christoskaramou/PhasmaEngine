@@ -91,6 +91,7 @@ namespace vm {
 		void createUniforms();
 		void destroyVkContext();
 		void resizeViewport(uint32_t width, uint32_t height);
+		void recreatePipelines();
 
 		vk::Instance createInstance() const;
 		static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
