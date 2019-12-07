@@ -225,6 +225,7 @@
     <ClInclude Include="Code\Context\Context.h" />
     <ClInclude Include="Code\Deferred\Deferred.h" />
     <ClInclude Include="Code\DepthOfField\DOF.h" />
+    <ClInclude Include="Code\Event\Delegate.h" />
     <ClInclude Include="Code\Event\Event.h" />
     <ClInclude Include="Code\FXAA\FXAA.h" />
     <ClInclude Include="Code\GUI\GUI.h" />

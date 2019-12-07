@@ -118,6 +118,7 @@ void Shader::preprocess_shader(shaderc_shader_kind kind)
 	shaderc::CompileOptions options;
 	options.SetIncluder(std::make_unique<FileIncluder>());
 	//options.AddMacroDefinition("MY_DEFINE", "1");
+	options.SetOptimizationLevel(shaderc_optimization_level_performance);
 
 	shaderc::PreprocessedSourceCompilationResult result =
 		compiler.PreprocessGlsl(m_source, kind, m_source_name.c_str(), options);

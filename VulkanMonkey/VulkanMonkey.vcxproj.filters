@@ -255,6 +255,9 @@
     <ClInclude Include="Code\Shader\Shader.h">
       <Filter>Code\Shader</Filter>
     </ClInclude>
+    <ClInclude Include="Code\Event\Delegate.h">
+      <Filter>Code\Event</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">

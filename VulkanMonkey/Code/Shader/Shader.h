@@ -49,7 +49,6 @@ namespace vm {
 		void compile_file(shaderc_shader_kind kind);
 
 	private:
-		bool online_compile = true;
 		std::string m_source_name{};
 		std::string m_source{};
 		std::string m_preprocessed{};
