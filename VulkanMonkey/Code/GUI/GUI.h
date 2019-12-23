@@ -78,7 +78,7 @@ namespace vm {
 		static inline ImVec2								mlPanelPos = ImVec2();
 		static inline ImVec2								mlPanelSize = ImVec2();
 		static inline uint32_t								scaleRenderTargetsEventType = SDL_RegisterEvents(1);
-		static inline uint32_t								compileShadersEventType = SDL_RegisterEvents(2);
+		static inline uint32_t								compileShadersEventType = SDL_RegisterEvents(1);
 		static inline SDL_Window*							g_Window = nullptr;
 		static inline Uint64								g_Time = 0;
 		static inline bool									g_MousePressed[3] = { false, false, false };

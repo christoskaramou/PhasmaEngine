@@ -331,7 +331,7 @@ namespace vm {
 
 	vec4 vec4::operator*(cvec4 & v) const
 	{
-		return vec4(x * v.x, y * v.y,z * v.z, w * v.w);
+		return vec4(x * v.x, y * v.y, z * v.z, w * v.w);
 	}
 
 	vec4 vec4::operator*(cfloat scalar) const

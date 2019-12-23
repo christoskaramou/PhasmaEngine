@@ -31,7 +31,6 @@ Renderer::~Renderer()
 			VulkanContext::get()->device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
 			Mesh::descriptorSetLayout = nullptr;
 		}
-
 		if (Primitive::descriptorSetLayout) {
 			VulkanContext::get()->device.destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
 			Primitive::descriptorSetLayout = nullptr;
