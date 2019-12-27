@@ -13,7 +13,14 @@
 
 namespace vm {
 
-	enum struct ShaderType {
+	struct Define
+	{
+		std::string name{};
+		std::string value{};
+	};
+
+	enum struct ShaderType
+	{
 		Vertex,
 		Fragment,
 		Compute,
@@ -38,7 +45,7 @@ namespace vm {
 
 	struct Shader
 	{
-		Shader(const std::string& filename, ShaderType kind, bool online_compile);
+		Shader(const std::string& filename, ShaderType kind, bool online_compile, const std::vector<Define>& defs = {});
 		const uint32_t* get_spriv();
 		size_t size();
 
@@ -47,12 +54,17 @@ namespace vm {
 		void preprocess_shader(shaderc_shader_kind kind);
 		void compile_file_to_assembly(shaderc_shader_kind kind);
 		void compile_file(shaderc_shader_kind kind);
+		void addDefine(Define& define);
+		void addDefines(const std::vector<Define>& defines);
 
 	private:
+		shaderc::Compiler compiler;
+		shaderc::CompileOptions options;
 		std::string m_source_name{};
 		std::string m_source{};
 		std::string m_preprocessed{};
 		std::string m_assembly{};
 		std::vector<uint32_t> m_spirv{};
+		std::vector<Define> defines{};
 	};
 }
