@@ -26,6 +26,7 @@ namespace vm {
 		LayoutState layoutState = LayoutState::ColorWrite;
 		vk::Format format{};
 		vk::ImageLayout initialLayout = vk::ImageLayout::ePreinitialized;
+		vk::ImageTiling tiling = vk::ImageTiling::eOptimal;
 		uint32_t mipLevels = 1;
 		uint32_t arrayLayers = 1;
 		bool anisotropyEnabled = VK_TRUE;

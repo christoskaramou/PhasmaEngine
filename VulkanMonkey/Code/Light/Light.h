@@ -38,7 +38,7 @@ namespace vm {
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout();
 
-		void update(const Camera& camera) const;
+		void update(const Camera& camera);
 		void createLightUniforms();
 		void destroy();
 	};

@@ -61,6 +61,8 @@ namespace vm {
 		static inline std::array<float, 3>					depthBias{ 0.0f, 0.0f, -6.2f };
 		static inline std::array<float, 4>					clearColor{ 0.0f, 0.0f, 0.0f, 1.0f };
 		static inline float									cpuTime = 0;
+		static inline float									updatesTime = 0;
+		static inline float									updatesTimeCount = 0;
 		static inline float									cpuWaitingTime = 0;
 		static inline float									gpuTime = 0;
 		static inline float									timeScale = 1.f;

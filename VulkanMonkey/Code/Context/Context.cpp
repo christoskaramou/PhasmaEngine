@@ -1,16 +1,20 @@
 #include "Context.h"
 #include "../Mesh/Mesh.h"
 #include "../Queue/Queue.h"
+#include "../Math/Math.h"
 #include <filesystem>
 #include <iostream>
 
 using namespace vm;
+
+constexpr uint32_t SWAPCHAIN_IMAGES = 3;
 
 void Context::initVulkanContext() const
 {
 	auto& vulkan = *VulkanContext::get();
 	vulkan.instance = createInstance();
 #ifdef _DEBUG
+	vulkan.dispatchLoaderDynamic.init(vulkan.instance, vk::Device());
 	vulkan.debugMessenger = createDebugMessenger();
 #endif
 	vulkan.surface = new Surface(createSurface());
@@ -27,14 +31,14 @@ void Context::initVulkanContext() const
 	vulkan.graphicsQueue = getGraphicsQueue();
 	vulkan.computeQueue = getComputeQueue();
 	vulkan.transferQueue = getTransferQueue();
-	vulkan.semaphores = createSemaphores(3);
-	vulkan.fences = createFences(2);
 	vulkan.commandPool = createCommandPool();
 	vulkan.commandPool2 = createCommandPool();
-	vulkan.swapchain = new Swapchain(createSwapchain());
+	vulkan.swapchain = new Swapchain(createSwapchain(SWAPCHAIN_IMAGES));
 	vulkan.descriptorPool = createDescriptorPool(15000); // max number of all descriptor sets to allocate
-	vulkan.dynamicCmdBuffer = createCmdBuffers().at(0);
-	vulkan.shadowCmdBuffers = createCmdBuffers(3);
+	vulkan.dynamicCmdBuffers = createCmdBuffers(SWAPCHAIN_IMAGES);
+	vulkan.shadowCmdBuffers = createCmdBuffers(SWAPCHAIN_IMAGES * 3);
+	vulkan.semaphores = createSemaphores(SWAPCHAIN_IMAGES * 3);
+	vulkan.fences = createFences(SWAPCHAIN_IMAGES);
 	vulkan.depth = new Image(createDepthResources());
 }
 
@@ -120,7 +124,7 @@ void Context::initRendering()
 void Context::resizeViewport(uint32_t width, uint32_t height)
 {
 	auto& vulkan = *VulkanContext::get();
-	vulkan.device.waitIdle();
+	vulkan.graphicsQueue.waitIdle();
 
 	//- Free resources ----------------------
 	// render targets
@@ -297,7 +301,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	//- Recreate resources ------------------
 	WIDTH = width;
 	HEIGHT = height;
-	*vulkan.swapchain = createSwapchain();
+	*vulkan.swapchain = createSwapchain(SWAPCHAIN_IMAGES);
 	*vulkan.depth = createDepthResources();
 
 	addRenderTarget("viewport", vulkan.surface->formatKHR.format, vk::ImageUsageFlagBits::eTransferSrc);
@@ -381,6 +385,8 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 
 void Context::recreatePipelines()
 {
+	VulkanContext::get()->graphicsQueue.waitIdle();
+
 	shadows.pipeline.destroy();
 	ssao.pipeline.destroy();
 	ssao.pipelineBlur.destroy();
@@ -524,29 +530,34 @@ void Context::createUniforms()
 
 vk::Instance Context::createInstance() const
 {
+	std::vector<const char*> instanceExtensions;
+	std::vector<const char*> instanceLayers;
+
+	// === Extentions ==============================
 	unsigned extCount;
 	if (!SDL_Vulkan_GetInstanceExtensions(VulkanContext::get()->window, &extCount, nullptr))
 		throw std::runtime_error(SDL_GetError());
-
-	std::vector<const char*> instanceExtensions(extCount);
+	instanceExtensions.resize(extCount);
 	if (!SDL_Vulkan_GetInstanceExtensions(VulkanContext::get()->window, &extCount, instanceExtensions.data()))
 		throw std::runtime_error(SDL_GetError());
+	// =============================================
 
-	std::vector<const char*> instanceLayers{};
 #ifdef _DEBUG
+	// === Debug Extensions ========================
 	auto extensions = vk::enumerateInstanceExtensionProperties();
 	for (auto& extension : extensions) {
 		if (std::string(extension.extensionName) == "VK_EXT_debug_utils")
 			instanceExtensions.push_back("VK_EXT_debug_utils");
 	}
+	// =============================================
 
+	// === Debug Layers ============================
 	auto layers = vk::enumerateInstanceLayerProperties();
 	for (auto layer : layers) {
 		if (std::string(layer.layerName) == "VK_LAYER_KHRONOS_validation")
 			instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
-		if (std::string(layer.layerName) == "VK_LAYER_LUNARG_assistant_layer")
-			instanceLayers.push_back("VK_LAYER_LUNARG_assistant_layer");
 	}
+	// =============================================
 #endif
 
 	vk::ApplicationInfo appInfo;
@@ -560,6 +571,7 @@ vk::Instance Context::createInstance() const
 	instInfo.ppEnabledLayerNames = instanceLayers.data();
 	instInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
 	instInfo.ppEnabledExtensionNames = instanceExtensions.data();
+	instInfo.pNext = nullptr;
 
 	return vk::createInstance(instInfo);
 }
@@ -594,12 +606,15 @@ vk::DebugUtilsMessengerEXT Context::createDebugMessenger() const
 		vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
 	dumci.pfnUserCallback = Context::messageCallback;
 
-	return VulkanContext::get()->instance.createDebugUtilsMessengerEXT(dumci, nullptr, vk::DispatchLoaderDynamic(VulkanContext::get()->instance));
+	return VulkanContext::get()->instance.createDebugUtilsMessengerEXT(dumci, nullptr, VulkanContext::get()->dispatchLoaderDynamic);
 }
 
 void Context::destroyDebugMessenger() const
 {
-	VulkanContext::get()->instance.destroyDebugUtilsMessengerEXT(VulkanContext::get()->debugMessenger, nullptr, vk::DispatchLoaderDynamic(VulkanContext::get()->instance));
+	vk::DispatchLoaderDynamic dld;
+	dld.init(VulkanContext::get()->instance, vk::Device());
+
+	VulkanContext::get()->instance.destroyDebugUtilsMessengerEXT(VulkanContext::get()->debugMessenger, nullptr, dld);
 }
 
 Surface Context::createSurface() const
@@ -721,10 +736,11 @@ vk::PresentModeKHR Context::getPresentationMode() const
 	std::vector<vk::PresentModeKHR> presentModes = VulkanContext::get()->gpu.getSurfacePresentModesKHR(VulkanContext::get()->surface->surface);
 
 	for (const auto& i : presentModes)
-		if (i == vk::PresentModeKHR::eImmediate)
-			return i;
-	for (const auto& i : presentModes)
 		if (i == vk::PresentModeKHR::eMailbox)
+			return i;
+
+	for (const auto& i : presentModes)
+		if (i == vk::PresentModeKHR::eImmediate)
 			return i;
 
 	return vk::PresentModeKHR::eFifo;
@@ -743,7 +759,7 @@ vk::PhysicalDeviceFeatures Context::getGPUFeatures() const
 vk::Device Context::createDevice() const
 {
 	auto& vulkan = *VulkanContext::get();
-	std::vector<vk::ExtensionProperties> extensionProperties = vulkan.gpu.enumerateDeviceExtensionProperties();
+	auto extensionProperties = vulkan.gpu.enumerateDeviceExtensionProperties();
 
 	std::vector<const char*> deviceExtensions{};
 	for (auto& i : extensionProperties) {
@@ -801,21 +817,15 @@ vk::Queue Context::getComputeQueue() const
 	return VulkanContext::get()->device.getQueue(VulkanContext::get()->computeFamilyId, 0);
 }
 
-Swapchain Context::createSwapchain() const
+Swapchain Context::createSwapchain(uint32_t requestImageCount) const
 {
 	auto& vulkan = *VulkanContext::get();
 	const VkExtent2D extent = vulkan.surface->actualExtent;
 	vulkan.surface->capabilities = getSurfaceCapabilities();
 
-	uint32_t swapchainImageCount = vulkan.surface->capabilities.minImageCount + 1;
-	if (vulkan.surface->capabilities.maxImageCount > 0 &&
-		swapchainImageCount > vulkan.surface->capabilities.maxImageCount) {
-		swapchainImageCount = vulkan.surface->capabilities.maxImageCount;
-	}
-
 	vk::SwapchainCreateInfoKHR swapchainCreateInfo;
 	swapchainCreateInfo.surface = vulkan.surface->surface;
-	swapchainCreateInfo.minImageCount = swapchainImageCount;
+	swapchainCreateInfo.minImageCount = clamp(requestImageCount, vulkan.surface->capabilities.minImageCount, vulkan.surface->capabilities.maxImageCount);
 	swapchainCreateInfo.imageFormat = vulkan.surface->formatKHR.format;
 	swapchainCreateInfo.imageColorSpace = vulkan.surface->formatKHR.colorSpace;
 	swapchainCreateInfo.imageExtent = extent;
@@ -969,7 +979,7 @@ vk::DescriptorPool Context::createDescriptorPool(uint32_t maxDescriptorSets) con
 std::vector<vk::Fence> Context::createFences(const uint32_t fenceCount) const
 {
 	std::vector<vk::Fence> _fences(fenceCount);
-	const vk::FenceCreateInfo fi;
+	const vk::FenceCreateInfo fi { vk::FenceCreateFlagBits::eSignaled };
 
 	for (uint32_t i = 0; i < fenceCount; i++) {
 		_fences[i] = VulkanContext::get()->device.createFence(fi);
@@ -993,6 +1003,8 @@ std::vector<vk::Semaphore> Context::createSemaphores(const uint32_t semaphoresCo
 void Context::destroyVkContext()
 {
 	auto& vulkan = *VulkanContext::get();
+	vulkan.device.waitIdle();
+
 	for (auto& fence : vulkan.fences) {
 		if (fence) {
 			vulkan.device.destroyFence(fence);

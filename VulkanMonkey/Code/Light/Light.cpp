@@ -19,9 +19,11 @@ void LightUniforms::createLightUniforms()
 	getDescriptorSetLayout();
 
 	LightsUBO lubo;
-	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	uniform.map();
 	uniform.copyData(&lubo);
+	uniform.flush();
+	uniform.unmap();
 
 	vk::DescriptorSetAllocateInfo allocateInfo;
 	allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
@@ -53,13 +55,16 @@ void LightUniforms::destroy()
 	}
 }
 
-void LightUniforms::update(const Camera& camera) const
+void LightUniforms::update(const Camera& camera)
 {
 	if (GUI::randomize_lights) {
 		GUI::randomize_lights = false;
 		LightsUBO lubo;
 		lubo.camPos = vec4(camera.position, 1.0f);
+		uniform.map();
 		memcpy(uniform.data, &lubo, sizeof(lubo));
+		uniform.flush();
+		uniform.unmap();
 	}
 	const vec3 sunPos(GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2]);
 	const float angle = dot(normalize(sunPos), vec3(0.f, 1.f, 0.f));
@@ -68,7 +73,10 @@ void LightUniforms::update(const Camera& camera) const
 		{ .9765f * GUI::sun_intensity, .8431f * GUI::sun_intensity, .9098f * GUI::sun_intensity, GUI::shadow_cast ? angle * 0.5f : angle * 0.25f},
 		{ sunPos.x, sunPos.y, sunPos.z, 1.0f }
 	};
+	uniform.map();
 	memcpy(uniform.data, values, sizeof(values));
+	uniform.flush();
+	uniform.unmap();
 }
 
 vk::DescriptorSetLayout LightUniforms::getDescriptorSetLayout()

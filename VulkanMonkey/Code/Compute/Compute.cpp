@@ -67,13 +67,17 @@ void vm::Compute::waitFence()
 
 void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
 {
-	SBIn.createBuffer(sizeIn, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	SBIn.createBuffer(sizeIn, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	SBIn.map();
 	SBIn.zero();
+	SBIn.flush();
+	SBIn.unmap();
 
-	SBOut.createBuffer(sizeOut, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	SBOut.createBuffer(sizeOut, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	SBOut.map();
 	SBOut.zero();
+	SBOut.flush();
+	SBOut.unmap();
 }
 
 void Compute::createDescriptorSet()

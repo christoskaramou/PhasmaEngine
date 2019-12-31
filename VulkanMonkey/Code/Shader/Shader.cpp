@@ -63,7 +63,7 @@ Shader::Shader(const std::string& filename, ShaderType kind, bool online_compile
 		init_source(filename);
 
 		options.SetIncluder(std::make_unique<FileIncluder>());
-		options.SetOptimizationLevel(shaderc_optimization_level_performance);
+		options.SetOptimizationLevel(shaderc_optimization_level_zero); // Validation Layers reporting error in spirv with other flags
 
 		addDefines(defs);
 

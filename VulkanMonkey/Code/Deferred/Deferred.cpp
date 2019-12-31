@@ -43,9 +43,11 @@ void Deferred::batchEnd()
 
 void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 {
-	uniform.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniform.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	uniform.map();
 	uniform.zero();
+	uniform.flush();
+	uniform.unmap();
 
 	auto vulkan = VulkanContext::get();
 	const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
@@ -72,9 +74,10 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 		vulkan->waitAndLockSubmits();
 
 		Buffer staging;
-		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
 		staging.map();
 		staging.copyData(pixels);
+		staging.flush();
 		staging.unmap();
 
 		stbi_image_free(pixels);
@@ -140,7 +143,10 @@ void Deferred::update(mat4& invViewProj)
 	ubo.screenSpace[6] = { GUI::fog_global_thickness, GUI::lights_intensity, GUI::lights_range, GUI::fog_max_height };
 	ubo.screenSpace[7] = { GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f };
 
+	uniform.map();
 	uniform.copyData(&ubo);
+	uniform.flush();
+	uniform.unmap();
 }
 
 void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent)

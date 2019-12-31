@@ -48,9 +48,11 @@ vk::DescriptorSetLayout* Mesh::getDescriptorSetLayout()
 
 void Mesh::createUniformBuffers()
 {
-	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	uniformBuffer.map();
 	uniformBuffer.zero();
+	uniformBuffer.flush();
+	uniformBuffer.unmap();
 
 	for (auto& primitive : primitives) {
 
@@ -61,9 +63,11 @@ void Mesh::createUniformBuffers()
 		factors[3][0] = static_cast<float>(primitive.hasBones);
 
 		const size_t size = sizeof(mat4);
-		primitive.uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		primitive.uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 		primitive.uniformBuffer.map();
 		primitive.uniformBuffer.copyData(&factors);
+		primitive.uniformBuffer.flush();
+		primitive.uniformBuffer.unmap();
 	}
 }
 
@@ -135,9 +139,10 @@ void Primitive::loadTexture(
 		VulkanContext::get()->waitAndLockSubmits();
 
 		Buffer staging;
-		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
 		staging.map();
 		staging.copyData(pixels);
+		staging.flush();
 		staging.unmap();
 
 		stbi_image_free(pixels);

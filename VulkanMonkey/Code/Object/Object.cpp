@@ -9,11 +9,11 @@ void Object::createVertexBuffer()
 
 	// Staging buffer
 	Buffer staging;
-	staging.createBuffer(sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-	staging.data = VulkanContext::get()->device.mapMemory(staging.memory, 0, staging.size);
-	memcpy(staging.data, vertices.data(), sizeof(float)*vertices.size());
-	VulkanContext::get()->device.unmapMemory(staging.memory);
+	staging.createBuffer(sizeof(float)*vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
+	staging.map();
+	staging.copyData(vertices.data());
+	staging.flush();
+	staging.unmap();
 
 	vertexBuffer.copyBuffer(staging.buffer, staging.size);
 	staging.destroy();
@@ -21,9 +21,11 @@ void Object::createVertexBuffer()
 
 void Object::createUniformBuffer(size_t size)
 {
-	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	uniformBuffer.map();
 	uniformBuffer.zero();
+	uniformBuffer.flush();
+	uniformBuffer.unmap();
 }
 
 void Object::loadTexture(const std::string& path)
@@ -38,9 +40,10 @@ void Object::loadTexture(const std::string& path)
 		throw std::runtime_error("No pixel data loaded");
 
 	Buffer staging;
-	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
 	staging.map();
 	staging.copyData(pixels);
+	staging.flush();
 	staging.unmap();
 
 	stbi_image_free(pixels);

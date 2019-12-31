@@ -40,15 +40,20 @@ void TAA::update(const Camera& camera)
 		ubo.values = { camera.projOffset.x, camera.projOffset.y, GUI::TAA_feedback_min, GUI::TAA_feedback_max };
 		ubo.sharpenValues = { GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias , sin(Timer::getTotalTime() * 0.125f) };
 		ubo.invProj = camera.invProjection;
+		uniform.map();
 		memcpy(uniform.data, &ubo, sizeof(ubo));
+		uniform.flush();
+		uniform.unmap();
 	}
 }
 
 void TAA::createUniforms(std::map<std::string, Image>& renderTargets)
 {
-	uniform.createBuffer(sizeof(UBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniform.createBuffer(sizeof(UBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	uniform.map();
 	uniform.zero();
+	uniform.flush();
+	uniform.unmap();
 
 	vk::DescriptorSetAllocateInfo allocateInfo2;
 	allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;

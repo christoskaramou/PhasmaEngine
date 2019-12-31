@@ -25,9 +25,11 @@ void MotionBlur::Init()
 void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTargets)
 {
 	auto size = 4 * sizeof(mat4);
-	UBmotionBlur.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	UBmotionBlur.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	UBmotionBlur.map();
 	UBmotionBlur.zero();
+	UBmotionBlur.flush();
+	UBmotionBlur.unmap();
 
 	vk::DescriptorSetAllocateInfo allocateInfo;
 	allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
@@ -104,12 +106,15 @@ void MotionBlur::destroy()
 	pipeline.destroy();
 }
 
-void MotionBlur::update(Camera& camera) const
+void MotionBlur::update(Camera& camera)
 {
 	if (GUI::show_motionBlur) {
 		static mat4 previousView = camera.view;
 		mat4 motionBlurInput[4]{ camera.projection, camera.view, previousView, camera.invViewProjection };
+		UBmotionBlur.map();
 		memcpy(UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
+		UBmotionBlur.flush();
+		UBmotionBlur.unmap();
 		previousView = camera.view;
 	}
 }

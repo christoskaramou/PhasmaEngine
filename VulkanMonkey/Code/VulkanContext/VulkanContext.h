@@ -35,11 +35,12 @@ namespace vm {
 		vk::CommandPool commandPool2;
 		Swapchain* swapchain = nullptr;
 		Image* depth = nullptr;
-		vk::CommandBuffer dynamicCmdBuffer;
+		std::vector<vk::CommandBuffer> dynamicCmdBuffers{};
 		std::vector<vk::CommandBuffer> shadowCmdBuffers{};
 		vk::DescriptorPool descriptorPool;
 		std::vector<vk::Fence> fences{};
 		std::vector<vk::Semaphore> semaphores{};
+		vk::DispatchLoaderDynamic dispatchLoaderDynamic;
 
 		// Helpers
 		void submit(
@@ -81,6 +82,20 @@ namespace vm {
 				throw std::runtime_error("wait fences error!");
 			device.destroyFence(fence);
 		}
+
+#ifdef _DEBUG
+		template<typename T>
+		void SetDebugObjectName(const T& validHandle, const char* name)
+		{
+			vk::DebugUtilsObjectNameInfoEXT duoni;
+			duoni.objectType = validHandle.objectType;
+			duoni.objectHandle = reinterpret_cast<uint64_t>(static_cast<void*>(validHandle));
+			duoni.pObjectName = name;
+			device.setDebugUtilsObjectNameEXT(duoni, dispatchLoaderDynamic);
+		}
+#else
+		void SetDebugObjectName(const void* validHandle, const void* name) {}
+#endif
 
 		std::atomic_bool submiting = false;
 		void waitAndLockSubmits() { while (submiting) {} submiting = true; }

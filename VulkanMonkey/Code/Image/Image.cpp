@@ -1,4 +1,5 @@
 #include "Image.h"
+#include <utility>
 
 using namespace vm;
 
@@ -20,7 +21,11 @@ void Image::transitionImageLayout(
 	barrier.newLayout = newLayout;
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.subresourceRange = { aspectFlags, 0, mipLevels, 0, arrayLayers };
+	barrier.subresourceRange.aspectMask = aspectFlags;
+	barrier.subresourceRange.baseMipLevel = 0;
+	barrier.subresourceRange.levelCount = mipLevels;
+	barrier.subresourceRange.baseArrayLayer = 0;
+	barrier.subresourceRange.layerCount = arrayLayers;
 	if (format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint) {
 		barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eStencil;
 	}
@@ -37,9 +42,19 @@ void Image::transitionImageLayout(
 
 void Image::createImage(const uint32_t width, const uint32_t height, const vk::ImageTiling tiling, const vk::ImageUsageFlags& usage, const vk::MemoryPropertyFlags& properties, vk::SampleCountFlagBits samples)
 {
-	auto const fProps = VulkanContext::get()->gpu.getFormatProperties(format);
-	if (!fProps.optimalTilingFeatures)
-		throw std::runtime_error("createImage(): wrong format error, no optimal tiling features supported!");
+	const auto fProps = VulkanContext::get()->gpu.getFormatProperties(format);
+
+	if (tiling == vk::ImageTiling::eOptimal) {
+		if (!fProps.optimalTilingFeatures)
+			throw std::runtime_error("createImage(): wrong format error, no optimal tiling features supported.");
+	}
+	else if (tiling == vk::ImageTiling::eLinear) {
+		if (!fProps.linearTilingFeatures)
+			throw std::runtime_error("createImage(): wrong format error, no linear tiling features supported.");
+	}
+	else {
+		throw std::runtime_error("createImage(): wrong format error.");
+	}
 
 	auto const ifProps = VulkanContext::get()->gpu.getImageFormatProperties(format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
 	if (ifProps.maxArrayLayers < arrayLayers ||
@@ -50,6 +65,7 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 		throw std::runtime_error("createImage(): image format properties error!");
 	
 
+	this->tiling = tiling;
 	this->width = width % 2 != 0 ? width - 1 : width;
 	this->height = height % 2 != 0 ? height - 1 : height;
 	width_f = static_cast<float>(this->width);
@@ -91,6 +107,8 @@ void Image::createImage(const uint32_t width, const uint32_t height, const vk::I
 
 	memory = VulkanContext::get()->device.allocateMemory(allocInfo);
 	VulkanContext::get()->device.bindImageMemory(image, memory, 0);
+
+	VulkanContext::get()->SetDebugObjectName(image, name.c_str());
 }
 
 void Image::createImageView(const vk::ImageAspectFlags& aspectFlags)
@@ -102,6 +120,8 @@ void Image::createImageView(const vk::ImageAspectFlags& aspectFlags)
 	viewInfo.subresourceRange = { aspectFlags, 0, mipLevels, 0, arrayLayers };
 
 	view = VulkanContext::get()->device.createImageView(viewInfo);
+
+	VulkanContext::get()->SetDebugObjectName(view, name.c_str());
 }
 
 void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout) const
@@ -238,6 +258,20 @@ void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer)
 
 void Image::generateMipMaps() const
 {
+	const auto fProps = VulkanContext::get()->gpu.getFormatProperties(format);
+
+	if (tiling == vk::ImageTiling::eOptimal) {
+		if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear))
+			throw std::runtime_error("generateMipMaps(): Image tiling error, linear filter is not supported.");
+	}
+	else if (tiling == vk::ImageTiling::eLinear) {
+		if (!(fProps.linearTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear))
+			throw std::runtime_error("generateMipMaps(): Image tiling error, linear filter is not supported.");
+	}
+	else {
+		throw std::runtime_error("generateMipMaps(): Image tiling error.");
+	}
+
 	vk::CommandBufferAllocateInfo allocInfo;
 	allocInfo.level = vk::CommandBufferLevel::ePrimary;
 	allocInfo.commandBufferCount = mipLevels;
@@ -321,9 +355,10 @@ void Image::generateMipMaps() const
 		if (mipHeight > 1) mipHeight /= 2;
 
 		commandBuffers[i].end();
+
+		VulkanContext::get()->submitAndWaitFence(commandBuffers[i], nullptr, nullptr, nullptr);
 	}
 
-	// front cmd buffer is free since the loop above starts from 1 and not 0
 	commandBuffers.front().begin(beginInfo);
 
 	barrier.subresourceRange.baseMipLevel = mipLevels - 1;
@@ -343,7 +378,7 @@ void Image::generateMipMaps() const
 
 	commandBuffers.front().end();
 
-	VulkanContext::get()->submitAndWaitFence(commandBuffers, nullptr, nullptr, nullptr);
+	VulkanContext::get()->submitAndWaitFence(commandBuffers.front(), nullptr, nullptr, nullptr);
 
 	VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, commandBuffers);
 }

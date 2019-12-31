@@ -9,9 +9,11 @@ using namespace vm;
 
 void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 {
-	UBReflection.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	UBReflection.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	UBReflection.map();
 	UBReflection.zero();
+	UBReflection.flush();
+	UBReflection.unmap();
 
 	vk::DescriptorSetAllocateInfo allocateInfo2;
 	allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;
@@ -45,7 +47,7 @@ void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
 }
 
-void SSR::update(Camera& camera) const
+void SSR::update(Camera& camera)
 {
 	if (GUI::show_ssr) {
 		mat4 reflectionInput[4];
@@ -56,7 +58,10 @@ void SSR::update(Camera& camera) const
 		reflectionInput[1] = camera.projection;
 		reflectionInput[2] = camera.view;
 		reflectionInput[3] = camera.invProjection;
+		UBReflection.map();
 		memcpy(UBReflection.data, &reflectionInput, sizeof(reflectionInput));
+		UBReflection.flush();
+		UBReflection.unmap();
 	}
 }
 

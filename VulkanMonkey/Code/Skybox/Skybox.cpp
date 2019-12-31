@@ -105,9 +105,10 @@ void SkyBox::loadTextures(const std::array<std::string, 6>& paths, int imageSide
 			throw std::runtime_error("No pixel data loaded");
 
 		Buffer staging;
-		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
 		staging.map();
 		staging.copyData(pixels);
+		staging.flush();
 		staging.unmap();
 
 		stbi_image_free(pixels);

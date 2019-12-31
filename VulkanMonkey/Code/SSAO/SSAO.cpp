@@ -19,9 +19,11 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 		scale = lerp(.1f, 1.f, scale * scale);
 		kernel.emplace_back(sample * scale, 0.f);
 	}
-	UB_Kernel.createBuffer(sizeof(vec4) * 16, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	UB_Kernel.createBuffer(sizeof(vec4) * 16, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	UB_Kernel.map();
 	UB_Kernel.copyData(kernel.data());
+	UB_Kernel.flush();
+	UB_Kernel.unmap();
 
 	// noise image
 	std::vector<vec4> noise{};
@@ -30,9 +32,10 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 
 	Buffer staging;
 	const uint64_t bufSize = sizeof(vec4) * 16;
-	staging.createBuffer(bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	staging.createBuffer(bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
 	staging.map();
 	staging.copyData(noise.data());
+	staging.flush();
 	staging.unmap();
 
 	noiseTex.filter = vk::Filter::eNearest;
@@ -48,9 +51,11 @@ void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	noiseTex.createSampler();
 	staging.destroy();
 	// pvm uniform
-	UB_PVM.createBuffer(3 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
+	UB_PVM.createBuffer(3 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	UB_PVM.map();
 	UB_PVM.zero();
+	UB_PVM.flush();
+	UB_PVM.unmap();
 
 	// DESCRIPTOR SET FOR SSAO
 	const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
@@ -168,11 +173,14 @@ void SSAO::destroy()
 	}
 }
 
-void SSAO::update(Camera& camera) const
+void SSAO::update(Camera& camera)
 {
 	if (GUI::show_ssao) {
 		mat4 pvm[3]{ camera.projection, camera.view, camera.invProjection };
+		UB_PVM.map();
 		memcpy(UB_PVM.data, pvm, sizeof(pvm));
+		UB_PVM.flush();
+		UB_PVM.unmap();
 	}
 }
 

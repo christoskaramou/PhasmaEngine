@@ -4,7 +4,11 @@ using namespace vm;
 
 uint32_t Swapchain::aquire(vk::Semaphore semaphore, vk::Fence fence) const
 {
-	return VulkanContext::get()->device.acquireNextImageKHR(swapchain, UINT64_MAX, semaphore, fence).value;
+	const auto aquire = VulkanContext::get()->device.acquireNextImageKHR(swapchain, UINT64_MAX, semaphore, fence);
+	if (aquire.result != vk::Result::eSuccess)
+		throw std::runtime_error("Aquire Next Image error");
+	
+	return aquire.value;
 }
 
 void Swapchain::present(vk::ArrayProxy<const uint32_t> imageIndices, vk::ArrayProxy<const vk::Semaphore> semaphores, vk::ArrayProxy<const vk::SwapchainKHR> additionalSwapchains) const

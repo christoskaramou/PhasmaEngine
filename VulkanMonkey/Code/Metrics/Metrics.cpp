@@ -43,7 +43,7 @@ float Metrics::getTime()
 {
 	const auto res = VulkanContext::get()->device.getQueryPoolResults<uint64_t>(queryPool, 0, 2, queryTimes, sizeof(uint64_t), vk::QueryResultFlagBits::e64);
 	if (res != vk::Result::eSuccess)
-		throw std::runtime_error("could not get QueryPoolResults");
+		return 0.0f;
 	return static_cast<float>(queryTimes[1] - queryTimes[0]) * gpuProps.limits.timestampPeriod * 1e-6f;
 }
 

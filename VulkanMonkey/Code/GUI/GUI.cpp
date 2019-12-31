@@ -88,14 +88,12 @@ void GUI::Metrics() const
 	ImGui::Begin("Metrics", &metrics_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
 	ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-	//for (int i = 0; i < 120; i++)
-	//	lines[i] = ImGui::GetIO().Framerate;
-	//ImVec2 plotextent(ImGui::GetContentRegionAvailWidth(), 100);
-	//ImGui::PlotLines("FPSPlot", lines, 120, 0, nullptr, 0.0f, 400.0f, plotextent);
 	ImGui::InputInt("FPS", &fps, 1, 15); fps = maximum(fps, 10);
 	ImGui::Separator(); ImGui::Separator();
 
 	ImGui::Text("CPU Total: %.3f (waited %.3f) ms", cpuTime, cpuWaitingTime);
+	ImGui::Indent(16.0f); ImGui::Text("Updates Total: %.3f ms", updatesTime); ImGui::Unindent(16.0f);
+	ImGui::Separator();
 	ImGui::Text("GPU Total: %.3f ms", stats[0] + (shadow_cast ? stats[11] + stats[12] + stats[13] : 0.f) + (use_compute ? stats[14] : 0.f));
 	ImGui::Separator();
 	ImGui::Text("Render Passes:");
@@ -269,7 +267,7 @@ void GUI::Properties() const
 	ImGui::InputFloat("Quality.", &rtScale, 0.01f, 0.05f, 2);
 	if (ImGui::Button("Apply")) {
 		if (scaleRenderTargetsEventType != UINT32_MAX) {
-			renderTargetsScale = clamp(rtScale, 0.1f, 2.0f);
+			renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
 			SDL_Event event;
 			SDL_zero(event);
 			event.type = scaleRenderTargetsEventType; // along side with window resize
@@ -564,7 +562,7 @@ void GUI::initImGui()
 
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-	vulkan->dynamicCmdBuffer.begin(beginInfo);
+	vulkan->dynamicCmdBuffers[0].begin(beginInfo);
 
 	// Create fonts texture
 	unsigned char* pixels;
@@ -611,7 +609,7 @@ void GUI::initImGui()
 		copy_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 		copy_barrier.subresourceRange.levelCount = 1;
 		copy_barrier.subresourceRange.layerCount = 1;
-		vulkan->dynamicCmdBuffer.pipelineBarrier(
+		vulkan->dynamicCmdBuffers[0].pipelineBarrier(
 			vk::PipelineStageFlagBits::eHost,
 			vk::PipelineStageFlagBits::eTransfer,
 			vk::DependencyFlagBits::eByRegion,
@@ -626,7 +624,7 @@ void GUI::initImGui()
 		region.imageExtent.width = width;
 		region.imageExtent.height = height;
 		region.imageExtent.depth = 1;
-		vulkan->dynamicCmdBuffer.copyBufferToImage(stagingBuffer.buffer, texture.image, vk::ImageLayout::eTransferDstOptimal, region);
+		vulkan->dynamicCmdBuffers[0].copyBufferToImage(stagingBuffer.buffer, texture.image, vk::ImageLayout::eTransferDstOptimal, region);
 
 		vk::ImageMemoryBarrier use_barrier = {};
 		use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -639,7 +637,7 @@ void GUI::initImGui()
 		use_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 		use_barrier.subresourceRange.levelCount = 1;
 		use_barrier.subresourceRange.layerCount = 1;
-		vulkan->dynamicCmdBuffer.pipelineBarrier(
+		vulkan->dynamicCmdBuffers[0].pipelineBarrier(
 			vk::PipelineStageFlagBits::eTransfer,
 			vk::PipelineStageFlagBits::eFragmentShader,
 			vk::DependencyFlagBits::eByRegion,
@@ -652,9 +650,9 @@ void GUI::initImGui()
 	// Store our identifier
 	io.Fonts->TexID = reinterpret_cast<ImTextureID>(reinterpret_cast<intptr_t>(static_cast<VkImage>(texture.image)));
 
-	vulkan->dynamicCmdBuffer.end();
+	vulkan->dynamicCmdBuffers[0].end();
 
-	vulkan->submitAndWaitFence(vulkan->dynamicCmdBuffer, nullptr, nullptr, nullptr);
+	vulkan->submitAndWaitFence(vulkan->dynamicCmdBuffers[0], nullptr, nullptr, nullptr);
 
 	stagingBuffer.destroy();
 }
@@ -893,8 +891,8 @@ void GUI::newFrame()
 	ImGui::NewFrame();
 
 	setWindows();
-	//if (show_demo_window)
-	//	ImGui::ShowDemoWindow(&show_demo_window);
+	if (show_demo_window)
+		ImGui::ShowDemoWindow(&show_demo_window);
 
 	ImGui::Render();
 
@@ -952,7 +950,7 @@ void GUI::newFrame()
 void GUI::windowStyle(ImGuiStyle* dst)
 {
 	ImGuiStyle* style = dst ? dst : &ImGui::GetStyle();
-
+	
 	style->WindowRounding = 0.0;
 	style->Colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 	style->Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);

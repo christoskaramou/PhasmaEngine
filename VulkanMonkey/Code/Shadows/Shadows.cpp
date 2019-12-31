@@ -16,8 +16,8 @@ void Shadows::createDescriptorSets()
 	allocateInfo.descriptorSetCount = 1;
 	allocateInfo.pSetLayouts = &descriptorSetLayout;
 
-	descriptorSets.resize(3); // size of wanted number of cascaded shadows
-	for (uint32_t i = 0; i < 3; i++) {
+	descriptorSets.resize(textures.size()); // size of wanted number of cascaded shadows
+	for (uint32_t i = 0; i < descriptorSets.size(); i++) {
 		descriptorSets[i] = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
@@ -100,9 +100,10 @@ void Shadows::createFrameBuffers()
 	}
 
 	frameBuffers.resize(VulkanContext::get()->swapchain->images.size() * textures.size());
-	for (uint32_t i = 0; i < frameBuffers.size(); ++i) {
-		std::vector<vk::ImageView> attachments = {
-			textures[i / VulkanContext::get()->swapchain->images.size()].view // e.g. framebuffer[0,1,2,3,4,5] -> texture[0,0,1,1,2,2].view
+	for (uint32_t i = 0; i < frameBuffers.size(); ++i)
+	{
+		std::vector<vk::ImageView> attachments {
+			textures[i % textures.size()].view
 		};
 
 		vk::FramebufferCreateInfo fbci;
@@ -273,11 +274,13 @@ vk::DescriptorSetLayout Shadows::getDescriptorSetLayout()
 
 void Shadows::createUniformBuffers()
 {
-	uniformBuffers.resize(3); // 3 buffers for the 3 shadow render passes
+	uniformBuffers.resize(textures.size());
 	for (auto& buffer : uniformBuffers) {
-		buffer.createBuffer(sizeof(ShadowsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		buffer.createBuffer(sizeof(ShadowsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 		buffer.map();
 		buffer.zero();
+		buffer.flush();
+		buffer.unmap();
 	}
 }
 
@@ -321,7 +324,10 @@ void Shadows::update(Camera& camera)
 			sideSizeOfPyramid * .1f,
 			sideSizeOfPyramid
 		};
+		uniformBuffers[0].map();
 		memcpy(uniformBuffers[0].data, &shadows_UBO, sizeof(ShadowsUBO));
+		uniformBuffers[0].flush();
+		uniformBuffers[0].unmap();
 
 		pointOnPyramid = camera.front * (sideSizeOfPyramid * .05f);
 		pos = p + camera.position + pointOnPyramid; 
@@ -337,7 +343,10 @@ void Shadows::update(Camera& camera)
 			sideSizeOfPyramid * .1f,
 			sideSizeOfPyramid 
 		};
+		uniformBuffers[1].map();
 		memcpy(uniformBuffers[1].data, &shadows_UBO, sizeof(ShadowsUBO));
+		uniformBuffers[1].flush();
+		uniformBuffers[1].unmap();
 
 		pointOnPyramid = camera.front * (sideSizeOfPyramid * .5f);
 		pos = p + camera.position + pointOnPyramid;
@@ -353,13 +362,27 @@ void Shadows::update(Camera& camera)
 			sideSizeOfPyramid * .1f,
 			sideSizeOfPyramid
 		};
+		uniformBuffers[2].map();
 		memcpy(uniformBuffers[2].data, &shadows_UBO, sizeof(ShadowsUBO));
+		uniformBuffers[2].flush();
+		uniformBuffers[2].unmap();
 	}
 	else
 	{
 		shadows_UBO.castShadows = 0.f;
+		uniformBuffers[0].map();
 		memcpy(uniformBuffers[0].data, &shadows_UBO, sizeof(ShadowsUBO));
+		uniformBuffers[0].flush();
+		uniformBuffers[0].unmap();
+
+		uniformBuffers[1].map();
 		memcpy(uniformBuffers[1].data, &shadows_UBO, sizeof(ShadowsUBO));
+		uniformBuffers[1].flush();
+		uniformBuffers[1].unmap();
+
+		uniformBuffers[2].map();
 		memcpy(uniformBuffers[2].data, &shadows_UBO, sizeof(ShadowsUBO));
+		uniformBuffers[2].flush();
+		uniformBuffers[2].unmap();
 	}
 }

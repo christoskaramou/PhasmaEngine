@@ -403,7 +403,10 @@ void Model::update(vm::Camera& camera, float delta)
 			ubo.matrix = transform;
 		}
 		ubo.matrix = vm::transform(quat(radians(rot)), scale, pos) * ubo.matrix;
+		uniformBuffer.map();
 		memcpy(uniformBuffer.data, &ubo, sizeof(ubo));
+		uniformBuffer.flush();
+		uniformBuffer.unmap();
 
 		if (!animations.empty()) {
 			animationTimer += delta;
@@ -686,9 +689,10 @@ void Model::createVertexBuffer()
 
 	// Staging buffer
 	Buffer staging;
-	staging.createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	staging.createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
 	staging.map();
 	staging.copyData(vertices.data());
+	staging.flush();
 	staging.unmap();
 
 	vertexBuffer.copyBuffer(staging.buffer, staging.size);
@@ -712,9 +716,10 @@ void Model::createIndexBuffer()
 
 	// Staging buffer
 	Buffer staging;
-	staging.createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	staging.createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
 	staging.map();
 	staging.copyData(indices.data());
+	staging.flush();
 	staging.unmap();
 
 	indexBuffer.copyBuffer(staging.buffer, staging.size);
@@ -723,9 +728,11 @@ void Model::createIndexBuffer()
 
 void Model::createUniformBuffers()
 {
-	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	uniformBuffer.createBuffer(sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	uniformBuffer.map();
 	uniformBuffer.zero();
+	uniformBuffer.flush();
+	uniformBuffer.unmap();
 	if (!isCopy) {
 		for (auto& node : linearNodes) {
 			if (node->mesh) {

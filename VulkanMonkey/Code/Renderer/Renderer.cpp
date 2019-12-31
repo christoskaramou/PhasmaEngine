@@ -118,7 +118,6 @@ void Renderer::changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState sta
 		}
 		image.layoutState = state;
 	}
-
 }
 
 void Renderer::checkQueue() const
@@ -187,6 +186,8 @@ void Renderer::checkQueue() const
 
 void Renderer::update(float delta)
 {
+	const std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
+
 	FIRE_EVENT(Event::OnUpdate);
 
 	// check for commands in queue
@@ -241,6 +242,9 @@ void Renderer::update(float delta)
 	else
 		ctx.skyBoxNight.update(ctx.camera_main);
 #endif
+
+	const std::chrono::duration<float> time = std::chrono::high_resolution_clock::now() - start;
+	GUI::updatesTimeCount = time.count();
 }
 
 void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
@@ -269,11 +273,10 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
-	const auto& cmd = VulkanContext::get()->dynamicCmdBuffer;
+	const auto& cmd = VulkanContext::get()->dynamicCmdBuffers[imageIndex];
+
 	cmd.begin(beginInfo);
 	ctx.metrics[0].start(cmd);
-	//cmd.setViewport(0, ctx.camera_main.renderArea.viewport);
-	//cmd.setScissor(0, ctx.camera_main.renderArea.scissor);
 
 	// SKYBOX
 	SkyBox& skybox = GUI::shadow_cast ? ctx.skyBoxDay : ctx.skyBoxNight;
@@ -409,13 +412,13 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 	renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
 	for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
-		auto& cmd = VulkanContext::get()->shadowCmdBuffers[i];
+		auto& cmd = VulkanContext::get()->shadowCmdBuffers[ctx.shadows.textures.size() * imageIndex + i];
 		cmd.begin(beginInfoShadows);
 		ctx.metrics[11 + static_cast<size_t>(i)].start(cmd);
 		cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
 		// depth[i] image ===========================================================
-		renderPassInfoShadows.framebuffer = ctx.shadows.frameBuffers[i * VulkanContext::get()->swapchain->images.size() + imageIndex]; // e.g. for 2 swapchain images - 1st(0,2,4) and 2nd(1,3,5)
+		renderPassInfoShadows.framebuffer = ctx.shadows.frameBuffers[ctx.shadows.textures.size() * imageIndex + i];
 		cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
 		for (auto& model : Model::models) {
@@ -443,6 +446,10 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 
 void Renderer::present()
 {
+	auto& vCtx = *VulkanContext::get();
+
+	static const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader };
+
 	FIRE_EVENT(Event::OnRender);
 
 	if (GUI::use_compute) {
@@ -455,38 +462,49 @@ void Renderer::present()
 		//VulkanContext::get()->device.resetFences(VulkanContext::get()->fences[1]);
 	}
 
-	// waitStage is a pipeline stage at which a semaphore wait will occur.
-	static const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader };
-
 	// aquire the image
-	const uint32_t imageIndex = VulkanContext::get()->swapchain->aquire(VulkanContext::get()->semaphores[0], nullptr);
+	auto aquireSignalSemaphore = vCtx.semaphores[0];
+	const uint32_t imageIndex = vCtx.swapchain->aquire(aquireSignalSemaphore, nullptr);
 
-	VulkanContext::get()->waitAndLockSubmits();
+	const std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
+	vCtx.waitFences(vCtx.fences[imageIndex]);
+	const std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
+	Timer::waitingTime += waitTime.count();
+
+	const auto& cmd = vCtx.dynamicCmdBuffers[imageIndex];
+
+	vCtx.waitAndLockSubmits();
 
 	if (GUI::shadow_cast) {
+
 		// record the shadow command buffers
 		recordShadowsCmds(imageIndex);
 
 		// submit the shadow command buffers
-		VulkanContext::get()->submit(VulkanContext::get()->shadowCmdBuffers, waitStages[0], VulkanContext::get()->semaphores[0], VulkanContext::get()->semaphores[1]);
+		const auto& shadowWaitSemaphore = aquireSignalSemaphore;
+		const auto& shadowSignalSemaphore = vCtx.semaphores[imageIndex * 3 + 1];
+		const auto& scb = vCtx.shadowCmdBuffers;
+		const auto size = ctx.shadows.textures.size();
+		const auto i = size * imageIndex;
+		const std::vector<vk::CommandBuffer> activeShadowCmdBuffers(scb.begin() + i, scb.begin() + i + size);
+		vCtx.submit(activeShadowCmdBuffers, waitStages[0], shadowWaitSemaphore, shadowSignalSemaphore);
+
+		aquireSignalSemaphore = shadowSignalSemaphore;
 	}
 
 	// record the command buffers
 	recordDeferredCmds(imageIndex);
 
-	const vk::PipelineStageFlags waitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
-	const vk::Semaphore& waiSemaphore = GUI::shadow_cast ? VulkanContext::get()->semaphores[1] : VulkanContext::get()->semaphores[0];
-
 	// submit the command buffers
-	VulkanContext::get()->submit(VulkanContext::get()->dynamicCmdBuffer, waitStage, waiSemaphore, VulkanContext::get()->semaphores[2], VulkanContext::get()->fences[0]);
+	const auto& deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
+	const auto& deferredWaitSemaphore = aquireSignalSemaphore;
+	const auto& deferredSignalSemaphore = vCtx.semaphores[imageIndex * 3 + 2];
+	const auto& deferredSignalFence = vCtx.fences[imageIndex];
+	vCtx.submit(cmd, deferredWaitStage, deferredWaitSemaphore, deferredSignalSemaphore, deferredSignalFence);
 
 	// Presentation
-	VulkanContext::get()->swapchain->present(imageIndex, VulkanContext::get()->semaphores[2]);
+	const auto& presentWaitSemaphore = deferredSignalSemaphore;
+	vCtx.swapchain->present(imageIndex, presentWaitSemaphore);
 
-	const std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
-	VulkanContext::get()->waitFences(VulkanContext::get()->fences[0]);
-	const std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
-	Timer::waitingTime = waitTime.count();
-
-	VulkanContext::get()->unlockSubmits();
+	vCtx.unlockSubmits();
 }

@@ -47,7 +47,7 @@ void Buffer::map(vk::DeviceSize offset)
 void Buffer::unmap()
 {
 	if (!data)
-		return;
+		throw std::runtime_error("Buffer is not mapped");
 	VulkanContext::get()->device.unmapMemory(memory);
 	data = nullptr;
 }

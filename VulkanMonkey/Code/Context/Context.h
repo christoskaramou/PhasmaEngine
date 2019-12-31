@@ -115,7 +115,7 @@ namespace vm {
 		vk::Queue getGraphicsQueue() const;
 		vk::Queue getTransferQueue() const;
 		vk::Queue getComputeQueue() const;
-		Swapchain createSwapchain() const;
+		Swapchain createSwapchain(uint32_t requestImageCount) const;
 		vk::CommandPool createCommandPool() const;
 		Image createDepthResources() const;
 		std::vector<vk::CommandBuffer> createCmdBuffers(uint32_t bufferCount = 1) const;
