@@ -56,18 +56,19 @@ void FileIncluder::ReleaseInclude(shaderc_include_result* include_result)
 	delete include_result;
 }
 
-Shader::Shader(const std::string& filename, ShaderType kind, bool online_compile, const std::vector<Define>& defs)
+Shader::Shader(const std::string& filename, ShaderType shaderType, bool online_compile, const std::vector<Define>& defs)
 {
+	this->shaderType = shaderType;
 	if (online_compile)
 	{
 		init_source(filename);
 
-		options.SetIncluder(std::make_unique<FileIncluder>());
-		options.SetOptimizationLevel(shaderc_optimization_level_zero); // Validation Layers reporting error in spirv with other flags
+		m_options.SetIncluder(std::make_unique<FileIncluder>());
+		m_options.SetOptimizationLevel(shaderc_optimization_level_zero); // Validation Layers reporting error in spirv with other flags
 
 		addDefines(defs);
 
-		compile_file(static_cast<shaderc_shader_kind>(kind));
+		compile_file(static_cast<shaderc_shader_kind>(shaderType));
 	}
 	else
 	{
@@ -91,9 +92,19 @@ const uint32_t* Shader::get_spriv()
 	return m_spirv.data();
 }
 
-size_t Shader::size()
+ShaderType Shader::get_shader_type()
+{
+	return shaderType;
+}
+
+size_t Shader::byte_size()
 {
 	return m_spirv.size() * sizeof(uint32_t);
+}
+
+size_t vm::Shader::size()
+{
+	return m_spirv.size();
 }
 
 void Shader::addDefine(Define& def)
@@ -101,9 +112,9 @@ void Shader::addDefine(Define& def)
 	if (def.name.empty()) return;
 
 	if (def.value.empty())
-		options.AddMacroDefinition(def.name);
+		m_options.AddMacroDefinition(def.name);
 	else
-		options.AddMacroDefinition(def.name, def.value);
+		m_options.AddMacroDefinition(def.name, def.value);
 
 	defines.push_back(def);
 
@@ -141,7 +152,7 @@ void Shader::preprocess_shader(shaderc_shader_kind kind)
 		throw std::runtime_error("source file was empty");
 
 	shaderc::PreprocessedSourceCompilationResult result =
-		compiler.PreprocessGlsl(m_source, kind, m_source_name.c_str(), options);
+		m_compiler.PreprocessGlsl(m_source, kind, m_source_name.c_str(), m_options);
 
 	if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
 		std::cerr << result.GetErrorMessage();
@@ -157,8 +168,8 @@ void Shader::compile_file_to_assembly(shaderc_shader_kind kind)
 	if (m_source.empty() || m_source_name.empty())
 		throw std::runtime_error("source file was empty");
 
-	shaderc::AssemblyCompilationResult result = compiler.CompileGlslToSpvAssembly(
-		m_source, kind, m_source_name.c_str(), options);
+	shaderc::AssemblyCompilationResult result = m_compiler.CompileGlslToSpvAssembly(
+		m_source, kind, m_source_name.c_str(), m_options);
 
 	if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
 		std::cerr << result.GetErrorMessage();
@@ -175,7 +186,7 @@ void Shader::compile_file(shaderc_shader_kind kind)
 		throw std::runtime_error("source file was empty");
 
 	shaderc::SpvCompilationResult module =
-		compiler.CompileGlslToSpv(m_source, kind, m_source_name.c_str(), options);
+		m_compiler.CompileGlslToSpv(m_source, kind, m_source_name.c_str(), m_options);
 
 	if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
 		std::cerr << module.GetErrorMessage();

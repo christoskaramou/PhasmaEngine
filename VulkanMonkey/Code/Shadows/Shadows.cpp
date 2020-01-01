@@ -124,7 +124,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	Shader vert { "shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true };
 
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vert.size();
+	vsmci.codeSize = vert.byte_size();
 	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 

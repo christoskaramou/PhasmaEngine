@@ -4,7 +4,6 @@
 #include <unordered_set>
 #include <string>
 #include <vector>
-
 #include "../../include/shaderc/shaderc/shaderc.hpp"
 
 #define ONLINE_COMPILE
@@ -43,8 +42,10 @@ namespace vm {
 
 	struct Shader
 	{
-		Shader(const std::string& filename, ShaderType kind, bool online_compile, const std::vector<Define>& defs = {});
+		Shader(const std::string& filename, ShaderType shaderType, bool online_compile, const std::vector<Define>& defs = {});
 		const uint32_t* get_spriv();
+		ShaderType get_shader_type();
+		size_t byte_size();
 		size_t size();
 
 	private:
@@ -56,8 +57,9 @@ namespace vm {
 		void addDefines(const std::vector<Define>& defines);
 
 	private:
-		shaderc::Compiler compiler;
-		shaderc::CompileOptions options;
+		ShaderType shaderType;
+		shaderc::Compiler m_compiler;
+		shaderc::CompileOptions m_options;
 		std::string m_source_name{};
 		std::string m_source{};
 		std::string m_preprocessed{};

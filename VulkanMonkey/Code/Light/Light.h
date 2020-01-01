@@ -7,7 +7,7 @@
 #include "../GUI/GUI.h"
 
 namespace vm {
-	#define MAX_LIGHTS 25
+	#define MAX_LIGHTS 10
 
 	struct Light
 	{

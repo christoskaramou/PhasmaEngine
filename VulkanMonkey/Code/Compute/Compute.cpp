@@ -107,7 +107,7 @@ void Compute::createPipeline()
 {
 	Shader comp { "shaders/Compute/shader.comp", ShaderType::Compute, true  };
 	vk::ShaderModuleCreateInfo csmci;
-	csmci.codeSize = comp.size();
+	csmci.codeSize = comp.byte_size();
 	csmci.pCode = comp.get_spriv();
 
 	vk::PipelineLayoutCreateInfo plci;

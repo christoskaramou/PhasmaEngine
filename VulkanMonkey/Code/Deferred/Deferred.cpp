@@ -7,6 +7,8 @@
 #include "tinygltf/stb_image.h"
 #include <deque>
 
+#include "../Shader/Reflection.h"
+
 using namespace vm;
 
 void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
@@ -365,13 +367,15 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	Shader vert{ "shaders/Deferred/gBuffer.vert", ShaderType::Vertex, true };
 	Shader frag{ "shaders/Deferred/gBuffer.frag", ShaderType::Fragment, true };
 
+	Reflection reflection(&vert, &frag);
+
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vert.size();
+	vsmci.codeSize = vert.byte_size();
 	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	vk::ShaderModuleCreateInfo fsmci;
-	fsmci.codeSize = frag.size();
+	fsmci.codeSize = frag.byte_size();
 	fsmci.pCode = frag.get_spriv();
 	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
@@ -520,12 +524,12 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	Shader frag{ "shaders/Deferred/composition.frag", ShaderType::Fragment, true };
 
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vert.size();
+	vsmci.codeSize = vert.byte_size();
 	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	vk::ShaderModuleCreateInfo fsmci;
-	fsmci.codeSize = frag.size();
+	fsmci.codeSize = frag.byte_size();
 	fsmci.pCode = frag.get_spriv();
 	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 
@@ -534,20 +538,20 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	pssci1.module = vertModule;
 	pssci1.pName = "main";
 
-	auto max_lights = MAX_LIGHTS;
-	vk::SpecializationMapEntry sme;
-	sme.size = sizeof(max_lights);
-	vk::SpecializationInfo si;
-	si.mapEntryCount = 1;
-	si.pMapEntries = &sme;
-	si.dataSize = sizeof(max_lights);
-	si.pData = &max_lights;
+	//auto max_lights = MAX_LIGHTS;
+	//vk::SpecializationMapEntry sme;
+	//sme.size = sizeof(max_lights);
+	//vk::SpecializationInfo si;
+	//si.mapEntryCount = 1;
+	//si.pMapEntries = &sme;
+	//si.dataSize = sizeof(max_lights);
+	//si.pData = &max_lights;
 
 	vk::PipelineShaderStageCreateInfo pssci2;
 	pssci2.stage = vk::ShaderStageFlagBits::eFragment;
 	pssci2.module = fragModule;
 	pssci2.pName = "main";
-	pssci2.pSpecializationInfo = &si;
+	//pssci2.pSpecializationInfo = &si;
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
 	pipelineComposition.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());

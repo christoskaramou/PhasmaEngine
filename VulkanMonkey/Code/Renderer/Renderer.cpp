@@ -235,14 +235,6 @@ void Renderer::update(float delta)
 	// COMPOSITION UNIFORMS
 	ctx.deferred.update(ctx.camera_main.invViewProjection);
 
-#ifdef RENDER_SKYBOX
-	// SKYBOXES
-	if (GUI::shadow_cast)
-		ctx.skyBoxDay.update(ctx.camera_main);
-	else
-		ctx.skyBoxNight.update(ctx.camera_main);
-#endif
-
 	const std::chrono::duration<float> time = std::chrono::high_resolution_clock::now() - start;
 	GUI::updatesTimeCount = time.count();
 }
@@ -280,11 +272,6 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	// SKYBOX
 	SkyBox& skybox = GUI::shadow_cast ? ctx.skyBoxDay : ctx.skyBoxNight;
-#ifdef RENDER_SKYBOX
-	ctx.metrics[1].start(cmd);
-	skybox.draw(imageIndex);
-	ctx.metrics[1].end(&GUI::metrics[1]);
-#endif
 
 	// MODELS
 	ctx.metrics[2].start(cmd);
@@ -469,7 +456,7 @@ void Renderer::present()
 	const std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
 	vCtx.waitFences(vCtx.fences[imageIndex]);
 	const std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
-	Timer::waitingTime += waitTime.count();
+	Timer::waitingTime = waitTime.count();
 
 	const auto& cmd = vCtx.dynamicCmdBuffers[imageIndex];
 

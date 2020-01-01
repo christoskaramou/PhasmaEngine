@@ -7,6 +7,7 @@ namespace vm {
 		vk::Buffer buffer;
 		vk::DeviceMemory memory;
 		vk::DeviceSize size = 0;
+		std::string name;
 		void *data = nullptr;
 
 		void createBuffer(vk::DeviceSize size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties);

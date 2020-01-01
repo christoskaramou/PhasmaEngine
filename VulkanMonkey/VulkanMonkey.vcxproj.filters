@@ -258,6 +258,12 @@
     <ClInclude Include="Code\Event\Delegate.h">
       <Filter>Code\Event</Filter>
     </ClInclude>
+    <ClInclude Include="Code\Shader\Reflection.h">
+      <Filter>Code\Shader</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\MemoryHash\MemoryHash.h">
+      <Filter>Code\MemoryHash</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -452,6 +458,9 @@
     <ClCompile Include="Code\Shader\Shader.cpp">
       <Filter>Code\Shader</Filter>
     </ClCompile>
+    <ClCompile Include="Code\Shader\Reflection.cpp">
+      <Filter>Code\Shader</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source">
@@ -618,6 +627,9 @@
     </Filter>
     <Filter Include="Code\Shader">
       <UniqueIdentifier>{16500006-bc42-4858-82a6-a135c5d8234d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\MemoryHash">
+      <UniqueIdentifier>{8bcfce7f-042b-41a8-bbf9-abdf023641ff}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

@@ -190,12 +190,12 @@ void DOF::createPipeline(std::map<std::string, Image>& renderTargets)
 	Shader frag{ "shaders/DepthOfField/DOF.frag", ShaderType::Fragment, true };
 
 	vk::ShaderModuleCreateInfo vsmci;
-	vsmci.codeSize = vert.size();
+	vsmci.codeSize = vert.byte_size();
 	vsmci.pCode = vert.get_spriv();
 	vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
 
 	vk::ShaderModuleCreateInfo fsmci;
-	fsmci.codeSize = frag.size();
+	fsmci.codeSize = frag.byte_size();
 	fsmci.pCode = frag.get_spriv();
 	vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
 

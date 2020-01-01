@@ -86,7 +86,7 @@ void main()
 	if (screenSpace.effects3.z > 0.5)
 		fragColor += directLight(material, frag_pos, ubo.cam_pos.xyz, normal, factor_occlusion);
 
-	for(int i = 1; i < NUM_LIGHTS+1; ++i)
+	for(int i = 1; i < NUM_LIGHTS; ++i)
 		fragColor += compute_point_light(i, material, frag_pos, ubo.cam_pos.xyz, normal, factor_occlusion);
 
 	outColor = vec4(fragColor, albedo.a) + texture(sampler_emission, in_UV);

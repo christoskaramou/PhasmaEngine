@@ -67,10 +67,6 @@ void Context::initRendering()
 	dof.Init();
 
 	// render passes
-#ifdef RENDER_SKYBOX
-	skyBoxDay.createRenderPass();
-	skyBoxNight.createRenderPass();
-#endif
 	shadows.createRenderPass();
 	ssao.createRenderPasses(renderTargets);
 	ssr.createRenderPass(renderTargets);
@@ -83,10 +79,6 @@ void Context::initRendering()
 	gui.createRenderPass();
 
 	// frame buffers
-#ifdef RENDER_SKYBOX
-	skyBoxDay.createFrameBuffers();
-	skyBoxNight.createFrameBuffers();
-#endif
 	shadows.createFrameBuffers();
 	ssao.createFrameBuffers(renderTargets);
 	ssr.createFrameBuffers(renderTargets);
@@ -99,10 +91,6 @@ void Context::initRendering()
 	gui.createFrameBuffers();
 
 	// pipelines
-#ifdef RENDER_SKYBOX
-	skyBoxDay.createPipeline();
-	skyBoxNight.createPipeline();
-#endif
 	shadows.createPipeline(*Mesh::getDescriptorSetLayout(), *Model::getDescriptorSetLayout());
 	ssao.createPipelines(renderTargets);
 	ssr.createPipeline(renderTargets);
@@ -273,27 +261,6 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	ssao.pipeline.destroy();
 	ssao.pipelineBlur.destroy();
 
-	// skyboxes
-	if (skyBoxDay.renderPass) {
-		vulkan.device.destroyRenderPass(skyBoxDay.renderPass);
-	}
-	for (auto &frameBuffer : skyBoxDay.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	skyBoxDay.pipeline.destroy();
-
-	if (skyBoxNight.renderPass) {
-		vulkan.device.destroyRenderPass(skyBoxNight.renderPass);
-	}
-	for (auto &frameBuffer : skyBoxNight.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	skyBoxNight.pipeline.destroy();
-
 	vulkan.depth->destroy();
 	vulkan.swapchain->destroy();
 	//- Free resources end ------------------
@@ -368,15 +335,6 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	gui.createFrameBuffers();
 	gui.createPipeline();
 	gui.updateDescriptorSets();
-
-#ifdef RENDER_SKYBOX
-	skyBoxDay.createRenderPass();
-	skyBoxDay.createFrameBuffers();
-	skyBoxDay.createPipeline();
-	skyBoxNight.createRenderPass();
-	skyBoxNight.createFrameBuffers();
-	skyBoxNight.createPipeline();
-#endif
 
 	//compute.pipeline = createComputePipeline();
 	//compute.updateDescriptorSets();
@@ -499,10 +457,8 @@ void Context::createUniforms()
 	// DESCRIPTOR SETS FOR GUI
 	gui.createDescriptorSet(GUI::getDescriptorSetLayout(VulkanContext::get()->device));
 	// DESCRIPTOR SETS FOR SKYBOX
-	skyBoxDay.createUniformBuffer(2 * sizeof(mat4));
-	skyBoxDay.createDescriptorSet(SkyBox::getDescriptorSetLayout());
-	skyBoxNight.createUniformBuffer(2 * sizeof(mat4));
-	skyBoxNight.createDescriptorSet(SkyBox::getDescriptorSetLayout());
+	skyBoxDay.createDescriptorSet();
+	skyBoxNight.createDescriptorSet();
 	// DESCRIPTOR SETS FOR SHADOWS
 	shadows.createUniformBuffers();
 	shadows.createDescriptorSets();
