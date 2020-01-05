@@ -21,7 +21,11 @@ namespace vm {
 	struct LightsUBO
 	{
 		vec4 camPos;
-		Light sun = { { .9765f, .8431f, .9098f, 1.f }, { GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2], 1.0f } };
+		Light sun
+		{
+			{ .9765f, .8431f, .9098f, GUI::sun_intensity },
+			{ GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2], 1.0f }
+		};
 #ifdef MAX_LIGHTS
 	#if MAX_LIGHTS == 0 // to avoid warnings when 0 lights are set
 		std::array<Light, MAX_LIGHTS> lights{};
@@ -33,6 +37,7 @@ namespace vm {
 
 	struct LightUniforms : Light
 	{
+		LightsUBO lubo;
 		Buffer uniform;
 		vk::DescriptorSet descriptorSet;
 		static vk::DescriptorSetLayout descriptorSetLayout;

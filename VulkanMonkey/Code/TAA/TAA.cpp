@@ -1,10 +1,10 @@
 #include "TAA.h"
-#include "../Timer/Timer.h"
-#include <deque>
 #include "../GUI/GUI.h"
 #include "../Surface/Surface.h"
 #include "../Swapchain/Swapchain.h"
 #include "../Shader/Shader.h"
+#include "../Queue/Queue.h"
+#include <deque>
 
 using namespace vm;
 
@@ -38,12 +38,14 @@ void TAA::update(const Camera& camera)
 {
 	if (GUI::use_TAA) {
 		ubo.values = { camera.projOffset.x, camera.projOffset.y, GUI::TAA_feedback_min, GUI::TAA_feedback_max };
-		ubo.sharpenValues = { GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias , sin(Timer::getTotalTime() * 0.125f) };
+		ubo.sharpenValues = { GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias , sin(static_cast<float>(ImGui::GetTime()) * 0.125f) };
 		ubo.invProj = camera.invProjection;
-		uniform.map();
-		memcpy(uniform.data, &ubo, sizeof(ubo));
-		uniform.flush();
-		uniform.unmap();
+		
+		Queue::memcpyRequest(&uniform, &ubo, sizeof(ubo));
+		//uniform.map();
+		//memcpy(uniform.data, &ubo, sizeof(ubo));
+		//uniform.flush();
+		//uniform.unmap();
 	}
 }
 

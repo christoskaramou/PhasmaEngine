@@ -1,80 +1,93 @@
 #include "Timer.h"
-#include <stdexcept>
-#include <SDL/SDL.h>
+#include "../VulkanContext/VulkanContext.h"
+#include <thread>
 
 using namespace vm;
 
-unsigned			Timer::totalCounter = 0;
-float				Timer::totalTime = 0.0f;
-float				Timer::delta = 0.0f;
-float				Timer::cleanDelta = 0.0f;
-float				Timer::waitingTime = 0.0f;
-float				Timer::time = 0.0f;
-unsigned			Timer::instances = 0;
-std::vector<float>	Timer::deltas(20, 0.f);
-std::chrono::high_resolution_clock::time_point Timer::frameStart = {};
-
-Timer::Timer()
+Timer::Timer() noexcept
 {
-	_minFrameTime = 0.0f;
-    if (++instances > 1)
-		throw std::runtime_error("Only one active instance of timer is allowed");
-
-    start = std::chrono::high_resolution_clock::now();
-	frameStart = start;
-	duration = {};
+	m_start = {};
 }
 
-Timer::~Timer()
+void Timer::Start() noexcept
 {
-    duration = std::chrono::high_resolution_clock::now() - start;
-	cleanDelta = duration.count();
-
-	// FPS limiting
-    if (_minFrameTime > 0){
-	    const float delay = _minFrameTime - cleanDelta;
-		if (delay > 0.f)
-			SDL_Delay(static_cast<unsigned>(delay * 1000.f)); // not accurate but fast and not CPU cycle consuming
-    }
-
-    duration = std::chrono::high_resolution_clock::now() - start;
-	delta = duration.count();
-
-	deltas[totalCounter++] = delta;
-    totalCounter %= deltas.size();
-    time += delta; // for any time rate given
-    totalTime += delta;
-    instances--;
+	m_start = std::chrono::high_resolution_clock::now();
 }
 
-float Timer::getDelta(float timeScale)
+double Timer::Count() noexcept
 {
-    return delta * timeScale;
+	const std::chrono::duration<double> t_duration = std::chrono::high_resolution_clock::now() - m_start;
+	return t_duration.count();
 }
 
-float Timer::getTotalTime()
+FrameTimer::FrameTimer() noexcept : Timer()
 {
-	return totalTime;
+	m_duration = {};
+	delta = 0.0f;
+	time = 0.0f;
+	measures.resize(1);
 }
 
-unsigned Timer::getFPS()
+void FrameTimer::Delay(double seconds)
 {
-	float sum = 0.f;
-	for (auto &d : deltas) sum += d;
-	return static_cast<unsigned int>(deltas.size() / sum);
+	static size_t system_delay = 0;
+	static Timer timer;
+
+	const std::chrono::nanoseconds delay(static_cast<size_t>(SECONDS_TO_NANOSECONDS(seconds)) - system_delay);
+
+	timer.Start();
+	std::this_thread::sleep_for(delay);
+	system_delay = static_cast<size_t>(SECONDS_TO_NANOSECONDS(timer.Count())) - delay.count();
 }
 
-bool Timer::intervalsOf(float seconds)
+
+void FrameTimer::Tick() noexcept
 {
-    if (time > seconds)
-    {
-        time = 0.0f;
-        return true;
-    }
-	return false;
+	m_duration = std::chrono::high_resolution_clock::now() - m_start;
+	delta = m_duration.count();
+	time += delta;
 }
 
-void Timer::minFrameTime(float seconds)
+void GPUTimer::start(const vk::CommandBuffer* cmd)
 {
-	_minFrameTime = seconds;
+	_cmd = const_cast<vk::CommandBuffer*>(cmd);
+	_cmd->resetQueryPool(*queryPool, 0, 2);
+	_cmd->writeTimestamp(vk::PipelineStageFlagBits::eTopOfPipe, *queryPool, 0);
+}
+
+void GPUTimer::end(float* res)
+{
+	_cmd->writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, *queryPool, 1);
+	if (res)
+		*res = getTime();
+}
+
+void GPUTimer::initQueryPool()
+{
+	auto gpuProps = VulkanContext::get()->gpu.getProperties();
+	if (!gpuProps.limits.timestampComputeAndGraphics)
+		throw std::runtime_error("Timestamps not supported");
+
+	timestampPeriod = gpuProps.limits.timestampPeriod;
+
+	vk::QueryPoolCreateInfo qpci;
+	qpci.queryType = vk::QueryType::eTimestamp;
+	qpci.queryCount = 2;
+
+	queryPool = std::make_unique<vk::QueryPool>(VulkanContext::get()->device.createQueryPool(qpci));
+
+	queryTimes.resize(2, 0);
+}
+
+float GPUTimer::getTime()
+{
+	const auto res = VulkanContext::get()->device.getQueryPoolResults<uint64_t>(*queryPool, 0, 2, queryTimes, sizeof(uint64_t), vk::QueryResultFlagBits::e64);
+	if (res != vk::Result::eSuccess)
+		return 0.0f;
+	return static_cast<float>(queryTimes[1] - queryTimes[0]) * timestampPeriod * 1e-6f;
+}
+
+void GPUTimer::destroy() const
+{
+	VulkanContext::get()->device.destroyQueryPool(*queryPool);
 }

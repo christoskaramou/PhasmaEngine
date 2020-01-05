@@ -2,10 +2,11 @@
 
 using namespace vm;
 
-void Buffer::createBuffer(vk::DeviceSize size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties)
+void Buffer::createBuffer(size_t size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties)
 {
 	auto vulkan = VulkanContext::get();
 	this->size = size;
+	data = nullptr;
 
 	vk::BufferCreateInfo bufferInfo;
 	bufferInfo.size = size;
@@ -37,11 +38,11 @@ void Buffer::createBuffer(vk::DeviceSize size, const vk::BufferUsageFlags& usage
 	vulkan->device.bindBufferMemory(buffer, memory, 0);
 }
 
-void Buffer::map(vk::DeviceSize offset)
+void Buffer::map(size_t offset)
 {
 	if (data)
 		throw std::runtime_error("Map called when buffer data is not null");
-	data = VulkanContext::get()->device.mapMemory(memory, offset, size, vk::MemoryMapFlags());		
+	data = VulkanContext::get()->device.mapMemory(memory, offset, size - offset, vk::MemoryMapFlags());
 }
 
 void Buffer::unmap()
@@ -59,14 +60,14 @@ void Buffer::zero()
 	memset(data, 0, size);
 }
 
-void Buffer::copyData(const void* srcData, vk::DeviceSize srcSize)
+void Buffer::copyData(const void* srcData, size_t srcSize, size_t offset)
 {
 	if (!data)
 		throw std::runtime_error("Buffer is not mapped");
-	memcpy(data, srcData, srcSize ? srcSize : size);
+	memcpy((char*)data + offset, srcData, srcSize > 0 ? srcSize : size);
 }
 
-void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size) const
+void Buffer::copyBuffer(const vk::Buffer srcBuffer, const size_t size) const
 {
 	vk::CommandBufferAllocateInfo cbai;
 	cbai.level = vk::CommandBufferLevel::ePrimary;
@@ -90,14 +91,14 @@ void Buffer::copyBuffer(const vk::Buffer srcBuffer, const vk::DeviceSize size) c
 	VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, copyCmd);
 }
 
-void Buffer::flush()
+void Buffer::flush(size_t size)
 {
 	if (!data)
 		throw std::runtime_error("Buffer is not mapped");
 
 	vk::MappedMemoryRange range;
 	range.memory = memory;
-	range.size = size;
+	range.size = size > 0 ? size : this->size;
 
 	VulkanContext::get()->device.flushMappedMemoryRanges(range);
 }

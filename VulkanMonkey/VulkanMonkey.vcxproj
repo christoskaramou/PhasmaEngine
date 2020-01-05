@@ -235,7 +235,6 @@
     <ClInclude Include="Code\Math\Math.h" />
     <ClInclude Include="Code\MemoryHash\MemoryHash.h" />
     <ClInclude Include="Code\Mesh\Mesh.h" />
-    <ClInclude Include="Code\Metrics\Metrics.h" />
     <ClInclude Include="Code\Model\Animation.h" />
     <ClInclude Include="Code\Model\Model.h" />
     <ClInclude Include="Code\Model\StreamReader.h" />
@@ -290,13 +289,11 @@
     <ClCompile Include="Code\Light\Light.cpp" />
     <ClCompile Include="Code\Math\Math.cpp" />
     <ClCompile Include="Code\Mesh\Mesh.cpp" />
-    <ClCompile Include="Code\Metrics\Metrics.cpp" />
     <ClCompile Include="Code\Model\Model.cpp" />
     <ClCompile Include="Code\MotionBlur\MotionBlur.cpp" />
     <ClCompile Include="Code\Node\Node.cpp" />
     <ClCompile Include="Code\Object\Object.cpp" />
     <ClCompile Include="Code\Pipeline\Pipeline.cpp" />
-    <ClCompile Include="Code\Queue\Queue.cpp" />
     <ClCompile Include="Code\Renderer\Renderer.cpp" />
     <ClCompile Include="Code\Script\Script.cpp" />
     <ClCompile Include="Code\Shader\Reflection.cpp" />

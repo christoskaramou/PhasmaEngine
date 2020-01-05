@@ -38,7 +38,6 @@ namespace vm {
 		mat4 transform = mat4::identity();
 		vec4 boundingSphere;
 		bool render = true;
-		bool isCopy = false;
 
 		std::string name;
 		std::string fullPathName;
@@ -58,7 +57,7 @@ namespace vm {
 		uint32_t numberOfVertices = 0, numberOfIndices = 0;
 
 		void draw();
-		void update(Camera& camera, float delta);
+		void update(Camera& camera, double delta);
 		void updateAnimation(uint32_t index, float time);
 		void calculateBoundingSphere();
 		void loadNode(Pointer<vm::Node> parent, const Microsoft::glTF::Node& node, const std::string& folderPath);

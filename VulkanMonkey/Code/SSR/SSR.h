@@ -10,6 +10,7 @@
 namespace vm {
 	struct SSR
 	{
+		mat4 reflectionInput[4];
 		Buffer UBReflection;
 		std::vector<vk::Framebuffer> frameBuffers{};
 		Pipeline pipeline;

@@ -1,6 +1,7 @@
 #include "Node.h"
 #include <future>
 #include "../Mesh/Mesh.h"
+#include "../Queue/Queue.h"
 
 using namespace vm;
 
@@ -60,16 +61,18 @@ void Node::update(Camera& camera)
 			}
 
 			mesh->ubo.jointcount = static_cast<float>(numJoints);
-			mesh->uniformBuffer.map();
-			memcpy(mesh->uniformBuffer.data, &mesh->ubo, sizeof(mesh->ubo));
-			mesh->uniformBuffer.flush();
-			mesh->uniformBuffer.unmap();
+			Queue::memcpyRequest(&mesh->uniformBuffer, &mesh->ubo, sizeof(mesh->ubo));
+			//mesh->uniformBuffer.map();
+			//memcpy(mesh->uniformBuffer.data, &mesh->ubo, sizeof(mesh->ubo));
+			//mesh->uniformBuffer.flush();
+			//mesh->uniformBuffer.unmap();
 		}
 		else {
-			mesh->uniformBuffer.map();
-			memcpy(mesh->uniformBuffer.data, &mesh->ubo, 2 * sizeof(mat4));
-			mesh->uniformBuffer.flush();
-			mesh->uniformBuffer.unmap();
+			Queue::memcpyRequest(&mesh->uniformBuffer, &mesh->ubo, 2 * sizeof(mat4));
+			//mesh->uniformBuffer.map();
+			//memcpy(mesh->uniformBuffer.data, &mesh->ubo, 2 * sizeof(mat4));
+			//mesh->uniformBuffer.flush();
+			//mesh->uniformBuffer.unmap();
 		}
 	}
 }

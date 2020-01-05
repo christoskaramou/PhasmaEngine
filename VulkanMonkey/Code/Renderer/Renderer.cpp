@@ -1,6 +1,5 @@
 #include "Renderer.h"
 #include "../Event/Event.h"
-#include "../Timer/Timer.h"
 #include "../Queue/Queue.h"
 #include "../Mesh/Mesh.h"
 
@@ -184,9 +183,10 @@ void Renderer::checkQueue() const
 #endif
 }
 
-void Renderer::update(float delta)
+void Renderer::update(double delta)
 {
-	const std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
+	static Timer timer;
+	timer.Start();
 
 	FIRE_EVENT(Event::OnUpdate);
 
@@ -196,11 +196,15 @@ void Renderer::update(float delta)
 #ifdef USE_SCRIPTS
 	// universal scripts
 	for (auto& s : ctx.scripts)
-		s->update(delta);
+		s->update(static_cast<float>(delta));
 #endif
 
 	// update camera matrices
 	ctx.camera_main.update();
+
+	// Model updates + 8(the rest updates)
+	std::vector<std::future<void>> futureUpdates;
+	futureUpdates.reserve(Model::models.size() + 8);
 
 	// MODELS
 	if (GUI::modelItemSelected > -1) {
@@ -208,35 +212,50 @@ void Renderer::update(float delta)
 		Model::models[GUI::modelItemSelected].pos = vec3(GUI::model_pos[GUI::modelItemSelected].data());
 		Model::models[GUI::modelItemSelected].rot = vec3(GUI::model_rot[GUI::modelItemSelected].data());
 	}
-	for (auto &model : Model::models)
-		model.update(ctx.camera_main, delta);
+	for (auto& model : Model::models)
+	{
+		const auto updateModel = [&]() { model.update(ctx.camera_main, delta); };
+		futureUpdates.push_back(std::async(std::launch::async, updateModel));
+	}
 
 	// GUI
-	ctx.gui.update();
+	auto updateGUI = [&]() { ctx.gui.update(); };
+	futureUpdates.push_back(std::async(std::launch::async, updateGUI));
 
 	// LIGHTS
-	ctx.lightUniforms.update(ctx.camera_main);
+	auto updateLights = [&]() { ctx.lightUniforms.update(ctx.camera_main); };
+	futureUpdates.push_back(std::async(std::launch::async, updateLights));
 
 	// SSAO
-	ctx.ssao.update(ctx.camera_main);
+	auto updateSSAO = [&]() { ctx.ssao.update(ctx.camera_main); };
+	futureUpdates.push_back(std::async(std::launch::async, updateSSAO));
 
 	// SSR
-	ctx.ssr.update(ctx.camera_main);
+	auto updateSSR = [&]() { ctx.ssr.update(ctx.camera_main); };
+	futureUpdates.push_back(std::async(std::launch::async, updateSSR));
 
 	// TAA
-	ctx.taa.update(ctx.camera_main);
+	auto updateTAA = [&]() { ctx.taa.update(ctx.camera_main); };
+	futureUpdates.push_back(std::async(std::launch::async, updateTAA));
 
 	// MOTION BLUR
-	ctx.motionBlur.update(ctx.camera_main);
+	auto updateMotionBlur = [&]() { ctx.motionBlur.update(ctx.camera_main); };
+	futureUpdates.push_back(std::async(std::launch::async, updateMotionBlur));
 
 	// SHADOWS
-	ctx.shadows.update(ctx.camera_main);
+	auto updateShadows = [&]() { ctx.shadows.update(ctx.camera_main); };
+	futureUpdates.push_back(std::async(std::launch::async, updateShadows));
 
 	// COMPOSITION UNIFORMS
-	ctx.deferred.update(ctx.camera_main.invViewProjection);
+	auto updateDeferred = [&]() { ctx.deferred.update(ctx.camera_main.invViewProjection); };
+	futureUpdates.push_back(std::async(std::launch::async, updateDeferred));
 
-	const std::chrono::duration<float> time = std::chrono::high_resolution_clock::now() - start;
-	GUI::updatesTimeCount = time.count();
+	for (auto& f : futureUpdates)
+		f.get();
+
+	Queue::exec_memcpyRequests(previousImageIndex);
+
+	GUI::updatesTimeCount = static_cast<float>(timer.Count());
 }
 
 void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
@@ -259,22 +278,19 @@ void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, con
 
 void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 {
-	// wait for vertex and index data to be ready on gui buffers
-	VulkanContext::get()->waitFences(ctx.gui.fenceUpload);
-
 	vk::CommandBufferBeginInfo beginInfo;
 	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
 	const auto& cmd = VulkanContext::get()->dynamicCmdBuffers[imageIndex];
 
 	cmd.begin(beginInfo);
-	ctx.metrics[0].start(cmd);
+	ctx.metrics[0].start(&cmd);
 
 	// SKYBOX
 	SkyBox& skybox = GUI::shadow_cast ? ctx.skyBoxDay : ctx.skyBoxNight;
 
 	// MODELS
-	ctx.metrics[2].start(cmd);
+	ctx.metrics[2].start(&cmd);
 	ctx.deferred.batchStart(cmd, imageIndex, ctx.renderTargets["viewport"].extent);
 	for (auto& model : Model::models)
 		model.draw();
@@ -295,7 +311,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	
 	// SCREEN SPACE AMBIENT OCCLUSION
 	if (GUI::show_ssao) {
-		ctx.metrics[3].start(cmd);
+		ctx.metrics[3].start(&cmd);
 		changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::ColorWrite);
 		//const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 		ctx.ssao.draw(cmd, imageIndex, changeLayout, ctx.renderTargets["ssao"]);
@@ -305,7 +321,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	
 	// SCREEN SPACE REFLECTIONS
 	if (GUI::show_ssr) {
-		ctx.metrics[4].start(cmd);
+		ctx.metrics[4].start(&cmd);
 		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::ColorWrite);
 		ctx.ssr.draw(cmd, imageIndex, ctx.renderTargets["ssr"].extent);
 		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::ColorRead);
@@ -313,21 +329,21 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	}
 	
 	// COMPOSITION
-	ctx.metrics[5].start(cmd);
+	ctx.metrics[5].start(&cmd);
 	ctx.deferred.draw(cmd, imageIndex, ctx.shadows, skybox, ctx.renderTargets["viewport"].extent);
 	ctx.metrics[5].end(&GUI::metrics[5]);
 	
 	if (GUI::use_AntiAliasing) {
 		// TAA
 		if (GUI::use_TAA) {
-			ctx.metrics[6].start(cmd);
+			ctx.metrics[6].start(&cmd);
 			ctx.taa.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
 			ctx.taa.draw(cmd, imageIndex, changeLayout, ctx.renderTargets);
 			ctx.metrics[6].end(&GUI::metrics[6]);
 		}
 		// FXAA
 		else if (GUI::use_FXAA) {
-			ctx.metrics[6].start(cmd);
+			ctx.metrics[6].start(&cmd);
 			ctx.fxaa.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
 			ctx.fxaa.draw(cmd, imageIndex, ctx.renderTargets["viewport"].extent);
 			ctx.metrics[6].end(&GUI::metrics[6]);
@@ -336,7 +352,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	// BLOOM
 	if (GUI::show_Bloom) {
-		ctx.metrics[7].start(cmd);
+		ctx.metrics[7].start(&cmd);
 		ctx.bloom.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
 		ctx.bloom.draw(cmd, imageIndex, static_cast<uint32_t>(VulkanContext::get()->swapchain->images.size()), changeLayout, ctx.renderTargets);
 		ctx.metrics[7].end(&GUI::metrics[7]);
@@ -344,7 +360,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 
 	// Depth of Field
 	if (GUI::use_DOF) {
-		ctx.metrics[8].start(cmd);
+		ctx.metrics[8].start(&cmd);
 		ctx.dof.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
 		ctx.dof.draw(cmd, imageIndex, ctx.renderTargets);
 		ctx.metrics[8].end(&GUI::metrics[8]);
@@ -352,7 +368,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	
 	// MOTION BLUR
 	if (GUI::show_motionBlur) {
-		ctx.metrics[9].start(cmd);
+		ctx.metrics[9].start(&cmd);
 		ctx.motionBlur.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
 		ctx.motionBlur.draw(cmd, imageIndex, ctx.renderTargets["viewport"].extent);
 		ctx.metrics[9].end(&GUI::metrics[9]);
@@ -371,7 +387,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		changeLayout(cmd, image, LayoutState::DepthWrite);
 
 	// GUI
-	ctx.metrics[10].start(cmd);
+	ctx.metrics[10].start(&cmd);
 	ctx.gui.scaleToRenderArea(cmd, ctx.renderTargets["viewport"], imageIndex);
 	ctx.gui.draw(cmd, imageIndex);
 	ctx.metrics[10].end(&GUI::metrics[10]);
@@ -401,7 +417,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 	for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
 		auto& cmd = VulkanContext::get()->shadowCmdBuffers[ctx.shadows.textures.size() * imageIndex + i];
 		cmd.begin(beginInfoShadows);
-		ctx.metrics[11 + static_cast<size_t>(i)].start(cmd);
+		ctx.metrics[11 + static_cast<size_t>(i)].start(&cmd);
 		cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
 		// depth[i] image ===========================================================
@@ -452,11 +468,12 @@ void Renderer::present()
 	// aquire the image
 	auto aquireSignalSemaphore = vCtx.semaphores[0];
 	const uint32_t imageIndex = vCtx.swapchain->aquire(aquireSignalSemaphore, nullptr);
+	this->previousImageIndex = imageIndex;
 
-	const std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
-	vCtx.waitFences(vCtx.fences[imageIndex]);
-	const std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
-	Timer::waitingTime = waitTime.count();
+	//const std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
+	//vCtx.waitFences(vCtx.fences[imageIndex]);
+	//const std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
+	//Timer::waitingTime = waitTime.count();
 
 	const auto& cmd = vCtx.dynamicCmdBuffers[imageIndex];
 

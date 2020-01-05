@@ -1,6 +1,5 @@
 #include "Window.h"
 #include "../Event/Event.h"
-#include "../Timer/Timer.h"
 #include "../Console/Console.h"
 #include <iostream>
 
@@ -43,7 +42,7 @@ void Window::destroyAll()
 	SDL_Quit();
 }
 
-bool Window::processEvents(float delta)
+bool Window::processEvents(double delta)
 {
 	if (Console::close_app) return false;
 	static int xMove = 0;
@@ -129,7 +128,7 @@ bool Window::processEvents(float delta)
 	if ((io.KeysDown[SDL_SCANCODE_W] || io.KeysDown[SDL_SCANCODE_S]) &&
 		(io.KeysDown[SDL_SCANCODE_A] || io.KeysDown[SDL_SCANCODE_D]))
 		combineDirections = true;
-	const float velocity = combineDirections ? GUI::cameraSpeed * Timer::delta * 0.707f : GUI::cameraSpeed * Timer::delta;
+	const float velocity = combineDirections ? GUI::cameraSpeed * static_cast<float>(delta) * 0.707f : GUI::cameraSpeed * static_cast<float>(delta);
 	if (io.KeysDown[SDL_SCANCODE_W]) info.camera_main.move(Camera::RelativeDirection::FORWARD, velocity);
 	if (io.KeysDown[SDL_SCANCODE_S]) info.camera_main.move(Camera::RelativeDirection::BACKWARD, velocity);
 	if (io.KeysDown[SDL_SCANCODE_A]) info.camera_main.move(Camera::RelativeDirection::LEFT, velocity);

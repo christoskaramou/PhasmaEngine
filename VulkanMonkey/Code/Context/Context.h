@@ -19,7 +19,7 @@
 #include "../MotionBlur/MotionBlur.h"
 #include "../Deferred/Deferred.h"
 #include "../Compute/Compute.h"
-#include "../Metrics/Metrics.h"
+#include "../Timer/Timer.h"
 #include "../Script/Script.h"
 
 //#define USE_SCRIPTS
@@ -78,7 +78,7 @@ namespace vm {
 		std::vector<Camera> camera{};
 
 		// Metrics
-		std::vector<Metrics> metrics{};
+		std::vector<GPUTimer> metrics{};
 
 #ifdef USE_SCRIPTS
 		// Scripts

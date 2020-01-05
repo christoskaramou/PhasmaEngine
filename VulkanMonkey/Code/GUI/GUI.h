@@ -56,7 +56,7 @@ namespace vm {
 		static inline bool									shadow_cast = false;
 		static inline float									sun_intensity = 7.f;
 		static inline std::array<float, 3>					sun_position{ 160.0f, 300.0f, -120.0f };
-		static inline int									fps = 60;
+		static inline float									fps = 60.0f;
 		static inline float									cameraSpeed = 3.5f;
 		static inline std::array<float, 3>					depthBias{ 0.0f, 0.0f, -6.2f };
 		static inline std::array<float, 4>					clearColor{ 0.0f, 0.0f, 0.0f, 1.0f };
@@ -64,7 +64,6 @@ namespace vm {
 		static inline float									updatesTime = 0;
 		static inline float									updatesTimeCount = 0;
 		static inline float									cpuWaitingTime = 0;
-		static inline float									gpuTime = 0;
 		static inline float									timeScale = 1.f;
 		static inline std::array<float, 20>					metrics = {};
 		static inline std::array<float, 20>					stats = {};
@@ -96,8 +95,6 @@ namespace vm {
 		std::string	name;
 		vk::RenderPass renderPass;
 		std::vector<vk::Framebuffer> frameBuffers{};
-		vk::CommandBuffer cmdBuf;
-		vk::Fence fenceUpload;
 		Pipeline pipeline;
 		static inline vk::DescriptorSetLayout descriptorSetLayout = nullptr;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
@@ -113,6 +110,10 @@ namespace vm {
 		void Menu() const;
 		void Metrics() const;
 		static void ConsoleWindow();
+		static const char* async_fileDialog_ImGuiButton(const char* buttonLabel, const char* dialogTitle, const std::vector<const char*>& filter);
+		static const char* async_inputBox_ImGuiButton(const char* buttonLabel, const char* dialogTitle, const char* message);
+		static const char* async_fileDialog_ImGuiMenuItem(const char* menuLabel, const char* dialogTitle, const std::vector<const char*>& filter);
+		static int async_messageBox_ImGuiMenuItem(const char* menuLabel, const char* messageBoxTitle, const char* message);
 		void Scripts() const;
 		void Shaders() const;
 		void Models() const;

@@ -11,29 +11,34 @@ int main(int argc, char* argv[])
 
 	Window::create();
 
+	FrameTimer& frame_timer = FrameTimer::Instance();
+
 	while (true)
 	{
-		Timer timer;
+		frame_timer.Start();
 		FIRE_EVENT(Event::FrameStart);
-		timer.minFrameTime(1.f / static_cast<float>(GUI::fps));
 
-		if (!Window::processEvents(timer.getDelta(GUI::timeScale)))
+		if (!Window::processEvents(frame_timer.delta))
 			break;
 
 		for (auto& renderer : Window::renderer) {
-			renderer->update(timer.getDelta(GUI::timeScale));
+			renderer->update(frame_timer.delta);
 			renderer->present();
 		}
-		if (timer.intervalsOf(0.75f)) {
-			FIRE_EVENT(Event::Tick);
-			GUI::cpuWaitingTime = Timer::waitingTime * 1000.f; // secs to ms
-			GUI::updatesTime = GUI::updatesTimeCount * 1000.f; // secs to ms
-			std::chrono::duration<float> dur = std::chrono::high_resolution_clock::now() - Timer::frameStart;
-			GUI::cpuTime = dur.count() * 1000.f - GUI::cpuWaitingTime;
+
+		static double interval = 0.0;
+		interval += frame_timer.delta;
+		if (interval > 0.75) {
+			interval = 0.0;
+			GUI::cpuWaitingTime = SECONDS_TO_MILLISECONDS(frame_timer.measures[0]);
+			GUI::updatesTime = SECONDS_TO_MILLISECONDS(GUI::updatesTimeCount);
+			GUI::cpuTime = static_cast<float>(frame_timer.delta * 1000.0) - GUI::cpuWaitingTime;
 			for (int i = 0; i < GUI::metrics.size(); i++)
 				GUI::stats[i] = GUI::metrics[i];
 		}
-		FIRE_EVENT(Event::FrameEnd, timer.getDelta());
+		FIRE_EVENT(Event::FrameEnd, frame_timer.delta);
+		frame_timer.Delay(1.0 / static_cast<double>(GUI::fps) - frame_timer.Count());
+		frame_timer.Tick();
 	}
 
 	return 0;

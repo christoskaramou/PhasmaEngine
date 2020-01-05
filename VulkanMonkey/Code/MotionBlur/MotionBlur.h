@@ -11,6 +11,7 @@
 namespace vm {
 	struct MotionBlur
 	{
+		mat4 motionBlurInput[4];
 		Buffer UBmotionBlur;
 		std::vector<vk::Framebuffer> frameBuffers{};
 		Pipeline pipeline;

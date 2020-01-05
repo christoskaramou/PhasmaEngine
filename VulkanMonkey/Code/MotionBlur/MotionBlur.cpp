@@ -3,8 +3,9 @@
 #include "../Surface/Surface.h"
 #include "../Swapchain/Swapchain.h"
 #include "../GUI/GUI.h"
-#include "../Timer/Timer.h"
 #include "../Shader/Shader.h"
+#include "../Queue/Queue.h"
+#include "../Timer/Timer.h"
 
 using namespace vm;
 
@@ -78,7 +79,7 @@ void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Exte
 	rpi.pClearValues = clearValues.data();
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-	const vec4 values {1.f / Timer::delta, sin(Timer::getTotalTime() * 0.125f), GUI::motionBlur_strength, 0.f };
+	const vec4 values {1.f / static_cast<float>(FrameTimer::Instance().delta), sin(static_cast<float>(FrameTimer::Instance().time) * 0.125f), GUI::motionBlur_strength, 0.f };
 	cmd.pushConstants<vec4>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
 	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSMotionBlur, nullptr);
@@ -110,12 +111,19 @@ void MotionBlur::update(Camera& camera)
 {
 	if (GUI::show_motionBlur) {
 		static mat4 previousView = camera.view;
-		mat4 motionBlurInput[4]{ camera.projection, camera.view, previousView, camera.invViewProjection };
-		UBmotionBlur.map();
-		memcpy(UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
-		UBmotionBlur.flush();
-		UBmotionBlur.unmap();
+
+		motionBlurInput[0] = camera.projection;
+		motionBlurInput[1] = camera.view;
+		motionBlurInput[2] = previousView;
+		motionBlurInput[3] = camera.invViewProjection;
+
 		previousView = camera.view;
+
+		Queue::memcpyRequest(&UBmotionBlur, &motionBlurInput, sizeof(motionBlurInput));
+		//UBmotionBlur.map();
+		//memcpy(UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
+		//UBmotionBlur.flush();
+		//UBmotionBlur.unmap();
 	}
 }
 

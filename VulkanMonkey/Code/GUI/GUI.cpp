@@ -2,7 +2,6 @@
 #include <filesystem>
 #include "../include/TinyFileDialogs/tinyfiledialogs.h"
 #include "../Queue/Queue.h"
-#include "../Timer/Timer.h"
 #include "../Console/Console.h"
 #include "../Vertex/Vertex.h"
 #include "../Swapchain/Swapchain.h"
@@ -43,34 +42,117 @@ void GUI::BottomPanel() const
 	Models();
 }
 
+const char* GUI::async_fileDialog_ImGuiMenuItem(const char* menuLabel, const char* dialogTitle, const std::vector<const char*>& filter)
+{
+	static std::future<const char*>* s_future = nullptr;
+
+	if (ImGui::MenuItem(menuLabel))
+	{
+		s_future = new std::future<const char*>(std::async(std::launch::async, tinyfd_openFileDialog, dialogTitle, "", static_cast<int>(filter.size()), filter.data(), "", 0));
+	}
+	if (s_future)
+	{
+		if (s_future->wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
+		{
+			const char* result = s_future->get();
+			delete s_future;
+			s_future = nullptr;
+			return result;
+		}
+	}
+	return nullptr;
+}
+
+int GUI::async_messageBox_ImGuiMenuItem(const char* menuLabel, const char* messageBoxTitle, const char* message)
+{
+	static std::future<int>* s_future = nullptr;
+
+	if (ImGui::MenuItem(menuLabel))
+	{
+		s_future = new std::future<int>(std::async(std::launch::async, tinyfd_messageBox, messageBoxTitle, message, "yesno", "warning", 0));
+	}
+	if (s_future)
+	{
+		if (s_future->wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
+		{
+			const int result = s_future->get();
+			delete s_future;
+			s_future = nullptr;
+			return result;
+		}
+	}
+	return 0;
+}
+
+
+const char* GUI::async_fileDialog_ImGuiButton(const char* buttonLabel, const char* dialogTitle, const std::vector<const char*>& filter)
+{
+	static std::future<const char*>* s_future = nullptr;
+
+	if (ImGui::Button(buttonLabel))
+	{
+		s_future = new std::future<const char*>(std::async(std::launch::async, tinyfd_openFileDialog, dialogTitle, "", static_cast<int>(filter.size()), filter.data(), "", 0));
+	}
+	if (s_future)
+	{
+		if (s_future->wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
+		{
+			const char* result = s_future->get();
+			delete s_future;
+			s_future = nullptr;
+			return result;
+		}
+	}
+	return nullptr;
+}
+
+const char* GUI::async_inputBox_ImGuiButton(const char* buttonLabel, const char* dialogTitle, const char* message)
+{
+	static std::future<const char*>* s_future = nullptr;
+
+	if (ImGui::Button(buttonLabel))
+	{
+		s_future = new std::future<const char*>(std::async(std::launch::async, tinyfd_inputBox, dialogTitle, message, ""));
+	}
+	if (s_future)
+	{
+		if (s_future->wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
+		{
+			const char* result = s_future->get();
+			delete s_future;
+			s_future = nullptr;
+			return result;
+		}
+	}
+	return nullptr;
+}
+
 void GUI::Menu() const
 {
 	if (ImGui::BeginMainMenuBar())
 	{
 		if (ImGui::BeginMenu("File"))
 		{
-			if (ImGui::MenuItem("Load...")) {
-				std::vector<const char*> filter{ "*.gltf", "*.glb" };
-				const char* result = tinyfd_openFileDialog("Choose Model", "", static_cast<int>(filter.size()), filter.data(), "", 0);
-				if (result) {
-					const std::string path(result);
-					std::string folderPath = path.substr(0, path.find_last_of('\\') + 1);
-					std::string modelName = path.substr(path.find_last_of('\\') + 1);
-					Queue::loadModel.emplace_back(folderPath, modelName);
-				}
+			static std::vector<const char*> filter{ "*.gltf", "*.glb" };
+
+			////////////////////////////////////
+			// TODO: rework async calls logic //
+			////////////////////////////////////
+			const char* result = async_fileDialog_ImGuiMenuItem("Load...", "Choose Model", filter);
+			if (result) {
+				const std::string path(result);
+				std::string folderPath = path.substr(0, path.find_last_of('\\') + 1);
+				std::string modelName = path.substr(path.find_last_of('\\') + 1);
+				Queue::loadModel.emplace_back(folderPath, modelName);
 			}
-			if (ImGui::MenuItem("Exit")) {
-				const SDL_MessageBoxButtonData buttons[] = { { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "cancel" },{ SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes" } };
-				const SDL_MessageBoxColorScheme colorScheme = { {{ 255,   0,   0 }, {   0, 255,   0 }, { 255, 255,   0 }, {   0,   0, 255 }, { 255,   0, 255 }} };
-				const SDL_MessageBoxData messageboxdata = { SDL_MESSAGEBOX_INFORMATION, nullptr,"Exit", "Are you sure you want to exit?",SDL_arraysize(buttons),buttons, &colorScheme };
-				int buttonid;
-				SDL_ShowMessageBox(&messageboxdata, &buttonid);
-				if (buttonid == 1) {
-					SDL_Event sdlevent;
-					sdlevent.type = SDL_QUIT;
-					SDL_PushEvent(&sdlevent);
-				}
+			
+			const int exit = async_messageBox_ImGuiMenuItem("Exit", "Exit", "Are you sure you want to exit?");
+			if (exit == 1) {
+				SDL_Event sdlevent;
+				sdlevent.type = SDL_QUIT;
+				SDL_PushEvent(&sdlevent);
 			}
+
 			ImGui::EndMenu();
 		}
 		ImGui::EndMainMenuBar();
@@ -88,7 +170,7 @@ void GUI::Metrics() const
 	ImGui::Begin("Metrics", &metrics_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 	ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
 	ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-	ImGui::InputInt("FPS", &fps, 1, 15); fps = maximum(fps, 10);
+	ImGui::InputFloat("FPS", &fps, 1.0f, 15.0f, 1); fps = maximum(fps, 10.0f);
 	ImGui::Separator(); ImGui::Separator();
 
 	ImGui::Text("CPU Total: %.3f (waited %.3f) ms", cpuTime, cpuWaitingTime);
@@ -152,20 +234,21 @@ void GUI::Scripts() const
 	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 1.f / 4.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
 	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
 	ImGui::Begin("Scripts Folder", &scripts_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-	if (ImGui::Button("Create New Script")) {
-		const char* result = tinyfd_inputBox("Script", "Give a name followed by the extension .cs", "");
-		if (result) {
-			std::string res = result;
-			if (std::find(fileList.begin(), fileList.end(), res) == fileList.end()) {
-				const std::string cmd = "type nul > Scripts\\" + res;
-				system(cmd.c_str());
-				fileList.push_back(res);
-			}
-			else {
-				SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Script not created", "Script name already exists", g_Window);
-			}
+
+	const char* result = async_inputBox_ImGuiButton("Create New Script", "Script", "Give a name followed by the extension .cs");
+	if (result)
+	{
+		std::string res = result;
+		if (std::find(fileList.begin(), fileList.end(), res) == fileList.end()) {
+			const std::string cmd = "type nul > Scripts\\" + res;
+			system(cmd.c_str());
+			fileList.push_back(res);
+		}
+		else {
+			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Script not created", "Script name already exists", g_Window);
 		}
 	}
+
 	for (uint32_t i = 0; i < fileList.size(); i++)
 	{
 		std::string name = fileList[i] + "##" + std::to_string(i);
@@ -213,16 +296,17 @@ void GUI::Models() const
 	ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 3.f / 4.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
 	ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
 	ImGui::Begin("Models Loaded", &models_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-	if (ImGui::Button("Add New Model")) {
-		std::vector<const char*> filter{ "*.gltf", "*.glb" };
-		const char* result = tinyfd_openFileDialog("Choose Model", "", static_cast<int>(filter.size()), filter.data(), "", 0);
-		if (result) {
-			const std::string path(result);
-			std::string folderPath = path.substr(0, path.find_last_of('\\') + 1);
-			std::string modelName = path.substr(path.find_last_of('\\') + 1);
-			Queue::loadModel.emplace_back(folderPath, modelName);
-		}
+
+	static std::vector<const char*> filter{ "*.gltf", "*.glb" };
+	const char* result = async_fileDialog_ImGuiButton("Add New Model", "Choose Model", filter);
+	if (result)
+	{
+		const std::string path(result);
+		std::string folderPath = path.substr(0, path.find_last_of('\\') + 1);
+		std::string modelName = path.substr(path.find_last_of('\\') + 1);
+		Queue::loadModel.emplace_back(folderPath, modelName);
 	}
+
 	for (uint32_t i = 0; i < modelList.size(); i++) {
 		std::string s = modelList[i] + "##" + std::to_string(i);
 		if (ImGui::Selectable(s.c_str(), false))
@@ -230,7 +314,7 @@ void GUI::Models() const
 	}
 
 	ImGui::End();
-
+	
 	if (!Queue::loadModelFutures.empty()) {
 		static bool loading = true;
 		static float time = 0.f;
@@ -252,7 +336,7 @@ void GUI::Models() const
 		else
 			time = 0.f;
 		ImGui::End();
-		time += Timer::delta;
+		time += ImGui::GetIO().DeltaTime;
 		style->Colors[ImGuiCol_WindowBg] = temp;
 	}
 }
@@ -406,15 +490,15 @@ void GUI::Properties() const
 
 		ImGui::Separator();
 		ImGui::Separator();
-		if (ImGui::Button("Add Script")) {
-			std::vector<const char*> filter{ "*.cs" };
-			const char* result = tinyfd_openFileDialog("Choose Script", "", static_cast<int>(filter.size()), filter.data(), "", 0);
-			if (result) {
-				std::string path(result);
-				path = path.substr(0, path.find_last_of('.'));
-				Queue::addScript.emplace_back(modelItemSelected, path.substr(path.find_last_of('\\') + 1));
-			}
+
+		static std::vector<const char*> filter{ "*.cs" };
+		const char* result = async_fileDialog_ImGuiButton("Add Script", "Choose Script", filter);
+		if (result) {
+			std::string path(result);
+			path = path.substr(0, path.find_last_of('.'));
+			Queue::addScript.emplace_back(modelItemSelected, path.substr(path.find_last_of('\\') + 1));
 		}
+
 		ImGui::SameLine();
 		if (ImGui::Button("Compile Script")) {
 			Queue::compileScript.push_back(modelItemSelected);
@@ -487,10 +571,6 @@ void GUI::initImGui()
 	cbai.commandPool = vulkan->commandPool;
 	cbai.level = vk::CommandBufferLevel::ePrimary;
 	cbai.commandBufferCount = 1;
-	cmdBuf = vulkan->device.allocateCommandBuffers(cbai).at(0);
-
-	vk::FenceCreateInfo fiu;
-	fenceUpload = vulkan->device.createFence(fiu);
 
 	for (auto& file : std::filesystem::recursive_directory_iterator("Scripts")) {
 		auto pathStr = file.path().string();
@@ -906,45 +986,45 @@ void GUI::newFrame()
 	if (!indexBuffer.buffer || indexBuffer.size < index_size)
 		createIndexBuffer(index_size);
 
-	//// Upload Vertex and index Data:
-	//{
-	//	ImDrawVert* vtx_dst = NULL;
-	//	ImDrawIdx* idx_dst = NULL;
-	//	vtx_dst = (ImDrawVert*)vulkan->device.mapMemory(vertexBuffer.memory, 0, vertex_size);
-	//	idx_dst = (ImDrawIdx*)vulkan->device.mapMemory(indexBuffer.memory, 0, index_size);
-	//	for (int n = 0; n < draw_data->CmdListsCount; n++)
-	//	{
-	//		const ImDrawList* cmd_list = draw_data->CmdLists[n];
-	//		memcpy(vtx_dst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
-	//		memcpy(idx_dst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
-	//		vtx_dst += cmd_list->VtxBuffer.Size;
-	//		idx_dst += cmd_list->IdxBuffer.Size;
-	//	}
-	//	vk::MappedMemoryRange range[2] = {};
-	//	range[0].memory = vertexBuffer.memory;
-	//	range[0].size = VK_WHOLE_SIZE;
-	//	range[1].memory = indexBuffer.memory;
-	//	range[1].size = VK_WHOLE_SIZE;
-	//	vulkan->device.flushMappedMemoryRanges(2, range);
-	//	vulkan->device.unmapMemory(vertexBuffer.memory);
-	//	vulkan->device.unmapMemory(indexBuffer.memory);
-	//}
-	
-	vk::CommandBufferBeginInfo beginInfo;
-	beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-	cmdBuf.begin(beginInfo);
-	vk::DeviceSize vOffset = 0;
-	vk::DeviceSize iOffset = 0;
-	for (int n = 0; n < draw_data->CmdListsCount; n++) {
-		const ImDrawList* cmd_list = draw_data->CmdLists[n];
-		cmdBuf.updateBuffer(vertexBuffer.buffer, vOffset, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert), cmd_list->VtxBuffer.Data);
-		cmdBuf.updateBuffer(indexBuffer.buffer, iOffset, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx), cmd_list->IdxBuffer.Data);
-		vOffset += cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
-		iOffset += cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
+	// Upload Vertex and index Data:
+	{
+		ImDrawVert* vtx_dst = NULL;
+		ImDrawIdx* idx_dst = NULL;
+		vtx_dst = (ImDrawVert*)VulkanContext::get()->device.mapMemory(vertexBuffer.memory, 0, vertex_size);
+		idx_dst = (ImDrawIdx*)VulkanContext::get()->device.mapMemory(indexBuffer.memory, 0, index_size);
+		for (int n = 0; n < draw_data->CmdListsCount; n++)
+		{
+			const ImDrawList* cmd_list = draw_data->CmdLists[n];
+			memcpy(vtx_dst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
+			memcpy(idx_dst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+			vtx_dst += cmd_list->VtxBuffer.Size;
+			idx_dst += cmd_list->IdxBuffer.Size;
+		}
+		vk::MappedMemoryRange range[2] = {};
+		range[0].memory = vertexBuffer.memory;
+		range[0].size = VK_WHOLE_SIZE;
+		range[1].memory = indexBuffer.memory;
+		range[1].size = VK_WHOLE_SIZE;
+		VulkanContext::get()->device.flushMappedMemoryRanges(2, range);
+		VulkanContext::get()->device.unmapMemory(vertexBuffer.memory);
+		VulkanContext::get()->device.unmapMemory(indexBuffer.memory);
 	}
-	cmdBuf.end();
-
-	VulkanContext::get()->submit(cmdBuf, nullptr, nullptr, nullptr, fenceUpload);
+	
+	//vk::CommandBufferBeginInfo beginInfo;
+	//beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+	//cmdBuf.begin(beginInfo);
+	//vk::DeviceSize vOffset = 0;
+	//vk::DeviceSize iOffset = 0;
+	//for (int n = 0; n < draw_data->CmdListsCount; n++) {
+	//	const ImDrawList* cmd_list = draw_data->CmdLists[n];
+	//	cmdBuf.updateBuffer(vertexBuffer.buffer, vOffset, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert), cmd_list->VtxBuffer.Data);
+	//	cmdBuf.updateBuffer(indexBuffer.buffer, iOffset, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx), cmd_list->IdxBuffer.Data);
+	//	vOffset += cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
+	//	iOffset += cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
+	//}
+	//cmdBuf.end();
+	//
+	//VulkanContext::get()->submit(cmdBuf, nullptr, nullptr, nullptr, fenceUpload);
 }
 
 void GUI::windowStyle(ImGuiStyle* dst)
@@ -1001,16 +1081,16 @@ void GUI::createVertexBuffer(size_t vertex_size)
 {
 	VulkanContext::get()->graphicsQueue.waitIdle();
 	vertexBuffer.destroy();
-	vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	//vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
+	//vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible);
 }
 
 void GUI::createIndexBuffer(size_t index_size)
 {
 	VulkanContext::get()->graphicsQueue.waitIdle();
 	indexBuffer.destroy();
-	indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	//indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
+	//indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible);
 }
 
 void GUI::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
@@ -1266,10 +1346,6 @@ void GUI::destroy()
 	if (GUI::descriptorSetLayout) {
 		VulkanContext::get()->device.destroyDescriptorSetLayout(GUI::descriptorSetLayout);
 		GUI::descriptorSetLayout = nullptr;
-	}
-	if (fenceUpload) {
-		VulkanContext::get()->device.destroyFence(fenceUpload);
-		fenceUpload = nullptr;
 	}
 }
 

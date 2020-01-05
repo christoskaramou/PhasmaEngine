@@ -72,6 +72,7 @@ void main()
 	// Ambient
 	float factor_occlusion = screenSpace.effects0.x > 0.5 ? texture(sampler_ssao_blur, in_UV).x : 1.0;
 	float factor_sky_light = clamp(ubo.lights[0].color.a, 0.025f, 1.0f);
+	factor_sky_light *= screenSpace.effects3.z > 0.5 ? 0.25 : 0.15;
 	float ambient_light = factor_sky_light * factor_occlusion;
 	vec3 fragColor = vec3(0.0);// 0.1 * material.albedo.xyz;
 
@@ -214,5 +215,5 @@ vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 materi
 	vec3 diffuse_light = diffref * material.albedo * (1.0 - material.metallic);
 	vec3 lighting = reflected_light + diffuse_light;
 
-	return lighting;
+	return lighting * ubo.lights[0].color.a;
 }

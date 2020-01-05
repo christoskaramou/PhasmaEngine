@@ -1,5 +1,6 @@
 #include "Model.h"
 #include "../Mesh/Mesh.h"
+#include "../Queue/Queue.h"
 #include <iostream>
 #include <future>
 #include <deque>
@@ -276,19 +277,6 @@ void Model::loadModelGltf(const std::string& folderPath, const std::string& mode
 
 void Model::loadModel(const std::string& folderPath, const std::string& modelName, bool show)
 {
-	// TODO: Copy the actual nodes and not the pointers
-	for (auto& model : models) {
-		if (model.fullPathName == folderPath + modelName) {
-			*this = model;
-			render = show;
-			isCopy = true;
-			animationTimer = 0.f;
-			createUniformBuffers();
-			createDescriptorSets();
-			return;
-		}
-	}
-
 	loadModelGltf(folderPath, modelName, show);
 	//calculateBoundingSphere();
 	name = modelName;
@@ -388,7 +376,7 @@ void updateNodeAsync(mat4& modelMatrix, Pointer<Node>& node, Camera& camera)
 	}
 }
 
-void Model::update(vm::Camera& camera, float delta)
+void Model::update(vm::Camera& camera, double delta)
 {
 	if (render) {
 		ubo.previousMatrix = ubo.matrix;
@@ -396,20 +384,21 @@ void Model::update(vm::Camera& camera, float delta)
 		ubo.previousView = camera.previousView;
 		ubo.projection = camera.projection;
 		if (script) {
-			script->update(delta);
+			script->update(static_cast<float>(delta));
 			ubo.matrix = script->getValue<Transform>("transform").matrix() * transform;
 		}
 		else {
 			ubo.matrix = transform;
 		}
 		ubo.matrix = vm::transform(quat(radians(rot)), scale, pos) * ubo.matrix;
-		uniformBuffer.map();
-		memcpy(uniformBuffer.data, &ubo, sizeof(ubo));
-		uniformBuffer.flush();
-		uniformBuffer.unmap();
+		Queue::memcpyRequest(&uniformBuffer, &ubo, sizeof(ubo));
+		//uniformBuffer.map();
+		//memcpy(uniformBuffer.data, &ubo, sizeof(ubo));
+		//uniformBuffer.flush();
+		//uniformBuffer.unmap();
 
 		if (!animations.empty()) {
-			animationTimer += delta;
+			animationTimer += static_cast<float>(delta);
 			if (animationTimer > animations[animationIndex].end) {
 				animationTimer -= animations[animationIndex].end;
 			}
@@ -733,11 +722,9 @@ void Model::createUniformBuffers()
 	uniformBuffer.zero();
 	uniformBuffer.flush();
 	uniformBuffer.unmap();
-	if (!isCopy) {
-		for (auto& node : linearNodes) {
-			if (node->mesh) {
-				node->mesh->createUniformBuffers();
-			}
+	for (auto& node : linearNodes) {
+		if (node->mesh) {
+			node->mesh->createUniformBuffers();
 		}
 	}
 }
@@ -764,40 +751,38 @@ void Model::createDescriptorSets()
 
 	VulkanContext::get()->device.updateDescriptorSets(wSetBuffer(descriptorSet, 0, uniformBuffer), nullptr);
 
-	if (!isCopy) {
-		// mesh dSets
-		for (auto& node : linearNodes) {
+	// mesh dSets
+	for (auto& node : linearNodes) {
 
-			if (!node->mesh) continue;
-			auto& mesh = node->mesh;
+		if (!node->mesh) continue;
+		auto& mesh = node->mesh;
 
-			vk::DescriptorSetAllocateInfo allocateInfo;
-			allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
-			allocateInfo.descriptorSetCount = 1;
-			allocateInfo.pSetLayouts = Mesh::getDescriptorSetLayout();
-			mesh->descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
+		vk::DescriptorSetAllocateInfo allocateInfo;
+		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
+		allocateInfo.descriptorSetCount = 1;
+		allocateInfo.pSetLayouts = Mesh::getDescriptorSetLayout();
+		mesh->descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
 
-			VulkanContext::get()->device.updateDescriptorSets(wSetBuffer(mesh->descriptorSet, 0, mesh->uniformBuffer), nullptr);
+		VulkanContext::get()->device.updateDescriptorSets(wSetBuffer(mesh->descriptorSet, 0, mesh->uniformBuffer), nullptr);
 
-			// primitive dSets
-			for (auto& primitive : mesh->primitives) {
+		// primitive dSets
+		for (auto& primitive : mesh->primitives) {
 
-				vk::DescriptorSetAllocateInfo allocateInfo2;
-				allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;
-				allocateInfo2.descriptorSetCount = 1;
-				allocateInfo2.pSetLayouts = Primitive::getDescriptorSetLayout();
-				primitive.descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo2).at(0);
+			vk::DescriptorSetAllocateInfo allocateInfo2;
+			allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;
+			allocateInfo2.descriptorSetCount = 1;
+			allocateInfo2.pSetLayouts = Primitive::getDescriptorSetLayout();
+			primitive.descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo2).at(0);
 
-				std::vector<vk::WriteDescriptorSet> textureWriteSets{
-					wSetImage(primitive.descriptorSet, 0, primitive.pbrMaterial.baseColorTexture),
-					wSetImage(primitive.descriptorSet, 1, primitive.pbrMaterial.metallicRoughnessTexture),
-					wSetImage(primitive.descriptorSet, 2, primitive.pbrMaterial.normalTexture),
-					wSetImage(primitive.descriptorSet, 3, primitive.pbrMaterial.occlusionTexture),
-					wSetImage(primitive.descriptorSet, 4, primitive.pbrMaterial.emissiveTexture),
-					wSetBuffer(primitive.descriptorSet, 5, primitive.uniformBuffer)
-				};
-				VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
-			}
+			std::vector<vk::WriteDescriptorSet> textureWriteSets{
+				wSetImage(primitive.descriptorSet, 0, primitive.pbrMaterial.baseColorTexture),
+				wSetImage(primitive.descriptorSet, 1, primitive.pbrMaterial.metallicRoughnessTexture),
+				wSetImage(primitive.descriptorSet, 2, primitive.pbrMaterial.normalTexture),
+				wSetImage(primitive.descriptorSet, 3, primitive.pbrMaterial.occlusionTexture),
+				wSetImage(primitive.descriptorSet, 4, primitive.pbrMaterial.emissiveTexture),
+				wSetBuffer(primitive.descriptorSet, 5, primitive.uniformBuffer)
+			};
+			VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
 		}
 	}
 }
@@ -809,30 +794,28 @@ void Model::destroy()
 		script = nullptr;
 	}
 	uniformBuffer.destroy();
-	if (!isCopy) {
-		delete document;
-		delete resourceReader;
-		if (Model::descriptorSetLayout) {
-			VulkanContext::get()->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
-			Model::descriptorSetLayout = nullptr;
-		}
-		for (auto& node : linearNodes) {
-			if (node->mesh) {
-				node->mesh->destroy();
-				delete node->mesh.get();
-				node->mesh = {};
-			}
-			delete node.get();
-			node = {};
-		}
-		for (auto& skin : skins) {
-			delete skin.get();
-			skin = {};
-		}
-		//for (auto& texture : Mesh::uniqueTextures)
-		//	texture.second.destroy();
-		//Mesh::uniqueTextures.clear();
-		vertexBuffer.destroy();
-		indexBuffer.destroy();
+	delete document;
+	delete resourceReader;
+	if (Model::descriptorSetLayout) {
+		VulkanContext::get()->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
+		Model::descriptorSetLayout = nullptr;
 	}
+	for (auto& node : linearNodes) {
+		if (node->mesh) {
+			node->mesh->destroy();
+			delete node->mesh.get();
+			node->mesh = {};
+		}
+		delete node.get();
+		node = {};
+	}
+	for (auto& skin : skins) {
+		delete skin.get();
+		skin = {};
+	}
+	//for (auto& texture : Mesh::uniqueTextures)
+	//	texture.second.destroy();
+	//Mesh::uniqueTextures.clear();
+	vertexBuffer.destroy();
+	indexBuffer.destroy();
 }

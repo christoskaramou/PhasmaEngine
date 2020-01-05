@@ -1,32 +1,69 @@
 #pragma once
+
 #include <chrono>
 #include <vector>
+#include <memory>
 
-namespace vm {
-	class Timer
+#define SECONDS_TO_MILLISECONDS(seconds) seconds * 1000
+#define SECONDS_TO_MICROSECONDS(seconds) seconds * 1000000
+#define SECONDS_TO_NANOSECONDS(seconds) seconds * 1000000000
+
+namespace vm
+{
+	struct Timer
 	{
 	public:
-		Timer();
-		~Timer();
+		Timer() noexcept;
 
-		static float getDelta(float timeScale = 1.0f);
-		static unsigned getFPS();
-		static bool intervalsOf(float seconds);
-		void minFrameTime(float seconds);
-		static float getTotalTime();
-		static float delta;
-		static float cleanDelta; // delta with no delay for taget FPS
-		static float waitingTime;
-		static std::chrono::high_resolution_clock::time_point frameStart;
-	private:
-		std::chrono::high_resolution_clock::time_point start;
-		std::chrono::duration<float> duration{};
-		float _minFrameTime;
+		void Start() noexcept;
+		double Count() noexcept;
 	protected:
-		static unsigned totalCounter;
-		static float totalTime;
-		static float time;
-		static unsigned instances;
-		static std::vector<float> deltas;
+		std::chrono::high_resolution_clock::time_point m_start;
+	};
+
+	struct FrameTimer : Timer
+	{
+	public:
+		void Tick() noexcept;
+		void Delay(double seconds = 0.0f);
+
+		double delta;
+		double time;
+		std::vector<double> measures{};
+	private:
+		std::chrono::duration<double> m_duration{};
+
+	public:
+		static auto& Instance() noexcept { static FrameTimer frame_timer; return frame_timer; }
+		FrameTimer(FrameTimer const&) = delete;				// copy constructor
+		FrameTimer(FrameTimer&&) noexcept = delete;			// move constructor
+		FrameTimer& operator=(FrameTimer const&) = delete;	// copy assignment
+		FrameTimer& operator=(FrameTimer&&) = delete;		// move assignment
+	private:
+		~FrameTimer() = default;							// destructor
+		FrameTimer() noexcept;								// default constructor
+	};
+}
+
+namespace vk
+{
+	class CommandBuffer;
+	class QueryPool;
+}
+namespace vm
+{
+	struct GPUTimer
+	{
+		void start(const vk::CommandBuffer* cmd);
+		void end(float* res = nullptr);
+		void initQueryPool();
+		float getTime();
+		void destroy() const;
+
+	private:
+		std::unique_ptr<vk::QueryPool> queryPool;
+		std::vector<uint64_t> queryTimes{};
+		float timestampPeriod;
+		vk::CommandBuffer* _cmd;
 	};
 }

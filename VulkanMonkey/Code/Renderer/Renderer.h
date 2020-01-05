@@ -7,10 +7,11 @@ namespace vm {
 	public:
 		Renderer(SDL_Window* window);
 		~Renderer();
-		void update(float delta);
+		void update(double delta);
 		void present();
 
 		Context ctx;
+		uint32_t previousImageIndex = 0;
 
 	private:
 		static void changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState state);

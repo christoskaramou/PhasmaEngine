@@ -4,6 +4,7 @@
 #include "../Swapchain/Swapchain.h"
 #include "../Surface/Surface.h"
 #include "../Shader/Shader.h"
+#include "../Queue/Queue.h"
 #include "tinygltf/stb_image.h"
 #include <deque>
 
@@ -73,6 +74,7 @@ void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTarget
 			throw std::runtime_error("No pixel data loaded");
 		const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
+		vulkan->graphicsQueue.waitIdle();
 		vulkan->waitAndLockSubmits();
 
 		Buffer staging;
@@ -145,10 +147,11 @@ void Deferred::update(mat4& invViewProj)
 	ubo.screenSpace[6] = { GUI::fog_global_thickness, GUI::lights_intensity, GUI::lights_range, GUI::fog_max_height };
 	ubo.screenSpace[7] = { GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f };
 
-	uniform.map();
-	uniform.copyData(&ubo);
-	uniform.flush();
-	uniform.unmap();
+	Queue::memcpyRequest(&uniform, &ubo, sizeof(ubo));
+	//uniform.map();
+	//uniform.copyData(&ubo);
+	//uniform.flush();
+	//uniform.unmap();
 }
 
 void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent)

@@ -10,6 +10,7 @@
 namespace vm {
 	struct SSAO
 	{
+		mat4 pvm[3];
 		Buffer UB_Kernel;
 		Buffer UB_PVM;
 		Image noiseTex;

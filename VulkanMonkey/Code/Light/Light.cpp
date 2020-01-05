@@ -1,4 +1,5 @@
 #include "Light.h"
+#include "../Queue/Queue.h"
 
 using namespace vm;
 
@@ -18,7 +19,6 @@ void LightUniforms::createLightUniforms()
 {
 	getDescriptorSetLayout();
 
-	LightsUBO lubo;
 	uniform.createBuffer(sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 	uniform.map();
 	uniform.copyData(&lubo);
@@ -58,25 +58,31 @@ void LightUniforms::destroy()
 void LightUniforms::update(const Camera& camera)
 {
 	if (GUI::randomize_lights) {
+
 		GUI::randomize_lights = false;
-		LightsUBO lubo;
-		lubo.camPos = vec4(camera.position, 1.0f);
-		uniform.map();
-		memcpy(uniform.data, &lubo, sizeof(lubo));
-		uniform.flush();
-		uniform.unmap();
+
+		lubo = LightsUBO();
+		lubo.camPos = { camera.position, 1.0f };
+
+		Queue::memcpyRequest(&uniform, &lubo, sizeof(lubo));
+		//uniform.map();
+		//memcpy(uniform.data, &lubo, sizeof(lubo));
+		//uniform.flush();
+		//uniform.unmap();
+
+		return;
+
 	}
-	const vec3 sunPos(GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2]);
-	const float angle = dot(normalize(sunPos), vec3(0.f, 1.f, 0.f));
-	vec4 values[3] = { // = {camPos, suncolor, sunposition}
-		{ camera.position, 1.0f },
-		{ .9765f * GUI::sun_intensity, .8431f * GUI::sun_intensity, .9098f * GUI::sun_intensity, GUI::shadow_cast ? angle * 0.5f : angle * 0.25f},
-		{ sunPos.x, sunPos.y, sunPos.z, 1.0f }
-	};
-	uniform.map();
-	memcpy(uniform.data, values, sizeof(values));
-	uniform.flush();
-	uniform.unmap();
+
+	lubo.camPos = { camera.position, 1.0f };
+	lubo.sun.color = { .9765f, .8431f, .9098f, GUI::sun_intensity };
+	lubo.sun.position = { GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2], 1.0f };
+
+	Queue::memcpyRequest(&uniform, &lubo, 3 * sizeof(vec4));
+	//uniform.map();
+	//memcpy(uniform.data, values, sizeof(values));
+	//uniform.flush();
+	//uniform.unmap();
 }
 
 vk::DescriptorSetLayout LightUniforms::getDescriptorSetLayout()

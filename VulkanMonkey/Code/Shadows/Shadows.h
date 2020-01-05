@@ -5,8 +5,19 @@
 #include "../Camera/Camera.h"
 
 namespace vm {
+
+	struct ShadowsUBO
+	{
+		mat4 projection, view;
+		float castShadows;
+		float maxCascadeDist0;
+		float maxCascadeDist1;
+		float maxCascadeDist2;
+	};
+
 	struct Shadows
 	{
+		ShadowsUBO shadows_UBO[3]{};
 		static uint32_t imageSize;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout();
@@ -24,14 +35,5 @@ namespace vm {
 		void createFrameBuffers();
 		void createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayout model);
 		void destroy();
-	};
-
-	struct ShadowsUBO
-	{
-		mat4 projection, view;
-		float castShadows;
-		float maxCascadeDist0;
-		float maxCascadeDist1;
-		float maxCascadeDist2;
 	};
 }

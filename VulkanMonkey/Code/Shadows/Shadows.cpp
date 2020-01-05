@@ -3,6 +3,7 @@
 #include "../Swapchain/Swapchain.h"
 #include "../Vertex/Vertex.h"
 #include "../Shader/Shader.h"
+#include "../Queue/Queue.h"
 
 using namespace vm;
 
@@ -303,8 +304,6 @@ void Shadows::destroy()
 
 void Shadows::update(Camera& camera)
 {
-	static ShadowsUBO shadows_UBO = {};
-
 	if (GUI::shadow_cast) {
 		// far/cos(x) = the side size
 		const float sideSizeOfPyramid = camera.nearPlane / cos(radians(camera.FOV * .5f)); // near plane is actually the far plane (they are reversed)
@@ -316,7 +315,7 @@ void Shadows::update(Camera& camera)
 		vec3 right = normalize(cross(front, camera.worldUp()));
 		vec3 up = normalize(cross(right, front));
 		float orthoSide = sideSizeOfPyramid * .01f; // small area
-		shadows_UBO = {
+		shadows_UBO[0] = {
 			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
 			lookAt(pos, front, right, up),
 			1.0f,
@@ -324,10 +323,12 @@ void Shadows::update(Camera& camera)
 			sideSizeOfPyramid * .1f,
 			sideSizeOfPyramid
 		};
-		uniformBuffers[0].map();
-		memcpy(uniformBuffers[0].data, &shadows_UBO, sizeof(ShadowsUBO));
-		uniformBuffers[0].flush();
-		uniformBuffers[0].unmap();
+
+		Queue::memcpyRequest(&uniformBuffers[0], &shadows_UBO[0], sizeof(ShadowsUBO));
+		//uniformBuffers[0].map();
+		//memcpy(uniformBuffers[0].data, &shadows_UBO[0], sizeof(ShadowsUBO));
+		//uniformBuffers[0].flush();
+		//uniformBuffers[0].unmap();
 
 		pointOnPyramid = camera.front * (sideSizeOfPyramid * .05f);
 		pos = p + camera.position + pointOnPyramid; 
@@ -335,7 +336,7 @@ void Shadows::update(Camera& camera)
 		right = normalize(cross(front, camera.worldUp()));
 		up = normalize(cross(right, front));
 		orthoSide = sideSizeOfPyramid * .05f; // medium area
-		shadows_UBO = {
+		shadows_UBO[1] = {
 			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
 			lookAt(pos, front, right, up),
 			1.0f,
@@ -343,10 +344,12 @@ void Shadows::update(Camera& camera)
 			sideSizeOfPyramid * .1f,
 			sideSizeOfPyramid 
 		};
-		uniformBuffers[1].map();
-		memcpy(uniformBuffers[1].data, &shadows_UBO, sizeof(ShadowsUBO));
-		uniformBuffers[1].flush();
-		uniformBuffers[1].unmap();
+
+		Queue::memcpyRequest(&uniformBuffers[1], &shadows_UBO[1], sizeof(ShadowsUBO));
+		//uniformBuffers[1].map();
+		//memcpy(uniformBuffers[1].data, &shadows_UBO[1], sizeof(ShadowsUBO));
+		//uniformBuffers[1].flush();
+		//uniformBuffers[1].unmap();
 
 		pointOnPyramid = camera.front * (sideSizeOfPyramid * .5f);
 		pos = p + camera.position + pointOnPyramid;
@@ -354,7 +357,7 @@ void Shadows::update(Camera& camera)
 		right = normalize(cross(front, camera.worldUp()));
 		up = normalize(cross(right, front));
 		orthoSide = sideSizeOfPyramid * .5f; // large area
-		shadows_UBO = {
+		shadows_UBO[2] = {
 			ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
 			lookAt(pos, front, right, up),
 			1.0f,
@@ -362,27 +365,33 @@ void Shadows::update(Camera& camera)
 			sideSizeOfPyramid * .1f,
 			sideSizeOfPyramid
 		};
-		uniformBuffers[2].map();
-		memcpy(uniformBuffers[2].data, &shadows_UBO, sizeof(ShadowsUBO));
-		uniformBuffers[2].flush();
-		uniformBuffers[2].unmap();
+
+		Queue::memcpyRequest(&uniformBuffers[2], &shadows_UBO[2], sizeof(ShadowsUBO));
+		//uniformBuffers[2].map();
+		//memcpy(uniformBuffers[2].data, &shadows_UBO[2], sizeof(ShadowsUBO));
+		//uniformBuffers[2].flush();
+		//uniformBuffers[2].unmap();
 	}
 	else
 	{
-		shadows_UBO.castShadows = 0.f;
-		uniformBuffers[0].map();
-		memcpy(uniformBuffers[0].data, &shadows_UBO, sizeof(ShadowsUBO));
-		uniformBuffers[0].flush();
-		uniformBuffers[0].unmap();
+		shadows_UBO[0].castShadows = 0.f;
 
-		uniformBuffers[1].map();
-		memcpy(uniformBuffers[1].data, &shadows_UBO, sizeof(ShadowsUBO));
-		uniformBuffers[1].flush();
-		uniformBuffers[1].unmap();
+		Queue::memcpyRequest(&uniformBuffers[0], &shadows_UBO[0], sizeof(ShadowsUBO));
+		//uniformBuffers[0].map();
+		//memcpy(uniformBuffers[0].data, &shadows_UBO[0], sizeof(ShadowsUBO));
+		//uniformBuffers[0].flush();
+		//uniformBuffers[0].unmap();
 
-		uniformBuffers[2].map();
-		memcpy(uniformBuffers[2].data, &shadows_UBO, sizeof(ShadowsUBO));
-		uniformBuffers[2].flush();
-		uniformBuffers[2].unmap();
+		Queue::memcpyRequest(&uniformBuffers[1], &shadows_UBO[1], sizeof(ShadowsUBO));
+		//uniformBuffers[1].map();
+		//memcpy(uniformBuffers[1].data, &shadows_UBO[0], sizeof(ShadowsUBO));
+		//uniformBuffers[1].flush();
+		//uniformBuffers[1].unmap();
+
+		Queue::memcpyRequest(&uniformBuffers[2], &shadows_UBO[2], sizeof(ShadowsUBO));
+		//uniformBuffers[2].map();
+		//memcpy(uniformBuffers[2].data, &shadows_UBO[0], sizeof(ShadowsUBO));
+		//uniformBuffers[2].flush();
+		//uniformBuffers[2].unmap();
 	}
 }

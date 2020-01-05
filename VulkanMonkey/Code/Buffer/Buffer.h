@@ -10,13 +10,13 @@ namespace vm {
 		std::string name;
 		void *data = nullptr;
 
-		void createBuffer(vk::DeviceSize size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties);
-		void map(vk::DeviceSize offset = 0);
+		void createBuffer(size_t size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties);
+		void map(size_t offset = 0);
 		void unmap();
 		void zero();
-		void copyData(const void* srcData, vk::DeviceSize srcSize = 0);
-		void copyBuffer(vk::Buffer srcBuffer, vk::DeviceSize size) const;
-		void flush();
+		void copyData(const void* srcData, size_t srcSize = 0, size_t offset = 0);
+		void copyBuffer(vk::Buffer srcBuffer, size_t size) const;
+		void flush(size_t size = 0);
 		void destroy();
 	};
 }

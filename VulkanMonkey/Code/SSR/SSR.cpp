@@ -4,6 +4,7 @@
 #include "../Swapchain/Swapchain.h"
 #include "../Surface/Surface.h"
 #include "../Shader/Shader.h"
+#include "../Queue/Queue.h"
 
 using namespace vm;
 
@@ -50,7 +51,6 @@ void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 void SSR::update(Camera& camera)
 {
 	if (GUI::show_ssr) {
-		mat4 reflectionInput[4];
 		reflectionInput[0][0] = vec4(camera.position, 1.0f);
 		reflectionInput[0][1] = vec4(camera.front, 1.0f);
 		reflectionInput[0][2] = vec4();
@@ -58,10 +58,12 @@ void SSR::update(Camera& camera)
 		reflectionInput[1] = camera.projection;
 		reflectionInput[2] = camera.view;
 		reflectionInput[3] = camera.invProjection;
-		UBReflection.map();
-		memcpy(UBReflection.data, &reflectionInput, sizeof(reflectionInput));
-		UBReflection.flush();
-		UBReflection.unmap();
+		
+		Queue::memcpyRequest(&UBReflection, &reflectionInput, sizeof(reflectionInput));
+		//UBReflection.map();
+		//memcpy(UBReflection.data, &reflectionInput, sizeof(reflectionInput));
+		//UBReflection.flush();
+		//UBReflection.unmap();
 	}
 }
 

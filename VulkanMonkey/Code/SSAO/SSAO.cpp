@@ -4,6 +4,7 @@
 #include "../Surface/Surface.h"
 #include "../GUI/GUI.h"
 #include "../Shader/Shader.h"
+#include "../Queue/Queue.h"
 
 using namespace vm;
 
@@ -176,11 +177,15 @@ void SSAO::destroy()
 void SSAO::update(Camera& camera)
 {
 	if (GUI::show_ssao) {
-		mat4 pvm[3]{ camera.projection, camera.view, camera.invProjection };
-		UB_PVM.map();
-		memcpy(UB_PVM.data, pvm, sizeof(pvm));
-		UB_PVM.flush();
-		UB_PVM.unmap();
+		pvm[0] = camera.projection;
+		pvm[1] = camera.view;
+		pvm[2] = camera.invProjection;
+		
+		Queue::memcpyRequest(&UB_PVM, &pvm, sizeof(pvm));
+		//UB_PVM.map();
+		//memcpy(UB_PVM.data, pvm, sizeof(pvm));
+		//UB_PVM.flush();
+		//UB_PVM.unmap();
 	}
 }
 

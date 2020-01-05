@@ -136,6 +136,7 @@ void Primitive::loadTexture(
 
 		const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
+		VulkanContext::get()->graphicsQueue.waitIdle();
 		VulkanContext::get()->waitAndLockSubmits();
 
 		Buffer staging;

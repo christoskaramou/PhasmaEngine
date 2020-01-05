@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 #include <type_traits>
+#include <mutex>
 
 #define WIDTH VulkanContext::get()->surface->actualExtent.width
 #define HEIGHT VulkanContext::get()->surface->actualExtent.height
@@ -96,10 +97,11 @@ namespace vm {
 #else
 		void SetDebugObjectName(const void* validHandle, const void* name) {}
 #endif
-
-		std::atomic_bool submiting = false;
-		void waitAndLockSubmits() { while (submiting) {} submiting = true; }
-		void unlockSubmits() { submiting = false; }
+	private:
+		std::mutex m_submit_mutex{};
+	public:
+		void waitAndLockSubmits() { m_submit_mutex.lock(); }
+		void unlockSubmits() { m_submit_mutex.unlock(); }
 
 		static auto get() noexcept { static auto VkCTX = new VulkanContext(); return VkCTX; }
 		static auto remove() noexcept { using type = decltype(get()); if (std::is_pointer<type>::value) delete get(); }
