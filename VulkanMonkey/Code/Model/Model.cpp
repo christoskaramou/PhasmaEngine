@@ -391,7 +391,7 @@ void Model::update(vm::Camera& camera, double delta)
 			ubo.matrix = transform;
 		}
 		ubo.matrix = vm::transform(quat(radians(rot)), scale, pos) * ubo.matrix;
-		Queue::memcpyRequest(&uniformBuffer, &ubo, sizeof(ubo));
+		Queue::memcpyRequest(&uniformBuffer, { { &ubo, sizeof(ubo), 0 } });
 		//uniformBuffer.map();
 		//memcpy(uniformBuffer.data, &ubo, sizeof(ubo));
 		//uniformBuffer.flush();

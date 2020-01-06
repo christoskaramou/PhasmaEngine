@@ -6,8 +6,9 @@ namespace vm {
 
 	struct MemoryRange
 	{
-		void* data;
-		size_t size;
+		void* data; // source data
+		size_t size; // source data size in bytes
+		size_t offset; // offset to destination data in bytes
 	};
 
 	struct MemoryHash

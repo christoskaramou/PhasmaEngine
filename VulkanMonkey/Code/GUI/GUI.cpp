@@ -988,26 +988,29 @@ void GUI::newFrame()
 
 	// Upload Vertex and index Data:
 	{
-		ImDrawVert* vtx_dst = NULL;
-		ImDrawIdx* idx_dst = NULL;
-		vtx_dst = (ImDrawVert*)VulkanContext::get()->device.mapMemory(vertexBuffer.memory, 0, vertex_size);
-		idx_dst = (ImDrawIdx*)VulkanContext::get()->device.mapMemory(indexBuffer.memory, 0, index_size);
+		static size_t vertex_size = sizeof(ImDrawVert);
+		static size_t index_size = sizeof(ImDrawIdx);
+		std::vector<MemoryRange> vertex_ranges(draw_data->CmdListsCount);
+		std::vector<MemoryRange> index_ranges(draw_data->CmdListsCount);
+		size_t vertex_offset = 0;
+		size_t index_offset = 0;
 		for (int n = 0; n < draw_data->CmdListsCount; n++)
 		{
 			const ImDrawList* cmd_list = draw_data->CmdLists[n];
-			memcpy(vtx_dst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
-			memcpy(idx_dst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
-			vtx_dst += cmd_list->VtxBuffer.Size;
-			idx_dst += cmd_list->IdxBuffer.Size;
+
+			vertex_ranges[n].data = cmd_list->VtxBuffer.Data;
+			vertex_ranges[n].size = static_cast<size_t>(cmd_list->VtxBuffer.Size)* vertex_size;
+			vertex_ranges[n].offset = vertex_offset;
+
+			index_ranges[n].data = cmd_list->IdxBuffer.Data;
+			index_ranges[n].size = static_cast<size_t>(cmd_list->IdxBuffer.Size)* index_size;
+			index_ranges[n].offset = index_offset;
+
+			vertex_offset += vertex_ranges[n].size;
+			index_offset += index_ranges[n].size;
 		}
-		vk::MappedMemoryRange range[2] = {};
-		range[0].memory = vertexBuffer.memory;
-		range[0].size = VK_WHOLE_SIZE;
-		range[1].memory = indexBuffer.memory;
-		range[1].size = VK_WHOLE_SIZE;
-		VulkanContext::get()->device.flushMappedMemoryRanges(2, range);
-		VulkanContext::get()->device.unmapMemory(vertexBuffer.memory);
-		VulkanContext::get()->device.unmapMemory(indexBuffer.memory);
+		Queue::memcpyRequest(&vertexBuffer, vertex_ranges);
+		Queue::memcpyRequest(&indexBuffer, index_ranges);
 	}
 	
 	//vk::CommandBufferBeginInfo beginInfo;

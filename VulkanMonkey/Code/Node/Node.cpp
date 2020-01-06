@@ -61,14 +61,14 @@ void Node::update(Camera& camera)
 			}
 
 			mesh->ubo.jointcount = static_cast<float>(numJoints);
-			Queue::memcpyRequest(&mesh->uniformBuffer, &mesh->ubo, sizeof(mesh->ubo));
+			Queue::memcpyRequest(&mesh->uniformBuffer, { { &mesh->ubo, sizeof(mesh->ubo), 0} });
 			//mesh->uniformBuffer.map();
 			//memcpy(mesh->uniformBuffer.data, &mesh->ubo, sizeof(mesh->ubo));
 			//mesh->uniformBuffer.flush();
 			//mesh->uniformBuffer.unmap();
 		}
 		else {
-			Queue::memcpyRequest(&mesh->uniformBuffer, &mesh->ubo, 2 * sizeof(mat4));
+			Queue::memcpyRequest(&mesh->uniformBuffer, { { &mesh->ubo, 2 * sizeof(mat4), 0} });
 			//mesh->uniformBuffer.map();
 			//memcpy(mesh->uniformBuffer.data, &mesh->ubo, 2 * sizeof(mat4));
 			//mesh->uniformBuffer.flush();

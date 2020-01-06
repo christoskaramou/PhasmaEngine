@@ -324,7 +324,7 @@ void Shadows::update(Camera& camera)
 			sideSizeOfPyramid
 		};
 
-		Queue::memcpyRequest(&uniformBuffers[0], &shadows_UBO[0], sizeof(ShadowsUBO));
+		Queue::memcpyRequest(&uniformBuffers[0], { { &shadows_UBO[0], sizeof(ShadowsUBO), 0 } });
 		//uniformBuffers[0].map();
 		//memcpy(uniformBuffers[0].data, &shadows_UBO[0], sizeof(ShadowsUBO));
 		//uniformBuffers[0].flush();
@@ -345,7 +345,7 @@ void Shadows::update(Camera& camera)
 			sideSizeOfPyramid 
 		};
 
-		Queue::memcpyRequest(&uniformBuffers[1], &shadows_UBO[1], sizeof(ShadowsUBO));
+		Queue::memcpyRequest(&uniformBuffers[1], { { &shadows_UBO[1], sizeof(ShadowsUBO), 0} });
 		//uniformBuffers[1].map();
 		//memcpy(uniformBuffers[1].data, &shadows_UBO[1], sizeof(ShadowsUBO));
 		//uniformBuffers[1].flush();
@@ -366,7 +366,7 @@ void Shadows::update(Camera& camera)
 			sideSizeOfPyramid
 		};
 
-		Queue::memcpyRequest(&uniformBuffers[2], &shadows_UBO[2], sizeof(ShadowsUBO));
+		Queue::memcpyRequest(&uniformBuffers[2], { { &shadows_UBO[2], sizeof(ShadowsUBO), 0 } });
 		//uniformBuffers[2].map();
 		//memcpy(uniformBuffers[2].data, &shadows_UBO[2], sizeof(ShadowsUBO));
 		//uniformBuffers[2].flush();
@@ -376,19 +376,19 @@ void Shadows::update(Camera& camera)
 	{
 		shadows_UBO[0].castShadows = 0.f;
 
-		Queue::memcpyRequest(&uniformBuffers[0], &shadows_UBO[0], sizeof(ShadowsUBO));
+		Queue::memcpyRequest(&uniformBuffers[0], { { &shadows_UBO[0], sizeof(ShadowsUBO), 0 } });
 		//uniformBuffers[0].map();
 		//memcpy(uniformBuffers[0].data, &shadows_UBO[0], sizeof(ShadowsUBO));
 		//uniformBuffers[0].flush();
 		//uniformBuffers[0].unmap();
 
-		Queue::memcpyRequest(&uniformBuffers[1], &shadows_UBO[1], sizeof(ShadowsUBO));
+		Queue::memcpyRequest(&uniformBuffers[1], { { &shadows_UBO[1], sizeof(ShadowsUBO), 0 } });
 		//uniformBuffers[1].map();
 		//memcpy(uniformBuffers[1].data, &shadows_UBO[0], sizeof(ShadowsUBO));
 		//uniformBuffers[1].flush();
 		//uniformBuffers[1].unmap();
 
-		Queue::memcpyRequest(&uniformBuffers[2], &shadows_UBO[2], sizeof(ShadowsUBO));
+		Queue::memcpyRequest(&uniformBuffers[2], { { &shadows_UBO[2], sizeof(ShadowsUBO), 0 } });
 		//uniformBuffers[2].map();
 		//memcpy(uniformBuffers[2].data, &shadows_UBO[0], sizeof(ShadowsUBO));
 		//uniformBuffers[2].flush();

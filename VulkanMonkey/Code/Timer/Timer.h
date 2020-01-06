@@ -41,7 +41,7 @@ namespace vm
 		FrameTimer& operator=(FrameTimer&&) = delete;		// move assignment
 	private:
 		~FrameTimer() = default;							// destructor
-		FrameTimer() noexcept;								// default constructor
+		FrameTimer();										// default constructor
 	};
 }
 
@@ -54,16 +54,16 @@ namespace vm
 {
 	struct GPUTimer
 	{
-		void start(const vk::CommandBuffer* cmd);
+		void start(const vk::CommandBuffer* cmd) noexcept;
 		void end(float* res = nullptr);
 		void initQueryPool();
 		float getTime();
-		void destroy() const;
+		void destroy() const noexcept;
 
 	private:
 		std::unique_ptr<vk::QueryPool> queryPool;
 		std::vector<uint64_t> queryTimes{};
 		float timestampPeriod;
-		vk::CommandBuffer* _cmd;
+		const vk::CommandBuffer* _cmd;
 	};
 }

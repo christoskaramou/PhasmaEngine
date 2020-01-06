@@ -147,7 +147,7 @@ void Deferred::update(mat4& invViewProj)
 	ubo.screenSpace[6] = { GUI::fog_global_thickness, GUI::lights_intensity, GUI::lights_range, GUI::fog_max_height };
 	ubo.screenSpace[7] = { GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f };
 
-	Queue::memcpyRequest(&uniform, &ubo, sizeof(ubo));
+	Queue::memcpyRequest(&uniform, { { &ubo, sizeof(ubo), 0 } });
 	//uniform.map();
 	//uniform.copyData(&ubo);
 	//uniform.flush();

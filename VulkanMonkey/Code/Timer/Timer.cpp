@@ -20,7 +20,7 @@ double Timer::Count() noexcept
 	return t_duration.count();
 }
 
-FrameTimer::FrameTimer() noexcept : Timer()
+FrameTimer::FrameTimer() : Timer()
 {
 	m_duration = {};
 	delta = 0.0f;
@@ -48,9 +48,9 @@ void FrameTimer::Tick() noexcept
 	time += delta;
 }
 
-void GPUTimer::start(const vk::CommandBuffer* cmd)
+void GPUTimer::start(const vk::CommandBuffer* cmd) noexcept
 {
-	_cmd = const_cast<vk::CommandBuffer*>(cmd);
+	_cmd = cmd;
 	_cmd->resetQueryPool(*queryPool, 0, 2);
 	_cmd->writeTimestamp(vk::PipelineStageFlagBits::eTopOfPipe, *queryPool, 0);
 }
@@ -64,7 +64,7 @@ void GPUTimer::end(float* res)
 
 void GPUTimer::initQueryPool()
 {
-	auto gpuProps = VulkanContext::get()->gpu.getProperties();
+	const auto gpuProps = VulkanContext::get()->gpu.getProperties();
 	if (!gpuProps.limits.timestampComputeAndGraphics)
 		throw std::runtime_error("Timestamps not supported");
 
@@ -87,7 +87,7 @@ float GPUTimer::getTime()
 	return static_cast<float>(queryTimes[1] - queryTimes[0]) * timestampPeriod * 1e-6f;
 }
 
-void GPUTimer::destroy() const
+void GPUTimer::destroy() const noexcept
 {
 	VulkanContext::get()->device.destroyQueryPool(*queryPool);
 }

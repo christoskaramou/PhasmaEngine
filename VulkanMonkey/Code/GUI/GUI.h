@@ -17,7 +17,7 @@ namespace vm {
 		static inline ImVec2								winSize = ImVec2();
 		static inline float									renderTargetsScale = 1.0f;//0.71f;
 		static inline bool									lock_render_window = true;
-		static inline bool									use_IBL = true;
+		static inline bool									use_IBL = false;
 		static inline bool									use_Volumetric_lights = false;
 		static inline int									volumetric_steps = 32;
 		static inline int									volumetric_dither_strength = 400;
@@ -25,7 +25,7 @@ namespace vm {
 		static inline bool									show_ssao = false;
 		static inline bool									show_tonemapping = false;
 		static inline float									exposure = 4.5f;
-		static inline bool									use_AntiAliasing = true;
+		static inline bool									use_AntiAliasing = false;
 		static inline bool									use_FXAA = false;
 		static inline bool									use_TAA = false;
 		static inline float									TAA_jitter_scale = 1.0f;
@@ -47,8 +47,8 @@ namespace vm {
 		static inline bool									show_motionBlur = false;
 		static inline float									motionBlur_strength = 1.0f;
 		static inline bool									randomize_lights = false;
-		static inline float									lights_intensity = 2.5f;
-		static inline float									lights_range = 7.0f;
+		static inline float									lights_intensity = 10.0f;
+		static inline float									lights_range = 15.0f;
 		static inline bool									use_fog = false;
 		static inline float									fog_ground_thickness = 30.0f;
 		static inline float									fog_global_thickness = 0.3f;

@@ -41,7 +41,7 @@ void TAA::update(const Camera& camera)
 		ubo.sharpenValues = { GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias , sin(static_cast<float>(ImGui::GetTime()) * 0.125f) };
 		ubo.invProj = camera.invProjection;
 		
-		Queue::memcpyRequest(&uniform, &ubo, sizeof(ubo));
+		Queue::memcpyRequest(&uniform, { { &ubo, sizeof(ubo), 0 } });
 		//uniform.map();
 		//memcpy(uniform.data, &ubo, sizeof(ubo));
 		//uniform.flush();

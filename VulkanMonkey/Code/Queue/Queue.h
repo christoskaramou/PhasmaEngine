@@ -15,14 +15,13 @@ namespace vm {
 	struct CopyRequest
 	{
 		Buffer* buffer;
-		void* src;
-		size_t size;
-		size_t offset;
+		std::vector<MemoryRange> memory_ranges{};
 
 		void exec_mem_copy()
 		{
 			buffer->map();
-			buffer->copyData(src, size, offset);
+			for (auto& memory_range : memory_ranges)
+				buffer->copyData(memory_range.data, memory_range.size, memory_range.offset);
 			buffer->flush();
 			buffer->unmap();
 		}
@@ -49,7 +48,6 @@ namespace vm {
 	private:
 		inline static std::unordered_map<size_t, DescriptorCache> m_descriptorCaches{};
 		inline static std::vector<CopyRequest> m_async_copy_requests{};
-		inline static std::vector<CopyRequest> m_sync_copy_requests{};
 		inline static std::mutex m_mem_cpy_request_mutex{};
 		inline static std::mutex m_descriptor_cache_mutex{};
 	public:
@@ -72,15 +70,10 @@ namespace vm {
 			}
 			return hash;
 		}
-		
-		inline static void memcpyRequest(Buffer* buffer, void* src, size_t size, size_t offset = 0, bool async_memCpy = true)
+		inline static void memcpyRequest(Buffer* buffer, const std::vector<MemoryRange>& ranges)
 		{
 			std::lock_guard<std::mutex> guard(m_mem_cpy_request_mutex);
-
-			if (async_memCpy)
-				m_async_copy_requests.push_back({ buffer, src, size, offset });
-			else
-				m_sync_copy_requests.push_back({ buffer, src, size, offset });
+			m_async_copy_requests.push_back({ buffer, ranges });
 		}
 		inline static void exec_memcpyRequests(uint32_t previousImageIndex)
 		{
@@ -93,14 +86,10 @@ namespace vm {
 			for (uint32_t i = 0; i < m_async_copy_requests.size(); i++)
 				futureNodes[i] = std::async(std::launch::async, std::bind(&CopyRequest::exec_mem_copy, m_async_copy_requests[i]));
 
-			for (uint32_t i = 0; i < m_sync_copy_requests.size(); i++)
-				m_sync_copy_requests[i].exec_mem_copy();
-
 			for (auto& f : futureNodes)
 				f.get();
 
 			m_async_copy_requests.clear();
-			m_sync_copy_requests.clear();
 		}
 	};
 }

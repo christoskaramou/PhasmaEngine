@@ -63,8 +63,8 @@ void LightUniforms::update(const Camera& camera)
 
 		lubo = LightsUBO();
 		lubo.camPos = { camera.position, 1.0f };
-
-		Queue::memcpyRequest(&uniform, &lubo, sizeof(lubo));
+		
+		Queue::memcpyRequest(&uniform, { { &lubo, sizeof(lubo), 0 } });
 		//uniform.map();
 		//memcpy(uniform.data, &lubo, sizeof(lubo));
 		//uniform.flush();
@@ -78,7 +78,7 @@ void LightUniforms::update(const Camera& camera)
 	lubo.sun.color = { .9765f, .8431f, .9098f, GUI::sun_intensity };
 	lubo.sun.position = { GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2], 1.0f };
 
-	Queue::memcpyRequest(&uniform, &lubo, 3 * sizeof(vec4));
+	Queue::memcpyRequest(&uniform, { { &lubo, 3 * sizeof(vec4), 0 } });
 	//uniform.map();
 	//memcpy(uniform.data, values, sizeof(values));
 	//uniform.flush();

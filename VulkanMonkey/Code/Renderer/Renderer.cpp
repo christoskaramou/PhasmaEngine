@@ -470,10 +470,10 @@ void Renderer::present()
 	const uint32_t imageIndex = vCtx.swapchain->aquire(aquireSignalSemaphore, nullptr);
 	this->previousImageIndex = imageIndex;
 
-	//const std::chrono::high_resolution_clock::time_point startWait = std::chrono::high_resolution_clock::now();
+	//static Timer timer;
+	//timer.Start();
 	//vCtx.waitFences(vCtx.fences[imageIndex]);
-	//const std::chrono::duration<float> waitTime = std::chrono::high_resolution_clock::now() - startWait;
-	//Timer::waitingTime = waitTime.count();
+	//FrameTimer::Instance().measures[0] = timer.Count();
 
 	const auto& cmd = vCtx.dynamicCmdBuffers[imageIndex];
 

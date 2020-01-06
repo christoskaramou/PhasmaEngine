@@ -181,7 +181,7 @@ void SSAO::update(Camera& camera)
 		pvm[1] = camera.view;
 		pvm[2] = camera.invProjection;
 		
-		Queue::memcpyRequest(&UB_PVM, &pvm, sizeof(pvm));
+		Queue::memcpyRequest(&UB_PVM, { { &pvm, sizeof(pvm), 0 } });
 		//UB_PVM.map();
 		//memcpy(UB_PVM.data, pvm, sizeof(pvm));
 		//UB_PVM.flush();

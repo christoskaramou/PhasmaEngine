@@ -119,7 +119,7 @@ void MotionBlur::update(Camera& camera)
 
 		previousView = camera.view;
 
-		Queue::memcpyRequest(&UBmotionBlur, &motionBlurInput, sizeof(motionBlurInput));
+		Queue::memcpyRequest(&UBmotionBlur, { { &motionBlurInput, sizeof(motionBlurInput), 0 } });
 		//UBmotionBlur.map();
 		//memcpy(UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
 		//UBmotionBlur.flush();

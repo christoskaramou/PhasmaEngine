@@ -59,7 +59,7 @@ void SSR::update(Camera& camera)
 		reflectionInput[2] = camera.view;
 		reflectionInput[3] = camera.invProjection;
 		
-		Queue::memcpyRequest(&UBReflection, &reflectionInput, sizeof(reflectionInput));
+		Queue::memcpyRequest(&UBReflection, { { &reflectionInput, sizeof(reflectionInput), 0 } });
 		//UBReflection.map();
 		//memcpy(UBReflection.data, &reflectionInput, sizeof(reflectionInput));
 		//UBReflection.flush();
