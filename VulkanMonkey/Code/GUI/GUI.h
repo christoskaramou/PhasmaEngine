@@ -48,7 +48,7 @@ namespace vm {
 		static inline float									motionBlur_strength = 1.0f;
 		static inline bool									randomize_lights = false;
 		static inline float									lights_intensity = 10.0f;
-		static inline float									lights_range = 15.0f;
+		static inline float									lights_range = 10.0f;
 		static inline bool									use_fog = false;
 		static inline float									fog_ground_thickness = 30.0f;
 		static inline float									fog_global_thickness = 0.3f;

@@ -105,8 +105,6 @@ void Context::initRendering()
 	ComputePool::get()->Init(5);
 
 	metrics.resize(20);
-	for (auto& metric : metrics)
-		metric.initQueryPool();
 }
 
 void Context::resizeViewport(uint32_t width, uint32_t height)

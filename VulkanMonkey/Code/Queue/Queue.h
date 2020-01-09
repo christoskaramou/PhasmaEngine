@@ -80,7 +80,7 @@ namespace vm {
 			static Timer timer;
 			timer.Start();
 			VulkanContext::get()->waitFences(VulkanContext::get()->fences[previousImageIndex]);
-			FrameTimer::Instance().measures[0] = timer.Count();
+			FrameTimer::Instance().timestamps[0] = timer.Count();
 
 			std::vector<std::future<void>> futureNodes(m_async_copy_requests.size());
 			for (uint32_t i = 0; i < m_async_copy_requests.size(); i++)

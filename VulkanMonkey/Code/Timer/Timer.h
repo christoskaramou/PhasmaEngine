@@ -29,8 +29,10 @@ namespace vm
 
 		double delta;
 		double time;
-		std::vector<double> measures{};
+		std::vector<double> timestamps{};
 	private:
+		Timer timer;
+		size_t system_delay;
 		std::chrono::duration<double> m_duration{};
 
 	public:
@@ -54,9 +56,9 @@ namespace vm
 {
 	struct GPUTimer
 	{
+		GPUTimer();
 		void start(const vk::CommandBuffer* cmd) noexcept;
 		void end(float* res = nullptr);
-		void initQueryPool();
 		float getTime();
 		void destroy() const noexcept;
 

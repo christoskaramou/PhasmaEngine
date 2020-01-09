@@ -284,6 +284,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 	const auto& cmd = VulkanContext::get()->dynamicCmdBuffers[imageIndex];
 
 	cmd.begin(beginInfo);
+	// TODO: add more queries (times the swapchain images), so they are not overlapped from previous frame
 	ctx.metrics[0].start(&cmd);
 
 	// SKYBOX
@@ -296,7 +297,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		model.draw();
 	ctx.deferred.batchEnd();
 	ctx.metrics[2].end(&GUI::metrics[2]);
-	
+
 	changeLayout(cmd, ctx.renderTargets["albedo"], LayoutState::ColorRead);
 	changeLayout(cmd, ctx.renderTargets["depth"], LayoutState::ColorRead);
 	changeLayout(cmd, ctx.renderTargets["normal"], LayoutState::ColorRead);
@@ -373,7 +374,7 @@ void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
 		ctx.motionBlur.draw(cmd, imageIndex, ctx.renderTargets["viewport"].extent);
 		ctx.metrics[9].end(&GUI::metrics[9]);
 	}
-	
+
 	changeLayout(cmd, ctx.renderTargets["albedo"], LayoutState::ColorWrite);
 	changeLayout(cmd, ctx.renderTargets["depth"], LayoutState::ColorWrite);
 	changeLayout(cmd, ctx.renderTargets["normal"], LayoutState::ColorWrite);
@@ -473,7 +474,7 @@ void Renderer::present()
 	//static Timer timer;
 	//timer.Start();
 	//vCtx.waitFences(vCtx.fences[imageIndex]);
-	//FrameTimer::Instance().measures[0] = timer.Count();
+	//FrameTimer::Instance().timestamps[0] = timer.Count();
 
 	const auto& cmd = vCtx.dynamicCmdBuffers[imageIndex];
 

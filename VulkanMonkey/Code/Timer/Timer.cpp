@@ -22,17 +22,15 @@ double Timer::Count() noexcept
 
 FrameTimer::FrameTimer() : Timer()
 {
+	system_delay = 0;
 	m_duration = {};
 	delta = 0.0f;
 	time = 0.0f;
-	measures.resize(1);
+	timestamps.resize(1);
 }
 
 void FrameTimer::Delay(double seconds)
 {
-	static size_t system_delay = 0;
-	static Timer timer;
-
 	const std::chrono::nanoseconds delay(static_cast<size_t>(SECONDS_TO_NANOSECONDS(seconds)) - system_delay);
 
 	timer.Start();
@@ -48,21 +46,7 @@ void FrameTimer::Tick() noexcept
 	time += delta;
 }
 
-void GPUTimer::start(const vk::CommandBuffer* cmd) noexcept
-{
-	_cmd = cmd;
-	_cmd->resetQueryPool(*queryPool, 0, 2);
-	_cmd->writeTimestamp(vk::PipelineStageFlagBits::eTopOfPipe, *queryPool, 0);
-}
-
-void GPUTimer::end(float* res)
-{
-	_cmd->writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, *queryPool, 1);
-	if (res)
-		*res = getTime();
-}
-
-void GPUTimer::initQueryPool()
+GPUTimer::GPUTimer()
 {
 	const auto gpuProps = VulkanContext::get()->gpu.getProperties();
 	if (!gpuProps.limits.timestampComputeAndGraphics)
@@ -77,6 +61,20 @@ void GPUTimer::initQueryPool()
 	queryPool = std::make_unique<vk::QueryPool>(VulkanContext::get()->device.createQueryPool(qpci));
 
 	queryTimes.resize(2, 0);
+}
+
+void GPUTimer::start(const vk::CommandBuffer* cmd) noexcept
+{
+	_cmd = cmd;
+	_cmd->resetQueryPool(*queryPool, 0, 2);
+	_cmd->writeTimestamp(vk::PipelineStageFlagBits::eTopOfPipe, *queryPool, 0);
+}
+
+void GPUTimer::end(float* res)
+{
+	_cmd->writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, *queryPool, 1);
+	if (res)
+		*res = getTime();
 }
 
 float GPUTimer::getTime()
