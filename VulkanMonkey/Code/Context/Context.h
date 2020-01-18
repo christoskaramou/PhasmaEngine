@@ -22,7 +22,7 @@
 #include "../PostProcess/SSR.h"
 #include "../PostProcess/TAA.h"
 
-//#define USE_SCRIPTS
+#define USE_SCRIPTS
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
 namespace vm {

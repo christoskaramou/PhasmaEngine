@@ -14,7 +14,9 @@ namespace vm {
 	struct Script
 	{
 	private:
-		static MonoDomain* domain;
+		static inline MonoDomain* domain = nullptr;
+		static inline MonoThread* mainThread = nullptr;
+
 		MonoDomain* child;
 
 		MonoAssembly* assembly;
@@ -26,7 +28,6 @@ namespace vm {
 		MonoMethod* dtor;
 		MonoMethod* updateFunc;
 		std::vector<MonoClassField*> fields{};
-		MonoThread* mainThread;
 
 		static bool initialized;
 

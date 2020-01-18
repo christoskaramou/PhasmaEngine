@@ -3,8 +3,6 @@
 
 using namespace vm;
 
-MonoDomain* Script::domain = nullptr;
-
 std::vector<std::string> Script::dlls{};
 bool Script::initialized = false;
 
@@ -91,8 +89,6 @@ Script::Script(const char* file, const char* extension)
 		}
 	}
 	mono_domain_set(mono_get_root_domain(), false);
-
-	mainThread = mono_thread_current();
 }
 
 Script::~Script()
@@ -127,6 +123,7 @@ void Script::Init()
 		}
 	}
 
+	mainThread = mono_thread_current();
 	initialized = true;
 }
 
