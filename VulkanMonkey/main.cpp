@@ -18,7 +18,6 @@ int main(int argc, char* argv[])
 	{
 		try {
 			frame_timer.Start();
-			FIRE_EVENT(Event::FrameStart);
 
 			if (!Window::processEvents(frame_timer.delta))
 				break;
@@ -38,7 +37,6 @@ int main(int argc, char* argv[])
 				for (int i = 0; i < GUI::metrics.size(); i++)
 					GUI::stats[i] = GUI::metrics[i];
 			}
-			FIRE_EVENT(Event::FrameEnd, frame_timer.delta);
 			frame_timer.Delay(1.0 / static_cast<double>(GUI::fps) - frame_timer.Count());
 			frame_timer.Tick();
 		}

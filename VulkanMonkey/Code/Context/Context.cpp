@@ -506,6 +506,7 @@ vk::Instance Context::createInstance() const
 	// =============================================
 
 	// === Debug Layers ============================
+	// To use these debug layers, here is assumed VulkanSDK is installed and Bin is in enviromental path
 	auto layers = vk::enumerateInstanceLayerProperties();
 	for (auto layer : layers) {
 		if (std::string(layer.layerName) == "VK_LAYER_KHRONOS_validation")

@@ -132,9 +132,6 @@
     <ClInclude Include="Code\Model\Model.h">
       <Filter>Code\Model</Filter>
     </ClInclude>
-    <ClInclude Include="Code\MotionBlur\MotionBlur.h">
-      <Filter>Code\MotionBlur</Filter>
-    </ClInclude>
     <ClInclude Include="Code\Node\Node.h">
       <Filter>Code\Node</Filter>
     </ClInclude>
@@ -155,12 +152,6 @@
     </ClInclude>
     <ClInclude Include="Code\Skybox\Skybox.h">
       <Filter>Code\Skybox</Filter>
-    </ClInclude>
-    <ClInclude Include="Code\SSAO\SSAO.h">
-      <Filter>Code\SSAO</Filter>
-    </ClInclude>
-    <ClInclude Include="Code\SSR\SSR.h">
-      <Filter>Code\SSR</Filter>
     </ClInclude>
     <ClInclude Include="Code\Surface\Surface.h">
       <Filter>Code\Surface</Filter>
@@ -228,12 +219,6 @@
     <ClInclude Include="Code\Model\Animation.h">
       <Filter>Code\Model</Filter>
     </ClInclude>
-    <ClInclude Include="Code\FXAA\FXAA.h">
-      <Filter>Code\FXAA</Filter>
-    </ClInclude>
-    <ClInclude Include="Code\Bloom\Bloom.h">
-      <Filter>Code\Bloom</Filter>
-    </ClInclude>
     <ClInclude Include="include\TinyFileDialogs\tinyfiledialogs.h">
       <Filter>Include</Filter>
     </ClInclude>
@@ -242,12 +227,6 @@
     </ClInclude>
     <ClInclude Include="Code\Pointer\Pointer.h">
       <Filter>Code\Pointer</Filter>
-    </ClInclude>
-    <ClInclude Include="Code\TAA\TAA.h">
-      <Filter>Code\TAA</Filter>
-    </ClInclude>
-    <ClInclude Include="Code\DepthOfField\DOF.h">
-      <Filter>Code\DepthOfField</Filter>
     </ClInclude>
     <ClInclude Include="Code\Shader\Shader.h">
       <Filter>Code\Shader</Filter>
@@ -260,6 +239,27 @@
     </ClInclude>
     <ClInclude Include="Code\MemoryHash\MemoryHash.h">
       <Filter>Code\MemoryHash</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\PostProcess\Bloom.h">
+      <Filter>Code\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\PostProcess\DOF.h">
+      <Filter>Code\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\PostProcess\FXAA.h">
+      <Filter>Code\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\PostProcess\MotionBlur.h">
+      <Filter>Code\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\PostProcess\SSAO.h">
+      <Filter>Code\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\PostProcess\SSR.h">
+      <Filter>Code\PostProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\PostProcess\TAA.h">
+      <Filter>Code\PostProcess</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -299,9 +299,6 @@
     <ClCompile Include="Code\Model\Model.cpp">
       <Filter>Code\Model</Filter>
     </ClCompile>
-    <ClCompile Include="Code\MotionBlur\MotionBlur.cpp">
-      <Filter>Code\MotionBlur</Filter>
-    </ClCompile>
     <ClCompile Include="Code\Node\Node.cpp">
       <Filter>Code\Node</Filter>
     </ClCompile>
@@ -319,12 +316,6 @@
     </ClCompile>
     <ClCompile Include="Code\Skybox\Skybox.cpp">
       <Filter>Code\Skybox</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\SSAO\SSAO.cpp">
-      <Filter>Code\SSAO</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\SSR\SSR.cpp">
-      <Filter>Code\SSR</Filter>
     </ClCompile>
     <ClCompile Include="Code\Swapchain\Swapchain.cpp">
       <Filter>Code\Swapchain</Filter>
@@ -367,12 +358,6 @@
     </ClCompile>
     <ClCompile Include="include\imgui\imgui_widgets.cpp">
       <Filter>Include</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\FXAA\FXAA.cpp">
-      <Filter>Code\FXAA</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Bloom\Bloom.cpp">
-      <Filter>Code\Bloom</Filter>
     </ClCompile>
     <ClCompile Include="include\TinyFileDialogs\tinyfiledialogs.c">
       <Filter>Include</Filter>
@@ -440,17 +425,32 @@
     <ClCompile Include="include\GLTFSDK\AnimationUtils.cpp">
       <Filter>Include</Filter>
     </ClCompile>
-    <ClCompile Include="Code\TAA\TAA.cpp">
-      <Filter>Code\TAA</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\DepthOfField\DOF.cpp">
-      <Filter>Code\DepthOfField</Filter>
-    </ClCompile>
     <ClCompile Include="Code\Shader\Shader.cpp">
       <Filter>Code\Shader</Filter>
     </ClCompile>
     <ClCompile Include="Code\Shader\Reflection.cpp">
       <Filter>Code\Shader</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\PostProcess\Bloom.cpp">
+      <Filter>Code\PostProcess</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\PostProcess\DOF.cpp">
+      <Filter>Code\PostProcess</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\PostProcess\FXAA.cpp">
+      <Filter>Code\PostProcess</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\PostProcess\MotionBlur.cpp">
+      <Filter>Code\PostProcess</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\PostProcess\SSAO.cpp">
+      <Filter>Code\PostProcess</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\PostProcess\SSR.cpp">
+      <Filter>Code\PostProcess</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\PostProcess\TAA.cpp">
+      <Filter>Code\PostProcess</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -499,9 +499,6 @@
     <Filter Include="Code\Model">
       <UniqueIdentifier>{8a93bf13-b615-4a3f-b290-fb36b2984127}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Code\MotionBlur">
-      <UniqueIdentifier>{d93ccf8a-27f0-40a4-b1b2-641bce0d9ec7}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Code\Node">
       <UniqueIdentifier>{31e22306-c5d2-4921-ba8f-86c036883dc0}</UniqueIdentifier>
     </Filter>
@@ -525,12 +522,6 @@
     </Filter>
     <Filter Include="Code\Window">
       <UniqueIdentifier>{0d4ad2d5-8716-4cbf-8b2d-09ede4b38bfb}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Code\SSAO">
-      <UniqueIdentifier>{88fdf4ee-d4e0-4832-aadc-897eecb5dc0f}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Code\SSR">
-      <UniqueIdentifier>{0ddd5f01-f50b-4889-a19b-949a38c6ec41}</UniqueIdentifier>
     </Filter>
     <Filter Include="Code\Surface">
       <UniqueIdentifier>{19940bde-323a-481c-9414-97b5e9d7c04a}</UniqueIdentifier>
@@ -589,26 +580,14 @@
     <Filter Include="Shaders\FXAA">
       <UniqueIdentifier>{aefd9808-d361-415b-8f3b-e98ba0c3f33e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Code\FXAA">
-      <UniqueIdentifier>{dfa65f66-da2f-4747-a210-f660a948a336}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Code\Bloom">
-      <UniqueIdentifier>{9c98f29a-d48d-44d5-ad4f-9d7a97970d85}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Shaders\Bloom">
       <UniqueIdentifier>{0ba63104-9f28-417c-802b-6561674880b8}</UniqueIdentifier>
     </Filter>
     <Filter Include="Code\Pointer">
       <UniqueIdentifier>{ba175b70-ca58-4045-a039-f79d9af62918}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Code\TAA">
-      <UniqueIdentifier>{d357fa6e-71f6-48bd-bde4-65d94eb8cf07}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Shaders\TAA">
       <UniqueIdentifier>{e7e47c1c-fdb2-4121-9c07-737ad56bb448}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Code\DepthOfField">
-      <UniqueIdentifier>{066d9d7f-cab5-463b-9e19-8c9d1305f386}</UniqueIdentifier>
     </Filter>
     <Filter Include="Shaders\DepthOfField">
       <UniqueIdentifier>{a926cc9a-6519-4264-bb1c-e055123bcf86}</UniqueIdentifier>
@@ -618,6 +597,9 @@
     </Filter>
     <Filter Include="Code\MemoryHash">
       <UniqueIdentifier>{8bcfce7f-042b-41a8-bbf9-abdf023641ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\PostProcess">
+      <UniqueIdentifier>{4e6ef0e8-35ed-40ab-849b-b24590ea4750}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

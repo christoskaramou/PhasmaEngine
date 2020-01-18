@@ -77,8 +77,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\VulkanSDK\1.1.130.0\Include;include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\VulkanSDK\1.1.130.0\Lib;Libs;$(LibraryPath)</LibraryPath>
+    <IncludePath>Include;$(IncludePath)</IncludePath>
+    <LibraryPath>Libs;$(LibraryPath)</LibraryPath>
     <ReferencePath>$(VC_ReferencesPath_x64);</ReferencePath>
     <SourcePath>$(SourcePath)</SourcePath>
   </PropertyGroup>
@@ -93,8 +93,8 @@
     <RunCodeAnalysis>false</RunCodeAnalysis>
     <EnableCppCoreCheck>true</EnableCppCoreCheck>
     <EnableExperimentalCppCoreCheck>true</EnableExperimentalCppCoreCheck>
-    <IncludePath>C:\VulkanSDK\1.1.130.0\Include;include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\VulkanSDK\1.1.130.0\Lib;Libs;$(LibraryPath)</LibraryPath>
+    <IncludePath>Include;$(IncludePath)</IncludePath>
+    <LibraryPath>Libs;$(LibraryPath)</LibraryPath>
     <ReferencePath>$(VC_ReferencesPath_x64);</ReferencePath>
     <SourcePath>$(SourcePath)</SourcePath>
   </PropertyGroup>
@@ -119,7 +119,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>include\Mono\include\mono-2.0;C:\VulkanSDK\1.1.130.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>Include\shaderc;Include\Mono\include\mono-2.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ControlFlowGuard>false</ControlFlowGuard>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <AssemblerListingLocation>Debug/</AssemblerListingLocation>
@@ -129,7 +129,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <AdditionalDependencies>spirv-cross-cored.lib;shaderc_shared.lib;mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.1.130.0\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <ProjectReference>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
@@ -164,7 +164,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>include\Mono\include\mono-2.0;C:\VulkanSDK\1.1.130.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>Include\shaderc;Include\Mono\include\mono-2.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>OldStyle</DebugInformationFormat>
       <EnablePREfast>false</EnablePREfast>
       <LanguageStandard>stdcpplatest</LanguageStandard>
@@ -177,7 +177,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalDependencies>spirv-cross-cored.lib;shaderc_shared.lib;mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.1.130.0\Lib;Libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Windows</SubSystem>
       <AdditionalOptions>/ENTRY:"mainCRTStartup" %(AdditionalOptions)</AdditionalOptions>
       <Profile>true</Profile>
@@ -217,17 +217,14 @@
     <None Include="shaders\TAA\TAASharpen.frag" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Code\Bloom\Bloom.h" />
     <ClInclude Include="Code\Buffer\Buffer.h" />
     <ClInclude Include="Code\Camera\Camera.h" />
     <ClInclude Include="Code\Compute\Compute.h" />
     <ClInclude Include="Code\Console\Console.h" />
     <ClInclude Include="Code\Context\Context.h" />
     <ClInclude Include="Code\Deferred\Deferred.h" />
-    <ClInclude Include="Code\DepthOfField\DOF.h" />
     <ClInclude Include="Code\Event\Delegate.h" />
     <ClInclude Include="Code\Event\Event.h" />
-    <ClInclude Include="Code\FXAA\FXAA.h" />
     <ClInclude Include="Code\GUI\GUI.h" />
     <ClInclude Include="Code\Image\Image.h" />
     <ClInclude Include="Code\Light\Light.h" />
@@ -238,11 +235,17 @@
     <ClInclude Include="Code\Model\Animation.h" />
     <ClInclude Include="Code\Model\Model.h" />
     <ClInclude Include="Code\Model\StreamReader.h" />
-    <ClInclude Include="Code\MotionBlur\MotionBlur.h" />
     <ClInclude Include="Code\Node\Node.h" />
     <ClInclude Include="Code\Object\Object.h" />
     <ClInclude Include="Code\Pipeline\Pipeline.h" />
     <ClInclude Include="Code\Pointer\Pointer.h" />
+    <ClInclude Include="Code\PostProcess\Bloom.h" />
+    <ClInclude Include="Code\PostProcess\DOF.h" />
+    <ClInclude Include="Code\PostProcess\FXAA.h" />
+    <ClInclude Include="Code\PostProcess\MotionBlur.h" />
+    <ClInclude Include="Code\PostProcess\SSAO.h" />
+    <ClInclude Include="Code\PostProcess\SSR.h" />
+    <ClInclude Include="Code\PostProcess\TAA.h" />
     <ClInclude Include="Code\Queue\Queue.h" />
     <ClInclude Include="Code\Renderer\Renderer.h" />
     <ClInclude Include="Code\Script\Script.h" />
@@ -250,11 +253,8 @@
     <ClInclude Include="Code\Shader\Shader.h" />
     <ClInclude Include="Code\Shadows\Shadows.h" />
     <ClInclude Include="Code\Skybox\Skybox.h" />
-    <ClInclude Include="Code\SSAO\SSAO.h" />
-    <ClInclude Include="Code\SSR\SSR.h" />
     <ClInclude Include="Code\Surface\Surface.h" />
     <ClInclude Include="Code\Swapchain\Swapchain.h" />
-    <ClInclude Include="Code\TAA\TAA.h" />
     <ClInclude Include="Code\Timer\Timer.h" />
     <ClInclude Include="Code\Vertex\Vertex.h" />
     <ClInclude Include="Code\VulkanContext\VulkanContext.h" />
@@ -274,36 +274,36 @@
     <ClInclude Include="include\Vulkan.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Code\Bloom\Bloom.cpp" />
     <ClCompile Include="Code\Buffer\Buffer.cpp" />
     <ClCompile Include="Code\Camera\Camera.cpp" />
     <ClCompile Include="Code\Compute\Compute.cpp" />
     <ClCompile Include="Code\Console\Console.cpp" />
     <ClCompile Include="Code\Context\Context.cpp" />
     <ClCompile Include="Code\Deferred\Deferred.cpp" />
-    <ClCompile Include="Code\DepthOfField\DOF.cpp" />
     <ClCompile Include="Code\Event\Event.cpp" />
-    <ClCompile Include="Code\FXAA\FXAA.cpp" />
     <ClCompile Include="Code\GUI\GUI.cpp" />
     <ClCompile Include="Code\Image\Image.cpp" />
     <ClCompile Include="Code\Light\Light.cpp" />
     <ClCompile Include="Code\Math\Math.cpp" />
     <ClCompile Include="Code\Mesh\Mesh.cpp" />
     <ClCompile Include="Code\Model\Model.cpp" />
-    <ClCompile Include="Code\MotionBlur\MotionBlur.cpp" />
     <ClCompile Include="Code\Node\Node.cpp" />
     <ClCompile Include="Code\Object\Object.cpp" />
     <ClCompile Include="Code\Pipeline\Pipeline.cpp" />
+    <ClCompile Include="Code\PostProcess\Bloom.cpp" />
+    <ClCompile Include="Code\PostProcess\DOF.cpp" />
+    <ClCompile Include="Code\PostProcess\FXAA.cpp" />
+    <ClCompile Include="Code\PostProcess\MotionBlur.cpp" />
+    <ClCompile Include="Code\PostProcess\SSAO.cpp" />
+    <ClCompile Include="Code\PostProcess\SSR.cpp" />
+    <ClCompile Include="Code\PostProcess\TAA.cpp" />
     <ClCompile Include="Code\Renderer\Renderer.cpp" />
     <ClCompile Include="Code\Script\Script.cpp" />
     <ClCompile Include="Code\Shader\Reflection.cpp" />
     <ClCompile Include="Code\Shader\Shader.cpp" />
     <ClCompile Include="Code\Shadows\Shadows.cpp" />
     <ClCompile Include="Code\Skybox\Skybox.cpp" />
-    <ClCompile Include="Code\SSAO\SSAO.cpp" />
-    <ClCompile Include="Code\SSR\SSR.cpp" />
     <ClCompile Include="Code\Swapchain\Swapchain.cpp" />
-    <ClCompile Include="Code\TAA\TAA.cpp" />
     <ClCompile Include="Code\Timer\Timer.cpp" />
     <ClCompile Include="Code\Vertex\Vertex.cpp" />
     <ClCompile Include="Code\Window\Window.cpp" />

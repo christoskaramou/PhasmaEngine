@@ -31,7 +31,7 @@ FrameTimer::FrameTimer() : Timer()
 
 void FrameTimer::Delay(double seconds)
 {
-	const std::chrono::nanoseconds delay(static_cast<size_t>(SECONDS_TO_NANOSECONDS(seconds)) - system_delay);
+	const std::chrono::nanoseconds delay{ static_cast<size_t>(SECONDS_TO_NANOSECONDS(seconds)) - system_delay };
 
 	timer.Start();
 	std::this_thread::sleep_for(delay);
