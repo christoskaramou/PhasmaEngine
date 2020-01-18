@@ -78,6 +78,7 @@ void main()
 
 	// IBL
 	IBL ibl;
+	ibl.reflectivity = vec3(0.5);
 	if (screenSpace.effects1.x > 0.5) {
 		ibl = ImageBasedLighting(material, normal, normalize(frag_pos - ubo.cam_pos.xyz), sampler_cube_map, sampler_lut_IBL);
 		fragColor += ibl.final_color * ambient_light;
