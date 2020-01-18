@@ -913,6 +913,7 @@ std::vector<vk::CommandBuffer> Context::createCmdBuffers(const uint32_t bufferCo
 
 vk::DescriptorPool Context::createDescriptorPool(uint32_t maxDescriptorSets) const
 {
+	// TODO: Make these dynamic
 	std::vector<vk::DescriptorPoolSize> descPoolsize(4);
 	descPoolsize[0].type = vk::DescriptorType::eUniformBuffer;
 	descPoolsize[0].descriptorCount =  maxDescriptorSets;

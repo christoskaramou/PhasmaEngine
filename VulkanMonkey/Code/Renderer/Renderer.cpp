@@ -188,8 +188,6 @@ void Renderer::update(double delta)
 	static Timer timer;
 	timer.Start();
 
-	FIRE_EVENT(Event::OnUpdate);
-
 	// check for commands in queue
 	checkQueue();
 
@@ -214,8 +212,13 @@ void Renderer::update(double delta)
 	}
 	for (auto& model : Model::models)
 	{
+#ifdef USE_SCRIPTS
+		// TODO: Find a way to call script updates from other threads
+		model.update(ctx.camera_main, delta);
+#else
 		const auto updateModel = [&]() { model.update(ctx.camera_main, delta); };
 		futureUpdates.push_back(std::async(std::launch::async, updateModel));
+#endif
 	}
 
 	// GUI
