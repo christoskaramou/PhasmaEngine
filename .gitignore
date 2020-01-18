@@ -264,3 +264,4 @@ __pycache__/
 # LOGS
 VulkanMonkey/errors.txt
 VulkanMonkey/log.txt
+/VulkanMonkey/Scripts/Duck.dll
