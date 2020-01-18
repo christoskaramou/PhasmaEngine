@@ -37,13 +37,4 @@ And some other primitive implemented ideas in a certain degree like Compute shad
 
 **Building and Compiling**
 
-VulkanMonkey3D is a Visual Studio project with all it needs to run included in the project, except the VulkanSDK.
-Install and link the [VulkanSDK](https://www.lunarg.com/vulkan-sdk/) to:
-- VC++ Directories:
-  - Include Directories (e.g. C:\VulkanSDK\1.1.97.0\Include;)
-  - Library Directories (e.g. C:\VulkanSDK\1.1.97.0\Lib)
-- C/C++ -> General:
-  - Additional Include Directories (e.g. C:\VulkanSDK\1.1.97.0\Include)
-- Linker -> General:
-  - Additional Library Directories (e.g C:\VulkanSDK\1.1.97.0\Lib)
-
+VulkanMonkey3D is a Visual Studio project with all it needs to run included in the project.
