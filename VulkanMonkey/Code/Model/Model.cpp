@@ -347,16 +347,18 @@ void Model::updateAnimation(uint32_t index, float time)
 	}
 }
 
-void frustumCheckAsync(mat4& modelMatrix, Pointer<Mesh>& mesh, Camera& camera, uint32_t index)
+void frustumCheckAsync(Model& model, Pointer<Mesh>& mesh, Camera& camera, uint32_t index)
 {
-	cmat4 trans = modelMatrix * mesh->ubo.matrix;
+	cmat4 trans = model.ubo.matrix * mesh->ubo.matrix;
 	vec4 bs = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
 	bs.w = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale 
 	mesh->primitives[index].cull = !camera.SphereInFrustum(bs);
 	mesh->primitives[index].transformedBS = bs;
+	if (!mesh->primitives[index].cull)
+		model.cull = false;
 }
 
-void updateNodeAsync(mat4& modelMatrix, Pointer<Node>& node, Camera& camera)
+void updateNodeAsync(Model& model, Pointer<Node>& node, Camera& camera)
 {
 	if (node->mesh) {
 		node->update(camera);
@@ -365,13 +367,13 @@ void updateNodeAsync(mat4& modelMatrix, Pointer<Node>& node, Camera& camera)
 		if (node->mesh->primitives.size() > 3) {
 			std::vector<std::future<void>> futures(node->mesh->primitives.size());
 			for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
-				futures[i] = std::async(std::launch::async, frustumCheckAsync, modelMatrix, node->mesh, camera, i);
+				futures[i] = std::async(std::launch::async, frustumCheckAsync, model, node->mesh, camera, i);
 			for (auto& f : futures)
 				f.get();
 		}
 		else {
 			for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
-				frustumCheckAsync(modelMatrix, node->mesh, camera, i);
+				frustumCheckAsync(model, node->mesh, camera, i);
 		}
 	}
 }
@@ -379,6 +381,7 @@ void updateNodeAsync(mat4& modelMatrix, Pointer<Node>& node, Camera& camera)
 void Model::update(vm::Camera& camera, double delta)
 {
 	if (render) {
+		cull = true;
 		ubo.previousMatrix = ubo.matrix;
 		ubo.view = camera.view;
 		ubo.previousView = camera.previousView;
@@ -409,20 +412,21 @@ void Model::update(vm::Camera& camera, double delta)
 		if (linearNodes.size() > 3) {
 			std::vector<std::future<void>> futureNodes(linearNodes.size());
 			for (uint32_t i = 0; i < linearNodes.size(); i++)
-				futureNodes[i] = std::async(std::launch::async, updateNodeAsync, ubo.matrix, linearNodes[i], camera);
+				futureNodes[i] = std::async(std::launch::async, updateNodeAsync, *this, linearNodes[i], camera);
 			for (auto& f : futureNodes)
 				f.get();
 		}
 		else {
 			for (auto& linearNode : linearNodes)
-				updateNodeAsync(ubo.matrix, linearNode, camera);
+				updateNodeAsync(*this, linearNode, camera);
 		}
 	}
 }
 
 void Model::draw()
 {
-	if (!render || !Model::pipeline) return;
+	if (!render || cull || !Model::pipeline)
+		return;
 
 	auto& cmd = Model::commandBuffer;
 	const vk::DeviceSize offset{ 0 };

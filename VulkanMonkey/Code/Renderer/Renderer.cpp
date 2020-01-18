@@ -126,6 +126,9 @@ void Renderer::checkQueue() const
 		Queue::loadModelFutures.push_back(std::async(std::launch::async, [](const std::string& folderPath, const std::string& modelName, bool show = true) {
 				Model model;
 				model.loadModel(folderPath, modelName, show);
+				for (auto& _model : Model::models)
+					if (_model.name == model.name)
+						model.name = "_" + model.name;
 				return std::any(std::move(model));
 			}, std::get<0>(*it), std::get<1>(*it), true));
 		it = Queue::loadModel.erase(it);

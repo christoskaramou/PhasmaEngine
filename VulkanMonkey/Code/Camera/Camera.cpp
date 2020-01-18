@@ -158,14 +158,14 @@ void Camera::ExtractFrustum()
 	frustum[1].d = temp.w;
 
 	/* Extract the BOTTOM plane */
-	temp = pvm[3] + pvm[1];
+	temp = pvm[3] - pvm[1];
 	temp /= length(vec3(temp));
 
 	frustum[2].normal = vec3(temp);
 	frustum[2].d = temp.w;
 
 	/* Extract the TOP plane */
-	temp = pvm[3] - pvm[1];
+	temp = pvm[3] + pvm[1];
 	temp /= length(vec3(temp));
 
 	frustum[3].normal = vec3(temp);
