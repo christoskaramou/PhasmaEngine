@@ -12,6 +12,9 @@ int main(int argc, char* argv[])
 
 	Window::create();
 
+	Timer interval;
+	interval.Start();
+
 	FrameTimer& frame_timer = FrameTimer::Instance();
 
 	while (true)
@@ -22,21 +25,23 @@ int main(int argc, char* argv[])
 			if (!Window::processEvents(frame_timer.delta))
 				break;
 
-			for (auto& renderer : Window::renderer) {
-				renderer->update(frame_timer.delta);
-				renderer->present();
+			if (!Window::isMinimized()) {
+				for (auto& renderer : Window::renderer) {
+					renderer->update(frame_timer.delta);
+					renderer->present();
+				}
 			}
 
-			static double interval = 0.0;
-			interval += frame_timer.delta;
-			if (interval > 0.75) {
-				interval = 0.0;
+			// Metrics every 0.75 sec
+			if (interval.Count() > 0.75) {
+				interval.Start();
 				GUI::cpuWaitingTime = SECONDS_TO_MILLISECONDS(frame_timer.timestamps[0]);
 				GUI::updatesTime = SECONDS_TO_MILLISECONDS(GUI::updatesTimeCount);
 				GUI::cpuTime = static_cast<float>(frame_timer.delta * 1000.0) - GUI::cpuWaitingTime;
 				for (int i = 0; i < GUI::metrics.size(); i++)
 					GUI::stats[i] = GUI::metrics[i];
 			}
+
 			frame_timer.Delay(1.0 / static_cast<double>(GUI::fps) - frame_timer.Count());
 			frame_timer.Tick();
 		}

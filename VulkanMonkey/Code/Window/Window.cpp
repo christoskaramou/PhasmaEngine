@@ -106,9 +106,12 @@ bool Window::processEvents(double delta)
 		}
 		if (event.type == SDL_WINDOWEVENT || event.type == GUI::scaleRenderTargetsEventType) {
 			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || event.type == GUI::scaleRenderTargetsEventType) {
-				int w, h;
-				SDL_GL_GetDrawableSize(vulkan->window, &w, &h);
-				renderer[0]->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+				if (!isMinimized())
+				{
+					int w, h;
+					SDL_GL_GetDrawableSize(vulkan->window, &w, &h);
+					renderer[0]->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+				}
 			}
 		}
 		if (event.type == GUI::compileShadersEventType) {
@@ -140,4 +143,9 @@ bool Window::processEvents(double delta)
 bool Window::isInsideRenderWindow(int32_t x, int32_t y)
 {
 	return x > GUI::winPos.x && y > GUI::winPos.y && x < GUI::winPos.x + GUI::winSize.x && y < GUI::winPos.y + GUI::winSize.y;
+}
+
+bool Window::isMinimized()
+{
+	return (SDL_GetWindowFlags(VulkanContext::get()->window) & SDL_WINDOW_MINIMIZED) != 0;
 }

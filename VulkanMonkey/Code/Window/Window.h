@@ -9,6 +9,7 @@ namespace vm {
 		static void destroyAll();
 		static bool processEvents(double delta);
 		static bool isInsideRenderWindow(int32_t x, int32_t y);
+		static bool isMinimized();
 
 		static std::vector<std::unique_ptr<Renderer>> renderer; // window pointer is also stored in here
 	private:
