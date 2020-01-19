@@ -47,7 +47,7 @@ namespace vm {
 			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
 			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
 			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
-			const vk::Fence fence = nullptr) const;
+			const vk::Fence signalFence = nullptr) const;
 		void waitFences(const vk::ArrayProxy<const vk::Fence> fences) const;
 		void submitAndWaitFence(
 			const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,

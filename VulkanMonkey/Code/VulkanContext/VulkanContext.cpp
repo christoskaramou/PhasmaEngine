@@ -7,7 +7,7 @@ void VulkanContext::submit(
 	const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
 	const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
 	const vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
-	const vk::Fence fence) const
+	const vk::Fence signalFence) const
 {
 	vk::SubmitInfo si;
 	si.waitSemaphoreCount = waitSemaphores.size();
@@ -17,7 +17,7 @@ void VulkanContext::submit(
 	si.pCommandBuffers = commandBuffers.data();
 	si.signalSemaphoreCount = signalSemaphores.size();
 	si.pSignalSemaphores = signalSemaphores.data();
-	graphicsQueue.submit(si, fence);
+	graphicsQueue.submit(si, signalFence);
 }
 void VulkanContext::waitFences(const vk::ArrayProxy<const vk::Fence> fences) const
 {
