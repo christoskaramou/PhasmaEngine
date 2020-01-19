@@ -1,6 +1,6 @@
 #pragma once
 #include "../Math/Math.h"
-#include "../../include/Vulkan.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm {
 	struct Camera

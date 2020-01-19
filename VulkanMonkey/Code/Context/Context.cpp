@@ -352,10 +352,10 @@ void Context::recreatePipelines()
 	fxaa.pipeline.destroy();
 	taa.pipeline.destroy();
 	taa.pipelineSharpen.destroy();
-	bloom.pipelineBrightFilter.destroy();
-	bloom.pipelineCombine.destroy();
-	bloom.pipelineGaussianBlurHorizontal.destroy();
-	bloom.pipelineGaussianBlurVertical.destroy();
+	//bloom.pipelineBrightFilter.destroy();
+	//bloom.pipelineCombine.destroy();
+	//bloom.pipelineGaussianBlurHorizontal.destroy();
+	//bloom.pipelineGaussianBlurVertical.destroy();
 	dof.pipeline.destroy();
 	motionBlur.pipeline.destroy();
 	gui.pipeline.destroy();

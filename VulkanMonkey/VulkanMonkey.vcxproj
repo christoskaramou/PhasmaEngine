@@ -265,13 +265,11 @@
     <ClInclude Include="include\imgui\imstb_rectpack.h" />
     <ClInclude Include="include\imgui\imstb_textedit.h" />
     <ClInclude Include="include\imgui\imstb_truetype.h" />
-    <ClInclude Include="include\SDL.h" />
     <ClInclude Include="include\TinyFileDialogs\tinyfiledialogs.h" />
     <ClInclude Include="include\tinygltf\json.hpp" />
     <ClInclude Include="include\tinygltf\stb_image.h" />
     <ClInclude Include="include\tinygltf\stb_image_write.h" />
     <ClInclude Include="include\tinygltf\tiny_gltf.h" />
-    <ClInclude Include="include\Vulkan.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp" />
@@ -306,6 +304,7 @@
     <ClCompile Include="Code\Swapchain\Swapchain.cpp" />
     <ClCompile Include="Code\Timer\Timer.cpp" />
     <ClCompile Include="Code\Vertex\Vertex.cpp" />
+    <ClCompile Include="Code\VulkanContext\VulkanContext.cpp" />
     <ClCompile Include="Code\Window\Window.cpp" />
     <ClCompile Include="include\GLTFSDK\AnimationUtils.cpp" />
     <ClCompile Include="include\GLTFSDK\BufferBuilder.cpp" />

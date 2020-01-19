@@ -2,7 +2,7 @@
 #include "../../include/imgui/imgui.h"
 #include "../Object/Object.h"
 #include "../Pipeline/Pipeline.h"
-#include "../../include/SDL.h"
+#include "SDL/SDL.h"
 #include <vector>
 
 namespace vm {

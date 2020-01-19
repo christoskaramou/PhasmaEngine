@@ -180,12 +180,6 @@
     <ClInclude Include="Code\Event\Event.h">
       <Filter>Code\Event</Filter>
     </ClInclude>
-    <ClInclude Include="include\SDL.h">
-      <Filter>Include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Vulkan.h">
-      <Filter>Include</Filter>
-    </ClInclude>
     <ClInclude Include="include\tinygltf\json.hpp">
       <Filter>Include</Filter>
     </ClInclude>
@@ -451,6 +445,9 @@
     </ClCompile>
     <ClCompile Include="Code\PostProcess\TAA.cpp">
       <Filter>Code\PostProcess</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\VulkanContext\VulkanContext.cpp">
+      <Filter>Code\VulkanContext</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

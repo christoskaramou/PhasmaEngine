@@ -38,7 +38,6 @@ namespace vm {
 		mat4 transform = mat4::identity();
 		vec4 boundingSphere;
 		bool render = true;
-		bool cull = false;
 
 		std::string name;
 		std::string fullPathName;

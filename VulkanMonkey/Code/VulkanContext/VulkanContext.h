@@ -1,12 +1,10 @@
 #pragma once
 
-#include "../../include/Vulkan.h"
-#include "../../include/SDL.h"
-#include <fstream>
-#include <atomic>
+#include <vulkan/vulkan.hpp>
+#include "SDL/SDL.h"
+#include "SDL/SDL_syswm.h"
+#include "SDL/SDL_vulkan.h"
 #include <vector>
-#include <memory>
-#include <type_traits>
 #include <mutex>
 
 #define WIDTH VulkanContext::get()->surface->actualExtent.width
@@ -49,62 +47,35 @@ namespace vm {
 			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
 			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
 			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
-			const vk::Fence fence = nullptr) const
-		{
-			vk::SubmitInfo si;
-			si.waitSemaphoreCount = waitSemaphores.size();
-			si.pWaitSemaphores = waitSemaphores.data();
-			si.pWaitDstStageMask = waitStages.data();
-			si.commandBufferCount = commandBuffers.size();
-			si.pCommandBuffers = commandBuffers.data();
-			si.signalSemaphoreCount = signalSemaphores.size();
-			si.pSignalSemaphores = signalSemaphores.data();
-			graphicsQueue.submit(si, fence);
-		};
-
-		void waitFences(const vk::ArrayProxy<const vk::Fence> fences) const {
-			if (device.waitForFences(fences, VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
-				throw std::runtime_error("wait fences error!");
-			device.resetFences(fences);
-		}
-
+			const vk::Fence fence = nullptr) const;
+		void waitFences(const vk::ArrayProxy<const vk::Fence> fences) const;
 		void submitAndWaitFence(
 			const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
 			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
 			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
-			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores) const
-		{
-			const vk::FenceCreateInfo fi;
-			const vk::Fence fence = device.createFence(fi);
-
-			submit(commandBuffers, waitStages, waitSemaphores, signalSemaphores, fence);
-
-			if (device.waitForFences(fence, VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
-				throw std::runtime_error("wait fences error!");
-			device.destroyFence(fence);
-		}
+			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores) const;
 
 #ifdef _DEBUG
-		template<typename T>
-		void SetDebugObjectName(const T& validHandle, const char* name)
-		{
-			vk::DebugUtilsObjectNameInfoEXT duoni;
-			duoni.objectType = validHandle.objectType;
-			duoni.objectHandle = reinterpret_cast<uint64_t>(static_cast<void*>(validHandle));
-			duoni.pObjectName = name;
-			device.setDebugUtilsObjectNameEXT(duoni, dispatchLoaderDynamic);
-		}
+	template<typename T>
+	void SetDebugObjectName(const T& validHandle, const char* name)
+	{
+		vk::DebugUtilsObjectNameInfoEXT duoni;
+		duoni.objectType = validHandle.objectType;
+		duoni.objectHandle = reinterpret_cast<uint64_t>(static_cast<void*>(validHandle));
+		duoni.pObjectName = name;
+		device.setDebugUtilsObjectNameEXT(duoni, dispatchLoaderDynamic);
+	}
 #else
 		void SetDebugObjectName(const void* validHandle, const void* name) {}
 #endif
 	private:
 		std::mutex m_submit_mutex{};
 	public:
-		void waitAndLockSubmits() { m_submit_mutex.lock(); }
-		void unlockSubmits() { m_submit_mutex.unlock(); }
+		void waitAndLockSubmits();
+		void unlockSubmits();
 
-		static auto get() noexcept { static auto VkCTX = new VulkanContext(); return VkCTX; }
-		static auto remove() noexcept { using type = decltype(get()); if (std::is_pointer<type>::value) delete get(); }
+		static VulkanContext* get() noexcept;
+		static void remove() noexcept;
 
 		VulkanContext(VulkanContext const&) = delete;				// copy constructor
 		VulkanContext(VulkanContext&&) noexcept = delete;			// move constructor
@@ -114,19 +85,4 @@ namespace vm {
 		~VulkanContext() = default;									// destructor
 		VulkanContext() = default;									// default constructor
 	};
-
-	static std::vector<char> readFile(const std::string& filename)
-	{
-		std::ifstream file(filename, std::ios::ate | std::ios::binary);
-		if (!file.is_open()) {
-			throw std::runtime_error("failed to open file!");
-		}
-		const size_t fileSize = static_cast<size_t>(file.tellg());
-		std::vector<char> buffer(fileSize);
-		file.seekg(0);
-		file.read(buffer.data(), fileSize);
-		file.close();
-
-		return buffer;
-	}
 }

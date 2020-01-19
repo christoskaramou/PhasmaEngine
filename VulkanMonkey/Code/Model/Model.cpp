@@ -354,8 +354,6 @@ void frustumCheckAsync(Model& model, Pointer<Mesh>& mesh, Camera& camera, uint32
 	bs.w = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale 
 	mesh->primitives[index].cull = !camera.SphereInFrustum(bs);
 	mesh->primitives[index].transformedBS = bs;
-	if (!mesh->primitives[index].cull)
-		model.cull = false;
 }
 
 void updateNodeAsync(Model& model, Pointer<Node>& node, Camera& camera)
@@ -381,7 +379,6 @@ void updateNodeAsync(Model& model, Pointer<Node>& node, Camera& camera)
 void Model::update(vm::Camera& camera, double delta)
 {
 	if (render) {
-		cull = true;
 		ubo.previousMatrix = ubo.matrix;
 		ubo.view = camera.view;
 		ubo.previousView = camera.previousView;
@@ -425,7 +422,7 @@ void Model::update(vm::Camera& camera, double delta)
 
 void Model::draw()
 {
-	if (!render || cull || !Model::pipeline)
+	if (!render || !Model::pipeline)
 		return;
 
 	auto& cmd = Model::commandBuffer;
