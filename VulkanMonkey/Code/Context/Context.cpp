@@ -486,6 +486,8 @@ vk::Instance Context::createInstance() const
 {
 	std::vector<const char*> instanceExtensions;
 	std::vector<const char*> instanceLayers;
+	vk::ValidationFeaturesEXT validationFeatures;
+	std::vector<vk::ValidationFeatureEnableEXT> enabledFeatures;
 
 	// === Extentions ==============================
 	unsigned extCount;
@@ -513,6 +515,15 @@ vk::Instance Context::createInstance() const
 			instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
 	}
 	// =============================================
+
+	// === Validation Features =====================
+	enabledFeatures.push_back(vk::ValidationFeatureEnableEXT::eBestPractices);
+	//enabledFeatures.push_back(vk::ValidationFeatureEnableEXT::eGpuAssisted);
+	//enabledFeatures.push_back(vk::ValidationFeatureEnableEXT::eGpuAssistedReserveBindingSlot);
+
+	validationFeatures.enabledValidationFeatureCount = static_cast<uint32_t>(enabledFeatures.size());
+	validationFeatures.pEnabledValidationFeatures = enabledFeatures.data();
+	// =============================================
 #endif
 
 	vk::ApplicationInfo appInfo;
@@ -526,7 +537,7 @@ vk::Instance Context::createInstance() const
 	instInfo.ppEnabledLayerNames = instanceLayers.data();
 	instInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
 	instInfo.ppEnabledExtensionNames = instanceExtensions.data();
-	instInfo.pNext = nullptr;
+	instInfo.pNext = &validationFeatures;
 
 	return vk::createInstance(instInfo);
 }
@@ -537,7 +548,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Context::messageCallback(
 	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void* pUserData)
 {
-	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
 		std::cerr 
 			<< to_string(vk::DebugUtilsMessageTypeFlagBitsEXT(messageType)) << " "
 			<< to_string(vk::DebugUtilsMessageSeverityFlagBitsEXT(messageSeverity)) << " from \""

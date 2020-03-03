@@ -35,8 +35,8 @@ int main(int argc, char* argv[])
 			// Metrics every 0.75 sec
 			if (interval.Count() > 0.75) {
 				interval.Start();
-				GUI::cpuWaitingTime = SECONDS_TO_MILLISECONDS(frame_timer.timestamps[0]);
-				GUI::updatesTime = SECONDS_TO_MILLISECONDS(GUI::updatesTimeCount);
+				GUI::cpuWaitingTime = SECONDS_TO_MILLISECONDS<float>(frame_timer.timestamps[0]);
+				GUI::updatesTime = SECONDS_TO_MILLISECONDS<float>(GUI::updatesTimeCount);
 				GUI::cpuTime = static_cast<float>(frame_timer.delta * 1000.0) - GUI::cpuWaitingTime;
 				for (int i = 0; i < GUI::metrics.size(); i++)
 					GUI::stats[i] = GUI::metrics[i];
@@ -66,10 +66,8 @@ int main(int argc, char* argv[])
 		catch (const vk::ValidationFailedEXTError & e) { std::cout << e.what() << '\n'; }
 		catch (const vk::InvalidShaderNVError & e) { std::cout << e.what() << '\n'; }
 		catch (const vk::InvalidDrmFormatModifierPlaneLayoutEXTError & e) { std::cout << e.what() << '\n'; }
-		catch (const vk::FragmentationEXTError & e) { std::cout << e.what() << '\n'; }
 		catch (const vk::NotPermittedEXTError & e) { std::cout << e.what() << '\n'; }
 		catch (const vk::FullScreenExclusiveModeLostEXTError & e) { std::cout << e.what() << '\n'; }
-		catch (const vk::InvalidOpaqueCaptureAddressKHRError & e) { std::cout << e.what() << '\n'; }
 		catch (const vk::SystemError & e) { std::cout << e.what() << '\n'; }
 		catch (const std::exception & e) { std::cout << e.what() << '\n'; }
 	}

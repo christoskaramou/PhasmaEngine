@@ -34,7 +34,7 @@ Script::Script(const char* file, const char* extension)
 
 	name = file;
 	ext = extension;
-	std::string cmd = R"(C:\Windows\System32\cmd.exe /c "include\Mono\bin\mcs -t:library Scripts\)" + name + ".cs";
+	std::string cmd = R"(C:\Windows\System32\cmd.exe /c Include\Mono\lib\mono\4.5\mcs -t:library Scripts\)" + name + ".cs";
 	for (auto& incl : includes) {
 		if (endsWithValue(incl, ".cs"))
 			cmd += " Scripts\\" + incl;

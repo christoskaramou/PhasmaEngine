@@ -4,9 +4,16 @@
 #include <vector>
 #include <memory>
 
-#define SECONDS_TO_MILLISECONDS(seconds) seconds * 1000
-#define SECONDS_TO_MICROSECONDS(seconds) seconds * 1000000
-#define SECONDS_TO_NANOSECONDS(seconds) seconds * 1000000000
+#define Arithmetic_Template(T1, T2) \
+template < \
+	typename T1, \
+	typename = typename std::enable_if<std::is_arithmetic<T1>::value, Return_T>::type, \
+	typename T2, \
+	typename = typename std::enable_if<std::is_arithmetic<T2>::value, Param_T>::type>
+
+Arithmetic_Template(Return_T, Param_T) constexpr Return_T SECONDS_TO_MILLISECONDS(Param_T seconds) { return static_cast<Return_T>(seconds * static_cast<Param_T>(1000)); }
+Arithmetic_Template(Return_T, Param_T) constexpr Return_T SECONDS_TO_MICROSECONDS(Param_T seconds) { return static_cast<Return_T>(seconds * static_cast<Param_T>(1000000)); }
+Arithmetic_Template(Return_T, Param_T) constexpr Return_T SECONDS_TO_NANOSECONDS(Param_T seconds) { return static_cast<Return_T>(seconds * static_cast<Param_T>(1000000000)); }
 
 namespace vm
 {
