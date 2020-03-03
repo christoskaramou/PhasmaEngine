@@ -302,7 +302,12 @@
     <ClCompile Include="Code\Shadows\Shadows.cpp" />
     <ClCompile Include="Code\Skybox\Skybox.cpp" />
     <ClCompile Include="Code\Swapchain\Swapchain.cpp" />
-    <ClCompile Include="Code\Timer\Timer.cpp" />
+    <ClCompile Include="Code\Timer\Timer.cpp">
+      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      </CompileAsManaged>
+      <AdditionalUsingDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      </AdditionalUsingDirectories>
+    </ClCompile>
     <ClCompile Include="Code\Vertex\Vertex.cpp" />
     <ClCompile Include="Code\VulkanContext\VulkanContext.cpp" />
     <ClCompile Include="Code\Window\Window.cpp" />
