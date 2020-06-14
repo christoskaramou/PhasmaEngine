@@ -81,101 +81,12 @@ void Bloom::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) c
 
 void vm::Bloom::createRenderPasses(std::map<std::string, Image>& renderTargets)
 {
-	createBrightFilterRenderPass(renderTargets);
-	createGaussianBlurRenderPass(renderTargets);
-	createCombineRenderPass(renderTargets);
-}
-
-void vm::Bloom::createBrightFilterRenderPass(std::map<std::string, Image>& renderTargets)
-{
-	std::array<vk::AttachmentDescription, 1> attachments{};
-	// Color attachment
-	attachments[0].format = renderTargets["brightFilter"].format;
-	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
-
-	vk::SubpassDescription subpassDescription;
-	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-	subpassDescription.colorAttachmentCount = 1;
-	subpassDescription.pColorAttachments = &colorReference;
-	subpassDescription.pDepthStencilAttachment = nullptr;
-
-	vk::RenderPassCreateInfo renderPassInfo = {};
-	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	renderPassInfo.pAttachments = attachments.data();
-	renderPassInfo.subpassCount = 1;
-	renderPassInfo.pSubpasses = &subpassDescription;
-
-	renderPassBrightFilter = VulkanContext::get()->device.createRenderPass(renderPassInfo);
-}
-
-void vm::Bloom::createGaussianBlurRenderPass(std::map<std::string, Image>& renderTargets)
-{
-	std::array<vk::AttachmentDescription, 1> attachments{};
-	// Color attachment
-	attachments[0].format = renderTargets["gaussianBlurHorizontal"].format;
-	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
-
-	vk::SubpassDescription subpassDescription;
-	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-	subpassDescription.colorAttachmentCount = 1;
-	subpassDescription.pColorAttachments = &colorReference;
-	subpassDescription.pDepthStencilAttachment = nullptr;
-
-	vk::RenderPassCreateInfo renderPassInfo = {};
-	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	renderPassInfo.pAttachments = attachments.data();
-	renderPassInfo.subpassCount = 1;
-	renderPassInfo.pSubpasses = &subpassDescription;
-
-	renderPassGaussianBlur = VulkanContext::get()->device.createRenderPass(renderPassInfo);
-}
-
-void vm::Bloom::createCombineRenderPass(std::map<std::string, Image>& renderTargets)
-{
-	std::array<vk::AttachmentDescription, 1> attachments{};
-	// Swapchain attachment
-	attachments[0].format = renderTargets["viewport"].format;
-	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	std::vector<vk::AttachmentReference> colorReferences{
-		{ 0, vk::ImageLayout::eColorAttachmentOptimal }
-	};
-
-	vk::SubpassDescription subpassDescription;
-	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-	subpassDescription.colorAttachmentCount = static_cast<uint32_t>(colorReferences.size());
-	subpassDescription.pColorAttachments = colorReferences.data();
-	subpassDescription.pDepthStencilAttachment = nullptr;
-
-	vk::RenderPassCreateInfo renderPassInfo = {};
-	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	renderPassInfo.pAttachments = attachments.data();
-	renderPassInfo.subpassCount = 1;
-	renderPassInfo.pSubpasses = &subpassDescription;
-
-	renderPassCombine = VulkanContext::get()->device.createRenderPass(renderPassInfo);
+	renderPassBrightFilter = CreateRef<RenderPass>();
+	renderPassGaussianBlur = CreateRef<RenderPass>();
+	renderPassCombine = CreateRef<RenderPass>();
+	renderPassBrightFilter->Create(renderTargets["brightFilter"].format);
+	renderPassGaussianBlur->Create(renderTargets["gaussianBlurHorizontal"].format);
+	renderPassCombine->Create(renderTargets["viewport"].format);
 }
 
 void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -187,7 +98,7 @@ void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 			renderTargets["brightFilter"].view
 		};
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = renderPassBrightFilter;
+		fbci.renderPass = *renderPassBrightFilter->GetRef();
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
 		fbci.width = renderTargets["brightFilter"].width;
@@ -201,7 +112,7 @@ void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 			renderTargets["gaussianBlurHorizontal"].view
 		};
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = renderPassGaussianBlur;
+		fbci.renderPass = *renderPassGaussianBlur->GetRef();
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
 		fbci.width = renderTargets["gaussianBlurHorizontal"].width;
@@ -215,7 +126,7 @@ void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 			renderTargets["gaussianBlurVertical"].view
 		};
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = renderPassGaussianBlur;
+		fbci.renderPass = *renderPassGaussianBlur->GetRef();
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
 		fbci.width = renderTargets["gaussianBlurVertical"].width;
@@ -229,7 +140,7 @@ void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 			renderTargets["viewport"].view
 		};
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = renderPassCombine;
+		fbci.renderPass = *renderPassCombine->GetRef();
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
 		fbci.width = renderTargets["viewport"].width;
@@ -301,7 +212,7 @@ void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImage
 	std::vector<float> values{ GUI::Bloom_Inv_brightness, GUI::Bloom_intensity, GUI::Bloom_range, GUI::Bloom_exposure, static_cast<float>(GUI::use_tonemap) };
 
 	vk::RenderPassBeginInfo rpi;
-	rpi.renderPass = renderPassBrightFilter;
+	rpi.renderPass = *renderPassBrightFilter->GetRef();
 	rpi.framebuffer = frameBuffers[imageIndex];
 	rpi.renderArea.offset = vk::Offset2D{0, 0};
 	rpi.renderArea.extent = renderTargets["brightFilter"].extent;
@@ -317,7 +228,7 @@ void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImage
 	cmd.endRenderPass();
 	changeLayout(cmd, renderTargets["brightFilter"], LayoutState::ColorRead);
 
-	rpi.renderPass = renderPassGaussianBlur;
+	rpi.renderPass = *renderPassGaussianBlur->GetRef();
 	rpi.framebuffer = frameBuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)];
 
 	changeLayout(cmd, renderTargets["gaussianBlurHorizontal"], LayoutState::ColorWrite);
@@ -340,7 +251,7 @@ void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImage
 	cmd.endRenderPass();
 	changeLayout(cmd, renderTargets["gaussianBlurVertical"], LayoutState::ColorRead);
 
-	rpi.renderPass = renderPassCombine;
+	rpi.renderPass = *renderPassCombine->GetRef();
 	rpi.framebuffer = frameBuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)];
 
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
@@ -493,7 +404,7 @@ void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTarge
 	pipelineBrightFilter.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipelineBrightFilter.pipeinfo.renderPass = renderPassBrightFilter;
+	pipelineBrightFilter.pipeinfo.renderPass = *renderPassBrightFilter->GetRef();
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	pipelineBrightFilter.pipeinfo.subpass = 0;
@@ -653,7 +564,7 @@ void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& re
 	pipelineGaussianBlurHorizontal.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipelineGaussianBlurHorizontal.pipeinfo.renderPass = renderPassGaussianBlur;
+	pipelineGaussianBlurHorizontal.pipeinfo.renderPass = *renderPassGaussianBlur->GetRef();
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	pipelineGaussianBlurHorizontal.pipeinfo.subpass = 0;
@@ -812,7 +723,7 @@ void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& ren
 	pipelineGaussianBlurVertical.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipelineGaussianBlurVertical.pipeinfo.renderPass = renderPassGaussianBlur;
+	pipelineGaussianBlurVertical.pipeinfo.renderPass = *renderPassGaussianBlur->GetRef();
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	pipelineGaussianBlurVertical.pipeinfo.subpass = 0;
@@ -973,7 +884,7 @@ void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	pipelineCombine.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipelineCombine.pipeinfo.renderPass = renderPassCombine;
+	pipelineCombine.pipeinfo.renderPass = *renderPassCombine->GetRef();
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	pipelineCombine.pipeinfo.subpass = 0;
@@ -999,18 +910,11 @@ void Bloom::destroy()
 			vulkan->device.destroyFramebuffer(frameBuffer);
 		}
 	}
-	if (renderPassBrightFilter) {
-		vulkan->device.destroyRenderPass(renderPassBrightFilter);
-		renderPassBrightFilter = nullptr;
-	}
-	if (renderPassGaussianBlur) {
-		vulkan->device.destroyRenderPass(renderPassGaussianBlur);
-		renderPassGaussianBlur = nullptr;
-	}
-	if (renderPassCombine) {
-		vulkan->device.destroyRenderPass(renderPassCombine);
-		renderPassCombine = nullptr;
-	}
+
+	renderPassBrightFilter->Destroy();
+	renderPassGaussianBlur->Destroy();
+	renderPassCombine->Destroy();
+
 	if (DSLayoutBrightFilter) {
 		vulkan->device.destroyDescriptorSetLayout(DSLayoutBrightFilter);
 		DSLayoutBrightFilter = nullptr;

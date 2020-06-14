@@ -222,6 +222,7 @@
     <ClInclude Include="Code\Compute\Compute.h" />
     <ClInclude Include="Code\Console\Console.h" />
     <ClInclude Include="Code\Context\Context.h" />
+    <ClInclude Include="Code\Core\Base.h" />
     <ClInclude Include="Code\Deferred\Deferred.h" />
     <ClInclude Include="Code\Event\Delegate.h" />
     <ClInclude Include="Code\Event\Event.h" />
@@ -248,6 +249,7 @@
     <ClInclude Include="Code\PostProcess\TAA.h" />
     <ClInclude Include="Code\Queue\Queue.h" />
     <ClInclude Include="Code\Renderer\Renderer.h" />
+    <ClInclude Include="Code\Renderer\RenderPass.h" />
     <ClInclude Include="Code\Script\Script.h" />
     <ClInclude Include="Code\Shader\Reflection.h" />
     <ClInclude Include="Code\Shader\Shader.h" />
@@ -296,6 +298,7 @@
     <ClCompile Include="Code\PostProcess\SSR.cpp" />
     <ClCompile Include="Code\PostProcess\TAA.cpp" />
     <ClCompile Include="Code\Renderer\Renderer.cpp" />
+    <ClCompile Include="Code\Renderer\RenderPass.cpp" />
     <ClCompile Include="Code\Script\Script.cpp" />
     <ClCompile Include="Code\Shader\Reflection.cpp" />
     <ClCompile Include="Code\Shader\Shader.cpp" />

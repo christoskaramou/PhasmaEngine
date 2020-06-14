@@ -76,7 +76,7 @@ void SSR::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& e
 	std::vector<vk::ClearValue> clearValues = { clearColor };
 
 	vk::RenderPassBeginInfo renderPassInfo;
-	renderPassInfo.renderPass = renderPass;
+	renderPassInfo.renderPass = *renderPass->GetRef();
 	renderPassInfo.framebuffer = frameBuffers[imageIndex];
 	renderPassInfo.renderArea.offset = vk::Offset2D{ 0, 0 };
 	renderPassInfo.renderArea.extent = extent;
@@ -92,32 +92,8 @@ void SSR::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& e
 
 void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 {
-	std::array<vk::AttachmentDescription, 1> attachments{};
-	// Color attachment
-	attachments[0].format = renderTargets["ssr"].format;
-	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
-
-	vk::SubpassDescription subpassDescription;
-	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-	subpassDescription.colorAttachmentCount = 1;
-	subpassDescription.pColorAttachments = &colorReference;
-	subpassDescription.pDepthStencilAttachment = nullptr;
-
-	vk::RenderPassCreateInfo renderPassInfo = {};
-	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	renderPassInfo.pAttachments = attachments.data();
-	renderPassInfo.subpassCount = 1;
-	renderPassInfo.pSubpasses = &subpassDescription;
-
-	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
+	renderPass = CreateRef<RenderPass>();
+	renderPass->Create(renderTargets["ssr"].format);
 }
 
 void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -129,7 +105,7 @@ void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 			renderTargets["ssr"].view
 		};
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = renderPass;
+		fbci.renderPass = *renderPass->GetRef();
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
 		fbci.width = renderTargets["ssr"].width;
@@ -285,7 +261,7 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipeline.pipeinfo.renderPass = renderPass;
+	pipeline.pipeinfo.renderPass = *renderPass->GetRef();
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	pipeline.pipeinfo.subpass = 0;
@@ -310,10 +286,9 @@ void SSR::destroy()
 			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
 		}
 	}
-	if (renderPass) {
-		VulkanContext::get()->device.destroyRenderPass(renderPass);
-		renderPass = nullptr;
-	}
+	
+	renderPass->Destroy();
+
 	if (DSLayoutReflection) {
 		VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayoutReflection);
 		DSLayoutReflection = nullptr;

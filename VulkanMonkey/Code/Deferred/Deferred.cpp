@@ -24,7 +24,7 @@ void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::
 	std::vector<vk::ClearValue> clearValues = { clearColor, clearColor, clearColor, clearColor, clearColor, clearColor, depthStencil };
 
 	vk::RenderPassBeginInfo rpi;
-	rpi.renderPass = renderPass;
+	rpi.renderPass = *renderPass->GetRef();
 	rpi.framebuffer = frameBuffers[imageIndex];
 	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = extent;
@@ -163,7 +163,7 @@ void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows
 	std::vector<vk::ClearValue> clearValues = { clearColor, clearColor };
 
 	vk::RenderPassBeginInfo rpi;
-	rpi.renderPass = compositionRenderPass;
+	rpi.renderPass = *compositionRenderPass->GetRef();
 	rpi.framebuffer = compositionFrameBuffers[imageIndex];
 	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = extent;
@@ -180,133 +180,20 @@ void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows
 
 void Deferred::createRenderPasses(std::map<std::string, Image>& renderTargets)
 {
-	createGBufferRenderPasses(renderTargets);
-	createCompositionRenderPass(renderTargets);
-}
-
-void Deferred::createGBufferRenderPasses(std::map<std::string, Image>& renderTargets)
-{
-	std::array<vk::AttachmentDescription, 7> attachments{};
-	// Depth store
-	attachments[0].format = renderTargets["depth"].format;
-	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Normals
-	attachments[1].format = renderTargets["normal"].format;
-	attachments[1].samples = vk::SampleCountFlagBits::e1;
-	attachments[1].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[1].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[1].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[1].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[1].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[1].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Albedo
-	attachments[2].format = renderTargets["albedo"].format;
-	attachments[2].samples = vk::SampleCountFlagBits::e1;
-	attachments[2].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[2].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[2].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[2].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[2].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[2].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Specular Roughness Metallic
-	attachments[3].format = renderTargets["srm"].format;
-	attachments[3].samples = vk::SampleCountFlagBits::e1;
-	attachments[3].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[3].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[3].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[3].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[3].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[3].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Velocity
-	attachments[4].format = renderTargets["velocity"].format;
-	attachments[4].samples = vk::SampleCountFlagBits::e1;
-	attachments[4].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[4].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[4].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[4].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[4].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[4].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Emissive
-	attachments[5].format = renderTargets["emissive"].format;
-	attachments[5].samples = vk::SampleCountFlagBits::e1;
-	attachments[5].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[5].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[5].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[5].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[5].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[5].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-	// Depth
-	attachments[6].format = VulkanContext::get()->depth->format;
-	attachments[6].samples = vk::SampleCountFlagBits::e1;
-	attachments[6].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[6].storeOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[6].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[6].stencilStoreOp = vk::AttachmentStoreOp::eStore;
-	attachments[6].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[6].finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-	std::array<vk::SubpassDescription, 1> subpassDescriptions{};
-
-	std::vector<vk::AttachmentReference> colorReferences{
-		{ 0, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 1, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 2, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 3, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 4, vk::ImageLayout::eColorAttachmentOptimal },
-		{ 5, vk::ImageLayout::eColorAttachmentOptimal }
+	std::vector<vk::Format> formats
+	{
+		renderTargets["depth"].format,
+		renderTargets["normal"].format,
+		renderTargets["albedo"].format,
+		renderTargets["srm"].format,
+		renderTargets["velocity"].format,
+		renderTargets["emissive"].format
 	};
-	vk::AttachmentReference depthReference = { 6, vk::ImageLayout::eDepthStencilAttachmentOptimal };
+	renderPass = CreateRef<RenderPass>();
+	renderPass->Create(formats, VulkanContext::get()->depth->format);
 
-	subpassDescriptions[0].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-	subpassDescriptions[0].colorAttachmentCount = static_cast<uint32_t>(colorReferences.size());
-	subpassDescriptions[0].pColorAttachments = colorReferences.data();
-	subpassDescriptions[0].pDepthStencilAttachment = &depthReference;
-
-	vk::RenderPassCreateInfo renderPassInfo = {};
-	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	renderPassInfo.pAttachments = attachments.data();
-	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
-	renderPassInfo.pSubpasses = subpassDescriptions.data();
-
-	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
-}
-
-void Deferred::createCompositionRenderPass(std::map<std::string, Image>& renderTargets)
-{
-	std::array<vk::AttachmentDescription, 1> attachments{};
-	// Color target
-	attachments[0].format = renderTargets["viewport"].format;
-	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	std::vector<vk::AttachmentReference> colorReferences{
-		{ 0, vk::ImageLayout::eColorAttachmentOptimal }
-	};
-
-	std::array<vk::SubpassDescription, 1> subpassDescriptions{};
-	subpassDescriptions[0].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-	subpassDescriptions[0].colorAttachmentCount = static_cast<uint32_t>(colorReferences.size());
-	subpassDescriptions[0].pColorAttachments = colorReferences.data();
-	subpassDescriptions[0].pDepthStencilAttachment = nullptr;
-
-	vk::RenderPassCreateInfo renderPassInfo = {};
-	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	renderPassInfo.pAttachments = attachments.data();
-	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
-	renderPassInfo.pSubpasses = subpassDescriptions.data();
-
-	compositionRenderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
+	compositionRenderPass = CreateRef<RenderPass>();
+	compositionRenderPass->Create(renderTargets["viewport"].format);
 }
 
 void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -329,7 +216,7 @@ void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTar
 			VulkanContext::get()->depth->view
 		};
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = renderPass;
+		fbci.renderPass = *renderPass->GetRef();
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
 		fbci.width = renderTargets["albedo"].width;
@@ -348,7 +235,7 @@ void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& rende
 			renderTargets["viewport"].view
 		};
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = compositionRenderPass;
+		fbci.renderPass = *compositionRenderPass->GetRef();
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
 		fbci.width = renderTargets["viewport"].width;
@@ -502,7 +389,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipeline.pipeinfo.renderPass = renderPass;
+	pipeline.pipeinfo.renderPass = *renderPass->GetRef();
 
 	// Subpass
 	pipeline.pipeinfo.subpass = 0;
@@ -686,7 +573,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	pipelineComposition.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipelineComposition.pipeinfo.renderPass = compositionRenderPass;
+	pipelineComposition.pipeinfo.renderPass = *compositionRenderPass->GetRef();
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	pipelineComposition.pipeinfo.subpass = 0;
@@ -707,14 +594,10 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 void Deferred::destroy()
 {
 	auto vulkan = VulkanContext::get();
-	if (renderPass) {
-		vulkan->device.destroyRenderPass(renderPass);
-		renderPass = nullptr;
-	}
-	if (compositionRenderPass) {
-		vulkan->device.destroyRenderPass(compositionRenderPass);
-		compositionRenderPass = nullptr;
-	}
+
+	renderPass->Destroy();
+	compositionRenderPass->Destroy();
+
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
 			vulkan->device.destroyFramebuffer(frameBuffer);

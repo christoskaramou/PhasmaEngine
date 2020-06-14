@@ -71,7 +71,7 @@ void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Exte
 	std::vector<vk::ClearValue> clearValues = { clearColor };
 
 	vk::RenderPassBeginInfo rpi;
-	rpi.renderPass = renderPass;
+	rpi.renderPass = *renderPass->GetRef();
 	rpi.framebuffer = frameBuffers[imageIndex];
 	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = extent;
@@ -94,10 +94,9 @@ void MotionBlur::destroy()
 			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
 		}
 	}
-	if (renderPass) {
-		VulkanContext::get()->device.destroyRenderPass(renderPass);
-		renderPass = nullptr;
-	}
+
+	renderPass->Destroy();
+
 	if (DSLayoutMotionBlur) {
 		VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayoutMotionBlur);
 		DSLayoutMotionBlur = nullptr;
@@ -129,32 +128,8 @@ void MotionBlur::update(Camera& camera)
 
 void MotionBlur::createRenderPass(std::map<std::string, Image>& renderTargets)
 {
-	std::array<vk::AttachmentDescription, 1> attachments{};
-	// Color attachment
-	attachments[0].format = renderTargets["viewport"].format;
-	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
-
-	vk::SubpassDescription subpassDescription;
-	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-	subpassDescription.colorAttachmentCount = 1;
-	subpassDescription.pColorAttachments = &colorReference;
-	subpassDescription.pDepthStencilAttachment = nullptr;
-
-	vk::RenderPassCreateInfo renderPassInfo = {};
-	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	renderPassInfo.pAttachments = attachments.data();
-	renderPassInfo.subpassCount = 1;
-	renderPassInfo.pSubpasses = &subpassDescription;
-
-	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
+	renderPass = CreateRef<RenderPass>();
+	renderPass->Create(renderTargets["viewport"].format);
 }
 
 void MotionBlur::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -166,7 +141,7 @@ void MotionBlur::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 			renderTargets["viewport"].view
 		};
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = renderPass;
+		fbci.renderPass = *renderPass->GetRef();
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
 		fbci.width = renderTargets["viewport"].width;
@@ -321,7 +296,7 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipeline.pipeinfo.renderPass = renderPass;
+	pipeline.pipeinfo.renderPass = *renderPass->GetRef();
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	pipeline.pipeinfo.subpass = 0;

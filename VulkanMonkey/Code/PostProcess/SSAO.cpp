@@ -111,7 +111,7 @@ void SSAO::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(v
 	std::vector<vk::ClearValue> clearValues = { clearColor };
 
 	vk::RenderPassBeginInfo rpi;
-	rpi.renderPass = renderPass;
+	rpi.renderPass = *renderPass->GetRef();
 	rpi.framebuffer = frameBuffers[imageIndex];
 	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = image.extent;
@@ -128,7 +128,7 @@ void SSAO::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(v
 	changeLayout(cmd, image, LayoutState::ColorRead);
 
 	// new blurry SSAO image
-	rpi.renderPass = blurRenderPass;
+	rpi.renderPass = *blurRenderPass->GetRef();
 	rpi.framebuffer = blurFrameBuffers[imageIndex];
 
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
@@ -144,14 +144,10 @@ void SSAO::destroy()
 	UB_Kernel.destroy();
 	UB_PVM.destroy();
 	noiseTex.destroy();
-	if (renderPass) {
-		VulkanContext::get()->device.destroyRenderPass(renderPass);
-		renderPass = nullptr;
-	}
-	if (blurRenderPass) {
-		VulkanContext::get()->device.destroyRenderPass(blurRenderPass);
-		blurRenderPass = nullptr;
-	}
+	
+	renderPass->Destroy();
+	blurRenderPass->Destroy();
+
 	for (auto &frameBuffer : frameBuffers) {
 		if (frameBuffer) {
 			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
@@ -191,88 +187,10 @@ void SSAO::update(Camera& camera)
 
 void vm::SSAO::createRenderPasses(std::map<std::string, Image>& renderTargets)
 {
-	createSSAORenderPass(renderTargets);
-	createSSAOBlurRenderPass(renderTargets);
-}
-
-void vm::SSAO::createSSAORenderPass(std::map<std::string, Image>& renderTargets)
-{
-	std::array<vk::AttachmentDescription, 1> attachments{};
-	// Color attachment
-	attachments[0].format = renderTargets["ssao"].format;
-	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
-
-	vk::SubpassDescription subpassDescription;
-	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-	subpassDescription.colorAttachmentCount = 1;
-	subpassDescription.pColorAttachments = &colorReference;
-	subpassDescription.pDepthStencilAttachment = nullptr;
-
-	vk::RenderPassCreateInfo renderPassInfo = {};
-	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	renderPassInfo.pAttachments = attachments.data();
-	renderPassInfo.subpassCount = 1;
-	renderPassInfo.pSubpasses = &subpassDescription;
-
-	renderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
-}
-
-void vm::SSAO::createSSAOBlurRenderPass(std::map<std::string, Image>& renderTargets)
-{
-	std::array<vk::AttachmentDescription, 1> attachments{};
-	// Color attachment
-	attachments[0].format = renderTargets["ssaoBlur"].format;
-	attachments[0].samples = vk::SampleCountFlagBits::e1;
-	attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
-	attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
-	attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-	attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-	attachments[0].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-
-	vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
-
-	vk::SubpassDescription subpassDescription;
-	subpassDescription.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-	subpassDescription.colorAttachmentCount = 1;
-	subpassDescription.pColorAttachments = &colorReference;
-	subpassDescription.pDepthStencilAttachment = nullptr;
-
-	// Subpass dependencies for layout transitions
-	std::vector<vk::SubpassDependency> dependencies(2);
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-	dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
-	vk::RenderPassCreateInfo renderPassInfo = {};
-	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	renderPassInfo.pAttachments = attachments.data();
-	renderPassInfo.subpassCount = 1;
-	renderPassInfo.pSubpasses = &subpassDescription;
-	//renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	//renderPassInfo.pDependencies = dependencies.data();
-
-	blurRenderPass = VulkanContext::get()->device.createRenderPass(renderPassInfo);
+	renderPass = CreateRef<RenderPass>();
+	renderPass->Create(renderTargets["ssao"].format);
+	blurRenderPass = CreateRef<RenderPass>();
+	blurRenderPass->Create(renderTargets["ssaoBlur"].format);
 }
 
 void vm::SSAO::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -290,7 +208,7 @@ void vm::SSAO::createSSAOFrameBuffers(std::map<std::string, Image>& renderTarget
 			renderTargets["ssao"].view
 		};
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = renderPass;
+		fbci.renderPass = *renderPass->GetRef();
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
 		fbci.width = renderTargets["ssao"].width;
@@ -309,7 +227,7 @@ void vm::SSAO::createSSAOBlurFrameBuffers(std::map<std::string, Image>& renderTa
 			renderTargets["ssaoBlur"].view
 		};
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = blurRenderPass;
+		fbci.renderPass = *blurRenderPass->GetRef();
 		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		fbci.pAttachments = attachments.data();
 		fbci.width = renderTargets["ssaoBlur"].width;
@@ -471,7 +389,7 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipeline.pipeinfo.renderPass = renderPass;
+	pipeline.pipeinfo.renderPass = *renderPass->GetRef();
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	pipeline.pipeinfo.subpass = 0;
@@ -625,7 +543,7 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	pipelineBlur.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipelineBlur.pipeinfo.renderPass = blurRenderPass;
+	pipelineBlur.pipeinfo.renderPass = *blurRenderPass->GetRef();
 
 	// Subpass (Index of subpass this pipeline will be used in)
 	pipelineBlur.pipeinfo.subpass = 0;

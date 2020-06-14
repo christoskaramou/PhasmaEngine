@@ -5,12 +5,13 @@
 #include "../Light/Light.h"
 #include "../Shadows/Shadows.h"
 #include "../Skybox/Skybox.h"
+#include "../Renderer/RenderPass.h"
 #include <map>
 
 namespace vm {
 	struct Deferred
 	{
-		vk::RenderPass renderPass, compositionRenderPass;
+		Ref<RenderPass> renderPass, compositionRenderPass;
 		std::vector<vk::Framebuffer> frameBuffers{}, compositionFrameBuffers{};
 		vk::DescriptorSet DSComposition;
 		vk::DescriptorSetLayout DSLayoutComposition;
@@ -28,8 +29,6 @@ namespace vm {
 		void update(mat4& invViewProj);
 		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent);
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
-		void createGBufferRenderPasses(std::map<std::string, Image>& renderTargets);
-		void createCompositionRenderPass(std::map<std::string, Image>& renderTargets);
 		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
 		void createGBufferFrameBuffers(std::map<std::string, Image>& renderTargets);
 		void createCompositionFrameBuffers(std::map<std::string, Image>& renderTargets);

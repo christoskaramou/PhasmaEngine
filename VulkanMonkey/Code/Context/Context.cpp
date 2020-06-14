@@ -130,12 +130,9 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	gui.pipeline.destroy();
 
 	// deferred
-	if (deferred.renderPass) {
-		vulkan.device.destroyRenderPass(deferred.renderPass);
-	}
-	if (deferred.compositionRenderPass) {
-		vulkan.device.destroyRenderPass(deferred.compositionRenderPass);
-	}
+	deferred.renderPass->Destroy();
+	deferred.compositionRenderPass->Destroy();
+
 	for (auto &frameBuffer : deferred.frameBuffers) {
 		if (frameBuffer) {
 			vulkan.device.destroyFramebuffer(frameBuffer);
@@ -155,9 +152,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 			vulkan.device.destroyFramebuffer(frameBuffer);
 		}
 	}
-	if (ssr.renderPass) {
-		vulkan.device.destroyRenderPass(ssr.renderPass);
-	}
+	ssr.renderPass->Destroy();
 	ssr.pipeline.destroy();
 
 	// FXAA
@@ -166,9 +161,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 			vulkan.device.destroyFramebuffer(frameBuffer);
 		}
 	}
-	if (fxaa.renderPass) {
-		vulkan.device.destroyRenderPass(fxaa.renderPass);
-	}
+	fxaa.renderPass->Destroy();
 	fxaa.pipeline.destroy();
 	fxaa.frameImage.destroy();
 
@@ -185,12 +178,8 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 			vulkan.device.destroyFramebuffer(frameBuffer);
 		}
 	}
-	if (taa.renderPass) {
-		vulkan.device.destroyRenderPass(taa.renderPass);
-	}
-	if (taa.renderPassSharpen) {
-		vulkan.device.destroyRenderPass(taa.renderPassSharpen);
-	}
+	taa.renderPass->Destroy();
+	taa.renderPassSharpen->Destroy();
 	taa.pipeline.destroy();
 	taa.pipelineSharpen.destroy();
 
@@ -200,15 +189,9 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 			vulkan.device.destroyFramebuffer(frameBuffer);
 		}
 	}
-	if (bloom.renderPassBrightFilter) {
-		vulkan.device.destroyRenderPass(bloom.renderPassBrightFilter);
-	}
-	if (bloom.renderPassGaussianBlur) {
-		vulkan.device.destroyRenderPass(bloom.renderPassGaussianBlur);
-	}
-	if (bloom.renderPassCombine) {
-		vulkan.device.destroyRenderPass(bloom.renderPassCombine);
-	}
+	bloom.renderPassBrightFilter->Destroy();
+	bloom.renderPassGaussianBlur->Destroy();
+	bloom.renderPassCombine->Destroy();
 	bloom.pipelineBrightFilter.destroy();
 	bloom.pipelineGaussianBlurHorizontal.destroy();
 	bloom.pipelineGaussianBlurVertical.destroy();
@@ -221,9 +204,7 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 			vulkan.device.destroyFramebuffer(frameBuffer);
 		}
 	}
-	if (dof.renderPass) {
-		vulkan.device.destroyRenderPass(dof.renderPass);
-	}
+	dof.renderPass->Destroy();
 	dof.pipeline.destroy();
 	dof.frameImage.destroy();
 
@@ -233,19 +214,13 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 			vulkan.device.destroyFramebuffer(frameBuffer);
 		}
 	}
-	if (motionBlur.renderPass) {
-		vulkan.device.destroyRenderPass(motionBlur.renderPass);
-	}
+	motionBlur.renderPass->Destroy();
 	motionBlur.pipeline.destroy();
 	motionBlur.frameImage.destroy();
 
 	// SSAO
-	if (ssao.renderPass) {
-		vulkan.device.destroyRenderPass(ssao.renderPass);
-	}
-	if (ssao.blurRenderPass) {
-		vulkan.device.destroyRenderPass(ssao.blurRenderPass);
-	}
+	ssao.renderPass->Destroy();
+	ssao.blurRenderPass->Destroy();
 	for (auto &frameBuffer : ssao.frameBuffers) {
 		if (frameBuffer) {
 			vulkan.device.destroyFramebuffer(frameBuffer);

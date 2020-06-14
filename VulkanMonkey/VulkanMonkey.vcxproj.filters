@@ -255,6 +255,12 @@
     <ClInclude Include="Code\PostProcess\TAA.h">
       <Filter>Code\PostProcess</Filter>
     </ClInclude>
+    <ClInclude Include="Code\Renderer\RenderPass.h">
+      <Filter>Code\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Core\Base.h">
+      <Filter>Code\Core</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Buffer\Buffer.cpp">
@@ -449,6 +455,9 @@
     <ClCompile Include="Code\VulkanContext\VulkanContext.cpp">
       <Filter>Code\VulkanContext</Filter>
     </ClCompile>
+    <ClCompile Include="Code\Renderer\RenderPass.cpp">
+      <Filter>Code\Renderer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source">
@@ -597,6 +606,9 @@
     </Filter>
     <Filter Include="Code\PostProcess">
       <UniqueIdentifier>{4e6ef0e8-35ed-40ab-849b-b24590ea4750}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\Core">
+      <UniqueIdentifier>{d0f370e5-a4a0-4895-9840-6f71d51b95bf}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

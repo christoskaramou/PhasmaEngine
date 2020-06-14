@@ -4,6 +4,7 @@
 #include "../Image/Image.h"
 #include "../Math/Math.h"
 #include "../Camera/Camera.h"
+#include "../Renderer/RenderPass.h"
 #include <vector>
 #include <map>
 #include <functional>
@@ -13,7 +14,7 @@ namespace vm {
 	{
 		std::vector<vk::Framebuffer> frameBuffers{}, frameBuffersSharpen{};
 		Pipeline pipeline, pipelineSharpen;
-		vk::RenderPass renderPass, renderPassSharpen;
+		Ref<RenderPass> renderPass, renderPassSharpen;
 		vk::DescriptorSet DSet, DSetSharpen;
 		vk::DescriptorSetLayout DSLayout, DSLayoutSharpen;
 		Image previous;
@@ -27,8 +28,6 @@ namespace vm {
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets);
-		void createRenderPass(std::map<std::string, Image>& renderTargets);
-		void createRenderPassSharpen(std::map<std::string, Image>& renderTargets);
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
 		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
 		void createPipeline(std::map<std::string, Image>& renderTargets);

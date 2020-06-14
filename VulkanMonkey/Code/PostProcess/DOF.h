@@ -3,6 +3,7 @@
 #include "../Pipeline/Pipeline.h"
 #include <map>
 #include "../Image/Image.h"
+#include "../Renderer/RenderPass.h"
 
 namespace vm {
 	struct DOF
@@ -12,7 +13,7 @@ namespace vm {
 
 		std::vector<vk::Framebuffer> frameBuffers{};
 		Pipeline pipeline;
-		vk::RenderPass renderPass;
+		Ref<RenderPass> renderPass;
 		vk::DescriptorSet DSet;
 		vk::DescriptorSetLayout DSLayout;
 		Image frameImage;

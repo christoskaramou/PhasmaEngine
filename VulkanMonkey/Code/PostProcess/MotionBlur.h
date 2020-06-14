@@ -4,6 +4,7 @@
 #include "../Pipeline/Pipeline.h"
 #include "../Image/Image.h"
 #include "../Camera/Camera.h"
+#include "../Renderer/RenderPass.h"
 #include <vector>
 #include <string>
 #include <map>
@@ -15,7 +16,7 @@ namespace vm {
 		Buffer UBmotionBlur;
 		std::vector<vk::Framebuffer> frameBuffers{};
 		Pipeline pipeline;
-		vk::RenderPass renderPass;
+		Ref<RenderPass> renderPass;
 		vk::DescriptorSet DSMotionBlur;
 		vk::DescriptorSetLayout DSLayoutMotionBlur;
 		Image frameImage;

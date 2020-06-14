@@ -4,6 +4,7 @@
 #include "../Pipeline/Pipeline.h"
 #include "../Image/Image.h"
 #include "../Camera/Camera.h"
+#include "../Renderer/RenderPass.h"
 #include <map>
 #include <functional>
 
@@ -14,7 +15,7 @@ namespace vm {
 		Buffer UB_Kernel;
 		Buffer UB_PVM;
 		Image noiseTex;
-		vk::RenderPass renderPass, blurRenderPass;
+		Ref<RenderPass> renderPass, blurRenderPass;
 		std::vector<vk::Framebuffer> frameBuffers{}, blurFrameBuffers{};
 		Pipeline pipeline;
 		Pipeline pipelineBlur;
@@ -23,8 +24,6 @@ namespace vm {
 
 		void update(Camera& camera);
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
-		void createSSAORenderPass(std::map<std::string, Image>& renderTargets);
-		void createSSAOBlurRenderPass(std::map<std::string, Image>& renderTargets);
 		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
 		void createSSAOFrameBuffers(std::map<std::string, Image>& renderTargets);
 		void createSSAOBlurFrameBuffers(std::map<std::string, Image>& renderTargets);

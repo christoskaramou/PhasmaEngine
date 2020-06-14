@@ -6,6 +6,7 @@
 #include "SDL/SDL_vulkan.h"
 #include <vector>
 #include <mutex>
+#include "../Core/Base.h"
 
 #define WIDTH VulkanContext::get()->surface->actualExtent.width
 #define HEIGHT VulkanContext::get()->surface->actualExtent.height
