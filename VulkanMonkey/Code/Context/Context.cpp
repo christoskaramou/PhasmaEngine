@@ -119,79 +119,52 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	renderTargets.clear();
 
 	// GUI
-	if (gui.renderPass) {
-		vulkan.device.destroyRenderPass(gui.renderPass);
-	}
-	for (auto &frameBuffer : gui.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
+	gui.renderPass.Destroy();
+	for (auto& framebuffer : gui.framebuffers)
+		framebuffer.Destroy();
 	gui.pipeline.destroy();
 
 	// deferred
-	deferred.renderPass->Destroy();
-	deferred.compositionRenderPass->Destroy();
-
-	for (auto &frameBuffer : deferred.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	for (auto &frameBuffer : deferred.compositionFrameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
+	deferred.renderPass.Destroy();
+	deferred.compositionRenderPass.Destroy();
+	for (auto& framebuffer : deferred.framebuffers)
+		framebuffer.Destroy();
+	for (auto & framebuffer : deferred.compositionFramebuffers)
+		framebuffer.Destroy();
 	deferred.pipeline.destroy();
 	deferred.pipelineComposition.destroy();
 
 	// SSR
-	for (auto &frameBuffer : ssr.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	ssr.renderPass->Destroy();
+	for (auto& framebuffer : ssr.framebuffers)
+		framebuffer.Destroy();
+	ssr.renderPass.Destroy();
 	ssr.pipeline.destroy();
 
 	// FXAA
-	for (auto &frameBuffer : fxaa.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	fxaa.renderPass->Destroy();
+	for (auto & framebuffer : fxaa.framebuffers)
+		framebuffer.Destroy();
+	fxaa.renderPass.Destroy();
 	fxaa.pipeline.destroy();
 	fxaa.frameImage.destroy();
 
 	// TAA
 	taa.previous.destroy();
 	taa.frameImage.destroy();
-	for (auto& frameBuffer : taa.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	for (auto& frameBuffer : taa.frameBuffersSharpen) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	taa.renderPass->Destroy();
-	taa.renderPassSharpen->Destroy();
+	for (auto& framebuffer : taa.framebuffers)
+		framebuffer.Destroy();
+	for (auto& framebuffer : taa.framebuffersSharpen)
+		framebuffer.Destroy();
+	taa.renderPass.Destroy();
+	taa.renderPassSharpen.Destroy();
 	taa.pipeline.destroy();
 	taa.pipelineSharpen.destroy();
 
 	// Bloom
-	for (auto &frameBuffer : bloom.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	bloom.renderPassBrightFilter->Destroy();
-	bloom.renderPassGaussianBlur->Destroy();
-	bloom.renderPassCombine->Destroy();
+	for (auto &frameBuffer : bloom.framebuffers)
+		frameBuffer.Destroy();
+	bloom.renderPassBrightFilter.Destroy();
+	bloom.renderPassGaussianBlur.Destroy();
+	bloom.renderPassCombine.Destroy();
 	bloom.pipelineBrightFilter.destroy();
 	bloom.pipelineGaussianBlurHorizontal.destroy();
 	bloom.pipelineGaussianBlurVertical.destroy();
@@ -199,38 +172,26 @@ void Context::resizeViewport(uint32_t width, uint32_t height)
 	bloom.frameImage.destroy();
 
 	// Depth of Field
-	for (auto& frameBuffer : dof.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	dof.renderPass->Destroy();
+	for (auto& framebuffer : dof.framebuffers)
+		framebuffer.Destroy();
+	dof.renderPass.Destroy();
 	dof.pipeline.destroy();
 	dof.frameImage.destroy();
 
 	// Motion blur
-	for (auto &frameBuffer : motionBlur.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	motionBlur.renderPass->Destroy();
+	for (auto & framebuffer : motionBlur.framebuffers)
+		framebuffer.Destroy();
+	motionBlur.renderPass.Destroy();
 	motionBlur.pipeline.destroy();
 	motionBlur.frameImage.destroy();
 
 	// SSAO
-	ssao.renderPass->Destroy();
-	ssao.blurRenderPass->Destroy();
-	for (auto &frameBuffer : ssao.frameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	for (auto &frameBuffer : ssao.blurFrameBuffers) {
-		if (frameBuffer) {
-			vulkan.device.destroyFramebuffer(frameBuffer);
-		}
-	}
+	ssao.renderPass.Destroy();
+	ssao.blurRenderPass.Destroy();
+	for (auto & framebuffer : ssao.framebuffers)
+		framebuffer.Destroy();
+	for (auto & framebuffer : ssao.blurFramebuffers)
+		framebuffer.Destroy();
 	ssao.pipeline.destroy();
 	ssao.pipelineBlur.destroy();
 

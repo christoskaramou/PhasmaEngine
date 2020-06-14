@@ -24,8 +24,8 @@ void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::
 	std::vector<vk::ClearValue> clearValues = { clearColor, clearColor, clearColor, clearColor, clearColor, clearColor, depthStencil };
 
 	vk::RenderPassBeginInfo rpi;
-	rpi.renderPass = *renderPass->GetRef();
-	rpi.framebuffer = frameBuffers[imageIndex];
+	rpi.renderPass = *renderPass;
+	rpi.framebuffer = *framebuffers[imageIndex];
 	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = extent;
 	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -163,16 +163,16 @@ void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows
 	std::vector<vk::ClearValue> clearValues = { clearColor, clearColor };
 
 	vk::RenderPassBeginInfo rpi;
-	rpi.renderPass = *compositionRenderPass->GetRef();
-	rpi.framebuffer = compositionFrameBuffers[imageIndex];
+	rpi.renderPass = *compositionRenderPass;
+	rpi.framebuffer = *compositionFramebuffers[imageIndex];
 	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = extent;
 	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	rpi.pClearValues = clearValues.data();
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline);
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo.layout, 0, { DSComposition, shadows.descriptorSets[0], shadows.descriptorSets[1], shadows.descriptorSets[2], skybox.descriptorSet }, nullptr);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineComposition.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo->layout, 0, { DSComposition, shadows.descriptorSets[0], shadows.descriptorSets[1], shadows.descriptorSets[2], skybox.descriptorSet }, nullptr);
 	cmd.draw(3, 1, 0, 0);
 	cmd.endRenderPass();
 	// End Composition
@@ -189,11 +189,8 @@ void Deferred::createRenderPasses(std::map<std::string, Image>& renderTargets)
 		renderTargets["velocity"].format,
 		renderTargets["emissive"].format
 	};
-	renderPass = CreateRef<RenderPass>();
-	renderPass->Create(formats, VulkanContext::get()->depth->format);
-
-	compositionRenderPass = CreateRef<RenderPass>();
-	compositionRenderPass->Create(renderTargets["viewport"].format, vk::Format::eUndefined);
+	renderPass.Create(formats, VulkanContext::get()->depth->format);
+	compositionRenderPass.Create(renderTargets["viewport"].format, vk::Format::eUndefined);
 }
 
 void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -204,9 +201,14 @@ void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 
 void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
-	for (auto& frameBuffer : frameBuffers) {
-		std::vector<vk::ImageView> attachments = {
+	auto vulkan = VulkanContext::get();
+
+	framebuffers.resize(vulkan->swapchain->images.size());
+	for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+	{
+		uint32_t width = renderTargets["albedo"].width;
+		uint32_t height = renderTargets["albedo"].height;
+		std::vector<vk::ImageView> views = {
 			renderTargets["depth"].view,
 			renderTargets["normal"].view,
 			renderTargets["albedo"].view,
@@ -215,33 +217,21 @@ void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTar
 			renderTargets["emissive"].view,
 			VulkanContext::get()->depth->view
 		};
-		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = *renderPass->GetRef();
-		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
-		fbci.pAttachments = attachments.data();
-		fbci.width = renderTargets["albedo"].width;
-		fbci.height = renderTargets["albedo"].height;
-		fbci.layers = 1;
-		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
+		framebuffers[i].Create(width, height, views, renderPass);
 	}
 }
 
 void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	compositionFrameBuffers.resize(VulkanContext::get()->swapchain->images.size());
+	auto vulkan = VulkanContext::get();
 
-	for (auto& compositionFrameBuffer : compositionFrameBuffers) {
-		std::vector<vk::ImageView> attachments = {
-			renderTargets["viewport"].view
-		};
-		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = *compositionRenderPass->GetRef();
-		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
-		fbci.pAttachments = attachments.data();
-		fbci.width = renderTargets["viewport"].width;
-		fbci.height = renderTargets["viewport"].height;
-		fbci.layers = 1;
-		compositionFrameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
+	compositionFramebuffers.resize(vulkan->swapchain->images.size());
+	for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+	{
+		uint32_t width = renderTargets["viewport"].width;
+		uint32_t height = renderTargets["viewport"].height;
+		vk::ImageView view = renderTargets["viewport"].view;
+		compositionFramebuffers[i].Create(width, height, view, compositionRenderPass);
 	}
 }
 
@@ -280,8 +270,8 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	pssci2.pName = "main";
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
-	pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
-	pipeline.pipeinfo.pStages = stages.data();
+	pipeline.pipeinfo->stageCount = static_cast<uint32_t>(stages.size());
+	pipeline.pipeinfo->pStages = stages.data();
 
 	// Vertex Input state
 	auto vibd = Vertex::getBindingDescriptionGeneral();
@@ -291,13 +281,13 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	pvisci.pVertexBindingDescriptions = vibd.data();
 	pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(viad.size());
 	pvisci.pVertexAttributeDescriptions = viad.data();
-	pipeline.pipeinfo.pVertexInputState = &pvisci;
+	pipeline.pipeinfo->pVertexInputState = &pvisci;
 
 	// Input Assembly stage
 	vk::PipelineInputAssemblyStateCreateInfo piasci;
 	piasci.topology = vk::PrimitiveTopology::eTriangleList;
 	piasci.primitiveRestartEnable = VK_FALSE;
-	pipeline.pipeinfo.pInputAssemblyState = &piasci;
+	pipeline.pipeinfo->pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
 	vk::Viewport vp;
@@ -316,7 +306,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	pvsci.pViewports = &vp;
 	pvsci.scissorCount = 1;
 	pvsci.pScissors = &r2d;
-	pipeline.pipeinfo.pViewportState = &pvsci;
+	pipeline.pipeinfo->pViewportState = &pvsci;
 
 	// Rasterization state
 	vk::PipelineRasterizationStateCreateInfo prsci;
@@ -330,7 +320,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	prsci.depthBiasClamp = 0.0f;
 	prsci.depthBiasSlopeFactor = 0.0f;
 	prsci.lineWidth = 1.0f;
-	pipeline.pipeinfo.pRasterizationState = &prsci;
+	pipeline.pipeinfo->pRasterizationState = &prsci;
 
 	// Multisample state
 	vk::PipelineMultisampleStateCreateInfo pmsci;
@@ -340,7 +330,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	pmsci.pSampleMask = nullptr;
 	pmsci.alphaToCoverageEnable = VK_FALSE;
 	pmsci.alphaToOneEnable = VK_FALSE;
-	pipeline.pipeinfo.pMultisampleState = &pmsci;
+	pipeline.pipeinfo->pMultisampleState = &pmsci;
 
 	// Depth stencil state
 	vk::PipelineDepthStencilStateCreateInfo pdssci;
@@ -353,7 +343,7 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	pdssci.back.compareOp = vk::CompareOp::eAlways;
 	pdssci.minDepthBounds = 0.0f;
 	pdssci.maxDepthBounds = 0.0f;
-	pipeline.pipeinfo.pDepthStencilState = &pdssci;
+	pipeline.pipeinfo->pDepthStencilState = &pdssci;
 
 	// Color Blending state
 	VulkanContext::get()->swapchain->images[0].blentAttachment.blendEnable = VK_TRUE;
@@ -372,35 +362,35 @@ void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
-	pipeline.pipeinfo.pColorBlendState = &pcbsci;
+	pipeline.pipeinfo->pColorBlendState = &pcbsci;
 
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates{};//vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 	vk::PipelineDynamicStateCreateInfo dsi;
 	dsi.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 	dsi.pDynamicStates = dynamicStates.data();
-	pipeline.pipeinfo.pDynamicState = &dsi;
+	pipeline.pipeinfo->pDynamicState = &dsi;
 
 	// Pipeline Layout
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ *Mesh::getDescriptorSetLayout(), *Primitive::getDescriptorSetLayout(), *Model::getDescriptorSetLayout() };
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
+	pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipeline.pipeinfo.renderPass = *renderPass->GetRef();
+	pipeline.pipeinfo->renderPass = *renderPass;
 
 	// Subpass
-	pipeline.pipeinfo.subpass = 0;
+	pipeline.pipeinfo->subpass = 0;
 
 	// Base Pipeline Handle
-	pipeline.pipeinfo.basePipelineHandle = nullptr;
+	pipeline.pipeinfo->basePipelineHandle = nullptr;
 
 	// Base Pipeline Index
-	pipeline.pipeinfo.basePipelineIndex = -1;
+	pipeline.pipeinfo->basePipelineIndex = -1;
 
-	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0));
 
 	// destroy Shader Modules
 	VulkanContext::get()->device.destroyShaderModule(vertModule);
@@ -444,18 +434,18 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	//pssci2.pSpecializationInfo = &si;
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
-	pipelineComposition.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
-	pipelineComposition.pipeinfo.pStages = stages.data();
+	pipelineComposition.pipeinfo->stageCount = static_cast<uint32_t>(stages.size());
+	pipelineComposition.pipeinfo->pStages = stages.data();
 
 	// Vertex Input state
 	vk::PipelineVertexInputStateCreateInfo pvisci;
-	pipelineComposition.pipeinfo.pVertexInputState = &pvisci;
+	pipelineComposition.pipeinfo->pVertexInputState = &pvisci;
 
 	// Input Assembly stage
 	vk::PipelineInputAssemblyStateCreateInfo piasci;
 	piasci.topology = vk::PrimitiveTopology::eTriangleList;
 	piasci.primitiveRestartEnable = VK_FALSE;
-	pipelineComposition.pipeinfo.pInputAssemblyState = &piasci;
+	pipelineComposition.pipeinfo->pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
 	vk::Viewport vp;
@@ -474,7 +464,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	pvsci.pViewports = &vp;
 	pvsci.scissorCount = 1;
 	pvsci.pScissors = &r2d;
-	pipelineComposition.pipeinfo.pViewportState = &pvsci;
+	pipelineComposition.pipeinfo->pViewportState = &pvsci;
 
 	// Rasterization state
 	vk::PipelineRasterizationStateCreateInfo prsci;
@@ -488,7 +478,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	prsci.depthBiasClamp = 0.0f;
 	prsci.depthBiasSlopeFactor = 0.0f;
 	prsci.lineWidth = 1.0f;
-	pipelineComposition.pipeinfo.pRasterizationState = &prsci;
+	pipelineComposition.pipeinfo->pRasterizationState = &prsci;
 
 	// Multisample state
 	vk::PipelineMultisampleStateCreateInfo pmsci;
@@ -498,7 +488,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	pmsci.pSampleMask = nullptr;
 	pmsci.alphaToCoverageEnable = VK_FALSE;
 	pmsci.alphaToOneEnable = VK_FALSE;
-	pipelineComposition.pipeinfo.pMultisampleState = &pmsci;
+	pipelineComposition.pipeinfo->pMultisampleState = &pmsci;
 
 	// Depth stencil state
 	vk::PipelineDepthStencilStateCreateInfo pdssci;
@@ -511,7 +501,7 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	pdssci.back.compareOp = vk::CompareOp::eAlways;
 	pdssci.minDepthBounds = 0.0f;
 	pdssci.maxDepthBounds = 0.0f;
-	pipelineComposition.pipeinfo.pDepthStencilState = &pdssci;
+	pipelineComposition.pipeinfo->pDepthStencilState = &pdssci;
 
 	// Color Blending state
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { 
@@ -524,10 +514,10 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
-	pipelineComposition.pipeinfo.pColorBlendState = &pcbsci;
+	pipelineComposition.pipeinfo->pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	pipelineComposition.pipeinfo.pDynamicState = nullptr;
+	pipelineComposition.pipeinfo->pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!DSLayoutComposition)
@@ -570,21 +560,21 @@ void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTar
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	//plci.pushConstantRangeCount = 1;
 	//plci.pPushConstantRanges = &pConstants;
-	pipelineComposition.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
+	pipelineComposition.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipelineComposition.pipeinfo.renderPass = *compositionRenderPass->GetRef();
+	pipelineComposition.pipeinfo->renderPass = *compositionRenderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
-	pipelineComposition.pipeinfo.subpass = 0;
+	pipelineComposition.pipeinfo->subpass = 0;
 
 	// Base Pipeline Handle
-	pipelineComposition.pipeinfo.basePipelineHandle = nullptr;
+	pipelineComposition.pipeinfo->basePipelineHandle = nullptr;
 
 	// Base Pipeline Index
-	pipelineComposition.pipeinfo.basePipelineIndex = -1;
+	pipelineComposition.pipeinfo->basePipelineIndex = -1;
 
-	pipelineComposition.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipelineComposition.pipeinfo).at(0);
+	pipelineComposition.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineComposition.pipeinfo).at(0));
 
 	// destroy Shader Modules
 	VulkanContext::get()->device.destroyShaderModule(vertModule);
@@ -595,19 +585,14 @@ void Deferred::destroy()
 {
 	auto vulkan = VulkanContext::get();
 
-	renderPass->Destroy();
-	compositionRenderPass->Destroy();
+	renderPass.Destroy();
+	compositionRenderPass.Destroy();
 
-	for (auto &frameBuffer : frameBuffers) {
-		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	for (auto &frameBuffer : compositionFrameBuffers) {
-		if (frameBuffer) {
-			vulkan->device.destroyFramebuffer(frameBuffer);
-		}
-	}
+	for (auto &framebuffer : framebuffers)
+		framebuffer.Destroy();
+	for (auto & framebuffer : compositionFramebuffers)
+		framebuffer.Destroy();
+
 	if (DSLayoutComposition) {
 		vulkan->device.destroyDescriptorSetLayout(DSLayoutComposition);
 		DSLayoutComposition = nullptr;

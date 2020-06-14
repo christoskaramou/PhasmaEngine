@@ -2,6 +2,8 @@
 #include "../../include/imgui/imgui.h"
 #include "../Object/Object.h"
 #include "../Pipeline/Pipeline.h"
+#include "../Renderer/RenderPass.h"
+#include "../Renderer/Framebuffer.h"
 #include "SDL/SDL.h"
 #include <vector>
 
@@ -93,8 +95,8 @@ namespace vm {
 		void				newFrame();
 
 		std::string	name;
-		vk::RenderPass renderPass;
-		std::vector<vk::Framebuffer> frameBuffers{};
+		RenderPass renderPass;
+		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipeline;
 		static inline vk::DescriptorSetLayout descriptorSetLayout = nullptr;
 		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);

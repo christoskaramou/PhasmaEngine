@@ -5,6 +5,7 @@
 #include "../Image/Image.h"
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
+#include "../Renderer/Framebuffer.h"
 #include <vector>
 #include <map>
 
@@ -13,9 +14,9 @@ namespace vm {
 	{
 		mat4 reflectionInput[4];
 		Buffer UBReflection;
-		std::vector<vk::Framebuffer> frameBuffers{};
+		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipeline;
-		Ref<RenderPass> renderPass;
+		RenderPass renderPass;
 		vk::DescriptorSet DSReflection;
 		vk::DescriptorSetLayout DSLayoutReflection;
 

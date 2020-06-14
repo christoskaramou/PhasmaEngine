@@ -4,6 +4,7 @@
 #include <map>
 #include "../Image/Image.h"
 #include "../Renderer/RenderPass.h"
+#include "../Renderer/Framebuffer.h"
 
 namespace vm {
 	struct DOF
@@ -11,9 +12,9 @@ namespace vm {
 		DOF() = default;
 		~DOF() = default;
 
-		std::vector<vk::Framebuffer> frameBuffers{};
+		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipeline;
-		Ref<RenderPass> renderPass;
+		RenderPass renderPass;
 		vk::DescriptorSet DSet;
 		vk::DescriptorSetLayout DSLayout;
 		Image frameImage;

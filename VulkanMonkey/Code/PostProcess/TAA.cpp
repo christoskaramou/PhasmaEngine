@@ -104,8 +104,8 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 
 	// Main TAA pass
 	vk::RenderPassBeginInfo rpi;
-	rpi.renderPass = *renderPass->GetRef();
-	rpi.framebuffer = frameBuffers[imageIndex];
+	rpi.renderPass = *renderPass;
+	rpi.framebuffer = *framebuffers[imageIndex];
 	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = renderTargets["taa"].extent;
 	rpi.clearValueCount = 1;
@@ -113,8 +113,8 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 
 	changeLayout(cmd, renderTargets["taa"], LayoutState::ColorWrite);
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSet, nullptr);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSet, nullptr);
 	cmd.draw(3, 1, 0, 0);
 	cmd.endRenderPass();
 	changeLayout(cmd, renderTargets["taa"], LayoutState::ColorRead);
@@ -123,60 +123,46 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 
 	// TAA Sharpen pass
 	vk::RenderPassBeginInfo rpi2;
-	rpi2.renderPass = *renderPassSharpen->GetRef();
-	rpi2.framebuffer = frameBuffersSharpen[imageIndex];
+	rpi2.renderPass = *renderPassSharpen;
+	rpi2.framebuffer = *framebuffersSharpen[imageIndex];
 	rpi2.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi2.renderArea.extent = renderTargets["viewport"].extent;
 	rpi2.clearValueCount = 1;
 	rpi2.pClearValues = clearValues.data();
 
 	cmd.beginRenderPass(rpi2, vk::SubpassContents::eInline);
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineSharpen.pipeline);
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineSharpen.pipeinfo.layout, 0, DSetSharpen, nullptr);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineSharpen.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineSharpen.pipeinfo->layout, 0, DSetSharpen, nullptr);
 	cmd.draw(3, 1, 0, 0);
 	cmd.endRenderPass();
 }
 
 void TAA::createRenderPasses(std::map<std::string, Image>& renderTargets)
 {
-	renderPass = CreateRef<RenderPass>();
-	renderPass->Create(renderTargets["taa"].format, vk::Format::eUndefined);
-	renderPassSharpen = CreateRef<RenderPass>();
-	renderPassSharpen->Create(renderTargets["viewport"].format, vk::Format::eUndefined);
+	renderPass.Create(renderTargets["taa"].format, vk::Format::eUndefined);
+	renderPassSharpen.Create(renderTargets["viewport"].format, vk::Format::eUndefined);
 }
 
 void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
+	auto vulkan = VulkanContext::get();
 
-	for (auto& frameBuffer : frameBuffers) {
-		std::vector<vk::ImageView> attachments = {
-			renderTargets["taa"].view
-		};
-		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = *renderPass->GetRef();
-		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
-		fbci.pAttachments = attachments.data();
-		fbci.width = renderTargets["taa"].width;
-		fbci.height = renderTargets["taa"].height;
-		fbci.layers = 1;
-		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
+	framebuffers.resize(vulkan->swapchain->images.size());
+	for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+	{
+		uint32_t width = renderTargets["taa"].width;
+		uint32_t height = renderTargets["taa"].height;
+		vk::ImageView view = renderTargets["taa"].view;
+		framebuffers[i].Create(width, height, view, renderPass);
 	}
 
-	frameBuffersSharpen.resize(VulkanContext::get()->swapchain->images.size());
-
-	for (auto& frameBuffer : frameBuffersSharpen) {
-		std::vector<vk::ImageView> attachments = {
-			renderTargets["viewport"].view
-		};
-		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = *renderPassSharpen->GetRef();
-		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
-		fbci.pAttachments = attachments.data();
-		fbci.width = renderTargets["viewport"].width;
-		fbci.height = renderTargets["viewport"].height;
-		fbci.layers = 1;
-		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
+	framebuffersSharpen.resize(vulkan->swapchain->images.size());
+	for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+	{
+		uint32_t width = renderTargets["viewport"].width;
+		uint32_t height = renderTargets["viewport"].height;
+		vk::ImageView view = renderTargets["viewport"].view;
+		framebuffersSharpen[i].Create(width, height, view, renderPassSharpen);
 	}
 }
 
@@ -213,18 +199,18 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	pssci2.pName = "main";
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
-	pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
-	pipeline.pipeinfo.pStages = stages.data();
+	pipeline.pipeinfo->stageCount = static_cast<uint32_t>(stages.size());
+	pipeline.pipeinfo->pStages = stages.data();
 
 	// Vertex Input state
 	vk::PipelineVertexInputStateCreateInfo pvisci;
-	pipeline.pipeinfo.pVertexInputState = &pvisci;
+	pipeline.pipeinfo->pVertexInputState = &pvisci;
 
 	// Input Assembly stage
 	vk::PipelineInputAssemblyStateCreateInfo piasci;
 	piasci.topology = vk::PrimitiveTopology::eTriangleList;
 	piasci.primitiveRestartEnable = VK_FALSE;
-	pipeline.pipeinfo.pInputAssemblyState = &piasci;
+	pipeline.pipeinfo->pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
 	vk::Viewport vp;
@@ -243,7 +229,7 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	pvsci.pViewports = &vp;
 	pvsci.scissorCount = 1;
 	pvsci.pScissors = &r2d;
-	pipeline.pipeinfo.pViewportState = &pvsci;
+	pipeline.pipeinfo->pViewportState = &pvsci;
 
 	// Rasterization state
 	vk::PipelineRasterizationStateCreateInfo prsci;
@@ -257,7 +243,7 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	prsci.depthBiasClamp = 0.0f;
 	prsci.depthBiasSlopeFactor = 0.0f;
 	prsci.lineWidth = 1.0f;
-	pipeline.pipeinfo.pRasterizationState = &prsci;
+	pipeline.pipeinfo->pRasterizationState = &prsci;
 
 	// Multisample state
 	vk::PipelineMultisampleStateCreateInfo pmsci;
@@ -267,7 +253,7 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	pmsci.pSampleMask = nullptr;
 	pmsci.alphaToCoverageEnable = VK_FALSE;
 	pmsci.alphaToOneEnable = VK_FALSE;
-	pipeline.pipeinfo.pMultisampleState = &pmsci;
+	pipeline.pipeinfo->pMultisampleState = &pmsci;
 
 	// Depth stencil state
 	vk::PipelineDepthStencilStateCreateInfo pdssci;
@@ -280,7 +266,7 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	pdssci.back.compareOp = vk::CompareOp::eAlways;
 	pdssci.minDepthBounds = 0.0f;
 	pdssci.maxDepthBounds = 0.0f;
-	pipeline.pipeinfo.pDepthStencilState = &pdssci;
+	pipeline.pipeinfo->pDepthStencilState = &pdssci;
 
 	// Color Blending state
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
@@ -293,10 +279,10 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
-	pipeline.pipeinfo.pColorBlendState = &pcbsci;
+	pipeline.pipeinfo->pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	pipeline.pipeinfo.pDynamicState = nullptr;
+	pipeline.pipeinfo->pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!DSLayout)
@@ -322,21 +308,21 @@ void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
+	pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipeline.pipeinfo.renderPass = *renderPass->GetRef();
+	pipeline.pipeinfo->renderPass = *renderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
-	pipeline.pipeinfo.subpass = 0;
+	pipeline.pipeinfo->subpass = 0;
 
 	// Base Pipeline Handle
-	pipeline.pipeinfo.basePipelineHandle = nullptr;
+	pipeline.pipeinfo->basePipelineHandle = nullptr;
 
 	// Base Pipeline Index
-	pipeline.pipeinfo.basePipelineIndex = -1;
+	pipeline.pipeinfo->basePipelineIndex = -1;
 
-	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0));
 
 	// destroy Shader Modules
 	VulkanContext::get()->device.destroyShaderModule(vertModule);
@@ -370,18 +356,18 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	pssci2.pName = "main";
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
-	pipelineSharpen.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
-	pipelineSharpen.pipeinfo.pStages = stages.data();
+	pipelineSharpen.pipeinfo->stageCount = static_cast<uint32_t>(stages.size());
+	pipelineSharpen.pipeinfo->pStages = stages.data();
 
 	// Vertex Input state
 	vk::PipelineVertexInputStateCreateInfo pvisci;
-	pipelineSharpen.pipeinfo.pVertexInputState = &pvisci;
+	pipelineSharpen.pipeinfo->pVertexInputState = &pvisci;
 
 	// Input Assembly stage
 	vk::PipelineInputAssemblyStateCreateInfo piasci;
 	piasci.topology = vk::PrimitiveTopology::eTriangleList;
 	piasci.primitiveRestartEnable = VK_FALSE;
-	pipelineSharpen.pipeinfo.pInputAssemblyState = &piasci;
+	pipelineSharpen.pipeinfo->pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
 	vk::Viewport vp;
@@ -400,7 +386,7 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	pvsci.pViewports = &vp;
 	pvsci.scissorCount = 1;
 	pvsci.pScissors = &r2d;
-	pipelineSharpen.pipeinfo.pViewportState = &pvsci;
+	pipelineSharpen.pipeinfo->pViewportState = &pvsci;
 
 	// Rasterization state
 	vk::PipelineRasterizationStateCreateInfo prsci;
@@ -414,7 +400,7 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	prsci.depthBiasClamp = 0.0f;
 	prsci.depthBiasSlopeFactor = 0.0f;
 	prsci.lineWidth = 1.0f;
-	pipelineSharpen.pipeinfo.pRasterizationState = &prsci;
+	pipelineSharpen.pipeinfo->pRasterizationState = &prsci;
 
 	// Multisample state
 	vk::PipelineMultisampleStateCreateInfo pmsci;
@@ -424,7 +410,7 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	pmsci.pSampleMask = nullptr;
 	pmsci.alphaToCoverageEnable = VK_FALSE;
 	pmsci.alphaToOneEnable = VK_FALSE;
-	pipelineSharpen.pipeinfo.pMultisampleState = &pmsci;
+	pipelineSharpen.pipeinfo->pMultisampleState = &pmsci;
 
 	// Depth stencil state
 	vk::PipelineDepthStencilStateCreateInfo pdssci;
@@ -437,7 +423,7 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	pdssci.back.compareOp = vk::CompareOp::eAlways;
 	pdssci.minDepthBounds = 0.0f;
 	pdssci.maxDepthBounds = 0.0f;
-	pipelineSharpen.pipeinfo.pDepthStencilState = &pdssci;
+	pipelineSharpen.pipeinfo->pDepthStencilState = &pdssci;
 
 	// Color Blending state
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
@@ -450,10 +436,10 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
-	pipelineSharpen.pipeinfo.pColorBlendState = &pcbsci;
+	pipelineSharpen.pipeinfo->pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	pipelineSharpen.pipeinfo.pDynamicState = nullptr;
+	pipelineSharpen.pipeinfo->pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!DSLayoutSharpen)
@@ -476,21 +462,21 @@ void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	pipelineSharpen.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
+	pipelineSharpen.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipelineSharpen.pipeinfo.renderPass = *renderPassSharpen->GetRef();
+	pipelineSharpen.pipeinfo->renderPass = *renderPassSharpen;
 
 	// Subpass (Index of subpass this pipeline will be used in)
-	pipelineSharpen.pipeinfo.subpass = 0;
+	pipelineSharpen.pipeinfo->subpass = 0;
 
 	// Base Pipeline Handle
-	pipelineSharpen.pipeinfo.basePipelineHandle = nullptr;
+	pipelineSharpen.pipeinfo->basePipelineHandle = nullptr;
 
 	// Base Pipeline Index
-	pipelineSharpen.pipeinfo.basePipelineIndex = -1;
+	pipelineSharpen.pipeinfo->basePipelineIndex = -1;
 
-	pipelineSharpen.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipelineSharpen.pipeinfo).at(0);
+	pipelineSharpen.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineSharpen.pipeinfo).at(0));
 
 	// destroy Shader Modules
 	VulkanContext::get()->device.destroyShaderModule(vertModule);
@@ -620,19 +606,14 @@ void TAA::destroy()
 	uniform.destroy();
 	previous.destroy();
 	frameImage.destroy();
-	for (auto& frameBuffer : frameBuffers) {
-		if (frameBuffer) {
-			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	for (auto& frameBuffer : frameBuffersSharpen) {
-		if (frameBuffer) {
-			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
-		}
-	}
 
-	renderPass->Destroy();
-	renderPassSharpen->Destroy();
+	for (auto& framebuffer : framebuffers)
+		framebuffer.Destroy();
+	for (auto& framebuffer : framebuffersSharpen)
+		framebuffer.Destroy();
+
+	renderPass.Destroy();
+	renderPassSharpen.Destroy();
 
 	if (DSLayout) {
 		VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayout);

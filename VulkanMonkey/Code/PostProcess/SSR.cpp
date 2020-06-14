@@ -76,42 +76,35 @@ void SSR::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& e
 	std::vector<vk::ClearValue> clearValues = { clearColor };
 
 	vk::RenderPassBeginInfo renderPassInfo;
-	renderPassInfo.renderPass = *renderPass->GetRef();
-	renderPassInfo.framebuffer = frameBuffers[imageIndex];
+	renderPassInfo.renderPass = *renderPass;
+	renderPassInfo.framebuffer = *framebuffers[imageIndex];
 	renderPassInfo.renderArea.offset = vk::Offset2D{ 0, 0 };
 	renderPassInfo.renderArea.extent = extent;
 	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	renderPassInfo.pClearValues = clearValues.data();
 
 	cmd.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSReflection, nullptr);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSReflection, nullptr);
 	cmd.draw(3, 1, 0, 0);
 	cmd.endRenderPass();
 }
 
 void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 {
-	renderPass = CreateRef<RenderPass>();
-	renderPass->Create(renderTargets["ssr"].format, vk::Format::eUndefined);
+	renderPass.Create(renderTargets["ssr"].format, vk::Format::eUndefined);
 }
 
 void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
-
-	for (auto& frameBuffer : frameBuffers) {
-		std::vector<vk::ImageView> attachments = {
-			renderTargets["ssr"].view
-		};
-		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = *renderPass->GetRef();
-		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
-		fbci.pAttachments = attachments.data();
-		fbci.width = renderTargets["ssr"].width;
-		fbci.height = renderTargets["ssr"].height;
-		fbci.layers = 1;
-		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
+	auto vulkan = VulkanContext::get();
+	framebuffers.resize(vulkan->swapchain->images.size());
+	for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+	{
+		uint32_t width = renderTargets["ssr"].width;
+		uint32_t height = renderTargets["ssr"].height;
+		vk::ImageView view = renderTargets["ssr"].view;
+		framebuffers[i].Create(width, height, view, renderPass);
 	}
 }
 
@@ -142,18 +135,18 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	pssci2.pName = "main";
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
-	pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
-	pipeline.pipeinfo.pStages = stages.data();
+	pipeline.pipeinfo->stageCount = static_cast<uint32_t>(stages.size());
+	pipeline.pipeinfo->pStages = stages.data();
 
 	// Vertex Input state
 	vk::PipelineVertexInputStateCreateInfo pvisci;
-	pipeline.pipeinfo.pVertexInputState = &pvisci;
+	pipeline.pipeinfo->pVertexInputState = &pvisci;
 
 	// Input Assembly stage
 	vk::PipelineInputAssemblyStateCreateInfo piasci;
 	piasci.topology = vk::PrimitiveTopology::eTriangleList;
 	piasci.primitiveRestartEnable = VK_FALSE;
-	pipeline.pipeinfo.pInputAssemblyState = &piasci;
+	pipeline.pipeinfo->pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
 	vk::Viewport vp;
@@ -172,7 +165,7 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	pvsci.pViewports = &vp;
 	pvsci.scissorCount = 1;
 	pvsci.pScissors = &r2d;
-	pipeline.pipeinfo.pViewportState = &pvsci;
+	pipeline.pipeinfo->pViewportState = &pvsci;
 
 	// Rasterization state
 	vk::PipelineRasterizationStateCreateInfo prsci;
@@ -186,7 +179,7 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	prsci.depthBiasClamp = 0.0f;
 	prsci.depthBiasSlopeFactor = 0.0f;
 	prsci.lineWidth = 1.0f;
-	pipeline.pipeinfo.pRasterizationState = &prsci;
+	pipeline.pipeinfo->pRasterizationState = &prsci;
 
 	// Multisample state
 	vk::PipelineMultisampleStateCreateInfo pmsci;
@@ -196,7 +189,7 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	pmsci.pSampleMask = nullptr;
 	pmsci.alphaToCoverageEnable = VK_FALSE;
 	pmsci.alphaToOneEnable = VK_FALSE;
-	pipeline.pipeinfo.pMultisampleState = &pmsci;
+	pipeline.pipeinfo->pMultisampleState = &pmsci;
 
 	// Depth stencil state
 	vk::PipelineDepthStencilStateCreateInfo pdssci;
@@ -209,7 +202,7 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	pdssci.back.compareOp = vk::CompareOp::eAlways;
 	pdssci.minDepthBounds = 0.0f;
 	pdssci.maxDepthBounds = 0.0f;
-	pipeline.pipeinfo.pDepthStencilState = &pdssci;
+	pipeline.pipeinfo->pDepthStencilState = &pdssci;
 
 	// Color Blending state
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
@@ -222,10 +215,10 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
-	pipeline.pipeinfo.pColorBlendState = &pcbsci;
+	pipeline.pipeinfo->pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	pipeline.pipeinfo.pDynamicState = nullptr;
+	pipeline.pipeinfo->pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!DSLayoutReflection)
@@ -258,21 +251,21 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 0;
 	plci.pPushConstantRanges = nullptr;
-	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
+	pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipeline.pipeinfo.renderPass = *renderPass->GetRef();
+	pipeline.pipeinfo->renderPass = *renderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
-	pipeline.pipeinfo.subpass = 0;
+	pipeline.pipeinfo->subpass = 0;
 
 	// Base Pipeline Handle
-	pipeline.pipeinfo.basePipelineHandle = nullptr;
+	pipeline.pipeinfo->basePipelineHandle = nullptr;
 
 	// Base Pipeline Index
-	pipeline.pipeinfo.basePipelineIndex = -1;
+	pipeline.pipeinfo->basePipelineIndex = -1;
 
-	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0));
 
 	// destroy Shader Modules
 	VulkanContext::get()->device.destroyShaderModule(vertModule);
@@ -281,13 +274,10 @@ void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 
 void SSR::destroy()
 {
-	for (auto &frameBuffer : frameBuffers) {
-		if (frameBuffer) {
-			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
-		}
-	}
+	for (auto &framebuffer : framebuffers)
+		framebuffer.Destroy();
 	
-	renderPass->Destroy();
+	renderPass.Destroy();
 
 	if (DSLayoutReflection) {
 		VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayoutReflection);

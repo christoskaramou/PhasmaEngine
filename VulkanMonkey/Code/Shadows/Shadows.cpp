@@ -77,7 +77,7 @@ void Shadows::createRenderPass()
 	rpci.subpassCount = 1;
 	rpci.pSubpasses = &subpassDesc;
 
-	renderPass = VulkanContext::get()->device.createRenderPass(rpci);
+	renderPass.SetRef(CreateRef<vk::RenderPass>(VulkanContext::get()->device.createRenderPass(rpci)));
 }
 
 void Shadows::createFrameBuffers()
@@ -100,22 +100,13 @@ void Shadows::createFrameBuffers()
 		texture.createSampler();
 	}
 
-	frameBuffers.resize(VulkanContext::get()->swapchain->images.size() * textures.size());
-	for (uint32_t i = 0; i < frameBuffers.size(); ++i)
+	framebuffers.resize(VulkanContext::get()->swapchain->images.size() * textures.size());
+	for (uint32_t i = 0; i < framebuffers.size(); ++i)
 	{
-		std::vector<vk::ImageView> attachments {
-			textures[i % textures.size()].view
-		};
-
-		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = renderPass;
-		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
-		fbci.pAttachments = attachments.data();
-		fbci.width = Shadows::imageSize;
-		fbci.height = Shadows::imageSize;
-		fbci.layers = 1;
-
-		frameBuffers[i] = VulkanContext::get()->device.createFramebuffer(fbci);
+		uint32_t width = Shadows::imageSize;
+		uint32_t height = Shadows::imageSize;
+		vk::ImageView view = textures[i % textures.size()].view;
+		framebuffers[i].Create(width, height, view, renderPass);
 	}
 }
 
@@ -135,8 +126,8 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	pssci1.pName = "main";
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1 };
-	pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
-	pipeline.pipeinfo.pStages = stages.data();
+	pipeline.pipeinfo->stageCount = static_cast<uint32_t>(stages.size());
+	pipeline.pipeinfo->pStages = stages.data();
 
 	// Vertex Input state
 	auto vibd = Vertex::getBindingDescriptionGeneral();
@@ -146,13 +137,13 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	pvisci.pVertexBindingDescriptions = vibd.data();
 	pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(viad.size());
 	pvisci.pVertexAttributeDescriptions = viad.data();
-	pipeline.pipeinfo.pVertexInputState = &pvisci;
+	pipeline.pipeinfo->pVertexInputState = &pvisci;
 
 	// Input Assembly stage
 	vk::PipelineInputAssemblyStateCreateInfo piasci;
 	piasci.topology = vk::PrimitiveTopology::eTriangleList;
 	piasci.primitiveRestartEnable = VK_FALSE;
-	pipeline.pipeinfo.pInputAssemblyState = &piasci;
+	pipeline.pipeinfo->pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
 	vk::Viewport vp;
@@ -171,7 +162,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	pvsci.pViewports = &vp;
 	pvsci.scissorCount = 1;
 	pvsci.pScissors = &r2d;
-	pipeline.pipeinfo.pViewportState = &pvsci;
+	pipeline.pipeinfo->pViewportState = &pvsci;
 
 	// Rasterization state
 	vk::PipelineRasterizationStateCreateInfo prsci;
@@ -185,7 +176,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	prsci.depthBiasClamp = 0.0f;
 	prsci.depthBiasSlopeFactor = 0.0f;
 	prsci.lineWidth = 1.0f;
-	pipeline.pipeinfo.pRasterizationState = &prsci;
+	pipeline.pipeinfo->pRasterizationState = &prsci;
 
 	// Multisample state
 	vk::PipelineMultisampleStateCreateInfo pmsci;
@@ -195,7 +186,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	pmsci.pSampleMask = nullptr;
 	pmsci.alphaToCoverageEnable = VK_FALSE;
 	pmsci.alphaToOneEnable = VK_FALSE;
-	pipeline.pipeinfo.pMultisampleState = &pmsci;
+	pipeline.pipeinfo->pMultisampleState = &pmsci;
 
 	// Depth stencil state
 	vk::PipelineDepthStencilStateCreateInfo pdssci;
@@ -208,7 +199,7 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	pdssci.back.compareOp = vk::CompareOp::eAlways;
 	pdssci.minDepthBounds = 0.0f;
 	pdssci.maxDepthBounds = 0.0f;
-	pipeline.pipeinfo.pDepthStencilState = &pdssci;
+	pipeline.pipeinfo->pDepthStencilState = &pdssci;
 
 	// Color Blending state
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
@@ -221,35 +212,35 @@ void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayo
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
-	pipeline.pipeinfo.pColorBlendState = &pcbsci;
+	pipeline.pipeinfo->pColorBlendState = &pcbsci;
 
 	// Dynamic state
 	std::vector<vk::DynamicState> dynamicStates{ vk::DynamicState::eDepthBias };
 	vk::PipelineDynamicStateCreateInfo dsi;
 	dsi.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 	dsi.pDynamicStates = dynamicStates.data();
-	pipeline.pipeinfo.pDynamicState = &dsi;
+	pipeline.pipeinfo->pDynamicState = &dsi;
 
 	// Pipeline Layout
 	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ getDescriptorSetLayout(), mesh, model };
 	vk::PipelineLayoutCreateInfo plci;
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
-	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
+	pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipeline.pipeinfo.renderPass = renderPass;
+	pipeline.pipeinfo->renderPass = *renderPass;
 
 	// Subpass
-	pipeline.pipeinfo.subpass = 0;
+	pipeline.pipeinfo->subpass = 0;
 
 	// Base Pipeline Handle
-	pipeline.pipeinfo.basePipelineHandle = nullptr;
+	pipeline.pipeinfo->basePipelineHandle = nullptr;
 
 	// Base Pipeline Index
-	pipeline.pipeinfo.basePipelineIndex = -1;
+	pipeline.pipeinfo->basePipelineIndex = -1;
 
-	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0));
 
 	// destroy Shader Modules
 	VulkanContext::get()->device.destroyShaderModule(vertModule);
@@ -287,16 +278,16 @@ void Shadows::createUniformBuffers()
 
 void Shadows::destroy()
 {
-	if (renderPass)
-		VulkanContext::get()->device.destroyRenderPass(renderPass);
+	if (*renderPass)
+		VulkanContext::get()->device.destroyRenderPass(*renderPass);
 	if (descriptorSetLayout) {
 		VulkanContext::get()->device.destroyDescriptorSetLayout(Shadows::descriptorSetLayout);
 		descriptorSetLayout = nullptr;
 	}
 	for (auto& texture : textures)
 		texture.destroy();
-	for (auto& fb : frameBuffers)
-		VulkanContext::get()->device.destroyFramebuffer(fb);
+	for (auto& fb : framebuffers)
+		VulkanContext::get()->device.destroyFramebuffer(*fb);
 	for (auto& buffer : uniformBuffers)
 		buffer.destroy();
 	pipeline.destroy();

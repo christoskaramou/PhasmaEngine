@@ -1,14 +1,22 @@
 #pragma once
-#include "../VulkanContext/VulkanContext.h"
-#include "../Math/Math.h"
-#include <vector>
+#include "../Core/Base.h"
 
-namespace vm {
-	struct Pipeline
+namespace vk
+{
+	class Pipeline;
+	struct GraphicsPipelineCreateInfo;
+	struct ComputePipelineCreateInfo;
+}
+
+namespace vm
+{
+	class Pipeline
 	{
-		vk::Pipeline pipeline;
-		vk::GraphicsPipelineCreateInfo pipeinfo;
-		vk::ComputePipelineCreateInfo compinfo;
+	public:
+		Pipeline();
+		Ref_t<vk::Pipeline> pipeline;
+		Ref_t<vk::GraphicsPipelineCreateInfo> pipeinfo;
+		Ref_t<vk::ComputePipelineCreateInfo> compinfo;
 
 		void destroy();
 	};

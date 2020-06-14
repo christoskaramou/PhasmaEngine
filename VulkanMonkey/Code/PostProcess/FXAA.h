@@ -3,6 +3,7 @@
 #include "../Pipeline/Pipeline.h"
 #include "../Image/Image.h"
 #include "../Renderer/RenderPass.h"
+#include "../Renderer/Framebuffer.h"
 #include <vector>
 #include <map>
 #include <string>
@@ -10,9 +11,9 @@
 namespace vm {
 	struct FXAA
 	{
-		std::vector<vk::Framebuffer> frameBuffers{};
+		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipeline;
-		Ref<RenderPass> renderPass;
+		RenderPass renderPass;
 		vk::DescriptorSet DSet;
 		vk::DescriptorSetLayout DSLayout;
 		Image frameImage;

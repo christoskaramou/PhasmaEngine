@@ -5,6 +5,7 @@
 #include <functional>
 #include "../Image/Image.h"
 #include "../Renderer/RenderPass.h"
+#include "../Renderer/Framebuffer.h"
 
 namespace vm {
 	struct Bloom
@@ -12,14 +13,14 @@ namespace vm {
 		Bloom() = default;
 		~Bloom() = default;
 
-		std::vector<vk::Framebuffer> frameBuffers{};
+		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipelineBrightFilter;
 		Pipeline pipelineGaussianBlurHorizontal;
 		Pipeline pipelineGaussianBlurVertical;
 		Pipeline pipelineCombine;
-		Ref<RenderPass> renderPassBrightFilter;
-		Ref<RenderPass> renderPassGaussianBlur;
-		Ref<RenderPass> renderPassCombine;
+		RenderPass renderPassBrightFilter;
+		RenderPass renderPassGaussianBlur;
+		RenderPass renderPassCombine;
 		vk::DescriptorSet DSBrightFilter;
 		vk::DescriptorSet DSGaussianBlurHorizontal;
 		vk::DescriptorSet DSGaussianBlurVertical;

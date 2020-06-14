@@ -111,8 +111,8 @@ void SSAO::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(v
 	std::vector<vk::ClearValue> clearValues = { clearColor };
 
 	vk::RenderPassBeginInfo rpi;
-	rpi.renderPass = *renderPass->GetRef();
-	rpi.framebuffer = frameBuffers[imageIndex];
+	rpi.renderPass = *renderPass;
+	rpi.framebuffer = *framebuffers[imageIndex];
 	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = image.extent;
 	rpi.clearValueCount = 1;
@@ -120,21 +120,21 @@ void SSAO::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(v
 
 	changeLayout(cmd, image, LayoutState::ColorWrite);
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
 	const vk::DescriptorSet descriptorSets = { DSet };
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, descriptorSets, nullptr);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, descriptorSets, nullptr);
 	cmd.draw(3, 1, 0, 0);
 	cmd.endRenderPass();
 	changeLayout(cmd, image, LayoutState::ColorRead);
 
 	// new blurry SSAO image
-	rpi.renderPass = *blurRenderPass->GetRef();
-	rpi.framebuffer = blurFrameBuffers[imageIndex];
+	rpi.renderPass = *blurRenderPass;
+	rpi.framebuffer = *blurFramebuffers[imageIndex];
 
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeline);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineBlur.pipeline);
 	const vk::DescriptorSet descriptorSetsBlur = { DSBlur };
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeinfo.layout, 0, descriptorSetsBlur, nullptr);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeinfo->layout, 0, descriptorSetsBlur, nullptr);
 	cmd.draw(3, 1, 0, 0);
 	cmd.endRenderPass();
 }
@@ -145,19 +145,14 @@ void SSAO::destroy()
 	UB_PVM.destroy();
 	noiseTex.destroy();
 	
-	renderPass->Destroy();
-	blurRenderPass->Destroy();
+	renderPass.Destroy();
+	blurRenderPass.Destroy();
 
-	for (auto &frameBuffer : frameBuffers) {
-		if (frameBuffer) {
-			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
-		}
-	}
-	for (auto &frameBuffer : blurFrameBuffers) {
-		if (frameBuffer) {
-			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
-		}
-	}
+	for (auto &frameBuffer : framebuffers)
+		frameBuffer.Destroy();
+	for (auto &frameBuffer : blurFramebuffers)
+		frameBuffer.Destroy();
+
 	pipeline.destroy();
 	pipelineBlur.destroy();
 	if (DSLayout) {
@@ -187,10 +182,8 @@ void SSAO::update(Camera& camera)
 
 void vm::SSAO::createRenderPasses(std::map<std::string, Image>& renderTargets)
 {
-	renderPass = CreateRef<RenderPass>();
-	renderPass->Create(renderTargets["ssao"].format, vk::Format::eUndefined);
-	blurRenderPass = CreateRef<RenderPass>();
-	blurRenderPass->Create(renderTargets["ssaoBlur"].format, vk::Format::eUndefined);
+	renderPass.Create(renderTargets["ssao"].format, vk::Format::eUndefined);
+	blurRenderPass.Create(renderTargets["ssaoBlur"].format, vk::Format::eUndefined);
 }
 
 void vm::SSAO::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -201,39 +194,27 @@ void vm::SSAO::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 
 void vm::SSAO::createSSAOFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
-
-	for (auto& frameBuffer : frameBuffers) {
-		std::vector<vk::ImageView> attachments = {
-			renderTargets["ssao"].view
-		};
-		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = *renderPass->GetRef();
-		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
-		fbci.pAttachments = attachments.data();
-		fbci.width = renderTargets["ssao"].width;
-		fbci.height = renderTargets["ssao"].height;
-		fbci.layers = 1;
-		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
+	auto vulkan = VulkanContext::get();
+	framebuffers.resize(vulkan->swapchain->images.size());
+	for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+	{
+		uint32_t width = renderTargets["ssao"].width;
+		uint32_t height = renderTargets["ssao"].height;
+		vk::ImageView view = renderTargets["ssao"].view;
+		framebuffers[i].Create(width, height, view, renderPass);
 	}
 }
 
 void vm::SSAO::createSSAOBlurFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	blurFrameBuffers.resize(VulkanContext::get()->swapchain->images.size());
-
-	for (auto& frameBuffer : blurFrameBuffers) {
-		std::vector<vk::ImageView> attachments = {
-			renderTargets["ssaoBlur"].view
-		};
-		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = *blurRenderPass->GetRef();
-		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
-		fbci.pAttachments = attachments.data();
-		fbci.width = renderTargets["ssaoBlur"].width;
-		fbci.height = renderTargets["ssaoBlur"].height;
-		fbci.layers = 1;
-		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
+	auto vulkan = VulkanContext::get();
+	blurFramebuffers.resize(vulkan->swapchain->images.size());
+	for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+	{
+		uint32_t width = renderTargets["ssaoBlur"].width;
+		uint32_t height = renderTargets["ssaoBlur"].height;
+		vk::ImageView view = renderTargets["ssaoBlur"].view;
+		blurFramebuffers[i].Create(width, height, view, blurRenderPass);
 	}
 }
 
@@ -270,18 +251,18 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	pssci2.pName = "main";
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
-	pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
-	pipeline.pipeinfo.pStages = stages.data();
+	pipeline.pipeinfo->stageCount = static_cast<uint32_t>(stages.size());
+	pipeline.pipeinfo->pStages = stages.data();
 
 	// Vertex Input state
 	vk::PipelineVertexInputStateCreateInfo pvisci;
-	pipeline.pipeinfo.pVertexInputState = &pvisci;
+	pipeline.pipeinfo->pVertexInputState = &pvisci;
 
 	// Input Assembly stage
 	vk::PipelineInputAssemblyStateCreateInfo piasci;
 	piasci.topology = vk::PrimitiveTopology::eTriangleList;
 	piasci.primitiveRestartEnable = VK_FALSE;
-	pipeline.pipeinfo.pInputAssemblyState = &piasci;
+	pipeline.pipeinfo->pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
 	vk::Viewport vp;
@@ -300,7 +281,7 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	pvsci.pViewports = &vp;
 	pvsci.scissorCount = 1;
 	pvsci.pScissors = &r2d;
-	pipeline.pipeinfo.pViewportState = &pvsci;
+	pipeline.pipeinfo->pViewportState = &pvsci;
 
 	// Rasterization state
 	vk::PipelineRasterizationStateCreateInfo prsci;
@@ -314,7 +295,7 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	prsci.depthBiasClamp = 0.0f;
 	prsci.depthBiasSlopeFactor = 0.0f;
 	prsci.lineWidth = 1.0f;
-	pipeline.pipeinfo.pRasterizationState = &prsci;
+	pipeline.pipeinfo->pRasterizationState = &prsci;
 
 	// Multisample state
 	vk::PipelineMultisampleStateCreateInfo pmsci;
@@ -324,7 +305,7 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	pmsci.pSampleMask = nullptr;
 	pmsci.alphaToCoverageEnable = VK_FALSE;
 	pmsci.alphaToOneEnable = VK_FALSE;
-	pipeline.pipeinfo.pMultisampleState = &pmsci;
+	pipeline.pipeinfo->pMultisampleState = &pmsci;
 
 	// Depth stencil state
 	vk::PipelineDepthStencilStateCreateInfo pdssci;
@@ -337,7 +318,7 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	pdssci.back.compareOp = vk::CompareOp::eAlways;
 	pdssci.minDepthBounds = 0.0f;
 	pdssci.maxDepthBounds = 0.0f;
-	pipeline.pipeinfo.pDepthStencilState = &pdssci;
+	pipeline.pipeinfo->pDepthStencilState = &pdssci;
 
 	// Color Blending state
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = { 
@@ -350,10 +331,10 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
-	pipeline.pipeinfo.pColorBlendState = &pcbsci;
+	pipeline.pipeinfo->pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	pipeline.pipeinfo.pDynamicState = nullptr;
+	pipeline.pipeinfo->pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!DSLayout)
@@ -386,21 +367,21 @@ void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 0;
 	plci.pPushConstantRanges = nullptr;
-	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
+	pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipeline.pipeinfo.renderPass = *renderPass->GetRef();
+	pipeline.pipeinfo->renderPass = *renderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
-	pipeline.pipeinfo.subpass = 0;
+	pipeline.pipeinfo->subpass = 0;
 
 	// Base Pipeline Handle
-	pipeline.pipeinfo.basePipelineHandle = nullptr;
+	pipeline.pipeinfo->basePipelineHandle = nullptr;
 
 	// Base Pipeline Index
-	pipeline.pipeinfo.basePipelineIndex = -1;
+	pipeline.pipeinfo->basePipelineIndex = -1;
 
-	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0));
 
 	// destroy Shader Modules
 	VulkanContext::get()->device.destroyShaderModule(vertModule);
@@ -434,18 +415,18 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	pssci2.pName = "main";
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
-	pipelineBlur.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
-	pipelineBlur.pipeinfo.pStages = stages.data();
+	pipelineBlur.pipeinfo->stageCount = static_cast<uint32_t>(stages.size());
+	pipelineBlur.pipeinfo->pStages = stages.data();
 
 	// Vertex Input state
 	vk::PipelineVertexInputStateCreateInfo pvisci;
-	pipelineBlur.pipeinfo.pVertexInputState = &pvisci;
+	pipelineBlur.pipeinfo->pVertexInputState = &pvisci;
 
 	// Input Assembly stage
 	vk::PipelineInputAssemblyStateCreateInfo piasci;
 	piasci.topology = vk::PrimitiveTopology::eTriangleList;
 	piasci.primitiveRestartEnable = VK_FALSE;
-	pipelineBlur.pipeinfo.pInputAssemblyState = &piasci;
+	pipelineBlur.pipeinfo->pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
 	vk::Viewport vp;
@@ -464,7 +445,7 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	pvsci.pViewports = &vp;
 	pvsci.scissorCount = 1;
 	pvsci.pScissors = &r2d;
-	pipelineBlur.pipeinfo.pViewportState = &pvsci;
+	pipelineBlur.pipeinfo->pViewportState = &pvsci;
 
 	// Rasterization state
 	vk::PipelineRasterizationStateCreateInfo prsci;
@@ -478,7 +459,7 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	prsci.depthBiasClamp = 0.0f;
 	prsci.depthBiasSlopeFactor = 0.0f;
 	prsci.lineWidth = 1.0f;
-	pipelineBlur.pipeinfo.pRasterizationState = &prsci;
+	pipelineBlur.pipeinfo->pRasterizationState = &prsci;
 
 	// Multisample state
 	vk::PipelineMultisampleStateCreateInfo pmsci;
@@ -488,7 +469,7 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	pmsci.pSampleMask = nullptr;
 	pmsci.alphaToCoverageEnable = VK_FALSE;
 	pmsci.alphaToOneEnable = VK_FALSE;
-	pipelineBlur.pipeinfo.pMultisampleState = &pmsci;
+	pipelineBlur.pipeinfo->pMultisampleState = &pmsci;
 
 	// Depth stencil state
 	vk::PipelineDepthStencilStateCreateInfo pdssci;
@@ -501,7 +482,7 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	pdssci.back.compareOp = vk::CompareOp::eAlways;
 	pdssci.minDepthBounds = 0.0f;
 	pdssci.maxDepthBounds = 0.0f;
-	pipelineBlur.pipeinfo.pDepthStencilState = &pdssci;
+	pipelineBlur.pipeinfo->pDepthStencilState = &pdssci;
 
 	// Color Blending state
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
@@ -514,10 +495,10 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
-	pipelineBlur.pipeinfo.pColorBlendState = &pcbsci;
+	pipelineBlur.pipeinfo->pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	pipelineBlur.pipeinfo.pDynamicState = nullptr;
+	pipelineBlur.pipeinfo->pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!DSLayoutBlur)
@@ -540,21 +521,21 @@ void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 	plci.pSetLayouts = descriptorSetLayouts.data();
 
-	pipelineBlur.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
+	pipelineBlur.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipelineBlur.pipeinfo.renderPass = *blurRenderPass->GetRef();
+	pipelineBlur.pipeinfo->renderPass = *blurRenderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
-	pipelineBlur.pipeinfo.subpass = 0;
+	pipelineBlur.pipeinfo->subpass = 0;
 
 	// Base Pipeline Handle
-	pipelineBlur.pipeinfo.basePipelineHandle = nullptr;
+	pipelineBlur.pipeinfo->basePipelineHandle = nullptr;
 
 	// Base Pipeline Index
-	pipelineBlur.pipeinfo.basePipelineIndex = -1;
+	pipelineBlur.pipeinfo->basePipelineIndex = -1;
 
-	pipelineBlur.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipelineBlur.pipeinfo).at(0);
+	pipelineBlur.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineBlur.pipeinfo).at(0));
 
 	// destroy Shader Modules
 	VulkanContext::get()->device.destroyShaderModule(vertModule);

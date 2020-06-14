@@ -71,8 +71,8 @@ void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Exte
 	std::vector<vk::ClearValue> clearValues = { clearColor };
 
 	vk::RenderPassBeginInfo rpi;
-	rpi.renderPass = *renderPass->GetRef();
-	rpi.framebuffer = frameBuffers[imageIndex];
+	rpi.renderPass = *renderPass;
+	rpi.framebuffer = *framebuffers[imageIndex];
 	rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 	rpi.renderArea.extent = extent;
 	rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -80,22 +80,19 @@ void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Exte
 	cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 	const vec4 values {1.f / static_cast<float>(FrameTimer::Instance().delta), sin(static_cast<float>(FrameTimer::Instance().time) * 0.125f), GUI::motionBlur_strength, 0.f };
-	cmd.pushConstants<vec4>(pipeline.pipeinfo.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo.layout, 0, DSMotionBlur, nullptr);
+	cmd.pushConstants<vec4>(pipeline.pipeinfo->layout, vk::ShaderStageFlagBits::eFragment, 0, values);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSMotionBlur, nullptr);
 	cmd.draw(3, 1, 0, 0);
 	cmd.endRenderPass();
 }
 
 void MotionBlur::destroy()
 {
-	for (auto &frameBuffer : frameBuffers) {
-		if (frameBuffer) {
-			VulkanContext::get()->device.destroyFramebuffer(frameBuffer);
-		}
-	}
+	for (auto &frameBuffer : framebuffers)
+		frameBuffer.Destroy();
 
-	renderPass->Destroy();
+	renderPass.Destroy();
 
 	if (DSLayoutMotionBlur) {
 		VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayoutMotionBlur);
@@ -128,26 +125,19 @@ void MotionBlur::update(Camera& camera)
 
 void MotionBlur::createRenderPass(std::map<std::string, Image>& renderTargets)
 {
-	renderPass = CreateRef<RenderPass>();
-	renderPass->Create(renderTargets["viewport"].format, vk::Format::eUndefined);
+	renderPass.Create(renderTargets["viewport"].format, vk::Format::eUndefined);
 }
 
 void MotionBlur::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 {
-	frameBuffers.resize(VulkanContext::get()->swapchain->images.size());
-
-	for (auto& frameBuffer : frameBuffers) {
-		std::vector<vk::ImageView> attachments = {
-			renderTargets["viewport"].view
-		};
-		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = *renderPass->GetRef();
-		fbci.attachmentCount = static_cast<uint32_t>(attachments.size());
-		fbci.pAttachments = attachments.data();
-		fbci.width = renderTargets["viewport"].width;
-		fbci.height = renderTargets["viewport"].height;
-		fbci.layers = 1;
-		frameBuffer = VulkanContext::get()->device.createFramebuffer(fbci);
+	auto vulkan = VulkanContext::get();
+	framebuffers.resize(vulkan->swapchain->images.size());
+	for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+	{
+		uint32_t width = renderTargets["viewport"].width;
+		uint32_t height = renderTargets["viewport"].height;
+		vk::ImageView view = renderTargets["viewport"].view;
+		framebuffers[i].Create(width, height, view, renderPass);
 	}
 }
 
@@ -178,18 +168,18 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	pssci2.pName = "main";
 
 	std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
-	pipeline.pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
-	pipeline.pipeinfo.pStages = stages.data();
+	pipeline.pipeinfo->stageCount = static_cast<uint32_t>(stages.size());
+	pipeline.pipeinfo->pStages = stages.data();
 
 	// Vertex Input state
 	vk::PipelineVertexInputStateCreateInfo pvisci;
-	pipeline.pipeinfo.pVertexInputState = &pvisci;
+	pipeline.pipeinfo->pVertexInputState = &pvisci;
 
 	// Input Assembly stage
 	vk::PipelineInputAssemblyStateCreateInfo piasci;
 	piasci.topology = vk::PrimitiveTopology::eTriangleList;
 	piasci.primitiveRestartEnable = VK_FALSE;
-	pipeline.pipeinfo.pInputAssemblyState = &piasci;
+	pipeline.pipeinfo->pInputAssemblyState = &piasci;
 
 	// Viewports and Scissors
 	vk::Viewport vp;
@@ -208,7 +198,7 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	pvsci.pViewports = &vp;
 	pvsci.scissorCount = 1;
 	pvsci.pScissors = &r2d;
-	pipeline.pipeinfo.pViewportState = &pvsci;
+	pipeline.pipeinfo->pViewportState = &pvsci;
 
 	// Rasterization state
 	vk::PipelineRasterizationStateCreateInfo prsci;
@@ -222,7 +212,7 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	prsci.depthBiasClamp = 0.0f;
 	prsci.depthBiasSlopeFactor = 0.0f;
 	prsci.lineWidth = 1.0f;
-	pipeline.pipeinfo.pRasterizationState = &prsci;
+	pipeline.pipeinfo->pRasterizationState = &prsci;
 
 	// Multisample state
 	vk::PipelineMultisampleStateCreateInfo pmsci;
@@ -232,7 +222,7 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	pmsci.pSampleMask = nullptr;
 	pmsci.alphaToCoverageEnable = VK_FALSE;
 	pmsci.alphaToOneEnable = VK_FALSE;
-	pipeline.pipeinfo.pMultisampleState = &pmsci;
+	pipeline.pipeinfo->pMultisampleState = &pmsci;
 
 	// Depth stencil state
 	vk::PipelineDepthStencilStateCreateInfo pdssci;
@@ -245,7 +235,7 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	pdssci.back.compareOp = vk::CompareOp::eAlways;
 	pdssci.minDepthBounds = 0.0f;
 	pdssci.maxDepthBounds = 0.0f;
-	pipeline.pipeinfo.pDepthStencilState = &pdssci;
+	pipeline.pipeinfo->pDepthStencilState = &pdssci;
 
 	// Color Blending state
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
@@ -258,10 +248,10 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	pcbsci.pAttachments = colorBlendAttachments.data();
 	float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
-	pipeline.pipeinfo.pColorBlendState = &pcbsci;
+	pipeline.pipeinfo->pColorBlendState = &pcbsci;
 
 	// Dynamic state
-	pipeline.pipeinfo.pDynamicState = nullptr;
+	pipeline.pipeinfo->pDynamicState = nullptr;
 
 	// Pipeline Layout
 	if (!DSLayoutMotionBlur)
@@ -293,21 +283,21 @@ void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	plci.pSetLayouts = descriptorSetLayouts.data();
 	plci.pushConstantRangeCount = 1;
 	plci.pPushConstantRanges = &pConstants;
-	pipeline.pipeinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
+	pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
 
 	// Render Pass
-	pipeline.pipeinfo.renderPass = *renderPass->GetRef();
+	pipeline.pipeinfo->renderPass = *renderPass;
 
 	// Subpass (Index of subpass this pipeline will be used in)
-	pipeline.pipeinfo.subpass = 0;
+	pipeline.pipeinfo->subpass = 0;
 
 	// Base Pipeline Handle
-	pipeline.pipeinfo.basePipelineHandle = nullptr;
+	pipeline.pipeinfo->basePipelineHandle = nullptr;
 
 	// Base Pipeline Index
-	pipeline.pipeinfo.basePipelineIndex = -1;
+	pipeline.pipeinfo->basePipelineIndex = -1;
 
-	pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, pipeline.pipeinfo).at(0);
+	pipeline.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0));
 
 	// destroy Shader Modules
 	VulkanContext::get()->device.destroyShaderModule(vertModule);

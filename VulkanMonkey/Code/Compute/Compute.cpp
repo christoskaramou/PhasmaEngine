@@ -45,8 +45,8 @@ void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_
 	cmd.begin(beginInfo);
 
 	//ctx.metrics[13].start(cmd);
-	cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline.pipeline);
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.compinfo.layout, 0, DSCompute, nullptr);
+	cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *pipeline.pipeline);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.compinfo->layout, 0, DSCompute, nullptr);
 	cmd.dispatch(sizeX, sizeY, sizeZ);
 	//ctx.metrics[13].end(&GUI::metrics[13]);
 
@@ -116,11 +116,11 @@ void Compute::createPipeline()
 
 	auto sm = VulkanContext::get()->device.createShaderModuleUnique(csmci);
 
-	pipeline.compinfo.stage.module = sm.get();
-	pipeline.compinfo.stage.pName = "main";
-	pipeline.compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
-	pipeline.compinfo.layout = VulkanContext::get()->device.createPipelineLayout(plci);
-	pipeline.pipeline = VulkanContext::get()->device.createComputePipelines(nullptr, pipeline.compinfo).at(0);
+	pipeline.compinfo->stage.module = sm.get();
+	pipeline.compinfo->stage.pName = "main";
+	pipeline.compinfo->stage.stage = vk::ShaderStageFlagBits::eCompute;
+	pipeline.compinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+	pipeline.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createComputePipelines(nullptr, *pipeline.compinfo).at(0));
 }
 
 void Compute::destroy()

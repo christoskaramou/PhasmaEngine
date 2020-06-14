@@ -427,7 +427,7 @@ void Model::draw()
 
 	auto& cmd = Model::commandBuffer;
 	const vk::DeviceSize offset{ 0 };
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeline);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *Model::pipeline->pipeline);
 	cmd.bindVertexBuffers(0, 1, &vertexBuffer.buffer, &offset);
 	cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
@@ -436,7 +436,7 @@ void Model::draw()
 		if (node->mesh) {
 			for (auto &primitive : node->mesh->primitives) {
 				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 1) {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo->layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
 					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 				}
 			}
@@ -448,7 +448,7 @@ void Model::draw()
 			for (auto &primitive : node->mesh->primitives) {
 				// ALPHA CUT
 				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 2) {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo->layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
 					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 				}
 			}
@@ -460,7 +460,7 @@ void Model::draw()
 			for (auto &primitive : node->mesh->primitives) {
 				// ALPHA CUT
 				if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 3) {
-					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo.layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo->layout, 0, { node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet }, nullptr);
 					cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 				}
 			}

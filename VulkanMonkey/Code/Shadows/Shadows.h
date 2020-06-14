@@ -3,6 +3,8 @@
 #include "../Pipeline/Pipeline.h"
 #include "../Math/Math.h"
 #include "../Camera/Camera.h"
+#include "../Renderer/RenderPass.h"
+#include "../Renderer/Framebuffer.h"
 
 namespace vm {
 
@@ -21,10 +23,10 @@ namespace vm {
 		static uint32_t imageSize;
 		static vk::DescriptorSetLayout descriptorSetLayout;
 		static vk::DescriptorSetLayout getDescriptorSetLayout();
-		vk::RenderPass renderPass;
+		RenderPass renderPass;
 		std::vector<Image> textures{};
 		std::vector<vk::DescriptorSet> descriptorSets{};
-		std::vector<vk::Framebuffer> frameBuffers{};
+		std::vector<Framebuffer> framebuffers{};
 		std::vector<Buffer> uniformBuffers{};
 		Pipeline pipeline;
 

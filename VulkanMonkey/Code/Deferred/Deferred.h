@@ -6,13 +6,14 @@
 #include "../Shadows/Shadows.h"
 #include "../Skybox/Skybox.h"
 #include "../Renderer/RenderPass.h"
+#include "../Renderer/Framebuffer.h"
 #include <map>
 
 namespace vm {
 	struct Deferred
 	{
-		Ref<RenderPass> renderPass, compositionRenderPass;
-		std::vector<vk::Framebuffer> frameBuffers{}, compositionFrameBuffers{};
+		RenderPass renderPass, compositionRenderPass;
+		std::vector<Framebuffer> framebuffers{}, compositionFramebuffers{};
 		vk::DescriptorSet DSComposition;
 		vk::DescriptorSetLayout DSLayoutComposition;
 		Pipeline pipeline;

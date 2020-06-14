@@ -5,6 +5,7 @@
 #include "../Image/Image.h"
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
+#include "../Renderer/Framebuffer.h"
 #include <map>
 #include <functional>
 
@@ -15,8 +16,8 @@ namespace vm {
 		Buffer UB_Kernel;
 		Buffer UB_PVM;
 		Image noiseTex;
-		Ref<RenderPass> renderPass, blurRenderPass;
-		std::vector<vk::Framebuffer> frameBuffers{}, blurFrameBuffers{};
+		RenderPass renderPass, blurRenderPass;
+		std::vector<Framebuffer> framebuffers{}, blurFramebuffers{};
 		Pipeline pipeline;
 		Pipeline pipelineBlur;
 		vk::DescriptorSetLayout DSLayout, DSLayoutBlur;

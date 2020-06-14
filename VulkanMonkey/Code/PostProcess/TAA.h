@@ -5,6 +5,7 @@
 #include "../Math/Math.h"
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
+#include "../Renderer/Framebuffer.h"
 #include <vector>
 #include <map>
 #include <functional>
@@ -12,9 +13,9 @@
 namespace vm {
 	struct TAA
 	{
-		std::vector<vk::Framebuffer> frameBuffers{}, frameBuffersSharpen{};
+		std::vector<Framebuffer> framebuffers{}, framebuffersSharpen{};
 		Pipeline pipeline, pipelineSharpen;
-		Ref<RenderPass> renderPass, renderPassSharpen;
+		RenderPass renderPass, renderPassSharpen;
 		vk::DescriptorSet DSet, DSetSharpen;
 		vk::DescriptorSetLayout DSLayout, DSLayoutSharpen;
 		Image previous;

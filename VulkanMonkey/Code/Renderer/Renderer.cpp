@@ -411,7 +411,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 	beginInfoShadows.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
 	vk::RenderPassBeginInfo renderPassInfoShadows;
-	renderPassInfoShadows.renderPass = ctx.shadows.renderPass;
+	renderPassInfoShadows.renderPass = *ctx.shadows.renderPass;
 	renderPassInfoShadows.renderArea = vk::Rect2D{ { 0, 0 },{ Shadows::imageSize, Shadows::imageSize } };
 	renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
 	renderPassInfoShadows.pClearValues = clearValuesShadows.data();
@@ -423,9 +423,9 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 		cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
 		// depth[i] image ===========================================================
-		renderPassInfoShadows.framebuffer = ctx.shadows.frameBuffers[ctx.shadows.textures.size() * imageIndex + i];
+		renderPassInfoShadows.framebuffer = *ctx.shadows.framebuffers[ctx.shadows.textures.size() * imageIndex + i];
 		cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeline);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *ctx.shadows.pipeline.pipeline);
 		for (auto& model : Model::models) {
 			if (model.render) {
 				cmd.bindVertexBuffers(0, model.vertexBuffer.buffer, offset);
@@ -433,7 +433,7 @@ void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
 
 				for (auto& node :model.linearNodes) {
 					if (node->mesh) {
-						cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo.layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet, model.descriptorSet }, nullptr);
+						cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo->layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet, model.descriptorSet }, nullptr);
 						for (auto& primitive : node->mesh->primitives) {
 							if (primitive.render)
 								cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);

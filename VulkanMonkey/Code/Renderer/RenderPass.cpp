@@ -60,20 +60,17 @@ namespace vm
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-		m_renderPass = CreateRef<vk::RenderPass>(VulkanContext::get()->device.createRenderPass(renderPassInfo));
+		m_ref = CreateRef<vk::RenderPass>(VulkanContext::get()->device.createRenderPass(renderPassInfo));
 	}
 
 	void RenderPass::Destroy()
 	{
-		auto vulkan = VulkanContext::get();
-		if (*m_renderPass) {
-			vulkan->device.destroyRenderPass(*m_renderPass);
-			m_renderPass = nullptr;
-		}
-	}
+		if (!m_ref)
+			throw std::runtime_error("m_ref is null");
 
-	Ref<vk::RenderPass> RenderPass::GetRef() const
-	{
-		return m_renderPass;
+		if (*m_ref) {
+			VulkanContext::get()->device.destroyRenderPass(*m_ref);
+			*m_ref = nullptr;
+		}
 	}
 }

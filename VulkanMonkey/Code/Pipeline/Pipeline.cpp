@@ -1,21 +1,30 @@
 #include "Pipeline.h"
+#include "../VulkanContext/VulkanContext.h"
 
-using namespace vm;
-
-void Pipeline::destroy()
+namespace vm
 {
-	if (pipeinfo.layout) {
-		VulkanContext::get()->device.destroyPipelineLayout(pipeinfo.layout);
-		pipeinfo.layout = nullptr;
+	Pipeline::Pipeline()
+	{
+		pipeline.SetRef(CreateRef<vk::Pipeline>());
+		pipeinfo.SetRef(CreateRef<vk::GraphicsPipelineCreateInfo>());
+		compinfo.SetRef(CreateRef<vk::ComputePipelineCreateInfo>());
 	}
 
-	if (compinfo.layout) {
-		VulkanContext::get()->device.destroyPipelineLayout(compinfo.layout);
-		pipeinfo.layout = nullptr;
-	}
+	void Pipeline::destroy()
+	{
+		if (pipeinfo->layout) {
+			VulkanContext::get()->device.destroyPipelineLayout(pipeinfo->layout);
+			pipeinfo->layout = nullptr;
+		}
 
-	if (pipeline) {
-		VulkanContext::get()->device.destroyPipeline(pipeline);
-		pipeline = nullptr;
+		if (compinfo->layout) {
+			VulkanContext::get()->device.destroyPipelineLayout(compinfo->layout);
+			compinfo->layout = nullptr;
+		}
+
+		if (*pipeline) {
+			VulkanContext::get()->device.destroyPipeline(*pipeline);
+			*pipeline = nullptr;
+		}
 	}
 }

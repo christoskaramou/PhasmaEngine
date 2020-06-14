@@ -248,6 +248,7 @@
     <ClInclude Include="Code\PostProcess\SSR.h" />
     <ClInclude Include="Code\PostProcess\TAA.h" />
     <ClInclude Include="Code\Queue\Queue.h" />
+    <ClInclude Include="Code\Renderer\Framebuffer.h" />
     <ClInclude Include="Code\Renderer\Renderer.h" />
     <ClInclude Include="Code\Renderer\RenderPass.h" />
     <ClInclude Include="Code\Script\Script.h" />
@@ -297,6 +298,7 @@
     <ClCompile Include="Code\PostProcess\SSAO.cpp" />
     <ClCompile Include="Code\PostProcess\SSR.cpp" />
     <ClCompile Include="Code\PostProcess\TAA.cpp" />
+    <ClCompile Include="Code\Renderer\Framebuffer.cpp" />
     <ClCompile Include="Code\Renderer\Renderer.cpp" />
     <ClCompile Include="Code\Renderer\RenderPass.cpp" />
     <ClCompile Include="Code\Script\Script.cpp" />

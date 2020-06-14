@@ -10,7 +10,7 @@ namespace vk
 
 namespace vm
 {
-	class RenderPass
+	class RenderPass : public Ref_t<vk::RenderPass>
 	{
 	public:
 		RenderPass() = default;
@@ -19,9 +19,5 @@ namespace vm
 		void Create(const vk::Format& format, const vk::Format& depthFormat);
 		void Create(const std::vector<vk::Format>& formats, const vk::Format& depthFormat);
 		void Destroy();
-		Ref<vk::RenderPass> GetRef() const;
-
-	private:
-		Ref<vk::RenderPass> m_renderPass;
 	};
 }
