@@ -84,9 +84,9 @@ void vm::Bloom::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	renderPassBrightFilter = CreateRef<RenderPass>();
 	renderPassGaussianBlur = CreateRef<RenderPass>();
 	renderPassCombine = CreateRef<RenderPass>();
-	renderPassBrightFilter->Create(renderTargets["brightFilter"].format);
-	renderPassGaussianBlur->Create(renderTargets["gaussianBlurHorizontal"].format);
-	renderPassCombine->Create(renderTargets["viewport"].format);
+	renderPassBrightFilter->Create(renderTargets["brightFilter"].format, vk::Format::eUndefined);
+	renderPassGaussianBlur->Create(renderTargets["gaussianBlurHorizontal"].format, vk::Format::eUndefined);
+	renderPassCombine->Create(renderTargets["viewport"].format, vk::Format::eUndefined);
 }
 
 void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)

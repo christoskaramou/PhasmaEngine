@@ -1,5 +1,12 @@
 #pragma once
-#include "../VulkanContext/VulkanContext.h"
+#include "../Core/Base.h"
+#include <vector>
+
+namespace vk
+{
+	enum class Format;
+	class RenderPass;
+}
 
 namespace vm
 {
@@ -9,8 +16,8 @@ namespace vm
 		RenderPass() = default;
 		~RenderPass() = default;
 
-		void Create(vk::Format format, vk::Format depthFormat = vk::Format::eUndefined);
-		void Create(const std::vector<vk::Format>& formats, vk::Format depthFormat = vk::Format::eUndefined);
+		void Create(const vk::Format& format, const vk::Format& depthFormat);
+		void Create(const std::vector<vk::Format>& formats, const vk::Format& depthFormat);
 		void Destroy();
 		Ref<vk::RenderPass> GetRef() const;
 

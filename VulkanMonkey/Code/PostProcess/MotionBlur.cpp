@@ -129,7 +129,7 @@ void MotionBlur::update(Camera& camera)
 void MotionBlur::createRenderPass(std::map<std::string, Image>& renderTargets)
 {
 	renderPass = CreateRef<RenderPass>();
-	renderPass->Create(renderTargets["viewport"].format);
+	renderPass->Create(renderTargets["viewport"].format, vk::Format::eUndefined);
 }
 
 void MotionBlur::createFrameBuffers(std::map<std::string, Image>& renderTargets)

@@ -82,7 +82,7 @@ void DOF::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) con
 void DOF::createRenderPass(std::map<std::string, Image>& renderTargets)
 {
 	renderPass = CreateRef<RenderPass>();
-	renderPass->Create(renderTargets["viewport"].format);
+	renderPass->Create(renderTargets["viewport"].format, vk::Format::eUndefined);
 }
 
 void DOF::createFrameBuffers(std::map<std::string, Image>& renderTargets)

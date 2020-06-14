@@ -188,9 +188,9 @@ void SSAO::update(Camera& camera)
 void vm::SSAO::createRenderPasses(std::map<std::string, Image>& renderTargets)
 {
 	renderPass = CreateRef<RenderPass>();
-	renderPass->Create(renderTargets["ssao"].format);
+	renderPass->Create(renderTargets["ssao"].format, vk::Format::eUndefined);
 	blurRenderPass = CreateRef<RenderPass>();
-	blurRenderPass->Create(renderTargets["ssaoBlur"].format);
+	blurRenderPass->Create(renderTargets["ssaoBlur"].format, vk::Format::eUndefined);
 }
 
 void vm::SSAO::createFrameBuffers(std::map<std::string, Image>& renderTargets)

@@ -193,7 +193,7 @@ void Deferred::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	renderPass->Create(formats, VulkanContext::get()->depth->format);
 
 	compositionRenderPass = CreateRef<RenderPass>();
-	compositionRenderPass->Create(renderTargets["viewport"].format);
+	compositionRenderPass->Create(renderTargets["viewport"].format, vk::Format::eUndefined);
 }
 
 void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)

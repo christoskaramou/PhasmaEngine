@@ -76,7 +76,7 @@ void FXAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& 
 void vm::FXAA::createRenderPass(std::map<std::string, Image>& renderTargets)
 {
 	renderPass = CreateRef<RenderPass>();
-	renderPass->Create(renderTargets["viewport"].format);
+	renderPass->Create(renderTargets["viewport"].format, vk::Format::eUndefined);
 }
 
 void vm::FXAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)

@@ -93,7 +93,7 @@ void SSR::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& e
 void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 {
 	renderPass = CreateRef<RenderPass>();
-	renderPass->Create(renderTargets["ssr"].format);
+	renderPass->Create(renderTargets["ssr"].format, vk::Format::eUndefined);
 }
 
 void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)

@@ -140,9 +140,9 @@ void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk
 void TAA::createRenderPasses(std::map<std::string, Image>& renderTargets)
 {
 	renderPass = CreateRef<RenderPass>();
-	renderPass->Create(renderTargets["taa"].format);
+	renderPass->Create(renderTargets["taa"].format, vk::Format::eUndefined);
 	renderPassSharpen = CreateRef<RenderPass>();
-	renderPassSharpen->Create(renderTargets["viewport"].format);
+	renderPassSharpen->Create(renderTargets["viewport"].format, vk::Format::eUndefined);
 }
 
 void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)

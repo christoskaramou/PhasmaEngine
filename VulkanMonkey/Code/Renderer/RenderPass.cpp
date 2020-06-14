@@ -1,13 +1,14 @@
 #include "RenderPass.h"
+#include "../VulkanContext/VulkanContext.h"
 
 namespace vm
 {
-	void RenderPass::Create(vk::Format format, vk::Format depthFormat)
+	void RenderPass::Create(const vk::Format& format, const vk::Format& depthFormat)
 	{
 		Create(std::vector<vk::Format>{ format }, depthFormat);
 	}
 
-	void RenderPass::Create(const std::vector<vk::Format>& formats, vk::Format depthFormat)
+	void RenderPass::Create(const std::vector<vk::Format>& formats, const vk::Format& depthFormat)
 	{
 		uint32_t size = static_cast<uint32_t>(formats.size());
 		bool hasDepth =
