@@ -1,13 +1,14 @@
 #pragma once
-#include "../Buffer/Buffer.h"
+#include "../Core/Buffer.h"
 #include "../Pipeline/Pipeline.h"
-#include "../Math/Math.h"
+#include "../Core/Math.h"
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
+#include "../VulkanContext/VulkanContext.h"
 
-namespace vm {
-
+namespace vm
+{
 	struct ShadowsUBO
 	{
 		mat4 projection, view;
@@ -17,8 +18,9 @@ namespace vm {
 		float maxCascadeDist2;
 	};
 
-	struct Shadows
+	class Shadows
 	{
+	public:
 		ShadowsUBO shadows_UBO[3]{};
 		static uint32_t imageSize;
 		static vk::DescriptorSetLayout descriptorSetLayout;

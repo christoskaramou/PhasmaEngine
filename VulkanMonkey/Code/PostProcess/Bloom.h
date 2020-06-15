@@ -3,13 +3,16 @@
 #include "../Pipeline/Pipeline.h"
 #include <map>
 #include <functional>
-#include "../Image/Image.h"
+#include "../Core/Image.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
+#include "../VulkanContext/VulkanContext.h"
 
-namespace vm {
-	struct Bloom
+namespace vm
+{
+	class Bloom
 	{
+	public:
 		Bloom() = default;
 		~Bloom() = default;
 

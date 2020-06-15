@@ -1,7 +1,8 @@
 #pragma once
 #include "../Context/Context.h"
 
-namespace vm {
+namespace vm
+{
 	class Renderer
 	{
 	public:

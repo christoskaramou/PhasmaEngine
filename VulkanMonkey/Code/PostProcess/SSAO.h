@@ -1,17 +1,20 @@
 #pragma once
 
-#include "../Buffer/Buffer.h"
+#include "../Core/Buffer.h"
 #include "../Pipeline/Pipeline.h"
-#include "../Image/Image.h"
+#include "../Core/Image.h"
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
+#include "../VulkanContext/VulkanContext.h"
 #include <map>
 #include <functional>
 
-namespace vm {
-	struct SSAO
+namespace vm
+{
+	class SSAO
 	{
+	public:
 		mat4 pvm[3];
 		Buffer UB_Kernel;
 		Buffer UB_PVM;

@@ -1,17 +1,19 @@
 #pragma once
 
 #include "../Pipeline/Pipeline.h"
-#include "../Image/Image.h"
-#include "../Light/Light.h"
+#include "../Core/Image.h"
+#include "../Core/Light.h"
 #include "../Shadows/Shadows.h"
 #include "../Skybox/Skybox.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
 #include <map>
 
-namespace vm {
-	struct Deferred
+namespace vm
+{
+	class Deferred
 	{
+	public:
 		RenderPass renderPass, compositionRenderPass;
 		std::vector<Framebuffer> framebuffers{}, compositionFramebuffers{};
 		vk::DescriptorSet DSComposition;

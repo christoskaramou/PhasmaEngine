@@ -5,8 +5,8 @@
 #include <any>
 #include <memory>
 
-namespace vm {
-
+namespace vm
+{
 #define CREATE_EVENT EventSystem::get()->createEvent
 #define SUBSCRIBE_TO_EVENT EventSystem::get()->subscribe
 #define FIRE_EVENT EventSystem::get()->fire
@@ -26,14 +26,16 @@ namespace vm {
 
 	using FuncID = uint32_t;
 	using Func_t = std::function<void(const std::any&)>;
-	struct Func {
+	struct Func
+	{
 		Func_t func;
 		FuncID ID;
 		uint32_t priority; // lower priority runs first
 	};
 
-	struct EventSystem
+	class EventSystem
 	{
+	public:
 		Event createEvent();
 		FuncID subscribe(Event event, Func_t&& func, uint32_t priority = -1); // priority set to max unsigned int as default
 		void unsubscribe(Event event, FuncID funcID);

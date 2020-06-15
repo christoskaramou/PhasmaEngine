@@ -1,18 +1,21 @@
 #pragma once
-#include "../Buffer/Buffer.h"
+#include "../Core/Buffer.h"
 #include "../Pipeline/Pipeline.h"
-#include "../Image/Image.h"
-#include "../Math/Math.h"
+#include "../Core/Image.h"
+#include "../Core/Math.h"
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
+#include "../VulkanContext/VulkanContext.h"
 #include <vector>
 #include <map>
 #include <functional>
 
-namespace vm {
-	struct TAA
+namespace vm
+{
+	class TAA
 	{
+	public:
 		std::vector<Framebuffer> framebuffers{}, framebuffersSharpen{};
 		Pipeline pipeline, pipelineSharpen;
 		RenderPass renderPass, renderPassSharpen;

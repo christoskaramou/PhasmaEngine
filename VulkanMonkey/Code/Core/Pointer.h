@@ -1,11 +1,12 @@
 #pragma once
 #include <type_traits>
 
-namespace vm {
-
+namespace vm
+{
 	template<typename T, typename std::enable_if<!std::is_pointer<T>::value >::type* = nullptr>
-	struct Pointer
+	class Pointer
 	{
+	public:
 		uint32_t hLeft;
 		uint32_t hRight;
 		T* ptr;

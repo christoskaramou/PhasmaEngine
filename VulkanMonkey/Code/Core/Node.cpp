@@ -1,7 +1,7 @@
 #include "Node.h"
 #include <future>
-#include "../Mesh/Mesh.h"
-#include "../Queue/Queue.h"
+#include "../Model/Mesh.h"
+#include "Queue.h"
 
 using namespace vm;
 

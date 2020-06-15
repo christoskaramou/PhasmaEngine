@@ -217,29 +217,32 @@
     <None Include="shaders\TAA\TAASharpen.frag" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Code\Buffer\Buffer.h" />
     <ClInclude Include="Code\Camera\Camera.h" />
     <ClInclude Include="Code\Compute\Compute.h" />
     <ClInclude Include="Code\Console\Console.h" />
     <ClInclude Include="Code\Context\Context.h" />
     <ClInclude Include="Code\Core\Base.h" />
+    <ClInclude Include="Code\Core\Buffer.h" />
+    <ClInclude Include="Code\Core\Image.h" />
+    <ClInclude Include="Code\Core\Light.h" />
+    <ClInclude Include="Code\Core\Math.h" />
+    <ClInclude Include="Code\Core\Node.h" />
+    <ClInclude Include="Code\Core\Pointer.h" />
+    <ClInclude Include="Code\Core\Queue.h" />
+    <ClInclude Include="Code\Core\Timer.h" />
+    <ClInclude Include="Code\Core\Vertex.h" />
     <ClInclude Include="Code\Deferred\Deferred.h" />
     <ClInclude Include="Code\Event\Delegate.h" />
     <ClInclude Include="Code\Event\Event.h" />
     <ClInclude Include="Code\GUI\GUI.h" />
-    <ClInclude Include="Code\Image\Image.h" />
-    <ClInclude Include="Code\Light\Light.h" />
-    <ClInclude Include="Code\Material\Material.h" />
-    <ClInclude Include="Code\Math\Math.h" />
     <ClInclude Include="Code\MemoryHash\MemoryHash.h" />
-    <ClInclude Include="Code\Mesh\Mesh.h" />
     <ClInclude Include="Code\Model\Animation.h" />
+    <ClInclude Include="Code\Model\Material.h" />
+    <ClInclude Include="Code\Model\Mesh.h" />
     <ClInclude Include="Code\Model\Model.h" />
+    <ClInclude Include="Code\Model\Object.h" />
     <ClInclude Include="Code\Model\StreamReader.h" />
-    <ClInclude Include="Code\Node\Node.h" />
-    <ClInclude Include="Code\Object\Object.h" />
     <ClInclude Include="Code\Pipeline\Pipeline.h" />
-    <ClInclude Include="Code\Pointer\Pointer.h" />
     <ClInclude Include="Code\PostProcess\Bloom.h" />
     <ClInclude Include="Code\PostProcess\DOF.h" />
     <ClInclude Include="Code\PostProcess\FXAA.h" />
@@ -247,7 +250,6 @@
     <ClInclude Include="Code\PostProcess\SSAO.h" />
     <ClInclude Include="Code\PostProcess\SSR.h" />
     <ClInclude Include="Code\PostProcess\TAA.h" />
-    <ClInclude Include="Code\Queue\Queue.h" />
     <ClInclude Include="Code\Renderer\Framebuffer.h" />
     <ClInclude Include="Code\Renderer\Renderer.h" />
     <ClInclude Include="Code\Renderer\RenderPass.h" />
@@ -258,8 +260,6 @@
     <ClInclude Include="Code\Skybox\Skybox.h" />
     <ClInclude Include="Code\Surface\Surface.h" />
     <ClInclude Include="Code\Swapchain\Swapchain.h" />
-    <ClInclude Include="Code\Timer\Timer.h" />
-    <ClInclude Include="Code\Vertex\Vertex.h" />
     <ClInclude Include="Code\VulkanContext\VulkanContext.h" />
     <ClInclude Include="Code\Window\Window.h" />
     <ClInclude Include="include\imgui\imconfig.h" />
@@ -275,21 +275,23 @@
     <ClInclude Include="include\tinygltf\tiny_gltf.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Code\Buffer\Buffer.cpp" />
     <ClCompile Include="Code\Camera\Camera.cpp" />
     <ClCompile Include="Code\Compute\Compute.cpp" />
     <ClCompile Include="Code\Console\Console.cpp" />
     <ClCompile Include="Code\Context\Context.cpp" />
+    <ClCompile Include="Code\Core\Buffer.cpp" />
+    <ClCompile Include="Code\Core\Image.cpp" />
+    <ClCompile Include="Code\Core\Light.cpp" />
+    <ClCompile Include="Code\Core\Math.cpp" />
+    <ClCompile Include="Code\Core\Node.cpp" />
+    <ClCompile Include="Code\Core\Timer.cpp" />
+    <ClCompile Include="Code\Core\Vertex.cpp" />
     <ClCompile Include="Code\Deferred\Deferred.cpp" />
     <ClCompile Include="Code\Event\Event.cpp" />
     <ClCompile Include="Code\GUI\GUI.cpp" />
-    <ClCompile Include="Code\Image\Image.cpp" />
-    <ClCompile Include="Code\Light\Light.cpp" />
-    <ClCompile Include="Code\Math\Math.cpp" />
-    <ClCompile Include="Code\Mesh\Mesh.cpp" />
+    <ClCompile Include="Code\Model\Mesh.cpp" />
     <ClCompile Include="Code\Model\Model.cpp" />
-    <ClCompile Include="Code\Node\Node.cpp" />
-    <ClCompile Include="Code\Object\Object.cpp" />
+    <ClCompile Include="Code\Model\Object.cpp" />
     <ClCompile Include="Code\Pipeline\Pipeline.cpp" />
     <ClCompile Include="Code\PostProcess\Bloom.cpp" />
     <ClCompile Include="Code\PostProcess\DOF.cpp" />
@@ -307,13 +309,6 @@
     <ClCompile Include="Code\Shadows\Shadows.cpp" />
     <ClCompile Include="Code\Skybox\Skybox.cpp" />
     <ClCompile Include="Code\Swapchain\Swapchain.cpp" />
-    <ClCompile Include="Code\Timer\Timer.cpp">
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-      </CompileAsManaged>
-      <AdditionalUsingDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-      </AdditionalUsingDirectories>
-    </ClCompile>
-    <ClCompile Include="Code\Vertex\Vertex.cpp" />
     <ClCompile Include="Code\VulkanContext\VulkanContext.cpp" />
     <ClCompile Include="Code\Window\Window.cpp" />
     <ClCompile Include="include\GLTFSDK\AnimationUtils.cpp" />

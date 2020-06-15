@@ -1,17 +1,20 @@
 #pragma once
 
-#include "../Buffer/Buffer.h"
+#include "../Core/Buffer.h"
 #include "../Pipeline/Pipeline.h"
-#include "../Image/Image.h"
+#include "../Core/Image.h"
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
+#include "../VulkanContext/VulkanContext.h"
 #include <vector>
 #include <map>
 
-namespace vm {
-	struct SSR
+namespace vm
+{
+	class SSR
 	{
+	public:
 		mat4 reflectionInput[4];
 		Buffer UBReflection;
 		std::vector<Framebuffer> framebuffers{};

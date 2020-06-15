@@ -1,12 +1,13 @@
 #pragma once
 #include <random>
 
-namespace vm {
-	struct vec2;
-	struct vec3;
-	struct vec4;	
-	struct mat4;
-	struct quat;
+namespace vm
+{
+	class vec2;
+	class vec3;
+	class vec4;	
+	class mat4;
+	class quat;
 
 	using cfloat = const float;
 	using cint = const int;
@@ -19,7 +20,9 @@ namespace vm {
 	using row = vec4;
 	using ccol = const col;
 
-	struct vec2 {
+	class vec2
+	{
+	public:
 		vec2();
 		vec2(cfloat value);
 		vec2(cfloat x, cfloat y);
@@ -52,7 +55,9 @@ namespace vm {
 		float x, y;
 	};
 
-	struct vec3 {
+	class vec3
+	{
+	public:
 		vec3();
 		vec3(cfloat value);
 		vec3(cfloat x, cfloat y, cfloat z);
@@ -87,8 +92,9 @@ namespace vm {
 		float x, y, z;
 	};
 	
-	struct ivec4
+	class ivec4
 	{
+	public:
 		ivec4() : x(0), y(0) ,z(0), w(0) {}
 		ivec4(const int* v) { x = v[0]; y = v[1]; z = v[2]; w = v[3]; }
 		int& operator[](unsigned i) {
@@ -97,7 +103,9 @@ namespace vm {
 		int x, y, z, w;
 	};
 
-	struct vec4 {
+	class vec4
+	{
+	public:
 		vec4();
 		vec4(cfloat value);
 		vec4(cfloat x, cfloat y, cfloat z, cfloat w);
@@ -131,7 +139,9 @@ namespace vm {
 		float x, y, z, w;
 	};
 
-	struct mat4 {
+	class mat4
+	{
+	public:
 		mat4();
 		mat4(cfloat diagonal);
 		mat4(cfloat* m);
@@ -168,7 +178,9 @@ namespace vm {
 		col _v[4];
 	};
 
-	struct quat {
+	class quat
+	{
+	public:
 		quat();
 		quat(cfloat* q);
 		quat(cquat* q);
@@ -203,14 +215,16 @@ namespace vm {
 		float x, y, z, w;
 	};
 
-	struct Ray
+	class Ray
 	{
+	public:
 		vec3 o, d; // origin, direction
 		Ray(cvec3& o, cvec3& d);
 	};
 
-	struct Transform
+	class Transform
 	{
+	public:
 		Transform();
 		mat4 matrix() const;
 

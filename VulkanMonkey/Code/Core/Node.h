@@ -1,13 +1,15 @@
 #pragma once
-#include "../Math/Math.h"
-#include "../Pointer/Pointer.h"
+#include "Math.h"
+#include "Pointer.h"
 #include "../Camera/Camera.h"
 
-namespace vm {
-	struct Mesh;
-	struct Node;
+namespace vm
+{
+	class Mesh;
+	class Node;
 
-	struct Skin {
+	struct Skin
+	{
 		std::string name;
 		Pointer<Node> skeletonRoot;
 		std::vector<mat4> inverseBindMatrices;
@@ -23,8 +25,9 @@ namespace vm {
 		TRANSFORMATION_TRS
 	};
 
-	struct Node
+	class Node
 	{
+	public:
 		Pointer<Node> parent;
 		uint32_t index;
 		std::vector<Pointer<Node>> children;

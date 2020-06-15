@@ -1,17 +1,16 @@
 #pragma once
 
-namespace vm {
+namespace vm
+{
+	class Shader;
 
-	struct Shader;
-
-	struct Reflection
+	class Reflection
 	{
+	public:
 		Reflection(Shader* vert, Shader* frag);
-
 	private:
 		void CreateResources();
 		void GetResources();
-	private:
 
 		Shader* vert;
 		Shader* frag;

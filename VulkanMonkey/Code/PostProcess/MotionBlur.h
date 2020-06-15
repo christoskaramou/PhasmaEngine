@@ -1,18 +1,21 @@
 #pragma once
 
-#include "../Buffer/Buffer.h"
+#include "../Core/Buffer.h"
 #include "../Pipeline/Pipeline.h"
-#include "../Image/Image.h"
+#include "../Core/Image.h"
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
+#include "../VulkanContext/VulkanContext.h"
 #include <vector>
 #include <string>
 #include <map>
 
-namespace vm {
-	struct MotionBlur
+namespace vm
+{
+	class MotionBlur
 	{
+	public:
 		mat4 motionBlurInput[4];
 		Buffer UBmotionBlur;
 		std::vector<Framebuffer> framebuffers{};

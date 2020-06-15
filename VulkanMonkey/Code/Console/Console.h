@@ -6,7 +6,8 @@
 #include <cstring>                     // for strlen
 #include "vcruntime_string.h"           // for memcpy
 
-namespace vm {
+namespace vm
+{
 	// Demonstrate creating a simple console window, with scrolling, filtering, completion and history.
 	// For the console example, here we are using a more C++ like approach of declaring a class to hold the data and the functions.
 	struct Console

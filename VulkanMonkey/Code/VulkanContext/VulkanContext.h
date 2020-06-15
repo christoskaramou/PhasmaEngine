@@ -13,13 +13,16 @@
 #define WIDTH_f static_cast<float>(WIDTH)
 #define HEIGHT_f static_cast<float>(HEIGHT)
 
-namespace vm {
+namespace vm
+{
 
-	struct Image;
+	class Image;
 	struct Surface;
-	struct Swapchain;
+	class Swapchain;
 
-	struct VulkanContext {
+	class VulkanContext
+	{
+	public:
 		SDL_Window* window = nullptr;
 		vk::Instance instance;
 		vk::DebugUtilsMessengerEXT debugMessenger;

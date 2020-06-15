@@ -6,14 +6,17 @@
 #include <any>
 #include <mutex>
 #include <map>
-#include "../Timer/Timer.h"
-#include "../Buffer/Buffer.h"
+#include "Timer.h"
+#include "Buffer.h"
 #include "../MemoryHash/MemoryHash.h"
+#include "../VulkanContext/VulkanContext.h"
 #include <iostream>
 
-namespace vm {
-	struct CopyRequest
+namespace vm
+{
+	class CopyRequest
 	{
+	public:
 		Buffer* buffer;
 		std::vector<MemoryRange> memory_ranges{};
 
@@ -36,8 +39,9 @@ namespace vm {
 		std::vector<vk::DescriptorImageInfo> descriptorImageInfos;
 	};
 
-	struct Queue
+	class Queue
 	{
+	public:
 		// std::deque insertion and deletion at either end of a deque never invalidates pointers or references to the rest of the elements
 		inline static std::deque<std::tuple<std::string, std::string>> loadModel{};
 		inline static std::deque<int> unloadModel{};

@@ -1,11 +1,14 @@
 #pragma once
-#include "../Image/Image.h"
-#include "../Buffer/Buffer.h"
-#include "../Math/Math.h"
+#include "../Core/Image.h"
+#include "../Core/Buffer.h"
+#include "../Core/Math.h"
+#include "../VulkanContext/VulkanContext.h"
 
-namespace vm {
-	struct Object
+namespace vm
+{
+	class Object
 	{
+	public:
 		virtual ~Object() = default;
 		bool render = true, cull = false;
 		vk::DescriptorSet descriptorSet;

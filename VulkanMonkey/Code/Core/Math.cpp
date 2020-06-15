@@ -2,7 +2,8 @@
 #include <cassert>
 #include <chrono>
 
-namespace vm {
+namespace vm
+{
 	vec2::vec2() : x(0.f), y(0.f)
 	{ }
 

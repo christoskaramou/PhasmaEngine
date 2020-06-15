@@ -1,14 +1,14 @@
 #pragma once
 
-#include "../Math/Math.h"
-#include "../Node/Node.h"
+#include "../Core/Math.h"
+#include "../Core/Node.h"
 #include <vector>
 #undef max
 #undef min
 #include <limits>
 
-namespace vm {
-
+namespace vm
+{
 	struct AnimationChannel {
 		enum PathType { TRANSLATION, ROTATION, SCALE };
 		PathType path;

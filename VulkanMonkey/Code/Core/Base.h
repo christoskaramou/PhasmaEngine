@@ -23,8 +23,10 @@ namespace vm
 	class Ref_t
 	{
 	public:
+		void operator=(const T& obj) { m_ref = CreateRef<T>(obj); }
 		void operator=(const Ref<T>& ref) { m_ref = ref; }
 		T& operator*() const { return *m_ref; }
+		const T& Value() const { return *m_ref; }
 		Ref<T> operator->() const { return m_ref; }
 		Ref<T> GetRef() const { return m_ref; };
 		void SetRef(const Ref<T>& ref) { m_ref = ref; };

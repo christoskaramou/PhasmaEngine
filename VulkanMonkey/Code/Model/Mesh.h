@@ -1,10 +1,11 @@
 #pragma once
-#include "../Vertex/Vertex.h"
-#include "../Material/Material.h"
-#include "../Buffer/Buffer.h"
+#include "../Core/Vertex.h"
+#include "Material.h"
+#include "../Core/Buffer.h"
 #include "../../include/GLTFSDK/GLTF.h"
 #include "../../include/GLTFSDK/Document.h"
 #include "../../include/GLTFSDK/GLTFResourceReader.h"
+#include "../VulkanContext/VulkanContext.h"
 #include <map>
 
 #undef min
@@ -12,8 +13,11 @@
 
 constexpr auto MAX_NUM_JOINTS = 128u;
 
-namespace vm {
-	struct Primitive {
+namespace vm
+{
+	class Primitive
+	{
+	public:
 		Primitive(): pbrMaterial({}) {}
 
 		static vk::DescriptorSetLayout descriptorSetLayout;
@@ -43,8 +47,9 @@ namespace vm {
 			const Microsoft::glTF::GLTFResourceReader* resourceReader = nullptr);
 	};
 
-	struct Mesh
+	class Mesh
 	{
+	public:
 		bool render = true, cull = false;
 
 		struct UBOMesh {

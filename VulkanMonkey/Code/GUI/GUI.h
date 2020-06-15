@@ -1,19 +1,22 @@
 #pragma once
 #include "../../include/imgui/imgui.h"
-#include "../Object/Object.h"
+#include "../Model/Object.h"
 #include "../Pipeline/Pipeline.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
+#include "../VulkanContext/VulkanContext.h"
 #include "SDL/SDL.h"
 #include <vector>
 
-namespace vm {
+namespace vm
+{
 	constexpr float LOWER_PANEL_HEIGHT = 150.f;
 	constexpr float LEFT_PANEL_WIDTH = 250.f;
 	constexpr float RIGHT_PANEL_WIDTH = 250.f;
 	constexpr float MENU_HEIGHT = 19.f;
-	struct GUI : Object
+	class GUI : public Object
 	{
+	public:
 		// Data
 		static inline ImVec2								winPos = ImVec2();
 		static inline ImVec2								winSize = ImVec2();

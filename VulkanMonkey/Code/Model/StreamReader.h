@@ -5,9 +5,11 @@
 #include <fstream>
 #include <sstream>
 
-namespace vm {
-	struct StreamReader : public Microsoft::glTF::IStreamReader
+namespace vm
+{
+	class StreamReader : public Microsoft::glTF::IStreamReader
 	{
+	public:
 		StreamReader(std::filesystem::path pathBase) : m_pathBase(std::move(pathBase))
 		{
 			assert(m_pathBase.has_root_path());

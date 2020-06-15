@@ -1,19 +1,22 @@
 #pragma once
-#include "../Buffer/Buffer.h"
-#include "../Math/Math.h"
+#include "../Core/Buffer.h"
+#include "../Core/Math.h"
 #include "../Pipeline/Pipeline.h"
 #include "../Script/Script.h"
 #include "../Camera/Camera.h"
 #include "../Model/Animation.h"
-#include "../Node/Node.h"
+#include "../Core/Node.h"
 #include "../../include/GLTFSDK/GLTF.h"
 #include "../../include/GLTFSDK/GLTFResourceReader.h"
 #include "../../include/GLTFSDK/Document.h"
+#include "../VulkanContext/VulkanContext.h"
 #include "StreamReader.h"
 
-namespace vm {
-	struct Model
+namespace vm
+{
+	class Model
 	{
+	public:
 		// Document holds all info about the gltf model
 		Microsoft::glTF::Document* document = nullptr;
 		Microsoft::glTF::GLTFResourceReader* resourceReader = nullptr;

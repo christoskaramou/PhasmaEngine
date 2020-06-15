@@ -2,7 +2,8 @@
 
 #include <functional>
 
-namespace vm {
+namespace vm
+{
 
 	struct MemoryRange
 	{
@@ -11,8 +12,9 @@ namespace vm {
 		size_t offset; // offset to destination data in bytes
 	};
 
-	struct MemoryHash
+	class MemoryHash
 	{
+	public:
 		using Type = size_t;
 
 		MemoryHash(const void* data, size_t size)

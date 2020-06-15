@@ -1,10 +1,13 @@
 #pragma once
-#include "../Image/Image.h"
+#include "../Core/Image.h"
 #include <vector>
+#include "../VulkanContext/VulkanContext.h"
 
-namespace vm {
-	struct Swapchain
+namespace vm 
+{
+	class Swapchain
 	{
+	public:
 		vk::SwapchainKHR swapchain;
 		std::vector<Image> images{};
 

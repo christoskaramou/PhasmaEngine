@@ -1,16 +1,18 @@
 #pragma once
 
 #include "../VulkanContext/VulkanContext.h"
-#include "../Math/Math.h"
-#include "../Buffer/Buffer.h"
+#include "Math.h"
+#include "Buffer.h"
 #include "../Camera/Camera.h"
 #include "../GUI/GUI.h"
 
-namespace vm {
+namespace vm
+{
 	#define MAX_LIGHTS 10
 
-	struct Light
+	class Light
 	{
+	public:
 		Light();
 		Light(const vec4& color, const vec4& position);
 
@@ -35,8 +37,9 @@ namespace vm {
 #endif
 	};
 
-	struct LightUniforms : Light
+	class LightUniforms : public Light
 	{
+	public:
 		LightsUBO lubo;
 		Buffer uniform;
 		vk::DescriptorSet descriptorSet;

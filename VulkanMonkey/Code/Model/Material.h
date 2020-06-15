@@ -1,9 +1,10 @@
 #pragma once
 
-#include "../Image/Image.h"
-#include "../Math/Math.h"
+#include "../Core/Image.h"
+#include "../Core/Math.h"
 
-namespace vm {
+namespace vm
+{
 	enum MaterialType
 	{
 		BaseColor,

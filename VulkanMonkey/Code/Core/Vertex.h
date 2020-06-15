@@ -1,10 +1,12 @@
 #pragma once
 #include <vulkan/vulkan.hpp>
-#include "../Math/Math.h"
+#include "Math.h"
 
-namespace vm {
-	struct Vertex
+namespace vm
+{
+	class Vertex
 	{
+	public:
 		Vertex();
 		Vertex(vec3& pos, vec2& uv, vec3& norm, vec4& color, ivec4& bonesIDs, vec4& weights);
 

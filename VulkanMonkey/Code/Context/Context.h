@@ -1,18 +1,18 @@
 #pragma once
 
 #include <vector>
-#include "../Image/Image.h"
+#include "../Core/Image.h"
 #include "../Surface/Surface.h"
 #include "../Swapchain/Swapchain.h"
 #include "../GUI/GUI.h"
 #include "../Skybox/Skybox.h"
 #include "../Shadows/Shadows.h"
-#include "../Light/Light.h"
+#include "../Core/Light.h"
 #include "../Model/Model.h"
 #include "../Camera/Camera.h"
 #include "../Deferred/Deferred.h"
 #include "../Compute/Compute.h"
-#include "../Timer/Timer.h"
+#include "../Core/Timer.h"
 #include "../Script/Script.h"
 #include "../PostProcess/Bloom.h"
 #include "../PostProcess/DOF.h"
@@ -25,9 +25,11 @@
 //#define USE_SCRIPTS
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
-namespace vm {
-	struct Context
+namespace vm
+{
+	class Context
 	{
+	public:
 		Context() = default;
 		~Context() = default;
 

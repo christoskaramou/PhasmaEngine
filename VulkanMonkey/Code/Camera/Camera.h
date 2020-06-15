@@ -1,26 +1,46 @@
 #pragma once
-#include "../Math/Math.h"
-#include <vulkan/vulkan.hpp>
+#include "../Core/Math.h"
 
 namespace vm {
-	struct Camera
+	class Camera
 	{
-		enum struct RelativeDirection {
+	public:
+		enum class RelativeDirection {
 			FORWARD,
 			BACKWARD,
 			LEFT,
 			RIGHT
 		};
-		struct TargetArea {
-			vk::Viewport viewport;
-			vk::Rect2D scissor;
+
+		struct Viewport
+		{
+			float x;
+			float y;
+			float width;
+			float height;
+			float minDepth;
+			float maxDepth;
+		};
+
+		struct Rect2D
+		{
+			int32_t x;
+			int32_t y;
+			uint32_t width;
+			uint32_t height;
+		};
+
+		struct TargetArea
+		{
+			Viewport viewport;
+			Rect2D scissor;
 			void update(const vec2& position, const vec2& size, float minDepth = 0.f, float maxDepth = 1.f);
 		};
 
 		struct Plane
 		{
-			vec3 normal{};
-			float d{};
+			vec3 normal;
+			float d;
 		};
 
 		mat4 view;

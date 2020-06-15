@@ -1,16 +1,19 @@
 #pragma once
 
 #include "../Pipeline/Pipeline.h"
-#include "../Image/Image.h"
+#include "../Core/Image.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
+#include "../VulkanContext/VulkanContext.h"
 #include <vector>
 #include <map>
 #include <string>
 
-namespace vm {
-	struct FXAA
+namespace vm
+{
+	class FXAA
 	{
+	public:
 		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipeline;
 		RenderPass renderPass;

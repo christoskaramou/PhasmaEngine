@@ -1,19 +1,22 @@
 #pragma once
 
-#include "../Buffer/Buffer.h"
+#include "../Core/Buffer.h"
 #include "../Pipeline/Pipeline.h"
+#include "../VulkanContext/VulkanContext.h"
 #include <deque>
 #include <memory>
 
-namespace vm {
-	struct Compute
+namespace vm
+{
+	class Compute
 	{
+	public:
 		Buffer& getIn();
 		Buffer& getOut();
 		void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ);
 		void waitFence();
 	private:
-		friend struct ComputePool;
+		friend class ComputePool;
 
 		bool ready = true;
 
@@ -32,8 +35,10 @@ namespace vm {
 		void updateDescriptorSet();
 		void destroy();
 	};
-	struct ComputePool
+
+	class ComputePool
 	{
+	public:
 		vk::CommandPool commandPool;
 		std::deque<Compute> compute{};
 		void Init(uint32_t cmdBuffersCount);

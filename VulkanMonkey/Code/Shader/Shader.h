@@ -8,15 +8,15 @@
 
 #define ONLINE_COMPILE
 
-namespace vm {
-
+namespace vm
+{
 	struct Define
 	{
 		std::string name{};
 		std::string value{};
 	};
 
-	enum struct ShaderType
+	enum class ShaderType
 	{
 		Vertex,
 		Fragment,
@@ -26,8 +26,9 @@ namespace vm {
 		TessEvaluation
 	};
 
-	struct FileIncluder : public shaderc::CompileOptions::IncluderInterface
+	class FileIncluder : public shaderc::CompileOptions::IncluderInterface
 	{
+	public:
 		shaderc_include_result* GetInclude(const char* requested_source, shaderc_include_type, const char* requesting_source, size_t) override;
 		void ReleaseInclude(shaderc_include_result* include_result) override;
 		inline const std::unordered_set<std::string>& file_path_trace() const { return included_files_; }
@@ -40,8 +41,9 @@ namespace vm {
 		std::unordered_set<std::string> included_files_;
 	};
 
-	struct Shader
+	class Shader
 	{
+	public:
 		Shader(const std::string& filename, ShaderType shaderType, bool online_compile, const std::vector<Define>& defs = {});
 		const uint32_t* get_spriv();
 		ShaderType get_shader_type();
@@ -56,7 +58,6 @@ namespace vm {
 		void addDefine(Define& define);
 		void addDefines(const std::vector<Define>& defines);
 
-	private:
 		ShaderType shaderType;
 		shaderc::Compiler m_compiler;
 		shaderc::CompileOptions m_options;

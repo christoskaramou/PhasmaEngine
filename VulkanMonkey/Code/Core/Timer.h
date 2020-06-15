@@ -17,7 +17,7 @@ Arithmetic_Template(Return_T, Param_T) constexpr Return_T SECONDS_TO_NANOSECONDS
 
 namespace vm
 {
-	struct Timer
+	class Timer
 	{
 	public:
 		Timer() noexcept;
@@ -28,7 +28,7 @@ namespace vm
 		std::chrono::high_resolution_clock::time_point m_start;
 	};
 
-	struct FrameTimer : Timer
+	class FrameTimer : public Timer
 	{
 	public:
 		void Tick() noexcept;
@@ -61,8 +61,9 @@ namespace vk
 }
 namespace vm
 {
-	struct GPUTimer
+	class GPUTimer
 	{
+	public:
 		GPUTimer();
 		void start(const vk::CommandBuffer* cmd) noexcept;
 		void end(float* res = nullptr);

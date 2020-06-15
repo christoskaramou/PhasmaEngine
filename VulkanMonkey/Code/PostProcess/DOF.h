@@ -2,13 +2,16 @@
 
 #include "../Pipeline/Pipeline.h"
 #include <map>
-#include "../Image/Image.h"
+#include "../Core/Image.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
+#include "../VulkanContext/VulkanContext.h"
 
-namespace vm {
-	struct DOF
+namespace vm
+{
+	class DOF
 	{
+	public:
 		DOF() = default;
 		~DOF() = default;
 

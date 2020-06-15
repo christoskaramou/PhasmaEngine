@@ -1,7 +1,8 @@
 #pragma once
 #include <vulkan/vulkan.hpp>
 
-namespace vm {
+namespace vm
+{
 	struct Surface
 	{
 		vk::SurfaceKHR surface;

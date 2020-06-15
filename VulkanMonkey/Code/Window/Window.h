@@ -1,7 +1,8 @@
 #pragma once
 #include "../Renderer/Renderer.h"
 
-namespace vm {
+namespace vm
+{
 	class Window
 	{
 	public:

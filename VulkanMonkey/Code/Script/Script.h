@@ -10,8 +10,9 @@
 #include <filesystem>
 #include <string>
 
-namespace vm {
-	struct Script
+namespace vm
+{
+	class Script
 	{
 	private:
 		static inline MonoDomain* domain = nullptr;

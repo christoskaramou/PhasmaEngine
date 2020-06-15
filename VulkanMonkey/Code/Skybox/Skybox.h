@@ -1,10 +1,12 @@
 #pragma once
-#include "../Object/Object.h"
+#include "../Model/Object.h"
 #include "../Pipeline/Pipeline.h"
 
-namespace vm {
-	struct SkyBox
+namespace vm
+{
+	class SkyBox
 	{
+	public:
 		Image texture;
 		vk::DescriptorSet descriptorSet;
 		static vk::DescriptorSetLayout descriptorSetLayout;
