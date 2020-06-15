@@ -60,7 +60,7 @@ namespace vm
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-		m_ref = CreateRef<vk::RenderPass>(VulkanContext::get()->device.createRenderPass(renderPassInfo));
+		SetRef(VulkanContext::get()->device.createRenderPass(renderPassInfo));
 	}
 
 	void RenderPass::Destroy()

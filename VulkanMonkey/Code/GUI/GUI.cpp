@@ -1155,7 +1155,7 @@ namespace vm
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-		renderPass.SetRef(CreateRef<vk::RenderPass>(VulkanContext::get()->device.createRenderPass(renderPassInfo)));
+		renderPass.SetRef(VulkanContext::get()->device.createRenderPass(renderPassInfo));
 	}
 
 	void GUI::createFrameBuffers()
@@ -1321,7 +1321,7 @@ namespace vm
 		// Base Pipeline Index
 		pipeline.pipeinfo->basePipelineIndex = -1;
 
-		pipeline.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0));
+		pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
 
 		// destroy Shader Modules
 		VulkanContext::get()->device.destroyShaderModule(vertModule);

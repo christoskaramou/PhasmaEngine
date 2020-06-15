@@ -120,7 +120,7 @@ namespace vm
 		pipeline.compinfo->stage.pName = "main";
 		pipeline.compinfo->stage.stage = vk::ShaderStageFlagBits::eCompute;
 		pipeline.compinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
-		pipeline.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createComputePipelines(nullptr, *pipeline.compinfo).at(0));
+		pipeline.pipeline = VulkanContext::get()->device.createComputePipelines(nullptr, *pipeline.compinfo).at(0);
 	}
 
 	void Compute::destroy()

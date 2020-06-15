@@ -5,9 +5,9 @@ namespace vm
 {
 	Pipeline::Pipeline()
 	{
-		pipeline.SetRef(CreateRef<vk::Pipeline>());
-		pipeinfo.SetRef(CreateRef<vk::GraphicsPipelineCreateInfo>());
-		compinfo.SetRef(CreateRef<vk::ComputePipelineCreateInfo>());
+		pipeline = vk::Pipeline();
+		pipeinfo = vk::GraphicsPipelineCreateInfo();
+		compinfo = vk::ComputePipelineCreateInfo();
 	}
 
 	void Pipeline::destroy()

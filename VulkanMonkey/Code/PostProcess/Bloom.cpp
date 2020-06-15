@@ -388,7 +388,7 @@ namespace vm
 		// Base Pipeline Index
 		pipelineBrightFilter.pipeinfo->basePipelineIndex = -1;
 
-		pipelineBrightFilter.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineBrightFilter.pipeinfo).at(0));
+		pipelineBrightFilter.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineBrightFilter.pipeinfo).at(0);
 
 		// destroy Shader Modules
 		VulkanContext::get()->device.destroyShaderModule(vertModule);
@@ -548,7 +548,7 @@ namespace vm
 		// Base Pipeline Index
 		pipelineGaussianBlurHorizontal.pipeinfo->basePipelineIndex = -1;
 
-		pipelineGaussianBlurHorizontal.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineGaussianBlurHorizontal.pipeinfo).at(0));
+		pipelineGaussianBlurHorizontal.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineGaussianBlurHorizontal.pipeinfo).at(0);
 
 		// destroy Shader Modules
 		VulkanContext::get()->device.destroyShaderModule(vertModule);
@@ -707,7 +707,7 @@ namespace vm
 		// Base Pipeline Index
 		pipelineGaussianBlurVertical.pipeinfo->basePipelineIndex = -1;
 
-		pipelineGaussianBlurVertical.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineGaussianBlurVertical.pipeinfo).at(0));
+		pipelineGaussianBlurVertical.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineGaussianBlurVertical.pipeinfo).at(0);
 
 		// destroy Shader Modules
 		VulkanContext::get()->device.destroyShaderModule(vertModule);
@@ -868,7 +868,7 @@ namespace vm
 		// Base Pipeline Index
 		pipelineCombine.pipeinfo->basePipelineIndex = -1;
 
-		pipelineCombine.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineCombine.pipeinfo).at(0));
+		pipelineCombine.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineCombine.pipeinfo).at(0);
 
 		// destroy Shader Modules
 		VulkanContext::get()->device.destroyShaderModule(vertModule);

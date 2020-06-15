@@ -322,7 +322,7 @@ namespace vm
 		// Base Pipeline Index
 		pipeline.pipeinfo->basePipelineIndex = -1;
 
-		pipeline.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0));
+		pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
 
 		// destroy Shader Modules
 		VulkanContext::get()->device.destroyShaderModule(vertModule);
@@ -476,7 +476,7 @@ namespace vm
 		// Base Pipeline Index
 		pipelineSharpen.pipeinfo->basePipelineIndex = -1;
 
-		pipelineSharpen.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineSharpen.pipeinfo).at(0));
+		pipelineSharpen.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineSharpen.pipeinfo).at(0);
 
 		// destroy Shader Modules
 		VulkanContext::get()->device.destroyShaderModule(vertModule);

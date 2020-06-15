@@ -77,7 +77,7 @@ namespace vm
 		rpci.subpassCount = 1;
 		rpci.pSubpasses = &subpassDesc;
 
-		renderPass.SetRef(CreateRef<vk::RenderPass>(VulkanContext::get()->device.createRenderPass(rpci)));
+		renderPass.SetRef(VulkanContext::get()->device.createRenderPass(rpci));
 	}
 
 	void Shadows::createFrameBuffers()
@@ -240,7 +240,7 @@ namespace vm
 		// Base Pipeline Index
 		pipeline.pipeinfo->basePipelineIndex = -1;
 
-		pipeline.pipeline = CreateRef<vk::Pipeline>(VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0));
+		pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
 
 		// destroy Shader Modules
 		VulkanContext::get()->device.destroyShaderModule(vertModule);

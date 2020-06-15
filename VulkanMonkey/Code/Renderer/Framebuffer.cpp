@@ -20,7 +20,7 @@ namespace vm
 		fbci.height = height;
 		fbci.layers = 1;
 
-		m_ref = CreateRef<vk::Framebuffer>(VulkanContext::get()->device.createFramebuffer(fbci));
+		SetRef(VulkanContext::get()->device.createFramebuffer(fbci));
 	}
 	
 	void Framebuffer::Destroy()
