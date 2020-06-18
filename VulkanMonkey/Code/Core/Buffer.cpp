@@ -1,5 +1,6 @@
 #include "Buffer.h"
 #include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
@@ -20,11 +21,11 @@ namespace vm
 		bufferInfo.size = size;
 		bufferInfo.usage = usage;
 		bufferInfo.sharingMode = vk::SharingMode::eExclusive;
-		buffer = vulkan->device.createBuffer(bufferInfo);
+		buffer = vulkan->device->createBuffer(bufferInfo);
 
 		uint32_t memTypeIndex = UINT32_MAX;
-		auto const memRequirements = vulkan->device.getBufferMemoryRequirements(buffer.Value());
-		auto const memProperties = vulkan->gpu.getMemoryProperties();
+		auto const memRequirements = vulkan->device->getBufferMemoryRequirements(buffer.Value());
+		auto const memProperties = vulkan->gpu->getMemoryProperties();
 		for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
 			if (memRequirements.memoryTypeBits & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
 				memTypeIndex = i;
@@ -40,24 +41,24 @@ namespace vm
 		vk::MemoryAllocateInfo allocInfo;
 		allocInfo.allocationSize = this->size.Value();
 		allocInfo.memoryTypeIndex = memTypeIndex;
-		memory = vulkan->device.allocateMemory(allocInfo);
+		memory = vulkan->device->allocateMemory(allocInfo);
 
 		//binding memory with buffer
-		vulkan->device.bindBufferMemory(buffer.Value(), memory.Value(), 0);
+		vulkan->device->bindBufferMemory(buffer.Value(), memory.Value(), 0);
 	}
 
 	void Buffer::map(size_t offset)
 	{
 		if (data)
 			throw std::runtime_error("Map called when buffer data is not null");
-		data = VulkanContext::get()->device.mapMemory(memory.Value(), offset, size.Value() - offset, vk::MemoryMapFlags());
+		data = VulkanContext::get()->device->mapMemory(memory.Value(), offset, size.Value() - offset, vk::MemoryMapFlags());
 	}
 
 	void Buffer::unmap()
 	{
 		if (!data)
 			throw std::runtime_error("Buffer is not mapped");
-		VulkanContext::get()->device.unmapMemory(memory.Value());
+		VulkanContext::get()->device->unmapMemory(memory.Value());
 		data = nullptr;
 	}
 
@@ -79,9 +80,9 @@ namespace vm
 	{
 		vk::CommandBufferAllocateInfo cbai;
 		cbai.level = vk::CommandBufferLevel::ePrimary;
-		cbai.commandPool = VulkanContext::get()->commandPool2;
+		cbai.commandPool = VulkanContext::get()->commandPool2.Value();
 		cbai.commandBufferCount = 1;
-		const vk::CommandBuffer copyCmd = VulkanContext::get()->device.allocateCommandBuffers(cbai).at(0);
+		const vk::CommandBuffer copyCmd = VulkanContext::get()->device->allocateCommandBuffers(cbai).at(0);
 
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -96,7 +97,7 @@ namespace vm
 
 		VulkanContext::get()->submitAndWaitFence(copyCmd, nullptr, nullptr, nullptr);
 
-		VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, copyCmd);
+		VulkanContext::get()->device->freeCommandBuffers(VulkanContext::get()->commandPool2.Value(), copyCmd);
 	}
 
 	void Buffer::flush(size_t size)
@@ -108,15 +109,15 @@ namespace vm
 		range.memory = memory.Value();
 		range.size = size > 0 ? size : this->size.Value();
 
-		VulkanContext::get()->device.flushMappedMemoryRanges(range);
+		VulkanContext::get()->device->flushMappedMemoryRanges(range);
 	}
 
 	void Buffer::destroy()
 	{
 		if (buffer.Value())
-			VulkanContext::get()->device.destroyBuffer(buffer.Value());
+			VulkanContext::get()->device->destroyBuffer(buffer.Value());
 		if (memory.Value())
-			VulkanContext::get()->device.freeMemory(memory.Value());
+			VulkanContext::get()->device->freeMemory(memory.Value());
 		*buffer = nullptr;
 		*memory = nullptr;
 	}

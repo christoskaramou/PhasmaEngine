@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 #include "Math.h"
 #include "Buffer.h"
 #include "../Camera/Camera.h"

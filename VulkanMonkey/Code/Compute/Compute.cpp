@@ -1,14 +1,14 @@
 #include "Compute.h"
 #include "../Shader/Shader.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 #include <deque>
 
 namespace vm
 {
-	vk::DescriptorSetLayout Compute::DSLayoutCompute = nullptr;
-
-	vk::DescriptorSetLayout* Compute::getDescriptorLayout()
+	const vk::DescriptorSetLayout& Compute::getDescriptorLayout()
 	{
-		if (!DSLayoutCompute) {
+		if (!DSLayoutCompute.Value()) {
 			auto const setLayoutBinding = [](uint32_t binding) {
 				return vk::DescriptorSetLayoutBinding{ binding, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute, nullptr };
 			};
@@ -21,9 +21,21 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo dlci;
 			dlci.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			dlci.pBindings = setLayoutBindings.data();
-			DSLayoutCompute = VulkanContext::get()->device.createDescriptorSetLayout(dlci);
+			DSLayoutCompute = VulkanContext::get()->device->createDescriptorSetLayout(dlci);
 		}
-		return &DSLayoutCompute;
+		return DSLayoutCompute.Value();
+	}
+
+	Compute::Compute()
+	{
+		fence = vk::Fence();
+		DSCompute = vk::DescriptorSet();
+		DSLayoutCompute = vk::DescriptorSetLayout();
+		commandBuffer = vk::CommandBuffer();
+	}
+
+	Compute::~Compute()
+	{
 	}
 
 	Buffer& Compute::getIn()
@@ -41,12 +53,12 @@ namespace vm
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
-		auto& cmd = commandBuffer;
+		auto& cmd = commandBuffer.Value();
 		cmd.begin(beginInfo);
 
 		//ctx.metrics[13].start(cmd);
 		cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.compinfo->layout, 0, DSCompute, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.compinfo->layout, 0, DSCompute.Value(), nullptr);
 		cmd.dispatch(sizeX, sizeY, sizeZ);
 		//ctx.metrics[13].end(&GUI::metrics[13]);
 
@@ -55,12 +67,12 @@ namespace vm
 		vk::SubmitInfo siCompute;
 		siCompute.commandBufferCount = 1;
 		siCompute.pCommandBuffers = &cmd;
-		VulkanContext::get()->computeQueue.submit(siCompute, fence);
+		VulkanContext::get()->computeQueue->submit(siCompute, fence.Value());
 	}
 
 	void vm::Compute::waitFence()
 	{
-		VulkanContext::get()->waitFences(fence);
+		VulkanContext::get()->waitFences(fence.Value());
 
 		ready = true;
 	}
@@ -83,24 +95,24 @@ namespace vm
 	void Compute::createDescriptorSet()
 	{
 		vk::DescriptorSetAllocateInfo allocInfo;
-		allocInfo.descriptorPool = VulkanContext::get()->descriptorPool;
+		allocInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = getDescriptorLayout();
-		DSCompute = VulkanContext::get()->device.allocateDescriptorSets(allocInfo).at(0);
+		allocInfo.pSetLayouts = &getDescriptorLayout();
+		DSCompute = VulkanContext::get()->device->allocateDescriptorSets(allocInfo).at(0);
 	}
 
 	void vm::Compute::updateDescriptorSet()
 	{
 		std::deque<vk::DescriptorBufferInfo> dsbi{};
-		auto const wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer, vk::DescriptorType type) {
+		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer, vk::DescriptorType type) {
 			dsbi.emplace_back(buffer.buffer.Value(), 0, buffer.size.Value());
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, type, nullptr, &dsbi.back(), nullptr };
 		};
 		std::vector<vk::WriteDescriptorSet> writeCompDescriptorSets{
-			wSetBuffer(DSCompute, 0, SBIn, vk::DescriptorType::eStorageBuffer),
-			wSetBuffer(DSCompute, 1, SBOut, vk::DescriptorType::eStorageBuffer),
+			wSetBuffer(DSCompute.Value(), 0, SBIn, vk::DescriptorType::eStorageBuffer),
+			wSetBuffer(DSCompute.Value(), 1, SBOut, vk::DescriptorType::eStorageBuffer),
 		};
-		VulkanContext::get()->device.updateDescriptorSets(writeCompDescriptorSets, nullptr);
+		VulkanContext::get()->device->updateDescriptorSets(writeCompDescriptorSets, nullptr);
 	}
 
 	void Compute::createPipeline()
@@ -112,15 +124,15 @@ namespace vm
 
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = 1;
-		plci.pSetLayouts = getDescriptorLayout();
+		plci.pSetLayouts = &getDescriptorLayout();
 
-		auto sm = VulkanContext::get()->device.createShaderModuleUnique(csmci);
+		auto sm = VulkanContext::get()->device->createShaderModuleUnique(csmci);
 
 		pipeline.compinfo->stage.module = sm.get();
 		pipeline.compinfo->stage.pName = "main";
 		pipeline.compinfo->stage.stage = vk::ShaderStageFlagBits::eCompute;
-		pipeline.compinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
-		pipeline.pipeline = VulkanContext::get()->device.createComputePipelines(nullptr, *pipeline.compinfo).at(0);
+		pipeline.compinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
+		pipeline.pipeline = VulkanContext::get()->device->createComputePipelines(nullptr, *pipeline.compinfo).at(0);
 	}
 
 	void Compute::destroy()
@@ -128,13 +140,13 @@ namespace vm
 		SBIn.destroy();
 		SBOut.destroy();
 		pipeline.destroy();
-		if (fence) {
-			VulkanContext::get()->device.destroyFence(fence);
-			fence = nullptr;
+		if (fence.Value()) {
+			VulkanContext::get()->device->destroyFence(fence.Value());
+			fence.Invalidate();
 		}
-		if (Compute::DSLayoutCompute) {
-			VulkanContext::get()->device.destroyDescriptorSetLayout(Compute::DSLayoutCompute);
-			Compute::DSLayoutCompute = nullptr;
+		if (Compute::DSLayoutCompute.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(Compute::DSLayoutCompute.Value());
+			*Compute::DSLayoutCompute = nullptr;
 		}
 	}
 
@@ -143,13 +155,13 @@ namespace vm
 		vk::CommandPoolCreateInfo cpci;
 		cpci.queueFamilyIndex = VulkanContext::get()->computeFamilyId;
 		cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-		commandPool = VulkanContext::get()->device.createCommandPool(cpci);
+		commandPool = VulkanContext::get()->device->createCommandPool(cpci);
 
 		vk::CommandBufferAllocateInfo cbai;
-		cbai.commandPool = commandPool;
+		cbai.commandPool = commandPool.Value();
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = cmdBuffersCount;
-		auto const cmds = VulkanContext::get()->device.allocateCommandBuffers(cbai);
+		auto const cmds = VulkanContext::get()->device->allocateCommandBuffers(cbai);
 
 		for (auto& cmd : cmds) {
 			compute.emplace_back();
@@ -158,7 +170,7 @@ namespace vm
 			compute.back().createDescriptorSet();
 			compute.back().createComputeStorageBuffers(8000, 8000);
 			compute.back().updateDescriptorSet();
-			compute.back().fence = VulkanContext::get()->device.createFence(vk::FenceCreateInfo());
+			compute.back().fence = VulkanContext::get()->device->createFence(vk::FenceCreateInfo());
 		}
 	}
 
@@ -173,12 +185,12 @@ namespace vm
 
 		// if a free compute is not found create one
 		vk::CommandBufferAllocateInfo cbai;
-		cbai.commandPool = commandPool;
+		cbai.commandPool = commandPool.Value();
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = 1;
 
 		compute.emplace_back();
-		compute.back().commandBuffer = VulkanContext::get()->device.allocateCommandBuffers(cbai).at(0);
+		compute.back().commandBuffer = VulkanContext::get()->device->allocateCommandBuffers(cbai).at(0);
 		compute.back().createPipeline();
 		compute.back().createDescriptorSet();
 		compute.back().createComputeStorageBuffers(8000, 8000);
@@ -193,7 +205,7 @@ namespace vm
 
 		for (auto& comp : compute) {
 			if (!comp.ready)
-				fences.push_back(comp.fence);
+				fences.push_back(comp.fence.Value());
 		}
 
 		VulkanContext::get()->waitFences(fences);
@@ -207,9 +219,13 @@ namespace vm
 	{
 		for (auto& comp : compute)
 			comp.destroy();
-		if (commandPool) {
-			VulkanContext::get()->device.destroyCommandPool(commandPool);
-			commandPool = nullptr;
+		if (commandPool.Value()) {
+			VulkanContext::get()->device->destroyCommandPool(commandPool.Value());
+			*commandPool = nullptr;
 		}
+	}
+	ComputePool::ComputePool()
+	{
+		commandPool = vk::CommandPool();
 	}
 }

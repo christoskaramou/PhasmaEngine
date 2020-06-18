@@ -1,5 +1,6 @@
 #include "Timer.h"
 #include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 #include <thread>
 
 namespace vm
@@ -48,7 +49,7 @@ namespace vm
 
 	GPUTimer::GPUTimer()
 	{
-		const auto gpuProps = VulkanContext::get()->gpu.getProperties();
+		const auto gpuProps = VulkanContext::get()->gpu->getProperties();
 		if (!gpuProps.limits.timestampComputeAndGraphics)
 			throw std::runtime_error("Timestamps not supported");
 
@@ -58,7 +59,7 @@ namespace vm
 		qpci.queryType = vk::QueryType::eTimestamp;
 		qpci.queryCount = 2;
 
-		queryPool = std::make_unique<vk::QueryPool>(VulkanContext::get()->device.createQueryPool(qpci));
+		queryPool = std::make_unique<vk::QueryPool>(VulkanContext::get()->device->createQueryPool(qpci));
 
 		queryTimes.resize(2, 0);
 	}
@@ -79,7 +80,7 @@ namespace vm
 
 	float GPUTimer::getTime()
 	{
-		const auto res = VulkanContext::get()->device.getQueryPoolResults<uint64_t>(*queryPool, 0, 2, queryTimes, sizeof(uint64_t), vk::QueryResultFlagBits::e64);
+		const auto res = VulkanContext::get()->device->getQueryPoolResults<uint64_t>(*queryPool, 0, 2, queryTimes, sizeof(uint64_t), vk::QueryResultFlagBits::e64);
 		if (res != vk::Result::eSuccess)
 			return 0.0f;
 		return static_cast<float>(queryTimes[1] - queryTimes[0]) * timestampPeriod * 1e-6f;
@@ -87,6 +88,6 @@ namespace vm
 
 	void GPUTimer::destroy() const noexcept
 	{
-		VulkanContext::get()->device.destroyQueryPool(*queryPool);
+		VulkanContext::get()->device->destroyQueryPool(*queryPool);
 	}
 }

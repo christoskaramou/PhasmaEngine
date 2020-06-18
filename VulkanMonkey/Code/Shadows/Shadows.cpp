@@ -13,13 +13,13 @@ namespace vm
 	void Shadows::createDescriptorSets()
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
+		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &descriptorSetLayout;
 
 		descriptorSets.resize(textures.size()); // size of wanted number of cascaded shadows
 		for (uint32_t i = 0; i < descriptorSets.size(); i++) {
-			descriptorSets[i] = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
+			descriptorSets[i] = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 			std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 			// MVP
@@ -48,14 +48,14 @@ namespace vm
 			textureWriteSets[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 			textureWriteSets[1].pImageInfo = &dii;
 
-			VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
+			VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 		}
 	}
 
 	void Shadows::createRenderPass()
 	{
 		vk::AttachmentDescription attachment;
-		attachment.format = VulkanContext::get()->depth->format.Value();
+		attachment.format = VulkanContext::get()->depth.format.Value();
 		attachment.samples = vk::SampleCountFlagBits::e1;
 		attachment.loadOp = vk::AttachmentLoadOp::eClear;
 		attachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -77,7 +77,7 @@ namespace vm
 		rpci.subpassCount = 1;
 		rpci.pSubpasses = &subpassDesc;
 
-		renderPass.SetRef(VulkanContext::get()->device.createRenderPass(rpci));
+		renderPass.SetRef(VulkanContext::get()->device->createRenderPass(rpci));
 	}
 
 	void Shadows::createFrameBuffers()
@@ -85,7 +85,7 @@ namespace vm
 		textures.resize(3);
 		for (auto& texture : textures)
 		{
-			texture.format = VulkanContext::get()->depth->format;
+			texture.format = VulkanContext::get()->depth.format;
 			texture.initialLayout = vk::ImageLayout::eUndefined;
 			texture.addressMode = vk::SamplerAddressMode::eClampToEdge;
 			texture.maxAnisotropy = 1.f;
@@ -100,7 +100,7 @@ namespace vm
 			texture.createSampler();
 		}
 
-		framebuffers.resize(VulkanContext::get()->swapchain->images.size() * textures.size());
+		framebuffers.resize(VulkanContext::get()->swapchain.images.size() * textures.size());
 		for (uint32_t i = 0; i < framebuffers.size(); ++i)
 		{
 			uint32_t width = Shadows::imageSize;
@@ -118,7 +118,7 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = vert.byte_size();
 		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
+		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -226,7 +226,7 @@ namespace vm
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 		plci.pSetLayouts = descriptorSetLayouts.data();
-		pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+		pipeline.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
 
 		// Render Pass
 		pipeline.pipeinfo->renderPass = *renderPass;
@@ -240,10 +240,10 @@ namespace vm
 		// Base Pipeline Index
 		pipeline.pipeinfo->basePipelineIndex = -1;
 
-		pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
+		pipeline.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
 
 		// destroy Shader Modules
-		VulkanContext::get()->device.destroyShaderModule(vertModule);
+		VulkanContext::get()->device->destroyShaderModule(vertModule);
 	}
 
 	vk::DescriptorSetLayout Shadows::getDescriptorSetLayout()
@@ -259,7 +259,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			descriptorSetLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 		return descriptorSetLayout;
 	}
@@ -279,15 +279,15 @@ namespace vm
 	void Shadows::destroy()
 	{
 		if (*renderPass)
-			VulkanContext::get()->device.destroyRenderPass(*renderPass);
+			VulkanContext::get()->device->destroyRenderPass(*renderPass);
 		if (descriptorSetLayout) {
-			VulkanContext::get()->device.destroyDescriptorSetLayout(Shadows::descriptorSetLayout);
+			VulkanContext::get()->device->destroyDescriptorSetLayout(Shadows::descriptorSetLayout);
 			descriptorSetLayout = nullptr;
 		}
 		for (auto& texture : textures)
 			texture.destroy();
 		for (auto& fb : framebuffers)
-			VulkanContext::get()->device.destroyFramebuffer(*fb);
+			VulkanContext::get()->device->destroyFramebuffer(*fb);
 		for (auto& buffer : uniformBuffers)
 			buffer.destroy();
 		pipeline.destroy();

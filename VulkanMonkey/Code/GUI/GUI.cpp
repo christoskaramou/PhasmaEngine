@@ -5,7 +5,7 @@
 #include "../Console/Console.h"
 #include "../Core/Vertex.h"
 #include "../Swapchain/Swapchain.h"
-#include "../Surface/Surface.h"
+#include "../Core/Surface.h"
 #include "../Shader/Shader.h"
 
 namespace vm
@@ -273,7 +273,7 @@ namespace vm
 				SDL_Event event;
 				SDL_zero(event);
 				event.type = compileShadersEventType; // this event is captured to window event check routine
-				VulkanContext::get()->device.waitIdle();
+				VulkanContext::get()->device->waitIdle();
 				SDL_PushEvent(&event);
 			}
 		}
@@ -355,7 +355,7 @@ namespace vm
 				SDL_Event event;
 				SDL_zero(event);
 				event.type = scaleRenderTargetsEventType; // along side with window resize
-				VulkanContext::get()->device.waitIdle();
+				VulkanContext::get()->device->waitIdle();
 				SDL_PushEvent(&event);
 			}
 		}
@@ -568,7 +568,7 @@ namespace vm
 	{
 		auto vulkan = VulkanContext::get();
 		vk::CommandBufferAllocateInfo cbai;
-		cbai.commandPool = vulkan->commandPool;
+		cbai.commandPool = vulkan->commandPool.Value();
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = 1;
 
@@ -642,7 +642,7 @@ namespace vm
 
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-		vulkan->dynamicCmdBuffers[0].begin(beginInfo);
+		(*vulkan->dynamicCmdBuffers)[0].begin(beginInfo);
 
 		// Create fonts texture
 		unsigned char* pixels;
@@ -689,7 +689,7 @@ namespace vm
 			copy_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 			copy_barrier.subresourceRange.levelCount = 1;
 			copy_barrier.subresourceRange.layerCount = 1;
-			vulkan->dynamicCmdBuffers[0].pipelineBarrier(
+			(*vulkan->dynamicCmdBuffers)[0].pipelineBarrier(
 				vk::PipelineStageFlagBits::eHost,
 				vk::PipelineStageFlagBits::eTransfer,
 				vk::DependencyFlagBits::eByRegion,
@@ -704,7 +704,7 @@ namespace vm
 			region.imageExtent.width = width;
 			region.imageExtent.height = height;
 			region.imageExtent.depth = 1;
-			vulkan->dynamicCmdBuffers[0].copyBufferToImage(stagingBuffer.buffer.Value(), texture.image.Value(), vk::ImageLayout::eTransferDstOptimal, region);
+			(*vulkan->dynamicCmdBuffers)[0].copyBufferToImage(stagingBuffer.buffer.Value(), texture.image.Value(), vk::ImageLayout::eTransferDstOptimal, region);
 
 			vk::ImageMemoryBarrier use_barrier = {};
 			use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -717,7 +717,7 @@ namespace vm
 			use_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 			use_barrier.subresourceRange.levelCount = 1;
 			use_barrier.subresourceRange.layerCount = 1;
-			vulkan->dynamicCmdBuffers[0].pipelineBarrier(
+			(*vulkan->dynamicCmdBuffers)[0].pipelineBarrier(
 				vk::PipelineStageFlagBits::eTransfer,
 				vk::PipelineStageFlagBits::eFragmentShader,
 				vk::DependencyFlagBits::eByRegion,
@@ -730,9 +730,9 @@ namespace vm
 		// Store our identifier
 		io.Fonts->TexID = reinterpret_cast<ImTextureID>(reinterpret_cast<intptr_t>(static_cast<VkImage>(texture.image.Value())));
 
-		vulkan->dynamicCmdBuffers[0].end();
+		(*vulkan->dynamicCmdBuffers)[0].end();
 
-		vulkan->submitAndWaitFence(vulkan->dynamicCmdBuffers[0], nullptr, nullptr, nullptr);
+		vulkan->submitAndWaitFence((*vulkan->dynamicCmdBuffers)[0], nullptr, nullptr, nullptr);
 
 		stagingBuffer.destroy();
 	}
@@ -756,7 +756,7 @@ namespace vm
 
 	void GUI::scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
 	{
-		Image& s_chain_Image = VulkanContext::get()->swapchain->images[imageIndex];
+		Image& s_chain_Image = VulkanContext::get()->swapchain.images[imageIndex];
 
 		renderedImage.transitionImageLayout(
 			cmd,
@@ -834,7 +834,7 @@ namespace vm
 			vk::RenderPassBeginInfo rpi;
 			rpi.renderPass = *renderPass;
 			rpi.framebuffer = *framebuffers[imageIndex];
-			rpi.renderArea = vk::Rect2D{ { 0, 0 }, VulkanContext::get()->surface->actualExtent };
+			rpi.renderArea = vk::Rect2D{ { 0, 0 }, VulkanContext::get()->surface.actualExtent.Value() };
 			rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			rpi.pClearValues = clearValues.data();
 
@@ -1082,7 +1082,7 @@ namespace vm
 
 	void GUI::createVertexBuffer(size_t vertex_size)
 	{
-		VulkanContext::get()->graphicsQueue.waitIdle();
+		VulkanContext::get()->graphicsQueue->waitIdle();
 		vertexBuffer.destroy();
 		//vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible);
@@ -1090,7 +1090,7 @@ namespace vm
 
 	void GUI::createIndexBuffer(size_t index_size)
 	{
-		VulkanContext::get()->graphicsQueue.waitIdle();
+		VulkanContext::get()->graphicsQueue->waitIdle();
 		indexBuffer.destroy();
 		//indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible);
@@ -1099,10 +1099,10 @@ namespace vm
 	void GUI::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
+		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &descriptorSetLayout;
-		descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
+		descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		updateDescriptorSets();
 
@@ -1125,14 +1125,14 @@ namespace vm
 		textureWriteSets[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 		textureWriteSets[0].pImageInfo = &dii0;
 
-		VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
+		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 
 	void GUI::createRenderPass()
 	{
 		std::array<vk::AttachmentDescription, 1> attachments{};
 		// Color attachment
-		attachments[0].format = VulkanContext::get()->surface->formatKHR.format;
+		attachments[0].format = VulkanContext::get()->surface.formatKHR->format;
 		attachments[0].samples = vk::SampleCountFlagBits::e1;
 		attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
 		attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -1155,19 +1155,19 @@ namespace vm
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-		renderPass.SetRef(VulkanContext::get()->device.createRenderPass(renderPassInfo));
+		renderPass.SetRef(VulkanContext::get()->device->createRenderPass(renderPassInfo));
 	}
 
 	void GUI::createFrameBuffers()
 	{
 		auto vulkan = VulkanContext::get();
 
-		framebuffers.resize(vulkan->swapchain->images.size());
-		for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+		framebuffers.resize(vulkan->swapchain.images.size());
+		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
 			uint32_t width = WIDTH;
 			uint32_t height = HEIGHT;
-			vk::ImageView view = vulkan->swapchain->images[i].view.Value();
+			vk::ImageView view = vulkan->swapchain.images[i].view.Value();
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -1181,12 +1181,12 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = vert.byte_size();
 		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
+		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
 
 		vk::ShaderModuleCreateInfo fsmci;
 		fsmci.codeSize = frag.byte_size();
 		fsmci.pCode = frag.get_spriv();
-		vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
+		vk::ShaderModule fragModule = VulkanContext::get()->device->createShaderModule(fsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -1275,9 +1275,9 @@ namespace vm
 		pipeline.pipeinfo->pDepthStencilState = &pdssci;
 
 		// Color Blending state
-		VulkanContext::get()->swapchain->images[0].blentAttachment->blendEnable = VK_TRUE;
+		VulkanContext::get()->swapchain.images[0].blentAttachment->blendEnable = VK_TRUE;
 		std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
-			VulkanContext::get()->swapchain->images[0].blentAttachment.Value()
+			VulkanContext::get()->swapchain.images[0].blentAttachment.Value()
 		};
 		vk::PipelineColorBlendStateCreateInfo pcbsci;
 		pcbsci.logicOpEnable = VK_FALSE;
@@ -1301,13 +1301,13 @@ namespace vm
 		pcr.size = sizeof(float) * 4;
 
 		// Pipeline Layout
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ getDescriptorSetLayout(VulkanContext::get()->device) };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ getDescriptorSetLayout(VulkanContext::get()->device.Value()) };
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 		plci.pSetLayouts = descriptorSetLayouts.data();
 		plci.pushConstantRangeCount = 1;
 		plci.pPushConstantRanges = &pcr;
-		pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+		pipeline.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
 
 		// Render Pass
 		pipeline.pipeinfo->renderPass = *renderPass;
@@ -1321,11 +1321,11 @@ namespace vm
 		// Base Pipeline Index
 		pipeline.pipeinfo->basePipelineIndex = -1;
 
-		pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
+		pipeline.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
 
 		// destroy Shader Modules
-		VulkanContext::get()->device.destroyShaderModule(vertModule);
-		VulkanContext::get()->device.destroyShaderModule(fragModule);
+		VulkanContext::get()->device->destroyShaderModule(vertModule);
+		VulkanContext::get()->device->destroyShaderModule(fragModule);
 	}
 
 	void GUI::destroy()
@@ -1338,7 +1338,7 @@ namespace vm
 
 		pipeline.destroy();
 		if (GUI::descriptorSetLayout) {
-			VulkanContext::get()->device.destroyDescriptorSetLayout(GUI::descriptorSetLayout);
+			VulkanContext::get()->device->destroyDescriptorSetLayout(GUI::descriptorSetLayout);
 			GUI::descriptorSetLayout = nullptr;
 		}
 	}

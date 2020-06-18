@@ -2,7 +2,7 @@
 
 #include <vector>
 #include "../Core/Image.h"
-#include "../Surface/Surface.h"
+#include "../Core/Surface.h"
 #include "../Swapchain/Swapchain.h"
 #include "../GUI/GUI.h"
 #include "../Skybox/Skybox.h"
@@ -21,6 +21,29 @@
 #include "../PostProcess/SSAO.h"
 #include "../PostProcess/SSR.h"
 #include "../PostProcess/TAA.h"
+#include <vulkan/vulkan.hpp>
+
+#if defined(_WIN32)
+// On Windows, Vulkan commands use the stdcall convention
+#define VKAPI_ATTR
+#define VKAPI_CALL __stdcall
+#define VKAPI_PTR  VKAPI_CALL
+#elif defined(__ANDROID__) && defined(__ARM_ARCH) && __ARM_ARCH < 7
+#error "Vulkan isn't supported for the 'armeabi' NDK ABI"
+#elif defined(__ANDROID__) && defined(__ARM_ARCH) && __ARM_ARCH >= 7 && defined(__ARM_32BIT_STATE)
+// On Android 32-bit ARM targets, Vulkan functions use the "hardfloat"
+// calling convention, i.e. float parameters are passed in registers. This
+// is true even if the rest of the application passes floats on the stack,
+// as it does by default when compiling for the armeabi-v7a NDK ABI.
+#define VKAPI_ATTR __attribute__((pcs("aapcs-vfp")))
+#define VKAPI_CALL
+#define VKAPI_PTR  VKAPI_ATTR
+#else
+// On other platforms, use the default calling convention
+#define VKAPI_ATTR
+#define VKAPI_CALL
+#define VKAPI_PTR
+#endif
 
 //#define USE_SCRIPTS
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE

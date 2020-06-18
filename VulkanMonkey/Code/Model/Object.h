@@ -3,6 +3,7 @@
 #include "../Core/Buffer.h"
 #include "../Core/Math.h"
 #include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

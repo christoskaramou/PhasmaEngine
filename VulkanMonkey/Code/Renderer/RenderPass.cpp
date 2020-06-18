@@ -1,5 +1,6 @@
 #include "RenderPass.h"
 #include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
@@ -60,7 +61,7 @@ namespace vm
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-		SetRef(VulkanContext::get()->device.createRenderPass(renderPassInfo));
+		SetRef(VulkanContext::get()->device->createRenderPass(renderPassInfo));
 	}
 
 	void RenderPass::Destroy()
@@ -69,7 +70,7 @@ namespace vm
 			throw std::runtime_error("m_ref is null");
 
 		if (*m_ref) {
-			VulkanContext::get()->device.destroyRenderPass(*m_ref);
+			VulkanContext::get()->device->destroyRenderPass(*m_ref);
 			*m_ref = nullptr;
 		}
 	}

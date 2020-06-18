@@ -6,6 +6,7 @@
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
 #include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

@@ -24,9 +24,9 @@ namespace vm
 
 		const std::string _title =
 			"VulkanMonkey3D   "
-			+ std::string(vulkan->gpuProperties.deviceName)
+			+ std::string(vulkan->gpuProperties->deviceName)
 			+ " (Present Mode: "
-			+ vk::to_string(vulkan->surface->presentModeKHR)
+			+ vk::to_string(vulkan->surface.presentModeKHR.Value())
 			+ ")";
 
 		SDL_SetWindowTitle(window, _title.c_str());

@@ -1,7 +1,7 @@
 #include "Bloom.h"
 #include "../GUI/GUI.h"
 #include "../Swapchain/Swapchain.h"
-#include "../Surface/Surface.h"
+#include "../Core/Surface.h"
 #include "../Shader/Shader.h"
 #include <deque>
 
@@ -9,7 +9,7 @@ namespace vm
 {
 	void Bloom::Init()
 	{
-		frameImage.format = VulkanContext::get()->surface->formatKHR.format;
+		frameImage.format = VulkanContext::get()->surface.formatKHR->format;
 		frameImage.initialLayout = vk::ImageLayout::eUndefined;
 		frameImage.createImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -89,8 +89,8 @@ namespace vm
 	void vm::Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::get();
-		framebuffers.resize(vulkan->swapchain->images.size() * 4);
-		for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+		framebuffers.resize(vulkan->swapchain.images.size() * 4);
+		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["brightFilter"].width.Value();
 			uint32_t height = renderTargets["brightFilter"].height.Value();
@@ -98,7 +98,7 @@ namespace vm
 			framebuffers[i].Create(width, height, view, renderPassBrightFilter);
 		}
 
-		for (size_t i = vulkan->swapchain->images.size(); i < vulkan->swapchain->images.size() * 2; ++i)
+		for (size_t i = vulkan->swapchain.images.size(); i < vulkan->swapchain.images.size() * 2; ++i)
 		{
 			uint32_t width = renderTargets["gaussianBlurHorizontal"].width.Value();
 			uint32_t height = renderTargets["gaussianBlurHorizontal"].height.Value();
@@ -106,7 +106,7 @@ namespace vm
 			framebuffers[i].Create(width, height, view, renderPassGaussianBlur);
 		}
 
-		for (size_t i = vulkan->swapchain->images.size() * 2; i < vulkan->swapchain->images.size() * 3; ++i)
+		for (size_t i = vulkan->swapchain.images.size() * 2; i < vulkan->swapchain.images.size() * 3; ++i)
 		{
 			uint32_t width = renderTargets["gaussianBlurVertical"].width.Value();
 			uint32_t height = renderTargets["gaussianBlurVertical"].height.Value();
@@ -114,7 +114,7 @@ namespace vm
 			framebuffers[i].Create(width, height, view, renderPassGaussianBlur);
 		}
 
-		for (size_t i = vulkan->swapchain->images.size() * 3; i < vulkan->swapchain->images.size() * 4; ++i)
+		for (size_t i = vulkan->swapchain.images.size() * 3; i < vulkan->swapchain.images.size() * 4; ++i)
 		{
 			uint32_t width = renderTargets["viewport"].width.Value();
 			uint32_t height = renderTargets["viewport"].height.Value();
@@ -135,24 +135,24 @@ namespace vm
 	{
 		auto vulkan = VulkanContext::get();
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = vulkan->descriptorPool;
+		allocateInfo.descriptorPool = vulkan->descriptorPool.Value();
 		allocateInfo.descriptorSetCount = 1;
 
 		// Composition image to Bright Filter shader
 		allocateInfo.pSetLayouts = &DSLayoutBrightFilter;
-		DSBrightFilter = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+		DSBrightFilter = vulkan->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		// Bright Filter image to Gaussian Blur Horizontal shader
 		allocateInfo.pSetLayouts = &DSLayoutGaussianBlurHorizontal;
-		DSGaussianBlurHorizontal = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+		DSGaussianBlurHorizontal = vulkan->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
 		allocateInfo.pSetLayouts = &DSLayoutGaussianBlurVertical;
-		DSGaussianBlurVertical = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+		DSGaussianBlurVertical = vulkan->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		// Gaussian Blur Vertical image to Combine shader
 		allocateInfo.pSetLayouts = &DSLayoutCombine;
-		DSCombine = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+		DSCombine = vulkan->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -172,7 +172,7 @@ namespace vm
 			wSetImage(DSCombine, 0, frameImage),
 			wSetImage(DSCombine, 1, renderTargets["gaussianBlurVertical"])
 		};
-		VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
+		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 
 	void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImages, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets)
@@ -244,12 +244,12 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = vert.byte_size();
 		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
+		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
 
 		vk::ShaderModuleCreateInfo fsmci;
 		fsmci.codeSize = frag.byte_size();
 		fsmci.pCode = frag.get_spriv();
-		vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
+		vk::ShaderModule fragModule = VulkanContext::get()->device->createShaderModule(fsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -359,7 +359,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayoutBrightFilter = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			DSLayoutBrightFilter = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
 		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutBrightFilter };
@@ -374,7 +374,7 @@ namespace vm
 		plci.pSetLayouts = descriptorSetLayouts.data();
 		plci.pushConstantRangeCount = 1;
 		plci.pPushConstantRanges = &pConstants;
-		pipelineBrightFilter.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+		pipelineBrightFilter.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
 
 		// Render Pass
 		pipelineBrightFilter.pipeinfo->renderPass = *renderPassBrightFilter;
@@ -388,11 +388,11 @@ namespace vm
 		// Base Pipeline Index
 		pipelineBrightFilter.pipeinfo->basePipelineIndex = -1;
 
-		pipelineBrightFilter.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineBrightFilter.pipeinfo).at(0);
+		pipelineBrightFilter.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipelineBrightFilter.pipeinfo).at(0);
 
 		// destroy Shader Modules
-		VulkanContext::get()->device.destroyShaderModule(vertModule);
-		VulkanContext::get()->device.destroyShaderModule(fragModule);
+		VulkanContext::get()->device->destroyShaderModule(vertModule);
+		VulkanContext::get()->device->destroyShaderModule(fragModule);
 	}
 
 	void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& renderTargets)
@@ -404,12 +404,12 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = vert.byte_size();
 		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
+		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
 
 		vk::ShaderModuleCreateInfo fsmci;
 		fsmci.codeSize = frag.byte_size();
 		fsmci.pCode = frag.get_spriv();
-		vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
+		vk::ShaderModule fragModule = VulkanContext::get()->device->createShaderModule(fsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -519,7 +519,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayoutGaussianBlurHorizontal = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			DSLayoutGaussianBlurHorizontal = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
 		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutGaussianBlurHorizontal };
@@ -534,7 +534,7 @@ namespace vm
 		plci.pSetLayouts = descriptorSetLayouts.data();
 		plci.pushConstantRangeCount = 1;
 		plci.pPushConstantRanges = &pConstants;
-		pipelineGaussianBlurHorizontal.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+		pipelineGaussianBlurHorizontal.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
 
 		// Render Pass
 		pipelineGaussianBlurHorizontal.pipeinfo->renderPass = *renderPassGaussianBlur;
@@ -548,11 +548,11 @@ namespace vm
 		// Base Pipeline Index
 		pipelineGaussianBlurHorizontal.pipeinfo->basePipelineIndex = -1;
 
-		pipelineGaussianBlurHorizontal.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineGaussianBlurHorizontal.pipeinfo).at(0);
+		pipelineGaussianBlurHorizontal.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipelineGaussianBlurHorizontal.pipeinfo).at(0);
 
 		// destroy Shader Modules
-		VulkanContext::get()->device.destroyShaderModule(vertModule);
-		VulkanContext::get()->device.destroyShaderModule(fragModule);
+		VulkanContext::get()->device->destroyShaderModule(vertModule);
+		VulkanContext::get()->device->destroyShaderModule(fragModule);
 	}
 
 	void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& renderTargets)
@@ -564,12 +564,12 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = vert.byte_size();
 		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
+		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
 
 		vk::ShaderModuleCreateInfo fsmci;
 		fsmci.codeSize = frag.byte_size();
 		fsmci.pCode = frag.get_spriv();
-		vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
+		vk::ShaderModule fragModule = VulkanContext::get()->device->createShaderModule(fsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -679,7 +679,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayoutGaussianBlurVertical = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			DSLayoutGaussianBlurVertical = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
 		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutGaussianBlurVertical };
@@ -693,7 +693,7 @@ namespace vm
 		plci.pSetLayouts = descriptorSetLayouts.data();
 		plci.pushConstantRangeCount = 1;
 		plci.pPushConstantRanges = &pConstants;
-		pipelineGaussianBlurVertical.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+		pipelineGaussianBlurVertical.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
 
 		// Render Pass
 		pipelineGaussianBlurVertical.pipeinfo->renderPass = *renderPassGaussianBlur;
@@ -707,11 +707,11 @@ namespace vm
 		// Base Pipeline Index
 		pipelineGaussianBlurVertical.pipeinfo->basePipelineIndex = -1;
 
-		pipelineGaussianBlurVertical.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineGaussianBlurVertical.pipeinfo).at(0);
+		pipelineGaussianBlurVertical.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipelineGaussianBlurVertical.pipeinfo).at(0);
 
 		// destroy Shader Modules
-		VulkanContext::get()->device.destroyShaderModule(vertModule);
-		VulkanContext::get()->device.destroyShaderModule(fragModule);
+		VulkanContext::get()->device->destroyShaderModule(vertModule);
+		VulkanContext::get()->device->destroyShaderModule(fragModule);
 	}
 
 	void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
@@ -723,12 +723,12 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = vert.byte_size();
 		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
+		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
 
 		vk::ShaderModuleCreateInfo fsmci;
 		fsmci.codeSize = frag.byte_size();
 		fsmci.pCode = frag.get_spriv();
-		vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
+		vk::ShaderModule fragModule = VulkanContext::get()->device->createShaderModule(fsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -839,7 +839,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayoutCombine = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			DSLayoutCombine = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
 		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutCombine };
@@ -854,7 +854,7 @@ namespace vm
 		plci.pSetLayouts = descriptorSetLayouts.data();
 		plci.pushConstantRangeCount = 1;
 		plci.pPushConstantRanges = &pConstants;
-		pipelineCombine.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+		pipelineCombine.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
 
 		// Render Pass
 		pipelineCombine.pipeinfo->renderPass = *renderPassCombine;
@@ -868,11 +868,11 @@ namespace vm
 		// Base Pipeline Index
 		pipelineCombine.pipeinfo->basePipelineIndex = -1;
 
-		pipelineCombine.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineCombine.pipeinfo).at(0);
+		pipelineCombine.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipelineCombine.pipeinfo).at(0);
 
 		// destroy Shader Modules
-		VulkanContext::get()->device.destroyShaderModule(vertModule);
-		VulkanContext::get()->device.destroyShaderModule(fragModule);
+		VulkanContext::get()->device->destroyShaderModule(vertModule);
+		VulkanContext::get()->device->destroyShaderModule(fragModule);
 	}
 
 	void Bloom::destroy()
@@ -886,19 +886,19 @@ namespace vm
 		renderPassCombine.Destroy();
 
 		if (DSLayoutBrightFilter) {
-			vulkan->device.destroyDescriptorSetLayout(DSLayoutBrightFilter);
+			vulkan->device->destroyDescriptorSetLayout(DSLayoutBrightFilter);
 			DSLayoutBrightFilter = nullptr;
 		}
 		if (DSLayoutGaussianBlurHorizontal) {
-			vulkan->device.destroyDescriptorSetLayout(DSLayoutGaussianBlurHorizontal);
+			vulkan->device->destroyDescriptorSetLayout(DSLayoutGaussianBlurHorizontal);
 			DSLayoutGaussianBlurHorizontal = nullptr;
 		}
 		if (DSLayoutGaussianBlurVertical) {
-			vulkan->device.destroyDescriptorSetLayout(DSLayoutGaussianBlurVertical);
+			vulkan->device->destroyDescriptorSetLayout(DSLayoutGaussianBlurVertical);
 			DSLayoutGaussianBlurVertical = nullptr;
 		}
 		if (DSLayoutCombine) {
-			vulkan->device.destroyDescriptorSetLayout(DSLayoutCombine);
+			vulkan->device->destroyDescriptorSetLayout(DSLayoutCombine);
 			DSLayoutCombine = nullptr;
 		}
 		frameImage.destroy();

@@ -1,14 +1,14 @@
 #include "FXAA.h"
 #include "../GUI/GUI.h"
 #include "../Swapchain/Swapchain.h"
-#include "../Surface/Surface.h"
+#include "../Core/Surface.h"
 #include"../Shader/Shader.h"
 
 namespace vm
 {
 	void FXAA::Init()
 	{
-		frameImage.format = VulkanContext::get()->surface->formatKHR.format;
+		frameImage.format = VulkanContext::get()->surface.formatKHR->format;
 		frameImage.initialLayout = vk::ImageLayout::eUndefined;
 		frameImage.createImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -24,10 +24,10 @@ namespace vm
 	void FXAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo2;
-		allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;
+		allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &DSLayout;
-		DSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo2).at(0);
+		DSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0);
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -48,7 +48,7 @@ namespace vm
 		textureWriteSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
 		textureWriteSet.pImageInfo = &dii;
 
-		VulkanContext::get()->device.updateDescriptorSets(textureWriteSet, nullptr);
+		VulkanContext::get()->device->updateDescriptorSets(textureWriteSet, nullptr);
 	}
 
 	void FXAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
@@ -81,8 +81,8 @@ namespace vm
 	void vm::FXAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::get();
-		framebuffers.resize(vulkan->swapchain->images.size());
-		for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+		framebuffers.resize(vulkan->swapchain.images.size());
+		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["viewport"].width.Value();
 			uint32_t height = renderTargets["viewport"].height.Value();
@@ -100,12 +100,12 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = vert.byte_size();
 		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
+		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
 
 		vk::ShaderModuleCreateInfo fsmci;
 		fsmci.codeSize = frag.byte_size();
 		fsmci.pCode = frag.get_spriv();
-		vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
+		vk::ShaderModule fragModule = VulkanContext::get()->device->createShaderModule(fsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -215,7 +215,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			DSLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
 		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout };
@@ -223,7 +223,7 @@ namespace vm
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 		plci.pSetLayouts = descriptorSetLayouts.data();
-		pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+		pipeline.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
 
 		// Render Pass
 		pipeline.pipeinfo->renderPass = *renderPass;
@@ -237,11 +237,11 @@ namespace vm
 		// Base Pipeline Index
 		pipeline.pipeinfo->basePipelineIndex = -1;
 
-		pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
+		pipeline.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
 
 		// destroy Shader Modules
-		VulkanContext::get()->device.destroyShaderModule(vertModule);
-		VulkanContext::get()->device.destroyShaderModule(fragModule);
+		VulkanContext::get()->device->destroyShaderModule(vertModule);
+		VulkanContext::get()->device->destroyShaderModule(fragModule);
 	}
 
 	void FXAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
@@ -310,7 +310,7 @@ namespace vm
 		renderPass.Destroy();
 
 		if (DSLayout) {
-			VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayout);
+			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayout);
 			DSLayout = nullptr;
 		}
 		frameImage.destroy();

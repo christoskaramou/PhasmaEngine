@@ -1,6 +1,7 @@
 #include "Framebuffer.h"
 #include "../Renderer/RenderPass.h"
 #include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
@@ -20,7 +21,7 @@ namespace vm
 		fbci.height = height;
 		fbci.layers = 1;
 
-		SetRef(VulkanContext::get()->device.createFramebuffer(fbci));
+		SetRef(VulkanContext::get()->device->createFramebuffer(fbci));
 	}
 	
 	void Framebuffer::Destroy()
@@ -29,7 +30,7 @@ namespace vm
 			throw std::runtime_error("m_ref is null");
 
 		if (*m_ref) {
-			VulkanContext::get()->device.destroyFramebuffer(*m_ref);
+			VulkanContext::get()->device->destroyFramebuffer(*m_ref);
 			*m_ref = nullptr;
 		}
 	}

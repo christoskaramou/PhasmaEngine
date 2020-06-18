@@ -229,6 +229,7 @@
     <ClInclude Include="Code\Core\Node.h" />
     <ClInclude Include="Code\Core\Pointer.h" />
     <ClInclude Include="Code\Core\Queue.h" />
+    <ClInclude Include="Code\Core\Surface.h" />
     <ClInclude Include="Code\Core\Timer.h" />
     <ClInclude Include="Code\Core\Vertex.h" />
     <ClInclude Include="Code\Deferred\Deferred.h" />
@@ -258,7 +259,6 @@
     <ClInclude Include="Code\Shader\Shader.h" />
     <ClInclude Include="Code\Shadows\Shadows.h" />
     <ClInclude Include="Code\Skybox\Skybox.h" />
-    <ClInclude Include="Code\Surface\Surface.h" />
     <ClInclude Include="Code\Swapchain\Swapchain.h" />
     <ClInclude Include="Code\VulkanContext\VulkanContext.h" />
     <ClInclude Include="Code\Window\Window.h" />
@@ -284,6 +284,7 @@
     <ClCompile Include="Code\Core\Light.cpp" />
     <ClCompile Include="Code\Core\Math.cpp" />
     <ClCompile Include="Code\Core\Node.cpp" />
+    <ClCompile Include="Code\Core\Surface.cpp" />
     <ClCompile Include="Code\Core\Timer.cpp" />
     <ClCompile Include="Code\Core\Vertex.cpp" />
     <ClCompile Include="Code\Deferred\Deferred.cpp" />

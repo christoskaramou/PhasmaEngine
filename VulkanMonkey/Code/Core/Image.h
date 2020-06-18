@@ -51,6 +51,7 @@ namespace vm
 	{
 	public:
 		Image();
+		~Image();
 		Ref_t<vk::Image> image;
 		Ref_t<vk::DeviceMemory> memory;
 		Ref_t<vk::ImageView> view;

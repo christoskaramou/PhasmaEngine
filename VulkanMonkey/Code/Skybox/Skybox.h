@@ -1,6 +1,7 @@
 #pragma once
 #include "../Model/Object.h"
 #include "../Pipeline/Pipeline.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

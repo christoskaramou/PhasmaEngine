@@ -14,51 +14,51 @@ namespace vm
 		auto& vulkan = *VulkanContext::get();
 		vulkan.instance = createInstance();
 #ifdef _DEBUG
-		vulkan.dispatchLoaderDynamic.init(vulkan.instance, vk::Device());
+		vulkan.dispatchLoaderDynamic->init(vulkan.instance.Value(), vk::Device());
 		vulkan.debugMessenger = createDebugMessenger();
 #endif
-		vulkan.surface = new Surface(createSurface());
+		vulkan.surface = createSurface();
 		vulkan.gpu = findGpu();
 		vulkan.graphicsFamilyId = getGraphicsFamilyId();
 		vulkan.computeFamilyId = getComputeFamilyId();
 		vulkan.transferFamilyId = getTransferFamilyId();
 		vulkan.gpuProperties = getGPUProperties();
 		vulkan.gpuFeatures = getGPUFeatures();
-		vulkan.surface->capabilities = getSurfaceCapabilities();
-		vulkan.surface->formatKHR = getSurfaceFormat();
-		vulkan.surface->presentModeKHR = getPresentationMode();
+		vulkan.surface.capabilities = getSurfaceCapabilities();
+		vulkan.surface.formatKHR = getSurfaceFormat();
+		vulkan.surface.presentModeKHR = getPresentationMode();
 		vulkan.device = createDevice();
 		vulkan.graphicsQueue = getGraphicsQueue();
 		vulkan.computeQueue = getComputeQueue();
 		vulkan.transferQueue = getTransferQueue();
 		vulkan.commandPool = createCommandPool();
 		vulkan.commandPool2 = createCommandPool();
-		vulkan.swapchain = new Swapchain(createSwapchain(SWAPCHAIN_IMAGES));
+		vulkan.swapchain = createSwapchain(SWAPCHAIN_IMAGES);
 		vulkan.descriptorPool = createDescriptorPool(15000); // max number of all descriptor sets to allocate
 		vulkan.dynamicCmdBuffers = createCmdBuffers(SWAPCHAIN_IMAGES);
 		vulkan.shadowCmdBuffers = createCmdBuffers(SWAPCHAIN_IMAGES * 3);
 		vulkan.semaphores = createSemaphores(SWAPCHAIN_IMAGES * 3);
 		vulkan.fences = createFences(SWAPCHAIN_IMAGES);
-		vulkan.depth = new Image(createDepthResources());
+		vulkan.depth = createDepthResources();
 	}
 
 	void Context::initRendering()
 	{
 		auto& vulkan = *VulkanContext::get();
-		addRenderTarget("viewport", vulkan.surface->formatKHR.format, vk::ImageUsageFlagBits::eTransferSrc);
+		addRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
 		addRenderTarget("depth", vk::Format::eR32Sfloat);
 		addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
-		addRenderTarget("albedo", vulkan.surface->formatKHR.format);
-		addRenderTarget("srm", vulkan.surface->formatKHR.format); // Specular Roughness Metallic
+		addRenderTarget("albedo", vulkan.surface.formatKHR->format);
+		addRenderTarget("srm", vulkan.surface.formatKHR->format); // Specular Roughness Metallic
 		addRenderTarget("ssao", vk::Format::eR16Unorm);
 		addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
-		addRenderTarget("ssr", vulkan.surface->formatKHR.format);
+		addRenderTarget("ssr", vulkan.surface.formatKHR->format);
 		addRenderTarget("velocity", vk::Format::eR16G16Sfloat);
-		addRenderTarget("brightFilter", vulkan.surface->formatKHR.format);
-		addRenderTarget("gaussianBlurHorizontal", vulkan.surface->formatKHR.format);
-		addRenderTarget("gaussianBlurVertical", vulkan.surface->formatKHR.format);
-		addRenderTarget("emissive", vulkan.surface->formatKHR.format);
-		addRenderTarget("taa", vulkan.surface->formatKHR.format, vk::ImageUsageFlagBits::eTransferSrc);
+		addRenderTarget("brightFilter", vulkan.surface.formatKHR->format);
+		addRenderTarget("gaussianBlurHorizontal", vulkan.surface.formatKHR->format);
+		addRenderTarget("gaussianBlurVertical", vulkan.surface.formatKHR->format);
+		addRenderTarget("emissive", vulkan.surface.formatKHR->format);
+		addRenderTarget("taa", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
 
 		taa.Init();
 		bloom.Init();
@@ -110,7 +110,7 @@ namespace vm
 	void Context::resizeViewport(uint32_t width, uint32_t height)
 	{
 		auto& vulkan = *VulkanContext::get();
-		vulkan.graphicsQueue.waitIdle();
+		vulkan.graphicsQueue->waitIdle();
 
 		//- Free resources ----------------------
 		// render targets
@@ -195,30 +195,30 @@ namespace vm
 		ssao.pipeline.destroy();
 		ssao.pipelineBlur.destroy();
 
-		vulkan.depth->destroy();
-		vulkan.swapchain->destroy();
+		vulkan.depth.destroy();
+		vulkan.swapchain.destroy();
 		//- Free resources end ------------------
 
 		//- Recreate resources ------------------
 		WIDTH = width;
 		HEIGHT = height;
-		*vulkan.swapchain = createSwapchain(SWAPCHAIN_IMAGES);
-		*vulkan.depth = createDepthResources();
+		vulkan.swapchain = createSwapchain(SWAPCHAIN_IMAGES);
+		vulkan.depth = createDepthResources();
 
-		addRenderTarget("viewport", vulkan.surface->formatKHR.format, vk::ImageUsageFlagBits::eTransferSrc);
+		addRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
 		addRenderTarget("depth", vk::Format::eR32Sfloat);
 		addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
-		addRenderTarget("albedo", vulkan.surface->formatKHR.format);
-		addRenderTarget("srm", vulkan.surface->formatKHR.format); // Specular Roughness Metallic
+		addRenderTarget("albedo", vulkan.surface.formatKHR->format);
+		addRenderTarget("srm", vulkan.surface.formatKHR->format); // Specular Roughness Metallic
 		addRenderTarget("ssao", vk::Format::eR16Unorm);
 		addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
-		addRenderTarget("ssr", vulkan.surface->formatKHR.format);
+		addRenderTarget("ssr", vulkan.surface.formatKHR->format);
 		addRenderTarget("velocity", vk::Format::eR16G16Sfloat);
-		addRenderTarget("brightFilter", vulkan.surface->formatKHR.format);
-		addRenderTarget("gaussianBlurHorizontal", vulkan.surface->formatKHR.format);
-		addRenderTarget("gaussianBlurVertical", vulkan.surface->formatKHR.format);
-		addRenderTarget("emissive", vulkan.surface->formatKHR.format);
-		addRenderTarget("taa", vulkan.surface->formatKHR.format, vk::ImageUsageFlagBits::eTransferSrc);
+		addRenderTarget("brightFilter", vulkan.surface.formatKHR->format);
+		addRenderTarget("gaussianBlurHorizontal", vulkan.surface.formatKHR->format);
+		addRenderTarget("gaussianBlurVertical", vulkan.surface.formatKHR->format);
+		addRenderTarget("emissive", vulkan.surface.formatKHR->format);
+		addRenderTarget("taa", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
 
 		deferred.createRenderPasses(renderTargets);
 		deferred.createFrameBuffers(renderTargets);
@@ -277,7 +277,7 @@ namespace vm
 
 	void Context::recreatePipelines()
 	{
-		VulkanContext::get()->graphicsQueue.waitIdle();
+		VulkanContext::get()->graphicsQueue->waitIdle();
 
 		shadows.pipeline.destroy();
 		ssao.pipeline.destroy();
@@ -389,7 +389,7 @@ namespace vm
 	void Context::createUniforms()
 	{
 		// DESCRIPTOR SETS FOR GUI
-		gui.createDescriptorSet(GUI::getDescriptorSetLayout(VulkanContext::get()->device));
+		gui.createDescriptorSet(GUI::getDescriptorSetLayout(VulkanContext::get()->device.Value()));
 		// DESCRIPTOR SETS FOR SKYBOX
 		skyBoxDay.createDescriptorSet();
 		skyBoxNight.createDescriptorSet();
@@ -508,21 +508,21 @@ namespace vm
 			vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
 		dumci.pfnUserCallback = Context::messageCallback;
 
-		return VulkanContext::get()->instance.createDebugUtilsMessengerEXT(dumci, nullptr, VulkanContext::get()->dispatchLoaderDynamic);
+		return VulkanContext::get()->instance->createDebugUtilsMessengerEXT(dumci, nullptr, VulkanContext::get()->dispatchLoaderDynamic.Value());
 	}
 
 	void Context::destroyDebugMessenger() const
 	{
 		vk::DispatchLoaderDynamic dld;
-		dld.init(VulkanContext::get()->instance, vk::Device());
+		dld.init(VulkanContext::get()->instance.Value(), vk::Device());
 
-		VulkanContext::get()->instance.destroyDebugUtilsMessengerEXT(VulkanContext::get()->debugMessenger, nullptr, dld);
+		VulkanContext::get()->instance->destroyDebugUtilsMessengerEXT(VulkanContext::get()->debugMessenger.Value(), nullptr, dld);
 	}
 
 	Surface Context::createSurface() const
 	{
 		VkSurfaceKHR _vkSurface;
-		if (!SDL_Vulkan_CreateSurface(VulkanContext::get()->window, VkInstance(VulkanContext::get()->instance), &_vkSurface))
+		if (!SDL_Vulkan_CreateSurface(VulkanContext::get()->window, VkInstance(VulkanContext::get()->instance.Value()), &_vkSurface))
 			throw std::runtime_error(SDL_GetError());
 
 		Surface _surface;
@@ -542,9 +542,9 @@ namespace vm
 		const vk::QueueFlags flags = vk::QueueFlagBits::eGraphics;
 #endif
 		auto& properties = VulkanContext::get()->queueFamilyProperties;
-		for (uint32_t i = 0; i < properties.size(); i++) {
+		for (uint32_t i = 0; i < properties->size(); i++) {
 			//find graphics queue family index
-			if (properties[i].queueFlags & flags && VulkanContext::get()->gpu.getSurfaceSupportKHR(i, VulkanContext::get()->surface->surface))
+			if ((*properties)[i].queueFlags & flags && VulkanContext::get()->gpu->getSurfaceSupportKHR(i, VulkanContext::get()->surface.surface.Value()))
 				return i;
 		}
 		return -1;
@@ -572,9 +572,9 @@ namespace vm
 		const vk::QueueFlags flags = vk::QueueFlagBits::eCompute;
 		auto& properties = VulkanContext::get()->queueFamilyProperties;
 		// prefer different families for different queue types, thus the reverse check
-		for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i) {
+		for (int i = static_cast<int>(properties->size()) - 1; i >= 0; --i) {
 			//find compute queue family index
-			if (properties[i].queueFlags & flags)
+			if ((*properties)[i].queueFlags & flags)
 				return i;
 		}
 		return -1;
@@ -582,13 +582,13 @@ namespace vm
 
 	vk::PhysicalDevice Context::findGpu() const
 	{
-		std::vector<vk::PhysicalDevice> gpuList = VulkanContext::get()->instance.enumeratePhysicalDevices();
+		std::vector<vk::PhysicalDevice> gpuList = VulkanContext::get()->instance->enumeratePhysicalDevices();
 
 		for (const auto& gpu : gpuList) {
 			VulkanContext::get()->queueFamilyProperties = gpu.getQueueFamilyProperties();
 			vk::QueueFlags flags;
 
-			for (const auto& qfp : VulkanContext::get()->queueFamilyProperties) {
+			for (const auto& qfp : VulkanContext::get()->queueFamilyProperties.Value()) {
 				if (qfp.queueFlags & vk::QueueFlagBits::eGraphics)
 					flags |= vk::QueueFlagBits::eGraphics;
 				if (qfp.queueFlags & vk::QueueFlagBits::eCompute)
@@ -607,7 +607,7 @@ namespace vm
 
 	vk::SurfaceCapabilitiesKHR Context::getSurfaceCapabilities() const
 	{
-		auto caps = VulkanContext::get()->gpu.getSurfaceCapabilitiesKHR(VulkanContext::get()->surface->surface);
+		auto caps = VulkanContext::get()->gpu->getSurfaceCapabilitiesKHR(VulkanContext::get()->surface.surface.Value());
 		// Ensure eTransferSrc bit for blit operations
 		if (!(caps.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferSrc))
 			throw std::runtime_error("Surface doesnt support vk::ImageUsageFlagBits::eTransferSrc");
@@ -616,7 +616,7 @@ namespace vm
 
 	vk::SurfaceFormatKHR Context::getSurfaceFormat() const
 	{
-		std::vector<vk::SurfaceFormatKHR> formats = VulkanContext::get()->gpu.getSurfaceFormatsKHR(VulkanContext::get()->surface->surface);
+		std::vector<vk::SurfaceFormatKHR> formats = VulkanContext::get()->gpu->getSurfaceFormatsKHR(VulkanContext::get()->surface.surface.Value());
 		auto format = formats[0];
 		for (const auto& f : formats) {
 			if (f.format == vk::Format::eB8G8R8A8Unorm && f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
@@ -624,7 +624,7 @@ namespace vm
 		}
 
 		// Check for blit operation
-		auto const fProps = VulkanContext::get()->gpu.getFormatProperties(format.format);
+		auto const fProps = VulkanContext::get()->gpu->getFormatProperties(format.format);
 		if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eBlitSrc))
 			throw std::runtime_error("No blit source operation supported");
 		if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eBlitDst))
@@ -635,7 +635,7 @@ namespace vm
 
 	vk::PresentModeKHR Context::getPresentationMode() const
 	{
-		std::vector<vk::PresentModeKHR> presentModes = VulkanContext::get()->gpu.getSurfacePresentModesKHR(VulkanContext::get()->surface->surface);
+		std::vector<vk::PresentModeKHR> presentModes = VulkanContext::get()->gpu->getSurfacePresentModesKHR(VulkanContext::get()->surface.surface.Value());
 
 		for (const auto& i : presentModes)
 			if (i == vk::PresentModeKHR::eMailbox)
@@ -650,18 +650,18 @@ namespace vm
 
 	vk::PhysicalDeviceProperties Context::getGPUProperties() const
 	{
-		return VulkanContext::get()->gpu.getProperties();
+		return VulkanContext::get()->gpu->getProperties();
 	}
 
 	vk::PhysicalDeviceFeatures Context::getGPUFeatures() const
 	{
-		return VulkanContext::get()->gpu.getFeatures();
+		return VulkanContext::get()->gpu->getFeatures();
 	}
 
 	vk::Device Context::createDevice() const
 	{
 		auto& vulkan = *VulkanContext::get();
-		auto extensionProperties = vulkan.gpu.enumerateDeviceExtensionProperties();
+		auto extensionProperties = vulkan.gpu->enumerateDeviceExtensionProperties();
 
 		std::vector<const char*> deviceExtensions{};
 		for (auto& i : extensionProperties) {
@@ -699,58 +699,61 @@ namespace vm
 		deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
 		deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
-		deviceCreateInfo.pEnabledFeatures = &vulkan.gpuFeatures;
+		deviceCreateInfo.pEnabledFeatures = &*vulkan.gpuFeatures;
 
-		return vulkan.gpu.createDevice(deviceCreateInfo);
+		return vulkan.gpu->createDevice(deviceCreateInfo);
 	}
 
 	vk::Queue Context::getGraphicsQueue() const
 	{
-		return VulkanContext::get()->device.getQueue(VulkanContext::get()->graphicsFamilyId, 0);
+		return VulkanContext::get()->device->getQueue(VulkanContext::get()->graphicsFamilyId, 0);
 	}
 
 	vk::Queue vm::Context::getTransferQueue() const
 	{
-		return VulkanContext::get()->device.getQueue(VulkanContext::get()->transferFamilyId, 0);
+		return VulkanContext::get()->device->getQueue(VulkanContext::get()->transferFamilyId, 0);
 	}
 
 	vk::Queue Context::getComputeQueue() const
 	{
-		return VulkanContext::get()->device.getQueue(VulkanContext::get()->computeFamilyId, 0);
+		return VulkanContext::get()->device->getQueue(VulkanContext::get()->computeFamilyId, 0);
 	}
 
 	Swapchain Context::createSwapchain(uint32_t requestImageCount) const
 	{
 		auto& vulkan = *VulkanContext::get();
-		const VkExtent2D extent = vulkan.surface->actualExtent;
-		vulkan.surface->capabilities = getSurfaceCapabilities();
+		const VkExtent2D extent = vulkan.surface.actualExtent.Value();
+		vulkan.surface.capabilities = getSurfaceCapabilities();
 
 		vk::SwapchainCreateInfoKHR swapchainCreateInfo;
-		swapchainCreateInfo.surface = vulkan.surface->surface;
-		swapchainCreateInfo.minImageCount = clamp(requestImageCount, vulkan.surface->capabilities.minImageCount, vulkan.surface->capabilities.maxImageCount);
-		swapchainCreateInfo.imageFormat = vulkan.surface->formatKHR.format;
-		swapchainCreateInfo.imageColorSpace = vulkan.surface->formatKHR.colorSpace;
+		swapchainCreateInfo.surface = vulkan.surface.surface.Value();
+		swapchainCreateInfo.minImageCount = clamp(requestImageCount, vulkan.surface.capabilities->minImageCount, vulkan.surface.capabilities->maxImageCount);
+		swapchainCreateInfo.imageFormat = vulkan.surface.formatKHR->format;
+		swapchainCreateInfo.imageColorSpace = vulkan.surface.formatKHR->colorSpace;
 		swapchainCreateInfo.imageExtent = extent;
 		swapchainCreateInfo.imageArrayLayers = 1;
 		swapchainCreateInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
-		swapchainCreateInfo.preTransform = vulkan.surface->capabilities.currentTransform;
+		swapchainCreateInfo.preTransform = vulkan.surface.capabilities->currentTransform;
 		swapchainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-		swapchainCreateInfo.presentMode = vulkan.surface->presentModeKHR;
+		swapchainCreateInfo.presentMode = vulkan.surface.presentModeKHR.Value();
 		swapchainCreateInfo.clipped = VK_TRUE;
-		swapchainCreateInfo.oldSwapchain = vulkan.swapchain && vulkan.swapchain->swapchain ? vulkan.swapchain->swapchain : nullptr;
+		swapchainCreateInfo.oldSwapchain = 
+			*vulkan.swapchain.swapchain ?
+			*vulkan.swapchain.swapchain :
+			nullptr;
 
 		// new swapchain with old create info
 		Swapchain swapchain;
-		swapchain.swapchain = vulkan.device.createSwapchainKHR(swapchainCreateInfo);
+		swapchain.swapchain = vulkan.device->createSwapchainKHR(swapchainCreateInfo);
 
 		// destroy old swapchain
-		if (vulkan.swapchain && vulkan.swapchain->swapchain) {
-			vulkan.device.destroySwapchainKHR(vulkan.swapchain->swapchain);
-			vulkan.swapchain->swapchain = nullptr;
+		if (vulkan.swapchain.swapchain.Value()) {
+			vulkan.device->destroySwapchainKHR(vulkan.swapchain.swapchain.Value());
+			*vulkan.swapchain.swapchain = nullptr;
 		}
 
 		// get the swapchain image handlers
-		std::vector<vk::Image> images = vulkan.device.getSwapchainImagesKHR(swapchain.swapchain);
+		std::vector<vk::Image> images = vulkan.device->getSwapchainImagesKHR(swapchain.swapchain.Value());
 
 		swapchain.images.resize(images.size());
 		for (unsigned i = 0; i < images.size(); i++) {
@@ -771,9 +774,9 @@ namespace vm
 			vk::ImageViewCreateInfo imageViewCreateInfo;
 			imageViewCreateInfo.image = image.image.Value();
 			imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
-			imageViewCreateInfo.format = VulkanContext::get()->surface->formatKHR.format;
+			imageViewCreateInfo.format = VulkanContext::get()->surface.formatKHR->format;
 			imageViewCreateInfo.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
-			image.view = VulkanContext::get()->device.createImageView(imageViewCreateInfo);
+			image.view = VulkanContext::get()->device->createImageView(imageViewCreateInfo);
 		}
 
 		return swapchain;
@@ -785,7 +788,7 @@ namespace vm
 		cpci.queueFamilyIndex = VulkanContext::get()->graphicsFamilyId;
 		cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
 
-		return VulkanContext::get()->device.createCommandPool(cpci);
+		return VulkanContext::get()->device->createCommandPool(cpci);
 	}
 
 	void Context::addRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
@@ -825,7 +828,7 @@ namespace vm
 		_image.format = vk::Format::eUndefined;
 		std::vector<vk::Format> candidates = { vk::Format::eD32SfloatS8Uint, vk::Format::eD32Sfloat, vk::Format::eD24UnormS8Uint };
 		for (auto& format : candidates) {
-			vk::FormatProperties props = VulkanContext::get()->gpu.getFormatProperties(format);
+			vk::FormatProperties props = VulkanContext::get()->gpu->getFormatProperties(format);
 			if ((props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) == vk::FormatFeatureFlagBits::eDepthStencilAttachment) {
 				_image.format = format;
 				break;
@@ -851,11 +854,11 @@ namespace vm
 	std::vector<vk::CommandBuffer> Context::createCmdBuffers(const uint32_t bufferCount) const
 	{
 		vk::CommandBufferAllocateInfo cbai;
-		cbai.commandPool = VulkanContext::get()->commandPool;
+		cbai.commandPool = VulkanContext::get()->commandPool.Value();
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = bufferCount;
 
-		return VulkanContext::get()->device.allocateCommandBuffers(cbai);
+		return VulkanContext::get()->device->allocateCommandBuffers(cbai);
 	}
 
 	vk::DescriptorPool Context::createDescriptorPool(uint32_t maxDescriptorSets) const
@@ -876,7 +879,7 @@ namespace vm
 		createInfo.pPoolSizes = descPoolsize.data();
 		createInfo.maxSets = maxDescriptorSets;
 
-		return VulkanContext::get()->device.createDescriptorPool(createInfo);
+		return VulkanContext::get()->device->createDescriptorPool(createInfo);
 	}
 
 	std::vector<vk::Fence> Context::createFences(const uint32_t fenceCount) const
@@ -885,7 +888,7 @@ namespace vm
 		const vk::FenceCreateInfo fi{ vk::FenceCreateFlagBits::eSignaled };
 
 		for (uint32_t i = 0; i < fenceCount; i++) {
-			_fences[i] = VulkanContext::get()->device.createFence(fi);
+			_fences[i] = VulkanContext::get()->device->createFence(fi);
 		}
 
 		return _fences;
@@ -897,7 +900,7 @@ namespace vm
 		const vk::SemaphoreCreateInfo si;
 
 		for (uint32_t i = 0; i < semaphoresCount; i++) {
-			_semaphores[i] = VulkanContext::get()->device.createSemaphore(si);
+			_semaphores[i] = VulkanContext::get()->device->createSemaphore(si);
 		}
 
 		return _semaphores;
@@ -906,53 +909,51 @@ namespace vm
 	void Context::destroyVkContext()
 	{
 		auto& vulkan = *VulkanContext::get();
-		vulkan.device.waitIdle();
+		vulkan.device->waitIdle();
 
-		for (auto& fence : vulkan.fences) {
+		for (auto& fence : *vulkan.fences) {
 			if (fence) {
-				vulkan.device.destroyFence(fence);
+				vulkan.device->destroyFence(fence);
 				fence = nullptr;
 			}
 		}
-		for (auto& semaphore : vulkan.semaphores) {
+		for (auto& semaphore : *vulkan.semaphores) {
 			if (semaphore) {
-				vulkan.device.destroySemaphore(semaphore);
+				vulkan.device->destroySemaphore(semaphore);
 				semaphore = nullptr;
 			}
 		}
 		for (auto& rt : renderTargets)
 			rt.second.destroy();
 
-		vulkan.depth->destroy();
-		delete vulkan.depth;
+		vulkan.depth.destroy();
 
-		if (vulkan.descriptorPool) {
-			vulkan.device.destroyDescriptorPool(vulkan.descriptorPool);
+		if (vulkan.descriptorPool.Value()) {
+			vulkan.device->destroyDescriptorPool(vulkan.descriptorPool.Value());
 		}
-		if (vulkan.commandPool) {
-			vulkan.device.destroyCommandPool(vulkan.commandPool);
+		if (vulkan.commandPool.Value()) {
+			vulkan.device->destroyCommandPool(vulkan.commandPool.Value());
 		}
-		if (vulkan.commandPool2) {
-			vulkan.device.destroyCommandPool(vulkan.commandPool2);
-		}
-
-		vulkan.swapchain->destroy();
-		delete vulkan.swapchain;
-
-		if (vulkan.device) {
-			vulkan.device.destroy();
+		if (vulkan.commandPool2.Value()) {
+			vulkan.device->destroyCommandPool(vulkan.commandPool2.Value());
 		}
 
-		if (vulkan.surface->surface) {
-			vulkan.instance.destroySurfaceKHR(vulkan.surface->surface);
-		}delete vulkan.surface;
+		vulkan.swapchain.destroy();
+
+		if (vulkan.device.Value()) {
+			vulkan.device->destroy();
+		}
+
+		if (vulkan.surface.surface.Value()) {
+			vulkan.instance->destroySurfaceKHR(vulkan.surface.surface.Value());
+		}
 
 #ifdef _DEBUG
 		destroyDebugMessenger();
 #endif
 
-		if (vulkan.instance) {
-			vulkan.instance.destroy();
+		if (vulkan.instance.Value()) {
+			vulkan.instance->destroy();
 		}
 	}
 }

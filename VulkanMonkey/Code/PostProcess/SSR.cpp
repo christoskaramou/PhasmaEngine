@@ -2,7 +2,7 @@
 #include <deque>
 #include "../GUI/GUI.h"
 #include "../Swapchain/Swapchain.h"
-#include "../Surface/Surface.h"
+#include "../Core/Surface.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
 
@@ -17,10 +17,10 @@ namespace vm
 		UBReflection.unmap();
 
 		vk::DescriptorSetAllocateInfo allocateInfo2;
-		allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;
+		allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &DSLayoutReflection;
-		DSReflection = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo2).at(0);
+		DSReflection = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0);
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -45,7 +45,7 @@ namespace vm
 			wSetImage(DSReflection, 3, renderTargets["srm"]),
 			wSetBuffer(DSReflection, 4, UBReflection)
 		};
-		VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
+		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 
 	void SSR::update(Camera& camera)
@@ -98,8 +98,8 @@ namespace vm
 	void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::get();
-		framebuffers.resize(vulkan->swapchain->images.size());
-		for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+		framebuffers.resize(vulkan->swapchain.images.size());
+		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["ssr"].width.Value();
 			uint32_t height = renderTargets["ssr"].height.Value();
@@ -117,12 +117,12 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = vert.byte_size();
 		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
+		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
 
 		vk::ShaderModuleCreateInfo fsmci;
 		fsmci.codeSize = frag.byte_size();
 		fsmci.pCode = frag.get_spriv();
-		vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
+		vk::ShaderModule fragModule = VulkanContext::get()->device->createShaderModule(fsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -236,7 +236,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayoutReflection = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			DSLayoutReflection = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
 		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutReflection };
@@ -251,7 +251,7 @@ namespace vm
 		plci.pSetLayouts = descriptorSetLayouts.data();
 		plci.pushConstantRangeCount = 0;
 		plci.pPushConstantRanges = nullptr;
-		pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+		pipeline.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
 
 		// Render Pass
 		pipeline.pipeinfo->renderPass = *renderPass;
@@ -265,11 +265,11 @@ namespace vm
 		// Base Pipeline Index
 		pipeline.pipeinfo->basePipelineIndex = -1;
 
-		pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
+		pipeline.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
 
 		// destroy Shader Modules
-		VulkanContext::get()->device.destroyShaderModule(vertModule);
-		VulkanContext::get()->device.destroyShaderModule(fragModule);
+		VulkanContext::get()->device->destroyShaderModule(vertModule);
+		VulkanContext::get()->device->destroyShaderModule(fragModule);
 	}
 
 	void SSR::destroy()
@@ -280,7 +280,7 @@ namespace vm
 		renderPass.Destroy();
 
 		if (DSLayoutReflection) {
-			VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayoutReflection);
+			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayoutReflection);
 			DSLayoutReflection = nullptr;
 		}
 		UBReflection.destroy();

@@ -1,5 +1,6 @@
 #include "Image.h"
 #include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 #include <utility>
 
 namespace vm
@@ -26,6 +27,10 @@ namespace vm
 		compareOp = vk::CompareOp::eLess;
 		samplerMipmapMode = vk::SamplerMipmapMode::eLinear;
 		blentAttachment = vk::PipelineColorBlendAttachmentState();
+	}
+
+	Image::~Image()
+	{
 	}
 
 	void Image::transitionImageLayout(
@@ -67,7 +72,7 @@ namespace vm
 
 	void Image::createImage(uint32_t width, uint32_t height, vk::ImageTiling tiling, const vk::ImageUsageFlags& usage, const vk::MemoryPropertyFlags& properties)
 	{
-		const auto fProps = VulkanContext::get()->gpu.getFormatProperties(format.Value());
+		const auto fProps = VulkanContext::get()->gpu->getFormatProperties(format.Value());
 
 		if (tiling == vk::ImageTiling::eOptimal) {
 			if (!fProps.optimalTilingFeatures)
@@ -81,7 +86,7 @@ namespace vm
 			throw std::runtime_error("createImage(): wrong format error.");
 		}
 
-		auto const ifProps = VulkanContext::get()->gpu.getImageFormatProperties(format.Value(), vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
+		auto const ifProps = VulkanContext::get()->gpu->getImageFormatProperties(format.Value(), vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
 		if (ifProps.maxArrayLayers < arrayLayers.Value() ||
 			ifProps.maxExtent.width < width ||
 			ifProps.maxExtent.height < height ||
@@ -110,11 +115,11 @@ namespace vm
 		imageInfo.sharingMode = vk::SharingMode::eExclusive;
 		imageInfo.initialLayout = initialLayout.Value();
 
-		image = VulkanContext::get()->device.createImage(imageInfo);
+		image = VulkanContext::get()->device->createImage(imageInfo);
 
 		uint32_t memTypeIndex = UINT32_MAX;
-		auto const memRequirements = VulkanContext::get()->device.getImageMemoryRequirements(image.Value());
-		auto const memProperties = VulkanContext::get()->gpu.getMemoryProperties();
+		auto const memRequirements = VulkanContext::get()->device->getImageMemoryRequirements(image.Value());
+		auto const memProperties = VulkanContext::get()->gpu->getMemoryProperties();
 
 		for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
 			if (memRequirements.memoryTypeBits & (1 << i) && memProperties.memoryTypes[i].propertyFlags & properties) {
@@ -130,8 +135,8 @@ namespace vm
 		allocInfo.allocationSize = memRequirements.size;
 		allocInfo.memoryTypeIndex = memTypeIndex;
 
-		memory = VulkanContext::get()->device.allocateMemory(allocInfo);
-		VulkanContext::get()->device.bindImageMemory(image.Value(), memory.Value(), 0);
+		memory = VulkanContext::get()->device->allocateMemory(allocInfo);
+		VulkanContext::get()->device->bindImageMemory(image.Value(), memory.Value(), 0);
 
 		VulkanContext::get()->SetDebugObjectName(image.Value(), "");
 	}
@@ -144,7 +149,7 @@ namespace vm
 		viewInfo.format = format.Value();
 		viewInfo.subresourceRange = { aspectFlags, 0, mipLevels.Value(), 0, arrayLayers.Value() };
 
-		view = VulkanContext::get()->device.createImageView(viewInfo);
+		view = VulkanContext::get()->device->createImageView(viewInfo);
 
 		VulkanContext::get()->SetDebugObjectName(view.Value(), "");
 	}
@@ -154,9 +159,9 @@ namespace vm
 		vk::CommandBufferAllocateInfo allocInfo;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = VulkanContext::get()->commandPool2;
+		allocInfo.commandPool = VulkanContext::get()->commandPool2.Value();
 
-		const vk::CommandBuffer commandBuffer = VulkanContext::get()->device.allocateCommandBuffers(allocInfo).at(0);
+		const vk::CommandBuffer commandBuffer = VulkanContext::get()->device->allocateCommandBuffers(allocInfo).at(0);
 
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -245,7 +250,7 @@ namespace vm
 
 		VulkanContext::get()->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-		VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, commandBuffer);
+		VulkanContext::get()->device->freeCommandBuffers(VulkanContext::get()->commandPool2.Value(), commandBuffer);
 	}
 
 	void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer) const
@@ -253,9 +258,9 @@ namespace vm
 		vk::CommandBufferAllocateInfo allocInfo;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = VulkanContext::get()->commandPool2;
+		allocInfo.commandPool = VulkanContext::get()->commandPool2.Value();
 
-		const vk::CommandBuffer commandBuffer = VulkanContext::get()->device.allocateCommandBuffers(allocInfo).at(0);
+		const vk::CommandBuffer commandBuffer = VulkanContext::get()->device->allocateCommandBuffers(allocInfo).at(0);
 
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -278,12 +283,12 @@ namespace vm
 
 		VulkanContext::get()->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-		VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, commandBuffer);
+		VulkanContext::get()->device->freeCommandBuffers(VulkanContext::get()->commandPool2.Value(), commandBuffer);
 	}
 
 	void Image::generateMipMaps() const
 	{
-		const auto fProps = VulkanContext::get()->gpu.getFormatProperties(format.Value());
+		const auto fProps = VulkanContext::get()->gpu->getFormatProperties(format.Value());
 
 		if (tiling.Value() == vk::ImageTiling::eOptimal) {
 			if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear))
@@ -300,9 +305,9 @@ namespace vm
 		vk::CommandBufferAllocateInfo allocInfo;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;
 		allocInfo.commandBufferCount = mipLevels.Value();
-		allocInfo.commandPool = VulkanContext::get()->commandPool2;
+		allocInfo.commandPool = VulkanContext::get()->commandPool2.Value();
 
-		const auto commandBuffers = VulkanContext::get()->device.allocateCommandBuffers(allocInfo);
+		const auto commandBuffers = VulkanContext::get()->device->allocateCommandBuffers(allocInfo);
 
 		auto mipWidth = static_cast<int32_t>(width.Value());
 		auto mipHeight = static_cast<int32_t>(height.Value());
@@ -405,7 +410,7 @@ namespace vm
 
 		VulkanContext::get()->submitAndWaitFence(commandBuffers.front(), nullptr, nullptr, nullptr);
 
-		VulkanContext::get()->device.freeCommandBuffers(VulkanContext::get()->commandPool2, commandBuffers);
+		VulkanContext::get()->device->freeCommandBuffers(VulkanContext::get()->commandPool2.Value(), commandBuffers);
 	}
 
 	void Image::createSampler()
@@ -426,15 +431,15 @@ namespace vm
 		samplerInfo.compareOp = compareOp.Value();
 		samplerInfo.borderColor = borderColor.Value();
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
-		sampler = VulkanContext::get()->device.createSampler(samplerInfo);
+		sampler = VulkanContext::get()->device->createSampler(samplerInfo);
 	}
 
 	void Image::destroy()
 	{
-		if (view.Value()) VulkanContext::get()->device.destroyImageView(view.Value());
-		if (image.Value()) VulkanContext::get()->device.destroyImage(image.Value());
-		if (memory.Value()) VulkanContext::get()->device.freeMemory(memory.Value());
-		if (sampler.Value()) VulkanContext::get()->device.destroySampler(sampler.Value());
+		if (view.Value()) VulkanContext::get()->device->destroyImageView(view.Value());
+		if (image.Value()) VulkanContext::get()->device->destroyImage(image.Value());
+		if (memory.Value()) VulkanContext::get()->device->freeMemory(memory.Value());
+		if (sampler.Value()) VulkanContext::get()->device->destroySampler(sampler.Value());
 		*view = nullptr;
 		*image = nullptr;
 		*memory = nullptr;

@@ -20,18 +20,18 @@ namespace vm
 
 	Renderer::~Renderer()
 	{
-		VulkanContext::get()->device.waitIdle();
+		VulkanContext::get()->device->waitIdle();
 		if (Model::models.empty()) {
 			if (Model::descriptorSetLayout) {
-				VulkanContext::get()->device.destroyDescriptorSetLayout(Model::descriptorSetLayout);
+				VulkanContext::get()->device->destroyDescriptorSetLayout(Model::descriptorSetLayout);
 				Model::descriptorSetLayout = nullptr;
 			}
 			if (Mesh::descriptorSetLayout) {
-				VulkanContext::get()->device.destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
+				VulkanContext::get()->device->destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
 				Mesh::descriptorSetLayout = nullptr;
 			}
 			if (Primitive::descriptorSetLayout) {
-				VulkanContext::get()->device.destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
+				VulkanContext::get()->device->destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
 				Primitive::descriptorSetLayout = nullptr;
 			}
 		}
@@ -122,7 +122,7 @@ namespace vm
 	void Renderer::checkQueue() const
 	{
 		for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();) {
-			VulkanContext::get()->device.waitIdle();
+			VulkanContext::get()->device->waitIdle();
 			Queue::loadModelFutures.push_back(std::async(std::launch::async, [](const std::string& folderPath, const std::string& modelName, bool show = true) {
 				Model model;
 				model.loadModel(folderPath, modelName, show);
@@ -149,7 +149,7 @@ namespace vm
 		}
 
 		for (auto it = Queue::unloadModel.begin(); it != Queue::unloadModel.end();) {
-			VulkanContext::get()->device.waitIdle();
+			VulkanContext::get()->device->waitIdle();
 			Model::models[*it].destroy();
 			Model::models.erase(Model::models.begin() + *it);
 			GUI::modelList.erase(GUI::modelList.begin() + *it);
@@ -282,7 +282,7 @@ namespace vm
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
-		const auto& cmd = VulkanContext::get()->dynamicCmdBuffers[imageIndex];
+		const auto& cmd = (*VulkanContext::get()->dynamicCmdBuffers)[imageIndex];
 
 		cmd.begin(beginInfo);
 		// TODO: add more queries (times the swapchain images), so they are not overlapped from previous frame
@@ -356,7 +356,7 @@ namespace vm
 		if (GUI::show_Bloom) {
 			ctx.metrics[7].start(&cmd);
 			ctx.bloom.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-			ctx.bloom.draw(cmd, imageIndex, static_cast<uint32_t>(VulkanContext::get()->swapchain->images.size()), changeLayout, ctx.renderTargets);
+			ctx.bloom.draw(cmd, imageIndex, static_cast<uint32_t>(VulkanContext::get()->swapchain.images.size()), changeLayout, ctx.renderTargets);
 			ctx.metrics[7].end(&GUI::metrics[7]);
 		}
 
@@ -417,7 +417,7 @@ namespace vm
 		renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
 		for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
-			auto& cmd = VulkanContext::get()->shadowCmdBuffers[ctx.shadows.textures.size() * imageIndex + i];
+			auto& cmd = (*VulkanContext::get()->shadowCmdBuffers)[ctx.shadows.textures.size() * imageIndex + i];
 			cmd.begin(beginInfoShadows);
 			ctx.metrics[11 + static_cast<size_t>(i)].start(&cmd);
 			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
@@ -468,8 +468,8 @@ namespace vm
 		}
 
 		// aquire the image
-		auto aquireSignalSemaphore = vCtx.semaphores[0];
-		const uint32_t imageIndex = vCtx.swapchain->aquire(aquireSignalSemaphore, nullptr);
+		auto aquireSignalSemaphore = (*vCtx.semaphores)[0];
+		const uint32_t imageIndex = vCtx.swapchain.aquire(aquireSignalSemaphore, nullptr);
 		this->previousImageIndex = imageIndex;
 
 		//static Timer timer;
@@ -477,7 +477,7 @@ namespace vm
 		//vCtx.waitFences(vCtx.fences[imageIndex]);
 		//FrameTimer::Instance().timestamps[0] = timer.Count();
 
-		const auto& cmd = vCtx.dynamicCmdBuffers[imageIndex];
+		const auto& cmd = (*vCtx.dynamicCmdBuffers)[imageIndex];
 
 		vCtx.waitAndLockSubmits();
 
@@ -488,12 +488,12 @@ namespace vm
 
 			// submit the shadow command buffers
 			const auto& shadowWaitSemaphore = aquireSignalSemaphore;
-			const auto& shadowSignalSemaphore = vCtx.semaphores[imageIndex * 3 + 1];
+			const auto& shadowSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 1];
 			const auto& scb = vCtx.shadowCmdBuffers;
 			const auto size = ctx.shadows.textures.size();
 			const auto i = size * imageIndex;
-			const std::vector<vk::CommandBuffer> activeShadowCmdBuffers(scb.begin() + i, scb.begin() + i + size);
-			vCtx.submit(activeShadowCmdBuffers, waitStages[0], shadowWaitSemaphore, shadowSignalSemaphore);
+			const std::vector<vk::CommandBuffer> activeShadowCmdBuffers(scb->begin() + i, scb->begin() + i + size);
+			vCtx.submit(activeShadowCmdBuffers, waitStages[0], shadowWaitSemaphore, shadowSignalSemaphore, nullptr);
 
 			aquireSignalSemaphore = shadowSignalSemaphore;
 		}
@@ -504,13 +504,13 @@ namespace vm
 		// submit the command buffers
 		const auto& deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
 		const auto& deferredWaitSemaphore = aquireSignalSemaphore;
-		const auto& deferredSignalSemaphore = vCtx.semaphores[imageIndex * 3 + 2];
-		const auto& deferredSignalFence = vCtx.fences[imageIndex];
+		const auto& deferredSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 2];
+		const auto& deferredSignalFence = (*vCtx.fences)[imageIndex];
 		vCtx.submit(cmd, deferredWaitStage, deferredWaitSemaphore, deferredSignalSemaphore, deferredSignalFence);
 
 		// Presentation
 		const auto& presentWaitSemaphore = deferredSignalSemaphore;
-		vCtx.swapchain->present(imageIndex, presentWaitSemaphore);
+		vCtx.swapchain.present(imageIndex, presentWaitSemaphore, nullptr);
 
 		vCtx.unlockSubmits();
 	}

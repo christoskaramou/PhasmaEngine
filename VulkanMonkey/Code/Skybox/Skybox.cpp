@@ -18,7 +18,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			descriptorSetLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 		return descriptorSetLayout;
 	}
@@ -26,10 +26,10 @@ namespace vm
 	void SkyBox::createDescriptorSet()
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool;
+		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &getDescriptorSetLayout();
-		descriptorSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo).at(0);
+		descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
 		// texture sampler
@@ -44,7 +44,7 @@ namespace vm
 		textureWriteSets[0].descriptorCount = 1;
 		textureWriteSets[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 		textureWriteSets[0].pImageInfo = &dii;
-		VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
+		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 
 	void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, bool show)
@@ -99,7 +99,7 @@ namespace vm
 	{
 		texture.destroy();
 		if (SkyBox::descriptorSetLayout) {
-			VulkanContext::get()->device.destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
+			VulkanContext::get()->device->destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
 			SkyBox::descriptorSetLayout = nullptr;
 		}
 	}

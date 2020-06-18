@@ -10,6 +10,7 @@
 #include "Buffer.h"
 #include "../MemoryHash/MemoryHash.h"
 #include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 #include <iostream>
 
 namespace vm
@@ -83,7 +84,7 @@ namespace vm
 		{
 			static Timer timer;
 			timer.Start();
-			VulkanContext::get()->waitFences(VulkanContext::get()->fences[previousImageIndex]);
+			VulkanContext::get()->waitFences((*VulkanContext::get()->fences)[previousImageIndex]);
 			FrameTimer::Instance().timestamps[0] = timer.Count();
 
 			std::vector<std::future<void>> futureNodes(m_async_copy_requests.size());

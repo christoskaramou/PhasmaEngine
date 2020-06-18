@@ -24,7 +24,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			descriptorSetLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 		return &descriptorSetLayout;
 	}
@@ -41,7 +41,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			descriptorSetLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 		return &descriptorSetLayout;
 	}
@@ -136,7 +136,7 @@ namespace vm
 
 			const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
-			VulkanContext::get()->graphicsQueue.waitIdle();
+			VulkanContext::get()->graphicsQueue->waitIdle();
 			VulkanContext::get()->waitAndLockSubmits();
 
 			Buffer staging;
@@ -183,7 +183,7 @@ namespace vm
 	{
 		uniformBuffer.destroy();
 		if (descriptorSetLayout) {
-			VulkanContext::get()->device.destroyDescriptorSetLayout(descriptorSetLayout);
+			VulkanContext::get()->device->destroyDescriptorSetLayout(descriptorSetLayout);
 			descriptorSetLayout = nullptr;
 		}
 
@@ -195,7 +195,7 @@ namespace vm
 		indices.clear();
 		indices.shrink_to_fit();
 		if (Primitive::descriptorSetLayout) {
-			VulkanContext::get()->device.destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
+			VulkanContext::get()->device->destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
 			Primitive::descriptorSetLayout = nullptr;
 		}
 	}

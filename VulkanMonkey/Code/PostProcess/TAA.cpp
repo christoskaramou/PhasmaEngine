@@ -1,6 +1,6 @@
 #include "TAA.h"
 #include "../GUI/GUI.h"
-#include "../Surface/Surface.h"
+#include "../Core/Surface.h"
 #include "../Swapchain/Swapchain.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
@@ -10,7 +10,7 @@ namespace vm
 {
 	void TAA::Init()
 	{
-		previous.format = VulkanContext::get()->surface->formatKHR.format;
+		previous.format = VulkanContext::get()->surface.formatKHR->format;
 		previous.initialLayout = vk::ImageLayout::eUndefined;
 		previous.createImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -21,7 +21,7 @@ namespace vm
 		previous.createImageView(vk::ImageAspectFlagBits::eColor);
 		previous.createSampler();
 
-		frameImage.format = VulkanContext::get()->surface->formatKHR.format;
+		frameImage.format = VulkanContext::get()->surface.formatKHR->format;
 		frameImage.initialLayout = vk::ImageLayout::eUndefined;
 		frameImage.createImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -58,13 +58,13 @@ namespace vm
 		uniform.unmap();
 
 		vk::DescriptorSetAllocateInfo allocateInfo2;
-		allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool;
+		allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &DSLayout;
-		DSet = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo2).at(0);
+		DSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0);
 
 		allocateInfo2.pSetLayouts = &DSLayoutSharpen;
-		DSetSharpen = VulkanContext::get()->device.allocateDescriptorSets(allocateInfo2).at(0);
+		DSetSharpen = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0);
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -92,7 +92,7 @@ namespace vm
 			wSetBuffer(DSetSharpen, 1, uniform)
 		};
 
-		VulkanContext::get()->device.updateDescriptorSets(writeDescriptorSets, nullptr);
+		VulkanContext::get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
 	}
 
 	void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets)
@@ -147,8 +147,8 @@ namespace vm
 	{
 		auto vulkan = VulkanContext::get();
 
-		framebuffers.resize(vulkan->swapchain->images.size());
-		for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+		framebuffers.resize(vulkan->swapchain.images.size());
+		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["taa"].width.Value();
 			uint32_t height = renderTargets["taa"].height.Value();
@@ -156,8 +156,8 @@ namespace vm
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 
-		framebuffersSharpen.resize(vulkan->swapchain->images.size());
-		for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+		framebuffersSharpen.resize(vulkan->swapchain.images.size());
+		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["viewport"].width.Value();
 			uint32_t height = renderTargets["viewport"].height.Value();
@@ -181,12 +181,12 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = vert.byte_size();
 		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
+		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
 
 		vk::ShaderModuleCreateInfo fsmci;
 		fsmci.codeSize = frag.byte_size();
 		fsmci.pCode = frag.get_spriv();
-		vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
+		vk::ShaderModule fragModule = VulkanContext::get()->device->createShaderModule(fsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -300,7 +300,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			DSLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
 		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout };
@@ -308,7 +308,7 @@ namespace vm
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 		plci.pSetLayouts = descriptorSetLayouts.data();
-		pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+		pipeline.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
 
 		// Render Pass
 		pipeline.pipeinfo->renderPass = *renderPass;
@@ -322,11 +322,11 @@ namespace vm
 		// Base Pipeline Index
 		pipeline.pipeinfo->basePipelineIndex = -1;
 
-		pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
+		pipeline.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
 
 		// destroy Shader Modules
-		VulkanContext::get()->device.destroyShaderModule(vertModule);
-		VulkanContext::get()->device.destroyShaderModule(fragModule);
+		VulkanContext::get()->device->destroyShaderModule(vertModule);
+		VulkanContext::get()->device->destroyShaderModule(fragModule);
 	}
 
 	void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
@@ -338,12 +338,12 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = vert.byte_size();
 		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
+		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
 
 		vk::ShaderModuleCreateInfo fsmci;
 		fsmci.codeSize = frag.byte_size();
 		fsmci.pCode = frag.get_spriv();
-		vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
+		vk::ShaderModule fragModule = VulkanContext::get()->device->createShaderModule(fsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -454,7 +454,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayoutSharpen = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			DSLayoutSharpen = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
 		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutSharpen };
@@ -462,7 +462,7 @@ namespace vm
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
 		plci.pSetLayouts = descriptorSetLayouts.data();
-		pipelineSharpen.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+		pipelineSharpen.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
 
 		// Render Pass
 		pipelineSharpen.pipeinfo->renderPass = *renderPassSharpen;
@@ -476,11 +476,11 @@ namespace vm
 		// Base Pipeline Index
 		pipelineSharpen.pipeinfo->basePipelineIndex = -1;
 
-		pipelineSharpen.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipelineSharpen.pipeinfo).at(0);
+		pipelineSharpen.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipelineSharpen.pipeinfo).at(0);
 
 		// destroy Shader Modules
-		VulkanContext::get()->device.destroyShaderModule(vertModule);
-		VulkanContext::get()->device.destroyShaderModule(fragModule);
+		VulkanContext::get()->device->destroyShaderModule(vertModule);
+		VulkanContext::get()->device->destroyShaderModule(fragModule);
 	}
 
 	void TAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
@@ -616,11 +616,11 @@ namespace vm
 		renderPassSharpen.Destroy();
 
 		if (DSLayout) {
-			VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayout);
+			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayout);
 			DSLayout = nullptr;
 		}
 		if (DSLayoutSharpen) {
-			VulkanContext::get()->device.destroyDescriptorSetLayout(DSLayoutSharpen);
+			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayoutSharpen);
 			DSLayoutSharpen = nullptr;
 		}
 		pipeline.destroy();

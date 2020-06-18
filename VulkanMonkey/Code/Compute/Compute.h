@@ -1,16 +1,25 @@
 #pragma once
-
 #include "../Core/Buffer.h"
 #include "../Pipeline/Pipeline.h"
-#include "../VulkanContext/VulkanContext.h"
 #include <deque>
 #include <memory>
+
+namespace vk
+{
+	class Fence;
+	class DescriptorSet;
+	class DescriptorSetLayout;
+	class CommandBuffer;
+	class CommandPool;
+}
 
 namespace vm
 {
 	class Compute
 	{
 	public:
+		Compute();
+		~Compute();
 		Buffer& getIn();
 		Buffer& getOut();
 		void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ);
@@ -22,13 +31,13 @@ namespace vm
 
 		Buffer SBIn;
 		Buffer SBOut;
-		vk::Fence fence;
-		vk::DescriptorSet DSCompute;
-		static vk::DescriptorSetLayout DSLayoutCompute;
 		Pipeline pipeline;
-		vk::CommandBuffer commandBuffer;
+		Ref_t<vk::Fence> fence;
+		Ref_t<vk::DescriptorSet> DSCompute;
+		Ref_t<vk::DescriptorSetLayout> DSLayoutCompute;
+		Ref_t<vk::CommandBuffer> commandBuffer;
 
-		static vk::DescriptorSetLayout* getDescriptorLayout();
+		const vk::DescriptorSetLayout& getDescriptorLayout();
 		void createPipeline();
 		void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
 		void createDescriptorSet();
@@ -39,7 +48,7 @@ namespace vm
 	class ComputePool
 	{
 	public:
-		vk::CommandPool commandPool;
+		Ref_t<vk::CommandPool> commandPool;
 		std::deque<Compute> compute{};
 		void Init(uint32_t cmdBuffersCount);
 		Compute& getNext();
@@ -54,7 +63,7 @@ namespace vm
 		ComputePool& operator=(ComputePool const&) = delete;	// copy assignment
 		ComputePool& operator=(ComputePool&&) = delete;			// move assignment
 	private:
-		ComputePool() = default;								// default constructor
+		ComputePool();											// default constructor
 		~ComputePool() = default;								// destructor
 	};
 }

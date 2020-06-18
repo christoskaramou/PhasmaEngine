@@ -6,6 +6,7 @@
 #include "../../include/GLTFSDK/Document.h"
 #include "../../include/GLTFSDK/GLTFResourceReader.h"
 #include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 #include <map>
 
 #undef min

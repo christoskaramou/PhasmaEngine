@@ -10,6 +10,7 @@
 #include "../../include/GLTFSDK/GLTFResourceReader.h"
 #include "../../include/GLTFSDK/Document.h"
 #include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 #include "StreamReader.h"
 
 namespace vm

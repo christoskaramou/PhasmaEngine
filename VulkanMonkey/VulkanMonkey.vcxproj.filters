@@ -129,9 +129,6 @@
     <ClInclude Include="Code\Skybox\Skybox.h">
       <Filter>Code\Skybox</Filter>
     </ClInclude>
-    <ClInclude Include="Code\Surface\Surface.h">
-      <Filter>Code\Surface</Filter>
-    </ClInclude>
     <ClInclude Include="Code\Swapchain\Swapchain.h">
       <Filter>Code\Swapchain</Filter>
     </ClInclude>
@@ -263,6 +260,9 @@
     </ClInclude>
     <ClInclude Include="Code\Model\Object.h">
       <Filter>Code\Model</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Core\Surface.h">
+      <Filter>Code\Core</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -464,6 +464,9 @@
     <ClCompile Include="Code\Model\Object.cpp">
       <Filter>Code\Model</Filter>
     </ClCompile>
+    <ClCompile Include="Code\Core\Surface.cpp">
+      <Filter>Code\Core</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source">
@@ -510,9 +513,6 @@
     </Filter>
     <Filter Include="Code\Window">
       <UniqueIdentifier>{0d4ad2d5-8716-4cbf-8b2d-09ede4b38bfb}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Code\Surface">
-      <UniqueIdentifier>{19940bde-323a-481c-9414-97b5e9d7c04a}</UniqueIdentifier>
     </Filter>
     <Filter Include="Code\Swapchain">
       <UniqueIdentifier>{b7feefc7-c3d2-4d95-b645-20fc805ee63a}</UniqueIdentifier>

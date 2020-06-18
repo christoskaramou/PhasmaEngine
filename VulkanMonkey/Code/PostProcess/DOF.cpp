@@ -1,7 +1,7 @@
 #include "DOF.h"
 #include "../GUI/GUI.h"
 #include "../Swapchain/Swapchain.h"
-#include "../Surface/Surface.h"
+#include "../Core/Surface.h"
 #include "../Shader/Shader.h"
 #include <deque>
 
@@ -9,7 +9,7 @@ namespace vm
 {
 	void DOF::Init()
 	{
-		frameImage.format = VulkanContext::get()->surface->formatKHR.format;
+		frameImage.format = VulkanContext::get()->surface.formatKHR->format;
 		frameImage.initialLayout = vk::ImageLayout::eUndefined;
 		frameImage.createImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -87,8 +87,8 @@ namespace vm
 	void DOF::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::get();
-		framebuffers.resize(vulkan->swapchain->images.size());
-		for (size_t i = 0; i < vulkan->swapchain->images.size(); ++i)
+		framebuffers.resize(vulkan->swapchain.images.size());
+		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["viewport"].width.Value();
 			uint32_t height = renderTargets["viewport"].height.Value();
@@ -101,11 +101,11 @@ namespace vm
 	{
 		auto vulkan = VulkanContext::get();
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = vulkan->descriptorPool;
+		allocateInfo.descriptorPool = vulkan->descriptorPool.Value();
 		allocateInfo.descriptorSetCount = 1;
 
 		allocateInfo.pSetLayouts = &DSLayout;
-		DSet = vulkan->device.allocateDescriptorSets(allocateInfo).at(0);
+		DSet = vulkan->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -122,7 +122,7 @@ namespace vm
 			wSetImage(DSet, 0, frameImage),
 			wSetImage(DSet, 1, renderTargets["depth"])
 		};
-		VulkanContext::get()->device.updateDescriptorSets(textureWriteSets, nullptr);
+		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 
 	void DOF::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
@@ -159,12 +159,12 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = vert.byte_size();
 		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device.createShaderModule(vsmci);
+		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
 
 		vk::ShaderModuleCreateInfo fsmci;
 		fsmci.codeSize = frag.byte_size();
 		fsmci.pCode = frag.get_spriv();
-		vk::ShaderModule fragModule = VulkanContext::get()->device.createShaderModule(fsmci);
+		vk::ShaderModule fragModule = VulkanContext::get()->device->createShaderModule(fsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -275,7 +275,7 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::get()->device.createDescriptorSetLayout(descriptorLayout);
+			DSLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
 		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout };
@@ -290,7 +290,7 @@ namespace vm
 		plci.pSetLayouts = descriptorSetLayouts.data();
 		plci.pushConstantRangeCount = 1;
 		plci.pPushConstantRanges = &pConstants;
-		pipeline.pipeinfo->layout = VulkanContext::get()->device.createPipelineLayout(plci);
+		pipeline.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
 
 		// Render Pass
 		pipeline.pipeinfo->renderPass = *renderPass;
@@ -304,11 +304,11 @@ namespace vm
 		// Base Pipeline Index
 		pipeline.pipeinfo->basePipelineIndex = -1;
 
-		pipeline.pipeline = VulkanContext::get()->device.createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
+		pipeline.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
 
 		// destroy Shader Modules
-		VulkanContext::get()->device.destroyShaderModule(vertModule);
-		VulkanContext::get()->device.destroyShaderModule(fragModule);
+		VulkanContext::get()->device->destroyShaderModule(vertModule);
+		VulkanContext::get()->device->destroyShaderModule(fragModule);
 	}
 
 	void DOF::destroy()
@@ -320,7 +320,7 @@ namespace vm
 		renderPass.Destroy();
 
 		if (DSLayout) {
-			vulkan->device.destroyDescriptorSetLayout(DSLayout);
+			vulkan->device->destroyDescriptorSetLayout(DSLayout);
 			DSLayout = nullptr;
 		}
 		frameImage.destroy();
