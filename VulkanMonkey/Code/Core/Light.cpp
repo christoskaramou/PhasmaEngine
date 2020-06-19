@@ -1,9 +1,12 @@
 #include "Light.h"
 #include "Queue.h"
+#include "../GUI/GUI.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
-	vk::DescriptorSetLayout LightUniforms::descriptorSetLayout = nullptr;
+	Ref_t<vk::DescriptorSetLayout> LightUniforms::descriptorSetLayout = Ref_t<vk::DescriptorSetLayout>();
 
 	Light::Light() :
 		color(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f),
@@ -28,7 +31,7 @@ namespace vm
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &descriptorSetLayout;
+		allocateInfo.pSetLayouts = &*descriptorSetLayout;
 		descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		vk::DescriptorBufferInfo dbi;
@@ -37,7 +40,7 @@ namespace vm
 		dbi.range = uniform.size.Value();
 
 		vk::WriteDescriptorSet writeSet;
-		writeSet.dstSet = descriptorSet;
+		writeSet.dstSet = descriptorSet.Value();
 		writeSet.dstBinding = 0;
 		writeSet.dstArrayElement = 0;
 		writeSet.descriptorCount = 1;
@@ -49,9 +52,9 @@ namespace vm
 	void LightUniforms::destroy()
 	{
 		uniform.destroy();
-		if (descriptorSetLayout) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(descriptorSetLayout);
-			descriptorSetLayout = nullptr;
+		if (descriptorSetLayout.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(descriptorSetLayout.Value());
+			*descriptorSetLayout = nullptr;
 		}
 	}
 
@@ -85,10 +88,19 @@ namespace vm
 		//uniform.unmap();
 	}
 
-	vk::DescriptorSetLayout LightUniforms::getDescriptorSetLayout()
+	LightUniforms::LightUniforms()
+	{
+		descriptorSetLayout = vk::DescriptorSetLayout();
+	}
+
+	LightUniforms::~LightUniforms()
+	{
+	}
+
+	const vk::DescriptorSetLayout& LightUniforms::getDescriptorSetLayout()
 	{
 		// binding for model mvp matrix
-		if (!descriptorSetLayout) {
+		if (!descriptorSetLayout.Value()) {
 			vk::DescriptorSetLayoutBinding descriptorSetLayoutBinding;
 			descriptorSetLayoutBinding.binding = 0;
 			descriptorSetLayoutBinding.descriptorCount = 1;
@@ -101,6 +113,6 @@ namespace vm
 
 			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(createInfo);
 		}
-		return descriptorSetLayout;
+		return descriptorSetLayout.Value();
 	}
 }

@@ -1,11 +1,15 @@
 #pragma once
 
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 #include "Math.h"
 #include "Buffer.h"
 #include "../Camera/Camera.h"
 #include "../GUI/GUI.h"
+
+namespace vk
+{
+	class DescriptorSet;
+	class DescriptorSetLayout;
+}
 
 namespace vm
 {
@@ -41,11 +45,13 @@ namespace vm
 	class LightUniforms : public Light
 	{
 	public:
+		LightUniforms();
+		~LightUniforms();
 		LightsUBO lubo;
 		Buffer uniform;
-		vk::DescriptorSet descriptorSet;
-		static vk::DescriptorSetLayout descriptorSetLayout;
-		static vk::DescriptorSetLayout getDescriptorSetLayout();
+		Ref_t<vk::DescriptorSet> descriptorSet;
+		static Ref_t<vk::DescriptorSetLayout> descriptorSetLayout;
+		static const vk::DescriptorSetLayout& getDescriptorSetLayout();
 
 		void update(const Camera& camera);
 		void createLightUniforms();

@@ -9,15 +9,23 @@
 #include "../Renderer/Framebuffer.h"
 #include <map>
 
+namespace vk
+{
+	class DescriptorSet;
+	class DescriptorSetLayout;
+}
+
 namespace vm
 {
 	class Deferred
 	{
 	public:
+		Deferred();
+		~Deferred();
 		RenderPass renderPass, compositionRenderPass;
 		std::vector<Framebuffer> framebuffers{}, compositionFramebuffers{};
-		vk::DescriptorSet DSComposition;
-		vk::DescriptorSetLayout DSLayoutComposition;
+		Ref_t<vk::DescriptorSet> DSComposition;
+		Ref_t<vk::DescriptorSetLayout> DSLayoutComposition;
 		Pipeline pipeline;
 		Pipeline pipelineComposition;
 		Image ibl_brdf_lut;

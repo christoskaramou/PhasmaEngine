@@ -7,9 +7,22 @@
 #include "../Swapchain/Swapchain.h"
 #include "../Core/Surface.h"
 #include "../Shader/Shader.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
+	Ref_t<vk::DescriptorSetLayout> GUI::descriptorSetLayout = Ref_t<vk::DescriptorSetLayout>();
+	GUI::GUI()
+	{
+		descriptorSetLayout = vk::DescriptorSetLayout(); // TODO: multiple instances will initialize this find an other way
+		framebuffers = std::vector<Framebuffer>();
+	}
+
+	GUI::~GUI()
+	{
+	}
+
 	bool endsWithExt(const std::string &mainStr, const std::string &toMatch)
 	{
 		return mainStr.size() >= toMatch.size() && mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0;
@@ -532,9 +545,9 @@ namespace vm
 		style->Colors[ImGuiCol_WindowBg].w = 1.0f;
 	}
 
-	vk::DescriptorSetLayout GUI::getDescriptorSetLayout(vk::Device device)
+	const vk::DescriptorSetLayout& GUI::getDescriptorSetLayout(vk::Device device)
 	{
-		if (!descriptorSetLayout) {
+		if (!descriptorSetLayout.Value()) {
 			// binding for gui texture
 			std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBindings(1);
 
@@ -548,7 +561,7 @@ namespace vm
 			createInfo.pBindings = descriptorSetLayoutBindings.data();
 			descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
 		}
-		return descriptorSetLayout;
+		return descriptorSetLayout.Value();
 	}
 
 	const char* GUI::ImGui_ImplSDL2_GetClipboardText(void*)
@@ -833,7 +846,7 @@ namespace vm
 
 			vk::RenderPassBeginInfo rpi;
 			rpi.renderPass = *renderPass;
-			rpi.framebuffer = *framebuffers[imageIndex];
+			rpi.framebuffer = (*framebuffers)[imageIndex].Value();
 			rpi.renderArea = vk::Rect2D{ { 0, 0 }, VulkanContext::get()->surface.actualExtent.Value() };
 			rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			rpi.pClearValues = clearValues.data();
@@ -842,7 +855,7 @@ namespace vm
 
 			const vk::DeviceSize offset{ 0 };
 			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
-			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, descriptorSet, nullptr);
+			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, descriptorSet.Value(), nullptr);
 			cmd.bindVertexBuffers(0, vertexBuffer.buffer.Value(), offset);
 			cmd.bindIndexBuffer(indexBuffer.buffer.Value(), 0, vk::IndexType::eUint32);
 
@@ -1118,7 +1131,7 @@ namespace vm
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
 
-		textureWriteSets[0].dstSet = descriptorSet;
+		textureWriteSets[0].dstSet = descriptorSet.Value();
 		textureWriteSets[0].dstBinding = 0;
 		textureWriteSets[0].dstArrayElement = 0;
 		textureWriteSets[0].descriptorCount = 1;
@@ -1162,13 +1175,13 @@ namespace vm
 	{
 		auto vulkan = VulkanContext::get();
 
-		framebuffers.resize(vulkan->swapchain.images.size());
+		(*framebuffers).resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
 			uint32_t width = WIDTH;
 			uint32_t height = HEIGHT;
 			vk::ImageView view = vulkan->swapchain.images[i].view.Value();
-			framebuffers[i].Create(width, height, view, renderPass);
+			(*framebuffers)[i].Create(width, height, view, renderPass);
 		}
 	}
 
@@ -1333,13 +1346,13 @@ namespace vm
 		Object::destroy();
 		renderPass.Destroy();
 
-		for (auto &framebuffer : framebuffers)
+		for (auto &framebuffer : (*framebuffers))
 			framebuffer.Destroy();
 
 		pipeline.destroy();
-		if (GUI::descriptorSetLayout) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(GUI::descriptorSetLayout);
-			GUI::descriptorSetLayout = nullptr;
+		if (GUI::descriptorSetLayout.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(GUI::descriptorSetLayout.Value());
+			*GUI::descriptorSetLayout = nullptr;
 		}
 	}
 

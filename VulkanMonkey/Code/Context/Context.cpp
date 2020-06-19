@@ -4,6 +4,7 @@
 #include "../Core/Math.h"
 #include <filesystem>
 #include <iostream>
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
@@ -46,18 +47,18 @@ namespace vm
 	{
 		auto& vulkan = *VulkanContext::get();
 		addRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
-		addRenderTarget("depth", vk::Format::eR32Sfloat);
-		addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
-		addRenderTarget("albedo", vulkan.surface.formatKHR->format);
-		addRenderTarget("srm", vulkan.surface.formatKHR->format); // Specular Roughness Metallic
-		addRenderTarget("ssao", vk::Format::eR16Unorm);
-		addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
-		addRenderTarget("ssr", vulkan.surface.formatKHR->format);
-		addRenderTarget("velocity", vk::Format::eR16G16Sfloat);
-		addRenderTarget("brightFilter", vulkan.surface.formatKHR->format);
-		addRenderTarget("gaussianBlurHorizontal", vulkan.surface.formatKHR->format);
-		addRenderTarget("gaussianBlurVertical", vulkan.surface.formatKHR->format);
-		addRenderTarget("emissive", vulkan.surface.formatKHR->format);
+		addRenderTarget("depth", vk::Format::eR32Sfloat, vk::ImageUsageFlags());
+		addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat, vk::ImageUsageFlags());
+		addRenderTarget("albedo", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		addRenderTarget("srm", vulkan.surface.formatKHR->format, vk::ImageUsageFlags()); // Specular Roughness Metallic
+		addRenderTarget("ssao", vk::Format::eR16Unorm, vk::ImageUsageFlags());
+		addRenderTarget("ssaoBlur", vk::Format::eR8Unorm, vk::ImageUsageFlags());
+		addRenderTarget("ssr", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		addRenderTarget("velocity", vk::Format::eR16G16Sfloat, vk::ImageUsageFlags());
+		addRenderTarget("brightFilter", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		addRenderTarget("gaussianBlurHorizontal", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		addRenderTarget("gaussianBlurVertical", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		addRenderTarget("emissive", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
 		addRenderTarget("taa", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
 
 		taa.Init();
@@ -120,7 +121,7 @@ namespace vm
 
 		// GUI
 		gui.renderPass.Destroy();
-		for (auto& framebuffer : gui.framebuffers)
+		for (auto& framebuffer : *gui.framebuffers)
 			framebuffer.Destroy();
 		gui.pipeline.destroy();
 
@@ -206,18 +207,18 @@ namespace vm
 		vulkan.depth = createDepthResources();
 
 		addRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
-		addRenderTarget("depth", vk::Format::eR32Sfloat);
-		addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat);
-		addRenderTarget("albedo", vulkan.surface.formatKHR->format);
-		addRenderTarget("srm", vulkan.surface.formatKHR->format); // Specular Roughness Metallic
-		addRenderTarget("ssao", vk::Format::eR16Unorm);
-		addRenderTarget("ssaoBlur", vk::Format::eR8Unorm);
-		addRenderTarget("ssr", vulkan.surface.formatKHR->format);
-		addRenderTarget("velocity", vk::Format::eR16G16Sfloat);
-		addRenderTarget("brightFilter", vulkan.surface.formatKHR->format);
-		addRenderTarget("gaussianBlurHorizontal", vulkan.surface.formatKHR->format);
-		addRenderTarget("gaussianBlurVertical", vulkan.surface.formatKHR->format);
-		addRenderTarget("emissive", vulkan.surface.formatKHR->format);
+		addRenderTarget("depth", vk::Format::eR32Sfloat, vk::ImageUsageFlags());
+		addRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat, vk::ImageUsageFlags());
+		addRenderTarget("albedo", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		addRenderTarget("srm", vulkan.surface.formatKHR->format, vk::ImageUsageFlags()); // Specular Roughness Metallic
+		addRenderTarget("ssao", vk::Format::eR16Unorm, vk::ImageUsageFlags());
+		addRenderTarget("ssaoBlur", vk::Format::eR8Unorm, vk::ImageUsageFlags());
+		addRenderTarget("ssr", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		addRenderTarget("velocity", vk::Format::eR16G16Sfloat, vk::ImageUsageFlags());
+		addRenderTarget("brightFilter", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		addRenderTarget("gaussianBlurHorizontal", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		addRenderTarget("gaussianBlurVertical", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		addRenderTarget("emissive", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
 		addRenderTarget("taa", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
 
 		deferred.createRenderPasses(renderTargets);

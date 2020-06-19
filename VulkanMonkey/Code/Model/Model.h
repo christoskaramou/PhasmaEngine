@@ -9,25 +9,32 @@
 #include "../../include/GLTFSDK/GLTF.h"
 #include "../../include/GLTFSDK/GLTFResourceReader.h"
 #include "../../include/GLTFSDK/Document.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 #include "StreamReader.h"
+
+namespace vk
+{
+	class CommandBuffer;
+	class DescriptorSetLayout;
+	class DescriptorSet;
+}
 
 namespace vm
 {
 	class Model
 	{
 	public:
+		Model();
+		~Model();
 		// Document holds all info about the gltf model
 		Microsoft::glTF::Document* document = nullptr;
 		Microsoft::glTF::GLTFResourceReader* resourceReader = nullptr;
 
 		static std::vector<Model> models;
 		static Pipeline* pipeline;
-		static vk::CommandBuffer commandBuffer;
-		static vk::DescriptorSetLayout descriptorSetLayout;
+		static Ref_t<vk::CommandBuffer> commandBuffer;
+		static Ref_t<vk::DescriptorSetLayout> descriptorSetLayout;
 		static vk::DescriptorSetLayout* getDescriptorSetLayout();
-		vk::DescriptorSet descriptorSet;
+		Ref_t<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 		struct UBOModel {
 			mat4 matrix = mat4::identity();

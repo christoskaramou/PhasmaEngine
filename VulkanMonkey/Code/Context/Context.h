@@ -21,7 +21,6 @@
 #include "../PostProcess/SSAO.h"
 #include "../PostProcess/SSR.h"
 #include "../PostProcess/TAA.h"
-#include <vulkan/vulkan.hpp>
 
 #if defined(_WIN32)
 // On Windows, Vulkan commands use the stdcall convention
@@ -47,6 +46,33 @@
 
 //#define USE_SCRIPTS
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
+
+namespace vk
+{
+	class Instance;
+	class DebugUtilsMessengerEXT;
+	class PhysicalDevice;
+	struct PhysicalDeviceProperties;
+	struct PhysicalDeviceFeatures;
+	struct SurfaceCapabilitiesKHR;
+	struct SurfaceFormatKHR;
+	enum class PresentModeKHR;
+	class Device;
+	class Queue;
+	class CommandPool;
+	class CommandBuffer;
+	class Fence;
+	class Semaphore;
+	enum class Format;
+
+	template<class T1, class T2> class Flags;
+	enum class ImageUsageFlagBits;
+	using ImageUsageFlags = Flags<ImageUsageFlagBits, uint32_t>;
+
+}
+
+enum VkDebugUtilsMessageSeverityFlagBitsEXT;
+struct VkDebugUtilsMessengerCallbackDataEXT;
 
 namespace vm
 {
@@ -147,6 +173,6 @@ namespace vm
 		vk::DescriptorPool createDescriptorPool(uint32_t maxDescriptorSets) const;
 		std::vector<vk::Fence> createFences(uint32_t fenceCount) const;
 		std::vector<vk::Semaphore> createSemaphores(uint32_t semaphoresCount) const;
-		void addRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags = vk::ImageUsageFlags());
+		void addRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags);
 	};
 }

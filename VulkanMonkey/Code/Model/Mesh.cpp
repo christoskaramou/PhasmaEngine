@@ -1,15 +1,31 @@
 #include "Mesh.h"
 #include "../../include/tinygltf/stb_image.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
-	vk::DescriptorSetLayout Mesh::descriptorSetLayout = nullptr;
-	vk::DescriptorSetLayout Primitive::descriptorSetLayout = nullptr;
+	Ref_t<vk::DescriptorSetLayout> Mesh::descriptorSetLayout = Ref_t<vk::DescriptorSetLayout>();
+	Ref_t<vk::DescriptorSetLayout> Primitive::descriptorSetLayout = Ref_t<vk::DescriptorSetLayout>();
 	std::map<std::string, Image> Mesh::uniqueTextures{};
+
+	Primitive::Primitive() : pbrMaterial({})
+	{
+		if (!Primitive::descriptorSetLayout)
+			Primitive::descriptorSetLayout = vk::DescriptorSetLayout();
+		descriptorSet = vk::DescriptorSet();
+	}
+
+	Primitive::~Primitive()
+	{
+	}
 
 	vk::DescriptorSetLayout* Primitive::getDescriptorSetLayout()
 	{
-		if (!descriptorSetLayout) {
+		if (!descriptorSetLayout)
+			descriptorSetLayout = vk::DescriptorSetLayout();
+
+		if (!descriptorSetLayout.Value()) {
 			auto const layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlag) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlag, nullptr };
 			};
@@ -26,12 +42,26 @@ namespace vm
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-		return &descriptorSetLayout;
+		return &*descriptorSetLayout;
+	}
+
+	Mesh::Mesh()
+	{
+		if (!Mesh::descriptorSetLayout)
+			Mesh::descriptorSetLayout = vk::DescriptorSetLayout();
+		descriptorSet = vk::DescriptorSet();
+	}
+
+	Mesh::~Mesh()
+	{
 	}
 
 	vk::DescriptorSetLayout* Mesh::getDescriptorSetLayout()
 	{
-		if (!descriptorSetLayout) {
+		if (!Mesh::descriptorSetLayout)
+			Mesh::descriptorSetLayout = vk::DescriptorSetLayout();
+
+		if (!descriptorSetLayout.Value()) {
 			auto const layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eVertex, nullptr };
 			};
@@ -43,7 +73,7 @@ namespace vm
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-		return &descriptorSetLayout;
+		return &*descriptorSetLayout;
 	}
 
 	void Mesh::createUniformBuffers()
@@ -182,9 +212,9 @@ namespace vm
 	void Mesh::destroy()
 	{
 		uniformBuffer.destroy();
-		if (descriptorSetLayout) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(descriptorSetLayout);
-			descriptorSetLayout = nullptr;
+		if (descriptorSetLayout.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(descriptorSetLayout.Value());
+			*descriptorSetLayout = nullptr;
 		}
 
 		for (auto& primitive : primitives) {
@@ -194,9 +224,9 @@ namespace vm
 		vertices.shrink_to_fit();
 		indices.clear();
 		indices.shrink_to_fit();
-		if (Primitive::descriptorSetLayout) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
-			Primitive::descriptorSetLayout = nullptr;
+		if (Primitive::descriptorSetLayout.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(Primitive::descriptorSetLayout.Value());
+			*Primitive::descriptorSetLayout = nullptr;
 		}
 	}
 }

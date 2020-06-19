@@ -1,14 +1,26 @@
 #include "Skybox.h"
 #include "../GUI/GUI.h"
 #include "tinygltf/stb_image.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
-	vk::DescriptorSetLayout SkyBox::descriptorSetLayout = nullptr;
+	Ref_t<vk::DescriptorSetLayout> SkyBox::descriptorSetLayout = Ref_t<vk::DescriptorSetLayout>();
 
-	vk::DescriptorSetLayout SkyBox::getDescriptorSetLayout()
+	SkyBox::SkyBox()
 	{
-		if (!descriptorSetLayout) {
+		descriptorSet = vk::DescriptorSet();
+		descriptorSetLayout = vk::DescriptorSetLayout();
+	}
+
+	SkyBox::~SkyBox()
+	{
+	}
+
+	const vk::DescriptorSetLayout& SkyBox::getDescriptorSetLayout()
+	{
+		if (!descriptorSetLayout.Value()) {
 			const auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlags, nullptr };
 			};
@@ -20,7 +32,7 @@ namespace vm
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-		return descriptorSetLayout;
+		return descriptorSetLayout.Value();
 	}
 
 	void SkyBox::createDescriptorSet()
@@ -38,7 +50,7 @@ namespace vm
 		dii.imageView = texture.view.Value();
 		dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-		textureWriteSets[0].dstSet = descriptorSet;
+		textureWriteSets[0].dstSet = descriptorSet.Value();
 		textureWriteSets[0].dstBinding = 0;
 		textureWriteSets[0].dstArrayElement = 0;
 		textureWriteSets[0].descriptorCount = 1;
@@ -98,9 +110,9 @@ namespace vm
 	void SkyBox::destroy()
 	{
 		texture.destroy();
-		if (SkyBox::descriptorSetLayout) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(SkyBox::descriptorSetLayout);
-			SkyBox::descriptorSetLayout = nullptr;
+		if (descriptorSetLayout.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(descriptorSetLayout.Value());
+			*SkyBox::descriptorSetLayout = nullptr;
 		}
 	}
 }

@@ -2,17 +2,22 @@
 #include "../Core/Image.h"
 #include "../Core/Buffer.h"
 #include "../Core/Math.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
+
+namespace vk
+{
+	class DescriptorSet;
+	class DescriptorSetLayout;
+}
 
 namespace vm
 {
 	class Object
 	{
 	public:
+		Object();
 		virtual ~Object() = default;
 		bool render = true, cull = false;
-		vk::DescriptorSet descriptorSet;
+		Ref_t<vk::DescriptorSet> descriptorSet;
 		Image texture;
 		std::vector<float> vertices{};
 		Buffer vertexBuffer;

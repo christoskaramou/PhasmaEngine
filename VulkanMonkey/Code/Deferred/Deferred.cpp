@@ -5,13 +5,25 @@
 #include "../Core/Surface.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
+#include "../GUI/GUI.h"
 #include "tinygltf/stb_image.h"
 #include <deque>
-
 #include "../Shader/Reflection.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
+	Deferred::Deferred()
+	{
+		DSComposition = vk::DescriptorSet();
+		DSLayoutComposition = vk::DescriptorSetLayout();
+	}
+
+	Deferred::~Deferred()
+	{
+	}
+
 	void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
 	{
 		vk::ClearValue clearColor;
@@ -39,8 +51,8 @@ namespace vm
 
 	void Deferred::batchEnd()
 	{
-		Model::commandBuffer.endRenderPass();
-		Model::commandBuffer = nullptr;
+		Model::commandBuffer->endRenderPass();
+		*Model::commandBuffer = nullptr;
 		Model::pipeline = nullptr;
 	}
 
@@ -57,7 +69,7 @@ namespace vm
 			vk::DescriptorSetAllocateInfo {
 				vulkan->descriptorPool.Value(),			//DescriptorPool descriptorPool;
 				1,										//uint32_t descriptorSetCount;
-				&DSLayoutComposition					//const DescriptorSetLayout* pSetLayouts;
+				&DSLayoutComposition.Value()					//const DescriptorSetLayout* pSetLayouts;
 		};
 		DSComposition = vulkan->device->allocateDescriptorSets(allocInfo).at(0);
 
@@ -110,27 +122,27 @@ namespace vm
 	void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii{};
-		auto const wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
 			dsii.emplace_back(image.sampler.Value(), image.view.Value(), vk::ImageLayout::eShaderReadOnlyOptimal);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 		};
 		std::deque<vk::DescriptorBufferInfo> dsbi{};
-		auto const wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
 			dsbi.emplace_back(buffer.buffer.Value(), 0, buffer.size.Value());
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 		};
 
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
-			wSetImage(DSComposition, 0, renderTargets["depth"]),
-			wSetImage(DSComposition, 1, renderTargets["normal"]),
-			wSetImage(DSComposition, 2, renderTargets["albedo"]),
-			wSetImage(DSComposition, 3, renderTargets["srm"]),
-			wSetBuffer(DSComposition, 4, lightUniforms.uniform),
-			wSetImage(DSComposition, 5, renderTargets["ssaoBlur"]),
-			wSetImage(DSComposition, 6, renderTargets["ssr"]),
-			wSetImage(DSComposition, 7, renderTargets["emissive"]),
-			wSetImage(DSComposition, 8, ibl_brdf_lut),
-			wSetBuffer(DSComposition, 9, uniform)
+			wSetImage(DSComposition.Value(), 0, renderTargets["depth"]),
+			wSetImage(DSComposition.Value(), 1, renderTargets["normal"]),
+			wSetImage(DSComposition.Value(), 2, renderTargets["albedo"]),
+			wSetImage(DSComposition.Value(), 3, renderTargets["srm"]),
+			wSetBuffer(DSComposition.Value(), 4, lightUniforms.uniform),
+			wSetImage(DSComposition.Value(), 5, renderTargets["ssaoBlur"]),
+			wSetImage(DSComposition.Value(), 6, renderTargets["ssr"]),
+			wSetImage(DSComposition.Value(), 7, renderTargets["emissive"]),
+			wSetImage(DSComposition.Value(), 8, ibl_brdf_lut),
+			wSetBuffer(DSComposition.Value(), 9, uniform)
 		};
 
 		VulkanContext::get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
@@ -172,7 +184,7 @@ namespace vm
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineComposition.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo->layout, 0, { DSComposition, shadows.descriptorSets[0], shadows.descriptorSets[1], shadows.descriptorSets[2], skybox.descriptorSet }, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeinfo->layout, 0, { DSComposition.Value(), shadows.descriptorSets[0], shadows.descriptorSets[1], shadows.descriptorSets[2], skybox.descriptorSet.Value() }, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		// End Composition
@@ -520,7 +532,7 @@ namespace vm
 		pipelineComposition.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayoutComposition)
+		if (!DSLayoutComposition.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -544,7 +556,7 @@ namespace vm
 		}
 
 		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = {
-			DSLayoutComposition,
+			DSLayoutComposition.Value(),
 			Shadows::getDescriptorSetLayout(),
 			Shadows::getDescriptorSetLayout(),
 			Shadows::getDescriptorSetLayout(),
@@ -593,9 +605,9 @@ namespace vm
 		for (auto& framebuffer : compositionFramebuffers)
 			framebuffer.Destroy();
 
-		if (DSLayoutComposition) {
-			vulkan->device->destroyDescriptorSetLayout(DSLayoutComposition);
-			DSLayoutComposition = nullptr;
+		if (DSLayoutComposition.Value()) {
+			vulkan->device->destroyDescriptorSetLayout(DSLayoutComposition.Value());
+			*DSLayoutComposition = nullptr;
 		}
 		uniform.destroy();
 		pipeline.destroy();

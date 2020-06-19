@@ -7,6 +7,8 @@ namespace vm
 	class Ref_t
 	{
 	public:
+		bool operator!() {return m_ref == nullptr; }
+		operator bool() { return !operator!(); }
 		void operator=(const T& obj) { m_ref = std::make_shared<T>(obj); }
 		void operator=(const std::shared_ptr<T>& ref) { m_ref = ref; }
 		T& operator*() const { return *m_ref; }

@@ -5,25 +5,27 @@
 #include "../../include/GLTFSDK/GLTF.h"
 #include "../../include/GLTFSDK/Document.h"
 #include "../../include/GLTFSDK/GLTFResourceReader.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 #include <map>
 
-#undef min
-#undef max
-
 constexpr auto MAX_NUM_JOINTS = 128u;
+
+namespace vk
+{
+	class DescriptorSetLayout;
+	class DescriptorSet;
+}
 
 namespace vm
 {
 	class Primitive
 	{
 	public:
-		Primitive(): pbrMaterial({}) {}
+		Primitive();
+		~Primitive();
 
-		static vk::DescriptorSetLayout descriptorSetLayout;
+		static Ref_t<vk::DescriptorSetLayout> descriptorSetLayout;
 		static vk::DescriptorSetLayout* getDescriptorSetLayout();
-		vk::DescriptorSet descriptorSet;
+		Ref_t<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 
 		bool render = true, cull = true;
@@ -51,6 +53,8 @@ namespace vm
 	class Mesh
 	{
 	public:
+		Mesh();
+		~Mesh();
 		bool render = true, cull = false;
 
 		struct UBOMesh {
@@ -64,9 +68,9 @@ namespace vm
 		static std::map<std::string, Image> uniqueTextures;
 		std::vector<Primitive> primitives{};
 
-		static vk::DescriptorSetLayout descriptorSetLayout;
+		static Ref_t<vk::DescriptorSetLayout> descriptorSetLayout;
 		static vk::DescriptorSetLayout* getDescriptorSetLayout();
-		vk::DescriptorSet descriptorSet;
+		Ref_t<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 		std::vector<Vertex> vertices{};
 		std::vector<uint32_t> indices{};

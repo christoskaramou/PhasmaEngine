@@ -22,17 +22,17 @@ namespace vm
 	{
 		VulkanContext::get()->device->waitIdle();
 		if (Model::models.empty()) {
-			if (Model::descriptorSetLayout) {
-				VulkanContext::get()->device->destroyDescriptorSetLayout(Model::descriptorSetLayout);
-				Model::descriptorSetLayout = nullptr;
+			if (Model::descriptorSetLayout.Value()) {
+				VulkanContext::get()->device->destroyDescriptorSetLayout(Model::descriptorSetLayout.Value());
+				*Model::descriptorSetLayout = nullptr;
 			}
-			if (Mesh::descriptorSetLayout) {
-				VulkanContext::get()->device->destroyDescriptorSetLayout(Mesh::descriptorSetLayout);
-				Mesh::descriptorSetLayout = nullptr;
+			if (Mesh::descriptorSetLayout.Value()) {
+				VulkanContext::get()->device->destroyDescriptorSetLayout(Mesh::descriptorSetLayout.Value());
+				*Mesh::descriptorSetLayout = nullptr;
 			}
-			if (Primitive::descriptorSetLayout) {
-				VulkanContext::get()->device->destroyDescriptorSetLayout(Primitive::descriptorSetLayout);
-				Primitive::descriptorSetLayout = nullptr;
+			if (Primitive::descriptorSetLayout.Value()) {
+				VulkanContext::get()->device->destroyDescriptorSetLayout(Primitive::descriptorSetLayout.Value());
+				*Primitive::descriptorSetLayout = nullptr;
 			}
 		}
 #ifdef USE_SCRIPTS
@@ -254,7 +254,11 @@ namespace vm
 		for (auto& f : futureUpdates)
 			f.get();
 
-		Queue::exec_memcpyRequests(previousImageIndex);
+		static Timer timerFenceWait;
+		timerFenceWait.Start();
+		VulkanContext::get()->waitFences((*VulkanContext::get()->fences)[previousImageIndex]);
+		FrameTimer::Instance().timestamps[0] = timerFenceWait.Count();
+		Queue::exec_memcpyRequests();
 
 		GUI::updatesTimeCount = static_cast<float>(timer.Count());
 	}
@@ -433,7 +437,7 @@ namespace vm
 
 					for (auto& node : model.linearNodes) {
 						if (node->mesh) {
-							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo->layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet, model.descriptorSet }, nullptr);
+							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo->layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet.Value(), model.descriptorSet.Value() }, nullptr);
 							for (auto& primitive : node->mesh->primitives) {
 								if (primitive.render)
 									cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);

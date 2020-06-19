@@ -4,10 +4,17 @@
 #include "../Pipeline/Pipeline.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 #include "SDL/SDL.h"
 #include <vector>
+#include <array>
+
+namespace vk
+{
+	class Framebuffer;
+	class DescriptorSetLayout;
+	class CommandBuffer;
+	class Device;
+}
 
 namespace vm
 {
@@ -18,6 +25,9 @@ namespace vm
 	class GUI : public Object
 	{
 	public:
+		GUI();
+		~GUI();
+
 		// Data
 		static inline ImVec2								winPos = ImVec2();
 		static inline ImVec2								winSize = ImVec2();
@@ -100,10 +110,10 @@ namespace vm
 
 		std::string	name;
 		RenderPass renderPass;
-		std::vector<Framebuffer> framebuffers{};
+		Ref_t<std::vector<Framebuffer>> framebuffers;
 		Pipeline pipeline;
-		static inline vk::DescriptorSetLayout descriptorSetLayout = nullptr;
-		static vk::DescriptorSetLayout getDescriptorSetLayout(vk::Device device);
+		static Ref_t<vk::DescriptorSetLayout> descriptorSetLayout;
+		static const vk::DescriptorSetLayout& getDescriptorSetLayout(vk::Device device);
 		void update();
 		void loadGUI(bool show = true);
 		static void scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex);

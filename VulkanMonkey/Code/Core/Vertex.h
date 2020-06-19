@@ -1,6 +1,11 @@
 #pragma once
-#include <vulkan/vulkan.hpp>
 #include "Math.h"
+
+namespace vk
+{
+	struct VertexInputBindingDescription;
+	struct VertexInputAttributeDescription;
+}
 
 namespace vm
 {

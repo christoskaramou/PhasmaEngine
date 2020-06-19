@@ -1,8 +1,15 @@
 #include "Object.h"
 #include "tinygltf/stb_image.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
+	Object::Object()
+	{
+		descriptorSet = vk::DescriptorSet();
+	}
+
 	void Object::createVertexBuffer()
 	{
 		vertexBuffer.createBuffer(sizeof(float) * vertices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
@@ -76,7 +83,7 @@ namespace vm
 		dbi.offset = 0;
 		dbi.range = uniformBuffer.size.Value();
 
-		textureWriteSets[0].dstSet = descriptorSet;
+		textureWriteSets[0].dstSet = descriptorSet.Value();
 		textureWriteSets[0].dstBinding = 0;
 		textureWriteSets[0].dstArrayElement = 0;
 		textureWriteSets[0].descriptorCount = 1;
@@ -89,7 +96,7 @@ namespace vm
 		dii.imageView = texture.view.Value();
 		dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-		textureWriteSets[1].dstSet = descriptorSet;
+		textureWriteSets[1].dstSet = descriptorSet.Value();
 		textureWriteSets[1].dstBinding = 1;
 		textureWriteSets[1].dstArrayElement = 0;
 		textureWriteSets[1].descriptorCount = 1;

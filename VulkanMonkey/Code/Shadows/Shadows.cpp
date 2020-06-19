@@ -4,18 +4,29 @@
 #include "../Core/Vertex.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
-	vk::DescriptorSetLayout		Shadows::descriptorSetLayout = nullptr;
-	uint32_t					Shadows::imageSize = 4096;
+	Ref_t<vk::DescriptorSetLayout> Shadows::descriptorSetLayout = Ref_t<vk::DescriptorSetLayout>();
+	uint32_t Shadows::imageSize = 4096;
+
+	Shadows::Shadows()
+	{
+		descriptorSetLayout = vk::DescriptorSetLayout();
+	}
+
+	Shadows::~Shadows()
+	{
+	}
 
 	void Shadows::createDescriptorSets()
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &descriptorSetLayout;
+		allocateInfo.pSetLayouts = &*descriptorSetLayout;
 
 		descriptorSets.resize(textures.size()); // size of wanted number of cascaded shadows
 		for (uint32_t i = 0; i < descriptorSets.size(); i++) {
@@ -246,9 +257,9 @@ namespace vm
 		VulkanContext::get()->device->destroyShaderModule(vertModule);
 	}
 
-	vk::DescriptorSetLayout Shadows::getDescriptorSetLayout()
+	const vk::DescriptorSetLayout& Shadows::getDescriptorSetLayout()
 	{
-		if (!descriptorSetLayout) {
+		if (!descriptorSetLayout.Value()) {
 			const auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlags, nullptr };
 			};
@@ -261,7 +272,7 @@ namespace vm
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-		return descriptorSetLayout;
+		return descriptorSetLayout.Value();
 	}
 
 	void Shadows::createUniformBuffers()
@@ -280,9 +291,9 @@ namespace vm
 	{
 		if (*renderPass)
 			VulkanContext::get()->device->destroyRenderPass(*renderPass);
-		if (descriptorSetLayout) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Shadows::descriptorSetLayout);
-			descriptorSetLayout = nullptr;
+		if (descriptorSetLayout.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(Shadows::descriptorSetLayout.Value());
+			*descriptorSetLayout = nullptr;
 		}
 		for (auto& texture : textures)
 			texture.destroy();
