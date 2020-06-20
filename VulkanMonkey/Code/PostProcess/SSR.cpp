@@ -5,9 +5,21 @@
 #include "../Core/Surface.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
+	SSR::SSR()
+	{
+		DSet = vk::DescriptorSet();
+		DSLayout = vk::DescriptorSetLayout();
+	}
+
+	SSR::~SSR()
+	{
+	}
+
 	void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		UBReflection.createBuffer(4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
@@ -19,8 +31,8 @@ namespace vm
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo2.descriptorSetCount = 1;
-		allocateInfo2.pSetLayouts = &DSLayoutReflection;
-		DSReflection = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0);
+		allocateInfo2.pSetLayouts = &*DSLayout;
+		DSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0);
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -28,22 +40,22 @@ namespace vm
 	void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii{};
-		const auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		const auto wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
 			dsii.emplace_back(image.sampler.Value(), image.view.Value(), vk::ImageLayout::eShaderReadOnlyOptimal);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 		};
 		std::deque<vk::DescriptorBufferInfo> dsbi{};
-		const auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
 			dsbi.emplace_back(buffer.buffer.Value(), 0, buffer.size.Value());
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 		};
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets{
-			wSetImage(DSReflection, 0, renderTargets["albedo"]),
-			wSetImage(DSReflection, 1, renderTargets["depth"]),
-			wSetImage(DSReflection, 2, renderTargets["normal"]),
-			wSetImage(DSReflection, 3, renderTargets["srm"]),
-			wSetBuffer(DSReflection, 4, UBReflection)
+			wSetImage(DSet.Value(), 0, renderTargets["albedo"]),
+			wSetImage(DSet.Value(), 1, renderTargets["depth"]),
+			wSetImage(DSet.Value(), 2, renderTargets["normal"]),
+			wSetImage(DSet.Value(), 3, renderTargets["srm"]),
+			wSetBuffer(DSet.Value(), 4, UBReflection)
 		};
 		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
@@ -85,7 +97,7 @@ namespace vm
 
 		cmd.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSReflection, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSet.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
@@ -221,7 +233,7 @@ namespace vm
 		pipeline.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayoutReflection)
+		if (!DSLayout || !DSLayout.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -236,10 +248,10 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayoutReflection = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutReflection };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout.Value() };
 
 		//vk::PushConstantRange pConstants;
 		//pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
@@ -279,9 +291,9 @@ namespace vm
 
 		renderPass.Destroy();
 
-		if (DSLayoutReflection) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayoutReflection);
-			DSLayoutReflection = nullptr;
+		if (DSLayout.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayout.Value());
+			*DSLayout = nullptr;
 		}
 		UBReflection.destroy();
 		pipeline.destroy();

@@ -1,6 +1,8 @@
 #include "Window.h"
 #include "../Event/Event.h"
 #include "../Console/Console.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 #include <iostream>
 
 namespace vm

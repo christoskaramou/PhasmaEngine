@@ -6,16 +6,23 @@
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 #include <map>
 #include <functional>
+
+namespace vk
+{
+	class DescriptorSet;
+	class DescriptorSetLayout;
+	class CommandBuffer;
+}
 
 namespace vm
 {
 	class SSAO
 	{
 	public:
+		SSAO();
+		~SSAO();
 		mat4 pvm[3];
 		Buffer UB_Kernel;
 		Buffer UB_PVM;
@@ -24,8 +31,8 @@ namespace vm
 		std::vector<Framebuffer> framebuffers{}, blurFramebuffers{};
 		Pipeline pipeline;
 		Pipeline pipelineBlur;
-		vk::DescriptorSetLayout DSLayout, DSLayoutBlur;
-		vk::DescriptorSet DSet, DSBlur;
+		Ref_t<vk::DescriptorSet> DSet, DSBlur;
+		Ref_t<vk::DescriptorSetLayout> DSLayout, DSLayoutBlur;
 
 		void update(Camera& camera);
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);

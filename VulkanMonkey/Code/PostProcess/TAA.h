@@ -6,22 +6,29 @@
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 #include <vector>
 #include <map>
 #include <functional>
+
+namespace vk
+{
+	class DescriptorSet;
+	class DescriptorSetLayout;
+	class CommandBuffer;
+}
 
 namespace vm
 {
 	class TAA
 	{
 	public:
+		TAA();
+		~TAA();
 		std::vector<Framebuffer> framebuffers{}, framebuffersSharpen{};
 		Pipeline pipeline, pipelineSharpen;
 		RenderPass renderPass, renderPassSharpen;
-		vk::DescriptorSet DSet, DSetSharpen;
-		vk::DescriptorSetLayout DSLayout, DSLayoutSharpen;
+		Ref_t<vk::DescriptorSet> DSet, DSetSharpen;
+		Ref_t<vk::DescriptorSetLayout> DSLayout, DSLayoutSharpen;
 		Image previous;
 		Image frameImage;
 

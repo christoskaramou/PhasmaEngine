@@ -4,10 +4,24 @@
 #include "../Swapchain/Swapchain.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 #include <deque>
 
 namespace vm
 {
+	TAA::TAA()
+	{
+		DSet = vk::DescriptorSet();
+		DSetSharpen = vk::DescriptorSet();
+		DSLayout = vk::DescriptorSetLayout();
+		DSLayoutSharpen = vk::DescriptorSetLayout();
+	}
+
+	TAA::~TAA()
+	{
+	}
+
 	void TAA::Init()
 	{
 		previous.format = VulkanContext::get()->surface.formatKHR->format;
@@ -60,10 +74,10 @@ namespace vm
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo2.descriptorSetCount = 1;
-		allocateInfo2.pSetLayouts = &DSLayout;
+		allocateInfo2.pSetLayouts = &*DSLayout;
 		DSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0);
 
-		allocateInfo2.pSetLayouts = &DSLayoutSharpen;
+		allocateInfo2.pSetLayouts = &*DSLayoutSharpen;
 		DSetSharpen = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0);
 
 		updateDescriptorSets(renderTargets);
@@ -72,24 +86,24 @@ namespace vm
 	void TAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii{};
-		const auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		const auto wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
 			dsii.emplace_back(image.sampler.Value(), image.view.Value(), vk::ImageLayout::eShaderReadOnlyOptimal);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 		};
 		std::deque<vk::DescriptorBufferInfo> dsbi{};
-		const auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
 			dsbi.emplace_back(buffer.buffer.Value(), 0, buffer.size.Value());
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 		};
 
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
-			wSetImage(DSet, 0, previous),
-			wSetImage(DSet, 1, frameImage),
-			wSetImage(DSet, 2, renderTargets["depth"]),
-			wSetImage(DSet, 3, renderTargets["velocity"]),
-			wSetBuffer(DSet, 4, uniform),
-			wSetImage(DSetSharpen, 0, renderTargets["taa"]),
-			wSetBuffer(DSetSharpen, 1, uniform)
+			wSetImage(DSet.Value(), 0, previous),
+			wSetImage(DSet.Value(), 1, frameImage),
+			wSetImage(DSet.Value(), 2, renderTargets["depth"]),
+			wSetImage(DSet.Value(), 3, renderTargets["velocity"]),
+			wSetBuffer(DSet.Value(), 4, uniform),
+			wSetImage(DSetSharpen.Value(), 0, renderTargets["taa"]),
+			wSetBuffer(DSetSharpen.Value(), 1, uniform)
 		};
 
 		VulkanContext::get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
@@ -114,7 +128,7 @@ namespace vm
 		changeLayout(cmd, renderTargets["taa"], LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSet, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSet.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		changeLayout(cmd, renderTargets["taa"], LayoutState::ColorRead);
@@ -132,7 +146,7 @@ namespace vm
 
 		cmd.beginRenderPass(rpi2, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineSharpen.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineSharpen.pipeinfo->layout, 0, DSetSharpen, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineSharpen.pipeinfo->layout, 0, DSetSharpen.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
@@ -285,7 +299,7 @@ namespace vm
 		pipeline.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayout)
+		if (!DSLayout || !DSLayout.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -303,7 +317,7 @@ namespace vm
 			DSLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout.Value() };
 
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
@@ -442,7 +456,7 @@ namespace vm
 		pipelineSharpen.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayoutSharpen)
+		if (!DSLayoutSharpen || !DSLayoutSharpen.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -457,7 +471,7 @@ namespace vm
 			DSLayoutSharpen = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutSharpen };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutSharpen.Value() };
 
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
@@ -615,13 +629,13 @@ namespace vm
 		renderPass.Destroy();
 		renderPassSharpen.Destroy();
 
-		if (DSLayout) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayout);
-			DSLayout = nullptr;
+		if (DSLayout.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayout.Value());
+			*DSLayout = nullptr;
 		}
-		if (DSLayoutSharpen) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayoutSharpen);
-			DSLayoutSharpen = nullptr;
+		if (DSLayoutSharpen.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayoutSharpen.Value());
+			*DSLayoutSharpen = nullptr;
 		}
 		pipeline.destroy();
 		pipelineSharpen.destroy();

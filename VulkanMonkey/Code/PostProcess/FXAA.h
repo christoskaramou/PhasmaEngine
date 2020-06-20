@@ -4,22 +4,30 @@
 #include "../Core/Image.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 #include <vector>
 #include <map>
 #include <string>
+
+namespace vk
+{
+	class DescriptorSet;
+	class DescriptorSetLayout;
+	class CommandBuffer;
+	struct Extent2D;
+}
 
 namespace vm
 {
 	class FXAA
 	{
 	public:
+		FXAA();
+		~FXAA();
 		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		vk::DescriptorSet DSet;
-		vk::DescriptorSetLayout DSLayout;
+		Ref_t<vk::DescriptorSet> DSet;
+		Ref_t<vk::DescriptorSetLayout> DSLayout;
 		Image frameImage;
 
 		void Init();

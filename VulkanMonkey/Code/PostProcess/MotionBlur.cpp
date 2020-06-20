@@ -6,9 +6,21 @@
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
 #include "../Core/Timer.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
+	MotionBlur::MotionBlur()
+	{
+		DSet = vk::DescriptorSet();
+		DSLayout = vk::DescriptorSetLayout();
+	}
+
+	MotionBlur::~MotionBlur()
+	{
+	}
+
 	void MotionBlur::Init()
 	{
 		frameImage.format = VulkanContext::get()->surface.formatKHR->format;
@@ -36,8 +48,8 @@ namespace vm
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &DSLayoutMotionBlur;
-		DSMotionBlur = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
+		allocateInfo.pSetLayouts = &*DSLayout;
+		DSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -45,21 +57,21 @@ namespace vm
 	void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii{};
-		auto const wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
 			dsii.emplace_back(image.sampler.Value(), image.view.Value(), vk::ImageLayout::eShaderReadOnlyOptimal);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 		};
 		std::deque<vk::DescriptorBufferInfo> dsbi{};
-		auto const wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
 			dsbi.emplace_back(buffer.buffer.Value(), 0, buffer.size.Value());
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 		};
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets{
-			wSetImage(DSMotionBlur, 0, frameImage),
-			wSetImage(DSMotionBlur, 1, renderTargets["depth"]),
-			wSetImage(DSMotionBlur, 2, renderTargets["velocity"]),
-			wSetBuffer(DSMotionBlur, 3, UBmotionBlur)
+			wSetImage(DSet.Value(), 0, frameImage),
+			wSetImage(DSet.Value(), 1, renderTargets["depth"]),
+			wSetImage(DSet.Value(), 2, renderTargets["velocity"]),
+			wSetBuffer(DSet.Value(), 3, UBmotionBlur)
 		};
 		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
@@ -83,7 +95,7 @@ namespace vm
 		const vec4 values{ 1.f / static_cast<float>(FrameTimer::Instance().delta), sin(static_cast<float>(FrameTimer::Instance().time) * 0.125f), GUI::motionBlur_strength, 0.f };
 		cmd.pushConstants<vec4>(pipeline.pipeinfo->layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSMotionBlur, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSet.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
@@ -95,9 +107,9 @@ namespace vm
 
 		renderPass.Destroy();
 
-		if (DSLayoutMotionBlur) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayoutMotionBlur);
-			DSLayoutMotionBlur = nullptr;
+		if (DSLayout) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayout.Value());
+			*DSLayout = nullptr;
 		}
 		frameImage.destroy();
 		UBmotionBlur.destroy();
@@ -255,7 +267,7 @@ namespace vm
 		pipeline.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayoutMotionBlur)
+		if (!DSLayout || !DSLayout.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -269,10 +281,10 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayoutMotionBlur = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutMotionBlur };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout.Value() };
 
 		vk::PushConstantRange pConstants;
 		pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;

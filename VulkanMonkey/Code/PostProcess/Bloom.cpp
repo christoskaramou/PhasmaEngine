@@ -3,10 +3,28 @@
 #include "../Swapchain/Swapchain.h"
 #include "../Core/Surface.h"
 #include "../Shader/Shader.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 #include <deque>
 
 namespace vm
 {
+	Bloom::Bloom()
+	{
+		DSBrightFilter = vk::DescriptorSet();
+		DSGaussianBlurHorizontal = vk::DescriptorSet();
+		DSGaussianBlurVertical = vk::DescriptorSet();
+		DSCombine = vk::DescriptorSet();
+		DSLayoutBrightFilter = vk::DescriptorSetLayout();
+		DSLayoutGaussianBlurHorizontal = vk::DescriptorSetLayout();
+		DSLayoutGaussianBlurVertical = vk::DescriptorSetLayout();
+		DSLayoutCombine = vk::DescriptorSetLayout();
+	}
+
+	Bloom::~Bloom()
+	{
+	}
+
 	void Bloom::Init()
 	{
 		frameImage.format = VulkanContext::get()->surface.formatKHR->format;
@@ -139,19 +157,19 @@ namespace vm
 		allocateInfo.descriptorSetCount = 1;
 
 		// Composition image to Bright Filter shader
-		allocateInfo.pSetLayouts = &DSLayoutBrightFilter;
+		allocateInfo.pSetLayouts = &*DSLayoutBrightFilter;
 		DSBrightFilter = vulkan->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		// Bright Filter image to Gaussian Blur Horizontal shader
-		allocateInfo.pSetLayouts = &DSLayoutGaussianBlurHorizontal;
+		allocateInfo.pSetLayouts = &*DSLayoutGaussianBlurHorizontal;
 		DSGaussianBlurHorizontal = vulkan->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
-		allocateInfo.pSetLayouts = &DSLayoutGaussianBlurVertical;
+		allocateInfo.pSetLayouts = &*DSLayoutGaussianBlurVertical;
 		DSGaussianBlurVertical = vulkan->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		// Gaussian Blur Vertical image to Combine shader
-		allocateInfo.pSetLayouts = &DSLayoutCombine;
+		allocateInfo.pSetLayouts = &*DSLayoutCombine;
 		DSCombine = vulkan->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		updateDescriptorSets(renderTargets);
@@ -160,17 +178,17 @@ namespace vm
 	void Bloom::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii{};
-		auto const wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
 			dsii.emplace_back(image.sampler.Value(), image.view.Value(), vk::ImageLayout::eShaderReadOnlyOptimal);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 		};
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets{
-			wSetImage(DSBrightFilter, 0, frameImage),
-			wSetImage(DSGaussianBlurHorizontal, 0, renderTargets["brightFilter"]),
-			wSetImage(DSGaussianBlurVertical, 0, renderTargets["gaussianBlurHorizontal"]),
-			wSetImage(DSCombine, 0, frameImage),
-			wSetImage(DSCombine, 1, renderTargets["gaussianBlurVertical"])
+			wSetImage(DSBrightFilter.Value(), 0, frameImage),
+			wSetImage(DSGaussianBlurHorizontal.Value(), 0, renderTargets["brightFilter"]),
+			wSetImage(DSGaussianBlurVertical.Value(), 0, renderTargets["gaussianBlurHorizontal"]),
+			wSetImage(DSCombine.Value(), 0, frameImage),
+			wSetImage(DSCombine.Value(), 1, renderTargets["gaussianBlurVertical"])
 		};
 		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
@@ -196,7 +214,7 @@ namespace vm
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(pipelineBrightFilter.pipeinfo->layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineBrightFilter.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo->layout, 0, DSBrightFilter, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo->layout, 0, DSBrightFilter.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		changeLayout(cmd, renderTargets["brightFilter"], LayoutState::ColorRead);
@@ -208,7 +226,7 @@ namespace vm
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(pipelineGaussianBlurHorizontal.pipeinfo->layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineGaussianBlurHorizontal.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo->layout, 0, DSGaussianBlurHorizontal, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo->layout, 0, DSGaussianBlurHorizontal.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		changeLayout(cmd, renderTargets["gaussianBlurHorizontal"], LayoutState::ColorRead);
@@ -219,7 +237,7 @@ namespace vm
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(pipelineGaussianBlurVertical.pipeinfo->layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineGaussianBlurVertical.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurVertical.pipeinfo->layout, 0, DSGaussianBlurVertical, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurVertical.pipeinfo->layout, 0, DSGaussianBlurVertical.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		changeLayout(cmd, renderTargets["gaussianBlurVertical"], LayoutState::ColorRead);
@@ -230,7 +248,7 @@ namespace vm
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(pipelineCombine.pipeinfo->layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineCombine.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeinfo->layout, 0, DSCombine, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineCombine.pipeinfo->layout, 0, DSCombine.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
@@ -348,7 +366,7 @@ namespace vm
 		pipelineBrightFilter.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayoutBrightFilter)
+		if (!DSLayoutBrightFilter || !DSLayoutBrightFilter.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -362,7 +380,7 @@ namespace vm
 			DSLayoutBrightFilter = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutBrightFilter };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutBrightFilter.Value() };
 
 		vk::PushConstantRange pConstants;
 		pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
@@ -508,7 +526,7 @@ namespace vm
 		pipelineGaussianBlurHorizontal.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayoutGaussianBlurHorizontal)
+		if (!DSLayoutGaussianBlurHorizontal || !DSLayoutGaussianBlurHorizontal.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -522,7 +540,7 @@ namespace vm
 			DSLayoutGaussianBlurHorizontal = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutGaussianBlurHorizontal };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutGaussianBlurHorizontal.Value() };
 
 		vk::PushConstantRange pConstants;
 		pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
@@ -668,7 +686,7 @@ namespace vm
 		pipelineGaussianBlurVertical.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayoutGaussianBlurVertical)
+		if (!DSLayoutGaussianBlurVertical || !DSLayoutGaussianBlurVertical.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -682,7 +700,7 @@ namespace vm
 			DSLayoutGaussianBlurVertical = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutGaussianBlurVertical };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutGaussianBlurVertical.Value() };
 		vk::PushConstantRange pConstants;
 		pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
 		pConstants.offset = 0;
@@ -827,7 +845,7 @@ namespace vm
 		pipelineCombine.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayoutCombine)
+		if (!DSLayoutCombine || !DSLayoutCombine.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -842,7 +860,7 @@ namespace vm
 			DSLayoutCombine = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutCombine };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutCombine.Value() };
 
 		vk::PushConstantRange pConstants;
 		pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
@@ -885,21 +903,21 @@ namespace vm
 		renderPassGaussianBlur.Destroy();
 		renderPassCombine.Destroy();
 
-		if (DSLayoutBrightFilter) {
-			vulkan->device->destroyDescriptorSetLayout(DSLayoutBrightFilter);
-			DSLayoutBrightFilter = nullptr;
+		if (DSLayoutBrightFilter.Value()) {
+			vulkan->device->destroyDescriptorSetLayout(DSLayoutBrightFilter.Value());
+			*DSLayoutBrightFilter = nullptr;
 		}
-		if (DSLayoutGaussianBlurHorizontal) {
-			vulkan->device->destroyDescriptorSetLayout(DSLayoutGaussianBlurHorizontal);
-			DSLayoutGaussianBlurHorizontal = nullptr;
+		if (DSLayoutGaussianBlurHorizontal.Value()) {
+			vulkan->device->destroyDescriptorSetLayout(DSLayoutGaussianBlurHorizontal.Value());
+			*DSLayoutGaussianBlurHorizontal = nullptr;
 		}
-		if (DSLayoutGaussianBlurVertical) {
-			vulkan->device->destroyDescriptorSetLayout(DSLayoutGaussianBlurVertical);
-			DSLayoutGaussianBlurVertical = nullptr;
+		if (DSLayoutGaussianBlurVertical.Value()) {
+			vulkan->device->destroyDescriptorSetLayout(DSLayoutGaussianBlurVertical.Value());
+			*DSLayoutGaussianBlurVertical = nullptr;
 		}
-		if (DSLayoutCombine) {
-			vulkan->device->destroyDescriptorSetLayout(DSLayoutCombine);
-			DSLayoutCombine = nullptr;
+		if (DSLayoutCombine.Value()) {
+			vulkan->device->destroyDescriptorSetLayout(DSLayoutCombine.Value());
+			*DSLayoutCombine = nullptr;
 		}
 		frameImage.destroy();
 		pipelineBrightFilter.destroy();

@@ -1,6 +1,11 @@
 #pragma once
 #include "../Context/Context.h"
 
+namespace vk
+{
+	class CommandBuffer;
+}
+
 namespace vm
 {
 	class Renderer

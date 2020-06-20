@@ -5,9 +5,23 @@
 #include "../GUI/GUI.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
+	SSAO::SSAO()
+	{
+		DSet = vk::DescriptorSet();
+		DSBlur = vk::DescriptorSet();
+		DSLayout = vk::DescriptorSetLayout();
+		DSLayoutBlur = vk::DescriptorSetLayout();
+	}
+
+	SSAO::~SSAO()
+	{
+	}
+
 	void SSAO::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		// kernel buffer
@@ -62,7 +76,7 @@ namespace vm
 		const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
 			VulkanContext::get()->descriptorPool.Value(),					//DescriptorPool descriptorPool;
 			1,										//uint32_t descriptorSetCount;
-			&DSLayout								//const DescriptorSetLayout* pSetLayouts;
+			&*DSLayout								//const DescriptorSetLayout* pSetLayouts;
 		};
 		DSet = VulkanContext::get()->device->allocateDescriptorSets(allocInfo).at(0);
 
@@ -70,7 +84,7 @@ namespace vm
 		const vk::DescriptorSetAllocateInfo allocInfoBlur = vk::DescriptorSetAllocateInfo{
 			VulkanContext::get()->descriptorPool.Value(),					//DescriptorPool descriptorPool;
 			1,										//uint32_t descriptorSetCount;
-			&DSLayoutBlur							//const DescriptorSetLayout* pSetLayouts;
+			&*DSLayoutBlur							//const DescriptorSetLayout* pSetLayouts;
 		};
 		DSBlur = VulkanContext::get()->device->allocateDescriptorSets(allocInfoBlur).at(0);
 
@@ -80,23 +94,23 @@ namespace vm
 	void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii{};
-		const auto wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal) {
+		const auto wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal) {
 			dsii.emplace_back(image.sampler.Value(), image.view.Value(), imageLayout);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 		};
 		std::deque<vk::DescriptorBufferInfo> dsbi{};
-		const auto wSetBuffer = [&dsbi](vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
 			dsbi.emplace_back(buffer.buffer.Value(), 0, buffer.size.Value());
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 		};
 
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets{
-			wSetImage(DSet, 0, renderTargets["depth"]),
-			wSetImage(DSet, 1, renderTargets["normal"]),
-			wSetImage(DSet, 2, noiseTex),
-			wSetBuffer(DSet, 3, UB_Kernel),
-			wSetBuffer(DSet, 4, UB_PVM),
-			wSetImage(DSBlur, 0, renderTargets["ssao"])
+			wSetImage(DSet.Value(), 0, renderTargets["depth"]),
+			wSetImage(DSet.Value(), 1, renderTargets["normal"]),
+			wSetImage(DSet.Value(), 2, noiseTex),
+			wSetBuffer(DSet.Value(), 3, UB_Kernel),
+			wSetBuffer(DSet.Value(), 4, UB_PVM),
+			wSetImage(DSBlur.Value(), 0, renderTargets["ssao"])
 		};
 		VulkanContext::get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
 	}
@@ -121,7 +135,7 @@ namespace vm
 		changeLayout(cmd, image, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
-		const vk::DescriptorSet descriptorSets = { DSet };
+		const vk::DescriptorSet descriptorSets = { DSet.Value() };
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, descriptorSets, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
@@ -133,7 +147,7 @@ namespace vm
 
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineBlur.pipeline);
-		const vk::DescriptorSet descriptorSetsBlur = { DSBlur };
+		const vk::DescriptorSet descriptorSetsBlur = { DSBlur.Value() };
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeinfo->layout, 0, descriptorSetsBlur, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
@@ -155,13 +169,13 @@ namespace vm
 
 		pipeline.destroy();
 		pipelineBlur.destroy();
-		if (DSLayout) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayout);
-			DSLayout = nullptr;
+		if (DSLayout.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayout.Value());
+			*DSLayout = nullptr;
 		}
-		if (DSLayoutBlur) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayoutBlur);
-			DSLayoutBlur = nullptr;
+		if (DSLayoutBlur.Value()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(DSLayoutBlur.Value());
+			*DSLayoutBlur = nullptr;
 		}
 	}
 
@@ -337,7 +351,7 @@ namespace vm
 		pipeline.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayout)
+		if (!DSLayout || !DSLayout.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -355,7 +369,7 @@ namespace vm
 			DSLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout.Value() };
 
 		//vk::PushConstantRange pConstants;
 		//pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
@@ -501,7 +515,7 @@ namespace vm
 		pipelineBlur.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayoutBlur)
+		if (!DSLayoutBlur || !DSLayoutBlur.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -515,7 +529,7 @@ namespace vm
 			DSLayoutBlur = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutBlur };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayoutBlur.Value() };
 
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());

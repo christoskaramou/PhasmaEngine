@@ -6,23 +6,31 @@
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 #include <vector>
 #include <map>
+
+namespace vk
+{
+	class DescriptorSet;
+	class DescriptorSetLayout;
+	class CommandBuffer;
+	struct Extent2D;
+}
 
 namespace vm
 {
 	class SSR
 	{
 	public:
+		SSR();
+		~SSR();
 		mat4 reflectionInput[4];
 		Buffer UBReflection;
 		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		vk::DescriptorSet DSReflection;
-		vk::DescriptorSetLayout DSLayoutReflection;
+		Ref_t<vk::DescriptorSet> DSet;
+		Ref_t<vk::DescriptorSetLayout> DSLayout;
 
 		void update(Camera& camera);
 		void createSSRUniforms(std::map<std::string, Image>& renderTargets);

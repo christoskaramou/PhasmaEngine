@@ -6,24 +6,32 @@
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 #include <vector>
 #include <string>
 #include <map>
+
+namespace vk
+{
+	class DescriptorSet;
+	class DescriptorSetLayout;
+	class CommandBuffer;
+	struct Extent2D;
+}
 
 namespace vm
 {
 	class MotionBlur
 	{
 	public:
+		MotionBlur();
+		~MotionBlur();
 		mat4 motionBlurInput[4];
 		Buffer UBmotionBlur;
 		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		vk::DescriptorSet DSMotionBlur;
-		vk::DescriptorSetLayout DSLayoutMotionBlur;
+		Ref_t<vk::DescriptorSet> DSet;
+		Ref_t<vk::DescriptorSetLayout> DSLayout;
 		Image frameImage;
 		
 		void Init();

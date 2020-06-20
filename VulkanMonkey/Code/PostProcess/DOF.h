@@ -1,26 +1,32 @@
 #pragma once
 
 #include "../Pipeline/Pipeline.h"
-#include <map>
 #include "../Core/Image.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
+#include <map>
+#include <string>
+
+namespace vk
+{
+	class DescriptorSet;
+	class DescriptorSetLayout;
+	class CommandBuffer;
+}
 
 namespace vm
 {
 	class DOF
 	{
 	public:
-		DOF() = default;
-		~DOF() = default;
+		DOF();
+		~DOF();
 
 		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		vk::DescriptorSet DSet;
-		vk::DescriptorSetLayout DSLayout;
+		Ref_t<vk::DescriptorSet> DSet;
+		Ref_t<vk::DescriptorSetLayout> DSLayout;
 		Image frameImage;
 
 		void Init();

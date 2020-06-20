@@ -3,10 +3,22 @@
 #include "../Swapchain/Swapchain.h"
 #include "../Core/Surface.h"
 #include "../Shader/Shader.h"
+#include "../VulkanContext/VulkanContext.h"
+#include <vulkan/vulkan.hpp>
 #include <deque>
 
 namespace vm
 {
+	DOF::DOF()
+	{
+		DSet = vk::DescriptorSet();
+		DSLayout = vk::DescriptorSetLayout();
+	}
+
+	DOF::~DOF()
+	{
+	}
+
 	void DOF::Init()
 	{
 		frameImage.format = VulkanContext::get()->surface.formatKHR->format;
@@ -104,7 +116,7 @@ namespace vm
 		allocateInfo.descriptorPool = vulkan->descriptorPool.Value();
 		allocateInfo.descriptorSetCount = 1;
 
-		allocateInfo.pSetLayouts = &DSLayout;
+		allocateInfo.pSetLayouts = &*DSLayout;
 		DSet = vulkan->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		updateDescriptorSets(renderTargets);
@@ -113,14 +125,14 @@ namespace vm
 	void DOF::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii{};
-		auto const wSetImage = [&dsii](vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
 			dsii.emplace_back(image.sampler.Value(), image.view.Value(), vk::ImageLayout::eShaderReadOnlyOptimal);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 		};
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets{
-			wSetImage(DSet, 0, frameImage),
-			wSetImage(DSet, 1, renderTargets["depth"])
+			wSetImage(DSet.Value(), 0, frameImage),
+			wSetImage(DSet.Value(), 1, renderTargets["depth"])
 		};
 		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
@@ -145,7 +157,7 @@ namespace vm
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(pipeline.pipeinfo->layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSet, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSet.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
@@ -263,7 +275,7 @@ namespace vm
 		pipeline.pipeinfo->pDynamicState = nullptr;
 
 		// Pipeline Layout
-		if (!DSLayout)
+		if (!DSLayout || !DSLayout.Value())
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
 				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
@@ -278,7 +290,7 @@ namespace vm
 			DSLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
 
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout };
+		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { DSLayout.Value() };
 
 		vk::PushConstantRange pConstants;
 		pConstants.stageFlags = vk::ShaderStageFlagBits::eFragment;
@@ -319,9 +331,9 @@ namespace vm
 
 		renderPass.Destroy();
 
-		if (DSLayout) {
-			vulkan->device->destroyDescriptorSetLayout(DSLayout);
-			DSLayout = nullptr;
+		if (DSLayout.Value()) {
+			vulkan->device->destroyDescriptorSetLayout(DSLayout.Value());
+			*DSLayout = nullptr;
 		}
 		frameImage.destroy();
 		pipeline.destroy();

@@ -64,6 +64,7 @@ namespace vk
 	class Fence;
 	class Semaphore;
 	enum class Format;
+	class DescriptorPool;
 
 	template<class T1, class T2> class Flags;
 	enum class ImageUsageFlagBits;
@@ -145,9 +146,9 @@ namespace vm
 		void recreatePipelines();
 
 		vk::Instance createInstance() const;
-		static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
+		static VKAPI_ATTR uint32_t VKAPI_CALL messageCallback(
 			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-			VkDebugUtilsMessageTypeFlagsEXT messageType,
+			uint32_t messageType,
 			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 			void* pUserData);
 		vk::DebugUtilsMessengerEXT createDebugMessenger() const;

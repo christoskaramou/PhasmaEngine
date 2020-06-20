@@ -4,6 +4,7 @@
 #include "../Core/Math.h"
 #include <filesystem>
 #include <iostream>
+#include "../VulkanContext/VulkanContext.h"
 #include <vulkan/vulkan.hpp>
 
 namespace vm
@@ -479,9 +480,9 @@ namespace vm
 		return vk::createInstance(instInfo);
 	}
 
-	VKAPI_ATTR VkBool32 VKAPI_CALL Context::messageCallback(
+	VKAPI_ATTR uint32_t VKAPI_CALL Context::messageCallback(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-		VkDebugUtilsMessageTypeFlagsEXT messageType,
+		uint32_t messageType,
 		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 		void* pUserData)
 	{

@@ -1,21 +1,26 @@
 #pragma once
 
-#include "../Pipeline/Pipeline.h"
-#include <map>
-#include <functional>
 #include "../Core/Image.h"
+#include "../Pipeline/Pipeline.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
-#include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
+#include <functional>
+#include <map>
+
+namespace vk
+{
+	class DescriptorSet;
+	class DescriptorSetLayout;
+	class CommandBuffer;
+}
 
 namespace vm
 {
 	class Bloom
 	{
 	public:
-		Bloom() = default;
-		~Bloom() = default;
+		Bloom();
+		~Bloom();
 
 		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipelineBrightFilter;
@@ -25,14 +30,14 @@ namespace vm
 		RenderPass renderPassBrightFilter;
 		RenderPass renderPassGaussianBlur;
 		RenderPass renderPassCombine;
-		vk::DescriptorSet DSBrightFilter;
-		vk::DescriptorSet DSGaussianBlurHorizontal;
-		vk::DescriptorSet DSGaussianBlurVertical;
-		vk::DescriptorSet DSCombine;
-		vk::DescriptorSetLayout DSLayoutBrightFilter;
-		vk::DescriptorSetLayout DSLayoutGaussianBlurHorizontal;
-		vk::DescriptorSetLayout DSLayoutGaussianBlurVertical;
-		vk::DescriptorSetLayout DSLayoutCombine;
+		Ref_t<vk::DescriptorSet> DSBrightFilter;
+		Ref_t<vk::DescriptorSet> DSGaussianBlurHorizontal;
+		Ref_t<vk::DescriptorSet> DSGaussianBlurVertical;
+		Ref_t<vk::DescriptorSet> DSCombine;
+		Ref_t<vk::DescriptorSetLayout> DSLayoutBrightFilter;
+		Ref_t<vk::DescriptorSetLayout> DSLayoutGaussianBlurHorizontal;
+		Ref_t<vk::DescriptorSetLayout> DSLayoutGaussianBlurVertical;
+		Ref_t<vk::DescriptorSetLayout> DSLayoutCombine;
 		Image frameImage;
 
 		void Init();
