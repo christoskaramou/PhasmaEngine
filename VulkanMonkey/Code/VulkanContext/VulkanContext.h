@@ -1,7 +1,4 @@
 #pragma once
-#include "SDL/SDL.h"
-#include "SDL/SDL_syswm.h"
-#include "SDL/SDL_vulkan.h"
 #include <vector>
 #include <mutex>
 #include "../Core/Surface.h"
@@ -33,6 +30,8 @@ namespace vk
 	enum class PipelineStageFlagBits;
 	using PipelineStageFlags = Flags<PipelineStageFlagBits, uint32_t>;
 }
+
+struct SDL_Window;
 
 namespace vm
 {

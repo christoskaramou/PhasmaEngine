@@ -319,59 +319,6 @@ namespace vm
 
 	void MotionBlur::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
 	{
-		frameImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eShaderReadOnlyOptimal,
-			vk::ImageLayout::eTransferDstOptimal,
-			vk::PipelineStageFlagBits::eFragmentShader,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::AccessFlagBits::eShaderRead,
-			vk::AccessFlagBits::eTransferWrite,
-			vk::ImageAspectFlagBits::eColor);
-		renderedImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::ImageLayout::eTransferSrcOptimal,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::AccessFlagBits::eTransferRead,
-			vk::ImageAspectFlagBits::eColor);
-
-		// copy the image
-		vk::ImageCopy region;
-		region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-		region.srcSubresource.layerCount = 1;
-		region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-		region.dstSubresource.layerCount = 1;
-		region.extent.width = renderedImage.width.Value();
-		region.extent.height = renderedImage.height.Value();
-		region.extent.depth = 1;
-
-		cmd.copyImage(
-			renderedImage.image.Value(),
-			vk::ImageLayout::eTransferSrcOptimal,
-			frameImage.image.Value(),
-			vk::ImageLayout::eTransferDstOptimal,
-			region);
-
-		frameImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eTransferDstOptimal,
-			vk::ImageLayout::eShaderReadOnlyOptimal,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eFragmentShader,
-			vk::AccessFlagBits::eTransferWrite,
-			vk::AccessFlagBits::eShaderRead,
-			vk::ImageAspectFlagBits::eColor);
-		renderedImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eTransferSrcOptimal,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::AccessFlagBits::eTransferRead,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::ImageAspectFlagBits::eColor);
+		frameImage.copyColorAttachment(cmd, renderedImage);
 	}
 }

@@ -6,7 +6,7 @@ namespace vm
 	class Window
 	{
 	public:
-		static void create(const std::string& title = "", Uint32 flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+		static void create(const std::string& title = "", uint32_t flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
 		static void destroyAll();
 		static bool processEvents(double delta);
 		static bool isInsideRenderWindow(int32_t x, int32_t y);

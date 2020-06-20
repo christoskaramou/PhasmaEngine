@@ -1,6 +1,6 @@
 #pragma once
 #include "../Model/Object.h"
-#include "../Pipeline/Pipeline.h"
+#include "../Renderer/Pipeline.h"
 
 namespace vk
 {

@@ -115,7 +115,7 @@ namespace vm
 		VulkanContext::get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
 	}
 
-	void SSAO::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, Image& image)
+	void SSAO::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Image& image)
 	{
 		// SSAO image
 		vk::ClearValue clearColor;
@@ -132,14 +132,14 @@ namespace vm
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
 
-		changeLayout(cmd, image, LayoutState::ColorWrite);
+		image.changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
 		const vk::DescriptorSet descriptorSets = { DSet.Value() };
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, descriptorSets, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
-		changeLayout(cmd, image, LayoutState::ColorRead);
+		image.changeLayout(cmd, LayoutState::ColorRead);
 
 		// new blurry SSAO image
 		rpi.renderPass = *blurRenderPass;

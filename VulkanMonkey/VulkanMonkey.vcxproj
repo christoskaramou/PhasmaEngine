@@ -243,7 +243,6 @@
     <ClInclude Include="Code\Model\Model.h" />
     <ClInclude Include="Code\Model\Object.h" />
     <ClInclude Include="Code\Model\StreamReader.h" />
-    <ClInclude Include="Code\Pipeline\Pipeline.h" />
     <ClInclude Include="Code\PostProcess\Bloom.h" />
     <ClInclude Include="Code\PostProcess\DOF.h" />
     <ClInclude Include="Code\PostProcess\FXAA.h" />
@@ -252,6 +251,7 @@
     <ClInclude Include="Code\PostProcess\SSR.h" />
     <ClInclude Include="Code\PostProcess\TAA.h" />
     <ClInclude Include="Code\Renderer\Framebuffer.h" />
+    <ClInclude Include="Code\Renderer\Pipeline.h" />
     <ClInclude Include="Code\Renderer\Renderer.h" />
     <ClInclude Include="Code\Renderer\RenderPass.h" />
     <ClInclude Include="Code\Script\Script.h" />
@@ -293,7 +293,6 @@
     <ClCompile Include="Code\Model\Mesh.cpp" />
     <ClCompile Include="Code\Model\Model.cpp" />
     <ClCompile Include="Code\Model\Object.cpp" />
-    <ClCompile Include="Code\Pipeline\Pipeline.cpp" />
     <ClCompile Include="Code\PostProcess\Bloom.cpp" />
     <ClCompile Include="Code\PostProcess\DOF.cpp" />
     <ClCompile Include="Code\PostProcess\FXAA.cpp" />
@@ -302,6 +301,7 @@
     <ClCompile Include="Code\PostProcess\SSR.cpp" />
     <ClCompile Include="Code\PostProcess\TAA.cpp" />
     <ClCompile Include="Code\Renderer\Framebuffer.cpp" />
+    <ClCompile Include="Code\Renderer\Pipeline.cpp" />
     <ClCompile Include="Code\Renderer\Renderer.cpp" />
     <ClCompile Include="Code\Renderer\RenderPass.cpp" />
     <ClCompile Include="Code\Script\Script.cpp" />

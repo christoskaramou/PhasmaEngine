@@ -68,59 +68,6 @@ namespace vm
 		VulkanContext::remove();
 	}
 
-	void Renderer::changeLayout(vk::CommandBuffer cmd, Image& image, LayoutState state)
-	{
-		if (state != image.layoutState.Value()) {
-			if (state == LayoutState::ColorRead) {
-				image.transitionImageLayout(
-					cmd,
-					vk::ImageLayout::eColorAttachmentOptimal,
-					vk::ImageLayout::eShaderReadOnlyOptimal,
-					vk::PipelineStageFlagBits::eColorAttachmentOutput,
-					vk::PipelineStageFlagBits::eFragmentShader,
-					vk::AccessFlagBits::eColorAttachmentWrite,
-					vk::AccessFlagBits::eShaderRead,
-					vk::ImageAspectFlagBits::eColor
-				);
-			}
-			else if (state == LayoutState::ColorWrite) {
-				image.transitionImageLayout(
-					cmd,
-					vk::ImageLayout::eShaderReadOnlyOptimal,
-					vk::ImageLayout::eColorAttachmentOptimal,
-					vk::PipelineStageFlagBits::eFragmentShader,
-					vk::PipelineStageFlagBits::eColorAttachmentOutput,
-					vk::AccessFlagBits::eShaderRead,
-					vk::AccessFlagBits::eColorAttachmentWrite,
-					vk::ImageAspectFlagBits::eColor
-				);
-			}
-			else if (state == LayoutState::DepthRead) {
-				image.transitionImageLayout(
-					cmd,
-					vk::ImageLayout::eDepthStencilAttachmentOptimal,
-					vk::ImageLayout::eDepthStencilReadOnlyOptimal,
-					vk::PipelineStageFlagBits::eEarlyFragmentTests,
-					vk::PipelineStageFlagBits::eFragmentShader,
-					vk::AccessFlagBits::eDepthStencilAttachmentWrite,
-					vk::AccessFlagBits::eShaderRead,
-					vk::ImageAspectFlagBits::eDepth);
-			}
-			else if (state == LayoutState::DepthWrite) {
-				image.transitionImageLayout(
-					cmd,
-					vk::ImageLayout::eDepthStencilReadOnlyOptimal,
-					vk::ImageLayout::eDepthStencilAttachmentOptimal,
-					vk::PipelineStageFlagBits::eFragmentShader,
-					vk::PipelineStageFlagBits::eEarlyFragmentTests,
-					vk::AccessFlagBits::eShaderRead,
-					vk::AccessFlagBits::eDepthStencilAttachmentWrite,
-					vk::ImageAspectFlagBits::eDepth);
-			}
-			image.layoutState = state;
-		}
-	}
-
 	void Renderer::checkQueue() const
 	{
 		for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();) {
@@ -305,34 +252,33 @@ namespace vm
 		ctx.deferred.batchEnd();
 		ctx.metrics[2].end(&GUI::metrics[2]);
 
-		changeLayout(cmd, ctx.renderTargets["albedo"], LayoutState::ColorRead);
-		changeLayout(cmd, ctx.renderTargets["depth"], LayoutState::ColorRead);
-		changeLayout(cmd, ctx.renderTargets["normal"], LayoutState::ColorRead);
-		changeLayout(cmd, ctx.renderTargets["srm"], LayoutState::ColorRead);
-		changeLayout(cmd, ctx.renderTargets["emissive"], LayoutState::ColorRead);
-		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::ColorRead);
-		changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::ColorRead);
-		changeLayout(cmd, ctx.renderTargets["velocity"], LayoutState::ColorRead);
-		changeLayout(cmd, ctx.renderTargets["taa"], LayoutState::ColorRead);
+		ctx.renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorRead);
+		ctx.renderTargets["depth"].changeLayout(cmd, LayoutState::ColorRead);
+		ctx.renderTargets["normal"].changeLayout(cmd, LayoutState::ColorRead);
+		ctx.renderTargets["srm"].changeLayout(cmd, LayoutState::ColorRead);
+		ctx.renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorRead);
+		ctx.renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorRead);
+		ctx.renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorRead);
+		ctx.renderTargets["velocity"].changeLayout(cmd, LayoutState::ColorRead);
+		ctx.renderTargets["taa"].changeLayout(cmd, LayoutState::ColorRead);
 		for (auto& image : ctx.shadows.textures)
-			changeLayout(cmd, image, LayoutState::DepthRead);
+			image.changeLayout(cmd, LayoutState::DepthRead);
 
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao) {
 			ctx.metrics[3].start(&cmd);
-			changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::ColorWrite);
-			//const auto changeLayoutFunc = std::bind(&Renderer::changeLayout, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-			ctx.ssao.draw(cmd, imageIndex, changeLayout, ctx.renderTargets["ssao"]);
-			changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::ColorRead);
+			ctx.renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorWrite);
+			ctx.ssao.draw(cmd, imageIndex, ctx.renderTargets["ssao"]);
+			ctx.renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorRead);
 			ctx.metrics[3].end(&GUI::metrics[3]);
 		}
 
 		// SCREEN SPACE REFLECTIONS
 		if (GUI::show_ssr) {
 			ctx.metrics[4].start(&cmd);
-			changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::ColorWrite);
+			ctx.renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorWrite);
 			ctx.ssr.draw(cmd, imageIndex, ctx.renderTargets["ssr"].extent.Value());
-			changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::ColorRead);
+			ctx.renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorRead);
 			ctx.metrics[4].end(&GUI::metrics[4]);
 		}
 
@@ -346,7 +292,7 @@ namespace vm
 			if (GUI::use_TAA) {
 				ctx.metrics[6].start(&cmd);
 				ctx.taa.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-				ctx.taa.draw(cmd, imageIndex, changeLayout, ctx.renderTargets);
+				ctx.taa.draw(cmd, imageIndex, ctx.renderTargets);
 				ctx.metrics[6].end(&GUI::metrics[6]);
 			}
 			// FXAA
@@ -362,7 +308,7 @@ namespace vm
 		if (GUI::show_Bloom) {
 			ctx.metrics[7].start(&cmd);
 			ctx.bloom.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-			ctx.bloom.draw(cmd, imageIndex, static_cast<uint32_t>(VulkanContext::get()->swapchain.images.size()), changeLayout, ctx.renderTargets);
+			ctx.bloom.draw(cmd, imageIndex, ctx.renderTargets);
 			ctx.metrics[7].end(&GUI::metrics[7]);
 		}
 
@@ -382,17 +328,17 @@ namespace vm
 			ctx.metrics[9].end(&GUI::metrics[9]);
 		}
 
-		changeLayout(cmd, ctx.renderTargets["albedo"], LayoutState::ColorWrite);
-		changeLayout(cmd, ctx.renderTargets["depth"], LayoutState::ColorWrite);
-		changeLayout(cmd, ctx.renderTargets["normal"], LayoutState::ColorWrite);
-		changeLayout(cmd, ctx.renderTargets["srm"], LayoutState::ColorWrite);
-		changeLayout(cmd, ctx.renderTargets["emissive"], LayoutState::ColorWrite);
-		changeLayout(cmd, ctx.renderTargets["ssr"], LayoutState::ColorWrite);
-		changeLayout(cmd, ctx.renderTargets["ssaoBlur"], LayoutState::ColorWrite);
-		changeLayout(cmd, ctx.renderTargets["velocity"], LayoutState::ColorWrite);
-		changeLayout(cmd, ctx.renderTargets["taa"], LayoutState::ColorWrite);
+		ctx.renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorWrite);
+		ctx.renderTargets["depth"].changeLayout(cmd, LayoutState::ColorWrite);
+		ctx.renderTargets["normal"].changeLayout(cmd, LayoutState::ColorWrite);
+		ctx.renderTargets["srm"].changeLayout(cmd, LayoutState::ColorWrite);
+		ctx.renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorWrite);
+		ctx.renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorWrite);
+		ctx.renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorWrite);
+		ctx.renderTargets["velocity"].changeLayout(cmd, LayoutState::ColorWrite);
+		ctx.renderTargets["taa"].changeLayout(cmd, LayoutState::ColorWrite);
 		for (auto& image : ctx.shadows.textures)
-			changeLayout(cmd, image, LayoutState::DepthWrite);
+			image.changeLayout(cmd, LayoutState::DepthWrite);
 
 		// GUI
 		ctx.metrics[10].start(&cmd);

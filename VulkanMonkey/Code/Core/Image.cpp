@@ -253,6 +253,59 @@ namespace vm
 		VulkanContext::get()->device->freeCommandBuffers(VulkanContext::get()->commandPool2.Value(), commandBuffer);
 	}
 
+	void Image::changeLayout(const vk::CommandBuffer& cmd, LayoutState state) const
+	{
+		if (state != layoutState.Value()) {
+			if (state == LayoutState::ColorRead) {
+				transitionImageLayout(
+					cmd,
+					vk::ImageLayout::eColorAttachmentOptimal,
+					vk::ImageLayout::eShaderReadOnlyOptimal,
+					vk::PipelineStageFlagBits::eColorAttachmentOutput,
+					vk::PipelineStageFlagBits::eFragmentShader,
+					vk::AccessFlagBits::eColorAttachmentWrite,
+					vk::AccessFlagBits::eShaderRead,
+					vk::ImageAspectFlagBits::eColor
+				);
+			}
+			else if (state == LayoutState::ColorWrite) {
+				transitionImageLayout(
+					cmd,
+					vk::ImageLayout::eShaderReadOnlyOptimal,
+					vk::ImageLayout::eColorAttachmentOptimal,
+					vk::PipelineStageFlagBits::eFragmentShader,
+					vk::PipelineStageFlagBits::eColorAttachmentOutput,
+					vk::AccessFlagBits::eShaderRead,
+					vk::AccessFlagBits::eColorAttachmentWrite,
+					vk::ImageAspectFlagBits::eColor
+				);
+			}
+			else if (state == LayoutState::DepthRead) {
+				transitionImageLayout(
+					cmd,
+					vk::ImageLayout::eDepthStencilAttachmentOptimal,
+					vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+					vk::PipelineStageFlagBits::eEarlyFragmentTests,
+					vk::PipelineStageFlagBits::eFragmentShader,
+					vk::AccessFlagBits::eDepthStencilAttachmentWrite,
+					vk::AccessFlagBits::eShaderRead,
+					vk::ImageAspectFlagBits::eDepth);
+			}
+			else if (state == LayoutState::DepthWrite) {
+				transitionImageLayout(
+					cmd,
+					vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+					vk::ImageLayout::eDepthStencilAttachmentOptimal,
+					vk::PipelineStageFlagBits::eFragmentShader,
+					vk::PipelineStageFlagBits::eEarlyFragmentTests,
+					vk::AccessFlagBits::eShaderRead,
+					vk::AccessFlagBits::eDepthStencilAttachmentWrite,
+					vk::ImageAspectFlagBits::eDepth);
+			}
+			*layoutState = state;
+		}
+	}
+
 	void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer) const
 	{
 		vk::CommandBufferAllocateInfo allocInfo;
@@ -284,6 +337,64 @@ namespace vm
 		VulkanContext::get()->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
 		VulkanContext::get()->device->freeCommandBuffers(VulkanContext::get()->commandPool2.Value(), commandBuffer);
+	}
+
+	void Image::copyColorAttachment(const vk::CommandBuffer& cmd, Image& renderedImage) const
+	{
+		transitionImageLayout(
+			cmd,
+			vk::ImageLayout::eShaderReadOnlyOptimal,
+			vk::ImageLayout::eTransferDstOptimal,
+			vk::PipelineStageFlagBits::eFragmentShader,
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::AccessFlagBits::eShaderRead,
+			vk::AccessFlagBits::eTransferWrite,
+			vk::ImageAspectFlagBits::eColor);
+		renderedImage.transitionImageLayout(
+			cmd,
+			vk::ImageLayout::eColorAttachmentOptimal,
+			vk::ImageLayout::eTransferSrcOptimal,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::AccessFlagBits::eColorAttachmentWrite,
+			vk::AccessFlagBits::eTransferRead,
+			vk::ImageAspectFlagBits::eColor);
+
+		// copy the image
+		vk::ImageCopy region;
+		region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		region.srcSubresource.layerCount = 1;
+		region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		region.dstSubresource.layerCount = 1;
+		region.extent.width = renderedImage.width.Value();
+		region.extent.height = renderedImage.height.Value();
+		region.extent.depth = 1;
+
+		cmd.copyImage(
+			renderedImage.image.Value(),
+			vk::ImageLayout::eTransferSrcOptimal,
+			image.Value(),
+			vk::ImageLayout::eTransferDstOptimal,
+			region);
+
+		transitionImageLayout(
+			cmd,
+			vk::ImageLayout::eTransferDstOptimal,
+			vk::ImageLayout::eShaderReadOnlyOptimal,
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eFragmentShader,
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eShaderRead,
+			vk::ImageAspectFlagBits::eColor);
+		renderedImage.transitionImageLayout(
+			cmd,
+			vk::ImageLayout::eTransferSrcOptimal,
+			vk::ImageLayout::eColorAttachmentOptimal,
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::AccessFlagBits::eTransferRead,
+			vk::AccessFlagBits::eColorAttachmentWrite,
+			vk::ImageAspectFlagBits::eColor);
 	}
 
 	void Image::generateMipMaps() const

@@ -117,9 +117,6 @@
     <ClInclude Include="Code\Model\Model.h">
       <Filter>Code\Model</Filter>
     </ClInclude>
-    <ClInclude Include="Code\Pipeline\Pipeline.h">
-      <Filter>Code\Pipeline</Filter>
-    </ClInclude>
     <ClInclude Include="Code\Renderer\Renderer.h">
       <Filter>Code\Renderer</Filter>
     </ClInclude>
@@ -264,6 +261,9 @@
     <ClInclude Include="Code\Core\Surface.h">
       <Filter>Code\Core</Filter>
     </ClInclude>
+    <ClInclude Include="Code\Renderer\Pipeline.h">
+      <Filter>Code\Renderer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Camera\Camera.cpp">
@@ -286,9 +286,6 @@
     </ClCompile>
     <ClCompile Include="Code\Model\Model.cpp">
       <Filter>Code\Model</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Pipeline\Pipeline.cpp">
-      <Filter>Code\Pipeline</Filter>
     </ClCompile>
     <ClCompile Include="Code\Renderer\Renderer.cpp">
       <Filter>Code\Renderer</Filter>
@@ -467,6 +464,9 @@
     <ClCompile Include="Code\Core\Surface.cpp">
       <Filter>Code\Core</Filter>
     </ClCompile>
+    <ClCompile Include="Code\Renderer\Pipeline.cpp">
+      <Filter>Code\Renderer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source">
@@ -498,9 +498,6 @@
     </Filter>
     <Filter Include="Code\Model">
       <UniqueIdentifier>{8a93bf13-b615-4a3f-b290-fb36b2984127}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Code\Pipeline">
-      <UniqueIdentifier>{09305895-199e-4415-b8e7-aef4015d8fc1}</UniqueIdentifier>
     </Filter>
     <Filter Include="Code\Renderer">
       <UniqueIdentifier>{24ef02e3-637a-4d1f-827f-184f0f578d41}</UniqueIdentifier>

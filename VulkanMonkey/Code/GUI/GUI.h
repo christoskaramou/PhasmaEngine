@@ -1,7 +1,7 @@
 #pragma once
 #include "../../include/imgui/imgui.h"
 #include "../Model/Object.h"
-#include "../Pipeline/Pipeline.h"
+#include "../Renderer/Pipeline.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
 #include "SDL/SDL.h"

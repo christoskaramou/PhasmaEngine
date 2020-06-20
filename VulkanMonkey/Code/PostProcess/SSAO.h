@@ -1,13 +1,13 @@
 #pragma once
 
 #include "../Core/Buffer.h"
-#include "../Pipeline/Pipeline.h"
+#include "../Renderer/Pipeline.h"
 #include "../Core/Image.h"
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
 #include <map>
-#include <functional>
+#include <string>
 
 namespace vk
 {
@@ -44,7 +44,7 @@ namespace vm
 		void createBlurPipeline(std::map<std::string, Image>& renderTargets);
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, Image& image);
+		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, Image& image);
 		void destroy();
 	};
 }

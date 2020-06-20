@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../Core/Buffer.h"
-#include "../Pipeline/Pipeline.h"
+#include "../Renderer/Pipeline.h"
 #include "../Core/Image.h"
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"

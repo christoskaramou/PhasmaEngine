@@ -1,4 +1,7 @@
 #include "Window.h"
+#include "SDL/SDL.h"
+#include "SDL/SDL_syswm.h"
+#include "SDL/SDL_vulkan.h"
 #include "../Event/Event.h"
 #include "../Console/Console.h"
 #include "../VulkanContext/VulkanContext.h"
@@ -13,7 +16,7 @@ namespace vm
 
 	Window::~Window() {}
 
-	void Window::create(const std::string& title, Uint32 flags) // flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN
+	void Window::create(const std::string& title, uint32_t flags)
 	{
 		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) { std::cout << SDL_GetError(); return; }
 

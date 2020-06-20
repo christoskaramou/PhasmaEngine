@@ -41,60 +41,7 @@ namespace vm
 
 	void Bloom::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
 	{
-		frameImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eShaderReadOnlyOptimal,
-			vk::ImageLayout::eTransferDstOptimal,
-			vk::PipelineStageFlagBits::eFragmentShader,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::AccessFlagBits::eShaderRead,
-			vk::AccessFlagBits::eTransferWrite,
-			vk::ImageAspectFlagBits::eColor);
-		renderedImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::ImageLayout::eTransferSrcOptimal,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::AccessFlagBits::eTransferRead,
-			vk::ImageAspectFlagBits::eColor);
-
-		// copy the image
-		vk::ImageCopy region;
-		region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-		region.srcSubresource.layerCount = 1;
-		region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-		region.dstSubresource.layerCount = 1;
-		region.extent.width = renderedImage.width.Value();
-		region.extent.height = renderedImage.height.Value();
-		region.extent.depth = 1;
-
-		cmd.copyImage(
-			renderedImage.image.Value(),
-			vk::ImageLayout::eTransferSrcOptimal,
-			frameImage.image.Value(),
-			vk::ImageLayout::eTransferDstOptimal,
-			region);
-
-		frameImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eTransferDstOptimal,
-			vk::ImageLayout::eShaderReadOnlyOptimal,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eFragmentShader,
-			vk::AccessFlagBits::eTransferWrite,
-			vk::AccessFlagBits::eShaderRead,
-			vk::ImageAspectFlagBits::eColor);
-		renderedImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eTransferSrcOptimal,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::AccessFlagBits::eTransferRead,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::ImageAspectFlagBits::eColor);
+		frameImage.copyColorAttachment(cmd, renderedImage);
 	}
 
 	void vm::Bloom::createRenderPasses(std::map<std::string, Image>& renderTargets)
@@ -193,8 +140,10 @@ namespace vm
 		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 
-	void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImages, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets)
+	void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{
+		uint32_t totalImages = static_cast<uint32_t>(VulkanContext::get()->swapchain.images.size());
+
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
@@ -210,37 +159,37 @@ namespace vm
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
 
-		changeLayout(cmd, renderTargets["brightFilter"], LayoutState::ColorWrite);
+		renderTargets["brightFilter"].changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(pipelineBrightFilter.pipeinfo->layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineBrightFilter.pipeline);
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo->layout, 0, DSBrightFilter.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
-		changeLayout(cmd, renderTargets["brightFilter"], LayoutState::ColorRead);
+		renderTargets["brightFilter"].changeLayout(cmd, LayoutState::ColorRead);
 
 		rpi.renderPass = *renderPassGaussianBlur;
 		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)];
 
-		changeLayout(cmd, renderTargets["gaussianBlurHorizontal"], LayoutState::ColorWrite);
+		renderTargets["gaussianBlurHorizontal"].changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(pipelineGaussianBlurHorizontal.pipeinfo->layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineGaussianBlurHorizontal.pipeline);
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBrightFilter.pipeinfo->layout, 0, DSGaussianBlurHorizontal.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
-		changeLayout(cmd, renderTargets["gaussianBlurHorizontal"], LayoutState::ColorRead);
+		renderTargets["gaussianBlurHorizontal"].changeLayout(cmd, LayoutState::ColorRead);
 
 		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)];
 
-		changeLayout(cmd, renderTargets["gaussianBlurVertical"], LayoutState::ColorWrite);
+		renderTargets["gaussianBlurVertical"].changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(pipelineGaussianBlurVertical.pipeinfo->layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineGaussianBlurVertical.pipeline);
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineGaussianBlurVertical.pipeinfo->layout, 0, DSGaussianBlurVertical.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
-		changeLayout(cmd, renderTargets["gaussianBlurVertical"], LayoutState::ColorRead);
+		renderTargets["gaussianBlurVertical"].changeLayout(cmd, LayoutState::ColorRead);
 
 		rpi.renderPass = *renderPassCombine;
 		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)];

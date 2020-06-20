@@ -109,7 +109,7 @@ namespace vm
 		VulkanContext::get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
 	}
 
-	void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets)
+	void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -125,13 +125,13 @@ namespace vm
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
 
-		changeLayout(cmd, renderTargets["taa"], LayoutState::ColorWrite);
+		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, DSet.Value(), nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
-		changeLayout(cmd, renderTargets["taa"], LayoutState::ColorRead);
+		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorRead);
 
 		saveImage(cmd, renderTargets["taa"]);
 
@@ -499,60 +499,7 @@ namespace vm
 
 	void TAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
 	{
-		frameImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eShaderReadOnlyOptimal,
-			vk::ImageLayout::eTransferDstOptimal,
-			vk::PipelineStageFlagBits::eFragmentShader,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::AccessFlagBits::eShaderRead,
-			vk::AccessFlagBits::eTransferWrite,
-			vk::ImageAspectFlagBits::eColor);
-		renderedImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::ImageLayout::eTransferSrcOptimal,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::AccessFlagBits::eTransferRead,
-			vk::ImageAspectFlagBits::eColor);
-
-		// copy the image
-		vk::ImageCopy region;
-		region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-		region.srcSubresource.layerCount = 1;
-		region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-		region.dstSubresource.layerCount = 1;
-		region.extent.width = renderedImage.width.Value();
-		region.extent.height = renderedImage.height.Value();
-		region.extent.depth = 1;
-
-		cmd.copyImage(
-			renderedImage.image.Value(),
-			vk::ImageLayout::eTransferSrcOptimal,
-			frameImage.image.Value(),
-			vk::ImageLayout::eTransferDstOptimal,
-			region);
-
-		frameImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eTransferDstOptimal,
-			vk::ImageLayout::eShaderReadOnlyOptimal,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eFragmentShader,
-			vk::AccessFlagBits::eTransferWrite,
-			vk::AccessFlagBits::eShaderRead,
-			vk::ImageAspectFlagBits::eColor);
-		renderedImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eTransferSrcOptimal,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::AccessFlagBits::eTransferRead,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::ImageAspectFlagBits::eColor);
+		frameImage.copyColorAttachment(cmd, renderedImage);
 	}
 
 	void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source) const

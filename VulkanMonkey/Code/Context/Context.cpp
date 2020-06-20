@@ -4,6 +4,7 @@
 #include "../Core/Math.h"
 #include <filesystem>
 #include <iostream>
+#include "SDL/SDL_vulkan.h"
 #include "../VulkanContext/VulkanContext.h"
 #include <vulkan/vulkan.hpp>
 

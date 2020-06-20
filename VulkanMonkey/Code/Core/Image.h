@@ -94,7 +94,9 @@ namespace vm
 		void createImage(uint32_t width, uint32_t height, vk::ImageTiling tiling, const vk::ImageUsageFlags& usage, const vk::MemoryPropertyFlags& properties);
 		void createImageView(const vk::ImageAspectFlags& aspectFlags);
 		void transitionImageLayout(vk::ImageLayout oldLayout, vk::ImageLayout newLayout) const;
+		void changeLayout(const vk::CommandBuffer& cmd, LayoutState state) const;
 		void copyBufferToImage(vk::Buffer buffer, uint32_t baseLayer = 0) const;
+		void copyColorAttachment(const vk::CommandBuffer& cmd, Image& renderedImage) const;
 		void generateMipMaps() const;
 		void createSampler();
 		void destroy();

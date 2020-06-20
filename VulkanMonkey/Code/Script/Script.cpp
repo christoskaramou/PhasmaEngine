@@ -30,7 +30,8 @@ namespace vm
 
 	Script::Script(const char* file, const char* extension)
 	{
-		if (!initialized) Init();
+		if (!initialized)
+			Init();
 
 		name = file;
 		ext = extension;

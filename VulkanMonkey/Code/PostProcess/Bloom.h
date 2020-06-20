@@ -1,11 +1,11 @@
 #pragma once
 
 #include "../Core/Image.h"
-#include "../Pipeline/Pipeline.h"
+#include "../Renderer/Pipeline.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
-#include <functional>
 #include <map>
+#include <string>
 
 namespace vk
 {
@@ -51,7 +51,7 @@ namespace vm
 		void createCombinePipeline(std::map<std::string, Image>& renderTargets);
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, uint32_t totalImages, std::function<void(vk::CommandBuffer, Image&, LayoutState)>&& changeLayout, std::map<std::string, Image>& renderTargets);
+		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets);
 		void destroy();
 	};
 }

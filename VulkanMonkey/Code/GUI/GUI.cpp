@@ -7,6 +7,7 @@
 #include "../Swapchain/Swapchain.h"
 #include "../Core/Surface.h"
 #include "../Shader/Shader.h"
+#include "SDL/SDL_syswm.h"
 #include "../VulkanContext/VulkanContext.h"
 #include <vulkan/vulkan.hpp>
 
