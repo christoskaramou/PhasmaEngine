@@ -1,8 +1,8 @@
+#include "vulkanPCH.h"
 #include "Light.h"
 #include "Queue.h"
 #include "../GUI/GUI.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

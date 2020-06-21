@@ -1,3 +1,4 @@
+#include "vulkanPCH.h"
 #include "Model.h"
 #include "Mesh.h"
 #include "../Core/Queue.h"
@@ -8,7 +9,6 @@
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 #undef max
 

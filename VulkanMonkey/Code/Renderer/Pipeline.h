@@ -12,8 +12,6 @@ namespace vk
 	enum class DynamicState;
 	class DescriptorSetLayout;
 	class PipelineLayout;
-	struct GraphicsPipelineCreateInfo;
-	struct ComputePipelineCreateInfo;
 }
 
 namespace vm
@@ -39,6 +37,7 @@ namespace vm
 		~PipelineCreateInfo();
 		Shader* pVertShader;
 		Shader* pFragShader;
+		Shader* pCompShader;
 		Ref_t<std::vector<vk::VertexInputBindingDescription>> vertexInputBindingDescriptions;
 		Ref_t<std::vector<vk::VertexInputAttributeDescription>> vertexInputAttributeDescriptions;
 		float width;
@@ -61,9 +60,9 @@ namespace vm
 		PipelineCreateInfo info;
 		Ref_t<vk::Pipeline> pipeline;
 		Ref_t<vk::PipelineLayout> pipelineLayout;
-		Ref_t<vk::ComputePipelineCreateInfo> compinfo;
 
 		void createGraphicsPipeline();
+		void createComputePipeline();
 		void destroy();
 
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutComposition();
@@ -84,5 +83,6 @@ namespace vm
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutPrimitive();
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutModel();
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutSkybox();
+		static vk::DescriptorSetLayout& getDescriptorSetLayoutCompute();
 	};
 }

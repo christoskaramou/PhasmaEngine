@@ -1,36 +1,14 @@
+#include "vulkanPCH.h"
 #include "Compute.h"
 #include "../Shader/Shader.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
-#include <deque>
 
 namespace vm
 {
-	const vk::DescriptorSetLayout& Compute::getDescriptorLayout()
-	{
-		if (!DSLayoutCompute.Value()) {
-			auto const setLayoutBinding = [](uint32_t binding) {
-				return vk::DescriptorSetLayoutBinding{ binding, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute, nullptr };
-			};
-
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				setLayoutBinding(0), // in
-				setLayoutBinding(1)  // out
-			};
-
-			vk::DescriptorSetLayoutCreateInfo dlci;
-			dlci.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			dlci.pBindings = setLayoutBindings.data();
-			DSLayoutCompute = VulkanContext::get()->device->createDescriptorSetLayout(dlci);
-		}
-		return DSLayoutCompute.Value();
-	}
-
 	Compute::Compute()
 	{
 		fence = vk::Fence();
 		DSCompute = vk::DescriptorSet();
-		DSLayoutCompute = vk::DescriptorSetLayout();
 		commandBuffer = vk::CommandBuffer();
 	}
 
@@ -58,7 +36,7 @@ namespace vm
 
 		//ctx.metrics[13].start(cmd);
 		cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.compinfo->layout, 0, DSCompute.Value(), nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.pipelineLayout.Value(), 0, DSCompute.Value(), nullptr);
 		cmd.dispatch(sizeX, sizeY, sizeZ);
 		//ctx.metrics[13].end(&GUI::metrics[13]);
 
@@ -97,7 +75,7 @@ namespace vm
 		vk::DescriptorSetAllocateInfo allocInfo;
 		allocInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &getDescriptorLayout();
+		allocInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutCompute();
 		DSCompute = VulkanContext::get()->device->allocateDescriptorSets(allocInfo).at(0);
 	}
 
@@ -118,21 +96,12 @@ namespace vm
 	void Compute::createPipeline()
 	{
 		Shader comp{ "shaders/Compute/shader.comp", ShaderType::Compute, true };
-		vk::ShaderModuleCreateInfo csmci;
-		csmci.codeSize = comp.byte_size();
-		csmci.pCode = comp.get_spriv();
+		
+		pipeline.info.pCompShader = &comp;
+		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutCompute() };
 
-		vk::PipelineLayoutCreateInfo plci;
-		plci.setLayoutCount = 1;
-		plci.pSetLayouts = &getDescriptorLayout();
+		pipeline.createComputePipeline();
 
-		auto sm = VulkanContext::get()->device->createShaderModuleUnique(csmci);
-
-		pipeline.compinfo->stage.module = sm.get();
-		pipeline.compinfo->stage.pName = "main";
-		pipeline.compinfo->stage.stage = vk::ShaderStageFlagBits::eCompute;
-		pipeline.compinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
-		pipeline.pipeline = VulkanContext::get()->device->createComputePipelines(nullptr, *pipeline.compinfo).at(0);
 	}
 
 	void Compute::destroy()
@@ -144,9 +113,9 @@ namespace vm
 			VulkanContext::get()->device->destroyFence(fence.Value());
 			fence.Invalidate();
 		}
-		if (Compute::DSLayoutCompute.Value()) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Compute::DSLayoutCompute.Value());
-			*Compute::DSLayoutCompute = nullptr;
+		if (Pipeline::getDescriptorSetLayoutCompute()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutCompute());
+			Pipeline::getDescriptorSetLayoutCompute() = nullptr;
 		}
 	}
 

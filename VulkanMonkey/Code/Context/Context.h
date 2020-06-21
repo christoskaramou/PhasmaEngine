@@ -1,6 +1,5 @@
 #pragma once
 
-#include <vector>
 #include "../Core/Image.h"
 #include "../Core/Surface.h"
 #include "../Swapchain/Swapchain.h"

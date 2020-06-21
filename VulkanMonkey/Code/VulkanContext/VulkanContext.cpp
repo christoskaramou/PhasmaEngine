@@ -1,5 +1,5 @@
+#include "vulkanPCH.h"
 #include "VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

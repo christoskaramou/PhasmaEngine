@@ -1,9 +1,9 @@
+#include "vulkanPCH.h"
 #include "Renderer.h"
 #include "../Event/Event.h"
 #include "../Core/Queue.h"
 #include "../Model/Mesh.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

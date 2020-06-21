@@ -1,6 +1,6 @@
+#include "vulkanPCH.h"
 #include "Timer.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 #include <thread>
 
 namespace vm

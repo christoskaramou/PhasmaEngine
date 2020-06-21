@@ -5,11 +5,8 @@
 #include <deque>
 #include <any>
 #include <mutex>
-#include <map>
-#include "Timer.h"
 #include "Buffer.h"
 #include "../MemoryHash/MemoryHash.h"
-#include <iostream>
 
 namespace vm
 {
@@ -42,7 +39,6 @@ namespace vm
 	private:
 		inline static std::vector<CopyRequest> m_async_copy_requests{};
 		inline static std::mutex m_mem_cpy_request_mutex{};
-		inline static std::mutex m_descriptor_cache_mutex{};
 	public:
 		inline static void memcpyRequest(Buffer* buffer, const std::vector<MemoryRange>& ranges)
 		{

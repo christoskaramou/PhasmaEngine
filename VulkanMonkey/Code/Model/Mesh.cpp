@@ -1,8 +1,8 @@
+#include "vulkanPCH.h"
 #include "Mesh.h"
 #include "../Renderer/Pipeline.h"
 #include "../../include/tinygltf/stb_image.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

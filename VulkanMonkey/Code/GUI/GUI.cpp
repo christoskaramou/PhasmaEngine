@@ -1,3 +1,4 @@
+#include "vulkanPCH.h"
 #include "GUI.h"
 #include <filesystem>
 #include "../include/TinyFileDialogs/tinyfiledialogs.h"
@@ -9,7 +10,6 @@
 #include "../Shader/Shader.h"
 #include "SDL/SDL_syswm.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

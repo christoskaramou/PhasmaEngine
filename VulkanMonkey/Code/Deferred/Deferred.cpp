@@ -1,3 +1,4 @@
+#include "vulkanPCH.h"
 #include "Deferred.h"
 #include "../Model/Model.h"
 #include "../Model/Mesh.h"
@@ -10,7 +11,6 @@
 #include <deque>
 #include "../Shader/Reflection.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

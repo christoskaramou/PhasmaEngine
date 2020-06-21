@@ -1,6 +1,6 @@
+#include "vulkanPCH.h"
 #include "Buffer.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

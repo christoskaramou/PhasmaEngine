@@ -264,6 +264,9 @@
     <ClInclude Include="Code\Renderer\Pipeline.h">
       <Filter>Code\Renderer</Filter>
     </ClInclude>
+    <ClInclude Include="Include\vulkanPCH.h">
+      <Filter>Include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Camera\Camera.cpp">
@@ -434,15 +437,6 @@
     <ClCompile Include="Code\Renderer\Framebuffer.cpp">
       <Filter>Code\Renderer</Filter>
     </ClCompile>
-    <ClCompile Include="Code\Core\Buffer.cpp">
-      <Filter>Code\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Core\Image.cpp">
-      <Filter>Code\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Core\Light.cpp">
-      <Filter>Code\Core</Filter>
-    </ClCompile>
     <ClCompile Include="Code\Core\Math.cpp">
       <Filter>Code\Core</Filter>
     </ClCompile>
@@ -452,20 +446,32 @@
     <ClCompile Include="Code\Core\Timer.cpp">
       <Filter>Code\Core</Filter>
     </ClCompile>
-    <ClCompile Include="Code\Core\Vertex.cpp">
-      <Filter>Code\Core</Filter>
-    </ClCompile>
     <ClCompile Include="Code\Model\Mesh.cpp">
       <Filter>Code\Model</Filter>
     </ClCompile>
     <ClCompile Include="Code\Model\Object.cpp">
       <Filter>Code\Model</Filter>
     </ClCompile>
+    <ClCompile Include="Code\Renderer\Pipeline.cpp">
+      <Filter>Code\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Core\Buffer.cpp">
+      <Filter>Code\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Core\Image.cpp">
+      <Filter>Code\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Core\Light.cpp">
+      <Filter>Code\Core</Filter>
+    </ClCompile>
     <ClCompile Include="Code\Core\Surface.cpp">
       <Filter>Code\Core</Filter>
     </ClCompile>
-    <ClCompile Include="Code\Renderer\Pipeline.cpp">
-      <Filter>Code\Renderer</Filter>
+    <ClCompile Include="Code\Core\Vertex.cpp">
+      <Filter>Code\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Include\vulkanPCH.cpp">
+      <Filter>Include</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

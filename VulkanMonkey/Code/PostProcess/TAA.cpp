@@ -1,3 +1,4 @@
+#include "vulkanPCH.h"
 #include "TAA.h"
 #include "../GUI/GUI.h"
 #include "../Core/Surface.h"
@@ -5,7 +6,6 @@
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 #include <deque>
 
 namespace vm

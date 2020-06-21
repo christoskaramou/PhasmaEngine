@@ -1,3 +1,4 @@
+#include "vulkanPCH.h"
 #include "MotionBlur.h"
 #include <deque>
 #include "../Core/Surface.h"
@@ -7,7 +8,6 @@
 #include "../Core/Queue.h"
 #include "../Core/Timer.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

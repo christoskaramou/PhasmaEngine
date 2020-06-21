@@ -2,7 +2,6 @@
 #include "../Core/Buffer.h"
 #include "../Renderer/Pipeline.h"
 #include <deque>
-#include <memory>
 
 namespace vk
 {
@@ -34,10 +33,8 @@ namespace vm
 		Pipeline pipeline;
 		Ref_t<vk::Fence> fence;
 		Ref_t<vk::DescriptorSet> DSCompute;
-		Ref_t<vk::DescriptorSetLayout> DSLayoutCompute;
 		Ref_t<vk::CommandBuffer> commandBuffer;
 
-		const vk::DescriptorSetLayout& getDescriptorLayout();
 		void createPipeline();
 		void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
 		void createDescriptorSet();

@@ -1,9 +1,9 @@
+#include "vulkanPCH.h"
 #include "Skybox.h"
 #include "../Renderer/Pipeline.h"
 #include "../GUI/GUI.h"
 #include "tinygltf/stb_image.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

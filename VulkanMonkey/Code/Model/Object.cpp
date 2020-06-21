@@ -1,7 +1,7 @@
+#include "vulkanPCH.h"
 #include "Object.h"
 #include "tinygltf/stb_image.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 namespace vm
 {

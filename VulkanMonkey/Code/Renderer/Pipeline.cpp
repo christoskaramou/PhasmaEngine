@@ -1,7 +1,7 @@
+#include "vulkanPCH.h"
 #include "Pipeline.h"
 #include "../Shader/Shader.h"
 #include "../VulkanContext/VulkanContext.h"
-#include <vulkan/vulkan.hpp>
 
 namespace vm
 {
@@ -9,6 +9,7 @@ namespace vm
 	{
 		pVertShader = nullptr;
 		pFragShader = nullptr;
+		pCompShader = nullptr;
 		vertexInputBindingDescriptions = std::vector<vk::VertexInputBindingDescription>();
 		vertexInputAttributeDescriptions = std::vector<vk::VertexInputAttributeDescription>();
 		width = 0.f;
@@ -29,7 +30,6 @@ namespace vm
 	{
 		pipeline = vk::Pipeline();
 		pipelineLayout = vk::PipelineLayout();
-		compinfo = vk::ComputePipelineCreateInfo();
 	}
 
 	Pipeline::~Pipeline()
@@ -43,23 +43,24 @@ namespace vm
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = info.pVertShader->byte_size();
 		vsmci.pCode = info.pVertShader->get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
+		vk::UniqueShaderModule vertModule = VulkanContext::get()->device->createShaderModuleUnique(vsmci);
 
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
-		pssci1.module = vertModule;
+		pssci1.module = vertModule.get();
 		pssci1.pName = "main";
 
 		vk::ShaderModuleCreateInfo fsmci;
+		vk::UniqueShaderModule fragModule;
 		vk::PipelineShaderStageCreateInfo pssci2;
-		vk::ShaderModule fragModule;
 		if (info.pFragShader)
 		{
 			fsmci.codeSize = info.pFragShader->byte_size();
 			fsmci.pCode = info.pFragShader->get_spriv();
+			fragModule = VulkanContext::get()->device->createShaderModuleUnique(fsmci);
 
 			pssci2.stage = vk::ShaderStageFlagBits::eFragment;
-			pssci2.module = VulkanContext::get()->device->createShaderModule(fsmci);;
+			pssci2.module = fragModule.get();
 			pssci2.pName = "main";
 		}
 
@@ -183,11 +184,29 @@ namespace vm
 		pipeinfo.basePipelineIndex = -1;
 
 		pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, pipeinfo).at(0);
+	}
 
-		// destroy Shader Modules
-		VulkanContext::get()->device->destroyShaderModule(vertModule);
-		if (fragModule)
-			VulkanContext::get()->device->destroyShaderModule(fragModule);
+	void Pipeline::createComputePipeline()
+	{
+		vk::ComputePipelineCreateInfo compinfo;
+
+		vk::ShaderModuleCreateInfo csmci;
+		csmci.codeSize = info.pCompShader->byte_size();
+		csmci.pCode = info.pCompShader->get_spriv();
+
+		vk::PipelineLayoutCreateInfo plci;
+		plci.setLayoutCount = static_cast<uint32_t>(info.descriptorSetLayouts->size());
+		plci.pSetLayouts = info.descriptorSetLayouts->data();
+
+		vk::UniqueShaderModule module = VulkanContext::get()->device->createShaderModuleUnique(csmci);
+
+		compinfo.stage.module = module.get();
+		compinfo.stage.pName = "main";
+		compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
+		pipelineLayout = VulkanContext::get()->device->createPipelineLayout(plci);
+		compinfo.layout = pipelineLayout.Value();
+
+		pipeline = VulkanContext::get()->device->createComputePipelines(nullptr, compinfo).at(0);
 	}
 
 	void Pipeline::destroy()
@@ -610,6 +629,29 @@ namespace vm
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
+		return DSLayout;
+	}
+
+	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutCompute()
+	{
+		static vk::DescriptorSetLayout DSLayout = nullptr;
+
+		if (!DSLayout) {
+			auto const setLayoutBinding = [](uint32_t binding) {
+				return vk::DescriptorSetLayoutBinding{ binding, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute, nullptr };
+			};
+
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+				setLayoutBinding(0), // in
+				setLayoutBinding(1)  // out
+			};
+
+			vk::DescriptorSetLayoutCreateInfo dlci;
+			dlci.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
+			dlci.pBindings = setLayoutBindings.data();
+			DSLayout = VulkanContext::get()->device->createDescriptorSetLayout(dlci);
+		}
+
 		return DSLayout;
 	}
 }
