@@ -12,7 +12,6 @@
 namespace vk
 {
 	class DescriptorSet;
-	class DescriptorSetLayout;
 	class CommandBuffer;
 }
 
@@ -32,7 +31,6 @@ namespace vm
 		Pipeline pipeline;
 		Pipeline pipelineBlur;
 		Ref_t<vk::DescriptorSet> DSet, DSBlur;
-		Ref_t<vk::DescriptorSetLayout> DSLayout, DSLayoutBlur;
 
 		void update(Camera& camera);
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);

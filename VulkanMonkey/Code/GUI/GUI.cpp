@@ -855,8 +855,8 @@ namespace vm
 			cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 			const vk::DeviceSize offset{ 0 };
-			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
-			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipeinfo->layout, 0, descriptorSet.Value(), nullptr);
+			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline.Value());
+			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout.Value(), 0, descriptorSet.Value(), nullptr);
 			cmd.bindVertexBuffers(0, vertexBuffer.buffer.Value(), offset);
 			cmd.bindIndexBuffer(indexBuffer.buffer.Value(), 0, vk::IndexType::eUint32);
 
@@ -874,7 +874,7 @@ namespace vm
 			data[1] = 2.0f / draw_data->DisplaySize.y;				// scale
 			data[2] = -1.0f - draw_data->DisplayPos.x * data[0];	// transform
 			data[3] = -1.0f - draw_data->DisplayPos.y * data[1];	// transform
-			cmd.pushConstants<float>(pipeline.pipeinfo->layout, vk::ShaderStageFlagBits::eVertex, 0, data);
+			cmd.pushConstants<float>(pipeline.pipelineLayout.Value(), vk::ShaderStageFlagBits::eVertex, 0, data);
 
 			// Render the command lists:
 			int vtx_offset = 0;
@@ -1188,158 +1188,24 @@ namespace vm
 
 	void GUI::createPipeline()
 	{
-		// Shader stages
 		Shader vert{ "shaders/GUI/shaderGUI.vert", ShaderType::Vertex, true };
 		Shader frag{ "shaders/GUI/shaderGUI.frag", ShaderType::Fragment, true };
 
-		vk::ShaderModuleCreateInfo vsmci;
-		vsmci.codeSize = vert.byte_size();
-		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
+		pipeline.info.pVertShader = &vert;
+		pipeline.info.pFragShader = &frag;
+		pipeline.info.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGUI();
+		pipeline.info.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGUI();
+		pipeline.info.width = WIDTH_f;
+		pipeline.info.height = HEIGHT_f;
+		pipeline.info.cullMode = CullMode::Back;
+		pipeline.info.colorBlendAttachments = { VulkanContext::get()->swapchain.images[0].blentAttachment.Value() };
+		pipeline.info.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+		pipeline.info.pushConstantStage = PushConstantStage::Vertex;
+		pipeline.info.pushConstantSize = sizeof(float) * 4;
+		pipeline.info.descriptorSetLayouts = { getDescriptorSetLayout(VulkanContext::get()->device.Value()) };
+		pipeline.info.renderPass = renderPass;
 
-		vk::ShaderModuleCreateInfo fsmci;
-		fsmci.codeSize = frag.byte_size();
-		fsmci.pCode = frag.get_spriv();
-		vk::ShaderModule fragModule = VulkanContext::get()->device->createShaderModule(fsmci);
-
-		vk::PipelineShaderStageCreateInfo pssci1;
-		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
-		pssci1.module = vertModule;
-		pssci1.pName = "main";
-
-		vk::PipelineShaderStageCreateInfo pssci2;
-		pssci2.stage = vk::ShaderStageFlagBits::eFragment;
-		pssci2.module = fragModule;
-		pssci2.pName = "main";
-
-		std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1, pssci2 };
-		pipeline.pipeinfo->stageCount = static_cast<uint32_t>(stages.size());
-		pipeline.pipeinfo->pStages = stages.data();
-
-		// Vertex Input state
-		auto vibd = Vertex::getBindingDescriptionGUI();
-		auto viad = Vertex::getAttributeDescriptionGUI();
-		vk::PipelineVertexInputStateCreateInfo pvisci;
-		pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(vibd.size());
-		pvisci.pVertexBindingDescriptions = vibd.data();
-		pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(viad.size());
-		pvisci.pVertexAttributeDescriptions = viad.data();
-		pipeline.pipeinfo->pVertexInputState = &pvisci;
-
-		// Input Assembly stage
-		vk::PipelineInputAssemblyStateCreateInfo piasci;
-		piasci.topology = vk::PrimitiveTopology::eTriangleList;
-		piasci.primitiveRestartEnable = VK_FALSE;
-		pipeline.pipeinfo->pInputAssemblyState = &piasci;
-
-		// Viewports and Scissors
-		vk::Viewport vp;
-		vp.x = 0.0f;
-		vp.y = 0.0f;
-		vp.width = WIDTH_f;
-		vp.height = HEIGHT_f;
-		vp.minDepth = 0.f;
-		vp.maxDepth = 1.f;
-
-		vk::Rect2D r2d;
-		r2d.extent = vk::Extent2D{ WIDTH, HEIGHT };
-
-		vk::PipelineViewportStateCreateInfo pvsci;
-		pvsci.viewportCount = 1;
-		pvsci.pViewports = &vp;
-		pvsci.scissorCount = 1;
-		pvsci.pScissors = &r2d;
-		pipeline.pipeinfo->pViewportState = &pvsci;
-
-		// Rasterization state
-		vk::PipelineRasterizationStateCreateInfo prsci;
-		prsci.depthClampEnable = VK_FALSE;
-		prsci.rasterizerDiscardEnable = VK_FALSE;
-		prsci.polygonMode = vk::PolygonMode::eFill;
-		prsci.cullMode = vk::CullModeFlagBits::eBack;
-		prsci.frontFace = vk::FrontFace::eClockwise;
-		prsci.depthBiasEnable = VK_FALSE;
-		prsci.depthBiasConstantFactor = 0.0f;
-		prsci.depthBiasClamp = 0.0f;
-		prsci.depthBiasSlopeFactor = 0.0f;
-		prsci.lineWidth = 1.0f;
-		pipeline.pipeinfo->pRasterizationState = &prsci;
-
-		// Multisample state
-		vk::PipelineMultisampleStateCreateInfo pmsci;
-		pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
-		pmsci.sampleShadingEnable = VK_FALSE;
-		pmsci.minSampleShading = 1.0f;
-		pmsci.pSampleMask = nullptr;
-		pmsci.alphaToCoverageEnable = VK_FALSE;
-		pmsci.alphaToOneEnable = VK_FALSE;
-		pipeline.pipeinfo->pMultisampleState = &pmsci;
-
-		// Depth stencil state
-		vk::PipelineDepthStencilStateCreateInfo pdssci;
-		pdssci.depthTestEnable = VK_TRUE;
-		pdssci.depthWriteEnable = VK_TRUE;
-		pdssci.depthCompareOp = vk::CompareOp::eGreater;
-		pdssci.depthBoundsTestEnable = VK_FALSE;
-		pdssci.stencilTestEnable = VK_FALSE;
-		pdssci.front.compareOp = vk::CompareOp::eAlways;
-		pdssci.back.compareOp = vk::CompareOp::eAlways;
-		pdssci.minDepthBounds = 0.0f;
-		pdssci.maxDepthBounds = 0.0f;
-		pipeline.pipeinfo->pDepthStencilState = &pdssci;
-
-		// Color Blending state
-		VulkanContext::get()->swapchain.images[0].blentAttachment->blendEnable = VK_TRUE;
-		std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
-			VulkanContext::get()->swapchain.images[0].blentAttachment.Value()
-		};
-		vk::PipelineColorBlendStateCreateInfo pcbsci;
-		pcbsci.logicOpEnable = VK_FALSE;
-		pcbsci.logicOp = vk::LogicOp::eCopy;
-		pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
-		pcbsci.pAttachments = colorBlendAttachments.data();
-		float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
-		pipeline.pipeinfo->pColorBlendState = &pcbsci;
-
-		// Dynamic state
-		std::vector<vk::DynamicState> dynamicStates{ vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-		vk::PipelineDynamicStateCreateInfo dsi;
-		dsi.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-		dsi.pDynamicStates = dynamicStates.data();
-		pipeline.pipeinfo->pDynamicState = &dsi;
-
-		// Push Constant Range
-		vk::PushConstantRange pcr;
-		pcr.stageFlags = vk::ShaderStageFlagBits::eVertex;
-		pcr.size = sizeof(float) * 4;
-
-		// Pipeline Layout
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ getDescriptorSetLayout(VulkanContext::get()->device.Value()) };
-		vk::PipelineLayoutCreateInfo plci;
-		plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
-		plci.pSetLayouts = descriptorSetLayouts.data();
-		plci.pushConstantRangeCount = 1;
-		plci.pPushConstantRanges = &pcr;
-		pipeline.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
-
-		// Render Pass
-		pipeline.pipeinfo->renderPass = *renderPass;
-
-		// Subpass
-		pipeline.pipeinfo->subpass = 0;
-
-		// Base Pipeline Handle
-		pipeline.pipeinfo->basePipelineHandle = nullptr;
-
-		// Base Pipeline Index
-		pipeline.pipeinfo->basePipelineIndex = -1;
-
-		pipeline.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
-
-		// destroy Shader Modules
-		VulkanContext::get()->device->destroyShaderModule(vertModule);
-		VulkanContext::get()->device->destroyShaderModule(fragModule);
+		pipeline.createGraphicsPipeline();
 	}
 
 	void GUI::destroy()

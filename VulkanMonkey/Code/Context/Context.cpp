@@ -94,7 +94,7 @@ namespace vm
 		gui.createFrameBuffers();
 
 		// pipelines
-		shadows.createPipeline(*Mesh::getDescriptorSetLayout(), *Model::getDescriptorSetLayout());
+		shadows.createPipeline();
 		ssao.createPipelines(renderTargets);
 		ssr.createPipeline(renderTargets);
 		deferred.createPipelines(renderTargets);
@@ -299,7 +299,7 @@ namespace vm
 		motionBlur.pipeline.destroy();
 		gui.pipeline.destroy();
 
-		shadows.createPipeline(*Mesh::getDescriptorSetLayout(), *Model::getDescriptorSetLayout());
+		shadows.createPipeline();
 		ssao.createPipelines(renderTargets);
 		ssr.createPipeline(renderTargets);
 		deferred.createPipelines(renderTargets);

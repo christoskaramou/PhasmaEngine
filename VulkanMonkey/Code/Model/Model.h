@@ -1,7 +1,6 @@
 #pragma once
 #include "../Core/Buffer.h"
 #include "../Core/Math.h"
-#include "../Renderer/Pipeline.h"
 #include "../Script/Script.h"
 #include "../Camera/Camera.h"
 #include "../Model/Animation.h"
@@ -14,12 +13,13 @@
 namespace vk
 {
 	class CommandBuffer;
-	class DescriptorSetLayout;
 	class DescriptorSet;
 }
 
 namespace vm
 {
+	class Pipeline;
+
 	class Model
 	{
 	public:
@@ -32,8 +32,6 @@ namespace vm
 		static std::vector<Model> models;
 		static Pipeline* pipeline;
 		static Ref_t<vk::CommandBuffer> commandBuffer;
-		static Ref_t<vk::DescriptorSetLayout> descriptorSetLayout;
-		static vk::DescriptorSetLayout* getDescriptorSetLayout();
 		Ref_t<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 		struct UBOModel {

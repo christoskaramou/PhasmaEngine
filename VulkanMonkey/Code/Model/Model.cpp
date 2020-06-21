@@ -1,6 +1,7 @@
 #include "Model.h"
 #include "Mesh.h"
 #include "../Core/Queue.h"
+#include "../Renderer/Pipeline.h"
 #include <iostream>
 #include <future>
 #include <deque>
@@ -15,7 +16,6 @@ namespace vm
 {
 	using namespace Microsoft;
 
-	Ref_t<vk::DescriptorSetLayout> Model::descriptorSetLayout = Ref_t<vk::DescriptorSetLayout>();
 	Ref_t<vk::CommandBuffer> Model::commandBuffer = Ref_t<vk::CommandBuffer>();
 	std::vector<Model> Model::models{};
 	Pipeline* Model::pipeline = nullptr;
@@ -24,8 +24,7 @@ namespace vm
 	{
 		if (!commandBuffer)
 			commandBuffer = vk::CommandBuffer();
-		if (!descriptorSetLayout)
-			descriptorSetLayout = vk::DescriptorSetLayout();
+
 		descriptorSet = vk::DescriptorSet();
 	}
 
@@ -306,27 +305,6 @@ namespace vm
 		createDescriptorSets();
 	}
 
-	vk::DescriptorSetLayout* Model::getDescriptorSetLayout()
-	{
-		if (!descriptorSetLayout)
-			descriptorSetLayout = vk::DescriptorSetLayout();
-
-		if (!descriptorSetLayout.Value()) {
-
-			vk::DescriptorSetLayoutBinding dslb;
-			dslb.binding = 0;
-			dslb.descriptorCount = 1; // number of descriptors contained
-			dslb.descriptorType = vk::DescriptorType::eUniformBuffer;
-			dslb.stageFlags = vk::ShaderStageFlagBits::eVertex;
-
-			vk::DescriptorSetLayoutCreateInfo dslci;
-			dslci.bindingCount = 1;
-			dslci.pBindings = &dslb;
-			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(dslci);
-		}
-		return &*descriptorSetLayout;
-	}
-
 	void Model::updateAnimation(uint32_t index, float time)
 	{
 		if (index > static_cast<uint32_t>(animations.size()) - 1) {
@@ -457,7 +435,7 @@ namespace vm
 			if (node->mesh) {
 				for (auto& primitive : node->mesh->primitives) {
 					if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 1) {
-						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo->layout, 0, { node->mesh->descriptorSet.Value(), primitive.descriptorSet.Value(), descriptorSet.Value() }, nullptr);
+						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipelineLayout.Value(), 0, { node->mesh->descriptorSet.Value(), primitive.descriptorSet.Value(), descriptorSet.Value() }, nullptr);
 						cmd->drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 					}
 				}
@@ -469,7 +447,7 @@ namespace vm
 				for (auto& primitive : node->mesh->primitives) {
 					// ALPHA CUT
 					if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 2) {
-						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo->layout, 0, { node->mesh->descriptorSet.Value(), primitive.descriptorSet.Value(), descriptorSet.Value() }, nullptr);
+						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipelineLayout.Value(), 0, { node->mesh->descriptorSet.Value(), primitive.descriptorSet.Value(), descriptorSet.Value() }, nullptr);
 						cmd->drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 					}
 				}
@@ -481,7 +459,7 @@ namespace vm
 				for (auto& primitive : node->mesh->primitives) {
 					// ALPHA CUT
 					if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 3) {
-						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeinfo->layout, 0, { node->mesh->descriptorSet.Value(), primitive.descriptorSet.Value(), descriptorSet.Value() }, nullptr);
+						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipelineLayout.Value(), 0, { node->mesh->descriptorSet.Value(), primitive.descriptorSet.Value(), descriptorSet.Value() }, nullptr);
 						cmd->drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 					}
 				}
@@ -768,7 +746,7 @@ namespace vm
 		vk::DescriptorSetAllocateInfo allocateInfo0;
 		allocateInfo0.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo0.descriptorSetCount = 1;
-		allocateInfo0.pSetLayouts = getDescriptorSetLayout();
+		allocateInfo0.pSetLayouts = &Pipeline::getDescriptorSetLayoutModel();
 		descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo0).at(0);
 
 		VulkanContext::get()->device->updateDescriptorSets(wSetBuffer(descriptorSet.Value(), 0, uniformBuffer), nullptr);
@@ -782,7 +760,7 @@ namespace vm
 			vk::DescriptorSetAllocateInfo allocateInfo;
 			allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 			allocateInfo.descriptorSetCount = 1;
-			allocateInfo.pSetLayouts = Mesh::getDescriptorSetLayout();
+			allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMesh();
 			mesh->descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 			VulkanContext::get()->device->updateDescriptorSets(wSetBuffer(mesh->descriptorSet.Value(), 0, mesh->uniformBuffer), nullptr);
@@ -793,7 +771,7 @@ namespace vm
 				vk::DescriptorSetAllocateInfo allocateInfo2;
 				allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 				allocateInfo2.descriptorSetCount = 1;
-				allocateInfo2.pSetLayouts = Primitive::getDescriptorSetLayout();
+				allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutPrimitive();
 				primitive.descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0);
 
 				std::vector<vk::WriteDescriptorSet> textureWriteSets{
@@ -818,9 +796,9 @@ namespace vm
 		uniformBuffer.destroy();
 		delete document;
 		delete resourceReader;
-		if (Model::descriptorSetLayout.Value()) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Model::descriptorSetLayout.Value());
-			*Model::descriptorSetLayout = nullptr;
+		if (Pipeline::getDescriptorSetLayoutModel()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
+			Pipeline::getDescriptorSetLayoutModel() = nullptr;
 		}
 		for (auto& node : linearNodes) {
 			if (node->mesh) {

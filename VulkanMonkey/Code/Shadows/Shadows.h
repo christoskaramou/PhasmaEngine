@@ -9,7 +9,6 @@
 
 namespace vk
 {
-	class DescriptorSetLayout;
 	class DescriptorSet;
 }
 
@@ -31,11 +30,9 @@ namespace vm
 		~Shadows();
 		ShadowsUBO shadows_UBO[3]{};
 		static uint32_t imageSize;
-		static Ref_t<vk::DescriptorSetLayout> descriptorSetLayout;
-		static const vk::DescriptorSetLayout& getDescriptorSetLayout();
 		RenderPass renderPass;
 		std::vector<Image> textures{};
-		std::vector<vk::DescriptorSet> descriptorSets{};
+		Ref_t<std::vector<vk::DescriptorSet>> descriptorSets;
 		std::vector<Framebuffer> framebuffers{};
 		std::vector<Buffer> uniformBuffers{};
 		Pipeline pipeline;
@@ -45,7 +42,7 @@ namespace vm
 		void createDescriptorSets();
 		void createRenderPass();
 		void createFrameBuffers();
-		void createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayout model);
+		void createPipeline();
 		void destroy();
 	};
 }

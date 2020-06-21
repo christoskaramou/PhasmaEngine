@@ -9,12 +9,11 @@
 
 namespace vm
 {
-	Ref_t<vk::DescriptorSetLayout> Shadows::descriptorSetLayout = Ref_t<vk::DescriptorSetLayout>();
 	uint32_t Shadows::imageSize = 4096;
 
 	Shadows::Shadows()
 	{
-		descriptorSetLayout = vk::DescriptorSetLayout();
+		descriptorSets = std::vector<vk::DescriptorSet>();
 	}
 
 	Shadows::~Shadows()
@@ -26,11 +25,11 @@ namespace vm
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &*descriptorSetLayout;
+		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutShadows();
 
-		descriptorSets.resize(textures.size()); // size of wanted number of cascaded shadows
-		for (uint32_t i = 0; i < descriptorSets.size(); i++) {
-			descriptorSets[i] = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
+		descriptorSets->resize(textures.size()); // size of wanted number of cascaded shadows
+		for (uint32_t i = 0; i < descriptorSets->size(); i++) {
+			(*descriptorSets)[i] = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 			std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 			// MVP
@@ -39,7 +38,7 @@ namespace vm
 			dbi.offset = 0;
 			dbi.range = sizeof(ShadowsUBO);
 
-			textureWriteSets[0].dstSet = descriptorSets[i];
+			textureWriteSets[0].dstSet = (*descriptorSets)[i];
 			textureWriteSets[0].dstBinding = 0;
 			textureWriteSets[0].dstArrayElement = 0;
 			textureWriteSets[0].descriptorCount = 1;
@@ -52,7 +51,7 @@ namespace vm
 			dii.imageView = textures[i].view.Value();
 			dii.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
 
-			textureWriteSets[1].dstSet = descriptorSets[i];
+			textureWriteSets[1].dstSet = (*descriptorSets)[i];
 			textureWriteSets[1].dstBinding = 1;
 			textureWriteSets[1].dstArrayElement = 0;
 			textureWriteSets[1].descriptorCount = 1;
@@ -121,158 +120,22 @@ namespace vm
 		}
 	}
 
-	void Shadows::createPipeline(vk::DescriptorSetLayout mesh, vk::DescriptorSetLayout model)
+	void Shadows::createPipeline()
 	{
-		// Shader stages
 		Shader vert{ "shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true };
 
-		vk::ShaderModuleCreateInfo vsmci;
-		vsmci.codeSize = vert.byte_size();
-		vsmci.pCode = vert.get_spriv();
-		vk::ShaderModule vertModule = VulkanContext::get()->device->createShaderModule(vsmci);
+		pipeline.info.pVertShader = &vert;
+		pipeline.info.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
+		pipeline.info.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
+		pipeline.info.width = static_cast<float>(Shadows::imageSize);
+		pipeline.info.height = static_cast<float>(Shadows::imageSize);
+		pipeline.info.cullMode = CullMode::Front;
+		pipeline.info.colorBlendAttachments = { textures[0].blentAttachment.Value() };
+		pipeline.info.dynamicStates = { vk::DynamicState::eDepthBias };
+		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutShadows(), Pipeline::getDescriptorSetLayoutMesh(), Pipeline::getDescriptorSetLayoutModel() };
+		pipeline.info.renderPass = renderPass;
 
-		vk::PipelineShaderStageCreateInfo pssci1;
-		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
-		pssci1.module = vertModule;
-		pssci1.pName = "main";
-
-		std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1 };
-		pipeline.pipeinfo->stageCount = static_cast<uint32_t>(stages.size());
-		pipeline.pipeinfo->pStages = stages.data();
-
-		// Vertex Input state
-		auto vibd = Vertex::getBindingDescriptionGeneral();
-		auto viad = Vertex::getAttributeDescriptionGeneral();
-		vk::PipelineVertexInputStateCreateInfo pvisci;
-		pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(vibd.size());
-		pvisci.pVertexBindingDescriptions = vibd.data();
-		pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(viad.size());
-		pvisci.pVertexAttributeDescriptions = viad.data();
-		pipeline.pipeinfo->pVertexInputState = &pvisci;
-
-		// Input Assembly stage
-		vk::PipelineInputAssemblyStateCreateInfo piasci;
-		piasci.topology = vk::PrimitiveTopology::eTriangleList;
-		piasci.primitiveRestartEnable = VK_FALSE;
-		pipeline.pipeinfo->pInputAssemblyState = &piasci;
-
-		// Viewports and Scissors
-		vk::Viewport vp;
-		vp.x = 0.0f;
-		vp.y = 0.0f;
-		vp.width = static_cast<float>(Shadows::imageSize);
-		vp.height = static_cast<float>(Shadows::imageSize);
-		vp.minDepth = 0.f;
-		vp.maxDepth = 1.f;
-
-		vk::Rect2D r2d;
-		r2d.extent = vk::Extent2D{ Shadows::imageSize, Shadows::imageSize };
-
-		vk::PipelineViewportStateCreateInfo pvsci;
-		pvsci.viewportCount = 1;
-		pvsci.pViewports = &vp;
-		pvsci.scissorCount = 1;
-		pvsci.pScissors = &r2d;
-		pipeline.pipeinfo->pViewportState = &pvsci;
-
-		// Rasterization state
-		vk::PipelineRasterizationStateCreateInfo prsci;
-		prsci.depthClampEnable = VK_FALSE;
-		prsci.rasterizerDiscardEnable = VK_FALSE;
-		prsci.polygonMode = vk::PolygonMode::eFill;
-		prsci.cullMode = vk::CullModeFlagBits::eFront;
-		prsci.frontFace = vk::FrontFace::eClockwise;
-		prsci.depthBiasEnable = VK_TRUE;
-		prsci.depthBiasConstantFactor = 0.0f;
-		prsci.depthBiasClamp = 0.0f;
-		prsci.depthBiasSlopeFactor = 0.0f;
-		prsci.lineWidth = 1.0f;
-		pipeline.pipeinfo->pRasterizationState = &prsci;
-
-		// Multisample state
-		vk::PipelineMultisampleStateCreateInfo pmsci;
-		pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
-		pmsci.sampleShadingEnable = VK_FALSE;
-		pmsci.minSampleShading = 1.0f;
-		pmsci.pSampleMask = nullptr;
-		pmsci.alphaToCoverageEnable = VK_FALSE;
-		pmsci.alphaToOneEnable = VK_FALSE;
-		pipeline.pipeinfo->pMultisampleState = &pmsci;
-
-		// Depth stencil state
-		vk::PipelineDepthStencilStateCreateInfo pdssci;
-		pdssci.depthTestEnable = VK_TRUE;
-		pdssci.depthWriteEnable = VK_TRUE;
-		pdssci.depthCompareOp = vk::CompareOp::eGreater;
-		pdssci.depthBoundsTestEnable = VK_FALSE;
-		pdssci.stencilTestEnable = VK_FALSE;
-		pdssci.front.compareOp = vk::CompareOp::eAlways;
-		pdssci.back.compareOp = vk::CompareOp::eAlways;
-		pdssci.minDepthBounds = 0.0f;
-		pdssci.maxDepthBounds = 0.0f;
-		pipeline.pipeinfo->pDepthStencilState = &pdssci;
-
-		// Color Blending state
-		std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments = {
-			textures[0].blentAttachment.Value()
-		};
-		vk::PipelineColorBlendStateCreateInfo pcbsci;
-		pcbsci.logicOpEnable = VK_FALSE;
-		pcbsci.logicOp = vk::LogicOp::eCopy;
-		pcbsci.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
-		pcbsci.pAttachments = colorBlendAttachments.data();
-		float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
-		pipeline.pipeinfo->pColorBlendState = &pcbsci;
-
-		// Dynamic state
-		std::vector<vk::DynamicState> dynamicStates{ vk::DynamicState::eDepthBias };
-		vk::PipelineDynamicStateCreateInfo dsi;
-		dsi.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-		dsi.pDynamicStates = dynamicStates.data();
-		pipeline.pipeinfo->pDynamicState = &dsi;
-
-		// Pipeline Layout
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{ getDescriptorSetLayout(), mesh, model };
-		vk::PipelineLayoutCreateInfo plci;
-		plci.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
-		plci.pSetLayouts = descriptorSetLayouts.data();
-		pipeline.pipeinfo->layout = VulkanContext::get()->device->createPipelineLayout(plci);
-
-		// Render Pass
-		pipeline.pipeinfo->renderPass = *renderPass;
-
-		// Subpass
-		pipeline.pipeinfo->subpass = 0;
-
-		// Base Pipeline Handle
-		pipeline.pipeinfo->basePipelineHandle = nullptr;
-
-		// Base Pipeline Index
-		pipeline.pipeinfo->basePipelineIndex = -1;
-
-		pipeline.pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, *pipeline.pipeinfo).at(0);
-
-		// destroy Shader Modules
-		VulkanContext::get()->device->destroyShaderModule(vertModule);
-	}
-
-	const vk::DescriptorSetLayout& Shadows::getDescriptorSetLayout()
-	{
-		if (!descriptorSetLayout.Value()) {
-			const auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlags, nullptr };
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex),
-				layoutBinding(1, vk::DescriptorType::eCombinedImageSampler,vk::ShaderStageFlagBits::eFragment),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
-		}
-		return descriptorSetLayout.Value();
+		pipeline.createGraphicsPipeline();
 	}
 
 	void Shadows::createUniformBuffers()
@@ -291,16 +154,21 @@ namespace vm
 	{
 		if (*renderPass)
 			VulkanContext::get()->device->destroyRenderPass(*renderPass);
-		if (descriptorSetLayout.Value()) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Shadows::descriptorSetLayout.Value());
-			*descriptorSetLayout = nullptr;
+
+		if (Pipeline::getDescriptorSetLayoutShadows()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutShadows());
+			Pipeline::getDescriptorSetLayoutShadows() = nullptr;
 		}
+
 		for (auto& texture : textures)
 			texture.destroy();
+
 		for (auto& fb : framebuffers)
 			VulkanContext::get()->device->destroyFramebuffer(*fb);
+
 		for (auto& buffer : uniformBuffers)
 			buffer.destroy();
+
 		pipeline.destroy();
 	}
 

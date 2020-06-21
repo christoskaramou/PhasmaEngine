@@ -24,17 +24,17 @@ namespace vm
 	{
 		VulkanContext::get()->device->waitIdle();
 		if (Model::models.empty()) {
-			if (Model::descriptorSetLayout.Value()) {
-				VulkanContext::get()->device->destroyDescriptorSetLayout(Model::descriptorSetLayout.Value());
-				*Model::descriptorSetLayout = nullptr;
+			if (Pipeline::getDescriptorSetLayoutModel()) {
+				VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
+				Pipeline::getDescriptorSetLayoutModel() = nullptr;
 			}
-			if (Mesh::descriptorSetLayout.Value()) {
-				VulkanContext::get()->device->destroyDescriptorSetLayout(Mesh::descriptorSetLayout.Value());
-				*Mesh::descriptorSetLayout = nullptr;
+			if (Pipeline::getDescriptorSetLayoutMesh()) {
+				VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
+				Pipeline::getDescriptorSetLayoutMesh() = nullptr;
 			}
-			if (Primitive::descriptorSetLayout.Value()) {
-				VulkanContext::get()->device->destroyDescriptorSetLayout(Primitive::descriptorSetLayout.Value());
-				*Primitive::descriptorSetLayout = nullptr;
+			if (Pipeline::getDescriptorSetLayoutPrimitive()) {
+				VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
+				Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
 			}
 		}
 #ifdef USE_SCRIPTS
@@ -385,7 +385,7 @@ namespace vm
 
 					for (auto& node : model.linearNodes) {
 						if (node->mesh) {
-							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipeinfo->layout, 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet.Value(), model.descriptorSet.Value() }, nullptr);
+							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipelineLayout.Value(), 0, { (*ctx.shadows.descriptorSets)[i], node->mesh->descriptorSet.Value(), model.descriptorSet.Value() }, nullptr);
 							for (auto& primitive : node->mesh->primitives) {
 								if (primitive.render)
 									cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);

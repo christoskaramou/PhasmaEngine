@@ -75,7 +75,7 @@ namespace vm
 			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
 			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores) const;
 
-#ifdef _DEBUG__
+#ifdef NOT_USED
 	template<typename T>
 	void SetDebugObjectName(const T& validHandle, const char* name)
 	{

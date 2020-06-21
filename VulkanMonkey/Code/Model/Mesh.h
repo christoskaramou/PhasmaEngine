@@ -11,7 +11,6 @@ constexpr auto MAX_NUM_JOINTS = 128u;
 
 namespace vk
 {
-	class DescriptorSetLayout;
 	class DescriptorSet;
 }
 
@@ -23,8 +22,6 @@ namespace vm
 		Primitive();
 		~Primitive();
 
-		static Ref_t<vk::DescriptorSetLayout> descriptorSetLayout;
-		static vk::DescriptorSetLayout* getDescriptorSetLayout();
 		Ref_t<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 
@@ -68,8 +65,6 @@ namespace vm
 		static std::map<std::string, Image> uniqueTextures;
 		std::vector<Primitive> primitives{};
 
-		static Ref_t<vk::DescriptorSetLayout> descriptorSetLayout;
-		static vk::DescriptorSetLayout* getDescriptorSetLayout();
 		Ref_t<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 		std::vector<Vertex> vertices{};

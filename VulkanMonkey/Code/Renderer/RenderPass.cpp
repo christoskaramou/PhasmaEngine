@@ -4,6 +4,15 @@
 
 namespace vm
 {
+	RenderPass::RenderPass()
+	{
+		SetRef(vk::RenderPass());
+	}
+
+	RenderPass::~RenderPass()
+	{
+	}
+
 	void RenderPass::Create(const vk::Format& format, const vk::Format& depthFormat)
 	{
 		Create(std::vector<vk::Format>{ format }, depthFormat);

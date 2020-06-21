@@ -13,8 +13,8 @@ namespace vm
 	class RenderPass : public Ref_t<vk::RenderPass>
 	{
 	public:
-		RenderPass() = default;
-		~RenderPass() = default;
+		RenderPass();
+		~RenderPass();
 
 		void Create(const vk::Format& format, const vk::Format& depthFormat);
 		void Create(const std::vector<vk::Format>& formats, const vk::Format& depthFormat);

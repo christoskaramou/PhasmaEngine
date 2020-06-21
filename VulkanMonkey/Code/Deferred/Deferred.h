@@ -25,7 +25,6 @@ namespace vm
 		RenderPass renderPass, compositionRenderPass;
 		std::vector<Framebuffer> framebuffers{}, compositionFramebuffers{};
 		Ref_t<vk::DescriptorSet> DSComposition;
-		Ref_t<vk::DescriptorSetLayout> DSLayoutComposition;
 		Pipeline pipeline;
 		Pipeline pipelineComposition;
 		Image ibl_brdf_lut;

@@ -10,7 +10,6 @@
 namespace vk
 {
 	class DescriptorSet;
-	class DescriptorSetLayout;
 	class CommandBuffer;
 }
 
@@ -34,10 +33,6 @@ namespace vm
 		Ref_t<vk::DescriptorSet> DSGaussianBlurHorizontal;
 		Ref_t<vk::DescriptorSet> DSGaussianBlurVertical;
 		Ref_t<vk::DescriptorSet> DSCombine;
-		Ref_t<vk::DescriptorSetLayout> DSLayoutBrightFilter;
-		Ref_t<vk::DescriptorSetLayout> DSLayoutGaussianBlurHorizontal;
-		Ref_t<vk::DescriptorSetLayout> DSLayoutGaussianBlurVertical;
-		Ref_t<vk::DescriptorSetLayout> DSLayoutCombine;
 		Image frameImage;
 
 		void Init();

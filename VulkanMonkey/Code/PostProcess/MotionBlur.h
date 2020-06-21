@@ -13,7 +13,6 @@
 namespace vk
 {
 	class DescriptorSet;
-	class DescriptorSetLayout;
 	class CommandBuffer;
 	struct Extent2D;
 }
@@ -31,7 +30,6 @@ namespace vm
 		Pipeline pipeline;
 		RenderPass renderPass;
 		Ref_t<vk::DescriptorSet> DSet;
-		Ref_t<vk::DescriptorSetLayout> DSLayout;
 		Image frameImage;
 		
 		void Init();

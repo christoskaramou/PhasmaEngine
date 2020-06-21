@@ -12,7 +12,6 @@
 namespace vk
 {
 	class DescriptorSet;
-	class DescriptorSetLayout;
 	class CommandBuffer;
 }
 
@@ -27,7 +26,6 @@ namespace vm
 		Pipeline pipeline, pipelineSharpen;
 		RenderPass renderPass, renderPassSharpen;
 		Ref_t<vk::DescriptorSet> DSet, DSetSharpen;
-		Ref_t<vk::DescriptorSetLayout> DSLayout, DSLayoutSharpen;
 		Image previous;
 		Image frameImage;
 

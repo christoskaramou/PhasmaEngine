@@ -1,4 +1,5 @@
 #include "Skybox.h"
+#include "../Renderer/Pipeline.h"
 #include "../GUI/GUI.h"
 #include "tinygltf/stb_image.h"
 #include "../VulkanContext/VulkanContext.h"
@@ -6,33 +7,13 @@
 
 namespace vm
 {
-	Ref_t<vk::DescriptorSetLayout> SkyBox::descriptorSetLayout = Ref_t<vk::DescriptorSetLayout>();
-
 	SkyBox::SkyBox()
 	{
 		descriptorSet = vk::DescriptorSet();
-		descriptorSetLayout = vk::DescriptorSetLayout();
 	}
 
 	SkyBox::~SkyBox()
 	{
-	}
-
-	const vk::DescriptorSetLayout& SkyBox::getDescriptorSetLayout()
-	{
-		if (!descriptorSetLayout.Value()) {
-			const auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlags, nullptr };
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(descriptorLayout);
-		}
-		return descriptorSetLayout.Value();
 	}
 
 	void SkyBox::createDescriptorSet()
@@ -40,7 +21,7 @@ namespace vm
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &getDescriptorSetLayout();
+		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutSkybox();
 		descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
@@ -110,9 +91,9 @@ namespace vm
 	void SkyBox::destroy()
 	{
 		texture.destroy();
-		if (descriptorSetLayout.Value()) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(descriptorSetLayout.Value());
-			*SkyBox::descriptorSetLayout = nullptr;
+		if (Pipeline::getDescriptorSetLayoutSkybox()) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSkybox());
+			Pipeline::getDescriptorSetLayoutSkybox() = nullptr;
 		}
 	}
 }
