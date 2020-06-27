@@ -369,7 +369,7 @@ namespace vm
 		renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
 		for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
-			auto& cmd = VulkanContext::get()->shadowCmdBuffers[ctx.shadows.textures.size() * imageIndex + i];
+			auto& cmd = VulkanContext::get()->shadowCmdBuffers[static_cast<uint32_t>(ctx.shadows.textures.size()) * imageIndex + i];
 			cmd.begin(beginInfoShadows);
 			ctx.metrics[11 + static_cast<size_t>(i)].start(&cmd);
 			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);

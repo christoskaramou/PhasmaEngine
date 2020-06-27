@@ -1,5 +1,6 @@
 #pragma once
 #include "../Context/Context.h"
+#include "../ECS/System.h"
 
 namespace vk
 {
@@ -8,7 +9,7 @@ namespace vk
 
 namespace vm
 {
-	class Renderer
+	class Renderer : System<Renderer>
 	{
 	public:
 		Renderer(SDL_Window* window);

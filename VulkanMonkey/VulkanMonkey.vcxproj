@@ -225,7 +225,6 @@
     <ClInclude Include="Code\Context\Context.h" />
     <ClInclude Include="Code\Core\Base.h" />
     <ClInclude Include="Code\Core\Buffer.h" />
-    <ClInclude Include="Code\Core\ECS.h" />
     <ClInclude Include="Code\Core\Image.h" />
     <ClInclude Include="Code\Core\Light.h" />
     <ClInclude Include="Code\Core\Math.h" />
@@ -236,6 +235,11 @@
     <ClInclude Include="Code\Core\Timer.h" />
     <ClInclude Include="Code\Core\Vertex.h" />
     <ClInclude Include="Code\Deferred\Deferred.h" />
+    <ClInclude Include="Code\ECS\Component.h" />
+    <ClInclude Include="Code\ECS\ECSBase.h" />
+    <ClInclude Include="Code\ECS\GameObject.h" />
+    <ClInclude Include="Code\ECS\System.h" />
+    <ClInclude Include="Code\ECS\Wolrd.h" />
     <ClInclude Include="Code\Event\Delegate.h" />
     <ClInclude Include="Code\Event\Event.h" />
     <ClInclude Include="Code\GUI\GUI.h" />
@@ -337,6 +341,11 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">vulkanPCH.h</PrecompiledHeaderFile>
     </ClCompile>
+    <ClCompile Include="Code\ECS\Component.cpp" />
+    <ClCompile Include="Code\ECS\ECSBase.cpp" />
+    <ClCompile Include="Code\ECS\GameObject.cpp" />
+    <ClCompile Include="Code\ECS\System.cpp" />
+    <ClCompile Include="Code\ECS\World.cpp" />
     <ClCompile Include="Code\Event\Event.cpp" />
     <ClCompile Include="Code\GUI\GUI.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>

@@ -267,8 +267,20 @@
     <ClInclude Include="Include\vulkanPCH.h">
       <Filter>Include</Filter>
     </ClInclude>
-    <ClInclude Include="Code\Core\ECS.h">
-      <Filter>Code\Core</Filter>
+    <ClInclude Include="Code\ECS\Component.h">
+      <Filter>Code\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\ECS\GameObject.h">
+      <Filter>Code\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\ECS\System.h">
+      <Filter>Code\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\ECS\Wolrd.h">
+      <Filter>Code\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\ECS\ECSBase.h">
+      <Filter>Code\ECS</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -476,6 +488,21 @@
     <ClCompile Include="Include\vulkanPCH.cpp">
       <Filter>Include</Filter>
     </ClCompile>
+    <ClCompile Include="Code\ECS\Component.cpp">
+      <Filter>Code\ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\ECS\GameObject.cpp">
+      <Filter>Code\ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\ECS\System.cpp">
+      <Filter>Code\ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\ECS\World.cpp">
+      <Filter>Code\ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\ECS\ECSBase.cpp">
+      <Filter>Code\ECS</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source">
@@ -585,6 +612,9 @@
     </Filter>
     <Filter Include="Code\Core">
       <UniqueIdentifier>{d0f370e5-a4a0-4895-9840-6f71d51b95bf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Code\ECS">
+      <UniqueIdentifier>{e67bd783-f0fe-43f5-b935-36e49cb4f2a9}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>
