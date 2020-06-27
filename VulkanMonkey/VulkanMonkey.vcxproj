@@ -225,6 +225,7 @@
     <ClInclude Include="Code\Context\Context.h" />
     <ClInclude Include="Code\Core\Base.h" />
     <ClInclude Include="Code\Core\Buffer.h" />
+    <ClInclude Include="Code\Core\ECS.h" />
     <ClInclude Include="Code\Core\Image.h" />
     <ClInclude Include="Code\Core\Light.h" />
     <ClInclude Include="Code\Core\Math.h" />

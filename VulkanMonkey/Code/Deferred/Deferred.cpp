@@ -183,7 +183,7 @@ namespace vm
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipeline.Value());
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipelineLayout.Value(), 0, { DSComposition.Value(), (*shadows.descriptorSets)[0], (*shadows.descriptorSets)[1], (*shadows.descriptorSets)[2], skybox.descriptorSet.Value() }, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineComposition.pipelineLayout.Value(), 0, { DSComposition.Value(), shadows.descriptorSets[0], shadows.descriptorSets[1], shadows.descriptorSets[2], skybox.descriptorSet.Value() }, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		// End Composition

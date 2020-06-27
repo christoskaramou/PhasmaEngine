@@ -226,12 +226,13 @@ namespace vm
 	{
 	public:
 		Transform();
+		Transform(cvec3& _scale, cquat& _rotation, cvec3& _position);
 		mat4 matrix() const;
 
 	private:
-		vec3 _scale;
-		quat _rotation;
-		vec3 _position;
+		vec3 m_scale;
+		quat m_rotation;
+		vec3 m_position;
 	};
 
 	vec2 operator*(cfloat scalar, cvec2& v);

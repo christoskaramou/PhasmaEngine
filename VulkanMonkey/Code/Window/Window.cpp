@@ -1,8 +1,5 @@
 #include "vulkanPCH.h"
 #include "Window.h"
-#include "SDL/SDL.h"
-#include "SDL/SDL_syswm.h"
-#include "SDL/SDL_vulkan.h"
 #include "../Event/Event.h"
 #include "../Console/Console.h"
 #include "../VulkanContext/VulkanContext.h"

@@ -267,6 +267,9 @@
     <ClInclude Include="Include\vulkanPCH.h">
       <Filter>Include</Filter>
     </ClInclude>
+    <ClInclude Include="Code\Core\ECS.h">
+      <Filter>Code\Core</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Code\Camera\Camera.cpp">

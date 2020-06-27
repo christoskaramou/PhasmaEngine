@@ -546,7 +546,7 @@ namespace vm
 		auto& properties = VulkanContext::get()->queueFamilyProperties;
 		for (uint32_t i = 0; i < properties->size(); i++) {
 			//find graphics queue family index
-			if ((*properties)[i].queueFlags & flags && VulkanContext::get()->gpu->getSurfaceSupportKHR(i, VulkanContext::get()->surface.surface.Value()))
+			if (properties[i].queueFlags & flags && VulkanContext::get()->gpu->getSurfaceSupportKHR(i, VulkanContext::get()->surface.surface.Value()))
 				return i;
 		}
 		return -1;
@@ -576,7 +576,7 @@ namespace vm
 		// prefer different families for different queue types, thus the reverse check
 		for (int i = static_cast<int>(properties->size()) - 1; i >= 0; --i) {
 			//find compute queue family index
-			if ((*properties)[i].queueFlags & flags)
+			if (properties[i].queueFlags & flags)
 				return i;
 		}
 		return -1;

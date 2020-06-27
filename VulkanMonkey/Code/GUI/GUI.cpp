@@ -8,7 +8,6 @@
 #include "../Swapchain/Swapchain.h"
 #include "../Core/Surface.h"
 #include "../Shader/Shader.h"
-#include "SDL/SDL_syswm.h"
 #include "../VulkanContext/VulkanContext.h"
 
 namespace vm
@@ -746,7 +745,7 @@ namespace vm
 
 		(*vulkan->dynamicCmdBuffers)[0].end();
 
-		vulkan->submitAndWaitFence((*vulkan->dynamicCmdBuffers)[0], nullptr, nullptr, nullptr);
+		vulkan->submitAndWaitFence(vulkan->dynamicCmdBuffers[0], nullptr, nullptr, nullptr);
 
 		stagingBuffer.destroy();
 	}
@@ -847,7 +846,7 @@ namespace vm
 
 			vk::RenderPassBeginInfo rpi;
 			rpi.renderPass = *renderPass;
-			rpi.framebuffer = (*framebuffers)[imageIndex].Value();
+			rpi.framebuffer = framebuffers[imageIndex].Value();
 			rpi.renderArea = vk::Rect2D{ { 0, 0 }, VulkanContext::get()->surface.actualExtent.Value() };
 			rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			rpi.pClearValues = clearValues.data();
@@ -1176,13 +1175,13 @@ namespace vm
 	{
 		auto vulkan = VulkanContext::get();
 
-		(*framebuffers).resize(vulkan->swapchain.images.size());
-		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
+		framebuffers->resize(vulkan->swapchain.images.size());
+		for (uint32_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
 			uint32_t width = WIDTH;
 			uint32_t height = HEIGHT;
 			vk::ImageView view = vulkan->swapchain.images[i].view.Value();
-			(*framebuffers)[i].Create(width, height, view, renderPass);
+			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
 
@@ -1213,7 +1212,7 @@ namespace vm
 		Object::destroy();
 		renderPass.Destroy();
 
-		for (auto &framebuffer : (*framebuffers))
+		for (auto &framebuffer : *framebuffers)
 			framebuffer.Destroy();
 
 		pipeline.destroy();

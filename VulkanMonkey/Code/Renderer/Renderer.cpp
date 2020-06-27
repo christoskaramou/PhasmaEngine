@@ -205,7 +205,7 @@ namespace vm
 
 		static Timer timerFenceWait;
 		timerFenceWait.Start();
-		VulkanContext::get()->waitFences((*VulkanContext::get()->fences)[previousImageIndex]);
+		VulkanContext::get()->waitFences(VulkanContext::get()->fences[previousImageIndex]);
 		FrameTimer::Instance().timestamps[0] = timerFenceWait.Count();
 		Queue::exec_memcpyRequests();
 
@@ -235,7 +235,7 @@ namespace vm
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
-		const auto& cmd = (*VulkanContext::get()->dynamicCmdBuffers)[imageIndex];
+		const auto& cmd = VulkanContext::get()->dynamicCmdBuffers[imageIndex];
 
 		cmd.begin(beginInfo);
 		// TODO: add more queries (times the swapchain images), so they are not overlapped from previous frame
@@ -369,7 +369,7 @@ namespace vm
 		renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
 		for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
-			auto& cmd = (*VulkanContext::get()->shadowCmdBuffers)[ctx.shadows.textures.size() * imageIndex + i];
+			auto& cmd = VulkanContext::get()->shadowCmdBuffers[ctx.shadows.textures.size() * imageIndex + i];
 			cmd.begin(beginInfoShadows);
 			ctx.metrics[11 + static_cast<size_t>(i)].start(&cmd);
 			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
@@ -385,7 +385,7 @@ namespace vm
 
 					for (auto& node : model.linearNodes) {
 						if (node->mesh) {
-							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipelineLayout.Value(), 0, { (*ctx.shadows.descriptorSets)[i], node->mesh->descriptorSet.Value(), model.descriptorSet.Value() }, nullptr);
+							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipelineLayout.Value(), 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet.Value(), model.descriptorSet.Value() }, nullptr);
 							for (auto& primitive : node->mesh->primitives) {
 								if (primitive.render)
 									cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
@@ -420,7 +420,7 @@ namespace vm
 		}
 
 		// aquire the image
-		auto aquireSignalSemaphore = (*vCtx.semaphores)[0];
+		auto aquireSignalSemaphore = vCtx.semaphores[0];
 		const uint32_t imageIndex = vCtx.swapchain.aquire(aquireSignalSemaphore, nullptr);
 		this->previousImageIndex = imageIndex;
 
@@ -429,7 +429,7 @@ namespace vm
 		//vCtx.waitFences(vCtx.fences[imageIndex]);
 		//FrameTimer::Instance().timestamps[0] = timer.Count();
 
-		const auto& cmd = (*vCtx.dynamicCmdBuffers)[imageIndex];
+		const auto& cmd = vCtx.dynamicCmdBuffers[imageIndex];
 
 		vCtx.waitAndLockSubmits();
 
@@ -440,7 +440,7 @@ namespace vm
 
 			// submit the shadow command buffers
 			const auto& shadowWaitSemaphore = aquireSignalSemaphore;
-			const auto& shadowSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 1];
+			const auto& shadowSignalSemaphore = vCtx.semaphores[imageIndex * 3 + 1];
 			const auto& scb = vCtx.shadowCmdBuffers;
 			const auto size = ctx.shadows.textures.size();
 			const auto i = size * imageIndex;
@@ -456,8 +456,8 @@ namespace vm
 		// submit the command buffers
 		const auto& deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
 		const auto& deferredWaitSemaphore = aquireSignalSemaphore;
-		const auto& deferredSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 2];
-		const auto& deferredSignalFence = (*vCtx.fences)[imageIndex];
+		const auto& deferredSignalSemaphore = vCtx.semaphores[imageIndex * 3 + 2];
+		const auto& deferredSignalFence = vCtx.fences[imageIndex];
 		vCtx.submit(cmd, deferredWaitStage, deferredWaitSemaphore, deferredSignalSemaphore, deferredSignalFence);
 
 		// Presentation

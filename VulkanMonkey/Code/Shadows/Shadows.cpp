@@ -29,7 +29,7 @@ namespace vm
 
 		descriptorSets->resize(textures.size()); // size of wanted number of cascaded shadows
 		for (uint32_t i = 0; i < descriptorSets->size(); i++) {
-			(*descriptorSets)[i] = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
+			descriptorSets[i] = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 			std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 			// MVP
@@ -38,7 +38,7 @@ namespace vm
 			dbi.offset = 0;
 			dbi.range = sizeof(ShadowsUBO);
 
-			textureWriteSets[0].dstSet = (*descriptorSets)[i];
+			textureWriteSets[0].dstSet = descriptorSets[i];
 			textureWriteSets[0].dstBinding = 0;
 			textureWriteSets[0].dstArrayElement = 0;
 			textureWriteSets[0].descriptorCount = 1;
@@ -51,7 +51,7 @@ namespace vm
 			dii.imageView = textures[i].view.Value();
 			dii.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
 
-			textureWriteSets[1].dstSet = (*descriptorSets)[i];
+			textureWriteSets[1].dstSet = descriptorSets[i];
 			textureWriteSets[1].dstBinding = 1;
 			textureWriteSets[1].dstArrayElement = 0;
 			textureWriteSets[1].descriptorCount = 1;
