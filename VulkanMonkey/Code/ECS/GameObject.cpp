@@ -1,6 +1,6 @@
 #include "GameObject.h"
 #include "Component.h"
-#include "Wolrd.h"
+#include "World.h"
 
 namespace vm
 {
