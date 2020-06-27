@@ -276,10 +276,10 @@
     <ClInclude Include="Code\ECS\System.h">
       <Filter>Code\ECS</Filter>
     </ClInclude>
-    <ClInclude Include="Code\ECS\Wolrd.h">
+    <ClInclude Include="Code\ECS\ECSBase.h">
       <Filter>Code\ECS</Filter>
     </ClInclude>
-    <ClInclude Include="Code\ECS\ECSBase.h">
+    <ClInclude Include="Code\ECS\World.h">
       <Filter>Code\ECS</Filter>
     </ClInclude>
   </ItemGroup>

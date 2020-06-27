@@ -239,7 +239,7 @@
     <ClInclude Include="Code\ECS\ECSBase.h" />
     <ClInclude Include="Code\ECS\GameObject.h" />
     <ClInclude Include="Code\ECS\System.h" />
-    <ClInclude Include="Code\ECS\Wolrd.h" />
+    <ClInclude Include="Code\ECS\World.h" />
     <ClInclude Include="Code\Event\Delegate.h" />
     <ClInclude Include="Code\Event\Event.h" />
     <ClInclude Include="Code\GUI\GUI.h" />

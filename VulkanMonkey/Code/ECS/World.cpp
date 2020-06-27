@@ -1,4 +1,4 @@
-#include "Wolrd.h"
+#include "World.h"
 #include "GameObject.h"
 
 namespace vm
