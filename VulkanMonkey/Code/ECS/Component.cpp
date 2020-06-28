@@ -2,9 +2,15 @@
 
 namespace vm
 {
-	template<class T>
-	const size_t Component<T>::s_typeID = BaseObject::nextTypeID();
+	Component::Component() : m_id(NextID()), m_gameObject(nullptr)
+	{
+		m_parent = nullptr;
+		m_enable = true;
+	}
 
-	template<class T>
-	size_t Component<T>::GetTypeID() { return Component<T>::s_typeID; }
+	Component::Component(GameObject* gameObject, Transform* parent, bool enable) : m_id(NextID()), m_gameObject(gameObject)
+	{
+		m_parent = parent;
+		m_enable = enable;
+	}
 }

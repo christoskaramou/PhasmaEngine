@@ -9,7 +9,7 @@ namespace vk
 
 namespace vm
 {
-	class Renderer : System<Renderer>
+	class Renderer : System
 	{
 	public:
 		Renderer(SDL_Window* window);

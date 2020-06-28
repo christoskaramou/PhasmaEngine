@@ -3,6 +3,12 @@
 
 namespace vm
 {
+
+	inline size_t NextID() { static size_t ID = 0; return ID++; }
+
+	template<class T>
+	inline size_t GetTypeID() { static size_t typeID = NextID(); return typeID; }
+
 	class BaseBehaviour
 	{
 	public:
@@ -24,8 +30,6 @@ namespace vm
 	public:
 		virtual ~BaseObject() {}
 
-		static size_t nextID();
-		static size_t nextTypeID();
 		Transform& GetTransform() { return m_transform; }
 		void SetTransform(const Transform& transform) { m_transform = transform; }
 		Transform* GetParent() { return m_parent; }
