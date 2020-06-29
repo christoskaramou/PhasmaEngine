@@ -1,5 +1,5 @@
 #include "vulkanPCH.h"
-#include "Context.h"
+#include "ContextTemp.h"
 #include "../Model/Mesh.h"
 #include "../Core/Queue.h"
 #include "../Core/Math.h"
@@ -11,7 +11,7 @@ namespace vm
 {
 	constexpr uint32_t SWAPCHAIN_IMAGES = 3;
 
-	void Context::initVulkanContext() const
+	void ContextTemp::initVulkanContext() const
 	{
 		auto& vulkan = *VulkanContext::get();
 		vulkan.instance = createInstance();
@@ -44,7 +44,7 @@ namespace vm
 		vulkan.depth = createDepthResources();
 	}
 
-	void Context::initRendering()
+	void ContextTemp::initRendering()
 	{
 		auto& vulkan = *VulkanContext::get();
 		addRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
@@ -109,7 +109,7 @@ namespace vm
 		metrics.resize(20);
 	}
 
-	void Context::resizeViewport(uint32_t width, uint32_t height)
+	void ContextTemp::resizeViewport(uint32_t width, uint32_t height)
 	{
 		auto& vulkan = *VulkanContext::get();
 		vulkan.graphicsQueue->waitIdle();
@@ -277,7 +277,7 @@ namespace vm
 		//- Recreate resources end --------------
 	}
 
-	void Context::recreatePipelines()
+	void ContextTemp::recreatePipelines()
 	{
 		VulkanContext::get()->graphicsQueue->waitIdle();
 
@@ -351,7 +351,7 @@ namespace vm
 	}
 	// ----------------------------------------
 
-	void Context::loadResources()
+	void ContextTemp::loadResources()
 	{
 		// SKYBOXES LOAD
 		std::array<std::string, 6> skyTextures = {
@@ -388,7 +388,7 @@ namespace vm
 #endif
 	}
 
-	void Context::createUniforms()
+	void ContextTemp::createUniforms()
 	{
 		// DESCRIPTOR SETS FOR GUI
 		gui.createDescriptorSet(GUI::getDescriptorSetLayout(VulkanContext::get()->device.Value()));
@@ -420,7 +420,7 @@ namespace vm
 		//compute.createComputeUniforms(sizeof(SBOIn));
 	}
 
-	vk::Instance Context::createInstance() const
+	vk::Instance ContextTemp::createInstance() const
 	{
 		std::vector<const char*> instanceExtensions;
 		std::vector<const char*> instanceLayers;
@@ -480,13 +480,13 @@ namespace vm
 		return vk::createInstance(instInfo);
 	}
 
-	VKAPI_ATTR uint32_t VKAPI_CALL Context::messageCallback(
+	VKAPI_ATTR uint32_t VKAPI_CALL ContextTemp::messageCallback(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 		uint32_t messageType,
 		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 		void* pUserData)
 	{
-		if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+		if (messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
 			std::cerr
 			<< to_string(vk::DebugUtilsMessageTypeFlagBitsEXT(messageType)) << " "
 			<< to_string(vk::DebugUtilsMessageSeverityFlagBitsEXT(messageSeverity)) << " from \""
@@ -496,7 +496,7 @@ namespace vm
 		return VK_FALSE;
 	}
 
-	vk::DebugUtilsMessengerEXT Context::createDebugMessenger() const
+	vk::DebugUtilsMessengerEXT ContextTemp::createDebugMessenger() const
 	{
 		vk::DebugUtilsMessengerCreateInfoEXT dumci;
 		dumci.messageSeverity =
@@ -508,12 +508,12 @@ namespace vm
 			vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
 			vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
 			vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
-		dumci.pfnUserCallback = Context::messageCallback;
+		dumci.pfnUserCallback = ContextTemp::messageCallback;
 
 		return VulkanContext::get()->instance->createDebugUtilsMessengerEXT(dumci, nullptr, VulkanContext::get()->dispatchLoaderDynamic.Value());
 	}
 
-	void Context::destroyDebugMessenger() const
+	void ContextTemp::destroyDebugMessenger() const
 	{
 		vk::DispatchLoaderDynamic dld;
 		dld.init(VulkanContext::get()->instance.Value(), vk::Device());
@@ -521,7 +521,7 @@ namespace vm
 		VulkanContext::get()->instance->destroyDebugUtilsMessengerEXT(VulkanContext::get()->debugMessenger.Value(), nullptr, dld);
 	}
 
-	Surface Context::createSurface() const
+	Surface ContextTemp::createSurface() const
 	{
 		VkSurfaceKHR _vkSurface;
 		if (!SDL_Vulkan_CreateSurface(VulkanContext::get()->window, VkInstance(VulkanContext::get()->instance.Value()), &_vkSurface))
@@ -536,7 +536,7 @@ namespace vm
 		return _surface;
 	}
 
-	int Context::getGraphicsFamilyId() const
+	int ContextTemp::getGraphicsFamilyId() const
 	{
 #ifdef UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 		const vk::QueueFlags flags = vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eTransfer;
@@ -552,7 +552,7 @@ namespace vm
 		return -1;
 	}
 
-	int vm::Context::getTransferFamilyId() const
+	int vm::ContextTemp::getTransferFamilyId() const
 	{
 #ifdef UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 		return getGraphicsFamilyId();
@@ -569,7 +569,7 @@ namespace vm
 #endif
 	}
 
-	int Context::getComputeFamilyId() const
+	int ContextTemp::getComputeFamilyId() const
 	{
 		const vk::QueueFlags flags = vk::QueueFlagBits::eCompute;
 		auto& properties = VulkanContext::get()->queueFamilyProperties;
@@ -582,7 +582,7 @@ namespace vm
 		return -1;
 	}
 
-	vk::PhysicalDevice Context::findGpu() const
+	vk::PhysicalDevice ContextTemp::findGpu() const
 	{
 		std::vector<vk::PhysicalDevice> gpuList = VulkanContext::get()->instance->enumeratePhysicalDevices();
 
@@ -607,7 +607,7 @@ namespace vm
 		return nullptr;
 	}
 
-	vk::SurfaceCapabilitiesKHR Context::getSurfaceCapabilities() const
+	vk::SurfaceCapabilitiesKHR ContextTemp::getSurfaceCapabilities() const
 	{
 		auto caps = VulkanContext::get()->gpu->getSurfaceCapabilitiesKHR(VulkanContext::get()->surface.surface.Value());
 		// Ensure eTransferSrc bit for blit operations
@@ -616,7 +616,7 @@ namespace vm
 		return caps;
 	}
 
-	vk::SurfaceFormatKHR Context::getSurfaceFormat() const
+	vk::SurfaceFormatKHR ContextTemp::getSurfaceFormat() const
 	{
 		std::vector<vk::SurfaceFormatKHR> formats = VulkanContext::get()->gpu->getSurfaceFormatsKHR(VulkanContext::get()->surface.surface.Value());
 		auto format = formats[0];
@@ -635,7 +635,7 @@ namespace vm
 		return format;
 	}
 
-	vk::PresentModeKHR Context::getPresentationMode() const
+	vk::PresentModeKHR ContextTemp::getPresentationMode() const
 	{
 		std::vector<vk::PresentModeKHR> presentModes = VulkanContext::get()->gpu->getSurfacePresentModesKHR(VulkanContext::get()->surface.surface.Value());
 
@@ -650,17 +650,17 @@ namespace vm
 		return vk::PresentModeKHR::eFifo;
 	}
 
-	vk::PhysicalDeviceProperties Context::getGPUProperties() const
+	vk::PhysicalDeviceProperties ContextTemp::getGPUProperties() const
 	{
 		return VulkanContext::get()->gpu->getProperties();
 	}
 
-	vk::PhysicalDeviceFeatures Context::getGPUFeatures() const
+	vk::PhysicalDeviceFeatures ContextTemp::getGPUFeatures() const
 	{
 		return VulkanContext::get()->gpu->getFeatures();
 	}
 
-	vk::Device Context::createDevice() const
+	vk::Device ContextTemp::createDevice() const
 	{
 		auto& vulkan = *VulkanContext::get();
 		auto extensionProperties = vulkan.gpu->enumerateDeviceExtensionProperties();
@@ -706,22 +706,22 @@ namespace vm
 		return vulkan.gpu->createDevice(deviceCreateInfo);
 	}
 
-	vk::Queue Context::getGraphicsQueue() const
+	vk::Queue ContextTemp::getGraphicsQueue() const
 	{
 		return VulkanContext::get()->device->getQueue(VulkanContext::get()->graphicsFamilyId, 0);
 	}
 
-	vk::Queue vm::Context::getTransferQueue() const
+	vk::Queue vm::ContextTemp::getTransferQueue() const
 	{
 		return VulkanContext::get()->device->getQueue(VulkanContext::get()->transferFamilyId, 0);
 	}
 
-	vk::Queue Context::getComputeQueue() const
+	vk::Queue ContextTemp::getComputeQueue() const
 	{
 		return VulkanContext::get()->device->getQueue(VulkanContext::get()->computeFamilyId, 0);
 	}
 
-	Swapchain Context::createSwapchain(uint32_t requestImageCount) const
+	Swapchain ContextTemp::createSwapchain(uint32_t requestImageCount) const
 	{
 		auto& vulkan = *VulkanContext::get();
 		const VkExtent2D extent = vulkan.surface.actualExtent.Value();
@@ -784,7 +784,7 @@ namespace vm
 		return swapchain;
 	}
 
-	vk::CommandPool Context::createCommandPool() const
+	vk::CommandPool ContextTemp::createCommandPool() const
 	{
 		vk::CommandPoolCreateInfo cpci;
 		cpci.queueFamilyIndex = VulkanContext::get()->graphicsFamilyId;
@@ -793,7 +793,7 @@ namespace vm
 		return VulkanContext::get()->device->createCommandPool(cpci);
 	}
 
-	void Context::addRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
+	void ContextTemp::addRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
 	{
 		if (renderTargets.find(name) != renderTargets.end()) {
 			std::cout << "Render Target already exists\n";
@@ -824,7 +824,7 @@ namespace vm
 		renderTargets[name].blentAttachment->colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
 	}
 
-	Image Context::createDepthResources() const
+	Image ContextTemp::createDepthResources() const
 	{
 		Image _image = Image();
 		_image.format = vk::Format::eUndefined;
@@ -853,7 +853,7 @@ namespace vm
 		return _image;
 	}
 
-	std::vector<vk::CommandBuffer> Context::createCmdBuffers(const uint32_t bufferCount) const
+	std::vector<vk::CommandBuffer> ContextTemp::createCmdBuffers(const uint32_t bufferCount) const
 	{
 		vk::CommandBufferAllocateInfo cbai;
 		cbai.commandPool = VulkanContext::get()->commandPool.Value();
@@ -863,7 +863,7 @@ namespace vm
 		return VulkanContext::get()->device->allocateCommandBuffers(cbai);
 	}
 
-	vk::DescriptorPool Context::createDescriptorPool(uint32_t maxDescriptorSets) const
+	vk::DescriptorPool ContextTemp::createDescriptorPool(uint32_t maxDescriptorSets) const
 	{
 		// TODO: Make these dynamic
 		std::vector<vk::DescriptorPoolSize> descPoolsize(4);
@@ -884,7 +884,7 @@ namespace vm
 		return VulkanContext::get()->device->createDescriptorPool(createInfo);
 	}
 
-	std::vector<vk::Fence> Context::createFences(const uint32_t fenceCount) const
+	std::vector<vk::Fence> ContextTemp::createFences(const uint32_t fenceCount) const
 	{
 		std::vector<vk::Fence> _fences(fenceCount);
 		const vk::FenceCreateInfo fi{ vk::FenceCreateFlagBits::eSignaled };
@@ -896,7 +896,7 @@ namespace vm
 		return _fences;
 	}
 
-	std::vector<vk::Semaphore> Context::createSemaphores(const uint32_t semaphoresCount) const
+	std::vector<vk::Semaphore> ContextTemp::createSemaphores(const uint32_t semaphoresCount) const
 	{
 		std::vector<vk::Semaphore> _semaphores(semaphoresCount);
 		const vk::SemaphoreCreateInfo si;
@@ -908,7 +908,7 @@ namespace vm
 		return _semaphores;
 	}
 
-	void Context::destroyVkContext()
+	void ContextTemp::destroyVkContext()
 	{
 		auto& vulkan = *VulkanContext::get();
 		vulkan.device->waitIdle();

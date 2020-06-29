@@ -4,24 +4,24 @@
 
 namespace vm
 {
-	class World;
+	class Context;
 
 	class System : public BaseSystem
 	{
 	public:
-		System() : m_world(nullptr), m_id(NextID())
+		System() : m_context(nullptr), m_id(NextID())
 		{
 			m_parent = nullptr;
 			m_enable = true;
 		}
 		virtual ~System() {}
-		void SetWorld(World* world) { m_world = world; }
+		void SetContext(Context* context) { m_context = context; }
 		size_t GetID() { return m_id; }
 
 		template<class T> inline void AddComponent(T* component);
 
 	private:
-		World* m_world;
+		Context* m_context;
 		std::map<size_t, BaseComponent*> m_components;
 		const size_t m_id;
 	};

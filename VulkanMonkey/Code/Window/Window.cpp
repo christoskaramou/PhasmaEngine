@@ -1,6 +1,5 @@
 #include "vulkanPCH.h"
 #include "Window.h"
-#include "../Event/Event.h"
 #include "../Console/Console.h"
 #include "../VulkanContext/VulkanContext.h"
 #include <iostream>
@@ -60,7 +59,7 @@ namespace vm
 		while (SDL_PollEvent(&event))
 		{
 			if (event.type == SDL_QUIT) {
-				FIRE_EVENT(Event::OnExit);
+				//FIRE_EVENT(Event::OnExit);
 				return false;
 			}
 

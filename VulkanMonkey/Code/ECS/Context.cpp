@@ -1,15 +1,15 @@
+#include "Context.h"
 #include "ECSBase.h"
-#include "World.h"
 #include "System.h"
 #include "GameObject.h"
 #include <utility>
 
 namespace vm
 {
-	GameObject* World::CreateGameObject()
+	GameObject* Context::CreateGameObject()
 	{
 		GameObject* gameObject = new GameObject();
-		gameObject->SetWorld(this);
+		gameObject->SetContext(this);
 
 		size_t key = gameObject->GetID();
 		m_gameObjects[key] = std::shared_ptr<GameObject>(gameObject);
@@ -17,7 +17,7 @@ namespace vm
 		return m_gameObjects[key].get();
 	}
 
-	GameObject* World::GetGameObject(size_t id)
+	GameObject* Context::GetGameObject(size_t id)
 	{
 		if (m_gameObjects.count(id))
 			return m_gameObjects[id].get();
@@ -25,7 +25,7 @@ namespace vm
 		return nullptr;
 	}
 
-	void World::RemoveGameObject(size_t id)
+	void Context::RemoveGameObject(size_t id)
 	{
 		if (m_gameObjects.count(id))
 			m_gameObjects.erase(id);

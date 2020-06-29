@@ -3,11 +3,11 @@
 
 namespace vm
 {
-	class World final
+	class Context final
 	{
 	public:
-		World() {}
-		~World() {}
+		Context() {}
+		~Context() {}
 
 		template<class T, class... Params> inline T* AddSystem(Params&&... params);
 		template<class T> inline T* GetSystem();
@@ -23,16 +23,16 @@ namespace vm
 	};
 
 	template<class T, class... Params>
-	inline T* World::AddSystem(Params&&... params)
+	inline T* Context::AddSystem(Params&&... params)
 	{
 		if constexpr (std::is_base_of<System, T>::value)
 		{
-			if (!m_systems.count(GetTypeID<T>()))
+			if (m_systems.find(GetTypeID<T>()) == m_systems.end())
 			{
 				m_systems[GetTypeID<T>()] = std::make_shared<T>(std::forward<Params>(params)...);
 
 				T* pT = static_cast<T*>(m_systems[GetTypeID<T>()].get());
-				pT->SetWorld(this);
+				pT->SetContext(this);
 
 				return pT;
 			}
@@ -43,53 +43,53 @@ namespace vm
 		}
 		else
 		{
-			throw std::runtime_error("World::AddSystem: Type is not a System");
+			throw std::runtime_error("Context::AddSystem: Type is not a System");
 		}
 	}
 
 	template<class T>
-	inline T* World::GetSystem()
+	inline T* Context::GetSystem()
 	{
 		if constexpr (std::is_base_of<System, T>::value)
 		{
-			if (m_systems.count(GetTypeID<T>()))
+			if (m_systems.find(GetTypeID<T>()) != m_systems.end())
 				return static_cast<T*>(m_systems[GetTypeID<T>()].get());
 			else
 				return nullptr;
 		}
 		else
 		{
-			throw std::runtime_error("World::GetSystem: Type is not a System");
+			throw std::runtime_error("Context::GetSystem: Type is not a System");
 		}
 	}
 
 	template<class T>
-	inline bool World::HasSystem()
+	inline bool Context::HasSystem()
 	{
 		if constexpr (std::is_base_of<System, T>::value)
 		{
-			if (m_systems.count(GetTypeID<T>()))
+			if (m_systems.find(GetTypeID<T>()) != m_systems.end())
 				return true;
 			else
 				return false;
 		}
 		else
 		{
-			throw std::runtime_error("World::HasSystem: Type is not a System");
+			throw std::runtime_error("Context::HasSystem: Type is not a System");
 		}
 	}
 
 	template<class T>
-	inline void World::RemoveSystem()
+	inline void Context::RemoveSystem()
 	{
 		if constexpr (std::is_base_of<System, T>::value)
 		{
-			if (m_systems.count(GetTypeID<T>()))
+			if (m_systems.find(GetTypeID<T>()) != m_systems.end())
 				m_systems.erase(GetTypeID<T>());
 		}
 		else
 		{
-			throw std::runtime_error("World::RemoveSystem: Type is not a System");
+			throw std::runtime_error("Context::RemoveSystem: Type is not a System");
 		}
 	}
 }

@@ -105,9 +105,6 @@
     <ClInclude Include="Code\Console\Console.h">
       <Filter>Code\Console</Filter>
     </ClInclude>
-    <ClInclude Include="Code\Context\Context.h">
-      <Filter>Code\Context</Filter>
-    </ClInclude>
     <ClInclude Include="Code\Deferred\Deferred.h">
       <Filter>Code\Deferred</Filter>
     </ClInclude>
@@ -137,9 +134,6 @@
     </ClInclude>
     <ClInclude Include="Code\Script\Script.h">
       <Filter>Code\Script</Filter>
-    </ClInclude>
-    <ClInclude Include="Code\Event\Event.h">
-      <Filter>Code\Event</Filter>
     </ClInclude>
     <ClInclude Include="include\tinygltf\json.hpp">
       <Filter>Include</Filter>
@@ -182,9 +176,6 @@
     </ClInclude>
     <ClInclude Include="Code\Shader\Shader.h">
       <Filter>Code\Shader</Filter>
-    </ClInclude>
-    <ClInclude Include="Code\Event\Delegate.h">
-      <Filter>Code\Event</Filter>
     </ClInclude>
     <ClInclude Include="Code\Shader\Reflection.h">
       <Filter>Code\Shader</Filter>
@@ -279,8 +270,17 @@
     <ClInclude Include="Code\ECS\ECSBase.h">
       <Filter>Code\ECS</Filter>
     </ClInclude>
-    <ClInclude Include="Code\ECS\World.h">
+    <ClInclude Include="Code\ECS\Context.h">
       <Filter>Code\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Context\ContextTemp.h">
+      <Filter>Code\Context</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Event\EventSystem.h">
+      <Filter>Code\Event</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Event\Delegate.h">
+      <Filter>Code\Event</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -292,9 +292,6 @@
     </ClCompile>
     <ClCompile Include="Code\Console\Console.cpp">
       <Filter>Code\Console</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Context\Context.cpp">
-      <Filter>Code\Context</Filter>
     </ClCompile>
     <ClCompile Include="Code\Deferred\Deferred.cpp">
       <Filter>Code\Deferred</Filter>
@@ -325,9 +322,6 @@
     </ClCompile>
     <ClCompile Include="Code\Script\Script.cpp">
       <Filter>Code\Script</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Event\Event.cpp">
-      <Filter>Code\Event</Filter>
     </ClCompile>
     <ClCompile Include="include\tinygltf\stb_image.cpp">
       <Filter>Include</Filter>
@@ -497,11 +491,17 @@
     <ClCompile Include="Code\ECS\System.cpp">
       <Filter>Code\ECS</Filter>
     </ClCompile>
-    <ClCompile Include="Code\ECS\World.cpp">
-      <Filter>Code\ECS</Filter>
-    </ClCompile>
     <ClCompile Include="Code\ECS\ECSBase.cpp">
       <Filter>Code\ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\ECS\Context.cpp">
+      <Filter>Code\ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Context\ContextTemp.cpp">
+      <Filter>Code\Context</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Event\EventSystem.cpp">
+      <Filter>Code\Event</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

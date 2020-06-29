@@ -76,11 +76,11 @@ struct VkDebugUtilsMessengerCallbackDataEXT;
 
 namespace vm
 {
-	class Context
+	class ContextTemp
 	{
 	public:
-		Context() = default;
-		~Context() = default;
+		ContextTemp() = default;
+		~ContextTemp() = default;
 
 		// RENDER TARGETS
 		std::map<std::string, Image> renderTargets{};

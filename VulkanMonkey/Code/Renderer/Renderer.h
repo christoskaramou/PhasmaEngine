@@ -1,5 +1,5 @@
 #pragma once
-#include "../Context/Context.h"
+#include "../Context/ContextTemp.h"
 #include "../ECS/System.h"
 
 namespace vk
@@ -17,7 +17,7 @@ namespace vm
 		void update(double delta);
 		void present();
 
-		Context ctx;
+		ContextTemp ctx;
 		uint32_t previousImageIndex = 0;
 
 	private:

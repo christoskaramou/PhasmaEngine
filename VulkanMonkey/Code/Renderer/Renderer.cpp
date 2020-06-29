@@ -1,6 +1,5 @@
 #include "vulkanPCH.h"
 #include "Renderer.h"
-#include "../Event/Event.h"
 #include "../Core/Queue.h"
 #include "../Model/Mesh.h"
 #include "../VulkanContext/VulkanContext.h"
@@ -407,7 +406,7 @@ namespace vm
 
 		static const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader };
 
-		FIRE_EVENT(Event::OnRender);
+		//FIRE_EVENT(Event::OnRender);
 
 		if (GUI::use_compute) {
 			//recordComputeCmds(2, 2, 1);
