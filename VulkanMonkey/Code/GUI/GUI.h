@@ -22,9 +22,14 @@ namespace vm
 	constexpr float LEFT_PANEL_WIDTH = 250.f;
 	constexpr float RIGHT_PANEL_WIDTH = 250.f;
 	constexpr float MENU_HEIGHT = 19.f;
+
+	class Context;
+
 	class GUI : public Object
 	{
 	public:
+		Context* ctx;
+
 		GUI();
 		~GUI();
 
@@ -110,9 +115,9 @@ namespace vm
 
 		std::string	name;
 		RenderPass renderPass;
-		Ref_t<std::vector<Framebuffer>> framebuffers;
+		std::vector<Framebuffer> framebuffers;
 		Pipeline pipeline;
-		static Ref_t<vk::DescriptorSetLayout> descriptorSetLayout;
+		static Ref<vk::DescriptorSetLayout> descriptorSetLayout;
 		static const vk::DescriptorSetLayout& getDescriptorSetLayout(vk::Device device);
 		void update();
 		void loadGUI(bool show = true);

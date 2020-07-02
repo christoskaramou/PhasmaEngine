@@ -17,10 +17,10 @@ namespace vm
 	public:
 		Surface();
 		~Surface();
-		Ref_t<vk::SurfaceKHR> surface;
-		Ref_t<vk::Extent2D> actualExtent;
-		Ref_t<vk::SurfaceCapabilitiesKHR> capabilities;
-		Ref_t<vk::SurfaceFormatKHR> formatKHR{};
-		Ref_t<vk::PresentModeKHR> presentModeKHR{};
+		Ref<vk::SurfaceKHR> surface;
+		Ref<vk::Extent2D> actualExtent;
+		Ref<vk::SurfaceCapabilitiesKHR> capabilities;
+		Ref<vk::SurfaceFormatKHR> formatKHR{};
+		Ref<vk::PresentModeKHR> presentModeKHR{};
 	};
 }

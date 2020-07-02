@@ -12,10 +12,10 @@
 
 namespace vm
 {
-	Ref_t<vk::DescriptorSetLayout> GUI::descriptorSetLayout = Ref_t<vk::DescriptorSetLayout>();
+	Ref<vk::DescriptorSetLayout> GUI::descriptorSetLayout = Ref<vk::DescriptorSetLayout>();
 	GUI::GUI()
 	{
-		descriptorSetLayout = vk::DescriptorSetLayout(); // TODO: multiple instances will initialize this find an other way
+		descriptorSetLayout = make_ref(vk::DescriptorSetLayout()); // TODO: multiple instances will initialize this find an other way
 		framebuffers = std::vector<Framebuffer>();
 	}
 
@@ -547,7 +547,7 @@ namespace vm
 
 	const vk::DescriptorSetLayout& GUI::getDescriptorSetLayout(vk::Device device)
 	{
-		if (!descriptorSetLayout.Value()) {
+		if (!*descriptorSetLayout) {
 			// binding for gui texture
 			std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBindings(1);
 
@@ -559,9 +559,9 @@ namespace vm
 			vk::DescriptorSetLayoutCreateInfo createInfo;
 			createInfo.bindingCount = static_cast<uint32_t>(descriptorSetLayoutBindings.size());
 			createInfo.pBindings = descriptorSetLayoutBindings.data();
-			descriptorSetLayout = device.createDescriptorSetLayout(createInfo);
+			descriptorSetLayout = make_ref(device.createDescriptorSetLayout(createInfo));
 		}
-		return descriptorSetLayout.Value();
+		return *descriptorSetLayout;
 	}
 
 	const char* GUI::ImGui_ImplSDL2_GetClipboardText(void*)
@@ -581,7 +581,7 @@ namespace vm
 	{
 		auto vulkan = VulkanContext::get();
 		vk::CommandBufferAllocateInfo cbai;
-		cbai.commandPool = vulkan->commandPool.Value();
+		cbai.commandPool = *vulkan->commandPool;
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = 1;
 
@@ -665,16 +665,16 @@ namespace vm
 
 		// Create the Image:
 		{
-			texture.format = vk::Format::eR8G8B8A8Unorm;
+			texture.format = make_ref(vk::Format::eR8G8B8A8Unorm);
 			texture.mipLevels = 1;
 			texture.arrayLayers = 1;
-			texture.initialLayout = vk::ImageLayout::eUndefined;
+			texture.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 			texture.createImage(width, height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-			texture.viewType = vk::ImageViewType::e2D;
+			texture.viewType = make_ref(vk::ImageViewType::e2D);
 			texture.createImageView(vk::ImageAspectFlagBits::eColor);
 
-			texture.addressMode = vk::SamplerAddressMode::eRepeat;
+			texture.addressMode = make_ref(vk::SamplerAddressMode::eRepeat);
 			texture.maxAnisotropy = 1.f;
 			texture.minLod = -1000.f;
 			texture.maxLod = 1000.f;
@@ -698,7 +698,7 @@ namespace vm
 			copy_barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
 			copy_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			copy_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			copy_barrier.image = texture.image.Value();
+			copy_barrier.image = *texture.image;
 			copy_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 			copy_barrier.subresourceRange.levelCount = 1;
 			copy_barrier.subresourceRange.layerCount = 1;
@@ -717,7 +717,7 @@ namespace vm
 			region.imageExtent.width = width;
 			region.imageExtent.height = height;
 			region.imageExtent.depth = 1;
-			(*vulkan->dynamicCmdBuffers)[0].copyBufferToImage(stagingBuffer.buffer.Value(), texture.image.Value(), vk::ImageLayout::eTransferDstOptimal, region);
+			(*vulkan->dynamicCmdBuffers)[0].copyBufferToImage(*stagingBuffer.buffer, *texture.image, vk::ImageLayout::eTransferDstOptimal, region);
 
 			vk::ImageMemoryBarrier use_barrier = {};
 			use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -726,7 +726,7 @@ namespace vm
 			use_barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 			use_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			use_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			use_barrier.image = texture.image.Value();
+			use_barrier.image = *texture.image;
 			use_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 			use_barrier.subresourceRange.levelCount = 1;
 			use_barrier.subresourceRange.layerCount = 1;
@@ -741,11 +741,11 @@ namespace vm
 		}
 
 		// Store our identifier
-		io.Fonts->TexID = reinterpret_cast<ImTextureID>(reinterpret_cast<intptr_t>(static_cast<VkImage>(texture.image.Value())));
+		io.Fonts->TexID = reinterpret_cast<ImTextureID>(reinterpret_cast<intptr_t>(static_cast<VkImage>(*texture.image)));
 
 		(*vulkan->dynamicCmdBuffers)[0].end();
 
-		vulkan->submitAndWaitFence(vulkan->dynamicCmdBuffers[0], nullptr, nullptr, nullptr);
+		vulkan->submitAndWaitFence((*vulkan->dynamicCmdBuffers)[0], nullptr, nullptr, nullptr);
 
 		stagingBuffer.destroy();
 	}
@@ -792,7 +792,7 @@ namespace vm
 
 		vk::ImageBlit blit;
 		blit.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
-		blit.srcOffsets[1] = vk::Offset3D{ static_cast<int32_t>(renderedImage.width.Value()), static_cast<int32_t>(renderedImage.height.Value()), 1 };
+		blit.srcOffsets[1] = vk::Offset3D{ static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 1 };
 		blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		blit.srcSubresource.layerCount = 1;
 		blit.dstOffsets[0] = vk::Offset3D{ static_cast<int32_t>(winPos.x), static_cast<int32_t>(winPos.y), 0 };
@@ -801,9 +801,9 @@ namespace vm
 		blit.dstSubresource.layerCount = 1;
 
 		cmd.blitImage(
-			renderedImage.image.Value(),
+			*renderedImage.image,
 			vk::ImageLayout::eTransferSrcOptimal,
-			s_chain_Image.image.Value(),
+			*s_chain_Image.image,
 			vk::ImageLayout::eTransferDstOptimal,
 			blit,
 			vk::Filter::eLinear);
@@ -845,19 +845,19 @@ namespace vm
 			std::vector<vk::ClearValue> clearValues = { clearColor, depthStencil };
 
 			vk::RenderPassBeginInfo rpi;
-			rpi.renderPass = *renderPass;
-			rpi.framebuffer = framebuffers[imageIndex].Value();
-			rpi.renderArea = vk::Rect2D{ { 0, 0 }, VulkanContext::get()->surface.actualExtent.Value() };
+			rpi.renderPass = *renderPass.renderPass;
+			rpi.framebuffer = *framebuffers[imageIndex].framebuffer;
+			rpi.renderArea = vk::Rect2D{ { 0, 0 }, *VulkanContext::get()->surface.actualExtent };
 			rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			rpi.pClearValues = clearValues.data();
 
 			cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 			const vk::DeviceSize offset{ 0 };
-			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline.Value());
-			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout.Value(), 0, descriptorSet.Value(), nullptr);
-			cmd.bindVertexBuffers(0, vertexBuffer.buffer.Value(), offset);
-			cmd.bindIndexBuffer(indexBuffer.buffer.Value(), 0, vk::IndexType::eUint32);
+			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
+			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.pipelineLayout, 0, *descriptorSet, nullptr);
+			cmd.bindVertexBuffers(0, *vertexBuffer.buffer, offset);
+			cmd.bindIndexBuffer(*indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
 			vk::Viewport viewport;
 			viewport.x = 0.f;
@@ -873,7 +873,7 @@ namespace vm
 			data[1] = 2.0f / draw_data->DisplaySize.y;				// scale
 			data[2] = -1.0f - draw_data->DisplayPos.x * data[0];	// transform
 			data[3] = -1.0f - draw_data->DisplayPos.y * data[1];	// transform
-			cmd.pushConstants<float>(pipeline.pipelineLayout.Value(), vk::ShaderStageFlagBits::eVertex, 0, data);
+			cmd.pushConstants<float>(*pipeline.pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, data);
 
 			// Render the command lists:
 			int vtx_offset = 0;
@@ -994,9 +994,9 @@ namespace vm
 			return;
 		const size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
 		const size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-		if (!vertexBuffer.buffer.Value() || vertexBuffer.size.Value() < vertex_size)
+		if (!*vertexBuffer.buffer || vertexBuffer.size < vertex_size)
 			createVertexBuffer(vertex_size);
-		if (!indexBuffer.buffer.Value() || indexBuffer.size.Value() < index_size)
+		if (!*indexBuffer.buffer || indexBuffer.size < index_size)
 			createIndexBuffer(index_size);
 
 		// Upload Vertex and index Data:
@@ -1112,10 +1112,10 @@ namespace vm
 	void GUI::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
+		allocateInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &descriptorSetLayout;
-		descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
+		descriptorSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0));
 
 		updateDescriptorSets();
 
@@ -1125,13 +1125,13 @@ namespace vm
 	{
 		// texture sampler
 		vk::DescriptorImageInfo dii0;
-		dii0.sampler = texture.sampler.Value();
-		dii0.imageView = texture.view.Value();
+		dii0.sampler = *texture.sampler;
+		dii0.imageView = *texture.view;
 		dii0.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
 
-		textureWriteSets[0].dstSet = descriptorSet.Value();
+		textureWriteSets[0].dstSet = *descriptorSet;
 		textureWriteSets[0].dstBinding = 0;
 		textureWriteSets[0].dstArrayElement = 0;
 		textureWriteSets[0].descriptorCount = 1;
@@ -1168,19 +1168,19 @@ namespace vm
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-		renderPass.SetRef(VulkanContext::get()->device->createRenderPass(renderPassInfo));
+		renderPass.renderPass = make_ref(VulkanContext::get()->device->createRenderPass(renderPassInfo));
 	}
 
 	void GUI::createFrameBuffers()
 	{
 		auto vulkan = VulkanContext::get();
 
-		framebuffers->resize(vulkan->swapchain.images.size());
+		framebuffers.resize(vulkan->swapchain.images.size());
 		for (uint32_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
 			uint32_t width = WIDTH;
 			uint32_t height = HEIGHT;
-			vk::ImageView view = vulkan->swapchain.images[i].view.Value();
+			vk::ImageView view = *vulkan->swapchain.images[i].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -1192,16 +1192,16 @@ namespace vm
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
-		pipeline.info.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGUI();
-		pipeline.info.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGUI();
+		pipeline.info.vertexInputBindingDescriptions = make_ref(Vertex::getBindingDescriptionGUI());
+		pipeline.info.vertexInputAttributeDescriptions = make_ref(Vertex::getAttributeDescriptionGUI());
 		pipeline.info.width = WIDTH_f;
 		pipeline.info.height = HEIGHT_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = { VulkanContext::get()->swapchain.images[0].blentAttachment.Value() };
-		pipeline.info.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+		pipeline.info.colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>{ *VulkanContext::get()->swapchain.images[0].blentAttachment });
+		pipeline.info.dynamicStates = make_ref(std::vector<vk::DynamicState>{ vk::DynamicState::eViewport, vk::DynamicState::eScissor });
 		pipeline.info.pushConstantStage = PushConstantStage::Vertex;
 		pipeline.info.pushConstantSize = sizeof(float) * 4;
-		pipeline.info.descriptorSetLayouts = { getDescriptorSetLayout(VulkanContext::get()->device.Value()) };
+		pipeline.info.descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>{ getDescriptorSetLayout(*VulkanContext::get()->device) });
 		pipeline.info.renderPass = renderPass;
 
 		pipeline.createGraphicsPipeline();
@@ -1212,12 +1212,12 @@ namespace vm
 		Object::destroy();
 		renderPass.Destroy();
 
-		for (auto &framebuffer : *framebuffers)
+		for (auto &framebuffer : framebuffers)
 			framebuffer.Destroy();
 
 		pipeline.destroy();
-		if (GUI::descriptorSetLayout.Value()) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(GUI::descriptorSetLayout.Value());
+		if (*GUI::descriptorSetLayout) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(*GUI::descriptorSetLayout);
 			*GUI::descriptorSetLayout = nullptr;
 		}
 	}

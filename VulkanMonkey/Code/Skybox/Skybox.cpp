@@ -9,7 +9,7 @@ namespace vm
 {
 	SkyBox::SkyBox()
 	{
-		descriptorSet = vk::DescriptorSet();
+		descriptorSet = make_ref(vk::DescriptorSet());
 	}
 
 	SkyBox::~SkyBox()
@@ -19,19 +19,19 @@ namespace vm
 	void SkyBox::createDescriptorSet()
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
+		allocateInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutSkybox();
-		descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
+		descriptorSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0));
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
 		// texture sampler
 		vk::DescriptorImageInfo dii;
-		dii.sampler = texture.sampler.Value();
-		dii.imageView = texture.view.Value();
+		dii.sampler = *texture.sampler;
+		dii.imageView = *texture.view;
 		dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-		textureWriteSets[0].dstSet = descriptorSet.Value();
+		textureWriteSets[0].dstSet = *descriptorSet;
 		textureWriteSets[0].dstBinding = 0;
 		textureWriteSets[0].dstArrayElement = 0;
 		textureWriteSets[0].descriptorCount = 1;
@@ -51,12 +51,12 @@ namespace vm
 		assert(paths.size() == 6);
 
 		texture.arrayLayers = 6;
-		texture.format = vk::Format::eR8G8B8A8Unorm;
-		texture.imageCreateFlags = vk::ImageCreateFlagBits::eCubeCompatible;
+		texture.format = make_ref(vk::Format::eR8G8B8A8Unorm);
+		texture.imageCreateFlags = make_ref<vk::ImageCreateFlags>(vk::ImageCreateFlagBits::eCubeCompatible);
 		texture.createImage(imageSideSize, imageSideSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 		texture.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-		for (uint32_t i = 0; i < texture.arrayLayers.Value(); ++i) {
+		for (uint32_t i = 0; i < texture.arrayLayers; ++i) {
 			// Texture Load
 			int texWidth, texHeight, texChannels;
 			//stbi_set_flip_vertically_on_load(true);
@@ -76,15 +76,15 @@ namespace vm
 
 			stbi_image_free(pixels);
 
-			texture.copyBufferToImage(staging.buffer.Value(), i);
+			texture.copyBufferToImage(*staging.buffer, i);
 			staging.destroy();
 		}
 		texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		texture.viewType = vk::ImageViewType::eCube;
+		texture.viewType = make_ref(vk::ImageViewType::eCube);
 		texture.createImageView(vk::ImageAspectFlagBits::eColor);
 
-		texture.addressMode = vk::SamplerAddressMode::eClampToEdge;
+		texture.addressMode = make_ref(vk::SamplerAddressMode::eClampToEdge);
 		texture.createSampler();
 	}
 

@@ -14,7 +14,7 @@ namespace vm
 		SkyBox();
 		~SkyBox();
 		Image texture;
-		Ref_t<vk::DescriptorSet> descriptorSet;
+		Ref<vk::DescriptorSet> descriptorSet;
 
 		void createDescriptorSet();
 		void loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, bool show = true);

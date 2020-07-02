@@ -5,24 +5,24 @@ namespace vm
 {
 	VulkanContext::VulkanContext()
 	{
-		instance = vk::Instance();
-		debugMessenger = vk::DebugUtilsMessengerEXT();
-		gpu = vk::PhysicalDevice();
-		gpuProperties = vk::PhysicalDeviceProperties();
-		gpuFeatures = vk::PhysicalDeviceFeatures();
-		device = vk::Device();
-		graphicsQueue = vk::Queue();
-		computeQueue = vk::Queue();
-		transferQueue = vk::Queue();
-		commandPool = vk::CommandPool();
-		commandPool2 = vk::CommandPool();
-		descriptorPool = vk::DescriptorPool();
-		dispatchLoaderDynamic = vk::DispatchLoaderDynamic();
-		queueFamilyProperties = std::vector<vk::QueueFamilyProperties>();
-		dynamicCmdBuffers = std::vector<vk::CommandBuffer>();
-		shadowCmdBuffers = std::vector<vk::CommandBuffer>();
-		fences = std::vector<vk::Fence>();
-		semaphores = std::vector<vk::Semaphore>();
+		instance = make_ref(vk::Instance());
+		debugMessenger = make_ref(vk::DebugUtilsMessengerEXT());
+		gpu = make_ref(vk::PhysicalDevice());
+		gpuProperties = make_ref(vk::PhysicalDeviceProperties());
+		gpuFeatures = make_ref(vk::PhysicalDeviceFeatures());
+		device = make_ref(vk::Device());
+		graphicsQueue = make_ref(vk::Queue());
+		computeQueue = make_ref(vk::Queue());
+		transferQueue = make_ref(vk::Queue());
+		commandPool = make_ref(vk::CommandPool());
+		commandPool2 = make_ref(vk::CommandPool());
+		descriptorPool = make_ref(vk::DescriptorPool());
+		dispatchLoaderDynamic = make_ref(vk::DispatchLoaderDynamic());
+		queueFamilyProperties = make_ref(std::vector<vk::QueueFamilyProperties>());
+		dynamicCmdBuffers = make_ref(std::vector<vk::CommandBuffer>());
+		shadowCmdBuffers = make_ref(std::vector<vk::CommandBuffer>());
+		fences = make_ref(std::vector<vk::Fence>());
+		semaphores = make_ref(std::vector<vk::Semaphore>());
 
 		window = nullptr;
 		graphicsFamilyId = 0;

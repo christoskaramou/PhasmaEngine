@@ -30,7 +30,7 @@ namespace vm
 		std::vector<Framebuffer> framebuffers{}, blurFramebuffers{};
 		Pipeline pipeline;
 		Pipeline pipelineBlur;
-		Ref_t<vk::DescriptorSet> DSet, DSBlur;
+		Ref<vk::DescriptorSet> DSet, DSBlur;
 
 		void update(Camera& camera);
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);

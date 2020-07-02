@@ -1,5 +1,6 @@
 #pragma once
 #include "GameObject.h"
+#include "../Core/Base.h"
 
 namespace vm
 {
@@ -9,7 +10,9 @@ namespace vm
 		Context() {}
 		~Context() {}
 
-		template<class T, class... Params> inline T* AddSystem(Params&&... params);
+		void UpdateSystems(double delta);
+
+		template<class T, class... Params> inline T* CreateSystem(Params&&... params);
 		template<class T> inline T* GetSystem();
 		template<class T> inline bool HasSystem();
 		template<class T> inline void RemoveSystem();
@@ -18,12 +21,12 @@ namespace vm
 		void RemoveGameObject(size_t id);
 
 	private:
-		std::map<size_t, std::shared_ptr<BaseSystem>> m_systems;
-		std::map<size_t, std::shared_ptr<GameObject>> m_gameObjects;
+		std::map<size_t, Ref<BaseSystem>> m_systems;
+		std::map<size_t, Ref<GameObject>> m_gameObjects;
 	};
 
 	template<class T, class... Params>
-	inline T* Context::AddSystem(Params&&... params)
+	inline T* Context::CreateSystem(Params&&... params)
 	{
 		if constexpr (std::is_base_of<System, T>::value)
 		{
@@ -43,7 +46,7 @@ namespace vm
 		}
 		else
 		{
-			throw std::runtime_error("Context::AddSystem: Type is not a System");
+			throw std::runtime_error("Context::CreateSystem: Type is not a System");
 		}
 	}
 

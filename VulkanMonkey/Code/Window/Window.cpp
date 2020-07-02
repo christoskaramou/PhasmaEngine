@@ -2,24 +2,20 @@
 #include "Window.h"
 #include "../Console/Console.h"
 #include "../VulkanContext/VulkanContext.h"
+#include "../Renderer/Renderer.h"
+#include "../ECS/Context.h"
 #include <iostream>
 
 namespace vm
 {
-	std::vector<std::unique_ptr<Renderer>> Window::renderer{};
-
-	Window::Window() {}
-
-	Window::~Window() {}
-
-	void Window::create(const std::string& title, uint32_t flags)
+	SDL_Window* Window::Create(Context* ctx, const std::string& title, uint32_t flags)
 	{
-		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) { std::cout << SDL_GetError(); return; }
+		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) { std::cout << SDL_GetError(); return nullptr; }
 
 		SDL_Window* window;
-		if (!((window = SDL_CreateWindow(title.c_str(), 50, 50, 800, 600, flags)))) { std::cout << SDL_GetError(); return; }
+		if (!((window = SDL_CreateWindow(title.c_str(), 50, 50, 800, 600, flags)))) { std::cout << SDL_GetError(); return nullptr; }
 
-		renderer.push_back(std::make_unique<Renderer>(window));
+		this->ctx = ctx;
 
 		auto vulkan = VulkanContext::get();
 
@@ -27,29 +23,28 @@ namespace vm
 			"VulkanMonkey3D   "
 			+ std::string(vulkan->gpuProperties->deviceName)
 			+ " (Present Mode: "
-			+ vk::to_string(vulkan->surface.presentModeKHR.Value())
+			+ vk::to_string(*vulkan->surface.presentModeKHR)
 			+ ")";
 
 		SDL_SetWindowTitle(window, _title.c_str());
+
+		return window;
 	}
 
-	void Window::destroyAll()
+	void Window::DestroyAll()
 	{
-		while (!renderer.empty()) {
-			auto vulkan = VulkanContext::get();
-			SDL_DestroyWindow(vulkan->window);
-			renderer.pop_back();
-		}
+		auto vulkan = VulkanContext::get();
+		SDL_DestroyWindow(vulkan->window);
 		SDL_Quit();
 	}
 
-	bool Window::processEvents(double delta)
+	bool Window::ProcessEvents(double delta)
 	{
 		if (Console::close_app) return false;
 		static int xMove = 0;
 		static int yMove = 0;
 
-		auto& info = renderer[0]->ctx;
+		auto& info = ctx->GetSystem<Renderer>()->ctx;
 		auto vulkan = VulkanContext::get();
 		bool combineDirections = false;
 
@@ -111,12 +106,12 @@ namespace vm
 					{
 						int w, h;
 						SDL_GL_GetDrawableSize(vulkan->window, &w, &h);
-						renderer[0]->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+						ctx->GetSystem<Renderer>()->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 					}
 				}
 			}
 			if (event.type == GUI::compileShadersEventType) {
-				renderer[0]->ctx.recreatePipelines();
+				ctx->GetSystem<Renderer>()->ctx.recreatePipelines();
 			}
 		}
 

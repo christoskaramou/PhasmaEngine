@@ -17,7 +17,7 @@ namespace vm
 		Object();
 		virtual ~Object() = default;
 		bool render = true, cull = false;
-		Ref_t<vk::DescriptorSet> descriptorSet;
+		Ref<vk::DescriptorSet> descriptorSet;
 		Image texture;
 		std::vector<float> vertices{};
 		Buffer vertexBuffer;

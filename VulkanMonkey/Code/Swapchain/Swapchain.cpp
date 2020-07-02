@@ -6,7 +6,7 @@ namespace vm
 {
 	Swapchain::Swapchain()
 	{
-		swapchain = vk::SwapchainKHR();
+		swapchain = make_ref(vk::SwapchainKHR());
 	}
 
 	Swapchain::~Swapchain()
@@ -15,7 +15,7 @@ namespace vm
 
 	uint32_t Swapchain::aquire(vk::Semaphore semaphore, vk::Fence fence) const
 	{
-		const auto aquire = VulkanContext::get()->device->acquireNextImageKHR(swapchain.Value(), UINT64_MAX, semaphore, fence);
+		const auto aquire = VulkanContext::get()->device->acquireNextImageKHR(*swapchain, UINT64_MAX, semaphore, fence);
 		if (aquire.result != vk::Result::eSuccess)
 			throw std::runtime_error("Aquire Next Image error");
 
@@ -27,7 +27,7 @@ namespace vm
 		if (imageIndices.size() <= additionalSwapchains.size())
 			throw std::runtime_error("Not enough image indices");
 		std::vector<vk::SwapchainKHR> swapchains(static_cast<size_t>(additionalSwapchains.size()) + 1);
-		swapchains[0] = swapchain.Value();
+		swapchains[0] = *swapchain;
 		if (!additionalSwapchains.empty())
 			memcpy(&swapchains[1], additionalSwapchains.data(), additionalSwapchains.size() * sizeof(vk::SwapchainKHR));
 
@@ -44,11 +44,11 @@ namespace vm
 	void Swapchain::destroy()
 	{
 		for (auto& image : images) {
-			VulkanContext::get()->device->destroyImageView(image.view.Value());
+			VulkanContext::get()->device->destroyImageView(*image.view);
 			*image.view = nullptr;
 		}
-		if (swapchain.Value()) {
-			VulkanContext::get()->device->destroySwapchainKHR(swapchain.Value());
+		if (*swapchain) {
+			VulkanContext::get()->device->destroySwapchainKHR(*swapchain);
 			*swapchain = nullptr;
 		}
 	}

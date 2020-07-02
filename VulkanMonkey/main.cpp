@@ -1,6 +1,7 @@
 #include "Code/Window/Window.h"
 #include "Code/Core/Timer.h"
 #include <iostream>
+#include "Code/ECS/Context.h"
 
 using namespace vm;
 
@@ -9,7 +10,10 @@ int main(int argc, char* argv[])
 	//freopen("log.txt", "w", stdout);
 	//freopen("errors.txt", "w", stderr);
 
-	Window::create();
+	Window window;
+	Context ctx;
+	ctx.CreateSystem<Renderer>(&ctx, window.Create(&ctx));
+	ctx.GetSystem<Renderer>()->Init();
 
 	Timer interval;
 	interval.Start();
@@ -20,14 +24,13 @@ int main(int argc, char* argv[])
 	{
 		frame_timer.Start();
 		
-		if (!Window::processEvents(frame_timer.delta))
+		if (!window.ProcessEvents(frame_timer.delta))
 			break;
 		
-		if (!Window::isMinimized()) {
-			for (auto& renderer : Window::renderer) {
-				renderer->update(frame_timer.delta);
-				renderer->present();
-			}
+		if (!window.isMinimized())
+		{
+			ctx.GetSystem<Renderer>()->Update(frame_timer.delta);
+			ctx.GetSystem<Renderer>()->Present();
 		}
 		
 		// Metrics every 0.75 sec

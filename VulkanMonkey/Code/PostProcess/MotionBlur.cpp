@@ -13,7 +13,7 @@ namespace vm
 {
 	MotionBlur::MotionBlur()
 	{
-		DSet = vk::DescriptorSet();
+		DSet = make_ref(vk::DescriptorSet());
 	}
 
 	MotionBlur::~MotionBlur()
@@ -22,8 +22,8 @@ namespace vm
 
 	void MotionBlur::Init()
 	{
-		frameImage.format = VulkanContext::get()->surface.formatKHR->format;
-		frameImage.initialLayout = vk::ImageLayout::eUndefined;
+		frameImage.format = make_ref(VulkanContext::get()->surface.formatKHR->format);
+		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
 			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
@@ -45,10 +45,10 @@ namespace vm
 		UBmotionBlur.unmap();
 
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
+		allocateInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMotionBlur();
-		DSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
+		DSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0));
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -57,20 +57,20 @@ namespace vm
 	{
 		std::deque<vk::DescriptorImageInfo> dsii{};
 		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
-			dsii.emplace_back(image.sampler.Value(), image.view.Value(), vk::ImageLayout::eShaderReadOnlyOptimal);
+			dsii.emplace_back(*image.sampler, *image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 		};
 		std::deque<vk::DescriptorBufferInfo> dsbi{};
 		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
-			dsbi.emplace_back(buffer.buffer.Value(), 0, buffer.size.Value());
+			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 		};
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets{
-			wSetImage(DSet.Value(), 0, frameImage),
-			wSetImage(DSet.Value(), 1, renderTargets["depth"]),
-			wSetImage(DSet.Value(), 2, renderTargets["velocity"]),
-			wSetBuffer(DSet.Value(), 3, UBmotionBlur)
+			wSetImage(*DSet, 0, frameImage),
+			wSetImage(*DSet, 1, renderTargets["depth"]),
+			wSetImage(*DSet, 2, renderTargets["velocity"]),
+			wSetBuffer(*DSet, 3, UBmotionBlur)
 		};
 		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
@@ -83,8 +83,8 @@ namespace vm
 		std::vector<vk::ClearValue> clearValues = { clearColor };
 
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *renderPass;
-		rpi.framebuffer = *framebuffers[imageIndex];
+		rpi.renderPass = *renderPass.renderPass;
+		rpi.framebuffer = *framebuffers[imageIndex].framebuffer;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -92,9 +92,9 @@ namespace vm
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 		const vec4 values{ 1.f / static_cast<float>(FrameTimer::Instance().delta), sin(static_cast<float>(FrameTimer::Instance().time) * 0.125f), GUI::motionBlur_strength, 0.f };
-		cmd.pushConstants<vec4>(pipeline.pipelineLayout.Value(), vk::ShaderStageFlagBits::eFragment, 0, values);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline.Value());
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout.Value(), 0, DSet.Value(), nullptr);
+		cmd.pushConstants<vec4>(*pipeline.pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, values);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.pipelineLayout, 0, *DSet, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
@@ -137,7 +137,7 @@ namespace vm
 
 	void MotionBlur::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(renderTargets["viewport"].format.Value(), vk::Format::eUndefined);
+		renderPass.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
 	}
 
 	void MotionBlur::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -146,9 +146,9 @@ namespace vm
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["viewport"].width.Value();
-			uint32_t height = renderTargets["viewport"].height.Value();
-			vk::ImageView view = renderTargets["viewport"].view.Value();
+			uint32_t width = renderTargets["viewport"].width;
+			uint32_t height = renderTargets["viewport"].height;
+			vk::ImageView view = *renderTargets["viewport"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -161,13 +161,13 @@ namespace vm
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
-		pipeline.info.width = renderTargets["viewport"].width_f.Value();
-		pipeline.info.height = renderTargets["viewport"].height_f.Value();
+		pipeline.info.width = renderTargets["viewport"].width_f;
+		pipeline.info.height = renderTargets["viewport"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = { renderTargets["viewport"].blentAttachment.Value() };
+		pipeline.info.colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>{ *renderTargets["viewport"].blentAttachment });
 		pipeline.info.pushConstantStage = PushConstantStage::Fragment;
 		pipeline.info.pushConstantSize = sizeof(vec4);
-		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutMotionBlur() };
+		pipeline.info.descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>{ Pipeline::getDescriptorSetLayoutMotionBlur() });
 		pipeline.info.renderPass = renderPass;
 
 		pipeline.createGraphicsPipeline();

@@ -7,26 +7,26 @@ namespace vm
 {
 	Image::Image()
 	{
-		samples = vk::SampleCountFlagBits::e1;
+		samples = make_ref(vk::SampleCountFlagBits::e1);
 		layoutState = LayoutState::ColorWrite;
-		format = {};
-		initialLayout = vk::ImageLayout::ePreinitialized;
-		tiling = vk::ImageTiling::eOptimal;
+		format = make_ref(vk::Format::eUndefined);
+		initialLayout = make_ref(vk::ImageLayout::ePreinitialized);
+		tiling = make_ref(vk::ImageTiling::eOptimal);
 		mipLevels = 1;
 		arrayLayers = 1;
 		anisotropyEnabled = VK_TRUE;
 		minLod = 0.f;
 		maxLod = 1.f;
 		maxAnisotropy = 16.f;
-		filter = vk::Filter::eLinear;
-		imageCreateFlags = vk::ImageCreateFlags();
-		viewType = vk::ImageViewType::e2D;
-		addressMode = vk::SamplerAddressMode::eRepeat;
-		borderColor = vk::BorderColor::eFloatOpaqueBlack;
+		filter = make_ref(vk::Filter::eLinear);
+		imageCreateFlags = make_ref(vk::ImageCreateFlags());
+		viewType = make_ref(vk::ImageViewType::e2D);
+		addressMode = make_ref(vk::SamplerAddressMode::eRepeat);
+		borderColor = make_ref(vk::BorderColor::eFloatOpaqueBlack);
 		samplerCompareEnable = VK_FALSE;
-		compareOp = vk::CompareOp::eLess;
-		samplerMipmapMode = vk::SamplerMipmapMode::eLinear;
-		blentAttachment = vk::PipelineColorBlendAttachmentState();
+		compareOp = make_ref(vk::CompareOp::eLess);
+		samplerMipmapMode = make_ref(vk::SamplerMipmapMode::eLinear);
+		blentAttachment = make_ref(vk::PipelineColorBlendAttachmentState());
 	}
 
 	Image::~Image()
@@ -46,17 +46,17 @@ namespace vm
 		vk::ImageMemoryBarrier barrier;
 		barrier.srcAccessMask = srcMask;
 		barrier.dstAccessMask = dstMask;
-		barrier.image = image.Value();
+		barrier.image = *image;
 		barrier.oldLayout = oldLayout;
 		barrier.newLayout = newLayout;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.subresourceRange.aspectMask = aspectFlags;
 		barrier.subresourceRange.baseMipLevel = 0;
-		barrier.subresourceRange.levelCount = mipLevels.Value();
+		barrier.subresourceRange.levelCount = mipLevels;
 		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.layerCount = arrayLayers.Value();
-		if (format.Value() == vk::Format::eD32SfloatS8Uint || format.Value() == vk::Format::eD24UnormS8Uint) {
+		barrier.subresourceRange.layerCount = arrayLayers;
+		if (*format== vk::Format::eD32SfloatS8Uint || *format == vk::Format::eD24UnormS8Uint) {
 			barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eStencil;
 		}
 
@@ -72,7 +72,7 @@ namespace vm
 
 	void Image::createImage(uint32_t width, uint32_t height, vk::ImageTiling tiling, const vk::ImageUsageFlags& usage, const vk::MemoryPropertyFlags& properties)
 	{
-		const auto fProps = VulkanContext::get()->gpu->getFormatProperties(format.Value());
+		const auto fProps = VulkanContext::get()->gpu->getFormatProperties(*format);
 
 		if (tiling == vk::ImageTiling::eOptimal) {
 			if (!fProps.optimalTilingFeatures)
@@ -86,39 +86,39 @@ namespace vm
 			throw std::runtime_error("createImage(): wrong format error.");
 		}
 
-		auto const ifProps = VulkanContext::get()->gpu->getImageFormatProperties(format.Value(), vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
-		if (ifProps.maxArrayLayers < arrayLayers.Value() ||
+		auto const ifProps = VulkanContext::get()->gpu->getImageFormatProperties(*format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
+		if (ifProps.maxArrayLayers < arrayLayers ||
 			ifProps.maxExtent.width < width ||
 			ifProps.maxExtent.height < height ||
-			ifProps.maxMipLevels < mipLevels.Value() ||
-			!(ifProps.sampleCounts & samples.Value()))
+			ifProps.maxMipLevels < mipLevels ||
+			!(ifProps.sampleCounts & *samples))
 			throw std::runtime_error("createImage(): image format properties error!");
 
 
-		this->tiling = tiling;
+		this->tiling = make_ref(tiling);
 		this->width = width % 2 != 0 ? width - 1 : width;
 		this->height = height % 2 != 0 ? height - 1 : height;
-		width_f = static_cast<float>(this->width.Value());
-		height_f = static_cast<float>(this->height.Value());
-		extent = vk::Extent2D{ this->width.Value(), this->height.Value() };
+		width_f = static_cast<float>(this->width);
+		height_f = static_cast<float>(this->height);
+		extent = make_ref(vk::Extent2D{ this->width, this->height });
 
 		vk::ImageCreateInfo imageInfo;
-		imageInfo.flags = imageCreateFlags.Value();
+		imageInfo.flags = *imageCreateFlags;
 		imageInfo.imageType = vk::ImageType::e2D;
-		imageInfo.format = format.Value();
-		imageInfo.extent = vk::Extent3D{ this->width.Value(), this->height.Value(), 1 };
-		imageInfo.mipLevels = mipLevels.Value();
-		imageInfo.arrayLayers = arrayLayers.Value();
-		imageInfo.samples = samples.Value();
+		imageInfo.format = *format;
+		imageInfo.extent = vk::Extent3D{ this->width, this->height, 1 };
+		imageInfo.mipLevels = mipLevels;
+		imageInfo.arrayLayers = arrayLayers;
+		imageInfo.samples = *samples;
 		imageInfo.tiling = tiling;
 		imageInfo.usage = usage;
 		imageInfo.sharingMode = vk::SharingMode::eExclusive;
-		imageInfo.initialLayout = initialLayout.Value();
+		imageInfo.initialLayout = *initialLayout;
 
-		image = VulkanContext::get()->device->createImage(imageInfo);
+		image = make_ref(VulkanContext::get()->device->createImage(imageInfo));
 
 		uint32_t memTypeIndex = UINT32_MAX;
-		auto const memRequirements = VulkanContext::get()->device->getImageMemoryRequirements(image.Value());
+		auto const memRequirements = VulkanContext::get()->device->getImageMemoryRequirements(*image);
 		auto const memProperties = VulkanContext::get()->gpu->getMemoryProperties();
 
 		for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
@@ -135,23 +135,23 @@ namespace vm
 		allocInfo.allocationSize = memRequirements.size;
 		allocInfo.memoryTypeIndex = memTypeIndex;
 
-		memory = VulkanContext::get()->device->allocateMemory(allocInfo);
-		VulkanContext::get()->device->bindImageMemory(image.Value(), memory.Value(), 0);
+		memory = make_ref(VulkanContext::get()->device->allocateMemory(allocInfo));
+		VulkanContext::get()->device->bindImageMemory(*image, *memory, 0);
 
-		VulkanContext::get()->SetDebugObjectName(image.Value(), "");
+		VulkanContext::get()->SetDebugObjectName(*image, "");
 	}
 
 	void Image::createImageView(const vk::ImageAspectFlags& aspectFlags)
 	{
 		vk::ImageViewCreateInfo viewInfo;
-		viewInfo.image = image.Value();
-		viewInfo.viewType = viewType.Value();
-		viewInfo.format = format.Value();
-		viewInfo.subresourceRange = { aspectFlags, 0, mipLevels.Value(), 0, arrayLayers.Value() };
+		viewInfo.image = *image;
+		viewInfo.viewType = *viewType;
+		viewInfo.format = *format;
+		viewInfo.subresourceRange = { aspectFlags, 0, mipLevels, 0, arrayLayers };
 
-		view = VulkanContext::get()->device->createImageView(viewInfo);
+		view = make_ref(VulkanContext::get()->device->createImageView(viewInfo));
 
-		VulkanContext::get()->SetDebugObjectName(view.Value(), "");
+		VulkanContext::get()->SetDebugObjectName(*view, "");
 	}
 
 	void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout) const
@@ -159,7 +159,7 @@ namespace vm
 		vk::CommandBufferAllocateInfo allocInfo;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = VulkanContext::get()->commandPool2.Value();
+		allocInfo.commandPool = *VulkanContext::get()->commandPool2;
 
 		const vk::CommandBuffer commandBuffer = VulkanContext::get()->device->allocateCommandBuffers(allocInfo).at(0);
 
@@ -172,19 +172,19 @@ namespace vm
 		barrier.newLayout = newLayout;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.image = image.Value();
+		barrier.image = *image;
 
 		vk::PipelineStageFlags srcStage;
 		vk::PipelineStageFlags dstStage;
 
 		// Subresource aspectMask
 		if (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
-			barrier.subresourceRange = { vk::ImageAspectFlagBits::eDepth, 0, mipLevels.Value(), 0, arrayLayers.Value() };
-			if (format.Value() == vk::Format::eD32SfloatS8Uint || format.Value() == vk::Format::eD24UnormS8Uint) {
+			barrier.subresourceRange = { vk::ImageAspectFlagBits::eDepth, 0, mipLevels, 0, arrayLayers };
+			if (*format == vk::Format::eD32SfloatS8Uint || *format == vk::Format::eD24UnormS8Uint) {
 				barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eStencil;
 			}
 		}
-		else barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, mipLevels.Value(), 0, arrayLayers.Value() };
+		else barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, mipLevels, 0, arrayLayers };
 
 		// Src, Dst AccessMasks and Pipeline Stages for pipelineBarrier
 		if (oldLayout == vk::ImageLayout::ePreinitialized && newLayout == vk::ImageLayout::eTransferSrcOptimal) {
@@ -250,12 +250,12 @@ namespace vm
 
 		VulkanContext::get()->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-		VulkanContext::get()->device->freeCommandBuffers(VulkanContext::get()->commandPool2.Value(), commandBuffer);
+		VulkanContext::get()->device->freeCommandBuffers(*VulkanContext::get()->commandPool2, commandBuffer);
 	}
 
-	void Image::changeLayout(const vk::CommandBuffer& cmd, LayoutState state) const
+	void Image::changeLayout(const vk::CommandBuffer& cmd, LayoutState state)
 	{
-		if (state != layoutState.Value()) {
+		if (state != layoutState) {
 			if (state == LayoutState::ColorRead) {
 				transitionImageLayout(
 					cmd,
@@ -302,7 +302,7 @@ namespace vm
 					vk::AccessFlagBits::eDepthStencilAttachmentWrite,
 					vk::ImageAspectFlagBits::eDepth);
 			}
-			*layoutState = state;
+			layoutState = state;
 		}
 	}
 
@@ -311,7 +311,7 @@ namespace vm
 		vk::CommandBufferAllocateInfo allocInfo;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = VulkanContext::get()->commandPool2.Value();
+		allocInfo.commandPool = *VulkanContext::get()->commandPool2;
 
 		const vk::CommandBuffer commandBuffer = VulkanContext::get()->device->allocateCommandBuffers(allocInfo).at(0);
 
@@ -328,15 +328,15 @@ namespace vm
 		region.imageSubresource.baseArrayLayer = baseLayer;
 		region.imageSubresource.layerCount = 1;
 		region.imageOffset = vk::Offset3D(0, 0, 0);
-		region.imageExtent = vk::Extent3D(width.Value(), height.Value(), 1);
+		region.imageExtent = vk::Extent3D(width, height, 1);
 
-		commandBuffer.copyBufferToImage(buffer, image.Value(), vk::ImageLayout::eTransferDstOptimal, 1, &region);
+		commandBuffer.copyBufferToImage(buffer, *image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
 
 		commandBuffer.end();
 
 		VulkanContext::get()->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-		VulkanContext::get()->device->freeCommandBuffers(VulkanContext::get()->commandPool2.Value(), commandBuffer);
+		VulkanContext::get()->device->freeCommandBuffers(*VulkanContext::get()->commandPool2, commandBuffer);
 	}
 
 	void Image::copyColorAttachment(const vk::CommandBuffer& cmd, Image& renderedImage) const
@@ -366,14 +366,14 @@ namespace vm
 		region.srcSubresource.layerCount = 1;
 		region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		region.dstSubresource.layerCount = 1;
-		region.extent.width = renderedImage.width.Value();
-		region.extent.height = renderedImage.height.Value();
+		region.extent.width = renderedImage.width;
+		region.extent.height = renderedImage.height;
 		region.extent.depth = 1;
 
 		cmd.copyImage(
-			renderedImage.image.Value(),
+			*renderedImage.image,
 			vk::ImageLayout::eTransferSrcOptimal,
-			image.Value(),
+			*image,
 			vk::ImageLayout::eTransferDstOptimal,
 			region);
 
@@ -399,13 +399,13 @@ namespace vm
 
 	void Image::generateMipMaps() const
 	{
-		const auto fProps = VulkanContext::get()->gpu->getFormatProperties(format.Value());
+		const auto fProps = VulkanContext::get()->gpu->getFormatProperties(*format);
 
-		if (tiling.Value() == vk::ImageTiling::eOptimal) {
+		if (*tiling == vk::ImageTiling::eOptimal) {
 			if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear))
 				throw std::runtime_error("generateMipMaps(): Image tiling error, linear filter is not supported.");
 		}
-		else if (tiling.Value() == vk::ImageTiling::eLinear) {
+		else if (*tiling == vk::ImageTiling::eLinear) {
 			if (!(fProps.linearTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear))
 				throw std::runtime_error("generateMipMaps(): Image tiling error, linear filter is not supported.");
 		}
@@ -415,19 +415,19 @@ namespace vm
 
 		vk::CommandBufferAllocateInfo allocInfo;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;
-		allocInfo.commandBufferCount = mipLevels.Value();
-		allocInfo.commandPool = VulkanContext::get()->commandPool2.Value();
+		allocInfo.commandBufferCount = mipLevels;
+		allocInfo.commandPool = *VulkanContext::get()->commandPool2;
 
 		const auto commandBuffers = VulkanContext::get()->device->allocateCommandBuffers(allocInfo);
 
-		auto mipWidth = static_cast<int32_t>(width.Value());
-		auto mipHeight = static_cast<int32_t>(height.Value());
+		auto mipWidth = static_cast<int32_t>(width);
+		auto mipHeight = static_cast<int32_t>(height);
 
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
 		vk::ImageMemoryBarrier barrier = {};
-		barrier.image = image.Value();
+		barrier.image = *image;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
@@ -445,7 +445,7 @@ namespace vm
 		blit.dstSubresource.baseArrayLayer = 0;
 		blit.dstSubresource.layerCount = 1;
 
-		for (uint32_t i = 1; i < mipLevels.Value(); i++) {
+		for (uint32_t i = 1; i < mipLevels; i++) {
 
 			commandBuffers[i].begin(beginInfo);
 
@@ -470,9 +470,9 @@ namespace vm
 			blit.dstSubresource.mipLevel = i;
 
 			commandBuffers[i].blitImage(
-				image.Value(),
+				*image,
 				vk::ImageLayout::eTransferSrcOptimal,
-				image.Value(),
+				*image,
 				vk::ImageLayout::eTransferDstOptimal,
 				blit,
 				vk::Filter::eLinear
@@ -502,7 +502,7 @@ namespace vm
 
 		commandBuffers.front().begin(beginInfo);
 
-		barrier.subresourceRange.baseMipLevel = mipLevels.Value() - 1;
+		barrier.subresourceRange.baseMipLevel = mipLevels- 1;
 		barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
 		barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 		barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -521,36 +521,36 @@ namespace vm
 
 		VulkanContext::get()->submitAndWaitFence(commandBuffers.front(), nullptr, nullptr, nullptr);
 
-		VulkanContext::get()->device->freeCommandBuffers(VulkanContext::get()->commandPool2.Value(), commandBuffers);
+		VulkanContext::get()->device->freeCommandBuffers(*VulkanContext::get()->commandPool2, commandBuffers);
 	}
 
 	void Image::createSampler()
 	{
 		vk::SamplerCreateInfo samplerInfo;
-		samplerInfo.magFilter = filter.Value();
-		samplerInfo.minFilter = filter.Value();
-		samplerInfo.mipmapMode = samplerMipmapMode.Value();
-		samplerInfo.minLod = minLod.Value();
-		samplerInfo.maxLod = maxLod.Value();
+		samplerInfo.magFilter = *filter;
+		samplerInfo.minFilter = *filter;
+		samplerInfo.mipmapMode = *samplerMipmapMode;
+		samplerInfo.minLod = minLod;
+		samplerInfo.maxLod = maxLod;
 		samplerInfo.mipLodBias = 0.f;
-		samplerInfo.addressModeU = addressMode.Value();
-		samplerInfo.addressModeV = addressMode.Value();
-		samplerInfo.addressModeW = addressMode.Value();
-		samplerInfo.anisotropyEnable = anisotropyEnabled.Value();
-		samplerInfo.maxAnisotropy = maxAnisotropy.Value();
-		samplerInfo.compareEnable = samplerCompareEnable.Value();
-		samplerInfo.compareOp = compareOp.Value();
-		samplerInfo.borderColor = borderColor.Value();
+		samplerInfo.addressModeU = *addressMode;
+		samplerInfo.addressModeV = *addressMode;
+		samplerInfo.addressModeW = *addressMode;
+		samplerInfo.anisotropyEnable = anisotropyEnabled;
+		samplerInfo.maxAnisotropy = maxAnisotropy;
+		samplerInfo.compareEnable = samplerCompareEnable;
+		samplerInfo.compareOp = *compareOp;
+		samplerInfo.borderColor = *borderColor;
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
-		sampler = VulkanContext::get()->device->createSampler(samplerInfo);
+		sampler = make_ref(VulkanContext::get()->device->createSampler(samplerInfo));
 	}
 
 	void Image::destroy()
 	{
-		if (view.Value()) VulkanContext::get()->device->destroyImageView(view.Value());
-		if (image.Value()) VulkanContext::get()->device->destroyImage(image.Value());
-		if (memory.Value()) VulkanContext::get()->device->freeMemory(memory.Value());
-		if (sampler.Value()) VulkanContext::get()->device->destroySampler(sampler.Value());
+		if (*view) VulkanContext::get()->device->destroyImageView(*view);
+		if (*image) VulkanContext::get()->device->destroyImage(*image);
+		if (*memory) VulkanContext::get()->device->freeMemory(*memory);
+		if (*sampler) VulkanContext::get()->device->destroySampler(*sampler);
 		*view = nullptr;
 		*image = nullptr;
 		*memory = nullptr;

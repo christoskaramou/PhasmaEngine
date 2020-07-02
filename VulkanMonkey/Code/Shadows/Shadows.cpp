@@ -13,7 +13,7 @@ namespace vm
 
 	Shadows::Shadows()
 	{
-		descriptorSets = std::vector<vk::DescriptorSet>();
+		descriptorSets = make_ref(std::vector<vk::DescriptorSet>());
 	}
 
 	Shadows::~Shadows()
@@ -23,22 +23,22 @@ namespace vm
 	void Shadows::createDescriptorSets()
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
+		allocateInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutShadows();
 
 		descriptorSets->resize(textures.size()); // size of wanted number of cascaded shadows
 		for (uint32_t i = 0; i < descriptorSets->size(); i++) {
-			descriptorSets[i] = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
+			(*descriptorSets)[i] = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 			std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 			// MVP
 			vk::DescriptorBufferInfo dbi;
-			dbi.buffer = uniformBuffers[i].buffer.Value();
+			dbi.buffer = *uniformBuffers[i].buffer;
 			dbi.offset = 0;
 			dbi.range = sizeof(ShadowsUBO);
 
-			textureWriteSets[0].dstSet = descriptorSets[i];
+			textureWriteSets[0].dstSet = (*descriptorSets)[i];
 			textureWriteSets[0].dstBinding = 0;
 			textureWriteSets[0].dstArrayElement = 0;
 			textureWriteSets[0].descriptorCount = 1;
@@ -47,11 +47,11 @@ namespace vm
 
 			// sampler
 			vk::DescriptorImageInfo dii;
-			dii.sampler = textures[i].sampler.Value();
-			dii.imageView = textures[i].view.Value();
+			dii.sampler = *textures[i].sampler;
+			dii.imageView = *textures[i].view;
 			dii.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
 
-			textureWriteSets[1].dstSet = descriptorSets[i];
+			textureWriteSets[1].dstSet = (*descriptorSets)[i];
 			textureWriteSets[1].dstBinding = 1;
 			textureWriteSets[1].dstArrayElement = 0;
 			textureWriteSets[1].descriptorCount = 1;
@@ -65,7 +65,7 @@ namespace vm
 	void Shadows::createRenderPass()
 	{
 		vk::AttachmentDescription attachment;
-		attachment.format = VulkanContext::get()->depth.format.Value();
+		attachment.format = *VulkanContext::get()->depth.format;
 		attachment.samples = vk::SampleCountFlagBits::e1;
 		attachment.loadOp = vk::AttachmentLoadOp::eClear;
 		attachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -87,7 +87,7 @@ namespace vm
 		rpci.subpassCount = 1;
 		rpci.pSubpasses = &subpassDesc;
 
-		renderPass.SetRef(VulkanContext::get()->device->createRenderPass(rpci));
+		renderPass.renderPass = make_ref(VulkanContext::get()->device->createRenderPass(rpci));
 	}
 
 	void Shadows::createFrameBuffers()
@@ -96,13 +96,13 @@ namespace vm
 		for (auto& texture : textures)
 		{
 			texture.format = VulkanContext::get()->depth.format;
-			texture.initialLayout = vk::ImageLayout::eUndefined;
-			texture.addressMode = vk::SamplerAddressMode::eClampToEdge;
+			texture.initialLayout = make_ref(vk::ImageLayout::eUndefined);
+			texture.addressMode = make_ref(vk::SamplerAddressMode::eClampToEdge);
 			texture.maxAnisotropy = 1.f;
-			texture.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+			texture.borderColor = make_ref(vk::BorderColor::eFloatOpaqueWhite);
 			texture.samplerCompareEnable = VK_TRUE;
-			texture.compareOp = vk::CompareOp::eGreaterOrEqual;
-			texture.samplerMipmapMode = vk::SamplerMipmapMode::eLinear;
+			texture.compareOp = make_ref(vk::CompareOp::eGreaterOrEqual);
+			texture.samplerMipmapMode = make_ref(vk::SamplerMipmapMode::eLinear);
 
 			texture.createImage(Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 			texture.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
@@ -115,7 +115,7 @@ namespace vm
 		{
 			uint32_t width = Shadows::imageSize;
 			uint32_t height = Shadows::imageSize;
-			vk::ImageView view = textures[i % textures.size()].view.Value();
+			vk::ImageView view = *textures[i % textures.size()].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -125,14 +125,20 @@ namespace vm
 		Shader vert{ "shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true };
 
 		pipeline.info.pVertShader = &vert;
-		pipeline.info.vertexInputBindingDescriptions = Vertex::getBindingDescriptionGeneral();
-		pipeline.info.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptionGeneral();
+		pipeline.info.vertexInputBindingDescriptions = make_ref(Vertex::getBindingDescriptionGeneral());
+		pipeline.info.vertexInputAttributeDescriptions = make_ref(Vertex::getAttributeDescriptionGeneral());
 		pipeline.info.width = static_cast<float>(Shadows::imageSize);
 		pipeline.info.height = static_cast<float>(Shadows::imageSize);
 		pipeline.info.cullMode = CullMode::Front;
-		pipeline.info.colorBlendAttachments = { textures[0].blentAttachment.Value() };
-		pipeline.info.dynamicStates = { vk::DynamicState::eDepthBias };
-		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutShadows(), Pipeline::getDescriptorSetLayoutMesh(), Pipeline::getDescriptorSetLayoutModel() };
+		pipeline.info.colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>{ *textures[0].blentAttachment });
+		pipeline.info.dynamicStates = make_ref(std::vector<vk::DynamicState>{ vk::DynamicState::eDepthBias });
+		pipeline.info.descriptorSetLayouts = make_ref(
+			std::vector<vk::DescriptorSetLayout>
+		{
+			Pipeline::getDescriptorSetLayoutShadows(),
+			Pipeline::getDescriptorSetLayoutMesh(),
+			Pipeline::getDescriptorSetLayoutModel()
+		});
 		pipeline.info.renderPass = renderPass;
 
 		pipeline.createGraphicsPipeline();
@@ -152,8 +158,8 @@ namespace vm
 
 	void Shadows::destroy()
 	{
-		if (*renderPass)
-			VulkanContext::get()->device->destroyRenderPass(*renderPass);
+		if (*renderPass.renderPass)
+			VulkanContext::get()->device->destroyRenderPass(*renderPass.renderPass);
 
 		if (Pipeline::getDescriptorSetLayoutShadows()) {
 			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutShadows());
@@ -164,7 +170,7 @@ namespace vm
 			texture.destroy();
 
 		for (auto& fb : framebuffers)
-			VulkanContext::get()->device->destroyFramebuffer(*fb);
+			VulkanContext::get()->device->destroyFramebuffer(*fb.framebuffer);
 
 		for (auto& buffer : uniformBuffers)
 			buffer.destroy();

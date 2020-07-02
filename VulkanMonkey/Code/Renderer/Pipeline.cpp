@@ -10,16 +10,16 @@ namespace vm
 		pVertShader = nullptr;
 		pFragShader = nullptr;
 		pCompShader = nullptr;
-		vertexInputBindingDescriptions = std::vector<vk::VertexInputBindingDescription>();
-		vertexInputAttributeDescriptions = std::vector<vk::VertexInputAttributeDescription>();
+		vertexInputBindingDescriptions = make_ref(std::vector<vk::VertexInputBindingDescription>());
+		vertexInputAttributeDescriptions = make_ref(std::vector<vk::VertexInputAttributeDescription>());
 		width = 0.f;
 		height = 0.f;
 		pushConstantStage = PushConstantStage::Vertex;
 		pushConstantSize = 0;
 		cullMode = CullMode::None;
-		colorBlendAttachments = std::vector<vk::PipelineColorBlendAttachmentState>();
-		dynamicStates = std::vector<vk::DynamicState>();
-		descriptorSetLayouts = std::vector<vk::DescriptorSetLayout>();
+		colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>());
+		dynamicStates = make_ref(std::vector<vk::DynamicState>());
+		descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>());
 	}
 
 	PipelineCreateInfo::~PipelineCreateInfo()
@@ -28,8 +28,8 @@ namespace vm
 
 	Pipeline::Pipeline()
 	{
-		pipeline = vk::Pipeline();
-		pipelineLayout = vk::PipelineLayout();
+		pipeline = make_ref(vk::Pipeline());
+		pipelineLayout = make_ref(vk::PipelineLayout());
 	}
 
 	Pipeline::~Pipeline()
@@ -168,11 +168,11 @@ namespace vm
 		plci.pSetLayouts = info.descriptorSetLayouts->data();
 		plci.pushConstantRangeCount = 1;
 		plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
-		pipelineLayout = VulkanContext::get()->device->createPipelineLayout(plci);
-		pipeinfo.layout = pipelineLayout.Value();
+		pipelineLayout = make_ref(VulkanContext::get()->device->createPipelineLayout(plci));
+		pipeinfo.layout = *pipelineLayout;
 
 		// Render Pass
-		pipeinfo.renderPass = info.renderPass.Value();
+		pipeinfo.renderPass = *info.renderPass.renderPass;
 
 		// Subpass (Index of subpass this pipeline will be used in)
 		pipeinfo.subpass = 0;
@@ -183,7 +183,7 @@ namespace vm
 		// Base Pipeline Index
 		pipeinfo.basePipelineIndex = -1;
 
-		pipeline = VulkanContext::get()->device->createGraphicsPipelines(nullptr, pipeinfo).at(0);
+		pipeline = make_ref(VulkanContext::get()->device->createGraphicsPipelines(nullptr, pipeinfo).at(0));
 	}
 
 	void Pipeline::createComputePipeline()
@@ -203,21 +203,21 @@ namespace vm
 		compinfo.stage.module = module.get();
 		compinfo.stage.pName = "main";
 		compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
-		pipelineLayout = VulkanContext::get()->device->createPipelineLayout(plci);
-		compinfo.layout = pipelineLayout.Value();
+		pipelineLayout = make_ref(VulkanContext::get()->device->createPipelineLayout(plci));
+		compinfo.layout = *pipelineLayout;
 
-		pipeline = VulkanContext::get()->device->createComputePipelines(nullptr, compinfo).at(0);
+		pipeline = make_ref(VulkanContext::get()->device->createComputePipelines(nullptr, compinfo).at(0));
 	}
 
 	void Pipeline::destroy()
 	{
-		if (pipelineLayout && pipelineLayout.Value()) {
-			VulkanContext::get()->device->destroyPipelineLayout(pipelineLayout.Value());
+		if (*pipelineLayout) {
+			VulkanContext::get()->device->destroyPipelineLayout(*pipelineLayout);
 			*pipelineLayout = nullptr;
 		}
 
-		if (pipeline && pipeline.Value()) {
-			VulkanContext::get()->device->destroyPipeline(pipeline.Value());
+		if (*pipeline) {
+			VulkanContext::get()->device->destroyPipeline(*pipeline);
 			*pipeline = nullptr;
 		}
 	}

@@ -3,18 +3,18 @@
 
 namespace vm
 {
+	class Context;
+
 	class Window
 	{
 	public:
-		static void create(const std::string& title = "", uint32_t flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
-		static void destroyAll();
-		static bool processEvents(double delta);
-		static bool isInsideRenderWindow(int32_t x, int32_t y);
-		static bool isMinimized();
+		SDL_Window* Create(Context* ctx, const std::string& title = "", uint32_t flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+		void DestroyAll();
+		bool ProcessEvents(double delta);
+		bool isInsideRenderWindow(int32_t x, int32_t y);
+		bool isMinimized();
 
-		static std::vector<std::unique_ptr<Renderer>> renderer; // window pointer is also stored in here
 	private:
-		Window();
-		~Window();
+		Context* ctx = nullptr;
 	};
 }

@@ -32,7 +32,7 @@ namespace vm
 		static uint32_t imageSize;
 		RenderPass renderPass;
 		std::vector<Image> textures{};
-		Ref_t<std::vector<vk::DescriptorSet>> descriptorSets;
+		Ref<std::vector<vk::DescriptorSet>> descriptorSets;
 		std::vector<Framebuffer> framebuffers{};
 		std::vector<Buffer> uniformBuffers{};
 		Pipeline pipeline;

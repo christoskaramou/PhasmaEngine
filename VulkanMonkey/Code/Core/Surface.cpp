@@ -5,11 +5,11 @@ namespace vm
 {
 	Surface::Surface()
 	{
-		surface = vk::SurfaceKHR();
-		actualExtent = vk::Extent2D();
-		capabilities = vk::SurfaceCapabilitiesKHR();
-		formatKHR = vk::SurfaceFormatKHR();
-		presentModeKHR = vk::PresentModeKHR();
+		surface = make_ref(vk::SurfaceKHR());
+		actualExtent = make_ref(vk::Extent2D());
+		capabilities = make_ref(vk::SurfaceCapabilitiesKHR());
+		formatKHR = make_ref(vk::SurfaceFormatKHR());
+		presentModeKHR = make_ref(vk::PresentModeKHR::eFifo);
 	}
 
 	Surface::~Surface()

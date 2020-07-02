@@ -5,7 +5,6 @@ namespace vk
 {
 	class Buffer;
 	class DeviceMemory;
-	using DeviceSize = uint64_t;
 
 	template<class T1, class T2> class Flags;
 	enum class BufferUsageFlagBits;
@@ -20,9 +19,9 @@ namespace vm
 	{
 	public:
 		Buffer();
-		Ref_t<vk::Buffer> buffer;
-		Ref_t<vk::DeviceMemory> memory;
-		Ref_t<vk::DeviceSize> size;
+		Ref<vk::Buffer> buffer;
+		Ref<vk::DeviceMemory> memory;
+		size_t size;
 		void *data = nullptr;
 
 		void createBuffer(size_t size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties);

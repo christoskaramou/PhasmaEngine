@@ -29,10 +29,10 @@ namespace vm
 		RenderPass renderPassBrightFilter;
 		RenderPass renderPassGaussianBlur;
 		RenderPass renderPassCombine;
-		Ref_t<vk::DescriptorSet> DSBrightFilter;
-		Ref_t<vk::DescriptorSet> DSGaussianBlurHorizontal;
-		Ref_t<vk::DescriptorSet> DSGaussianBlurVertical;
-		Ref_t<vk::DescriptorSet> DSCombine;
+		Ref<vk::DescriptorSet> DSBrightFilter;
+		Ref<vk::DescriptorSet> DSGaussianBlurHorizontal;
+		Ref<vk::DescriptorSet> DSGaussianBlurVertical;
+		Ref<vk::DescriptorSet> DSCombine;
 		Image frameImage;
 
 		void Init();

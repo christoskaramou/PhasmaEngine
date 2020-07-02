@@ -21,6 +21,7 @@ namespace vm
 			{
 				const size_t functionAdress = *reinterpret_cast<long*>(reinterpret_cast<char*>(&function));
 
+				// This equality seems to work, holding back though since it might not be accurate
 				if (funcAddress == functionAdress)
 					alreadyExist = true;
 			}
@@ -38,6 +39,7 @@ namespace vm
 			{
 				const size_t functionAdress = *reinterpret_cast<long*>(reinterpret_cast<char*>(&function));
 
+				// This equality seems to work, holding back though since it might not be accurate
 				if (funcAddress == functionAdress)
 					delegates.erase(delegates.begin() + index);
 				else

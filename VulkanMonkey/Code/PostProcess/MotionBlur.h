@@ -29,7 +29,7 @@ namespace vm
 		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		Ref_t<vk::DescriptorSet> DSet;
+		Ref<vk::DescriptorSet> DSet;
 		Image frameImage;
 		
 		void Init();

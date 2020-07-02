@@ -16,6 +16,7 @@ namespace vm
 		}
 		virtual ~System() {}
 		void SetContext(Context* context) { m_context = context; }
+		Context* GetContext() { return m_context; }
 		size_t GetID() { return m_id; }
 
 		template<class T> inline void AddComponent(T* component);
@@ -23,7 +24,7 @@ namespace vm
 	private:
 		Context* m_context;
 		std::map<size_t, BaseComponent*> m_components;
-		const size_t m_id;
+		size_t m_id;
 	};
 
 	template<class T>
@@ -36,7 +37,7 @@ namespace vm
 		}
 		else
 		{
-			throw std::runtime_error("System::AddComponent: Type is not a Component");
+			throw std::runtime_error("System::CreateComponent: Type is not a Component");
 		}
 	}
 }

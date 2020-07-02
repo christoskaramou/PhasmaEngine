@@ -7,7 +7,7 @@ namespace vm
 {
 	Object::Object()
 	{
-		descriptorSet = vk::DescriptorSet();
+		descriptorSet = make_ref(vk::DescriptorSet());
 	}
 
 	void Object::createVertexBuffer()
@@ -22,7 +22,7 @@ namespace vm
 		staging.flush();
 		staging.unmap();
 
-		vertexBuffer.copyBuffer(staging.buffer.Value(), staging.size.Value());
+		vertexBuffer.copyBuffer(*staging.buffer, staging.size);
 		staging.destroy();
 	}
 
@@ -55,11 +55,11 @@ namespace vm
 
 		stbi_image_free(pixels);
 
-		texture.format = vk::Format::eR8G8B8A8Unorm;
+		texture.format = make_ref(vk::Format::eR8G8B8A8Unorm);
 		texture.mipLevels = 1;
 		texture.createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		texture.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-		texture.copyBufferToImage(staging.buffer.Value());
+		texture.copyBufferToImage(*staging.buffer);
 		texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		texture.createImageView(vk::ImageAspectFlagBits::eColor);
 		texture.createSampler();
@@ -70,20 +70,20 @@ namespace vm
 	void Object::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
+		allocateInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &descriptorSetLayout;
-		descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
+		descriptorSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0));
 
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 		// MVP
 		vk::DescriptorBufferInfo dbi;
-		dbi.buffer = uniformBuffer.buffer.Value();
+		dbi.buffer = *uniformBuffer.buffer;
 		dbi.offset = 0;
-		dbi.range = uniformBuffer.size.Value();
+		dbi.range = uniformBuffer.size;
 
-		textureWriteSets[0].dstSet = descriptorSet.Value();
+		textureWriteSets[0].dstSet = *descriptorSet;
 		textureWriteSets[0].dstBinding = 0;
 		textureWriteSets[0].dstArrayElement = 0;
 		textureWriteSets[0].descriptorCount = 1;
@@ -92,11 +92,11 @@ namespace vm
 
 		// texture sampler
 		vk::DescriptorImageInfo dii;
-		dii.sampler = texture.sampler.Value();
-		dii.imageView = texture.view.Value();
+		dii.sampler = *texture.sampler;
+		dii.imageView = *texture.view;
 		dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-		textureWriteSets[1].dstSet = descriptorSet.Value();
+		textureWriteSets[1].dstSet = *descriptorSet;
 		textureWriteSets[1].dstBinding = 1;
 		textureWriteSets[1].dstArrayElement = 0;
 		textureWriteSets[1].descriptorCount = 1;

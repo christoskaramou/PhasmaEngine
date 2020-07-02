@@ -24,7 +24,7 @@ namespace vm
 		~Deferred();
 		RenderPass renderPass, compositionRenderPass;
 		std::vector<Framebuffer> framebuffers{}, compositionFramebuffers{};
-		Ref_t<vk::DescriptorSet> DSComposition;
+		Ref<vk::DescriptorSet> DSComposition;
 		Pipeline pipeline;
 		Pipeline pipelineComposition;
 		Image ibl_brdf_lut;

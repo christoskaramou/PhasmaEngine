@@ -31,8 +31,8 @@ namespace vm
 
 		static std::vector<Model> models;
 		static Pipeline* pipeline;
-		static Ref_t<vk::CommandBuffer> commandBuffer;
-		Ref_t<vk::DescriptorSet> descriptorSet;
+		static Ref<vk::CommandBuffer> commandBuffer;
+		Ref<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 		struct UBOModel {
 			mat4 matrix = mat4::identity();

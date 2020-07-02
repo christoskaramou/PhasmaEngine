@@ -5,42 +5,22 @@
 namespace vm
 {
 	template<class T>
-	class Ref_t
-	{
-	public:
-		bool operator!() {return m_ref == nullptr; }
-		operator bool() { return !operator!(); }
-		void operator=(const T& obj) { m_ref = std::make_shared<T>(obj); }
-		void operator=(const std::shared_ptr<T>& ref) { m_ref = ref; }
-		T& operator*() const { return *m_ref; }
-		const T& Value() const { return *m_ref; }
-		std::shared_ptr<T> operator->() const { return m_ref; }
-		std::shared_ptr<T> GetRef() const { return m_ref; };
-		void SetRef(const T& obj) { m_ref = std::make_shared<T>(obj); };
-		void SetRef(const std::shared_ptr<T>& ref) { m_ref = ref; };
-		void Invalidate() { m_ref = nullptr; };
-	protected:
-		std::shared_ptr<T> m_ref;
-	};
+	using Ref = std::shared_ptr<T>;
 
-	template<typename U>
-	class Ref_t<std::vector<U>>
+	template <class T>
+	Ref<T> make_ref(const T& obj)
 	{
-	public:
-		using T = std::vector<U>;
-		U& operator[](int i) { return (*m_ref)[i]; }
-		bool operator!() { return m_ref == nullptr; }
-		operator bool() { return !operator!(); }
-		void operator=(const T& obj) { m_ref = std::make_shared<T>(obj); }
-		void operator=(const std::shared_ptr<T>& ref) { m_ref = ref; }
-		T& operator*() const { return *m_ref; }
-		const T& Value() const { return *m_ref; }
-		std::shared_ptr<T> operator->() const { return m_ref; }
-		std::shared_ptr<T> GetRef() const { return m_ref; };
-		void SetRef(const T& obj) { m_ref = std::make_shared<T>(obj); };
-		void SetRef(const std::shared_ptr<T>& ref) { m_ref = ref; };
-		void Invalidate() { m_ref = nullptr; };
-	protected:
-		std::shared_ptr<T> m_ref;
-	};
+		return std::make_shared<T>(obj);
+	}
+
+	template <class T>
+	std::vector<Ref<T>> make_ref_vec(const std::vector<T>& vec)
+	{
+		std::vector ref_vec(vec.size());
+
+		for (int i = 0; i < vec.size())
+			ref_vec[i] = std::make_shared<T>(vec[i]);
+
+		return ref_vec;
+	}
 }

@@ -16,16 +16,16 @@ namespace vm
 {
 	using namespace Microsoft;
 
-	Ref_t<vk::CommandBuffer> Model::commandBuffer = Ref_t<vk::CommandBuffer>();
+	Ref<vk::CommandBuffer> Model::commandBuffer = make_ref(vk::CommandBuffer());
 	std::vector<Model> Model::models{};
 	Pipeline* Model::pipeline = nullptr;
 
 	Model::Model()
 	{
-		if (!commandBuffer)
-			commandBuffer = vk::CommandBuffer();
+		if (commandBuffer == nullptr)
+			commandBuffer = make_ref(vk::CommandBuffer());
 
-		descriptorSet = vk::DescriptorSet();
+		descriptorSet = make_ref(vk::DescriptorSet());
 	}
 
 	Model::~Model()
@@ -426,16 +426,16 @@ namespace vm
 
 		auto& cmd = Model::commandBuffer;
 		const vk::DeviceSize offset{ 0 };
-		cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipeline.Value());
-		cmd->bindVertexBuffers(0, 1, &vertexBuffer.buffer.Value(), &offset);
-		cmd->bindIndexBuffer(indexBuffer.buffer.Value(), 0, vk::IndexType::eUint32);
+		cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, *Model::pipeline->pipeline);
+		cmd->bindVertexBuffers(0, 1, &*vertexBuffer.buffer, &offset);
+		cmd->bindIndexBuffer(*indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
 		//ALPHA_OPAQUE
 		for (auto& node : linearNodes) {
 			if (node->mesh) {
 				for (auto& primitive : node->mesh->primitives) {
 					if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 1) {
-						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipelineLayout.Value(), 0, { node->mesh->descriptorSet.Value(), primitive.descriptorSet.Value(), descriptorSet.Value() }, nullptr);
+						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *Model::pipeline->pipelineLayout, 0, { *node->mesh->descriptorSet, *primitive.descriptorSet, *descriptorSet }, nullptr);
 						cmd->drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 					}
 				}
@@ -447,7 +447,7 @@ namespace vm
 				for (auto& primitive : node->mesh->primitives) {
 					// ALPHA CUT
 					if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 2) {
-						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipelineLayout.Value(), 0, { node->mesh->descriptorSet.Value(), primitive.descriptorSet.Value(), descriptorSet.Value() }, nullptr);
+						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *Model::pipeline->pipelineLayout, 0, { *node->mesh->descriptorSet, *primitive.descriptorSet, *descriptorSet }, nullptr);
 						cmd->drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 					}
 				}
@@ -459,7 +459,7 @@ namespace vm
 				for (auto& primitive : node->mesh->primitives) {
 					// ALPHA CUT
 					if (primitive.render && !primitive.cull && primitive.pbrMaterial.alphaMode == 3) {
-						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, Model::pipeline->pipelineLayout.Value(), 0, { node->mesh->descriptorSet.Value(), primitive.descriptorSet.Value(), descriptorSet.Value() }, nullptr);
+						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *Model::pipeline->pipelineLayout, 0, { *node->mesh->descriptorSet, *primitive.descriptorSet, *descriptorSet }, nullptr);
 						cmd->drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
 					}
 				}
@@ -684,7 +684,7 @@ namespace vm
 		staging.flush();
 		staging.unmap();
 
-		vertexBuffer.copyBuffer(staging.buffer.Value(), staging.size.Value());
+		vertexBuffer.copyBuffer(*staging.buffer, staging.size);
 		staging.destroy();
 	}
 
@@ -711,7 +711,7 @@ namespace vm
 		staging.flush();
 		staging.unmap();
 
-		indexBuffer.copyBuffer(staging.buffer.Value(), staging.size.Value());
+		indexBuffer.copyBuffer(*staging.buffer, staging.size);
 		staging.destroy();
 	}
 
@@ -733,23 +733,23 @@ namespace vm
 	{
 		std::deque<vk::DescriptorImageInfo> dsii{};
 		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
-			dsii.emplace_back(image.sampler.Value(), image.view.Value(), vk::ImageLayout::eShaderReadOnlyOptimal);
+			dsii.emplace_back(*image.sampler, *image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 		};
 		std::deque<vk::DescriptorBufferInfo> dsbi{};
 		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
-			dsbi.emplace_back(buffer.buffer.Value(), 0, buffer.size.Value());
+			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 		};
 
 		// model dSet
 		vk::DescriptorSetAllocateInfo allocateInfo0;
-		allocateInfo0.descriptorPool = VulkanContext::get()->descriptorPool.Value();
+		allocateInfo0.descriptorPool = *VulkanContext::get()->descriptorPool;
 		allocateInfo0.descriptorSetCount = 1;
 		allocateInfo0.pSetLayouts = &Pipeline::getDescriptorSetLayoutModel();
-		descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo0).at(0);
+		descriptorSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo0).at(0));
 
-		VulkanContext::get()->device->updateDescriptorSets(wSetBuffer(descriptorSet.Value(), 0, uniformBuffer), nullptr);
+		VulkanContext::get()->device->updateDescriptorSets(wSetBuffer(*descriptorSet, 0, uniformBuffer), nullptr);
 
 		// mesh dSets
 		for (auto& node : linearNodes) {
@@ -758,29 +758,29 @@ namespace vm
 			auto& mesh = node->mesh;
 
 			vk::DescriptorSetAllocateInfo allocateInfo;
-			allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
+			allocateInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
 			allocateInfo.descriptorSetCount = 1;
 			allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMesh();
-			mesh->descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
+			mesh->descriptorSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0));
 
-			VulkanContext::get()->device->updateDescriptorSets(wSetBuffer(mesh->descriptorSet.Value(), 0, mesh->uniformBuffer), nullptr);
+			VulkanContext::get()->device->updateDescriptorSets(wSetBuffer(*mesh->descriptorSet, 0, mesh->uniformBuffer), nullptr);
 
 			// primitive dSets
 			for (auto& primitive : mesh->primitives) {
 
 				vk::DescriptorSetAllocateInfo allocateInfo2;
-				allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool.Value();
+				allocateInfo2.descriptorPool = *VulkanContext::get()->descriptorPool;
 				allocateInfo2.descriptorSetCount = 1;
 				allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutPrimitive();
-				primitive.descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0);
+				primitive.descriptorSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0));
 
 				std::vector<vk::WriteDescriptorSet> textureWriteSets{
-					wSetImage(primitive.descriptorSet.Value(), 0, primitive.pbrMaterial.baseColorTexture),
-					wSetImage(primitive.descriptorSet.Value(), 1, primitive.pbrMaterial.metallicRoughnessTexture),
-					wSetImage(primitive.descriptorSet.Value(), 2, primitive.pbrMaterial.normalTexture),
-					wSetImage(primitive.descriptorSet.Value(), 3, primitive.pbrMaterial.occlusionTexture),
-					wSetImage(primitive.descriptorSet.Value(), 4, primitive.pbrMaterial.emissiveTexture),
-					wSetBuffer(primitive.descriptorSet.Value(), 5, primitive.uniformBuffer)
+					wSetImage(*primitive.descriptorSet, 0, primitive.pbrMaterial.baseColorTexture),
+					wSetImage(*primitive.descriptorSet, 1, primitive.pbrMaterial.metallicRoughnessTexture),
+					wSetImage(*primitive.descriptorSet, 2, primitive.pbrMaterial.normalTexture),
+					wSetImage(*primitive.descriptorSet, 3, primitive.pbrMaterial.occlusionTexture),
+					wSetImage(*primitive.descriptorSet, 4, primitive.pbrMaterial.emissiveTexture),
+					wSetBuffer(*primitive.descriptorSet, 5, primitive.uniformBuffer)
 				};
 				VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 			}

@@ -52,35 +52,35 @@ namespace vm
 	public:
 		Image();
 		~Image();
-		Ref_t<vk::Image> image;
-		Ref_t<vk::DeviceMemory> memory;
-		Ref_t<vk::ImageView> view;
-		Ref_t<vk::Sampler> sampler;
-		Ref_t<uint32_t> width;
-		Ref_t<uint32_t> height;
-		Ref_t<float> width_f;
-		Ref_t<float> height_f;
-		Ref_t<vk::Extent2D> extent;
+		Ref<vk::Image> image;
+		Ref<vk::DeviceMemory> memory;
+		Ref<vk::ImageView> view;
+		Ref<vk::Sampler> sampler;
+		uint32_t width;
+		uint32_t height;
+		float width_f;
+		float height_f;
+		Ref<vk::Extent2D> extent;
 
 		// values
-		Ref_t<vk::SampleCountFlagBits> samples;
-		Ref_t<LayoutState> layoutState;
-		Ref_t<vk::Format> format;
-		Ref_t<vk::ImageLayout> initialLayout;
-		Ref_t<vk::ImageTiling> tiling;
-		Ref_t<uint32_t> mipLevels;
-		Ref_t<uint32_t> arrayLayers;
-		Ref_t<bool> anisotropyEnabled;
-		Ref_t<float> minLod, maxLod, maxAnisotropy;
-		Ref_t<vk::Filter> filter;
-		Ref_t<vk::ImageCreateFlags> imageCreateFlags;
-		Ref_t<vk::ImageViewType> viewType;
-		Ref_t<vk::SamplerAddressMode> addressMode;
-		Ref_t<vk::BorderColor> borderColor;
-		Ref_t<vk::Bool32> samplerCompareEnable;
-		Ref_t<vk::CompareOp> compareOp;
-		Ref_t<vk::SamplerMipmapMode> samplerMipmapMode;
-		Ref_t<vk::PipelineColorBlendAttachmentState> blentAttachment;
+		Ref<vk::SampleCountFlagBits> samples;
+		LayoutState layoutState;
+		Ref<vk::Format> format;
+		Ref<vk::ImageLayout> initialLayout;
+		Ref<vk::ImageTiling> tiling;
+		uint32_t mipLevels;
+		uint32_t arrayLayers;
+		bool anisotropyEnabled;
+		float minLod, maxLod, maxAnisotropy;
+		Ref<vk::Filter> filter;
+		Ref<vk::ImageCreateFlags> imageCreateFlags;
+		Ref<vk::ImageViewType> viewType;
+		Ref<vk::SamplerAddressMode> addressMode;
+		Ref<vk::BorderColor> borderColor;
+		bool samplerCompareEnable;
+		Ref<vk::CompareOp> compareOp;
+		Ref<vk::SamplerMipmapMode> samplerMipmapMode;
+		Ref<vk::PipelineColorBlendAttachmentState> blentAttachment;
 
 		void transitionImageLayout(
 			vk::CommandBuffer cmd,
@@ -94,7 +94,7 @@ namespace vm
 		void createImage(uint32_t width, uint32_t height, vk::ImageTiling tiling, const vk::ImageUsageFlags& usage, const vk::MemoryPropertyFlags& properties);
 		void createImageView(const vk::ImageAspectFlags& aspectFlags);
 		void transitionImageLayout(vk::ImageLayout oldLayout, vk::ImageLayout newLayout) const;
-		void changeLayout(const vk::CommandBuffer& cmd, LayoutState state) const;
+		void changeLayout(const vk::CommandBuffer& cmd, LayoutState state);
 		void copyBufferToImage(vk::Buffer buffer, uint32_t baseLayer = 0) const;
 		void copyColorAttachment(const vk::CommandBuffer& cmd, Image& renderedImage) const;
 		void generateMipMaps() const;

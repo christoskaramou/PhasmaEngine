@@ -38,16 +38,16 @@ namespace vm
 		Shader* pVertShader;
 		Shader* pFragShader;
 		Shader* pCompShader;
-		Ref_t<std::vector<vk::VertexInputBindingDescription>> vertexInputBindingDescriptions;
-		Ref_t<std::vector<vk::VertexInputAttributeDescription>> vertexInputAttributeDescriptions;
+		Ref<std::vector<vk::VertexInputBindingDescription>> vertexInputBindingDescriptions;
+		Ref<std::vector<vk::VertexInputAttributeDescription>> vertexInputAttributeDescriptions;
 		float width;
 		float height;
 		CullMode cullMode;
-		Ref_t<std::vector<vk::PipelineColorBlendAttachmentState>> colorBlendAttachments;
-		Ref_t<std::vector<vk::DynamicState>> dynamicStates;
+		Ref<std::vector<vk::PipelineColorBlendAttachmentState>> colorBlendAttachments;
+		Ref<std::vector<vk::DynamicState>> dynamicStates;
 		PushConstantStage pushConstantStage;
 		uint32_t pushConstantSize;
-		Ref_t<std::vector<vk::DescriptorSetLayout>> descriptorSetLayouts;
+		Ref<std::vector<vk::DescriptorSetLayout>> descriptorSetLayouts;
 		RenderPass renderPass;
 	};
 
@@ -58,8 +58,8 @@ namespace vm
 		~Pipeline();
 
 		PipelineCreateInfo info;
-		Ref_t<vk::Pipeline> pipeline;
-		Ref_t<vk::PipelineLayout> pipelineLayout;
+		Ref<vk::Pipeline> pipeline;
+		Ref<vk::PipelineLayout> pipelineLayout;
 
 		void createGraphicsPipeline();
 		void createComputePipeline();

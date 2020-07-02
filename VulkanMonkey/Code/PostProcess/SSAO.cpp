@@ -12,8 +12,8 @@ namespace vm
 {
 	SSAO::SSAO()
 	{
-		DSet = vk::DescriptorSet();
-		DSBlur = vk::DescriptorSet();
+		DSet = make_ref(vk::DescriptorSet());
+		DSBlur = make_ref(vk::DescriptorSet());
 	}
 
 	SSAO::~SSAO()
@@ -51,14 +51,14 @@ namespace vm
 		staging.flush();
 		staging.unmap();
 
-		noiseTex.filter = vk::Filter::eNearest;
+		noiseTex.filter = make_ref(vk::Filter::eNearest);
 		noiseTex.minLod = 0.0f;
 		noiseTex.maxLod = 0.0f;
 		noiseTex.maxAnisotropy = 1.0f;
-		noiseTex.format = vk::Format::eR16G16B16A16Sfloat;
+		noiseTex.format = make_ref(vk::Format::eR16G16B16A16Sfloat);
 		noiseTex.createImage(4, 4, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		noiseTex.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-		noiseTex.copyBufferToImage(staging.buffer.Value());
+		noiseTex.copyBufferToImage(*staging.buffer);
 		noiseTex.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		noiseTex.createImageView(vk::ImageAspectFlagBits::eColor);
 		noiseTex.createSampler();
@@ -72,19 +72,19 @@ namespace vm
 
 		// DESCRIPTOR SET FOR SSAO
 		const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo{
-			VulkanContext::get()->descriptorPool.Value(),	//DescriptorPool descriptorPool;
+			*VulkanContext::get()->descriptorPool,	//DescriptorPool descriptorPool;
 			1,												//uint32_t descriptorSetCount;
 			&Pipeline::getDescriptorSetLayoutSSAO()			//const DescriptorSetLayout* pSetLayouts;
 		};
-		DSet = VulkanContext::get()->device->allocateDescriptorSets(allocInfo).at(0);
+		DSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocInfo).at(0));
 
 		// DESCRIPTOR SET FOR SSAO BLUR
 		const vk::DescriptorSetAllocateInfo allocInfoBlur = vk::DescriptorSetAllocateInfo{
-			VulkanContext::get()->descriptorPool.Value(),	//DescriptorPool descriptorPool;
+			*VulkanContext::get()->descriptorPool,	//DescriptorPool descriptorPool;
 			1,												//uint32_t descriptorSetCount;
 			& Pipeline::getDescriptorSetLayoutSSAOBlur()	//const DescriptorSetLayout* pSetLayouts;
 		};
-		DSBlur = VulkanContext::get()->device->allocateDescriptorSets(allocInfoBlur).at(0);
+		DSBlur = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocInfoBlur).at(0));
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -93,22 +93,22 @@ namespace vm
 	{
 		std::deque<vk::DescriptorImageInfo> dsii{};
 		const auto wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal) {
-			dsii.emplace_back(image.sampler.Value(), image.view.Value(), imageLayout);
+			dsii.emplace_back(*image.sampler, *image.view, imageLayout);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 		};
 		std::deque<vk::DescriptorBufferInfo> dsbi{};
 		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
-			dsbi.emplace_back(buffer.buffer.Value(), 0, buffer.size.Value());
+			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 		};
 
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets{
-			wSetImage(DSet.Value(), 0, renderTargets["depth"]),
-			wSetImage(DSet.Value(), 1, renderTargets["normal"]),
-			wSetImage(DSet.Value(), 2, noiseTex),
-			wSetBuffer(DSet.Value(), 3, UB_Kernel),
-			wSetBuffer(DSet.Value(), 4, UB_PVM),
-			wSetImage(DSBlur.Value(), 0, renderTargets["ssao"])
+			wSetImage(*DSet, 0, renderTargets["depth"]),
+			wSetImage(*DSet, 1, renderTargets["normal"]),
+			wSetImage(*DSet, 2, noiseTex),
+			wSetBuffer(*DSet, 3, UB_Kernel),
+			wSetBuffer(*DSet, 4, UB_PVM),
+			wSetImage(*DSBlur, 0, renderTargets["ssao"])
 		};
 		VulkanContext::get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
 	}
@@ -123,30 +123,30 @@ namespace vm
 		std::vector<vk::ClearValue> clearValues = { clearColor };
 
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *renderPass;
-		rpi.framebuffer = *framebuffers[imageIndex];
+		rpi.renderPass = *renderPass.renderPass;
+		rpi.framebuffer = *framebuffers[imageIndex].framebuffer;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
-		rpi.renderArea.extent = image.extent.Value();
+		rpi.renderArea.extent = *image.extent;
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
 
 		image.changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
-		const vk::DescriptorSet descriptorSets = { DSet.Value() };
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout.Value(), 0, descriptorSets, nullptr);
+		const vk::DescriptorSet descriptorSets = { *DSet };
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.pipelineLayout, 0, descriptorSets, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		image.changeLayout(cmd, LayoutState::ColorRead);
 
 		// new blurry SSAO image
-		rpi.renderPass = *blurRenderPass;
-		rpi.framebuffer = *blurFramebuffers[imageIndex];
+		rpi.renderPass = *blurRenderPass.renderPass;
+		rpi.framebuffer = *blurFramebuffers[imageIndex].framebuffer;
 
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipeline.Value());
-		const vk::DescriptorSet descriptorSetsBlur = { DSBlur.Value() };
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineBlur.pipelineLayout.Value(), 0, descriptorSetsBlur, nullptr);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineBlur.pipeline);
+		const vk::DescriptorSet descriptorSetsBlur = { *DSBlur };
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineBlur.pipelineLayout, 0, descriptorSetsBlur, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
@@ -194,8 +194,8 @@ namespace vm
 
 	void vm::SSAO::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(renderTargets["ssao"].format.Value(), vk::Format::eUndefined);
-		blurRenderPass.Create(renderTargets["ssaoBlur"].format.Value(), vk::Format::eUndefined);
+		renderPass.Create(*renderTargets["ssao"].format, vk::Format::eUndefined);
+		blurRenderPass.Create(*renderTargets["ssaoBlur"].format, vk::Format::eUndefined);
 	}
 
 	void vm::SSAO::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -210,9 +210,9 @@ namespace vm
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["ssao"].width.Value();
-			uint32_t height = renderTargets["ssao"].height.Value();
-			vk::ImageView view = renderTargets["ssao"].view.Value();
+			uint32_t width = renderTargets["ssao"].width;
+			uint32_t height = renderTargets["ssao"].height;
+			vk::ImageView view = *renderTargets["ssao"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -223,9 +223,9 @@ namespace vm
 		blurFramebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["ssaoBlur"].width.Value();
-			uint32_t height = renderTargets["ssaoBlur"].height.Value();
-			vk::ImageView view = renderTargets["ssaoBlur"].view.Value();
+			uint32_t width = renderTargets["ssaoBlur"].width;
+			uint32_t height = renderTargets["ssaoBlur"].height;
+			vk::ImageView view = *renderTargets["ssaoBlur"].view;
 			blurFramebuffers[i].Create(width, height, view, blurRenderPass);
 		}
 	}
@@ -243,11 +243,11 @@ namespace vm
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
-		pipeline.info.width = renderTargets["ssao"].width_f.Value();
-		pipeline.info.height = renderTargets["ssao"].height_f.Value();
+		pipeline.info.width = renderTargets["ssao"].width_f;
+		pipeline.info.height = renderTargets["ssao"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = { renderTargets["ssao"].blentAttachment.Value() };
-		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSAO() };
+		pipeline.info.colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>{ *renderTargets["ssao"].blentAttachment });
+		pipeline.info.descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>{ Pipeline::getDescriptorSetLayoutSSAO() });
 		pipeline.info.renderPass = renderPass;
 
 		pipeline.createGraphicsPipeline();
@@ -260,11 +260,11 @@ namespace vm
 
 		pipelineBlur.info.pVertShader = &vert;
 		pipelineBlur.info.pFragShader = &frag;
-		pipelineBlur.info.width = renderTargets["ssaoBlur"].width_f.Value();
-		pipelineBlur.info.height = renderTargets["ssaoBlur"].height_f.Value();
+		pipelineBlur.info.width = renderTargets["ssaoBlur"].width_f;
+		pipelineBlur.info.height = renderTargets["ssaoBlur"].height_f;
 		pipelineBlur.info.cullMode = CullMode::Back;
-		pipelineBlur.info.colorBlendAttachments = { renderTargets["ssaoBlur"].blentAttachment.Value() };
-		pipelineBlur.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSAOBlur() };
+		pipelineBlur.info.colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>{ *renderTargets["ssaoBlur"].blentAttachment });
+		pipelineBlur.info.descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>{ Pipeline::getDescriptorSetLayoutSSAOBlur() });
 		pipelineBlur.info.renderPass = blurRenderPass;
 
 		pipelineBlur.createGraphicsPipeline();

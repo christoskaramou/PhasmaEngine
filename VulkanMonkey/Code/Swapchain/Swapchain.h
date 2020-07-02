@@ -17,7 +17,7 @@ namespace vm
 	public:
 		Swapchain();
 		~Swapchain();
-		Ref_t<vk::SwapchainKHR> swapchain;
+		Ref<vk::SwapchainKHR> swapchain;
 		std::vector<Image> images{};
 
 		uint32_t aquire(vk::Semaphore semaphore, vk::Fence fence) const;

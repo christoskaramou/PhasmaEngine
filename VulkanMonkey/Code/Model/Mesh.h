@@ -22,7 +22,7 @@ namespace vm
 		Primitive();
 		~Primitive();
 
-		Ref_t<vk::DescriptorSet> descriptorSet;
+		Ref<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 
 		bool render = true, cull = true;
@@ -65,7 +65,7 @@ namespace vm
 		static std::map<std::string, Image> uniqueTextures;
 		std::vector<Primitive> primitives{};
 
-		Ref_t<vk::DescriptorSet> descriptorSet;
+		Ref<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 		std::vector<Vertex> vertices{};
 		std::vector<uint32_t> indices{};

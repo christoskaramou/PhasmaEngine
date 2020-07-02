@@ -17,14 +17,14 @@ namespace vm
 
 		template<class T> inline bool HasComponent();
 		template<class T> inline T* GetComponent();
-		template<class T, class... Params> inline T* AddComponent(Params&&... params);
+		template<class T, class... Params> inline T* CreateComponent(Params&&... params);
 		template<class T> inline void RemoveComponent();
 
 	private:
 		friend class Context;
 		GameObject() : m_context(nullptr), m_id(NextID()) { m_parent = nullptr;  m_enable = true; }
 
-		const size_t m_id;
+		size_t m_id;
 		Context* m_context;
 		std::map<size_t, std::shared_ptr<BaseComponent>> m_components;
 	};
@@ -62,7 +62,7 @@ namespace vm
 	}
 
 	template<class T, class... Params>
-	inline T* GameObject::AddComponent(Params&&... params)
+	inline T* GameObject::CreateComponent(Params&&... params)
 	{
 		if constexpr (std::is_base_of<Component, T>::value)
 		{
@@ -83,7 +83,7 @@ namespace vm
 		}
 		else
 		{
-			throw std::runtime_error("GameObject::AddComponent: Type is not a Component");
+			throw std::runtime_error("GameObject::CreateComponent: Type is not a Component");
 		}
 	}
 

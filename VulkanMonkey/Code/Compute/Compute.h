@@ -31,9 +31,9 @@ namespace vm
 		Buffer SBIn;
 		Buffer SBOut;
 		Pipeline pipeline;
-		Ref_t<vk::Fence> fence;
-		Ref_t<vk::DescriptorSet> DSCompute;
-		Ref_t<vk::CommandBuffer> commandBuffer;
+		Ref<vk::Fence> fence;
+		Ref<vk::DescriptorSet> DSCompute;
+		Ref<vk::CommandBuffer> commandBuffer;
 
 		void createPipeline();
 		void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
@@ -45,7 +45,7 @@ namespace vm
 	class ComputePool
 	{
 	public:
-		Ref_t<vk::CommandPool> commandPool;
+		Ref<vk::CommandPool> commandPool;
 		std::deque<Compute> compute{};
 		void Init(uint32_t cmdBuffersCount);
 		Compute& getNext();

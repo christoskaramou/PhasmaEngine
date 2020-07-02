@@ -49,8 +49,8 @@ namespace vm
 		~LightUniforms();
 		LightsUBO lubo;
 		Buffer uniform;
-		Ref_t<vk::DescriptorSet> descriptorSet;
-		static Ref_t<vk::DescriptorSetLayout> descriptorSetLayout;
+		Ref<vk::DescriptorSet> descriptorSet;
+		static Ref<vk::DescriptorSetLayout> descriptorSetLayout;
 		static const vk::DescriptorSetLayout& getDescriptorSetLayout();
 
 		void update(const Camera& camera);

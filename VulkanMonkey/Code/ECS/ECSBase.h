@@ -14,20 +14,19 @@ namespace vm
 	public:
 		virtual ~BaseBehaviour() {}
 
-	protected:
-		virtual void Awake() {}
-		virtual void Start() {}
-		virtual void Update() {}
+		virtual void Init() {}
+		virtual void Update(double delta) {}
 		virtual void FixedUpdate() {}
-		virtual void LateUpdate() {}
 		virtual void OnGUI() {}
 		virtual void OnEnable() {}
 		virtual void OnDisable() {}
+		virtual void Destroy() {}
 	};
 
 	class BaseObject
 	{
 	public:
+		BaseObject() : m_parent(nullptr), m_enable(true) {}
 		virtual ~BaseObject() {}
 
 		Transform& GetTransform() { return m_transform; }
@@ -54,5 +53,8 @@ namespace vm
 	{
 	public:
 		virtual ~BaseSystem() {}
+		virtual void Init() override = 0;
+		virtual void Update(double delta) override = 0;
+		virtual void Destroy() override = 0;
 	};
 }

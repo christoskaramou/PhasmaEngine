@@ -6,9 +6,16 @@
 
 namespace vm
 {
-	Renderer::Renderer(SDL_Window* window)
+	Renderer::Renderer(Context* ctxx, SDL_Window* window)
 	{
+		// Temporary ugliness, until ECS is complete
+		this->window = window;
+		ctx.ctx = ctxx;
 		VulkanContext::get()->window = window;
+	}
+
+	void Renderer::Init()
+	{
 		// INIT ALL VULKAN CONTEXT
 		ctx.initVulkanContext();
 		// INIT RENDERING
@@ -67,7 +74,7 @@ namespace vm
 		VulkanContext::remove();
 	}
 
-	void Renderer::checkQueue() const
+	void Renderer::CheckQueue() const
 	{
 		for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();) {
 			VulkanContext::get()->device->waitIdle();
@@ -134,13 +141,13 @@ namespace vm
 #endif
 	}
 
-	void Renderer::update(double delta)
+	void Renderer::Update(double delta)
 	{
 		static Timer timer;
 		timer.Start();
 
 		// check for commands in queue
-		checkQueue();
+		CheckQueue();
 
 #ifdef USE_SCRIPTS
 		// universal scripts
@@ -204,14 +211,14 @@ namespace vm
 
 		static Timer timerFenceWait;
 		timerFenceWait.Start();
-		VulkanContext::get()->waitFences(VulkanContext::get()->fences[previousImageIndex]);
+		VulkanContext::get()->waitFences((*VulkanContext::get()->fences)[previousImageIndex]);
 		FrameTimer::Instance().timestamps[0] = timerFenceWait.Count();
 		Queue::exec_memcpyRequests();
 
 		GUI::updatesTimeCount = static_cast<float>(timer.Count());
 	}
 
-	void Renderer::recordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
+	void Renderer::RecordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
 	{
 		//auto beginInfo = vk::CommandBufferBeginInfo()
 		//	.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
@@ -229,12 +236,12 @@ namespace vm
 		//cmd.end();
 	}
 
-	void Renderer::recordDeferredCmds(const uint32_t& imageIndex)
+	void Renderer::RecordDeferredCmds(const uint32_t& imageIndex)
 	{
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
-		const auto& cmd = VulkanContext::get()->dynamicCmdBuffers[imageIndex];
+		const auto& cmd = (*VulkanContext::get()->dynamicCmdBuffers)[imageIndex];
 
 		cmd.begin(beginInfo);
 		// TODO: add more queries (times the swapchain images), so they are not overlapped from previous frame
@@ -245,7 +252,7 @@ namespace vm
 
 		// MODELS
 		ctx.metrics[2].start(&cmd);
-		ctx.deferred.batchStart(cmd, imageIndex, ctx.renderTargets["viewport"].extent.Value());
+		ctx.deferred.batchStart(cmd, imageIndex, *ctx.renderTargets["viewport"].extent);
 		for (auto& model : Model::models)
 			model.draw();
 		ctx.deferred.batchEnd();
@@ -276,14 +283,14 @@ namespace vm
 		if (GUI::show_ssr) {
 			ctx.metrics[4].start(&cmd);
 			ctx.renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorWrite);
-			ctx.ssr.draw(cmd, imageIndex, ctx.renderTargets["ssr"].extent.Value());
+			ctx.ssr.draw(cmd, imageIndex, *ctx.renderTargets["ssr"].extent);
 			ctx.renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorRead);
 			ctx.metrics[4].end(&GUI::metrics[4]);
 		}
 
 		// COMPOSITION
 		ctx.metrics[5].start(&cmd);
-		ctx.deferred.draw(cmd, imageIndex, ctx.shadows, skybox, ctx.renderTargets["viewport"].extent.Value());
+		ctx.deferred.draw(cmd, imageIndex, ctx.shadows, skybox, *ctx.renderTargets["viewport"].extent);
 		ctx.metrics[5].end(&GUI::metrics[5]);
 
 		if (GUI::use_AntiAliasing) {
@@ -298,7 +305,7 @@ namespace vm
 			else if (GUI::use_FXAA) {
 				ctx.metrics[6].start(&cmd);
 				ctx.fxaa.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-				ctx.fxaa.draw(cmd, imageIndex, ctx.renderTargets["viewport"].extent.Value());
+				ctx.fxaa.draw(cmd, imageIndex, *ctx.renderTargets["viewport"].extent);
 				ctx.metrics[6].end(&GUI::metrics[6]);
 			}
 		}
@@ -323,7 +330,7 @@ namespace vm
 		if (GUI::show_motionBlur) {
 			ctx.metrics[9].start(&cmd);
 			ctx.motionBlur.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-			ctx.motionBlur.draw(cmd, imageIndex, ctx.renderTargets["viewport"].extent.Value());
+			ctx.motionBlur.draw(cmd, imageIndex, *ctx.renderTargets["viewport"].extent);
 			ctx.metrics[9].end(&GUI::metrics[9]);
 		}
 
@@ -350,7 +357,7 @@ namespace vm
 		cmd.end();
 	}
 
-	void Renderer::recordShadowsCmds(const uint32_t& imageIndex)
+	void Renderer::RecordShadowsCmds(const uint32_t& imageIndex)
 	{
 		// Render Pass (shadows mapping) (outputs the depth image with the light POV)
 
@@ -362,29 +369,29 @@ namespace vm
 		beginInfoShadows.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
 		vk::RenderPassBeginInfo renderPassInfoShadows;
-		renderPassInfoShadows.renderPass = *ctx.shadows.renderPass;
+		renderPassInfoShadows.renderPass = *ctx.shadows.renderPass.renderPass;
 		renderPassInfoShadows.renderArea = vk::Rect2D{ { 0, 0 },{ Shadows::imageSize, Shadows::imageSize } };
 		renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
 		renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
 		for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
-			auto& cmd = VulkanContext::get()->shadowCmdBuffers[static_cast<uint32_t>(ctx.shadows.textures.size()) * imageIndex + i];
+			auto& cmd = (*VulkanContext::get()->shadowCmdBuffers)[static_cast<uint32_t>(ctx.shadows.textures.size()) * imageIndex + i];
 			cmd.begin(beginInfoShadows);
 			ctx.metrics[11 + static_cast<size_t>(i)].start(&cmd);
 			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
 			// depth[i] image ===========================================================
-			renderPassInfoShadows.framebuffer = *ctx.shadows.framebuffers[ctx.shadows.textures.size() * imageIndex + i];
+			renderPassInfoShadows.framebuffer = *ctx.shadows.framebuffers[ctx.shadows.textures.size() * imageIndex + i].framebuffer;
 			cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *ctx.shadows.pipeline.pipeline);
 			for (auto& model : Model::models) {
 				if (model.render) {
-					cmd.bindVertexBuffers(0, model.vertexBuffer.buffer.Value(), offset);
-					cmd.bindIndexBuffer(model.indexBuffer.buffer.Value(), 0, vk::IndexType::eUint32);
+					cmd.bindVertexBuffers(0, *model.vertexBuffer.buffer, offset);
+					cmd.bindIndexBuffer(*model.indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
 					for (auto& node : model.linearNodes) {
 						if (node->mesh) {
-							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, ctx.shadows.pipeline.pipelineLayout.Value(), 0, { ctx.shadows.descriptorSets[i], node->mesh->descriptorSet.Value(), model.descriptorSet.Value() }, nullptr);
+							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *ctx.shadows.pipeline.pipelineLayout, 0, { (*ctx.shadows.descriptorSets)[i], *node->mesh->descriptorSet, *model.descriptorSet }, nullptr);
 							for (auto& primitive : node->mesh->primitives) {
 								if (primitive.render)
 									cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
@@ -400,7 +407,11 @@ namespace vm
 		}
 	}
 
-	void Renderer::present()
+	void Renderer::Destroy()
+	{
+	}
+
+	void Renderer::Present()
 	{
 		auto& vCtx = *VulkanContext::get();
 
@@ -419,7 +430,7 @@ namespace vm
 		}
 
 		// aquire the image
-		auto aquireSignalSemaphore = vCtx.semaphores[0];
+		auto aquireSignalSemaphore = (*vCtx.semaphores)[0];
 		const uint32_t imageIndex = vCtx.swapchain.aquire(aquireSignalSemaphore, nullptr);
 		this->previousImageIndex = imageIndex;
 
@@ -428,18 +439,18 @@ namespace vm
 		//vCtx.waitFences(vCtx.fences[imageIndex]);
 		//FrameTimer::Instance().timestamps[0] = timer.Count();
 
-		const auto& cmd = vCtx.dynamicCmdBuffers[imageIndex];
+		const auto& cmd = (*vCtx.dynamicCmdBuffers)[imageIndex];
 
 		vCtx.waitAndLockSubmits();
 
 		if (GUI::shadow_cast) {
 
 			// record the shadow command buffers
-			recordShadowsCmds(imageIndex);
+			RecordShadowsCmds(imageIndex);
 
 			// submit the shadow command buffers
 			const auto& shadowWaitSemaphore = aquireSignalSemaphore;
-			const auto& shadowSignalSemaphore = vCtx.semaphores[imageIndex * 3 + 1];
+			const auto& shadowSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 1];
 			const auto& scb = vCtx.shadowCmdBuffers;
 			const auto size = ctx.shadows.textures.size();
 			const auto i = size * imageIndex;
@@ -450,13 +461,13 @@ namespace vm
 		}
 
 		// record the command buffers
-		recordDeferredCmds(imageIndex);
+		RecordDeferredCmds(imageIndex);
 
 		// submit the command buffers
 		const auto& deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
 		const auto& deferredWaitSemaphore = aquireSignalSemaphore;
-		const auto& deferredSignalSemaphore = vCtx.semaphores[imageIndex * 3 + 2];
-		const auto& deferredSignalFence = vCtx.fences[imageIndex];
+		const auto& deferredSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 2];
+		const auto& deferredSignalFence = (*vCtx.fences)[imageIndex];
 		vCtx.submit(cmd, deferredWaitStage, deferredWaitSemaphore, deferredSignalSemaphore, deferredSignalFence);
 
 		// Presentation

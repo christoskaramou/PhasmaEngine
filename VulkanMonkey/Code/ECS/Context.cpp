@@ -6,13 +6,21 @@
 
 namespace vm
 {
+	void Context::UpdateSystems(double delta)
+	{
+		for (auto& system : m_systems)
+		{
+			system.second->Update(delta);
+		}
+	}
+
 	GameObject* Context::CreateGameObject()
 	{
-		GameObject* gameObject = new GameObject();
-		gameObject->SetContext(this);
+		GameObject gameObject;
+		gameObject.SetContext(this);
 
-		size_t key = gameObject->GetID();
-		m_gameObjects[key] = std::shared_ptr<GameObject>(gameObject);
+		size_t key = gameObject.GetID();
+		m_gameObjects[key] = std::make_shared<GameObject>(gameObject);
 
 		return m_gameObjects[key].get();
 	}

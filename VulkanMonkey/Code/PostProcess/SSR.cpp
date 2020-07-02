@@ -12,7 +12,7 @@ namespace vm
 {
 	SSR::SSR()
 	{
-		DSet = vk::DescriptorSet();
+		DSet = make_ref(vk::DescriptorSet());
 	}
 
 	SSR::~SSR()
@@ -28,10 +28,10 @@ namespace vm
 		UBReflection.unmap();
 
 		vk::DescriptorSetAllocateInfo allocateInfo2;
-		allocateInfo2.descriptorPool = VulkanContext::get()->descriptorPool.Value();
+		allocateInfo2.descriptorPool = *VulkanContext::get()->descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutSSR();
-		DSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0);
+		DSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0));
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -40,21 +40,21 @@ namespace vm
 	{
 		std::deque<vk::DescriptorImageInfo> dsii{};
 		const auto wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
-			dsii.emplace_back(image.sampler.Value(), image.view.Value(), vk::ImageLayout::eShaderReadOnlyOptimal);
+			dsii.emplace_back(*image.sampler, *image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
 		};
 		std::deque<vk::DescriptorBufferInfo> dsbi{};
 		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
-			dsbi.emplace_back(buffer.buffer.Value(), 0, buffer.size.Value());
+			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
 			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
 		};
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets{
-			wSetImage(DSet.Value(), 0, renderTargets["albedo"]),
-			wSetImage(DSet.Value(), 1, renderTargets["depth"]),
-			wSetImage(DSet.Value(), 2, renderTargets["normal"]),
-			wSetImage(DSet.Value(), 3, renderTargets["srm"]),
-			wSetBuffer(DSet.Value(), 4, UBReflection)
+			wSetImage(*DSet, 0, renderTargets["albedo"]),
+			wSetImage(*DSet, 1, renderTargets["depth"]),
+			wSetImage(*DSet, 2, renderTargets["normal"]),
+			wSetImage(*DSet, 3, renderTargets["srm"]),
+			wSetBuffer(*DSet, 4, UBReflection)
 		};
 		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
@@ -87,23 +87,23 @@ namespace vm
 		std::vector<vk::ClearValue> clearValues = { clearColor };
 
 		vk::RenderPassBeginInfo renderPassInfo;
-		renderPassInfo.renderPass = *renderPass;
-		renderPassInfo.framebuffer = *framebuffers[imageIndex];
+		renderPassInfo.renderPass = *renderPass.renderPass;
+		renderPassInfo.framebuffer = *framebuffers[imageIndex].framebuffer;
 		renderPassInfo.renderArea.offset = vk::Offset2D{ 0, 0 };
 		renderPassInfo.renderArea.extent = extent;
 		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		renderPassInfo.pClearValues = clearValues.data();
 
 		cmd.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline.Value());
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.pipelineLayout.Value(), 0, DSet.Value(), nullptr);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.pipelineLayout, 0, *DSet, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
 
 	void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(renderTargets["ssr"].format.Value(), vk::Format::eUndefined);
+		renderPass.Create(*renderTargets["ssr"].format, vk::Format::eUndefined);
 	}
 
 	void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -112,9 +112,9 @@ namespace vm
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["ssr"].width.Value();
-			uint32_t height = renderTargets["ssr"].height.Value();
-			vk::ImageView view = renderTargets["ssr"].view.Value();
+			uint32_t width = renderTargets["ssr"].width;
+			uint32_t height = renderTargets["ssr"].height;
+			vk::ImageView view = *renderTargets["ssr"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -126,11 +126,11 @@ namespace vm
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
-		pipeline.info.width = renderTargets["ssr"].width_f.Value();
-		pipeline.info.height = renderTargets["ssr"].height_f.Value();
+		pipeline.info.width = renderTargets["ssr"].width_f;
+		pipeline.info.height = renderTargets["ssr"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = { renderTargets["ssr"].blentAttachment.Value() };
-		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSR() };
+		pipeline.info.colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>{ *renderTargets["ssr"].blentAttachment });
+		pipeline.info.descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>{ Pipeline::getDescriptorSetLayoutSSR() });
 		pipeline.info.renderPass = renderPass;
 
 		pipeline.createGraphicsPipeline();

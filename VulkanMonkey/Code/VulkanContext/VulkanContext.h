@@ -38,22 +38,22 @@ namespace vm
 	class VulkanContext
 	{
 	public:
-		Ref_t<vk::Instance> instance;
-		Ref_t<vk::DebugUtilsMessengerEXT> debugMessenger;
-		Ref_t<vk::PhysicalDevice> gpu;
-		Ref_t<vk::PhysicalDeviceProperties> gpuProperties;
-		Ref_t<vk::PhysicalDeviceFeatures> gpuFeatures;
-		Ref_t<vk::Device> device;
-		Ref_t<vk::Queue> graphicsQueue, computeQueue, transferQueue;
-		Ref_t<vk::CommandPool> commandPool;
-		Ref_t<vk::CommandPool> commandPool2;
-		Ref_t<vk::DescriptorPool> descriptorPool;
-		Ref_t<vk::DispatchLoaderDynamic> dispatchLoaderDynamic;
-		Ref_t<std::vector<vk::QueueFamilyProperties>> queueFamilyProperties;
-		Ref_t<std::vector<vk::CommandBuffer>> dynamicCmdBuffers;
-		Ref_t<std::vector<vk::CommandBuffer>> shadowCmdBuffers;
-		Ref_t<std::vector<vk::Fence>> fences;
-		Ref_t<std::vector<vk::Semaphore>> semaphores;
+		Ref<vk::Instance> instance;
+		Ref<vk::DebugUtilsMessengerEXT> debugMessenger;
+		Ref<vk::PhysicalDevice> gpu;
+		Ref<vk::PhysicalDeviceProperties> gpuProperties;
+		Ref<vk::PhysicalDeviceFeatures> gpuFeatures;
+		Ref<vk::Device> device;
+		Ref<vk::Queue> graphicsQueue, computeQueue, transferQueue;
+		Ref<vk::CommandPool> commandPool;
+		Ref<vk::CommandPool> commandPool2;
+		Ref<vk::DescriptorPool> descriptorPool;
+		Ref<vk::DispatchLoaderDynamic> dispatchLoaderDynamic;
+		Ref<std::vector<vk::QueueFamilyProperties>> queueFamilyProperties;
+		Ref<std::vector<vk::CommandBuffer>> dynamicCmdBuffers;
+		Ref<std::vector<vk::CommandBuffer>> shadowCmdBuffers;
+		Ref<std::vector<vk::Fence>> fences;
+		Ref<std::vector<vk::Semaphore>> semaphores;
 
 		SDL_Window* window;
 		Surface surface;

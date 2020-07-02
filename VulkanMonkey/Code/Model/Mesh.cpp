@@ -10,7 +10,7 @@ namespace vm
 
 	Primitive::Primitive() : pbrMaterial({})
 	{
-		descriptorSet = vk::DescriptorSet();
+		descriptorSet = make_ref(vk::DescriptorSet());
 	}
 
 	Primitive::~Primitive()
@@ -19,7 +19,7 @@ namespace vm
 
 	Mesh::Mesh()
 	{
-		descriptorSet = vk::DescriptorSet();
+		descriptorSet = make_ref(vk::DescriptorSet());
 	}
 
 	Mesh::~Mesh()
@@ -128,14 +128,14 @@ namespace vm
 
 			stbi_image_free(pixels);
 
-			tex->format = vk::Format::eR8G8B8A8Unorm;
+			tex->format = make_ref(vk::Format::eR8G8B8A8Unorm);
 			tex->mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
 			tex->createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
 			tex->transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-			tex->copyBufferToImage(staging.buffer.Value());
+			tex->copyBufferToImage(*staging.buffer);
 			tex->generateMipMaps();
 			tex->createImageView(vk::ImageAspectFlagBits::eColor);
-			tex->maxLod = static_cast<float>(tex->mipLevels.Value());
+			tex->maxLod = static_cast<float>(tex->mipLevels);
 			tex->createSampler();
 
 			staging.destroy();

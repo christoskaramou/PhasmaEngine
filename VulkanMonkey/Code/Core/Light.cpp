@@ -6,7 +6,7 @@
 
 namespace vm
 {
-	Ref_t<vk::DescriptorSetLayout> LightUniforms::descriptorSetLayout = Ref_t<vk::DescriptorSetLayout>();
+	Ref<vk::DescriptorSetLayout> LightUniforms::descriptorSetLayout = Ref<vk::DescriptorSetLayout>();
 
 	Light::Light() :
 		color(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f),
@@ -29,18 +29,18 @@ namespace vm
 		uniform.unmap();
 
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = VulkanContext::get()->descriptorPool.Value();
+		allocateInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &*descriptorSetLayout;
-		descriptorSet = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
+		allocateInfo.pSetLayouts = descriptorSetLayout.get();
+		descriptorSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0));
 
 		vk::DescriptorBufferInfo dbi;
-		dbi.buffer = uniform.buffer.Value();
+		dbi.buffer = *uniform.buffer;
 		dbi.offset = 0;
-		dbi.range = uniform.size.Value();
+		dbi.range = uniform.size;
 
 		vk::WriteDescriptorSet writeSet;
-		writeSet.dstSet = descriptorSet.Value();
+		writeSet.dstSet = *descriptorSet;
 		writeSet.dstBinding = 0;
 		writeSet.dstArrayElement = 0;
 		writeSet.descriptorCount = 1;
@@ -52,8 +52,8 @@ namespace vm
 	void LightUniforms::destroy()
 	{
 		uniform.destroy();
-		if (descriptorSetLayout.Value()) {
-			VulkanContext::get()->device->destroyDescriptorSetLayout(descriptorSetLayout.Value());
+		if (*descriptorSetLayout) {
+			VulkanContext::get()->device->destroyDescriptorSetLayout(*descriptorSetLayout);
 			*descriptorSetLayout = nullptr;
 		}
 	}
@@ -90,7 +90,7 @@ namespace vm
 
 	LightUniforms::LightUniforms()
 	{
-		descriptorSetLayout = vk::DescriptorSetLayout();
+		descriptorSetLayout = make_ref(vk::DescriptorSetLayout());
 	}
 
 	LightUniforms::~LightUniforms()
@@ -100,7 +100,7 @@ namespace vm
 	const vk::DescriptorSetLayout& LightUniforms::getDescriptorSetLayout()
 	{
 		// binding for model mvp matrix
-		if (!descriptorSetLayout.Value()) {
+		if (!*descriptorSetLayout) {
 			vk::DescriptorSetLayoutBinding descriptorSetLayoutBinding;
 			descriptorSetLayoutBinding.binding = 0;
 			descriptorSetLayoutBinding.descriptorCount = 1;
@@ -111,8 +111,8 @@ namespace vm
 			createInfo.bindingCount = 1;
 			createInfo.pBindings = &descriptorSetLayoutBinding;
 
-			descriptorSetLayout = VulkanContext::get()->device->createDescriptorSetLayout(createInfo);
+			descriptorSetLayout = make_ref(VulkanContext::get()->device->createDescriptorSetLayout(createInfo));
 		}
-		return descriptorSetLayout.Value();
+		return *descriptorSetLayout;
 	}
 }

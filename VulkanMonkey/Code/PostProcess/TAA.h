@@ -25,7 +25,7 @@ namespace vm
 		std::vector<Framebuffer> framebuffers{}, framebuffersSharpen{};
 		Pipeline pipeline, pipelineSharpen;
 		RenderPass renderPass, renderPassSharpen;
-		Ref_t<vk::DescriptorSet> DSet, DSetSharpen;
+		Ref<vk::DescriptorSet> DSet, DSetSharpen;
 		Image previous;
 		Image frameImage;
 

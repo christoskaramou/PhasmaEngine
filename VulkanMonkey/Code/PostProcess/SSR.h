@@ -28,7 +28,7 @@ namespace vm
 		std::vector<Framebuffer> framebuffers{};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		Ref_t<vk::DescriptorSet> DSet;
+		Ref<vk::DescriptorSet> DSet;
 
 		void update(Camera& camera);
 		void createSSRUniforms(std::map<std::string, Image>& renderTargets);
