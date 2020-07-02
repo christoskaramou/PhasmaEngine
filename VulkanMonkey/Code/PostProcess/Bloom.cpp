@@ -140,8 +140,8 @@ namespace vm
 		std::vector<float> values{ GUI::Bloom_Inv_brightness, GUI::Bloom_intensity, GUI::Bloom_range, GUI::Bloom_exposure, static_cast<float>(GUI::use_tonemap) };
 
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *renderPassBrightFilter.renderPass;
-		rpi.framebuffer = *framebuffers[imageIndex].framebuffer;
+		rpi.renderPass = *renderPassBrightFilter.handle;
+		rpi.framebuffer = *framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = *renderTargets["brightFilter"].extent;
 		rpi.clearValueCount = 1;
@@ -149,43 +149,43 @@ namespace vm
 
 		renderTargets["brightFilter"].changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		cmd.pushConstants<float>(*pipelineBrightFilter.pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, values);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineBrightFilter.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineBrightFilter.pipelineLayout, 0, *DSBrightFilter, nullptr);
+		cmd.pushConstants<float>(*pipelineBrightFilter.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineBrightFilter.handle);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineBrightFilter.layout, 0, *DSBrightFilter, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		renderTargets["brightFilter"].changeLayout(cmd, LayoutState::ColorRead);
 
-		rpi.renderPass = *renderPassGaussianBlur.renderPass;
-		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)].framebuffer;
+		rpi.renderPass = *renderPassGaussianBlur.handle;
+		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)].handle;
 
 		renderTargets["gaussianBlurHorizontal"].changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		cmd.pushConstants<float>(*pipelineGaussianBlurHorizontal.pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, values);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineGaussianBlurHorizontal.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineBrightFilter.pipelineLayout, 0, *DSGaussianBlurHorizontal, nullptr);
+		cmd.pushConstants<float>(*pipelineGaussianBlurHorizontal.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineGaussianBlurHorizontal.handle);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineBrightFilter.layout, 0, *DSGaussianBlurHorizontal, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		renderTargets["gaussianBlurHorizontal"].changeLayout(cmd, LayoutState::ColorRead);
 
-		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)].framebuffer;
+		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)].handle;
 
 		renderTargets["gaussianBlurVertical"].changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		cmd.pushConstants<float>(*pipelineGaussianBlurVertical.pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, values);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineGaussianBlurVertical.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineGaussianBlurVertical.pipelineLayout, 0, *DSGaussianBlurVertical, nullptr);
+		cmd.pushConstants<float>(*pipelineGaussianBlurVertical.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineGaussianBlurVertical.handle);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineGaussianBlurVertical.layout, 0, *DSGaussianBlurVertical, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		renderTargets["gaussianBlurVertical"].changeLayout(cmd, LayoutState::ColorRead);
 
-		rpi.renderPass = *renderPassCombine.renderPass;
-		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)].framebuffer;
+		rpi.renderPass = *renderPassCombine.handle;
+		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)].handle;
 
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		cmd.pushConstants<float>(*pipelineCombine.pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, values);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineCombine.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineCombine.pipelineLayout, 0, *DSCombine, nullptr);
+		cmd.pushConstants<float>(*pipelineCombine.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineCombine.handle);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineCombine.layout, 0, *DSCombine, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}

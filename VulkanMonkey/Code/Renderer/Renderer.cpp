@@ -369,7 +369,7 @@ namespace vm
 		beginInfoShadows.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
 		vk::RenderPassBeginInfo renderPassInfoShadows;
-		renderPassInfoShadows.renderPass = *ctx.shadows.renderPass.renderPass;
+		renderPassInfoShadows.renderPass = *ctx.shadows.renderPass.handle;
 		renderPassInfoShadows.renderArea = vk::Rect2D{ { 0, 0 },{ Shadows::imageSize, Shadows::imageSize } };
 		renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
 		renderPassInfoShadows.pClearValues = clearValuesShadows.data();
@@ -381,9 +381,9 @@ namespace vm
 			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
 			// depth[i] image ===========================================================
-			renderPassInfoShadows.framebuffer = *ctx.shadows.framebuffers[ctx.shadows.textures.size() * imageIndex + i].framebuffer;
+			renderPassInfoShadows.framebuffer = *ctx.shadows.framebuffers[ctx.shadows.textures.size() * imageIndex + i].handle;
 			cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
-			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *ctx.shadows.pipeline.pipeline);
+			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *ctx.shadows.pipeline.handle);
 			for (auto& model : Model::models) {
 				if (model.render) {
 					cmd.bindVertexBuffers(0, *model.vertexBuffer.buffer, offset);
@@ -391,7 +391,7 @@ namespace vm
 
 					for (auto& node : model.linearNodes) {
 						if (node->mesh) {
-							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *ctx.shadows.pipeline.pipelineLayout, 0, { (*ctx.shadows.descriptorSets)[i], *node->mesh->descriptorSet, *model.descriptorSet }, nullptr);
+							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *ctx.shadows.pipeline.layout, 0, { (*ctx.shadows.descriptorSets)[i], *node->mesh->descriptorSet, *model.descriptorSet }, nullptr);
 							for (auto& primitive : node->mesh->primitives) {
 								if (primitive.render)
 									cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);

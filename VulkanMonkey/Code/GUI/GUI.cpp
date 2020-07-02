@@ -845,8 +845,8 @@ namespace vm
 			std::vector<vk::ClearValue> clearValues = { clearColor, depthStencil };
 
 			vk::RenderPassBeginInfo rpi;
-			rpi.renderPass = *renderPass.renderPass;
-			rpi.framebuffer = *framebuffers[imageIndex].framebuffer;
+			rpi.renderPass = *renderPass.handle;
+			rpi.framebuffer = *framebuffers[imageIndex].handle;
 			rpi.renderArea = vk::Rect2D{ { 0, 0 }, *VulkanContext::get()->surface.actualExtent };
 			rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			rpi.pClearValues = clearValues.data();
@@ -854,8 +854,8 @@ namespace vm
 			cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 			const vk::DeviceSize offset{ 0 };
-			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
-			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.pipelineLayout, 0, *descriptorSet, nullptr);
+			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
+			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *descriptorSet, nullptr);
 			cmd.bindVertexBuffers(0, *vertexBuffer.buffer, offset);
 			cmd.bindIndexBuffer(*indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
@@ -873,7 +873,7 @@ namespace vm
 			data[1] = 2.0f / draw_data->DisplaySize.y;				// scale
 			data[2] = -1.0f - draw_data->DisplayPos.x * data[0];	// transform
 			data[3] = -1.0f - draw_data->DisplayPos.y * data[1];	// transform
-			cmd.pushConstants<float>(*pipeline.pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, data);
+			cmd.pushConstants<float>(*pipeline.layout, vk::ShaderStageFlagBits::eVertex, 0, data);
 
 			// Render the command lists:
 			int vtx_offset = 0;
@@ -1168,7 +1168,7 @@ namespace vm
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-		renderPass.renderPass = make_ref(VulkanContext::get()->device->createRenderPass(renderPassInfo));
+		renderPass.handle = make_ref(VulkanContext::get()->device->createRenderPass(renderPassInfo));
 	}
 
 	void GUI::createFrameBuffers()

@@ -28,8 +28,8 @@ namespace vm
 
 	Pipeline::Pipeline()
 	{
-		pipeline = make_ref(vk::Pipeline());
-		pipelineLayout = make_ref(vk::PipelineLayout());
+		handle = make_ref(vk::Pipeline());
+		layout = make_ref(vk::PipelineLayout());
 	}
 
 	Pipeline::~Pipeline()
@@ -168,11 +168,11 @@ namespace vm
 		plci.pSetLayouts = info.descriptorSetLayouts->data();
 		plci.pushConstantRangeCount = 1;
 		plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
-		pipelineLayout = make_ref(VulkanContext::get()->device->createPipelineLayout(plci));
-		pipeinfo.layout = *pipelineLayout;
+		layout = make_ref(VulkanContext::get()->device->createPipelineLayout(plci));
+		pipeinfo.layout = *layout;
 
 		// Render Pass
-		pipeinfo.renderPass = *info.renderPass.renderPass;
+		pipeinfo.renderPass = *info.renderPass.handle;
 
 		// Subpass (Index of subpass this pipeline will be used in)
 		pipeinfo.subpass = 0;
@@ -183,7 +183,7 @@ namespace vm
 		// Base Pipeline Index
 		pipeinfo.basePipelineIndex = -1;
 
-		pipeline = make_ref(VulkanContext::get()->device->createGraphicsPipelines(nullptr, pipeinfo).at(0));
+		handle = make_ref(VulkanContext::get()->device->createGraphicsPipelines(nullptr, pipeinfo).at(0));
 	}
 
 	void Pipeline::createComputePipeline()
@@ -203,22 +203,22 @@ namespace vm
 		compinfo.stage.module = module.get();
 		compinfo.stage.pName = "main";
 		compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
-		pipelineLayout = make_ref(VulkanContext::get()->device->createPipelineLayout(plci));
-		compinfo.layout = *pipelineLayout;
+		layout = make_ref(VulkanContext::get()->device->createPipelineLayout(plci));
+		compinfo.layout = *layout;
 
-		pipeline = make_ref(VulkanContext::get()->device->createComputePipelines(nullptr, compinfo).at(0));
+		handle = make_ref(VulkanContext::get()->device->createComputePipelines(nullptr, compinfo).at(0));
 	}
 
 	void Pipeline::destroy()
 	{
-		if (*pipelineLayout) {
-			VulkanContext::get()->device->destroyPipelineLayout(*pipelineLayout);
-			*pipelineLayout = nullptr;
+		if (*layout) {
+			VulkanContext::get()->device->destroyPipelineLayout(*layout);
+			*layout = nullptr;
 		}
 
-		if (*pipeline) {
-			VulkanContext::get()->device->destroyPipeline(*pipeline);
-			*pipeline = nullptr;
+		if (*handle) {
+			VulkanContext::get()->device->destroyPipeline(*handle);
+			*handle = nullptr;
 		}
 	}
 

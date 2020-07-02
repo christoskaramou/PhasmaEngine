@@ -35,8 +35,8 @@ namespace vm
 		cmd.begin(beginInfo);
 
 		//ctx.metrics[13].start(cmd);
-		cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *pipeline.pipelineLayout, 0, *DSCompute, nullptr);
+		cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *pipeline.handle);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *pipeline.layout, 0, *DSCompute, nullptr);
 		cmd.dispatch(sizeX, sizeY, sizeZ);
 		//ctx.metrics[13].end(&GUI::metrics[13]);
 

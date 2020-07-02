@@ -123,8 +123,8 @@ namespace vm
 		std::vector<vk::ClearValue> clearValues = { clearColor };
 
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *renderPass.renderPass;
-		rpi.framebuffer = *framebuffers[imageIndex].framebuffer;
+		rpi.renderPass = *renderPass.handle;
+		rpi.framebuffer = *framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = *image.extent;
 		rpi.clearValueCount = 1;
@@ -132,21 +132,21 @@ namespace vm
 
 		image.changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
 		const vk::DescriptorSet descriptorSets = { *DSet };
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.pipelineLayout, 0, descriptorSets, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, descriptorSets, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		image.changeLayout(cmd, LayoutState::ColorRead);
 
 		// new blurry SSAO image
-		rpi.renderPass = *blurRenderPass.renderPass;
-		rpi.framebuffer = *blurFramebuffers[imageIndex].framebuffer;
+		rpi.renderPass = *blurRenderPass.handle;
+		rpi.framebuffer = *blurFramebuffers[imageIndex].handle;
 
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineBlur.pipeline);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineBlur.handle);
 		const vk::DescriptorSet descriptorSetsBlur = { *DSBlur };
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineBlur.pipelineLayout, 0, descriptorSetsBlur, nullptr);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineBlur.layout, 0, descriptorSetsBlur, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}

@@ -22,6 +22,6 @@ namespace vm
 		void Create(uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, const RenderPass& renderPass);
 		void Destroy();
 
-		Ref<vk::Framebuffer> framebuffer;
+		Ref<vk::Framebuffer> handle;
 	};
 }

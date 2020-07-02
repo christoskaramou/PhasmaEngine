@@ -58,8 +58,8 @@ namespace vm
 		~Pipeline();
 
 		PipelineCreateInfo info;
-		Ref<vk::Pipeline> pipeline;
-		Ref<vk::PipelineLayout> pipelineLayout;
+		Ref<vk::Pipeline> handle;
+		Ref<vk::PipelineLayout> layout;
 
 		void createGraphicsPipeline();
 		void createComputePipeline();

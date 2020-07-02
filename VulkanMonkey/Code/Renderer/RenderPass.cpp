@@ -6,7 +6,7 @@ namespace vm
 {
 	RenderPass::RenderPass()
 	{
-		renderPass = make_ref(vk::RenderPass());
+		handle = make_ref(vk::RenderPass());
 	}
 
 	RenderPass::~RenderPass()
@@ -70,14 +70,14 @@ namespace vm
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-		renderPass = make_ref(VulkanContext::get()->device->createRenderPass(renderPassInfo));
+		handle = make_ref(VulkanContext::get()->device->createRenderPass(renderPassInfo));
 	}
 
 	void RenderPass::Destroy()
 	{
-		if (*renderPass) {
-			VulkanContext::get()->device->destroyRenderPass(*renderPass);
-			*renderPass = nullptr;
+		if (*handle) {
+			VulkanContext::get()->device->destroyRenderPass(*handle);
+			*handle = nullptr;
 		}
 	}
 }

@@ -87,7 +87,7 @@ namespace vm
 		rpci.subpassCount = 1;
 		rpci.pSubpasses = &subpassDesc;
 
-		renderPass.renderPass = make_ref(VulkanContext::get()->device->createRenderPass(rpci));
+		renderPass.handle = make_ref(VulkanContext::get()->device->createRenderPass(rpci));
 	}
 
 	void Shadows::createFrameBuffers()
@@ -158,8 +158,8 @@ namespace vm
 
 	void Shadows::destroy()
 	{
-		if (*renderPass.renderPass)
-			VulkanContext::get()->device->destroyRenderPass(*renderPass.renderPass);
+		if (*renderPass.handle)
+			VulkanContext::get()->device->destroyRenderPass(*renderPass.handle);
 
 		if (Pipeline::getDescriptorSetLayoutShadows()) {
 			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutShadows());
@@ -170,7 +170,7 @@ namespace vm
 			texture.destroy();
 
 		for (auto& fb : framebuffers)
-			VulkanContext::get()->device->destroyFramebuffer(*fb.framebuffer);
+			VulkanContext::get()->device->destroyFramebuffer(*fb.handle);
 
 		for (auto& buffer : uniformBuffers)
 			buffer.destroy();

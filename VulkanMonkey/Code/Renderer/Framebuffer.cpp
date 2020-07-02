@@ -7,7 +7,7 @@ namespace vm
 {
 	Framebuffer::Framebuffer()
 	{
-		framebuffer = make_ref(vk::Framebuffer());
+		handle = make_ref(vk::Framebuffer());
 	}
 
 	void Framebuffer::Create(uint32_t width, uint32_t height, const vk::ImageView& view, const RenderPass& renderPass)
@@ -19,21 +19,21 @@ namespace vm
 	{
 
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = *renderPass.renderPass;
+		fbci.renderPass = *renderPass.handle;
 		fbci.attachmentCount = static_cast<uint32_t>(views.size());
 		fbci.pAttachments = views.data();
 		fbci.width = width;
 		fbci.height = height;
 		fbci.layers = 1;
 
-		framebuffer = make_ref(VulkanContext::get()->device->createFramebuffer(fbci));
+		handle = make_ref(VulkanContext::get()->device->createFramebuffer(fbci));
 	}
 	
 	void Framebuffer::Destroy()
 	{
-		if (*framebuffer) {
-			VulkanContext::get()->device->destroyFramebuffer(*framebuffer);
-			*framebuffer = nullptr;
+		if (*handle) {
+			VulkanContext::get()->device->destroyFramebuffer(*handle);
+			*handle = nullptr;
 		}
 	}
 }

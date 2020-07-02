@@ -70,16 +70,16 @@ namespace vm
 		std::vector<vk::ClearValue> clearValues = { clearColor };
 
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *renderPass.renderPass;
-		rpi.framebuffer = *framebuffers[imageIndex].framebuffer;
+		rpi.renderPass = *renderPass.handle;
+		rpi.framebuffer = *framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
 
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.pipelineLayout, 0, *DSet, nullptr);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *DSet, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}

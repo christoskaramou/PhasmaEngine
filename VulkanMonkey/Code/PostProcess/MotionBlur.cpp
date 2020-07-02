@@ -83,8 +83,8 @@ namespace vm
 		std::vector<vk::ClearValue> clearValues = { clearColor };
 
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *renderPass.renderPass;
-		rpi.framebuffer = *framebuffers[imageIndex].framebuffer;
+		rpi.renderPass = *renderPass.handle;
+		rpi.framebuffer = *framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -92,9 +92,9 @@ namespace vm
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
 		const vec4 values{ 1.f / static_cast<float>(FrameTimer::Instance().delta), sin(static_cast<float>(FrameTimer::Instance().time) * 0.125f), GUI::motionBlur_strength, 0.f };
-		cmd.pushConstants<vec4>(*pipeline.pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, values);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.pipelineLayout, 0, *DSet, nullptr);
+		cmd.pushConstants<vec4>(*pipeline.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *DSet, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}

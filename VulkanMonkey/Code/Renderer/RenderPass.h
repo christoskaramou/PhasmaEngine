@@ -20,6 +20,6 @@ namespace vm
 		void Create(const std::vector<vk::Format>& formats, const vk::Format& depthFormat);
 		void Destroy();
 
-		Ref<vk::RenderPass> renderPass;
+		Ref<vk::RenderPass> handle;
 	};
 }

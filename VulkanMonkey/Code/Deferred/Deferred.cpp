@@ -35,8 +35,8 @@ namespace vm
 		std::vector<vk::ClearValue> clearValues = { clearColor, clearColor, clearColor, clearColor, clearColor, clearColor, depthStencil };
 
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *renderPass.renderPass;
-		rpi.framebuffer = *framebuffers[imageIndex].framebuffer;
+		rpi.renderPass = *renderPass.handle;
+		rpi.framebuffer = *framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -174,16 +174,16 @@ namespace vm
 		std::vector<vk::ClearValue> clearValues = { clearColor, clearColor };
 
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *compositionRenderPass.renderPass;
-		rpi.framebuffer = *compositionFramebuffers[imageIndex].framebuffer;
+		rpi.renderPass = *compositionRenderPass.handle;
+		rpi.framebuffer = *compositionFramebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		rpi.pClearValues = clearValues.data();
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineComposition.pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineComposition.pipelineLayout, 0, { *DSComposition, (*shadows.descriptorSets)[0], (*shadows.descriptorSets)[1], (*shadows.descriptorSets)[2], *skybox.descriptorSet }, nullptr);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineComposition.handle);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineComposition.layout, 0, { *DSComposition, (*shadows.descriptorSets)[0], (*shadows.descriptorSets)[1], (*shadows.descriptorSets)[2], *skybox.descriptorSet }, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		// End Composition
