@@ -1,43 +1,30 @@
 #pragma once
-#include "Component.h"
-#include <map>
+#include <unordered_set>
 
 namespace vm
 {
 	class Context;
 
-	class System : public BaseSystem
+	class ISystem
 	{
 	public:
-		System() : m_context(nullptr), m_id(NextID())
-		{
-			m_parent = nullptr;
-			m_enable = true;
-		}
-		virtual ~System() {}
+		ISystem() : m_context(nullptr), m_enabled(false) {}
+		virtual ~ISystem() {}
+
+		virtual void Init() = 0;
+		virtual void Update(double delta) = 0;
+		virtual void Destroy() = 0;
+		void AddComponentType(size_t type) { m_componentTypes.insert(type); }
+		void RemoveComponentType(size_t type) { m_componentTypes.erase(type); }
+		std::unordered_set<size_t>& GetComponentTypes() { return m_componentTypes; }
 		void SetContext(Context* context) { m_context = context; }
 		Context* GetContext() { return m_context; }
-		size_t GetID() { return m_id; }
-
-		template<class T> inline void AddComponent(T* component);
+		bool IsEnabled() { return m_enabled; }
+		void SetEnabled(bool enabled) { m_enabled = enabled; }
 
 	private:
 		Context* m_context;
-		std::map<size_t, BaseComponent*> m_components;
-		size_t m_id;
+		std::unordered_set<size_t> m_componentTypes;
+		bool m_enabled;
 	};
-
-	template<class T>
-	inline void System::AddComponent(T* component)
-	{
-		if constexpr (std::is_base_of<Component, T>::value)
-		{
-			if (!m_components.count(component->GetID()))
-				m_components[component->GetID()] = static_cast<BaseComponent*>(component);
-		}
-		else
-		{
-			throw std::runtime_error("System::CreateComponent: Type is not a Component");
-		}
-	}
 }

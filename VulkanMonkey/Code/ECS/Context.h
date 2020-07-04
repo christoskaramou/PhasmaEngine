@@ -1,98 +1,74 @@
 #pragma once
-#include "GameObject.h"
+#include "Entity.h"
+#include "System.h"
 #include "../Core/Base.h"
+#include <vector>
 
 namespace vm
 {
-	class Context final
+	class Context final : public BaseBehaviour
 	{
 	public:
 		Context() {}
 		~Context() {}
 
-		void UpdateSystems(double delta);
+		void Update(double delta) override;
 
 		template<class T, class... Params> inline T* CreateSystem(Params&&... params);
 		template<class T> inline T* GetSystem();
 		template<class T> inline bool HasSystem();
 		template<class T> inline void RemoveSystem();
-		GameObject* CreateGameObject();
-		GameObject* GetGameObject(size_t id);
-		void RemoveGameObject(size_t id);
+		Entity* CreateEntity();
+		Entity* GetEntity(size_t id);
+		void RemoveEntity(size_t id);
 
 	private:
-		std::map<size_t, Ref<BaseSystem>> m_systems;
-		std::map<size_t, Ref<GameObject>> m_gameObjects;
+		std::unordered_map<size_t, Ref<ISystem>> m_systems;
+		std::unordered_map<size_t, Ref<Entity>> m_entities;
 	};
+
+	template<class T>
+	inline bool Context::HasSystem()
+	{
+		ValidateBaseClass<ISystem, T>();
+
+		if (m_systems.find(GetTypeID<T>()) != m_systems.end())
+			return true;
+		else
+			return false;
+	}
 
 	template<class T, class... Params>
 	inline T* Context::CreateSystem(Params&&... params)
 	{
-		if constexpr (std::is_base_of<System, T>::value)
+		if (!HasSystem<T>())
 		{
-			if (m_systems.find(GetTypeID<T>()) == m_systems.end())
-			{
-				m_systems[GetTypeID<T>()] = std::make_shared<T>(std::forward<Params>(params)...);
+			size_t id = GetTypeID<T>();
+			m_systems[id] = std::make_shared<T>(std::forward<Params>(params)...);
+			GetSystem<T>()->SetContext(this);
+			GetSystem<T>()->SetEnabled(true);
 
-				T* pT = static_cast<T*>(m_systems[GetTypeID<T>()].get());
-				pT->SetContext(this);
-
-				return pT;
-			}
-			else
-			{
-				return nullptr;
-			}
+			return static_cast<T*>(m_systems[id].get());
 		}
 		else
 		{
-			throw std::runtime_error("Context::CreateSystem: Type is not a System");
+			return nullptr;
 		}
 	}
 
 	template<class T>
 	inline T* Context::GetSystem()
 	{
-		if constexpr (std::is_base_of<System, T>::value)
-		{
-			if (m_systems.find(GetTypeID<T>()) != m_systems.end())
-				return static_cast<T*>(m_systems[GetTypeID<T>()].get());
-			else
-				return nullptr;
-		}
+		if (HasSystem<T>())
+			return static_cast<T*>(m_systems[GetTypeID<T>()].get());
 		else
-		{
-			throw std::runtime_error("Context::GetSystem: Type is not a System");
-		}
-	}
-
-	template<class T>
-	inline bool Context::HasSystem()
-	{
-		if constexpr (std::is_base_of<System, T>::value)
-		{
-			if (m_systems.find(GetTypeID<T>()) != m_systems.end())
-				return true;
-			else
-				return false;
-		}
-		else
-		{
-			throw std::runtime_error("Context::HasSystem: Type is not a System");
-		}
+			return nullptr;
 	}
 
 	template<class T>
 	inline void Context::RemoveSystem()
 	{
-		if constexpr (std::is_base_of<System, T>::value)
-		{
-			if (m_systems.find(GetTypeID<T>()) != m_systems.end())
-				m_systems.erase(GetTypeID<T>());
-		}
-		else
-		{
-			throw std::runtime_error("Context::RemoveSystem: Type is not a System");
-		}
+		if (HasSystem<T>())
+			m_systems.erase(GetTypeID<T>());
 	}
 }

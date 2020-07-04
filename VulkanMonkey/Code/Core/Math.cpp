@@ -1367,17 +1367,12 @@ namespace vm
 		return a + f * (b - a);
 	}
 
-	Transform::Transform() : m_scale(1.0f), m_rotation(quat::identity()), m_position(0.0f)
+	Transform::Transform() : matrix(mat4::identity()), scale(1.0f), rotation(quat::identity()), position(0.0f)
 	{ }
 
 	Transform::Transform(cvec3& scale, cquat& rotation, cvec3& position) :
-		m_scale(scale), m_rotation(rotation), m_position(position)
+		matrix(transform(rotation, scale, position)), scale(scale), rotation(rotation), position(position)
 	{ }
-
-	mat4 Transform::matrix() const
-	{
-		return transform(m_rotation, m_scale, m_position);
-	}
 
 	float halton(uint32_t index, uint32_t base)
 	{

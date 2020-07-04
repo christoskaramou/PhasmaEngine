@@ -238,7 +238,7 @@
     <ClInclude Include="Code\ECS\Component.h" />
     <ClInclude Include="Code\ECS\Context.h" />
     <ClInclude Include="Code\ECS\ECSBase.h" />
-    <ClInclude Include="Code\ECS\GameObject.h" />
+    <ClInclude Include="Code\ECS\Entity.h" />
     <ClInclude Include="Code\ECS\System.h" />
     <ClInclude Include="Code\Event\Delegate.h" />
     <ClInclude Include="Code\Event\EventSystem.h" />
@@ -341,11 +341,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">vulkanPCH.h</PrecompiledHeaderFile>
     </ClCompile>
-    <ClCompile Include="Code\ECS\Component.cpp" />
     <ClCompile Include="Code\ECS\Context.cpp" />
-    <ClCompile Include="Code\ECS\ECSBase.cpp" />
-    <ClCompile Include="Code\ECS\GameObject.cpp" />
-    <ClCompile Include="Code\ECS\System.cpp" />
     <ClCompile Include="Code\Event\EventSystem.cpp" />
     <ClCompile Include="Code\GUI\GUI.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>

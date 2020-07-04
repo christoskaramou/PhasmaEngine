@@ -261,9 +261,6 @@
     <ClInclude Include="Code\ECS\Component.h">
       <Filter>Code\ECS</Filter>
     </ClInclude>
-    <ClInclude Include="Code\ECS\GameObject.h">
-      <Filter>Code\ECS</Filter>
-    </ClInclude>
     <ClInclude Include="Code\ECS\System.h">
       <Filter>Code\ECS</Filter>
     </ClInclude>
@@ -281,6 +278,9 @@
     </ClInclude>
     <ClInclude Include="Code\Event\Delegate.h">
       <Filter>Code\Event</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\ECS\Entity.h">
+      <Filter>Code\ECS</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -481,18 +481,6 @@
     </ClCompile>
     <ClCompile Include="Include\vulkanPCH.cpp">
       <Filter>Include</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\ECS\Component.cpp">
-      <Filter>Code\ECS</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\ECS\GameObject.cpp">
-      <Filter>Code\ECS</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\ECS\System.cpp">
-      <Filter>Code\ECS</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\ECS\ECSBase.cpp">
-      <Filter>Code\ECS</Filter>
     </ClCompile>
     <ClCompile Include="Code\ECS\Context.cpp">
       <Filter>Code\ECS</Filter>

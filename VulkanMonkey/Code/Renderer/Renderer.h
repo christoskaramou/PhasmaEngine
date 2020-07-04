@@ -9,7 +9,7 @@ namespace vk
 
 namespace vm
 {
-	class Renderer final : public System
+	class Renderer final : public ISystem
 	{
 	public:
 		Renderer(Context* ctxx, SDL_Window* window);
@@ -18,7 +18,7 @@ namespace vm
 		void Init() override;
 		void Update(double delta) override;
 		void Destroy() override;
-		void Present();
+		void Draw();
 		inline SDL_Window* GetWindow() { return window; }
 
 		ContextTemp ctx;

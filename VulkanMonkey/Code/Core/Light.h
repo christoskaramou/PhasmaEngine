@@ -4,6 +4,7 @@
 #include "Buffer.h"
 #include "../Camera/Camera.h"
 #include "../GUI/GUI.h"
+#include "../ECS/Component.h"
 
 namespace vk
 {
@@ -23,6 +24,36 @@ namespace vm
 
 		vec4 color;
 		vec4 position;
+	};
+
+	class DirectionalLight : public IComponent
+	{
+	public:
+		DirectionalLight();
+
+		vec4 color;
+		vec3 direction;
+	};
+
+	class PointLight : public IComponent
+	{
+	public:
+		PointLight();
+
+		vec4 color;
+		vec3 position;
+		float radius;
+	};
+
+	class SpotLight : public IComponent
+	{
+	public:
+		SpotLight();
+
+		vec4 color;
+		vec4 start;
+		vec3 end;
+		float radius;
 	};
 
 	struct LightsUBO

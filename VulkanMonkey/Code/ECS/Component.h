@@ -3,23 +3,21 @@
 
 namespace vm
 {
-	class GameObject;
+	class Entity;
 
-	class Component : public BaseComponent
+	class IComponent
 	{
 	public:
-		virtual ~Component() {}
-		size_t GetID() { return m_id; }
-		GameObject* GetGameObject() { return m_gameObject; }
-		void SetGameObject(GameObject* gameObject) { m_gameObject = gameObject; }
+		IComponent() : m_entity(nullptr), m_enabled(false) {}
+		virtual ~IComponent() {}
 
-	protected:
-		friend class GameObject;
-		Component();
-		Component(GameObject* gameObject, Transform* parent = nullptr, bool enable = true);
+		Entity* GetEntity() { return m_entity; }
+		void SetEntity(Entity* entity) { m_entity = entity; }
+		bool IsEnabled() { return m_enabled; }
+		void SetEnabled(bool enabled) { m_enabled = enabled; }
 
 	private:
-		GameObject* m_gameObject;
-		const size_t m_id;
+		Entity* m_entity;
+		bool m_enabled;
 	};
 }

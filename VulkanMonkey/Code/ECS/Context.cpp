@@ -1,41 +1,38 @@
 #include "Context.h"
 #include "ECSBase.h"
-#include "System.h"
-#include "GameObject.h"
-#include <utility>
+#include "Entity.h"
+#include <stdexcept>
+#include <iostream>
 
 namespace vm
 {
-	void Context::UpdateSystems(double delta)
+	void Context::Update(double delta)
 	{
-		for (auto& system : m_systems)
-		{
-			system.second->Update(delta);
-		}
 	}
 
-	GameObject* Context::CreateGameObject()
+	Entity* Context::CreateEntity()
 	{
-		GameObject gameObject;
-		gameObject.SetContext(this);
+		Entity* entity = new Entity();
+		entity->SetContext(this);
+		entity->SetEnabled(true);
 
-		size_t key = gameObject.GetID();
-		m_gameObjects[key] = std::make_shared<GameObject>(gameObject);
+		size_t key = entity->GetID();
+		m_entities[key] = std::shared_ptr<Entity>(entity);
 
-		return m_gameObjects[key].get();
+		return m_entities[key].get();
 	}
 
-	GameObject* Context::GetGameObject(size_t id)
+	Entity* Context::GetEntity(size_t id)
 	{
-		if (m_gameObjects.count(id))
-			return m_gameObjects[id].get();
-
-		return nullptr;
+		if (m_entities.find(id) != m_entities.end())
+			return m_entities[id].get();
+		else
+			return nullptr;
 	}
 
-	void Context::RemoveGameObject(size_t id)
+	void Context::RemoveEntity(size_t id)
 	{
-		if (m_gameObjects.count(id))
-			m_gameObjects.erase(id);
+		if (m_entities.find(id) != m_entities.end())
+			m_entities.erase(id);
 	}
 }

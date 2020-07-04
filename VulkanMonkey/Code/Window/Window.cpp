@@ -8,27 +8,31 @@
 
 namespace vm
 {
-	SDL_Window* Window::Create(Context* ctx, const std::string& title, uint32_t flags)
+	SDL_Window* Window::Create(Context* ctx, uint32_t flags)
 	{
 		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) { std::cout << SDL_GetError(); return nullptr; }
 
-		SDL_Window* window;
-		if (!((window = SDL_CreateWindow(title.c_str(), 50, 50, 800, 600, flags)))) { std::cout << SDL_GetError(); return nullptr; }
+		if (!((handle = SDL_CreateWindow("", 50, 50, 800, 600, flags)))) { std::cout << SDL_GetError(); return nullptr; }
 
 		this->ctx = ctx;
 
 		auto vulkan = VulkanContext::get();
 
-		const std::string _title =
+		const std::string title =
 			"VulkanMonkey3D   "
 			+ std::string(vulkan->gpuProperties->deviceName)
 			+ " (Present Mode: "
 			+ vk::to_string(*vulkan->surface.presentModeKHR)
 			+ ")";
 
-		SDL_SetWindowTitle(window, _title.c_str());
+		SetTitle(title);
 
-		return window;
+		return handle;
+	}
+
+	void Window::SetTitle(const std::string& title)
+	{
+		SDL_SetWindowTitle(handle, title.c_str());
 	}
 
 	void Window::DestroyAll()

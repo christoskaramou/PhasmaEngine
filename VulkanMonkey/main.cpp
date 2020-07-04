@@ -30,7 +30,7 @@ int main(int argc, char* argv[])
 		if (!window.isMinimized())
 		{
 			ctx.GetSystem<Renderer>()->Update(frame_timer.delta);
-			ctx.GetSystem<Renderer>()->Present();
+			ctx.GetSystem<Renderer>()->Draw();
 		}
 		
 		// Metrics every 0.75 sec

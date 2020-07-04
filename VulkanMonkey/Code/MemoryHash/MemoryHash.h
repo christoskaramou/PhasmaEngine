@@ -15,6 +15,11 @@ namespace vm
 	public:
 		using Type = size_t;
 
+		bool operator==(MemoryHash memoryHash)
+		{
+			return hash == memoryHash.hash;
+		}
+
 		MemoryHash(const void* data, size_t size)
 		{
 			Type* array = reinterpret_cast<Type*>(const_cast<void*>(data));

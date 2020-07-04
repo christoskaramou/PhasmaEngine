@@ -411,7 +411,7 @@ namespace vm
 	{
 	}
 
-	void Renderer::Present()
+	void Renderer::Draw()
 	{
 		auto& vCtx = *VulkanContext::get();
 

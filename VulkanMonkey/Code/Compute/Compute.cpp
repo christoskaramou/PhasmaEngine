@@ -111,7 +111,7 @@ namespace vm
 		pipeline.destroy();
 		if (*fence) {
 			VulkanContext::get()->device->destroyFence(*fence);
-			fence = nullptr;
+			*fence = nullptr;
 		}
 		if (Pipeline::getDescriptorSetLayoutCompute()) {
 			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutCompute());
