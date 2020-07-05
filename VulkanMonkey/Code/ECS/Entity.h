@@ -58,7 +58,7 @@ namespace vm
 		if (!HasComponent<T>())
 		{
 			size_t id = GetTypeID<T>();
-			m_components[id] = std::shared_ptr<T>(std::forward<Params>(params)...);
+			m_components[id] = std::make_shared<T>(std::forward<Params>(params)...);
 			GetComponent<T>()->SetEntity(this);			
 			GetComponent<T>()->SetEnabled(true);			
 

@@ -188,7 +188,7 @@ namespace vm
 			vec3 pointOnPyramid = camera.front * (sideSizeOfPyramid * .01f);
 			vec3 pos = p + camera.position + pointOnPyramid; // sun position will be moved, so its angle to the lookat position is the same always
 			vec3 front = normalize(camera.position + pointOnPyramid - pos);
-			vec3 right = normalize(cross(front, camera.worldUp()));
+			vec3 right = normalize(cross(front, camera.WorldUp()));
 			vec3 up = normalize(cross(right, front));
 			float orthoSide = sideSizeOfPyramid * .01f; // small area
 			shadows_UBO[0] = {
@@ -209,7 +209,7 @@ namespace vm
 			pointOnPyramid = camera.front * (sideSizeOfPyramid * .05f);
 			pos = p + camera.position + pointOnPyramid;
 			front = normalize(camera.position + pointOnPyramid - pos);
-			right = normalize(cross(front, camera.worldUp()));
+			right = normalize(cross(front, camera.WorldUp()));
 			up = normalize(cross(right, front));
 			orthoSide = sideSizeOfPyramid * .05f; // medium area
 			shadows_UBO[1] = {
@@ -230,7 +230,7 @@ namespace vm
 			pointOnPyramid = camera.front * (sideSizeOfPyramid * .5f);
 			pos = p + camera.position + pointOnPyramid;
 			front = normalize(camera.position + pointOnPyramid - pos);
-			right = normalize(cross(front, camera.worldUp()));
+			right = normalize(cross(front, camera.WorldUp()));
 			up = normalize(cross(right, front));
 			orthoSide = sideSizeOfPyramid * .5f; // large area
 			shadows_UBO[2] = {

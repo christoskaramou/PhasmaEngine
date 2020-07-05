@@ -128,11 +128,11 @@ namespace vm
 		// LIGHTS
 		LightUniforms lightUniforms;
 
-		// CAMERAS
-		// main camera
-		Camera camera_main;
-		// other cameras
-		std::vector<Camera> camera{};
+		//// CAMERAS
+		//// main camera
+		//Camera camera_main;
+		//// other cameras
+		//std::vector<Camera> camera{};
 
 		// Metrics
 		std::vector<GPUTimer> metrics{};

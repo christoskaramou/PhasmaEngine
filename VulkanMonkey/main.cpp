@@ -2,6 +2,7 @@
 #include "Code/Core/Timer.h"
 #include <iostream>
 #include "Code/ECS/Context.h"
+#include "Code/Camera/Camera.h"
 
 using namespace vm;
 
@@ -12,8 +13,16 @@ int main(int argc, char* argv[])
 
 	Window window;
 	Context ctx;
+
+	Entity* mainEntity = ctx.CreateEntity();
+	Camera* mainCamera = mainEntity->CreateComponent<Camera>();
+
+	ctx.CreateSystem<CameraSystem>();
 	ctx.CreateSystem<Renderer>(&ctx, window.Create(&ctx));
+
+	ctx.GetSystem<CameraSystem>()->AddComponent(mainCamera);
 	ctx.GetSystem<Renderer>()->Init();
+
 
 	Timer interval;
 	interval.Start();
@@ -29,6 +38,7 @@ int main(int argc, char* argv[])
 		
 		if (!window.isMinimized())
 		{
+			ctx.GetSystem<CameraSystem>()->Update(frame_timer.delta);
 			ctx.GetSystem<Renderer>()->Update(frame_timer.delta);
 			ctx.GetSystem<Renderer>()->Draw();
 		}

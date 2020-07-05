@@ -52,6 +52,9 @@ namespace vm
 		auto vulkan = VulkanContext::get();
 		bool combineDirections = false;
 
+		CameraSystem* cameraSystem = ctx->GetSystem<CameraSystem>();
+		Camera& camera_main = *(Camera*)cameraSystem->GetComponentsOfType<Camera>()[0];
+
 		ImGuiIO& io = ImGui::GetIO();
 
 		SDL_Event event;
@@ -94,10 +97,11 @@ namespace vm
 				if (isInsideRenderWindow(event.motion.x, event.motion.y)) {
 					SDL_ShowCursor(SDL_DISABLE);
 					SDL_WarpMouseInWindow(vulkan->window, static_cast<int>(GUI::winSize.x * .5f + GUI::winPos.x), static_cast<int>(GUI::winSize.y * .5f + GUI::winPos.y));
-					if (event.type == SDL_MOUSEMOTION) {
+					if (event.type == SDL_MOUSEMOTION)
+					{
 						xMove = event.motion.x - static_cast<int>(GUI::winSize.x * .5f + GUI::winPos.x);
 						yMove = event.motion.y - static_cast<int>(GUI::winSize.y * .5f + GUI::winPos.y);
-						info.camera_main.rotate(static_cast<float>(xMove), static_cast<float>(yMove));
+						camera_main.Rotate(static_cast<float>(xMove), static_cast<float>(yMove));
 					}
 				}
 			}
@@ -132,10 +136,10 @@ namespace vm
 			(io.KeysDown[SDL_SCANCODE_A] || io.KeysDown[SDL_SCANCODE_D]))
 			combineDirections = true;
 		const float velocity = combineDirections ? GUI::cameraSpeed * static_cast<float>(delta) * 0.707f : GUI::cameraSpeed * static_cast<float>(delta);
-		if (io.KeysDown[SDL_SCANCODE_W]) info.camera_main.move(Camera::RelativeDirection::FORWARD, velocity);
-		if (io.KeysDown[SDL_SCANCODE_S]) info.camera_main.move(Camera::RelativeDirection::BACKWARD, velocity);
-		if (io.KeysDown[SDL_SCANCODE_A]) info.camera_main.move(Camera::RelativeDirection::LEFT, velocity);
-		if (io.KeysDown[SDL_SCANCODE_D]) info.camera_main.move(Camera::RelativeDirection::RIGHT, velocity);
+		if (io.KeysDown[SDL_SCANCODE_W]) camera_main.Move(Camera::RelativeDirection::FORWARD, velocity);
+		if (io.KeysDown[SDL_SCANCODE_S]) camera_main.Move(Camera::RelativeDirection::BACKWARD, velocity);
+		if (io.KeysDown[SDL_SCANCODE_A]) camera_main.Move(Camera::RelativeDirection::LEFT, velocity);
+		if (io.KeysDown[SDL_SCANCODE_D]) camera_main.Move(Camera::RelativeDirection::RIGHT, velocity);
 
 		return true;
 	}

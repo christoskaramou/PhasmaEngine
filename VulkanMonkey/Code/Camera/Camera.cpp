@@ -1,8 +1,41 @@
 #include "Camera.h"
 #include "../GUI/GUI.h"
+#include <algorithm>
+#include <execution>
 
 namespace vm
 {
+	void CameraSystem::Init()
+	{
+
+	}
+
+	void CameraSystem::Update(double delta)
+	{
+		static auto update = [](IComponent* component)
+		{
+			Camera* camera = static_cast<Camera*>(component);
+			camera->Update();
+		};
+
+		auto& components = GetComponentsOfType<Camera>();
+		
+		if (components.size() > 3)
+		{
+			std::for_each(std::execution::par_unseq, components.begin(), components.end(), update);
+		}
+		else
+		{
+			for (auto& component : GetComponentsOfType<Camera>())
+				update(component);
+		}
+	}
+
+	void CameraSystem::Destroy()
+	{
+
+	}
+
 	Camera::Camera()
 	{
 		// gltf is right handed, reversing the x orientation makes the models left handed
@@ -22,16 +55,16 @@ namespace vm
 
 		frustum.resize(6);
 
-		renderArea.update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
+		renderArea.Update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
 
 	}
 
-	void vm::Camera::update()
+	void vm::Camera::Update()
 	{
-		renderArea.update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
-		front = orientation * worldFront();
-		right = orientation * worldRight();
-		up = orientation * worldUp();
+		renderArea.Update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
+		front = orientation * WorldFront();
+		right = orientation * WorldRight();
+		up = orientation * WorldUp();
 		previousView = view;
 		previousProjection = projection;
 		projOffsetPrevious = projOffset;
@@ -51,15 +84,15 @@ namespace vm
 		else {
 			projOffset = { 0.0f, 0.0f };
 		}
-		updatePerspective();
-		updateView();
+		UpdatePerspective();
+		UpdateView();
 		invView = inverse(view);
 		invProjection = inverse(projection);
 		invViewProjection = invView * invProjection;
 		ExtractFrustum();
 	}
 
-	void vm::Camera::updatePerspective()
+	void vm::Camera::UpdatePerspective()
 	{
 		const float aspect = renderArea.viewport.width / renderArea.viewport.height;
 		const float tanHalfFovy = tan(radians(FOV) * .5f);
@@ -80,7 +113,7 @@ namespace vm
 		);
 	}
 
-	void vm::Camera::updateView()
+	void vm::Camera::UpdateView()
 	{
 		const vec3& r = right;
 		const vec3& u = up;
@@ -98,7 +131,7 @@ namespace vm
 		);
 	}
 
-	void Camera::move(RelativeDirection direction, float velocity)
+	void Camera::Move(RelativeDirection direction, float velocity)
 	{
 		// prediction of where the submit happens
 		//const float prediction = (Timer::cleanDelta - Timer::waitingTime) / Timer::cleanDelta;
@@ -110,7 +143,7 @@ namespace vm
 		if (direction == RelativeDirection::LEFT)		position -= right * velocity;
 	}
 
-	void Camera::rotate(float xoffset, float yoffset)
+	void Camera::Rotate(float xoffset, float yoffset)
 	{
 		// prediction of where the submit happens
 		//const float prediction = (Timer::cleanDelta - Timer::waitingTime) / Timer::cleanDelta;
@@ -123,17 +156,17 @@ namespace vm
 		orientation = quat(euler);
 	}
 
-	vec3 Camera::worldRight() const
+	vec3 Camera::WorldRight() const
 	{
 		return vec3(worldOrientation.x, 0.f, 0.f);
 	}
 
-	vec3 Camera::worldUp() const
+	vec3 Camera::WorldUp() const
 	{
 		return vec3(0.f, worldOrientation.y, 0.f);
 	}
 
-	vec3 Camera::worldFront() const
+	vec3 Camera::WorldFront() const
 	{
 		return vec3(0.f, 0.f, worldOrientation.z);
 	}
@@ -201,7 +234,7 @@ namespace vm
 		return true;
 	}
 
-	void Camera::TargetArea::update(const vec2& position, const vec2& size, float minDepth, float maxDepth)
+	void Camera::TargetArea::Update(const vec2& position, const vec2& size, float minDepth, float maxDepth)
 	{
 		viewport.x = position.x;
 		viewport.y = position.y;

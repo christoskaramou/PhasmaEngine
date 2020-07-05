@@ -3,6 +3,8 @@
 #include "../Core/Queue.h"
 #include "../Model/Mesh.h"
 #include "../VulkanContext/VulkanContext.h"
+#include "../Camera/Camera.h"
+#include "../ECS/Context.h"
 
 namespace vm
 {
@@ -155,8 +157,11 @@ namespace vm
 			s->update(static_cast<float>(delta));
 #endif
 
-		// update camera matrices
-		ctx.camera_main.update();
+		//// update camera matrices
+		//ctx.camera_main.Update();
+
+		CameraSystem* cameraSystem = ctx.ctx->GetSystem<CameraSystem>();
+		Camera& camera_main = *(Camera*)cameraSystem->GetComponentsOfType<Camera>()[0];
 
 		// Model updates + 8(the rest updates)
 		std::vector<std::future<void>> futureUpdates;
@@ -170,7 +175,7 @@ namespace vm
 		}
 		for (auto& model : Model::models)
 		{
-			const auto updateModel = [&]() { model.update(ctx.camera_main, delta); };
+			const auto updateModel = [&]() { model.update(camera_main, delta); };
 			futureUpdates.push_back(std::async(std::launch::async, updateModel));
 		}
 
@@ -179,31 +184,31 @@ namespace vm
 		futureUpdates.push_back(std::async(std::launch::async, updateGUI));
 
 		// LIGHTS
-		auto updateLights = [&]() { ctx.lightUniforms.update(ctx.camera_main); };
+		auto updateLights = [&]() { ctx.lightUniforms.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateLights));
 
 		// SSAO
-		auto updateSSAO = [&]() { ctx.ssao.update(ctx.camera_main); };
+		auto updateSSAO = [&]() { ctx.ssao.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateSSAO));
 
 		// SSR
-		auto updateSSR = [&]() { ctx.ssr.update(ctx.camera_main); };
+		auto updateSSR = [&]() { ctx.ssr.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateSSR));
 
 		// TAA
-		auto updateTAA = [&]() { ctx.taa.update(ctx.camera_main); };
+		auto updateTAA = [&]() { ctx.taa.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateTAA));
 
 		// MOTION BLUR
-		auto updateMotionBlur = [&]() { ctx.motionBlur.update(ctx.camera_main); };
+		auto updateMotionBlur = [&]() { ctx.motionBlur.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateMotionBlur));
 
 		// SHADOWS
-		auto updateShadows = [&]() { ctx.shadows.update(ctx.camera_main); };
+		auto updateShadows = [&]() { ctx.shadows.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateShadows));
 
 		// COMPOSITION UNIFORMS
-		auto updateDeferred = [&]() { ctx.deferred.update(ctx.camera_main.invViewProjection); };
+		auto updateDeferred = [&]() { ctx.deferred.update(camera_main.invViewProjection); };
 		futureUpdates.push_back(std::async(std::launch::async, updateDeferred));
 
 		for (auto& f : futureUpdates)
