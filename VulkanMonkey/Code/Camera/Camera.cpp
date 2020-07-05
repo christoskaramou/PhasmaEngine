@@ -26,7 +26,7 @@ namespace vm
 		}
 		else
 		{
-			for (auto& component : GetComponentsOfType<Camera>())
+			for (auto& component : components)
 				update(component);
 		}
 	}
