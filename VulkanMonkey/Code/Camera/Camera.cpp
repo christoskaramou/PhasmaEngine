@@ -1,10 +1,13 @@
 #include "Camera.h"
 #include "../GUI/GUI.h"
-#include <algorithm>
-#include <execution>
 
 namespace vm
 {
+	Camera& CameraSystem::GetCamera(size_t index)
+	{
+		return *GetComponentOfTypeAt<Camera>(index);
+	}
+
 	void CameraSystem::Init()
 	{
 
@@ -12,23 +15,15 @@ namespace vm
 
 	void CameraSystem::Update(double delta)
 	{
-		static auto update = [](IComponent* component)
+		static auto updateBody = [](IComponent* component)
 		{
 			Camera* camera = static_cast<Camera*>(component);
-			camera->Update();
+			if (camera->IsEnabled())
+				camera->Update();
 		};
 
-		auto& components = GetComponentsOfType<Camera>();
-		
-		if (components.size() > 3)
-		{
-			std::for_each(std::execution::par_unseq, components.begin(), components.end(), update);
-		}
-		else
-		{
-			for (auto& component : components)
-				update(component);
-		}
+		std::vector<IComponent*>& components = GetComponentsOfType<Camera>();
+		ForEachParallel<IComponent*>(components, updateBody);
 	}
 
 	void CameraSystem::Destroy()

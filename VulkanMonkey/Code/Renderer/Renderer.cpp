@@ -161,7 +161,7 @@ namespace vm
 		//ctx.camera_main.Update();
 
 		CameraSystem* cameraSystem = ctx.ctx->GetSystem<CameraSystem>();
-		Camera& camera_main = *(Camera*)cameraSystem->GetComponentsOfType<Camera>()[0];
+		Camera& camera_main = cameraSystem->GetCamera(0);
 
 		// Model updates + 8(the rest updates)
 		std::vector<std::future<void>> futureUpdates;

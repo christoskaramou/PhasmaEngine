@@ -6,13 +6,14 @@
 
 namespace vm
 {
-	class Context final : public BaseBehaviour
+	class Context final
 	{
 	public:
 		Context() {}
 		~Context() {}
 
-		void Update(double delta) override;
+		void InitSystems();
+		void UpdateSystems(double delta);
 
 		template<class T, class... Params> inline T* CreateSystem(Params&&... params);
 		template<class T> inline T* GetSystem();

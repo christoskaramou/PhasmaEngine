@@ -12,17 +12,16 @@ int main(int argc, char* argv[])
 	//freopen("errors.txt", "w", stderr);
 
 	Window window;
-	Context ctx;
+	Context context;
 
-	Entity* mainEntity = ctx.CreateEntity();
+	Entity* mainEntity = context.CreateEntity();
 	Camera* mainCamera = mainEntity->CreateComponent<Camera>();
 
-	ctx.CreateSystem<CameraSystem>();
-	ctx.CreateSystem<Renderer>(&ctx, window.Create(&ctx));
+	context.CreateSystem<Renderer>(&context, window.Create(&context));
+	context.CreateSystem<CameraSystem>();
+	context.GetSystem<CameraSystem>()->AddComponent(mainCamera);
 
-	ctx.GetSystem<CameraSystem>()->AddComponent(mainCamera);
-	ctx.GetSystem<Renderer>()->Init();
-
+	context.InitSystems();
 
 	Timer interval;
 	interval.Start();
@@ -38,9 +37,8 @@ int main(int argc, char* argv[])
 		
 		if (!window.isMinimized())
 		{
-			ctx.GetSystem<CameraSystem>()->Update(frame_timer.delta);
-			ctx.GetSystem<Renderer>()->Update(frame_timer.delta);
-			ctx.GetSystem<Renderer>()->Draw();
+			context.UpdateSystems(frame_timer.delta);
+			context.GetSystem<Renderer>()->Draw();
 		}
 		
 		// Metrics every 0.75 sec

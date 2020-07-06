@@ -23,8 +23,8 @@ namespace vm
 
 			if (m_components.find(GetTypeID<T>()) != m_components.end())
 				return true;
-			else
-				return false;
+
+			return false;
 		}
 		template<class T> inline void AddComponent(T* component)
 		{
@@ -52,12 +52,22 @@ namespace vm
 		{
 			m_components.clear();
 		}
+		template<class T> T* GetComponentOfTypeAt(size_t index)
+		{
+			if (HasComponents<T>())
+			{
+				if (index < m_components[GetTypeID<T>()].size())
+					return static_cast<T*>(m_components[GetTypeID<T>()][index]);
+			}
+
+			return nullptr;
+		}
 		template<class T> std::vector<IComponent*>& GetComponentsOfType()
 		{
 			if (HasComponents<T>())
 				return m_components[GetTypeID<T>()];
-			else
-				return m_components[-1];
+
+			return m_components[-1];
 		}
 		void SetContext(Context* context) { m_context = context; }
 		Context* GetContext() { return m_context; }

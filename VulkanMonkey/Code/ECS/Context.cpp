@@ -6,8 +6,22 @@
 
 namespace vm
 {
-	void Context::Update(double delta)
+	void Context::InitSystems()
 	{
+		for (auto& system : m_systems)
+		{
+			if (system.second->IsEnabled())
+				system.second->Init();
+		}
+	}
+
+	void Context::UpdateSystems(double delta)
+	{
+		for (auto& system : m_systems)
+		{
+			if (system.second->IsEnabled())
+				system.second->Update(delta);
+		}
 	}
 
 	Entity* Context::CreateEntity()

@@ -53,7 +53,7 @@ namespace vm
 		bool combineDirections = false;
 
 		CameraSystem* cameraSystem = ctx->GetSystem<CameraSystem>();
-		Camera& camera_main = *(Camera*)cameraSystem->GetComponentsOfType<Camera>()[0];
+		Camera& camera_main = cameraSystem->GetCamera(0);
 
 		ImGuiIO& io = ImGui::GetIO();
 

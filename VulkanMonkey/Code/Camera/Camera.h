@@ -5,11 +5,15 @@
 
 namespace vm {
 
+	class Camera;
+
 	class CameraSystem : public ISystem
 	{
 	public:
 		CameraSystem() {}
 		~CameraSystem() {}
+
+		Camera& GetCamera(size_t index);
 
 		// Inherited via ISystem
 		void Init() override;
