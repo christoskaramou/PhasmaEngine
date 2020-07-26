@@ -3,7 +3,7 @@
 #include "../Console/Console.h"
 #include "../VulkanContext/VulkanContext.h"
 #include "../Renderer/Renderer.h"
-#include "../ECS/Context.h"
+#include "../Context/Context.h"
 #include <iostream>
 
 namespace vm
@@ -48,8 +48,7 @@ namespace vm
 		static int xMove = 0;
 		static int yMove = 0;
 
-		auto& info = ctx->GetSystem<Renderer>()->ctx;
-		auto vulkan = VulkanContext::get();
+		auto vulkan = ctx->GetVKContext();
 		bool combineDirections = false;
 
 		CameraSystem* cameraSystem = ctx->GetSystem<CameraSystem>();
@@ -114,12 +113,12 @@ namespace vm
 					{
 						int w, h;
 						SDL_GL_GetDrawableSize(vulkan->window, &w, &h);
-						ctx->GetSystem<Renderer>()->ctx.resizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+						ctx->GetSystem<Renderer>()->ResizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 					}
 				}
 			}
 			if (event.type == GUI::compileShadersEventType) {
-				ctx->GetSystem<Renderer>()->ctx.recreatePipelines();
+				ctx->GetSystem<Renderer>()->RecreatePipelines();
 			}
 		}
 

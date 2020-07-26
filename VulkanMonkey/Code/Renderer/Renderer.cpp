@@ -4,33 +4,97 @@
 #include "../Model/Mesh.h"
 #include "../VulkanContext/VulkanContext.h"
 #include "../Camera/Camera.h"
-#include "../ECS/Context.h"
+#include "../Context/Context.h"
 
 namespace vm
 {
-	Renderer::Renderer(Context* ctxx, SDL_Window* window)
+	Renderer::Renderer(Context* ctx, SDL_Window* window)
 	{
 		// Temporary ugliness, until ECS is complete
 		this->window = window;
-		ctx.ctx = ctxx;
+		this->ctx = ctx;
 		VulkanContext::get()->window = window;
 	}
 
 	void Renderer::Init()
 	{
-		// INIT ALL VULKAN CONTEXT
-		ctx.initVulkanContext();
+		auto& vulkan = *VulkanContext::get();
+
+		// INIT VULKAN CONTEXT
+		vulkan.Init(ctx);
 		// INIT RENDERING
-		ctx.initRendering();
+		AddRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
+		AddRenderTarget("depth", vk::Format::eR32Sfloat, vk::ImageUsageFlags());
+		AddRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat, vk::ImageUsageFlags());
+		AddRenderTarget("albedo", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("srm", vulkan.surface.formatKHR->format, vk::ImageUsageFlags()); // Specular Roughness Metallic
+		AddRenderTarget("ssao", vk::Format::eR16Unorm, vk::ImageUsageFlags());
+		AddRenderTarget("ssaoBlur", vk::Format::eR8Unorm, vk::ImageUsageFlags());
+		AddRenderTarget("ssr", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("velocity", vk::Format::eR16G16Sfloat, vk::ImageUsageFlags());
+		AddRenderTarget("brightFilter", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("gaussianBlurHorizontal", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("gaussianBlurVertical", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("emissive", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("taa", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
+
+		taa.Init();
+		bloom.Init();
+		fxaa.Init();
+		motionBlur.Init();
+		dof.Init();
+
+		// render passes
+		shadows.createRenderPass();
+		ssao.createRenderPasses(renderTargets);
+		ssr.createRenderPass(renderTargets);
+		deferred.createRenderPasses(renderTargets);
+		fxaa.createRenderPass(renderTargets);
+		taa.createRenderPasses(renderTargets);
+		bloom.createRenderPasses(renderTargets);
+		dof.createRenderPass(renderTargets);
+		motionBlur.createRenderPass(renderTargets);
+		gui.createRenderPass();
+
+		// frame buffers
+		shadows.createFrameBuffers();
+		ssao.createFrameBuffers(renderTargets);
+		ssr.createFrameBuffers(renderTargets);
+		deferred.createFrameBuffers(renderTargets);
+		fxaa.createFrameBuffers(renderTargets);
+		taa.createFrameBuffers(renderTargets);
+		bloom.createFrameBuffers(renderTargets);
+		dof.createFrameBuffers(renderTargets);
+		motionBlur.createFrameBuffers(renderTargets);
+		gui.createFrameBuffers();
+
+		// pipelines
+		shadows.createPipeline();
+		ssao.createPipelines(renderTargets);
+		ssr.createPipeline(renderTargets);
+		deferred.createPipelines(renderTargets);
+		fxaa.createPipeline(renderTargets);
+		taa.createPipelines(renderTargets);
+		bloom.createPipelines(renderTargets);
+		dof.createPipeline(renderTargets);
+		motionBlur.createPipeline(renderTargets);
+		gui.createPipeline();
+
+		ComputePool::get()->Init(5);
+
+		metrics.resize(20);
 		//LOAD RESOURCES
-		ctx.loadResources();
+		LoadResources();
 		// CREATE UNIFORMS AND DESCRIPTOR SETS
-		ctx.createUniforms();
+		CreateUniforms();
 	}
 
 	Renderer::~Renderer()
 	{
 		VulkanContext::get()->device->waitIdle();
+
+		Destroy();
+
 		if (Model::models.empty()) {
 			if (Pipeline::getDescriptorSetLayoutModel()) {
 				VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
@@ -57,23 +121,23 @@ namespace vm
 
 		ComputePool::get()->destroy();
 		ComputePool::remove();
-		ctx.shadows.destroy();
-		ctx.deferred.destroy();
-		ctx.ssao.destroy();
-		ctx.ssr.destroy();
-		ctx.fxaa.destroy();
-		ctx.taa.destroy();
-		ctx.bloom.destroy();
-		ctx.dof.destroy();
-		ctx.motionBlur.destroy();
-		ctx.skyBoxDay.destroy();
-		ctx.skyBoxNight.destroy();
-		ctx.gui.destroy();
-		ctx.lightUniforms.destroy();
-		for (auto& metric : ctx.metrics)
+		shadows.destroy();
+		deferred.destroy();
+		ssao.destroy();
+		ssr.destroy();
+		fxaa.destroy();
+		taa.destroy();
+		bloom.destroy();
+		dof.destroy();
+		motionBlur.destroy();
+		skyBoxDay.destroy();
+		skyBoxNight.destroy();
+		gui.destroy();
+		lightUniforms.destroy();
+		for (auto& metric : metrics)
 			metric.destroy();
-		ctx.destroyVkContext();
-		VulkanContext::remove();
+		ctx->GetVKContext()->Destroy();
+		ctx->GetVKContext()->remove();
 	}
 
 	void Renderer::CheckQueue() const
@@ -157,10 +221,7 @@ namespace vm
 			s->update(static_cast<float>(delta));
 #endif
 
-		//// update camera matrices
-		//ctx.camera_main.Update();
-
-		CameraSystem* cameraSystem = ctx.ctx->GetSystem<CameraSystem>();
+		CameraSystem* cameraSystem = ctx->GetSystem<CameraSystem>();
 		Camera& camera_main = cameraSystem->GetCamera(0);
 
 		// Model updates + 8(the rest updates)
@@ -180,35 +241,35 @@ namespace vm
 		}
 
 		// GUI
-		auto updateGUI = [&]() { ctx.gui.update(); };
+		auto updateGUI = [&]() { gui.update(); };
 		futureUpdates.push_back(std::async(std::launch::async, updateGUI));
 
 		// LIGHTS
-		auto updateLights = [&]() { ctx.lightUniforms.update(camera_main); };
+		auto updateLights = [&]() { lightUniforms.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateLights));
 
 		// SSAO
-		auto updateSSAO = [&]() { ctx.ssao.update(camera_main); };
+		auto updateSSAO = [&]() { ssao.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateSSAO));
 
 		// SSR
-		auto updateSSR = [&]() { ctx.ssr.update(camera_main); };
+		auto updateSSR = [&]() { ssr.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateSSR));
 
 		// TAA
-		auto updateTAA = [&]() { ctx.taa.update(camera_main); };
+		auto updateTAA = [&]() { taa.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateTAA));
 
 		// MOTION BLUR
-		auto updateMotionBlur = [&]() { ctx.motionBlur.update(camera_main); };
+		auto updateMotionBlur = [&]() { motionBlur.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateMotionBlur));
 
 		// SHADOWS
-		auto updateShadows = [&]() { ctx.shadows.update(camera_main); };
+		auto updateShadows = [&]() { shadows.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateShadows));
 
 		// COMPOSITION UNIFORMS
-		auto updateDeferred = [&]() { ctx.deferred.update(camera_main.invViewProjection); };
+		auto updateDeferred = [&]() { deferred.update(camera_main.invViewProjection); };
 		futureUpdates.push_back(std::async(std::launch::async, updateDeferred));
 
 		for (auto& f : futureUpdates)
@@ -250,114 +311,114 @@ namespace vm
 
 		cmd.begin(beginInfo);
 		// TODO: add more queries (times the swapchain images), so they are not overlapped from previous frame
-		ctx.metrics[0].start(&cmd);
+		metrics[0].start(&cmd);
 
 		// SKYBOX
-		SkyBox& skybox = GUI::shadow_cast ? ctx.skyBoxDay : ctx.skyBoxNight;
+		SkyBox& skybox = GUI::shadow_cast ? skyBoxDay : skyBoxNight;
 
 		// MODELS
-		ctx.metrics[2].start(&cmd);
-		ctx.deferred.batchStart(cmd, imageIndex, *ctx.renderTargets["viewport"].extent);
+		metrics[2].start(&cmd);
+		deferred.batchStart(cmd, imageIndex, *renderTargets["viewport"].extent);
 		for (auto& model : Model::models)
 			model.draw();
-		ctx.deferred.batchEnd();
-		ctx.metrics[2].end(&GUI::metrics[2]);
+		deferred.batchEnd();
+		metrics[2].end(&GUI::metrics[2]);
 
-		ctx.renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorRead);
-		ctx.renderTargets["depth"].changeLayout(cmd, LayoutState::ColorRead);
-		ctx.renderTargets["normal"].changeLayout(cmd, LayoutState::ColorRead);
-		ctx.renderTargets["srm"].changeLayout(cmd, LayoutState::ColorRead);
-		ctx.renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorRead);
-		ctx.renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorRead);
-		ctx.renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorRead);
-		ctx.renderTargets["velocity"].changeLayout(cmd, LayoutState::ColorRead);
-		ctx.renderTargets["taa"].changeLayout(cmd, LayoutState::ColorRead);
-		for (auto& image : ctx.shadows.textures)
+		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["depth"].changeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["normal"].changeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["srm"].changeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["velocity"].changeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorRead);
+		for (auto& image : shadows.textures)
 			image.changeLayout(cmd, LayoutState::DepthRead);
 
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao) {
-			ctx.metrics[3].start(&cmd);
-			ctx.renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorWrite);
-			ctx.ssao.draw(cmd, imageIndex, ctx.renderTargets["ssao"]);
-			ctx.renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorRead);
-			ctx.metrics[3].end(&GUI::metrics[3]);
+			metrics[3].start(&cmd);
+			renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorWrite);
+			ssao.draw(cmd, imageIndex, renderTargets["ssao"]);
+			renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorRead);
+			metrics[3].end(&GUI::metrics[3]);
 		}
 
 		// SCREEN SPACE REFLECTIONS
 		if (GUI::show_ssr) {
-			ctx.metrics[4].start(&cmd);
-			ctx.renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorWrite);
-			ctx.ssr.draw(cmd, imageIndex, *ctx.renderTargets["ssr"].extent);
-			ctx.renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorRead);
-			ctx.metrics[4].end(&GUI::metrics[4]);
+			metrics[4].start(&cmd);
+			renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorWrite);
+			ssr.draw(cmd, imageIndex, *renderTargets["ssr"].extent);
+			renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorRead);
+			metrics[4].end(&GUI::metrics[4]);
 		}
 
 		// COMPOSITION
-		ctx.metrics[5].start(&cmd);
-		ctx.deferred.draw(cmd, imageIndex, ctx.shadows, skybox, *ctx.renderTargets["viewport"].extent);
-		ctx.metrics[5].end(&GUI::metrics[5]);
+		metrics[5].start(&cmd);
+		deferred.draw(cmd, imageIndex, shadows, skybox, *renderTargets["viewport"].extent);
+		metrics[5].end(&GUI::metrics[5]);
 
 		if (GUI::use_AntiAliasing) {
 			// TAA
 			if (GUI::use_TAA) {
-				ctx.metrics[6].start(&cmd);
-				ctx.taa.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-				ctx.taa.draw(cmd, imageIndex, ctx.renderTargets);
-				ctx.metrics[6].end(&GUI::metrics[6]);
+				metrics[6].start(&cmd);
+				taa.copyFrameImage(cmd, renderTargets["viewport"]);
+				taa.draw(cmd, imageIndex, renderTargets);
+				metrics[6].end(&GUI::metrics[6]);
 			}
 			// FXAA
 			else if (GUI::use_FXAA) {
-				ctx.metrics[6].start(&cmd);
-				ctx.fxaa.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-				ctx.fxaa.draw(cmd, imageIndex, *ctx.renderTargets["viewport"].extent);
-				ctx.metrics[6].end(&GUI::metrics[6]);
+				metrics[6].start(&cmd);
+				fxaa.copyFrameImage(cmd, renderTargets["viewport"]);
+				fxaa.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
+				metrics[6].end(&GUI::metrics[6]);
 			}
 		}
 
 		// BLOOM
 		if (GUI::show_Bloom) {
-			ctx.metrics[7].start(&cmd);
-			ctx.bloom.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-			ctx.bloom.draw(cmd, imageIndex, ctx.renderTargets);
-			ctx.metrics[7].end(&GUI::metrics[7]);
+			metrics[7].start(&cmd);
+			bloom.copyFrameImage(cmd, renderTargets["viewport"]);
+			bloom.draw(cmd, imageIndex, renderTargets);
+			metrics[7].end(&GUI::metrics[7]);
 		}
 
 		// Depth of Field
 		if (GUI::use_DOF) {
-			ctx.metrics[8].start(&cmd);
-			ctx.dof.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-			ctx.dof.draw(cmd, imageIndex, ctx.renderTargets);
-			ctx.metrics[8].end(&GUI::metrics[8]);
+			metrics[8].start(&cmd);
+			dof.copyFrameImage(cmd, renderTargets["viewport"]);
+			dof.draw(cmd, imageIndex, renderTargets);
+			metrics[8].end(&GUI::metrics[8]);
 		}
 
 		// MOTION BLUR
 		if (GUI::show_motionBlur) {
-			ctx.metrics[9].start(&cmd);
-			ctx.motionBlur.copyFrameImage(cmd, ctx.renderTargets["viewport"]);
-			ctx.motionBlur.draw(cmd, imageIndex, *ctx.renderTargets["viewport"].extent);
-			ctx.metrics[9].end(&GUI::metrics[9]);
+			metrics[9].start(&cmd);
+			motionBlur.copyFrameImage(cmd, renderTargets["viewport"]);
+			motionBlur.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
+			metrics[9].end(&GUI::metrics[9]);
 		}
 
-		ctx.renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorWrite);
-		ctx.renderTargets["depth"].changeLayout(cmd, LayoutState::ColorWrite);
-		ctx.renderTargets["normal"].changeLayout(cmd, LayoutState::ColorWrite);
-		ctx.renderTargets["srm"].changeLayout(cmd, LayoutState::ColorWrite);
-		ctx.renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorWrite);
-		ctx.renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorWrite);
-		ctx.renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorWrite);
-		ctx.renderTargets["velocity"].changeLayout(cmd, LayoutState::ColorWrite);
-		ctx.renderTargets["taa"].changeLayout(cmd, LayoutState::ColorWrite);
-		for (auto& image : ctx.shadows.textures)
+		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["depth"].changeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["normal"].changeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["srm"].changeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["velocity"].changeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorWrite);
+		for (auto& image : shadows.textures)
 			image.changeLayout(cmd, LayoutState::DepthWrite);
 
 		// GUI
-		ctx.metrics[10].start(&cmd);
-		ctx.gui.scaleToRenderArea(cmd, ctx.renderTargets["viewport"], imageIndex);
-		ctx.gui.draw(cmd, imageIndex);
-		ctx.metrics[10].end(&GUI::metrics[10]);
+		metrics[10].start(&cmd);
+		gui.scaleToRenderArea(cmd, renderTargets["viewport"], imageIndex);
+		gui.draw(cmd, imageIndex);
+		metrics[10].end(&GUI::metrics[10]);
 
-		ctx.metrics[0].end(&GUI::metrics[0]);
+		metrics[0].end(&GUI::metrics[0]);
 
 		cmd.end();
 	}
@@ -374,21 +435,21 @@ namespace vm
 		beginInfoShadows.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
 		vk::RenderPassBeginInfo renderPassInfoShadows;
-		renderPassInfoShadows.renderPass = *ctx.shadows.renderPass.handle;
+		renderPassInfoShadows.renderPass = *shadows.renderPass.handle;
 		renderPassInfoShadows.renderArea = vk::Rect2D{ { 0, 0 },{ Shadows::imageSize, Shadows::imageSize } };
 		renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
 		renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
-		for (uint32_t i = 0; i < ctx.shadows.textures.size(); i++) {
-			auto& cmd = (*VulkanContext::get()->shadowCmdBuffers)[static_cast<uint32_t>(ctx.shadows.textures.size()) * imageIndex + i];
+		for (uint32_t i = 0; i < shadows.textures.size(); i++) {
+			auto& cmd = (*VulkanContext::get()->shadowCmdBuffers)[static_cast<uint32_t>(shadows.textures.size()) * imageIndex + i];
 			cmd.begin(beginInfoShadows);
-			ctx.metrics[11 + static_cast<size_t>(i)].start(&cmd);
+			metrics[11 + static_cast<size_t>(i)].start(&cmd);
 			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
 			// depth[i] image ===========================================================
-			renderPassInfoShadows.framebuffer = *ctx.shadows.framebuffers[ctx.shadows.textures.size() * imageIndex + i].handle;
+			renderPassInfoShadows.framebuffer = *shadows.framebuffers[shadows.textures.size() * imageIndex + i].handle;
 			cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
-			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *ctx.shadows.pipeline.handle);
+			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadows.pipeline.handle);
 			for (auto& model : Model::models) {
 				if (model.render) {
 					cmd.bindVertexBuffers(0, *model.vertexBuffer.buffer, offset);
@@ -396,7 +457,7 @@ namespace vm
 
 					for (auto& node : model.linearNodes) {
 						if (node->mesh) {
-							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *ctx.shadows.pipeline.layout, 0, { (*ctx.shadows.descriptorSets)[i], *node->mesh->descriptorSet, *model.descriptorSet }, nullptr);
+							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *shadows.pipeline.layout, 0, { (*shadows.descriptorSets)[i], *node->mesh->descriptorSet, *model.descriptorSet }, nullptr);
 							for (auto& primitive : node->mesh->primitives) {
 								if (primitive.render)
 									cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
@@ -406,7 +467,7 @@ namespace vm
 				}
 			}
 			cmd.endRenderPass();
-			ctx.metrics[11 + static_cast<size_t>(i)].end(&GUI::metrics[11 + static_cast<size_t>(i)]);
+			metrics[11 + static_cast<size_t>(i)].end(&GUI::metrics[11 + static_cast<size_t>(i)]);
 			// ==========================================================================
 			cmd.end();
 		}
@@ -414,6 +475,8 @@ namespace vm
 
 	void Renderer::Destroy()
 	{
+		for (auto& rt : renderTargets)
+			rt.second.destroy();
 	}
 
 	void Renderer::Draw()
@@ -436,7 +499,7 @@ namespace vm
 
 		// aquire the image
 		auto aquireSignalSemaphore = (*vCtx.semaphores)[0];
-		const uint32_t imageIndex = vCtx.swapchain.aquire(aquireSignalSemaphore, nullptr);
+		const uint32_t imageIndex = vCtx.swapchain.Aquire(aquireSignalSemaphore, nullptr);
 		this->previousImageIndex = imageIndex;
 
 		//static Timer timer;
@@ -457,7 +520,7 @@ namespace vm
 			const auto& shadowWaitSemaphore = aquireSignalSemaphore;
 			const auto& shadowSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 1];
 			const auto& scb = vCtx.shadowCmdBuffers;
-			const auto size = ctx.shadows.textures.size();
+			const auto size = shadows.textures.size();
 			const auto i = size * imageIndex;
 			const std::vector<vk::CommandBuffer> activeShadowCmdBuffers(scb->begin() + i, scb->begin() + i + size);
 			vCtx.submit(activeShadowCmdBuffers, waitStages[0], shadowWaitSemaphore, shadowSignalSemaphore, nullptr);
@@ -477,8 +540,349 @@ namespace vm
 
 		// Presentation
 		const auto& presentWaitSemaphore = deferredSignalSemaphore;
-		vCtx.swapchain.present(imageIndex, presentWaitSemaphore, nullptr);
+		vCtx.swapchain.Present(imageIndex, presentWaitSemaphore, nullptr);
 
 		vCtx.unlockSubmits();
 	}
+
+	void Renderer::AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
+	{
+		if (renderTargets.find(name) != renderTargets.end())
+			return;
+
+		renderTargets[name] = Image();
+		renderTargets[name].format = make_ref(format);
+		renderTargets[name].initialLayout = make_ref(vk::ImageLayout::eUndefined);
+		renderTargets[name].createImage(
+			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+			vk::ImageTiling::eOptimal,
+			vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | additionalFlags,
+			vk::MemoryPropertyFlagBits::eDeviceLocal
+		);
+		renderTargets[name].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
+		renderTargets[name].createImageView(vk::ImageAspectFlagBits::eColor);
+		renderTargets[name].createSampler();
+
+		//std::string str = to_string(format); str.find("A8") != std::string::npos
+		renderTargets[name].blentAttachment->blendEnable = name == "albedo" ? VK_TRUE : VK_FALSE;
+		renderTargets[name].blentAttachment->srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+		renderTargets[name].blentAttachment->dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+		renderTargets[name].blentAttachment->colorBlendOp = vk::BlendOp::eAdd;
+		renderTargets[name].blentAttachment->srcAlphaBlendFactor = vk::BlendFactor::eOne;
+		renderTargets[name].blentAttachment->dstAlphaBlendFactor = vk::BlendFactor::eZero;
+		renderTargets[name].blentAttachment->alphaBlendOp = vk::BlendOp::eAdd;
+		renderTargets[name].blentAttachment->colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+	}
+
+	void Renderer::LoadResources()
+	{
+		// SKYBOXES LOAD
+		std::array<std::string, 6> skyTextures = {
+			"objects/sky/right.png",
+			"objects/sky/left.png",
+			"objects/sky/top.png",
+			"objects/sky/bottom.png",
+			"objects/sky/back.png",
+			"objects/sky/front.png" };
+		skyBoxDay.loadSkyBox(skyTextures, 1024);
+		skyTextures = {
+			"objects/lmcity/lmcity_rt.png",
+			"objects/lmcity/lmcity_lf.png",
+			"objects/lmcity/lmcity_up.png",
+			"objects/lmcity/lmcity_dn.png",
+			"objects/lmcity/lmcity_bk.png",
+			"objects/lmcity/lmcity_ft.png" };
+		skyBoxNight.loadSkyBox(skyTextures, 512);
+
+		// GUI LOAD
+		gui.loadGUI();
+
+		// SCRIPTS
+#ifdef USE_SCRIPTS
+		Script::Init();
+		Script::addCallback("Global::LoadModel", reinterpret_cast<const void*>(LoadModel));
+		Script::addCallback("Global::KeyDown", reinterpret_cast<const void*>(KeyDown));
+		Script::addCallback("Global::SetTimeScale", reinterpret_cast<const void*>(SetTimeScale));
+		Script::addCallback("Global::MouseButtonDown", reinterpret_cast<const void*>(MouseButtonDown));
+		Script::addCallback("Global::GetMousePos", reinterpret_cast<const void*>(GetMousePos));
+		Script::addCallback("Global::SetMousePos", reinterpret_cast<const void*>(SetMousePos));
+		Script::addCallback("Global::GetMouseWheel", reinterpret_cast<const void*>(GetMouseWheel));
+		scripts.push_back(new Script("Load"));
+#endif
+	}
+
+	void Renderer::CreateUniforms()
+	{
+		// DESCRIPTOR SETS FOR GUI
+		gui.createDescriptorSet(GUI::getDescriptorSetLayout(*VulkanContext::get()->device));
+		// DESCRIPTOR SETS FOR SKYBOX
+		skyBoxDay.createDescriptorSet();
+		skyBoxNight.createDescriptorSet();
+		// DESCRIPTOR SETS FOR SHADOWS
+		shadows.createUniformBuffers();
+		shadows.createDescriptorSets();
+		// DESCRIPTOR SETS FOR LIGHTS
+		lightUniforms.createLightUniforms();
+		// DESCRIPTOR SETS FOR SSAO
+		ssao.createUniforms(renderTargets);
+		// DESCRIPTOR SETS FOR COMPOSITION PIPELINE
+		deferred.createDeferredUniforms(renderTargets, lightUniforms);
+		// DESCRIPTOR SET FOR REFLECTION PIPELINE
+		ssr.createSSRUniforms(renderTargets);
+		// DESCRIPTOR SET FOR FXAA PIPELINE
+		fxaa.createUniforms(renderTargets);
+		// DESCRIPTOR SET FOR TAA PIPELINE
+		taa.createUniforms(renderTargets);
+		// DESCRIPTOR SET FOR BLOOM PIPELINES
+		bloom.createUniforms(renderTargets);
+		// DESCRIPTOR SET FOR DEPTH OF FIELD PIPELINE
+		dof.createUniforms(renderTargets);
+		// DESCRIPTOR SET FOR MOTIONBLUR PIPELINE
+		motionBlur.createMotionBlurUniforms(renderTargets);
+		// DESCRIPTOR SET FOR COMPUTE PIPELINE
+		//compute.createComputeUniforms(sizeof(SBOIn));
+	}
+
+	void Renderer::ResizeViewport(uint32_t width, uint32_t height)
+	{
+		auto& vulkan = *VulkanContext::get();
+		vulkan.graphicsQueue->waitIdle();
+
+		//- Free resources ----------------------
+		// render targets
+		for (auto& RT : renderTargets)
+			RT.second.destroy();
+		renderTargets.clear();
+
+		// GUI
+		gui.renderPass.Destroy();
+		for (auto& framebuffer : gui.framebuffers)
+			framebuffer.Destroy();
+		gui.pipeline.destroy();
+
+		// deferred
+		deferred.renderPass.Destroy();
+		deferred.compositionRenderPass.Destroy();
+		for (auto& framebuffer : deferred.framebuffers)
+			framebuffer.Destroy();
+		for (auto& framebuffer : deferred.compositionFramebuffers)
+			framebuffer.Destroy();
+		deferred.pipeline.destroy();
+		deferred.pipelineComposition.destroy();
+
+		// SSR
+		for (auto& framebuffer : ssr.framebuffers)
+			framebuffer.Destroy();
+		ssr.renderPass.Destroy();
+		ssr.pipeline.destroy();
+
+		// FXAA
+		for (auto& framebuffer : fxaa.framebuffers)
+			framebuffer.Destroy();
+		fxaa.renderPass.Destroy();
+		fxaa.pipeline.destroy();
+		fxaa.frameImage.destroy();
+
+		// TAA
+		taa.previous.destroy();
+		taa.frameImage.destroy();
+		for (auto& framebuffer : taa.framebuffers)
+			framebuffer.Destroy();
+		for (auto& framebuffer : taa.framebuffersSharpen)
+			framebuffer.Destroy();
+		taa.renderPass.Destroy();
+		taa.renderPassSharpen.Destroy();
+		taa.pipeline.destroy();
+		taa.pipelineSharpen.destroy();
+
+		// Bloom
+		for (auto& frameBuffer : bloom.framebuffers)
+			frameBuffer.Destroy();
+		bloom.renderPassBrightFilter.Destroy();
+		bloom.renderPassGaussianBlur.Destroy();
+		bloom.renderPassCombine.Destroy();
+		bloom.pipelineBrightFilter.destroy();
+		bloom.pipelineGaussianBlurHorizontal.destroy();
+		bloom.pipelineGaussianBlurVertical.destroy();
+		bloom.pipelineCombine.destroy();
+		bloom.frameImage.destroy();
+
+		// Depth of Field
+		for (auto& framebuffer : dof.framebuffers)
+			framebuffer.Destroy();
+		dof.renderPass.Destroy();
+		dof.pipeline.destroy();
+		dof.frameImage.destroy();
+
+		// Motion blur
+		for (auto& framebuffer : motionBlur.framebuffers)
+			framebuffer.Destroy();
+		motionBlur.renderPass.Destroy();
+		motionBlur.pipeline.destroy();
+		motionBlur.frameImage.destroy();
+
+		// SSAO
+		ssao.renderPass.Destroy();
+		ssao.blurRenderPass.Destroy();
+		for (auto& framebuffer : ssao.framebuffers)
+			framebuffer.Destroy();
+		for (auto& framebuffer : ssao.blurFramebuffers)
+			framebuffer.Destroy();
+		ssao.pipeline.destroy();
+		ssao.pipelineBlur.destroy();
+
+		vulkan.depth.destroy();
+		vulkan.swapchain.Destroy();
+		//- Free resources end ------------------
+
+		//- Recreate resources ------------------
+		WIDTH = width;
+		HEIGHT = height;
+		vulkan.CreateSwapchain(ctx, 3);
+		vulkan.CreateDepth();
+
+		AddRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
+		AddRenderTarget("depth", vk::Format::eR32Sfloat, vk::ImageUsageFlags());
+		AddRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat, vk::ImageUsageFlags());
+		AddRenderTarget("albedo", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("srm", vulkan.surface.formatKHR->format, vk::ImageUsageFlags()); // Specular Roughness Metallic
+		AddRenderTarget("ssao", vk::Format::eR16Unorm, vk::ImageUsageFlags());
+		AddRenderTarget("ssaoBlur", vk::Format::eR8Unorm, vk::ImageUsageFlags());
+		AddRenderTarget("ssr", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("velocity", vk::Format::eR16G16Sfloat, vk::ImageUsageFlags());
+		AddRenderTarget("brightFilter", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("gaussianBlurHorizontal", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("gaussianBlurVertical", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("emissive", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("taa", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
+
+		deferred.createRenderPasses(renderTargets);
+		deferred.createFrameBuffers(renderTargets);
+		deferred.createPipelines(renderTargets);
+		deferred.updateDescriptorSets(renderTargets, lightUniforms);
+
+		ssr.createRenderPass(renderTargets);
+		ssr.createFrameBuffers(renderTargets);
+		ssr.createPipeline(renderTargets);
+		ssr.updateDescriptorSets(renderTargets);
+
+		fxaa.Init();
+		fxaa.createRenderPass(renderTargets);
+		fxaa.createFrameBuffers(renderTargets);
+		fxaa.createPipeline(renderTargets);
+		fxaa.updateDescriptorSets(renderTargets);
+
+		taa.Init();
+		taa.createRenderPasses(renderTargets);
+		taa.createFrameBuffers(renderTargets);
+		taa.createPipelines(renderTargets);
+		taa.updateDescriptorSets(renderTargets);
+
+		bloom.Init();
+		bloom.createRenderPasses(renderTargets);
+		bloom.createFrameBuffers(renderTargets);
+		bloom.createPipelines(renderTargets);
+		bloom.updateDescriptorSets(renderTargets);
+
+		dof.Init();
+		dof.createRenderPass(renderTargets);
+		dof.createFrameBuffers(renderTargets);
+		dof.createPipeline(renderTargets);
+		dof.updateDescriptorSets(renderTargets);
+
+		motionBlur.Init();
+		motionBlur.createRenderPass(renderTargets);
+		motionBlur.createFrameBuffers(renderTargets);
+		motionBlur.createPipeline(renderTargets);
+		motionBlur.updateDescriptorSets(renderTargets);
+
+		ssao.createRenderPasses(renderTargets);
+		ssao.createFrameBuffers(renderTargets);
+		ssao.createPipelines(renderTargets);
+		ssao.updateDescriptorSets(renderTargets);
+
+		gui.createRenderPass();
+		gui.createFrameBuffers();
+		gui.createPipeline();
+		gui.updateDescriptorSets();
+
+		//compute.pipeline = createComputePipeline();
+		//compute.updateDescriptorSets();
+		//- Recreate resources end --------------
+	}
+
+	void Renderer::RecreatePipelines()
+	{
+		VulkanContext::get()->graphicsQueue->waitIdle();
+
+		shadows.pipeline.destroy();
+		ssao.pipeline.destroy();
+		ssao.pipelineBlur.destroy();
+		ssr.pipeline.destroy();
+		deferred.pipeline.destroy();
+		deferred.pipelineComposition.destroy();
+		fxaa.pipeline.destroy();
+		taa.pipeline.destroy();
+		taa.pipelineSharpen.destroy();
+		//bloom.pipelineBrightFilter.destroy();
+		//bloom.pipelineCombine.destroy();
+		//bloom.pipelineGaussianBlurHorizontal.destroy();
+		//bloom.pipelineGaussianBlurVertical.destroy();
+		dof.pipeline.destroy();
+		motionBlur.pipeline.destroy();
+		gui.pipeline.destroy();
+
+		shadows.createPipeline();
+		ssao.createPipelines(renderTargets);
+		ssr.createPipeline(renderTargets);
+		deferred.createPipelines(renderTargets);
+		fxaa.createPipeline(renderTargets);
+		taa.createPipelines(renderTargets);
+		bloom.createPipelines(renderTargets);
+		dof.createPipeline(renderTargets);
+		motionBlur.createPipeline(renderTargets);
+		gui.createPipeline();
+	}
+
+	// Callbacks for scripts -------------------
+	static void LoadModel(MonoString* folderPath, MonoString* modelName, uint32_t instances)
+	{
+		const std::string curPath = std::filesystem::current_path().string() + "\\";
+		const std::string path(mono_string_to_utf8(folderPath));
+		const std::string name(mono_string_to_utf8(modelName));
+		for (; instances > 0; instances--)
+			Queue::loadModel.emplace_back(curPath + path, name);
+	}
+
+	static bool KeyDown(uint32_t key)
+	{
+		return ImGui::GetIO().KeysDown[key];
+	}
+
+	static bool MouseButtonDown(uint32_t button)
+	{
+		return ImGui::GetIO().MouseDown[button];
+	}
+
+	static ImVec2 GetMousePos()
+	{
+		return ImGui::GetIO().MousePos;
+	}
+
+	static void SetMousePos(float x, float y)
+	{
+		SDL_WarpMouseInWindow(GUI::g_Window, static_cast<int>(x), static_cast<int>(y));
+	}
+
+	static float GetMouseWheel()
+	{
+		return ImGui::GetIO().MouseWheel;
+	}
+
+	static void SetTimeScale(float timeScale)
+	{
+		GUI::timeScale = timeScale;
+	}
+	// ----------------------------------------
 }

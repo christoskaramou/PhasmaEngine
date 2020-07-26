@@ -1,16 +1,18 @@
 #pragma once
-#include "Entity.h"
-#include "System.h"
+#include "../ECS/Entity.h"
+#include "../ECS/System.h"
 #include "../Core/Base.h"
 #include <vector>
 
 namespace vm
 {
+	class VulkanContext;
+
 	class Context final
 	{
 	public:
-		Context() {}
-		~Context() {}
+		Context();
+		~Context();
 
 		void InitSystems();
 		void UpdateSystems(double delta);
@@ -22,10 +24,11 @@ namespace vm
 		Entity* CreateEntity();
 		Entity* GetEntity(size_t id);
 		void RemoveEntity(size_t id);
-
+		VulkanContext* GetVKContext();
 	private:
 		std::unordered_map<size_t, Ref<ISystem>> m_systems;
 		std::unordered_map<size_t, Ref<Entity>> m_entities;
+		Ref<VulkanContext> vulkanContext;
 	};
 
 	template<class T>

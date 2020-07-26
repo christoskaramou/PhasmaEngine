@@ -1,7 +1,6 @@
 #pragma once
 #include "Delegate.h"
 #include <map>
-#include <vector>
 #include <deque>
 #include <utility>
 #include <any>

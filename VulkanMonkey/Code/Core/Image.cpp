@@ -1,6 +1,7 @@
 #include "vulkanPCH.h"
 #include "Image.h"
 #include "../VulkanContext/VulkanContext.h"
+#include "../Context/Context.h"
 #include <utility>
 
 namespace vm
@@ -72,7 +73,9 @@ namespace vm
 
 	void Image::createImage(uint32_t width, uint32_t height, vk::ImageTiling tiling, const vk::ImageUsageFlags& usage, const vk::MemoryPropertyFlags& properties)
 	{
-		const auto fProps = VulkanContext::get()->gpu->getFormatProperties(*format);
+		auto vCtx = VulkanContext::get();
+
+		const auto fProps = vCtx->gpu->getFormatProperties(*format);
 
 		if (tiling == vk::ImageTiling::eOptimal) {
 			if (!fProps.optimalTilingFeatures)
@@ -86,7 +89,7 @@ namespace vm
 			throw std::runtime_error("createImage(): wrong format error.");
 		}
 
-		auto const ifProps = VulkanContext::get()->gpu->getImageFormatProperties(*format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
+		auto const ifProps = vCtx->gpu->getImageFormatProperties(*format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
 		if (ifProps.maxArrayLayers < arrayLayers ||
 			ifProps.maxExtent.width < width ||
 			ifProps.maxExtent.height < height ||
@@ -115,11 +118,11 @@ namespace vm
 		imageInfo.sharingMode = vk::SharingMode::eExclusive;
 		imageInfo.initialLayout = *initialLayout;
 
-		image = make_ref(VulkanContext::get()->device->createImage(imageInfo));
+		image = make_ref(vCtx->device->createImage(imageInfo));
 
 		uint32_t memTypeIndex = UINT32_MAX;
-		auto const memRequirements = VulkanContext::get()->device->getImageMemoryRequirements(*image);
-		auto const memProperties = VulkanContext::get()->gpu->getMemoryProperties();
+		auto const memRequirements = vCtx->device->getImageMemoryRequirements(*image);
+		auto const memProperties = vCtx->gpu->getMemoryProperties();
 
 		for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
 			if (memRequirements.memoryTypeBits & (1 << i) && memProperties.memoryTypes[i].propertyFlags & properties) {
@@ -135,33 +138,37 @@ namespace vm
 		allocInfo.allocationSize = memRequirements.size;
 		allocInfo.memoryTypeIndex = memTypeIndex;
 
-		memory = make_ref(VulkanContext::get()->device->allocateMemory(allocInfo));
-		VulkanContext::get()->device->bindImageMemory(*image, *memory, 0);
+		memory = make_ref(vCtx->device->allocateMemory(allocInfo));
+		vCtx->device->bindImageMemory(*image, *memory, 0);
 
-		VulkanContext::get()->SetDebugObjectName(*image, "");
+		vCtx->SetDebugObjectName(*image, "");
 	}
 
 	void Image::createImageView(const vk::ImageAspectFlags& aspectFlags)
 	{
+		auto vCtx = VulkanContext::get();
+
 		vk::ImageViewCreateInfo viewInfo;
 		viewInfo.image = *image;
 		viewInfo.viewType = *viewType;
 		viewInfo.format = *format;
 		viewInfo.subresourceRange = { aspectFlags, 0, mipLevels, 0, arrayLayers };
 
-		view = make_ref(VulkanContext::get()->device->createImageView(viewInfo));
+		view = make_ref(vCtx->device->createImageView(viewInfo));
 
-		VulkanContext::get()->SetDebugObjectName(*view, "");
+		vCtx->SetDebugObjectName(*view, "");
 	}
 
 	void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout) const
 	{
+		auto vCtx = VulkanContext::get();
+
 		vk::CommandBufferAllocateInfo allocInfo;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = *VulkanContext::get()->commandPool2;
+		allocInfo.commandPool = *vCtx->commandPool2;
 
-		const vk::CommandBuffer commandBuffer = VulkanContext::get()->device->allocateCommandBuffers(allocInfo).at(0);
+		const vk::CommandBuffer commandBuffer = vCtx->device->allocateCommandBuffers(allocInfo).at(0);
 
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -248,9 +255,9 @@ namespace vm
 
 		commandBuffer.end();
 
-		VulkanContext::get()->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
+		vCtx->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-		VulkanContext::get()->device->freeCommandBuffers(*VulkanContext::get()->commandPool2, commandBuffer);
+		vCtx->device->freeCommandBuffers(*vCtx->commandPool2, commandBuffer);
 	}
 
 	void Image::changeLayout(const vk::CommandBuffer& cmd, LayoutState state)
@@ -308,12 +315,14 @@ namespace vm
 
 	void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer) const
 	{
+		auto vCtx = VulkanContext::get();
+
 		vk::CommandBufferAllocateInfo allocInfo;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = *VulkanContext::get()->commandPool2;
+		allocInfo.commandPool = *vCtx->commandPool2;
 
-		const vk::CommandBuffer commandBuffer = VulkanContext::get()->device->allocateCommandBuffers(allocInfo).at(0);
+		const vk::CommandBuffer commandBuffer = vCtx->device->allocateCommandBuffers(allocInfo).at(0);
 
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -334,9 +343,9 @@ namespace vm
 
 		commandBuffer.end();
 
-		VulkanContext::get()->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
+		vCtx->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
 
-		VulkanContext::get()->device->freeCommandBuffers(*VulkanContext::get()->commandPool2, commandBuffer);
+		vCtx->device->freeCommandBuffers(*vCtx->commandPool2, commandBuffer);
 	}
 
 	void Image::copyColorAttachment(const vk::CommandBuffer& cmd, Image& renderedImage) const
@@ -399,7 +408,9 @@ namespace vm
 
 	void Image::generateMipMaps() const
 	{
-		const auto fProps = VulkanContext::get()->gpu->getFormatProperties(*format);
+		auto vCtx = VulkanContext::get();
+
+		const auto fProps = vCtx->gpu->getFormatProperties(*format);
 
 		if (*tiling == vk::ImageTiling::eOptimal) {
 			if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear))
@@ -416,9 +427,9 @@ namespace vm
 		vk::CommandBufferAllocateInfo allocInfo;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;
 		allocInfo.commandBufferCount = mipLevels;
-		allocInfo.commandPool = *VulkanContext::get()->commandPool2;
+		allocInfo.commandPool = *vCtx->commandPool2;
 
-		const auto commandBuffers = VulkanContext::get()->device->allocateCommandBuffers(allocInfo);
+		const auto commandBuffers = vCtx->device->allocateCommandBuffers(allocInfo);
 
 		auto mipWidth = static_cast<int32_t>(width);
 		auto mipHeight = static_cast<int32_t>(height);
@@ -497,7 +508,7 @@ namespace vm
 
 			commandBuffers[i].end();
 
-			VulkanContext::get()->submitAndWaitFence(commandBuffers[i], nullptr, nullptr, nullptr);
+			vCtx->submitAndWaitFence(commandBuffers[i], nullptr, nullptr, nullptr);
 		}
 
 		commandBuffers.front().begin(beginInfo);
@@ -519,13 +530,15 @@ namespace vm
 
 		commandBuffers.front().end();
 
-		VulkanContext::get()->submitAndWaitFence(commandBuffers.front(), nullptr, nullptr, nullptr);
+		vCtx->submitAndWaitFence(commandBuffers.front(), nullptr, nullptr, nullptr);
 
-		VulkanContext::get()->device->freeCommandBuffers(*VulkanContext::get()->commandPool2, commandBuffers);
+		vCtx->device->freeCommandBuffers(*vCtx->commandPool2, commandBuffers);
 	}
 
 	void Image::createSampler()
 	{
+		auto vCtx = VulkanContext::get();
+
 		vk::SamplerCreateInfo samplerInfo;
 		samplerInfo.magFilter = *filter;
 		samplerInfo.minFilter = *filter;
@@ -542,15 +555,17 @@ namespace vm
 		samplerInfo.compareOp = *compareOp;
 		samplerInfo.borderColor = *borderColor;
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
-		sampler = make_ref(VulkanContext::get()->device->createSampler(samplerInfo));
+		sampler = make_ref(vCtx->device->createSampler(samplerInfo));
 	}
 
 	void Image::destroy()
 	{
-		if (*view) VulkanContext::get()->device->destroyImageView(*view);
-		if (*image) VulkanContext::get()->device->destroyImage(*image);
-		if (*memory) VulkanContext::get()->device->freeMemory(*memory);
-		if (*sampler) VulkanContext::get()->device->destroySampler(*sampler);
+		auto vCtx = VulkanContext::get();
+
+		if (*view) vCtx->device->destroyImageView(*view);
+		if (*image) vCtx->device->destroyImage(*image);
+		if (*memory) vCtx->device->freeMemory(*memory);
+		if (*sampler) vCtx->device->destroySampler(*sampler);
 		*view = nullptr;
 		*image = nullptr;
 		*memory = nullptr;

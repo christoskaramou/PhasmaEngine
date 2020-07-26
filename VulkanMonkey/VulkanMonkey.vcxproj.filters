@@ -267,12 +267,6 @@
     <ClInclude Include="Code\ECS\ECSBase.h">
       <Filter>Code\ECS</Filter>
     </ClInclude>
-    <ClInclude Include="Code\ECS\Context.h">
-      <Filter>Code\ECS</Filter>
-    </ClInclude>
-    <ClInclude Include="Code\Context\ContextTemp.h">
-      <Filter>Code\Context</Filter>
-    </ClInclude>
     <ClInclude Include="Code\Event\EventSystem.h">
       <Filter>Code\Event</Filter>
     </ClInclude>
@@ -281,6 +275,9 @@
     </ClInclude>
     <ClInclude Include="Code\ECS\Entity.h">
       <Filter>Code\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Context\Context.h">
+      <Filter>Code\Context</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -482,14 +479,11 @@
     <ClCompile Include="Include\vulkanPCH.cpp">
       <Filter>Include</Filter>
     </ClCompile>
-    <ClCompile Include="Code\ECS\Context.cpp">
-      <Filter>Code\ECS</Filter>
-    </ClCompile>
-    <ClCompile Include="Code\Context\ContextTemp.cpp">
-      <Filter>Code\Context</Filter>
-    </ClCompile>
     <ClCompile Include="Code\Event\EventSystem.cpp">
       <Filter>Code\Event</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\Context\Context.cpp">
+      <Filter>Code\Context</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

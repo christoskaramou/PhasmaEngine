@@ -47,6 +47,9 @@ namespace vm
 		DepthRead,
 		DepthWrite
 	};
+
+	class Context;
+
 	class Image
 	{
 	public:

@@ -4,6 +4,9 @@
 #include "../Core/Surface.h"
 #include "../Swapchain/Swapchain.h"
 
+//#define USE_SCRIPTS
+#define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
+
 #define WIDTH VulkanContext::get()->surface.actualExtent->width
 #define HEIGHT VulkanContext::get()->surface.actualExtent->height
 #define WIDTH_f static_cast<float>(WIDTH)
@@ -32,12 +35,70 @@ namespace vk
 }
 
 struct SDL_Window;
+enum VkDebugUtilsMessageSeverityFlagBitsEXT;
+struct VkDebugUtilsMessengerCallbackDataEXT;
+
+#if defined(_WIN32)
+// On Windows, Vulkan commands use the stdcall convention
+#define VKAPI_ATTR
+#define VKAPI_CALL __stdcall
+#define VKAPI_PTR  VKAPI_CALL
+#elif defined(__ANDROID__) && defined(__ARM_ARCH) && __ARM_ARCH < 7
+#error "Vulkan isn't supported for the 'armeabi' NDK ABI"
+#elif defined(__ANDROID__) && defined(__ARM_ARCH) && __ARM_ARCH >= 7 && defined(__ARM_32BIT_STATE)
+// On Android 32-bit ARM targets, Vulkan functions use the "hardfloat"
+// calling convention, i.e. float parameters are passed in registers. This
+// is true even if the rest of the application passes floats on the stack,
+// as it does by default when compiling for the armeabi-v7a NDK ABI.
+#define VKAPI_ATTR __attribute__((pcs("aapcs-vfp")))
+#define VKAPI_CALL
+#define VKAPI_PTR  VKAPI_ATTR
+#else
+// On other platforms, use the default calling convention
+#define VKAPI_ATTR
+#define VKAPI_CALL
+#define VKAPI_PTR
+#endif
 
 namespace vm
 {
+	class Context;
+
 	class VulkanContext
 	{
 	public:
+		VulkanContext();
+		~VulkanContext();
+
+		void CreateInstance(SDL_Window* window);
+		static VKAPI_ATTR uint32_t VKAPI_CALL MessageCallback(
+			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+			uint32_t messageType,
+			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+			void* pUserData);
+		void CreateDebugMessenger();
+		void DestroyDebugMessenger();
+		void CreateSurface(Context* ctx);
+		void GetSurfaceProperties(Context* ctx);
+		void GetGpu();
+		void GetGraphicsFamilyId();
+		void GetTransferFamilyId();
+		void GetComputeFamilyId();
+		void CreateDevice();
+		void GetGraphicsQueue();
+		void GetTransferQueue();
+		void GetComputeQueue();
+		void GetQueues();
+		void CreateSwapchain(Context* ctx, uint32_t requestImageCount);
+		void CreateCommandPools();
+		void CreateDescriptorPool(uint32_t maxDescriptorSets);
+		void CreateCmdBuffers(uint32_t bufferCount = 1);
+		void CreateFences(uint32_t fenceCount);
+		void CreateSemaphores(uint32_t semaphoresCount);
+		void CreateDepth();
+		void Init(Context* ctx);
+		void Destroy();
+
 		Ref<vk::Instance> instance;
 		Ref<vk::DebugUtilsMessengerEXT> debugMessenger;
 		Ref<vk::PhysicalDevice> gpu;
@@ -89,20 +150,12 @@ namespace vm
 		void SetDebugObjectName(const void* validHandle, const void* name) {}
 #endif
 	private:
-		std::mutex m_submit_mutex{};
+		static inline std::mutex m_submit_mutex{};
 	public:
 		void waitAndLockSubmits();
 		void unlockSubmits();
 
 		static VulkanContext* get() noexcept;
 		static void remove() noexcept;
-
-		VulkanContext(VulkanContext const&) = delete;				// copy constructor
-		VulkanContext(VulkanContext&&) noexcept = delete;			// move constructor
-		VulkanContext& operator=(VulkanContext const&) = delete;	// copy assignment
-		VulkanContext& operator=(VulkanContext&&) = delete;			// move assignment
-	private:
-		VulkanContext();											// default constructor
-		~VulkanContext() = default;									// destructor
 	};
 }

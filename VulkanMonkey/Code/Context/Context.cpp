@@ -1,11 +1,18 @@
 #include "Context.h"
-#include "ECSBase.h"
-#include "Entity.h"
-#include <stdexcept>
-#include <iostream>
+#include "../ECS/ECSBase.h"
+#include "../VulkanContext/VulkanContext.h"
 
 namespace vm
 {
+	Context::Context()
+	{
+		vulkanContext = make_ref(VulkanContext());
+	}
+
+	Context::~Context()
+	{
+	}
+
 	void Context::InitSystems()
 	{
 		for (auto& system : m_systems)
@@ -48,5 +55,10 @@ namespace vm
 	{
 		if (m_entities.find(id) != m_entities.end())
 			m_entities.erase(id);
+	}
+
+	VulkanContext* Context::GetVKContext()
+	{
+		return VulkanContext::get();
 	}
 }
