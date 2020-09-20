@@ -119,11 +119,6 @@ namespace vm
 		pipeline.createGraphicsPipeline();
 	}
 
-	void FXAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
-	{
-		frameImage.copyColorAttachment(cmd, renderedImage);
-	}
-
 	void FXAA::destroy()
 	{
 		for (auto& frameBuffer : framebuffers)

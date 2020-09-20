@@ -32,11 +32,6 @@ namespace vm
 		frameImage.createSampler();
 	}
 
-	void DOF::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
-	{
-		frameImage.copyColorAttachment(cmd, renderedImage);
-	}
-
 	void DOF::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
 		renderPass.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);

@@ -42,7 +42,6 @@ namespace vm
 		void createPipeline(std::map<std::string, Image>& renderTargets);
 		void createPipelineSharpen(std::map<std::string, Image>& renderTargets);
 		void createPipelines(std::map<std::string, Image>& renderTargets);
-		void copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const;
 		void saveImage(const vk::CommandBuffer& cmd, Image& source) const;
 		void destroy();
 	};

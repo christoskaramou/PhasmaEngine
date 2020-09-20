@@ -172,9 +172,4 @@ namespace vm
 
 		pipeline.createGraphicsPipeline();
 	}
-
-	void MotionBlur::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
-	{
-		frameImage.copyColorAttachment(cmd, renderedImage);
-	}
 }

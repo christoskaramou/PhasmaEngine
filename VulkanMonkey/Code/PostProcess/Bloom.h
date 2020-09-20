@@ -36,7 +36,6 @@ namespace vm
 		Image frameImage;
 
 		void Init();
-		void copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const;
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
 		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
 		void createPipelines(std::map<std::string, Image>& renderTargets);

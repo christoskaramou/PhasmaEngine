@@ -166,7 +166,7 @@ namespace vm
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(info.descriptorSetLayouts->size());
 		plci.pSetLayouts = info.descriptorSetLayouts->data();
-		plci.pushConstantRangeCount = 1;
+		plci.pushConstantRangeCount = info.pushConstantSize ? 1 : 0;
 		plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
 		layout = make_ref(VulkanContext::get()->device->createPipelineLayout(plci));
 		pipeinfo.layout = *layout;

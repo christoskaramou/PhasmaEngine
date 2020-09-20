@@ -363,14 +363,14 @@ namespace vm
 			// TAA
 			if (GUI::use_TAA) {
 				metrics[6].start(&cmd);
-				taa.copyFrameImage(cmd, renderTargets["viewport"]);
+				taa.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 				taa.draw(cmd, imageIndex, renderTargets);
 				metrics[6].end(&GUI::metrics[6]);
 			}
 			// FXAA
 			else if (GUI::use_FXAA) {
 				metrics[6].start(&cmd);
-				fxaa.copyFrameImage(cmd, renderTargets["viewport"]);
+				fxaa.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 				fxaa.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
 				metrics[6].end(&GUI::metrics[6]);
 			}
@@ -379,7 +379,7 @@ namespace vm
 		// BLOOM
 		if (GUI::show_Bloom) {
 			metrics[7].start(&cmd);
-			bloom.copyFrameImage(cmd, renderTargets["viewport"]);
+			bloom.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 			bloom.draw(cmd, imageIndex, renderTargets);
 			metrics[7].end(&GUI::metrics[7]);
 		}
@@ -387,7 +387,7 @@ namespace vm
 		// Depth of Field
 		if (GUI::use_DOF) {
 			metrics[8].start(&cmd);
-			dof.copyFrameImage(cmd, renderTargets["viewport"]);
+			dof.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 			dof.draw(cmd, imageIndex, renderTargets);
 			metrics[8].end(&GUI::metrics[8]);
 		}
@@ -395,7 +395,7 @@ namespace vm
 		// MOTION BLUR
 		if (GUI::show_motionBlur) {
 			metrics[9].start(&cmd);
-			motionBlur.copyFrameImage(cmd, renderTargets["viewport"]);
+			motionBlur.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 			motionBlur.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
 			metrics[9].end(&GUI::metrics[9]);
 		}

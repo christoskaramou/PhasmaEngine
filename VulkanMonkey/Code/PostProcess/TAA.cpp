@@ -218,11 +218,6 @@ namespace vm
 		pipelineSharpen.createGraphicsPipeline();
 	}
 
-	void TAA::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
-	{
-		frameImage.copyColorAttachment(cmd, renderedImage);
-	}
-
 	void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source) const
 	{
 		previous.transitionImageLayout(

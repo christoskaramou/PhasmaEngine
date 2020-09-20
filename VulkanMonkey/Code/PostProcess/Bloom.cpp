@@ -35,11 +35,6 @@ namespace vm
 		frameImage.createSampler();
 	}
 
-	void Bloom::copyFrameImage(const vk::CommandBuffer& cmd, Image& renderedImage) const
-	{
-		frameImage.copyColorAttachment(cmd, renderedImage);
-	}
-
 	void vm::Bloom::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
 		renderPassBrightFilter.Create(*renderTargets["brightFilter"].format, vk::Format::eUndefined);
