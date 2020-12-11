@@ -4,7 +4,6 @@
 #pragma once
 
 #include <GLTFSDK/Document.h>
-#include <GLTFSDK/Schema.h>
 
 namespace Microsoft 
 {
@@ -24,10 +23,13 @@ namespace Microsoft
 
         class ExtensionDeserializer;
 
-        Document Deserialize(const std::string& json, DeserializeFlags flags = DeserializeFlags::None, SchemaFlags schemaFlags = SchemaFlags::None);
-        Document Deserialize(const std::string& json, const ExtensionDeserializer& extensions, DeserializeFlags flags = DeserializeFlags::None, SchemaFlags schemaFlags = SchemaFlags::None);
-
-        Document Deserialize(std::istream& jsonStream, DeserializeFlags flags = DeserializeFlags::None, SchemaFlags schemaFlags = SchemaFlags::None);
-        Document Deserialize(std::istream& jsonStream, const ExtensionDeserializer& extensions, DeserializeFlags flags = DeserializeFlags::None, SchemaFlags schemaFlags = SchemaFlags::None);
+        Document Deserialize(const std::string& json);
+        Document Deserialize(const std::string& json, DeserializeFlags flags);
+        Document Deserialize(const std::string& json, const ExtensionDeserializer& extensions);
+        Document Deserialize(const std::string& json, const ExtensionDeserializer& extensions, DeserializeFlags flags);
+        Document Deserialize(std::istream& jsonStream);
+        Document Deserialize(std::istream& jsonStream, DeserializeFlags flags);
+        Document Deserialize(std::istream& jsonStream, const ExtensionDeserializer& extensions);
+        Document Deserialize(std::istream& jsonStream, const ExtensionDeserializer& extensions, DeserializeFlags flags);
     }
 }

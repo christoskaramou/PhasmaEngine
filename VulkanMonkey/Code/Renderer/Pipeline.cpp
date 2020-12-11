@@ -183,7 +183,7 @@ namespace vm
 		// Base Pipeline Index
 		pipeinfo.basePipelineIndex = -1;
 
-		handle = make_ref(VulkanContext::get()->device->createGraphicsPipelines(nullptr, pipeinfo).at(0));
+		handle = make_ref(VulkanContext::get()->device->createGraphicsPipeline(nullptr, pipeinfo).value);
 	}
 
 	void Pipeline::createComputePipeline()
@@ -206,7 +206,7 @@ namespace vm
 		layout = make_ref(VulkanContext::get()->device->createPipelineLayout(plci));
 		compinfo.layout = *layout;
 
-		handle = make_ref(VulkanContext::get()->device->createComputePipelines(nullptr, compinfo).at(0));
+		handle = make_ref(VulkanContext::get()->device->createComputePipeline(nullptr, compinfo).value);
 	}
 
 	void Pipeline::destroy()

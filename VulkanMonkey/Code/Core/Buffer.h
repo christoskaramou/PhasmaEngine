@@ -6,11 +6,11 @@ namespace vk
 	class Buffer;
 	class DeviceMemory;
 
-	template<class T1, class T2> class Flags;
-	enum class BufferUsageFlagBits;
-	enum class MemoryPropertyFlagBits;
-	using BufferUsageFlags = Flags<BufferUsageFlagBits, uint32_t>;
-	using MemoryPropertyFlags = Flags<MemoryPropertyFlagBits, uint32_t>;
+	template<class T1> class Flags;
+	enum class BufferUsageFlagBits : uint32_t;
+	enum class MemoryPropertyFlagBits : uint32_t;
+	using BufferUsageFlags = Flags<BufferUsageFlagBits>;
+	using MemoryPropertyFlags = Flags<MemoryPropertyFlagBits>;
 }
 
 namespace vm 

@@ -20,7 +20,7 @@ namespace vm
 
 		const std::string title =
 			"VulkanMonkey3D   "
-			+ std::string(vulkan->gpuProperties->deviceName)
+			+ std::string(vulkan->gpuProperties->deviceName.data())
 			+ " (Present Mode: "
 			+ vk::to_string(*vulkan->surface.presentModeKHR)
 			+ ")";

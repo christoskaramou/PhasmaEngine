@@ -498,7 +498,7 @@ namespace vm
 		}
 
 		// aquire the image
-		auto aquireSignalSemaphore = (*vCtx.semaphores)[0];
+		auto& aquireSignalSemaphore = (*vCtx.semaphores)[0];
 		const uint32_t imageIndex = vCtx.swapchain.Aquire(aquireSignalSemaphore, nullptr);
 		this->previousImageIndex = imageIndex;
 

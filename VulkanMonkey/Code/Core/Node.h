@@ -1,6 +1,5 @@
 #pragma once
 #include "Math.h"
-#include "Pointer.h"
 #include "../Camera/Camera.h"
 
 namespace vm
@@ -11,9 +10,9 @@ namespace vm
 	struct Skin
 	{
 		std::string name;
-		Pointer<Node> skeletonRoot;
+		Node* skeletonRoot;
 		std::vector<mat4> inverseBindMatrices;
-		std::vector<Pointer<Node>> joints;
+		std::vector<Node*> joints;
 	};
 
 	// It is invalid to have both 'matrix' and any of 'translation'/'rotation'/'scale'
@@ -28,13 +27,13 @@ namespace vm
 	class Node
 	{
 	public:
-		Pointer<Node> parent;
+		Node* parent;
 		uint32_t index;
-		std::vector<Pointer<Node>> children;
+		std::vector<Node*> children;
 		mat4 matrix;
 		std::string name;
-		Pointer<Mesh> mesh;
-		Pointer<Skin> skin;
+		Mesh* mesh;
+		Skin* skin;
 		int32_t skinIndex = -1;
 		vec3 translation;
 		vec3 scale;
@@ -43,6 +42,6 @@ namespace vm
 
 		mat4 localMatrix() const;
 		mat4 getMatrix() const;
-		void update(Camera& camera);
+		void update();
 	};
 }

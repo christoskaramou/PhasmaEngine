@@ -19,22 +19,22 @@ namespace vk
 	enum class SamplerMipmapMode;
 	struct PipelineColorBlendAttachmentState;
 	class CommandBuffer;
-	enum class SampleCountFlagBits;
+	enum class SampleCountFlagBits : uint32_t;
 	class Buffer;
 
-	template<class T1, class T2> class Flags;
-	enum class ImageCreateFlagBits;
-	enum class PipelineStageFlagBits;
-	enum class AccessFlagBits;
-	enum class ImageAspectFlagBits;
-	enum class ImageUsageFlagBits;
-	enum class MemoryPropertyFlagBits;
-	using ImageCreateFlags = Flags<ImageCreateFlagBits, uint32_t>;
-	using PipelineStageFlags = Flags<PipelineStageFlagBits, uint32_t>;
-	using AccessFlags = Flags<AccessFlagBits, uint32_t>;
-	using ImageAspectFlags = Flags<ImageAspectFlagBits, uint32_t>;
-	using ImageUsageFlags = Flags<ImageUsageFlagBits, uint32_t>;
-	using MemoryPropertyFlags = Flags<MemoryPropertyFlagBits, uint32_t>;
+	template<class T1> class Flags;
+	enum class ImageCreateFlagBits : uint32_t;
+	enum class PipelineStageFlagBits : uint32_t;
+	enum class AccessFlagBits : uint32_t;
+	enum class ImageAspectFlagBits : uint32_t;
+	enum class ImageUsageFlagBits : uint32_t;
+	enum class MemoryPropertyFlagBits : uint32_t;
+	using ImageCreateFlags = Flags<ImageCreateFlagBits>;
+	using PipelineStageFlags = Flags<PipelineStageFlagBits>;
+	using AccessFlags = Flags<AccessFlagBits>;
+	using ImageAspectFlags = Flags<ImageAspectFlagBits>;
+	using ImageUsageFlags = Flags<ImageUsageFlagBits>;
+	using MemoryPropertyFlags = Flags<MemoryPropertyFlagBits>;
 	using Bool32 = uint32_t;
 }
 

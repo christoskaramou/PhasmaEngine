@@ -12,7 +12,7 @@ namespace vm
 	struct AnimationChannel {
 		enum PathType { TRANSLATION, ROTATION, SCALE };
 		PathType path;
-		Pointer<Node> node;
+		Node* node;
 		int32_t samplerIndex;
 	};
 

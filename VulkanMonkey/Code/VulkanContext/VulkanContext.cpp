@@ -60,7 +60,7 @@ namespace vm
 	// === Debug Extensions ========================
 		auto extensions = vk::enumerateInstanceExtensionProperties();
 		for (auto& extension : extensions) {
-			if (std::string(extension.extensionName) == "VK_EXT_debug_utils")
+			if (std::string(extension.extensionName.data()) == "VK_EXT_debug_utils")
 				instanceExtensions.push_back("VK_EXT_debug_utils");
 		}
 		// =============================================
@@ -69,7 +69,7 @@ namespace vm
 		// To use these debug layers, here is assumed VulkanSDK is installed and Bin is in enviromental path
 		auto layers = vk::enumerateInstanceLayerProperties();
 		for (auto layer : layers) {
-			if (std::string(layer.layerName) == "VK_LAYER_KHRONOS_validation")
+			if (std::string(layer.layerName.data()) == "VK_LAYER_KHRONOS_validation")
 				instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
 		}
 		// =============================================
@@ -247,7 +247,7 @@ namespace vm
 
 		std::vector<const char*> deviceExtensions{};
 		for (auto& i : extensionProperties) {
-			if (std::string(i.extensionName) == VK_KHR_SWAPCHAIN_EXTENSION_NAME)
+			if (std::string(i.extensionName.data()) == VK_KHR_SWAPCHAIN_EXTENSION_NAME)
 				deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 		}
 		float priorities[]{ 1.0f }; // range : [0.0, 1.0]

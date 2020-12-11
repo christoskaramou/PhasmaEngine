@@ -4,7 +4,7 @@
 #include <unordered_set>
 #include <string>
 #include <vector>
-#include "../../include/shaderc/shaderc/shaderc.hpp"
+#include "../../Include/shaderc/shaderc.hpp"
 
 #define ONLINE_COMPILE
 

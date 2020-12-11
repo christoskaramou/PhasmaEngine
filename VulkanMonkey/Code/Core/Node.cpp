@@ -23,39 +23,46 @@ mat4 Node::localMatrix() const
 mat4 Node::getMatrix() const
 {
 	mat4 m = localMatrix();
-	Pointer<Node> p = parent;
-	while (p) {
+	Node* p = parent;
+	while (p)
+	{
 		m = p->localMatrix() * m;
 		p = p->parent;
 	}
 	return m;
 }
 
-void calculateMeshJointMatrixAsync(Pointer<Mesh>& mesh, Pointer<Skin>& skin, const mat4& inverseTransform, const size_t index)
+void calculateMeshJointMatrixAsync(Mesh* mesh, Skin* skin, const mat4& inverseTransform, const size_t index)
 {
 	mesh->ubo.jointMatrix[index] = inverseTransform * skin->joints[index]->getMatrix() * skin->inverseBindMatrices[index];
 }
 
-void Node::update(Camera& camera)
+void Node::update()
 {
-	if (mesh) {
+	if (mesh)
+	{
 		mesh->ubo.previousMatrix = mesh->ubo.matrix;
 		mesh->ubo.matrix = getMatrix();
 
-		if (skin) {
+		if (skin)
+		{
 			// Update joint matrices
 			mat4 inverseTransform = inverse(mesh->ubo.matrix);
 			const size_t numJoints = std::min(static_cast<uint32_t>(skin->joints.size()), MAX_NUM_JOINTS);
 
 			// async calls should be at least bigger than a number, else this will be slower
-			if (numJoints > 3) {
+			if (numJoints > 3)
+			{
 				std::vector<std::future<void>> futures(numJoints);
+
 				for (size_t i = 0; i < numJoints; i++)
 					futures[i] = std::async(std::launch::async, calculateMeshJointMatrixAsync, mesh, skin, inverseTransform, i);
+
 				for (auto& f : futures)
 					f.get();
 			}
-			else {
+			else
+			{
 				for (size_t i = 0; i < numJoints; i++)
 					calculateMeshJointMatrixAsync(mesh, skin, inverseTransform, i);
 			}
@@ -67,7 +74,8 @@ void Node::update(Camera& camera)
 			//mesh->uniformBuffer.flush();
 			//mesh->uniformBuffer.unmap();
 		}
-		else {
+		else
+		{
 			Queue::memcpyRequest(&mesh->uniformBuffer, { { &mesh->ubo, 2 * sizeof(mat4), 0} });
 			//mesh->uniformBuffer.map();
 			//memcpy(mesh->uniformBuffer.data, &mesh->ubo, 2 * sizeof(mat4));

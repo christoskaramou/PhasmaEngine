@@ -51,8 +51,8 @@ namespace vm
 		std::string name;
 		std::string fullPathName;
 		//std::vector<Pointer<vm::Node>> nodes{};
-		std::vector<Pointer<vm::Node>> linearNodes{};
-		std::vector<Pointer<Skin>> skins{};
+		std::vector<vm::Node*> linearNodes{};
+		std::vector<Skin*> skins{};
 		std::vector<Animation> animations{};
 		std::vector<std::string> extensions{};
 
@@ -69,12 +69,12 @@ namespace vm
 		void update(Camera& camera, double delta);
 		void updateAnimation(uint32_t index, float time);
 		void calculateBoundingSphere();
-		void loadNode(Pointer<vm::Node> parent, const Microsoft::glTF::Node& node, const std::string& folderPath);
+		void loadNode(vm::Node* parent, const Microsoft::glTF::Node& node, const std::string& folderPath);
 		void loadAnimations();
 		void loadSkins();
 		void readGltf(const std::filesystem::path& file);
 		void loadModelGltf(const std::string& folderPath, const std::string& modelName, bool show = true);
-		void getMesh(Pointer<vm::Node>& node, const std::string& meshID, const std::string& folderPath);
+		void getMesh(vm::Node* node, const std::string& meshID, const std::string& folderPath);
 		template <typename T> void getVertexData(std::vector<T>& vec, const std::string& accessorName, const Microsoft::glTF::MeshPrimitive& primitive) const;
 		void getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::MeshPrimitive& primitive) const;
 		Microsoft::glTF::Image* getImage(const std::string& textureID) const;

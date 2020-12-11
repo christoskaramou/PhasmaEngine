@@ -8,9 +8,6 @@
 #include <string>
 #include <vector>
 
-#undef min
-#undef max
-
 namespace Microsoft
 {
     namespace glTF
@@ -210,14 +207,6 @@ namespace Microsoft
             }
 
             return false;
-        }
-
-        inline bool IsUriBase64(const std::string& uri)
-        {
-            std::string::const_iterator itBegin;
-            std::string::const_iterator itEnd;
-
-            return IsUriBase64(uri, itBegin, itEnd);
         }
     }
 }

@@ -36,7 +36,7 @@ Please do not include their headers and this header in the same cpp file.
 #include <GLTFSDK/Color.h>
 #include <GLTFSDK/Exceptions.h>
 #include <GLTFSDK/IndexedContainer.h>
-#include <GLTFSDK/Maths.h>
+#include <GLTFSDK/Math.h>
 
 #include <vector>
 #include <string>

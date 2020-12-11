@@ -2,7 +2,7 @@
 #include "Shader.h"
 #include "../Core/Buffer.h"
 #include "../MemoryHash/MemoryHash.h"
-#include "../../include/shaderc/spirv_cross/spirv_cross.hpp"
+#include "../../Include/spirv_cross/spirv_cross.hpp"
 #include <vector>
 
 namespace vm

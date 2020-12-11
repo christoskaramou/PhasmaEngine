@@ -18,7 +18,7 @@ namespace vm
 	{
 		std::vector ref_vec(vec.size());
 
-		for (int i = 0; i < vec.size())
+		for (int i = 0; i < vec.size(); i++)
 			ref_vec[i] = std::make_shared<T>(vec[i]);
 
 		return ref_vec;

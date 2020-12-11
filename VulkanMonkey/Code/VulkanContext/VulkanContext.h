@@ -29,9 +29,9 @@ namespace vk
 	class Semaphore;
 	class DispatchLoaderDynamic;
 
-	template<class T1, class T2> class Flags;
-	enum class PipelineStageFlagBits;
-	using PipelineStageFlags = Flags<PipelineStageFlagBits, uint32_t>;
+	template<class T1> class Flags;
+	enum class PipelineStageFlagBits : uint32_t;
+	using PipelineStageFlags = Flags<PipelineStageFlagBits>;
 }
 
 struct SDL_Window;

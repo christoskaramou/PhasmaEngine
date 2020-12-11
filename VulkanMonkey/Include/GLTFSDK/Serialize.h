@@ -23,7 +23,9 @@ namespace Microsoft
         class Document;
         class ExtensionSerializer;
 
-        std::string Serialize(const Document& gltfDocument, SerializeFlags flags = SerializeFlags::None);
-        std::string Serialize(const Document& gltfDocument, const ExtensionSerializer& extensionHandler, SerializeFlags flags = SerializeFlags::None);
+        std::string Serialize(const Document& gltfDocument);
+        std::string Serialize(const Document& gltfDocument, const ExtensionSerializer& extensionHandler);
+        std::string Serialize(const Document& gltfDocument, const ExtensionSerializer& extensionHandler, SerializeFlags flags);
+        std::string Serialize(const Document& gltfDocument, SerializeFlags flags);
     }
 }

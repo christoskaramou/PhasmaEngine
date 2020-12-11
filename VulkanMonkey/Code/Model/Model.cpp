@@ -189,7 +189,7 @@ namespace vm
 		}
 	}
 
-	void Model::getMesh(Pointer<vm::Node>& node, const std::string& meshID, const std::string& folderPath)
+	void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string& folderPath)
 	{
 		if (!node || meshID.empty()) return;
 		const auto& mesh = document->meshes.Get(meshID);
@@ -346,29 +346,35 @@ namespace vm
 		}
 	}
 
-	void frustumCheckAsync(Model& model, Pointer<Mesh>& mesh, Camera& camera, uint32_t index)
+	void frustumCheckAsync(const Model& model, Mesh* mesh, const Camera& camera, uint32_t index)
 	{
 		cmat4 trans = model.ubo.matrix * mesh->ubo.matrix;
 		vec4 bs = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
+
 		bs.w = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale 
 		mesh->primitives[index].cull = !camera.SphereInFrustum(bs);
 		mesh->primitives[index].transformedBS = bs;
 	}
 
-	void updateNodeAsync(Model& model, Pointer<Node>& node, Camera& camera)
+	void updateNodeAsync(const Model& model, Node* node, const Camera& camera)
 	{
-		if (node->mesh) {
-			node->update(camera);
+		if (node->mesh)
+		{
+			node->update();
 
 			// async calls should be at least bigger than a number, else this will be slower
-			if (node->mesh->primitives.size() > 3) {
+			if (node->mesh->primitives.size() > 3)
+			{
 				std::vector<std::future<void>> futures(node->mesh->primitives.size());
+
 				for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
 					futures[i] = std::async(std::launch::async, frustumCheckAsync, model, node->mesh, camera, i);
+
 				for (auto& f : futures)
 					f.get();
 			}
-			else {
+			else
+			{
 				for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
 					frustumCheckAsync(model, node->mesh, camera, i);
 			}
@@ -377,16 +383,19 @@ namespace vm
 
 	void Model::update(vm::Camera& camera, double delta)
 	{
-		if (render) {
+		if (render)
+		{
 			ubo.previousMatrix = ubo.matrix;
 			ubo.view = camera.view;
 			ubo.previousView = camera.previousView;
 			ubo.projection = camera.projection;
-			if (script) {
+			if (script)
+			{
 				script->update(static_cast<float>(delta));
 				ubo.matrix = script->getValue<Transform>("transform").matrix * transform;
 			}
-			else {
+			else
+			{
 				ubo.matrix = transform;
 			}
 			ubo.matrix = vm::transform(quat(radians(rot)), scale, pos) * ubo.matrix;
@@ -396,23 +405,29 @@ namespace vm
 			//uniformBuffer.flush();
 			//uniformBuffer.unmap();
 
-			if (!animations.empty()) {
+			if (!animations.empty())
+			{
 				animationTimer += static_cast<float>(delta);
-				if (animationTimer > animations[animationIndex].end) {
+
+				if (animationTimer > animations[animationIndex].end)
 					animationTimer -= animations[animationIndex].end;
-				}
+
 				updateAnimation(animationIndex, animationTimer);
 			}
 
 			// async calls should be at least bigger than a number, else this will be slower
-			if (linearNodes.size() > 3) {
+			if (linearNodes.size() > 3)
+			{
 				std::vector<std::future<void>> futureNodes(linearNodes.size());
+
 				for (uint32_t i = 0; i < linearNodes.size(); i++)
 					futureNodes[i] = std::async(std::launch::async, updateNodeAsync, *this, linearNodes[i], camera);
+
 				for (auto& f : futureNodes)
 					f.get();
 			}
-			else {
+			else
+			{
 				for (auto& linearNode : linearNodes)
 					updateNodeAsync(*this, linearNode, camera);
 			}
@@ -493,9 +508,9 @@ namespace vm
 		boundingSphere = vec4(center, sphereRadius);
 	}
 
-	void Model::loadNode(Pointer<vm::Node> parent, const glTF::Node& node, const std::string& folderPath)
+	void Model::loadNode(vm::Node* parent, const glTF::Node& node, const std::string& folderPath)
 	{
-		Pointer<vm::Node> newNode = new vm::Node{};
+		vm::Node* newNode = new vm::Node{};
 		newNode->index = !node.id.empty() ? static_cast<uint32_t>(document->nodes.GetIndex(node.id)) : -1;
 		newNode->parent = parent;
 		newNode->name = node.name;
@@ -523,7 +538,7 @@ namespace vm
 
 	void vm::Model::loadAnimations()
 	{
-		const auto getNode = [](std::vector<Pointer<Node>>& linearNodes, size_t index) -> Pointer<Node> {
+		const auto getNode = [](std::vector<Node*>& linearNodes, size_t index) -> Node* {
 			for (auto& node : linearNodes) {
 				if (node->index == index)
 					return node;
@@ -626,7 +641,7 @@ namespace vm
 
 	void vm::Model::loadSkins()
 	{
-		const auto getNode = [](std::vector<Pointer<Node>>& linearNodes, size_t index) -> Pointer<Node> {
+		const auto getNode = [](std::vector<Node*>& linearNodes, size_t index) -> Node* {
 			for (auto& node : linearNodes) {
 				if (node->index == index)
 					return node;
@@ -634,7 +649,7 @@ namespace vm
 			return nullptr;
 		};
 		for (auto& source : document->skins.Elements()) {
-			Pointer<Skin> newSkin = new Skin{};
+			Skin* newSkin = new Skin{};
 			newSkin->name = source.name;
 
 			// Find skeleton root node
@@ -644,7 +659,7 @@ namespace vm
 
 			// Find joint nodes
 			for (auto& jointID : source.jointIds) {
-				Pointer<Node> node = !jointID.empty() ? getNode(linearNodes, document->nodes.GetIndex(jointID)) : nullptr;
+				Node* node = !jointID.empty() ? getNode(linearNodes, document->nodes.GetIndex(jointID)) : nullptr;
 				if (node) {
 					newSkin->joints.push_back(node);
 				}
@@ -803,14 +818,14 @@ namespace vm
 		for (auto& node : linearNodes) {
 			if (node->mesh) {
 				node->mesh->destroy();
-				delete node->mesh.get();
+				delete node->mesh;
 				node->mesh = {};
 			}
-			delete node.get();
+			delete node;
 			node = {};
 		}
 		for (auto& skin : skins) {
-			delete skin.get();
+			delete skin;
 			skin = {};
 		}
 		//for (auto& texture : Mesh::uniqueTextures)

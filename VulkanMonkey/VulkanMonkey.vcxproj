@@ -130,7 +130,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>spirv-cross-cored.lib;shaderc_shared.lib;mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>spirv-cross-core.lib;shaderc_shared.lib;mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;GLTFSDKd.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <ProjectReference>
@@ -177,7 +177,7 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>spirv-cross-cored.lib;shaderc_shared.lib;mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>spirv-cross-core.lib;shaderc_shared.lib;mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;GLTFSDK.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Windows</SubSystem>
@@ -229,7 +229,6 @@
     <ClInclude Include="Code\Core\Light.h" />
     <ClInclude Include="Code\Core\Math.h" />
     <ClInclude Include="Code\Core\Node.h" />
-    <ClInclude Include="Code\Core\Pointer.h" />
     <ClInclude Include="Code\Core\Queue.h" />
     <ClInclude Include="Code\Core\Surface.h" />
     <ClInclude Include="Code\Core\Timer.h" />
@@ -459,27 +458,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">vulkanPCH.h</PrecompiledHeaderFile>
     </ClCompile>
-    <ClCompile Include="include\GLTFSDK\AnimationUtils.cpp" />
-    <ClCompile Include="include\GLTFSDK\BufferBuilder.cpp" />
-    <ClCompile Include="include\GLTFSDK\Color.cpp" />
-    <ClCompile Include="include\GLTFSDK\Deserialize.cpp" />
-    <ClCompile Include="include\GLTFSDK\Document.cpp" />
-    <ClCompile Include="include\GLTFSDK\Extension.cpp" />
-    <ClCompile Include="include\GLTFSDK\ExtensionHandlers.cpp" />
-    <ClCompile Include="include\GLTFSDK\ExtensionsKHR.cpp" />
-    <ClCompile Include="include\GLTFSDK\GLBResourceReader.cpp" />
-    <ClCompile Include="include\GLTFSDK\GLBResourceWriter.cpp" />
-    <ClCompile Include="include\GLTFSDK\GLTFResourceWriter.cpp" />
-    <ClCompile Include="include\GLTFSDK\Maths.cpp" />
-    <ClCompile Include="include\GLTFSDK\MeshPrimitiveUtils.cpp" />
-    <ClCompile Include="include\GLTFSDK\MicrosoftGeneratorVersion.cpp" />
-    <ClCompile Include="include\GLTFSDK\PBRUtils.cpp" />
-    <ClCompile Include="include\GLTFSDK\ResourceWriter.cpp" />
-    <ClCompile Include="include\GLTFSDK\Schema.cpp" />
-    <ClCompile Include="include\GLTFSDK\SchemaValidation.cpp" />
-    <ClCompile Include="include\GLTFSDK\Serialize.cpp" />
-    <ClCompile Include="include\GLTFSDK\Validation.cpp" />
-    <ClCompile Include="include\GLTFSDK\Version.cpp" />
     <ClCompile Include="include\imgui\imgui.cpp" />
     <ClCompile Include="include\imgui\imgui_demo.cpp" />
     <ClCompile Include="include\imgui\imgui_draw.cpp" />
@@ -500,6 +478,5 @@
     </ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets">
-  </ImportGroup>
+  <ImportGroup Label="ExtensionTargets" />
 </Project>

@@ -8,7 +8,7 @@
 #include <GLTFSDK/Exceptions.h>
 #include <GLTFSDK/Extension.h>
 #include <GLTFSDK/IndexedContainer.h>
-#include <GLTFSDK/Maths.h>
+#include <GLTFSDK/Math.h>
 
 #include <memory>
 #include <string>
