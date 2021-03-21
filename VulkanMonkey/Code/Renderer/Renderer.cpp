@@ -319,8 +319,16 @@ namespace vm
 		// MODELS
 		metrics[2].start(&cmd);
 		deferred.batchStart(cmd, imageIndex, *renderTargets["viewport"].extent);
+
 		for (auto& model : Model::models)
-			model.draw();
+			model.draw((uint16_t)RenderQueue::Opaque);
+
+		for (auto& model : Model::models)
+			model.draw((uint16_t)RenderQueue::AlphaCut);
+
+		for (auto& model : Model::models)
+			model.draw((uint16_t)RenderQueue::AlphaBlend);
+
 		deferred.batchEnd();
 		metrics[2].end(&GUI::metrics[2]);
 

@@ -65,7 +65,7 @@ namespace vm
 		Buffer indexBuffer;
 		uint32_t numberOfVertices = 0, numberOfIndices = 0;
 
-		void draw();
+		void draw(uint16_t renderQueue);
 		void update(Camera& camera, double delta);
 		void updateAnimation(uint32_t index, float time);
 		void calculateBoundingSphere();

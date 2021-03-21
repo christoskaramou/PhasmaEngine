@@ -7,7 +7,16 @@ layout (set = 0, binding = 0) uniform sampler2D albedoSampler;
 layout (set = 0, binding = 1) uniform sampler2D depthSampler;
 layout (set = 0, binding = 2) uniform sampler2D normalSampler;
 layout (set = 0, binding = 3) uniform sampler2D specRoughMetSampler; // TODO: remove this
-layout (set = 0, binding = 4) uniform WorldCameraPos{ vec4 camPos; vec4 camFront; vec4 size; vec4 dummy1; mat4 projection; mat4 view; mat4 invProj; } ubo;
+layout (set = 0, binding = 4) uniform WorldCameraPos
+{
+	vec4 camPos;
+	vec4 camFront;
+	vec4 size;
+	vec4 dummy1;
+	mat4 projection;
+	mat4 view;
+	mat4 invProj;
+} ubo;
 
 layout (location = 0) in vec2 inUV;
 
