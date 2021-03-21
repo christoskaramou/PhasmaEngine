@@ -4,7 +4,6 @@
 #include "../Core/Surface.h"
 #include "../Swapchain/Swapchain.h"
 
-//#define USE_SCRIPTS
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
 #define WIDTH VulkanContext::get()->surface.actualExtent->width

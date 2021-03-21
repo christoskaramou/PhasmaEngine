@@ -18,12 +18,18 @@ namespace vm
 
 		auto vulkan = VulkanContext::get();
 
-		const std::string title =
-			"VulkanMonkey3D   "
+		std::string title =
+			"VulkanMonkey3D"
 			+ std::string(vulkan->gpuProperties->deviceName.data())
-			+ " (Present Mode: "
-			+ vk::to_string(*vulkan->surface.presentModeKHR)
-			+ ")";
+			+ " - Present Mode: "
+			+ vk::to_string(*vulkan->surface.presentModeKHR);
+
+#ifdef _DEBUG
+		title += " - Configuration: Debug";
+#else
+		title += " - Configuration: Release";
+#endif // _DEBUG
+
 
 		SetTitle(title);
 

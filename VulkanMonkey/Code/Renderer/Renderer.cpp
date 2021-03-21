@@ -109,8 +109,9 @@ namespace vm
 				Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
 			}
 		}
-#ifdef USE_SCRIPTS
-		for (auto& script : ctx.scripts)
+
+#ifndef IGNORE_SCRIPTS
+		for (auto& script : scripts)
 			delete script;
 #endif
 		for (auto& model : Model::models)
@@ -180,7 +181,7 @@ namespace vm
 			GUI::modelItemSelected = -1;
 			it = Queue::unloadModel.erase(it);
 		}
-#ifdef USE_SCRIPTS
+#ifndef IGNORE_SCRIPTS
 		for (auto it = Queue::addScript.begin(); it != Queue::addScript.end();) {
 			delete Model::models[std::get<0>(*it)].script;
 			Model::models[std::get<0>(*it)].script = new Script(std::get<1>(*it).c_str());
@@ -215,9 +216,9 @@ namespace vm
 		// check for commands in queue
 		CheckQueue();
 
-#ifdef USE_SCRIPTS
+#ifndef IGNORE_SCRIPTS
 		// universal scripts
-		for (auto& s : ctx.scripts)
+		for (auto& s : scripts)
 			s->update(static_cast<float>(delta));
 #endif
 
@@ -317,20 +318,22 @@ namespace vm
 		SkyBox& skybox = GUI::shadow_cast ? skyBoxDay : skyBoxNight;
 
 		// MODELS
-		metrics[2].start(&cmd);
-		deferred.batchStart(cmd, imageIndex, *renderTargets["viewport"].extent);
+		{
+			metrics[2].start(&cmd);
+			deferred.batchStart(cmd, imageIndex, *renderTargets["viewport"].extent);
 
-		for (auto& model : Model::models)
-			model.draw((uint16_t)RenderQueue::Opaque);
+			for (auto& model : Model::models)
+				model.draw((uint16_t)RenderQueue::Opaque);
 
-		for (auto& model : Model::models)
-			model.draw((uint16_t)RenderQueue::AlphaCut);
+			for (auto& model : Model::models)
+				model.draw((uint16_t)RenderQueue::AlphaCut);
 
-		for (auto& model : Model::models)
-			model.draw((uint16_t)RenderQueue::AlphaBlend);
+			for (auto& model : Model::models)
+				model.draw((uint16_t)RenderQueue::AlphaBlend);
 
-		deferred.batchEnd();
-		metrics[2].end(&GUI::metrics[2]);
+			deferred.batchEnd();
+			metrics[2].end(&GUI::metrics[2]);
+		}
 
 		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorRead);
 		renderTargets["depth"].changeLayout(cmd, LayoutState::ColorRead);
@@ -583,6 +586,49 @@ namespace vm
 		renderTargets[name].blentAttachment->colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
 	}
 
+#ifndef IGNORE_SCRIPTS
+	// Callbacks for scripts -------------------
+	static void LoadModel(MonoString* folderPath, MonoString* modelName, uint32_t instances)
+	{
+		const std::string curPath = std::filesystem::current_path().string() + "\\";
+		const std::string path(mono_string_to_utf8(folderPath));
+		const std::string name(mono_string_to_utf8(modelName));
+		for (; instances > 0; instances--)
+			Queue::loadModel.emplace_back(curPath + path, name);
+	}
+
+	static bool KeyDown(uint32_t key)
+	{
+		return ImGui::GetIO().KeysDown[key];
+	}
+
+	static bool MouseButtonDown(uint32_t button)
+	{
+		return ImGui::GetIO().MouseDown[button];
+	}
+
+	static ImVec2 GetMousePos()
+	{
+		return ImGui::GetIO().MousePos;
+	}
+
+	static void SetMousePos(float x, float y)
+	{
+		SDL_WarpMouseInWindow(GUI::g_Window, static_cast<int>(x), static_cast<int>(y));
+	}
+
+	static float GetMouseWheel()
+	{
+		return ImGui::GetIO().MouseWheel;
+	}
+
+	static void SetTimeScale(float timeScale)
+	{
+		GUI::timeScale = timeScale;
+	}
+	// ----------------------------------------
+#endif
+
 	void Renderer::LoadResources()
 	{
 		// SKYBOXES LOAD
@@ -606,8 +652,8 @@ namespace vm
 		// GUI LOAD
 		gui.loadGUI();
 
+#ifndef IGNORE_SCRIPTS
 		// SCRIPTS
-#ifdef USE_SCRIPTS
 		Script::Init();
 		Script::addCallback("Global::LoadModel", reinterpret_cast<const void*>(LoadModel));
 		Script::addCallback("Global::KeyDown", reinterpret_cast<const void*>(KeyDown));
@@ -852,45 +898,4 @@ namespace vm
 		motionBlur.createPipeline(renderTargets);
 		gui.createPipeline();
 	}
-
-	// Callbacks for scripts -------------------
-	static void LoadModel(MonoString* folderPath, MonoString* modelName, uint32_t instances)
-	{
-		const std::string curPath = std::filesystem::current_path().string() + "\\";
-		const std::string path(mono_string_to_utf8(folderPath));
-		const std::string name(mono_string_to_utf8(modelName));
-		for (; instances > 0; instances--)
-			Queue::loadModel.emplace_back(curPath + path, name);
-	}
-
-	static bool KeyDown(uint32_t key)
-	{
-		return ImGui::GetIO().KeysDown[key];
-	}
-
-	static bool MouseButtonDown(uint32_t button)
-	{
-		return ImGui::GetIO().MouseDown[button];
-	}
-
-	static ImVec2 GetMousePos()
-	{
-		return ImGui::GetIO().MousePos;
-	}
-
-	static void SetMousePos(float x, float y)
-	{
-		SDL_WarpMouseInWindow(GUI::g_Window, static_cast<int>(x), static_cast<int>(y));
-	}
-
-	static float GetMouseWheel()
-	{
-		return ImGui::GetIO().MouseWheel;
-	}
-
-	static void SetTimeScale(float timeScale)
-	{
-		GUI::timeScale = timeScale;
-	}
-	// ----------------------------------------
 }

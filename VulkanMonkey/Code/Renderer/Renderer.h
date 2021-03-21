@@ -21,6 +21,8 @@
 #include "../PostProcess/SSR.h"
 #include "../PostProcess/TAA.h"
 
+#define IGNORE_SCRIPTS
+
 namespace vk
 {
 	class CommandBuffer;
@@ -53,7 +55,7 @@ namespace vm
 
 		std::vector<GPUTimer> metrics{};
 
-#ifdef USE_SCRIPTS
+#ifndef IGNORE_SCRIPTS
 		std::vector<Script*> scripts{};
 #endif
 	public:
