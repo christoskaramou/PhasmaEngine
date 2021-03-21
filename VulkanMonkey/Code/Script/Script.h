@@ -1,5 +1,6 @@
 #pragma once
 
+#if 0
 #include <mono/jit/jit.h>
 #include <mono/metadata/assembly.h>
 #include <mono/metadata/mono-config.h>
@@ -71,3 +72,4 @@ namespace vm
 		}
 	};
 }
+#endif

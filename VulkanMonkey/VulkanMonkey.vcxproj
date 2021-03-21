@@ -119,7 +119,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>Include\shaderc;Include\Mono\include\mono-2.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>Include\shaderc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ControlFlowGuard>false</ControlFlowGuard>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <AssemblerListingLocation>Debug/</AssemblerListingLocation>
@@ -130,7 +130,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>spirv-cross-core.lib;shaderc_shared.lib;mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;GLTFSDKd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>spirv-cross-core.lib;shaderc_shared.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;GLTFSDKd.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <ProjectReference>
@@ -165,7 +165,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>Include\shaderc;Include\Mono\include\mono-2.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>Include\shaderc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>OldStyle</DebugInformationFormat>
       <EnablePREfast>false</EnablePREfast>
       <LanguageStandard>stdcpplatest</LanguageStandard>
@@ -177,7 +177,7 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>spirv-cross-core.lib;shaderc_shared.lib;mono-2.0-sgen.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;GLTFSDK.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>spirv-cross-core.lib;shaderc_shared.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;GLTFSDK.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Windows</SubSystem>

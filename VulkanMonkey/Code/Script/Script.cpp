@@ -1,3 +1,4 @@
+#if 0
 #include "Script.h"
 #include <fstream>
 
@@ -162,3 +163,4 @@ namespace vm
 			mono_thread_detach(monoThread);
 	}
 }
+#endif

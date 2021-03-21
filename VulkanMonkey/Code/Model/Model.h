@@ -58,8 +58,11 @@ namespace vm
 
 		int32_t animationIndex = 0;
 		float animationTimer = 0.0f;
-
+#if 0
 		Script* script = nullptr;
+#else
+		void* script = nullptr;
+#endif
 
 		Buffer vertexBuffer;
 		Buffer indexBuffer;

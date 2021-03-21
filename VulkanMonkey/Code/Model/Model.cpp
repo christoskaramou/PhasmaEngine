@@ -391,8 +391,10 @@ namespace vm
 			ubo.projection = camera.projection;
 			if (script)
 			{
+#if 0
 				script->update(static_cast<float>(delta));
 				ubo.matrix = script->getValue<Transform>("transform").matrix * transform;
+#endif
 			}
 			else
 			{
