@@ -130,7 +130,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>spirv-cross-core.lib;shaderc_shared.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;GLTFSDKd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>spirv-cross-cored.lib;shaderc_shared.lib;SDL2main.lib;SDL2.lib;vulkan-1.lib;GLTFSDKd.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <ProjectReference>
