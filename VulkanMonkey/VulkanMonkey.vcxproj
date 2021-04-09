@@ -209,8 +209,6 @@
     <None Include="shaders\GUI\shaderGUI.vert" />
     <None Include="shaders\MotionBlur\motionBlur.frag" />
     <None Include="shaders\Shadows\shaderShadows.vert" />
-    <None Include="shaders\SkyBox\shaderSkyBox.frag" />
-    <None Include="shaders\SkyBox\shaderSkyBox.vert" />
     <None Include="shaders\SSAO\ssao.frag" />
     <None Include="shaders\SSAO\ssaoBlur.frag" />
     <None Include="shaders\SSR\ssr.frag" />
