@@ -1,8 +1,5 @@
-#include "vulkanPCH.h"
 #include "Reflection.h"
 #include "Shader.h"
-#include "../Core/Buffer.h"
-#include "../MemoryHash/MemoryHash.h"
 #include "../../Include/spirv_cross/spirv_cross.hpp"
 #include <vector>
 
@@ -10,15 +7,14 @@ namespace vm
 {
 	Reflection::Reflection(Shader* vert, Shader* frag) : m_vert(vert), m_frag(frag)
 	{
-#if 1
 		spirv_cross::Compiler compiler{ vert->get_spriv(), vert->size() };
-		spirv_cross::ShaderResources resourses = compiler.get_shader_resources();
+		spirv_cross::ShaderResources resources = compiler.get_shader_resources();
 
 		auto active = compiler.get_active_interface_variables();
 		compiler.set_enabled_interface_variables(std::move(active));
 
 		// Shader inputs
-		for (const spirv_cross::Resource& resource : resourses.stage_inputs)
+		for (const spirv_cross::Resource& resource : resources.stage_inputs)
 		{
 			ShaderInOutDesc desc;
 			desc.name = resource.name;
@@ -29,7 +25,7 @@ namespace vm
 		}
 
 		// Shader outputs
-		for (const spirv_cross::Resource& resource : resourses.stage_outputs)
+		for (const spirv_cross::Resource& resource : resources.stage_outputs)
 		{
 			ShaderInOutDesc desc;
 			desc.name = resource.name;
@@ -40,7 +36,7 @@ namespace vm
 		}
 
 		// Compined image samplers
-		for (const spirv_cross::Resource& resource : resourses.sampled_images)
+		for (const spirv_cross::Resource& resource : resources.sampled_images)
 		{
 			CompinedImageSamplerDesc desc;
 			desc.name = resource.name;
@@ -51,7 +47,7 @@ namespace vm
 		}
 
 		// Uniform buffers
-		for (const spirv_cross::Resource& resource : resourses.uniform_buffers)
+		for (const spirv_cross::Resource& resource : resources.uniform_buffers)
 		{
 			BufferDesc desc;
 			desc.name = resource.name;
@@ -64,7 +60,7 @@ namespace vm
 		}
 
 		// Push constants
-		for (const spirv_cross::Resource& resource : resourses.push_constant_buffers)
+		for (const spirv_cross::Resource& resource : resources.push_constant_buffers)
 		{
 			BufferDesc desc;
 			desc.name = resource.name;
@@ -75,7 +71,6 @@ namespace vm
 
 			pushConstantBuffers.push_back(desc);
 		}
-#endif
 	}
 
 	ShaderInOutDesc::ShaderInOutDesc()
