@@ -189,7 +189,7 @@ namespace vm
 		}
 	}
 
-	void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string& folderPath)
+	void Model::getMesh(vm::Node* node, const std::string& meshID, const std::string& folderPath) const
 	{
 		if (!node || meshID.empty()) return;
 		const auto& mesh = document->meshes.Get(meshID);
@@ -221,7 +221,7 @@ namespace vm
 			// ------------ Materials ------------
 			const auto& material = document->materials.Get(primitive.materialId);
 
-			myMesh->primitives.push_back({});
+			myMesh->primitives.emplace_back();
 			auto& myPrimitive = myMesh->primitives.back();
 
 			// factors
@@ -348,7 +348,7 @@ namespace vm
 
 	void frustumCheckAsync(const Model& model, Mesh* mesh, const Camera& camera, uint32_t index)
 	{
-		cmat4 trans = model.ubo.matrix * mesh->ubo.matrix;
+		cmat4 trans = model.transform * mesh->ubo.matrix;
 		vec4 bs = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
 
 		bs.w = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale 
@@ -385,22 +385,19 @@ namespace vm
 	{
 		if (render)
 		{
-			ubo.previousMatrix = ubo.matrix;
-			ubo.view = camera.view;
-			ubo.previousView = camera.previousView;
-			ubo.projection = camera.projection;
 			if (script)
 			{
 #if 0
 				script->update(static_cast<float>(delta));
-				ubo.matrix = script->getValue<Transform>("transform").matrix * transform;
+				transform = script->getValue<Transform>("transform").matrix * transform;
 #endif
 			}
-			else
-			{
-				ubo.matrix = transform;
-			}
-			ubo.matrix = vm::transform(quat(radians(rot)), scale, pos) * ubo.matrix;
+
+            transform = vm::transform(quat(radians(rot)), scale, pos);
+			ubo.matrix = transform;
+            ubo.previousMvp = ubo.mvp;
+            ubo.mvp = camera.viewProjection * transform;
+
 			Queue::memcpyRequest(&uniformBuffer, { { &ubo, sizeof(ubo), 0 } });
 			//uniformBuffer.map();
 			//memcpy(uniformBuffer.data, &ubo, sizeof(ubo));

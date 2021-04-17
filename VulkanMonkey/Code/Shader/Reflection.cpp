@@ -35,10 +35,10 @@ namespace vm
 			outputs.push_back(desc);
 		}
 
-		// Compined image samplers
+		// Combined image samplers
 		for (const spirv_cross::Resource& resource : resources.sampled_images)
 		{
-			CompinedImageSamplerDesc desc;
+			CombinedImageSamplerDesc desc;
 			desc.name = resource.name;
 			desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
 			desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
@@ -73,26 +73,26 @@ namespace vm
 		}
 	}
 
-	ShaderInOutDesc::ShaderInOutDesc()
+    Reflection::ShaderInOutDesc::ShaderInOutDesc()
 	{
 		name = "";
 		location = -1;
-		type = make_ref(spirv_cross::SPIRType());
+		//type = make_ref(spirv_cross::SPIRType());
 	}
 
-	CompinedImageSamplerDesc::CompinedImageSamplerDesc()
+    Reflection::CombinedImageSamplerDesc::CombinedImageSamplerDesc()
 	{
 		name = "";
 		set = -1;
 		binding = -1;
 	}
 
-	BufferDesc::BufferDesc()
+    Reflection::BufferDesc::BufferDesc()
 	{
 		name = "";
 		set = -1;
 		binding = -1;
-		type = make_ref(spirv_cross::SPIRType());
+		//type = make_ref(spirv_cross::SPIRType());
 		bufferSize = 0;
 	}
 }

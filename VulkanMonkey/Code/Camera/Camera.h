@@ -58,6 +58,8 @@ namespace vm {
 		mat4 previousView;
 		mat4 projection;
 		mat4 previousProjection;
+        mat4 viewProjection;
+        mat4 previousViewProjection;
 		mat4 invView;
 		mat4 invProjection;
 		mat4 invViewProjection;

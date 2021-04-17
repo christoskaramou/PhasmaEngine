@@ -84,6 +84,8 @@ namespace vm
 		invView = inverse(view);
 		invProjection = inverse(projection);
 		invViewProjection = invView * invProjection;
+        previousViewProjection = viewProjection;
+        viewProjection = projection * view;
 		ExtractFrustum();
 	}
 
@@ -169,7 +171,7 @@ namespace vm
 	void Camera::ExtractFrustum()
 	{
 		// transpose just to make the calculations look simpler
-		mat4 pvm = transpose(projection * view);
+		mat4 pvm = transpose(viewProjection);
 
 		/* Extract the numbers for the RIGHT plane */
 		vec4 temp = pvm[3] - pvm[0];

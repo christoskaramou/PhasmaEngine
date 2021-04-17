@@ -23,10 +23,8 @@ layout(set = 1, binding = 5) uniform UniformBufferObject2 {
 
 layout(set = 2, binding = 0) uniform UniformBufferObject3 {
 	mat4 matrix;
-	mat4 view;
-	mat4 projection;
-	mat4 previousMatrix;
-	mat4 previousView;
+	mat4 mvp;
+	mat4 previousMvp;
 } uboModel;
 
 layout(location = 0) in vec3 inPosition;
@@ -42,9 +40,9 @@ layout (location = 2) out vec4 outColor;
 layout (location = 3) out vec4 baseColorFactor;
 layout (location = 4) out vec3 emissiveFactor;
 layout (location = 5) out vec4 metRoughAlphacutOcl;
-layout (location = 6) out vec4 posProj;
-layout (location = 7) out vec4 posLastProj;
-layout (location = 8) out vec4 outWorldPos;
+layout (location = 6) out vec4 positionCS;
+layout (location = 7) out vec4 previousPositionCS;
+layout (location = 8) out vec4 positionWS;
 
 void main() 
 {
@@ -75,15 +73,11 @@ void main()
 	emissiveFactor = uboPrimitive.emissiveFactor.xyz;
 	metRoughAlphacutOcl = vec4(uboPrimitive.metallicFactor, uboPrimitive.roughnessFactor, uboPrimitive.alphaCutoff, uboPrimitive.occlusionlMetalRoughness);
 
+	positionWS = uboModel.matrix * uboMesh.matrix * boneTransform * inPos;
+
 	// Velocity
-	mat4 projectionNoJitter = uboModel.projection;
-	projectionNoJitter[2][0] = 0.0;
-	projectionNoJitter[2][1] = 0.0;
-	posProj = projectionNoJitter * uboModel.view * uboModel.matrix * uboMesh.matrix * inPos; // clip space
-	posLastProj = projectionNoJitter * uboModel.previousView * uboModel.previousMatrix * uboMesh.previousMatrix * inPos; // clip space
+	positionCS = uboModel.mvp * uboMesh.matrix * boneTransform * inPos; // clip space
+	previousPositionCS = uboModel.previousMvp * uboMesh.previousMatrix * boneTransform * inPos; // clip space
 
-	// WorldPos
-	outWorldPos = uboModel.matrix * uboMesh.matrix * boneTransform * inPos;
-
-	gl_Position = uboModel.projection * uboModel.view * outWorldPos;
+	gl_Position = positionCS;
 }

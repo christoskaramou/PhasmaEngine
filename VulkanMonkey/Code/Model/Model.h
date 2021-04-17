@@ -35,11 +35,9 @@ namespace vm
 		Ref<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 		struct UBOModel {
-			mat4 matrix = mat4::identity();
-			mat4 view;
-			mat4 projection;
-			mat4 previousMatrix;
-			mat4 previousView;
+            mat4 matrix = mat4::identity();
+			mat4 mvp = mat4::identity();
+			mat4 previousMvp = mat4::identity();
 		} ubo;
 		vec3 scale = vec3(1.0f);
 		vec3 pos = vec3(0.0f);
@@ -50,7 +48,6 @@ namespace vm
 
 		std::string name;
 		std::string fullPathName;
-		//std::vector<Pointer<vm::Node>> nodes{};
 		std::vector<vm::Node*> linearNodes{};
 		std::vector<Skin*> skins{};
 		std::vector<Animation> animations{};
@@ -77,7 +74,7 @@ namespace vm
 		void loadSkins();
 		void readGltf(const std::filesystem::path& file);
 		void loadModelGltf(const std::string& folderPath, const std::string& modelName, bool show = true);
-		void getMesh(vm::Node* node, const std::string& meshID, const std::string& folderPath);
+		void getMesh(vm::Node* node, const std::string& meshID, const std::string& folderPath) const;
 		template <typename T> void getVertexData(std::vector<T>& vec, const std::string& accessorName, const Microsoft::glTF::MeshPrimitive& primitive) const;
 		void getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::MeshPrimitive& primitive) const;
 		Microsoft::glTF::Image* getImage(const std::string& textureID) const;
