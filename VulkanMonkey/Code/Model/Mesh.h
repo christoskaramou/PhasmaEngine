@@ -2,9 +2,9 @@
 #include "../Core/Vertex.h"
 #include "Material.h"
 #include "../Core/Buffer.h"
-#include "../../include/GLTFSDK/GLTF.h"
-#include "../../include/GLTFSDK/Document.h"
-#include "../../include/GLTFSDK/GLTFResourceReader.h"
+#include "../../Include/GLTFSDK/GLTF.h"
+#include "../../Include/GLTFSDK/Document.h"
+#include "../../Include/GLTFSDK/GLTFResourceReader.h"
 #include <map>
 
 constexpr auto MAX_NUM_JOINTS = 128u;

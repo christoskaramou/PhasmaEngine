@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../include/GLTFSDK/IStreamReader.h"
+#include "../Include/GLTFSDK/IStreamReader.h"
 #include <filesystem>
 #include <fstream>
 #include <sstream>

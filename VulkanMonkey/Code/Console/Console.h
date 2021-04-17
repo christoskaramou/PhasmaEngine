@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../include/imgui/imgui.h"
+#include "../../Include/imgui/imgui.h"
 #include <cctype>
 #include <cstdlib>
 #include <cstring>                     // for strlen

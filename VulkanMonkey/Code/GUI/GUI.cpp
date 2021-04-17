@@ -1,7 +1,7 @@
 #include "vulkanPCH.h"
 #include "GUI.h"
 #include <filesystem>
-#include "../include/TinyFileDialogs/tinyfiledialogs.h"
+#include "../Include/TinyFileDialogs/tinyfiledialogs.h"
 #include "../Core/Queue.h"
 #include "../Console/Console.h"
 #include "../Core/Vertex.h"
