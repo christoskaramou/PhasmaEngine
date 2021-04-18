@@ -2,6 +2,7 @@
 #include "../ECS/Component.h"
 #include "../ECS/System.h"
 #include "../Core/Math.h"
+#include "../Compute/Compute.h"
 
 namespace vm {
 
@@ -70,6 +71,7 @@ namespace vm {
 		vec2 projOffset, projOffsetPrevious;
 		TargetArea renderArea;
 		std::vector<Plane> frustum{};
+        Compute frustumCompute;
 
 		Camera();
 		void Update();
@@ -82,5 +84,6 @@ namespace vm {
 		void Rotate(float xoffset, float yoffset);
 		void ExtractFrustum();
 		bool SphereInFrustum(const vec4& boundingSphere) const;
+		void ReCreateComputePipelines();
 	};
 }

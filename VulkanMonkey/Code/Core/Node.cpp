@@ -32,7 +32,7 @@ mat4 Node::getMatrix() const
 	return m;
 }
 
-void calculateMeshJointMatrixAsync(Mesh* mesh, Skin* skin, const mat4& inverseTransform, const size_t index)
+void calculateMeshJointMatrix(Mesh* mesh, Skin* skin, const mat4& inverseTransform, const size_t index)
 {
 	mesh->ubo.jointMatrix[index] = inverseTransform * skin->joints[index]->getMatrix() * skin->inverseBindMatrices[index];
 }
@@ -56,7 +56,7 @@ void Node::update()
 				std::vector<std::future<void>> futures(numJoints);
 
 				for (size_t i = 0; i < numJoints; i++)
-					futures[i] = std::async(std::launch::async, calculateMeshJointMatrixAsync, mesh, skin, inverseTransform, i);
+					futures[i] = std::async(std::launch::async, calculateMeshJointMatrix, mesh, skin, inverseTransform, i);
 
 				for (auto& f : futures)
 					f.get();
@@ -64,7 +64,7 @@ void Node::update()
 			else
 			{
 				for (size_t i = 0; i < numJoints; i++)
-					calculateMeshJointMatrixAsync(mesh, skin, inverseTransform, i);
+                    calculateMeshJointMatrix(mesh, skin, inverseTransform, i);
 			}
 
 			mesh->ubo.jointcount = static_cast<float>(numJoints);

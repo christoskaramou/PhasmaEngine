@@ -1,7 +1,7 @@
 #pragma once
 #include "../Core/Buffer.h"
 #include "../Renderer/Pipeline.h"
-#include <deque>
+#include <vector>
 
 namespace vk
 {
@@ -14,53 +14,83 @@ namespace vk
 
 namespace vm
 {
+    constexpr uint32_t AUTO = UINT32_MAX;
+
 	class Compute
 	{
 	public:
-		Compute();
-		~Compute();
-		Buffer& getIn();
-		Buffer& getOut();
-		void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ);
+        static Compute Create(const std::string& shaderName, size_t sizeIn, size_t sizeOut);
+        static std::vector<Compute> Create(const std::string& shaderName, size_t sizeIn, size_t sizeOut, uint32_t count);
+        static void CreateResources();
+        static void DestroyResources();
+
+        Compute();
+		~Compute() = default;
+
+		void updateInput(const void* srcData, size_t srcSize = 0, size_t offset = 0);
+		void updateInput(vk::Buffer srcBuffer, size_t size = 0);
+		void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ, const std::vector<vk::Semaphore>& waitFor = {});
 		void waitFence();
+        void destroy();
+        template<typename T, uint32_t N>
+        inline std::vector<T> copyOutput(size_t range = 0, size_t offset = 0)
+        {
+            static_assert(N > 0);
+
+            size_t n;
+            if constexpr (N == AUTO)
+            {
+                n = SBOut.sizeRequested / sizeof(T);
+                if (n < 1)
+                    throw std::range_error("The size requested in Compute::copyOutput is bigger than the buffer");
+            }
+            else
+            {
+                n = N;
+                if (n * sizeof(T) > SBOut.sizeRequested)
+                    throw std::range_error("The size requested in Compute::copyOutput is bigger than the buffer");
+            }
+
+            if (SBOut.sizeRequested % sizeof(T) != 0)
+                throw std::range_error("The type of T is not dividing the buffer size accurately in Compute::copyOutput");
+
+            std::vector<T> output(n);
+            SBOut.map(range, offset);
+            T* data = static_cast<T*>(SBOut.data);
+            for (int i = 0; i < n; ++i)
+            {
+                output[i] = data[i];
+            }
+            SBOut.unmap();
+
+            return output;
+        }
+        template<typename T>
+        inline T copyOutput(size_t range = 0, size_t offset = 0)
+        {
+            assert(sizeof(T) <= SBOut.size);
+
+            SBOut.map(range, offset);
+            T output = *static_cast<T*>(SBOut.data);
+            SBOut.unmap();
+
+            return output;
+        }
+
+        void createPipeline(const std::string& shaderName);
+
 	private:
-		friend class ComputePool;
-
-		bool ready = true;
-
+        static Ref<vk::CommandPool> s_commandPool;
 		Buffer SBIn;
 		Buffer SBOut;
 		Pipeline pipeline;
 		Ref<vk::Fence> fence;
+		Ref<vk::Semaphore> semaphore;
 		Ref<vk::DescriptorSet> DSCompute;
 		Ref<vk::CommandBuffer> commandBuffer;
 
-		void createPipeline();
 		void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
 		void createDescriptorSet();
 		void updateDescriptorSet();
-		void destroy();
-	};
-
-	class ComputePool
-	{
-	public:
-		Ref<vk::CommandPool> commandPool;
-		std::deque<Compute> compute{};
-		void Init(uint32_t cmdBuffersCount);
-		Compute& getNext();
-		void waitFences();
-		void destroy();
-
-		static auto get() noexcept { static auto cp = new ComputePool(); return cp; }
-		static auto remove() noexcept { using type = decltype(get()); if (std::is_pointer<type>::value) delete get(); }
-
-		ComputePool(ComputePool const&) = delete;				// copy constructor
-		ComputePool(ComputePool&&) noexcept = delete;			// move constructor
-		ComputePool& operator=(ComputePool const&) = delete;	// copy assignment
-		ComputePool& operator=(ComputePool&&) = delete;			// move assignment
-	private:
-		ComputePool();											// default constructor
-		~ComputePool() = default;								// destructor
 	};
 }

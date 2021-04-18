@@ -13,14 +13,13 @@ int main(int argc, char* argv[])
 	Window window;
 	Context context;
 
-	Entity* mainEntity = context.CreateEntity();
-	Camera* mainCamera = mainEntity->CreateComponent<Camera>();
-
 	context.CreateSystem<Renderer>(&context, window.Create(&context));
 	context.CreateSystem<CameraSystem>();
-	context.GetSystem<CameraSystem>()->AddComponent(mainCamera);
-
 	context.InitSystems();
+
+    Entity* mainEntity = context.CreateEntity();
+    Camera* mainCamera = mainEntity->CreateComponent<Camera>();
+    context.GetSystem<CameraSystem>()->AddComponent(mainCamera);
 
 	Timer interval;
 	interval.Start();

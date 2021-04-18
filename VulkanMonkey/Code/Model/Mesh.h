@@ -22,6 +22,8 @@ namespace vm
 		Primitive();
 		~Primitive();
 
+		std::string name;
+
 		Ref<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 

@@ -8,7 +8,6 @@
 #include "../Shadows/Shadows.h"
 #include "../Core/Light.h"
 #include "../Model/Model.h"
-#include "../Camera/Camera.h"
 #include "../Deferred/Deferred.h"
 #include "../Compute/Compute.h"
 #include "../Core/Timer.h"
@@ -52,6 +51,8 @@ namespace vm
 		SkyBox skyBoxNight;
 		GUI gui;
 		LightUniforms lightUniforms;
+		Compute animationsCompute;
+		Compute nodesCompute;
 
 		std::vector<GPUTimer> metrics{};
 
@@ -60,7 +61,7 @@ namespace vm
 #endif
 	public:
 		Renderer(Context* ctx, SDL_Window* window);
-		~Renderer();
+		~Renderer() override;
 
 		void Init() override;
 		void Update(double delta) override;
@@ -80,8 +81,8 @@ namespace vm
 	private:
 		Context* ctx;
 		SDL_Window* window;
-		void CheckQueue() const;
-		static void RecordComputeCmds(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ);
+		static void CheckQueue();
+		void ComputeAnimations();
 		void RecordDeferredCmds(const uint32_t& imageIndex);
 		void RecordShadowsCmds(const uint32_t& imageIndex);
 	};

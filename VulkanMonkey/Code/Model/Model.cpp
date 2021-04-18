@@ -245,8 +245,9 @@ namespace vm
 			myPrimitive.loadTexture(MaterialType::Occlusion, folderPath, occlusionImage, document, resourceReader);
 			myPrimitive.loadTexture(MaterialType::Emissive, folderPath, emissiveImage, document, resourceReader);
 
+            myPrimitive.name = baseColorImage->name;
 
-			std::string accessorId;
+            std::string accessorId;
 			primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_POSITION, accessorId);
 			const glTF::Accessor* accessorPos = &document->accessors.Get(accessorId);
 			myPrimitive.vertexOffset = static_cast<uint32_t>(myMesh->vertices.size());
@@ -445,20 +446,32 @@ namespace vm
 		cmd->bindVertexBuffers(0, 1, &*vertexBuffer.buffer, &offset);
 		cmd->bindIndexBuffer(*indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
+		int culled = 0;
+		int total = 0;
 		for (auto& node : linearNodes)
 		{
 			if (node->mesh)
 			{
 				for (auto& primitive : node->mesh->primitives)
 				{
-					if (primitive.pbrMaterial.alphaMode == renderQueue && primitive.render && !primitive.cull)
-					{
-						cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *Model::pipeline->layout, 0, { *node->mesh->descriptorSet, *primitive.descriptorSet, *descriptorSet }, nullptr);
-						cmd->drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
-					}
+				    if (primitive.pbrMaterial.alphaMode == renderQueue && primitive.render)
+				    {
+				        total++;
+                        if (!primitive.cull)
+                        {
+                            cmd->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *Model::pipeline->layout, 0, {*node->mesh->descriptorSet, *primitive.descriptorSet, *descriptorSet}, nullptr);
+                            cmd->drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
+                        }
+                        else
+                        {
+                            culled++;
+                        }
+                    }
 				}
 			}
 		}
+
+        std::cout << "RenderQueue: " << renderQueue << " Culled: " << culled << "/" << total << std::endl;
 	}
 
 	// position x, y, z and radius w

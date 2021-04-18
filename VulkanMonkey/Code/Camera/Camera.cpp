@@ -50,9 +50,16 @@ namespace vm
 
 		frustum.resize(6);
 
+        frustumCompute = Compute::Create("shaders/Compute/frustum.comp", 64, 96);
+
 		renderArea.Update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
 
 	}
+
+    void Camera::ReCreateComputePipelines()
+    {
+	    frustumCompute.createPipeline("shaders/Compute/frustum.comp");
+    }
 
 	void vm::Camera::Update()
 	{
@@ -170,50 +177,56 @@ namespace vm
 
 	void Camera::ExtractFrustum()
 	{
-		// transpose just to make the calculations look simpler
-		mat4 pvm = transpose(viewProjection);
+	    // Just testing computes, the specific one is not speeding up any process
+        frustumCompute.waitFence();
+        frustum = frustumCompute.copyOutput<Plane, AUTO>();
+	    frustumCompute.updateInput(&viewProjection, 64);
+	    frustumCompute.dispatch(1, 1, 1);
 
-		/* Extract the numbers for the RIGHT plane */
-		vec4 temp = pvm[3] - pvm[0];
-		temp /= length(vec3(temp));
-
-		frustum[0].normal = vec3(temp);
-		frustum[0].d = temp.w;
-
-		/* Extract the numbers for the LEFT plane */
-		temp = pvm[3] + pvm[0];
-		temp /= length(vec3(temp));
-
-		frustum[1].normal = vec3(temp);
-		frustum[1].d = temp.w;
-
-		/* Extract the BOTTOM plane */
-		temp = pvm[3] - pvm[1];
-		temp /= length(vec3(temp));
-
-		frustum[2].normal = vec3(temp);
-		frustum[2].d = temp.w;
-
-		/* Extract the TOP plane */
-		temp = pvm[3] + pvm[1];
-		temp /= length(vec3(temp));
-
-		frustum[3].normal = vec3(temp);
-		frustum[3].d = temp.w;
-
-		/* Extract the FAR plane */
-		temp = pvm[3] - pvm[2];
-		temp /= length(vec3(temp));
-
-		frustum[4].normal = vec3(temp);
-		frustum[4].d = temp.w;
-
-		/* Extract the NEAR plane */
-		temp = pvm[3] + pvm[2];
-		temp /= length(vec3(temp));
-
-		frustum[5].normal = vec3(temp);
-		frustum[5].d = temp.w;
+//		// transpose just to make the calculations look simpler
+//		mat4 pvm = transpose(viewProjection);
+//
+//		/* Extract the numbers for the RIGHT plane */
+//		vec4 temp = pvm[3] - pvm[0];
+//		temp /= length(vec3(temp));
+//
+//		frustum[0].normal = vec3(temp);
+//		frustum[0].d = temp.w;
+//
+//		/* Extract the numbers for the LEFT plane */
+//		temp = pvm[3] + pvm[0];
+//		temp /= length(vec3(temp));
+//
+//		frustum[1].normal = vec3(temp);
+//		frustum[1].d = temp.w;
+//
+//		/* Extract the BOTTOM plane */
+//		temp = pvm[3] - pvm[1];
+//		temp /= length(vec3(temp));
+//
+//		frustum[2].normal = vec3(temp);
+//		frustum[2].d = temp.w;
+//
+//		/* Extract the TOP plane */
+//		temp = pvm[3] + pvm[1];
+//		temp /= length(vec3(temp));
+//
+//		frustum[3].normal = vec3(temp);
+//		frustum[3].d = temp.w;
+//
+//		/* Extract the FAR plane */
+//		temp = pvm[3] - pvm[2];
+//		temp /= length(vec3(temp));
+//
+//		frustum[4].normal = vec3(temp);
+//		frustum[4].d = temp.w;
+//
+//		/* Extract the NEAR plane */
+//		temp = pvm[3] + pvm[2];
+//		temp /= length(vec3(temp));
+//
+//		frustum[5].normal = vec3(temp);
+//		frustum[5].d = temp.w;
 	}
 
 	// center x,y,z - radius w 
@@ -231,7 +244,7 @@ namespace vm
 		return true;
 	}
 
-	void Camera::TargetArea::Update(const vec2& position, const vec2& size, float minDepth, float maxDepth)
+    void Camera::TargetArea::Update(const vec2& position, const vec2& size, float minDepth, float maxDepth)
 	{
 		viewport.x = position.x;
 		viewport.y = position.y;

@@ -22,15 +22,19 @@ namespace vm
 		Ref<vk::Buffer> buffer;
 		Ref<vk::DeviceMemory> memory;
 		size_t size;
+        // sizeRequested is the size asked from user during the creation, afterwards the size can be
+        // changed dynamically based on the system's minimum alignment on the specific buffer type
+        // and it will always be less or equal than the actual size of the created buffer
+		size_t sizeRequested;
 		void *data = nullptr;
 
 		void createBuffer(size_t size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties);
-		void map(size_t offset = 0);
+		void map(size_t mapSize = 0, size_t offset = 0);
 		void unmap();
-		void zero();
+		void zero() const;
 		void copyData(const void* srcData, size_t srcSize = 0, size_t offset = 0);
-		void copyBuffer(vk::Buffer srcBuffer, size_t size) const;
-		void flush(size_t size = 0);
-		void destroy();
+		void copyBuffer(vk::Buffer srcBuffer, size_t srcSize = 0) const;
+		void flush(size_t flushSize = 0);
+		void destroy() const;
 	};
 }

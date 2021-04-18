@@ -80,7 +80,7 @@ namespace vm
 		motionBlur.createPipeline(renderTargets);
 		gui.createPipeline();
 
-		ComputePool::get()->Init(5);
+        //transformsCompute = Compute::Create("shaders/Compute/shader.comp", 64, 64);
 
 		metrics.resize(20);
 		//LOAD RESOURCES
@@ -120,8 +120,7 @@ namespace vm
 			texture.second.destroy();
 		Mesh::uniqueTextures.clear();
 
-		ComputePool::get()->destroy();
-		ComputePool::remove();
+		Compute::DestroyResources();
 		shadows.destroy();
 		deferred.destroy();
 		ssao.destroy();
@@ -141,7 +140,7 @@ namespace vm
 		ctx->GetVKContext()->remove();
 	}
 
-	void Renderer::CheckQueue() const
+	void Renderer::CheckQueue()
 	{
 		for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();) {
 			VulkanContext::get()->device->waitIdle();
@@ -207,6 +206,12 @@ namespace vm
 
 #endif
 	}
+
+
+    void Renderer::ComputeAnimations()
+    {
+
+    }
 
 	void Renderer::Update(double delta)
 	{
@@ -283,24 +288,6 @@ namespace vm
 		Queue::exec_memcpyRequests();
 
 		GUI::updatesTimeCount = static_cast<float>(timer.Count());
-	}
-
-	void Renderer::RecordComputeCmds(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
-	{
-		//auto beginInfo = vk::CommandBufferBeginInfo()
-		//	.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
-		//	.setPInheritanceInfo(nullptr);
-		//
-		//auto& cmd = VulkanContext::get()->computeCmdBuffer;
-		//cmd.begin(beginInfo);
-		//
-		//ctx.metrics[13].start(cmd);
-		//cmd.bindPipeline(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.pipeline);
-		//cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, ctx.compute.pipeline.compinfo.layout, 0, ctx.compute.DSCompute, nullptr);
-		//cmd.dispatch(sizeX, sizeY, sizeZ);
-		//ctx.metrics[13].end(&GUI::metrics[13]);
-		//
-		//cmd.end();
 	}
 
 	void Renderer::RecordDeferredCmds(const uint32_t& imageIndex)
@@ -498,14 +485,14 @@ namespace vm
 
 		//FIRE_EVENT(Event::OnRender);
 
-		if (GUI::use_compute) {
-			//recordComputeCmds(2, 2, 1);
-			//vk::SubmitInfo siCompute;
-			//siCompute.commandBufferCount = 1;
-			//siCompute.setPCommandBuffers = &VulkanContext::get()->computeCmdBuffer;
-			//VulkanContext::get()->computeQueue.submit(siCompute, VulkanContext::get()->fences[1]);
-			//VulkanContext::get()->device.waitForFences(VulkanContext::get()->fences[1], VK_TRUE, UINT64_MAX);
-			//VulkanContext::get()->device.resetFences(VulkanContext::get()->fences[1]);
+        GUI::use_compute = true;
+		if (GUI::use_compute)
+		{
+            //auto mat = transformsCompute.copyOutput<mat4, AUTO>();
+            //mat[0][0] = 1.0f;
+            //mat4* matp = static_cast<mat4*>(transformsCompute.mapOutput());
+            //mat4* matp1;
+            //float f = (*matp)[0][0];
 		}
 
 		// aquire the image
@@ -897,5 +884,7 @@ namespace vm
 		dof.createPipeline(renderTargets);
 		motionBlur.createPipeline(renderTargets);
 		gui.createPipeline();
+
+        ctx->GetSystem<CameraSystem>()->GetCamera(0).ReCreateComputePipelines();
 	}
 }
