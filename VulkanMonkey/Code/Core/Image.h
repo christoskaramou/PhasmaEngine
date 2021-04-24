@@ -56,13 +56,13 @@ namespace vm
 		Image();
 		~Image();
 		Ref<vk::Image> image;
-		Ref<vk::DeviceMemory> memory;
+		VmaAllocation allocation{};
 		Ref<vk::ImageView> view;
 		Ref<vk::Sampler> sampler;
-		uint32_t width;
-		uint32_t height;
-		float width_f;
-		float height_f;
+		uint32_t width{};
+		uint32_t height{};
+		float width_f{};
+		float height_f{};
 		Ref<vk::Extent2D> extent;
 
 		// values
@@ -102,6 +102,6 @@ namespace vm
 		void copyColorAttachment(const vk::CommandBuffer& cmd, Image& renderedImage) const;
 		void generateMipMaps() const;
 		void createSampler();
-		void destroy();
+		void destroy() const;
 	};
 }

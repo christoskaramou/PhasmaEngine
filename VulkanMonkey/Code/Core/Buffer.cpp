@@ -1,4 +1,3 @@
-#include "vulkanPCH.h"
 #include "Buffer.h"
 #include "../VulkanContext/VulkanContext.h"
 
@@ -7,7 +6,7 @@ namespace vm
 	Buffer::Buffer()
 	{
 		buffer = make_ref(vk::Buffer());
-		memory = make_ref(vk::DeviceMemory());
+        allocation = nullptr;
 		size = 0;
 	}
 
@@ -22,30 +21,20 @@ namespace vm
 		bufferInfo.size = size;
 		bufferInfo.usage = usage;
 		bufferInfo.sharingMode = vk::SharingMode::eExclusive;
-		buffer = make_ref(vulkan->device->createBuffer(bufferInfo));
+        VkBufferCreateInfo vkBufferCreateInfo = VkBufferCreateInfo(bufferInfo);
+		//buffer = make_ref(vulkan->device->createBuffer(bufferInfo));
 
-		uint32_t memTypeIndex = UINT32_MAX;
-		auto const memRequirements = vulkan->device->getBufferMemoryRequirements(*buffer);
-		auto const memProperties = vulkan->gpu->getMemoryProperties();
-		for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
-			if (memRequirements.memoryTypeBits & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-				memTypeIndex = i;
-				break;
-			}
-		}
-		if (memTypeIndex == UINT32_MAX)
-			throw std::runtime_error("Could not Create buffer, memTypeIndex not valid");
+        VmaAllocationCreateInfo allocationCreateInfo  = {};
+        allocationCreateInfo.usage =
+                usage & vk::BufferUsageFlagBits::eTransferSrc ?
+                    VMA_MEMORY_USAGE_CPU_ONLY : properties & vk::MemoryPropertyFlagBits::eDeviceLocal ?
+                        VMA_MEMORY_USAGE_GPU_ONLY : VMA_MEMORY_USAGE_CPU_TO_GPU;
+        allocationCreateInfo.preferredFlags = VkMemoryPropertyFlags(properties);
 
-		if (this->size < memRequirements.size)
-			this->size = memRequirements.size;
-		//allocate memory of buffer
-		vk::MemoryAllocateInfo allocInfo;
-		allocInfo.allocationSize = this->size;
-		allocInfo.memoryTypeIndex = memTypeIndex;
-		memory = make_ref(vulkan->device->allocateMemory(allocInfo));
-
-		//binding memory with buffer
-		vulkan->device->bindBufferMemory(*buffer, *memory, 0);
+		VkBuffer vkBuffer;
+		VmaAllocationInfo allocationInfo;
+        vmaCreateBuffer(VulkanContext::get()->allocator, &vkBufferCreateInfo, &allocationCreateInfo, &vkBuffer, &allocation, &allocationInfo);
+        buffer = make_ref(vk::Buffer(vkBuffer));
 	}
 
 	void Buffer::map(size_t mapSize, size_t offset)
@@ -53,14 +42,14 @@ namespace vm
 		if (data)
             return;
         assert(mapSize + offset <= size);
-		data = VulkanContext::get()->device->mapMemory(*memory, offset, mapSize > 0 ? mapSize : size - offset, vk::MemoryMapFlags());
+        vmaMapMemory(VulkanContext::get()->allocator, allocation, &data);
 	}
 
 	void Buffer::unmap()
 	{
 		if (!data)
             return;
-		VulkanContext::get()->device->unmapMemory(*memory);
+        vmaUnmapMemory(VulkanContext::get()->allocator, allocation);
 		data = nullptr;
 	}
 
@@ -104,26 +93,18 @@ namespace vm
 		VulkanContext::get()->device->freeCommandBuffers(*VulkanContext::get()->commandPool2, copyCmd);
 	}
 
-	void Buffer::flush(size_t flushSize)
+	void Buffer::flush(size_t offset, size_t flushSize) const
 	{
 		if (!data)
             return;
 
-        assert(flushSize <= size);
-		vk::MappedMemoryRange range;
-		range.memory = *memory;
-		range.size = flushSize > 0 ? flushSize : size;
-
-		VulkanContext::get()->device->flushMappedMemoryRanges(range);
+        vmaFlushAllocation(VulkanContext::get()->allocator, allocation, offset, flushSize);
 	}
 
 	void Buffer::destroy() const
 	{
 		if (*buffer)
-			VulkanContext::get()->device->destroyBuffer(*buffer);
-		if (*memory)
-			VulkanContext::get()->device->freeMemory(*memory);
+            vmaDestroyBuffer(VulkanContext::get()->allocator, VkBuffer(*buffer), allocation);
 		*buffer = nullptr;
-		*memory = nullptr;
 	}
 }

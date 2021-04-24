@@ -286,6 +286,17 @@ namespace vm
 		device = make_ref(gpu->createDevice(deviceCreateInfo));
 	}
 
+    void VulkanContext::CreateAllocator()
+    {
+        VmaAllocatorCreateInfo allocator_info   = {};
+        allocator_info.physicalDevice = VkPhysicalDevice(*gpu);
+        allocator_info.device = VkDevice(*device);
+        allocator_info.instance = VkInstance(*instance);
+        allocator_info.vulkanApiVersion = vk::enumerateInstanceVersion();
+
+        vmaCreateAllocator(&allocator_info, &allocator);
+    }
+
 	void VulkanContext::GetGraphicsQueue()
 	{
 		graphicsQueue = make_ref(device->getQueue(graphicsFamilyId, 0));
@@ -415,6 +426,7 @@ namespace vm
 		GetGpu();
 		GetSurfaceProperties(ctx);
 		CreateDevice();
+		CreateAllocator();
 		GetQueues();
 		CreateCommandPools();
 		CreateSwapchain(ctx, SWAPCHAIN_IMAGES);

@@ -84,6 +84,7 @@ namespace vm
 		void GetTransferFamilyId();
 		void GetComputeFamilyId();
 		void CreateDevice();
+		void CreateAllocator();
 		void GetGraphicsQueue();
 		void GetTransferQueue();
 		void GetComputeQueue();
@@ -114,6 +115,7 @@ namespace vm
 		Ref<std::vector<vk::CommandBuffer>> shadowCmdBuffers;
 		Ref<std::vector<vk::Fence>> fences;
 		Ref<std::vector<vk::Semaphore>> semaphores;
+        VmaAllocator allocator = nullptr;
 
 		SDL_Window* window;
 		Surface surface;

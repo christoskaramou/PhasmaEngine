@@ -471,7 +471,7 @@ namespace vm
 			}
 		}
 
-        std::cout << "RenderQueue: " << renderQueue << " Culled: " << culled << "/" << total << std::endl;
+        //std::cout << "RenderQueue: " << renderQueue << " Culled: " << culled << "/" << total << std::endl;
 	}
 
 	// position x, y, z and radius w

@@ -1,4 +1,3 @@
-#include "vulkanPCH.h"
 #include "Image.h"
 #include "../VulkanContext/VulkanContext.h"
 #include "../Context/Context.h"
@@ -117,29 +116,15 @@ namespace vm
 		imageInfo.usage = usage;
 		imageInfo.sharingMode = vk::SharingMode::eExclusive;
 		imageInfo.initialLayout = *initialLayout;
+		VkImageCreateInfo vkImageInfo = VkImageCreateInfo(imageInfo);
 
-		image = make_ref(vCtx->device->createImage(imageInfo));
+        VmaAllocationCreateInfo allocationCreateInfo = {};
+        allocationCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-		uint32_t memTypeIndex = UINT32_MAX;
-		auto const memRequirements = vCtx->device->getImageMemoryRequirements(*image);
-		auto const memProperties = vCtx->gpu->getMemoryProperties();
-
-		for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
-			if (memRequirements.memoryTypeBits & (1 << i) && memProperties.memoryTypes[i].propertyFlags & properties) {
-				memTypeIndex = i;
-				break;
-			}
-		}
-
-		if (memTypeIndex == UINT32_MAX)
-			throw std::runtime_error("createImage(): no suitable memory type");
-
-		vk::MemoryAllocateInfo allocInfo;
-		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = memTypeIndex;
-
-		memory = make_ref(vCtx->device->allocateMemory(allocInfo));
-		vCtx->device->bindImageMemory(*image, *memory, 0);
+		VkImage vkImage;
+        VmaAllocationInfo allocationInfo;
+        vmaCreateImage(VulkanContext::get()->allocator, &vkImageInfo, &allocationCreateInfo, &vkImage, &allocation, &allocationInfo);
+        image = make_ref(vk::Image(vkImage));
 
 		vCtx->SetDebugObjectName(*image, "");
 	}
@@ -558,17 +543,15 @@ namespace vm
 		sampler = make_ref(vCtx->device->createSampler(samplerInfo));
 	}
 
-	void Image::destroy()
+	void Image::destroy() const
 	{
 		auto vCtx = VulkanContext::get();
 
 		if (*view) vCtx->device->destroyImageView(*view);
-		if (*image) vCtx->device->destroyImage(*image);
-		if (*memory) vCtx->device->freeMemory(*memory);
+		if (*image) vmaDestroyImage(VulkanContext::get()->allocator, VkImage(*image), allocation);
 		if (*sampler) vCtx->device->destroySampler(*sampler);
 		*view = nullptr;
 		*image = nullptr;
-		*memory = nullptr;
 		*sampler = nullptr;
 	}
 }
