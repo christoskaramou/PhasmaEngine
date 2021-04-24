@@ -1,4 +1,5 @@
 #pragma once
+
 #include "../Core/Buffer.h"
 #include "../Core/Math.h"
 #include "../Script/Script.h"
@@ -24,7 +25,9 @@ namespace vm
 	{
 	public:
 		Model();
+
 		~Model();
+
 		// Document holds all info about the gltf model
 		Microsoft::glTF::Document* document = nullptr;
 		Microsoft::glTF::GLTFResourceReader* resourceReader = nullptr;
@@ -34,8 +37,9 @@ namespace vm
 		static Ref<vk::CommandBuffer> commandBuffer;
 		Ref<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
-		struct UBOModel {
-            mat4 matrix = mat4::identity();
+		struct UBOModel
+		{
+			mat4 matrix = mat4::identity();
 			mat4 mvp = mat4::identity();
 			mat4 previousMvp = mat4::identity();
 		} ubo;
@@ -48,10 +52,10 @@ namespace vm
 
 		std::string name;
 		std::string fullPathName;
-		std::vector<vm::Node*> linearNodes{};
-		std::vector<Skin*> skins{};
-		std::vector<Animation> animations{};
-		std::vector<std::string> extensions{};
+		std::vector<vm::Node*> linearNodes {};
+		std::vector<Skin*> skins {};
+		std::vector<Animation> animations {};
+		std::vector<std::string> extensions {};
 
 		int32_t animationIndex = 0;
 		float animationTimer = 0.0f;
@@ -66,23 +70,44 @@ namespace vm
 		uint32_t numberOfVertices = 0, numberOfIndices = 0;
 
 		void draw(uint16_t renderQueue);
+
 		void update(Camera& camera, double delta);
+
 		void updateAnimation(uint32_t index, float time);
+
 		void calculateBoundingSphere();
+
 		void loadNode(vm::Node* parent, const Microsoft::glTF::Node& node, const std::string& folderPath);
+
 		void loadAnimations();
+
 		void loadSkins();
+
 		void readGltf(const std::filesystem::path& file);
+
 		void loadModelGltf(const std::string& folderPath, const std::string& modelName, bool show = true);
+
 		void getMesh(vm::Node* node, const std::string& meshID, const std::string& folderPath) const;
-		template <typename T> void getVertexData(std::vector<T>& vec, const std::string& accessorName, const Microsoft::glTF::MeshPrimitive& primitive) const;
+
+		template <typename T>
+		void getVertexData(
+				std::vector<T>& vec, const std::string& accessorName, const Microsoft::glTF::MeshPrimitive& primitive
+		) const;
+
 		void getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::MeshPrimitive& primitive) const;
+
 		Microsoft::glTF::Image* getImage(const std::string& textureID) const;
+
 		void loadModel(const std::string& folderPath, const std::string& modelName, bool show = true);
+
 		void createVertexBuffer();
+
 		void createIndexBuffer();
+
 		void createUniformBuffers();
+
 		void createDescriptorSets();
+
 		void destroy();
 	};
 }

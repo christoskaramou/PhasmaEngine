@@ -64,7 +64,7 @@ namespace vm
 			pssci2.pName = "main";
 		}
 
-		std::vector<vk::PipelineShaderStageCreateInfo> stages{ pssci1 };
+		std::vector<vk::PipelineShaderStageCreateInfo> stages {pssci1};
 		if (info.pFragShader)
 			stages.push_back(pssci2);
 
@@ -95,7 +95,7 @@ namespace vm
 		vp.maxDepth = 1.0f;
 
 		vk::Rect2D r2d;
-		r2d.extent = vk::Extent2D{ static_cast<uint32_t>(info.width), static_cast<uint32_t>(info.height) };
+		r2d.extent = vk::Extent2D {static_cast<uint32_t>(info.width), static_cast<uint32_t>(info.height)};
 
 		vk::PipelineViewportStateCreateInfo pvsci;
 		pvsci.viewportCount = 1;
@@ -147,7 +147,7 @@ namespace vm
 		pcbsci.logicOp = vk::LogicOp::eAnd;
 		pcbsci.attachmentCount = static_cast<uint32_t>(info.colorBlendAttachments->size());
 		pcbsci.pAttachments = info.colorBlendAttachments->data();
-		float blendConstants[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		float blendConstants[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 		memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
 		pipeinfo.pColorBlendState = &pcbsci;
 
@@ -211,12 +211,14 @@ namespace vm
 
 	void Pipeline::destroy()
 	{
-		if (*layout) {
+		if (*layout)
+		{
 			VulkanContext::get()->device->destroyPipelineLayout(*layout);
 			*layout = nullptr;
 		}
 
-		if (*handle) {
+		if (*handle)
+		{
 			VulkanContext::get()->device->destroyPipeline(*handle);
 			*handle = nullptr;
 		}
@@ -228,20 +230,23 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(4, vk::DescriptorType::eUniformBuffer),
-				layoutBinding(5, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(6, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(7, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(8, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(9, vk::DescriptorType::eUniformBuffer)
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(4, vk::DescriptorType::eUniformBuffer),
+					layoutBinding(5, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(6, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(7, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(8, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(9, vk::DescriptorType::eUniformBuffer)
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -258,11 +263,14 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -279,11 +287,14 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -300,11 +311,14 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -321,12 +335,15 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -343,12 +360,15 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -365,11 +385,14 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -386,14 +409,17 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(3, vk::DescriptorType::eUniformBuffer),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(3, vk::DescriptorType::eUniformBuffer),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -410,15 +436,18 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(3, vk::DescriptorType::eUniformBuffer),
-				layoutBinding(4, vk::DescriptorType::eUniformBuffer),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(3, vk::DescriptorType::eUniformBuffer),
+					layoutBinding(4, vk::DescriptorType::eUniformBuffer),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -435,11 +464,14 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -456,15 +488,18 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(4, vk::DescriptorType::eUniformBuffer),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(4, vk::DescriptorType::eUniformBuffer),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -481,15 +516,18 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(4, vk::DescriptorType::eUniformBuffer)
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(4, vk::DescriptorType::eUniformBuffer)
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -506,12 +544,15 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr };
+			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-				layoutBinding(1, vk::DescriptorType::eUniformBuffer)
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
+					layoutBinding(1, vk::DescriptorType::eUniformBuffer)
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -525,15 +566,18 @@ namespace vm
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutShadows()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-		
+
 		if (!DSLayout)
 		{
-			const auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlags, nullptr };
+			const auto layoutBinding = [](
+					uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags
+			)
+			{
+				return vk::DescriptorSetLayoutBinding {binding, descriptorType, 1, stageFlags, nullptr};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex),
-				layoutBinding(1, vk::DescriptorType::eCombinedImageSampler,vk::ShaderStageFlagBits::eFragment),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex),
+					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -550,11 +594,14 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto const layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, vk::ShaderStageFlagBits::eVertex, nullptr };
+			auto const layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, descriptorType, 1, vk::ShaderStageFlagBits::eVertex, nullptr
+				};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eUniformBuffer),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eUniformBuffer),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -571,16 +618,19 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			auto const layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlag) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlag, nullptr };
+			auto const layoutBinding = [](
+					uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlag
+			)
+			{
+				return vk::DescriptorSetLayoutBinding {binding, descriptorType, 1, stageFlag, nullptr};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
-				layoutBinding(1, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
-				layoutBinding(2, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
-				layoutBinding(3, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
-				layoutBinding(4, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
-				layoutBinding(5, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex),
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
+					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
+					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
+					layoutBinding(3, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
+					layoutBinding(4, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
+					layoutBinding(5, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex),
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -618,11 +668,14 @@ namespace vm
 
 		if (!DSLayout)
 		{
-			const auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags) {
-				return vk::DescriptorSetLayoutBinding{ binding, descriptorType, 1, stageFlags, nullptr };
+			const auto layoutBinding = [](
+					uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags
+			)
+			{
+				return vk::DescriptorSetLayoutBinding {binding, descriptorType, 1, stageFlags, nullptr};
 			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				layoutBinding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
 			};
 			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
@@ -636,14 +689,18 @@ namespace vm
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
 
-		if (!DSLayout) {
-			auto const setLayoutBinding = [](uint32_t binding) {
-				return vk::DescriptorSetLayoutBinding{ binding, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute, nullptr };
+		if (!DSLayout)
+		{
+			auto const setLayoutBinding = [](uint32_t binding)
+			{
+				return vk::DescriptorSetLayoutBinding {
+						binding, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute, nullptr
+				};
 			};
 
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-				setLayoutBinding(0), // in
-				setLayoutBinding(1)  // out
+			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
+					setLayoutBinding(0), // in
+					setLayoutBinding(1)  // out
 			};
 
 			vk::DescriptorSetLayoutCreateInfo dlci;

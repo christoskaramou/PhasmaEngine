@@ -1,4 +1,5 @@
 #pragma once
+
 #include "../Core/Base.h"
 #include "../Shader/Shader.h"
 #include "../Renderer/RenderPass.h"
@@ -34,7 +35,9 @@ namespace vm
 	{
 	public:
 		PipelineCreateInfo();
+
 		~PipelineCreateInfo();
+
 		Shader* pVertShader;
 		Shader* pFragShader;
 		Shader* pCompShader;
@@ -55,6 +58,7 @@ namespace vm
 	{
 	public:
 		Pipeline();
+
 		~Pipeline();
 
 		PipelineCreateInfo info;
@@ -62,27 +66,47 @@ namespace vm
 		Ref<vk::PipelineLayout> layout;
 
 		void createGraphicsPipeline();
+
 		void createComputePipeline();
+
 		void destroy();
 
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutComposition();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutBrightFilter();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutGaussianBlurH();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutGaussianBlurV();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutCombine();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutDOF();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutFXAA();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutMotionBlur();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutSSAO();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutSSAOBlur();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutSSR();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutTAA();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutTAASharpen();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutShadows();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutMesh();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutPrimitive();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutModel();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutSkybox();
+
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutCompute();
 	};
 }

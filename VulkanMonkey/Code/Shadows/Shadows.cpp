@@ -28,7 +28,8 @@ namespace vm
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutShadows();
 
 		descriptorSets->resize(textures.size()); // size of wanted number of cascaded shadows
-		for (uint32_t i = 0; i < descriptorSets->size(); i++) {
+		for (uint32_t i = 0; i < descriptorSets->size(); i++)
+		{
 			(*descriptorSets)[i] = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 			std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
@@ -104,7 +105,11 @@ namespace vm
 			texture.compareOp = make_ref(vk::CompareOp::eGreaterOrEqual);
 			texture.samplerMipmapMode = make_ref(vk::SamplerMipmapMode::eLinear);
 
-			texture.createImage(Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+			texture.createImage(
+					Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal,
+					vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
+					vk::MemoryPropertyFlagBits::eDeviceLocal
+			);
 			texture.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 			texture.createImageView(vk::ImageAspectFlagBits::eDepth);
 			texture.createSampler();
@@ -122,7 +127,7 @@ namespace vm
 
 	void Shadows::createPipeline()
 	{
-		Shader vert{ "shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true };
+		Shader vert {"shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true};
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.vertexInputBindingDescriptions = make_ref(Vertex::getBindingDescriptionGeneral());
@@ -130,15 +135,18 @@ namespace vm
 		pipeline.info.width = static_cast<float>(Shadows::imageSize);
 		pipeline.info.height = static_cast<float>(Shadows::imageSize);
 		pipeline.info.cullMode = CullMode::Front;
-		pipeline.info.colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>{ *textures[0].blentAttachment });
-		pipeline.info.dynamicStates = make_ref(std::vector<vk::DynamicState>{ vk::DynamicState::eDepthBias });
+		pipeline.info.colorBlendAttachments = make_ref(
+				std::vector<vk::PipelineColorBlendAttachmentState> {*textures[0].blentAttachment}
+		);
+		pipeline.info.dynamicStates = make_ref(std::vector<vk::DynamicState> {vk::DynamicState::eDepthBias});
 		pipeline.info.descriptorSetLayouts = make_ref(
-			std::vector<vk::DescriptorSetLayout>
-		{
-			Pipeline::getDescriptorSetLayoutShadows(),
-			Pipeline::getDescriptorSetLayoutMesh(),
-			Pipeline::getDescriptorSetLayoutModel()
-		});
+				std::vector<vk::DescriptorSetLayout>
+						{
+								Pipeline::getDescriptorSetLayoutShadows(),
+								Pipeline::getDescriptorSetLayoutMesh(),
+								Pipeline::getDescriptorSetLayoutModel()
+						}
+		);
 		pipeline.info.renderPass = renderPass;
 
 		pipeline.createGraphicsPipeline();
@@ -147,8 +155,12 @@ namespace vm
 	void Shadows::createUniformBuffers()
 	{
 		uniformBuffers.resize(textures.size());
-		for (auto& buffer : uniformBuffers) {
-			buffer.createBuffer(sizeof(ShadowsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
+		for (auto& buffer : uniformBuffers)
+		{
+			buffer.createBuffer(
+					sizeof(ShadowsUBO), vk::BufferUsageFlagBits::eUniformBuffer,
+					vk::MemoryPropertyFlagBits::eHostVisible
+			);
 			buffer.map();
 			buffer.zero();
 			buffer.flush();
@@ -161,7 +173,8 @@ namespace vm
 		if (*renderPass.handle)
 			VulkanContext::get()->device->destroyRenderPass(*renderPass.handle);
 
-		if (Pipeline::getDescriptorSetLayoutShadows()) {
+		if (Pipeline::getDescriptorSetLayoutShadows())
+		{
 			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutShadows());
 			Pipeline::getDescriptorSetLayoutShadows() = nullptr;
 		}
@@ -180,27 +193,30 @@ namespace vm
 
 	void Shadows::update(Camera& camera)
 	{
-		if (GUI::shadow_cast) {
+		if (GUI::shadow_cast)
+		{
 			// far/cos(x) = the side size
-			const float sideSizeOfPyramid = camera.nearPlane / cos(radians(camera.FOV * .5f)); // near plane is actually the far plane (they are reversed)
+			const float sideSizeOfPyramid = camera.nearPlane /
+					cos(radians(camera.FOV * .5f)); // near plane is actually the far plane (they are reversed)
 			const vec3 p = &GUI::sun_position[0];
 
 			vec3 pointOnPyramid = camera.front * (sideSizeOfPyramid * .01f);
-			vec3 pos = p + camera.position + pointOnPyramid; // sun position will be moved, so its angle to the lookat position is the same always
+			vec3 pos = p + camera.position +
+					pointOnPyramid; // sun position will be moved, so its angle to the lookat position is the same always
 			vec3 front = normalize(camera.position + pointOnPyramid - pos);
 			vec3 right = normalize(cross(front, camera.WorldUp()));
 			vec3 up = normalize(cross(right, front));
 			float orthoSide = sideSizeOfPyramid * .01f; // small area
 			shadows_UBO[0] = {
-				ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
-				lookAt(pos, front, right, up),
-				1.0f,
-				sideSizeOfPyramid * .02f,
-				sideSizeOfPyramid * .1f,
-				sideSizeOfPyramid
+					ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
+					lookAt(pos, front, right, up),
+					1.0f,
+					sideSizeOfPyramid * .02f,
+					sideSizeOfPyramid * .1f,
+					sideSizeOfPyramid
 			};
 
-			Queue::memcpyRequest(&uniformBuffers[0], { { &shadows_UBO[0], sizeof(ShadowsUBO), 0 } });
+			Queue::memcpyRequest(&uniformBuffers[0], {{&shadows_UBO[0], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[0].map();
 			//memcpy(uniformBuffers[0].data, &shadows_UBO[0], sizeof(ShadowsUBO));
 			//uniformBuffers[0].flush();
@@ -213,15 +229,15 @@ namespace vm
 			up = normalize(cross(right, front));
 			orthoSide = sideSizeOfPyramid * .05f; // medium area
 			shadows_UBO[1] = {
-				ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
-				lookAt(pos, front, right, up),
-				1.0f,
-				sideSizeOfPyramid * .02f,
-				sideSizeOfPyramid * .1f,
-				sideSizeOfPyramid
+					ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
+					lookAt(pos, front, right, up),
+					1.0f,
+					sideSizeOfPyramid * .02f,
+					sideSizeOfPyramid * .1f,
+					sideSizeOfPyramid
 			};
 
-			Queue::memcpyRequest(&uniformBuffers[1], { { &shadows_UBO[1], sizeof(ShadowsUBO), 0} });
+			Queue::memcpyRequest(&uniformBuffers[1], {{&shadows_UBO[1], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[1].map();
 			//memcpy(uniformBuffers[1].data, &shadows_UBO[1], sizeof(ShadowsUBO));
 			//uniformBuffers[1].flush();
@@ -234,15 +250,15 @@ namespace vm
 			up = normalize(cross(right, front));
 			orthoSide = sideSizeOfPyramid * .5f; // large area
 			shadows_UBO[2] = {
-				ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
-				lookAt(pos, front, right, up),
-				1.0f,
-				sideSizeOfPyramid * .02f,
-				sideSizeOfPyramid * .1f,
-				sideSizeOfPyramid
+					ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane),
+					lookAt(pos, front, right, up),
+					1.0f,
+					sideSizeOfPyramid * .02f,
+					sideSizeOfPyramid * .1f,
+					sideSizeOfPyramid
 			};
 
-			Queue::memcpyRequest(&uniformBuffers[2], { { &shadows_UBO[2], sizeof(ShadowsUBO), 0 } });
+			Queue::memcpyRequest(&uniformBuffers[2], {{&shadows_UBO[2], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[2].map();
 			//memcpy(uniformBuffers[2].data, &shadows_UBO[2], sizeof(ShadowsUBO));
 			//uniformBuffers[2].flush();
@@ -252,19 +268,19 @@ namespace vm
 		{
 			shadows_UBO[0].castShadows = 0.f;
 
-			Queue::memcpyRequest(&uniformBuffers[0], { { &shadows_UBO[0], sizeof(ShadowsUBO), 0 } });
+			Queue::memcpyRequest(&uniformBuffers[0], {{&shadows_UBO[0], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[0].map();
 			//memcpy(uniformBuffers[0].data, &shadows_UBO[0], sizeof(ShadowsUBO));
 			//uniformBuffers[0].flush();
 			//uniformBuffers[0].unmap();
 
-			Queue::memcpyRequest(&uniformBuffers[1], { { &shadows_UBO[1], sizeof(ShadowsUBO), 0 } });
+			Queue::memcpyRequest(&uniformBuffers[1], {{&shadows_UBO[1], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[1].map();
 			//memcpy(uniformBuffers[1].data, &shadows_UBO[0], sizeof(ShadowsUBO));
 			//uniformBuffers[1].flush();
 			//uniformBuffers[1].unmap();
 
-			Queue::memcpyRequest(&uniformBuffers[2], { { &shadows_UBO[2], sizeof(ShadowsUBO), 0 } });
+			Queue::memcpyRequest(&uniformBuffers[2], {{&shadows_UBO[2], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[2].map();
 			//memcpy(uniformBuffers[2].data, &shadows_UBO[0], sizeof(ShadowsUBO));
 			//uniformBuffers[2].flush();

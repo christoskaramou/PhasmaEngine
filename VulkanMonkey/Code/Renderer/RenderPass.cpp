@@ -15,16 +15,16 @@ namespace vm
 
 	void RenderPass::Create(const vk::Format& format, const vk::Format& depthFormat)
 	{
-		Create(std::vector<vk::Format>{ format }, depthFormat);
+		Create(std::vector<vk::Format> {format}, depthFormat);
 	}
 
 	void RenderPass::Create(const std::vector<vk::Format>& formats, const vk::Format& depthFormat)
 	{
 		uint32_t size = static_cast<uint32_t>(formats.size());
 		bool hasDepth =
-			depthFormat == vk::Format::eD32SfloatS8Uint ||
-			depthFormat == vk::Format::eD32Sfloat ||
-			depthFormat == vk::Format::eD24UnormS8Uint;
+				depthFormat == vk::Format::eD32SfloatS8Uint ||
+						depthFormat == vk::Format::eD32Sfloat ||
+						depthFormat == vk::Format::eD24UnormS8Uint;
 
 		std::vector<vk::AttachmentDescription> attachments(size);
 		std::vector<vk::AttachmentReference> colorReferences(size);
@@ -40,9 +40,9 @@ namespace vm
 			attachments[i].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 			attachments[i].initialLayout = vk::ImageLayout::eUndefined;
 			attachments[i].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-			colorReferences[i] = {i, vk::ImageLayout::eColorAttachmentOptimal };
+			colorReferences[i] = {i, vk::ImageLayout::eColorAttachmentOptimal};
 		}
-		
+
 		if (hasDepth)
 		{
 			vk::AttachmentDescription attachmentDescription;
@@ -55,10 +55,10 @@ namespace vm
 			attachmentDescription.initialLayout = vk::ImageLayout::eUndefined;
 			attachmentDescription.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 			attachments.push_back(attachmentDescription);
-			depthReference = { size, vk::ImageLayout::eDepthStencilAttachmentOptimal };
+			depthReference = {size, vk::ImageLayout::eDepthStencilAttachmentOptimal};
 		}
 
-		std::array<vk::SubpassDescription, 1> subpassDescriptions{};
+		std::array<vk::SubpassDescription, 1> subpassDescriptions {};
 		subpassDescriptions[0].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
 		subpassDescriptions[0].colorAttachmentCount = static_cast<uint32_t>(colorReferences.size());
 		subpassDescriptions[0].pColorAttachments = colorReferences.data();
@@ -75,7 +75,8 @@ namespace vm
 
 	void RenderPass::Destroy()
 	{
-		if (*handle) {
+		if (*handle)
+		{
 			VulkanContext::get()->device->destroyRenderPass(*handle);
 			*handle = nullptr;
 		}

@@ -19,9 +19,10 @@ namespace vm
 	{
 	public:
 		Bloom();
+
 		~Bloom();
 
-		std::vector<Framebuffer> framebuffers{};
+		std::vector<Framebuffer> framebuffers {};
 		Pipeline pipelineBrightFilter;
 		Pipeline pipelineGaussianBlurHorizontal;
 		Pipeline pipelineGaussianBlurVertical;
@@ -36,16 +37,27 @@ namespace vm
 		Image frameImage;
 
 		void Init();
+
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
+
 		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
+
 		void createPipelines(std::map<std::string, Image>& renderTargets);
+
 		void createBrightFilterPipeline(std::map<std::string, Image>& renderTargets);
+
 		void createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& renderTargets);
+
 		void createGaussianBlurVerticalPipeline(std::map<std::string, Image>& renderTargets);
+
 		void createCombinePipeline(std::map<std::string, Image>& renderTargets);
+
 		void createUniforms(std::map<std::string, Image>& renderTargets);
+
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
+
 		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets);
+
 		void destroy();
 	};
 }

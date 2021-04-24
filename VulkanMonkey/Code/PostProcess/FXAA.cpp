@@ -22,11 +22,12 @@ namespace vm
 		frameImage.format = make_ref(VulkanContext::get()->surface.formatKHR->format);
 		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
-			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-			vk::ImageTiling::eOptimal,
-			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-			vk::MemoryPropertyFlagBits::eDeviceLocal);
+				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+				vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+				vk::MemoryPropertyFlagBits::eDeviceLocal
+		);
 		frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 		frameImage.createSampler();
@@ -67,12 +68,12 @@ namespace vm
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
-		std::vector<vk::ClearValue> clearValues = { clearColor };
+		std::vector<vk::ClearValue> clearValues = {clearColor};
 
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = *renderPass.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
-		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
+		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
@@ -104,16 +105,20 @@ namespace vm
 
 	void FXAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert{ "shaders/Common/quad.vert", ShaderType::Vertex, true };
-		Shader frag{ "shaders/FXAA/FXAA.frag", ShaderType::Fragment, true };
+		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"shaders/FXAA/FXAA.frag", ShaderType::Fragment, true};
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
 		pipeline.info.width = renderTargets["viewport"].width_f;
 		pipeline.info.height = renderTargets["viewport"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>{ *renderTargets["viewport"].blentAttachment });
-		pipeline.info.descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>{ Pipeline::getDescriptorSetLayoutDOF() });
+		pipeline.info.colorBlendAttachments = make_ref(
+				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["viewport"].blentAttachment}
+		);
+		pipeline.info.descriptorSetLayouts = make_ref(
+				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutDOF()}
+		);
 		pipeline.info.renderPass = renderPass;
 
 		pipeline.createGraphicsPipeline();
@@ -126,7 +131,8 @@ namespace vm
 
 		renderPass.Destroy();
 
-		if (Pipeline::getDescriptorSetLayoutFXAA()) {
+		if (Pipeline::getDescriptorSetLayoutFXAA())
+		{
 			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutFXAA());
 			Pipeline::getDescriptorSetLayoutFXAA() = nullptr;
 		}

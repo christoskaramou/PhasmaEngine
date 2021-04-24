@@ -1,4 +1,5 @@
 #pragma once
+
 #include "../ECS/System.h"
 #include "../Core/Image.h"
 #include "../Core/Surface.h"
@@ -54,36 +55,53 @@ namespace vm
 		Compute animationsCompute;
 		Compute nodesCompute;
 
-		std::vector<GPUTimer> metrics{};
+		std::vector<GPUTimer> metrics {};
 
 #ifndef IGNORE_SCRIPTS
 		std::vector<Script*> scripts{};
 #endif
 	public:
 		Renderer(Context* ctx, SDL_Window* window);
+
 		~Renderer() override;
 
 		void Init() override;
+
 		void Update(double delta) override;
+
 		void Destroy() override;
+
 		void Draw();
+
 		void AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags);
+
 		void LoadResources();
+
 		void CreateUniforms();
+
 		void ResizeViewport(uint32_t width, uint32_t height);
+
 		void RecreatePipelines();
-		inline SDL_Window* GetWindow() { return window; }
-		inline Context* GetContext() { return ctx; }
+
+		inline SDL_Window* GetWindow()
+		{ return window; }
+
+		inline Context* GetContext()
+		{ return ctx; }
 
 		uint32_t previousImageIndex = 0;
-		std::map<std::string, Image> renderTargets{};
+		std::map<std::string, Image> renderTargets {};
 
 	private:
 		Context* ctx;
 		SDL_Window* window;
+
 		static void CheckQueue();
+
 		void ComputeAnimations();
+
 		void RecordDeferredCmds(const uint32_t& imageIndex);
+
 		void RecordShadowsCmds(const uint32_t& imageIndex);
 	};
 }

@@ -6,13 +6,13 @@
 
 namespace vm
 {
-	template<typename ... T>
+	template <typename ... T>
 	class Delegate
 	{
 	public:
 		using Func_type = std::function<void(const T& ...)>;
 
-		inline void operator += (Func_type&& func)
+		inline void operator+=(Func_type&& func)
 		{
 			const size_t funcAddress = *reinterpret_cast<long*>(reinterpret_cast<char*>(&func));
 
@@ -30,7 +30,7 @@ namespace vm
 				delegates.push_back(std::forward<Func_type>(func));
 		}
 
-		inline void operator -= (Func_type&& func)
+		inline void operator-=(Func_type&& func)
 		{
 			const size_t funcAddress = *reinterpret_cast<long*>(reinterpret_cast<char*>(&func));
 
@@ -52,7 +52,8 @@ namespace vm
 			for (auto& func : delegates)
 				func(args...);
 		}
+
 	private:
-		std::vector<Func_type> delegates{};
+		std::vector<Func_type> delegates {};
 	};
 }

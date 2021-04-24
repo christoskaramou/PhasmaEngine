@@ -53,10 +53,15 @@ namespace vm
 		texture.arrayLayers = 6;
 		texture.format = make_ref(vk::Format::eR8G8B8A8Unorm);
 		texture.imageCreateFlags = make_ref<vk::ImageCreateFlags>(vk::ImageCreateFlagBits::eCubeCompatible);
-		texture.createImage(imageSideSize, imageSideSize, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		texture.createImage(
+				imageSideSize, imageSideSize, vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+				vk::MemoryPropertyFlagBits::eDeviceLocal
+		);
 
 		texture.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-		for (uint32_t i = 0; i < texture.arrayLayers; ++i) {
+		for (uint32_t i = 0; i < texture.arrayLayers; ++i)
+		{
 			// Texture Load
 			int texWidth, texHeight, texChannels;
 			//stbi_set_flip_vertically_on_load(true);
@@ -68,7 +73,9 @@ namespace vm
 				throw std::runtime_error("No pixel data loaded");
 
 			Buffer staging;
-			staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
+			staging.createBuffer(
+					imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible
+			);
 			staging.map();
 			staging.copyData(pixels);
 			staging.flush();
@@ -91,7 +98,8 @@ namespace vm
 	void SkyBox::destroy()
 	{
 		texture.destroy();
-		if (Pipeline::getDescriptorSetLayoutSkybox()) {
+		if (Pipeline::getDescriptorSetLayoutSkybox())
+		{
 			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSkybox());
 			Pipeline::getDescriptorSetLayoutSkybox() = nullptr;
 		}

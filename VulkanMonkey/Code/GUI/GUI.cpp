@@ -13,9 +13,12 @@
 namespace vm
 {
 	Ref<vk::DescriptorSetLayout> GUI::descriptorSetLayout = Ref<vk::DescriptorSetLayout>();
+
 	GUI::GUI()
 	{
-		descriptorSetLayout = make_ref(vk::DescriptorSetLayout()); // TODO: multiple instances will initialize this find an other way
+		descriptorSetLayout = make_ref(
+				vk::DescriptorSetLayout()
+		); // TODO: multiple instances will initialize this find an other way
 		framebuffers = std::vector<Framebuffer>();
 	}
 
@@ -23,9 +26,10 @@ namespace vm
 	{
 	}
 
-	bool endsWithExt(const std::string &mainStr, const std::string &toMatch)
+	bool endsWithExt(const std::string& mainStr, const std::string& toMatch)
 	{
-		return mainStr.size() >= toMatch.size() && mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0;
+		return mainStr.size() >= toMatch.size() &&
+				mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0;
 	}
 
 	void GUI::setWindows()
@@ -55,13 +59,20 @@ namespace vm
 		Models();
 	}
 
-	const char* GUI::async_fileDialog_ImGuiMenuItem(const char* menuLabel, const char* dialogTitle, const std::vector<const char*>& filter)
+	const char* GUI::async_fileDialog_ImGuiMenuItem(
+			const char* menuLabel, const char* dialogTitle, const std::vector<const char*>& filter
+	)
 	{
 		static std::future<const char*>* s_future = nullptr;
 
 		if (ImGui::MenuItem(menuLabel))
 		{
-			s_future = new std::future<const char*>(std::async(std::launch::async, tinyfd_openFileDialog, dialogTitle, "", static_cast<int>(filter.size()), filter.data(), "", 0));
+			s_future = new std::future<const char*>(
+					std::async(
+							std::launch::async, tinyfd_openFileDialog, dialogTitle, "", static_cast<int>(filter.size()),
+							filter.data(), "", 0
+					)
+			);
 		}
 		if (s_future)
 		{
@@ -82,7 +93,9 @@ namespace vm
 
 		if (ImGui::MenuItem(menuLabel))
 		{
-			s_future = new std::future<int>(std::async(std::launch::async, tinyfd_messageBox, messageBoxTitle, message, "yesno", "warning", 0));
+			s_future = new std::future<int>(
+					std::async(std::launch::async, tinyfd_messageBox, messageBoxTitle, message, "yesno", "warning", 0)
+			);
 		}
 		if (s_future)
 		{
@@ -98,13 +111,20 @@ namespace vm
 	}
 
 
-	const char* GUI::async_fileDialog_ImGuiButton(const char* buttonLabel, const char* dialogTitle, const std::vector<const char*>& filter)
+	const char* GUI::async_fileDialog_ImGuiButton(
+			const char* buttonLabel, const char* dialogTitle, const std::vector<const char*>& filter
+	)
 	{
 		static std::future<const char*>* s_future = nullptr;
 
 		if (ImGui::Button(buttonLabel))
 		{
-			s_future = new std::future<const char*>(std::async(std::launch::async, tinyfd_openFileDialog, dialogTitle, "", static_cast<int>(filter.size()), filter.data(), "", 0));
+			s_future = new std::future<const char*>(
+					std::async(
+							std::launch::async, tinyfd_openFileDialog, dialogTitle, "", static_cast<int>(filter.size()),
+							filter.data(), "", 0
+					)
+			);
 		}
 		if (s_future)
 		{
@@ -125,7 +145,9 @@ namespace vm
 
 		if (ImGui::Button(buttonLabel))
 		{
-			s_future = new std::future<const char*>(std::async(std::launch::async, tinyfd_inputBox, dialogTitle, message, ""));
+			s_future = new std::future<const char*>(
+					std::async(std::launch::async, tinyfd_inputBox, dialogTitle, message, "")
+			);
 		}
 		if (s_future)
 		{
@@ -146,21 +168,23 @@ namespace vm
 		{
 			if (ImGui::BeginMenu("File"))
 			{
-				static std::vector<const char*> filter{ "*.gltf", "*.glb" };
+				static std::vector<const char*> filter {"*.gltf", "*.glb"};
 
 				////////////////////////////////////
 				// TODO: rework async calls logic //
 				////////////////////////////////////
 				const char* result = async_fileDialog_ImGuiMenuItem("Load...", "Choose Model", filter);
-				if (result) {
+				if (result)
+				{
 					const std::string path(result);
 					std::string folderPath = path.substr(0, path.find_last_of('\\') + 1);
 					std::string modelName = path.substr(path.find_last_of('\\') + 1);
 					Queue::loadModel.emplace_back(folderPath, modelName);
 				}
-			
+
 				const int exit = async_messageBox_ImGuiMenuItem("Exit", "Exit", "Are you sure you want to exit?");
-				if (exit == 1) {
+				if (exit == 1)
+				{
 					SDL_Event sdlevent;
 					sdlevent.type = SDL_QUIT;
 					SDL_PushEvent(&sdlevent);
@@ -183,13 +207,20 @@ namespace vm
 		ImGui::Begin("Metrics", &metrics_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 		ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
 		ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::InputFloat("FPS", &fps, 1.0f, 15.0f, 1); fps = maximum(fps, 10.0f);
-		ImGui::Separator(); ImGui::Separator();
+		ImGui::InputFloat("FPS", &fps, 1.0f, 15.0f, 1);
+		fps = maximum(fps, 10.0f);
+		ImGui::Separator();
+		ImGui::Separator();
 
 		ImGui::Text("CPU Total: %.3f (waited %.3f) ms", cpuTime, cpuWaitingTime);
-		ImGui::Indent(16.0f); ImGui::Text("Updates Total: %.3f ms", updatesTime); ImGui::Unindent(16.0f);
+		ImGui::Indent(16.0f);
+		ImGui::Text("Updates Total: %.3f ms", updatesTime);
+		ImGui::Unindent(16.0f);
 		ImGui::Separator();
-		ImGui::Text("GPU Total: %.3f ms", stats[0] + (shadow_cast ? stats[11] + stats[12] + stats[13] : 0.f) + (use_compute ? stats[14] : 0.f));
+		ImGui::Text(
+				"GPU Total: %.3f ms",
+				stats[0] + (shadow_cast ? stats[11] + stats[12] + stats[13] : 0.f) + (use_compute ? stats[14] : 0.f)
+		);
 		ImGui::Separator();
 		ImGui::Text("Render Passes:");
 		//if (use_compute) {
@@ -197,33 +228,64 @@ namespace vm
 		//}
 		//ImGui::Text("   Skybox: %.3f ms", stats[1]); totalPasses++;
 		ImGui::Indent(16.0f);
-		if (shadow_cast) {
-			ImGui::Text("Depth: %.3f ms", stats[11]); totalPasses++; totalTime += stats[11];
-			ImGui::Text("Depth: %.3f ms", stats[12]); totalPasses++; totalTime += stats[12];
-			ImGui::Text("Depth: %.3f ms", stats[13]); totalPasses++; totalTime += stats[13];
+		if (shadow_cast)
+		{
+			ImGui::Text("Depth: %.3f ms", stats[11]);
+			totalPasses++;
+			totalTime += stats[11];
+			ImGui::Text("Depth: %.3f ms", stats[12]);
+			totalPasses++;
+			totalTime += stats[12];
+			ImGui::Text("Depth: %.3f ms", stats[13]);
+			totalPasses++;
+			totalTime += stats[13];
 		}
-		ImGui::Text("GBuffer: %.3f ms", stats[2]); totalPasses++; totalTime += stats[2];
-		if (show_ssao) {
-			ImGui::Text("SSAO: %.3f ms", stats[3]); totalPasses++; totalTime += stats[3];
+		ImGui::Text("GBuffer: %.3f ms", stats[2]);
+		totalPasses++;
+		totalTime += stats[2];
+		if (show_ssao)
+		{
+			ImGui::Text("SSAO: %.3f ms", stats[3]);
+			totalPasses++;
+			totalTime += stats[3];
 		}
-		if (show_ssr) {
-			ImGui::Text("SSR: %.3f ms", stats[4]); totalPasses++; totalTime += stats[4];
+		if (show_ssr)
+		{
+			ImGui::Text("SSR: %.3f ms", stats[4]);
+			totalPasses++;
+			totalTime += stats[4];
 		}
-		ImGui::Text("Lights: %.3f ms", stats[5]); totalPasses++; totalTime += stats[5];
-		if ((use_FXAA || use_TAA) && use_AntiAliasing) {
-			ImGui::Text("Anti aliasing: %.3f ms", stats[6]); totalPasses++; totalTime += stats[6];
+		ImGui::Text("Lights: %.3f ms", stats[5]);
+		totalPasses++;
+		totalTime += stats[5];
+		if ((use_FXAA || use_TAA) && use_AntiAliasing)
+		{
+			ImGui::Text("Anti aliasing: %.3f ms", stats[6]);
+			totalPasses++;
+			totalTime += stats[6];
 		}
-		if (show_Bloom) {
-			ImGui::Text("Bloom: %.3f ms", stats[7]); totalPasses++; totalTime += stats[7];
+		if (show_Bloom)
+		{
+			ImGui::Text("Bloom: %.3f ms", stats[7]);
+			totalPasses++;
+			totalTime += stats[7];
 		}
-		if (use_DOF) {
-			ImGui::Text("Depth of Field: %.3f ms", stats[8]); totalPasses++; totalTime += stats[8];
+		if (use_DOF)
+		{
+			ImGui::Text("Depth of Field: %.3f ms", stats[8]);
+			totalPasses++;
+			totalTime += stats[8];
 		}
-		if (show_motionBlur) {
-			ImGui::Text("Motion Blur: %.3f ms", stats[9]); totalPasses++; totalTime += stats[9];
+		if (show_motionBlur)
+		{
+			ImGui::Text("Motion Blur: %.3f ms", stats[9]);
+			totalPasses++;
+			totalTime += stats[9];
 		}
 
-		ImGui::Text("GUI: %.3f ms", stats[10]); totalPasses++; totalTime += stats[10];
+		ImGui::Text("GUI: %.3f ms", stats[10]);
+		totalPasses++;
+		totalTime += stats[10];
 		ImGui::Unindent(16.0f);
 		ImGui::Separator();
 		ImGui::Separator();
@@ -238,7 +300,10 @@ namespace vm
 	{
 		static bool console_open = true;
 		static Console console;
-		console.Draw("Console", &console_open, ImVec2(0.f, HEIGHT_f - LOWER_PANEL_HEIGHT), ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
+		console.Draw(
+				"Console", &console_open, ImVec2(0.f, HEIGHT_f - LOWER_PANEL_HEIGHT),
+				ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT)
+		);
 	}
 
 	void GUI::Scripts() const
@@ -248,25 +313,33 @@ namespace vm
 		ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
 		ImGui::Begin("Scripts Folder", &scripts_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
-		const char* result = async_inputBox_ImGuiButton("Create New Script", "Script", "Give a name followed by the extension .cs");
+		const char* result = async_inputBox_ImGuiButton(
+				"Create New Script", "Script", "Give a name followed by the extension .cs"
+		);
 		if (result)
 		{
 			std::string res = result;
-			if (std::find(fileList.begin(), fileList.end(), res) == fileList.end()) {
+			if (std::find(fileList.begin(), fileList.end(), res) == fileList.end())
+			{
 				const std::string cmd = "type nul > Scripts\\" + res;
 				system(cmd.c_str());
 				fileList.push_back(res);
 			}
-			else {
-				SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Script not created", "Script name already exists", g_Window);
+			else
+			{
+				SDL_ShowSimpleMessageBox(
+						SDL_MESSAGEBOX_INFORMATION, "Script not created", "Script name already exists", g_Window
+				);
 			}
 		}
 
 		for (uint32_t i = 0; i < fileList.size(); i++)
 		{
 			std::string name = fileList[i] + "##" + std::to_string(i);
-			if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
-				if (ImGui::IsMouseDoubleClicked(0)) {
+			if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick))
+			{
+				if (ImGui::IsMouseDoubleClicked(0))
+				{
 					std::string s = "Scripts\\" + fileList[i];
 					system(s.c_str());
 				}
@@ -281,8 +354,10 @@ namespace vm
 		ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 2.f / 4.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
 		ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
 		ImGui::Begin("Shaders Folder", &shaders_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-		if (ImGui::Button("Compile Shaders")) {
-			if (compileShadersEventType != UINT32_MAX) {
+		if (ImGui::Button("Compile Shaders"))
+		{
+			if (compileShadersEventType != UINT32_MAX)
+			{
 				SDL_Event event;
 				SDL_zero(event);
 				event.type = compileShadersEventType; // this event is captured to window event check routine
@@ -293,8 +368,10 @@ namespace vm
 		for (uint32_t i = 0; i < shaderList.size(); i++)
 		{
 			std::string name = shaderList[i] + "##" + std::to_string(i);
-			if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
-				if (ImGui::IsMouseDoubleClicked(0)) {
+			if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick))
+			{
+				if (ImGui::IsMouseDoubleClicked(0))
+				{
 					std::string s = "Shaders\\" + shaderList[i];
 					system(s.c_str());
 				}
@@ -310,7 +387,7 @@ namespace vm
 		ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
 		ImGui::Begin("Models Loaded", &models_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
-		static std::vector<const char*> filter{ "*.gltf", "*.glb" };
+		static std::vector<const char*> filter {"*.gltf", "*.glb"};
 		const char* result = async_fileDialog_ImGuiButton("Add New Model", "Choose Model", filter);
 		if (result)
 		{
@@ -320,15 +397,17 @@ namespace vm
 			Queue::loadModel.emplace_back(folderPath, modelName);
 		}
 
-		for (uint32_t i = 0; i < modelList.size(); i++) {
+		for (uint32_t i = 0; i < modelList.size(); i++)
+		{
 			std::string s = modelList[i] + "##" + std::to_string(i);
 			if (ImGui::Selectable(s.c_str(), false))
 				modelItemSelected = i;
 		}
 
 		ImGui::End();
-	
-		if (!Queue::loadModelFutures.empty()) {
+
+		if (!Queue::loadModelFutures.empty())
+		{
 			static bool loading = true;
 			static float time = 0.f;
 			ImGuiStyle* style = &ImGui::GetStyle();
@@ -356,14 +435,16 @@ namespace vm
 
 	void GUI::Properties() const
 	{
-		static bool	propetries_open = true;
+		static bool propetries_open = true;
 		static float rtScale = renderTargetsScale;
 		ImGui::SetNextWindowPos(ImVec2(WIDTH_f - RIGHT_PANEL_WIDTH, MENU_HEIGHT));
 		ImGui::SetNextWindowSize(ImVec2(RIGHT_PANEL_WIDTH, HEIGHT_f - LOWER_PANEL_HEIGHT - MENU_HEIGHT));
 		ImGui::Begin("Global Properties", &propetries_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 		ImGui::InputFloat("Quality.", &rtScale, 0.01f, 0.05f, 2);
-		if (ImGui::Button("Apply")) {
-			if (scaleRenderTargetsEventType != UINT32_MAX) {
+		if (ImGui::Button("Apply"))
+		{
+			if (scaleRenderTargetsEventType != UINT32_MAX)
+			{
 				renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
 				SDL_Event event;
 				SDL_zero(event);
@@ -377,38 +458,48 @@ namespace vm
 		ImGui::Checkbox("SSR", &show_ssr);
 		ImGui::Checkbox("SSAO", &show_ssao);
 		ImGui::Checkbox("Depth of Field", &use_DOF);
-		if (use_DOF) {
+		if (use_DOF)
+		{
 			ImGui::Indent(16.0f);
 			ImGui::InputFloat("Scale##DOF", &DOF_focus_scale, 0.05f, 0.5f);
 			ImGui::InputFloat("Range##DOF", &DOF_blur_range, 0.05f, 0.5f);
 			ImGui::Unindent(16.0f);
-			ImGui::Separator(); ImGui::Separator();
+			ImGui::Separator();
+			ImGui::Separator();
 		}
 		ImGui::Checkbox("Motion Blur", &show_motionBlur);
-		if (show_motionBlur) {
+		if (show_motionBlur)
+		{
 			ImGui::Indent(16.0f);
 			ImGui::InputFloat("Strength#mb", &motionBlur_strength, 0.05f, 0.2f);
 			ImGui::Unindent(16.0f);
-			ImGui::Separator(); ImGui::Separator();
+			ImGui::Separator();
+			ImGui::Separator();
 		}
 		ImGui::Checkbox("Tone Mapping", &show_tonemapping);
 		//ImGui::Checkbox("Compute shaders", &use_compute);
-		if (show_tonemapping) {
+		if (show_tonemapping)
+		{
 			ImGui::Indent(16.0f);
 			ImGui::SliderFloat("Exposure", &exposure, 0.01f, 10.f);
 			ImGui::Unindent(16.0f);
-			ImGui::Separator(); ImGui::Separator();
+			ImGui::Separator();
+			ImGui::Separator();
 		}
 		ImGui::Checkbox("Anti aliasing", &use_AntiAliasing);
-		if (use_AntiAliasing) {
+		if (use_AntiAliasing)
+		{
 			ImGui::Indent(16.0f);
-			if (ImGui::Checkbox("FXAA", &use_FXAA)) {
+			if (ImGui::Checkbox("FXAA", &use_FXAA))
+			{
 				use_TAA = false;
 			}
-			if (ImGui::Checkbox("TAA", &use_TAA)) {
+			if (ImGui::Checkbox("TAA", &use_TAA))
+			{
 				use_FXAA = false;
 			}
-			if (use_TAA) {
+			if (use_TAA)
+			{
 				ImGui::Indent(16.0f);
 				ImGui::InputFloat("Jitter", &TAA_jitter_scale, 0.01f, 0.1f, 5);
 				ImGui::InputFloat("FeedbackMin", &TAA_feedback_min, 0.005f, 0.05f, 3);
@@ -419,15 +510,18 @@ namespace vm
 				ImGui::Unindent(16.0f);
 			}
 			ImGui::Unindent(16.0f);
-			ImGui::Separator(); ImGui::Separator();
+			ImGui::Separator();
+			ImGui::Separator();
 		}
-		else {
+		else
+		{
 			use_TAA = false;
 			use_FXAA = false;
 		}
 
 		ImGui::Checkbox("Bloom", &show_Bloom);
-		if (show_Bloom) {
+		if (show_Bloom)
+		{
 			ImGui::Indent(16.0f);
 			ImGui::SliderFloat("Inv Brightness", &Bloom_Inv_brightness, 0.01f, 50.f);
 			ImGui::SliderFloat("Intensity", &Bloom_intensity, 0.01f, 10.f);
@@ -436,16 +530,19 @@ namespace vm
 			if (use_tonemap)
 				ImGui::SliderFloat("Bloom Exposure", &Bloom_exposure, 0.01f, 10.f);
 			ImGui::Unindent(16.0f);
-			ImGui::Separator(); ImGui::Separator();
+			ImGui::Separator();
+			ImGui::Separator();
 		}
 		ImGui::Checkbox("Fog", &use_fog);
-		if (use_fog) {
+		if (use_fog)
+		{
 			ImGui::Indent(16.0f);
 			ImGui::InputFloat("Ground Thickness", &fog_ground_thickness, 0.1f, 1.0f, 4);
 			ImGui::InputFloat("Global Thickness", &fog_global_thickness, 0.1f, 1.0f, 4);
 			ImGui::InputFloat("Max Height", &fog_max_height, 0.01f, 0.1f, 4);
 			ImGui::Checkbox("Volumetric", &use_Volumetric_lights);
-			if (use_Volumetric_lights) {
+			if (use_Volumetric_lights)
+			{
 				ImGui::Indent(16.0f);
 				ImGui::InputInt("Iterations", &volumetric_steps, 1, 3);
 				ImGui::InputInt("Dither", &volumetric_dither_strength, 1, 10);
@@ -454,14 +551,18 @@ namespace vm
 			ImGui::Unindent(16.0f);
 		}
 		ImGui::Checkbox("Sun Light", &shadow_cast);
-		if (shadow_cast) {
+		if (shadow_cast)
+		{
 			ImGui::Indent(16.0f);
 			ImGui::SliderFloat("Sun Intst", &sun_intensity, 0.1f, 50.f);
 			ImGui::InputFloat3("SunPos", sun_position.data(), 1);
-			ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5); ImGui::Separator(); ImGui::Separator();
+			ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5);
+			ImGui::Separator();
+			ImGui::Separator();
 			{
 				vec3 sunDist(&sun_position[0]);
-				if (lengthSquared(sunDist) > 160000.f) {
+				if (lengthSquared(sunDist) > 160000.f)
+				{
 					sunDist = 400.f * normalize(sunDist);
 					sun_position[0] = sunDist.x;
 					sun_position[1] = sunDist.y;
@@ -472,7 +573,9 @@ namespace vm
 		}
 		ImGui::InputFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f, 3);
 		ImGui::SliderFloat4("ClearCol", clearColor.data(), 0.0f, 1.0f);
-		ImGui::InputFloat("TimeScale", &timeScale, 0.05f, 0.2f); ImGui::Separator(); ImGui::Separator();
+		ImGui::InputFloat("TimeScale", &timeScale, 0.05f, 0.2f);
+		ImGui::Separator();
+		ImGui::Separator();
 		if (ImGui::Button("Randomize Lights"))
 			randomize_lights = true;
 		ImGui::SliderFloat("Light Intst", &lights_intensity, 0.01f, 30.f);
@@ -483,7 +586,8 @@ namespace vm
 		ImGui::Separator();
 		ImGui::Separator();
 		ImGui::LabelText("", "Model Properties");
-		if (modelItemSelected > -1) {
+		if (modelItemSelected > -1)
+		{
 			const std::string toStr = std::to_string(modelItemSelected);
 			const std::string id = " ID[" + toStr + "]";
 			const std::string fmt = modelList[modelItemSelected] + id;
@@ -494,9 +598,9 @@ namespace vm
 				Queue::unloadModel.push_back(modelItemSelected);
 
 			ImGui::Separator();
-			 const std::string s = "Scale##" + toStr;
-			 const std::string p = "Position##" + toStr;
-			 const std::string r = "Rotation##" + toStr;
+			const std::string s = "Scale##" + toStr;
+			const std::string p = "Position##" + toStr;
+			const std::string r = "Rotation##" + toStr;
 			ImGui::InputFloat3(s.c_str(), model_scale[modelItemSelected].data(), 3);
 			ImGui::InputFloat3(p.c_str(), model_pos[modelItemSelected].data(), 3);
 			ImGui::InputFloat3(r.c_str(), model_rot[modelItemSelected].data(), 3);
@@ -504,20 +608,23 @@ namespace vm
 			ImGui::Separator();
 			ImGui::Separator();
 
-			static std::vector<const char*> filter{ "*.cs" };
+			static std::vector<const char*> filter {"*.cs"};
 			const char* result = async_fileDialog_ImGuiButton("Add Script", "Choose Script", filter);
-			if (result) {
+			if (result)
+			{
 				std::string path(result);
 				path = path.substr(0, path.find_last_of('.'));
 				Queue::addScript.emplace_back(modelItemSelected, path.substr(path.find_last_of('\\') + 1));
 			}
 
 			ImGui::SameLine();
-			if (ImGui::Button("Compile Script")) {
+			if (ImGui::Button("Compile Script"))
+			{
 				Queue::compileScript.push_back(modelItemSelected);
 			}
 
-			if (ImGui::Button("Remove Script")) {
+			if (ImGui::Button("Remove Script"))
+			{
 				Queue::removeScript.push_back(modelItemSelected);
 			}
 		}
@@ -533,10 +640,13 @@ namespace vm
 		ImGuiStyle* style = &ImGui::GetStyle();
 		style->Colors[ImGuiCol_WindowBg].w = 0.0f;
 		int flags = ImGuiWindowFlags_NoTitleBar;
-		if (lock_render_window) {
+		if (lock_render_window)
+		{
 			flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 			ImGui::SetNextWindowPos(ImVec2(LEFT_PANEL_WIDTH, MENU_HEIGHT));
-			ImGui::SetNextWindowSize(ImVec2(WIDTH_f - LEFT_PANEL_WIDTH - RIGHT_PANEL_WIDTH, HEIGHT_f - LOWER_PANEL_HEIGHT - MENU_HEIGHT));
+			ImGui::SetNextWindowSize(
+					ImVec2(WIDTH_f - LEFT_PANEL_WIDTH - RIGHT_PANEL_WIDTH, HEIGHT_f - LOWER_PANEL_HEIGHT - MENU_HEIGHT)
+			);
 		}
 		ImGui::Begin("Rendering Window", &active, flags);
 		winPos = ImGui::GetWindowPos();
@@ -547,7 +657,8 @@ namespace vm
 
 	const vk::DescriptorSetLayout& GUI::getDescriptorSetLayout(vk::Device device)
 	{
-		if (!*descriptorSetLayout) {
+		if (!*descriptorSetLayout)
+		{
 			// binding for gui texture
 			std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBindings(1);
 
@@ -585,21 +696,26 @@ namespace vm
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = 1;
 
-		for (auto& file : std::filesystem::recursive_directory_iterator("Scripts")) {
+		for (auto& file : std::filesystem::recursive_directory_iterator("Scripts"))
+		{
 			auto pathStr = file.path().string();
 			if (endsWithExt(pathStr, ".cs"))
 				fileList.push_back(pathStr.erase(0, 8)); // remove "Scripts\\"
 		}
 
-		for (auto& file : std::filesystem::recursive_directory_iterator("shaders")) {
+		for (auto& file : std::filesystem::recursive_directory_iterator("shaders"))
+		{
 			auto pathStr = file.path().string();
-			if (endsWithExt(pathStr, ".vert") || endsWithExt(pathStr, ".frag") || endsWithExt(pathStr, ".comp") || endsWithExt(pathStr, ".glsl")) {
+			if (endsWithExt(pathStr, ".vert") || endsWithExt(pathStr, ".frag") || endsWithExt(pathStr, ".comp") ||
+					endsWithExt(pathStr, ".glsl"))
+			{
 				shaderList.push_back(pathStr.erase(0, 8)); // remove "shaders\\"
 			}
 		}
 
 		ImGui::CreateContext();
-		ImGuiIO& io = ImGui::GetIO(); (void)io;
+		ImGuiIO& io = ImGui::GetIO();
+		(void) io;
 
 		g_Window = vulkan->window;
 
@@ -643,14 +759,14 @@ namespace vm
 		g_MouseCursors[ImGuiMouseCursor_ResizeNWSE] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENWSE);
 		g_MouseCursors[ImGuiMouseCursor_Hand] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
 
-	#ifdef _WIN32
+#ifdef _WIN32
 		SDL_SysWMinfo wmInfo;
 		SDL_VERSION(&wmInfo.version);
 		SDL_GetWindowWMInfo(vulkan->window, &wmInfo);
 		io.ImeWindowHandle = wmInfo.info.win.window;
-	#else
+#else
 		(void)window;
-	#endif
+#endif
 		windowStyle();
 
 		vk::CommandBufferBeginInfo beginInfo;
@@ -669,7 +785,11 @@ namespace vm
 			texture.mipLevels = 1;
 			texture.arrayLayers = 1;
 			texture.initialLayout = make_ref(vk::ImageLayout::eUndefined);
-			texture.createImage(width, height, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+			texture.createImage(
+					width, height, vk::ImageTiling::eOptimal,
+					vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+					vk::MemoryPropertyFlagBits::eDeviceLocal
+			);
 
 			texture.viewType = make_ref(vk::ImageViewType::e2D);
 			texture.createImageView(vk::ImageAspectFlagBits::eColor);
@@ -683,7 +803,9 @@ namespace vm
 		// Create the and Upload to Buffer:
 		Buffer stagingBuffer;
 		{
-			stagingBuffer.createBuffer(upload_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
+			stagingBuffer.createBuffer(
+					upload_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible
+			);
 			stagingBuffer.map();
 			stagingBuffer.copyData(pixels);
 			stagingBuffer.flush();
@@ -703,12 +825,12 @@ namespace vm
 			copy_barrier.subresourceRange.levelCount = 1;
 			copy_barrier.subresourceRange.layerCount = 1;
 			(*vulkan->dynamicCmdBuffers)[0].pipelineBarrier(
-				vk::PipelineStageFlagBits::eHost,
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::DependencyFlagBits::eByRegion,
-				nullptr,
-				nullptr,
-				copy_barrier
+					vk::PipelineStageFlagBits::eHost,
+					vk::PipelineStageFlagBits::eTransfer,
+					vk::DependencyFlagBits::eByRegion,
+					nullptr,
+					nullptr,
+					copy_barrier
 			);
 
 			vk::BufferImageCopy region = {};
@@ -717,7 +839,9 @@ namespace vm
 			region.imageExtent.width = width;
 			region.imageExtent.height = height;
 			region.imageExtent.depth = 1;
-			(*vulkan->dynamicCmdBuffers)[0].copyBufferToImage(*stagingBuffer.buffer, *texture.image, vk::ImageLayout::eTransferDstOptimal, region);
+			(*vulkan->dynamicCmdBuffers)[0].copyBufferToImage(
+					*stagingBuffer.buffer, *texture.image, vk::ImageLayout::eTransferDstOptimal, region
+			);
 
 			vk::ImageMemoryBarrier use_barrier = {};
 			use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -731,17 +855,18 @@ namespace vm
 			use_barrier.subresourceRange.levelCount = 1;
 			use_barrier.subresourceRange.layerCount = 1;
 			(*vulkan->dynamicCmdBuffers)[0].pipelineBarrier(
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::PipelineStageFlagBits::eFragmentShader,
-				vk::DependencyFlagBits::eByRegion,
-				nullptr,
-				nullptr,
-				use_barrier
+					vk::PipelineStageFlagBits::eTransfer,
+					vk::PipelineStageFlagBits::eFragmentShader,
+					vk::DependencyFlagBits::eByRegion,
+					nullptr,
+					nullptr,
+					use_barrier
 			);
 		}
 
 		// Store our identifier
-		io.Fonts->TexID = reinterpret_cast<ImTextureID>(reinterpret_cast<intptr_t>(static_cast<VkImage>(*texture.image)));
+		io.Fonts->TexID = reinterpret_cast<ImTextureID>(reinterpret_cast<intptr_t>(static_cast<VkImage>(*texture
+				.image)));
 
 		(*vulkan->dynamicCmdBuffers)[0].end();
 
@@ -772,60 +897,70 @@ namespace vm
 		Image& s_chain_Image = VulkanContext::get()->swapchain.images[imageIndex];
 
 		renderedImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::ImageLayout::eTransferSrcOptimal,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::AccessFlagBits::eTransferRead,
-			vk::ImageAspectFlagBits::eColor);
+				cmd,
+				vk::ImageLayout::eColorAttachmentOptimal,
+				vk::ImageLayout::eTransferSrcOptimal,
+				vk::PipelineStageFlagBits::eColorAttachmentOutput,
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::AccessFlagBits::eColorAttachmentWrite,
+				vk::AccessFlagBits::eTransferRead,
+				vk::ImageAspectFlagBits::eColor
+		);
 		s_chain_Image.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::ePresentSrcKHR,
-			vk::ImageLayout::eTransferDstOptimal,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::AccessFlagBits::eColorAttachmentRead,
-			vk::AccessFlagBits::eTransferWrite,
-			vk::ImageAspectFlagBits::eColor);
+				cmd,
+				vk::ImageLayout::ePresentSrcKHR,
+				vk::ImageLayout::eTransferDstOptimal,
+				vk::PipelineStageFlagBits::eColorAttachmentOutput,
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::AccessFlagBits::eColorAttachmentRead,
+				vk::AccessFlagBits::eTransferWrite,
+				vk::ImageAspectFlagBits::eColor
+		);
 
 		vk::ImageBlit blit;
-		blit.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
-		blit.srcOffsets[1] = vk::Offset3D{ static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 1 };
+		blit.srcOffsets[0] = vk::Offset3D {0, 0, 0};
+		blit.srcOffsets[1] = vk::Offset3D {
+				static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 1
+		};
 		blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		blit.srcSubresource.layerCount = 1;
-		blit.dstOffsets[0] = vk::Offset3D{ static_cast<int32_t>(winPos.x), static_cast<int32_t>(winPos.y), 0 };
-		blit.dstOffsets[1] = vk::Offset3D{ static_cast<int32_t>(winPos.x) + static_cast<int32_t>(winSize.x), static_cast<int32_t>(winPos.y) + static_cast<int32_t>(winSize.y), 1 };
+		blit.dstOffsets[0] = vk::Offset3D {static_cast<int32_t>(winPos.x), static_cast<int32_t>(winPos.y), 0};
+		blit.dstOffsets[1] = vk::Offset3D {
+				static_cast<int32_t>(winPos.x) + static_cast<int32_t>(winSize.x),
+				static_cast<int32_t>(winPos.y) + static_cast<int32_t>(winSize.y), 1
+		};
 		blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		blit.dstSubresource.layerCount = 1;
 
 		cmd.blitImage(
-			*renderedImage.image,
-			vk::ImageLayout::eTransferSrcOptimal,
-			*s_chain_Image.image,
-			vk::ImageLayout::eTransferDstOptimal,
-			blit,
-			vk::Filter::eLinear);
+				*renderedImage.image,
+				vk::ImageLayout::eTransferSrcOptimal,
+				*s_chain_Image.image,
+				vk::ImageLayout::eTransferDstOptimal,
+				blit,
+				vk::Filter::eLinear
+		);
 
 		renderedImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eTransferSrcOptimal,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::AccessFlagBits::eTransferRead,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::ImageAspectFlagBits::eColor);
+				cmd,
+				vk::ImageLayout::eTransferSrcOptimal,
+				vk::ImageLayout::eColorAttachmentOptimal,
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::PipelineStageFlagBits::eColorAttachmentOutput,
+				vk::AccessFlagBits::eTransferRead,
+				vk::AccessFlagBits::eColorAttachmentWrite,
+				vk::ImageAspectFlagBits::eColor
+		);
 		s_chain_Image.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eTransferDstOptimal,
-			vk::ImageLayout::ePresentSrcKHR,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::AccessFlagBits::eTransferWrite,
-			vk::AccessFlagBits::eColorAttachmentRead,
-			vk::ImageAspectFlagBits::eColor);
+				cmd,
+				vk::ImageLayout::eTransferDstOptimal,
+				vk::ImageLayout::ePresentSrcKHR,
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::PipelineStageFlagBits::eColorAttachmentOutput,
+				vk::AccessFlagBits::eTransferWrite,
+				vk::AccessFlagBits::eColorAttachmentRead,
+				vk::ImageAspectFlagBits::eColor
+		);
 	}
 
 	void GUI::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
@@ -842,18 +977,18 @@ namespace vm
 			depthStencil.depth = 1.f;
 			depthStencil.stencil = 0;
 
-			std::vector<vk::ClearValue> clearValues = { clearColor, depthStencil };
+			std::vector<vk::ClearValue> clearValues = {clearColor, depthStencil};
 
 			vk::RenderPassBeginInfo rpi;
 			rpi.renderPass = *renderPass.handle;
 			rpi.framebuffer = *framebuffers[imageIndex].handle;
-			rpi.renderArea = vk::Rect2D{ { 0, 0 }, *VulkanContext::get()->surface.actualExtent };
+			rpi.renderArea = vk::Rect2D {{0, 0}, *VulkanContext::get()->surface.actualExtent};
 			rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			rpi.pClearValues = clearValues.data();
 
 			cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-			const vk::DeviceSize offset{ 0 };
+			const vk::DeviceSize offset {0};
 			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
 			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *descriptorSet, nullptr);
 			cmd.bindVertexBuffers(0, *vertexBuffer.buffer, offset);
@@ -869,10 +1004,10 @@ namespace vm
 			cmd.setViewport(0, viewport);
 
 			std::vector<float> data(4);
-			data[0] = 2.0f / draw_data->DisplaySize.x;				// scale
-			data[1] = 2.0f / draw_data->DisplaySize.y;				// scale
-			data[2] = -1.0f - draw_data->DisplayPos.x * data[0];	// transform
-			data[3] = -1.0f - draw_data->DisplayPos.y * data[1];	// transform
+			data[0] = 2.0f / draw_data->DisplaySize.x;                // scale
+			data[1] = 2.0f / draw_data->DisplaySize.y;                // scale
+			data[2] = -1.0f - draw_data->DisplayPos.x * data[0];    // transform
+			data[3] = -1.0f - draw_data->DisplayPos.y * data[1];    // transform
 			cmd.pushConstants<float>(*pipeline.layout, vk::ShaderStageFlagBits::eVertex, 0, data);
 
 			// Render the command lists:
@@ -894,10 +1029,13 @@ namespace vm
 						// Apply scissor/clipping rectangle
 						// FIXME: We could clamp width/height based on clamped min/max values.
 						vk::Rect2D scissor;
-						scissor.offset.x = static_cast<int32_t>(pcmd->ClipRect.x - display_pos.x) > 0 ? static_cast<int32_t>(pcmd->ClipRect.x - display_pos.x) : 0;
-						scissor.offset.y = static_cast<int32_t>(pcmd->ClipRect.y - display_pos.y) > 0 ? static_cast<int32_t>(pcmd->ClipRect.y - display_pos.y) : 0;
+						scissor.offset.x = static_cast<int32_t>(pcmd->ClipRect.x - display_pos.x) > 0 ?
+						                   static_cast<int32_t>(pcmd->ClipRect.x - display_pos.x) : 0;
+						scissor.offset.y = static_cast<int32_t>(pcmd->ClipRect.y - display_pos.y) > 0 ?
+						                   static_cast<int32_t>(pcmd->ClipRect.y - display_pos.y) : 0;
 						scissor.extent.width = static_cast<uint32_t>(pcmd->ClipRect.z - pcmd->ClipRect.x);
-						scissor.extent.height = static_cast<uint32_t>(pcmd->ClipRect.w - pcmd->ClipRect.y + 1); // FIXME: Why +1 here?
+						scissor.extent.height = static_cast<uint32_t>(pcmd->ClipRect.w - pcmd->ClipRect.y +
+								1); // FIXME: Why +1 here?
 						cmd.setScissor(0, scissor);
 
 						// Draw
@@ -914,7 +1052,8 @@ namespace vm
 	void GUI::newFrame()
 	{
 		ImGuiIO& io = ImGui::GetIO();
-		IM_ASSERT(io.Fonts->IsBuilt());     // Font atlas needs to be built, call renderer _NewFrame() function e.g. ImGui_ImplOpenGL3_NewFrame() 
+		IM_ASSERT(io.Fonts
+				          ->IsBuilt());     // Font atlas needs to be built, call renderer _NewFrame() function e.g. ImGui_ImplOpenGL3_NewFrame()
 
 		// Setup display size (every frame to accommodate for window resizing)
 		int w, h;
@@ -922,12 +1061,16 @@ namespace vm
 		SDL_GetWindowSize(VulkanContext::get()->window, &w, &h);
 		SDL_GL_GetDrawableSize(VulkanContext::get()->window, &display_w, &display_h);
 		io.DisplaySize = ImVec2(static_cast<float>(w), static_cast<float>(h));
-		io.DisplayFramebufferScale = ImVec2(w > 0 ? static_cast<float>(display_w) / static_cast<float>(w) : 0, h > 0 ? static_cast<float>(display_h) / static_cast<float>(h) : 0);
+		io.DisplayFramebufferScale = ImVec2(
+				w > 0 ? static_cast<float>(display_w) / static_cast<float>(w) : 0,
+				h > 0 ? static_cast<float>(display_h) / static_cast<float>(h) : 0
+		);
 
 		// Setup time step (we don't use SDL_GetTicks() because it is using millisecond resolution)
 		static Uint64 frequency = SDL_GetPerformanceFrequency();
 		const Uint64 current_time = SDL_GetPerformanceCounter();
-		io.DeltaTime = g_Time > 0 ? static_cast<float>(static_cast<double>(current_time - g_Time) / frequency) : static_cast<float>(1.0f / 60.0f);
+		io.DeltaTime = g_Time > 0 ? static_cast<float>(static_cast<double>(current_time - g_Time) / frequency) :
+		               static_cast<float>(1.0f / 60.0f);
 		g_Time = current_time;
 
 		// Set OS mouse position if requested (rarely used, only when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
@@ -938,12 +1081,13 @@ namespace vm
 
 		int mx, my;
 		const Uint32 mouse_buttons = SDL_GetMouseState(&mx, &my);
-		io.MouseDown[0] = g_MousePressed[0] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;  // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
+		io.MouseDown[0] = g_MousePressed[0] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) !=
+				0;  // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
 		io.MouseDown[1] = g_MousePressed[1] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
 		io.MouseDown[2] = g_MousePressed[2] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
 		g_MousePressed[0] = g_MousePressed[1] = g_MousePressed[2] = false;
 
-	#if SDL_HAS_CAPTURE_MOUSE && !defined(__EMSCRIPTEN__)
+#if SDL_HAS_CAPTURE_MOUSE && !defined(__EMSCRIPTEN__)
 		SDL_Window* focused_window = SDL_GetKeyboardFocus();
 		if (g_Window == focused_window)
 		{
@@ -961,10 +1105,10 @@ namespace vm
 		// The function is only supported from SDL 2.0.4 (released Jan 2016)
 		bool any_mouse_button_down = ImGui::IsAnyMouseDown();
 		SDL_CaptureMouse(any_mouse_button_down ? SDL_TRUE : SDL_FALSE);
-	#else
+#else
 		if (SDL_GetWindowFlags(g_Window) & SDL_WINDOW_INPUT_FOCUS)
 			io.MousePos = ImVec2(static_cast<float>(mx), static_cast<float>(my));
-	#endif
+#endif
 		if (io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange)
 			return;
 
@@ -977,7 +1121,9 @@ namespace vm
 		else
 		{
 			// Show OS mouse cursor
-			SDL_SetCursor(g_MouseCursors[imgui_cursor] ? g_MouseCursors[imgui_cursor] : g_MouseCursors[ImGuiMouseCursor_Arrow]);
+			SDL_SetCursor(
+					g_MouseCursors[imgui_cursor] ? g_MouseCursors[imgui_cursor] : g_MouseCursors[ImGuiMouseCursor_Arrow]
+			);
 			//SDL_ShowCursor(SDL_TRUE);
 		}
 
@@ -1012,11 +1158,11 @@ namespace vm
 				const ImDrawList* cmd_list = draw_data->CmdLists[n];
 
 				vertex_ranges[n].data = cmd_list->VtxBuffer.Data;
-				vertex_ranges[n].size = static_cast<size_t>(cmd_list->VtxBuffer.Size)* vertex_size;
+				vertex_ranges[n].size = static_cast<size_t>(cmd_list->VtxBuffer.Size) * vertex_size;
 				vertex_ranges[n].offset = vertex_offset;
 
 				index_ranges[n].data = cmd_list->IdxBuffer.Data;
-				index_ranges[n].size = static_cast<size_t>(cmd_list->IdxBuffer.Size)* index_size;
+				index_ranges[n].size = static_cast<size_t>(cmd_list->IdxBuffer.Size) * index_size;
 				index_ranges[n].offset = index_offset;
 
 				vertex_offset += vertex_ranges[n].size;
@@ -1025,7 +1171,7 @@ namespace vm
 			Queue::memcpyRequest(&vertexBuffer, vertex_ranges);
 			Queue::memcpyRequest(&indexBuffer, index_ranges);
 		}
-	
+
 		//vk::CommandBufferBeginInfo beginInfo;
 		//beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 		//cmdBuf.begin(beginInfo);
@@ -1046,7 +1192,7 @@ namespace vm
 	void GUI::windowStyle(ImGuiStyle* dst)
 	{
 		ImGuiStyle* style = dst ? dst : &ImGui::GetStyle();
-	
+
 		style->WindowRounding = 0.0;
 		style->Colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 		style->Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
@@ -1098,7 +1244,10 @@ namespace vm
 		VulkanContext::get()->graphicsQueue->waitIdle();
 		vertexBuffer.destroy();
 		//vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
-		vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible);
+		vertexBuffer.createBuffer(
+				vertex_size, vk::BufferUsageFlagBits::eVertexBuffer,
+				vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible
+		);
 	}
 
 	void GUI::createIndexBuffer(size_t index_size)
@@ -1106,7 +1255,10 @@ namespace vm
 		VulkanContext::get()->graphicsQueue->waitIdle();
 		indexBuffer.destroy();
 		//indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
-		indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible);
+		indexBuffer.createBuffer(
+				index_size, vk::BufferUsageFlagBits::eIndexBuffer,
+				vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible
+		);
 	}
 
 	void GUI::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
@@ -1143,7 +1295,7 @@ namespace vm
 
 	void GUI::createRenderPass()
 	{
-		std::array<vk::AttachmentDescription, 1> attachments{};
+		std::array<vk::AttachmentDescription, 1> attachments {};
 		// Color attachment
 		attachments[0].format = VulkanContext::get()->surface.formatKHR->format;
 		attachments[0].samples = vk::SampleCountFlagBits::e1;
@@ -1154,9 +1306,9 @@ namespace vm
 		attachments[0].initialLayout = vk::ImageLayout::ePresentSrcKHR;
 		attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
 
-		std::array<vk::SubpassDescription, 1> subpassDescriptions{};
+		std::array<vk::SubpassDescription, 1> subpassDescriptions {};
 
-		vk::AttachmentReference colorReference = { 0, vk::ImageLayout::eColorAttachmentOptimal };
+		vk::AttachmentReference colorReference = {0, vk::ImageLayout::eColorAttachmentOptimal};
 
 		subpassDescriptions[0].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
 		subpassDescriptions[0].colorAttachmentCount = 1;
@@ -1187,8 +1339,8 @@ namespace vm
 
 	void GUI::createPipeline()
 	{
-		Shader vert{ "shaders/GUI/shaderGUI.vert", ShaderType::Vertex, true };
-		Shader frag{ "shaders/GUI/shaderGUI.frag", ShaderType::Fragment, true };
+		Shader vert {"shaders/GUI/shaderGUI.vert", ShaderType::Vertex, true};
+		Shader frag {"shaders/GUI/shaderGUI.frag", ShaderType::Fragment, true};
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
@@ -1197,11 +1349,19 @@ namespace vm
 		pipeline.info.width = WIDTH_f;
 		pipeline.info.height = HEIGHT_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>{ *VulkanContext::get()->swapchain.images[0].blentAttachment });
-		pipeline.info.dynamicStates = make_ref(std::vector<vk::DynamicState>{ vk::DynamicState::eViewport, vk::DynamicState::eScissor });
+		pipeline.info.colorBlendAttachments = make_ref(
+				std::vector<vk::PipelineColorBlendAttachmentState> {
+						*VulkanContext::get()->swapchain.images[0].blentAttachment
+				}
+		);
+		pipeline.info.dynamicStates = make_ref(
+				std::vector<vk::DynamicState> {vk::DynamicState::eViewport, vk::DynamicState::eScissor}
+		);
 		pipeline.info.pushConstantStage = PushConstantStage::Vertex;
 		pipeline.info.pushConstantSize = sizeof(float) * 4;
-		pipeline.info.descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>{ getDescriptorSetLayout(*VulkanContext::get()->device) });
+		pipeline.info.descriptorSetLayouts = make_ref(
+				std::vector<vk::DescriptorSetLayout> {getDescriptorSetLayout(*VulkanContext::get()->device)}
+		);
 		pipeline.info.renderPass = renderPass;
 
 		pipeline.createGraphicsPipeline();
@@ -1212,11 +1372,12 @@ namespace vm
 		Object::destroy();
 		renderPass.Destroy();
 
-		for (auto &framebuffer : framebuffers)
+		for (auto& framebuffer : framebuffers)
 			framebuffer.Destroy();
 
 		pipeline.destroy();
-		if (*GUI::descriptorSetLayout) {
+		if (*GUI::descriptorSetLayout)
+		{
 			VulkanContext::get()->device->destroyDescriptorSetLayout(*GUI::descriptorSetLayout);
 			*GUI::descriptorSetLayout = nullptr;
 		}

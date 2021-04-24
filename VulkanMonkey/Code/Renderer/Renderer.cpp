@@ -80,7 +80,7 @@ namespace vm
 		motionBlur.createPipeline(renderTargets);
 		gui.createPipeline();
 
-        //transformsCompute = Compute::Create("shaders/Compute/shader.comp", 64, 64);
+		//transformsCompute = Compute::Create("shaders/Compute/shader.comp", 64, 64);
 
 		metrics.resize(20);
 		//LOAD RESOURCES
@@ -95,16 +95,20 @@ namespace vm
 
 		Destroy();
 
-		if (Model::models.empty()) {
-			if (Pipeline::getDescriptorSetLayoutModel()) {
+		if (Model::models.empty())
+		{
+			if (Pipeline::getDescriptorSetLayoutModel())
+			{
 				VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
 				Pipeline::getDescriptorSetLayoutModel() = nullptr;
 			}
-			if (Pipeline::getDescriptorSetLayoutMesh()) {
+			if (Pipeline::getDescriptorSetLayoutMesh())
+			{
 				VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
 				Pipeline::getDescriptorSetLayoutMesh() = nullptr;
 			}
-			if (Pipeline::getDescriptorSetLayoutPrimitive()) {
+			if (Pipeline::getDescriptorSetLayoutPrimitive())
+			{
 				VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
 				Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
 			}
@@ -142,34 +146,45 @@ namespace vm
 
 	void Renderer::CheckQueue()
 	{
-		for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();) {
+		for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();)
+		{
 			VulkanContext::get()->device->waitIdle();
-			Queue::loadModelFutures.push_back(std::async(std::launch::async, [](const std::string& folderPath, const std::string& modelName, bool show = true) {
-				Model model;
-				model.loadModel(folderPath, modelName, show);
-				for (auto& _model : Model::models)
-					if (_model.name == model.name)
-						model.name = "_" + model.name;
-				return std::any(std::move(model));
-				}, std::get<0>(*it), std::get<1>(*it), true));
+			Queue::loadModelFutures.push_back(
+					std::async(
+							std::launch::async,
+							[](const std::string& folderPath, const std::string& modelName, bool show = true)
+							{
+								Model model;
+								model.loadModel(folderPath, modelName, show);
+								for (auto& _model : Model::models)
+									if (_model.name == model.name)
+										model.name = "_" + model.name;
+								return std::any(std::move(model));
+							}, std::get<0>(*it), std::get<1>(*it), true
+					)
+			);
 			it = Queue::loadModel.erase(it);
 		}
 
-		for (auto it = Queue::loadModelFutures.begin(); it != Queue::loadModelFutures.end();) {
-			if (it->wait_for(std::chrono::seconds(0)) != std::future_status::timeout) {
+		for (auto it = Queue::loadModelFutures.begin(); it != Queue::loadModelFutures.end();)
+		{
+			if (it->wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
+			{
 				Model::models.push_back(std::any_cast<Model>(it->get()));
 				GUI::modelList.push_back(Model::models.back().name);
-				GUI::model_scale.push_back({ 1.f, 1.f, 1.f });
-				GUI::model_pos.push_back({ 0.f, 0.f, 0.f });
-				GUI::model_rot.push_back({ 0.f, 0.f, 0.f });
+				GUI::model_scale.push_back({1.f, 1.f, 1.f});
+				GUI::model_pos.push_back({0.f, 0.f, 0.f});
+				GUI::model_rot.push_back({0.f, 0.f, 0.f});
 				it = Queue::loadModelFutures.erase(it);
 			}
-			else {
+			else
+			{
 				++it;
 			}
 		}
 
-		for (auto it = Queue::unloadModel.begin(); it != Queue::unloadModel.end();) {
+		for (auto it = Queue::unloadModel.begin(); it != Queue::unloadModel.end();)
+		{
 			VulkanContext::get()->device->waitIdle();
 			Model::models[*it].destroy();
 			Model::models.erase(Model::models.begin() + *it);
@@ -208,10 +223,10 @@ namespace vm
 	}
 
 
-    void Renderer::ComputeAnimations()
-    {
+	void Renderer::ComputeAnimations()
+	{
 
-    }
+	}
 
 	void Renderer::Update(double delta)
 	{
@@ -235,47 +250,57 @@ namespace vm
 		futureUpdates.reserve(Model::models.size() + 8);
 
 		// MODELS
-		if (GUI::modelItemSelected > -1) {
+		if (GUI::modelItemSelected > -1)
+		{
 			Model::models[GUI::modelItemSelected].scale = vec3(GUI::model_scale[GUI::modelItemSelected].data());
 			Model::models[GUI::modelItemSelected].pos = vec3(GUI::model_pos[GUI::modelItemSelected].data());
 			Model::models[GUI::modelItemSelected].rot = vec3(GUI::model_rot[GUI::modelItemSelected].data());
 		}
 		for (auto& model : Model::models)
 		{
-			const auto updateModel = [&]() { model.update(camera_main, delta); };
+			const auto updateModel = [&]()
+			{ model.update(camera_main, delta); };
 			futureUpdates.push_back(std::async(std::launch::async, updateModel));
 		}
 
 		// GUI
-		auto updateGUI = [&]() { gui.update(); };
+		auto updateGUI = [&]()
+		{ gui.update(); };
 		futureUpdates.push_back(std::async(std::launch::async, updateGUI));
 
 		// LIGHTS
-		auto updateLights = [&]() { lightUniforms.update(camera_main); };
+		auto updateLights = [&]()
+		{ lightUniforms.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateLights));
 
 		// SSAO
-		auto updateSSAO = [&]() { ssao.update(camera_main); };
+		auto updateSSAO = [&]()
+		{ ssao.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateSSAO));
 
 		// SSR
-		auto updateSSR = [&]() { ssr.update(camera_main); };
+		auto updateSSR = [&]()
+		{ ssr.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateSSR));
 
 		// TAA
-		auto updateTAA = [&]() { taa.update(camera_main); };
+		auto updateTAA = [&]()
+		{ taa.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateTAA));
 
 		// MOTION BLUR
-		auto updateMotionBlur = [&]() { motionBlur.update(camera_main); };
+		auto updateMotionBlur = [&]()
+		{ motionBlur.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateMotionBlur));
 
 		// SHADOWS
-		auto updateShadows = [&]() { shadows.update(camera_main); };
+		auto updateShadows = [&]()
+		{ shadows.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateShadows));
 
 		// COMPOSITION UNIFORMS
-		auto updateDeferred = [&]() { deferred.update(camera_main.invViewProjection); };
+		auto updateDeferred = [&]()
+		{ deferred.update(camera_main.invViewProjection); };
 		futureUpdates.push_back(std::async(std::launch::async, updateDeferred));
 
 		for (auto& f : futureUpdates)
@@ -310,13 +335,13 @@ namespace vm
 			deferred.batchStart(cmd, imageIndex, *renderTargets["viewport"].extent);
 
 			for (auto& model : Model::models)
-				model.draw((uint16_t)RenderQueue::Opaque);
+				model.draw((uint16_t) RenderQueue::Opaque);
 
 			for (auto& model : Model::models)
-				model.draw((uint16_t)RenderQueue::AlphaCut);
+				model.draw((uint16_t) RenderQueue::AlphaCut);
 
 			for (auto& model : Model::models)
-				model.draw((uint16_t)RenderQueue::AlphaBlend);
+				model.draw((uint16_t) RenderQueue::AlphaBlend);
 
 			deferred.batchEnd();
 			metrics[2].end(&GUI::metrics[2]);
@@ -335,7 +360,8 @@ namespace vm
 			image.changeLayout(cmd, LayoutState::DepthRead);
 
 		// SCREEN SPACE AMBIENT OCCLUSION
-		if (GUI::show_ssao) {
+		if (GUI::show_ssao)
+		{
 			metrics[3].start(&cmd);
 			renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorWrite);
 			ssao.draw(cmd, imageIndex, renderTargets["ssao"]);
@@ -344,7 +370,8 @@ namespace vm
 		}
 
 		// SCREEN SPACE REFLECTIONS
-		if (GUI::show_ssr) {
+		if (GUI::show_ssr)
+		{
 			metrics[4].start(&cmd);
 			renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorWrite);
 			ssr.draw(cmd, imageIndex, *renderTargets["ssr"].extent);
@@ -357,16 +384,19 @@ namespace vm
 		deferred.draw(cmd, imageIndex, shadows, skybox, *renderTargets["viewport"].extent);
 		metrics[5].end(&GUI::metrics[5]);
 
-		if (GUI::use_AntiAliasing) {
+		if (GUI::use_AntiAliasing)
+		{
 			// TAA
-			if (GUI::use_TAA) {
+			if (GUI::use_TAA)
+			{
 				metrics[6].start(&cmd);
 				taa.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 				taa.draw(cmd, imageIndex, renderTargets);
 				metrics[6].end(&GUI::metrics[6]);
 			}
-			// FXAA
-			else if (GUI::use_FXAA) {
+				// FXAA
+			else if (GUI::use_FXAA)
+			{
 				metrics[6].start(&cmd);
 				fxaa.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 				fxaa.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
@@ -375,7 +405,8 @@ namespace vm
 		}
 
 		// BLOOM
-		if (GUI::show_Bloom) {
+		if (GUI::show_Bloom)
+		{
 			metrics[7].start(&cmd);
 			bloom.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 			bloom.draw(cmd, imageIndex, renderTargets);
@@ -383,7 +414,8 @@ namespace vm
 		}
 
 		// Depth of Field
-		if (GUI::use_DOF) {
+		if (GUI::use_DOF)
+		{
 			metrics[8].start(&cmd);
 			dof.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 			dof.draw(cmd, imageIndex, renderTargets);
@@ -391,7 +423,8 @@ namespace vm
 		}
 
 		// MOTION BLUR
-		if (GUI::show_motionBlur) {
+		if (GUI::show_motionBlur)
+		{
 			metrics[9].start(&cmd);
 			motionBlur.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 			motionBlur.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
@@ -426,20 +459,22 @@ namespace vm
 		// Render Pass (shadows mapping) (outputs the depth image with the light POV)
 
 		const vk::DeviceSize offset = vk::DeviceSize();
-		std::array<vk::ClearValue, 1> clearValuesShadows{};
-		clearValuesShadows[0].depthStencil = vk::ClearDepthStencilValue{ 0.0f, 0 };
+		std::array<vk::ClearValue, 1> clearValuesShadows {};
+		clearValuesShadows[0].depthStencil = vk::ClearDepthStencilValue {0.0f, 0};
 
 		vk::CommandBufferBeginInfo beginInfoShadows;
 		beginInfoShadows.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
 		vk::RenderPassBeginInfo renderPassInfoShadows;
 		renderPassInfoShadows.renderPass = *shadows.renderPass.handle;
-		renderPassInfoShadows.renderArea = vk::Rect2D{ { 0, 0 },{ Shadows::imageSize, Shadows::imageSize } };
+		renderPassInfoShadows.renderArea = vk::Rect2D {{0, 0}, {Shadows::imageSize, Shadows::imageSize}};
 		renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
 		renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
-		for (uint32_t i = 0; i < shadows.textures.size(); i++) {
-			auto& cmd = (*VulkanContext::get()->shadowCmdBuffers)[static_cast<uint32_t>(shadows.textures.size()) * imageIndex + i];
+		for (uint32_t i = 0; i < shadows.textures.size(); i++)
+		{
+			auto& cmd = (*VulkanContext::get()->shadowCmdBuffers)[
+					static_cast<uint32_t>(shadows.textures.size()) * imageIndex + i];
 			cmd.begin(beginInfoShadows);
 			metrics[11 + static_cast<size_t>(i)].start(&cmd);
 			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
@@ -448,17 +483,30 @@ namespace vm
 			renderPassInfoShadows.framebuffer = *shadows.framebuffers[shadows.textures.size() * imageIndex + i].handle;
 			cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadows.pipeline.handle);
-			for (auto& model : Model::models) {
-				if (model.render) {
+			for (auto& model : Model::models)
+			{
+				if (model.render)
+				{
 					cmd.bindVertexBuffers(0, *model.vertexBuffer.buffer, offset);
 					cmd.bindIndexBuffer(*model.indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
-					for (auto& node : model.linearNodes) {
-						if (node->mesh) {
-							cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *shadows.pipeline.layout, 0, { (*shadows.descriptorSets)[i], *node->mesh->descriptorSet, *model.descriptorSet }, nullptr);
-							for (auto& primitive : node->mesh->primitives) {
+					for (auto& node : model.linearNodes)
+					{
+						if (node->mesh)
+						{
+							cmd.bindDescriptorSets(
+									vk::PipelineBindPoint::eGraphics, *shadows.pipeline.layout, 0, {
+											(*shadows.descriptorSets)[i], *node->mesh->descriptorSet,
+											*model.descriptorSet
+									}, nullptr
+							);
+							for (auto& primitive : node->mesh->primitives)
+							{
 								if (primitive.render)
-									cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset, node->mesh->vertexOffset + primitive.vertexOffset, 0);
+									cmd.drawIndexed(
+											primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset,
+											node->mesh->vertexOffset + primitive.vertexOffset, 0
+									);
 							}
 						}
 					}
@@ -481,18 +529,20 @@ namespace vm
 	{
 		auto& vCtx = *VulkanContext::get();
 
-		static const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader };
+		static const vk::PipelineStageFlags waitStages[] = {
+				vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader
+		};
 
 		//FIRE_EVENT(Event::OnRender);
 
-        GUI::use_compute = true;
+		GUI::use_compute = true;
 		if (GUI::use_compute)
 		{
-            //auto mat = transformsCompute.copyOutput<mat4, AUTO>();
-            //mat[0][0] = 1.0f;
-            //mat4* matp = static_cast<mat4*>(transformsCompute.mapOutput());
-            //mat4* matp1;
-            //float f = (*matp)[0][0];
+			//auto mat = transformsCompute.copyOutput<mat4, AUTO>();
+			//mat[0][0] = 1.0f;
+			//mat4* matp = static_cast<mat4*>(transformsCompute.mapOutput());
+			//mat4* matp1;
+			//float f = (*matp)[0][0];
 		}
 
 		// aquire the image
@@ -509,7 +559,8 @@ namespace vm
 
 		vCtx.waitAndLockSubmits();
 
-		if (GUI::shadow_cast) {
+		if (GUI::shadow_cast)
+		{
 
 			// record the shadow command buffers
 			RecordShadowsCmds(imageIndex);
@@ -543,7 +594,8 @@ namespace vm
 		vCtx.unlockSubmits();
 	}
 
-	void Renderer::AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
+	void
+	Renderer::AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
 	{
 		if (renderTargets.find(name) != renderTargets.end())
 			return;
@@ -552,13 +604,14 @@ namespace vm
 		renderTargets[name].format = make_ref(format);
 		renderTargets[name].initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		renderTargets[name].createImage(
-			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-			vk::ImageTiling::eOptimal,
-			vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | additionalFlags,
-			vk::MemoryPropertyFlagBits::eDeviceLocal
+				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+				vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | additionalFlags,
+				vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
-		renderTargets[name].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
+		renderTargets[name]
+				.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
 		renderTargets[name].createImageView(vk::ImageAspectFlagBits::eColor);
 		renderTargets[name].createSampler();
 
@@ -570,7 +623,9 @@ namespace vm
 		renderTargets[name].blentAttachment->srcAlphaBlendFactor = vk::BlendFactor::eOne;
 		renderTargets[name].blentAttachment->dstAlphaBlendFactor = vk::BlendFactor::eZero;
 		renderTargets[name].blentAttachment->alphaBlendOp = vk::BlendOp::eAdd;
-		renderTargets[name].blentAttachment->colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+		renderTargets[name].blentAttachment->colorWriteMask =
+				vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
+						vk::ColorComponentFlagBits::eA;
 	}
 
 #ifndef IGNORE_SCRIPTS
@@ -620,20 +675,22 @@ namespace vm
 	{
 		// SKYBOXES LOAD
 		std::array<std::string, 6> skyTextures = {
-			"objects/sky/right.png",
-			"objects/sky/left.png",
-			"objects/sky/top.png",
-			"objects/sky/bottom.png",
-			"objects/sky/back.png",
-			"objects/sky/front.png" };
+				"objects/sky/right.png",
+				"objects/sky/left.png",
+				"objects/sky/top.png",
+				"objects/sky/bottom.png",
+				"objects/sky/back.png",
+				"objects/sky/front.png"
+		};
 		skyBoxDay.loadSkyBox(skyTextures, 1024);
 		skyTextures = {
-			"objects/lmcity/lmcity_rt.png",
-			"objects/lmcity/lmcity_lf.png",
-			"objects/lmcity/lmcity_up.png",
-			"objects/lmcity/lmcity_dn.png",
-			"objects/lmcity/lmcity_bk.png",
-			"objects/lmcity/lmcity_ft.png" };
+				"objects/lmcity/lmcity_rt.png",
+				"objects/lmcity/lmcity_lf.png",
+				"objects/lmcity/lmcity_up.png",
+				"objects/lmcity/lmcity_dn.png",
+				"objects/lmcity/lmcity_bk.png",
+				"objects/lmcity/lmcity_ft.png"
+		};
 		skyBoxNight.loadSkyBox(skyTextures, 512);
 
 		// GUI LOAD
@@ -885,6 +942,6 @@ namespace vm
 		motionBlur.createPipeline(renderTargets);
 		gui.createPipeline();
 
-        ctx->GetSystem<CameraSystem>()->GetCamera(0).ReCreateComputePipelines();
+		ctx->GetSystem<CameraSystem>()->GetCamera(0).ReCreateComputePipelines();
 	}
 }

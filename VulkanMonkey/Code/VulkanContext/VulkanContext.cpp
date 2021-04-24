@@ -57,9 +57,10 @@ namespace vm
 		// =============================================
 
 #ifdef _DEBUG
-	// === Debug Extensions ========================
+		// === Debug Extensions ========================
 		auto extensions = vk::enumerateInstanceExtensionProperties();
-		for (auto& extension : extensions) {
+		for (auto& extension : extensions)
+		{
 			if (std::string(extension.extensionName.data()) == "VK_EXT_debug_utils")
 				instanceExtensions.push_back("VK_EXT_debug_utils");
 		}
@@ -68,7 +69,8 @@ namespace vm
 		// === Debug Layers ============================
 		// To use these debug layers, here is assumed VulkanSDK is installed and Bin is in enviromental path
 		auto layers = vk::enumerateInstanceLayerProperties();
-		for (auto layer : layers) {
+		for (auto layer : layers)
+		{
 			if (std::string(layer.layerName.data()) == "VK_LAYER_KHRONOS_validation")
 				instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
 		}
@@ -101,17 +103,18 @@ namespace vm
 	}
 
 	VKAPI_ATTR uint32_t VKAPI_CALL VulkanContext::MessageCallback(
-		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-		uint32_t messageType,
-		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-		void* pUserData)
+			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+			uint32_t messageType,
+			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+			void* pUserData
+	)
 	{
 		if (messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
 			std::cerr
-			<< to_string(vk::DebugUtilsMessageTypeFlagBitsEXT(messageType)) << " "
-			<< to_string(vk::DebugUtilsMessageSeverityFlagBitsEXT(messageSeverity)) << " from \""
-			<< pCallbackData->pMessageIdName << "\": "
-			<< pCallbackData->pMessage << std::endl;
+					<< to_string(vk::DebugUtilsMessageTypeFlagBitsEXT(messageType)) << " "
+					<< to_string(vk::DebugUtilsMessageSeverityFlagBitsEXT(messageSeverity)) << " from \""
+					<< pCallbackData->pMessageIdName << "\": "
+					<< pCallbackData->pMessage << std::endl;
 
 		return VK_FALSE;
 	}
@@ -122,14 +125,14 @@ namespace vm
 
 		vk::DebugUtilsMessengerCreateInfoEXT dumci;
 		dumci.messageSeverity =
-			vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-			vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
-			vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-			vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
+				vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+						vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+						vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+						vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
 		dumci.messageType =
-			vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-			vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-			vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
+				vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+						vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+						vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
 		dumci.pfnUserCallback = VulkanContext::MessageCallback;
 
 		debugMessenger = make_ref(instance->createDebugUtilsMessengerEXT(dumci, nullptr, *dispatchLoaderDynamic));
@@ -154,11 +157,13 @@ namespace vm
 	{
 		std::vector<vk::PhysicalDevice> gpuList = instance->enumeratePhysicalDevices();
 
-		for (auto& GPU : gpuList) {
+		for (auto& GPU : gpuList)
+		{
 			queueFamilyProperties = make_ref(GPU.getQueueFamilyProperties());
 			vk::QueueFlags flags;
 
-			for (auto& qfp : *queueFamilyProperties) {
+			for (auto& qfp : *queueFamilyProperties)
+			{
 				if (qfp.queueFlags & vk::QueueFlagBits::eGraphics)
 					flags |= vk::QueueFlagBits::eGraphics;
 				if (qfp.queueFlags & vk::QueueFlagBits::eCompute)
@@ -168,8 +173,8 @@ namespace vm
 			}
 
 			if (flags & vk::QueueFlagBits::eGraphics &&
-				flags & vk::QueueFlagBits::eCompute &&
-				flags & vk::QueueFlagBits::eTransfer)
+					flags & vk::QueueFlagBits::eCompute &&
+					flags & vk::QueueFlagBits::eTransfer)
 			{
 				gpu = make_ref(GPU);
 
@@ -193,7 +198,8 @@ namespace vm
 		const vk::QueueFlags flags = vk::QueueFlagBits::eGraphics;
 #endif
 		auto& properties = *queueFamilyProperties;
-		for (uint32_t i = 0; i < properties.size(); i++) {
+		for (uint32_t i = 0; i < properties.size(); i++)
+		{
 			//find graphics queue family index
 			if (properties[i].queueFlags & flags && gpu->getSurfaceSupportKHR(i, *surface.surface))
 			{
@@ -212,7 +218,8 @@ namespace vm
 		vk::QueueFlags flags = vk::QueueFlagBits::eTransfer;
 		auto& properties = *queueFamilyProperties;
 		// prefer different families for different queue types, thus the reverse check
-		for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i) {
+		for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i)
+		{
 			//find transfer queue family index
 			if (properties[i].queueFlags & flags)
 			{
@@ -229,7 +236,8 @@ namespace vm
 		const vk::QueueFlags flags = vk::QueueFlagBits::eCompute;
 		auto& properties = *queueFamilyProperties;
 		// prefer different families for different queue types, thus the reverse check
-		for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i) {
+		for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i)
+		{
 			//find compute queue family index
 			if (properties[i].queueFlags & flags)
 			{
@@ -245,14 +253,15 @@ namespace vm
 	{
 		auto extensionProperties = gpu->enumerateDeviceExtensionProperties();
 
-		std::vector<const char*> deviceExtensions{};
-		for (auto& i : extensionProperties) {
+		std::vector<const char*> deviceExtensions {};
+		for (auto& i : extensionProperties)
+		{
 			if (std::string(i.extensionName.data()) == VK_KHR_SWAPCHAIN_EXTENSION_NAME)
 				deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 		}
-		float priorities[]{ 1.0f }; // range : [0.0, 1.0]
+		float priorities[] {1.0f}; // range : [0.0, 1.0]
 
-		std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos{};
+		std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos {};
 
 		// graphics queue
 		queueCreateInfos.emplace_back();
@@ -261,7 +270,8 @@ namespace vm
 		queueCreateInfos.back().pQueuePriorities = priorities;
 
 		// compute queue
-		if (computeFamilyId != graphicsFamilyId) {
+		if (computeFamilyId != graphicsFamilyId)
+		{
 			queueCreateInfos.emplace_back();
 			queueCreateInfos.back().queueFamilyIndex = computeFamilyId;
 			queueCreateInfos.back().queueCount = 1;
@@ -269,7 +279,8 @@ namespace vm
 		}
 
 		// transer queue
-		if (transferFamilyId != graphicsFamilyId && transferFamilyId != computeFamilyId) {
+		if (transferFamilyId != graphicsFamilyId && transferFamilyId != computeFamilyId)
+		{
 			queueCreateInfos.emplace_back();
 			queueCreateInfos.back().queueFamilyIndex = transferFamilyId;
 			queueCreateInfos.back().queueCount = 1;
@@ -286,16 +297,16 @@ namespace vm
 		device = make_ref(gpu->createDevice(deviceCreateInfo));
 	}
 
-    void VulkanContext::CreateAllocator()
-    {
-        VmaAllocatorCreateInfo allocator_info   = {};
-        allocator_info.physicalDevice = VkPhysicalDevice(*gpu);
-        allocator_info.device = VkDevice(*device);
-        allocator_info.instance = VkInstance(*instance);
-        allocator_info.vulkanApiVersion = vk::enumerateInstanceVersion();
+	void VulkanContext::CreateAllocator()
+	{
+		VmaAllocatorCreateInfo allocator_info = {};
+		allocator_info.physicalDevice = VkPhysicalDevice(*gpu);
+		allocator_info.device = VkDevice(*device);
+		allocator_info.instance = VkInstance(*instance);
+		allocator_info.vulkanApiVersion = vk::enumerateInstanceVersion();
 
-        vmaCreateAllocator(&allocator_info, &allocator);
-    }
+		vmaCreateAllocator(&allocator_info, &allocator);
+	}
 
 	void VulkanContext::GetGraphicsQueue()
 	{
@@ -369,9 +380,10 @@ namespace vm
 	void VulkanContext::CreateFences(uint32_t fenceCount)
 	{
 		std::vector<vk::Fence> _fences(fenceCount);
-		const vk::FenceCreateInfo fi{ vk::FenceCreateFlagBits::eSignaled };
+		const vk::FenceCreateInfo fi {vk::FenceCreateFlagBits::eSignaled};
 
-		for (uint32_t i = 0; i < fenceCount; i++) {
+		for (uint32_t i = 0; i < fenceCount; i++)
+		{
 			_fences[i] = device->createFence(fi);
 		}
 
@@ -383,7 +395,8 @@ namespace vm
 		std::vector<vk::Semaphore> _semaphores(semaphoresCount);
 		const vk::SemaphoreCreateInfo si;
 
-		for (uint32_t i = 0; i < semaphoresCount; i++) {
+		for (uint32_t i = 0; i < semaphoresCount; i++)
+		{
 			_semaphores[i] = device->createSemaphore(si);
 		}
 
@@ -393,10 +406,15 @@ namespace vm
 	void VulkanContext::CreateDepth()
 	{
 		depth.format = make_ref(vk::Format::eUndefined);
-		std::vector<vk::Format> candidates = { vk::Format::eD32SfloatS8Uint, vk::Format::eD32Sfloat, vk::Format::eD24UnormS8Uint };
-		for (auto& format : candidates) {
+		std::vector<vk::Format> candidates = {
+				vk::Format::eD32SfloatS8Uint, vk::Format::eD32Sfloat, vk::Format::eD24UnormS8Uint
+		};
+		for (auto& format : candidates)
+		{
 			vk::FormatProperties props = gpu->getFormatProperties(format);
-			if ((props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) == vk::FormatFeatureFlagBits::eDepthStencilAttachment) {
+			if ((props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) ==
+					vk::FormatFeatureFlagBits::eDepthStencilAttachment)
+			{
 				depth.format = make_ref(format);
 				break;
 			}
@@ -404,7 +422,11 @@ namespace vm
 		if (*depth.format == vk::Format::eUndefined)
 			throw std::runtime_error("Depth format is undefined");
 
-		depth.createImage(static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale), static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale), vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		depth.createImage(
+				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale), vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal
+		);
 		depth.createImageView(vk::ImageAspectFlagBits::eDepth);
 
 		depth.addressMode = make_ref(vk::SamplerAddressMode::eClampToEdge);
@@ -441,14 +463,18 @@ namespace vm
 	{
 		device->waitIdle();
 
-		for (auto& fence : *fences) {
-			if (fence) {
+		for (auto& fence : *fences)
+		{
+			if (fence)
+			{
 				device->destroyFence(fence);
 				fence = nullptr;
 			}
 		}
-		for (auto& semaphore : *semaphores) {
-			if (semaphore) {
+		for (auto& semaphore : *semaphores)
+		{
+			if (semaphore)
+			{
 				device->destroySemaphore(semaphore);
 				semaphore = nullptr;
 			}
@@ -456,23 +482,28 @@ namespace vm
 
 		depth.destroy();
 
-		if (*descriptorPool) {
+		if (*descriptorPool)
+		{
 			device->destroyDescriptorPool(*descriptorPool);
 		}
-		if (*commandPool) {
+		if (*commandPool)
+		{
 			device->destroyCommandPool(*commandPool);
 		}
-		if (*commandPool2) {
+		if (*commandPool2)
+		{
 			device->destroyCommandPool(*commandPool2);
 		}
 
 		swapchain.Destroy();
 
-		if (*device) {
+		if (*device)
+		{
 			device->destroy();
 		}
 
-		if (*surface.surface) {
+		if (*surface.surface)
+		{
 			instance->destroySurfaceKHR(*surface.surface);
 		}
 
@@ -480,17 +511,19 @@ namespace vm
 		DestroyDebugMessenger();
 #endif
 
-		if (*instance) {
+		if (*instance)
+		{
 			instance->destroy();
 		}
 	}
 
 	void VulkanContext::submit(
-		const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
-		const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
-		const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
-		const vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
-		const vk::Fence signalFence) const
+			const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
+			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
+			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
+			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
+			const vk::Fence signalFence
+	) const
 	{
 		vk::SubmitInfo si;
 		si.waitSemaphoreCount = waitSemaphores.size();
@@ -511,10 +544,11 @@ namespace vm
 	}
 
 	void VulkanContext::submitAndWaitFence(
-		const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
-		const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
-		const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
-		const vk::ArrayProxy<const vk::Semaphore> signalSemaphores) const
+			const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
+			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
+			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
+			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores
+	) const
 	{
 		const vk::FenceCreateInfo fi;
 		const vk::Fence fence = device->createFence(fi);
@@ -538,7 +572,8 @@ namespace vm
 
 	VulkanContext* VulkanContext::get() noexcept
 	{
-		static auto VkCTX = new VulkanContext(); return VkCTX;
+		static auto VkCTX = new VulkanContext();
+		return VkCTX;
 	}
 
 	void VulkanContext::remove() noexcept

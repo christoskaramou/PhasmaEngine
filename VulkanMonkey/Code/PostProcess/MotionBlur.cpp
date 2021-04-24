@@ -25,11 +25,12 @@ namespace vm
 		frameImage.format = make_ref(VulkanContext::get()->surface.formatKHR->format);
 		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
-			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-			vk::ImageTiling::eOptimal,
-			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-			vk::MemoryPropertyFlagBits::eDeviceLocal);
+				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+				vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+				vk::MemoryPropertyFlagBits::eDeviceLocal
+		);
 		frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 		frameImage.createSampler();
@@ -38,7 +39,8 @@ namespace vm
 	void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		auto size = 4 * sizeof(mat4);
-		UBmotionBlur.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
+		UBmotionBlur
+				.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 		UBmotionBlur.map();
 		UBmotionBlur.zero();
 		UBmotionBlur.flush();
@@ -55,22 +57,28 @@ namespace vm
 
 	void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		std::deque<vk::DescriptorImageInfo> dsii{};
-		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image) {
+		std::deque<vk::DescriptorImageInfo> dsii {};
+		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image)
+		{
 			dsii.emplace_back(*image.sampler, *image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
-			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr };
+			return vk::WriteDescriptorSet {
+					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
+			};
 		};
-		std::deque<vk::DescriptorBufferInfo> dsbi{};
-		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer) {
+		std::deque<vk::DescriptorBufferInfo> dsbi {};
+		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
+		{
 			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
-			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr };
+			return vk::WriteDescriptorSet {
+					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
+			};
 		};
 
-		std::vector<vk::WriteDescriptorSet> textureWriteSets{
-			wSetImage(*DSet, 0, frameImage),
-			wSetImage(*DSet, 1, renderTargets["depth"]),
-			wSetImage(*DSet, 2, renderTargets["velocity"]),
-			wSetBuffer(*DSet, 3, UBmotionBlur)
+		std::vector<vk::WriteDescriptorSet> textureWriteSets {
+				wSetImage(*DSet, 0, frameImage),
+				wSetImage(*DSet, 1, renderTargets["depth"]),
+				wSetImage(*DSet, 2, renderTargets["velocity"]),
+				wSetBuffer(*DSet, 3, UBmotionBlur)
 		};
 		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
@@ -80,18 +88,21 @@ namespace vm
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
 
-		std::vector<vk::ClearValue> clearValues = { clearColor };
+		std::vector<vk::ClearValue> clearValues = {clearColor};
 
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = *renderPass.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
-		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
+		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		rpi.pClearValues = clearValues.data();
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-		const vec4 values{ 1.f / static_cast<float>(FrameTimer::Instance().delta), sin(static_cast<float>(FrameTimer::Instance().time) * 0.125f), GUI::motionBlur_strength, 0.f };
+		const vec4 values {
+				1.f / static_cast<float>(FrameTimer::Instance().delta),
+				sin(static_cast<float>(FrameTimer::Instance().time) * 0.125f), GUI::motionBlur_strength, 0.f
+		};
 		cmd.pushConstants<vec4>(*pipeline.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *DSet, nullptr);
@@ -106,7 +117,8 @@ namespace vm
 
 		renderPass.Destroy();
 
-		if (Pipeline::getDescriptorSetLayoutMotionBlur()) {
+		if (Pipeline::getDescriptorSetLayoutMotionBlur())
+		{
 			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMotionBlur());
 			Pipeline::getDescriptorSetLayoutMotionBlur() = nullptr;
 		}
@@ -117,7 +129,8 @@ namespace vm
 
 	void MotionBlur::update(Camera& camera)
 	{
-		if (GUI::show_motionBlur) {
+		if (GUI::show_motionBlur)
+		{
 			static mat4 previousView = camera.view;
 
 			motionBlurInput[0] = camera.projection;
@@ -127,7 +140,7 @@ namespace vm
 
 			previousView = camera.view;
 
-			Queue::memcpyRequest(&UBmotionBlur, { { &motionBlurInput, sizeof(motionBlurInput), 0 } });
+			Queue::memcpyRequest(&UBmotionBlur, {{&motionBlurInput, sizeof(motionBlurInput), 0}});
 			//UBmotionBlur.map();
 			//memcpy(UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
 			//UBmotionBlur.flush();
@@ -156,18 +169,22 @@ namespace vm
 	void MotionBlur::createPipeline(std::map<std::string, Image>& renderTargets)
 	{
 		// Shader stages
-		Shader vert{ "shaders/Common/quad.vert", ShaderType::Vertex, true };
-		Shader frag{ "shaders/MotionBlur/motionBlur.frag", ShaderType::Fragment, true };
+		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"shaders/MotionBlur/motionBlur.frag", ShaderType::Fragment, true};
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
 		pipeline.info.width = renderTargets["viewport"].width_f;
 		pipeline.info.height = renderTargets["viewport"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>{ *renderTargets["viewport"].blentAttachment });
+		pipeline.info.colorBlendAttachments = make_ref(
+				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["viewport"].blentAttachment}
+		);
 		pipeline.info.pushConstantStage = PushConstantStage::Fragment;
 		pipeline.info.pushConstantSize = sizeof(vec4);
-		pipeline.info.descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>{ Pipeline::getDescriptorSetLayoutMotionBlur() });
+		pipeline.info.descriptorSetLayouts = make_ref(
+				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutMotionBlur()}
+		);
 		pipeline.info.renderPass = renderPass;
 
 		pipeline.createGraphicsPipeline();

@@ -12,10 +12,12 @@ namespace vm
 
 	void Framebuffer::Create(uint32_t width, uint32_t height, const vk::ImageView& view, const RenderPass& renderPass)
 	{
-		Create(width, height, std::vector<vk::ImageView>{ view }, renderPass);
+		Create(width, height, std::vector<vk::ImageView> {view}, renderPass);
 	}
 
-	void Framebuffer::Create(uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, const RenderPass& renderPass)
+	void Framebuffer::Create(
+			uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, const RenderPass& renderPass
+	)
 	{
 
 		vk::FramebufferCreateInfo fbci;
@@ -28,10 +30,11 @@ namespace vm
 
 		handle = make_ref(VulkanContext::get()->device->createFramebuffer(fbci));
 	}
-	
+
 	void Framebuffer::Destroy()
 	{
-		if (*handle) {
+		if (*handle)
+		{
 			VulkanContext::get()->device->destroyFramebuffer(*handle);
 			*handle = nullptr;
 		}

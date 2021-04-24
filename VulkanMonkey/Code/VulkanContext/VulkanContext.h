@@ -1,4 +1,5 @@
 #pragma once
+
 #include <vector>
 #include <mutex>
 #include "../Core/Surface.h"
@@ -28,7 +29,8 @@ namespace vk
 	class Semaphore;
 	class DispatchLoaderDynamic;
 
-	template<class T1> class Flags;
+	template <class T1>
+	class Flags;
 	enum class PipelineStageFlagBits : uint32_t;
 	using PipelineStageFlags = Flags<PipelineStageFlagBits>;
 }
@@ -67,36 +69,62 @@ namespace vm
 	{
 	public:
 		VulkanContext();
+
 		~VulkanContext();
 
 		void CreateInstance(SDL_Window* window);
+
 		static VKAPI_ATTR uint32_t VKAPI_CALL MessageCallback(
-			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-			uint32_t messageType,
-			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-			void* pUserData);
+				VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+				uint32_t messageType,
+				const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+				void* pUserData
+		);
+
 		void CreateDebugMessenger();
+
 		void DestroyDebugMessenger();
+
 		void CreateSurface(Context* ctx);
+
 		void GetSurfaceProperties(Context* ctx);
+
 		void GetGpu();
+
 		void GetGraphicsFamilyId();
+
 		void GetTransferFamilyId();
+
 		void GetComputeFamilyId();
+
 		void CreateDevice();
+
 		void CreateAllocator();
+
 		void GetGraphicsQueue();
+
 		void GetTransferQueue();
+
 		void GetComputeQueue();
+
 		void GetQueues();
+
 		void CreateSwapchain(Context* ctx, uint32_t requestImageCount);
+
 		void CreateCommandPools();
+
 		void CreateDescriptorPool(uint32_t maxDescriptorSets);
+
 		void CreateCmdBuffers(uint32_t bufferCount = 1);
+
 		void CreateFences(uint32_t fenceCount);
+
 		void CreateSemaphores(uint32_t semaphoresCount);
+
 		void CreateDepth();
+
 		void Init(Context* ctx);
+
 		void Destroy();
 
 		Ref<vk::Instance> instance;
@@ -115,7 +143,7 @@ namespace vm
 		Ref<std::vector<vk::CommandBuffer>> shadowCmdBuffers;
 		Ref<std::vector<vk::Fence>> fences;
 		Ref<std::vector<vk::Semaphore>> semaphores;
-        VmaAllocator allocator = nullptr;
+		VmaAllocator allocator = nullptr;
 
 		SDL_Window* window;
 		Surface surface;
@@ -125,38 +153,47 @@ namespace vm
 
 		// Helpers
 		void submit(
-			const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
-			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
-			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
-			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
-			const vk::Fence signalFence) const;
+				const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
+				const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
+				const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
+				const vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
+				const vk::Fence signalFence
+		) const;
+
 		void waitFences(const vk::ArrayProxy<const vk::Fence> fences) const;
+
 		void submitAndWaitFence(
-			const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
-			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
-			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
-			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores) const;
+				const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
+				const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
+				const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
+				const vk::ArrayProxy<const vk::Semaphore> signalSemaphores
+		) const;
 
 #ifdef NOT_USED
-	template<typename T>
-	void SetDebugObjectName(const T& validHandle, const char* name)
-	{
-		vk::DebugUtilsObjectNameInfoEXT duoni;
-		duoni.objectType = validHandle.objectType;
-		duoni.objectHandle = reinterpret_cast<uint64_t>(static_cast<void*>(validHandle));
-		duoni.pObjectName = name;
-		device.setDebugUtilsObjectNameEXT(duoni, dispatchLoaderDynamic);
-	}
+		template<typename T>
+		void SetDebugObjectName(const T& validHandle, const char* name)
+		{
+			vk::DebugUtilsObjectNameInfoEXT duoni;
+			duoni.objectType = validHandle.objectType;
+			duoni.objectHandle = reinterpret_cast<uint64_t>(static_cast<void*>(validHandle));
+			duoni.pObjectName = name;
+			device.setDebugUtilsObjectNameEXT(duoni, dispatchLoaderDynamic);
+		}
 #else
-		void SetDebugObjectName(const void* validHandle, const void* name) {}
+
+		void SetDebugObjectName(const void* validHandle, const void* name)
+		{ }
+
 #endif
 	private:
-		static inline std::mutex m_submit_mutex{};
+		static inline std::mutex m_submit_mutex {};
 	public:
 		void waitAndLockSubmits();
+
 		void unlockSubmits();
 
 		static VulkanContext* get() noexcept;
+
 		static void remove() noexcept;
 	};
 }

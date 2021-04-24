@@ -40,14 +40,16 @@ namespace vm
 				hash ^= std::hash<Type>()(lastBytes) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
 			}
 		}
-		
-		template<typename T>
-		MemoryHash(const T& object) : MemoryHash(&object, sizeof(T)) {}
+
+		template <typename T>
+		MemoryHash(const T& object) : MemoryHash(&object, sizeof(T))
+		{ }
 
 		size_t getHash()
 		{
 			return hash;
 		}
+
 	private:
 		size_t hash;
 	};

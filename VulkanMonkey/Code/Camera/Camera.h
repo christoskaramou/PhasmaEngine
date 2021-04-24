@@ -1,31 +1,39 @@
 #pragma once
+
 #include "../ECS/Component.h"
 #include "../ECS/System.h"
 #include "../Core/Math.h"
 #include "../Compute/Compute.h"
 
-namespace vm {
+namespace vm
+{
 
 	class Camera;
 
 	class CameraSystem : public ISystem
 	{
 	public:
-		CameraSystem() {}
-		~CameraSystem() {}
+		CameraSystem()
+		{ }
+
+		~CameraSystem()
+		{ }
 
 		Camera& GetCamera(size_t index);
 
 		// Inherited via ISystem
 		void Init() override;
+
 		void Update(double delta) override;
+
 		void Destroy() override;
 	};
 
 	class Camera : public IComponent
 	{
 	public:
-		enum class RelativeDirection {
+		enum class RelativeDirection
+		{
 			FORWARD,
 			BACKWARD,
 			LEFT,
@@ -46,6 +54,7 @@ namespace vm {
 		{
 			Viewport viewport;
 			Rect2D scissor;
+
 			void Update(const vec2& position, const vec2& size, float minDepth = 0.f, float maxDepth = 1.f);
 		};
 
@@ -59,8 +68,8 @@ namespace vm {
 		mat4 previousView;
 		mat4 projection;
 		mat4 previousProjection;
-        mat4 viewProjection;
-        mat4 previousViewProjection;
+		mat4 viewProjection;
+		mat4 previousViewProjection;
 		mat4 invView;
 		mat4 invProjection;
 		mat4 invViewProjection;
@@ -70,20 +79,31 @@ namespace vm {
 		float nearPlane, farPlane, FOV, speed, rotationSpeed;
 		vec2 projOffset, projOffsetPrevious;
 		TargetArea renderArea;
-		std::vector<Plane> frustum{};
-        Compute frustumCompute;
+		std::vector<Plane> frustum {};
+		Compute frustumCompute;
 
 		Camera();
+
 		void Update();
+
 		void UpdatePerspective();
+
 		void UpdateView();
+
 		vec3 WorldFront() const;
+
 		vec3 WorldRight() const;
+
 		vec3 WorldUp() const;
+
 		void Move(RelativeDirection direction, float velocity);
+
 		void Rotate(float xoffset, float yoffset);
+
 		void ExtractFrustum();
+
 		bool SphereInFrustum(const vec4& boundingSphere) const;
+
 		void ReCreateComputePipelines();
 	};
 }

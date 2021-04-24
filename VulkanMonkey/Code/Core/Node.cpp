@@ -9,14 +9,13 @@ mat4 Node::localMatrix() const
 {
 	switch (transformationType)
 	{
-	case TRANSFORMATION_MATRIX: 
-		return matrix;
-	case TRANSFORMATION_TRS: {
-		return transform(rotation, scale, translation);
-	}
-	case TRANSFORMATION_IDENTITY:
-	default:
-		return mat4::identity();
+		case TRANSFORMATION_MATRIX: return matrix;
+		case TRANSFORMATION_TRS:
+		{
+			return transform(rotation, scale, translation);
+		}
+		case TRANSFORMATION_IDENTITY:
+		default: return mat4::identity();
 	}
 }
 
@@ -34,7 +33,8 @@ mat4 Node::getMatrix() const
 
 void calculateMeshJointMatrix(Mesh* mesh, Skin* skin, const mat4& inverseTransform, const size_t index)
 {
-	mesh->ubo.jointMatrix[index] = inverseTransform * skin->joints[index]->getMatrix() * skin->inverseBindMatrices[index];
+	mesh->ubo.jointMatrix[index] =
+			inverseTransform * skin->joints[index]->getMatrix() * skin->inverseBindMatrices[index];
 }
 
 void Node::update()
@@ -56,7 +56,9 @@ void Node::update()
 				std::vector<std::future<void>> futures(numJoints);
 
 				for (size_t i = 0; i < numJoints; i++)
-					futures[i] = std::async(std::launch::async, calculateMeshJointMatrix, mesh, skin, inverseTransform, i);
+					futures[i] = std::async(
+							std::launch::async, calculateMeshJointMatrix, mesh, skin, inverseTransform, i
+					);
 
 				for (auto& f : futures)
 					f.get();
@@ -64,11 +66,11 @@ void Node::update()
 			else
 			{
 				for (size_t i = 0; i < numJoints; i++)
-                    calculateMeshJointMatrix(mesh, skin, inverseTransform, i);
+					calculateMeshJointMatrix(mesh, skin, inverseTransform, i);
 			}
 
 			mesh->ubo.jointcount = static_cast<float>(numJoints);
-			Queue::memcpyRequest(&mesh->uniformBuffer, { { &mesh->ubo, sizeof(mesh->ubo), 0} });
+			Queue::memcpyRequest(&mesh->uniformBuffer, {{&mesh->ubo, sizeof(mesh->ubo), 0}});
 			//mesh->uniformBuffer.map();
 			//memcpy(mesh->uniformBuffer.data, &mesh->ubo, sizeof(mesh->ubo));
 			//mesh->uniformBuffer.flush();
@@ -76,7 +78,7 @@ void Node::update()
 		}
 		else
 		{
-			Queue::memcpyRequest(&mesh->uniformBuffer, { { &mesh->ubo, 2 * sizeof(mat4), 0} });
+			Queue::memcpyRequest(&mesh->uniformBuffer, {{&mesh->ubo, 2 * sizeof(mat4), 0}});
 			//mesh->uniformBuffer.map();
 			//memcpy(mesh->uniformBuffer.data, &mesh->ubo, 2 * sizeof(mat4));
 			//mesh->uniformBuffer.flush();

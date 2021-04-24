@@ -1,4 +1,5 @@
 #pragma once
+
 #include "Delegate.h"
 #include <map>
 #include <deque>
@@ -24,10 +25,15 @@ namespace vm
 		void SendEvent(EventType type, const std::any& data);
 
 		void RegisterEvent(EventType type);
+
 		void UnregisterEvent(EventType type);
+
 		void RegisterEventAction(EventType type, Func&& func);
+
 		void UnregisterEventAction(EventType type, Func&& func);
+
 		void ProcessEvents();
+
 		void ClearEvents();
 
 	private:
@@ -35,14 +41,18 @@ namespace vm
 		std::deque<std::pair<Delegate<std::any>*, std::any>> m_processEvents;
 
 	public:
-		static auto get() { static auto instance = new EventSystem(); return instance; }
+		static auto get()
+		{
+			static auto instance = new EventSystem();
+			return instance;
+		}
 
-		EventSystem(EventSystem const&) = delete;				// copy constructor
-		EventSystem(EventSystem&&) noexcept = delete;			// move constructor
-		EventSystem& operator=(EventSystem const&) = delete;	// copy assignment
-		EventSystem& operator=(EventSystem&&) = delete;			// move assignment
-		~EventSystem() = default;								// destructor
+		EventSystem(EventSystem const&) = delete;                // copy constructor
+		EventSystem(EventSystem&&) noexcept = delete;            // move constructor
+		EventSystem& operator=(EventSystem const&) = delete;    // copy assignment
+		EventSystem& operator=(EventSystem&&) = delete;            // move assignment
+		~EventSystem() = default;                                // destructor
 	private:
-		EventSystem() = default;								// default constructor
+		EventSystem() = default;                                // default constructor
 	};
 }

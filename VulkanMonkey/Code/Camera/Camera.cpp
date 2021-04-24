@@ -50,16 +50,16 @@ namespace vm
 
 		frustum.resize(6);
 
-        frustumCompute = Compute::Create("shaders/Compute/frustum.comp", 64, 96);
+		frustumCompute = Compute::Create("shaders/Compute/frustum.comp", 64, 96);
 
 		renderArea.Update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
 
 	}
 
-    void Camera::ReCreateComputePipelines()
-    {
-	    frustumCompute.createPipeline("shaders/Compute/frustum.comp");
-    }
+	void Camera::ReCreateComputePipelines()
+	{
+		frustumCompute.createPipeline("shaders/Compute/frustum.comp");
+	}
 
 	void vm::Camera::Update()
 	{
@@ -70,7 +70,8 @@ namespace vm
 		previousView = view;
 		previousProjection = projection;
 		projOffsetPrevious = projOffset;
-		if (GUI::use_TAA) {
+		if (GUI::use_TAA)
+		{
 			// has the aspect ratio of the render area because the projection matrix has the same aspect ratio too,
 			// doesn't matter if it renders in bigger image size,
 			// it will be scaled down to render area size before GUI pass
@@ -83,16 +84,17 @@ namespace vm
 			projOffset *= GUI::renderTargetsScale;
 			projOffset *= GUI::TAA_jitter_scale;
 		}
-		else {
-			projOffset = { 0.0f, 0.0f };
+		else
+		{
+			projOffset = {0.0f, 0.0f};
 		}
 		UpdatePerspective();
 		UpdateView();
 		invView = inverse(view);
 		invProjection = inverse(projection);
 		invViewProjection = invView * invProjection;
-        previousViewProjection = viewProjection;
-        viewProjection = projection * view;
+		previousViewProjection = viewProjection;
+		viewProjection = projection * view;
 		ExtractFrustum();
 	}
 
@@ -110,10 +112,10 @@ namespace vm
 		const float m21 = projOffset.y;
 
 		projection = mat4(
-			m00, 0.f, 0.f, 0.f,
-			0.f, m11, 0.f, 0.f,
-			m20, m21, m22, m23,
-			0.f, 0.f, m32, 0.f
+				m00, 0.f, 0.f, 0.f,
+				0.f, m11, 0.f, 0.f,
+				m20, m21, m22, m23,
+				0.f, 0.f, m32, 0.f
 		);
 	}
 
@@ -128,10 +130,10 @@ namespace vm
 		const float m32 = -dot(f, position);
 
 		view = mat4(
-			r.x, u.x, f.x, 0.f,
-			r.y, u.y, f.y, 0.f,
-			r.z, u.z, f.z, 0.f,
-			m30, m31, m32, 1.f
+				r.x, u.x, f.x, 0.f,
+				r.y, u.y, f.y, 0.f,
+				r.z, u.z, f.z, 0.f,
+				m30, m31, m32, 1.f
 		);
 	}
 
@@ -141,18 +143,18 @@ namespace vm
 		//const float prediction = (Timer::cleanDelta - Timer::waitingTime) / Timer::cleanDelta;
 		//velocity -= velocity * prediction;
 
-		if (direction == RelativeDirection::FORWARD)	position += front * (velocity * worldOrientation.z);
-		if (direction == RelativeDirection::BACKWARD)	position -= front * (velocity * worldOrientation.z);
-		if (direction == RelativeDirection::RIGHT)		position += right * velocity;
-		if (direction == RelativeDirection::LEFT)		position -= right * velocity;
+		if (direction == RelativeDirection::FORWARD) position += front * (velocity * worldOrientation.z);
+		if (direction == RelativeDirection::BACKWARD) position -= front * (velocity * worldOrientation.z);
+		if (direction == RelativeDirection::RIGHT) position += right * velocity;
+		if (direction == RelativeDirection::LEFT) position -= right * velocity;
 	}
 
 	void Camera::Rotate(float xoffset, float yoffset)
 	{
 		// prediction of where the submit happens
 		//const float prediction = (Timer::cleanDelta - Timer::waitingTime) / Timer::cleanDelta;
-		const float x = radians(-yoffset * rotationSpeed) * worldOrientation.y;	// pitch
-		const float y = radians(xoffset * rotationSpeed) * worldOrientation.x;	// yaw
+		const float x = radians(-yoffset * rotationSpeed) * worldOrientation.y;    // pitch
+		const float y = radians(xoffset * rotationSpeed) * worldOrientation.x;    // yaw
 
 		euler.x += x;
 		euler.y += y;
@@ -177,11 +179,11 @@ namespace vm
 
 	void Camera::ExtractFrustum()
 	{
-	    // Just testing computes, the specific one is not speeding up any process
-        frustumCompute.waitFence();
-        frustum = frustumCompute.copyOutput<Plane, AUTO>();
-	    frustumCompute.updateInput(&viewProjection, 64);
-	    frustumCompute.dispatch(1, 1, 1);
+		// Just testing computes, the specific one is not speeding up any process
+		frustumCompute.waitFence();
+		frustum = frustumCompute.copyOutput<Plane, AUTO>();
+		frustumCompute.updateInput(&viewProjection, 64);
+		frustumCompute.dispatch(1, 1, 1);
 
 //		// transpose just to make the calculations look simpler
 //		mat4 pvm = transpose(viewProjection);
@@ -232,7 +234,8 @@ namespace vm
 	// center x,y,z - radius w 
 	bool Camera::SphereInFrustum(const vec4& boundingSphere) const
 	{
-		for (auto& plane : frustum) {
+		for (auto& plane : frustum)
+		{
 			const float dist = dot(plane.normal, vec3(boundingSphere)) + plane.d;
 
 			if (dist < -boundingSphere.w)
@@ -244,7 +247,7 @@ namespace vm
 		return true;
 	}
 
-    void Camera::TargetArea::Update(const vec2& position, const vec2& size, float minDepth, float maxDepth)
+	void Camera::TargetArea::Update(const vec2& position, const vec2& size, float minDepth, float maxDepth)
 	{
 		viewport.x = position.x;
 		viewport.y = position.y;

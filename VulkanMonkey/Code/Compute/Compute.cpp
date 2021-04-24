@@ -7,7 +7,7 @@
 
 namespace vm
 {
-    Ref<vk::CommandPool> Compute::s_commandPool = make_ref(vk::CommandPool());
+	Ref<vk::CommandPool> Compute::s_commandPool = make_ref(vk::CommandPool());
 
 	Compute::Compute()
 	{
@@ -17,23 +17,25 @@ namespace vm
 		commandBuffer = make_ref(vk::CommandBuffer());
 	}
 
-    void Compute::updateInput(const void *srcData, size_t srcSize, size_t offset)
-    {
-	    SBIn.map();
-        SBIn.copyData(srcData, srcSize, offset);
-        SBIn.flush();
-        SBIn.unmap();
-    }
+	void Compute::updateInput(const void* srcData, size_t srcSize, size_t offset)
+	{
+		SBIn.map();
+		SBIn.copyData(srcData, srcSize, offset);
+		SBIn.flush();
+		SBIn.unmap();
+	}
 
-    void Compute::updateInput(vk::Buffer srcBuffer, size_t srcSize)
-    {
-        SBIn.map();
-        SBIn.copyBuffer(srcBuffer, srcSize);
-        SBIn.flush();
-        SBIn.unmap();
-    }
+	void Compute::updateInput(vk::Buffer srcBuffer, size_t srcSize)
+	{
+		SBIn.map();
+		SBIn.copyBuffer(srcBuffer, srcSize);
+		SBIn.flush();
+		SBIn.unmap();
+	}
 
-	void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, const std::vector<vk::Semaphore>& waitFor)
+	void Compute::dispatch(
+			const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, const std::vector<vk::Semaphore>& waitFor
+	)
 	{
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -86,28 +88,32 @@ namespace vm
 
 	void vm::Compute::updateDescriptorSet()
 	{
-		std::deque<vk::DescriptorBufferInfo> dsbi{};
-		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer, vk::DescriptorType type)
-        {
+		std::deque<vk::DescriptorBufferInfo> dsbi {};
+		auto const wSetBuffer = [&dsbi](
+				const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer, vk::DescriptorType type
+		)
+		{
 			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
-			return vk::WriteDescriptorSet{ dstSet, dstBinding, 0, 1, type, nullptr, &dsbi.back(), nullptr };
+			return vk::WriteDescriptorSet {dstSet, dstBinding, 0, 1, type, nullptr, &dsbi.back(), nullptr};
 		};
 		std::vector<vk::WriteDescriptorSet> writeCompDescriptorSets
-		{
-			wSetBuffer(*DSCompute, 0, SBIn, vk::DescriptorType::eStorageBuffer),
-			wSetBuffer(*DSCompute, 1, SBOut, vk::DescriptorType::eStorageBuffer),
-		};
+				{
+						wSetBuffer(*DSCompute, 0, SBIn, vk::DescriptorType::eStorageBuffer),
+						wSetBuffer(*DSCompute, 1, SBOut, vk::DescriptorType::eStorageBuffer),
+				};
 		VulkanContext::get()->device->updateDescriptorSets(writeCompDescriptorSets, nullptr);
 	}
 
 	void Compute::createPipeline(const std::string& shaderName)
 	{
-        pipeline.destroy();
+		pipeline.destroy();
 
-		Shader shader{shaderName, ShaderType::Compute, true };
-		
+		Shader shader {shaderName, ShaderType::Compute, true};
+
 		pipeline.info.pCompShader = &shader;
-		pipeline.info.descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>{ Pipeline::getDescriptorSetLayoutCompute() });
+		pipeline.info.descriptorSetLayouts = make_ref(
+				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutCompute()}
+		);
 
 		pipeline.createComputePipeline();
 
@@ -125,31 +131,33 @@ namespace vm
 		}
 	}
 
-    Compute Compute::Create(const std::string& shaderName, size_t sizeIn, size_t sizeOut)
-    {
-	    CreateResources();
-
-        vk::CommandBufferAllocateInfo cbai;
-        cbai.commandPool = *s_commandPool;
-        cbai.level = vk::CommandBufferLevel::ePrimary;
-        cbai.commandBufferCount = 1;
-        vk::CommandBuffer commandBuffer = VulkanContext::get()->device->allocateCommandBuffers(cbai).at(0);
-
-        Compute compute;
-        compute.commandBuffer = make_ref(commandBuffer);
-        compute.createPipeline(shaderName);
-        compute.createDescriptorSet();
-        compute.createComputeStorageBuffers(sizeIn, sizeOut);
-        compute.updateDescriptorSet();
-        compute.fence = make_ref(VulkanContext::get()->device->createFence(vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled }));
-        compute.semaphore = make_ref(VulkanContext::get()->device->createSemaphore(vk::SemaphoreCreateInfo{ }));
-
-        return compute;
-    }
-
-    std::vector<Compute> Compute::Create(const std::string& shaderName, size_t sizeIn, size_t sizeOut, uint32_t count)
+	Compute Compute::Create(const std::string& shaderName, size_t sizeIn, size_t sizeOut)
 	{
-        CreateResources();
+		CreateResources();
+
+		vk::CommandBufferAllocateInfo cbai;
+		cbai.commandPool = *s_commandPool;
+		cbai.level = vk::CommandBufferLevel::ePrimary;
+		cbai.commandBufferCount = 1;
+		vk::CommandBuffer commandBuffer = VulkanContext::get()->device->allocateCommandBuffers(cbai).at(0);
+
+		Compute compute;
+		compute.commandBuffer = make_ref(commandBuffer);
+		compute.createPipeline(shaderName);
+		compute.createDescriptorSet();
+		compute.createComputeStorageBuffers(sizeIn, sizeOut);
+		compute.updateDescriptorSet();
+		compute.fence = make_ref(
+				VulkanContext::get()->device->createFence(vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled})
+		);
+		compute.semaphore = make_ref(VulkanContext::get()->device->createSemaphore(vk::SemaphoreCreateInfo {}));
+
+		return compute;
+	}
+
+	std::vector<Compute> Compute::Create(const std::string& shaderName, size_t sizeIn, size_t sizeOut, uint32_t count)
+	{
+		CreateResources();
 
 		vk::CommandBufferAllocateInfo cbai;
 		cbai.commandPool = *s_commandPool;
@@ -157,34 +165,37 @@ namespace vm
 		cbai.commandBufferCount = count;
 		std::vector<vk::CommandBuffer> commandBuffers = VulkanContext::get()->device->allocateCommandBuffers(cbai);
 
-        std::vector<Compute> computes(count);
+		std::vector<Compute> computes(count);
 
 		for (auto& commandBuffer : commandBuffers)
 		{
-		    Compute compute;
-            compute.commandBuffer = make_ref(commandBuffer);
+			Compute compute;
+			compute.commandBuffer = make_ref(commandBuffer);
 			compute.createPipeline(shaderName);
 			compute.createDescriptorSet();
 			compute.createComputeStorageBuffers(sizeIn, sizeOut);
 			compute.updateDescriptorSet();
-            compute.fence = make_ref(VulkanContext::get()->device->createFence(vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled }));
+			compute.fence = make_ref(
+					VulkanContext::get()->device->createFence(vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled})
+			);
 
-            computes.push_back(compute);
+			computes.push_back(compute);
 		}
 
-        return computes;
+		return computes;
 	}
 
 	void Compute::CreateResources()
-    {
-        if (!*s_commandPool)
-        {
-            vk::CommandPoolCreateInfo cpci;
-            cpci.queueFamilyIndex = VulkanContext::get()->computeFamilyId;
-            cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-            s_commandPool = make_ref(VulkanContext::get()->device->createCommandPool(cpci));
-        }
-    }
+	{
+		if (!*s_commandPool)
+		{
+			vk::CommandPoolCreateInfo cpci;
+			cpci.queueFamilyIndex = VulkanContext::get()->computeFamilyId;
+			cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+			s_commandPool = make_ref(VulkanContext::get()->device->createCommandPool(cpci));
+		}
+	}
+
 	void Compute::DestroyResources()
 	{
 		if (*s_commandPool)
@@ -193,10 +204,10 @@ namespace vm
 			*s_commandPool = nullptr;
 		}
 
-        if (Pipeline::getDescriptorSetLayoutCompute())
-        {
-            VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutCompute());
-            Pipeline::getDescriptorSetLayoutCompute() = nullptr;
-        }
+		if (Pipeline::getDescriptorSetLayoutCompute())
+		{
+			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutCompute());
+			Pipeline::getDescriptorSetLayoutCompute() = nullptr;
+		}
 	}
 }

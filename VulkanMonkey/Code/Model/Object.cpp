@@ -12,11 +12,18 @@ namespace vm
 
 	void Object::createVertexBuffer()
 	{
-		vertexBuffer.createBuffer(sizeof(float) * vertices.size(), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		vertexBuffer.createBuffer(
+				sizeof(float) * vertices.size(),
+				vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+				vk::MemoryPropertyFlagBits::eDeviceLocal
+		);
 
 		// Staging buffer
 		Buffer staging;
-		staging.createBuffer(sizeof(float) * vertices.size(), vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
+		staging.createBuffer(
+				sizeof(float) * vertices.size(), vk::BufferUsageFlagBits::eTransferSrc,
+				vk::MemoryPropertyFlagBits::eHostVisible
+		);
 		staging.map();
 		staging.copyData(vertices.data());
 		staging.flush();
@@ -28,7 +35,8 @@ namespace vm
 
 	void Object::createUniformBuffer(size_t size)
 	{
-		uniformBuffer.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
+		uniformBuffer
+				.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
 		uniformBuffer.map();
 		uniformBuffer.zero();
 		uniformBuffer.flush();
@@ -47,7 +55,9 @@ namespace vm
 			throw std::runtime_error("No pixel data loaded");
 
 		Buffer staging;
-		staging.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
+		staging.createBuffer(
+				imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible
+		);
 		staging.map();
 		staging.copyData(pixels);
 		staging.flush();
@@ -57,7 +67,11 @@ namespace vm
 
 		texture.format = make_ref(vk::Format::eR8G8B8A8Unorm);
 		texture.mipLevels = 1;
-		texture.createImage(texWidth, texHeight, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		texture.createImage(
+				texWidth, texHeight, vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+				vk::MemoryPropertyFlagBits::eDeviceLocal
+		);
 		texture.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
 		texture.copyBufferToImage(*staging.buffer);
 		texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);

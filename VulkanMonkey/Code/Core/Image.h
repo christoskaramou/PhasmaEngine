@@ -1,4 +1,5 @@
 #pragma once
+
 #include "Base.h"
 
 namespace vk
@@ -22,7 +23,8 @@ namespace vk
 	enum class SampleCountFlagBits : uint32_t;
 	class Buffer;
 
-	template<class T1> class Flags;
+	template <class T1>
+	class Flags;
 	enum class ImageCreateFlagBits : uint32_t;
 	enum class PipelineStageFlagBits : uint32_t;
 	enum class AccessFlagBits : uint32_t;
@@ -54,15 +56,17 @@ namespace vm
 	{
 	public:
 		Image();
+
 		~Image();
+
 		Ref<vk::Image> image;
-		VmaAllocation allocation{};
+		VmaAllocation allocation {};
 		Ref<vk::ImageView> view;
 		Ref<vk::Sampler> sampler;
-		uint32_t width{};
-		uint32_t height{};
-		float width_f{};
-		float height_f{};
+		uint32_t width {};
+		uint32_t height {};
+		float width_f {};
+		float height_f {};
 		Ref<vk::Extent2D> extent;
 
 		// values
@@ -86,22 +90,35 @@ namespace vm
 		Ref<vk::PipelineColorBlendAttachmentState> blentAttachment;
 
 		void transitionImageLayout(
-			vk::CommandBuffer cmd,
-			vk::ImageLayout oldLayout,
-			vk::ImageLayout newLayout,
-			const vk::PipelineStageFlags& oldStageMask,
-			const vk::PipelineStageFlags& newStageMask,
-			const vk::AccessFlags& srcMask,
-			const vk::AccessFlags& dstMask,
-			const vk::ImageAspectFlags& aspectFlags) const;
-		void createImage(uint32_t width, uint32_t height, vk::ImageTiling tiling, const vk::ImageUsageFlags& usage, const vk::MemoryPropertyFlags& properties);
+				vk::CommandBuffer cmd,
+				vk::ImageLayout oldLayout,
+				vk::ImageLayout newLayout,
+				const vk::PipelineStageFlags& oldStageMask,
+				const vk::PipelineStageFlags& newStageMask,
+				const vk::AccessFlags& srcMask,
+				const vk::AccessFlags& dstMask,
+				const vk::ImageAspectFlags& aspectFlags
+		) const;
+
+		void createImage(
+				uint32_t width, uint32_t height, vk::ImageTiling tiling, const vk::ImageUsageFlags& usage,
+				const vk::MemoryPropertyFlags& properties
+		);
+
 		void createImageView(const vk::ImageAspectFlags& aspectFlags);
+
 		void transitionImageLayout(vk::ImageLayout oldLayout, vk::ImageLayout newLayout) const;
+
 		void changeLayout(const vk::CommandBuffer& cmd, LayoutState state);
+
 		void copyBufferToImage(vk::Buffer buffer, uint32_t baseLayer = 0) const;
+
 		void copyColorAttachment(const vk::CommandBuffer& cmd, Image& renderedImage) const;
+
 		void generateMipMaps() const;
+
 		void createSampler();
+
 		void destroy() const;
 	};
 }

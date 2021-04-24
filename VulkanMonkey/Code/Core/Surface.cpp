@@ -22,12 +22,14 @@ namespace vm
 	void Surface::Create(Context* ctx)
 	{
 		VkSurfaceKHR _vkSurface;
-		if (!SDL_Vulkan_CreateSurface(ctx->GetSystem<Renderer>()->GetWindow(), VkInstance(*ctx->GetVKContext()->instance), &_vkSurface))
+		if (!SDL_Vulkan_CreateSurface(
+				ctx->GetSystem<Renderer>()->GetWindow(), VkInstance(*ctx->GetVKContext()->instance), &_vkSurface
+		))
 			throw std::runtime_error(SDL_GetError());
 
 		int width, height;
 		SDL_GL_GetDrawableSize(ctx->GetSystem<Renderer>()->GetWindow(), &width, &height);
-		actualExtent = make_ref(vk::Extent2D{ static_cast<uint32_t>(width), static_cast<uint32_t>(height) });
+		actualExtent = make_ref(vk::Extent2D {static_cast<uint32_t>(width), static_cast<uint32_t>(height)});
 		surface = make_ref(vk::SurfaceKHR(_vkSurface));
 	}
 
@@ -46,7 +48,8 @@ namespace vm
 		auto gpu = ctx->GetVKContext()->gpu;
 		std::vector<vk::SurfaceFormatKHR> formats = gpu->getSurfaceFormatsKHR(*surface);
 		auto format = formats[0];
-		for (const auto& f : formats) {
+		for (const auto& f : formats)
+		{
 			if (f.format == vk::Format::eB8G8R8A8Unorm && f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
 				format = f;
 		}

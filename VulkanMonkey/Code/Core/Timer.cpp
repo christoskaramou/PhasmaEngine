@@ -32,7 +32,7 @@ namespace vm
 
 	void FrameTimer::Delay(double seconds)
 	{
-		const std::chrono::nanoseconds delay{ SECONDS_TO_NANOSECONDS<size_t>(seconds) - system_delay };
+		const std::chrono::nanoseconds delay {SECONDS_TO_NANOSECONDS<size_t>(seconds) - system_delay};
 
 		timer.Start();
 		std::this_thread::sleep_for(delay);
@@ -80,7 +80,10 @@ namespace vm
 
 	float GPUTimer::getTime()
 	{
-		const auto res = VulkanContext::get()->device->getQueryPoolResults(*queryPool, 0, 2, sizeof(uint64_t) * queryTimes.size(), queryTimes.data(), sizeof(uint64_t), vk::QueryResultFlagBits::e64);
+		const auto res = VulkanContext::get()->device->getQueryPoolResults(
+				*queryPool, 0, 2, sizeof(uint64_t) * queryTimes.size(), queryTimes.data(), sizeof(uint64_t),
+				vk::QueryResultFlagBits::e64
+		);
 		if (res != vk::Result::eSuccess)
 			return 0.0f;
 		return static_cast<float>(queryTimes[1] - queryTimes[0]) * timestampPeriod * 1e-6f;

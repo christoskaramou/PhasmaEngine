@@ -7,7 +7,7 @@ namespace vm
 {
 	Reflection::Reflection(Shader* vert, Shader* frag) : m_vert(vert), m_frag(frag)
 	{
-		spirv_cross::Compiler compiler{ vert->get_spriv(), vert->size() };
+		spirv_cross::Compiler compiler {vert->get_spriv(), vert->size()};
 		spirv_cross::ShaderResources resources = compiler.get_shader_resources();
 
 		auto active = compiler.get_active_interface_variables();
@@ -73,21 +73,21 @@ namespace vm
 		}
 	}
 
-    Reflection::ShaderInOutDesc::ShaderInOutDesc()
+	Reflection::ShaderInOutDesc::ShaderInOutDesc()
 	{
 		name = "";
 		location = -1;
 		//type = make_ref(spirv_cross::SPIRType());
 	}
 
-    Reflection::CombinedImageSamplerDesc::CombinedImageSamplerDesc()
+	Reflection::CombinedImageSamplerDesc::CombinedImageSamplerDesc()
 	{
 		name = "";
 		set = -1;
 		binding = -1;
 	}
 
-    Reflection::BufferDesc::BufferDesc()
+	Reflection::BufferDesc::BufferDesc()
 	{
 		name = "";
 		set = -1;

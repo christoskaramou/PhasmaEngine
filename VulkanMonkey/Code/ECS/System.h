@@ -1,4 +1,5 @@
 #pragma once
+
 #include <unordered_map>
 #include <vector>
 #include "ECSBase.h"
@@ -11,13 +12,20 @@ namespace vm
 	class ISystem
 	{
 	public:
-		ISystem() : m_context(nullptr), m_enabled(false) { m_components[-1] = std::vector<IComponent*>(); }
-		virtual ~ISystem() {}
+		ISystem() : m_context(nullptr), m_enabled(false)
+		{ m_components[-1] = std::vector<IComponent*>(); }
+
+		virtual ~ISystem()
+		{ }
 
 		virtual void Init() = 0;
+
 		virtual void Update(double delta) = 0;
+
 		virtual void Destroy() = 0;
-		template<class T> inline bool HasComponents()
+
+		template <class T>
+		inline bool HasComponents()
 		{
 			ValidateBaseClass<IComponent, T>();
 
@@ -26,14 +34,18 @@ namespace vm
 
 			return false;
 		}
-		template<class T> inline void AddComponent(T* component)
+
+		template <class T>
+		inline void AddComponent(T* component)
 		{
 			size_t id = GetTypeID<T>();
 			if (!HasComponents<T>())
 				m_components[id] = std::vector<IComponent*>();
 			m_components[id].push_back(component);
 		}
-		template<class T> void RemoveComponent(IComponent* component)
+
+		template <class T>
+		void RemoveComponent(IComponent* component)
 		{
 			if (HasComponents<T>())
 			{
@@ -43,16 +55,22 @@ namespace vm
 					m_components[id].erase(it);
 			}
 		}
-		template<class T> void RemoveComponents()
+
+		template <class T>
+		void RemoveComponents()
 		{
 			if (HasComponents<T>())
 				m_components[GetTypeID<T>()].clear();
 		}
-		template<class T> void RemoveAllComponents()
+
+		template <class T>
+		void RemoveAllComponents()
 		{
 			m_components.clear();
 		}
-		template<class T> T* GetComponentOfTypeAt(size_t index)
+
+		template <class T>
+		T* GetComponentOfTypeAt(size_t index)
 		{
 			if (HasComponents<T>())
 			{
@@ -62,17 +80,27 @@ namespace vm
 
 			return nullptr;
 		}
-		template<class T> std::vector<IComponent*>& GetComponentsOfType()
+
+		template <class T>
+		std::vector<IComponent*>& GetComponentsOfType()
 		{
 			if (HasComponents<T>())
 				return m_components[GetTypeID<T>()];
 
 			return m_components[-1];
 		}
-		void SetContext(Context* context) { m_context = context; }
-		Context* GetContext() { return m_context; }
-		bool IsEnabled() { return m_enabled; }
-		void SetEnabled(bool enabled) { m_enabled = enabled; }
+
+		void SetContext(Context* context)
+		{ m_context = context; }
+
+		Context* GetContext()
+		{ return m_context; }
+
+		bool IsEnabled()
+		{ return m_enabled; }
+
+		void SetEnabled(bool enabled)
+		{ m_enabled = enabled; }
 
 	private:
 		Context* m_context;
