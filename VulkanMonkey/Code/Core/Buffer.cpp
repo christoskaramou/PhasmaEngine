@@ -6,7 +6,7 @@ namespace vm
 	Buffer::Buffer()
 	{
 		buffer = make_ref(vk::Buffer());
-        allocation = nullptr;
+		allocation = nullptr;
 		size = 0;
 	}
 
