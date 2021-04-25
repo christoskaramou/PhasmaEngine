@@ -13,11 +13,9 @@ namespace vm
 	class CameraSystem : public ISystem
 	{
 	public:
-		CameraSystem()
-		{ }
+		CameraSystem() = default;
 
-		~CameraSystem()
-		{ }
+		~CameraSystem() override = default;
 
 		Camera& GetCamera(size_t index);
 
@@ -64,15 +62,10 @@ namespace vm
 			float d;
 		};
 
-		mat4 view;
-		mat4 previousView;
-		mat4 projection;
-		mat4 previousProjection;
-		mat4 viewProjection;
-		mat4 previousViewProjection;
-		mat4 invView;
-		mat4 invProjection;
-		mat4 invViewProjection;
+		mat4 view, previousView;
+		mat4 projection, previousProjection;
+		mat4 viewProjection, previousViewProjection;
+		mat4 invView, invProjection, invViewProjection;
 		quat orientation;
 		vec3 position, euler, worldOrientation;
 		vec3 front, right, up;

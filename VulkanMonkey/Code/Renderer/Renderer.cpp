@@ -594,8 +594,7 @@ namespace vm
 		vCtx.unlockSubmits();
 	}
 
-	void
-	Renderer::AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
+	void Renderer::AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
 	{
 		if (renderTargets.find(name) != renderTargets.end())
 			return;

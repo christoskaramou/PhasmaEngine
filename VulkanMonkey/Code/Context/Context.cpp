@@ -45,10 +45,8 @@ namespace vm
 
 	Entity* Context::GetEntity(size_t id)
 	{
-		if (m_entities.find(id) != m_entities.end())
-			return m_entities[id].get();
-		else
-			return nullptr;
+		auto iterator = m_entities.find(id);
+		return iterator != m_entities.end() ? iterator->second.get() : nullptr;
 	}
 
 	void Context::RemoveEntity(size_t id)
