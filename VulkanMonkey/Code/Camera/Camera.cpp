@@ -50,7 +50,7 @@ namespace vm
 
 		frustum.resize(6);
 
-		frustumCompute = Compute::Create("shaders/Compute/frustum.comp", 64, 96);
+		frustumCompute = Compute::Create("Shaders/Compute/frustum.comp", 64, 96);
 
 		renderArea.Update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
 
@@ -58,7 +58,7 @@ namespace vm
 
 	void Camera::ReCreateComputePipelines()
 	{
-		frustumCompute.createPipeline("shaders/Compute/frustum.comp");
+		frustumCompute.createPipeline("Shaders/Compute/frustum.comp");
 	}
 
 	void vm::Camera::Update()

@@ -5,6 +5,7 @@
 #include "../VulkanContext/VulkanContext.h"
 #include "../Camera/Camera.h"
 #include "../Context/Context.h"
+#include "../Core/Path.h"
 
 namespace vm
 {
@@ -80,7 +81,7 @@ namespace vm
 		motionBlur.createPipeline(renderTargets);
 		gui.createPipeline();
 
-		//transformsCompute = Compute::Create("shaders/Compute/shader.comp", 64, 64);
+		//transformsCompute = Compute::Create("Shaders/Compute/shader.comp", 64, 64);
 
 		metrics.resize(20);
 		//LOAD RESOURCES
@@ -674,21 +675,21 @@ namespace vm
 	{
 		// SKYBOXES LOAD
 		std::array<std::string, 6> skyTextures = {
-				"objects/sky/right.png",
-				"objects/sky/left.png",
-				"objects/sky/top.png",
-				"objects/sky/bottom.png",
-				"objects/sky/back.png",
-				"objects/sky/front.png"
+				Path::Assets + "Objects/sky/right.png",
+				Path::Assets + "Objects/sky/left.png",
+				Path::Assets + "Objects/sky/top.png",
+				Path::Assets + "Objects/sky/bottom.png",
+				Path::Assets + "Objects/sky/back.png",
+				Path::Assets + "Objects/sky/front.png"
 		};
 		skyBoxDay.loadSkyBox(skyTextures, 1024);
 		skyTextures = {
-				"objects/lmcity/lmcity_rt.png",
-				"objects/lmcity/lmcity_lf.png",
-				"objects/lmcity/lmcity_up.png",
-				"objects/lmcity/lmcity_dn.png",
-				"objects/lmcity/lmcity_bk.png",
-				"objects/lmcity/lmcity_ft.png"
+				Path::Assets + "Objects/lmcity/lmcity_rt.png",
+				Path::Assets + "Objects/lmcity/lmcity_lf.png",
+				Path::Assets + "Objects/lmcity/lmcity_up.png",
+				Path::Assets + "Objects/lmcity/lmcity_dn.png",
+				Path::Assets + "Objects/lmcity/lmcity_bk.png",
+				Path::Assets + "Objects/lmcity/lmcity_ft.png"
 		};
 		skyBoxNight.loadSkyBox(skyTextures, 512);
 

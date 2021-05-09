@@ -39,6 +39,4 @@ And some other primitive implemented ideas in a certain degree like Compute shad
 
 Clone the repo and get CMAKE (https://cmake.org/).
 To build use CMAKE and set VulkanMonkey3D folder as root, this is where CMakeLists.txt is.
-Open the project in your IDE and select a build type (Debug/Release).
-
-Noting that CMAKE will automatically copy the needed files and folders to where CMAKE_BINARY_DIR is after it runs. Any changes to these files will need to be copied again, this includes shader files, because they are getting loaded and compiled at runtime.
+Open the project in your IDE and select or set a build type (Debug/Release).

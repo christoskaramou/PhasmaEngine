@@ -11,6 +11,7 @@
 #include <deque>
 #include "../Shader/Reflection.h"
 #include "../VulkanContext/VulkanContext.h"
+#include "../Core/Path.h"
 
 namespace vm
 {
@@ -77,7 +78,7 @@ namespace vm
 		DSComposition = make_ref(vulkan->device->allocateDescriptorSets(allocInfo).at(0));
 
 		// Check if ibl_brdf_lut is already loaded
-		const std::string path = "objects/ibl_brdf_lut.png";
+		const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
 		if (Mesh::uniqueTextures.find(path) != Mesh::uniqueTextures.end())
 		{
 			ibl_brdf_lut = Mesh::uniqueTextures[path];
@@ -288,8 +289,8 @@ namespace vm
 
 	void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"shaders/Deferred/gBuffer.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/Deferred/gBuffer.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Deferred/gBuffer.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/Deferred/gBuffer.frag", ShaderType::Fragment, true};
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
@@ -324,8 +325,8 @@ namespace vm
 
 	void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"shaders/Deferred/composition.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/Deferred/composition.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Deferred/composition.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/Deferred/composition.frag", ShaderType::Fragment, true};
 
 		pipelineComposition.info.pVertShader = &vert;
 		pipelineComposition.info.pFragShader = &frag;

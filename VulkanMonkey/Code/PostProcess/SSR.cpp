@@ -130,8 +130,8 @@ namespace vm
 
 	void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/SSR/ssr.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/SSR/ssr.frag", ShaderType::Fragment, true};
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;

@@ -210,8 +210,8 @@ namespace vm
 
 	void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/Bloom/brightFilter.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/Bloom/brightFilter.frag", ShaderType::Fragment, true};
 
 		pipelineBrightFilter.info.pVertShader = &vert;
 		pipelineBrightFilter.info.pFragShader = &frag;
@@ -233,8 +233,8 @@ namespace vm
 
 	void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/Bloom/gaussianBlurHorizontal.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/Bloom/gaussianBlurHorizontal.frag", ShaderType::Fragment, true};
 
 		pipelineGaussianBlurHorizontal.info.pVertShader = &vert;
 		pipelineGaussianBlurHorizontal.info.pFragShader = &frag;
@@ -258,8 +258,8 @@ namespace vm
 
 	void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/Bloom/gaussianBlurVertical.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/Bloom/gaussianBlurVertical.frag", ShaderType::Fragment, true};
 
 		pipelineGaussianBlurVertical.info.pVertShader = &vert;
 		pipelineGaussianBlurVertical.info.pFragShader = &frag;
@@ -284,8 +284,8 @@ namespace vm
 	void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	{
 		// Shader stages
-		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/Bloom/combine.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/Bloom/combine.frag", ShaderType::Fragment, true};
 
 		pipelineCombine.info.pVertShader = &vert;
 		pipelineCombine.info.pFragShader = &frag;

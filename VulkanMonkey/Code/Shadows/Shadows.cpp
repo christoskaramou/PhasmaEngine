@@ -127,7 +127,7 @@ namespace vm
 
 	void Shadows::createPipeline()
 	{
-		Shader vert {"shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true};
+		Shader vert {"Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true};
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.vertexInputBindingDescriptions = make_ref(Vertex::getBindingDescriptionGeneral());

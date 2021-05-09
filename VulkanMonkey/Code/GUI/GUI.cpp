@@ -9,6 +9,7 @@
 #include "../Core/Surface.h"
 #include "../Shader/Shader.h"
 #include "../VulkanContext/VulkanContext.h"
+#include "../Core/Path.h"
 
 namespace vm
 {
@@ -321,7 +322,7 @@ namespace vm
 			std::string res = result;
 			if (std::find(fileList.begin(), fileList.end(), res) == fileList.end())
 			{
-				const std::string cmd = "type nul > Scripts\\" + res;
+				const std::string cmd = "type nul > " + Path::Assets + "Scripts\\" + res;
 				system(cmd.c_str());
 				fileList.push_back(res);
 			}
@@ -340,7 +341,7 @@ namespace vm
 			{
 				if (ImGui::IsMouseDoubleClicked(0))
 				{
-					std::string s = "Scripts\\" + fileList[i];
+					std::string s = Path::Assets + "Scripts\\" + fileList[i];
 					system(s.c_str());
 				}
 			}
@@ -372,7 +373,7 @@ namespace vm
 			{
 				if (ImGui::IsMouseDoubleClicked(0))
 				{
-					std::string s = "Shaders\\" + shaderList[i];
+					std::string s = Path::Assets + "Shaders\\" + shaderList[i];
 					system(s.c_str());
 				}
 			}
@@ -696,20 +697,22 @@ namespace vm
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = 1;
 
-		for (auto& file : std::filesystem::recursive_directory_iterator("Scripts"))
+		std::string directory = Path::Assets + "Scripts";
+		for (auto& file : std::filesystem::recursive_directory_iterator(directory))
 		{
 			auto pathStr = file.path().string();
 			if (endsWithExt(pathStr, ".cs"))
-				fileList.push_back(pathStr.erase(0, 8)); // remove "Scripts\\"
+				fileList.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size() + 1));
 		}
 
-		for (auto& file : std::filesystem::recursive_directory_iterator("shaders"))
+		directory = Path::Assets + "Shaders";
+		for (auto& file : std::filesystem::recursive_directory_iterator(directory))
 		{
 			auto pathStr = file.path().string();
 			if (endsWithExt(pathStr, ".vert") || endsWithExt(pathStr, ".frag") || endsWithExt(pathStr, ".comp") ||
 					endsWithExt(pathStr, ".glsl"))
 			{
-				shaderList.push_back(pathStr.erase(0, 8)); // remove "shaders\\"
+				shaderList.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size()+ 1));
 			}
 		}
 
@@ -1339,8 +1342,8 @@ namespace vm
 
 	void GUI::createPipeline()
 	{
-		Shader vert {"shaders/GUI/shaderGUI.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/GUI/shaderGUI.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/GUI/shaderGUI.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/GUI/shaderGUI.frag", ShaderType::Fragment, true};
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;

@@ -1,4 +1,5 @@
 #include "Shader.h"
+#include "../Core/Path.h"
 #include <fstream>
 #include <iostream>
 #include <filesystem>
@@ -65,10 +66,16 @@ namespace vm
 			const std::string& filename, ShaderType shaderType, bool online_compile, const std::vector<Define>& defs
 	)
 	{
+		std::string path = filename;
+		if (path.find(Path::Assets) == std::string::npos)
+		{
+			path = Path::Assets + filename;
+		}
+
 		this->shaderType = shaderType;
 		if (online_compile)
 		{
-			init_source(filename);
+			init_source(path);
 
 			m_options.SetIncluder(std::make_unique<FileIncluder>());
 			m_options.SetOptimizationLevel(
@@ -81,7 +88,7 @@ namespace vm
 		}
 		else
 		{
-			std::ifstream file(filename, std::ios::ate | std::ios::binary);
+			std::ifstream file(path, std::ios::ate | std::ios::binary);
 			if (!file.is_open())
 			{
 				throw std::runtime_error("failed to open file!");

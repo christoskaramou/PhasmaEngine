@@ -259,8 +259,8 @@ namespace vm
 
 	void SSAO::createPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/SSAO/ssao.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/SSAO/ssao.frag", ShaderType::Fragment, true};
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
@@ -280,8 +280,8 @@ namespace vm
 
 	void SSAO::createBlurPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/SSAO/ssaoBlur.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/SSAO/ssaoBlur.frag", ShaderType::Fragment, true};
 
 		pipelineBlur.info.pVertShader = &vert;
 		pipelineBlur.info.pFragShader = &frag;

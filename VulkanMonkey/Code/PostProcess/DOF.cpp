@@ -110,8 +110,8 @@ namespace vm
 
 	void DOF::createPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/DepthOfField/DOF.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/DepthOfField/DOF.frag", ShaderType::Fragment, true};
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;

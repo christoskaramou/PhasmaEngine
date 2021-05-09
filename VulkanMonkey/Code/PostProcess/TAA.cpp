@@ -201,8 +201,8 @@ namespace vm
 
 	void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/TAA/TAA.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/TAA/TAA.frag", ShaderType::Fragment, true};
 
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
@@ -222,8 +222,8 @@ namespace vm
 
 	void vm::TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"shaders/TAA/TAASharpen.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag {"Shaders/TAA/TAASharpen.frag", ShaderType::Fragment, true};
 
 		pipelineSharpen.info.pVertShader = &vert;
 		pipelineSharpen.info.pFragShader = &frag;

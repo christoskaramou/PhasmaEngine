@@ -3,6 +3,7 @@
 #include "../Renderer/Pipeline.h"
 #include "../../Include/tinygltf/stb_image.h"
 #include "../VulkanContext/VulkanContext.h"
+#include "../Core/Path.h"
 
 namespace vm
 {
@@ -78,23 +79,23 @@ namespace vm
 		{
 			case MaterialType::BaseColor: tex = &pbrMaterial.baseColorTexture;
 				if (!image || image->uri.empty())
-					path = "objects/black.png";
+					path = Path::Assets + "Objects/black.png";
 				break;
 			case MaterialType::MetallicRoughness: tex = &pbrMaterial.metallicRoughnessTexture;
 				if (!image || image->uri.empty())
-					path = "objects/black.png";
+					path = Path::Assets + "Objects/black.png";
 				break;
 			case MaterialType::Normal: tex = &pbrMaterial.normalTexture;
 				if (!image || image->uri.empty())
-					path = "objects/normal.png";
+					path = Path::Assets + "Objects/normal.png";
 				break;
 			case MaterialType::Occlusion: tex = &pbrMaterial.occlusionTexture;
 				if (!image || image->uri.empty())
-					path = "objects/white.png";
+					path = Path::Assets + "Objects/white.png";
 				break;
 			case MaterialType::Emissive: tex = &pbrMaterial.emissiveTexture;
 				if (!image || image->uri.empty())
-					path = "objects/black.png";
+					path = Path::Assets + "Objects/black.png";
 				break;
 			default: throw std::runtime_error("Load texture invalid type");
 		}
