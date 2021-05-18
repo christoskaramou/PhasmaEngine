@@ -30,10 +30,10 @@ Here is a [demo video](https://www.youtube.com/watch?v=Dj1CpDCSy_k) with some of
 
 And some other primitive implemented ideas in a certain degree like Compute shaders.
 
-![Screenshot](PhasmaEngine/Images/example_image3.png)
-![Screenshot](PhasmaEngine/Images/example_image7.png)
-![Screenshot](PhasmaEngine/Images/example_image2.png)
-![Screenshot](PhasmaEngine/Images/example_image6.png)
+![Screenshot](Phasma/Images/example_image3.png)
+![Screenshot](Phasma/Images/example_image7.png)
+![Screenshot](Phasma/Images/example_image2.png)
+![Screenshot](Phasma/Images/example_image6.png)
 
 **Building and Compiling**
 
