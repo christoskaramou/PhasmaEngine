@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.2)
-set(PROJECT_NAME VulkanMonkey)
+set(PROJECT_NAME Phasma)
 project(${PROJECT_NAME} CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -9,18 +9,18 @@ message("CMAKE_SOURCE_DIR = ${CMAKE_SOURCE_DIR}")
 message("CMAKE_CURRENT_SOURCE_DIR = ${CMAKE_CURRENT_SOURCE_DIR}")
 message("CMAKE_BINARY_DIR = ${CMAKE_BINARY_DIR}")
 
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/VulkanMonkey")
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/VulkanMonkey/Include")
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/VulkanMonkey/Include/imgui")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/imgui")
 
-link_directories("${CMAKE_CURRENT_SOURCE_DIR}/VulkanMonkey/Libs")
+link_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Libs")
 
 file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/VulkanMonkey/*.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/VulkanMonkey/*.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/*.cpp")
 
 add_executable(${PROJECT_NAME} ${SRC_FILES})
-target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/VulkanMonkey/Include/vulkanPCH.h")
+target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/PhasmaPch.h")
 
 set(ADDITIONAL_COMPILE_DEFINITIONS
         "$<$<CONFIG:Debug>:"
@@ -52,10 +52,10 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")
 
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/VulkanMonkey/imgui.ini" DESTINATION ${CMAKE_BINARY_DIR})
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/VulkanMonkey/SDL2.dll" DESTINATION ${CMAKE_BINARY_DIR})
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/VulkanMonkey/shaderc_shared.dll" DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/imgui.ini" DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/SDL2.dll" DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/shaderc_shared.dll" DESTINATION ${CMAKE_BINARY_DIR})
 
 file(WRITE "${CMAKE_BINARY_DIR}/roots.txt"
-        "Assets root: ${CMAKE_CURRENT_SOURCE_DIR}/VulkanMonkey/Assets/" "\n"
+        "Assets root: ${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Assets/" "\n"
         "Executable root: ${CMAKE_BINARY_DIR}/")

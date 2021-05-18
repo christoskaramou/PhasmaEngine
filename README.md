@@ -1,7 +1,7 @@
-# VulkanMonkey3D
+# PhasmaEngine
 
 
-VulkanMonkey3D is intended as a project for learning 3D graphics and techniques, using the Vulkan API. Until now these are the most important features VulkanMonkey3D has:
+PhasmaEngine is intended as a project for learning 3D graphics and techniques, using Vulkan and DirectX12 API. Until now these are the most important features PhasmaEngine has:
 
 * Deffered Rendering
 * Physical Based Rendering
@@ -30,13 +30,13 @@ Here is a [demo video](https://www.youtube.com/watch?v=Dj1CpDCSy_k) with some of
 
 And some other primitive implemented ideas in a certain degree like Compute shaders.
 
-![Screenshot](VulkanMonkey/Images/example_image3.png)
-![Screenshot](VulkanMonkey/Images/example_image7.png)
-![Screenshot](VulkanMonkey/Images/example_image2.png)
-![Screenshot](VulkanMonkey/Images/example_image6.png)
+![Screenshot](PhasmaEngine/Images/example_image3.png)
+![Screenshot](PhasmaEngine/Images/example_image7.png)
+![Screenshot](PhasmaEngine/Images/example_image2.png)
+![Screenshot](PhasmaEngine/Images/example_image6.png)
 
 **Building and Compiling**
 
 Clone the repo and get CMAKE (https://cmake.org/).
-To build use CMAKE and set VulkanMonkey3D folder as root, this is where CMakeLists.txt is.
+To build use CMAKE. CMakeLists.txt is under PhasmaEngine root folder.
 Open the project in your IDE and select or set a build type (Debug/Release).

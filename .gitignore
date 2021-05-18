@@ -4,7 +4,7 @@
 # Ignore almost everything above the root folder
 /*
 /*/
-!/VulkanMonkey/
+!/Phasma/
 !/CMakeLists.txt
 !/LICENCE
 !/README.md
@@ -30,7 +30,7 @@ bld/
 [Bb]in/
 [Oo]bj/
 [Ll]og/
-VulkanMonkey/x64/
+Phasma/x64/
 
 # Visual Studio 2015 cache/options directory
 .vs/
@@ -271,5 +271,5 @@ __pycache__/
 *.pyc
 
 # LOGS
-VulkanMonkey/errors.txt
-VulkanMonkey/log.txt
+Phasma/errors.txt
+Phasma/log.txt
