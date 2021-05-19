@@ -27,7 +27,7 @@ namespace pe
 		auto vulkan = VulkanContext::get();
 
 		std::string title =
-				"VulkanMonkey3D"
+				"PhasmaEngine"
 						+ std::string(vulkan->gpuProperties->deviceName.data())
 						+ " - Present Mode: "
 						+ vk::to_string(*vulkan->surface.presentModeKHR);
