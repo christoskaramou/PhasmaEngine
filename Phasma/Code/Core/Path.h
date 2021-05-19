@@ -1,7 +1,8 @@
 #pragma once
 
 #include <fstream>
-#include<string>
+#include <string>
+#include <filesystem>
 
 namespace pe
 {
@@ -20,7 +21,12 @@ namespace pe
 		public:
 			Constructor()
 			{
-				std::ifstream file("roots.txt");
+				Executable = std::filesystem::current_path().string() + "/";
+				std::replace(Executable.begin(), Executable.end(), '\\', '/');
+
+				Assets = "Assets/";
+
+				std::ifstream file(Executable + "AssetsRoot");
 				if (file)
 				{
 					std::string line;
@@ -30,21 +36,24 @@ namespace pe
 						index = line.find(s_assetsMarker);
 						if (index != std::string::npos)
 						{
-							Assets = line.substr(index + s_assetsMarker.size());
-						}
+							std::string path = line.substr(index + s_assetsMarker.size());
+							path.erase(remove(path.begin(), path.end(), ' '), path.end());
+							
+							// Formating the path
+							std::replace(path.begin(), path.end(), '\\', '/');
+							if (path.size() != 0 && path.back() != '/')
+							{
+								path += "/";
+							}
 
-						index = line.find(s_executableMarker);
-						if (index != std::string::npos)
-						{
-							Executable = line.substr(index + s_executableMarker.size());
+							Assets = path;
 						}
 					}
 				}
 			}
 		};
 
-		inline static std::string s_assetsMarker = "Assets root: ";
-		inline static std::string s_executableMarker = "Executable root: ";
+		inline static std::string s_assetsMarker = "Assets root:";
 		inline static Constructor s_constructor;
 	};
 }
