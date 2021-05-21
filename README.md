@@ -1,7 +1,7 @@
 # PhasmaEngine
 
 
-PhasmaEngine is intended as a project for learning 3D graphics and techniques, using Vulkan and DirectX12 API. Until now these are the most important features PhasmaEngine has:
+PhasmaEngine is intended as a project for learning 3D graphics and techniques, using Vulkan API (and soon DirectX12). Until now these are the most important features PhasmaEngine has:
 
 * Deffered Rendering
 * Physical Based Rendering
