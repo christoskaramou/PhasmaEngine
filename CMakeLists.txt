@@ -58,4 +58,4 @@ file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/SDL2.dll" DESTINATION ${CMAKE_BINA
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/shaderc_shared.dll" DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Assets" DESTINATION ${CMAKE_BINARY_DIR})
 
-file(WRITE "${CMAKE_BINARY_DIR}/AssetsRoot" "Assets root: ")
+file(WRITE "${CMAKE_BINARY_DIR}/AssetsRoot" "Assets root: Assets/")
