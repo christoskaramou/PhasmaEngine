@@ -7,8 +7,8 @@
 
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
-#define WIDTH VulkanContext::get()->surface.actualExtent->width
-#define HEIGHT VulkanContext::get()->surface.actualExtent->height
+#define WIDTH VulkanContext::Get()->surface.actualExtent->width
+#define HEIGHT VulkanContext::Get()->surface.actualExtent->height
 #define WIDTH_f static_cast<float>(WIDTH)
 #define HEIGHT_f static_cast<float>(HEIGHT)
 
@@ -65,11 +65,12 @@ namespace pe
 {
 	class Context;
 
-	class VulkanContext
+    class VulkanContext : public NoCopy, public NoMove
 	{
+	private:
+        VulkanContext();
+        
 	public:
-		VulkanContext();
-
 		~VulkanContext();
 
 		void CreateInstance(SDL_Window* window);
@@ -192,8 +193,8 @@ namespace pe
 
 		void unlockSubmits();
 
-		static VulkanContext* get() noexcept;
+		static VulkanContext* Get() noexcept;
 
-		static void remove() noexcept;
+		static void Remove() noexcept;
 	};
 }

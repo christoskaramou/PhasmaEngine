@@ -256,9 +256,9 @@ namespace pe
 		viewport.minDepth = minDepth;
 		viewport.maxDepth = maxDepth;
 
-		scissor.x = static_cast<int32_t>(position.x);
-		scissor.y = static_cast<int32_t>(position.y);
-		scissor.width = static_cast<uint32_t>(size.x);
-		scissor.height = static_cast<uint32_t>(size.y);
+		scissor.x = static_cast<int>(position.x);
+		scissor.y = static_cast<int>(position.y);
+		scissor.width = static_cast<int>(size.x);
+		scissor.height = static_cast<int>(size.y);
 	}
 }

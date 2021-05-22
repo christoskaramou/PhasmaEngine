@@ -22,7 +22,7 @@ namespace pe
 
 	void MotionBlur::Init()
 	{
-		frameImage.format = make_ref(VulkanContext::get()->surface.formatKHR->format);
+		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
 		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -47,10 +47,10 @@ namespace pe
 		UBmotionBlur.unmap();
 
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
+		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMotionBlur();
-		DSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -80,7 +80,7 @@ namespace pe
 				wSetImage(*DSet, 2, renderTargets["velocity"]),
 				wSetBuffer(*DSet, 3, UBmotionBlur)
 		};
-		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 
 	void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
@@ -119,7 +119,7 @@ namespace pe
 
 		if (Pipeline::getDescriptorSetLayoutMotionBlur())
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMotionBlur());
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMotionBlur());
 			Pipeline::getDescriptorSetLayoutMotionBlur() = nullptr;
 		}
 		frameImage.destroy();
@@ -155,7 +155,7 @@ namespace pe
 
 	void MotionBlur::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{

@@ -6,6 +6,7 @@
 #include "../Camera/Camera.h"
 #include "../Context/Context.h"
 #include "../Core/Path.h"
+#include "../Event/EventSystem.h"
 
 namespace pe
 {
@@ -14,30 +15,43 @@ namespace pe
 		// Temporary ugliness, until ECS is complete
 		this->window = window;
 		this->ctx = ctx;
-		VulkanContext::get()->window = window;
+		VulkanContext::Get()->window = window;
 	}
 
 	void Renderer::Init()
 	{
-		auto& vulkan = *VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 
 		// INIT VULKAN CONTEXT
-		vulkan.Init(ctx);
+		vulkan->Init(ctx);
+		
+		// SET WINDOW TITLE
+        std::string title = "PhasmaEngine";
+        title += " - Device: " + std::string(vulkan->gpuProperties->deviceName.data());
+        title += " - API: Vulkan";
+        title += " - Present Mode: " + vk::to_string(*vulkan->surface.presentModeKHR);
+#ifdef _DEBUG
+        title += " - Configuration: Debug";
+#else
+        title += " - Configuration: Release";
+#endif // _DEBUG
+        EventSystem::Get()->DispatchEvent(EventType::SetWindowTitle, title);
+        
 		// INIT RENDERING
-		AddRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
+		AddRenderTarget("viewport", vulkan->surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
 		AddRenderTarget("depth", vk::Format::eR32Sfloat, vk::ImageUsageFlags());
 		AddRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat, vk::ImageUsageFlags());
-		AddRenderTarget("albedo", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("srm", vulkan.surface.formatKHR->format, vk::ImageUsageFlags()); // Specular Roughness Metallic
+		AddRenderTarget("albedo", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("srm", vulkan->surface.formatKHR->format, vk::ImageUsageFlags()); // Specular Roughness Metallic
 		AddRenderTarget("ssao", vk::Format::eR16Unorm, vk::ImageUsageFlags());
 		AddRenderTarget("ssaoBlur", vk::Format::eR8Unorm, vk::ImageUsageFlags());
-		AddRenderTarget("ssr", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("ssr", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
 		AddRenderTarget("velocity", vk::Format::eR16G16Sfloat, vk::ImageUsageFlags());
-		AddRenderTarget("brightFilter", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("gaussianBlurHorizontal", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("gaussianBlurVertical", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("emissive", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("taa", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
+		AddRenderTarget("brightFilter", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("gaussianBlurHorizontal", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("gaussianBlurVertical", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("emissive", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
+		AddRenderTarget("taa", vulkan->surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
 
 		taa.Init();
 		bloom.Init();
@@ -92,7 +106,7 @@ namespace pe
 
 	Renderer::~Renderer()
 	{
-		VulkanContext::get()->device->waitIdle();
+		VulkanContext::Get()->device->waitIdle();
 
 		Destroy();
 
@@ -100,17 +114,17 @@ namespace pe
 		{
 			if (Pipeline::getDescriptorSetLayoutModel())
 			{
-				VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
+				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
 				Pipeline::getDescriptorSetLayoutModel() = nullptr;
 			}
 			if (Pipeline::getDescriptorSetLayoutMesh())
 			{
-				VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
+				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
 				Pipeline::getDescriptorSetLayoutMesh() = nullptr;
 			}
 			if (Pipeline::getDescriptorSetLayoutPrimitive())
 			{
-				VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
+				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
 				Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
 			}
 		}
@@ -142,14 +156,14 @@ namespace pe
 		for (auto& metric : metrics)
 			metric.destroy();
 		ctx->GetVKContext()->Destroy();
-		ctx->GetVKContext()->remove();
+		ctx->GetVKContext()->Remove();
 	}
 
 	void Renderer::CheckQueue()
 	{
 		for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();)
 		{
-			VulkanContext::get()->device->waitIdle();
+			VulkanContext::Get()->device->waitIdle();
 			Queue::loadModelFutures.push_back(
 					std::async(
 							std::launch::async,
@@ -186,7 +200,7 @@ namespace pe
 
 		for (auto it = Queue::unloadModel.begin(); it != Queue::unloadModel.end();)
 		{
-			VulkanContext::get()->device->waitIdle();
+			VulkanContext::Get()->device->waitIdle();
 			Model::models[*it].destroy();
 			Model::models.erase(Model::models.begin() + *it);
 			GUI::modelList.erase(GUI::modelList.begin() + *it);
@@ -309,7 +323,7 @@ namespace pe
 
 		static Timer timerFenceWait;
 		timerFenceWait.Start();
-		VulkanContext::get()->waitFences((*VulkanContext::get()->fences)[previousImageIndex]);
+		VulkanContext::Get()->waitFences((*VulkanContext::Get()->fences)[previousImageIndex]);
 		FrameTimer::Instance().timestamps[0] = timerFenceWait.Count();
 		Queue::exec_memcpyRequests();
 
@@ -321,7 +335,7 @@ namespace pe
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
-		const auto& cmd = (*VulkanContext::get()->dynamicCmdBuffers)[imageIndex];
+		const auto& cmd = (*VulkanContext::Get()->dynamicCmdBuffers)[imageIndex];
 
 		cmd.begin(beginInfo);
 		// TODO: add more queries (times the swapchain images), so they are not overlapped from previous frame
@@ -474,7 +488,7 @@ namespace pe
 
 		for (uint32_t i = 0; i < shadows.textures.size(); i++)
 		{
-			auto& cmd = (*VulkanContext::get()->shadowCmdBuffers)[
+			auto& cmd = (*VulkanContext::Get()->shadowCmdBuffers)[
 					static_cast<uint32_t>(shadows.textures.size()) * imageIndex + i];
 			cmd.begin(beginInfoShadows);
 			metrics[11 + static_cast<size_t>(i)].start(&cmd);
@@ -528,7 +542,7 @@ namespace pe
 
 	void Renderer::Draw()
 	{
-		auto& vCtx = *VulkanContext::get();
+		auto& vCtx = *VulkanContext::Get();
 
 		static const vk::PipelineStageFlags waitStages[] = {
 				vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader
@@ -713,7 +727,7 @@ namespace pe
 	void Renderer::CreateUniforms()
 	{
 		// DESCRIPTOR SETS FOR GUI
-		gui.createDescriptorSet(GUI::getDescriptorSetLayout(*VulkanContext::get()->device));
+		gui.createDescriptorSet(GUI::getDescriptorSetLayout(*VulkanContext::Get()->device));
 		// DESCRIPTOR SETS FOR SKYBOX
 		skyBoxDay.createDescriptorSet();
 		skyBoxNight.createDescriptorSet();
@@ -744,7 +758,7 @@ namespace pe
 
 	void Renderer::ResizeViewport(uint32_t width, uint32_t height)
 	{
-		auto& vulkan = *VulkanContext::get();
+		auto& vulkan = *VulkanContext::Get();
 		vulkan.graphicsQueue->waitIdle();
 
 		//- Free resources ----------------------
@@ -912,7 +926,7 @@ namespace pe
 
 	void Renderer::RecreatePipelines()
 	{
-		VulkanContext::get()->graphicsQueue->waitIdle();
+		VulkanContext::Get()->graphicsQueue->waitIdle();
 
 		shadows.pipeline.destroy();
 		ssao.pipeline.destroy();

@@ -18,7 +18,9 @@ namespace pe
 
 		bool ProcessEvents(double delta);
 
-		bool isInsideRenderWindow(int32_t x, int32_t y);
+		void WrapInsideRenderWindow(int& x, int& y);
+		
+		bool IsInsideRenderWindow(int x, int y);
 
 		bool isMinimized();
 

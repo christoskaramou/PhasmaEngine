@@ -54,12 +54,12 @@ namespace pe
 		siCompute.pCommandBuffers = &cmd;
 		siCompute.pWaitSemaphores = !waitFor.empty() ? waitFor.data() : nullptr;
 		siCompute.pSignalSemaphores = semaphore.get();
-		VulkanContext::get()->computeQueue->submit(siCompute, *fence);
+		VulkanContext::Get()->computeQueue->submit(siCompute, *fence);
 	}
 
 	void Compute::waitFence()
 	{
-		VulkanContext::get()->waitFences(*fence);
+		VulkanContext::Get()->waitFences(*fence);
 	}
 
 	void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
@@ -80,10 +80,10 @@ namespace pe
 	void Compute::createDescriptorSet()
 	{
 		vk::DescriptorSetAllocateInfo allocInfo;
-		allocInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
+		allocInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocInfo.descriptorSetCount = 1;
 		allocInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutCompute();
-		DSCompute = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocInfo).at(0));
+		DSCompute = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocInfo).at(0));
 	}
 
 	void Compute::updateDescriptorSet()
@@ -101,7 +101,7 @@ namespace pe
 						wSetBuffer(*DSCompute, 0, SBIn, vk::DescriptorType::eStorageBuffer),
 						wSetBuffer(*DSCompute, 1, SBOut, vk::DescriptorType::eStorageBuffer),
 				};
-		VulkanContext::get()->device->updateDescriptorSets(writeCompDescriptorSets, nullptr);
+		VulkanContext::Get()->device->updateDescriptorSets(writeCompDescriptorSets, nullptr);
 	}
 
 	void Compute::createPipeline(const std::string& shaderName)
@@ -126,7 +126,7 @@ namespace pe
 		pipeline.destroy();
 		if (*fence)
 		{
-			VulkanContext::get()->device->destroyFence(*fence);
+			VulkanContext::Get()->device->destroyFence(*fence);
 			*fence = nullptr;
 		}
 	}
@@ -139,7 +139,7 @@ namespace pe
 		cbai.commandPool = *s_commandPool;
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = 1;
-		vk::CommandBuffer commandBuffer = VulkanContext::get()->device->allocateCommandBuffers(cbai).at(0);
+		vk::CommandBuffer commandBuffer = VulkanContext::Get()->device->allocateCommandBuffers(cbai).at(0);
 
 		Compute compute;
 		compute.commandBuffer = make_ref(commandBuffer);
@@ -148,9 +148,9 @@ namespace pe
 		compute.createComputeStorageBuffers(sizeIn, sizeOut);
 		compute.updateDescriptorSet();
 		compute.fence = make_ref(
-				VulkanContext::get()->device->createFence(vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled})
+				VulkanContext::Get()->device->createFence(vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled})
 		);
-		compute.semaphore = make_ref(VulkanContext::get()->device->createSemaphore(vk::SemaphoreCreateInfo {}));
+		compute.semaphore = make_ref(VulkanContext::Get()->device->createSemaphore(vk::SemaphoreCreateInfo {}));
 
 		return compute;
 	}
@@ -163,7 +163,7 @@ namespace pe
 		cbai.commandPool = *s_commandPool;
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = count;
-		std::vector<vk::CommandBuffer> commandBuffers = VulkanContext::get()->device->allocateCommandBuffers(cbai);
+		std::vector<vk::CommandBuffer> commandBuffers = VulkanContext::Get()->device->allocateCommandBuffers(cbai);
 
 		std::vector<Compute> computes(count);
 
@@ -176,7 +176,7 @@ namespace pe
 			compute.createComputeStorageBuffers(sizeIn, sizeOut);
 			compute.updateDescriptorSet();
 			compute.fence = make_ref(
-					VulkanContext::get()->device->createFence(vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled})
+					VulkanContext::Get()->device->createFence(vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled})
 			);
 
 			computes.push_back(compute);
@@ -190,9 +190,9 @@ namespace pe
 		if (!*s_commandPool)
 		{
 			vk::CommandPoolCreateInfo cpci;
-			cpci.queueFamilyIndex = VulkanContext::get()->computeFamilyId;
+			cpci.queueFamilyIndex = VulkanContext::Get()->computeFamilyId;
 			cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-			s_commandPool = make_ref(VulkanContext::get()->device->createCommandPool(cpci));
+			s_commandPool = make_ref(VulkanContext::Get()->device->createCommandPool(cpci));
 		}
 	}
 
@@ -200,13 +200,13 @@ namespace pe
 	{
 		if (*s_commandPool)
 		{
-			VulkanContext::get()->device->destroyCommandPool(*s_commandPool);
+			VulkanContext::Get()->device->destroyCommandPool(*s_commandPool);
 			*s_commandPool = nullptr;
 		}
 
 		if (Pipeline::getDescriptorSetLayoutCompute())
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutCompute());
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutCompute());
 			Pipeline::getDescriptorSetLayoutCompute() = nullptr;
 		}
 	}

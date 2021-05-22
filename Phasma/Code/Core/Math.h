@@ -391,10 +391,10 @@ namespace pe
 	class Rect2D
 	{
 	public:
-		int32_t x;
-		int32_t y;
-		uint32_t width;
-		uint32_t height;
+		int x;
+		int y;
+		int width;
+		int height;
 	};
 
 	vec2 operator*(cfloat scalar, cvec2& v);

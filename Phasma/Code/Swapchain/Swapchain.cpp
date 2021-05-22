@@ -78,9 +78,9 @@ namespace pe
 			vk::ImageViewCreateInfo imageViewCreateInfo;
 			imageViewCreateInfo.image = *image.image;
 			imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
-			imageViewCreateInfo.format = VulkanContext::get()->surface.formatKHR->format;
+			imageViewCreateInfo.format = VulkanContext::Get()->surface.formatKHR->format;
 			imageViewCreateInfo.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-			image.view = make_ref(VulkanContext::get()->device->createImageView(imageViewCreateInfo));
+			image.view = make_ref(VulkanContext::Get()->device->createImageView(imageViewCreateInfo));
 		}
 
 		*this = newSwapchain;
@@ -88,7 +88,7 @@ namespace pe
 
 	uint32_t Swapchain::Aquire(vk::Semaphore semaphore, vk::Fence fence) const
 	{
-		const auto aquire = VulkanContext::get()->device->acquireNextImageKHR(*swapchain, UINT64_MAX, semaphore, fence);
+		const auto aquire = VulkanContext::Get()->device->acquireNextImageKHR(*swapchain, UINT64_MAX, semaphore, fence);
 		if (aquire.result != vk::Result::eSuccess)
 			throw std::runtime_error("Aquire Next Image error");
 
@@ -113,7 +113,7 @@ namespace pe
 		pi.swapchainCount = static_cast<uint32_t>(swapchains.size());
 		pi.pSwapchains = swapchains.data();
 		pi.pImageIndices = imageIndices.data();
-		if (VulkanContext::get()->graphicsQueue->presentKHR(pi) != vk::Result::eSuccess)
+		if (VulkanContext::Get()->graphicsQueue->presentKHR(pi) != vk::Result::eSuccess)
 			throw std::runtime_error("Present error!");
 	}
 
@@ -121,12 +121,12 @@ namespace pe
 	{
 		for (auto& image : images)
 		{
-			VulkanContext::get()->device->destroyImageView(*image.view);
+			VulkanContext::Get()->device->destroyImageView(*image.view);
 			*image.view = nullptr;
 		}
 		if (*swapchain)
 		{
-			VulkanContext::get()->device->destroySwapchainKHR(*swapchain);
+			VulkanContext::Get()->device->destroySwapchainKHR(*swapchain);
 			*swapchain = nullptr;
 		}
 	}

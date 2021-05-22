@@ -77,7 +77,7 @@ namespace pe
 			const vk::MemoryPropertyFlags& properties
 	)
 	{
-		auto vCtx = VulkanContext::get();
+		auto vCtx = VulkanContext::Get();
 
 		const auto fProps = vCtx->gpu->getFormatProperties(*format);
 
@@ -133,7 +133,7 @@ namespace pe
 		VkImage vkImage;
 		VmaAllocationInfo allocationInfo;
 		vmaCreateImage(
-				VulkanContext::get()->allocator, &vkImageInfo, &allocationCreateInfo, &vkImage, &allocation,
+				VulkanContext::Get()->allocator, &vkImageInfo, &allocationCreateInfo, &vkImage, &allocation,
 				&allocationInfo
 		);
 		image = make_ref(vk::Image(vkImage));
@@ -143,7 +143,7 @@ namespace pe
 
 	void Image::createImageView(const vk::ImageAspectFlags& aspectFlags)
 	{
-		auto vCtx = VulkanContext::get();
+		auto vCtx = VulkanContext::Get();
 
 		vk::ImageViewCreateInfo viewInfo;
 		viewInfo.image = *image;
@@ -158,7 +158,7 @@ namespace pe
 
 	void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout) const
 	{
-		auto vCtx = VulkanContext::get();
+		auto vCtx = VulkanContext::Get();
 
 		vk::CommandBufferAllocateInfo allocInfo;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;
@@ -332,7 +332,7 @@ namespace pe
 
 	void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer) const
 	{
-		auto vCtx = VulkanContext::get();
+		auto vCtx = VulkanContext::Get();
 
 		vk::CommandBufferAllocateInfo allocInfo;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;
@@ -430,7 +430,7 @@ namespace pe
 
 	void Image::generateMipMaps() const
 	{
-		auto vCtx = VulkanContext::get();
+		auto vCtx = VulkanContext::Get();
 
 		const auto fProps = vCtx->gpu->getFormatProperties(*format);
 
@@ -564,7 +564,7 @@ namespace pe
 
 	void Image::createSampler()
 	{
-		auto vCtx = VulkanContext::get();
+		auto vCtx = VulkanContext::Get();
 
 		vk::SamplerCreateInfo samplerInfo;
 		samplerInfo.magFilter = *filter;
@@ -587,10 +587,10 @@ namespace pe
 
 	void Image::destroy() const
 	{
-		auto vCtx = VulkanContext::get();
+		auto vCtx = VulkanContext::Get();
 
 		if (*view) vCtx->device->destroyImageView(*view);
-		if (*image) vmaDestroyImage(VulkanContext::get()->allocator, VkImage(*image), allocation);
+		if (*image) vmaDestroyImage(VulkanContext::Get()->allocator, VkImage(*image), allocation);
 		if (*sampler) vCtx->device->destroySampler(*sampler);
 		*view = nullptr;
 		*image = nullptr;

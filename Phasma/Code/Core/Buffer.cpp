@@ -12,7 +12,7 @@ namespace pe
 
 	void Buffer::createBuffer(size_t size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		sizeRequested = size;
 		this->size = size;
 		data = nullptr;
@@ -34,7 +34,7 @@ namespace pe
 		VkBuffer vkBuffer;
 		VmaAllocationInfo allocationInfo;
 		vmaCreateBuffer(
-				VulkanContext::get()->allocator, &vkBufferCreateInfo, &allocationCreateInfo, &vkBuffer, &allocation,
+				VulkanContext::Get()->allocator, &vkBufferCreateInfo, &allocationCreateInfo, &vkBuffer, &allocation,
 				&allocationInfo
 		);
 		buffer = make_ref(vk::Buffer(vkBuffer));
@@ -45,14 +45,14 @@ namespace pe
 		if (data)
 			return;
 		assert(mapSize + offset <= size);
-		vmaMapMemory(VulkanContext::get()->allocator, allocation, &data);
+		vmaMapMemory(VulkanContext::Get()->allocator, allocation, &data);
 	}
 
 	void Buffer::unmap()
 	{
 		if (!data)
 			return;
-		vmaUnmapMemory(VulkanContext::get()->allocator, allocation);
+		vmaUnmapMemory(VulkanContext::Get()->allocator, allocation);
 		data = nullptr;
 	}
 
@@ -76,9 +76,9 @@ namespace pe
 		assert(srcSize <= size);
 		vk::CommandBufferAllocateInfo cbai;
 		cbai.level = vk::CommandBufferLevel::ePrimary;
-		cbai.commandPool = *VulkanContext::get()->commandPool2;
+		cbai.commandPool = *VulkanContext::Get()->commandPool2;
 		cbai.commandBufferCount = 1;
-		const vk::CommandBuffer copyCmd = VulkanContext::get()->device->allocateCommandBuffers(cbai).at(0);
+		const vk::CommandBuffer copyCmd = VulkanContext::Get()->device->allocateCommandBuffers(cbai).at(0);
 
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -91,9 +91,9 @@ namespace pe
 
 		copyCmd.end();
 
-		VulkanContext::get()->submitAndWaitFence(copyCmd, nullptr, nullptr, nullptr);
+		VulkanContext::Get()->submitAndWaitFence(copyCmd, nullptr, nullptr, nullptr);
 
-		VulkanContext::get()->device->freeCommandBuffers(*VulkanContext::get()->commandPool2, copyCmd);
+		VulkanContext::Get()->device->freeCommandBuffers(*VulkanContext::Get()->commandPool2, copyCmd);
 	}
 
 	void Buffer::flush(size_t offset, size_t flushSize) const
@@ -101,13 +101,13 @@ namespace pe
 		if (!data)
 			return;
 
-		vmaFlushAllocation(VulkanContext::get()->allocator, allocation, offset, flushSize);
+		vmaFlushAllocation(VulkanContext::Get()->allocator, allocation, offset, flushSize);
 	}
 
 	void Buffer::destroy() const
 	{
 		if (*buffer)
-			vmaDestroyBuffer(VulkanContext::get()->allocator, VkBuffer(*buffer), allocation);
+			vmaDestroyBuffer(VulkanContext::Get()->allocator, VkBuffer(*buffer), allocation);
 		*buffer = nullptr;
 	}
 }

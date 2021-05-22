@@ -23,14 +23,14 @@ namespace pe
 	void Shadows::createDescriptorSets()
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
+		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutShadows();
 
 		descriptorSets->resize(textures.size()); // size of wanted number of cascaded shadows
 		for (uint32_t i = 0; i < descriptorSets->size(); i++)
 		{
-			(*descriptorSets)[i] = VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0);
+			(*descriptorSets)[i] = VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0);
 
 			std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 			// MVP
@@ -59,14 +59,14 @@ namespace pe
 			textureWriteSets[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 			textureWriteSets[1].pImageInfo = &dii;
 
-			VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+			VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 		}
 	}
 
 	void Shadows::createRenderPass()
 	{
 		vk::AttachmentDescription attachment;
-		attachment.format = *VulkanContext::get()->depth.format;
+		attachment.format = *VulkanContext::Get()->depth.format;
 		attachment.samples = vk::SampleCountFlagBits::e1;
 		attachment.loadOp = vk::AttachmentLoadOp::eClear;
 		attachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -88,7 +88,7 @@ namespace pe
 		rpci.subpassCount = 1;
 		rpci.pSubpasses = &subpassDesc;
 
-		renderPass.handle = make_ref(VulkanContext::get()->device->createRenderPass(rpci));
+		renderPass.handle = make_ref(VulkanContext::Get()->device->createRenderPass(rpci));
 	}
 
 	void Shadows::createFrameBuffers()
@@ -96,7 +96,7 @@ namespace pe
 		textures.resize(3);
 		for (auto& texture : textures)
 		{
-			texture.format = VulkanContext::get()->depth.format;
+			texture.format = VulkanContext::Get()->depth.format;
 			texture.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 			texture.addressMode = make_ref(vk::SamplerAddressMode::eClampToEdge);
 			texture.maxAnisotropy = 1.f;
@@ -115,7 +115,7 @@ namespace pe
 			texture.createSampler();
 		}
 
-		framebuffers.resize(VulkanContext::get()->swapchain.images.size() * textures.size());
+		framebuffers.resize(VulkanContext::Get()->swapchain.images.size() * textures.size());
 		for (uint32_t i = 0; i < framebuffers.size(); ++i)
 		{
 			uint32_t width = Shadows::imageSize;
@@ -171,11 +171,11 @@ namespace pe
 	void Shadows::destroy()
 	{
 		if (*renderPass.handle)
-			VulkanContext::get()->device->destroyRenderPass(*renderPass.handle);
+			VulkanContext::Get()->device->destroyRenderPass(*renderPass.handle);
 
 		if (Pipeline::getDescriptorSetLayoutShadows())
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutShadows());
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutShadows());
 			Pipeline::getDescriptorSetLayoutShadows() = nullptr;
 		}
 
@@ -183,7 +183,7 @@ namespace pe
 			texture.destroy();
 
 		for (auto& fb : framebuffers)
-			VulkanContext::get()->device->destroyFramebuffer(*fb.handle);
+			VulkanContext::Get()->device->destroyFramebuffer(*fb.handle);
 
 		for (auto& buffer : uniformBuffers)
 			buffer.destroy();

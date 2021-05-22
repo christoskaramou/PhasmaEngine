@@ -68,7 +68,7 @@ namespace pe
 		uniform.flush();
 		uniform.unmap();
 
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		const vk::DescriptorSetAllocateInfo allocInfo =
 				vk::DescriptorSetAllocateInfo {
 						*vulkan->descriptorPool,            //DescriptorPool descriptorPool;
@@ -164,7 +164,7 @@ namespace pe
 				wSetBuffer(*DSComposition, 9, uniform)
 		};
 
-		VulkanContext::get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
+		VulkanContext::Get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
 	}
 
 	void Deferred::update(mat4& invViewProj)
@@ -235,7 +235,7 @@ namespace pe
 						*renderTargets["velocity"].format,
 						*renderTargets["emissive"].format
 				};
-		renderPass.Create(formats, *VulkanContext::get()->depth.format);
+		renderPass.Create(formats, *VulkanContext::Get()->depth.format);
 		compositionRenderPass.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
 	}
 
@@ -247,7 +247,7 @@ namespace pe
 
 	void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
@@ -261,7 +261,7 @@ namespace pe
 					*renderTargets["srm"].view,
 					*renderTargets["velocity"].view,
 					*renderTargets["emissive"].view,
-					*VulkanContext::get()->depth.view
+					*VulkanContext::Get()->depth.view
 			};
 			framebuffers[i].Create(width, height, views, renderPass);
 		}
@@ -269,7 +269,7 @@ namespace pe
 
 	void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 
 		compositionFramebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
@@ -355,7 +355,7 @@ namespace pe
 
 	void Deferred::destroy()
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 
 		renderPass.Destroy();
 		compositionRenderPass.Destroy();

@@ -31,10 +31,10 @@ namespace pe
 		uniform.unmap();
 
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
+		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = descriptorSetLayout.get();
-		descriptorSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
 
 		vk::DescriptorBufferInfo dbi;
 		dbi.buffer = *uniform.buffer;
@@ -48,7 +48,7 @@ namespace pe
 		writeSet.descriptorCount = 1;
 		writeSet.descriptorType = vk::DescriptorType::eUniformBuffer;
 		writeSet.pBufferInfo = &dbi;
-		VulkanContext::get()->device->updateDescriptorSets(writeSet, nullptr);
+		VulkanContext::Get()->device->updateDescriptorSets(writeSet, nullptr);
 	}
 
 	void LightUniforms::destroy()
@@ -56,7 +56,7 @@ namespace pe
 		uniform.destroy();
 		if (*descriptorSetLayout)
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(*descriptorSetLayout);
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(*descriptorSetLayout);
 			*descriptorSetLayout = nullptr;
 		}
 	}
@@ -116,7 +116,7 @@ namespace pe
 			createInfo.bindingCount = 1;
 			createInfo.pBindings = &descriptorSetLayoutBinding;
 
-			descriptorSetLayout = make_ref(VulkanContext::get()->device->createDescriptorSetLayout(createInfo));
+			descriptorSetLayout = make_ref(VulkanContext::Get()->device->createDescriptorSetLayout(createInfo));
 		}
 		return *descriptorSetLayout;
 	}

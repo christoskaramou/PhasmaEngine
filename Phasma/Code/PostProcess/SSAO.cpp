@@ -81,19 +81,19 @@ namespace pe
 
 		// DESCRIPTOR SET FOR SSAO
 		const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo {
-				*VulkanContext::get()->descriptorPool,    //DescriptorPool descriptorPool;
+				*VulkanContext::Get()->descriptorPool,    //DescriptorPool descriptorPool;
 				1,                                                //uint32_t descriptorSetCount;
 				&Pipeline::getDescriptorSetLayoutSSAO()            //const DescriptorSetLayout* pSetLayouts;
 		};
-		DSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocInfo).at(0));
+		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocInfo).at(0));
 
 		// DESCRIPTOR SET FOR SSAO BLUR
 		const vk::DescriptorSetAllocateInfo allocInfoBlur = vk::DescriptorSetAllocateInfo {
-				*VulkanContext::get()->descriptorPool,    //DescriptorPool descriptorPool;
+				*VulkanContext::Get()->descriptorPool,    //DescriptorPool descriptorPool;
 				1,                                                //uint32_t descriptorSetCount;
 				&Pipeline::getDescriptorSetLayoutSSAOBlur()    //const DescriptorSetLayout* pSetLayouts;
 		};
-		DSBlur = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocInfoBlur).at(0));
+		DSBlur = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocInfoBlur).at(0));
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -128,7 +128,7 @@ namespace pe
 				wSetBuffer(*DSet, 4, UB_PVM),
 				wSetImage(*DSBlur, 0, renderTargets["ssao"])
 		};
-		VulkanContext::get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
+		VulkanContext::Get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
 	}
 
 	void SSAO::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Image& image)
@@ -187,12 +187,12 @@ namespace pe
 		pipelineBlur.destroy();
 		if (Pipeline::getDescriptorSetLayoutSSAO())
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSAO());
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSAO());
 			Pipeline::getDescriptorSetLayoutSSAO() = nullptr;
 		}
 		if (Pipeline::getDescriptorSetLayoutSSAOBlur())
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSAOBlur());
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSAOBlur());
 			Pipeline::getDescriptorSetLayoutSSAOBlur() = nullptr;
 		}
 	}
@@ -227,7 +227,7 @@ namespace pe
 
 	void SSAO::createSSAOFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
@@ -240,7 +240,7 @@ namespace pe
 
 	void SSAO::createSSAOBlurFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		blurFramebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{

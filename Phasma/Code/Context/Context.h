@@ -12,10 +12,6 @@ namespace pe
 	class Context final
 	{
 	public:
-		Context();
-
-		~Context();
-
 		void InitSystems();
 
 		void UpdateSystems(double delta);
@@ -43,7 +39,6 @@ namespace pe
 	private:
 		std::unordered_map<size_t, Ref<ISystem>> m_systems;
 		std::unordered_map<size_t, Ref<Entity>> m_entities;
-		Ref<VulkanContext> vulkanContext;
 	};
 
 	template <class T>

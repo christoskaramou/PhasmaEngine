@@ -125,8 +125,8 @@ namespace pe
 
 			const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
-			VulkanContext::get()->graphicsQueue->waitIdle();
-			VulkanContext::get()->waitAndLockSubmits();
+			VulkanContext::Get()->graphicsQueue->waitIdle();
+			VulkanContext::Get()->waitAndLockSubmits();
 
 			Buffer staging;
 			staging.createBuffer(
@@ -156,7 +156,7 @@ namespace pe
 
 			staging.destroy();
 
-			VulkanContext::get()->unlockSubmits();
+			VulkanContext::Get()->unlockSubmits();
 
 			Mesh::uniqueTextures[path] = *tex;
 		}
@@ -180,7 +180,7 @@ namespace pe
 		uniformBuffer.destroy();
 		if (Pipeline::getDescriptorSetLayoutMesh())
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
 			Pipeline::getDescriptorSetLayoutMesh() = nullptr;
 		}
 
@@ -194,7 +194,7 @@ namespace pe
 		indices.shrink_to_fit();
 		if (Pipeline::getDescriptorSetLayoutPrimitive())
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
 			Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
 		}
 	}

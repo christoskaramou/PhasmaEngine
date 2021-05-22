@@ -10,6 +10,7 @@
 #include "../Shader/Shader.h"
 #include "../Renderer/Vulkan/Vulkan.h"
 #include "../Core/Path.h"
+#include "../Event/EventSystem.h"
 
 namespace pe
 {
@@ -357,14 +358,8 @@ namespace pe
 		ImGui::Begin("Shaders Folder", &shaders_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 		if (ImGui::Button("Compile Shaders"))
 		{
-			if (compileShadersEventType != UINT32_MAX)
-			{
-				SDL_Event event;
-				SDL_zero(event);
-				event.type = compileShadersEventType; // this event is captured to window event check routine
-				VulkanContext::get()->device->waitIdle();
-				SDL_PushEvent(&event);
-			}
+            VulkanContext::Get()->device->waitIdle();
+		    EventSystem::Get()->PushEvent(EventType::CompileShaders);
 		}
 		for (uint32_t i = 0; i < shaderList.size(); i++)
 		{
@@ -444,15 +439,9 @@ namespace pe
 		ImGui::InputFloat("Quality.", &rtScale, 0.01f, 0.05f, 2);
 		if (ImGui::Button("Apply"))
 		{
-			if (scaleRenderTargetsEventType != UINT32_MAX)
-			{
-				renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
-				SDL_Event event;
-				SDL_zero(event);
-				event.type = scaleRenderTargetsEventType; // along side with window resize
-				VulkanContext::get()->device->waitIdle();
-				SDL_PushEvent(&event);
-			}
+            renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
+            VulkanContext::Get()->device->waitIdle();
+            EventSystem::Get()->PushEvent(EventType::ScaleRenderTargets);
 		}
 		ImGui::Checkbox("Lock Render Window", &lock_render_window);
 		ImGui::Checkbox("IBL", &use_IBL);
@@ -691,7 +680,7 @@ namespace pe
 
 	void GUI::initImGui()
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		vk::CommandBufferAllocateInfo cbai;
 		cbai.commandPool = *vulkan->commandPool;
 		cbai.level = vk::CommandBufferLevel::ePrimary;
@@ -897,7 +886,7 @@ namespace pe
 
 	void GUI::scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
 	{
-		Image& s_chain_Image = VulkanContext::get()->swapchain.images[imageIndex];
+		Image& s_chain_Image = VulkanContext::Get()->swapchain.images[imageIndex];
 
 		renderedImage.transitionImageLayout(
 				cmd,
@@ -985,7 +974,7 @@ namespace pe
 			vk::RenderPassBeginInfo rpi;
 			rpi.renderPass = *renderPass.handle;
 			rpi.framebuffer = *framebuffers[imageIndex].handle;
-			rpi.renderArea = vk::Rect2D {{0, 0}, *VulkanContext::get()->surface.actualExtent};
+			rpi.renderArea = vk::Rect2D {{0, 0}, *VulkanContext::Get()->surface.actualExtent};
 			rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			rpi.pClearValues = clearValues.data();
 
@@ -1061,8 +1050,8 @@ namespace pe
 		// Setup display size (every frame to accommodate for window resizing)
 		int w, h;
 		int display_w, display_h;
-		SDL_GetWindowSize(VulkanContext::get()->window, &w, &h);
-		SDL_GL_GetDrawableSize(VulkanContext::get()->window, &display_w, &display_h);
+		SDL_GetWindowSize(VulkanContext::Get()->window, &w, &h);
+		SDL_GL_GetDrawableSize(VulkanContext::Get()->window, &display_w, &display_h);
 		io.DisplaySize = ImVec2(static_cast<float>(w), static_cast<float>(h));
 		io.DisplayFramebufferScale = ImVec2(
 				w > 0 ? static_cast<float>(display_w) / static_cast<float>(w) : 0,
@@ -1189,7 +1178,7 @@ namespace pe
 		//}
 		//cmdBuf.end();
 		//
-		//VulkanContext::get()->submit(cmdBuf, nullptr, nullptr, nullptr, fenceUpload);
+		//VulkanContext::Get()->submit(cmdBuf, nullptr, nullptr, nullptr, fenceUpload);
 	}
 
 	void GUI::windowStyle(ImGuiStyle* dst)
@@ -1244,7 +1233,7 @@ namespace pe
 
 	void GUI::createVertexBuffer(size_t vertex_size)
 	{
-		VulkanContext::get()->graphicsQueue->waitIdle();
+		VulkanContext::Get()->graphicsQueue->waitIdle();
 		vertexBuffer.destroy();
 		//vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		vertexBuffer.createBuffer(
@@ -1255,7 +1244,7 @@ namespace pe
 
 	void GUI::createIndexBuffer(size_t index_size)
 	{
-		VulkanContext::get()->graphicsQueue->waitIdle();
+		VulkanContext::Get()->graphicsQueue->waitIdle();
 		indexBuffer.destroy();
 		//indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		indexBuffer.createBuffer(
@@ -1267,10 +1256,10 @@ namespace pe
 	void GUI::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VulkanContext::get()->descriptorPool;
+		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &descriptorSetLayout;
-		descriptorSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
 
 		updateDescriptorSets();
 
@@ -1293,14 +1282,14 @@ namespace pe
 		textureWriteSets[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 		textureWriteSets[0].pImageInfo = &dii0;
 
-		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 
 	void GUI::createRenderPass()
 	{
 		std::array<vk::AttachmentDescription, 1> attachments {};
 		// Color attachment
-		attachments[0].format = VulkanContext::get()->surface.formatKHR->format;
+		attachments[0].format = VulkanContext::Get()->surface.formatKHR->format;
 		attachments[0].samples = vk::SampleCountFlagBits::e1;
 		attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
 		attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -1323,12 +1312,12 @@ namespace pe
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-		renderPass.handle = make_ref(VulkanContext::get()->device->createRenderPass(renderPassInfo));
+		renderPass.handle = make_ref(VulkanContext::Get()->device->createRenderPass(renderPassInfo));
 	}
 
 	void GUI::createFrameBuffers()
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (uint32_t i = 0; i < vulkan->swapchain.images.size(); ++i)
@@ -1354,7 +1343,7 @@ namespace pe
 		pipeline.info.cullMode = CullMode::Back;
 		pipeline.info.colorBlendAttachments = make_ref(
 				std::vector<vk::PipelineColorBlendAttachmentState> {
-						*VulkanContext::get()->swapchain.images[0].blentAttachment
+						*VulkanContext::Get()->swapchain.images[0].blentAttachment
 				}
 		);
 		pipeline.info.dynamicStates = make_ref(
@@ -1363,7 +1352,7 @@ namespace pe
 		pipeline.info.pushConstantStage = PushConstantStage::Vertex;
 		pipeline.info.pushConstantSize = sizeof(float) * 4;
 		pipeline.info.descriptorSetLayouts = make_ref(
-				std::vector<vk::DescriptorSetLayout> {getDescriptorSetLayout(*VulkanContext::get()->device)}
+				std::vector<vk::DescriptorSetLayout> {getDescriptorSetLayout(*VulkanContext::Get()->device)}
 		);
 		pipeline.info.renderPass = renderPass;
 
@@ -1381,7 +1370,7 @@ namespace pe
 		pipeline.destroy();
 		if (*GUI::descriptorSetLayout)
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(*GUI::descriptorSetLayout);
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(*GUI::descriptorSetLayout);
 			*GUI::descriptorSetLayout = nullptr;
 		}
 	}

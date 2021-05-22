@@ -70,14 +70,14 @@ namespace pe
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 
-		handle = make_ref(VulkanContext::get()->device->createRenderPass(renderPassInfo));
+		handle = make_ref(VulkanContext::Get()->device->createRenderPass(renderPassInfo));
 	}
 
 	void RenderPass::Destroy()
 	{
 		if (*handle)
 		{
-			VulkanContext::get()->device->destroyRenderPass(*handle);
+			VulkanContext::Get()->device->destroyRenderPass(*handle);
 			*handle = nullptr;
 		}
 	}

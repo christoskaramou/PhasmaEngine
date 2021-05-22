@@ -20,7 +20,7 @@ namespace pe
 
 	void DOF::Init()
 	{
-		frameImage.format = make_ref(VulkanContext::get()->surface.formatKHR->format);
+		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
 		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -41,7 +41,7 @@ namespace pe
 
 	void DOF::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
@@ -54,7 +54,7 @@ namespace pe
 
 	void DOF::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *vulkan->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
@@ -80,7 +80,7 @@ namespace pe
 				wSetImage(*DSet, 0, frameImage),
 				wSetImage(*DSet, 1, renderTargets["depth"])
 		};
-		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 
 	void DOF::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
@@ -134,7 +134,7 @@ namespace pe
 
 	void DOF::destroy()
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		for (auto& framebuffer : framebuffers)
 			framebuffer.Destroy();
 

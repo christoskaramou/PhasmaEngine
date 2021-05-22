@@ -19,10 +19,10 @@ namespace pe
 			bool alreadyExist = false;
 			for (auto& function : delegates)
 			{
-				const size_t functionAdress = *reinterpret_cast<long*>(reinterpret_cast<char*>(&function));
+				const size_t functionAddress = *reinterpret_cast<long*>(reinterpret_cast<char*>(&function));
 
 				// This equality seems to work, holding back though since it might not be accurate
-				if (funcAddress == functionAdress)
+				if (funcAddress == functionAddress)
 					alreadyExist = true;
 			}
 

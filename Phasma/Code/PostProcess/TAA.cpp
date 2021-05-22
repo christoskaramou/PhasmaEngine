@@ -22,7 +22,7 @@ namespace pe
 
 	void TAA::Init()
 	{
-		previous.format = make_ref(VulkanContext::get()->surface.formatKHR->format);
+		previous.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
 		previous.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		previous.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -35,7 +35,7 @@ namespace pe
 		previous.createImageView(vk::ImageAspectFlagBits::eColor);
 		previous.createSampler();
 
-		frameImage.format = make_ref(VulkanContext::get()->surface.formatKHR->format);
+		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
 		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -79,13 +79,13 @@ namespace pe
 		uniform.unmap();
 
 		vk::DescriptorSetAllocateInfo allocateInfo2;
-		allocateInfo2.descriptorPool = *VulkanContext::get()->descriptorPool;
+		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutTAA();
-		DSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
 
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutTAASharpen();
-		DSetSharpen = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+		DSetSharpen = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -119,7 +119,7 @@ namespace pe
 				wSetBuffer(*DSetSharpen, 1, uniform)
 		};
 
-		VulkanContext::get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
+		VulkanContext::Get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
 	}
 
 	void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
@@ -172,7 +172,7 @@ namespace pe
 
 	void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
@@ -324,12 +324,12 @@ namespace pe
 
 		if (Pipeline::getDescriptorSetLayoutTAA())
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutTAA());
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutTAA());
 			Pipeline::getDescriptorSetLayoutTAA() = nullptr;
 		}
 		if (Pipeline::getDescriptorSetLayoutTAASharpen())
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutTAASharpen());
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutTAASharpen());
 			Pipeline::getDescriptorSetLayoutTAASharpen() = nullptr;
 		}
 		pipeline.destroy();

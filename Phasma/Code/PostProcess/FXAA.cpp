@@ -19,7 +19,7 @@ namespace pe
 
 	void FXAA::Init()
 	{
-		frameImage.format = make_ref(VulkanContext::get()->surface.formatKHR->format);
+		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
 		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -36,10 +36,10 @@ namespace pe
 	void FXAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo2;
-		allocateInfo2.descriptorPool = *VulkanContext::get()->descriptorPool;
+		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutFXAA();
-		DSet = make_ref(VulkanContext::get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
 
 		updateDescriptorSets(renderTargets);
 	}
@@ -60,7 +60,7 @@ namespace pe
 		textureWriteSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
 		textureWriteSet.pImageInfo = &dii;
 
-		VulkanContext::get()->device->updateDescriptorSets(textureWriteSet, nullptr);
+		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSet, nullptr);
 	}
 
 	void FXAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
@@ -92,7 +92,7 @@ namespace pe
 
 	void FXAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
@@ -133,7 +133,7 @@ namespace pe
 
 		if (Pipeline::getDescriptorSetLayoutFXAA())
 		{
-			VulkanContext::get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutFXAA());
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutFXAA());
 			Pipeline::getDescriptorSetLayoutFXAA() = nullptr;
 		}
 		frameImage.destroy();

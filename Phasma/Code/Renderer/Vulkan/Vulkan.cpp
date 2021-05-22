@@ -570,15 +570,15 @@ namespace pe
 		m_submit_mutex.unlock();
 	}
 
-	VulkanContext* VulkanContext::get() noexcept
+	VulkanContext* VulkanContext::Get() noexcept
 	{
 		static auto VkCTX = new VulkanContext();
 		return VkCTX;
 	}
 
-	void VulkanContext::remove() noexcept
+	void VulkanContext::Remove() noexcept
 	{
-		if (get())
-			delete get();
+		if (Get())
+			delete Get();
 	}
 }

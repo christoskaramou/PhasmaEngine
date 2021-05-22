@@ -1,18 +1,8 @@
 #include "Context.h"
-#include "../ECS/ECSBase.h"
 #include "../Renderer/Vulkan/Vulkan.h"
 
 namespace pe
 {
-	Context::Context()
-	{
-		vulkanContext = make_ref(VulkanContext());
-	}
-
-	Context::~Context()
-	{
-	}
-
 	void Context::InitSystems()
 	{
 		for (auto& system : m_systems)
@@ -57,6 +47,6 @@ namespace pe
 
 	VulkanContext* Context::GetVKContext()
 	{
-		return VulkanContext::get();
+		return VulkanContext::Get();
 	}
 }

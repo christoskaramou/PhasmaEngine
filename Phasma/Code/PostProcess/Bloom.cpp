@@ -23,7 +23,7 @@ namespace pe
 
 	void Bloom::Init()
 	{
-		frameImage.format = make_ref(VulkanContext::get()->surface.formatKHR->format);
+		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
 		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -46,7 +46,7 @@ namespace pe
 
 	void Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		framebuffers.resize(vulkan->swapchain.images.size() * 4);
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
@@ -83,7 +83,7 @@ namespace pe
 
 	void Bloom::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *vulkan->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
@@ -125,12 +125,12 @@ namespace pe
 				wSetImage(*DSCombine, 0, frameImage),
 				wSetImage(*DSCombine, 1, renderTargets["gaussianBlurVertical"])
 		};
-		VulkanContext::get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 
 	void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{
-		uint32_t totalImages = static_cast<uint32_t>(VulkanContext::get()->swapchain.images.size());
+		uint32_t totalImages = static_cast<uint32_t>(VulkanContext::Get()->swapchain.images.size());
 
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
@@ -307,7 +307,7 @@ namespace pe
 
 	void Bloom::destroy()
 	{
-		auto vulkan = VulkanContext::get();
+		auto vulkan = VulkanContext::Get();
 		for (auto& frameBuffer : framebuffers)
 			frameBuffer.Destroy();
 
