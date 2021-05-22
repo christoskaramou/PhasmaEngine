@@ -10,59 +10,59 @@
 namespace pe
 {
 	uint32_t Shadows::imageSize = 4096;
-
+	
 	Shadows::Shadows()
 	{
 		descriptorSets = make_ref(std::vector<vk::DescriptorSet>());
 	}
-
+	
 	Shadows::~Shadows()
 	{
 	}
-
+	
 	void Shadows::createDescriptorSets()
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutShadows();
-
+		
 		descriptorSets->resize(textures.size()); // size of wanted number of cascaded shadows
 		for (uint32_t i = 0; i < descriptorSets->size(); i++)
 		{
 			(*descriptorSets)[i] = VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0);
-
+			
 			std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 			// MVP
 			vk::DescriptorBufferInfo dbi;
 			dbi.buffer = *uniformBuffers[i].buffer;
 			dbi.offset = 0;
 			dbi.range = sizeof(ShadowsUBO);
-
+			
 			textureWriteSets[0].dstSet = (*descriptorSets)[i];
 			textureWriteSets[0].dstBinding = 0;
 			textureWriteSets[0].dstArrayElement = 0;
 			textureWriteSets[0].descriptorCount = 1;
 			textureWriteSets[0].descriptorType = vk::DescriptorType::eUniformBuffer;
 			textureWriteSets[0].pBufferInfo = &dbi;
-
+			
 			// sampler
 			vk::DescriptorImageInfo dii;
 			dii.sampler = *textures[i].sampler;
 			dii.imageView = *textures[i].view;
 			dii.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
-
+			
 			textureWriteSets[1].dstSet = (*descriptorSets)[i];
 			textureWriteSets[1].dstBinding = 1;
 			textureWriteSets[1].dstArrayElement = 0;
 			textureWriteSets[1].descriptorCount = 1;
 			textureWriteSets[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 			textureWriteSets[1].pImageInfo = &dii;
-
+			
 			VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 		}
 	}
-
+	
 	void Shadows::createRenderPass()
 	{
 		vk::AttachmentDescription attachment;
@@ -74,23 +74,23 @@ namespace pe
 		attachment.stencilStoreOp = vk::AttachmentStoreOp::eStore;
 		attachment.initialLayout = vk::ImageLayout::eUndefined;
 		attachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
+		
 		vk::AttachmentReference depthAttachmentRef;
 		depthAttachmentRef.attachment = 0;
 		depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
+		
 		vk::SubpassDescription subpassDesc;
 		subpassDesc.pDepthStencilAttachment = &depthAttachmentRef;
-
+		
 		vk::RenderPassCreateInfo rpci;
 		rpci.attachmentCount = 1;
 		rpci.pAttachments = &attachment;
 		rpci.subpassCount = 1;
 		rpci.pSubpasses = &subpassDesc;
-
+		
 		renderPass.handle = make_ref(VulkanContext::Get()->device->createRenderPass(rpci));
 	}
-
+	
 	void Shadows::createFrameBuffers()
 	{
 		textures.resize(3);
@@ -104,7 +104,7 @@ namespace pe
 			texture.samplerCompareEnable = VK_TRUE;
 			texture.compareOp = make_ref(vk::CompareOp::eGreaterOrEqual);
 			texture.samplerMipmapMode = make_ref(vk::SamplerMipmapMode::eLinear);
-
+			
 			texture.createImage(
 					Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal,
 					vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
@@ -114,7 +114,7 @@ namespace pe
 			texture.createImageView(vk::ImageAspectFlagBits::eDepth);
 			texture.createSampler();
 		}
-
+		
 		framebuffers.resize(VulkanContext::Get()->swapchain.images.size() * textures.size());
 		for (uint32_t i = 0; i < framebuffers.size(); ++i)
 		{
@@ -124,11 +124,11 @@ namespace pe
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
-
+	
 	void Shadows::createPipeline()
 	{
 		Shader vert {"Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true};
-
+		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.vertexInputBindingDescriptions = make_ref(Vertex::getBindingDescriptionGeneral());
 		pipeline.info.vertexInputAttributeDescriptions = make_ref(Vertex::getAttributeDescriptionGeneral());
@@ -148,10 +148,10 @@ namespace pe
 						}
 		);
 		pipeline.info.renderPass = renderPass;
-
+		
 		pipeline.createGraphicsPipeline();
 	}
-
+	
 	void Shadows::createUniformBuffers()
 	{
 		uniformBuffers.resize(textures.size());
@@ -167,42 +167,45 @@ namespace pe
 			buffer.unmap();
 		}
 	}
-
+	
 	void Shadows::destroy()
 	{
 		if (*renderPass.handle)
 			VulkanContext::Get()->device->destroyRenderPass(*renderPass.handle);
-
+		
 		if (Pipeline::getDescriptorSetLayoutShadows())
 		{
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutShadows());
 			Pipeline::getDescriptorSetLayoutShadows() = nullptr;
 		}
-
+		
 		for (auto& texture : textures)
 			texture.destroy();
-
+		
 		for (auto& fb : framebuffers)
 			VulkanContext::Get()->device->destroyFramebuffer(*fb.handle);
-
+		
 		for (auto& buffer : uniformBuffers)
 			buffer.destroy();
-
+		
 		pipeline.destroy();
 	}
-
+	
 	void Shadows::update(Camera& camera)
 	{
 		if (GUI::shadow_cast)
 		{
 			// far/cos(x) = the side size
 			const float sideSizeOfPyramid = camera.nearPlane /
-					cos(radians(camera.FOV * .5f)); // near plane is actually the far plane (they are reversed)
+			                                cos(
+					                                radians(
+							                                camera.FOV * .5f
+					                                )); // near plane is actually the far plane (they are reversed)
 			const vec3 p = &GUI::sun_position[0];
-
+			
 			vec3 pointOnPyramid = camera.front * (sideSizeOfPyramid * .01f);
 			vec3 pos = p + camera.position +
-					pointOnPyramid; // sun position will be moved, so its angle to the lookat position is the same always
+			           pointOnPyramid; // sun position will be moved, so its angle to the lookat position is the same always
 			vec3 front = normalize(camera.position + pointOnPyramid - pos);
 			vec3 right = normalize(cross(front, camera.WorldUp()));
 			vec3 up = normalize(cross(right, front));
@@ -215,13 +218,13 @@ namespace pe
 					sideSizeOfPyramid * .1f,
 					sideSizeOfPyramid
 			};
-
+			
 			Queue::memcpyRequest(&uniformBuffers[0], {{&shadows_UBO[0], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[0].map();
 			//memcpy(uniformBuffers[0].data, &shadows_UBO[0], sizeof(ShadowsUBO));
 			//uniformBuffers[0].flush();
 			//uniformBuffers[0].unmap();
-
+			
 			pointOnPyramid = camera.front * (sideSizeOfPyramid * .05f);
 			pos = p + camera.position + pointOnPyramid;
 			front = normalize(camera.position + pointOnPyramid - pos);
@@ -236,13 +239,13 @@ namespace pe
 					sideSizeOfPyramid * .1f,
 					sideSizeOfPyramid
 			};
-
+			
 			Queue::memcpyRequest(&uniformBuffers[1], {{&shadows_UBO[1], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[1].map();
 			//memcpy(uniformBuffers[1].data, &shadows_UBO[1], sizeof(ShadowsUBO));
 			//uniformBuffers[1].flush();
 			//uniformBuffers[1].unmap();
-
+			
 			pointOnPyramid = camera.front * (sideSizeOfPyramid * .5f);
 			pos = p + camera.position + pointOnPyramid;
 			front = normalize(camera.position + pointOnPyramid - pos);
@@ -257,7 +260,7 @@ namespace pe
 					sideSizeOfPyramid * .1f,
 					sideSizeOfPyramid
 			};
-
+			
 			Queue::memcpyRequest(&uniformBuffers[2], {{&shadows_UBO[2], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[2].map();
 			//memcpy(uniformBuffers[2].data, &shadows_UBO[2], sizeof(ShadowsUBO));
@@ -267,19 +270,19 @@ namespace pe
 		else
 		{
 			shadows_UBO[0].castShadows = 0.f;
-
+			
 			Queue::memcpyRequest(&uniformBuffers[0], {{&shadows_UBO[0], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[0].map();
 			//memcpy(uniformBuffers[0].data, &shadows_UBO[0], sizeof(ShadowsUBO));
 			//uniformBuffers[0].flush();
 			//uniformBuffers[0].unmap();
-
+			
 			Queue::memcpyRequest(&uniformBuffers[1], {{&shadows_UBO[1], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[1].map();
 			//memcpy(uniformBuffers[1].data, &shadows_UBO[0], sizeof(ShadowsUBO));
 			//uniformBuffers[1].flush();
 			//uniformBuffers[1].unmap();
-
+			
 			Queue::memcpyRequest(&uniformBuffers[2], {{&shadows_UBO[2], sizeof(ShadowsUBO), 0}});
 			//uniformBuffers[2].map();
 			//memcpy(uniformBuffers[2].data, &shadows_UBO[0], sizeof(ShadowsUBO));

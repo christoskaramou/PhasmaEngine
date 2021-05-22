@@ -15,22 +15,34 @@
 namespace vk
 {
 	class Instance;
+	
 	class DebugUtilsMessengerEXT;
+	
 	class PhysicalDevice;
+	
 	struct PhysicalDeviceProperties;
 	struct PhysicalDeviceFeatures;
 	struct QueueFamilyProperties;
+	
 	class Device;
+	
 	class Queue;
+	
 	class CommandPool;
+	
 	class CommandBuffer;
+	
 	class DescriptorPool;
+	
 	class Fence;
+	
 	class Semaphore;
+	
 	class DispatchLoaderDynamic;
-
-	template <class T1>
+	
+	template<class T1>
 	class Flags;
+	
 	enum class PipelineStageFlagBits : uint32_t;
 	using PipelineStageFlags = Flags<PipelineStageFlagBits>;
 }
@@ -64,70 +76,70 @@ struct VkDebugUtilsMessengerCallbackDataEXT;
 namespace pe
 {
 	class Context;
-
-    class VulkanContext : public NoCopy, public NoMove
+	
+	class VulkanContext : public NoCopy, public NoMove
 	{
 	private:
-        VulkanContext();
-        
+		VulkanContext();
+	
 	public:
 		~VulkanContext();
-
+		
 		void CreateInstance(SDL_Window* window);
-
+		
 		static VKAPI_ATTR uint32_t VKAPI_CALL MessageCallback(
 				VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 				uint32_t messageType,
 				const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 				void* pUserData
 		);
-
+		
 		void CreateDebugMessenger();
-
+		
 		void DestroyDebugMessenger();
-
+		
 		void CreateSurface(Context* ctx);
-
+		
 		void GetSurfaceProperties(Context* ctx);
-
+		
 		void GetGpu();
-
+		
 		void GetGraphicsFamilyId();
-
+		
 		void GetTransferFamilyId();
-
+		
 		void GetComputeFamilyId();
-
+		
 		void CreateDevice();
-
+		
 		void CreateAllocator();
-
+		
 		void GetGraphicsQueue();
-
+		
 		void GetTransferQueue();
-
+		
 		void GetComputeQueue();
-
+		
 		void GetQueues();
-
+		
 		void CreateSwapchain(Context* ctx, uint32_t requestImageCount);
-
+		
 		void CreateCommandPools();
-
+		
 		void CreateDescriptorPool(uint32_t maxDescriptorSets);
-
+		
 		void CreateCmdBuffers(uint32_t bufferCount = 1);
-
+		
 		void CreateFences(uint32_t fenceCount);
-
+		
 		void CreateSemaphores(uint32_t semaphoresCount);
-
+		
 		void CreateDepth();
-
+		
 		void Init(Context* ctx);
-
+		
 		void Destroy();
-
+		
 		Ref<vk::Instance> instance;
 		Ref<vk::DebugUtilsMessengerEXT> debugMessenger;
 		Ref<vk::PhysicalDevice> gpu;
@@ -145,13 +157,13 @@ namespace pe
 		Ref<std::vector<vk::Fence>> fences;
 		Ref<std::vector<vk::Semaphore>> semaphores;
 		VmaAllocator allocator = nullptr;
-
+		
 		SDL_Window* window;
 		Surface surface;
 		Swapchain swapchain;
 		Image depth;
 		int graphicsFamilyId, computeFamilyId, transferFamilyId;
-
+		
 		// Helpers
 		void submit(
 				const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
@@ -160,9 +172,9 @@ namespace pe
 				const vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
 				const vk::Fence signalFence
 		) const;
-
+		
 		void waitFences(const vk::ArrayProxy<const vk::Fence> fences) const;
-
+		
 		void submitAndWaitFence(
 				const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
 				const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
@@ -181,20 +193,20 @@ namespace pe
 			device.setDebugUtilsObjectNameEXT(duoni, dispatchLoaderDynamic);
 		}
 #else
-
+		
 		void SetDebugObjectName(const void* validHandle, const void* name)
-		{ }
+		{}
 
 #endif
 	private:
 		static inline std::mutex m_submit_mutex {};
 	public:
 		void waitAndLockSubmits();
-
+		
 		void unlockSubmits();
-
+		
 		static VulkanContext* Get() noexcept;
-
+		
 		static void Remove() noexcept;
 	};
 }

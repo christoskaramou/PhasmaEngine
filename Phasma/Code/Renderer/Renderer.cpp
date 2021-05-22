@@ -17,26 +17,26 @@ namespace pe
 		this->ctx = ctx;
 		VulkanContext::Get()->window = window;
 	}
-
+	
 	void Renderer::Init()
 	{
 		auto vulkan = VulkanContext::Get();
-
+		
 		// INIT VULKAN CONTEXT
 		vulkan->Init(ctx);
 		
 		// SET WINDOW TITLE
-        std::string title = "PhasmaEngine";
-        title += " - Device: " + std::string(vulkan->gpuProperties->deviceName.data());
-        title += " - API: Vulkan";
-        title += " - Present Mode: " + vk::to_string(*vulkan->surface.presentModeKHR);
+		std::string title = "PhasmaEngine";
+		title += " - Device: " + std::string(vulkan->gpuProperties->deviceName.data());
+		title += " - API: Vulkan";
+		title += " - Present Mode: " + vk::to_string(*vulkan->surface.presentModeKHR);
 #ifdef _DEBUG
-        title += " - Configuration: Debug";
+		title += " - Configuration: Debug";
 #else
-        title += " - Configuration: Release";
+		title += " - Configuration: Release";
 #endif // _DEBUG
-        EventSystem::Get()->DispatchEvent(EventType::SetWindowTitle, title);
-        
+		EventSystem::Get()->DispatchEvent(EventType::SetWindowTitle, title);
+		
 		// INIT RENDERING
 		AddRenderTarget("viewport", vulkan->surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
 		AddRenderTarget("depth", vk::Format::eR32Sfloat, vk::ImageUsageFlags());
@@ -52,13 +52,13 @@ namespace pe
 		AddRenderTarget("gaussianBlurVertical", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
 		AddRenderTarget("emissive", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
 		AddRenderTarget("taa", vulkan->surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
-
+		
 		taa.Init();
 		bloom.Init();
 		fxaa.Init();
 		motionBlur.Init();
 		dof.Init();
-
+		
 		// render passes
 		shadows.createRenderPass();
 		ssao.createRenderPasses(renderTargets);
@@ -70,7 +70,7 @@ namespace pe
 		dof.createRenderPass(renderTargets);
 		motionBlur.createRenderPass(renderTargets);
 		gui.createRenderPass();
-
+		
 		// frame buffers
 		shadows.createFrameBuffers();
 		ssao.createFrameBuffers(renderTargets);
@@ -82,7 +82,7 @@ namespace pe
 		dof.createFrameBuffers(renderTargets);
 		motionBlur.createFrameBuffers(renderTargets);
 		gui.createFrameBuffers();
-
+		
 		// pipelines
 		shadows.createPipeline();
 		ssao.createPipelines(renderTargets);
@@ -94,22 +94,22 @@ namespace pe
 		dof.createPipeline(renderTargets);
 		motionBlur.createPipeline(renderTargets);
 		gui.createPipeline();
-
+		
 		//transformsCompute = Compute::Create("Shaders/Compute/shader.comp", 64, 64);
-
+		
 		metrics.resize(20);
 		//LOAD RESOURCES
 		LoadResources();
 		// CREATE UNIFORMS AND DESCRIPTOR SETS
 		CreateUniforms();
 	}
-
+	
 	Renderer::~Renderer()
 	{
 		VulkanContext::Get()->device->waitIdle();
-
+		
 		Destroy();
-
+		
 		if (Model::models.empty())
 		{
 			if (Pipeline::getDescriptorSetLayoutModel())
@@ -138,7 +138,7 @@ namespace pe
 		for (auto& texture : Mesh::uniqueTextures)
 			texture.second.destroy();
 		Mesh::uniqueTextures.clear();
-
+		
 		Compute::DestroyResources();
 		shadows.destroy();
 		deferred.destroy();
@@ -158,7 +158,7 @@ namespace pe
 		ctx->GetVKContext()->Destroy();
 		ctx->GetVKContext()->Remove();
 	}
-
+	
 	void Renderer::CheckQueue()
 	{
 		for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();)
@@ -180,7 +180,7 @@ namespace pe
 			);
 			it = Queue::loadModel.erase(it);
 		}
-
+		
 		for (auto it = Queue::loadModelFutures.begin(); it != Queue::loadModelFutures.end();)
 		{
 			if (it->wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
@@ -197,7 +197,7 @@ namespace pe
 				++it;
 			}
 		}
-
+		
 		for (auto it = Queue::unloadModel.begin(); it != Queue::unloadModel.end();)
 		{
 			VulkanContext::Get()->device->waitIdle();
@@ -236,18 +236,18 @@ namespace pe
 
 #endif
 	}
-
-
+	
+	
 	void Renderer::ComputeAnimations()
 	{
-
+	
 	}
-
+	
 	void Renderer::Update(double delta)
 	{
 		static Timer timer;
 		timer.Start();
-
+		
 		// check for commands in queue
 		CheckQueue();
 
@@ -256,14 +256,14 @@ namespace pe
 		for (auto& s : scripts)
 			s->update(static_cast<float>(delta));
 #endif
-
+		
 		CameraSystem* cameraSystem = ctx->GetSystem<CameraSystem>();
 		Camera& camera_main = cameraSystem->GetCamera(0);
-
+		
 		// Model updates + 8(the rest updates)
 		std::vector<std::future<void>> futureUpdates;
 		futureUpdates.reserve(Model::models.size() + 8);
-
+		
 		// MODELS
 		if (GUI::modelItemSelected > -1)
 		{
@@ -277,91 +277,91 @@ namespace pe
 			{ model.update(camera_main, delta); };
 			futureUpdates.push_back(std::async(std::launch::async, updateModel));
 		}
-
+		
 		// GUI
 		auto updateGUI = [&]()
 		{ gui.update(); };
 		futureUpdates.push_back(std::async(std::launch::async, updateGUI));
-
+		
 		// LIGHTS
 		auto updateLights = [&]()
 		{ lightUniforms.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateLights));
-
+		
 		// SSAO
 		auto updateSSAO = [&]()
 		{ ssao.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateSSAO));
-
+		
 		// SSR
 		auto updateSSR = [&]()
 		{ ssr.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateSSR));
-
+		
 		// TAA
 		auto updateTAA = [&]()
 		{ taa.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateTAA));
-
+		
 		// MOTION BLUR
 		auto updateMotionBlur = [&]()
 		{ motionBlur.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateMotionBlur));
-
+		
 		// SHADOWS
 		auto updateShadows = [&]()
 		{ shadows.update(camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateShadows));
-
+		
 		// COMPOSITION UNIFORMS
 		auto updateDeferred = [&]()
 		{ deferred.update(camera_main.invViewProjection); };
 		futureUpdates.push_back(std::async(std::launch::async, updateDeferred));
-
+		
 		for (auto& f : futureUpdates)
 			f.get();
-
+		
 		static Timer timerFenceWait;
 		timerFenceWait.Start();
 		VulkanContext::Get()->waitFences((*VulkanContext::Get()->fences)[previousImageIndex]);
 		FrameTimer::Instance().timestamps[0] = timerFenceWait.Count();
 		Queue::exec_memcpyRequests();
-
+		
 		GUI::updatesTimeCount = static_cast<float>(timer.Count());
 	}
-
+	
 	void Renderer::RecordDeferredCmds(const uint32_t& imageIndex)
 	{
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-
+		
 		const auto& cmd = (*VulkanContext::Get()->dynamicCmdBuffers)[imageIndex];
-
+		
 		cmd.begin(beginInfo);
 		// TODO: add more queries (times the swapchain images), so they are not overlapped from previous frame
 		metrics[0].start(&cmd);
-
+		
 		// SKYBOX
 		SkyBox& skybox = GUI::shadow_cast ? skyBoxDay : skyBoxNight;
-
+		
 		// MODELS
 		{
 			metrics[2].start(&cmd);
 			deferred.batchStart(cmd, imageIndex, *renderTargets["viewport"].extent);
-
+			
 			for (auto& model : Model::models)
 				model.draw((uint16_t) RenderQueue::Opaque);
-
+			
 			for (auto& model : Model::models)
 				model.draw((uint16_t) RenderQueue::AlphaCut);
-
+			
 			for (auto& model : Model::models)
 				model.draw((uint16_t) RenderQueue::AlphaBlend);
-
+			
 			deferred.batchEnd();
 			metrics[2].end(&GUI::metrics[2]);
 		}
-
+		
 		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorRead);
 		renderTargets["depth"].changeLayout(cmd, LayoutState::ColorRead);
 		renderTargets["normal"].changeLayout(cmd, LayoutState::ColorRead);
@@ -373,7 +373,7 @@ namespace pe
 		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorRead);
 		for (auto& image : shadows.textures)
 			image.changeLayout(cmd, LayoutState::DepthRead);
-
+		
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao)
 		{
@@ -383,7 +383,7 @@ namespace pe
 			renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorRead);
 			metrics[3].end(&GUI::metrics[3]);
 		}
-
+		
 		// SCREEN SPACE REFLECTIONS
 		if (GUI::show_ssr)
 		{
@@ -393,12 +393,12 @@ namespace pe
 			renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorRead);
 			metrics[4].end(&GUI::metrics[4]);
 		}
-
+		
 		// COMPOSITION
 		metrics[5].start(&cmd);
 		deferred.draw(cmd, imageIndex, shadows, skybox, *renderTargets["viewport"].extent);
 		metrics[5].end(&GUI::metrics[5]);
-
+		
 		if (GUI::use_AntiAliasing)
 		{
 			// TAA
@@ -418,7 +418,7 @@ namespace pe
 				metrics[6].end(&GUI::metrics[6]);
 			}
 		}
-
+		
 		// BLOOM
 		if (GUI::show_Bloom)
 		{
@@ -427,7 +427,7 @@ namespace pe
 			bloom.draw(cmd, imageIndex, renderTargets);
 			metrics[7].end(&GUI::metrics[7]);
 		}
-
+		
 		// Depth of Field
 		if (GUI::use_DOF)
 		{
@@ -436,7 +436,7 @@ namespace pe
 			dof.draw(cmd, imageIndex, renderTargets);
 			metrics[8].end(&GUI::metrics[8]);
 		}
-
+		
 		// MOTION BLUR
 		if (GUI::show_motionBlur)
 		{
@@ -445,7 +445,7 @@ namespace pe
 			motionBlur.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
 			metrics[9].end(&GUI::metrics[9]);
 		}
-
+		
 		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorWrite);
 		renderTargets["depth"].changeLayout(cmd, LayoutState::ColorWrite);
 		renderTargets["normal"].changeLayout(cmd, LayoutState::ColorWrite);
@@ -457,35 +457,36 @@ namespace pe
 		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorWrite);
 		for (auto& image : shadows.textures)
 			image.changeLayout(cmd, LayoutState::DepthWrite);
-
+		
 		// GUI
 		metrics[10].start(&cmd);
 		gui.scaleToRenderArea(cmd, renderTargets["viewport"], imageIndex);
 		gui.draw(cmd, imageIndex);
 		metrics[10].end(&GUI::metrics[10]);
-
+		
 		metrics[0].end(&GUI::metrics[0]);
-
+		
 		cmd.end();
 	}
-
+	
 	void Renderer::RecordShadowsCmds(const uint32_t& imageIndex)
 	{
 		// Render Pass (shadows mapping) (outputs the depth image with the light POV)
-
+		
 		const vk::DeviceSize offset = vk::DeviceSize();
 		std::array<vk::ClearValue, 1> clearValuesShadows {};
 		clearValuesShadows[0].depthStencil = vk::ClearDepthStencilValue {0.0f, 0};
-
+		
 		vk::CommandBufferBeginInfo beginInfoShadows;
 		beginInfoShadows.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-
+		
 		vk::RenderPassBeginInfo renderPassInfoShadows;
 		renderPassInfoShadows.renderPass = *shadows.renderPass.handle;
-		renderPassInfoShadows.renderArea = vk::Rect2D {{0, 0}, {Shadows::imageSize, Shadows::imageSize}};
+		renderPassInfoShadows.renderArea = vk::Rect2D {{0,                  0},
+		                                               {Shadows::imageSize, Shadows::imageSize}};
 		renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
 		renderPassInfoShadows.pClearValues = clearValuesShadows.data();
-
+		
 		for (uint32_t i = 0; i < shadows.textures.size(); i++)
 		{
 			auto& cmd = (*VulkanContext::Get()->shadowCmdBuffers)[
@@ -493,7 +494,7 @@ namespace pe
 			cmd.begin(beginInfoShadows);
 			metrics[11 + static_cast<size_t>(i)].start(&cmd);
 			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
-
+			
 			// depth[i] image ===========================================================
 			renderPassInfoShadows.framebuffer = *shadows.framebuffers[shadows.textures.size() * imageIndex + i].handle;
 			cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
@@ -504,7 +505,7 @@ namespace pe
 				{
 					cmd.bindVertexBuffers(0, *model.vertexBuffer.buffer, offset);
 					cmd.bindIndexBuffer(*model.indexBuffer.buffer, 0, vk::IndexType::eUint32);
-
+					
 					for (auto& node : model.linearNodes)
 					{
 						if (node->mesh)
@@ -533,23 +534,23 @@ namespace pe
 			cmd.end();
 		}
 	}
-
+	
 	void Renderer::Destroy()
 	{
 		for (auto& rt : renderTargets)
 			rt.second.destroy();
 	}
-
+	
 	void Renderer::Draw()
 	{
 		auto& vCtx = *VulkanContext::Get();
-
+		
 		static const vk::PipelineStageFlags waitStages[] = {
 				vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader
 		};
-
+		
 		//FIRE_EVENT(Event::OnRender);
-
+		
 		GUI::use_compute = true;
 		if (GUI::use_compute)
 		{
@@ -559,27 +560,27 @@ namespace pe
 			//mat4* matp1;
 			//float f = (*matp)[0][0];
 		}
-
+		
 		// aquire the image
 		auto& aquireSignalSemaphore = (*vCtx.semaphores)[0];
 		const uint32_t imageIndex = vCtx.swapchain.Aquire(aquireSignalSemaphore, nullptr);
 		this->previousImageIndex = imageIndex;
-
+		
 		//static Timer timer;
 		//timer.Start();
 		//vCtx.waitFences(vCtx.fences[imageIndex]);
 		//FrameTimer::Instance().timestamps[0] = timer.Count();
-
+		
 		const auto& cmd = (*vCtx.dynamicCmdBuffers)[imageIndex];
-
+		
 		vCtx.waitAndLockSubmits();
-
+		
 		if (GUI::shadow_cast)
 		{
-
+			
 			// record the shadow command buffers
 			RecordShadowsCmds(imageIndex);
-
+			
 			// submit the shadow command buffers
 			const auto& shadowWaitSemaphore = aquireSignalSemaphore;
 			const auto& shadowSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 1];
@@ -588,32 +589,33 @@ namespace pe
 			const auto i = size * imageIndex;
 			const std::vector<vk::CommandBuffer> activeShadowCmdBuffers(scb->begin() + i, scb->begin() + i + size);
 			vCtx.submit(activeShadowCmdBuffers, waitStages[0], shadowWaitSemaphore, shadowSignalSemaphore, nullptr);
-
+			
 			aquireSignalSemaphore = shadowSignalSemaphore;
 		}
-
+		
 		// record the command buffers
 		RecordDeferredCmds(imageIndex);
-
+		
 		// submit the command buffers
 		const auto& deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
 		const auto& deferredWaitSemaphore = aquireSignalSemaphore;
 		const auto& deferredSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 2];
 		const auto& deferredSignalFence = (*vCtx.fences)[imageIndex];
 		vCtx.submit(cmd, deferredWaitStage, deferredWaitSemaphore, deferredSignalSemaphore, deferredSignalFence);
-
+		
 		// Presentation
 		const auto& presentWaitSemaphore = deferredSignalSemaphore;
 		vCtx.swapchain.Present(imageIndex, presentWaitSemaphore, nullptr);
-
+		
 		vCtx.unlockSubmits();
 	}
-
-	void Renderer::AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
+	
+	void
+	Renderer::AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
 	{
 		if (renderTargets.find(name) != renderTargets.end())
 			return;
-
+		
 		renderTargets[name] = Image();
 		renderTargets[name].format = make_ref(format);
 		renderTargets[name].initialLayout = make_ref(vk::ImageLayout::eUndefined);
@@ -628,7 +630,7 @@ namespace pe
 				.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
 		renderTargets[name].createImageView(vk::ImageAspectFlagBits::eColor);
 		renderTargets[name].createSampler();
-
+		
 		//std::string str = to_string(format); str.find("A8") != std::string::npos
 		renderTargets[name].blentAttachment->blendEnable = name == "albedo" ? VK_TRUE : VK_FALSE;
 		renderTargets[name].blentAttachment->srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
@@ -639,7 +641,7 @@ namespace pe
 		renderTargets[name].blentAttachment->alphaBlendOp = vk::BlendOp::eAdd;
 		renderTargets[name].blentAttachment->colorWriteMask =
 				vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
-						vk::ColorComponentFlagBits::eA;
+				vk::ColorComponentFlagBits::eA;
 	}
 
 #ifndef IGNORE_SCRIPTS
@@ -684,7 +686,7 @@ namespace pe
 	}
 	// ----------------------------------------
 #endif
-
+	
 	void Renderer::LoadResources()
 	{
 		// SKYBOXES LOAD
@@ -706,7 +708,7 @@ namespace pe
 				Path::Assets + "Objects/lmcity/lmcity_ft.png"
 		};
 		skyBoxNight.loadSkyBox(skyTextures, 512);
-
+		
 		// GUI LOAD
 		gui.loadGUI();
 
@@ -723,7 +725,7 @@ namespace pe
 		scripts.push_back(new Script("Load"));
 #endif
 	}
-
+	
 	void Renderer::CreateUniforms()
 	{
 		// DESCRIPTOR SETS FOR GUI
@@ -755,24 +757,24 @@ namespace pe
 		// DESCRIPTOR SET FOR COMPUTE PIPELINE
 		//compute.createComputeUniforms(sizeof(SBOIn));
 	}
-
+	
 	void Renderer::ResizeViewport(uint32_t width, uint32_t height)
 	{
 		auto& vulkan = *VulkanContext::Get();
 		vulkan.graphicsQueue->waitIdle();
-
+		
 		//- Free resources ----------------------
 		// render targets
 		for (auto& RT : renderTargets)
 			RT.second.destroy();
 		renderTargets.clear();
-
+		
 		// GUI
 		gui.renderPass.Destroy();
 		for (auto& framebuffer : gui.framebuffers)
 			framebuffer.Destroy();
 		gui.pipeline.destroy();
-
+		
 		// deferred
 		deferred.renderPass.Destroy();
 		deferred.compositionRenderPass.Destroy();
@@ -782,20 +784,20 @@ namespace pe
 			framebuffer.Destroy();
 		deferred.pipeline.destroy();
 		deferred.pipelineComposition.destroy();
-
+		
 		// SSR
 		for (auto& framebuffer : ssr.framebuffers)
 			framebuffer.Destroy();
 		ssr.renderPass.Destroy();
 		ssr.pipeline.destroy();
-
+		
 		// FXAA
 		for (auto& framebuffer : fxaa.framebuffers)
 			framebuffer.Destroy();
 		fxaa.renderPass.Destroy();
 		fxaa.pipeline.destroy();
 		fxaa.frameImage.destroy();
-
+		
 		// TAA
 		taa.previous.destroy();
 		taa.frameImage.destroy();
@@ -807,7 +809,7 @@ namespace pe
 		taa.renderPassSharpen.Destroy();
 		taa.pipeline.destroy();
 		taa.pipelineSharpen.destroy();
-
+		
 		// Bloom
 		for (auto& frameBuffer : bloom.framebuffers)
 			frameBuffer.Destroy();
@@ -819,21 +821,21 @@ namespace pe
 		bloom.pipelineGaussianBlurVertical.destroy();
 		bloom.pipelineCombine.destroy();
 		bloom.frameImage.destroy();
-
+		
 		// Depth of Field
 		for (auto& framebuffer : dof.framebuffers)
 			framebuffer.Destroy();
 		dof.renderPass.Destroy();
 		dof.pipeline.destroy();
 		dof.frameImage.destroy();
-
+		
 		// Motion blur
 		for (auto& framebuffer : motionBlur.framebuffers)
 			framebuffer.Destroy();
 		motionBlur.renderPass.Destroy();
 		motionBlur.pipeline.destroy();
 		motionBlur.frameImage.destroy();
-
+		
 		// SSAO
 		ssao.renderPass.Destroy();
 		ssao.blurRenderPass.Destroy();
@@ -843,17 +845,17 @@ namespace pe
 			framebuffer.Destroy();
 		ssao.pipeline.destroy();
 		ssao.pipelineBlur.destroy();
-
+		
 		vulkan.depth.destroy();
 		vulkan.swapchain.Destroy();
 		//- Free resources end ------------------
-
+		
 		//- Recreate resources ------------------
 		WIDTH = width;
 		HEIGHT = height;
 		vulkan.CreateSwapchain(ctx, 3);
 		vulkan.CreateDepth();
-
+		
 		AddRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
 		AddRenderTarget("depth", vk::Format::eR32Sfloat, vk::ImageUsageFlags());
 		AddRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat, vk::ImageUsageFlags());
@@ -868,66 +870,66 @@ namespace pe
 		AddRenderTarget("gaussianBlurVertical", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
 		AddRenderTarget("emissive", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
 		AddRenderTarget("taa", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
-
+		
 		deferred.createRenderPasses(renderTargets);
 		deferred.createFrameBuffers(renderTargets);
 		deferred.createPipelines(renderTargets);
 		deferred.updateDescriptorSets(renderTargets, lightUniforms);
-
+		
 		ssr.createRenderPass(renderTargets);
 		ssr.createFrameBuffers(renderTargets);
 		ssr.createPipeline(renderTargets);
 		ssr.updateDescriptorSets(renderTargets);
-
+		
 		fxaa.Init();
 		fxaa.createRenderPass(renderTargets);
 		fxaa.createFrameBuffers(renderTargets);
 		fxaa.createPipeline(renderTargets);
 		fxaa.updateDescriptorSets(renderTargets);
-
+		
 		taa.Init();
 		taa.createRenderPasses(renderTargets);
 		taa.createFrameBuffers(renderTargets);
 		taa.createPipelines(renderTargets);
 		taa.updateDescriptorSets(renderTargets);
-
+		
 		bloom.Init();
 		bloom.createRenderPasses(renderTargets);
 		bloom.createFrameBuffers(renderTargets);
 		bloom.createPipelines(renderTargets);
 		bloom.updateDescriptorSets(renderTargets);
-
+		
 		dof.Init();
 		dof.createRenderPass(renderTargets);
 		dof.createFrameBuffers(renderTargets);
 		dof.createPipeline(renderTargets);
 		dof.updateDescriptorSets(renderTargets);
-
+		
 		motionBlur.Init();
 		motionBlur.createRenderPass(renderTargets);
 		motionBlur.createFrameBuffers(renderTargets);
 		motionBlur.createPipeline(renderTargets);
 		motionBlur.updateDescriptorSets(renderTargets);
-
+		
 		ssao.createRenderPasses(renderTargets);
 		ssao.createFrameBuffers(renderTargets);
 		ssao.createPipelines(renderTargets);
 		ssao.updateDescriptorSets(renderTargets);
-
+		
 		gui.createRenderPass();
 		gui.createFrameBuffers();
 		gui.createPipeline();
 		gui.updateDescriptorSets();
-
+		
 		//compute.pipeline = createComputePipeline();
 		//compute.updateDescriptorSets();
 		//- Recreate resources end --------------
 	}
-
+	
 	void Renderer::RecreatePipelines()
 	{
 		VulkanContext::Get()->graphicsQueue->waitIdle();
-
+		
 		shadows.pipeline.destroy();
 		ssao.pipeline.destroy();
 		ssao.pipelineBlur.destroy();
@@ -944,7 +946,7 @@ namespace pe
 		dof.pipeline.destroy();
 		motionBlur.pipeline.destroy();
 		gui.pipeline.destroy();
-
+		
 		shadows.createPipeline();
 		ssao.createPipelines(renderTargets);
 		ssr.createPipeline(renderTargets);
@@ -955,7 +957,7 @@ namespace pe
 		dof.createPipeline(renderTargets);
 		motionBlur.createPipeline(renderTargets);
 		gui.createPipeline();
-
+		
 		ctx->GetSystem<CameraSystem>()->GetCamera(0).ReCreateComputePipelines();
 	}
 }

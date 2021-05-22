@@ -14,11 +14,11 @@ namespace pe
 	{
 		DSet = make_ref(vk::DescriptorSet());
 	}
-
+	
 	SSR::~SSR()
 	{
 	}
-
+	
 	void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		UBReflection.createBuffer(
@@ -28,16 +28,16 @@ namespace pe
 		UBReflection.zero();
 		UBReflection.flush();
 		UBReflection.unmap();
-
+		
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutSSR();
 		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
-
+		
 		updateDescriptorSets(renderTargets);
 	}
-
+	
 	void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
@@ -56,7 +56,7 @@ namespace pe
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
 		};
-
+		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets {
 				wSetImage(*DSet, 0, renderTargets["albedo"]),
 				wSetImage(*DSet, 1, renderTargets["depth"]),
@@ -66,7 +66,7 @@ namespace pe
 		};
 		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
-
+	
 	void SSR::update(Camera& camera)
 	{
 		if (GUI::show_ssr)
@@ -78,7 +78,7 @@ namespace pe
 			reflectionInput[1] = camera.projection;
 			reflectionInput[2] = camera.view;
 			reflectionInput[3] = camera.invProjection;
-
+			
 			Queue::memcpyRequest(&UBReflection, {{&reflectionInput, sizeof(reflectionInput), 0}});
 			//UBReflection.map();
 			//memcpy(UBReflection.data, &reflectionInput, sizeof(reflectionInput));
@@ -86,15 +86,15 @@ namespace pe
 			//UBReflection.unmap();
 		}
 	}
-
-
+	
+	
 	void SSR::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
 	{
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
-
+		
 		std::vector<vk::ClearValue> clearValues = {clearColor};
-
+		
 		vk::RenderPassBeginInfo renderPassInfo;
 		renderPassInfo.renderPass = *renderPass.handle;
 		renderPassInfo.framebuffer = *framebuffers[imageIndex].handle;
@@ -102,19 +102,19 @@ namespace pe
 		renderPassInfo.renderArea.extent = extent;
 		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		renderPassInfo.pClearValues = clearValues.data();
-
+		
 		cmd.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *DSet, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
-
+	
 	void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
 		renderPass.Create(*renderTargets["ssr"].format, vk::Format::eUndefined);
 	}
-
+	
 	void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::Get();
@@ -127,12 +127,12 @@ namespace pe
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
-
+	
 	void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/SSR/ssr.frag", ShaderType::Fragment, true};
-
+		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
 		pipeline.info.width = renderTargets["ssr"].width_f;
@@ -145,17 +145,17 @@ namespace pe
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutSSR()}
 		);
 		pipeline.info.renderPass = renderPass;
-
+		
 		pipeline.createGraphicsPipeline();
 	}
-
+	
 	void SSR::destroy()
 	{
 		for (auto& framebuffer : framebuffers)
 			framebuffer.Destroy();
-
+		
 		renderPass.Destroy();
-
+		
 		if (Pipeline::getDescriptorSetLayoutSSR())
 		{
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSR());

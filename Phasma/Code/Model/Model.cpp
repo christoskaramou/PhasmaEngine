@@ -15,38 +15,38 @@
 namespace pe
 {
 	using namespace Microsoft;
-
+	
 	Ref<vk::CommandBuffer> Model::commandBuffer = make_ref(vk::CommandBuffer());
 	std::vector<Model> Model::models {};
 	Pipeline* Model::pipeline = nullptr;
-
+	
 	Model::Model()
 	{
 		if (commandBuffer == nullptr)
 			commandBuffer = make_ref(vk::CommandBuffer());
-
+		
 		descriptorSet = make_ref(vk::DescriptorSet());
 	}
-
+	
 	Model::~Model()
 	{
 	}
-
+	
 	bool endsWith(const std::string& mainStr, const std::string& toMatch)
 	{
 		if (mainStr.size() >= toMatch.size() &&
-				mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
+		    mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0)
 			return true;
 		return false;
 	}
-
+	
 	void Model::readGltf(const std::filesystem::path& file)
 	{
 		if (file.extension() != ".gltf" && file.extension() != ".glb")
 			throw glTF::GLTFException("Model type not supported");
-
+		
 		std::string manifest;
-
+		
 		// Pass the absolute path, without the filename, to the stream reader
 		auto streamReader = std::make_unique<StreamReader>(file.parent_path());
 		const std::filesystem::path pathFile = file.filename();
@@ -69,9 +69,9 @@ namespace pe
 			manifest = resourceReaderGLB->GetJson();
 			resourceReader = static_cast<glTF::GLTFResourceReader*>(resourceReaderGLB);
 		}
-
+		
 		//std::cout << manifest;
-
+		
 		try
 		{
 			document = new glTF::Document();
@@ -80,22 +80,22 @@ namespace pe
 		catch (const glTF::GLTFException& ex)
 		{
 			std::stringstream ss;
-
+			
 			ss << "Microsoft::glTF::Deserialize failed: ";
 			ss << ex.what();
-
+			
 			throw std::runtime_error(ss.str());
 		}
 	}
-
+	
 	glTF::Image* Model::getImage(const std::string& textureID) const
 	{
 		return textureID.empty() ? nullptr :
 		       const_cast<glTF::Image*>
 		       (&document->images.Get(document->textures.Get(textureID).imageId));
 	}
-
-	template <typename T>
+	
+	template<typename T>
 	void Model::getVertexData(
 			std::vector<T>& vec, const std::string& accessorName, const glTF::MeshPrimitive& primitive
 	) const
@@ -105,7 +105,7 @@ namespace pe
 		{
 			const auto& doc = *document;
 			const auto& accessor = doc.accessors.Get(accessorId);
-
+			
 			switch (accessor.componentType)
 			{
 				case glTF::COMPONENT_FLOAT:
@@ -168,18 +168,19 @@ namespace pe
 					);
 					break;
 				}
-				default: throw glTF::GLTFException("Unsupported accessor ComponentType");
+				default:
+					throw glTF::GLTFException("Unsupported accessor ComponentType");
 			}
 		}
 	}
-
+	
 	void Model::getIndexData(std::vector<uint32_t>& vec, const glTF::MeshPrimitive& primitive) const
 	{
 		if (!primitive.indicesAccessorId.empty())
 		{
 			const auto& doc = *document;
 			const auto& accessor = doc.accessors.Get(primitive.indicesAccessorId);
-
+			
 			switch (accessor.componentType)
 			{
 				case glTF::COMPONENT_BYTE:
@@ -232,19 +233,20 @@ namespace pe
 					);
 					break;
 				}
-				default: throw glTF::GLTFException("Unsupported accessor ComponentType");
+				default:
+					throw glTF::GLTFException("Unsupported accessor ComponentType");
 			}
 		}
 	}
-
+	
 	void Model::getMesh(pe::Node* node, const std::string& meshID, const std::string& folderPath) const
 	{
 		if (!node || meshID.empty()) return;
 		const auto& mesh = document->meshes.Get(meshID);
-
+		
 		node->mesh = new Mesh();
 		auto& myMesh = node->mesh;
-
+		
 		for (const auto& primitive : mesh.primitives)
 		{
 			std::vector<float> positions {};
@@ -254,7 +256,7 @@ namespace pe
 			std::vector<int> bonesIDs {};
 			std::vector<float> weights {};
 			std::vector<uint32_t> indices {};
-
+			
 			// ------------ Vertices ------------
 			getVertexData(positions, glTF::ACCESSOR_POSITION, primitive);
 			getVertexData(uvs, glTF::ACCESSOR_TEXCOORD_0, primitive);
@@ -262,16 +264,16 @@ namespace pe
 			getVertexData(colors, glTF::ACCESSOR_COLOR_0, primitive);
 			getVertexData(bonesIDs, glTF::ACCESSOR_JOINTS_0, primitive);
 			getVertexData(weights, glTF::ACCESSOR_WEIGHTS_0, primitive);
-
+			
 			// ------------ Indices ------------
 			getIndexData(indices, primitive);
-
+			
 			// ------------ Materials ------------
 			const auto& material = document->materials.Get(primitive.materialId);
-
+			
 			myMesh->primitives.emplace_back();
 			auto& myPrimitive = myMesh->primitives.back();
-
+			
 			// factors
 			myPrimitive.pbrMaterial.alphaCutoff = material.alphaCutoff;
 			myPrimitive.pbrMaterial.alphaMode = material.alphaMode;
@@ -280,7 +282,7 @@ namespace pe
 			myPrimitive.pbrMaterial.emissiveFactor = vec3(&material.emissiveFactor.r);
 			myPrimitive.pbrMaterial.metallicFactor = material.metallicRoughness.metallicFactor;
 			myPrimitive.pbrMaterial.roughnessFactor = material.metallicRoughness.roughnessFactor;
-
+			
 			// textures
 			const auto baseColorImage = getImage(material.metallicRoughness.baseColorTexture.textureId);
 			const auto metallicRoughnessImage = getImage(material.metallicRoughness.metallicRoughnessTexture.textureId);
@@ -294,9 +296,9 @@ namespace pe
 			myPrimitive.loadTexture(MaterialType::Normal, folderPath, normalImage, document, resourceReader);
 			myPrimitive.loadTexture(MaterialType::Occlusion, folderPath, occlusionImage, document, resourceReader);
 			myPrimitive.loadTexture(MaterialType::Emissive, folderPath, emissiveImage, document, resourceReader);
-
+			
 			myPrimitive.name = baseColorImage->name;
-
+			
 			std::string accessorId;
 			primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_POSITION, accessorId);
 			const glTF::Accessor* accessorPos = &document->accessors.Get(accessorId);
@@ -308,7 +310,7 @@ namespace pe
 			myPrimitive.max = vec3(&accessorPos->max[0]);
 			myPrimitive.calculateBoundingSphere();
 			myPrimitive.hasBones = !bonesIDs.empty() && !weights.empty();
-
+			
 			for (size_t i = 0; i < accessorPos->count; i++)
 			{
 				Vertex vertex;
@@ -326,17 +328,17 @@ namespace pe
 			}
 		}
 	}
-
+	
 	void Model::loadModelGltf(const std::string& folderPath, const std::string& modelName, bool show)
 	{
 		// reads and gets the document and resourceReader objects
 		readGltf(std::filesystem::path(folderPath + modelName));
-
+		
 		for (auto& node : document->GetDefaultScene().nodes)
 			loadNode({}, document->nodes.Get(node), folderPath);
 		loadAnimations();
 		loadSkins();
-
+		
 		for (auto node : linearNodes)
 		{
 			// Assign skins
@@ -346,7 +348,7 @@ namespace pe
 			}
 		}
 	}
-
+	
 	void Model::loadModel(const std::string& folderPath, const std::string& modelName, bool show)
 	{
 		loadModelGltf(folderPath, modelName, show);
@@ -359,7 +361,7 @@ namespace pe
 		createUniformBuffers();
 		createDescriptorSets();
 	}
-
+	
 	void Model::updateAnimation(uint32_t index, float time)
 	{
 		if (index > static_cast<uint32_t>(animations.size()) - 1)
@@ -368,13 +370,13 @@ namespace pe
 			return;
 		}
 		Animation& animation = animations[index];
-
+		
 		for (auto& channel : animation.channels)
 		{
 			pe::AnimationSampler& sampler = animation.samplers[channel.samplerIndex];
 			if (sampler.inputs.size() > sampler.outputsVec4.size())
 				continue;
-
+			
 			for (size_t i = 0; i < sampler.inputs.size() - 1; i++)
 			{
 				if ((time >= sampler.inputs[i]) && (time <= sampler.inputs[i + 1]))
@@ -410,31 +412,31 @@ namespace pe
 			}
 		}
 	}
-
+	
 	void frustumCheckAsync(const Model& model, Mesh* mesh, const Camera& camera, uint32_t index)
 	{
 		cmat4 trans = model.transform * mesh->ubo.matrix;
 		vec4 bs = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
-
+		
 		bs.w = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale 
 		mesh->primitives[index].cull = !camera.SphereInFrustum(bs);
 		mesh->primitives[index].transformedBS = bs;
 	}
-
+	
 	void updateNodeAsync(const Model& model, Node* node, const Camera& camera)
 	{
 		if (node->mesh)
 		{
 			node->update();
-
+			
 			// async calls should be at least bigger than a number, else this will be slower
 			if (node->mesh->primitives.size() > 3)
 			{
 				std::vector<std::future<void>> futures(node->mesh->primitives.size());
-
+				
 				for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
 					futures[i] = std::async(std::launch::async, frustumCheckAsync, model, node->mesh, camera, i);
-
+				
 				for (auto& f : futures)
 					f.get();
 			}
@@ -445,7 +447,7 @@ namespace pe
 			}
 		}
 	}
-
+	
 	void Model::update(pe::Camera& camera, double delta)
 	{
 		if (render)
@@ -457,36 +459,36 @@ namespace pe
 				transform = script->getValue<Transform>("transform").matrix * transform;
 #endif
 			}
-
+			
 			transform = pe::transform(quat(radians(rot)), scale, pos);
 			ubo.matrix = transform;
 			ubo.previousMvp = ubo.mvp;
 			ubo.mvp = camera.viewProjection * transform;
-
+			
 			Queue::memcpyRequest(&uniformBuffer, {{&ubo, sizeof(ubo), 0}});
 			//uniformBuffer.map();
 			//memcpy(uniformBuffer.data, &ubo, sizeof(ubo));
 			//uniformBuffer.flush();
 			//uniformBuffer.unmap();
-
+			
 			if (!animations.empty())
 			{
 				animationTimer += static_cast<float>(delta);
-
+				
 				if (animationTimer > animations[animationIndex].end)
 					animationTimer -= animations[animationIndex].end;
-
+				
 				updateAnimation(animationIndex, animationTimer);
 			}
-
+			
 			// async calls should be at least bigger than a number, else this will be slower
 			if (linearNodes.size() > 3)
 			{
 				std::vector<std::future<void>> futureNodes(linearNodes.size());
-
+				
 				for (uint32_t i = 0; i < linearNodes.size(); i++)
 					futureNodes[i] = std::async(std::launch::async, updateNodeAsync, *this, linearNodes[i], camera);
-
+				
 				for (auto& f : futureNodes)
 					f.get();
 			}
@@ -497,19 +499,19 @@ namespace pe
 			}
 		}
 	}
-
+	
 	void Model::draw(uint16_t renderQueue)
 	{
 		if (!render || !Model::pipeline)
 			return;
-
+		
 		auto& cmd = Model::commandBuffer;
 		const vk::DeviceSize offset {0};
-
+		
 		cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, *Model::pipeline->handle);
 		cmd->bindVertexBuffers(0, 1, &*vertexBuffer.buffer, &offset);
 		cmd->bindIndexBuffer(*indexBuffer.buffer, 0, vk::IndexType::eUint32);
-
+		
 		int culled = 0;
 		int total = 0;
 		for (auto& node : linearNodes)
@@ -541,16 +543,16 @@ namespace pe
 				}
 			}
 		}
-
+		
 		//std::cout << "RenderQueue: " << renderQueue << " Culled: " << culled << "/" << total << std::endl;
 	}
-
+	
 	// position x, y, z and radius w
 	void Model::calculateBoundingSphere()
 	{
 		vec4 centerMax(0.f);
 		vec4 centerMin(FLT_MAX);
-
+		
 		for (auto& node : linearNodes)
 		{
 			if (node->mesh)
@@ -558,11 +560,11 @@ namespace pe
 				for (auto& primitive : node->mesh->primitives)
 				{
 					cvec3 center = vec3(primitive.boundingSphere);
-
+					
 					const float lenMax = length(center) + primitive.boundingSphere.w;
 					if (lenMax > centerMax.w)
 						centerMax = vec4(center, lenMax);
-
+					
 					const float lenMin = lenMax - 2.f * primitive.boundingSphere.w;
 					if (lenMin < centerMin.w)
 						centerMin = vec4(center, lenMin);
@@ -573,7 +575,7 @@ namespace pe
 		const float sphereRadius = length(vec3(centerMax) - center);
 		boundingSphere = vec4(center, sphereRadius);
 	}
-
+	
 	void Model::loadNode(pe::Node* parent, const glTF::Node& node, const std::string& folderPath)
 	{
 		pe::Node* newNode = new pe::Node {};
@@ -581,7 +583,7 @@ namespace pe
 		newNode->parent = parent;
 		newNode->name = node.name;
 		newNode->skinIndex = !node.skinId.empty() ? static_cast<int32_t>(document->skins.GetIndex(node.skinId)) : -1;
-
+		
 		// Generate local node matrix
 		if (!node.HasValidTransformType())
 			throw glTF::InvalidGLTFException(
@@ -592,7 +594,7 @@ namespace pe
 		newNode->scale = vec3(&node.scale.x);
 		newNode->rotation = quat(&node.rotation.x);
 		newNode->matrix = mat4(&node.matrix.values[0]);
-
+		
 		// Node with children
 		for (auto& child : node.children)
 		{
@@ -605,7 +607,7 @@ namespace pe
 		//	nodes.push_back(newNode);
 		linearNodes.push_back(newNode);
 	}
-
+	
 	void Model::loadAnimations()
 	{
 		const auto getNode = [](std::vector<Node*>& linearNodes, size_t index) -> Node*
@@ -617,7 +619,7 @@ namespace pe
 			}
 			return nullptr;
 		};
-
+		
 		for (auto& anim : document->animations.Elements())
 		{
 			pe::Animation animation {};
@@ -626,7 +628,7 @@ namespace pe
 			{
 				animation.name = std::to_string(animations.size());
 			}
-
+			
 			// Samplers
 			for (auto& samp : anim.samplers.Elements())
 			{
@@ -650,7 +652,7 @@ namespace pe
 						throw std::runtime_error("Animation componentType is not equal to float");
 					const auto data = resourceReader->ReadBinaryData<float>(*document, accessor);
 					sampler.inputs.insert(sampler.inputs.end(), data.begin(), data.end());
-
+					
 					for (auto input : sampler.inputs)
 					{
 						if (input < animation.start)
@@ -669,7 +671,7 @@ namespace pe
 					if (accessor.componentType != glTF::COMPONENT_FLOAT)
 						throw std::runtime_error("Animation componentType is not equal to float");
 					const auto data = resourceReader->ReadBinaryData<float>(*document, accessor);
-
+					
 					switch (accessor.type)
 					{
 						case glTF::AccessorType::TYPE_VEC3:
@@ -697,12 +699,12 @@ namespace pe
 				}
 				animation.samplers.push_back(sampler);
 			}
-
+			
 			// Channels
 			for (auto& source : anim.channels.Elements())
 			{
 				pe::AnimationChannel channel {};
-
+				
 				if (source.target.path == glTF::TARGET_ROTATION)
 				{
 					channel.path = AnimationChannel::PathType::ROTATION;
@@ -731,7 +733,7 @@ namespace pe
 			animations.push_back(animation);
 		}
 	}
-
+	
 	void Model::loadSkins()
 	{
 		const auto getNode = [](std::vector<Node*>& linearNodes, size_t index) -> Node*
@@ -747,13 +749,13 @@ namespace pe
 		{
 			Skin* newSkin = new Skin {};
 			newSkin->name = source.name;
-
+			
 			// Find skeleton root node
 			if (!source.skeletonId.empty())
 			{
 				newSkin->skeletonRoot = getNode(linearNodes, document->nodes.GetIndex(source.skeletonId));
 			}
-
+			
 			// Find joint nodes
 			for (auto& jointID : source.jointIds)
 			{
@@ -763,7 +765,7 @@ namespace pe
 					newSkin->joints.push_back(node);
 				}
 			}
-
+			
 			// Get inverse bind matrices
 			if (!source.inverseBindMatricesAccessorId.empty())
 			{
@@ -775,7 +777,7 @@ namespace pe
 			skins.push_back(newSkin);
 		}
 	}
-
+	
 	void Model::createVertexBuffer()
 	{
 		std::vector<Vertex> vertices {};
@@ -796,7 +798,7 @@ namespace pe
 				size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
 				vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
-
+		
 		// Staging buffer
 		Buffer staging;
 		staging.createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
@@ -804,11 +806,11 @@ namespace pe
 		staging.copyData(vertices.data());
 		staging.flush();
 		staging.unmap();
-
+		
 		vertexBuffer.copyBuffer(*staging.buffer, staging.size);
 		staging.destroy();
 	}
-
+	
 	void Model::createIndexBuffer()
 	{
 		std::vector<uint32_t> indices {};
@@ -829,7 +831,7 @@ namespace pe
 				size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
 				vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
-
+		
 		// Staging buffer
 		Buffer staging;
 		staging.createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
@@ -837,11 +839,11 @@ namespace pe
 		staging.copyData(indices.data());
 		staging.flush();
 		staging.unmap();
-
+		
 		indexBuffer.copyBuffer(*staging.buffer, staging.size);
 		staging.destroy();
 	}
-
+	
 	void Model::createUniformBuffers()
 	{
 		uniformBuffer.createBuffer(
@@ -859,7 +861,7 @@ namespace pe
 			}
 		}
 	}
-
+	
 	void Model::createDescriptorSets()
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
@@ -878,36 +880,38 @@ namespace pe
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
 		};
-
+		
 		// model dSet
 		vk::DescriptorSetAllocateInfo allocateInfo0;
 		allocateInfo0.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo0.descriptorSetCount = 1;
 		allocateInfo0.pSetLayouts = &Pipeline::getDescriptorSetLayoutModel();
 		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo0).at(0));
-
+		
 		VulkanContext::Get()->device->updateDescriptorSets(wSetBuffer(*descriptorSet, 0, uniformBuffer), nullptr);
-
+		
 		// mesh dSets
 		for (auto& node : linearNodes)
 		{
-
+			
 			if (!node->mesh) continue;
 			auto& mesh = node->mesh;
-
+			
 			vk::DescriptorSetAllocateInfo allocateInfo;
 			allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 			allocateInfo.descriptorSetCount = 1;
 			allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMesh();
 			mesh->descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
-
+			
 			VulkanContext::Get()->device
-					->updateDescriptorSets(wSetBuffer(*mesh->descriptorSet, 0, mesh->uniformBuffer), nullptr);
-
+			                    ->updateDescriptorSets(
+					                    wSetBuffer(*mesh->descriptorSet, 0, mesh->uniformBuffer), nullptr
+			                    );
+			
 			// primitive dSets
 			for (auto& primitive : mesh->primitives)
 			{
-
+				
 				vk::DescriptorSetAllocateInfo allocateInfo2;
 				allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 				allocateInfo2.descriptorSetCount = 1;
@@ -915,7 +919,7 @@ namespace pe
 				primitive.descriptorSet = make_ref(
 						VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0)
 				);
-
+				
 				std::vector<vk::WriteDescriptorSet> textureWriteSets {
 						wSetImage(*primitive.descriptorSet, 0, primitive.pbrMaterial.baseColorTexture),
 						wSetImage(*primitive.descriptorSet, 1, primitive.pbrMaterial.metallicRoughnessTexture),
@@ -928,7 +932,7 @@ namespace pe
 			}
 		}
 	}
-
+	
 	void Model::destroy()
 	{
 		if (script)

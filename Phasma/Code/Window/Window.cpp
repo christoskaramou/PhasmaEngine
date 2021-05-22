@@ -16,32 +16,33 @@ namespace pe
 			std::cout << SDL_GetError();
 			return nullptr;
 		}
-
+		
 		if (!((handle = SDL_CreateWindow("", 50, 50, 800, 600, flags))))
 		{
 			std::cout << SDL_GetError();
 			return nullptr;
 		}
 		
-		auto lambda = [this](const std::any& title) { SetTitle(std::any_cast<std::string>(title)); };
+		auto lambda = [this](const std::any& title)
+		{ SetTitle(std::any_cast<std::string>(title)); };
 		EventSystem::Get()->RegisterEventAction(EventType::SetWindowTitle, lambda);
-
+		
 		this->ctx = ctx;
-
+		
 		return handle;
 	}
-
+	
 	void Window::SetTitle(const std::string& title)
 	{
 		SDL_SetWindowTitle(handle, title.c_str());
 	}
-
+	
 	void Window::DestroyAll()
 	{
 		SDL_DestroyWindow(handle);
 		SDL_Quit();
 	}
-
+	
 	bool Window::ProcessEvents(double delta)
 	{
 		if (Console::close_app) return false;
@@ -49,15 +50,15 @@ namespace pe
 		static float dx, dy = 0.f;
 		
 		auto peEvents = EventSystem::Get();
-
+		
 		auto vulkan = ctx->GetVKContext();
 		bool combineDirections = false;
-
+		
 		CameraSystem* cameraSystem = ctx->GetSystem<CameraSystem>();
 		Camera& camera_main = cameraSystem->GetCamera(0);
-
+		
 		ImGuiIO& io = ImGui::GetIO();
-
+		
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
 		{
@@ -66,7 +67,7 @@ namespace pe
 				//FIRE_EVENT(Event::OnExit);
 				return false;
 			}
-
+			
 			if (event.type == SDL_MOUSEWHEEL)
 			{
 				if (event.wheel.x > 0) io.MouseWheelH += 1;
@@ -74,17 +75,17 @@ namespace pe
 				if (event.wheel.y > 0) io.MouseWheel += 1;
 				if (event.wheel.y < 0) io.MouseWheel -= 1;
 			}
-
+			
 			if (event.type == SDL_MOUSEBUTTONDOWN)
 			{
 				if (event.button.button == SDL_BUTTON_LEFT) GUI::g_MousePressed[0] = true;
 				if (event.button.button == SDL_BUTTON_RIGHT) GUI::g_MousePressed[1] = true;
 				if (event.button.button == SDL_BUTTON_MIDDLE) GUI::g_MousePressed[2] = true;
 			}
-
+			
 			if (event.type == SDL_TEXTINPUT)
 				io.AddInputCharactersUTF8(event.text.text);
-
+			
 			if (event.type == SDL_KEYDOWN)
 			{
 				const int key = event.key.keysym.scancode;
@@ -102,22 +103,22 @@ namespace pe
 			
 			if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
 			{
-                peEvents->PushEvent(EventType::ScaleRenderTargets);
+				peEvents->PushEvent(EventType::ScaleRenderTargets);
 			}
 		}
 		
 		
-        if (SDL_GetMouseState(&x, &y) & SDL_BUTTON(SDL_BUTTON_RIGHT) && IsInsideRenderWindow(px, py))
-        {
-            dx = static_cast<float>(x - px);
-            dy = static_cast<float>(y - py);
-            camera_main.Rotate(dx, dy);
-            WrapInsideRenderWindow(x, y);
-        }
-        
-        px = x;
-        py = y;
-        
+		if (SDL_GetMouseState(&x, &y) & SDL_BUTTON(SDL_BUTTON_RIGHT) && IsInsideRenderWindow(px, py))
+		{
+			dx = static_cast<float>(x - px);
+			dy = static_cast<float>(y - py);
+			camera_main.Rotate(dx, dy);
+			WrapInsideRenderWindow(x, y);
+		}
+		
+		px = x;
+		py = y;
+		
 		if (io.KeysDown[SDL_SCANCODE_ESCAPE])
 		{
 			const SDL_MessageBoxButtonData buttons[] = {
@@ -138,10 +139,10 @@ namespace pe
 		}
 		
 		if ((io.KeysDown[SDL_SCANCODE_W] || io.KeysDown[SDL_SCANCODE_S]) &&
-				(io.KeysDown[SDL_SCANCODE_A] || io.KeysDown[SDL_SCANCODE_D]))
-        {
-		    combineDirections = true;
-        }
+		    (io.KeysDown[SDL_SCANCODE_A] || io.KeysDown[SDL_SCANCODE_D]))
+		{
+			combineDirections = true;
+		}
 		const float velocity = combineDirections ? GUI::cameraSpeed * static_cast<float>(delta) * 0.707f :
 		                       GUI::cameraSpeed * static_cast<float>(delta);
 		if (io.KeysDown[SDL_SCANCODE_W]) camera_main.Move(Camera::RelativeDirection::FORWARD, velocity);
@@ -149,70 +150,70 @@ namespace pe
 		if (io.KeysDown[SDL_SCANCODE_A]) camera_main.Move(Camera::RelativeDirection::LEFT, velocity);
 		if (io.KeysDown[SDL_SCANCODE_D]) camera_main.Move(Camera::RelativeDirection::RIGHT, velocity);
 		
-        if (peEvents->PollEvent(EventType::CompileShaders))
-        {
-            ctx->GetSystem<Renderer>()->RecreatePipelines();
-        }
-        
-        if (peEvents->PollEvent(EventType::ScaleRenderTargets))
-        {
-            if (!isMinimized())
-            {
-                SDL_GL_GetDrawableSize(vulkan->window, &w, &h);
-                ctx->GetSystem<Renderer>()->ResizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
-            }
-        }
-        
-        peEvents->ClearPushedEvents();
+		if (peEvents->PollEvent(EventType::CompileShaders))
+		{
+			ctx->GetSystem<Renderer>()->RecreatePipelines();
+		}
+		
+		if (peEvents->PollEvent(EventType::ScaleRenderTargets))
+		{
+			if (!isMinimized())
+			{
+				SDL_GL_GetDrawableSize(vulkan->window, &w, &h);
+				ctx->GetSystem<Renderer>()->ResizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+			}
+		}
+		
+		peEvents->ClearPushedEvents();
 		
 		return true;
 	}
-
+	
 	void Window::WrapInsideRenderWindow(int& x, int& y)
 	{
-	    Rect2D rect2D
-	    {
-	        static_cast<int>(GUI::winPos.x),
-            static_cast<int>(GUI::winPos.y),
-            static_cast<int>(GUI::winSize.x),
-            static_cast<int>(GUI::winSize.y)
-	    };
-	    
-	    if (x < rect2D.x)
-        {
-	        x = rect2D.x + rect2D.width;
-        }
-	    else if (x > rect2D.x + rect2D.width)
-        {
-	        x = rect2D.x;
-        }
-        
-        if (y < rect2D.y)
-        {
-            y = rect2D.y + rect2D.height;
-        }
-        else if (y > rect2D.y + rect2D.height)
-        {
-            y = rect2D.y;
-        }
-	    
-        SDL_WarpMouseInWindow(handle, x, y);
+		Rect2D rect2D
+				{
+						static_cast<int>(GUI::winPos.x),
+						static_cast<int>(GUI::winPos.y),
+						static_cast<int>(GUI::winSize.x),
+						static_cast<int>(GUI::winSize.y)
+				};
+		
+		if (x < rect2D.x)
+		{
+			x = rect2D.x + rect2D.width;
+		}
+		else if (x > rect2D.x + rect2D.width)
+		{
+			x = rect2D.x;
+		}
+		
+		if (y < rect2D.y)
+		{
+			y = rect2D.y + rect2D.height;
+		}
+		else if (y > rect2D.y + rect2D.height)
+		{
+			y = rect2D.y;
+		}
+		
+		SDL_WarpMouseInWindow(handle, x, y);
 	}
 	
-    bool Window::IsInsideRenderWindow(int x, int y)
-    {
-	    Rect2D rect2D
-        {
-                static_cast<int>(GUI::winPos.x),
-                static_cast<int>(GUI::winPos.y),
-                static_cast<int>(GUI::winSize.x),
-                static_cast<int>(GUI::winSize.y)
-        };
-	    
-        return x >= rect2D.x && y >= rect2D.y && x <= rect2D.x + rect2D.width &&
-               y <= rect2D.y + rect2D.height;
-    }
-
+	bool Window::IsInsideRenderWindow(int x, int y)
+	{
+		Rect2D rect2D
+				{
+						static_cast<int>(GUI::winPos.x),
+						static_cast<int>(GUI::winPos.y),
+						static_cast<int>(GUI::winSize.x),
+						static_cast<int>(GUI::winSize.y)
+				};
+		
+		return x >= rect2D.x && y >= rect2D.y && x <= rect2D.x + rect2D.width &&
+		       y <= rect2D.y + rect2D.height;
+	}
+	
 	bool Window::isMinimized()
 	{
 		return (SDL_GetWindowFlags(handle) & SDL_WINDOW_MINIMIZED) != 0;

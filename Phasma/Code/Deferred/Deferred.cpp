@@ -19,24 +19,24 @@ namespace pe
 	{
 		DSComposition = make_ref(vk::DescriptorSet());
 	}
-
+	
 	Deferred::~Deferred()
 	{
 	}
-
+	
 	void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
 	{
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
-
+		
 		vk::ClearDepthStencilValue depthStencil;
 		depthStencil.depth = 0.f;
 		depthStencil.stencil = 0;
-
+		
 		std::vector<vk::ClearValue> clearValues = {
 				clearColor, clearColor, clearColor, clearColor, clearColor, clearColor, depthStencil
 		};
-
+		
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = *renderPass.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
@@ -44,20 +44,20 @@ namespace pe
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		rpi.pClearValues = clearValues.data();
-
+		
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-
+		
 		*Model::commandBuffer = cmd;
 		Model::pipeline = &pipeline;
 	}
-
+	
 	void Deferred::batchEnd()
 	{
 		Model::commandBuffer->endRenderPass();
 		*Model::commandBuffer = nullptr;
 		Model::pipeline = nullptr;
 	}
-
+	
 	void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 	{
 		uniform.createBuffer(
@@ -67,7 +67,7 @@ namespace pe
 		uniform.zero();
 		uniform.flush();
 		uniform.unmap();
-
+		
 		auto vulkan = VulkanContext::Get();
 		const vk::DescriptorSetAllocateInfo allocInfo =
 				vk::DescriptorSetAllocateInfo {
@@ -76,7 +76,7 @@ namespace pe
 						&Pipeline::getDescriptorSetLayoutComposition() //const DescriptorSetLayout* pSetLayouts;
 				};
 		DSComposition = make_ref(vulkan->device->allocateDescriptorSets(allocInfo).at(0));
-
+		
 		// Check if ibl_brdf_lut is already loaded
 		const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
 		if (Mesh::uniqueTextures.find(path) != Mesh::uniqueTextures.end())
@@ -92,10 +92,10 @@ namespace pe
 			if (!pixels)
 				throw std::runtime_error("No pixel data loaded");
 			const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
-
+			
 			vulkan->graphicsQueue->waitIdle();
 			vulkan->waitAndLockSubmits();
-
+			
 			Buffer staging;
 			staging.createBuffer(
 					imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible
@@ -104,16 +104,16 @@ namespace pe
 			staging.copyData(pixels);
 			staging.flush();
 			staging.unmap();
-
+			
 			stbi_image_free(pixels);
-
+			
 			ibl_brdf_lut.format = make_ref(vk::Format::eR8G8B8A8Unorm);
 			ibl_brdf_lut.mipLevels =
 					static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
 			ibl_brdf_lut.createImage(
 					texWidth, texHeight, vk::ImageTiling::eOptimal,
 					vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
-							vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal
+					vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal
 			);
 			ibl_brdf_lut.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
 			ibl_brdf_lut.copyBufferToImage(*staging.buffer);
@@ -121,17 +121,17 @@ namespace pe
 			ibl_brdf_lut.createImageView(vk::ImageAspectFlagBits::eColor);
 			ibl_brdf_lut.maxLod = static_cast<float>(ibl_brdf_lut.mipLevels);
 			ibl_brdf_lut.createSampler();
-
+			
 			staging.destroy();
-
+			
 			vulkan->unlockSubmits();
-
+			
 			Mesh::uniqueTextures[path] = ibl_brdf_lut;
 		}
-
+		
 		updateDescriptorSets(renderTargets, lightUniforms);
 	}
-
+	
 	void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
@@ -150,7 +150,7 @@ namespace pe
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
 		};
-
+		
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
 				wSetImage(*DSComposition, 0, renderTargets["depth"]),
 				wSetImage(*DSComposition, 1, renderTargets["normal"]),
@@ -163,10 +163,10 @@ namespace pe
 				wSetImage(*DSComposition, 8, ibl_brdf_lut),
 				wSetBuffer(*DSComposition, 9, uniform)
 		};
-
+		
 		VulkanContext::Get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
 	}
-
+	
 	void Deferred::update(mat4& invViewProj)
 	{
 		ubo.screenSpace[0] = {invViewProj[0]};
@@ -185,14 +185,14 @@ namespace pe
 		ubo.screenSpace[7] = {
 				GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f
 		};
-
+		
 		Queue::memcpyRequest(&uniform, {{&ubo, sizeof(ubo), 0}});
 		//uniform.map();
 		//uniform.copyData(&ubo);
 		//uniform.flush();
 		//uniform.unmap();
 	}
-
+	
 	void Deferred::draw(
 			vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent
 	)
@@ -200,9 +200,9 @@ namespace pe
 		// Begin Composition
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
-
+		
 		std::vector<vk::ClearValue> clearValues = {clearColor, clearColor};
-
+		
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = *compositionRenderPass.handle;
 		rpi.framebuffer = *compositionFramebuffers[imageIndex].handle;
@@ -211,7 +211,7 @@ namespace pe
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		rpi.pClearValues = clearValues.data();
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-
+		
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineComposition.handle);
 		cmd.bindDescriptorSets(
 				vk::PipelineBindPoint::eGraphics, *pipelineComposition.layout, 0, {
@@ -223,7 +223,7 @@ namespace pe
 		cmd.endRenderPass();
 		// End Composition
 	}
-
+	
 	void Deferred::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
 		std::vector<vk::Format> formats
@@ -238,17 +238,17 @@ namespace pe
 		renderPass.Create(formats, *VulkanContext::Get()->depth.format);
 		compositionRenderPass.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
 	}
-
+	
 	void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		createGBufferFrameBuffers(renderTargets);
 		createCompositionFrameBuffers(renderTargets);
 	}
-
+	
 	void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::Get();
-
+		
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
@@ -266,11 +266,11 @@ namespace pe
 			framebuffers[i].Create(width, height, views, renderPass);
 		}
 	}
-
+	
 	void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::Get();
-
+		
 		compositionFramebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
@@ -280,18 +280,18 @@ namespace pe
 			compositionFramebuffers[i].Create(width, height, view, compositionRenderPass);
 		}
 	}
-
+	
 	void Deferred::createPipelines(std::map<std::string, Image>& renderTargets)
 	{
 		createGBufferPipeline(renderTargets);
 		createCompositionPipeline(renderTargets);
 	}
-
+	
 	void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets)
 	{
 		Shader vert {"Shaders/Deferred/gBuffer.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/Deferred/gBuffer.frag", ShaderType::Fragment, true};
-
+		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
 		pipeline.info.vertexInputBindingDescriptions = make_ref(Vertex::getBindingDescriptionGeneral());
@@ -319,15 +319,15 @@ namespace pe
 						}
 		);
 		pipeline.info.renderPass = renderPass;
-
+		
 		pipeline.createGraphicsPipeline();
 	}
-
+	
 	void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTargets)
 	{
 		Shader vert {"Shaders/Deferred/composition.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/Deferred/composition.frag", ShaderType::Fragment, true};
-
+		
 		pipelineComposition.info.pVertShader = &vert;
 		pipelineComposition.info.pFragShader = &frag;
 		pipelineComposition.info.width = renderTargets["viewport"].width_f;
@@ -349,22 +349,22 @@ namespace pe
 						}
 		);
 		pipelineComposition.info.renderPass = compositionRenderPass;
-
+		
 		pipelineComposition.createGraphicsPipeline();
 	}
-
+	
 	void Deferred::destroy()
 	{
 		auto vulkan = VulkanContext::Get();
-
+		
 		renderPass.Destroy();
 		compositionRenderPass.Destroy();
-
+		
 		for (auto& framebuffer : framebuffers)
 			framebuffer.Destroy();
 		for (auto& framebuffer : compositionFramebuffers)
 			framebuffer.Destroy();
-
+		
 		if (Pipeline::getDescriptorSetLayoutComposition())
 		{
 			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutComposition());

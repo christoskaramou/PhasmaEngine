@@ -13,11 +13,11 @@ namespace pe
 	{
 		DSet = make_ref(vk::DescriptorSet());
 	}
-
+	
 	DOF::~DOF()
 	{
 	}
-
+	
 	void DOF::Init()
 	{
 		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
@@ -33,12 +33,12 @@ namespace pe
 		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 		frameImage.createSampler();
 	}
-
+	
 	void DOF::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
 		renderPass.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
 	}
-
+	
 	void DOF::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::Get();
@@ -51,20 +51,20 @@ namespace pe
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
-
+	
 	void DOF::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::Get();
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *vulkan->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-
+		
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutDOF();
 		DSet = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
-
+		
 		updateDescriptorSets(renderTargets);
 	}
-
+	
 	void DOF::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
@@ -75,23 +75,23 @@ namespace pe
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};
 		};
-
+		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets {
 				wSetImage(*DSet, 0, frameImage),
 				wSetImage(*DSet, 1, renderTargets["depth"])
 		};
 		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
-
+	
 	void DOF::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
-
+		
 		std::vector<vk::ClearValue> clearValues = {clearColor};
-
+		
 		std::vector<float> values {GUI::DOF_focus_scale, GUI::DOF_blur_range, 0.0f, 0.0f};
-
+		
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = *renderPass.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
@@ -99,7 +99,7 @@ namespace pe
 		rpi.renderArea.extent = *renderTargets["viewport"].extent;
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
-
+		
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(*pipeline.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
@@ -107,12 +107,12 @@ namespace pe
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
-
+	
 	void DOF::createPipeline(std::map<std::string, Image>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/DepthOfField/DOF.frag", ShaderType::Fragment, true};
-
+		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
 		pipeline.info.width = renderTargets["viewport"].width_f;
@@ -127,19 +127,19 @@ namespace pe
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutDOF()}
 		);
 		pipeline.info.renderPass = renderPass;
-
+		
 		pipeline.createGraphicsPipeline();
-
+		
 	}
-
+	
 	void DOF::destroy()
 	{
 		auto vulkan = VulkanContext::Get();
 		for (auto& framebuffer : framebuffers)
 			framebuffer.Destroy();
-
+		
 		renderPass.Destroy();
-
+		
 		if (Pipeline::getDescriptorSetLayoutDOF())
 		{
 			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutDOF());

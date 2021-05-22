@@ -14,7 +14,7 @@ namespace pe
 		{
 			assert(m_pathBase.has_root_path());
 		}
-
+		
 		// Resolves the relative URIs of any external resources declared in the glTF manifest
 		std::shared_ptr<std::istream> GetInputStream(const std::string& filename) const override
 		{
@@ -28,16 +28,16 @@ namespace pe
 			//    encoding issues for us.
 			auto streamPath = m_pathBase / std::filesystem::path(filename);
 			auto stream = std::make_shared<std::ifstream>(streamPath, std::ios_base::binary);
-
+			
 			// Check if the stream has no errors and is ready for I/O operations
 			if (!stream || !(*stream))
 			{
 				throw std::runtime_error("Unable to create a valid input stream for uri: " + filename);
 			}
-
+			
 			return stream;
 		}
-
+	
 	private:
 		std::filesystem::path m_pathBase;
 	};

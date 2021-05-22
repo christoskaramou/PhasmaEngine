@@ -7,7 +7,7 @@
 namespace pe
 {
 	constexpr uint32_t SWAPCHAIN_IMAGES = 3;
-
+	
 	VulkanContext::VulkanContext()
 	{
 		instance = make_ref(vk::Instance());
@@ -28,25 +28,25 @@ namespace pe
 		shadowCmdBuffers = make_ref(std::vector<vk::CommandBuffer>());
 		fences = make_ref(std::vector<vk::Fence>());
 		semaphores = make_ref(std::vector<vk::Semaphore>());
-
+		
 		window = nullptr;
 		graphicsFamilyId = 0;
 		computeFamilyId = 0;
 		transferFamilyId = 0;
 	}
-
+	
 	VulkanContext::~VulkanContext()
 	{
-
+	
 	}
-
+	
 	void VulkanContext::CreateInstance(SDL_Window* window)
 	{
 		std::vector<const char*> instanceExtensions;
 		std::vector<const char*> instanceLayers;
 		vk::ValidationFeaturesEXT validationFeatures;
 		std::vector<vk::ValidationFeatureEnableEXT> enabledFeatures;
-
+		
 		// === Extentions ==============================
 		unsigned extCount;
 		if (!SDL_Vulkan_GetInstanceExtensions(window, &extCount, nullptr))
@@ -65,7 +65,7 @@ namespace pe
 				instanceExtensions.push_back("VK_EXT_debug_utils");
 		}
 		// =============================================
-
+		
 		// === Debug Layers ============================
 		// To use these debug layers, here is assumed VulkanSDK is installed and Bin is in enviromental path
 		auto layers = vk::enumerateInstanceLayerProperties();
@@ -75,22 +75,22 @@ namespace pe
 				instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
 		}
 		// =============================================
-
+		
 		// === Validation Features =====================
 		enabledFeatures.push_back(vk::ValidationFeatureEnableEXT::eBestPractices);
 		//enabledFeatures.push_back(vk::ValidationFeatureEnableEXT::eGpuAssisted);
 		//enabledFeatures.push_back(vk::ValidationFeatureEnableEXT::eGpuAssistedReserveBindingSlot);
-
+		
 		validationFeatures.enabledValidationFeatureCount = static_cast<uint32_t>(enabledFeatures.size());
 		validationFeatures.pEnabledValidationFeatures = enabledFeatures.data();
 		// =============================================
 #endif
-
+		
 		vk::ApplicationInfo appInfo;
 		appInfo.pApplicationName = "VulkanMonkey3D";
 		appInfo.pEngineName = "VulkanMonkey3D";
 		appInfo.apiVersion = vk::enumerateInstanceVersion();
-
+		
 		vk::InstanceCreateInfo instInfo;
 		instInfo.pApplicationInfo = &appInfo;
 		instInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
@@ -98,10 +98,10 @@ namespace pe
 		instInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
 		instInfo.ppEnabledExtensionNames = instanceExtensions.data();
 		instInfo.pNext = &validationFeatures;
-
+		
 		instance = make_ref(vk::createInstance(instInfo));
 	}
-
+	
 	VKAPI_ATTR uint32_t VKAPI_CALL VulkanContext::MessageCallback(
 			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 			uint32_t messageType,
@@ -115,53 +115,53 @@ namespace pe
 					<< to_string(vk::DebugUtilsMessageSeverityFlagBitsEXT(messageSeverity)) << " from \""
 					<< pCallbackData->pMessageIdName << "\": "
 					<< pCallbackData->pMessage << std::endl;
-
+		
 		return VK_FALSE;
 	}
-
+	
 	void VulkanContext::CreateDebugMessenger()
 	{
 		dispatchLoaderDynamic->init(*instance, vk::Device());
-
+		
 		vk::DebugUtilsMessengerCreateInfoEXT dumci;
 		dumci.messageSeverity =
 				vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-						vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
-						vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-						vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
+				vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+				vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+				vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
 		dumci.messageType =
 				vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-						vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-						vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
+				vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+				vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
 		dumci.pfnUserCallback = VulkanContext::MessageCallback;
-
+		
 		debugMessenger = make_ref(instance->createDebugUtilsMessengerEXT(dumci, nullptr, *dispatchLoaderDynamic));
 	}
-
+	
 	void VulkanContext::DestroyDebugMessenger()
 	{
 		instance->destroyDebugUtilsMessengerEXT(*debugMessenger, nullptr, *dispatchLoaderDynamic);
 	}
-
+	
 	void VulkanContext::CreateSurface(Context* ctx)
 	{
 		surface.Create(ctx);
 	}
-
+	
 	void VulkanContext::GetSurfaceProperties(Context* ctx)
 	{
 		surface.FindProperties(ctx);
 	}
-
+	
 	void VulkanContext::GetGpu()
 	{
 		std::vector<vk::PhysicalDevice> gpuList = instance->enumeratePhysicalDevices();
-
+		
 		for (auto& GPU : gpuList)
 		{
 			queueFamilyProperties = make_ref(GPU.getQueueFamilyProperties());
 			vk::QueueFlags flags;
-
+			
 			for (auto& qfp : *queueFamilyProperties)
 			{
 				if (qfp.queueFlags & vk::QueueFlagBits::eGraphics)
@@ -171,25 +171,25 @@ namespace pe
 				if (qfp.queueFlags & vk::QueueFlagBits::eTransfer)
 					flags |= vk::QueueFlagBits::eTransfer;
 			}
-
+			
 			if (flags & vk::QueueFlagBits::eGraphics &&
-					flags & vk::QueueFlagBits::eCompute &&
-					flags & vk::QueueFlagBits::eTransfer)
+			    flags & vk::QueueFlagBits::eCompute &&
+			    flags & vk::QueueFlagBits::eTransfer)
 			{
 				gpu = make_ref(GPU);
-
+				
 				GetGraphicsFamilyId();
 				GetComputeFamilyId();
 				GetTransferFamilyId();
 				gpuProperties = make_ref(gpu->getProperties());
 				gpuFeatures = make_ref(gpu->getFeatures());
-
+				
 				return;
 			}
 		}
 		gpu = nullptr;
 	}
-
+	
 	void VulkanContext::GetGraphicsFamilyId()
 	{
 #ifdef UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
@@ -209,7 +209,7 @@ namespace pe
 		}
 		graphicsFamilyId = -1;
 	}
-
+	
 	void VulkanContext::GetTransferFamilyId()
 	{
 #ifdef UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE1
@@ -230,7 +230,7 @@ namespace pe
 		transferFamilyId = -1;
 #endif
 	}
-
+	
 	void VulkanContext::GetComputeFamilyId()
 	{
 		const vk::QueueFlags flags = vk::QueueFlagBits::eCompute;
@@ -247,12 +247,12 @@ namespace pe
 		}
 		computeFamilyId = -1;
 	}
-
-
+	
+	
 	void VulkanContext::CreateDevice()
 	{
 		auto extensionProperties = gpu->enumerateDeviceExtensionProperties();
-
+		
 		std::vector<const char*> deviceExtensions {};
 		for (auto& i : extensionProperties)
 		{
@@ -260,15 +260,15 @@ namespace pe
 				deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 		}
 		float priorities[] {1.0f}; // range : [0.0, 1.0]
-
+		
 		std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos {};
-
+		
 		// graphics queue
 		queueCreateInfos.emplace_back();
 		queueCreateInfos.back().queueFamilyIndex = graphicsFamilyId;
 		queueCreateInfos.back().queueCount = 1;
 		queueCreateInfos.back().pQueuePriorities = priorities;
-
+		
 		// compute queue
 		if (computeFamilyId != graphicsFamilyId)
 		{
@@ -277,7 +277,7 @@ namespace pe
 			queueCreateInfos.back().queueCount = 1;
 			queueCreateInfos.back().pQueuePriorities = priorities;
 		}
-
+		
 		// transer queue
 		if (transferFamilyId != graphicsFamilyId && transferFamilyId != computeFamilyId)
 		{
@@ -286,17 +286,17 @@ namespace pe
 			queueCreateInfos.back().queueCount = 1;
 			queueCreateInfos.back().pQueuePriorities = priorities;
 		}
-
+		
 		vk::DeviceCreateInfo deviceCreateInfo;
 		deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 		deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
 		deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
 		deviceCreateInfo.pEnabledFeatures = &*gpuFeatures;
-
+		
 		device = make_ref(gpu->createDevice(deviceCreateInfo));
 	}
-
+	
 	void VulkanContext::CreateAllocator()
 	{
 		VmaAllocatorCreateInfo allocator_info = {};
@@ -304,47 +304,47 @@ namespace pe
 		allocator_info.device = VkDevice(*device);
 		allocator_info.instance = VkInstance(*instance);
 		allocator_info.vulkanApiVersion = vk::enumerateInstanceVersion();
-
+		
 		vmaCreateAllocator(&allocator_info, &allocator);
 	}
-
+	
 	void VulkanContext::GetGraphicsQueue()
 	{
 		graphicsQueue = make_ref(device->getQueue(graphicsFamilyId, 0));
 	}
-
+	
 	void VulkanContext::GetTransferQueue()
 	{
 		transferQueue = make_ref(device->getQueue(transferFamilyId, 0));
 	}
-
+	
 	void VulkanContext::GetComputeQueue()
 	{
 		computeQueue = make_ref(device->getQueue(computeFamilyId, 0));
 	}
-
+	
 	void VulkanContext::GetQueues()
 	{
 		GetGraphicsQueue();
 		GetTransferQueue();
 		GetComputeQueue();
 	}
-
+	
 	void VulkanContext::CreateSwapchain(Context* ctx, uint32_t requestImageCount)
 	{
 		swapchain.Create(ctx, requestImageCount);
 	}
-
+	
 	void VulkanContext::CreateCommandPools()
 	{
 		vk::CommandPoolCreateInfo cpci;
 		cpci.queueFamilyIndex = graphicsFamilyId;
 		cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-
+		
 		commandPool = make_ref(device->createCommandPool(cpci));
 		commandPool2 = make_ref(device->createCommandPool(cpci));
 	}
-
+	
 	void VulkanContext::CreateDescriptorPool(uint32_t maxDescriptorSets)
 	{
 		std::vector<vk::DescriptorPoolSize> descPoolsize(4);
@@ -356,15 +356,15 @@ namespace pe
 		descPoolsize[2].descriptorCount = maxDescriptorSets;
 		descPoolsize[3].type = vk::DescriptorType::eCombinedImageSampler;
 		descPoolsize[3].descriptorCount = maxDescriptorSets;
-
+		
 		vk::DescriptorPoolCreateInfo createInfo;
 		createInfo.poolSizeCount = static_cast<uint32_t>(descPoolsize.size());
 		createInfo.pPoolSizes = descPoolsize.data();
 		createInfo.maxSets = maxDescriptorSets;
-
+		
 		descriptorPool = make_ref(device->createDescriptorPool(createInfo));
 	}
-
+	
 	void VulkanContext::CreateCmdBuffers(uint32_t bufferCount)
 	{
 		vk::CommandBufferAllocateInfo cbai;
@@ -372,37 +372,37 @@ namespace pe
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = bufferCount;
 		dynamicCmdBuffers = make_ref(device->allocateCommandBuffers(cbai));
-
+		
 		cbai.commandBufferCount = bufferCount * 3;
 		shadowCmdBuffers = make_ref(device->allocateCommandBuffers(cbai));
 	}
-
+	
 	void VulkanContext::CreateFences(uint32_t fenceCount)
 	{
 		std::vector<vk::Fence> _fences(fenceCount);
 		const vk::FenceCreateInfo fi {vk::FenceCreateFlagBits::eSignaled};
-
+		
 		for (uint32_t i = 0; i < fenceCount; i++)
 		{
 			_fences[i] = device->createFence(fi);
 		}
-
+		
 		fences = make_ref(_fences);
 	}
-
+	
 	void VulkanContext::CreateSemaphores(uint32_t semaphoresCount)
 	{
 		std::vector<vk::Semaphore> _semaphores(semaphoresCount);
 		const vk::SemaphoreCreateInfo si;
-
+		
 		for (uint32_t i = 0; i < semaphoresCount; i++)
 		{
 			_semaphores[i] = device->createSemaphore(si);
 		}
-
+		
 		semaphores = make_ref(_semaphores);
 	}
-
+	
 	void VulkanContext::CreateDepth()
 	{
 		depth.format = make_ref(vk::Format::eUndefined);
@@ -413,7 +413,7 @@ namespace pe
 		{
 			vk::FormatProperties props = gpu->getFormatProperties(format);
 			if ((props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) ==
-					vk::FormatFeatureFlagBits::eDepthStencilAttachment)
+			    vk::FormatFeatureFlagBits::eDepthStencilAttachment)
 			{
 				depth.format = make_ref(format);
 				break;
@@ -421,23 +421,23 @@ namespace pe
 		}
 		if (*depth.format == vk::Format::eUndefined)
 			throw std::runtime_error("Depth format is undefined");
-
+		
 		depth.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
 				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale), vk::ImageTiling::eOptimal,
 				vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
 		depth.createImageView(vk::ImageAspectFlagBits::eDepth);
-
+		
 		depth.addressMode = make_ref(vk::SamplerAddressMode::eClampToEdge);
 		depth.maxAnisotropy = 1.f;
 		depth.borderColor = make_ref(vk::BorderColor::eFloatOpaqueWhite);
 		depth.samplerCompareEnable = VK_TRUE;
 		depth.createSampler();
-
+		
 		depth.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 	}
-
+	
 	void VulkanContext::Init(Context* ctx)
 	{
 		CreateInstance(ctx->GetSystem<Renderer>()->GetWindow());
@@ -458,11 +458,11 @@ namespace pe
 		CreateFences(SWAPCHAIN_IMAGES);
 		CreateDepth();
 	}
-
+	
 	void VulkanContext::Destroy()
 	{
 		device->waitIdle();
-
+		
 		for (auto& fence : *fences)
 		{
 			if (fence)
@@ -479,9 +479,9 @@ namespace pe
 				semaphore = nullptr;
 			}
 		}
-
+		
 		depth.destroy();
-
+		
 		if (*descriptorPool)
 		{
 			device->destroyDescriptorPool(*descriptorPool);
@@ -494,14 +494,14 @@ namespace pe
 		{
 			device->destroyCommandPool(*commandPool2);
 		}
-
+		
 		swapchain.Destroy();
-
+		
 		if (*device)
 		{
 			device->destroy();
 		}
-
+		
 		if (*surface.surface)
 		{
 			instance->destroySurfaceKHR(*surface.surface);
@@ -510,13 +510,13 @@ namespace pe
 #ifdef _DEBUG
 		DestroyDebugMessenger();
 #endif
-
+		
 		if (*instance)
 		{
 			instance->destroy();
 		}
 	}
-
+	
 	void VulkanContext::submit(
 			const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
 			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
@@ -535,14 +535,14 @@ namespace pe
 		si.pSignalSemaphores = signalSemaphores.data();
 		graphicsQueue->submit(si, signalFence);
 	}
-
+	
 	void VulkanContext::waitFences(const vk::ArrayProxy<const vk::Fence> fences) const
 	{
 		if (device->waitForFences(fences, VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
 			throw std::runtime_error("wait fences error!");
 		device->resetFences(fences);
 	}
-
+	
 	void VulkanContext::submitAndWaitFence(
 			const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
 			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
@@ -552,30 +552,30 @@ namespace pe
 	{
 		const vk::FenceCreateInfo fi;
 		const vk::Fence fence = device->createFence(fi);
-
+		
 		submit(commandBuffers, waitStages, waitSemaphores, signalSemaphores, fence);
-
+		
 		if (device->waitForFences(fence, VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
 			throw std::runtime_error("wait fences error!");
 		device->destroyFence(fence);
 	}
-
+	
 	void VulkanContext::waitAndLockSubmits()
 	{
 		m_submit_mutex.lock();
 	}
-
+	
 	void VulkanContext::unlockSubmits()
 	{
 		m_submit_mutex.unlock();
 	}
-
+	
 	VulkanContext* VulkanContext::Get() noexcept
 	{
 		static auto VkCTX = new VulkanContext();
 		return VkCTX;
 	}
-
+	
 	void VulkanContext::Remove() noexcept
 	{
 		if (Get())

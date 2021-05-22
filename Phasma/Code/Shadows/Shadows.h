@@ -23,14 +23,14 @@ namespace pe
 		float maxCascadeDist1;
 		float maxCascadeDist2;
 	};
-
+	
 	class Shadows
 	{
 	public:
 		Shadows();
-
+		
 		~Shadows();
-
+		
 		ShadowsUBO shadows_UBO[3] {};
 		static uint32_t imageSize;
 		RenderPass renderPass;
@@ -39,19 +39,19 @@ namespace pe
 		std::vector<Framebuffer> framebuffers {};
 		std::vector<Buffer> uniformBuffers {};
 		Pipeline pipeline;
-
+		
 		void update(Camera& camera);
-
+		
 		void createUniformBuffers();
-
+		
 		void createDescriptorSets();
-
+		
 		void createRenderPass();
-
+		
 		void createFrameBuffers();
-
+		
 		void createPipeline();
-
+		
 		void destroy();
 	};
 }

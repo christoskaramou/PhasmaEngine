@@ -12,11 +12,11 @@ namespace pe
 	{
 		DSet = make_ref(vk::DescriptorSet());
 	}
-
+	
 	FXAA::~FXAA()
 	{
 	}
-
+	
 	void FXAA::Init()
 	{
 		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
@@ -32,7 +32,7 @@ namespace pe
 		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 		frameImage.createSampler();
 	}
-
+	
 	void FXAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo2;
@@ -40,10 +40,10 @@ namespace pe
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutFXAA();
 		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
-
+		
 		updateDescriptorSets(renderTargets);
 	}
-
+	
 	void FXAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets) const
 	{
 		// Composition sampler
@@ -51,7 +51,7 @@ namespace pe
 		dii.sampler = *frameImage.sampler;
 		dii.imageView = *frameImage.view;
 		dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
+		
 		vk::WriteDescriptorSet textureWriteSet;
 		textureWriteSet.dstSet = *DSet;
 		textureWriteSet.dstBinding = 0;
@@ -59,17 +59,17 @@ namespace pe
 		textureWriteSet.descriptorCount = 1;
 		textureWriteSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
 		textureWriteSet.pImageInfo = &dii;
-
+		
 		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSet, nullptr);
 	}
-
+	
 	void FXAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
 	{
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
-
+		
 		std::vector<vk::ClearValue> clearValues = {clearColor};
-
+		
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = *renderPass.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
@@ -77,19 +77,19 @@ namespace pe
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
-
+		
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *DSet, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
-
+	
 	void FXAA::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
 		renderPass.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
 	}
-
+	
 	void FXAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::Get();
@@ -102,12 +102,12 @@ namespace pe
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
-
+	
 	void FXAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/FXAA/FXAA.frag", ShaderType::Fragment, true};
-
+		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
 		pipeline.info.width = renderTargets["viewport"].width_f;
@@ -120,17 +120,17 @@ namespace pe
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutDOF()}
 		);
 		pipeline.info.renderPass = renderPass;
-
+		
 		pipeline.createGraphicsPipeline();
 	}
-
+	
 	void FXAA::destroy()
 	{
 		for (auto& frameBuffer : framebuffers)
 			frameBuffer.Destroy();
-
+		
 		renderPass.Destroy();
-
+		
 		if (Pipeline::getDescriptorSetLayoutFXAA())
 		{
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutFXAA());

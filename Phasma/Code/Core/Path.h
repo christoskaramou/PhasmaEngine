@@ -11,10 +11,10 @@ namespace pe
 	public:
 		inline static std::string Assets;
 		inline static std::string Executable;
-
+	
 	private:
 		friend class Constructor;
-
+		
 		// Helper to initialize static variables
 		class Constructor
 		{
@@ -23,9 +23,9 @@ namespace pe
 			{
 				Executable = std::filesystem::current_path().string() + "/";
 				std::replace(Executable.begin(), Executable.end(), '\\', '/');
-
+				
 				Assets = "Assets/";
-
+				
 				std::ifstream file(Executable + "AssetsRoot");
 				if (file)
 				{
@@ -45,14 +45,14 @@ namespace pe
 							{
 								path += "/";
 							}
-
+							
 							Assets = path;
 						}
 					}
 				}
 			}
 		};
-
+		
 		inline static std::string s_assetsMarker = "Assets root:";
 		inline static Constructor s_constructor;
 	};

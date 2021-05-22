@@ -16,11 +16,11 @@ namespace pe
 		DSGaussianBlurVertical = make_ref(vk::DescriptorSet());
 		DSCombine = make_ref(vk::DescriptorSet());
 	}
-
+	
 	Bloom::~Bloom()
 	{
 	}
-
+	
 	void Bloom::Init()
 	{
 		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
@@ -36,14 +36,14 @@ namespace pe
 		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 		frameImage.createSampler();
 	}
-
+	
 	void Bloom::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
 		renderPassBrightFilter.Create(*renderTargets["brightFilter"].format, vk::Format::eUndefined);
 		renderPassGaussianBlur.Create(*renderTargets["gaussianBlurHorizontal"].format, vk::Format::eUndefined);
 		renderPassCombine.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
 	}
-
+	
 	void Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::Get();
@@ -55,7 +55,7 @@ namespace pe
 			vk::ImageView view = *renderTargets["brightFilter"].view;
 			framebuffers[i].Create(width, height, view, renderPassBrightFilter);
 		}
-
+		
 		for (size_t i = vulkan->swapchain.images.size(); i < vulkan->swapchain.images.size() * 2; ++i)
 		{
 			uint32_t width = renderTargets["gaussianBlurHorizontal"].width;
@@ -63,7 +63,7 @@ namespace pe
 			vk::ImageView view = *renderTargets["gaussianBlurHorizontal"].view;
 			framebuffers[i].Create(width, height, view, renderPassGaussianBlur);
 		}
-
+		
 		for (size_t i = vulkan->swapchain.images.size() * 2; i < vulkan->swapchain.images.size() * 3; ++i)
 		{
 			uint32_t width = renderTargets["gaussianBlurVertical"].width;
@@ -71,7 +71,7 @@ namespace pe
 			vk::ImageView view = *renderTargets["gaussianBlurVertical"].view;
 			framebuffers[i].Create(width, height, view, renderPassGaussianBlur);
 		}
-
+		
 		for (size_t i = vulkan->swapchain.images.size() * 3; i < vulkan->swapchain.images.size() * 4; ++i)
 		{
 			uint32_t width = renderTargets["viewport"].width;
@@ -80,33 +80,33 @@ namespace pe
 			framebuffers[i].Create(width, height, view, renderPassCombine);
 		}
 	}
-
+	
 	void Bloom::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::Get();
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *vulkan->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-
+		
 		// Composition image to Bright Filter shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutBrightFilter();
 		DSBrightFilter = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
-
+		
 		// Bright Filter image to Gaussian Blur Horizontal shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutGaussianBlurH();
 		DSGaussianBlurHorizontal = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
-
+		
 		// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutGaussianBlurV();
 		DSGaussianBlurVertical = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
-
+		
 		// Gaussian Blur Vertical image to Combine shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutCombine();
 		DSCombine = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
-
+		
 		updateDescriptorSets(renderTargets);
 	}
-
+	
 	void Bloom::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
@@ -117,7 +117,7 @@ namespace pe
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};
 		};
-
+		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets {
 				wSetImage(*DSBrightFilter, 0, frameImage),
 				wSetImage(*DSGaussianBlurHorizontal, 0, renderTargets["brightFilter"]),
@@ -127,21 +127,21 @@ namespace pe
 		};
 		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
-
+	
 	void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{
 		uint32_t totalImages = static_cast<uint32_t>(VulkanContext::Get()->swapchain.images.size());
-
+		
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
-
+		
 		std::vector<vk::ClearValue> clearValues = {clearColor};
-
+		
 		std::vector<float> values {
 				GUI::Bloom_Inv_brightness, GUI::Bloom_intensity, GUI::Bloom_range, GUI::Bloom_exposure,
 				static_cast<float>(GUI::use_tonemap)
 		};
-
+		
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = *renderPassBrightFilter.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
@@ -149,7 +149,7 @@ namespace pe
 		rpi.renderArea.extent = *renderTargets["brightFilter"].extent;
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
-
+		
 		renderTargets["brightFilter"].changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(*pipelineBrightFilter.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
@@ -160,10 +160,10 @@ namespace pe
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		renderTargets["brightFilter"].changeLayout(cmd, LayoutState::ColorRead);
-
+		
 		rpi.renderPass = *renderPassGaussianBlur.handle;
 		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)].handle;
-
+		
 		renderTargets["gaussianBlurHorizontal"].changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(*pipelineGaussianBlurHorizontal.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
@@ -174,9 +174,9 @@ namespace pe
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		renderTargets["gaussianBlurHorizontal"].changeLayout(cmd, LayoutState::ColorRead);
-
+		
 		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)].handle;
-
+		
 		renderTargets["gaussianBlurVertical"].changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(*pipelineGaussianBlurVertical.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
@@ -188,10 +188,10 @@ namespace pe
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		renderTargets["gaussianBlurVertical"].changeLayout(cmd, LayoutState::ColorRead);
-
+		
 		rpi.renderPass = *renderPassCombine.handle;
 		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)].handle;
-
+		
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(*pipelineCombine.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineCombine.handle);
@@ -199,7 +199,7 @@ namespace pe
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
-
+	
 	void Bloom::createPipelines(std::map<std::string, Image>& renderTargets)
 	{
 		createBrightFilterPipeline(renderTargets);
@@ -207,12 +207,12 @@ namespace pe
 		createGaussianBlurVerticalPipeline(renderTargets);
 		createCombinePipeline(renderTargets);
 	}
-
+	
 	void Bloom::createBrightFilterPipeline(std::map<std::string, Image>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/Bloom/brightFilter.frag", ShaderType::Fragment, true};
-
+		
 		pipelineBrightFilter.info.pVertShader = &vert;
 		pipelineBrightFilter.info.pFragShader = &frag;
 		pipelineBrightFilter.info.width = renderTargets["brightFilter"].width_f;
@@ -227,15 +227,15 @@ namespace pe
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutBrightFilter()}
 		);
 		pipelineBrightFilter.info.renderPass = renderPassBrightFilter;
-
+		
 		pipelineBrightFilter.createGraphicsPipeline();
 	}
-
+	
 	void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/Bloom/gaussianBlurHorizontal.frag", ShaderType::Fragment, true};
-
+		
 		pipelineGaussianBlurHorizontal.info.pVertShader = &vert;
 		pipelineGaussianBlurHorizontal.info.pFragShader = &frag;
 		pipelineGaussianBlurHorizontal.info.width = renderTargets["gaussianBlurHorizontal"].width_f;
@@ -252,15 +252,15 @@ namespace pe
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutGaussianBlurH()}
 		);
 		pipelineGaussianBlurHorizontal.info.renderPass = renderPassGaussianBlur;
-
+		
 		pipelineGaussianBlurHorizontal.createGraphicsPipeline();
 	}
-
+	
 	void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/Bloom/gaussianBlurVertical.frag", ShaderType::Fragment, true};
-
+		
 		pipelineGaussianBlurVertical.info.pVertShader = &vert;
 		pipelineGaussianBlurVertical.info.pFragShader = &frag;
 		pipelineGaussianBlurVertical.info.width = renderTargets["gaussianBlurVertical"].width_f;
@@ -277,16 +277,16 @@ namespace pe
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutGaussianBlurV()}
 		);
 		pipelineGaussianBlurVertical.info.renderPass = renderPassGaussianBlur;
-
+		
 		pipelineGaussianBlurVertical.createGraphicsPipeline();
 	}
-
+	
 	void Bloom::createCombinePipeline(std::map<std::string, Image>& renderTargets)
 	{
 		// Shader stages
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/Bloom/combine.frag", ShaderType::Fragment, true};
-
+		
 		pipelineCombine.info.pVertShader = &vert;
 		pipelineCombine.info.pFragShader = &frag;
 		pipelineCombine.info.width = renderTargets["viewport"].width_f;
@@ -301,20 +301,20 @@ namespace pe
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutCombine()}
 		);
 		pipelineCombine.info.renderPass = renderPassCombine;
-
+		
 		pipelineCombine.createGraphicsPipeline();
 	}
-
+	
 	void Bloom::destroy()
 	{
 		auto vulkan = VulkanContext::Get();
 		for (auto& frameBuffer : framebuffers)
 			frameBuffer.Destroy();
-
+		
 		renderPassBrightFilter.Destroy();
 		renderPassGaussianBlur.Destroy();
 		renderPassCombine.Destroy();
-
+		
 		if (Pipeline::getDescriptorSetLayoutBrightFilter())
 		{
 			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutBrightFilter());

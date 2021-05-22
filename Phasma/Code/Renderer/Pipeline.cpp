@@ -21,35 +21,35 @@ namespace pe
 		dynamicStates = make_ref(std::vector<vk::DynamicState>());
 		descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>());
 	}
-
+	
 	PipelineCreateInfo::~PipelineCreateInfo()
 	{
 	}
-
+	
 	Pipeline::Pipeline()
 	{
 		handle = make_ref(vk::Pipeline());
 		layout = make_ref(vk::PipelineLayout());
 	}
-
+	
 	Pipeline::~Pipeline()
 	{
 	}
-
+	
 	void Pipeline::createGraphicsPipeline()
 	{
 		vk::GraphicsPipelineCreateInfo pipeinfo;
-
+		
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = info.pVertShader->byte_size();
 		vsmci.pCode = info.pVertShader->get_spriv();
 		vk::UniqueShaderModule vertModule = VulkanContext::Get()->device->createShaderModuleUnique(vsmci);
-
+		
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
 		pssci1.module = vertModule.get();
 		pssci1.pName = "main";
-
+		
 		vk::ShaderModuleCreateInfo fsmci;
 		vk::UniqueShaderModule fragModule;
 		vk::PipelineShaderStageCreateInfo pssci2;
@@ -58,19 +58,19 @@ namespace pe
 			fsmci.codeSize = info.pFragShader->byte_size();
 			fsmci.pCode = info.pFragShader->get_spriv();
 			fragModule = VulkanContext::Get()->device->createShaderModuleUnique(fsmci);
-
+			
 			pssci2.stage = vk::ShaderStageFlagBits::eFragment;
 			pssci2.module = fragModule.get();
 			pssci2.pName = "main";
 		}
-
+		
 		std::vector<vk::PipelineShaderStageCreateInfo> stages {pssci1};
 		if (info.pFragShader)
 			stages.push_back(pssci2);
-
+		
 		pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
 		pipeinfo.pStages = stages.data();
-
+		
 		// Vertex Input state
 		vk::PipelineVertexInputStateCreateInfo pvisci;
 		pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(info.vertexInputBindingDescriptions->size());
@@ -78,13 +78,13 @@ namespace pe
 		pvisci.pVertexBindingDescriptions = info.vertexInputBindingDescriptions->data();
 		pvisci.pVertexAttributeDescriptions = info.vertexInputAttributeDescriptions->data();
 		pipeinfo.pVertexInputState = &pvisci;
-
+		
 		// Input Assembly stage
 		vk::PipelineInputAssemblyStateCreateInfo piasci;
 		piasci.topology = vk::PrimitiveTopology::eTriangleList;
 		piasci.primitiveRestartEnable = VK_FALSE;
 		pipeinfo.pInputAssemblyState = &piasci;
-
+		
 		// Viewports and Scissors
 		vk::Viewport vp;
 		vp.x = 0.0f;
@@ -93,17 +93,17 @@ namespace pe
 		vp.height = info.height;
 		vp.minDepth = 0.0f;
 		vp.maxDepth = 1.0f;
-
+		
 		vk::Rect2D r2d;
 		r2d.extent = vk::Extent2D {static_cast<uint32_t>(info.width), static_cast<uint32_t>(info.height)};
-
+		
 		vk::PipelineViewportStateCreateInfo pvsci;
 		pvsci.viewportCount = 1;
 		pvsci.pViewports = &vp;
 		pvsci.scissorCount = 1;
 		pvsci.pScissors = &r2d;
 		pipeinfo.pViewportState = &pvsci;
-
+		
 		// Rasterization state
 		vk::PipelineRasterizationStateCreateInfo prsci;
 		prsci.depthClampEnable = VK_FALSE;
@@ -117,7 +117,7 @@ namespace pe
 		prsci.depthBiasSlopeFactor = 0.0f;
 		prsci.lineWidth = 1.0f;
 		pipeinfo.pRasterizationState = &prsci;
-
+		
 		// Multisample state
 		vk::PipelineMultisampleStateCreateInfo pmsci;
 		pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
@@ -127,7 +127,7 @@ namespace pe
 		pmsci.alphaToCoverageEnable = VK_FALSE;
 		pmsci.alphaToOneEnable = VK_FALSE;
 		pipeinfo.pMultisampleState = &pmsci;
-
+		
 		// Depth stencil state
 		vk::PipelineDepthStencilStateCreateInfo pdssci;
 		pdssci.depthTestEnable = VK_TRUE;
@@ -140,7 +140,7 @@ namespace pe
 		pdssci.minDepthBounds = 0.0f;
 		pdssci.maxDepthBounds = 0.0f;
 		pipeinfo.pDepthStencilState = &pdssci;
-
+		
 		// Color Blending state
 		vk::PipelineColorBlendStateCreateInfo pcbsci;
 		pcbsci.logicOpEnable = VK_FALSE;
@@ -150,18 +150,18 @@ namespace pe
 		float blendConstants[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 		memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
 		pipeinfo.pColorBlendState = &pcbsci;
-
+		
 		// Dynamic state
 		vk::PipelineDynamicStateCreateInfo dsi;
 		dsi.dynamicStateCount = static_cast<uint32_t>(info.dynamicStates->size());
 		dsi.pDynamicStates = info.dynamicStates->data();
 		pipeinfo.pDynamicState = &dsi;
-
+		
 		// Push Constant Range
 		vk::PushConstantRange pcr;
 		pcr.stageFlags = static_cast<vk::ShaderStageFlagBits>(info.pushConstantStage);
 		pcr.size = info.pushConstantSize;
-
+		
 		// Pipeline Layout
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(info.descriptorSetLayouts->size());
@@ -170,45 +170,45 @@ namespace pe
 		plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
 		layout = make_ref(VulkanContext::Get()->device->createPipelineLayout(plci));
 		pipeinfo.layout = *layout;
-
+		
 		// Render Pass
 		pipeinfo.renderPass = *info.renderPass.handle;
-
+		
 		// Subpass (Index of subpass this pipeline will be used in)
 		pipeinfo.subpass = 0;
-
+		
 		// Base Pipeline Handle
 		pipeinfo.basePipelineHandle = nullptr;
-
+		
 		// Base Pipeline Index
 		pipeinfo.basePipelineIndex = -1;
-
+		
 		handle = make_ref(VulkanContext::Get()->device->createGraphicsPipeline(nullptr, pipeinfo).value);
 	}
-
+	
 	void Pipeline::createComputePipeline()
 	{
 		vk::ComputePipelineCreateInfo compinfo;
-
+		
 		vk::ShaderModuleCreateInfo csmci;
 		csmci.codeSize = info.pCompShader->byte_size();
 		csmci.pCode = info.pCompShader->get_spriv();
-
+		
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(info.descriptorSetLayouts->size());
 		plci.pSetLayouts = info.descriptorSetLayouts->data();
-
+		
 		vk::UniqueShaderModule module = VulkanContext::Get()->device->createShaderModuleUnique(csmci);
-
+		
 		compinfo.stage.module = module.get();
 		compinfo.stage.pName = "main";
 		compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
 		layout = make_ref(VulkanContext::Get()->device->createPipelineLayout(plci));
 		compinfo.layout = *layout;
-
+		
 		handle = make_ref(VulkanContext::Get()->device->createComputePipeline(nullptr, compinfo).value);
 	}
-
+	
 	void Pipeline::destroy()
 	{
 		if (*layout)
@@ -216,18 +216,18 @@ namespace pe
 			VulkanContext::Get()->device->destroyPipelineLayout(*layout);
 			*layout = nullptr;
 		}
-
+		
 		if (*handle)
 		{
 			VulkanContext::Get()->device->destroyPipeline(*handle);
 			*handle = nullptr;
 		}
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutComposition()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -253,14 +253,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutBrightFilter()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -277,14 +277,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutGaussianBlurH()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -301,14 +301,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutGaussianBlurV()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -325,14 +325,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutCombine()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -350,14 +350,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutDOF()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -375,14 +375,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutFXAA()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -399,14 +399,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutMotionBlur()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -426,14 +426,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutSSAO()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -454,14 +454,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutSSAOBlur()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -478,14 +478,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutSSR()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -506,14 +506,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutTAA()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -534,14 +534,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutTAASharpen()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -559,14 +559,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutShadows()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			const auto layoutBinding = [](
@@ -584,14 +584,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutMesh()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto const layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
@@ -608,14 +608,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutPrimitive()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto const layoutBinding = [](
@@ -637,14 +637,14 @@ namespace pe
 			descriptorLayout.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutModel()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			vk::DescriptorSetLayoutBinding dslb;
@@ -652,20 +652,20 @@ namespace pe
 			dslb.descriptorCount = 1; // number of descriptors contained
 			dslb.descriptorType = vk::DescriptorType::eUniformBuffer;
 			dslb.stageFlags = vk::ShaderStageFlagBits::eVertex;
-
+			
 			vk::DescriptorSetLayoutCreateInfo dslci;
 			dslci.bindingCount = 1;
 			dslci.pBindings = &dslb;
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(dslci);
 		}
-
+		
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutSkybox()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			const auto layoutBinding = [](
@@ -684,11 +684,11 @@ namespace pe
 		}
 		return DSLayout;
 	}
-
+	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutCompute()
 	{
 		static vk::DescriptorSetLayout DSLayout = nullptr;
-
+		
 		if (!DSLayout)
 		{
 			auto const setLayoutBinding = [](uint32_t binding)
@@ -697,18 +697,18 @@ namespace pe
 						binding, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute, nullptr
 				};
 			};
-
+			
 			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
 					setLayoutBinding(0), // in
 					setLayoutBinding(1)  // out
 			};
-
+			
 			vk::DescriptorSetLayoutCreateInfo dlci;
 			dlci.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 			dlci.pBindings = setLayoutBindings.data();
 			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(dlci);
 		}
-
+		
 		return DSLayout;
 	}
 }

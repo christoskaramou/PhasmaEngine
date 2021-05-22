@@ -16,7 +16,7 @@ namespace pe
 	public:
 		Buffer* buffer;
 		std::vector<MemoryRange> memory_ranges {};
-
+		
 		void exec_mem_copy()
 		{
 			buffer->map();
@@ -26,7 +26,7 @@ namespace pe
 			buffer->unmap();
 		}
 	};
-
+	
 	class Queue
 	{
 	public:
@@ -46,7 +46,7 @@ namespace pe
 			std::lock_guard<std::mutex> guard(m_mem_cpy_request_mutex);
 			m_async_copy_requests.push_back({buffer, ranges});
 		}
-
+		
 		inline static void exec_memcpyRequests()
 		{
 			std::vector<std::future<void>> futureNodes(m_async_copy_requests.size());
@@ -54,10 +54,10 @@ namespace pe
 				futureNodes[i] = std::async(
 						std::launch::async, std::bind(&CopyRequest::exec_mem_copy, m_async_copy_requests[i])
 				);
-
+			
 			for (auto& f : futureNodes)
 				f.get();
-
+			
 			m_async_copy_requests.clear();
 		}
 	};

@@ -15,7 +15,7 @@
 namespace pe
 {
 	Ref<vk::DescriptorSetLayout> GUI::descriptorSetLayout = Ref<vk::DescriptorSetLayout>();
-
+	
 	GUI::GUI()
 	{
 		descriptorSetLayout = make_ref(
@@ -23,17 +23,17 @@ namespace pe
 		); // TODO: multiple instances will initialize this find an other way
 		framebuffers = std::vector<Framebuffer>();
 	}
-
+	
 	GUI::~GUI()
 	{
 	}
-
+	
 	bool endsWithExt(const std::string& mainStr, const std::string& toMatch)
 	{
 		return mainStr.size() >= toMatch.size() &&
-				mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0;
+		       mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0;
 	}
-
+	
 	void GUI::setWindows()
 	{
 		Menu();
@@ -42,17 +42,17 @@ namespace pe
 		RightPanel();
 		BottomPanel();
 	}
-
+	
 	void GUI::LeftPanel() const
 	{
 		Metrics();
 	}
-
+	
 	void GUI::RightPanel() const
 	{
 		Properties();
 	}
-
+	
 	void GUI::BottomPanel() const
 	{
 		ConsoleWindow();
@@ -60,13 +60,13 @@ namespace pe
 		Shaders();
 		Models();
 	}
-
+	
 	const char* GUI::async_fileDialog_ImGuiMenuItem(
 			const char* menuLabel, const char* dialogTitle, const std::vector<const char*>& filter
 	)
 	{
 		static std::future<const char*>* s_future = nullptr;
-
+		
 		if (ImGui::MenuItem(menuLabel))
 		{
 			s_future = new std::future<const char*>(
@@ -88,11 +88,11 @@ namespace pe
 		}
 		return nullptr;
 	}
-
+	
 	int GUI::async_messageBox_ImGuiMenuItem(const char* menuLabel, const char* messageBoxTitle, const char* message)
 	{
 		static std::future<int>* s_future = nullptr;
-
+		
 		if (ImGui::MenuItem(menuLabel))
 		{
 			s_future = new std::future<int>(
@@ -111,14 +111,14 @@ namespace pe
 		}
 		return 0;
 	}
-
-
+	
+	
 	const char* GUI::async_fileDialog_ImGuiButton(
 			const char* buttonLabel, const char* dialogTitle, const std::vector<const char*>& filter
 	)
 	{
 		static std::future<const char*>* s_future = nullptr;
-
+		
 		if (ImGui::Button(buttonLabel))
 		{
 			s_future = new std::future<const char*>(
@@ -140,11 +140,11 @@ namespace pe
 		}
 		return nullptr;
 	}
-
+	
 	const char* GUI::async_inputBox_ImGuiButton(const char* buttonLabel, const char* dialogTitle, const char* message)
 	{
 		static std::future<const char*>* s_future = nullptr;
-
+		
 		if (ImGui::Button(buttonLabel))
 		{
 			s_future = new std::future<const char*>(
@@ -163,7 +163,7 @@ namespace pe
 		}
 		return nullptr;
 	}
-
+	
 	void GUI::Menu() const
 	{
 		if (ImGui::BeginMainMenuBar())
@@ -171,7 +171,7 @@ namespace pe
 			if (ImGui::BeginMenu("File"))
 			{
 				static std::vector<const char*> filter {"*.gltf", "*.glb"};
-
+				
 				////////////////////////////////////
 				// TODO: rework async calls logic //
 				////////////////////////////////////
@@ -183,7 +183,7 @@ namespace pe
 					std::string modelName = path.substr(path.find_last_of('\\') + 1);
 					Queue::loadModel.emplace_back(folderPath, modelName);
 				}
-
+				
 				const int exit = async_messageBox_ImGuiMenuItem("Exit", "Exit", "Are you sure you want to exit?");
 				if (exit == 1)
 				{
@@ -191,18 +191,18 @@ namespace pe
 					sdlevent.type = SDL_QUIT;
 					SDL_PushEvent(&sdlevent);
 				}
-
+				
 				ImGui::EndMenu();
 			}
 			ImGui::EndMainMenuBar();
 		}
 	}
-
+	
 	void GUI::Metrics() const
 	{
 		int totalPasses = 0;
 		float totalTime = 0.f;
-
+		
 		static bool metrics_open = true;
 		ImGui::SetNextWindowPos(ImVec2(0.f, MENU_HEIGHT));
 		ImGui::SetNextWindowSize(ImVec2(LEFT_PANEL_WIDTH, HEIGHT_f - LOWER_PANEL_HEIGHT - MENU_HEIGHT));
@@ -213,7 +213,7 @@ namespace pe
 		fps = maximum(fps, 10.0f);
 		ImGui::Separator();
 		ImGui::Separator();
-
+		
 		ImGui::Text("CPU Total: %.3f (waited %.3f) ms", cpuTime, cpuWaitingTime);
 		ImGui::Indent(16.0f);
 		ImGui::Text("Updates Total: %.3f ms", updatesTime);
@@ -284,7 +284,7 @@ namespace pe
 			totalPasses++;
 			totalTime += stats[9];
 		}
-
+		
 		ImGui::Text("GUI: %.3f ms", stats[10]);
 		totalPasses++;
 		totalTime += stats[10];
@@ -292,12 +292,12 @@ namespace pe
 		ImGui::Separator();
 		ImGui::Separator();
 		ImGui::Text("Total: %i (%.3f ms)", totalPasses, totalTime);
-
+		
 		tlPanelPos = ImGui::GetWindowPos();
 		tlPanelSize = ImGui::GetWindowSize();
 		ImGui::End();
 	}
-
+	
 	void GUI::ConsoleWindow()
 	{
 		static bool console_open = true;
@@ -307,14 +307,14 @@ namespace pe
 				ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT)
 		);
 	}
-
+	
 	void GUI::Scripts() const
 	{
 		static bool scripts_open = true;
 		ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 1.f / 4.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
 		ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
 		ImGui::Begin("Scripts Folder", &scripts_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-
+		
 		const char* result = async_inputBox_ImGuiButton(
 				"Create New Script", "Script", "Give a name followed by the extension .cs"
 		);
@@ -334,7 +334,7 @@ namespace pe
 				);
 			}
 		}
-
+		
 		for (uint32_t i = 0; i < fileList.size(); i++)
 		{
 			std::string name = fileList[i] + "##" + std::to_string(i);
@@ -349,7 +349,7 @@ namespace pe
 		}
 		ImGui::End();
 	}
-
+	
 	void GUI::Shaders() const
 	{
 		static bool shaders_open = true;
@@ -358,8 +358,8 @@ namespace pe
 		ImGui::Begin("Shaders Folder", &shaders_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 		if (ImGui::Button("Compile Shaders"))
 		{
-            VulkanContext::Get()->device->waitIdle();
-		    EventSystem::Get()->PushEvent(EventType::CompileShaders);
+			VulkanContext::Get()->device->waitIdle();
+			EventSystem::Get()->PushEvent(EventType::CompileShaders);
 		}
 		for (uint32_t i = 0; i < shaderList.size(); i++)
 		{
@@ -375,14 +375,14 @@ namespace pe
 		}
 		ImGui::End();
 	}
-
+	
 	void GUI::Models() const
 	{
 		static bool models_open = true;
 		ImGui::SetNextWindowPos(ImVec2(WIDTH_f * 3.f / 4.f, HEIGHT_f - LOWER_PANEL_HEIGHT));
 		ImGui::SetNextWindowSize(ImVec2(WIDTH_f / 4.f, LOWER_PANEL_HEIGHT));
 		ImGui::Begin("Models Loaded", &models_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-
+		
 		static std::vector<const char*> filter {"*.gltf", "*.glb"};
 		const char* result = async_fileDialog_ImGuiButton("Add New Model", "Choose Model", filter);
 		if (result)
@@ -392,16 +392,16 @@ namespace pe
 			std::string modelName = path.substr(path.find_last_of('\\') + 1);
 			Queue::loadModel.emplace_back(folderPath, modelName);
 		}
-
+		
 		for (uint32_t i = 0; i < modelList.size(); i++)
 		{
 			std::string s = modelList[i] + "##" + std::to_string(i);
 			if (ImGui::Selectable(s.c_str(), false))
 				modelItemSelected = i;
 		}
-
+		
 		ImGui::End();
-
+		
 		if (!Queue::loadModelFutures.empty())
 		{
 			static bool loading = true;
@@ -412,7 +412,7 @@ namespace pe
 			ImGui::SetNextWindowPos(ImVec2(WIDTH_f * .5f - 44.f, HEIGHT_f * .5f - 10.f));
 			ImGui::SetNextWindowSize(ImVec2(88.f, 20.f));
 			ImGui::Begin("Loading", &loading, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
-
+			
 			if (time < 1.f)
 				ImGui::Text("Loading");
 			else if (time < 2.f)
@@ -428,7 +428,7 @@ namespace pe
 			style->Colors[ImGuiCol_WindowBg] = temp;
 		}
 	}
-
+	
 	void GUI::Properties() const
 	{
 		static bool propetries_open = true;
@@ -439,9 +439,9 @@ namespace pe
 		ImGui::InputFloat("Quality.", &rtScale, 0.01f, 0.05f, 2);
 		if (ImGui::Button("Apply"))
 		{
-            renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
-            VulkanContext::Get()->device->waitIdle();
-            EventSystem::Get()->PushEvent(EventType::ScaleRenderTargets);
+			renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
+			VulkanContext::Get()->device->waitIdle();
+			EventSystem::Get()->PushEvent(EventType::ScaleRenderTargets);
 		}
 		ImGui::Checkbox("Lock Render Window", &lock_render_window);
 		ImGui::Checkbox("IBL", &use_IBL);
@@ -508,7 +508,7 @@ namespace pe
 			use_TAA = false;
 			use_FXAA = false;
 		}
-
+		
 		ImGui::Checkbox("Bloom", &show_Bloom);
 		if (show_Bloom)
 		{
@@ -570,7 +570,7 @@ namespace pe
 			randomize_lights = true;
 		ImGui::SliderFloat("Light Intst", &lights_intensity, 0.01f, 30.f);
 		ImGui::SliderFloat("Light Rng", &lights_range, 0.1f, 30.f);
-
+		
 		// Model properties
 		ImGui::Separator();
 		ImGui::Separator();
@@ -582,11 +582,11 @@ namespace pe
 			const std::string id = " ID[" + toStr + "]";
 			const std::string fmt = modelList[modelItemSelected] + id;
 			ImGui::TextColored(ImVec4(.6f, 1.f, .5f, 1.f), "%s", fmt.c_str());
-
+			
 			ImGui::Separator();
 			if (ImGui::Button("Unload Model"))
 				Queue::unloadModel.push_back(modelItemSelected);
-
+			
 			ImGui::Separator();
 			const std::string s = "Scale##" + toStr;
 			const std::string p = "Position##" + toStr;
@@ -594,10 +594,10 @@ namespace pe
 			ImGui::InputFloat3(s.c_str(), model_scale[modelItemSelected].data(), 3);
 			ImGui::InputFloat3(p.c_str(), model_pos[modelItemSelected].data(), 3);
 			ImGui::InputFloat3(r.c_str(), model_rot[modelItemSelected].data(), 3);
-
+			
 			ImGui::Separator();
 			ImGui::Separator();
-
+			
 			static std::vector<const char*> filter {"*.cs"};
 			const char* result = async_fileDialog_ImGuiButton("Add Script", "Choose Script", filter);
 			if (result)
@@ -606,24 +606,24 @@ namespace pe
 				path = path.substr(0, path.find_last_of('.'));
 				Queue::addScript.emplace_back(modelItemSelected, path.substr(path.find_last_of('\\') + 1));
 			}
-
+			
 			ImGui::SameLine();
 			if (ImGui::Button("Compile Script"))
 			{
 				Queue::compileScript.push_back(modelItemSelected);
 			}
-
+			
 			if (ImGui::Button("Remove Script"))
 			{
 				Queue::removeScript.push_back(modelItemSelected);
 			}
 		}
-
+		
 		mlPanelPos = ImGui::GetWindowPos();
 		mlPanelSize = ImGui::GetWindowSize();
 		ImGui::End();
 	}
-
+	
 	void GUI::RenderingWindowBox() const
 	{
 		static bool active = true;
@@ -644,19 +644,19 @@ namespace pe
 		ImGui::End();
 		style->Colors[ImGuiCol_WindowBg].w = 1.0f;
 	}
-
+	
 	const vk::DescriptorSetLayout& GUI::getDescriptorSetLayout(vk::Device device)
 	{
 		if (!*descriptorSetLayout)
 		{
 			// binding for gui texture
 			std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBindings(1);
-
+			
 			descriptorSetLayoutBindings[0].binding = 0;
 			descriptorSetLayoutBindings[0].descriptorCount = 1;
 			descriptorSetLayoutBindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 			descriptorSetLayoutBindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
+			
 			vk::DescriptorSetLayoutCreateInfo createInfo;
 			createInfo.bindingCount = static_cast<uint32_t>(descriptorSetLayoutBindings.size());
 			createInfo.pBindings = descriptorSetLayoutBindings.data();
@@ -664,7 +664,7 @@ namespace pe
 		}
 		return *descriptorSetLayout;
 	}
-
+	
 	const char* GUI::ImGui_ImplSDL2_GetClipboardText(void*)
 	{
 		if (g_ClipboardTextData)
@@ -672,12 +672,12 @@ namespace pe
 		g_ClipboardTextData = SDL_GetClipboardText();
 		return g_ClipboardTextData;
 	}
-
+	
 	void GUI::ImGui_ImplSDL2_SetClipboardText(void*, const char* text)
 	{
 		SDL_SetClipboardText(text);
 	}
-
+	
 	void GUI::initImGui()
 	{
 		auto vulkan = VulkanContext::Get();
@@ -685,7 +685,7 @@ namespace pe
 		cbai.commandPool = *vulkan->commandPool;
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = 1;
-
+		
 		std::string directory = Path::Assets + "Scripts";
 		for (auto& file : std::filesystem::recursive_directory_iterator(directory))
 		{
@@ -693,28 +693,28 @@ namespace pe
 			if (endsWithExt(pathStr, ".cs"))
 				fileList.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size() + 1));
 		}
-
+		
 		directory = Path::Assets + "Shaders";
 		for (auto& file : std::filesystem::recursive_directory_iterator(directory))
 		{
 			auto pathStr = file.path().string();
 			if (endsWithExt(pathStr, ".vert") || endsWithExt(pathStr, ".frag") || endsWithExt(pathStr, ".comp") ||
-					endsWithExt(pathStr, ".glsl"))
+			    endsWithExt(pathStr, ".glsl"))
 			{
-				shaderList.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size()+ 1));
+				shaderList.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size() + 1));
 			}
 		}
-
+		
 		ImGui::CreateContext();
 		ImGuiIO& io = ImGui::GetIO();
 		(void) io;
-
+		
 		g_Window = vulkan->window;
-
+		
 		// Setup back-end capabilities flags
 		io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;       // We can honor GetMouseCursor() values (optional)
 		io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;        // We can honor io.WantSetMousePos requests (optional, rarely used)
-
+		
 		// Keyboard mapping. ImGui will use those indices to peek into the io.KeysDown[] array.
 		io.KeyMap[ImGuiKey_Tab] = SDL_SCANCODE_TAB;
 		io.KeyMap[ImGuiKey_LeftArrow] = SDL_SCANCODE_LEFT;
@@ -737,11 +737,11 @@ namespace pe
 		io.KeyMap[ImGuiKey_X] = SDL_SCANCODE_X;
 		io.KeyMap[ImGuiKey_Y] = SDL_SCANCODE_Y;
 		io.KeyMap[ImGuiKey_Z] = SDL_SCANCODE_Z;
-
+		
 		io.SetClipboardTextFn = ImGui_ImplSDL2_SetClipboardText;
 		io.GetClipboardTextFn = ImGui_ImplSDL2_GetClipboardText;
 		io.ClipboardUserData = nullptr;
-
+		
 		g_MouseCursors[ImGuiMouseCursor_Arrow] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
 		g_MouseCursors[ImGuiMouseCursor_TextInput] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM);
 		g_MouseCursors[ImGuiMouseCursor_ResizeAll] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEALL);
@@ -760,17 +760,17 @@ namespace pe
 		(void)window;
 #endif
 		windowStyle();
-
+		
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 		(*vulkan->dynamicCmdBuffers)[0].begin(beginInfo);
-
+		
 		// Create fonts texture
 		unsigned char* pixels;
 		int width, height;
 		io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 		size_t upload_size = width * height * 4 * sizeof(char);
-
+		
 		// Create the Image:
 		{
 			texture.format = make_ref(vk::Format::eR8G8B8A8Unorm);
@@ -782,10 +782,10 @@ namespace pe
 					vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
 					vk::MemoryPropertyFlagBits::eDeviceLocal
 			);
-
+			
 			texture.viewType = make_ref(vk::ImageViewType::e2D);
 			texture.createImageView(vk::ImageAspectFlagBits::eColor);
-
+			
 			texture.addressMode = make_ref(vk::SamplerAddressMode::eRepeat);
 			texture.maxAnisotropy = 1.f;
 			texture.minLod = -1000.f;
@@ -803,7 +803,7 @@ namespace pe
 			stagingBuffer.flush();
 			stagingBuffer.unmap();
 		}
-
+		
 		// Copy to Image:
 		{
 			vk::ImageMemoryBarrier copy_barrier = {};
@@ -824,7 +824,7 @@ namespace pe
 					nullptr,
 					copy_barrier
 			);
-
+			
 			vk::BufferImageCopy region = {};
 			region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 			region.imageSubresource.layerCount = 1;
@@ -834,7 +834,7 @@ namespace pe
 			(*vulkan->dynamicCmdBuffers)[0].copyBufferToImage(
 					*stagingBuffer.buffer, *texture.image, vk::ImageLayout::eTransferDstOptimal, region
 			);
-
+			
 			vk::ImageMemoryBarrier use_barrier = {};
 			use_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
 			use_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
@@ -855,18 +855,18 @@ namespace pe
 					use_barrier
 			);
 		}
-
+		
 		// Store our identifier
 		io.Fonts->TexID = reinterpret_cast<ImTextureID>(reinterpret_cast<intptr_t>(static_cast<VkImage>(*texture
 				.image)));
-
+		
 		(*vulkan->dynamicCmdBuffers)[0].end();
-
+		
 		vulkan->submitAndWaitFence((*vulkan->dynamicCmdBuffers)[0], nullptr, nullptr, nullptr);
-
+		
 		stagingBuffer.destroy();
 	}
-
+	
 	void GUI::loadGUI(bool show)
 	{
 		//                   counter clock wise
@@ -878,16 +878,16 @@ namespace pe
 		//         /|       +x          //     |
 		//        /	|                   //     |
 		//       /  |/ +y               //     |/ v
-
+		
 		render = show;
-
+		
 		initImGui();
 	}
-
+	
 	void GUI::scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
 	{
 		Image& s_chain_Image = VulkanContext::Get()->swapchain.images[imageIndex];
-
+		
 		renderedImage.transitionImageLayout(
 				cmd,
 				vk::ImageLayout::eColorAttachmentOptimal,
@@ -908,7 +908,7 @@ namespace pe
 				vk::AccessFlagBits::eTransferWrite,
 				vk::ImageAspectFlagBits::eColor
 		);
-
+		
 		vk::ImageBlit blit;
 		blit.srcOffsets[0] = vk::Offset3D {0, 0, 0};
 		blit.srcOffsets[1] = vk::Offset3D {
@@ -923,7 +923,7 @@ namespace pe
 		};
 		blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		blit.dstSubresource.layerCount = 1;
-
+		
 		cmd.blitImage(
 				*renderedImage.image,
 				vk::ImageLayout::eTransferSrcOptimal,
@@ -932,7 +932,7 @@ namespace pe
 				blit,
 				vk::Filter::eLinear
 		);
-
+		
 		renderedImage.transitionImageLayout(
 				cmd,
 				vk::ImageLayout::eTransferSrcOptimal,
@@ -954,38 +954,38 @@ namespace pe
 				vk::ImageAspectFlagBits::eColor
 		);
 	}
-
+	
 	void GUI::draw(vk::CommandBuffer cmd, uint32_t imageIndex)
 	{
 		if (!render) return;
-
+		
 		const auto draw_data = ImGui::GetDrawData();
 		if (render && draw_data->TotalVtxCount > 0)
 		{
 			vk::ClearValue clearColor;
 			memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
-
+			
 			vk::ClearDepthStencilValue depthStencil;
 			depthStencil.depth = 1.f;
 			depthStencil.stencil = 0;
-
+			
 			std::vector<vk::ClearValue> clearValues = {clearColor, depthStencil};
-
+			
 			vk::RenderPassBeginInfo rpi;
 			rpi.renderPass = *renderPass.handle;
 			rpi.framebuffer = *framebuffers[imageIndex].handle;
 			rpi.renderArea = vk::Rect2D {{0, 0}, *VulkanContext::Get()->surface.actualExtent};
 			rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			rpi.pClearValues = clearValues.data();
-
+			
 			cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-
+			
 			const vk::DeviceSize offset {0};
 			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
 			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *descriptorSet, nullptr);
 			cmd.bindVertexBuffers(0, *vertexBuffer.buffer, offset);
 			cmd.bindIndexBuffer(*indexBuffer.buffer, 0, vk::IndexType::eUint32);
-
+			
 			vk::Viewport viewport;
 			viewport.x = 0.f;
 			viewport.y = 0.f;
@@ -994,14 +994,14 @@ namespace pe
 			viewport.minDepth = 0.f;
 			viewport.maxDepth = 1.f;
 			cmd.setViewport(0, viewport);
-
+			
 			std::vector<float> data(4);
 			data[0] = 2.0f / draw_data->DisplaySize.x;                // scale
 			data[1] = 2.0f / draw_data->DisplaySize.y;                // scale
 			data[2] = -1.0f - draw_data->DisplayPos.x * data[0];    // transform
 			data[3] = -1.0f - draw_data->DisplayPos.y * data[1];    // transform
 			cmd.pushConstants<float>(*pipeline.layout, vk::ShaderStageFlagBits::eVertex, 0, data);
-
+			
 			// Render the command lists:
 			int vtx_offset = 0;
 			int idx_offset = 0;
@@ -1027,9 +1027,9 @@ namespace pe
 						                   static_cast<int32_t>(pcmd->ClipRect.y - display_pos.y) : 0;
 						scissor.extent.width = static_cast<uint32_t>(pcmd->ClipRect.z - pcmd->ClipRect.x);
 						scissor.extent.height = static_cast<uint32_t>(pcmd->ClipRect.w - pcmd->ClipRect.y +
-								1); // FIXME: Why +1 here?
+						                                              1); // FIXME: Why +1 here?
 						cmd.setScissor(0, scissor);
-
+						
 						// Draw
 						cmd.drawIndexed(pcmd->ElemCount, 1, idx_offset, vtx_offset, 0);
 					}
@@ -1040,13 +1040,13 @@ namespace pe
 			cmd.endRenderPass();
 		}
 	}
-
+	
 	void GUI::newFrame()
 	{
 		ImGuiIO& io = ImGui::GetIO();
 		IM_ASSERT(io.Fonts
-				          ->IsBuilt());     // Font atlas needs to be built, call renderer _NewFrame() function e.g. ImGui_ImplOpenGL3_NewFrame()
-
+		            ->IsBuilt());     // Font atlas needs to be built, call renderer _NewFrame() function e.g. ImGui_ImplOpenGL3_NewFrame()
+		
 		// Setup display size (every frame to accommodate for window resizing)
 		int w, h;
 		int display_w, display_h;
@@ -1057,24 +1057,24 @@ namespace pe
 				w > 0 ? static_cast<float>(display_w) / static_cast<float>(w) : 0,
 				h > 0 ? static_cast<float>(display_h) / static_cast<float>(h) : 0
 		);
-
+		
 		// Setup time step (we don't use SDL_GetTicks() because it is using millisecond resolution)
 		static Uint64 frequency = SDL_GetPerformanceFrequency();
 		const Uint64 current_time = SDL_GetPerformanceCounter();
 		io.DeltaTime = g_Time > 0 ? static_cast<float>(static_cast<double>(current_time - g_Time) / frequency) :
 		               static_cast<float>(1.0f / 60.0f);
 		g_Time = current_time;
-
+		
 		// Set OS mouse position if requested (rarely used, only when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
 		if (io.WantSetMousePos)
 			SDL_WarpMouseInWindow(g_Window, static_cast<int>(io.MousePos.x), static_cast<int>(io.MousePos.y));
 		else
 			io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
-
+		
 		int mx, my;
 		const Uint32 mouse_buttons = SDL_GetMouseState(&mx, &my);
 		io.MouseDown[0] = g_MousePressed[0] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) !=
-				0;  // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
+		                                       0;  // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
 		io.MouseDown[1] = g_MousePressed[1] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
 		io.MouseDown[2] = g_MousePressed[2] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
 		g_MousePressed[0] = g_MousePressed[1] = g_MousePressed[2] = false;
@@ -1103,7 +1103,7 @@ namespace pe
 #endif
 		if (io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange)
 			return;
-
+		
 		const ImGuiMouseCursor imgui_cursor = ImGui::GetMouseCursor();
 		if (io.MouseDrawCursor || imgui_cursor == ImGuiMouseCursor_None)
 		{
@@ -1118,15 +1118,15 @@ namespace pe
 			);
 			//SDL_ShowCursor(SDL_TRUE);
 		}
-
+		
 		ImGui::NewFrame();
-
+		
 		setWindows();
 		if (show_demo_window)
 			ImGui::ShowDemoWindow(&show_demo_window);
-
+		
 		ImGui::Render();
-
+		
 		const ImDrawData* draw_data = ImGui::GetDrawData();
 		if (draw_data->TotalVtxCount < 1)
 			return;
@@ -1136,7 +1136,7 @@ namespace pe
 			createVertexBuffer(vertex_size);
 		if (!*indexBuffer.buffer || indexBuffer.size < index_size)
 			createIndexBuffer(index_size);
-
+		
 		// Upload Vertex and index Data:
 		{
 			static size_t vertex_size = sizeof(ImDrawVert);
@@ -1148,22 +1148,22 @@ namespace pe
 			for (int n = 0; n < draw_data->CmdListsCount; n++)
 			{
 				const ImDrawList* cmd_list = draw_data->CmdLists[n];
-
+				
 				vertex_ranges[n].data = cmd_list->VtxBuffer.Data;
 				vertex_ranges[n].size = static_cast<size_t>(cmd_list->VtxBuffer.Size) * vertex_size;
 				vertex_ranges[n].offset = vertex_offset;
-
+				
 				index_ranges[n].data = cmd_list->IdxBuffer.Data;
 				index_ranges[n].size = static_cast<size_t>(cmd_list->IdxBuffer.Size) * index_size;
 				index_ranges[n].offset = index_offset;
-
+				
 				vertex_offset += vertex_ranges[n].size;
 				index_offset += index_ranges[n].size;
 			}
 			Queue::memcpyRequest(&vertexBuffer, vertex_ranges);
 			Queue::memcpyRequest(&indexBuffer, index_ranges);
 		}
-
+		
 		//vk::CommandBufferBeginInfo beginInfo;
 		//beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 		//cmdBuf.begin(beginInfo);
@@ -1180,11 +1180,11 @@ namespace pe
 		//
 		//VulkanContext::Get()->submit(cmdBuf, nullptr, nullptr, nullptr, fenceUpload);
 	}
-
+	
 	void GUI::windowStyle(ImGuiStyle* dst)
 	{
 		ImGuiStyle* style = dst ? dst : &ImGui::GetStyle();
-
+		
 		style->WindowRounding = 0.0;
 		style->Colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 		style->Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
@@ -1230,7 +1230,7 @@ namespace pe
 		style->Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
 		style->Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 	}
-
+	
 	void GUI::createVertexBuffer(size_t vertex_size)
 	{
 		VulkanContext::Get()->graphicsQueue->waitIdle();
@@ -1241,7 +1241,7 @@ namespace pe
 				vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible
 		);
 	}
-
+	
 	void GUI::createIndexBuffer(size_t index_size)
 	{
 		VulkanContext::Get()->graphicsQueue->waitIdle();
@@ -1252,7 +1252,7 @@ namespace pe
 				vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible
 		);
 	}
-
+	
 	void GUI::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
@@ -1260,11 +1260,11 @@ namespace pe
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &descriptorSetLayout;
 		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
-
+		
 		updateDescriptorSets();
-
+		
 	}
-
+	
 	void GUI::updateDescriptorSets() const
 	{
 		// texture sampler
@@ -1272,19 +1272,19 @@ namespace pe
 		dii0.sampler = *texture.sampler;
 		dii0.imageView = *texture.view;
 		dii0.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
+		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
-
+		
 		textureWriteSets[0].dstSet = *descriptorSet;
 		textureWriteSets[0].dstBinding = 0;
 		textureWriteSets[0].dstArrayElement = 0;
 		textureWriteSets[0].descriptorCount = 1;
 		textureWriteSets[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 		textureWriteSets[0].pImageInfo = &dii0;
-
+		
 		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
-
+	
 	void GUI::createRenderPass()
 	{
 		std::array<vk::AttachmentDescription, 1> attachments {};
@@ -1297,28 +1297,28 @@ namespace pe
 		attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
 		attachments[0].initialLayout = vk::ImageLayout::ePresentSrcKHR;
 		attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
-
+		
 		std::array<vk::SubpassDescription, 1> subpassDescriptions {};
-
+		
 		vk::AttachmentReference colorReference = {0, vk::ImageLayout::eColorAttachmentOptimal};
-
+		
 		subpassDescriptions[0].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
 		subpassDescriptions[0].colorAttachmentCount = 1;
 		subpassDescriptions[0].pColorAttachments = &colorReference;
-
+		
 		vk::RenderPassCreateInfo renderPassInfo = {};
 		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
 		renderPassInfo.pAttachments = attachments.data();
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
-
+		
 		renderPass.handle = make_ref(VulkanContext::Get()->device->createRenderPass(renderPassInfo));
 	}
-
+	
 	void GUI::createFrameBuffers()
 	{
 		auto vulkan = VulkanContext::Get();
-
+		
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (uint32_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
@@ -1328,12 +1328,12 @@ namespace pe
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
-
+	
 	void GUI::createPipeline()
 	{
 		Shader vert {"Shaders/GUI/shaderGUI.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/GUI/shaderGUI.frag", ShaderType::Fragment, true};
-
+		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
 		pipeline.info.vertexInputBindingDescriptions = make_ref(Vertex::getBindingDescriptionGUI());
@@ -1355,18 +1355,18 @@ namespace pe
 				std::vector<vk::DescriptorSetLayout> {getDescriptorSetLayout(*VulkanContext::Get()->device)}
 		);
 		pipeline.info.renderPass = renderPass;
-
+		
 		pipeline.createGraphicsPipeline();
 	}
-
+	
 	void GUI::destroy()
 	{
 		Object::destroy();
 		renderPass.Destroy();
-
+		
 		for (auto& framebuffer : framebuffers)
 			framebuffer.Destroy();
-
+		
 		pipeline.destroy();
 		if (*GUI::descriptorSetLayout)
 		{
@@ -1374,7 +1374,7 @@ namespace pe
 			*GUI::descriptorSetLayout = nullptr;
 		}
 	}
-
+	
 	void GUI::update()
 	{
 		if (render)

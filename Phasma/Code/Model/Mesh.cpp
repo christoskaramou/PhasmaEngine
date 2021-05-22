@@ -8,25 +8,25 @@
 namespace pe
 {
 	std::map<std::string, Image> Mesh::uniqueTextures {};
-
+	
 	Primitive::Primitive() : pbrMaterial({})
 	{
 		descriptorSet = make_ref(vk::DescriptorSet());
 	}
-
+	
 	Primitive::~Primitive()
 	{
 	}
-
+	
 	Mesh::Mesh()
 	{
 		descriptorSet = make_ref(vk::DescriptorSet());
 	}
-
+	
 	Mesh::~Mesh()
 	{
 	}
-
+	
 	void Mesh::createUniformBuffers()
 	{
 		uniformBuffer.createBuffer(
@@ -36,10 +36,10 @@ namespace pe
 		uniformBuffer.zero();
 		uniformBuffer.flush();
 		uniformBuffer.unmap();
-
+		
 		for (auto& primitive : primitives)
 		{
-
+			
 			mat4 factors;
 			factors[0] = primitive.pbrMaterial.baseColorFactor != vec4(0.f) ? primitive.pbrMaterial.baseColorFactor :
 			             vec4(1.f);
@@ -49,7 +49,7 @@ namespace pe
 					primitive.pbrMaterial.alphaCutoff, 0.f
 			);
 			factors[3][0] = static_cast<float>(primitive.hasBones);
-
+			
 			const size_t size = sizeof(mat4);
 			primitive.uniformBuffer.createBuffer(
 					size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible
@@ -60,7 +60,7 @@ namespace pe
 			primitive.uniformBuffer.unmap();
 		}
 	}
-
+	
 	void Primitive::loadTexture(
 			MaterialType type,
 			const std::string& folderPath,
@@ -72,34 +72,40 @@ namespace pe
 		std::string path = folderPath;
 		if (image)
 			path = folderPath + image->uri;
-
+		
 		// get the right texture
 		Image* tex;
 		switch (type)
 		{
-			case MaterialType::BaseColor: tex = &pbrMaterial.baseColorTexture;
+			case MaterialType::BaseColor:
+				tex = &pbrMaterial.baseColorTexture;
 				if (!image || image->uri.empty())
 					path = Path::Assets + "Objects/black.png";
 				break;
-			case MaterialType::MetallicRoughness: tex = &pbrMaterial.metallicRoughnessTexture;
+			case MaterialType::MetallicRoughness:
+				tex = &pbrMaterial.metallicRoughnessTexture;
 				if (!image || image->uri.empty())
 					path = Path::Assets + "Objects/black.png";
 				break;
-			case MaterialType::Normal: tex = &pbrMaterial.normalTexture;
+			case MaterialType::Normal:
+				tex = &pbrMaterial.normalTexture;
 				if (!image || image->uri.empty())
 					path = Path::Assets + "Objects/normal.png";
 				break;
-			case MaterialType::Occlusion: tex = &pbrMaterial.occlusionTexture;
+			case MaterialType::Occlusion:
+				tex = &pbrMaterial.occlusionTexture;
 				if (!image || image->uri.empty())
 					path = Path::Assets + "Objects/white.png";
 				break;
-			case MaterialType::Emissive: tex = &pbrMaterial.emissiveTexture;
+			case MaterialType::Emissive:
+				tex = &pbrMaterial.emissiveTexture;
 				if (!image || image->uri.empty())
 					path = Path::Assets + "Objects/black.png";
 				break;
-			default: throw std::runtime_error("Load texture invalid type");
+			default:
+				throw std::runtime_error("Load texture invalid type");
 		}
-
+		
 		// Check if it is already loaded
 		if (Mesh::uniqueTextures.find(path) != Mesh::uniqueTextures.end())
 		{
@@ -119,15 +125,15 @@ namespace pe
 						data.data(), static_cast<int>(data.size()), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha
 				);
 			}
-
+			
 			if (!pixels)
 				throw std::runtime_error("No pixel data loaded");
-
+			
 			const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
-
+			
 			VulkanContext::Get()->graphicsQueue->waitIdle();
 			VulkanContext::Get()->waitAndLockSubmits();
-
+			
 			Buffer staging;
 			staging.createBuffer(
 					imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible
@@ -136,16 +142,16 @@ namespace pe
 			staging.copyData(pixels);
 			staging.flush();
 			staging.unmap();
-
+			
 			stbi_image_free(pixels);
-
+			
 			tex->format = make_ref(vk::Format::eR8G8B8A8Unorm);
 			tex->mipLevels =
 					static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
 			tex->createImage(
 					texWidth, texHeight, vk::ImageTiling::eOptimal,
 					vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
-							vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal
+					vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal
 			);
 			tex->transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
 			tex->copyBufferToImage(*staging.buffer);
@@ -153,15 +159,15 @@ namespace pe
 			tex->createImageView(vk::ImageAspectFlagBits::eColor);
 			tex->maxLod = static_cast<float>(tex->mipLevels);
 			tex->createSampler();
-
+			
 			staging.destroy();
-
+			
 			VulkanContext::Get()->unlockSubmits();
-
+			
 			Mesh::uniqueTextures[path] = *tex;
 		}
 	}
-
+	
 	//void Mesh::calculateBoundingSphere()
 	//{
 	//	vec3 _max(-FLT_MAX);
@@ -174,7 +180,7 @@ namespace pe
 	//	float sphereRadius = length(_max - center);
 	//	boundingSphere = vec4(center, sphereRadius);
 	//}
-
+	
 	void Mesh::destroy()
 	{
 		uniformBuffer.destroy();
@@ -183,7 +189,7 @@ namespace pe
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
 			Pipeline::getDescriptorSetLayoutMesh() = nullptr;
 		}
-
+		
 		for (auto& primitive : primitives)
 		{
 			primitive.uniformBuffer.destroy();

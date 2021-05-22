@@ -4,7 +4,7 @@
 namespace pe
 {
 	bool Console::close_app = false;
-
+	
 	Console::Console()
 	{
 		ClearLog();
@@ -16,14 +16,14 @@ namespace pe
 		Commands.push_back("CLOSE");
 		AddLog("Welcome to Dear ImGui!");
 	}
-
+	
 	Console::~Console()
 	{
 		ClearLog();
 		for (int i = 0; i < History.Size; i++)
 			free(History[i]);
 	}
-
+	
 	void Console::ClearLog()
 	{
 		for (int i = 0; i < Items.Size; i++)
@@ -31,7 +31,7 @@ namespace pe
 		Items.clear();
 		ScrollToBottom = true;
 	}
-
+	
 	void Console::AddLog(const char* fmt, ...) IM_FMTARGS(2)
 	{
 		// FIXME-OPT
@@ -44,7 +44,7 @@ namespace pe
 		Items.push_back(Strdup(buf));
 		ScrollToBottom = true;
 	}
-
+	
 	void Console::Draw(const char* title, bool* p_open, ImVec2 pos, ImVec2 size)
 	{
 		ImGui::SetNextWindowPos(pos);
@@ -54,7 +54,7 @@ namespace pe
 			ImGui::End();
 			return;
 		}
-
+		
 		// As a specific feature guaranteed by the library, after calling Begin() the last Item represent the title bar. So e.g. IsItemHovered() will return true when hovering the title bar.
 		// Here we create a context menu only available from the title bar.
 		if (ImGui::BeginPopupContextItem())
@@ -63,7 +63,7 @@ namespace pe
 				*p_open = false;
 			ImGui::EndPopup();
 		}
-
+		
 		// TODO: display items starting from the bottom
 		//ClearLog();
 		//if (ImGui::SmallButton("Load Sponza")) { Queue::loadModel.push_back({ "objects/sponza/glTF/", "Sponza.gltf" }); AddLog("loading..."); } ImGui::SameLine();
@@ -72,19 +72,19 @@ namespace pe
 		//if (ImGui::SmallButton("Load DamagedHelmet")) { Queue::loadModel.push_back({ "objects/DamagedHelmet/glTF/", "DamagedHelmet.gltf" }); AddLog("loading..."); } ImGui::SameLine();
 		//if (ImGui::SmallButton("Load MetalRoughSpheres")) { Queue::loadModel.push_back({ "objects/MetalRoughSpheres/glTF/", "MetalRoughSpheres.gltf" }); AddLog("loading..."); }
 		//if (ImGui::SmallButton("Load Bob Animated")) { Queue::loadModel.push_back({ "objects/Bob/", "Bob.md5mesh" }); AddLog("loading..."); } ImGui::SameLine();
-
+		
 		if (ImGui::SmallButton("Clear"))
 		{ ClearLog(); }
 		ImGui::SameLine();
-
+		
 		ImGui::Separator();
-
+		
 		//ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
 		//static ImGuiTextFilter filter;
 		//filter.Draw("Filter (\"incl,-excl\") (\"error\")", 180);
 		//ImGui::PopStyleVar();
 		//ImGui::Separator();
-
+		
 		const float footer_height_to_reserve =
 				ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing(); // 1 separator, 1 input text
 		ImGui::BeginChild(
@@ -95,7 +95,7 @@ namespace pe
 			if (ImGui::Selectable("Clear")) ClearLog();
 			ImGui::EndPopup();
 		}
-
+		
 		// Display every line as a separate entry so we can change their color or add custom widgets. If you only want raw text you can use ImGui::TextUnformatted(log.begin(), log.end());
 		// NB- if you have thousands of entries this approach may be too inefficient and may require user-side clipping to only process visible items.
 		// You can seek and display only the lines that are visible using the ImGuiListClipper helper, if your elements are evenly spaced and you have cheap random access to the elements.
@@ -131,13 +131,13 @@ namespace pe
 		ImGui::PopStyleVar();
 		ImGui::EndChild();
 		ImGui::Separator();
-
+		
 		// Command-line
 		bool reclaim_focus = false;
 		if (ImGui::InputText(
 				"Input", InputBuf, IM_ARRAYSIZE(InputBuf),
 				ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion |
-						ImGuiInputTextFlags_CallbackHistory, &TextEditCallbackStub, (void*) this
+				ImGuiInputTextFlags_CallbackHistory, &TextEditCallbackStub, (void*) this
 		))
 		{
 			char* s = InputBuf;
@@ -147,19 +147,19 @@ namespace pe
 			memset(s, 0, strlen(s));
 			reclaim_focus = true;
 		}
-
+		
 		// Auto-focus on window apparition
 		ImGui::SetItemDefaultFocus();
 		if (reclaim_focus)
 			ImGui::SetKeyboardFocusHere(-1); // Auto focus previous widget
-
+		
 		ImGui::End();
 	}
-
+	
 	void Console::ExecCommand(const char* command_line)
 	{
 		AddLog("# %s\n", command_line);
-
+		
 		// Insert into history. First find match and delete it so it can be pushed to the back. This isn't trying to be smart or optimal.
 		HistoryPos = -1;
 		for (int i = History.Size - 1; i >= 0; i--)
@@ -170,7 +170,7 @@ namespace pe
 				break;
 			}
 		History.push_back(Strdup(command_line));
-
+		
 		// Process command
 		if (Stricmp(command_line, "CLEAR") == 0)
 		{
@@ -201,13 +201,13 @@ namespace pe
 			AddLog("Unknown command: '%s'\n", command_line);
 		}
 	}
-
+	
 	int Console::TextEditCallbackStub(ImGuiInputTextCallbackData* data)
 	{
 		auto console = static_cast<Console*>(data->UserData);
 		return console->TextEditCallback(data);
 	}
-
+	
 	int Console::TextEditCallback(ImGuiInputTextCallbackData* data)
 	{
 		//AddLog("cursor: %d, selection: %d-%d", data->CursorPos, data->SelectionStart, data->SelectionEnd);
@@ -216,7 +216,7 @@ namespace pe
 			case ImGuiInputTextFlags_CallbackCompletion:
 			{
 				// Example of TEXT COMPLETION
-
+				
 				// Locate beginning of current word
 				const char* word_end = data->Buf + data->CursorPos;
 				const char* word_start = word_end;
@@ -227,13 +227,13 @@ namespace pe
 						break;
 					word_start--;
 				}
-
+				
 				// Build a list of candidates
 				ImVector<const char*> candidates;
 				for (int i = 0; i < Commands.Size; i++)
 					if (Strnicmp(Commands[i], word_start, (int) (word_end - word_start)) == 0)
 						candidates.push_back(Commands[i]);
-
+				
 				if (candidates.Size == 0)
 				{
 					// No match
@@ -263,19 +263,19 @@ namespace pe
 							break;
 						match_len++;
 					}
-
+					
 					if (match_len > 0)
 					{
 						data->DeleteChars((int) (word_start - data->Buf), (int) (word_end - word_start));
 						data->InsertChars(data->CursorPos, candidates[0], candidates[0] + match_len);
 					}
-
+					
 					// List matches
 					AddLog("Possible matches:\n");
 					for (int i = 0; i < candidates.Size; i++)
 						AddLog("- %s\n", candidates[i]);
 				}
-
+				
 				break;
 			}
 			case ImGuiInputTextFlags_CallbackHistory:
@@ -295,7 +295,7 @@ namespace pe
 						if (++HistoryPos >= History.Size)
 							HistoryPos = -1;
 				}
-
+				
 				// A better implementation would preserve the data on the current input line along with cursor position.
 				if (prev_history_pos != HistoryPos)
 				{

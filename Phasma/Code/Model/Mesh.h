@@ -21,14 +21,14 @@ namespace pe
 	{
 	public:
 		Primitive();
-
+		
 		~Primitive();
-
+		
 		std::string name;
-
+		
 		Ref<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
-
+		
 		bool render = true, cull = true;
 		uint32_t vertexOffset = 0, indexOffset = 0;
 		uint32_t verticesSize = 0, indicesSize = 0;
@@ -38,14 +38,14 @@ namespace pe
 		vec4 boundingSphere;
 		vec4 transformedBS;
 		bool hasBones = false;
-
+		
 		void calculateBoundingSphere()
 		{
 			const vec3 center = (max + min) * .5f;
 			const float sphereRadius = length(max - center);
 			boundingSphere = vec4(center, sphereRadius);
 		}
-
+		
 		void loadTexture(
 				MaterialType type,
 				const std::string& folderPath,
@@ -54,16 +54,16 @@ namespace pe
 				const Microsoft::glTF::GLTFResourceReader* resourceReader = nullptr
 		);
 	};
-
+	
 	class Mesh
 	{
 	public:
 		Mesh();
-
+		
 		~Mesh();
-
+		
 		bool render = true, cull = false;
-
+		
 		struct UBOMesh
 		{
 			mat4 matrix;
@@ -72,19 +72,19 @@ namespace pe
 			float jointcount {0};
 			float dummy[3];
 		} ubo;
-
+		
 		static std::map<std::string, Image> uniqueTextures;
 		std::vector<Primitive> primitives {};
-
+		
 		Ref<vk::DescriptorSet> descriptorSet;
 		Buffer uniformBuffer;
 		std::vector<Vertex> vertices {};
 		std::vector<uint32_t> indices {};
 		uint32_t vertexOffset = 0, indexOffset = 0;
 		//vec4 boundingSphere;
-
+		
 		void createUniformBuffers();
-
+		
 		//void calculateBoundingSphere();
 		void destroy();
 	};

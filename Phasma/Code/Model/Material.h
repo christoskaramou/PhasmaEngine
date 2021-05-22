@@ -13,7 +13,7 @@ namespace pe
 		Occlusion,
 		Emissive
 	};
-
+	
 	struct PBRMaterial
 	{
 		vec4 baseColorFactor;
@@ -23,7 +23,7 @@ namespace pe
 		float alphaCutoff {};
 		bool doubleSided {};
 		uint16_t alphaMode {};
-
+		
 		Image baseColorTexture;
 		Image metallicRoughnessTexture;
 		Image normalTexture;

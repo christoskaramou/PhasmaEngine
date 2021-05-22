@@ -15,11 +15,11 @@ namespace pe
 		DSet = make_ref(vk::DescriptorSet());
 		DSetSharpen = make_ref(vk::DescriptorSet());
 	}
-
+	
 	TAA::~TAA()
 	{
 	}
-
+	
 	void TAA::Init()
 	{
 		previous.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
@@ -34,7 +34,7 @@ namespace pe
 		previous.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 		previous.createImageView(vk::ImageAspectFlagBits::eColor);
 		previous.createSampler();
-
+		
 		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
 		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
@@ -48,7 +48,7 @@ namespace pe
 		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 		frameImage.createSampler();
 	}
-
+	
 	void TAA::update(const Camera& camera)
 	{
 		if (GUI::use_TAA)
@@ -59,7 +59,7 @@ namespace pe
 					sin(static_cast<float>(ImGui::GetTime()) * 0.125f)
 			};
 			ubo.invProj = camera.invProjection;
-
+			
 			Queue::memcpyRequest(&uniform, {{&ubo, sizeof(ubo), 0}});
 			//uniform.map();
 			//memcpy(uniform.data, &ubo, sizeof(ubo));
@@ -67,7 +67,7 @@ namespace pe
 			//uniform.unmap();
 		}
 	}
-
+	
 	void TAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		uniform.createBuffer(
@@ -77,19 +77,19 @@ namespace pe
 		uniform.zero();
 		uniform.flush();
 		uniform.unmap();
-
+		
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutTAA();
 		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
-
+		
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutTAASharpen();
 		DSetSharpen = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
-
+		
 		updateDescriptorSets(renderTargets);
 	}
-
+	
 	void TAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
@@ -108,7 +108,7 @@ namespace pe
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
 		};
-
+		
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
 				wSetImage(*DSet, 0, previous),
 				wSetImage(*DSet, 1, frameImage),
@@ -118,17 +118,17 @@ namespace pe
 				wSetImage(*DSetSharpen, 0, renderTargets["taa"]),
 				wSetBuffer(*DSetSharpen, 1, uniform)
 		};
-
+		
 		VulkanContext::Get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
 	}
-
+	
 	void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
-
+		
 		std::vector<vk::ClearValue> clearValues = {clearColor};
-
+		
 		// Main TAA pass
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = *renderPass.handle;
@@ -137,7 +137,7 @@ namespace pe
 		rpi.renderArea.extent = *renderTargets["taa"].extent;
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
-
+		
 		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
@@ -145,9 +145,9 @@ namespace pe
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorRead);
-
+		
 		saveImage(cmd, renderTargets["taa"]);
-
+		
 		// TAA Sharpen pass
 		vk::RenderPassBeginInfo rpi2;
 		rpi2.renderPass = *renderPassSharpen.handle;
@@ -156,24 +156,24 @@ namespace pe
 		rpi2.renderArea.extent = *renderTargets["viewport"].extent;
 		rpi2.clearValueCount = 1;
 		rpi2.pClearValues = clearValues.data();
-
+		
 		cmd.beginRenderPass(rpi2, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineSharpen.handle);
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineSharpen.layout, 0, *DSetSharpen, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
 	}
-
+	
 	void TAA::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
 		renderPass.Create(*renderTargets["taa"].format, vk::Format::eUndefined);
 		renderPassSharpen.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
 	}
-
+	
 	void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
 		auto vulkan = VulkanContext::Get();
-
+		
 		framebuffers.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
@@ -182,7 +182,7 @@ namespace pe
 			vk::ImageView view = *renderTargets["taa"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
-
+		
 		framebuffersSharpen.resize(vulkan->swapchain.images.size());
 		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
 		{
@@ -192,18 +192,18 @@ namespace pe
 			framebuffersSharpen[i].Create(width, height, view, renderPassSharpen);
 		}
 	}
-
+	
 	void TAA::createPipelines(std::map<std::string, Image>& renderTargets)
 	{
 		createPipeline(renderTargets);
 		createPipelineSharpen(renderTargets);
 	}
-
+	
 	void TAA::createPipeline(std::map<std::string, Image>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/TAA/TAA.frag", ShaderType::Fragment, true};
-
+		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
 		pipeline.info.width = renderTargets["taa"].width_f;
@@ -216,15 +216,15 @@ namespace pe
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutTAA()}
 		);
 		pipeline.info.renderPass = renderPass;
-
+		
 		pipeline.createGraphicsPipeline();
 	}
-
+	
 	void TAA::createPipelineSharpen(std::map<std::string, Image>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/TAA/TAASharpen.frag", ShaderType::Fragment, true};
-
+		
 		pipelineSharpen.info.pVertShader = &vert;
 		pipelineSharpen.info.pFragShader = &frag;
 		pipelineSharpen.info.width = renderTargets["viewport"].width_f;
@@ -237,10 +237,10 @@ namespace pe
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutTAASharpen()}
 		);
 		pipelineSharpen.info.renderPass = renderPassSharpen;
-
+		
 		pipelineSharpen.createGraphicsPipeline();
 	}
-
+	
 	void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source) const
 	{
 		previous.transitionImageLayout(
@@ -266,7 +266,7 @@ namespace pe
 				vk::AccessFlagBits::eTransferRead,
 				vk::ImageAspectFlagBits::eColor
 		);
-
+		
 		// copy the image
 		vk::ImageCopy region;
 		region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
@@ -276,7 +276,7 @@ namespace pe
 		region.extent.width = source.width;
 		region.extent.height = source.height;
 		region.extent.depth = 1;
-
+		
 		cmd.copyImage(
 				*source.image,
 				vk::ImageLayout::eTransferSrcOptimal,
@@ -284,7 +284,7 @@ namespace pe
 				vk::ImageLayout::eTransferDstOptimal,
 				region
 		);
-
+		
 		previous.transitionImageLayout(
 				cmd,
 				vk::ImageLayout::eTransferDstOptimal,
@@ -307,21 +307,21 @@ namespace pe
 		);
 		source.layoutState = LayoutState::ColorRead;
 	}
-
+	
 	void TAA::destroy()
 	{
 		uniform.destroy();
 		previous.destroy();
 		frameImage.destroy();
-
+		
 		for (auto& framebuffer : framebuffers)
 			framebuffer.Destroy();
 		for (auto& framebuffer : framebuffersSharpen)
 			framebuffer.Destroy();
-
+		
 		renderPass.Destroy();
 		renderPassSharpen.Destroy();
-
+		
 		if (Pipeline::getDescriptorSetLayoutTAA())
 		{
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutTAA());

@@ -19,11 +19,11 @@ namespace pe
 		int HistoryPos;    // -1: new line, 0..History.Size-1 browsing history.
 		ImVector<const char*> Commands;
 		static bool close_app;
-
+		
 		Console();
-
+		
 		~Console();
-
+		
 		// Portable helpers
 		static int Stricmp(const char* str1, const char* str2)
 		{
@@ -35,7 +35,7 @@ namespace pe
 			}
 			return d;
 		}
-
+		
 		static int Strnicmp(const char* str1, const char* str2, int n)
 		{
 			int d = 0;
@@ -47,7 +47,7 @@ namespace pe
 			}
 			return d;
 		}
-
+		
 		static char* Strdup(const char* str)
 		{
 			size_t len = strlen(str) + 1;
@@ -55,22 +55,22 @@ namespace pe
 			if (!buff) return nullptr;
 			return (char*) memcpy(buff, (const void*) str, len);
 		}
-
+		
 		static void Strtrim(char* str)
 		{
 			char* str_end = str + strlen(str);
 			while (str_end > str && str_end[-1] == ' ') str_end--;
 			*str_end = 0;
 		}
-
+		
 		void ClearLog();
-
+		
 		void AddLog(const char* fmt, ...) IM_FMTARGS(2);
-
+		
 		void Draw(const char* title, bool* p_open, ImVec2 pos, ImVec2 size);
-
+		
 		void ExecCommand(const char* command_line);
-
+		
 		static int TextEditCallbackStub(
 				ImGuiInputTextCallbackData* data
 		); // In C++11 you are better off using lambdas for this sort of forwarding callbacks

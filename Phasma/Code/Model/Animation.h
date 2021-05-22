@@ -21,7 +21,7 @@ namespace pe
 		Node* node;
 		int32_t samplerIndex;
 	};
-
+	
 	struct AnimationSampler
 	{
 		enum InterpolationType
@@ -32,7 +32,7 @@ namespace pe
 		std::vector<float> inputs;
 		std::vector<vec4> outputsVec4;
 	};
-
+	
 	struct Animation
 	{
 		std::string name;

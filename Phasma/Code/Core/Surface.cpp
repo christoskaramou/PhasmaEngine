@@ -14,11 +14,11 @@ namespace pe
 		formatKHR = make_ref(vk::SurfaceFormatKHR());
 		presentModeKHR = make_ref(vk::PresentModeKHR::eFifo);
 	}
-
+	
 	Surface::~Surface()
 	{
 	}
-
+	
 	void Surface::Create(Context* ctx)
 	{
 		VkSurfaceKHR _vkSurface;
@@ -26,13 +26,13 @@ namespace pe
 				ctx->GetSystem<Renderer>()->GetWindow(), VkInstance(*ctx->GetVKContext()->instance), &_vkSurface
 		))
 			throw std::runtime_error(SDL_GetError());
-
+		
 		int width, height;
 		SDL_GL_GetDrawableSize(ctx->GetSystem<Renderer>()->GetWindow(), &width, &height);
 		actualExtent = make_ref(vk::Extent2D {static_cast<uint32_t>(width), static_cast<uint32_t>(height)});
 		surface = make_ref(vk::SurfaceKHR(_vkSurface));
 	}
-
+	
 	void Surface::FindCapabilities(Context* ctx)
 	{
 		auto gpu = ctx->GetVKContext()->gpu;
@@ -42,7 +42,7 @@ namespace pe
 			throw std::runtime_error("Surface doesnt support vk::ImageUsageFlagBits::eTransferSrc");
 		capabilities = make_ref(caps);
 	}
-
+	
 	void Surface::FindFormat(Context* ctx)
 	{
 		auto gpu = ctx->GetVKContext()->gpu;
@@ -53,40 +53,40 @@ namespace pe
 			if (f.format == vk::Format::eB8G8R8A8Unorm && f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
 				format = f;
 		}
-
+		
 		// Check for blit operation
 		auto const fProps = gpu->getFormatProperties(format.format);
 		if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eBlitSrc))
 			throw std::runtime_error("No blit source operation supported");
 		if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eBlitDst))
 			throw std::runtime_error("No blit destination operation supported");
-
+		
 		formatKHR = make_ref(format);
 	}
-
+	
 	void Surface::FindPresentationMode(Context* ctx)
 	{
 		auto gpu = ctx->GetVKContext()->gpu;
 		std::vector<vk::PresentModeKHR> presentModes = gpu->getSurfacePresentModesKHR(*surface);
-
+		
 		for (const auto& i : presentModes)
 			if (i == vk::PresentModeKHR::eMailbox)
 			{
 				presentModeKHR = make_ref(i);
 				return;
 			}
-
+		
 		for (const auto& i : presentModes)
 			if (i == vk::PresentModeKHR::eImmediate)
 			{
 				presentModeKHR = make_ref(i);
 				return;
 			}
-
+		
 		presentModeKHR = make_ref(vk::PresentModeKHR::eFifo);
 	}
-
-
+	
+	
 	void Surface::FindProperties(Context* ctx)
 	{
 		FindCapabilities(ctx);
