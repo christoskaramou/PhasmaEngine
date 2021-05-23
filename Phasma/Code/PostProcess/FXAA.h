@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../Renderer/Pipeline.h"
-#include "../Core/Image.h"
+#include "../Renderer/Image.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"
 #include <vector>

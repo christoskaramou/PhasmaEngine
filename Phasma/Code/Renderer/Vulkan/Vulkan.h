@@ -2,8 +2,8 @@
 
 #include <vector>
 #include <mutex>
-#include "../../Core/Surface.h"
-#include "../../Swapchain/Swapchain.h"
+#include "../Surface.h"
+#include "../Swapchain.h"
 
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 

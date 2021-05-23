@@ -1,8 +1,8 @@
 #include "PhasmaPch.h"
 #include "SSAO.h"
 #include <deque>
-#include "../Swapchain/Swapchain.h"
-#include "../Core/Surface.h"
+#include "../Renderer/Swapchain.h"
+#include "../Renderer/Surface.h"
 #include "../GUI/GUI.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"

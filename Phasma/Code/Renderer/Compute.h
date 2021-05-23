@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../Core/Buffer.h"
-#include "../Renderer/Pipeline.h"
+#include "Buffer.h"
+#include "Pipeline.h"
 #include <vector>
 
 namespace vk

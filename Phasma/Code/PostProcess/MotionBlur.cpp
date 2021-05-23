@@ -1,8 +1,8 @@
 #include "PhasmaPch.h"
 #include "MotionBlur.h"
 #include <deque>
-#include "../Core/Surface.h"
-#include "../Swapchain/Swapchain.h"
+#include "../Renderer/Surface.h"
+#include "../Renderer/Swapchain.h"
 #include "../GUI/GUI.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"

@@ -1,7 +1,7 @@
 #include "PhasmaPch.h"
 #include "Surface.h"
-#include "../Context/Context.h"
-#include "../Renderer/Renderer.h"
+#include "../ECS/Context.h"
+#include "Renderer.h"
 #include "../Renderer/Vulkan/Vulkan.h"
 
 namespace pe

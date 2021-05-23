@@ -3,7 +3,7 @@
 #include "../ECS/Component.h"
 #include "../ECS/System.h"
 #include "../Core/Math.h"
-#include "../Compute/Compute.h"
+#include "../Renderer/Compute.h"
 
 namespace pe
 {

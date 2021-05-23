@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../ECS/Entity.h"
-#include "../ECS/System.h"
+#include "Entity.h"
+#include "System.h"
 #include "../Core/Base.h"
 #include <vector>
 

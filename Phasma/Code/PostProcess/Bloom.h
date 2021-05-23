@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Core/Image.h"
+#include "../Renderer/Image.h"
 #include "../Renderer/Pipeline.h"
 #include "../Renderer/RenderPass.h"
 #include "../Renderer/Framebuffer.h"

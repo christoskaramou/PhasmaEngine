@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../Core/Buffer.h"
+#include "../Renderer/Buffer.h"
 #include "../Renderer/Pipeline.h"
-#include "../Core/Image.h"
+#include "../Renderer/Image.h"
 #include "../Core/Math.h"
 #include "../Camera/Camera.h"
 #include "../Renderer/RenderPass.h"

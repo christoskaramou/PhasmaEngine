@@ -1,12 +1,12 @@
 #pragma once
 
-#include "../Core/Buffer.h"
-#include "../Core/Image.h"
-#include "../Renderer/Pipeline.h"
+#include "Buffer.h"
+#include "Image.h"
+#include "Pipeline.h"
 #include "../Core/Math.h"
 #include "../Camera/Camera.h"
-#include "../Renderer/RenderPass.h"
-#include "../Renderer/Framebuffer.h"
+#include "RenderPass.h"
+#include "Framebuffer.h"
 
 namespace vk
 {

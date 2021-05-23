@@ -2,8 +2,8 @@
 #include "SSR.h"
 #include <deque>
 #include "../GUI/GUI.h"
-#include "../Swapchain/Swapchain.h"
-#include "../Core/Surface.h"
+#include "../Renderer/Swapchain.h"
+#include "../Renderer/Surface.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
 #include "../Renderer/Vulkan/Vulkan.h"

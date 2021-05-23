@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Core/Image.h"
+#include "../Renderer/Image.h"
 #include "../Core/Math.h"
 
 namespace pe

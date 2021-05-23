@@ -1,6 +1,6 @@
 #include "Image.h"
-#include "../Renderer/Vulkan/Vulkan.h"
-#include "../Context/Context.h"
+#include "Vulkan/Vulkan.h"
+#include "../ECS/Context.h"
 #include <utility>
 
 namespace pe

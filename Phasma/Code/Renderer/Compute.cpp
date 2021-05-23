@@ -1,7 +1,7 @@
 #include "PhasmaPch.h"
 #include "Compute.h"
 #include "../Shader/Shader.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "Vulkan/Vulkan.h"
 #include <deque>
 #include <cassert>
 

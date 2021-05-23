@@ -1,12 +1,12 @@
 #pragma once
 
-#include "../Renderer/Pipeline.h"
-#include "../Core/Image.h"
-#include "../Core/Light.h"
-#include "../Shadows/Shadows.h"
+#include "Pipeline.h"
+#include "Image.h"
+#include "Light.h"
+#include "Shadows.h"
 #include "../Skybox/Skybox.h"
-#include "../Renderer/RenderPass.h"
-#include "../Renderer/Framebuffer.h"
+#include "RenderPass.h"
+#include "Framebuffer.h"
 #include <map>
 
 namespace vk

@@ -1,11 +1,11 @@
 #include "PhasmaPch.h"
 #include "Shadows.h"
 #include "../GUI/GUI.h"
-#include "../Swapchain/Swapchain.h"
-#include "../Core/Vertex.h"
+#include "Swapchain.h"
+#include "Vertex.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "Vulkan/Vulkan.h"
 
 namespace pe
 {

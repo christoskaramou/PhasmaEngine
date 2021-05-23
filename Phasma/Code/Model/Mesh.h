@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../Core/Vertex.h"
+#include "../Renderer/Vertex.h"
 #include "Material.h"
-#include "../Core/Buffer.h"
+#include "../Renderer/Buffer.h"
 #include "../../Include/GLTFSDK/GLTF.h"
 #include "../../Include/GLTFSDK/Document.h"
 #include "../../Include/GLTFSDK/GLTFResourceReader.h"

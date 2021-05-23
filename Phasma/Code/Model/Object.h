@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../Core/Image.h"
-#include "../Core/Buffer.h"
+#include "../Renderer/Image.h"
+#include "../Renderer/Buffer.h"
 #include "../Core/Math.h"
 
 namespace vk

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Core/Image.h"
+#include "Image.h"
 #include <vector>
 
 namespace vk

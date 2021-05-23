@@ -2,15 +2,15 @@
 #include "Deferred.h"
 #include "../Model/Model.h"
 #include "../Model/Mesh.h"
-#include "../Swapchain/Swapchain.h"
-#include "../Core/Surface.h"
+#include "Swapchain.h"
+#include "Surface.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
 #include "../GUI/GUI.h"
 #include "tinygltf/stb_image.h"
 #include <deque>
 #include "../Shader/Reflection.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "Vulkan/Vulkan.h"
 #include "../Core/Path.h"
 
 namespace pe

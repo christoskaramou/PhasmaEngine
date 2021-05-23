@@ -1,8 +1,8 @@
 #include "PhasmaPch.h"
 #include "Swapchain.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "Vulkan/Vulkan.h"
 #include "../Core/Math.h"
-#include "../Context/Context.h"
+#include "../ECS/Context.h"
 
 namespace pe
 {

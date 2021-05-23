@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Core/Buffer.h"
+#include "../Renderer/Buffer.h"
 #include "../Core/Math.h"
 #include "../Script/Script.h"
 #include "../Camera/Camera.h"
