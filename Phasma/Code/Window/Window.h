@@ -27,10 +27,10 @@ namespace pe
 		void SetTitle(const std::string& title);
 		
 		SDL_Window* Handle()
-		{ return handle; }
+		{ return m_handle; }
 	
 	private:
-		Context* ctx = nullptr;
-		SDL_Window* handle = nullptr;
+		Context* m_ctx = nullptr;
+		SDL_Window* m_handle = nullptr;
 	};
 }

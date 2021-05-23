@@ -17,7 +17,7 @@ namespace pe
 			return nullptr;
 		}
 		
-		if (!((handle = SDL_CreateWindow("", 50, 50, 800, 600, flags))))
+		if (!((m_handle = SDL_CreateWindow("", 50, 50, 800, 600, flags))))
 		{
 			std::cout << SDL_GetError();
 			return nullptr;
@@ -27,19 +27,19 @@ namespace pe
 		{ SetTitle(std::any_cast<std::string>(title)); };
 		EventSystem::Get()->RegisterEventAction(EventType::SetWindowTitle, lambda);
 		
-		this->ctx = ctx;
+		m_ctx = ctx;
 		
-		return handle;
+		return m_handle;
 	}
 	
 	void Window::SetTitle(const std::string& title)
 	{
-		SDL_SetWindowTitle(handle, title.c_str());
+		SDL_SetWindowTitle(m_handle, title.c_str());
 	}
 	
 	void Window::DestroyAll()
 	{
-		SDL_DestroyWindow(handle);
+		SDL_DestroyWindow(m_handle);
 		SDL_Quit();
 	}
 	
@@ -51,10 +51,10 @@ namespace pe
 		
 		auto peEvents = EventSystem::Get();
 		
-		auto vulkan = ctx->GetVKContext();
+		auto vulkan = m_ctx->GetVKContext();
 		bool combineDirections = false;
 		
-		CameraSystem* cameraSystem = ctx->GetSystem<CameraSystem>();
+		CameraSystem* cameraSystem = m_ctx->GetSystem<CameraSystem>();
 		Camera& camera_main = cameraSystem->GetCamera(0);
 		
 		ImGuiIO& io = ImGui::GetIO();
@@ -152,7 +152,7 @@ namespace pe
 		
 		if (peEvents->PollEvent(EventType::CompileShaders))
 		{
-			ctx->GetSystem<Renderer>()->RecreatePipelines();
+			m_ctx->GetSystem<Renderer>()->RecreatePipelines();
 		}
 		
 		if (peEvents->PollEvent(EventType::ScaleRenderTargets))
@@ -160,7 +160,7 @@ namespace pe
 			if (!isMinimized())
 			{
 				SDL_GL_GetDrawableSize(vulkan->window, &w, &h);
-				ctx->GetSystem<Renderer>()->ResizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+				m_ctx->GetSystem<Renderer>()->ResizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 			}
 		}
 		
@@ -197,7 +197,7 @@ namespace pe
 			y = rect2D.y;
 		}
 		
-		SDL_WarpMouseInWindow(handle, x, y);
+		SDL_WarpMouseInWindow(m_handle, x, y);
 	}
 	
 	bool Window::IsInsideRenderWindow(int x, int y)
@@ -216,6 +216,6 @@ namespace pe
 	
 	bool Window::isMinimized()
 	{
-		return (SDL_GetWindowFlags(handle) & SDL_WINDOW_MINIMIZED) != 0;
+		return (SDL_GetWindowFlags(m_handle) & SDL_WINDOW_MINIMIZED) != 0;
 	}
 }
