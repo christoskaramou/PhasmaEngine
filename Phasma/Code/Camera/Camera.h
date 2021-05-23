@@ -16,7 +16,7 @@ namespace pe
 		
 		~CameraSystem() override = default;
 		
-		Camera& GetCamera(size_t index);
+		Camera* GetCamera(size_t index);
 		
 		// Inherited via ISystem
 		void Init() override;

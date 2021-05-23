@@ -258,7 +258,7 @@ namespace pe
 #endif
 		
 		CameraSystem* cameraSystem = ctx->GetSystem<CameraSystem>();
-		Camera& camera_main = cameraSystem->GetCamera(0);
+		Camera* camera_main = cameraSystem->GetCamera(0);
 		
 		// Model updates + 8(the rest updates)
 		std::vector<std::future<void>> futureUpdates;
@@ -274,7 +274,7 @@ namespace pe
 		for (auto& model : Model::models)
 		{
 			const auto updateModel = [&]()
-			{ model.update(camera_main, delta); };
+			{ model.update(*camera_main, delta); };
 			futureUpdates.push_back(std::async(std::launch::async, updateModel));
 		}
 		
@@ -285,37 +285,37 @@ namespace pe
 		
 		// LIGHTS
 		auto updateLights = [&]()
-		{ lightUniforms.update(camera_main); };
+		{ lightUniforms.update(*camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateLights));
 		
 		// SSAO
 		auto updateSSAO = [&]()
-		{ ssao.update(camera_main); };
+		{ ssao.update(*camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateSSAO));
 		
 		// SSR
 		auto updateSSR = [&]()
-		{ ssr.update(camera_main); };
+		{ ssr.update(*camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateSSR));
 		
 		// TAA
 		auto updateTAA = [&]()
-		{ taa.update(camera_main); };
+		{ taa.update(*camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateTAA));
 		
 		// MOTION BLUR
 		auto updateMotionBlur = [&]()
-		{ motionBlur.update(camera_main); };
+		{ motionBlur.update(*camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateMotionBlur));
 		
 		// SHADOWS
 		auto updateShadows = [&]()
-		{ shadows.update(camera_main); };
+		{ shadows.update(*camera_main); };
 		futureUpdates.push_back(std::async(std::launch::async, updateShadows));
 		
 		// COMPOSITION UNIFORMS
 		auto updateDeferred = [&]()
-		{ deferred.update(camera_main.invViewProjection); };
+		{ deferred.update(camera_main->invViewProjection); };
 		futureUpdates.push_back(std::async(std::launch::async, updateDeferred));
 		
 		for (auto& f : futureUpdates)
@@ -958,6 +958,6 @@ namespace pe
 		motionBlur.createPipeline(renderTargets);
 		gui.createPipeline();
 		
-		ctx->GetSystem<CameraSystem>()->GetCamera(0).ReCreateComputePipelines();
+		ctx->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
 	}
 }

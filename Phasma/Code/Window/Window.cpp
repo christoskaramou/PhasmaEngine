@@ -49,13 +49,13 @@ namespace pe
 		static int x, y, w, h, px, py = 0;
 		static float dx, dy = 0.f;
 		
-		auto peEvents = EventSystem::Get();
+		EventSystem* eventSystem = EventSystem::Get();
+		Renderer* renderer = m_ctx->GetSystem<Renderer>();
+		CameraSystem* cameraSystem = m_ctx->GetSystem<CameraSystem>();
+		Camera* camera_main = cameraSystem->GetCamera(0);
 		
 		auto vulkan = m_ctx->GetVKContext();
 		bool combineDirections = false;
-		
-		CameraSystem* cameraSystem = m_ctx->GetSystem<CameraSystem>();
-		Camera& camera_main = cameraSystem->GetCamera(0);
 		
 		ImGuiIO& io = ImGui::GetIO();
 		
@@ -103,7 +103,7 @@ namespace pe
 			
 			if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
 			{
-				peEvents->PushEvent(EventType::ScaleRenderTargets);
+				eventSystem->PushEvent(EventType::ScaleRenderTargets);
 			}
 		}
 		
@@ -112,7 +112,7 @@ namespace pe
 		{
 			dx = static_cast<float>(x - px);
 			dy = static_cast<float>(y - py);
-			camera_main.Rotate(dx, dy);
+			camera_main->Rotate(dx, dy);
 			WrapInsideRenderWindow(x, y);
 		}
 		
@@ -145,26 +145,26 @@ namespace pe
 		}
 		const float velocity = combineDirections ? GUI::cameraSpeed * static_cast<float>(delta) * 0.707f :
 		                       GUI::cameraSpeed * static_cast<float>(delta);
-		if (io.KeysDown[SDL_SCANCODE_W]) camera_main.Move(Camera::RelativeDirection::FORWARD, velocity);
-		if (io.KeysDown[SDL_SCANCODE_S]) camera_main.Move(Camera::RelativeDirection::BACKWARD, velocity);
-		if (io.KeysDown[SDL_SCANCODE_A]) camera_main.Move(Camera::RelativeDirection::LEFT, velocity);
-		if (io.KeysDown[SDL_SCANCODE_D]) camera_main.Move(Camera::RelativeDirection::RIGHT, velocity);
+		if (io.KeysDown[SDL_SCANCODE_W]) camera_main->Move(Camera::RelativeDirection::FORWARD, velocity);
+		if (io.KeysDown[SDL_SCANCODE_S]) camera_main->Move(Camera::RelativeDirection::BACKWARD, velocity);
+		if (io.KeysDown[SDL_SCANCODE_A]) camera_main->Move(Camera::RelativeDirection::LEFT, velocity);
+		if (io.KeysDown[SDL_SCANCODE_D]) camera_main->Move(Camera::RelativeDirection::RIGHT, velocity);
 		
-		if (peEvents->PollEvent(EventType::CompileShaders))
+		if (eventSystem->PollEvent(EventType::CompileShaders))
 		{
-			m_ctx->GetSystem<Renderer>()->RecreatePipelines();
+			renderer->RecreatePipelines();
 		}
 		
-		if (peEvents->PollEvent(EventType::ScaleRenderTargets))
+		if (eventSystem->PollEvent(EventType::ScaleRenderTargets))
 		{
 			if (!isMinimized())
 			{
 				SDL_GL_GetDrawableSize(vulkan->window, &w, &h);
-				m_ctx->GetSystem<Renderer>()->ResizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+				renderer->ResizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 			}
 		}
 		
-		peEvents->ClearPushedEvents();
+		eventSystem->ClearPushedEvents();
 		
 		return true;
 	}

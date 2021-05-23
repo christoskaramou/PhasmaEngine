@@ -3,9 +3,9 @@
 
 namespace pe
 {
-    Camera& CameraSystem::GetCamera(size_t index)
+    Camera* CameraSystem::GetCamera(size_t index)
     {
-        return *GetComponentOfTypeAt<Camera>(index);
+        return GetComponentOfTypeAt<Camera>(index);
     }
     
     void CameraSystem::Init()
