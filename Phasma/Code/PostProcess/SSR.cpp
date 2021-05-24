@@ -6,7 +6,7 @@
 #include "../Renderer/Surface.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "../Renderer/RenderApi.h"
 
 namespace pe
 {
@@ -21,13 +21,12 @@ namespace pe
 	
 	void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		UBReflection.createBuffer(
-				4 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible
+		UBReflection.CreateBuffer(4 * sizeof(mat4), BufferUsage::UniformBuffer, MemoryProperty::HostVisible
 		);
-		UBReflection.map();
-		UBReflection.zero();
-		UBReflection.flush();
-		UBReflection.unmap();
+		UBReflection.Map();
+		UBReflection.Zero();
+		UBReflection.Flush();
+		UBReflection.Unmap();
 		
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
@@ -51,7 +50,7 @@ namespace pe
 		std::deque<vk::DescriptorBufferInfo> dsbi {};
 		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
+			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
@@ -161,7 +160,7 @@ namespace pe
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSR());
 			Pipeline::getDescriptorSetLayoutSSR() = nullptr;
 		}
-		UBReflection.destroy();
+		UBReflection.Destroy();
 		pipeline.destroy();
 	}
 }

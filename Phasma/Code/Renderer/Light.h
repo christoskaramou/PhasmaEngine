@@ -31,8 +31,6 @@ namespace pe
 	class DirectionalLight : public IComponent
 	{
 	public:
-		DirectionalLight();
-		
 		vec4 color;
 		vec3 direction;
 	};
@@ -40,8 +38,6 @@ namespace pe
 	class PointLight : public IComponent
 	{
 	public:
-		PointLight();
-		
 		vec4 color;
 		vec3 position;
 		float radius;
@@ -50,8 +46,6 @@ namespace pe
 	class SpotLight : public IComponent
 	{
 	public:
-		SpotLight();
-		
 		vec4 color;
 		vec4 start;
 		vec3 end;

@@ -8,7 +8,7 @@
 #include "../Renderer/Swapchain.h"
 #include "../Renderer/Surface.h"
 #include "../Shader/Shader.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "../Renderer/RenderApi.h"
 #include "../Core/Path.h"
 #include "../Event/EventSystem.h"
 
@@ -795,13 +795,13 @@ namespace pe
 		// Create the and Upload to Buffer:
 		Buffer stagingBuffer;
 		{
-			stagingBuffer.createBuffer(
-					upload_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible
+			stagingBuffer.CreateBuffer(
+					upload_size, BufferUsage::TransferSrc, MemoryProperty::HostVisible
 			);
-			stagingBuffer.map();
-			stagingBuffer.copyData(pixels);
-			stagingBuffer.flush();
-			stagingBuffer.unmap();
+			stagingBuffer.Map();
+			stagingBuffer.CopyData(pixels);
+			stagingBuffer.Flush();
+			stagingBuffer.Unmap();
 		}
 		
 		// Copy to Image:
@@ -832,7 +832,7 @@ namespace pe
 			region.imageExtent.height = height;
 			region.imageExtent.depth = 1;
 			(*vulkan->dynamicCmdBuffers)[0].copyBufferToImage(
-					*stagingBuffer.buffer, *texture.image, vk::ImageLayout::eTransferDstOptimal, region
+					*stagingBuffer.GetBufferVK(), *texture.image, vk::ImageLayout::eTransferDstOptimal, region
 			);
 			
 			vk::ImageMemoryBarrier use_barrier = {};
@@ -864,7 +864,7 @@ namespace pe
 		
 		vulkan->submitAndWaitFence((*vulkan->dynamicCmdBuffers)[0], nullptr, nullptr, nullptr);
 		
-		stagingBuffer.destroy();
+		stagingBuffer.Destroy();
 	}
 	
 	void GUI::loadGUI(bool show)
@@ -983,8 +983,8 @@ namespace pe
 			const vk::DeviceSize offset {0};
 			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
 			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *descriptorSet, nullptr);
-			cmd.bindVertexBuffers(0, *vertexBuffer.buffer, offset);
-			cmd.bindIndexBuffer(*indexBuffer.buffer, 0, vk::IndexType::eUint32);
+			cmd.bindVertexBuffers(0, *vertexBuffer.GetBufferVK(), offset);
+			cmd.bindIndexBuffer(*indexBuffer.GetBufferVK(), 0, vk::IndexType::eUint32);
 			
 			vk::Viewport viewport;
 			viewport.x = 0.f;
@@ -1132,9 +1132,9 @@ namespace pe
 			return;
 		const size_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
 		const size_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-		if (!*vertexBuffer.buffer || vertexBuffer.size < vertex_size)
+		if (!*vertexBuffer.GetBufferVK() || vertexBuffer.Size() < vertex_size)
 			createVertexBuffer(vertex_size);
-		if (!*indexBuffer.buffer || indexBuffer.size < index_size)
+		if (!*indexBuffer.GetBufferVK() || indexBuffer.Size() < index_size)
 			createIndexBuffer(index_size);
 		
 		// Upload Vertex and index Data:
@@ -1234,22 +1234,22 @@ namespace pe
 	void GUI::createVertexBuffer(size_t vertex_size)
 	{
 		VulkanContext::Get()->graphicsQueue->waitIdle();
-		vertexBuffer.destroy();
+		vertexBuffer.Destroy();
 		//vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
-		vertexBuffer.createBuffer(
-				vertex_size, vk::BufferUsageFlagBits::eVertexBuffer,
-				vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible
+		vertexBuffer.CreateBuffer(
+				vertex_size, BufferUsage::VertexBuffer,
+				MemoryProperty::HostCached | MemoryProperty::HostVisible
 		);
 	}
 	
 	void GUI::createIndexBuffer(size_t index_size)
 	{
 		VulkanContext::Get()->graphicsQueue->waitIdle();
-		indexBuffer.destroy();
+		indexBuffer.Destroy();
 		//indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
-		indexBuffer.createBuffer(
-				index_size, vk::BufferUsageFlagBits::eIndexBuffer,
-				vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eHostVisible
+		indexBuffer.CreateBuffer(
+				index_size, BufferUsage::IndexBuffer,
+				MemoryProperty::HostCached | MemoryProperty::HostVisible
 		);
 	}
 	

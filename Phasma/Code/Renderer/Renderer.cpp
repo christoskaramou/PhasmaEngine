@@ -2,7 +2,7 @@
 #include "Renderer.h"
 #include "../Core/Queue.h"
 #include "../Model/Mesh.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "RenderApi.h"
 #include "../Camera/Camera.h"
 #include "../ECS/Context.h"
 #include "../Core/Path.h"
@@ -503,8 +503,8 @@ namespace pe
 			{
 				if (model.render)
 				{
-					cmd.bindVertexBuffers(0, *model.vertexBuffer.buffer, offset);
-					cmd.bindIndexBuffer(*model.indexBuffer.buffer, 0, vk::IndexType::eUint32);
+					cmd.bindVertexBuffers(0, *model.vertexBuffer.GetBufferVK(), offset);
+					cmd.bindIndexBuffer(*model.indexBuffer.GetBufferVK(), 0, vk::IndexType::eUint32);
 					
 					for (auto& node : model.linearNodes)
 					{

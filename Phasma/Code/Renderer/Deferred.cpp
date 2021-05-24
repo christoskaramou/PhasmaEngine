@@ -10,7 +10,7 @@
 #include "tinygltf/stb_image.h"
 #include <deque>
 #include "../Shader/Reflection.h"
-#include "Vulkan/Vulkan.h"
+#include "RenderApi.h"
 #include "../Core/Path.h"
 
 namespace pe
@@ -60,13 +60,11 @@ namespace pe
 	
 	void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 	{
-		uniform.createBuffer(
-				sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible
-		);
-		uniform.map();
-		uniform.zero();
-		uniform.flush();
-		uniform.unmap();
+		uniform.CreateBuffer(sizeof(ubo), BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		uniform.Map();
+		uniform.Zero();
+		uniform.Flush();
+		uniform.Unmap();
 		
 		auto vulkan = VulkanContext::Get();
 		const vk::DescriptorSetAllocateInfo allocInfo =
@@ -97,13 +95,11 @@ namespace pe
 			vulkan->waitAndLockSubmits();
 			
 			Buffer staging;
-			staging.createBuffer(
-					imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible
-			);
-			staging.map();
-			staging.copyData(pixels);
-			staging.flush();
-			staging.unmap();
+			staging.CreateBuffer(imageSize, BufferUsage::TransferSrc, MemoryProperty::HostVisible);
+			staging.Map();
+			staging.CopyData(pixels);
+			staging.Flush();
+			staging.Unmap();
 			
 			stbi_image_free(pixels);
 			
@@ -116,13 +112,13 @@ namespace pe
 					vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal
 			);
 			ibl_brdf_lut.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-			ibl_brdf_lut.copyBufferToImage(*staging.buffer);
+			ibl_brdf_lut.copyBufferToImage(*staging.GetBufferVK());
 			ibl_brdf_lut.generateMipMaps();
 			ibl_brdf_lut.createImageView(vk::ImageAspectFlagBits::eColor);
 			ibl_brdf_lut.maxLod = static_cast<float>(ibl_brdf_lut.mipLevels);
 			ibl_brdf_lut.createSampler();
 			
-			staging.destroy();
+			staging.Destroy();
 			
 			vulkan->unlockSubmits();
 			
@@ -145,7 +141,7 @@ namespace pe
 		std::deque<vk::DescriptorBufferInfo> dsbi {};
 		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
+			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
@@ -370,7 +366,7 @@ namespace pe
 			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutComposition());
 			Pipeline::getDescriptorSetLayoutComposition() = nullptr;
 		}
-		uniform.destroy();
+		uniform.Destroy();
 		pipeline.destroy();
 		pipelineComposition.destroy();
 	}

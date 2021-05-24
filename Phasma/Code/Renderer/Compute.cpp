@@ -1,7 +1,7 @@
 #include "PhasmaPch.h"
 #include "Compute.h"
 #include "../Shader/Shader.h"
-#include "Vulkan/Vulkan.h"
+#include "RenderApi.h"
 #include <deque>
 #include <cassert>
 
@@ -19,18 +19,10 @@ namespace pe
 	
 	void Compute::updateInput(const void* srcData, size_t srcSize, size_t offset)
 	{
-		SBIn.map();
-		SBIn.copyData(srcData, srcSize, offset);
-		SBIn.flush();
-		SBIn.unmap();
-	}
-	
-	void Compute::updateInput(vk::Buffer srcBuffer, size_t srcSize)
-	{
-		SBIn.map();
-		SBIn.copyBuffer(srcBuffer, srcSize);
-		SBIn.flush();
-		SBIn.unmap();
+		SBIn.Map();
+		SBIn.CopyData(srcData, srcSize, offset);
+		SBIn.Flush();
+		SBIn.Unmap();
 	}
 	
 	void Compute::dispatch(
@@ -64,17 +56,17 @@ namespace pe
 	
 	void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
 	{
-		SBIn.createBuffer(sizeIn, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
-		SBIn.map();
-		SBIn.zero();
-		SBIn.flush();
-		SBIn.unmap();
+		SBIn.CreateBuffer(sizeIn, BufferUsage::StorageBuffer, MemoryProperty::HostVisible);
+		SBIn.Map();
+		SBIn.Zero();
+		SBIn.Flush();
+		SBIn.Unmap();
 		
-		SBOut.createBuffer(sizeOut, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
-		SBOut.map();
-		SBOut.zero();
-		SBOut.flush();
-		SBOut.unmap();
+		SBOut.CreateBuffer(sizeOut, BufferUsage::StorageBuffer, MemoryProperty::HostVisible);
+		SBOut.Map();
+		SBOut.Zero();
+		SBOut.Flush();
+		SBOut.Unmap();
 	}
 	
 	void Compute::createDescriptorSet()
@@ -93,7 +85,7 @@ namespace pe
 				const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer, vk::DescriptorType type
 		)
 		{
-			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
+			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {dstSet, dstBinding, 0, 1, type, nullptr, &dsbi.back(), nullptr};
 		};
 		std::vector<vk::WriteDescriptorSet> writeCompDescriptorSets
@@ -121,8 +113,8 @@ namespace pe
 	
 	void Compute::destroy()
 	{
-		SBIn.destroy();
-		SBOut.destroy();
+		SBIn.Destroy();
+		SBOut.Destroy();
 		pipeline.destroy();
 		if (*fence)
 		{

@@ -1,7 +1,7 @@
 #include "PhasmaPch.h"
 #include "Object.h"
 #include "tinygltf/stb_image.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "../Renderer/RenderApi.h"
 
 namespace pe
 {
@@ -12,35 +12,34 @@ namespace pe
 	
 	void Object::createVertexBuffer()
 	{
-		vertexBuffer.createBuffer(
+		vertexBuffer.CreateBuffer(
 				sizeof(float) * vertices.size(),
-				vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-				vk::MemoryPropertyFlagBits::eDeviceLocal
+				BufferUsage::TransferDst | BufferUsage::VertexBuffer,
+				MemoryProperty::DeviceLocal
 		);
 		
 		// Staging buffer
 		Buffer staging;
-		staging.createBuffer(
-				sizeof(float) * vertices.size(), vk::BufferUsageFlagBits::eTransferSrc,
-				vk::MemoryPropertyFlagBits::eHostVisible
+		staging.CreateBuffer(
+				sizeof(float) * vertices.size(), BufferUsage::TransferSrc,
+				MemoryProperty::HostVisible
 		);
-		staging.map();
-		staging.copyData(vertices.data());
-		staging.flush();
-		staging.unmap();
+		staging.Map();
+		staging.CopyData(vertices.data());
+		staging.Flush();
+		staging.Unmap();
 		
-		vertexBuffer.copyBuffer(*staging.buffer, staging.size);
-		staging.destroy();
+		vertexBuffer.CopyBuffer(&staging, staging.Size());
+		staging.Destroy();
 	}
 	
 	void Object::createUniformBuffer(size_t size)
 	{
-		uniformBuffer
-				.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
-		uniformBuffer.map();
-		uniformBuffer.zero();
-		uniformBuffer.flush();
-		uniformBuffer.unmap();
+		uniformBuffer.CreateBuffer(size, BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		uniformBuffer.Map();
+		uniformBuffer.Zero();
+		uniformBuffer.Flush();
+		uniformBuffer.Unmap();
 	}
 	
 	void Object::loadTexture(const std::string& path)
@@ -55,13 +54,13 @@ namespace pe
 			throw std::runtime_error("No pixel data loaded");
 		
 		Buffer staging;
-		staging.createBuffer(
-				imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible
+		staging.CreateBuffer(
+				imageSize, BufferUsage::TransferSrc, MemoryProperty::HostVisible
 		);
-		staging.map();
-		staging.copyData(pixels);
-		staging.flush();
-		staging.unmap();
+		staging.Map();
+		staging.CopyData(pixels);
+		staging.Flush();
+		staging.Unmap();
 		
 		stbi_image_free(pixels);
 		
@@ -73,12 +72,12 @@ namespace pe
 				vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
 		texture.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-		texture.copyBufferToImage(*staging.buffer);
+		texture.copyBufferToImage(*staging.GetBufferVK());
 		texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		texture.createImageView(vk::ImageAspectFlagBits::eColor);
 		texture.createSampler();
 		
-		staging.destroy();
+		staging.Destroy();
 	}
 	
 	void Object::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
@@ -93,9 +92,9 @@ namespace pe
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 		// MVP
 		vk::DescriptorBufferInfo dbi;
-		dbi.buffer = *uniformBuffer.buffer;
+		dbi.buffer = *uniformBuffer.GetBufferVK();
 		dbi.offset = 0;
-		dbi.range = uniformBuffer.size;
+		dbi.range = uniformBuffer.Size();
 		
 		textureWriteSets[0].dstSet = *descriptorSet;
 		textureWriteSets[0].dstBinding = 0;
@@ -122,9 +121,9 @@ namespace pe
 	void Object::destroy()
 	{
 		texture.destroy();
-		vertexBuffer.destroy();
-		indexBuffer.destroy();
-		uniformBuffer.destroy();
+		vertexBuffer.Destroy();
+		indexBuffer.Destroy();
+		uniformBuffer.Destroy();
 		vertices.clear();
 		vertices.shrink_to_fit();
 	}

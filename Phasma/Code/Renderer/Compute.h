@@ -39,8 +39,6 @@ namespace pe
 		
 		void updateInput(const void* srcData, size_t srcSize = 0, size_t offset = 0);
 		
-		void updateInput(vk::Buffer srcBuffer, size_t size = 0);
-		
 		void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ, const std::vector<vk::Semaphore>& waitFor = {});
 		
 		void waitFence();
@@ -55,30 +53,30 @@ namespace pe
 			size_t n;
 			if constexpr (N == AUTO)
 			{
-				n = SBOut.sizeRequested / sizeof(T);
+				n = SBOut.SizeRequested() / sizeof(T);
 				if (n < 1)
 					throw std::range_error("The size requested in Compute::copyOutput is bigger than the buffer");
 			}
 			else
 			{
 				n = N;
-				if (n * sizeof(T) > SBOut.sizeRequested)
+				if (n * sizeof(T) > SBOut.SizeRequested())
 					throw std::range_error("The size requested in Compute::copyOutput is bigger than the buffer");
 			}
 			
-			if (SBOut.sizeRequested % sizeof(T) != 0)
+			if (SBOut.SizeRequested() % sizeof(T) != 0)
 				throw std::range_error(
 						"The type of T is not dividing the buffer size accurately in Compute::copyOutput"
 				);
 			
 			std::vector<T> output(n);
-			SBOut.map(range, offset);
-			T* data = static_cast<T*>(SBOut.data);
+			SBOut.Map(range, offset);
+			T* data = static_cast<T*>(SBOut.Data());
 			for (int i = 0; i < n; ++i)
 			{
 				output[i] = data[i];
 			}
-			SBOut.unmap();
+			SBOut.Unmap();
 			
 			return output;
 		}
@@ -86,11 +84,11 @@ namespace pe
 		template<typename T>
 		inline T copyOutput(size_t range = 0, size_t offset = 0)
 		{
-			assert(sizeof(T) <= SBOut.size);
+			assert(sizeof(T) <= SBOut.Size());
 			
-			SBOut.map(range, offset);
-			T output = *static_cast<T*>(SBOut.data);
-			SBOut.unmap();
+			SBOut.Map(range, offset);
+			T output = *static_cast<T*>(SBOut.Data());
+			SBOut.Unmap();
 			
 			return output;
 		}

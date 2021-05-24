@@ -7,7 +7,7 @@
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
 #include "../Core/Timer.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "../Renderer/RenderApi.h"
 
 namespace pe
 {
@@ -39,12 +39,11 @@ namespace pe
 	void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		auto size = 4 * sizeof(mat4);
-		UBmotionBlur
-				.createBuffer(size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible);
-		UBmotionBlur.map();
-		UBmotionBlur.zero();
-		UBmotionBlur.flush();
-		UBmotionBlur.unmap();
+		UBmotionBlur.CreateBuffer(size, BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		UBmotionBlur.Map();
+		UBmotionBlur.Zero();
+		UBmotionBlur.Flush();
+		UBmotionBlur.Unmap();
 		
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
@@ -68,7 +67,7 @@ namespace pe
 		std::deque<vk::DescriptorBufferInfo> dsbi {};
 		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
+			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
@@ -123,7 +122,7 @@ namespace pe
 			Pipeline::getDescriptorSetLayoutMotionBlur() = nullptr;
 		}
 		frameImage.destroy();
-		UBmotionBlur.destroy();
+		UBmotionBlur.Destroy();
 		pipeline.destroy();
 	}
 	

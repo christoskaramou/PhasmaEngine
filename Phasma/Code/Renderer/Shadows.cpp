@@ -5,7 +5,7 @@
 #include "Vertex.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
-#include "Vulkan/Vulkan.h"
+#include "RenderApi.h"
 
 namespace pe
 {
@@ -35,7 +35,7 @@ namespace pe
 			std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 			// MVP
 			vk::DescriptorBufferInfo dbi;
-			dbi.buffer = *uniformBuffers[i].buffer;
+			dbi.buffer = *uniformBuffers[i].GetBufferVK();
 			dbi.offset = 0;
 			dbi.range = sizeof(ShadowsUBO);
 			
@@ -157,14 +157,11 @@ namespace pe
 		uniformBuffers.resize(textures.size());
 		for (auto& buffer : uniformBuffers)
 		{
-			buffer.createBuffer(
-					sizeof(ShadowsUBO), vk::BufferUsageFlagBits::eUniformBuffer,
-					vk::MemoryPropertyFlagBits::eHostVisible
-			);
-			buffer.map();
-			buffer.zero();
-			buffer.flush();
-			buffer.unmap();
+			buffer.CreateBuffer(sizeof(ShadowsUBO), BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+			buffer.Map();
+			buffer.Zero();
+			buffer.Flush();
+			buffer.Unmap();
 		}
 	}
 	
@@ -186,7 +183,7 @@ namespace pe
 			VulkanContext::Get()->device->destroyFramebuffer(*fb.handle);
 		
 		for (auto& buffer : uniformBuffers)
-			buffer.destroy();
+			buffer.Destroy();
 		
 		pipeline.destroy();
 	}

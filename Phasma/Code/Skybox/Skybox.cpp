@@ -3,7 +3,7 @@
 #include "../Renderer/Pipeline.h"
 #include "../GUI/GUI.h"
 #include "tinygltf/stb_image.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "../Renderer/RenderApi.h"
 
 namespace pe
 {
@@ -73,18 +73,18 @@ namespace pe
 				throw std::runtime_error("No pixel data loaded");
 			
 			Buffer staging;
-			staging.createBuffer(
-					imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible
+			staging.CreateBuffer(
+					imageSize, BufferUsage::TransferSrc, MemoryProperty::HostVisible
 			);
-			staging.map();
-			staging.copyData(pixels);
-			staging.flush();
-			staging.unmap();
+			staging.Map();
+			staging.CopyData(pixels);
+			staging.Flush();
+			staging.Unmap();
 			
 			stbi_image_free(pixels);
 			
-			texture.copyBufferToImage(*staging.buffer, i);
-			staging.destroy();
+			texture.copyBufferToImage(*staging.GetBufferVK(), i);
+			staging.Destroy();
 		}
 		texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		

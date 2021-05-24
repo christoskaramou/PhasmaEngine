@@ -2,7 +2,7 @@
 #include "Light.h"
 #include "../Core/Queue.h"
 #include "../GUI/GUI.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "RenderApi.h"
 
 namespace pe
 {
@@ -22,13 +22,11 @@ namespace pe
 	{
 		getDescriptorSetLayout();
 		
-		uniform.createBuffer(
-				sizeof(LightsUBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible
-		);
-		uniform.map();
-		uniform.copyData(&lubo);
-		uniform.flush();
-		uniform.unmap();
+		uniform.CreateBuffer(sizeof(LightsUBO), BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		uniform.Map();
+		uniform.CopyData(&lubo);
+		uniform.Flush();
+		uniform.Unmap();
 		
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
@@ -37,9 +35,9 @@ namespace pe
 		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
 		
 		vk::DescriptorBufferInfo dbi;
-		dbi.buffer = *uniform.buffer;
+		dbi.buffer = *uniform.GetBufferVK();
 		dbi.offset = 0;
-		dbi.range = uniform.size;
+		dbi.range = uniform.Size();
 		
 		vk::WriteDescriptorSet writeSet;
 		writeSet.dstSet = *descriptorSet;
@@ -53,9 +51,10 @@ namespace pe
 	
 	void LightUniforms::destroy()
 	{
-		uniform.destroy();
+		uniform.Destroy();
 		if (*descriptorSetLayout)
 		{
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(*descriptorSetLayout);
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(*descriptorSetLayout);
 			*descriptorSetLayout = nullptr;
 		}

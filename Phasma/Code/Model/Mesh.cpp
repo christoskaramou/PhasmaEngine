@@ -2,7 +2,7 @@
 #include "Mesh.h"
 #include "../Renderer/Pipeline.h"
 #include "../../Include/tinygltf/stb_image.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "../Renderer/RenderApi.h"
 #include "../Core/Path.h"
 
 namespace pe
@@ -29,13 +29,13 @@ namespace pe
 	
 	void Mesh::createUniformBuffers()
 	{
-		uniformBuffer.createBuffer(
-				sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible
+		uniformBuffer.CreateBuffer(
+				sizeof(ubo), BufferUsage::UniformBuffer, MemoryProperty::HostVisible
 		);
-		uniformBuffer.map();
-		uniformBuffer.zero();
-		uniformBuffer.flush();
-		uniformBuffer.unmap();
+		uniformBuffer.Map();
+		uniformBuffer.Zero();
+		uniformBuffer.Flush();
+		uniformBuffer.Unmap();
 		
 		for (auto& primitive : primitives)
 		{
@@ -51,13 +51,13 @@ namespace pe
 			factors[3][0] = static_cast<float>(primitive.hasBones);
 			
 			const size_t size = sizeof(mat4);
-			primitive.uniformBuffer.createBuffer(
-					size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible
+			primitive.uniformBuffer.CreateBuffer(
+					size, BufferUsage::UniformBuffer, MemoryProperty::HostVisible
 			);
-			primitive.uniformBuffer.map();
-			primitive.uniformBuffer.copyData(&factors);
-			primitive.uniformBuffer.flush();
-			primitive.uniformBuffer.unmap();
+			primitive.uniformBuffer.Map();
+			primitive.uniformBuffer.CopyData(&factors);
+			primitive.uniformBuffer.Flush();
+			primitive.uniformBuffer.Unmap();
 		}
 	}
 	
@@ -135,13 +135,13 @@ namespace pe
 			VulkanContext::Get()->waitAndLockSubmits();
 			
 			Buffer staging;
-			staging.createBuffer(
-					imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible
+			staging.CreateBuffer(
+					imageSize, BufferUsage::TransferSrc, MemoryProperty::HostVisible
 			);
-			staging.map();
-			staging.copyData(pixels);
-			staging.flush();
-			staging.unmap();
+			staging.Map();
+			staging.CopyData(pixels);
+			staging.Flush();
+			staging.Unmap();
 			
 			stbi_image_free(pixels);
 			
@@ -154,13 +154,13 @@ namespace pe
 					vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal
 			);
 			tex->transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-			tex->copyBufferToImage(*staging.buffer);
+			tex->copyBufferToImage(*staging.GetBufferVK());
 			tex->generateMipMaps();
 			tex->createImageView(vk::ImageAspectFlagBits::eColor);
 			tex->maxLod = static_cast<float>(tex->mipLevels);
 			tex->createSampler();
 			
-			staging.destroy();
+			staging.Destroy();
 			
 			VulkanContext::Get()->unlockSubmits();
 			
@@ -183,7 +183,7 @@ namespace pe
 	
 	void Mesh::destroy()
 	{
-		uniformBuffer.destroy();
+		uniformBuffer.Destroy();
 		if (Pipeline::getDescriptorSetLayoutMesh())
 		{
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
@@ -192,7 +192,7 @@ namespace pe
 		
 		for (auto& primitive : primitives)
 		{
-			primitive.uniformBuffer.destroy();
+			primitive.uniformBuffer.Destroy();
 		}
 		vertices.clear();
 		vertices.shrink_to_fit();

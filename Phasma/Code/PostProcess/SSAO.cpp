@@ -6,7 +6,7 @@
 #include "../GUI/GUI.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "../Renderer/RenderApi.h"
 
 namespace pe
 {
@@ -33,13 +33,11 @@ namespace pe
 			scale = lerp(.1f, 1.f, scale * scale);
 			kernel.emplace_back(sample * scale, 0.f);
 		}
-		UB_Kernel.createBuffer(
-				sizeof(vec4) * 16, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible
-		);
-		UB_Kernel.map();
-		UB_Kernel.copyData(kernel.data());
-		UB_Kernel.flush();
-		UB_Kernel.unmap();
+		UB_Kernel.CreateBuffer(sizeof(vec4) * 16, BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		UB_Kernel.Map();
+		UB_Kernel.CopyData(kernel.data());
+		UB_Kernel.Flush();
+		UB_Kernel.Unmap();
 		
 		// noise image
 		std::vector<vec4> noise {};
@@ -48,11 +46,11 @@ namespace pe
 		
 		Buffer staging;
 		const uint64_t bufSize = sizeof(vec4) * 16;
-		staging.createBuffer(bufSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
-		staging.map();
-		staging.copyData(noise.data());
-		staging.flush();
-		staging.unmap();
+		staging.CreateBuffer(bufSize, BufferUsage::TransferSrc, MemoryProperty::HostVisible);
+		staging.Map();
+		staging.CopyData(noise.data());
+		staging.Flush();
+		staging.Unmap();
 		
 		noiseTex.filter = make_ref(vk::Filter::eNearest);
 		noiseTex.minLod = 0.0f;
@@ -65,19 +63,17 @@ namespace pe
 				vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
 		noiseTex.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-		noiseTex.copyBufferToImage(*staging.buffer);
+		noiseTex.copyBufferToImage(*staging.GetBufferVK());
 		noiseTex.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		noiseTex.createImageView(vk::ImageAspectFlagBits::eColor);
 		noiseTex.createSampler();
-		staging.destroy();
+		staging.Destroy();
 		// pvm uniform
-		UB_PVM.createBuffer(
-				3 * sizeof(mat4), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible
-		);
-		UB_PVM.map();
-		UB_PVM.zero();
-		UB_PVM.flush();
-		UB_PVM.unmap();
+		UB_PVM.CreateBuffer(3 * sizeof(mat4), BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		UB_PVM.Map();
+		UB_PVM.Zero();
+		UB_PVM.Flush();
+		UB_PVM.Unmap();
 		
 		// DESCRIPTOR SET FOR SSAO
 		const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo {
@@ -114,7 +110,7 @@ namespace pe
 		std::deque<vk::DescriptorBufferInfo> dsbi {};
 		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
+			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
@@ -171,8 +167,8 @@ namespace pe
 	
 	void SSAO::destroy()
 	{
-		UB_Kernel.destroy();
-		UB_PVM.destroy();
+		UB_Kernel.Destroy();
+		UB_PVM.Destroy();
 		noiseTex.destroy();
 		
 		renderPass.Destroy();

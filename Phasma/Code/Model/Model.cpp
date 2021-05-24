@@ -8,7 +8,7 @@
 #include <deque>
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "../Renderer/RenderApi.h"
 
 #undef max
 
@@ -509,8 +509,8 @@ namespace pe
 		const vk::DeviceSize offset {0};
 		
 		cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, *Model::pipeline->handle);
-		cmd->bindVertexBuffers(0, 1, &*vertexBuffer.buffer, &offset);
-		cmd->bindIndexBuffer(*indexBuffer.buffer, 0, vk::IndexType::eUint32);
+		cmd->bindVertexBuffers(0, 1, &*vertexBuffer.GetBufferVK(), &offset);
+		cmd->bindIndexBuffer(*indexBuffer.GetBufferVK(), 0, vk::IndexType::eUint32);
 		
 		int culled = 0;
 		int total = 0;
@@ -794,21 +794,21 @@ namespace pe
 		}
 		numberOfVertices = static_cast<uint32_t>(vertices.size());
 		auto size = sizeof(Vertex) * numberOfVertices;
-		vertexBuffer.createBuffer(
-				size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-				vk::MemoryPropertyFlagBits::eDeviceLocal
+		vertexBuffer.CreateBuffer(
+				size, BufferUsage::TransferDst | BufferUsage::VertexBuffer,
+				MemoryProperty::DeviceLocal
 		);
 		
 		// Staging buffer
 		Buffer staging;
-		staging.createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
-		staging.map();
-		staging.copyData(vertices.data());
-		staging.flush();
-		staging.unmap();
+		staging.CreateBuffer(size, BufferUsage::TransferSrc, MemoryProperty::HostVisible);
+		staging.Map();
+		staging.CopyData(vertices.data());
+		staging.Flush();
+		staging.Unmap();
 		
-		vertexBuffer.copyBuffer(*staging.buffer, staging.size);
-		staging.destroy();
+		vertexBuffer.CopyBuffer(&staging, staging.Size());
+		staging.Destroy();
 	}
 	
 	void Model::createIndexBuffer()
@@ -827,32 +827,32 @@ namespace pe
 		}
 		numberOfIndices = static_cast<uint32_t>(indices.size());
 		auto size = sizeof(uint32_t) * numberOfIndices;
-		indexBuffer.createBuffer(
-				size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-				vk::MemoryPropertyFlagBits::eDeviceLocal
+		indexBuffer.CreateBuffer(
+				size, BufferUsage::TransferDst | BufferUsage::IndexBuffer,
+				MemoryProperty::DeviceLocal
 		);
 		
 		// Staging buffer
 		Buffer staging;
-		staging.createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible);
-		staging.map();
-		staging.copyData(indices.data());
-		staging.flush();
-		staging.unmap();
+		staging.CreateBuffer(size, BufferUsage::TransferSrc, MemoryProperty::HostVisible);
+		staging.Map();
+		staging.CopyData(indices.data());
+		staging.Flush();
+		staging.Unmap();
 		
-		indexBuffer.copyBuffer(*staging.buffer, staging.size);
-		staging.destroy();
+		indexBuffer.CopyBuffer(&staging, staging.Size());
+		staging.Destroy();
 	}
 	
 	void Model::createUniformBuffers()
 	{
-		uniformBuffer.createBuffer(
-				sizeof(ubo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible
+		uniformBuffer.CreateBuffer(
+				sizeof(ubo), BufferUsage::UniformBuffer, MemoryProperty::HostVisible
 		);
-		uniformBuffer.map();
-		uniformBuffer.zero();
-		uniformBuffer.flush();
-		uniformBuffer.unmap();
+		uniformBuffer.Map();
+		uniformBuffer.Zero();
+		uniformBuffer.Flush();
+		uniformBuffer.Unmap();
 		for (auto& node : linearNodes)
 		{
 			if (node->mesh)
@@ -875,7 +875,7 @@ namespace pe
 		std::deque<vk::DescriptorBufferInfo> dsbi {};
 		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
+			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
@@ -940,7 +940,7 @@ namespace pe
 			delete script;
 			script = nullptr;
 		}
-		uniformBuffer.destroy();
+		uniformBuffer.Destroy();
 		delete document;
 		delete resourceReader;
 		if (Pipeline::getDescriptorSetLayoutModel())
@@ -967,7 +967,7 @@ namespace pe
 		//for (auto& texture : Mesh::uniqueTextures)
 		//	texture.second.destroy();
 		//Mesh::uniqueTextures.clear();
-		vertexBuffer.destroy();
-		indexBuffer.destroy();
+		vertexBuffer.Destroy();
+		indexBuffer.Destroy();
 	}
 }

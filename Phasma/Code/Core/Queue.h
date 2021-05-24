@@ -19,11 +19,11 @@ namespace pe
 		
 		void exec_mem_copy()
 		{
-			buffer->map();
+			buffer->Map();
 			for (auto& memory_range : memory_ranges)
-				buffer->copyData(memory_range.data, memory_range.size, memory_range.offset);
-			buffer->flush();
-			buffer->unmap();
+				buffer->CopyData(memory_range.data, memory_range.size, memory_range.offset);
+			buffer->Flush();
+			buffer->Unmap();
 		}
 	};
 	

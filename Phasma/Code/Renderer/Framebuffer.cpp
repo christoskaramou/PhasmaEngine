@@ -1,7 +1,7 @@
 #include "PhasmaPch.h"
 #include "Framebuffer.h"
-#include "../Renderer/RenderPass.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "RenderPass.h"
+#include "RenderApi.h"
 
 namespace pe
 {

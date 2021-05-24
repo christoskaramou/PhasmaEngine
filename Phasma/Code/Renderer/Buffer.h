@@ -2,49 +2,72 @@
 
 #include "../Core/Base.h"
 
+// TEMPORARY
 namespace vk
 {
 	class Buffer;
-	
-	template<class T1>
-	class Flags;
-	
-	enum class BufferUsageFlagBits : uint32_t;
-	enum class MemoryPropertyFlagBits : uint32_t;
-	using BufferUsageFlags = Flags<BufferUsageFlagBits>;
-	using MemoryPropertyFlags = Flags<MemoryPropertyFlagBits>;
 }
 
 namespace pe
 {
+	enum MemoryProperty
+	{
+		DeviceLocal,
+		HostVisible,
+		HostCoherent,
+		HostCached
+	};
+	
+	enum BufferUsage
+	{
+		TransferSrc = 1,
+		TransferDst = 1<<1,
+		UniformTexelBuffer = 1<<2,
+		StorageTexelBuffer = 1<<3,
+		UniformBuffer = 1<<4,
+		StorageBuffer = 1<<5,
+		IndexBuffer = 1<<6,
+		VertexBuffer = 1<<7
+	};
+	
+	using BufferUsageFlags = Flags<BufferUsage>;
+	using MemoryPropertyFlags = Flags<MemoryProperty>;
+	
+	class BufferVK;
+	class BufferDX;
+	
 	class Buffer
 	{
 	public:
 		Buffer();
 		
-		Ref<vk::Buffer> buffer;
-		VmaAllocation allocation;
-		size_t size;
-		// sizeRequested is the size asked from user during the creation, afterwards the size can be
-		// changed dynamically based on the system's minimum alignment on the specific buffer type
-		// and it will always be less or equal than the actual size of the created buffer
-		size_t sizeRequested {};
-		void* data = nullptr;
+		void CreateBuffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
 		
-		void createBuffer(size_t size, const vk::BufferUsageFlags& usage, const vk::MemoryPropertyFlags& properties);
+		void Map(size_t mapSize = 0, size_t offset = 0);
 		
-		void map(size_t mapSize = 0, size_t offset = 0);
+		void Unmap();
 		
-		void unmap();
+		void Zero() const;
 		
-		void zero() const;
+		void CopyData(const void* srcData, size_t srcSize = 0, size_t offset = 0);
 		
-		void copyData(const void* srcData, size_t srcSize = 0, size_t offset = 0);
+		void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) const;
 		
-		void copyBuffer(vk::Buffer srcBuffer, size_t srcSize = 0) const;
+		void Flush(size_t offset = 0, size_t flushSize = 0) const;
 		
-		void flush(size_t offset = 0, size_t flushSize = 0) const;
+		void Destroy() const;
 		
-		void destroy() const;
+		size_t Size();
+		
+		size_t SizeRequested();
+		
+		void* Data();
+		
+		// TEMPORARY
+		Ref<vk::Buffer> GetBufferVK();
+		
+	private:
+		Ref<BufferVK> m_bufferVK;
+		Ref<BufferDX> m_bufferDX;
 	};
 }

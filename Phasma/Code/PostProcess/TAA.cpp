@@ -5,7 +5,7 @@
 #include "../Renderer/Swapchain.h"
 #include "../Shader/Shader.h"
 #include "../Core/Queue.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "../Renderer/RenderApi.h"
 #include <deque>
 
 namespace pe
@@ -70,13 +70,11 @@ namespace pe
 	
 	void TAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		uniform.createBuffer(
-				sizeof(UBO), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible
-		);
-		uniform.map();
-		uniform.zero();
-		uniform.flush();
-		uniform.unmap();
+		uniform.CreateBuffer(sizeof(UBO), BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		uniform.Map();
+		uniform.Zero();
+		uniform.Flush();
+		uniform.Unmap();
 		
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
@@ -103,7 +101,7 @@ namespace pe
 		std::deque<vk::DescriptorBufferInfo> dsbi {};
 		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(*buffer.buffer, 0, buffer.size);
+			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
@@ -310,7 +308,7 @@ namespace pe
 	
 	void TAA::destroy()
 	{
-		uniform.destroy();
+		uniform.Destroy();
 		previous.destroy();
 		frameImage.destroy();
 		
