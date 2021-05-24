@@ -13,7 +13,7 @@ namespace pe
 	
 	void Buffer::CreateBuffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties)
 	{
-		if (PE_VULKAN)
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
 			m_bufferVK->CreateBuffer(size, usage, properties);
 		}
@@ -25,7 +25,7 @@ namespace pe
 	
 	void Buffer::Map(size_t mapSize, size_t offset)
 	{
-		if (PE_VULKAN)
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
 			m_bufferVK->Map(mapSize, offset);
 		}
@@ -37,7 +37,7 @@ namespace pe
 	
 	void Buffer::Unmap()
 	{
-		if (PE_VULKAN)
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
 			m_bufferVK->Unmap();
 		}
@@ -49,7 +49,7 @@ namespace pe
 	
 	void Buffer::Zero() const
 	{
-		if (PE_VULKAN)
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
 			m_bufferVK->Zero();
 		}
@@ -61,7 +61,7 @@ namespace pe
 	
 	void Buffer::CopyData(const void* srcData, size_t srcSize, size_t offset)
 	{
-		if (PE_VULKAN)
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
 			m_bufferVK->CopyData(srcData, srcSize, offset);
 		}
@@ -73,7 +73,7 @@ namespace pe
 	
 	void Buffer::CopyBuffer(Buffer* srcBuffer, size_t srcSize) const
 	{
-		if (PE_VULKAN)
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
 			m_bufferVK->CopyBuffer(*srcBuffer->m_bufferVK->buffer, srcSize);
 		}
@@ -85,7 +85,7 @@ namespace pe
 	
 	void Buffer::Flush(size_t offset, size_t flushSize) const
 	{
-		if (PE_VULKAN)
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
 			m_bufferVK->Flush(offset, flushSize);
 		}
@@ -97,7 +97,7 @@ namespace pe
 	
 	void Buffer::Destroy() const
 	{
-		if (PE_VULKAN)
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
 			m_bufferVK->Destroy();
 		}
@@ -109,7 +109,7 @@ namespace pe
 	
 	size_t Buffer::Size()
 	{
-		if (PE_VULKAN)
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
 			return m_bufferVK->size;
 		}
@@ -121,7 +121,7 @@ namespace pe
 	
 	size_t Buffer::SizeRequested()
 	{
-		if (PE_VULKAN)
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
 			return m_bufferVK->sizeRequested;
 		}
@@ -133,7 +133,7 @@ namespace pe
 	
 	void* Buffer::Data()
 	{
-		if (PE_VULKAN)
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
 			return m_bufferVK->data;
 		}
