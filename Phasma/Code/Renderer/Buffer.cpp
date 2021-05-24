@@ -7,8 +7,14 @@ namespace pe
 {
 	Buffer::Buffer()
 	{
-		m_bufferVK = make_ref(BufferVK());
-		//m_bufferDX = make_ref(BufferDX());
+		if DYNAMIC_CONSTEXPR (PE_VULKAN)
+		{
+			m_bufferVK = make_ref(BufferVK());
+		}
+		else //if (PE_DX12)
+		{
+		
+		};
 	}
 	
 	void Buffer::CreateBuffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties)

@@ -11,7 +11,7 @@ namespace pe
 	{
 		Vulkan,
 #ifdef WIN32
-		Dx12
+		Dx12 // Not implemented yet
 #endif
 	};
 	
