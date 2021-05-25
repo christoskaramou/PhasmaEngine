@@ -23,18 +23,11 @@ SOFTWARE.
 #pragma once
 
 #include "../../Core/Base.h"
+#include "../RendererEnums.h"
 
 namespace vk
 {
 	class Buffer;
-	
-	template<class T1>
-	class Flags;
-	
-	enum class BufferUsageFlagBits : uint32_t;
-	enum class MemoryPropertyFlagBits : uint32_t;
-	using BufferUsageFlags = Flags<BufferUsageFlagBits>;
-	using MemoryPropertyFlags = Flags<MemoryPropertyFlagBits>;
 }
 
 namespace pe

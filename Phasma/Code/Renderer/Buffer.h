@@ -23,6 +23,7 @@ SOFTWARE.
 #pragma once
 
 #include "../Core/Base.h"
+#include "RendererEnums.h"
 
 // TEMPORARY
 namespace vk
@@ -32,29 +33,6 @@ namespace vk
 
 namespace pe
 {
-	enum MemoryProperty
-	{
-		DeviceLocal,
-		HostVisible,
-		HostCoherent,
-		HostCached
-	};
-	
-	enum BufferUsage
-	{
-		TransferSrc = 1,
-		TransferDst = 1<<1,
-		UniformTexelBuffer = 1<<2,
-		StorageTexelBuffer = 1<<3,
-		UniformBuffer = 1<<4,
-		StorageBuffer = 1<<5,
-		IndexBuffer = 1<<6,
-		VertexBuffer = 1<<7
-	};
-	
-	using BufferUsageFlags = Flags<BufferUsage>;
-	using MemoryPropertyFlags = Flags<MemoryProperty>;
-	
 	class BufferVK;
 	class BufferDX;
 	

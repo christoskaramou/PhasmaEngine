@@ -52,13 +52,6 @@ namespace vk
 
 namespace pe
 {
-	enum class RenderQueue
-	{
-		Opaque = 1,
-		AlphaCut = 2,
-		AlphaBlend = 3
-	};
-	
 	class Renderer final : public ISystem
 	{
 		Shadows shadows;

@@ -75,19 +75,19 @@ namespace pe
 	
 	void BufferVK::CreateBuffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties)
 	{
+		vk::BufferUsageFlags usageVK = UsageFlagsToVK(usage);
+		vk::MemoryPropertyFlags propertiesVK = MemoryFlagsToVK(properties);
+		
 		sizeRequested = size;
 		this->size = size;
 		data = nullptr;
 		
-		vk::BufferUsageFlags usageVK = UsageFlagsToVK(usage);
 		vk::BufferCreateInfo bufferInfo;
 		bufferInfo.size = size;
 		bufferInfo.usage = usageVK;
 		bufferInfo.sharingMode = vk::SharingMode::eExclusive;
 		VkBufferCreateInfo vkBufferCreateInfo = VkBufferCreateInfo(bufferInfo);
 		//buffer = make_ref(vulkan->device->createBuffer(bufferInfo));
-		
-		vk::MemoryPropertyFlags propertiesVK = MemoryFlagsToVK(properties);
 		VmaAllocationCreateInfo allocationCreateInfo = {};
 		allocationCreateInfo.usage =
 				usageVK & vk::BufferUsageFlagBits::eTransferSrc ?
