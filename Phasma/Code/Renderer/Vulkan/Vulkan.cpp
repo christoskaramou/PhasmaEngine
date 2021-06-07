@@ -178,6 +178,8 @@ namespace pe
 	void VulkanContext::GetGpu()
 	{
 		std::vector<vk::PhysicalDevice> gpuList = instance->enumeratePhysicalDevices();
+		std::vector<vk::PhysicalDevice> validGpuList{};
+		vk::PhysicalDevice discreteGpu;
 		
 		for (auto& GPU : gpuList)
 		{
@@ -198,18 +200,23 @@ namespace pe
 			    flags & vk::QueueFlagBits::eCompute &&
 			    flags & vk::QueueFlagBits::eTransfer)
 			{
-				gpu = make_ref(GPU);
-				
-				GetGraphicsFamilyId();
-				GetComputeFamilyId();
-				GetTransferFamilyId();
-				gpuProperties = make_ref(gpu->getProperties());
-				gpuFeatures = make_ref(gpu->getFeatures());
-				
-				return;
+				vk::PhysicalDeviceProperties properties = GPU.getProperties();
+				if (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
+				{
+					discreteGpu = GPU;
+					break;
+				}
+
+				validGpuList.push_back(GPU);
 			}
 		}
-		gpu = nullptr;
+
+		gpu = discreteGpu ? make_ref(discreteGpu) : make_ref(validGpuList[0]);
+		GetGraphicsFamilyId();
+		GetComputeFamilyId();
+		GetTransferFamilyId();
+		gpuProperties = make_ref(gpu->getProperties());
+		gpuFeatures = make_ref(gpu->getFeatures());
 	}
 	
 	void VulkanContext::GetGraphicsFamilyId()
