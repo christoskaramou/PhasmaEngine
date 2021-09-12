@@ -84,12 +84,17 @@ namespace pe
 		for (auto& extension : extensions)
 		{
 			if (std::string(extension.extensionName.data()) == "VK_EXT_debug_utils")
+			{
 				instanceExtensions.push_back("VK_EXT_debug_utils");
+				m_HasDebugUtils = true;
+			}
 		}
 		// =============================================
 		
 		// === Debug Layers ============================
-		// To use these debug layers, here is assumed VulkanSDK is installed and Bin is in enviromental path
+		// To use these debug layers, here is assumed VulkanSDK is installed
+		// Also VK_LAYER_PATH environmental variable has to be created and target the bin
+		// e.g VK_LAYER_PATH = C:\VulkanSDK\1.2.189.1\Bin
 		auto layers = vk::enumerateInstanceLayerProperties();
 		for (auto layer : layers)
 		{
@@ -124,6 +129,7 @@ namespace pe
 		instance = make_ref(vk::createInstance(instInfo));
 	}
 	
+#if _DEBUG
 	VKAPI_ATTR uint32_t VKAPI_CALL VulkanContext::MessageCallback(
 			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 			uint32_t messageType,
@@ -164,6 +170,7 @@ namespace pe
 	{
 		instance->destroyDebugUtilsMessengerEXT(*debugMessenger, nullptr, *dispatchLoaderDynamic);
 	}
+#endif
 	
 	void VulkanContext::CreateSurface(Context* ctx)
 	{
@@ -307,7 +314,7 @@ namespace pe
 			queueCreateInfos.back().pQueuePriorities = priorities;
 		}
 		
-		// transer queue
+		// transfer queue
 		if (transferFamilyId != graphicsFamilyId && transferFamilyId != computeFamilyId)
 		{
 			queueCreateInfos.emplace_back();
@@ -324,6 +331,10 @@ namespace pe
 		deviceCreateInfo.pEnabledFeatures = &*gpuFeatures;
 		
 		device = make_ref(gpu->createDevice(deviceCreateInfo));
+		SetDebugObjectName(*device, "");
+		//SetDebugObjectName(*instance, "");
+		SetDebugObjectName(*surface.surface, "");
+		SetDebugObjectName(*gpu, "");
 	}
 	
 	void VulkanContext::CreateAllocator()
@@ -372,6 +383,8 @@ namespace pe
 		
 		commandPool = make_ref(device->createCommandPool(cpci));
 		commandPool2 = make_ref(device->createCommandPool(cpci));
+		SetDebugObjectName(*commandPool, "");
+		SetDebugObjectName(*commandPool2, "");
 	}
 	
 	void VulkanContext::CreateDescriptorPool(uint32_t maxDescriptorSets)
@@ -392,6 +405,7 @@ namespace pe
 		createInfo.maxSets = maxDescriptorSets;
 		
 		descriptorPool = make_ref(device->createDescriptorPool(createInfo));
+		SetDebugObjectName(*descriptorPool, "");
 	}
 	
 	void VulkanContext::CreateCmdBuffers(uint32_t bufferCount)
@@ -401,22 +415,32 @@ namespace pe
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = bufferCount;
 		dynamicCmdBuffers = make_ref(device->allocateCommandBuffers(cbai));
+		for (int i = 0; i < dynamicCmdBuffers->size(); i++)
+			SetDebugObjectName((*dynamicCmdBuffers)[i], "Dynamic" + std::to_string(i));
 		
 		cbai.commandBufferCount = bufferCount * 3;
 		shadowCmdBuffers = make_ref(device->allocateCommandBuffers(cbai));
+		for (int i = 0; i < shadowCmdBuffers->size(); i++)
+			SetDebugObjectName((*shadowCmdBuffers)[i], "Shadow" + std::to_string(i));
 	}
 	
 	void VulkanContext::CreateFences(uint32_t fenceCount)
 	{
+		if (fenceCount == 0)
+			return;
+
 		std::vector<vk::Fence> _fences(fenceCount);
-		const vk::FenceCreateInfo fi {vk::FenceCreateFlagBits::eSignaled};
-		
-		for (uint32_t i = 0; i < fenceCount; i++)
+		vk::FenceCreateInfo fi{ vk::FenceCreateFlagBits::eSignaled };
+		_fences[0] = device->createFence(fi);
+
+		for (uint32_t i = 1; i < fenceCount; i++)
 		{
-			_fences[i] = device->createFence(fi);
+			_fences[i] = device->createFence(vk::FenceCreateInfo());
 		}
 		
 		fences = make_ref(_fences);
+		for (int i = 0; i < fences->size(); i++)
+			SetDebugObjectName((*fences)[i], "Frame" + std::to_string(i));
 	}
 	
 	void VulkanContext::CreateSemaphores(uint32_t semaphoresCount)
@@ -430,6 +454,8 @@ namespace pe
 		}
 		
 		semaphores = make_ref(_semaphores);
+		for (int i = 0; i < semaphores->size(); i++)
+			SetDebugObjectName((*semaphores)[i], std::to_string(i));
 	}
 	
 	void VulkanContext::CreateDepth()
@@ -463,6 +489,7 @@ namespace pe
 		depth.borderColor = make_ref(vk::BorderColor::eFloatOpaqueWhite);
 		depth.samplerCompareEnable = VK_TRUE;
 		depth.createSampler();
+		depth.SetDebugName("DepthImage");
 		
 		depth.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 	}
@@ -577,10 +604,11 @@ namespace pe
 			const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
 			const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
 			const vk::ArrayProxy<const vk::Semaphore> signalSemaphores
-	) const
+	)
 	{
 		const vk::FenceCreateInfo fi;
 		const vk::Fence fence = device->createFence(fi);
+		SetDebugObjectName(fence, "SubmitFence");
 		
 		submit(commandBuffers, waitStages, waitSemaphores, signalSemaphores, fence);
 		

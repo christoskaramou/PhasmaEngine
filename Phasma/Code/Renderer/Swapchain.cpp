@@ -106,6 +106,7 @@ namespace pe
 		}
 		
 		*this = newSwapchain;
+		vulkan.SetDebugObjectName(*swapchain, "");
 	}
 	
 	uint32_t Swapchain::Aquire(vk::Semaphore semaphore, vk::Fence fence) const

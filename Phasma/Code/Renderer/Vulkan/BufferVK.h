@@ -61,5 +61,7 @@ namespace pe
 		void Flush(size_t offset = 0, size_t flushSize = 0) const;
 		
 		void Destroy() const;
+
+		void SetDebugName(const std::string& debugName);
 	};
 }

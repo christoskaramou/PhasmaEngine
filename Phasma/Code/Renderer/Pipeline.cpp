@@ -23,6 +23,7 @@ SOFTWARE.
 #include "PhasmaPch.h"
 #include "Pipeline.h"
 #include "../Shader/Shader.h"
+#include "Descriptor.h"
 #include "RenderApi.h"
 
 namespace pe
@@ -245,6 +246,32 @@ namespace pe
 			*handle = nullptr;
 		}
 	}
+
+	const vk::DescriptorSetLayout& CreateDescriptorSetLayout(const std::vector<DescriptorBinding>& descriptionBindings)
+	{
+		if (!descriptionBindings.size())
+			return nullptr;
+
+		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{};
+		for (const auto& layoutBinding : descriptionBindings)
+		{
+			setLayoutBindings.push_back(
+				vk::DescriptorSetLayoutBinding
+				{
+					layoutBinding.binding,
+					(vk::DescriptorType)layoutBinding.descriptorType,
+					1,
+					(vk::ShaderStageFlags)layoutBinding.stageFlags,
+					nullptr
+				}
+			);
+		}
+
+		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
+		descriptorLayout.pBindings = setLayoutBindings.data();
+		return VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+	}
 	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutComposition()
 	{
@@ -252,28 +279,20 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(4, vk::DescriptorType::eUniformBuffer),
-					layoutBinding(5, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(6, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(7, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(8, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(9, vk::DescriptorType::eUniformBuffer)
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(2, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(5, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(6, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(7, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(8, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(9, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Composition");
 		}
 		
 		return DSLayout;
@@ -285,19 +304,11 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "BrightFilter");
 		}
 		
 		return DSLayout;
@@ -309,19 +320,11 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "GaussianBlurH");
 		}
 		
 		return DSLayout;
@@ -333,19 +336,11 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "GaussianBlurV");
 		}
 		
 		return DSLayout;
@@ -357,20 +352,12 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Combine");
 		}
 		
 		return DSLayout;
@@ -382,20 +369,12 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "DOF");
 		}
 		
 		return DSLayout;
@@ -407,19 +386,11 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "FXAA");
 		}
 		
 		return DSLayout;
@@ -431,22 +402,14 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(3, vk::DescriptorType::eUniformBuffer),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(2, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "MotionBlur");
 		}
 		
 		return DSLayout;
@@ -458,23 +421,15 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(3, vk::DescriptorType::eUniformBuffer),
-					layoutBinding(4, vk::DescriptorType::eUniformBuffer),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(2, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "SSAO");
 		}
 		
 		return DSLayout;
@@ -486,19 +441,11 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "SSAOBlur");
 		}
 		
 		return DSLayout;
@@ -510,23 +457,15 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(4, vk::DescriptorType::eUniformBuffer),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(2, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "SSR");
 		}
 		
 		return DSLayout;
@@ -538,23 +477,15 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(3, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(4, vk::DescriptorType::eUniformBuffer)
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(2, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "TAA");
 		}
 		
 		return DSLayout;
@@ -566,20 +497,12 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eFragment, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler),
-					layoutBinding(1, vk::DescriptorType::eUniformBuffer)
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "TAASharpen");
 		}
 		
 		return DSLayout;
@@ -591,20 +514,12 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			const auto layoutBinding = [](
-					uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags
-			)
-			{
-				return vk::DescriptorSetLayoutBinding {binding, descriptorType, 1, stageFlags, nullptr};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex),
-					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eVertex),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Shadows");
 		}
 		
 		return DSLayout;
@@ -616,19 +531,11 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto const layoutBinding = [](uint32_t binding, vk::DescriptorType descriptorType)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, descriptorType, 1, vk::ShaderStageFlagBits::eVertex, nullptr
-				};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eUniformBuffer),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Mesh");
 		}
 		
 		return DSLayout;
@@ -640,24 +547,16 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto const layoutBinding = [](
-					uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlag
-			)
-			{
-				return vk::DescriptorSetLayoutBinding {binding, descriptorType, 1, stageFlag, nullptr};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
-					layoutBinding(1, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
-					layoutBinding(2, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
-					layoutBinding(3, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
-					layoutBinding(4, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment),
-					layoutBinding(5, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex),
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(2, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(5, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eVertex)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Primitive");
 		}
 		
 		return DSLayout;
@@ -669,16 +568,11 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			vk::DescriptorSetLayoutBinding dslb;
-			dslb.binding = 0;
-			dslb.descriptorCount = 1; // number of descriptors contained
-			dslb.descriptorType = vk::DescriptorType::eUniformBuffer;
-			dslb.stageFlags = vk::ShaderStageFlagBits::eVertex;
-			
-			vk::DescriptorSetLayoutCreateInfo dslci;
-			dslci.bindingCount = 1;
-			dslci.pBindings = &dslb;
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(dslci);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Model");
 		}
 		
 		return DSLayout;
@@ -690,19 +584,11 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			const auto layoutBinding = [](
-					uint32_t binding, vk::DescriptorType descriptorType, const vk::ShaderStageFlags& stageFlags
-			)
-			{
-				return vk::DescriptorSetLayoutBinding {binding, descriptorType, 1, stageFlags, nullptr};
-			};
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					layoutBinding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
-			};
-			vk::DescriptorSetLayoutCreateInfo descriptorLayout;
-			descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			descriptorLayout.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "SkyBox");
 		}
 		return DSLayout;
 	}
@@ -713,22 +599,12 @@ namespace pe
 		
 		if (!DSLayout)
 		{
-			auto const setLayoutBinding = [](uint32_t binding)
-			{
-				return vk::DescriptorSetLayoutBinding {
-						binding, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute, nullptr
-				};
-			};
-			
-			std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings {
-					setLayoutBinding(0), // in
-					setLayoutBinding(1)  // out
-			};
-			
-			vk::DescriptorSetLayoutCreateInfo dlci;
-			dlci.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-			dlci.pBindings = setLayoutBindings.data();
-			DSLayout = VulkanContext::Get()->device->createDescriptorSetLayout(dlci);
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eStorageBuffer, (uint32_t)vk::ShaderStageFlagBits::eCompute),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eStorageBuffer, (uint32_t)vk::ShaderStageFlagBits::eCompute)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Compute");
 		}
 		
 		return DSLayout;

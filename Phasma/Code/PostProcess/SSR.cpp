@@ -43,18 +43,22 @@ namespace pe
 	
 	void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		UBReflection.CreateBuffer(4 * sizeof(mat4), BufferUsage::UniformBuffer, MemoryProperty::HostVisible
-		);
+		UBReflection.CreateBuffer(
+			4 * sizeof(mat4),
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		UBReflection.Map();
 		UBReflection.Zero();
 		UBReflection.Flush();
 		UBReflection.Unmap();
+		UBReflection.SetDebugName("SSR_UB_Reflection");
 		
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutSSR();
 		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSet, "SSR");
 		
 		updateDescriptorSets(renderTargets);
 	}

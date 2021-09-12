@@ -56,6 +56,7 @@ namespace pe
 		previous.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 		previous.createImageView(vk::ImageAspectFlagBits::eColor);
 		previous.createSampler();
+		previous.SetDebugName("TAA_PreviousFrameImage");
 		
 		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
 		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
@@ -69,6 +70,7 @@ namespace pe
 		frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 		frameImage.createSampler();
+		frameImage.SetDebugName("TAA_FrameImage");
 	}
 	
 	void TAA::update(const Camera& camera)
@@ -92,20 +94,26 @@ namespace pe
 	
 	void TAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		uniform.CreateBuffer(sizeof(UBO), BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		uniform.CreateBuffer(
+			sizeof(UBO),
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		uniform.Map();
 		uniform.Zero();
 		uniform.Flush();
 		uniform.Unmap();
+		uniform.SetDebugName("TAA_UB");
 		
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutTAA();
 		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSet, "TAA");
 		
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutTAASharpen();
 		DSetSharpen = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSetSharpen, "TAA_Sharpen");
 		
 		updateDescriptorSets(renderTargets);
 	}

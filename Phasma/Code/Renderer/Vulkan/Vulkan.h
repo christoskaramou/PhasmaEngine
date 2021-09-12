@@ -109,17 +109,6 @@ namespace pe
 		
 		void CreateInstance(SDL_Window* window);
 		
-		static VKAPI_ATTR uint32_t VKAPI_CALL MessageCallback(
-				VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-				uint32_t messageType,
-				const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-				void* pUserData
-		);
-		
-		void CreateDebugMessenger();
-		
-		void DestroyDebugMessenger();
-		
 		void CreateSurface(Context* ctx);
 		
 		void GetSurfaceProperties(Context* ctx);
@@ -202,17 +191,33 @@ namespace pe
 				const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
 				const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
 				const vk::ArrayProxy<const vk::Semaphore> signalSemaphores
-		) const;
+		);
 
-#ifdef NOT_USED
+#if _DEBUG
+		static VKAPI_ATTR uint32_t VKAPI_CALL MessageCallback(
+		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+			uint32_t messageType,
+			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+			void* pUserData
+			);
+
+		void CreateDebugMessenger();
+
+		void DestroyDebugMessenger();
+
 		template<typename T>
-		void SetDebugObjectName(const T& validHandle, const char* name)
+		void SetDebugObjectName(const T& validHandle, const std::string& debugName)
 		{
+			if (!m_HasDebugUtils)
+				return;
+
+			std::string name = vk::to_string(validHandle.objectType) + "-" + debugName;
+
 			vk::DebugUtilsObjectNameInfoEXT duoni;
 			duoni.objectType = validHandle.objectType;
 			duoni.objectHandle = reinterpret_cast<uint64_t>(static_cast<void*>(validHandle));
-			duoni.pObjectName = name;
-			device.setDebugUtilsObjectNameEXT(duoni, dispatchLoaderDynamic);
+			duoni.pObjectName = name.c_str();
+			device->setDebugUtilsObjectNameEXT(duoni, *dispatchLoaderDynamic);
 		}
 #else
 		
@@ -221,7 +226,8 @@ namespace pe
 
 #endif
 	private:
-		static inline std::mutex m_submit_mutex {};
+		static inline std::mutex m_submit_mutex{};
+		bool m_HasDebugUtils = false;
 	public:
 		void waitAndLockSubmits();
 		

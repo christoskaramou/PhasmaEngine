@@ -26,46 +26,6 @@ SOFTWARE.
 
 namespace pe
 {
-	vk::BufferUsageFlags UsageFlagsToVK(BufferUsageFlags usage)
-	{
-		vk::BufferUsageFlags flags;
-		
-		if (usage & BufferUsage::TransferSrc)
-			flags |= vk::BufferUsageFlagBits::eTransferSrc;
-		if (usage & BufferUsage::TransferDst)
-			flags |= vk::BufferUsageFlagBits::eTransferDst;
-		if (usage & BufferUsage::UniformTexelBuffer)
-			flags |= vk::BufferUsageFlagBits::eUniformTexelBuffer;
-		if (usage & BufferUsage::StorageTexelBuffer)
-			flags |= vk::BufferUsageFlagBits::eStorageTexelBuffer;
-		if (usage & BufferUsage::UniformBuffer)
-			flags |= vk::BufferUsageFlagBits::eUniformBuffer;
-		if (usage & BufferUsage::StorageBuffer)
-			flags |= vk::BufferUsageFlagBits::eStorageBuffer;
-		if (usage & BufferUsage::IndexBuffer)
-			flags |= vk::BufferUsageFlagBits::eIndexBuffer;
-		if (usage & BufferUsage::VertexBuffer)
-			flags |= vk::BufferUsageFlagBits::eVertexBuffer;
-		
-		return flags;
-	}
-	
-	vk::MemoryPropertyFlags MemoryFlagsToVK(MemoryPropertyFlags properties)
-	{
-		vk::MemoryPropertyFlags flags;
-		
-		if (properties & MemoryProperty::DeviceLocal)
-			flags |= vk::MemoryPropertyFlagBits::eDeviceLocal;
-		if (properties & MemoryProperty::HostVisible)
-			flags |= vk::MemoryPropertyFlagBits::eHostVisible;
-		if (properties & MemoryProperty::HostCoherent)
-			flags |= vk::MemoryPropertyFlagBits::eHostCoherent;
-		if (properties & MemoryProperty::HostCached)
-			flags |= vk::MemoryPropertyFlagBits::eHostCached;
-		
-		return flags;
-	}
-	
 	BufferVK::BufferVK()
 	{
 		buffer = make_ref(vk::Buffer());
@@ -75,8 +35,8 @@ namespace pe
 	
 	void BufferVK::CreateBuffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties)
 	{
-		vk::BufferUsageFlags usageVK = UsageFlagsToVK(usage);
-		vk::MemoryPropertyFlags propertiesVK = MemoryFlagsToVK(properties);
+		vk::BufferUsageFlags usageVK = vk::BufferUsageFlags(usage);
+		vk::MemoryPropertyFlags propertiesVK = vk::MemoryPropertyFlags(properties);
 		
 		sizeRequested = size;
 		this->size = size;
@@ -173,5 +133,12 @@ namespace pe
 		if (*buffer)
 			vmaDestroyBuffer(VulkanContext::Get()->allocator, VkBuffer(*buffer), allocation);
 		*buffer = nullptr;
+	}
+
+	void BufferVK::SetDebugName(const std::string& debugName)
+	{
+#if _DEBUG
+		VulkanContext::Get()->SetDebugObjectName(*buffer, debugName);
+#endif
 	}
 }

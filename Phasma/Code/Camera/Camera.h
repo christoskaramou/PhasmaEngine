@@ -119,5 +119,7 @@ namespace pe
 		bool SphereInFrustum(const vec4& boundingSphere) const;
 		
 		void ReCreateComputePipelines();
+
+		void Destroy() override;
 	};
 }

@@ -48,6 +48,8 @@ namespace pe
 		
 		void SetEnabled(bool enabled)
 		{ m_enabled = enabled; }
+
+		virtual void Destroy() {}
 	
 	private:
 		Entity* m_entity;

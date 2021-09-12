@@ -268,6 +268,7 @@ namespace pe
 		
 		node->mesh = new Mesh();
 		auto& myMesh = node->mesh;
+		myMesh->name = mesh.name;
 		
 		for (const auto& primitive : mesh.primitives)
 		{
@@ -817,17 +818,20 @@ namespace pe
 		numberOfVertices = static_cast<uint32_t>(vertices.size());
 		auto size = sizeof(Vertex) * numberOfVertices;
 		vertexBuffer.CreateBuffer(
-				size, BufferUsage::TransferDst | BufferUsage::VertexBuffer,
-				MemoryProperty::DeviceLocal
+			size,
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferDst | (BufferUsageFlags)vk::BufferUsageFlagBits::eVertexBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
+		vertexBuffer.SetDebugName("Vertex_" + name);
 		
 		// Staging buffer
 		Buffer staging;
-		staging.CreateBuffer(size, BufferUsage::TransferSrc, MemoryProperty::HostVisible);
+		staging.CreateBuffer(size, (BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		staging.Map();
 		staging.CopyData(vertices.data());
 		staging.Flush();
 		staging.Unmap();
+		staging.SetDebugName("Staging");
 		
 		vertexBuffer.CopyBuffer(&staging, staging.Size());
 		staging.Destroy();
@@ -850,17 +854,20 @@ namespace pe
 		numberOfIndices = static_cast<uint32_t>(indices.size());
 		auto size = sizeof(uint32_t) * numberOfIndices;
 		indexBuffer.CreateBuffer(
-				size, BufferUsage::TransferDst | BufferUsage::IndexBuffer,
-				MemoryProperty::DeviceLocal
+			size,
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferDst | (BufferUsageFlags)vk::BufferUsageFlagBits::eIndexBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
+		indexBuffer.SetDebugName("Index_" + name);
 		
 		// Staging buffer
 		Buffer staging;
-		staging.CreateBuffer(size, BufferUsage::TransferSrc, MemoryProperty::HostVisible);
+		staging.CreateBuffer(size, (BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		staging.Map();
 		staging.CopyData(indices.data());
 		staging.Flush();
 		staging.Unmap();
+		staging.SetDebugName("Staging");
 		
 		indexBuffer.CopyBuffer(&staging, staging.Size());
 		staging.Destroy();
@@ -869,8 +876,9 @@ namespace pe
 	void Model::createUniformBuffers()
 	{
 		uniformBuffer.CreateBuffer(
-				sizeof(ubo), BufferUsage::UniformBuffer, MemoryProperty::HostVisible
+				sizeof(ubo), (BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
 		);
+		uniformBuffer.SetDebugName("UB_" + name);
 		uniformBuffer.Map();
 		uniformBuffer.Zero();
 		uniformBuffer.Flush();
@@ -909,6 +917,7 @@ namespace pe
 		allocateInfo0.descriptorSetCount = 1;
 		allocateInfo0.pSetLayouts = &Pipeline::getDescriptorSetLayoutModel();
 		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo0).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Model_" + name);
 		
 		VulkanContext::Get()->device->updateDescriptorSets(wSetBuffer(*descriptorSet, 0, uniformBuffer), nullptr);
 		
@@ -924,6 +933,7 @@ namespace pe
 			allocateInfo.descriptorSetCount = 1;
 			allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMesh();
 			mesh->descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
+			VulkanContext::Get()->SetDebugObjectName(*mesh->descriptorSet, "Mesh_" + mesh->name);
 			
 			VulkanContext::Get()->device
 			                    ->updateDescriptorSets(
@@ -938,9 +948,8 @@ namespace pe
 				allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 				allocateInfo2.descriptorSetCount = 1;
 				allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutPrimitive();
-				primitive.descriptorSet = make_ref(
-						VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0)
-				);
+				primitive.descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+				VulkanContext::Get()->SetDebugObjectName(*mesh->descriptorSet, "Primitive_" + primitive.name);
 				
 				std::vector<vk::WriteDescriptorSet> textureWriteSets {
 						wSetImage(*primitive.descriptorSet, 0, primitive.pbrMaterial.baseColorTexture),

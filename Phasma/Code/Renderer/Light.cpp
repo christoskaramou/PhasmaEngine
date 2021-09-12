@@ -44,17 +44,22 @@ namespace pe
 	{
 		getDescriptorSetLayout();
 		
-		uniform.CreateBuffer(sizeof(LightsUBO), BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		uniform.CreateBuffer(
+			sizeof(LightsUBO),
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		uniform.Map();
 		uniform.CopyData(&lubo);
 		uniform.Flush();
 		uniform.Unmap();
+		uniform.SetDebugName("Light_UB");
 		
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = descriptorSetLayout.get();
 		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Lights");
 		
 		vk::DescriptorBufferInfo dbi;
 		dbi.buffer = *uniform.GetBufferVK();
@@ -76,7 +81,6 @@ namespace pe
 		uniform.Destroy();
 		if (*descriptorSetLayout)
 		{
-			VulkanContext::Get()->device->destroyDescriptorSetLayout(*descriptorSetLayout);
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(*descriptorSetLayout);
 			*descriptorSetLayout = nullptr;
 		}
@@ -138,6 +142,7 @@ namespace pe
 			createInfo.pBindings = &descriptorSetLayoutBinding;
 			
 			descriptorSetLayout = make_ref(VulkanContext::Get()->device->createDescriptorSetLayout(createInfo));
+			VulkanContext::Get()->SetDebugObjectName(*descriptorSetLayout, "Lights");
 		}
 		return *descriptorSetLayout;
 	}

@@ -128,55 +128,6 @@ namespace pe
 	
 	Renderer::~Renderer()
 	{
-		VulkanContext::Get()->device->waitIdle();
-		
-		Destroy();
-		
-		if (Model::models.empty())
-		{
-			if (Pipeline::getDescriptorSetLayoutModel())
-			{
-				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
-				Pipeline::getDescriptorSetLayoutModel() = nullptr;
-			}
-			if (Pipeline::getDescriptorSetLayoutMesh())
-			{
-				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
-				Pipeline::getDescriptorSetLayoutMesh() = nullptr;
-			}
-			if (Pipeline::getDescriptorSetLayoutPrimitive())
-			{
-				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
-				Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
-			}
-		}
-
-#ifndef IGNORE_SCRIPTS
-		for (auto& script : scripts)
-			delete script;
-#endif
-		for (auto& model : Model::models)
-			model.destroy();
-		for (auto& texture : Mesh::uniqueTextures)
-			texture.second.destroy();
-		Mesh::uniqueTextures.clear();
-		
-		Compute::DestroyResources();
-		shadows.destroy();
-		deferred.destroy();
-		ssao.destroy();
-		ssr.destroy();
-		fxaa.destroy();
-		taa.destroy();
-		bloom.destroy();
-		dof.destroy();
-		motionBlur.destroy();
-		skyBoxDay.destroy();
-		skyBoxNight.destroy();
-		gui.destroy();
-		lightUniforms.destroy();
-		for (auto& metric : metrics)
-			metric.destroy();
 		ctx->GetVKContext()->Destroy();
 		ctx->GetVKContext()->Remove();
 	}
@@ -559,8 +510,56 @@ namespace pe
 	
 	void Renderer::Destroy()
 	{
+		VulkanContext::Get()->device->waitIdle();
+
 		for (auto& rt : renderTargets)
 			rt.second.destroy();
+
+		if (Model::models.empty())
+		{
+			if (Pipeline::getDescriptorSetLayoutModel())
+			{
+				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
+				Pipeline::getDescriptorSetLayoutModel() = nullptr;
+			}
+			if (Pipeline::getDescriptorSetLayoutMesh())
+			{
+				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
+				Pipeline::getDescriptorSetLayoutMesh() = nullptr;
+			}
+			if (Pipeline::getDescriptorSetLayoutPrimitive())
+			{
+				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
+				Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
+			}
+		}
+
+#ifndef IGNORE_SCRIPTS
+		for (auto& script : scripts)
+			delete script;
+#endif
+		for (auto& model : Model::models)
+			model.destroy();
+		for (auto& texture : Mesh::uniqueTextures)
+			texture.second.destroy();
+		Mesh::uniqueTextures.clear();
+
+		Compute::DestroyResources();
+		shadows.destroy();
+		deferred.destroy();
+		ssao.destroy();
+		ssr.destroy();
+		fxaa.destroy();
+		taa.destroy();
+		bloom.destroy();
+		dof.destroy();
+		motionBlur.destroy();
+		skyBoxDay.destroy();
+		skyBoxNight.destroy();
+		gui.destroy();
+		lightUniforms.destroy();
+		for (auto& metric : metrics)
+			metric.destroy();
 	}
 	
 	void Renderer::Draw()
@@ -583,7 +582,7 @@ namespace pe
 			//float f = (*matp)[0][0];
 		}
 		
-		// aquire the image
+		// acquire the image
 		auto& aquireSignalSemaphore = (*vCtx.semaphores)[0];
 		const uint32_t imageIndex = vCtx.swapchain.Aquire(aquireSignalSemaphore, nullptr);
 		this->previousImageIndex = imageIndex;
@@ -652,6 +651,7 @@ namespace pe
 				.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
 		renderTargets[name].createImageView(vk::ImageAspectFlagBits::eColor);
 		renderTargets[name].createSampler();
+		renderTargets[name].SetDebugName("RenderTarget_" + name);
 		
 		//std::string str = to_string(format); str.find("A8") != std::string::npos
 		renderTargets[name].blentAttachment->blendEnable = name == "albedo" ? VK_TRUE : VK_FALSE;

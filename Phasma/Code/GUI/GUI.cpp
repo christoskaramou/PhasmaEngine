@@ -683,6 +683,7 @@ namespace pe
 			createInfo.bindingCount = static_cast<uint32_t>(descriptorSetLayoutBindings.size());
 			createInfo.pBindings = descriptorSetLayoutBindings.data();
 			descriptorSetLayout = make_ref(device.createDescriptorSetLayout(createInfo));
+			VulkanContext::Get()->SetDebugObjectName(*descriptorSetLayout, "GUI");
 		}
 		return *descriptorSetLayout;
 	}
@@ -813,17 +814,19 @@ namespace pe
 			texture.minLod = -1000.f;
 			texture.maxLod = 1000.f;
 			texture.createSampler();
+			texture.SetDebugName("IMGUI_TexDataAsRGBA32");
 		}
 		// Create the and Upload to Buffer:
 		Buffer stagingBuffer;
 		{
 			stagingBuffer.CreateBuffer(
-					upload_size, BufferUsage::TransferSrc, MemoryProperty::HostVisible
+					upload_size, (BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
 			);
 			stagingBuffer.Map();
 			stagingBuffer.CopyData(pixels);
 			stagingBuffer.Flush();
 			stagingBuffer.Unmap();
+			stagingBuffer.SetDebugName("IMGUI_TexDataAsRGBA32");
 		}
 		
 		// Copy to Image:
@@ -1259,9 +1262,10 @@ namespace pe
 		vertexBuffer.Destroy();
 		//vertexBuffer.createBuffer(vertex_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		vertexBuffer.CreateBuffer(
-				vertex_size, BufferUsage::VertexBuffer,
-				MemoryProperty::HostCached | MemoryProperty::HostVisible
+				vertex_size, (BufferUsageFlags)vk::BufferUsageFlagBits::eVertexBuffer,
+				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostCached | (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
 		);
+		vertexBuffer.SetDebugName("IMGUI_Vertex");
 	}
 	
 	void GUI::createIndexBuffer(size_t index_size)
@@ -1270,9 +1274,10 @@ namespace pe
 		indexBuffer.Destroy();
 		//indexBuffer.createBuffer(index_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		indexBuffer.CreateBuffer(
-				index_size, BufferUsage::IndexBuffer,
-				MemoryProperty::HostCached | MemoryProperty::HostVisible
+				index_size, (BufferUsageFlags)vk::BufferUsageFlagBits::eIndexBuffer,
+				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostCached | (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
 		);
+		indexBuffer.SetDebugName("IMGUI_Index");
 	}
 	
 	void GUI::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
@@ -1282,6 +1287,7 @@ namespace pe
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &descriptorSetLayout;
 		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "GUI");
 		
 		updateDescriptorSets();
 		

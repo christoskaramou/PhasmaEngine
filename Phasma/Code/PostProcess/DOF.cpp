@@ -54,6 +54,7 @@ namespace pe
 		frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 		frameImage.createSampler();
+		frameImage.SetDebugName("DOF_FrameImage");
 	}
 	
 	void DOF::createRenderPass(std::map<std::string, Image>& renderTargets)
@@ -83,6 +84,7 @@ namespace pe
 		
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutDOF();
 		DSet = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSet, "DOF");
 		
 		updateDescriptorSets(renderTargets);
 	}

@@ -50,7 +50,9 @@ namespace pe
     
     void CameraSystem::Destroy()
     {
-    
+		std::vector<IComponent*>& components = GetComponentsOfType<Camera>();
+        for (auto camera : components)
+            static_cast<Camera*>(camera)->Destroy();
     }
     
     Camera::Camera()
@@ -81,6 +83,11 @@ namespace pe
     void Camera::ReCreateComputePipelines()
     {
         frustumCompute.createPipeline("Shaders/Compute/frustum.comp");
+    }
+
+    void Camera::Destroy()
+    {
+        frustumCompute.destroy();
     }
     
     void Camera::Update()

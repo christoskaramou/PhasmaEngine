@@ -53,6 +53,7 @@ namespace pe
 		for (uint32_t i = 0; i < descriptorSets->size(); i++)
 		{
 			(*descriptorSets)[i] = VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0);
+			VulkanContext::Get()->SetDebugObjectName((*descriptorSets)[i], "Shadows" + std::to_string(i));
 			
 			std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 			// MVP
@@ -116,6 +117,7 @@ namespace pe
 	void Shadows::createFrameBuffers()
 	{
 		textures.resize(3);
+		int textureIdx = 0;
 		for (auto& texture : textures)
 		{
 			texture.format = VulkanContext::Get()->depth.format;
@@ -135,6 +137,7 @@ namespace pe
 			texture.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 			texture.createImageView(vk::ImageAspectFlagBits::eDepth);
 			texture.createSampler();
+			texture.SetDebugName("ShadowPass_DepthImage" + textureIdx++);
 		}
 		
 		framebuffers.resize(VulkanContext::Get()->swapchain.images.size() * textures.size());
@@ -177,13 +180,18 @@ namespace pe
 	void Shadows::createUniformBuffers()
 	{
 		uniformBuffers.resize(textures.size());
+		int ubIdx = 0;
 		for (auto& buffer : uniformBuffers)
 		{
-			buffer.CreateBuffer(sizeof(ShadowsUBO), BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+			buffer.CreateBuffer(
+				sizeof(ShadowsUBO),
+				(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 			buffer.Map();
 			buffer.Zero();
 			buffer.Flush();
 			buffer.Unmap();
+			buffer.SetDebugName("Shadows_UB" + ubIdx++);
 		}
 	}
 	

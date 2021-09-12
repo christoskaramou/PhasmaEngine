@@ -35,6 +35,8 @@ namespace pe
 	{
 	public:
 		void InitSystems();
+
+		void DestroySystems();
 		
 		void UpdateSystems(double delta);
 		

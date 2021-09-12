@@ -53,6 +53,7 @@ namespace pe
 		frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 		frameImage.createSampler();
+		frameImage.SetDebugName("FXAA_FrameImage");
 	}
 	
 	void FXAA::createUniforms(std::map<std::string, Image>& renderTargets)
@@ -62,6 +63,7 @@ namespace pe
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutFXAA();
 		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSet, "FXAA");
 		
 		updateDescriptorSets(renderTargets);
 	}
@@ -139,7 +141,7 @@ namespace pe
 				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["viewport"].blentAttachment}
 		);
 		pipeline.info.descriptorSetLayouts = make_ref(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutDOF()}
+				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutFXAA()}
 		);
 		pipeline.info.renderPass = renderPass;
 		

@@ -63,8 +63,9 @@ namespace pe
 		
 		void* Data();
 		
-		// TEMPORARY
 		Ref<vk::Buffer> GetBufferVK();
+
+		void SetDebugName(const std::string& debugName);
 		
 	private:
 		Ref<BufferVK> m_bufferVK;

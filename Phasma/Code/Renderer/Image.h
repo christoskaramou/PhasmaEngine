@@ -88,7 +88,7 @@ namespace pe
 		Image();
 		
 		~Image();
-		
+
 		Ref<vk::Image> image;
 		VmaAllocation allocation {};
 		Ref<vk::ImageView> view;
@@ -150,5 +150,7 @@ namespace pe
 		void createSampler();
 		
 		void destroy() const;
+
+		void SetDebugName(const std::string& debugName);
 	};
 }

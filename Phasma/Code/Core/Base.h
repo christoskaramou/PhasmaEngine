@@ -75,4 +75,72 @@ namespace pe
 		
 		NoMove& operator=(NoMove&&) = delete;
 	};
+
+#define Flag_Operators(Enum)							\
+	inline Enum##Flags operator|(Enum bit0, Enum bit1)	\
+	{ return Enum##Flags(bit0) | bit1; }				\
+	inline Enum##Flags operator&(Enum bit0, Enum bit1)	\
+	{ return Enum##Flags(bit0) & bit1; }
+
+#define Create_Flags(Enum)				\
+	using Enum##Flags = Flags<Enum>;	\
+	Flag_Operators(Enum)
+
+	template<class T>
+	class Flags
+	{
+	public:
+		using MaskType = typename std::underlying_type<T>::type;
+
+		Flags()
+			: m_mask(0)
+		{}
+
+		Flags(T bit)
+			: m_mask(static_cast<MaskType>(bit))
+		{}
+
+		Flags(Flags<T> const& rhs) = default;
+
+		Flags(MaskType flags)
+			: m_mask(flags)
+		{}
+
+		Flags<T> operator&(Flags<T> const& rhs) const
+		{
+			return Flags<T>(m_mask & rhs.m_mask);
+		}
+
+		Flags<T> operator|(Flags<T> const& rhs) const
+		{
+			return Flags<T>(m_mask | rhs.m_mask);
+		}
+
+		explicit operator bool() const
+		{
+			return !!m_mask;
+		}
+
+		explicit operator MaskType() const
+		{
+			return m_mask;
+		}
+
+		Flags<T>& operator=(Flags<T> const& rhs) = default;
+
+		Flags<T>& operator|=(Flags<T> const& rhs)
+		{
+			m_mask |= rhs.m_mask;
+			return *this;
+		}
+
+		Flags<T>& operator&=(Flags<T> const& rhs)
+		{
+			m_mask &= rhs.m_mask;
+			return *this;
+		}
+
+	private:
+		MaskType m_mask;
+	};
 }

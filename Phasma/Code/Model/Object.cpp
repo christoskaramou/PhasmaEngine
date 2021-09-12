@@ -35,21 +35,22 @@ namespace pe
 	void Object::createVertexBuffer()
 	{
 		vertexBuffer.CreateBuffer(
-				sizeof(float) * vertices.size(),
-				BufferUsage::TransferDst | BufferUsage::VertexBuffer,
-				MemoryProperty::DeviceLocal
-		);
-		
+			sizeof(float) * vertices.size(),
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferDst | (BufferUsageFlags)vk::BufferUsageFlagBits::eVertexBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eDeviceLocal);
+		vertexBuffer.SetDebugName("Object_Vertex");
+
 		// Staging buffer
 		Buffer staging;
 		staging.CreateBuffer(
-				sizeof(float) * vertices.size(), BufferUsage::TransferSrc,
-				MemoryProperty::HostVisible
-		);
+				sizeof(float) * vertices.size(),
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		staging.Map();
 		staging.CopyData(vertices.data());
 		staging.Flush();
 		staging.Unmap();
+		staging.SetDebugName("Staging");
 		
 		vertexBuffer.CopyBuffer(&staging, staging.Size());
 		staging.Destroy();
@@ -57,11 +58,15 @@ namespace pe
 	
 	void Object::createUniformBuffer(size_t size)
 	{
-		uniformBuffer.CreateBuffer(size, BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		uniformBuffer.CreateBuffer(
+			size,
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		uniformBuffer.Map();
 		uniformBuffer.Zero();
 		uniformBuffer.Flush();
 		uniformBuffer.Unmap();
+		uniformBuffer.SetDebugName("Object_UB");
 	}
 	
 	void Object::loadTexture(const std::string& path)
@@ -77,12 +82,14 @@ namespace pe
 		
 		Buffer staging;
 		staging.CreateBuffer(
-				imageSize, BufferUsage::TransferSrc, MemoryProperty::HostVisible
-		);
+			imageSize,
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		staging.Map();
 		staging.CopyData(pixels);
 		staging.Flush();
 		staging.Unmap();
+		staging.SetDebugName("Staging");
 		
 		stbi_image_free(pixels);
 		
@@ -98,6 +105,7 @@ namespace pe
 		texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		texture.createImageView(vk::ImageAspectFlagBits::eColor);
 		texture.createSampler();
+		texture.SetDebugName(path.c_str());
 		
 		staging.Destroy();
 	}
@@ -109,7 +117,7 @@ namespace pe
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &descriptorSetLayout;
 		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
-		
+		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Object");
 		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 		// MVP

@@ -54,6 +54,14 @@ namespace pe
 	Image::~Image()
 	{
 	}
+	void Image::SetDebugName(const std::string& debugName)
+	{
+#if _DEBUG
+		VulkanContext::Get()->SetDebugObjectName(*image, debugName);
+#else
+		return;
+#endif
+	}
 	
 	void Image::transitionImageLayout(
 			vk::CommandBuffer cmd,
@@ -160,8 +168,6 @@ namespace pe
 				&allocationInfo
 		);
 		image = make_ref(vk::Image(vkImage));
-		
-		vCtx->SetDebugObjectName(*image, "");
 	}
 	
 	void Image::createImageView(const vk::ImageAspectFlags& aspectFlags)

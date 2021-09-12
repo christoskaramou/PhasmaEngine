@@ -56,22 +56,28 @@ namespace pe
 		frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 		frameImage.createSampler();
+		frameImage.SetDebugName("MotionBlur_FrameImage");
 	}
 	
 	void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		auto size = 4 * sizeof(mat4);
-		UBmotionBlur.CreateBuffer(size, BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		UBmotionBlur.CreateBuffer(
+			size,
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		UBmotionBlur.Map();
 		UBmotionBlur.Zero();
 		UBmotionBlur.Flush();
 		UBmotionBlur.Unmap();
+		UBmotionBlur.SetDebugName("MotionBlur_UB");
 		
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMotionBlur();
 		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSet, "MotionBlur");
 		
 		updateDescriptorSets(renderTargets);
 	}

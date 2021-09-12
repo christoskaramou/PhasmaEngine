@@ -57,6 +57,7 @@ namespace pe
 		frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
 		frameImage.createSampler();
+		frameImage.SetDebugName("Bloom_FrameImage");
 	}
 	
 	void Bloom::createRenderPasses(std::map<std::string, Image>& renderTargets)
@@ -113,18 +114,22 @@ namespace pe
 		// Composition image to Bright Filter shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutBrightFilter();
 		DSBrightFilter = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSBrightFilter, "Bloom_BloomBrightFilter");
 		
 		// Bright Filter image to Gaussian Blur Horizontal shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutGaussianBlurH();
 		DSGaussianBlurHorizontal = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSGaussianBlurHorizontal, "Bloom_GaussianBlurHorizontal");
 		
 		// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutGaussianBlurV();
 		DSGaussianBlurVertical = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSGaussianBlurVertical, "Bloom_GaussianBlurVertical");
 		
 		// Gaussian Blur Vertical image to Combine shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutCombine();
 		DSCombine = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSCombine, "Bloom_Combine");
 		
 		updateDescriptorSets(renderTargets);
 	}

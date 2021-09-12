@@ -55,11 +55,15 @@ namespace pe
 			scale = lerp(.1f, 1.f, scale * scale);
 			kernel.emplace_back(sample * scale, 0.f);
 		}
-		UB_Kernel.CreateBuffer(sizeof(vec4) * 16, BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		UB_Kernel.CreateBuffer(
+			sizeof(vec4) * 16,
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		UB_Kernel.Map();
 		UB_Kernel.CopyData(kernel.data());
 		UB_Kernel.Flush();
 		UB_Kernel.Unmap();
+		UB_Kernel.SetDebugName("SSAO_UB_Kernel");
 		
 		// noise image
 		std::vector<vec4> noise {};
@@ -68,11 +72,15 @@ namespace pe
 		
 		Buffer staging;
 		const uint64_t bufSize = sizeof(vec4) * 16;
-		staging.CreateBuffer(bufSize, BufferUsage::TransferSrc, MemoryProperty::HostVisible);
+		staging.CreateBuffer(
+			bufSize,
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		staging.Map();
 		staging.CopyData(noise.data());
 		staging.Flush();
 		staging.Unmap();
+		staging.SetDebugName("Staging");
 		
 		noiseTex.filter = make_ref(vk::Filter::eNearest);
 		noiseTex.minLod = 0.0f;
@@ -89,13 +97,18 @@ namespace pe
 		noiseTex.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		noiseTex.createImageView(vk::ImageAspectFlagBits::eColor);
 		noiseTex.createSampler();
+		noiseTex.SetDebugName("SSAO_NoiseTexture");
 		staging.Destroy();
 		// pvm uniform
-		UB_PVM.CreateBuffer(3 * sizeof(mat4), BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		UB_PVM.CreateBuffer(
+			3 * sizeof(mat4),
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		UB_PVM.Map();
 		UB_PVM.Zero();
 		UB_PVM.Flush();
 		UB_PVM.Unmap();
+		UB_PVM.SetDebugName("SSAO_UB_PVM");
 		
 		// DESCRIPTOR SET FOR SSAO
 		const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo {
@@ -104,6 +117,7 @@ namespace pe
 				&Pipeline::getDescriptorSetLayoutSSAO()            //const DescriptorSetLayout* pSetLayouts;
 		};
 		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSet, "SSAO");
 		
 		// DESCRIPTOR SET FOR SSAO BLUR
 		const vk::DescriptorSetAllocateInfo allocInfoBlur = vk::DescriptorSetAllocateInfo {
@@ -112,6 +126,7 @@ namespace pe
 				&Pipeline::getDescriptorSetLayoutSSAOBlur()    //const DescriptorSetLayout* pSetLayouts;
 		};
 		DSBlur = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocInfoBlur).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSBlur, "SSAO_Blur");
 		
 		updateDescriptorSets(renderTargets);
 	}

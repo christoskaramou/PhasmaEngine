@@ -82,11 +82,15 @@ namespace pe
 	
 	void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
 	{
-		uniform.CreateBuffer(sizeof(ubo), BufferUsage::UniformBuffer, MemoryProperty::HostVisible);
+		uniform.CreateBuffer(
+			sizeof(ubo),
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		uniform.Map();
 		uniform.Zero();
 		uniform.Flush();
 		uniform.Unmap();
+		uniform.SetDebugName("Deferred_UB");
 		
 		auto vulkan = VulkanContext::Get();
 		const vk::DescriptorSetAllocateInfo allocInfo =
@@ -96,6 +100,7 @@ namespace pe
 						&Pipeline::getDescriptorSetLayoutComposition() //const DescriptorSetLayout* pSetLayouts;
 				};
 		DSComposition = make_ref(vulkan->device->allocateDescriptorSets(allocInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSComposition, "Composition");
 		
 		// Check if ibl_brdf_lut is already loaded
 		const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
@@ -117,11 +122,15 @@ namespace pe
 			vulkan->waitAndLockSubmits();
 			
 			Buffer staging;
-			staging.CreateBuffer(imageSize, BufferUsage::TransferSrc, MemoryProperty::HostVisible);
+			staging.CreateBuffer(
+				imageSize,
+				(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
+				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 			staging.Map();
 			staging.CopyData(pixels);
 			staging.Flush();
 			staging.Unmap();
+			staging.SetDebugName("Staging");
 			
 			stbi_image_free(pixels);
 			
@@ -139,6 +148,7 @@ namespace pe
 			ibl_brdf_lut.createImageView(vk::ImageAspectFlagBits::eColor);
 			ibl_brdf_lut.maxLod = static_cast<float>(ibl_brdf_lut.mipLevels);
 			ibl_brdf_lut.createSampler();
+			ibl_brdf_lut.SetDebugName("ibl_brdf_lut");
 			
 			staging.Destroy();
 			

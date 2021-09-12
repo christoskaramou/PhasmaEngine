@@ -33,7 +33,14 @@ namespace pe
 				system.second->Init();
 		}
 	}
-	
+
+	void Context::DestroySystems()
+	{
+		// Reverse destroy systems, some do have dependencies on previous 
+		for (auto& system : m_systems)
+			system.second->Destroy();
+	}
+
 	void Context::UpdateSystems(double delta)
 	{
 		for (auto& system : m_systems)

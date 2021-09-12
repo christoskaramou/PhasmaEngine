@@ -171,9 +171,19 @@ namespace pe
 		}
 	}
 	
-	// TEMPORARY
 	Ref<vk::Buffer> Buffer::GetBufferVK()
 	{
 		return m_bufferVK->buffer;
+	}
+
+	void Buffer::SetDebugName(const std::string& debugName)
+	{
+		if DYNAMIC_CONSTEXPR(PE_VULKAN)
+		{
+			m_bufferVK->SetDebugName(debugName);
+		}
+		else //if (PE_DX12)
+		{
+		}
 	}
 }

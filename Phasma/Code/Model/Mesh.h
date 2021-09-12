@@ -85,6 +85,7 @@ namespace pe
 		~Mesh();
 		
 		bool render = true, cull = false;
+		std::string name;
 		
 		struct UBOMesh
 		{

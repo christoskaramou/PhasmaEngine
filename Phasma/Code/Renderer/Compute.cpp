@@ -78,17 +78,25 @@ namespace pe
 	
 	void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
 	{
-		SBIn.CreateBuffer(sizeIn, BufferUsage::StorageBuffer, MemoryProperty::HostVisible);
+		SBIn.CreateBuffer(
+			sizeIn,
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eStorageBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		SBIn.Map();
 		SBIn.Zero();
 		SBIn.Flush();
 		SBIn.Unmap();
+		SBIn.SetDebugName("Compute_SB_In");
 		
-		SBOut.CreateBuffer(sizeOut, BufferUsage::StorageBuffer, MemoryProperty::HostVisible);
+		SBOut.CreateBuffer(
+			sizeOut,
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eStorageBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 		SBOut.Map();
 		SBOut.Zero();
 		SBOut.Flush();
 		SBOut.Unmap();
+		SBIn.SetDebugName("Compute_SB_Out");
 	}
 	
 	void Compute::createDescriptorSet()
@@ -98,6 +106,7 @@ namespace pe
 		allocInfo.descriptorSetCount = 1;
 		allocInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutCompute();
 		DSCompute = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*DSCompute, "Compute");
 	}
 	
 	void Compute::updateDescriptorSet()
@@ -130,7 +139,7 @@ namespace pe
 		);
 		
 		pipeline.createComputePipeline();
-		
+		VulkanContext::Get()->SetDebugObjectName(*pipeline.handle, "Compute");
 	}
 	
 	void Compute::destroy()
@@ -138,6 +147,11 @@ namespace pe
 		SBIn.Destroy();
 		SBOut.Destroy();
 		pipeline.destroy();
+		if (*semaphore)
+		{
+			VulkanContext::Get()->device->destroySemaphore(*semaphore);
+			*semaphore = nullptr;
+		}
 		if (*fence)
 		{
 			VulkanContext::Get()->device->destroyFence(*fence);
@@ -154,6 +168,7 @@ namespace pe
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = 1;
 		vk::CommandBuffer commandBuffer = VulkanContext::Get()->device->allocateCommandBuffers(cbai).at(0);
+		VulkanContext::Get()->SetDebugObjectName(commandBuffer, "Compute");
 		
 		Compute compute;
 		compute.commandBuffer = make_ref(commandBuffer);
@@ -164,7 +179,9 @@ namespace pe
 		compute.fence = make_ref(
 				VulkanContext::Get()->device->createFence(vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled})
 		);
-		compute.semaphore = make_ref(VulkanContext::Get()->device->createSemaphore(vk::SemaphoreCreateInfo {}));
+		compute.semaphore = make_ref(VulkanContext::Get()->device->createSemaphore(vk::SemaphoreCreateInfo{}));
+		VulkanContext::Get()->SetDebugObjectName(*compute.fence, "Compute");
+		VulkanContext::Get()->SetDebugObjectName(*compute.semaphore, "Compute");
 		
 		return compute;
 	}
@@ -183,6 +200,8 @@ namespace pe
 		
 		for (auto& commandBuffer : commandBuffers)
 		{
+			VulkanContext::Get()->SetDebugObjectName(commandBuffer, "Compute");
+
 			Compute compute;
 			compute.commandBuffer = make_ref(commandBuffer);
 			compute.createPipeline(shaderName);
@@ -192,6 +211,10 @@ namespace pe
 			compute.fence = make_ref(
 					VulkanContext::Get()->device->createFence(vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled})
 			);
+			compute.semaphore = make_ref(VulkanContext::Get()->device->createSemaphore(vk::SemaphoreCreateInfo{}));
+
+			VulkanContext::Get()->SetDebugObjectName(*compute.fence, "Compute");
+			VulkanContext::Get()->SetDebugObjectName(*compute.semaphore, "Compute");
 			
 			computes.push_back(compute);
 		}
@@ -207,6 +230,7 @@ namespace pe
 			cpci.queueFamilyIndex = VulkanContext::Get()->computeFamilyId;
 			cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
 			s_commandPool = make_ref(VulkanContext::Get()->device->createCommandPool(cpci));
+			VulkanContext::Get()->SetDebugObjectName(*s_commandPool, "Compute");
 		}
 	}
 	

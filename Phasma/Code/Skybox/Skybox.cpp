@@ -45,6 +45,7 @@ namespace pe
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutSkybox();
 		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Skybox");
 		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
 		// texture sampler
@@ -96,12 +97,14 @@ namespace pe
 			
 			Buffer staging;
 			staging.CreateBuffer(
-					imageSize, BufferUsage::TransferSrc, MemoryProperty::HostVisible
-			);
+				imageSize,
+				(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
+				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
 			staging.Map();
 			staging.CopyData(pixels);
 			staging.Flush();
 			staging.Unmap();
+			staging.SetDebugName("Staging");
 			
 			stbi_image_free(pixels);
 			
@@ -115,6 +118,8 @@ namespace pe
 		
 		texture.addressMode = make_ref(vk::SamplerAddressMode::eClampToEdge);
 		texture.createSampler();
+		static int skyboxIdx = 0;
+		texture.SetDebugName("Skybox_TextureArray" + skyboxIdx++);
 	}
 	
 	void SkyBox::destroy()

@@ -52,12 +52,15 @@ namespace pe
 	void Mesh::createUniformBuffers()
 	{
 		uniformBuffer.CreateBuffer(
-				sizeof(ubo), BufferUsage::UniformBuffer, MemoryProperty::HostVisible
+			sizeof(ubo),
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
 		);
 		uniformBuffer.Map();
 		uniformBuffer.Zero();
 		uniformBuffer.Flush();
 		uniformBuffer.Unmap();
+		uniformBuffer.SetDebugName(name);
 		
 		for (auto& primitive : primitives)
 		{
@@ -74,12 +77,15 @@ namespace pe
 			
 			const size_t size = sizeof(mat4);
 			primitive.uniformBuffer.CreateBuffer(
-					size, BufferUsage::UniformBuffer, MemoryProperty::HostVisible
+				size,
+				(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
 			);
 			primitive.uniformBuffer.Map();
 			primitive.uniformBuffer.CopyData(&factors);
 			primitive.uniformBuffer.Flush();
 			primitive.uniformBuffer.Unmap();
+			primitive.uniformBuffer.SetDebugName(primitive.name);
 		}
 	}
 	
@@ -158,12 +164,15 @@ namespace pe
 			
 			Buffer staging;
 			staging.CreateBuffer(
-					imageSize, BufferUsage::TransferSrc, MemoryProperty::HostVisible
+				imageSize,
+				(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
+				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
 			);
 			staging.Map();
 			staging.CopyData(pixels);
 			staging.Flush();
 			staging.Unmap();
+			staging.SetDebugName("Staging");
 			
 			stbi_image_free(pixels);
 			
@@ -181,6 +190,7 @@ namespace pe
 			tex->createImageView(vk::ImageAspectFlagBits::eColor);
 			tex->maxLod = static_cast<float>(tex->mipLevels);
 			tex->createSampler();
+			tex->SetDebugName(path.c_str());
 			
 			staging.Destroy();
 			
