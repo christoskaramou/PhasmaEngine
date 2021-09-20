@@ -51,11 +51,11 @@ namespace pe
 		}
 	}
 	
-	void Buffer::Map(size_t mapSize, size_t offset)
+	void Buffer::Map()
 	{
 		if DYNAMIC_CONSTEXPR (PE_VULKAN)
 		{
-			m_bufferVK->Map(mapSize, offset);
+			m_bufferVK->Map();
 		}
 		else //if (PE_DX12)
 		{

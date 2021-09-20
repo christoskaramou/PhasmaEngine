@@ -47,9 +47,7 @@ namespace pe
 		SBIn.Unmap();
 	}
 	
-	void Compute::dispatch(
-			const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, const std::vector<vk::Semaphore>& waitFor
-	)
+	void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, const std::vector<vk::Semaphore>& waitFor)
 	{
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -96,7 +94,7 @@ namespace pe
 		SBOut.Zero();
 		SBOut.Flush();
 		SBOut.Unmap();
-		SBIn.SetDebugName("Compute_SB_Out");
+		SBOut.SetDebugName("Compute_SB_Out");
 	}
 	
 	void Compute::createDescriptorSet()

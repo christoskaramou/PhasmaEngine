@@ -67,52 +67,14 @@ namespace pe
 		
 		void destroy();
 		
-		template<typename T, uint32_t N>
-		inline std::vector<T> copyOutput(size_t range = 0, size_t offset = 0)
+		template<class T>
+		void copyDataTo(T* ptr, int elements)
 		{
-			static_assert(N > 0);
-			
-			size_t n;
-			if constexpr (N == AUTO)
-			{
-				n = SBOut.SizeRequested() / sizeof(T);
-				if (n < 1)
-					throw std::range_error("The size requested in Compute::copyOutput is bigger than the buffer");
-			}
-			else
-			{
-				n = N;
-				if (n * sizeof(T) > SBOut.SizeRequested())
-					throw std::range_error("The size requested in Compute::copyOutput is bigger than the buffer");
-			}
-			
-			if (SBOut.SizeRequested() % sizeof(T) != 0)
-				throw std::range_error(
-						"The type of T is not dividing the buffer size accurately in Compute::copyOutput"
-				);
-			
-			std::vector<T> output(n);
-			SBOut.Map(range, offset);
-			T* data = static_cast<T*>(SBOut.Data());
-			for (int i = 0; i < n; ++i)
-			{
-				output[i] = data[i];
-			}
+			assert(elements * sizeof(T) <= SBOut.SizeRequested());
+
+			SBOut.Map();
+			memcpy(ptr, SBOut.Data(), elements * sizeof(T));
 			SBOut.Unmap();
-			
-			return output;
-		}
-		
-		template<typename T>
-		inline T copyOutput(size_t range = 0, size_t offset = 0)
-		{
-			assert(sizeof(T) <= SBOut.Size());
-			
-			SBOut.Map(range, offset);
-			T output = *static_cast<T*>(SBOut.Data());
-			SBOut.Unmap();
-			
-			return output;
 		}
 		
 		void createPipeline(const std::string& shaderName);

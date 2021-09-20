@@ -48,7 +48,7 @@ namespace pe
 		
 		void CreateBuffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
 		
-		void Map(size_t mapSize = 0, size_t offset = 0);
+		void Map();
 		
 		void Unmap();
 		

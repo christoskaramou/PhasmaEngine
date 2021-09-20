@@ -220,10 +220,9 @@ namespace pe
 			device->setDebugUtilsObjectNameEXT(duoni, *dispatchLoaderDynamic);
 		}
 #else
-		
-		void SetDebugObjectName(const void* validHandle, const void* name)
+		template<typename T>
+		void SetDebugObjectName(const T& validHandle, const std::string& debugName)
 		{}
-
 #endif
 	private:
 		static inline std::mutex m_submit_mutex{};

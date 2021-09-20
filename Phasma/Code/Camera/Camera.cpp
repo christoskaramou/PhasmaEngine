@@ -210,8 +210,8 @@ namespace pe
     {
         // Just testing computes, the specific one is not speeding up any process
         frustumCompute.waitFence();
-        frustum = frustumCompute.copyOutput<Plane, AUTO>();
-        frustumCompute.updateInput(&viewProjection, 64);
+        frustumCompute.copyDataTo(frustum.data(), frustum.size()); // Update frustum planes
+        frustumCompute.updateInput(&viewProjection, sizeof(mat4));
         frustumCompute.dispatch(1, 1, 1);
 
 //		// transpose just to make the calculations look simpler

@@ -64,11 +64,10 @@ namespace pe
 		buffer = make_ref(vk::Buffer(vkBuffer));
 	}
 	
-	void BufferVK::Map(size_t mapSize, size_t offset)
+	void BufferVK::Map()
 	{
 		if (data)
 			return;
-		assert(mapSize + offset <= size);
 		vmaMapMemory(VulkanContext::Get()->allocator, allocation, &data);
 	}
 	
