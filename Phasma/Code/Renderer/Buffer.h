@@ -25,12 +25,6 @@ SOFTWARE.
 #include "../Core/Base.h"
 #include "RendererEnums.h"
 
-// TEMPORARY
-namespace vk
-{
-	class Buffer;
-}
-
 namespace pe
 {
 	class BufferVK;

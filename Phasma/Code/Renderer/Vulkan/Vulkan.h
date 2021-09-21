@@ -34,45 +34,6 @@ SOFTWARE.
 #define WIDTH_f static_cast<float>(WIDTH)
 #define HEIGHT_f static_cast<float>(HEIGHT)
 
-namespace vk
-{
-	class Instance;
-	
-	class DebugUtilsMessengerEXT;
-	
-	class PhysicalDevice;
-	
-	struct PhysicalDeviceProperties;
-	struct PhysicalDeviceFeatures;
-	struct QueueFamilyProperties;
-	
-	class Device;
-	
-	class Queue;
-	
-	class CommandPool;
-	
-	class CommandBuffer;
-	
-	class DescriptorPool;
-	
-	class Fence;
-	
-	class Semaphore;
-	
-	class DispatchLoaderDynamic;
-	
-	template<class T1>
-	class Flags;
-	
-	enum class PipelineStageFlagBits : uint32_t;
-	using PipelineStageFlags = Flags<PipelineStageFlagBits>;
-}
-
-struct SDL_Window;
-enum VkDebugUtilsMessageSeverityFlagBitsEXT;
-struct VkDebugUtilsMessengerCallbackDataEXT;
-
 #if defined(_WIN32)
 // On Windows, Vulkan commands use the stdcall convention
 #define VKAPI_ATTR

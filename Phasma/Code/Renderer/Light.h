@@ -28,13 +28,6 @@ SOFTWARE.
 #include "../GUI/GUI.h"
 #include "../ECS/Component.h"
 
-namespace vk
-{
-	class DescriptorSet;
-	
-	class DescriptorSetLayout;
-}
-
 namespace pe
 {
 #define MAX_LIGHTS 10

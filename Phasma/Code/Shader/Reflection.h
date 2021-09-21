@@ -25,11 +25,6 @@ SOFTWARE.
 #include "../Core/Base.h"
 #include <vector>
 
-namespace vk
-{
-	class DescriptorSetLayout;
-}
-
 namespace spirv_cross
 {
 	struct SPIRType;

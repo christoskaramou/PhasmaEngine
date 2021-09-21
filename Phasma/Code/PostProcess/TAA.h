@@ -32,13 +32,6 @@ SOFTWARE.
 #include <vector>
 #include <map>
 
-namespace vk
-{
-	class DescriptorSet;
-	
-	class CommandBuffer;
-}
-
 namespace pe
 {
 	class TAA

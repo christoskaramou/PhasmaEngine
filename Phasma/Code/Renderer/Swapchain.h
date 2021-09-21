@@ -25,18 +25,6 @@ SOFTWARE.
 #include "Image.h"
 #include <vector>
 
-namespace vk
-{
-	class SwapchainKHR;
-	
-	class Semaphore;
-	
-	class Fence;
-	
-	template<class T>
-	class ArrayProxy;
-}
-
 namespace pe
 {
 	class Context;

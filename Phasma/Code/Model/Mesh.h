@@ -32,11 +32,6 @@ SOFTWARE.
 
 constexpr auto MAX_NUM_JOINTS = 128u;
 
-namespace vk
-{
-	class DescriptorSet;
-}
-
 namespace pe
 {
 	class Primitive

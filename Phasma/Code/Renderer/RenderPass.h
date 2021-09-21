@@ -25,13 +25,6 @@ SOFTWARE.
 #include "../Core/Base.h"
 #include <vector>
 
-namespace vk
-{
-	enum class Format;
-	
-	class RenderPass;
-}
-
 namespace pe
 {
 	class RenderPass

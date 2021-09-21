@@ -29,13 +29,6 @@ SOFTWARE.
 #include <map>
 #include <string>
 
-namespace vk
-{
-	class DescriptorSet;
-	
-	class CommandBuffer;
-}
-
 namespace pe
 {
 	class DOF

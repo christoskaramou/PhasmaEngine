@@ -24,12 +24,6 @@ SOFTWARE.
 
 #include "../Core/Math.h"
 
-namespace vk
-{
-	struct VertexInputBindingDescription;
-	struct VertexInputAttributeDescription;
-}
-
 namespace pe
 {
 	class Vertex

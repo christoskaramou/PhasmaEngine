@@ -30,11 +30,6 @@ SOFTWARE.
 #include "RenderPass.h"
 #include "Framebuffer.h"
 
-namespace vk
-{
-	class DescriptorSet;
-}
-
 namespace pe
 {
 	struct ShadowsUBO

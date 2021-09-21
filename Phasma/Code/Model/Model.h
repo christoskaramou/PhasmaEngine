@@ -33,13 +33,6 @@ SOFTWARE.
 #include "../../Include/GLTFSDK/Document.h"
 #include "StreamReader.h"
 
-namespace vk
-{
-	class CommandBuffer;
-	
-	class DescriptorSet;
-}
-
 namespace pe
 {
 	class Pipeline;

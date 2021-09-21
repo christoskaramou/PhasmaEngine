@@ -26,13 +26,6 @@ SOFTWARE.
 #include "../Renderer/Buffer.h"
 #include "../Core/Math.h"
 
-namespace vk
-{
-	class DescriptorSet;
-	
-	class DescriptorSetLayout;
-}
-
 namespace pe
 {
 	class Object

@@ -24,52 +24,6 @@ SOFTWARE.
 
 #include "../Core/Base.h"
 
-namespace vk
-{
-	class Image;
-	
-	class DeviceMemory;
-	
-	class ImageView;
-	
-	class Sampler;
-	
-	struct Extent2D;
-	enum class Format;
-	enum class ImageLayout;
-	enum class ImageTiling;
-	enum class Filter;
-	enum class ImageViewType;
-	enum class SamplerAddressMode;
-	enum class BorderColor;
-	enum class CompareOp;
-	enum class SamplerMipmapMode;
-	struct PipelineColorBlendAttachmentState;
-	
-	class CommandBuffer;
-	
-	enum class SampleCountFlagBits : uint32_t;
-	
-	class Buffer;
-	
-	template<class T1>
-	class Flags;
-	
-	enum class ImageCreateFlagBits : uint32_t;
-	enum class PipelineStageFlagBits : uint32_t;
-	enum class AccessFlagBits : uint32_t;
-	enum class ImageAspectFlagBits : uint32_t;
-	enum class ImageUsageFlagBits : uint32_t;
-	enum class MemoryPropertyFlagBits : uint32_t;
-	using ImageCreateFlags = Flags<ImageCreateFlagBits>;
-	using PipelineStageFlags = Flags<PipelineStageFlagBits>;
-	using AccessFlags = Flags<AccessFlagBits>;
-	using ImageAspectFlags = Flags<ImageAspectFlagBits>;
-	using ImageUsageFlags = Flags<ImageUsageFlagBits>;
-	using MemoryPropertyFlags = Flags<MemoryPropertyFlagBits>;
-	using Bool32 = uint32_t;
-}
-
 namespace pe
 {
 	enum class LayoutState

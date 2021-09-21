@@ -71,6 +71,7 @@ namespace vk
 	struct SurfaceFormatKHR;
 	enum class PresentModeKHR;
 	class SwapchainKHR;
+	class QueryPool;
 
 	template<class T1> class Flags;
 	enum class PipelineStageFlagBits : uint32_t; using PipelineStageFlags = Flags<PipelineStageFlagBits>;
@@ -85,6 +86,10 @@ namespace vk
 
 	template <typename T> class ArrayProxy;
 }
+
+struct SDL_Window;
+enum VkDebugUtilsMessageSeverityFlagBitsEXT;
+struct VkDebugUtilsMessengerCallbackDataEXT;
 
 namespace pe
 {

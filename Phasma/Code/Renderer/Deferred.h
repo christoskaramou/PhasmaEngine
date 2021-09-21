@@ -31,13 +31,6 @@ SOFTWARE.
 #include "Framebuffer.h"
 #include <map>
 
-namespace vk
-{
-	class DescriptorSet;
-	
-	class DescriptorSetLayout;
-}
-
 namespace pe
 {
 	class Deferred

@@ -25,13 +25,6 @@ SOFTWARE.
 #include "../Core/Base.h"
 #include <vector>
 
-namespace vk
-{
-	class Framebuffer;
-	
-	class ImageView;
-}
-
 namespace pe
 {
 	class RenderPass;

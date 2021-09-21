@@ -24,11 +24,6 @@ SOFTWARE.
 
 #include "../Model/Object.h"
 
-namespace vk
-{
-	class DescriptorSet;
-}
-
 namespace pe
 {
 	class SkyBox

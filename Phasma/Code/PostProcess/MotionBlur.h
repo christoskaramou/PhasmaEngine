@@ -32,15 +32,6 @@ SOFTWARE.
 #include <string>
 #include <map>
 
-namespace vk
-{
-	class DescriptorSet;
-	
-	class CommandBuffer;
-	
-	struct Extent2D;
-}
-
 namespace pe
 {
 	class MotionBlur

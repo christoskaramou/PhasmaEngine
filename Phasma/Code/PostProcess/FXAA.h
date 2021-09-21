@@ -30,15 +30,6 @@ SOFTWARE.
 #include <map>
 #include <string>
 
-namespace vk
-{
-	class DescriptorSet;
-	
-	class CommandBuffer;
-	
-	struct Extent2D;
-}
-
 namespace pe
 {
 	class FXAA

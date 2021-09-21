@@ -22,6 +22,7 @@ SOFTWARE.
 
 #pragma once
 
+#include "Base.h"
 #include <chrono>
 #include <vector>
 #include <memory>
@@ -89,12 +90,6 @@ namespace pe
 	};
 }
 
-namespace vk
-{
-	class CommandBuffer;
-	
-	class QueryPool;
-}
 namespace pe
 {
 	class GPUTimer

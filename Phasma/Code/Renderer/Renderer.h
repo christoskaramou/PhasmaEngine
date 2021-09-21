@@ -45,11 +45,6 @@ SOFTWARE.
 
 #define IGNORE_SCRIPTS
 
-namespace vk
-{
-	class CommandBuffer;
-}
-
 namespace pe
 {
 	class Renderer final : public ISystem

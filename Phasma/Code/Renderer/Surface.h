@@ -24,16 +24,6 @@ SOFTWARE.
 
 #include "../Core/Base.h"
 
-namespace vk
-{
-	class SurfaceKHR;
-	
-	struct Extent2D;
-	struct SurfaceCapabilitiesKHR;
-	struct SurfaceFormatKHR;
-	enum class PresentModeKHR;
-}
-
 namespace pe
 {
 	class Context;

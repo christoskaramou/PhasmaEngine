@@ -26,19 +26,6 @@ SOFTWARE.
 #include "Pipeline.h"
 #include <vector>
 
-namespace vk
-{
-	class Fence;
-	
-	class DescriptorSet;
-	
-	class DescriptorSetLayout;
-	
-	class CommandBuffer;
-	
-	class CommandPool;
-}
-
 namespace pe
 {
 	constexpr uint32_t AUTO = UINT32_MAX;

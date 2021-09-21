@@ -31,17 +31,6 @@ SOFTWARE.
 #include <vector>
 #include <array>
 
-namespace vk
-{
-    class Framebuffer;
-    
-    class DescriptorSetLayout;
-    
-    class CommandBuffer;
-    
-    class Device;
-}
-
 namespace pe
 {
     constexpr float LOWER_PANEL_HEIGHT = 150.f;

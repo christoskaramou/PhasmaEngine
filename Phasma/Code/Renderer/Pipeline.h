@@ -26,20 +26,6 @@ SOFTWARE.
 #include "../Shader/Shader.h"
 #include "../Renderer/RenderPass.h"
 
-namespace vk
-{
-	class Pipeline;
-	
-	struct VertexInputBindingDescription;
-	struct VertexInputAttributeDescription;
-	struct PipelineColorBlendAttachmentState;
-	enum class DynamicState;
-	
-	class DescriptorSetLayout;
-	
-	class PipelineLayout;
-}
-
 namespace pe
 {
 	enum class CullMode
