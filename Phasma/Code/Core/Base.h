@@ -147,6 +147,12 @@ namespace pe
 		NoMove& operator=(NoMove&&) = delete;
 	};
 
+	//template<class T>
+	//class Imposter : public T
+	//{
+	//	using BaseType = T;
+	//};
+	//
 	//using ImpRenderPass = Imposter<vk::RenderPass>;
 	//using ImpFormat = Imposter<vk::Format>;
 	//using ImpImageView = Imposter<vk::ImageView>;

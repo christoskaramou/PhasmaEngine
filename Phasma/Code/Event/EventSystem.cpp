@@ -24,6 +24,18 @@ SOFTWARE.
 
 namespace pe
 {
+    void EventSystem::Init()
+    {
+    }
+
+    void EventSystem::Update(double delta)
+    {
+    }
+
+    void EventSystem::Destroy()
+    {
+    }
+
     void EventSystem::DispatchEvent(EventType type, const std::any& data)
     {
         if (m_events.find(type) != m_events.end())

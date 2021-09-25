@@ -28,19 +28,39 @@ SOFTWARE.
 #include "pbr.glsl"
 #include "Material.glsl"
 
-struct Light {
+#define MAX_POINT_LIGHTS 10
+#define MAX_SPOT_LIGHTS 10
+
+struct DirectionalLight
+{
 	vec4 color; // .a is the intensity
-	vec4 position;
+	vec4 direction;
 };
 
-//layout(constant_id = 0) const int NUM_LIGHTS = 1;
-#define NUM_LIGHTS 11 // one is for directional
+struct PointLight
+{
+	vec4 color;
+	vec4 position; // .w = radius
+};
+	
+struct SpotLight
+{
+	vec4 color;
+	vec4 start;
+	vec4 end; // .w = radius
+};
 
 layout(set = 0, binding = 0) uniform sampler2D sampler_depth;
 layout(set = 0, binding = 1) uniform sampler2D sampler_normal;
 layout(set = 0, binding = 2) uniform sampler2D sampler_albedo;
 layout(set = 0, binding = 3) uniform sampler2D sampler_met_rough;
-layout(set = 0, binding = 4) uniform UBO { vec4 cam_pos; Light lights[NUM_LIGHTS]; } ubo;
+layout(set = 0, binding = 4) uniform UBO
+{
+	vec4 camPos;
+	DirectionalLight sun;
+	PointLight pointLights[MAX_POINT_LIGHTS];
+	SpotLight spotLights[MAX_SPOT_LIGHTS];
+} ubo;
 layout(set = 0, binding = 5) uniform sampler2D sampler_ssao_blur;
 layout(set = 0, binding = 6) uniform sampler2D sampler_ssr;
 layout(set = 0, binding = 7) uniform sampler2D sampler_emission;
@@ -53,14 +73,14 @@ layout(set = 4, binding = 0) uniform samplerCube sampler_cube_map;
 
 vec3 compute_point_light(int lightIndex, Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao)
 {
-	vec3 light_dir_full = world_pos - ubo.lights[lightIndex].position.xyz;
+	vec3 light_dir_full = world_pos - ubo.pointLights[lightIndex].position.xyz;
 	float light_dist = max(0.1, length(light_dir_full));
 	if (light_dist > screenSpace.effects2.z) // max range
 		return vec3(0.0);
 
 	vec3 light_dir = normalize(-light_dir_full);
 	float attenuation = 1 / (light_dist * light_dist);
-	vec3 point_color = ubo.lights[lightIndex].color.xyz * attenuation;
+	vec3 point_color = ubo.pointLights[lightIndex].color.xyz * attenuation;
 	point_color *= screenSpace.effects2.y * ssao; // intensity
 
 	float roughness = material.roughness * 0.75 + 0.25;
@@ -215,11 +235,11 @@ float ComputeScattering(float dir_dot_l)
 	return result;
 }
 
-vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj, float fog_factor)
+vec3 VolumetricLighting(DirectionalLight light, vec3 pos_world, vec2 uv, mat4 lightViewProj, float fog_factor)
 {
 	float iterations = screenSpace.effects1.z; // 32 iterations default
 
-	vec3 pixel_to_camera 			= ubo.cam_pos.xyz - pos_world;
+	vec3 pixel_to_camera 			= ubo.camPos.xyz - pos_world;
 	float pixel_to_camera_length 	= length(pixel_to_camera);
 	vec3 ray_dir					= pixel_to_camera / pixel_to_camera_length;
 	float step_length 				= pixel_to_camera_length / iterations;
@@ -250,7 +270,7 @@ vec3 VolumetricLighting(Light light, vec3 pos_world, vec2 uv, mat4 lightViewProj
 		float depth_delta = texture(sampler_shadow_map1, vec3(ray_uv, pos_light.z)).r;
 		if (depth_delta > 0.0f)
 		{
-			volumetricFactor += ComputeScattering(dot(ray_dir, normalize(-light.position.xyz)));
+			volumetricFactor += ComputeScattering(dot(ray_dir, light.direction.xyz));
 		}
 		ray_pos += ray_step;
 	}

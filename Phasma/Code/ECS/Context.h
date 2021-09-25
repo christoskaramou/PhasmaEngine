@@ -34,6 +34,28 @@ namespace pe
 	class Context final
 	{
 	public:
+		static auto Get()
+		{
+			static auto instance = new Context();
+			return instance;
+		}
+
+		Context(Context const&) = delete;				// copy constructor
+
+		Context(Context&&) noexcept = delete;			// move constructor
+
+		Context& operator=(Context const&) = delete;	// copy assignment
+
+		Context& operator=(Context&&) = delete;			// move assignment
+
+		~Context() = default;							// destructor
+
+	private:
+		Context() = default;
+
+	public:
+		static Entity* MainEntity;
+
 		void InitSystems();
 
 		void DestroySystems();
@@ -83,8 +105,7 @@ namespace pe
 		{
 			size_t id = GetTypeID<T>();
 			m_systems[id] = std::make_shared<T>(std::forward<Params>(params)...);
-			GetSystem<T>()->SetContext(this);
-			GetSystem<T>()->SetEnabled(true);
+			m_systems[id]->SetEnabled(true);
 			
 			return static_cast<T*>(m_systems[id].get());
 		}

@@ -172,14 +172,14 @@ namespace pe
 	}
 #endif
 	
-	void VulkanContext::CreateSurface(Context* ctx)
+	void VulkanContext::CreateSurface()
 	{
-		surface.Create(ctx);
+		surface.Create(window);
 	}
 	
-	void VulkanContext::GetSurfaceProperties(Context* ctx)
+	void VulkanContext::GetSurfaceProperties()
 	{
-		surface.FindProperties(ctx);
+		surface.FindProperties();
 	}
 	
 	void VulkanContext::GetGpu()
@@ -370,9 +370,9 @@ namespace pe
 		GetComputeQueue();
 	}
 	
-	void VulkanContext::CreateSwapchain(Context* ctx, uint32_t requestImageCount)
+	void VulkanContext::CreateSwapchain(uint32_t requestImageCount)
 	{
-		swapchain.Create(ctx, requestImageCount);
+		swapchain.Create(requestImageCount);
 	}
 	
 	void VulkanContext::CreateCommandPools()
@@ -494,20 +494,22 @@ namespace pe
 		depth.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 	}
 	
-	void VulkanContext::Init(Context* ctx)
+	void VulkanContext::Init(SDL_Window* window)
 	{
-		CreateInstance(ctx->GetSystem<Renderer>()->GetWindow());
+		this->window = window;
+
+		CreateInstance(window);
 #ifdef _DEBUG
 		CreateDebugMessenger();
 #endif
-		CreateSurface(ctx);
+		CreateSurface();
 		GetGpu();
-		GetSurfaceProperties(ctx);
+		GetSurfaceProperties();
 		CreateDevice();
 		CreateAllocator();
 		GetQueues();
 		CreateCommandPools();
-		CreateSwapchain(ctx, SWAPCHAIN_IMAGES);
+		CreateSwapchain(SWAPCHAIN_IMAGES);
 		CreateDescriptorPool(15000); // max number of all descriptor sets to allocate
 		CreateCmdBuffers(SWAPCHAIN_IMAGES);
 		CreateSemaphores(SWAPCHAIN_IMAGES * 3);

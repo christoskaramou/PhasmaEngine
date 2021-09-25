@@ -35,11 +35,9 @@ namespace pe
 	class ISystem
 	{
 	public:
-		ISystem() : m_context(nullptr), m_enabled(false)
-		{ m_components[-1] = std::vector<IComponent*>(); }
+		ISystem() : m_enabled(false) { }
 		
-		virtual ~ISystem()
-		{}
+		virtual ~ISystem() {}
 		
 		virtual void Init() = 0;
 		
@@ -59,7 +57,7 @@ namespace pe
 		}
 		
 		template<class T>
-		inline void AddComponent(T* component)
+		inline void AttachComponent(T* component)
 		{
 			size_t id = GetTypeID<T>();
 			if (!HasComponents<T>())
@@ -105,28 +103,29 @@ namespace pe
 		}
 		
 		template<class T>
-		std::vector<IComponent*>& GetComponentsOfType()
+		std::vector<T*> GetComponentsOfType()
 		{
 			if (HasComponents<T>())
-				return m_components[GetTypeID<T>()];
+			{
+				size_t id = GetTypeID<T>();
+				std::vector<IComponent*>& icomponents = m_components[id];
+				size_t size = m_components[id].size();
+
+				std::vector<T*> components(size);
+				for (int i = 0; i < size; i++)
+					components[i] = static_cast<T*>(icomponents[i]);
+
+				return components;
+			}
 			
-			return m_components[-1];
+			return std::vector<T*>();
 		}
 		
-		void SetContext(Context* context)
-		{ m_context = context; }
+		bool IsEnabled() { return m_enabled; }
 		
-		Context* GetContext()
-		{ return m_context; }
-		
-		bool IsEnabled()
-		{ return m_enabled; }
-		
-		void SetEnabled(bool enabled)
-		{ m_enabled = enabled; }
+		void SetEnabled(bool enabled) { m_enabled = enabled; }
 	
 	private:
-		Context* m_context;
 		std::unordered_map<size_t, std::vector<IComponent*>> m_components;
 		bool m_enabled;
 	};

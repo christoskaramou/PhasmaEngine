@@ -22,9 +22,17 @@ SOFTWARE.
 
 #include "Camera.h"
 #include "../GUI/GUI.h"
+#include "../ECS/Entity.h"
+#include "../ECS/Context.h"
 
 namespace pe
 {
+    CameraSystem::CameraSystem()
+    {
+        Camera* mainCamera = Context::Get()->MainEntity->CreateComponent<Camera>();
+        AttachComponent(mainCamera);
+    }
+
     Camera* CameraSystem::GetCamera(size_t index)
     {
         return GetComponentOfTypeAt<Camera>(index);
@@ -37,22 +45,21 @@ namespace pe
     
     void CameraSystem::Update(double delta)
     {
-        static auto updateBody = [](IComponent* component)
+        static auto updateBody = [](Camera* camera)
         {
-            Camera* camera = static_cast<Camera*>(component);
             if (camera->IsEnabled())
                 camera->Update();
         };
         
-        std::vector<IComponent*>& components = GetComponentsOfType<Camera>();
-        ForEachParallel<IComponent*>(components, updateBody);
+        std::vector<Camera*> components = GetComponentsOfType<Camera>();
+        ForEachParallel<Camera*>(components, updateBody);
     }
     
     void CameraSystem::Destroy()
     {
-		std::vector<IComponent*>& components = GetComponentsOfType<Camera>();
+		std::vector<Camera*> components = GetComponentsOfType<Camera>();
         for (auto camera : components)
-            static_cast<Camera*>(camera)->Destroy();
+            camera->Destroy();
     }
     
     Camera::Camera()
@@ -130,40 +137,12 @@ namespace pe
     void Camera::UpdatePerspective()
     {
         const float aspect = renderArea.viewport.width / renderArea.viewport.height;
-        const float tanHalfFovy = tan(radians(FOV) * .5f);
-        
-        const float m00 = 1.f / (aspect * tanHalfFovy);
-        const float m11 = 1.f / (tanHalfFovy);
-        const float m22 = farPlane / (farPlane - nearPlane) * worldOrientation.z;
-        const float m23 = worldOrientation.z;
-        const float m32 = -(farPlane * nearPlane) / (farPlane - nearPlane);
-        const float m20 = projOffset.x;
-        const float m21 = projOffset.y;
-        
-        projection = mat4(
-                m00, 0.f, 0.f, 0.f,
-                0.f, m11, 0.f, 0.f,
-                m20, m21, m22, m23,
-                0.f, 0.f, m32, 0.f
-        );
+        projection = perspective(radians(FOV), aspect, nearPlane, farPlane, projOffset, worldOrientation.z);
     }
     
     void Camera::UpdateView()
-    {
-        const vec3& r = right;
-        const vec3& u = up;
-        const vec3& f = front;
-        
-        const float m30 = -dot(r, position);
-        const float m31 = -dot(u, position);
-        const float m32 = -dot(f, position);
-        
-        view = mat4(
-                r.x, u.x, f.x, 0.f,
-                r.y, u.y, f.y, 0.f,
-                r.z, u.z, f.z, 0.f,
-                m30, m31, m32, 1.f
-        );
+    {        
+        view = lookAt(position, front, right, up);
     }
     
     void Camera::Move(RelativeDirection direction, float velocity)

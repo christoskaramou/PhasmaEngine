@@ -36,7 +36,7 @@ namespace pe
 		
 		~Swapchain();
 		
-		void Create(Context* ctx, uint32_t requestImageCount);
+		void Create(uint32_t requestImageCount);
 		
 		uint32_t Aquire(vk::Semaphore semaphore, vk::Fence fence) const;
 		

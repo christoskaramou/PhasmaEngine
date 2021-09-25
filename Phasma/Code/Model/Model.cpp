@@ -39,7 +39,7 @@ namespace pe
 	using namespace Microsoft;
 	
 	Ref<vk::CommandBuffer> Model::commandBuffer = make_ref(vk::CommandBuffer());
-	std::vector<Model> Model::models {};
+	std::deque<Model> Model::models = {};
 	Pipeline* Model::pipeline = nullptr;
 	
 	Model::Model()
@@ -118,9 +118,7 @@ namespace pe
 	}
 	
 	template<typename T>
-	void Model::getVertexData(
-			std::vector<T>& vec, const std::string& accessorName, const glTF::MeshPrimitive& primitive
-	) const
+	void Model::getVertexData(std::vector<T>& vec, const std::string& accessorName, const glTF::MeshPrimitive& primitive) const
 	{
 		std::string accessorId;
 		if (primitive.TryGetAttributeAccessorId(accessorName, accessorId))
@@ -352,7 +350,7 @@ namespace pe
 		}
 	}
 	
-	void Model::loadModelGltf(const std::string& folderPath, const std::string& modelName, bool show)
+	void Model::loadModelGltf(const std::string& folderPath, const std::string& modelName)
 	{
 		// reads and gets the document and resourceReader objects
 		readGltf(std::filesystem::path(folderPath + modelName));
@@ -372,9 +370,9 @@ namespace pe
 		}
 	}
 	
-	void Model::loadModel(const std::string& folderPath, const std::string& modelName, bool show)
+	void Model::Load(const std::string& folderPath, const std::string& modelName, bool show)
 	{
-		loadModelGltf(folderPath, modelName, show);
+		loadModelGltf(folderPath, modelName);
 		//calculateBoundingSphere();
 		name = modelName;
 		fullPathName = folderPath + modelName;
@@ -383,6 +381,15 @@ namespace pe
 		createIndexBuffer();
 		createUniformBuffers();
 		createDescriptorSets();
+	}
+
+	std::map<Model*, std::future<void>> futures{};
+
+	void Model::LoadAsync(const std::string& folderPath, const std::string& modelName)
+	{
+		render = false;
+		VulkanContext::Get()->device->waitIdle();
+		futures[this] = std::async(std::launch::async, &Model::Load, this, folderPath, modelName, false);
 	}
 	
 	void Model::updateAnimation(uint32_t index, float time)
@@ -436,9 +443,9 @@ namespace pe
 		}
 	}
 	
-	void frustumCheckAsync(const Model& model, Mesh* mesh, const Camera& camera, uint32_t index)
+	void frustumCheckAsync(Model* model, Mesh* mesh, const Camera& camera, uint32_t index)
 	{
-		cmat4 trans = model.transform * mesh->ubo.matrix;
+		cmat4 trans = model->transform * mesh->ubo.matrix;
 		vec4 bs = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
 		
 		bs.w = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale 
@@ -446,7 +453,7 @@ namespace pe
 		mesh->primitives[index].transformedBS = bs;
 	}
 	
-	void updateNodeAsync(const Model& model, Node* node, const Camera& camera)
+	void updateNodeAsync(Model* model, Node* node, const Camera& camera)
 	{
 		if (node->mesh)
 		{
@@ -473,53 +480,67 @@ namespace pe
 	
 	void Model::update(pe::Camera& camera, double delta)
 	{
-		if (render)
+		for (auto it = futures.begin(); it != futures.end();)
 		{
-			if (script)
+			if (it->second.wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
 			{
-#if 0
-				script->update(static_cast<float>(delta));
-				transform = script->getValue<Transform>("transform").matrix * transform;
-#endif
-			}
-			
-			transform = pe::transform(quat(radians(rot)), scale, pos);
-			ubo.matrix = transform;
-			ubo.previousMvp = ubo.mvp;
-			ubo.mvp = camera.viewProjection * transform;
-			
-			Queue::memcpyRequest(&uniformBuffer, {{&ubo, sizeof(ubo), 0}});
-			//uniformBuffer.map();
-			//memcpy(uniformBuffer.data, &ubo, sizeof(ubo));
-			//uniformBuffer.flush();
-			//uniformBuffer.unmap();
-			
-			if (!animations.empty())
-			{
-				animationTimer += static_cast<float>(delta);
-				
-				if (animationTimer > animations[animationIndex].end)
-					animationTimer -= animations[animationIndex].end;
-				
-				updateAnimation(animationIndex, animationTimer);
-			}
-			
-			// async calls should be at least bigger than a number, else this will be slower
-			if (linearNodes.size() > 3)
-			{
-				std::vector<std::future<void>> futureNodes(linearNodes.size());
-				
-				for (uint32_t i = 0; i < linearNodes.size(); i++)
-					futureNodes[i] = std::async(std::launch::async, updateNodeAsync, *this, linearNodes[i], camera);
-				
-				for (auto& f : futureNodes)
-					f.get();
+				it->second.get();
+				render = true;
+				it = futures.erase(it);
 			}
 			else
 			{
-				for (auto& linearNode : linearNodes)
-					updateNodeAsync(*this, linearNode, camera);
+				++it;
 			}
+		}
+
+		if (!render)
+			return;
+
+		if (script)
+		{
+#if 0
+			script->update(static_cast<float>(delta));
+			transform = script->getValue<Transform>("transform").matrix * transform;
+#endif
+		}
+		
+		transform = pe::transform(quat(radians(rot)), scale, pos);
+		ubo.matrix = transform;
+		ubo.previousMvp = ubo.mvp;
+		ubo.mvp = camera.viewProjection * transform;
+		
+		Queue::memcpyRequest(&uniformBuffer, {{&ubo, sizeof(ubo), 0}});
+		//uniformBuffer.map();
+		//memcpy(uniformBuffer.data, &ubo, sizeof(ubo));
+		//uniformBuffer.flush();
+		//uniformBuffer.unmap();
+		
+		if (!animations.empty())
+		{
+			animationTimer += static_cast<float>(delta);
+			
+			if (animationTimer > animations[animationIndex].end)
+				animationTimer -= animations[animationIndex].end;
+			
+			updateAnimation(animationIndex, animationTimer);
+		}
+		
+		// async calls should be at least bigger than a number, else this will be slower
+		if (linearNodes.size() > 3)
+		{
+			std::vector<std::future<void>> futureNodes(linearNodes.size());
+			
+			for (uint32_t i = 0; i < linearNodes.size(); i++)
+				futureNodes[i] = std::async(std::launch::async, updateNodeAsync, this, linearNodes[i], camera);
+			
+			for (auto& f : futureNodes)
+				f.get();
+		}
+		else
+		{
+			for (auto& linearNode : linearNodes)
+				updateNodeAsync(this, linearNode, camera);
 		}
 	}
 	

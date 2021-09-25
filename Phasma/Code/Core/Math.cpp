@@ -443,52 +443,42 @@ namespace pe
 		return &x;
 	}
 	
-	mat4::mat4() : _v {
-			col(0.f, 0.f, 0.f, 0.f),
-			col(0.f, 0.f, 0.f, 0.f),
-			col(0.f, 0.f, 0.f, 0.f),
-			col(0.f, 0.f, 0.f, 0.f)
+	mat4::mat4() : m_v {
+			vec4(0.f, 0.f, 0.f, 0.f),
+			vec4(0.f, 0.f, 0.f, 0.f),
+			vec4(0.f, 0.f, 0.f, 0.f),
+			vec4(0.f, 0.f, 0.f, 0.f)
 	}
 	{}
 	
-	mat4::mat4(cfloat diagonal) : _v {
-			col(diagonal, 0.f, 0.f, 0.f),
-			col(0.f, diagonal, 0.f, 0.f),
-			col(0.f, 0.f, diagonal, 0.f),
-			col(0.f, 0.f, 0.f, diagonal)
+	mat4::mat4(cfloat diagonal) : m_v {
+			vec4(diagonal, 0.f, 0.f, 0.f),
+			vec4(0.f, diagonal, 0.f, 0.f),
+			vec4(0.f, 0.f, diagonal, 0.f),
+			vec4(0.f, 0.f, 0.f, diagonal)
 	}
 	{}
 	
-	mat4::mat4(cfloat* m) : _v {
-			col(m[0], m[1], m[2], m[3]),
-			col(m[4], m[5], m[6], m[7]),
-			col(m[8], m[9], m[10], m[11]),
-			col(m[12], m[13], m[14], m[15])
+	mat4::mat4(cfloat* m) : m_v {
+			vec4(m[0], m[1], m[2], m[3]),
+			vec4(m[4], m[5], m[6], m[7]),
+			vec4(m[8], m[9], m[10], m[11]),
+			vec4(m[12], m[13], m[14], m[15])
 	}
 	{}
 	
-	mat4::mat4(cmat4& m) : _v {
-			m._v[0],
-			m._v[1],
-			m._v[2],
-			m._v[3]
+	mat4::mat4(cmat4& m) : m_v { m.m_v[0], m.m_v[1], m.m_v[2], m.m_v[3] }
+	{}
+	
+	mat4::mat4(cmat4* m) : m_v {
+			m->m_v[0],
+			m->m_v[1],
+			m->m_v[2],
+			m->m_v[3]
 	}
 	{}
 	
-	mat4::mat4(cmat4* m) : _v {
-			m->_v[0],
-			m->_v[1],
-			m->_v[2],
-			m->_v[3]
-	}
-	{}
-	
-	mat4::mat4(ccol& v0, ccol& v1, ccol& v2, ccol& v3) : _v {
-			v0,
-			v1,
-			v2,
-			v3
-	}
+	mat4::mat4(cvec4& v0, cvec4& v1, cvec4& v2, cvec4& v3) : m_v { v0, v1, v2, v3 }
 	{}
 	
 	mat4::mat4(cquat& q)
@@ -503,37 +493,30 @@ namespace pe
 		cfloat qwy(q.w * q.y);
 		cfloat qwz(q.w * q.z);
 		
-		cfloat r00 = 1.f - 2.f * (qyy + qzz);
-		cfloat r01 = 2.f * (qxy + qwz);
-		cfloat r02 = 2.f * (qxz - qwy);
+		m_v[0].x = 1.f - 2.f * (qyy + qzz);
+		m_v[0].y = 2.f * (qxy + qwz);
+		m_v[0].z = 2.f * (qxz - qwy);
 		
-		cfloat r10 = 2.f * (qxy - qwz);
-		cfloat r11 = 1.f - 2.f * (qxx + qzz);
-		cfloat r12 = 2.f * (qyz + qwx);
+		m_v[1].x = 2.f * (qxy - qwz);
+		m_v[1].y = 1.f - 2.f * (qxx + qzz);
+		m_v[1].z = 2.f * (qyz + qwx);
 		
-		cfloat r20 = 2.f * (qxz + qwy);
-		cfloat r21 = 2.f * (qyz - qwx);
-		cfloat r22 = 1.f - 2.f * (qxx + qyy);
-		
-		_v[0] = col(r00, r01, r02, 0.f);
-		_v[1] = col(r10, r11, r12, 0.f);
-		_v[2] = col(r20, r21, r22, 0.f);
-		_v[3] = col(0.f, 0.f, 0.f, 1.f);
+		m_v[2].x = 2.f * (qxz + qwy);
+		m_v[2].y = 2.f * (qyz - qwx);
+		m_v[2].z = 1.f - 2.f * (qxx + qyy);
 	}
 	
-	mat4::mat4
-			(
-					cfloat& x0, cfloat& y0, cfloat& z0, cfloat& w0,
-					cfloat& x1, cfloat& y1, cfloat& z1, cfloat& w1,
-					cfloat& x2, cfloat& y2, cfloat& z2, cfloat& w2,
-					cfloat& x3, cfloat& y3, cfloat& z3, cfloat& w3
-			) : _v {
-			col(x0, y0, z0, w0),
-			col(x1, y1, z1, w1),
-			col(x2, y2, z2, w2),
-			col(x3, y3, z3, w3)
+	mat4::mat4(
+		cfloat& x0, cfloat& y0, cfloat& z0, cfloat& w0,
+		cfloat& x1, cfloat& y1, cfloat& z1, cfloat& w1,
+		cfloat& x2, cfloat& y2, cfloat& z2, cfloat& w2,
+		cfloat& x3, cfloat& y3, cfloat& z3, cfloat& w3)
+	{
+		m_v[0][0] = x0; m_v[0][1] = y0; m_v[0][2] = z0; m_v[0][3] = w0;
+		m_v[1][0] = x1; m_v[1][1] = y1; m_v[1][2] = z1; m_v[1][3] = w1;
+		m_v[2][0] = x2; m_v[2][1] = y2; m_v[2][2] = z2; m_v[2][3] = w2;
+		m_v[3][0] = x3; m_v[3][1] = y3; m_v[3][2] = z3; m_v[3][3] = w3;
 	}
-	{}
 	
 	cmat4 mat4::identity()
 	{
@@ -567,19 +550,19 @@ namespace pe
 	
 	vec3 mat4::translation() const
 	{
-		return vec3(_v[3]);
+		return vec3(m_v[3]);
 	}
 	
 	vec3 mat4::scale() const
 	{
-		cfloat xSign = _v[0].x * _v[0].y * _v[0].z * _v[0].w < 0.f ? -1.f : 1.f;
-		cfloat ySign = _v[1].x * _v[1].y * _v[1].z * _v[1].w < 0.f ? -1.f : 1.f;
-		cfloat zSign = _v[2].x * _v[2].y * _v[2].z * _v[2].w < 0.f ? -1.f : 1.f;
+		cfloat xSign = m_v[0].x * m_v[0].y * m_v[0].z * m_v[0].w < 0.f ? -1.f : 1.f;
+		cfloat ySign = m_v[1].x * m_v[1].y * m_v[1].z * m_v[1].w < 0.f ? -1.f : 1.f;
+		cfloat zSign = m_v[2].x * m_v[2].y * m_v[2].z * m_v[2].w < 0.f ? -1.f : 1.f;
 		
 		return vec3(
-				xSign * length(vec3(_v[0])),
-				ySign * length(vec3(_v[1])),
-				zSign * length(vec3(_v[2]))
+				xSign * length(vec3(m_v[0])),
+				ySign * length(vec3(m_v[1])),
+				zSign * length(vec3(m_v[2]))
 		);
 	}
 	
@@ -591,9 +574,9 @@ namespace pe
 		
 		return quat(
 				mat4(
-						_v[0].x / s.x, _v[0].y / s.x, _v[0].z / s.x, 0.f,
-						_v[1].x / s.y, _v[1].y / s.y, _v[1].z / s.y, 0.f,
-						_v[2].x / s.z, _v[2].y / s.z, _v[2].z / s.z, 0.f,
+						m_v[0].x / s.x, m_v[0].y / s.x, m_v[0].z / s.x, 0.f,
+						m_v[1].x / s.y, m_v[1].y / s.y, m_v[1].z / s.y, 0.f,
+						m_v[2].x / s.z, m_v[2].y / s.z, m_v[2].z / s.z, 0.f,
 						0.f, 0.f, 0.f, 1.f
 				)
 		);
@@ -601,58 +584,58 @@ namespace pe
 	
 	void mat4::operator=(cmat4& m)
 	{
-		_v[0] = m._v[0];
-		_v[1] = m._v[1];
-		_v[2] = m._v[2];
-		_v[3] = m._v[3];
+		m_v[0] = m.m_v[0];
+		m_v[1] = m.m_v[1];
+		m_v[2] = m.m_v[2];
+		m_v[3] = m.m_v[3];
 	}
 	
 	mat4 mat4::operator*(cmat4& m) const
 	{
 		return mat4(
-				_v[0] * m._v[0].x + _v[1] * m._v[0].y + _v[2] * m._v[0].z + _v[3] * m._v[0].w,
-				_v[0] * m._v[1].x + _v[1] * m._v[1].y + _v[2] * m._v[1].z + _v[3] * m._v[1].w,
-				_v[0] * m._v[2].x + _v[1] * m._v[2].y + _v[2] * m._v[2].z + _v[3] * m._v[2].w,
-				_v[0] * m._v[3].x + _v[1] * m._v[3].y + _v[2] * m._v[3].z + _v[3] * m._v[3].w
+				m_v[0] * m.m_v[0].x + m_v[1] * m.m_v[0].y + m_v[2] * m.m_v[0].z + m_v[3] * m.m_v[0].w,
+				m_v[0] * m.m_v[1].x + m_v[1] * m.m_v[1].y + m_v[2] * m.m_v[1].z + m_v[3] * m.m_v[1].w,
+				m_v[0] * m.m_v[2].x + m_v[1] * m.m_v[2].y + m_v[2] * m.m_v[2].z + m_v[3] * m.m_v[2].w,
+				m_v[0] * m.m_v[3].x + m_v[1] * m.m_v[3].y + m_v[2] * m.m_v[3].z + m_v[3] * m.m_v[3].w
 		);
 	}
 	
 	vec4 mat4::operator*(cvec4& v) const
 	{
 		return
-				_v[0] * vec4(v.x) +
-				_v[1] * vec4(v.y) +
-				_v[2] * vec4(v.z) +
-				_v[3] * vec4(v.w);
+				m_v[0] * vec4(v.x) +
+				m_v[1] * vec4(v.y) +
+				m_v[2] * vec4(v.z) +
+				m_v[3] * vec4(v.w);
 	}
 	
 	mat4 mat4::operator*(cfloat scalar) const
 	{
 		return mat4(
-				_v[0] * scalar,
-				_v[1] * scalar,
-				_v[2] * scalar,
-				_v[3] * scalar
+				m_v[0] * scalar,
+				m_v[1] * scalar,
+				m_v[2] * scalar,
+				m_v[3] * scalar
 		);
 	}
 	
 	bool mat4::operator==(cfloat* m) const
 	{
 		return
-				_v[0].x == m[0] && _v[0].y == m[1] && _v[0].z == m[2] && _v[0].w == m[3] &&
-				_v[1].x == m[4] && _v[1].y == m[5] && _v[1].z == m[6] && _v[1].w == m[7] &&
-				_v[2].x == m[8] && _v[2].y == m[9] && _v[2].z == m[10] && _v[2].w == m[11] &&
-				_v[3].x == m[12] && _v[3].y == m[13] && _v[3].z == m[14] && _v[3].w == m[15];
+				m_v[0].x == m[0] && m_v[0].y == m[1] && m_v[0].z == m[2] && m_v[0].w == m[3] &&
+				m_v[1].x == m[4] && m_v[1].y == m[5] && m_v[1].z == m[6] && m_v[1].w == m[7] &&
+				m_v[2].x == m[8] && m_v[2].y == m[9] && m_v[2].z == m[10] && m_v[2].w == m[11] &&
+				m_v[3].x == m[12] && m_v[3].y == m[13] && m_v[3].z == m[14] && m_v[3].w == m[15];
 	}
 	
 	bool mat4::operator==(cmat4* m) const
 	{
-		return operator==(&m->_v[0].x);
+		return operator==(&m->m_v[0].x);
 	}
 	
 	bool mat4::operator==(cmat4& m) const
 	{
-		return operator==(&m._v[0].x);
+		return operator==(&m.m_v[0].x);
 	}
 	
 	bool mat4::operator!=(cfloat* m) const
@@ -673,12 +656,12 @@ namespace pe
 	vec4& mat4::operator[](unsigned i)
 	{
 		assert(i < 4);
-		return _v[i];
+		return m_v[i];
 	}
 	
 	float* mat4::ptr()
 	{
-		return &_v[0].x;
+		return &m_v[0].x;
 	}
 	
 	quat::quat() : x(0.f), y(0.f), z(0.f), w(1.f)
@@ -741,12 +724,12 @@ namespace pe
 		z = c.x * c.y * s.z - s.x * s.y * c.z;
 	}
 	
-	quat::quat(cmat4& m)
+	quat::quat(mat4& m)
 	{
-		cfloat fourXSquaredMinus1 = m._v[0].x - m._v[1].y - m._v[2].z;
-		cfloat fourYSquaredMinus1 = m._v[1].y - m._v[0].x - m._v[2].z;
-		cfloat fourZSquaredMinus1 = m._v[2].z - m._v[0].x - m._v[1].y;
-		cfloat fourWSquaredMinus1 = m._v[0].x + m._v[1].y + m._v[2].z;
+		cfloat fourXSquaredMinus1 = m[0][0] - m[1][1] - m[2][2];
+		cfloat fourYSquaredMinus1 = m[1][1] - m[0][0] - m[2][2];
+		cfloat fourZSquaredMinus1 = m[2][2] - m[0][0] - m[1][1];
+		cfloat fourWSquaredMinus1 = m[0][0] + m[1][1] + m[2][2];
 		
 		int biggestIndex = 0;
 		float fourBiggestSquaredMinus1 = fourWSquaredMinus1;
@@ -773,26 +756,26 @@ namespace pe
 		{
 			case 0:
 				w = biggestVal;
-				x = (m._v[1].z - m._v[2].y) * mult;
-				y = (m._v[2].x - m._v[0].z) * mult;
-				z = (m._v[0].y - m._v[1].x) * mult;
+				x = (m[1][2] - m[2][1]) * mult;
+				y = (m[2][0] - m[0][2]) * mult;
+				z = (m[0][1] - m[1][0]) * mult;
 				break;
 			case 1:
-				w = (m._v[1].z - m._v[2].y) * mult;
+				w = (m[1][2] - m[2][1]) * mult;
 				x = biggestVal;
-				y = (m._v[0].y + m._v[1].x) * mult;
-				z = (m._v[2].x + m._v[0].z) * mult;
+				y = (m[0][1] + m[1][0]) * mult;
+				z = (m[2][0] + m[0][2]) * mult;
 				break;
 			case 2:
-				w = (m._v[2].x - m._v[0].z) * mult;
-				x = (m._v[0].y + m._v[1].x) * mult;
+				w = (m[2][0] - m[0][2]) * mult;
+				x = (m[0][1] + m[1][0]) * mult;
 				y = biggestVal;
-				z = (m._v[1].z + m._v[2].y) * mult;
+				z = (m[1][2] + m[2][1]) * mult;
 				break;
 			case 3:
-				w = (m._v[0].y - m._v[1].x) * mult;
-				x = (m._v[2].x + m._v[0].z) * mult;
-				y = (m._v[1].z + m._v[2].y) * mult;
+				w = (m[0][1] - m[1][0]) * mult;
+				x = (m[2][0] + m[0][2]) * mult;
+				y = (m[1][2] + m[2][1]) * mult;
 				z = biggestVal;
 				break;
 			default: // Silence a -Wswitch-default warning in GCC. Should never actually get here. Assert is just for sanity.
@@ -948,31 +931,31 @@ namespace pe
 		return q * scalar;
 	}
 	
-	mat4 inverse(cmat4& m)
+	mat4 inverse(mat4& m)
 	{
-		cfloat c00 = m._v[2].z * m._v[3].w - m._v[3].z * m._v[2].w;
-		cfloat c02 = m._v[1].z * m._v[3].w - m._v[3].z * m._v[1].w;
-		cfloat c03 = m._v[1].z * m._v[2].w - m._v[2].z * m._v[1].w;
+		cfloat c00 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
+		cfloat c02 = m[1][2] * m[3][3] - m[3][2] * m[1][3];
+		cfloat c03 = m[1][2] * m[2][3] - m[2][2] * m[1][3];
 		
-		cfloat c04 = m._v[2].y * m._v[3].w - m._v[3].y * m._v[2].w;
-		cfloat c06 = m._v[1].y * m._v[3].w - m._v[3].y * m._v[1].w;
-		cfloat c07 = m._v[1].y * m._v[2].w - m._v[2].y * m._v[1].w;
+		cfloat c04 = m[2][1] * m[3][3] - m[3][1] * m[2][3];
+		cfloat c06 = m[1][1] * m[3][3] - m[3][1] * m[1][3];
+		cfloat c07 = m[1][1] * m[2][3] - m[2][1] * m[1][3];
 		
-		cfloat c08 = m._v[2].y * m._v[3].z - m._v[3].y * m._v[2].z;
-		cfloat c10 = m._v[1].y * m._v[3].z - m._v[3].y * m._v[1].z;
-		cfloat c11 = m._v[1].y * m._v[2].z - m._v[2].y * m._v[1].z;
+		cfloat c08 = m[2][1] * m[3][2] - m[3][1] * m[2][2];
+		cfloat c10 = m[1][1] * m[3][2] - m[3][1] * m[1][2];
+		cfloat c11 = m[1][1] * m[2][2] - m[2][1] * m[1][2];
 		
-		cfloat c12 = m._v[2].x * m._v[3].w - m._v[3].x * m._v[2].w;
-		cfloat c14 = m._v[1].x * m._v[3].w - m._v[3].x * m._v[1].w;
-		cfloat c15 = m._v[1].x * m._v[2].w - m._v[2].x * m._v[1].w;
+		cfloat c12 = m[2][0] * m[3][3] - m[3][0] * m[2][3];
+		cfloat c14 = m[1][0] * m[3][3] - m[3][0] * m[1][3];
+		cfloat c15 = m[1][0] * m[2][3] - m[2][0] * m[1][3];
 		
-		cfloat c16 = m._v[2].x * m._v[3].z - m._v[3].x * m._v[2].z;
-		cfloat c18 = m._v[1].x * m._v[3].z - m._v[3].x * m._v[1].z;
-		cfloat c19 = m._v[1].x * m._v[2].z - m._v[2].x * m._v[1].z;
+		cfloat c16 = m[2][0] * m[3][2] - m[3][0] * m[2][2];
+		cfloat c18 = m[1][0] * m[3][2] - m[3][0] * m[1][2];
+		cfloat c19 = m[1][0] * m[2][2] - m[2][0] * m[1][2];
 		
-		cfloat c20 = m._v[2].x * m._v[3].y - m._v[3].x * m._v[2].y;
-		cfloat c22 = m._v[1].x * m._v[3].y - m._v[3].x * m._v[1].y;
-		cfloat c23 = m._v[1].x * m._v[2].y - m._v[2].x * m._v[1].y;
+		cfloat c20 = m[2][0] * m[3][1] - m[3][0] * m[2][1];
+		cfloat c22 = m[1][0] * m[3][1] - m[3][0] * m[1][1];
+		cfloat c23 = m[1][0] * m[2][1] - m[2][0] * m[1][1];
 		
 		cvec4 f0(c00, c00, c02, c03);
 		cvec4 f1(c04, c04, c06, c07);
@@ -981,10 +964,10 @@ namespace pe
 		cvec4 f4(c16, c16, c18, c19);
 		cvec4 f5(c20, c20, c22, c23);
 		
-		cvec4 v0(m._v[1].x, m._v[0].x, m._v[0].x, m._v[0].x);
-		cvec4 v1(m._v[1].y, m._v[0].y, m._v[0].y, m._v[0].y);
-		cvec4 v2(m._v[1].z, m._v[0].z, m._v[0].z, m._v[0].z);
-		cvec4 v3(m._v[1].w, m._v[0].w, m._v[0].w, m._v[0].w);
+		cvec4 v0(m[1][0], m[0][0], m[0][0], m[0][0]);
+		cvec4 v1(m[1][1], m[0][1], m[0][1], m[0][1]);
+		cvec4 v2(m[1][2], m[0][2], m[0][2], m[0][2]);
+		cvec4 v3(m[1][3], m[0][3], m[0][3], m[0][3]);
 		
 		cvec4 i0(v1 * f0 - v2 * f1 + v3 * f2);
 		cvec4 i1(v0 * f0 - v2 * f3 + v3 * f4);
@@ -997,7 +980,7 @@ namespace pe
 		
 		cvec4 r0(i[0][0], i[1][0], i[2][0], i[3][0]);
 		
-		cvec4 d0(m._v[0] * r0);
+		cvec4 d0(m[0] * r0);
 		cfloat d1 = (d0.x + d0.y) + (d0.z + d0.w);
 		
 		return i * (1.f / d1);
@@ -1013,37 +996,37 @@ namespace pe
 		return quat(q.w, -q.x, -q.y, -q.z);
 	}
 	
-	mat4 transpose(cmat4& m)
+	mat4 transpose(mat4& m)
 	{
 		return mat4(
-				m._v[0].x, m._v[1].x, m._v[2].x, m._v[3].x,
-				m._v[0].y, m._v[1].y, m._v[2].y, m._v[3].y,
-				m._v[0].z, m._v[1].z, m._v[2].z, m._v[3].z,
-				m._v[0].w, m._v[1].w, m._v[2].w, m._v[3].w
+				m[0][0], m[1][0], m[2][0], m[3][0],
+				m[0][1], m[1][1], m[2][1], m[3][1],
+				m[0][2], m[1][2], m[2][2], m[3][2],
+				m[0][3], m[1][3], m[2][3], m[3][3]
 		);
 	}
 	
-	mat4 translate(cmat4& m, cvec3& v)
+	mat4 translate(mat4& m, cvec3& v)
 	{
 		return mat4(
-				m._v[0],
-				m._v[1],
-				m._v[2],
-				m._v[0] * v.x + m._v[1] * v.y + m._v[2] * v.z + m._v[3]
+				m[0],
+				m[1],
+				m[2],
+				m[0] * v.x + m[1] * v.y + m[2] * v.z + m[3]
 		);
 	}
 	
-	mat4 scale(cmat4& m, cvec3& v)
+	mat4 scale(mat4& m, cvec3& v)
 	{
 		return mat4(
-				m._v[0] * v.x,
-				m._v[1] * v.y,
-				m._v[2] * v.z,
-				m._v[3]
+				m[0] * v.x,
+				m[1] * v.y,
+				m[2] * v.z,
+				m[3]
 		);
 	}
 	
-	mat4 rotate(cmat4& m, cfloat angle, cvec3& axis)
+	mat4 rotate(mat4& m, cfloat angle, cvec3& axis)
 	{
 		cfloat c = cos(angle);
 		cfloat s = sin(angle);
@@ -1064,10 +1047,10 @@ namespace pe
 		cfloat r22 = c + temp.z * naxis.z;
 		
 		return mat4(
-				m._v[0] * r00 + m._v[1] * r01 + m._v[2] * r02,
-				m._v[0] * r10 + m._v[1] * r11 + m._v[2] * r12,
-				m._v[0] * r20 + m._v[1] * r21 + m._v[2] * r22,
-				m._v[3]
+				m[0] * r00 + m[1] * r01 + m[2] * r02,
+				m[0] * r10 + m[1] * r11 + m[2] * r12,
+				m[0] * r20 + m[1] * r21 + m[2] * r22,
+				m[3]
 		);
 	}
 	
@@ -1089,23 +1072,27 @@ namespace pe
 				m[0] * s.x,
 				m[1] * s.y,
 				m[2] * s.z,
-				col(t, 1.0f)
+				vec4(t, 1.0f)
 		);
 	}
 	
-	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar)
+	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar, cvec2& projOffset, float zDirection)
 	{
-		cfloat tanHalfFovy = tan(fovy / 2.f);
+		cfloat tanHalfFovy = tan(fovy * .5f);
+
 		cfloat m00 = 1.f / (aspect * tanHalfFovy);
 		cfloat m11 = 1.f / (tanHalfFovy);
-		cfloat m22 = zFar / (zFar - zNear);
-		cfloat m23 = 1.f;
+		cfloat m20 = projOffset.x;
+		cfloat m21 = projOffset.y;
+		cfloat m22 = zFar / (zFar - zNear) * zDirection;
+		cfloat m23 = zDirection;
 		cfloat m32 = -(zFar * zNear) / (zFar - zNear);
+
 		return mat4(
-				m00, 0.f, 0.f, 0.f,
-				0.f, m11, 0.f, 0.f,
-				0.f, 0.f, m22, m23,
-				0.f, 0.f, m32, 0.f
+			m00, 0.f, 0.f, 0.f,
+			0.f, m11, 0.f, 0.f,
+			m20, m21, m22, m23,
+			0.f, 0.f, m32, 0.f
 		);
 	}
 	
@@ -1148,15 +1135,12 @@ namespace pe
 		cvec3& f = front;
 		cvec3& r = right;
 		cvec3& u = up;
-		cvec4 fill(0.f, 0.f, 0.f, 1.f);
 		
-		return quat(
-				mat4(
-						row(r, 0.f),
-						row(u, 0.f),
-						row(f, 0.f),
-						fill
-				)
+		return mat4(
+			r.x, u.x, f.x, 0.f,
+			r.y, u.y, f.y, 0.f,
+			r.z, u.z, f.z, 0.f,
+			0.f, 0.f, 0.f, 1.f
 		);
 	}
 	

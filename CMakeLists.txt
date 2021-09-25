@@ -36,6 +36,13 @@ set(ADDITIONAL_COMPILE_DEFINITIONS
         "$<$<CONFIG:Release>:"
             "NDEBUG"
         ">"
+        "$<$<CONFIG:MinSizeRel>:"
+            "NDEBUG"
+        ">"
+        "$<$<CONFIG:RelWithDebInfo>:"
+            "WIN32;"
+            "_DEBUG"
+        ">"
         "_CONSOLE;"
         "UNICODE;"
         "_UNICODE"
@@ -51,6 +58,14 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
         "spirv-cross-core;"
         "GLTFSDK"
     ">"
+    "$<$<CONFIG:MinSizeRel>:"
+        "spirv-cross-core;"
+        "GLTFSDK"
+    ">"
+    "$<$<CONFIG:RelWithDebInfo>:"
+        "spirv-cross-cored;"
+        "GLTFSDKd"
+    ">"
     "shaderc_shared;"
     "SDL2main;"
     "SDL2;"
@@ -58,7 +73,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")
 
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/D3D12.dll" DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/D3D12.dll" DESTINATION ${CMAKE_BINARY_DIR})  
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/imgui.ini" DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/SDL2.dll" DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/shaderc_shared.dll" DESTINATION ${CMAKE_BINARY_DIR})

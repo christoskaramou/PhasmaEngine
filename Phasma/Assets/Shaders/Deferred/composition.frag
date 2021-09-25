@@ -47,7 +47,7 @@ void main()
 
 		// Skybox
 		vec3 frag_pos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
-		outColor = vec4(texture(sampler_cube_map, normalize(frag_pos - ubo.cam_pos.xyz)).xyz, 1.0);
+		outColor = vec4(texture(sampler_cube_map, normalize(frag_pos - ubo.camPos.xyz)).xyz, 1.0);
 		
 		// Fog
 		if (screenSpace.effects3.y > 0.5) {
@@ -58,7 +58,7 @@ void main()
 
 			float fogNear = 0.5;
 			float fogFar = 1000.0;
-			float depth = length(frag_pos - ubo.cam_pos.xyz);
+			float depth = length(frag_pos - ubo.camPos.xyz);
 			float groundHeightMin = -100.0;
 			float groundHeightMax = screenSpace.effects2.w * 20.0;
 			float globalThickness = 1.0;
@@ -75,7 +75,7 @@ void main()
 
 			// Volumetric light
 			if (screenSpace.effects1.y > 0.5)
-				outColor.xyz += VolumetricLighting(ubo.lights[0], frag_pos, in_UV, shadow_coords1, fogFactor);
+				outColor.xyz += VolumetricLighting(ubo.sun, frag_pos, in_UV, shadow_coords1, fogFactor);
 		}
 
 		return;
@@ -93,7 +93,7 @@ void main()
 
 	// Ambient
 	float factor_occlusion = screenSpace.effects0.x > 0.5 ? texture(sampler_ssao_blur, in_UV).x : 1.0;
-	float factor_sky_light = clamp(ubo.lights[0].color.a, 0.025f, 1.0f);
+	float factor_sky_light = clamp(ubo.sun.color.a, 0.025f, 1.0f);
 	factor_sky_light *= screenSpace.effects3.z > 0.5 ? 0.25 : 0.15;
 	float ambient_light = factor_sky_light * factor_occlusion;
 	vec3 fragColor = vec3(0.0);// 0.1 * material.albedo.xyz;
@@ -102,16 +102,16 @@ void main()
 	IBL ibl;
 	ibl.reflectivity = vec3(0.5);
 	if (screenSpace.effects1.x > 0.5) {
-		ibl = ImageBasedLighting(material, normal, normalize(frag_pos - ubo.cam_pos.xyz), sampler_cube_map, sampler_lut_IBL);
+		ibl = ImageBasedLighting(material, normal, normalize(frag_pos - ubo.camPos.xyz), sampler_cube_map, sampler_lut_IBL);
 		fragColor += ibl.final_color * ambient_light;
 	}
 
 	// screenSpace.effects3.z -> shadow cast
 	if (screenSpace.effects3.z > 0.5)
-		fragColor += directLight(material, frag_pos, ubo.cam_pos.xyz, normal, factor_occlusion);
+		fragColor += directLight(material, frag_pos, ubo.camPos.xyz, normal, factor_occlusion);
 
-	for(int i = 1; i < NUM_LIGHTS; ++i)
-		fragColor += compute_point_light(i, material, frag_pos, ubo.cam_pos.xyz, normal, factor_occlusion);
+	for(int i = 0; i < MAX_POINT_LIGHTS; ++i)
+		fragColor += compute_point_light(i, material, frag_pos, ubo.camPos.xyz, normal, factor_occlusion);
 
 	outColor = vec4(fragColor, albedo.a) + texture(sampler_emission, in_UV);
 
@@ -134,7 +134,7 @@ void main()
 		
 		float fogNear = 0.5;
 		float fogFar = 1000.0;
-		float depth = length(frag_pos - ubo.cam_pos.xyz);
+		float depth = length(frag_pos - ubo.camPos.xyz);
 		float groundHeightMin = -2.0;
 		float groundHeightMax = screenSpace.effects2.w;
 		float globalThickness = screenSpace.effects2.x;
@@ -151,7 +151,7 @@ void main()
 
 		// Volumetric light
 		if (screenSpace.effects1.y > 0.5)
-			outColor.xyz += VolumetricLighting(ubo.lights[0], frag_pos, in_UV, shadow_coords1, fogFactor);
+			outColor.xyz += VolumetricLighting(ubo.sun, frag_pos, in_UV, shadow_coords1, fogFactor);
 	}
 }
 
@@ -217,8 +217,7 @@ vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 materi
 	float roughness = material.roughness * 0.75 + 0.25;
 
 	// Compute directional light.
-	vec3 light_dir_full = ubo.lights[0].position.xyz;
-	vec3 light_dir = normalize(light_dir_full);
+	vec3 light_dir = ubo.sun.direction.xyz;
 	vec3 L = light_dir;
 	vec3 V = normalize(camera_pos - world_pos);
 	vec3 H = normalize(V + L);
@@ -231,12 +230,12 @@ vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 materi
 
 	vec3 F0 = compute_F0(material.albedo, material.metallic);
 	vec3 specular_fresnel = fresnel(F0, HoV);
-	vec3 specref = ubo.lights[0].color.xyz * NoL * lit * cook_torrance_specular(N, H, NoL, NoV, specular_fresnel, roughness);
-	vec3 diffref = ubo.lights[0].color.xyz * NoL * lit * (1.0 - specular_fresnel) * (1.0 / PI);
+	vec3 specref = ubo.sun.color.xyz * NoL * lit * cook_torrance_specular(N, H, NoL, NoV, specular_fresnel, roughness);
+	vec3 diffref = ubo.sun.color.xyz * NoL * lit * (1.0 - specular_fresnel) * (1.0 / PI);
 
 	vec3 reflected_light = specref;
 	vec3 diffuse_light = diffref * material.albedo * (1.0 - material.metallic);
 	vec3 lighting = reflected_light + diffuse_light;
 
-	return lighting * ubo.lights[0].color.a;
+	return lighting * ubo.sun.color.a;
 }

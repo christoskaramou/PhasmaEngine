@@ -43,9 +43,6 @@ namespace pe
 	using cvec4 = const vec4;
 	using cmat4 = const mat4;
 	using cquat = const quat;
-	using col = vec4;
-	using row = vec4;
-	using ccol = const col;
 	
 	class vec2
 	{
@@ -274,7 +271,7 @@ namespace pe
 		
 		mat4(cmat4& m);
 		
-		mat4(ccol& v0, ccol& v1, ccol& v2, ccol& v3);
+		mat4(cvec4& v0, cvec4& v1, cvec4& v2, cvec4& v3);
 		
 		mat4(cquat& q);
 		
@@ -323,11 +320,12 @@ namespace pe
 		
 		bool operator!=(cmat4& m) const;
 		
-		col& operator[](unsigned i);
+		vec4& operator[](unsigned i);
 		
 		float* ptr();
 		
-		col _v[4];
+	private:
+		vec4 m_v[4];
 	};
 	
 	class quat
@@ -351,7 +349,7 @@ namespace pe
 		
 		quat(cvec4& eulerAngle);
 		
-		quat(cmat4& m);
+		quat(mat4& m);
 		
 		static cquat identity();
 		
@@ -435,25 +433,25 @@ namespace pe
 	
 	vec4 operator*(cvec4& v, cquat& q);
 	
-	mat4 inverse(cmat4& m);
+	mat4 inverse(mat4& m);
 	
 	quat inverse(cquat& q);
 	
 	quat conjugate(cquat& q);
 	
-	mat4 transpose(cmat4& m);
+	mat4 transpose(mat4& m);
 	
-	mat4 translate(cmat4& m, cvec3& v);
+	mat4 translate(mat4& m, cvec3& v);
 	
-	mat4 scale(cmat4& m, cvec3& v);
+	mat4 scale(mat4& m, cvec3& v);
 	
-	mat4 rotate(cmat4& m, cfloat angle, cvec3& axis);
+	mat4 rotate(mat4& m, cfloat angle, cvec3& axis);
 	
 	quat rotate(cquat& q, cfloat angle, cvec3& axis);
 	
 	mat4 transform(cquat& r, cvec3& s, cvec3& t);
 	
-	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar);
+	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar, cvec2& projOffset = vec2(0.f), float zDirection = 1.f);
 	
 	mat4 ortho(cfloat left, cfloat right, cfloat bottom, cfloat top, cfloat zNear, cfloat zFar);
 	

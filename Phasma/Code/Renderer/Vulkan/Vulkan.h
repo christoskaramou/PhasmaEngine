@@ -70,9 +70,9 @@ namespace pe
 		
 		void CreateInstance(SDL_Window* window);
 		
-		void CreateSurface(Context* ctx);
+		void CreateSurface();
 		
-		void GetSurfaceProperties(Context* ctx);
+		void GetSurfaceProperties();
 		
 		void GetGpu();
 		
@@ -94,7 +94,7 @@ namespace pe
 		
 		void GetQueues();
 		
-		void CreateSwapchain(Context* ctx, uint32_t requestImageCount);
+		void CreateSwapchain(uint32_t requestImageCount);
 		
 		void CreateCommandPools();
 		
@@ -108,7 +108,7 @@ namespace pe
 		
 		void CreateDepth();
 		
-		void Init(Context* ctx);
+		void Init(SDL_Window* window);
 		
 		void Destroy();
 		

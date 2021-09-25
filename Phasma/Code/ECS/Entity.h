@@ -25,12 +25,13 @@ SOFTWARE.
 #include <unordered_map>
 #include "Component.h"
 #include "../Core/Base.h"
+#include "../Core/Node.h"
 
 namespace pe
 {
 	class Context;
 	
-	class Entity
+	class Entity : public Node
 	{
 	public:
 		Entity() : m_context(nullptr), m_id(NextID()), m_enabled(false)
@@ -101,8 +102,8 @@ namespace pe
 		{
 			size_t id = GetTypeID<T>();
 			m_components[id] = std::make_shared<T>(std::forward<Params>(params)...);
-			GetComponent<T>()->SetEntity(this);
-			GetComponent<T>()->SetEnabled(true);
+			m_components[id]->SetEntity(this);
+			m_components[id]->SetEnabled(true);
 			
 			return static_cast<T*>(m_components[id].get());
 		}

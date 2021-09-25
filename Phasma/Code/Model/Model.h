@@ -32,23 +32,30 @@ SOFTWARE.
 #include "../../Include/GLTFSDK/GLTFResourceReader.h"
 #include "../../Include/GLTFSDK/Document.h"
 #include "StreamReader.h"
+#include <future>
+#include <deque>
 
 namespace pe
 {
 	class Pipeline;
 	
-	class Model
+	class Model : public NoCopy
 	{
 	public:
 		Model();
 		
 		~Model();
+
+		Model& operator=(const Model& other)
+		{
+			return Model();
+		}
 		
 		// Document holds all info about the gltf model
 		Microsoft::glTF::Document* document = nullptr;
 		Microsoft::glTF::GLTFResourceReader* resourceReader = nullptr;
 		
-		static std::vector<Model> models;
+		static std::deque<Model> models;
 		static Pipeline* pipeline;
 		static Ref<vk::CommandBuffer> commandBuffer;
 		Ref<vk::DescriptorSet> descriptorSet;
@@ -101,20 +108,20 @@ namespace pe
 		
 		void readGltf(const std::filesystem::path& file);
 		
-		void loadModelGltf(const std::string& folderPath, const std::string& modelName, bool show = true);
+		void loadModelGltf(const std::string& folderPath, const std::string& modelName);
 		
 		void getMesh(pe::Node* node, const std::string& meshID, const std::string& folderPath) const;
 		
 		template<typename T>
-		void getVertexData(
-				std::vector<T>& vec, const std::string& accessorName, const Microsoft::glTF::MeshPrimitive& primitive
-		) const;
+		void getVertexData( std::vector<T>& vec, const std::string& accessorName, const Microsoft::glTF::MeshPrimitive& primitive) const;
 		
 		void getIndexData(std::vector<uint32_t>& vec, const Microsoft::glTF::MeshPrimitive& primitive) const;
 		
 		Microsoft::glTF::Image* getImage(const std::string& textureID) const;
 		
-		void loadModel(const std::string& folderPath, const std::string& modelName, bool show = true);
+		void Load(const std::string& folderPath, const std::string& modelName, bool show = true);
+
+		void LoadAsync(const std::string& folderPath, const std::string& modelName);
 		
 		void createVertexBuffer();
 		

@@ -37,9 +37,9 @@ namespace pe
 	{
 	}
 	
-	void Swapchain::Create(Context* ctx, uint32_t requestImageCount)
+	void Swapchain::Create(uint32_t requestImageCount)
 	{
-		auto& vulkan = *ctx->GetVKContext();
+		auto& vulkan = *Context::Get()->GetVKContext();
 		const VkExtent2D extent = *vulkan.surface.actualExtent;
 		
 		vk::SwapchainCreateInfoKHR swapchainCreateInfo;

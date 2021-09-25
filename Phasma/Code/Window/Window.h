@@ -31,10 +31,7 @@ namespace pe
 	class Window
 	{
 	public:
-		SDL_Window* Create(
-				Context* ctx,
-				uint32_t flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN
-		);
+		SDL_Window* Create(uint32_t flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
 		
 		void DestroyAll();
 		
@@ -52,7 +49,6 @@ namespace pe
 		{ return m_handle; }
 	
 	private:
-		Context* m_ctx = nullptr;
 		SDL_Window* m_handle = nullptr;
 	};
 }

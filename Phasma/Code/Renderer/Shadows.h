@@ -34,8 +34,9 @@ namespace pe
 {
 	struct ShadowsUBO
 	{
-		mat4 projection, view;
-		float castShadows;
+		mat4 projection;
+		mat4 view;
+		float castShadows; // TODO: put it in pushconstants
 		float maxCascadeDist0;
 		float maxCascadeDist1;
 		float maxCascadeDist2;

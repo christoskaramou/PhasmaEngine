@@ -34,7 +34,7 @@ namespace pe
 	class CameraSystem : public ISystem
 	{
 	public:
-		CameraSystem() = default;
+		CameraSystem();
 		
 		~CameraSystem() override = default;
 		

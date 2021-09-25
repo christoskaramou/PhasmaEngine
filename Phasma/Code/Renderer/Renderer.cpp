@@ -32,20 +32,13 @@ SOFTWARE.
 
 namespace pe
 {
-	Renderer::Renderer(Context* ctx, SDL_Window* window)
+	Renderer::Renderer()
 	{
-		// Temporary ugliness, until ECS is complete
-		this->window = window;
-		this->ctx = ctx;
-		VulkanContext::Get()->window = window;
 	}
 	
 	void Renderer::Init()
 	{
 		auto vulkan = VulkanContext::Get();
-		
-		// INIT VULKAN CONTEXT
-		vulkan->Init(ctx);
 		
 		// SET WINDOW TITLE
 		std::string title = "PhasmaEngine";
@@ -57,7 +50,7 @@ namespace pe
 #else
 		title += " - Configuration: Release";
 #endif // _DEBUG
-		EventSystem::Get()->DispatchEvent(EventType::SetWindowTitle, title);
+		Context::Get()->GetSystem<EventSystem>()->DispatchEvent(EventType::SetWindowTitle, title);
 		
 		// INIT RENDERING
 		AddRenderTarget("viewport", vulkan->surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
@@ -128,61 +121,12 @@ namespace pe
 	
 	Renderer::~Renderer()
 	{
-		ctx->GetVKContext()->Destroy();
-		ctx->GetVKContext()->Remove();
+		Context::Get()->GetVKContext()->Destroy();
+		Context::Get()->GetVKContext()->Remove();
 	}
 	
 	void Renderer::CheckQueue()
 	{
-		for (auto it = Queue::loadModel.begin(); it != Queue::loadModel.end();)
-		{
-			VulkanContext::Get()->device->waitIdle();
-			Queue::loadModelFutures.push_back(
-					std::async(
-							std::launch::async,
-							[](const std::string& folderPath, const std::string& modelName, bool show = true)
-							{
-								Model model;
-								model.loadModel(folderPath, modelName, show);
-								for (auto& _model : Model::models)
-									if (_model.name == model.name)
-										model.name = "_" + model.name;
-								return std::any(std::move(model));
-							}, std::get<0>(*it), std::get<1>(*it), true
-					)
-			);
-			it = Queue::loadModel.erase(it);
-		}
-		
-		for (auto it = Queue::loadModelFutures.begin(); it != Queue::loadModelFutures.end();)
-		{
-			if (it->wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
-			{
-				Model::models.push_back(std::any_cast<Model>(it->get()));
-				GUI::modelList.push_back(Model::models.back().name);
-				GUI::model_scale.push_back({1.f, 1.f, 1.f});
-				GUI::model_pos.push_back({0.f, 0.f, 0.f});
-				GUI::model_rot.push_back({0.f, 0.f, 0.f});
-				it = Queue::loadModelFutures.erase(it);
-			}
-			else
-			{
-				++it;
-			}
-		}
-		
-		for (auto it = Queue::unloadModel.begin(); it != Queue::unloadModel.end();)
-		{
-			VulkanContext::Get()->device->waitIdle();
-			Model::models[*it].destroy();
-			Model::models.erase(Model::models.begin() + *it);
-			GUI::modelList.erase(GUI::modelList.begin() + *it);
-			GUI::model_scale.erase(GUI::model_scale.begin() + *it);
-			GUI::model_pos.erase(GUI::model_pos.begin() + *it);
-			GUI::model_rot.erase(GUI::model_rot.begin() + *it);
-			GUI::modelItemSelected = -1;
-			it = Queue::unloadModel.erase(it);
-		}
 #ifndef IGNORE_SCRIPTS
 		for (auto it = Queue::addScript.begin(); it != Queue::addScript.end();) {
 			delete Model::models[std::get<0>(*it)].script;
@@ -230,7 +174,7 @@ namespace pe
 			s->update(static_cast<float>(delta));
 #endif
 		
-		CameraSystem* cameraSystem = ctx->GetSystem<CameraSystem>();
+		CameraSystem* cameraSystem = Context::Get()->GetSystem<CameraSystem>();
 		Camera* camera_main = cameraSystem->GetCamera(0);
 		
 		// Model updates + 8(the rest updates)
@@ -255,11 +199,6 @@ namespace pe
 		auto updateGUI = [&]()
 		{ gui.update(); };
 		futureUpdates.push_back(std::async(std::launch::async, updateGUI));
-		
-		// LIGHTS
-		auto updateLights = [&]()
-		{ lightUniforms.update(*camera_main); };
-		futureUpdates.push_back(std::async(std::launch::async, updateLights));
 		
 		// SSAO
 		auto updateSSAO = [&]()
@@ -557,7 +496,6 @@ namespace pe
 		skyBoxDay.destroy();
 		skyBoxNight.destroy();
 		gui.destroy();
-		lightUniforms.destroy();
 		for (auto& metric : metrics)
 			metric.destroy();
 	}
@@ -758,12 +696,10 @@ namespace pe
 		// DESCRIPTOR SETS FOR SHADOWS
 		shadows.createUniformBuffers();
 		shadows.createDescriptorSets();
-		// DESCRIPTOR SETS FOR LIGHTS
-		lightUniforms.createLightUniforms();
 		// DESCRIPTOR SETS FOR SSAO
 		ssao.createUniforms(renderTargets);
 		// DESCRIPTOR SETS FOR COMPOSITION PIPELINE
-		deferred.createDeferredUniforms(renderTargets, lightUniforms);
+		deferred.createDeferredUniforms(renderTargets);
 		// DESCRIPTOR SET FOR REFLECTION PIPELINE
 		ssr.createSSRUniforms(renderTargets);
 		// DESCRIPTOR SET FOR FXAA PIPELINE
@@ -875,7 +811,7 @@ namespace pe
 		//- Recreate resources ------------------
 		WIDTH = width;
 		HEIGHT = height;
-		vulkan.CreateSwapchain(ctx, 3);
+		vulkan.CreateSwapchain(3);
 		vulkan.CreateDepth();
 		
 		AddRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
@@ -896,7 +832,7 @@ namespace pe
 		deferred.createRenderPasses(renderTargets);
 		deferred.createFrameBuffers(renderTargets);
 		deferred.createPipelines(renderTargets);
-		deferred.updateDescriptorSets(renderTargets, lightUniforms);
+		deferred.updateDescriptorSets(renderTargets);
 		
 		ssr.createRenderPass(renderTargets);
 		ssr.createFrameBuffers(renderTargets);
@@ -980,6 +916,6 @@ namespace pe
 		motionBlur.createPipeline(renderTargets);
 		gui.createPipeline();
 		
-		ctx->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
+		Context::Get()->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
 	}
 }

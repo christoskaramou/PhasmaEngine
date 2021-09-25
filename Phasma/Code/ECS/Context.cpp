@@ -25,6 +25,8 @@ SOFTWARE.
 
 namespace pe
 {
+	Entity* Context::MainEntity = Context::Get()->CreateEntity();
+
 	void Context::InitSystems()
 	{
 		for (auto& system : m_systems)

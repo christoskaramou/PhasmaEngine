@@ -41,23 +41,23 @@ namespace pe
 	{
 	}
 	
-	void Surface::Create(Context* ctx)
+	void Surface::Create(SDL_Window* window)
 	{
 		VkSurfaceKHR _vkSurface;
 		if (!SDL_Vulkan_CreateSurface(
-				ctx->GetSystem<Renderer>()->GetWindow(), VkInstance(*ctx->GetVKContext()->instance), &_vkSurface
+			window, VkInstance(*Context::Get()->GetVKContext()->instance), &_vkSurface
 		))
 			throw std::runtime_error(SDL_GetError());
 		
 		int width, height;
-		SDL_GL_GetDrawableSize(ctx->GetSystem<Renderer>()->GetWindow(), &width, &height);
+		SDL_GL_GetDrawableSize(window, &width, &height);
 		actualExtent = make_ref(vk::Extent2D {static_cast<uint32_t>(width), static_cast<uint32_t>(height)});
 		surface = make_ref(vk::SurfaceKHR(_vkSurface));
 	}
 	
-	void Surface::FindCapabilities(Context* ctx)
+	void Surface::FindCapabilities()
 	{
-		auto gpu = ctx->GetVKContext()->gpu;
+		auto gpu = VulkanContext::Get()->gpu;
 		auto caps = gpu->getSurfaceCapabilitiesKHR(*surface);
 		// Ensure eTransferSrc bit for blit operations
 		if (!(caps.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferSrc))
@@ -65,9 +65,9 @@ namespace pe
 		capabilities = make_ref(caps);
 	}
 	
-	void Surface::FindFormat(Context* ctx)
+	void Surface::FindFormat()
 	{
-		auto gpu = ctx->GetVKContext()->gpu;
+		auto gpu = VulkanContext::Get()->gpu;
 		std::vector<vk::SurfaceFormatKHR> formats = gpu->getSurfaceFormatsKHR(*surface);
 		auto format = formats[0];
 		for (const auto& f : formats)
@@ -86,9 +86,9 @@ namespace pe
 		formatKHR = make_ref(format);
 	}
 	
-	void Surface::FindPresentationMode(Context* ctx)
+	void Surface::FindPresentationMode()
 	{
-		auto gpu = ctx->GetVKContext()->gpu;
+		auto gpu = VulkanContext::Get()->gpu;
 		std::vector<vk::PresentModeKHR> presentModes = gpu->getSurfacePresentModesKHR(*surface);
 		
 		for (const auto& i : presentModes)
@@ -109,10 +109,10 @@ namespace pe
 	}
 	
 	
-	void Surface::FindProperties(Context* ctx)
+	void Surface::FindProperties()
 	{
-		FindCapabilities(ctx);
-		FindFormat(ctx);
-		FindPresentationMode(ctx);
+		FindCapabilities();
+		FindFormat();
+		FindPresentationMode();
 	}
 }

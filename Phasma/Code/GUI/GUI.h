@@ -42,9 +42,7 @@ namespace pe
     
     class GUI : public Object
     {
-    public:
-        Context* ctx;
-        
+    public:        
         GUI();
         
         ~GUI();
@@ -92,7 +90,7 @@ namespace pe
         static inline float fog_max_height = 3.0f;
         static inline bool shadow_cast = false;
         static inline float sun_intensity = 7.f;
-        static inline std::array<float, 3> sun_position {160.0f, 300.0f, -120.0f};
+        static inline std::array<float, 3> sun_direction { -0.196116f, 0.98058f, 0.f};
         static inline float fps = 60.0f;
         static inline float cameraSpeed = 3.5f;
         static inline std::array<float, 3> depthBias {0.0f, 0.0f, -6.2f};

@@ -34,6 +34,7 @@ SOFTWARE.
 #include "../Shader/Reflection.h"
 #include "RenderApi.h"
 #include "../Core/Path.h"
+#include "../ECS/Context.h"
 
 namespace pe
 {
@@ -80,7 +81,7 @@ namespace pe
 		Model::pipeline = nullptr;
 	}
 	
-	void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
+	void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		uniform.CreateBuffer(
 			sizeof(ubo),
@@ -157,10 +158,10 @@ namespace pe
 			Mesh::uniqueTextures[path] = ibl_brdf_lut;
 		}
 		
-		updateDescriptorSets(renderTargets, lightUniforms);
+		updateDescriptorSets(renderTargets);
 	}
 	
-	void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms)
+	void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
 		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image)
@@ -179,12 +180,13 @@ namespace pe
 			};
 		};
 		
+		Buffer& lightsUniform = Context::Get()->GetSystem<LightSystem>()->GetUniform();
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
 				wSetImage(*DSComposition, 0, renderTargets["depth"]),
 				wSetImage(*DSComposition, 1, renderTargets["normal"]),
 				wSetImage(*DSComposition, 2, renderTargets["albedo"]),
 				wSetImage(*DSComposition, 3, renderTargets["srm"]),
-				wSetBuffer(*DSComposition, 4, lightUniforms.uniform),
+				wSetBuffer(*DSComposition, 4, lightsUniform),
 				wSetImage(*DSComposition, 5, renderTargets["ssaoBlur"]),
 				wSetImage(*DSComposition, 6, renderTargets["ssr"]),
 				wSetImage(*DSComposition, 7, renderTargets["emissive"]),

@@ -31,7 +31,7 @@ SOFTWARE.
 
 namespace pe
 {
-	SDL_Window* Window::Create(Context* ctx, uint32_t flags)
+	SDL_Window* Window::Create(uint32_t flags)
 	{
 		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
 		{
@@ -46,10 +46,12 @@ namespace pe
 		}
 		
 		auto lambda = [this](const std::any& title)
-		{ SetTitle(std::any_cast<std::string>(title)); };
-		EventSystem::Get()->RegisterEventAction(EventType::SetWindowTitle, lambda);
-		
-		m_ctx = ctx;
+		{
+			SetTitle(std::any_cast<std::string>(title));
+		};
+
+		EventSystem* eventSystem = Context::Get()->GetSystem<EventSystem>();
+		eventSystem->RegisterEventAction(EventType::SetWindowTitle, lambda);
 		
 		return m_handle;
 	}
@@ -71,12 +73,11 @@ namespace pe
 		static int x, y, w, h, px, py = 0;
 		static float dx, dy = 0.f;
 		
-		EventSystem* eventSystem = EventSystem::Get();
-		Renderer* renderer = m_ctx->GetSystem<Renderer>();
-		CameraSystem* cameraSystem = m_ctx->GetSystem<CameraSystem>();
+		EventSystem* eventSystem = Context::Get()->GetSystem<EventSystem>();
+		Renderer* renderer = Context::Get()->GetSystem<Renderer>();
+		CameraSystem* cameraSystem = Context::Get()->GetSystem<CameraSystem>();
 		Camera* camera_main = cameraSystem->GetCamera(0);
 		
-		auto vulkan = m_ctx->GetVKContext();
 		bool combineDirections = false;
 		
 		ImGuiIO& io = ImGui::GetIO();
@@ -181,7 +182,7 @@ namespace pe
 		{
 			if (!isMinimized())
 			{
-				SDL_GL_GetDrawableSize(vulkan->window, &w, &h);
+				SDL_GL_GetDrawableSize(m_handle, &w, &h);
 				renderer->ResizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 			}
 		}

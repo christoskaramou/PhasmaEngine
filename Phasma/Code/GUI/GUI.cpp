@@ -33,6 +33,8 @@ SOFTWARE.
 #include "../Renderer/RenderApi.h"
 #include "../Core/Path.h"
 #include "../Event/EventSystem.h"
+#include "../ECS/Context.h"
+#include "../Model/Model.h"
 
 namespace pe
 {
@@ -135,9 +137,7 @@ namespace pe
 	}
 	
 	
-	const char* GUI::async_fileDialog_ImGuiButton(
-			const char* buttonLabel, const char* dialogTitle, const std::vector<const char*>& filter
-	)
+	const char* GUI::async_fileDialog_ImGuiButton(const char* buttonLabel, const char* dialogTitle, const std::vector<const char*>& filter)
 	{
 		static std::future<const char*>* s_future = nullptr;
 		
@@ -203,7 +203,12 @@ namespace pe
 					const std::string path(result);
 					std::string folderPath = path.substr(0, path.find_last_of('\\') + 1);
 					std::string modelName = path.substr(path.find_last_of('\\') + 1);
-					Queue::loadModel.emplace_back(folderPath, modelName);
+					Model::models.emplace_back();
+					Model::models.back().LoadAsync(folderPath, modelName);
+					GUI::modelList.push_back(modelName);
+					GUI::model_scale.push_back({ 1.f, 1.f, 1.f });
+					GUI::model_pos.push_back({ 0.f, 0.f, 0.f });
+					GUI::model_rot.push_back({ 0.f, 0.f, 0.f });
 				}
 				
 				const int exit = async_messageBox_ImGuiMenuItem("Exit", "Exit", "Are you sure you want to exit?");
@@ -381,7 +386,7 @@ namespace pe
 		if (ImGui::Button("Compile Shaders"))
 		{
 			VulkanContext::Get()->device->waitIdle();
-			EventSystem::Get()->PushEvent(EventType::CompileShaders);
+			Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders);
 		}
 		for (uint32_t i = 0; i < shaderList.size(); i++)
 		{
@@ -412,7 +417,12 @@ namespace pe
 			const std::string path(result);
 			std::string folderPath = path.substr(0, path.find_last_of('\\') + 1);
 			std::string modelName = path.substr(path.find_last_of('\\') + 1);
-			Queue::loadModel.emplace_back(folderPath, modelName);
+			Model::models.emplace_back();
+			Model::models.back().LoadAsync(folderPath, modelName);
+			GUI::modelList.push_back(modelName);
+			GUI::model_scale.push_back({ 1.f, 1.f, 1.f });
+			GUI::model_pos.push_back({ 0.f, 0.f, 0.f });
+			GUI::model_rot.push_back({ 0.f, 0.f, 0.f });
 		}
 		
 		for (uint32_t i = 0; i < modelList.size(); i++)
@@ -423,32 +433,6 @@ namespace pe
 		}
 		
 		ImGui::End();
-		
-		if (!Queue::loadModelFutures.empty())
-		{
-			static bool loading = true;
-			static float time = 0.f;
-			ImGuiStyle* style = &ImGui::GetStyle();
-			const ImVec4 temp = style->Colors[ImGuiCol_WindowBg];
-			style->Colors[ImGuiCol_WindowBg] = ImVec4(.5f, .5f, .5f, 1.f);
-			ImGui::SetNextWindowPos(ImVec2(WIDTH_f * .5f - 44.f, HEIGHT_f * .5f - 10.f));
-			ImGui::SetNextWindowSize(ImVec2(88.f, 20.f));
-			ImGui::Begin("Loading", &loading, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
-			
-			if (time < 1.f)
-				ImGui::Text("Loading");
-			else if (time < 2.f)
-				ImGui::Text("Loading.");
-			else if (time < 3.f)
-				ImGui::Text("Loading..");
-			else if (time < 4.f)
-				ImGui::Text("Loading...");
-			else
-				time = 0.f;
-			ImGui::End();
-			time += ImGui::GetIO().DeltaTime;
-			style->Colors[ImGuiCol_WindowBg] = temp;
-		}
 	}
 	
 	void GUI::Properties() const
@@ -463,7 +447,7 @@ namespace pe
 		{
 			renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
 			VulkanContext::Get()->device->waitIdle();
-			EventSystem::Get()->PushEvent(EventType::ScaleRenderTargets);
+			Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::ScaleRenderTargets);
 		}
 		ImGui::Checkbox("Lock Render Window", &lock_render_window);
 		ImGui::Checkbox("IBL", &use_IBL);
@@ -566,20 +550,16 @@ namespace pe
 		if (shadow_cast)
 		{
 			ImGui::Indent(16.0f);
-			ImGui::SliderFloat("Sun Intst", &sun_intensity, 0.1f, 50.f);
-			ImGui::InputFloat3("SunPos", sun_position.data(), 1);
+			ImGui::SliderFloat("Intst", &sun_intensity, 0.1f, 50.f);
+			ImGui::InputFloat3("Dir", sun_direction.data(), 3);
 			ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5);
 			ImGui::Separator();
 			ImGui::Separator();
 			{
-				vec3 sunDist(&sun_position[0]);
-				if (lengthSquared(sunDist) > 160000.f)
-				{
-					sunDist = 400.f * normalize(sunDist);
-					sun_position[0] = sunDist.x;
-					sun_position[1] = sunDist.y;
-					sun_position[2] = sunDist.z;
-				}
+				vec3 direction = normalize(vec3(&sun_direction[0]));
+				sun_direction[0] = direction.x;
+				sun_direction[1] = direction.y;
+				sun_direction[2] = direction.z;
 			}
 			ImGui::Unindent(16.0f);
 		}
@@ -607,7 +587,16 @@ namespace pe
 			
 			ImGui::Separator();
 			if (ImGui::Button("Unload Model"))
-				Queue::unloadModel.push_back(modelItemSelected);
+			{
+				VulkanContext::Get()->device->waitIdle();
+				Model::models[modelItemSelected].destroy();
+				Model::models.erase(Model::models.begin() + modelItemSelected);
+				GUI::modelList.erase(GUI::modelList.begin() + modelItemSelected);
+				GUI::model_scale.erase(GUI::model_scale.begin() + modelItemSelected);
+				GUI::model_pos.erase(GUI::model_pos.begin() + modelItemSelected);
+				GUI::model_rot.erase(GUI::model_rot.begin() + modelItemSelected);
+				GUI::modelItemSelected = -1;
+			}
 			
 			ImGui::Separator();
 			const std::string s = "Scale##" + toStr;

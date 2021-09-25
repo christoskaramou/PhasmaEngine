@@ -57,9 +57,9 @@ namespace pe
 		
 		static void batchEnd();
 		
-		void createDeferredUniforms(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
+		void createDeferredUniforms(std::map<std::string, Image>& renderTargets);
 		
-		void updateDescriptorSets(std::map<std::string, Image>& renderTargets, LightUniforms& lightUniforms);
+		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		
 		void update(mat4& invViewProj);
 		

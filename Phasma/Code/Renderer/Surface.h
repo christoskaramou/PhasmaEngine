@@ -35,15 +35,15 @@ namespace pe
 		
 		~Surface();
 		
-		void Create(Context* ctx);
+		void Create(SDL_Window* window);
 		
-		void FindCapabilities(Context* ctx);
+		void FindCapabilities();
 		
-		void FindFormat(Context* ctx);
+		void FindFormat();
 		
-		void FindPresentationMode(Context* ctx);
+		void FindPresentationMode();
 		
-		void FindProperties(Context* ctx);
+		void FindProperties();
 		
 		Ref<vk::SurfaceKHR> surface;
 		Ref<vk::Extent2D> actualExtent;

@@ -29,6 +29,7 @@ SOFTWARE.
 #include <utility>
 #include <any>
 #include <unordered_set>
+#include "../ECS/System.h"
 
 namespace pe
 {
@@ -49,9 +50,16 @@ namespace pe
     
     using Func = Delegate<std::any>::Func_type;
     
-    class EventSystem : public NoCopy, public NoMove
+    class EventSystem : public ISystem
     {
     public:
+
+        void Init() override;
+
+        void Update(double delta) override;
+
+        void Destroy() override;
+
         // Immediately dispatch a registered event
         void DispatchEvent(EventType type, const std::any& data);
         
@@ -74,20 +82,5 @@ namespace pe
     private:
         std::unordered_map<EventType, Delegate<std::any>> m_events;
         std::unordered_set<EventType> m_pushedEventTypes;
-    
-    public:
-        static auto Get()
-        {
-            static auto instance = new EventSystem();
-            return instance;
-        }
-        
-        EventSystem(EventSystem const&) = delete;                // copy constructor
-        EventSystem(EventSystem&&) noexcept = delete;            // move constructor
-        EventSystem& operator=(EventSystem const&) = delete;    // copy assignment
-        EventSystem& operator=(EventSystem&&) = delete;            // move assignment
-        ~EventSystem() = default;                                // destructor
-    private:
-        EventSystem() = default;                                // default constructor
     };
 }

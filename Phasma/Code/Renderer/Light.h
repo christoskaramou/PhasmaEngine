@@ -30,78 +30,58 @@ SOFTWARE.
 
 namespace pe
 {
-#define MAX_LIGHTS 10
+#define MAX_POINT_LIGHTS 10
+#define MAX_SPOT_LIGHTS 10
 	
-	class Light
+	struct Light
 	{
-	public:
-		Light();
-		
-		Light(const vec4& color, const vec4& position);
-		
-		vec4 color;
+	};
+	
+	struct DirectionalLight : public Light
+	{
+		vec4 color; // .w = intensity
+		vec4 direction;
+	};
+	
+	struct PointLight : public Light
+	{
+		vec4 color; // .w = intensity
 		vec4 position;
 	};
 	
-	class DirectionalLight : public IComponent
+	struct SpotLight : public Light
 	{
-	public:
-		vec4 color;
-		vec3 direction;
-	};
-	
-	class PointLight : public IComponent
-	{
-	public:
-		vec4 color;
-		vec3 position;
-		float radius;
-	};
-	
-	class SpotLight : public IComponent
-	{
-	public:
-		vec4 color;
-		vec4 start;
-		vec3 end;
-		float radius;
+		vec4 color; // .w = intensity
+		vec4 start; // .w = radius;
+		vec4 end;
 	};
 	
 	struct LightsUBO
 	{
 		vec4 camPos;
-		Light sun
-				{
-						{.9765f,               .8431f,               .9098f,               GUI::sun_intensity},
-						{GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2], 1.0f}
-				};
-#ifdef MAX_LIGHTS
-#if MAX_LIGHTS == 0 // to avoid warnings when 0 lights are set
-		std::array<Light, MAX_LIGHTS> lights{};
-#else
-		Light lights[MAX_LIGHTS];
-#endif
-#endif
+		DirectionalLight sun;
+		PointLight pointLights[MAX_POINT_LIGHTS];
+		SpotLight spotLights[MAX_SPOT_LIGHTS];
 	};
-	
-	class LightUniforms : public Light
+
+	class LightSystem : public ISystem
 	{
 	public:
-		LightUniforms();
-		
-		~LightUniforms();
-		
+		LightSystem();
+
+		~LightSystem();
+
+		void Init() override;
+
+		void Update(double delta) override;
+
+		void Destroy() override;
+
+		Buffer& GetUniform() { return uniform; }
+
+	private:
 		LightsUBO lubo;
 		Buffer uniform;
 		Ref<vk::DescriptorSet> descriptorSet;
-		static Ref<vk::DescriptorSetLayout> descriptorSetLayout;
-		
-		static const vk::DescriptorSetLayout& getDescriptorSetLayout();
-		
-		void update(const Camera& camera);
-		
-		void createLightUniforms();
-		
-		void destroy();
 	};
 }

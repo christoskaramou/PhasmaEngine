@@ -61,7 +61,6 @@ namespace pe
 		SkyBox skyBoxDay;
 		SkyBox skyBoxNight;
 		GUI gui;
-		LightUniforms lightUniforms;
 		Compute animationsCompute;
 		Compute nodesCompute;
 		
@@ -71,7 +70,7 @@ namespace pe
 		std::vector<Script*> scripts{};
 #endif
 	public:
-		Renderer(Context* ctx, SDL_Window* window);
+		Renderer();
 		
 		~Renderer() override;
 		
@@ -93,19 +92,10 @@ namespace pe
 		
 		void RecreatePipelines();
 		
-		inline SDL_Window* GetWindow()
-		{ return window; }
-		
-		inline Context* GetContext()
-		{ return ctx; }
-		
 		uint32_t previousImageIndex = 0;
 		std::map<std::string, Image> renderTargets {};
 	
-	private:
-		Context* ctx;
-		SDL_Window* window;
-		
+	private:		
 		static void CheckQueue();
 		
 		void ComputeAnimations();

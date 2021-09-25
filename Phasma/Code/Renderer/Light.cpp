@@ -25,111 +25,15 @@ SOFTWARE.
 #include "../Core/Queue.h"
 #include "../GUI/GUI.h"
 #include "RenderApi.h"
+#include "../ECS/Context.h"
 
 namespace pe
-{
-	Ref <vk::DescriptorSetLayout> LightUniforms::descriptorSetLayout = Ref<vk::DescriptorSetLayout>();
-	
-	Light::Light() :
-			color(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f),
-			position(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 1.f)
-	{}
-	
-	Light::Light(const vec4& color, const vec4& position) :
-			color(color),
-			position(position)
-	{}
-	
-	void LightUniforms::createLightUniforms()
+{	
+	vk::DescriptorSetLayout& GetDescriptorSetLayout()
 	{
-		getDescriptorSetLayout();
-		
-		uniform.CreateBuffer(
-			sizeof(LightsUBO),
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		uniform.Map();
-		uniform.CopyData(&lubo);
-		uniform.Flush();
-		uniform.Unmap();
-		uniform.SetDebugName("Light_UB");
-		
-		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
-		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = descriptorSetLayout.get();
-		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Lights");
-		
-		vk::DescriptorBufferInfo dbi;
-		dbi.buffer = *uniform.GetBufferVK();
-		dbi.offset = 0;
-		dbi.range = uniform.Size();
-		
-		vk::WriteDescriptorSet writeSet;
-		writeSet.dstSet = *descriptorSet;
-		writeSet.dstBinding = 0;
-		writeSet.dstArrayElement = 0;
-		writeSet.descriptorCount = 1;
-		writeSet.descriptorType = vk::DescriptorType::eUniformBuffer;
-		writeSet.pBufferInfo = &dbi;
-		VulkanContext::Get()->device->updateDescriptorSets(writeSet, nullptr);
-	}
-	
-	void LightUniforms::destroy()
-	{
-		uniform.Destroy();
-		if (*descriptorSetLayout)
-		{
-			VulkanContext::Get()->device->destroyDescriptorSetLayout(*descriptorSetLayout);
-			*descriptorSetLayout = nullptr;
-		}
-	}
-	
-	void LightUniforms::update(const Camera& camera)
-	{
-		if (GUI::randomize_lights)
-		{
-			
-			GUI::randomize_lights = false;
-			
-			lubo = LightsUBO();
-			lubo.camPos = {camera.position, 1.0f};
-			
-			Queue::memcpyRequest(&uniform, {{&lubo, sizeof(lubo), 0}});
-			//uniform.map();
-			//memcpy(uniform.data, &lubo, sizeof(lubo));
-			//uniform.flush();
-			//uniform.unmap();
-			
-			return;
-			
-		}
-		
-		lubo.camPos = {camera.position, 1.0f};
-		lubo.sun.color = {.9765f, .8431f, .9098f, GUI::sun_intensity};
-		lubo.sun.position = {GUI::sun_position[0], GUI::sun_position[1], GUI::sun_position[2], 1.0f};
-		
-		Queue::memcpyRequest(&uniform, {{&lubo, 3 * sizeof(vec4), 0}});
-		//uniform.map();
-		//memcpy(uniform.data, values, sizeof(values));
-		//uniform.flush();
-		//uniform.unmap();
-	}
-	
-	LightUniforms::LightUniforms()
-	{
-		descriptorSetLayout = make_ref(vk::DescriptorSetLayout());
-	}
-	
-	LightUniforms::~LightUniforms()
-	{
-	}
-	
-	const vk::DescriptorSetLayout& LightUniforms::getDescriptorSetLayout()
-	{
-		// binding for model mvp matrix
-		if (!*descriptorSetLayout)
+		static vk::DescriptorSetLayout descriptorSetLayout;
+
+		if (!descriptorSetLayout)
 		{
 			vk::DescriptorSetLayoutBinding descriptorSetLayoutBinding;
 			descriptorSetLayoutBinding.binding = 0;
@@ -141,9 +45,100 @@ namespace pe
 			createInfo.bindingCount = 1;
 			createInfo.pBindings = &descriptorSetLayoutBinding;
 			
-			descriptorSetLayout = make_ref(VulkanContext::Get()->device->createDescriptorSetLayout(createInfo));
-			VulkanContext::Get()->SetDebugObjectName(*descriptorSetLayout, "Lights");
+			descriptorSetLayout = VulkanContext::Get()->device->createDescriptorSetLayout(createInfo);
+			VulkanContext::Get()->SetDebugObjectName(descriptorSetLayout, "Lights");
 		}
-		return *descriptorSetLayout;
+		return descriptorSetLayout;
+	}
+
+	LightSystem::LightSystem()
+	{
+	}
+
+	LightSystem::~LightSystem()
+	{
+	}
+
+	void LightSystem::Init()
+	{
+		uniform.CreateBuffer(
+			sizeof(LightsUBO),
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+		uniform.Map();
+		uniform.Zero();
+		uniform.Flush();
+		uniform.Unmap();
+		uniform.SetDebugName("Light_UB");
+
+		vk::DescriptorSetAllocateInfo allocateInfo;
+		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
+		allocateInfo.descriptorSetCount = 1;
+		allocateInfo.pSetLayouts = &GetDescriptorSetLayout();
+		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Lights");
+
+		vk::DescriptorBufferInfo dbi;
+		dbi.buffer = *uniform.GetBufferVK();
+		dbi.offset = 0;
+		dbi.range = uniform.Size();
+
+		vk::WriteDescriptorSet writeSet;
+		writeSet.dstSet = *descriptorSet;
+		writeSet.dstBinding = 0;
+		writeSet.dstArrayElement = 0;
+		writeSet.descriptorCount = 1;
+		writeSet.descriptorType = vk::DescriptorType::eUniformBuffer;
+		writeSet.pBufferInfo = &dbi;
+		VulkanContext::Get()->device->updateDescriptorSets(writeSet, nullptr);
+
+		for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+		{
+			PointLight& point = lubo.pointLights[i];
+			point.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f);
+			point.position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
+		}
+
+		for (int i = 0; i < MAX_SPOT_LIGHTS; i++)
+		{
+			SpotLight& spot = lubo.spotLights[i];
+			spot.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f);
+			spot.start = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
+			spot.end = spot.start + normalize(vec4(rand(-1.f, 1.f), rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f));
+		}
+		Queue::memcpyRequest(&uniform, { {&lubo, sizeof(LightsUBO), 0} }, CopyRequestType::Sync);
+	}
+
+	void LightSystem::Update(double delta)
+	{
+		if (GUI::randomize_lights)
+		{
+			for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+			{
+				PointLight& point = lubo.pointLights[i];
+				point.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f);
+				point.position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
+			}
+			GUI::randomize_lights = false;
+
+			Queue::memcpyRequest(&uniform, { {&lubo, sizeof(LightsUBO), 0} }, CopyRequestType::Sync);
+		}
+
+		Camera& camera = *Context::Get()->GetSystem<CameraSystem>()->GetCamera(0);
+		lubo.camPos = { camera.position, 1.0f };
+		lubo.sun.color = { .9765f, .8431f, .9098f, GUI::sun_intensity };
+		lubo.sun.direction = { GUI::sun_direction[0], GUI::sun_direction[1], GUI::sun_direction[2], 1.f};
+
+		Queue::memcpyRequest(&uniform, { {&lubo, 3 * sizeof(vec4), 0} });
+	}
+
+	void LightSystem::Destroy()
+	{
+		uniform.Destroy();
+		if (GetDescriptorSetLayout())
+		{
+			VulkanContext::Get()->device->destroyDescriptorSetLayout(GetDescriptorSetLayout());
+			GetDescriptorSetLayout() = nullptr;
+		}
 	}
 }
