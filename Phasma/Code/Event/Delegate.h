@@ -36,20 +36,7 @@ namespace pe
 		
 		inline void operator+=(Func_type&& func)
 		{
-			const size_t funcAddress = *reinterpret_cast<long*>(reinterpret_cast<char*>(&func));
-			
-			bool alreadyExist = false;
-			for (auto& function : m_functions)
-			{
-				const size_t functionAddress = *reinterpret_cast<long*>(reinterpret_cast<char*>(&function));
-				
-				// This equality seems to work, holding back though since it might not be accurate
-				if (funcAddress == functionAddress)
-					alreadyExist = true;
-			}
-			
-			if (!alreadyExist)
-				m_functions.push_back(std::forward<Func_type>(func));
+			m_functions.push_back(std::forward<Func_type>(func));
 		}
 		
 		inline void operator-=(Func_type&& func)
@@ -73,6 +60,11 @@ namespace pe
 		{
 			for (auto& function : m_functions)
 				function(args...);
+		}
+
+		inline void Clear()
+		{
+			m_functions.clear();
 		}
 	
 	private:

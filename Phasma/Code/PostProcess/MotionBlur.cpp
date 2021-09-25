@@ -167,11 +167,7 @@ namespace pe
 			
 			previousView = camera.view;
 			
-			Queue::memcpyRequest(&UBmotionBlur, {{&motionBlurInput, sizeof(motionBlurInput), 0}});
-			//UBmotionBlur.map();
-			//memcpy(UBmotionBlur.data, &motionBlurInput, sizeof(motionBlurInput));
-			//UBmotionBlur.flush();
-			//UBmotionBlur.unmap();
+			UBmotionBlur.CopyRequest({ &motionBlurInput, sizeof(motionBlurInput), 0 }, QueueType::AsyncDeferred);
 		}
 	}
 	

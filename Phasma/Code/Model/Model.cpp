@@ -510,11 +510,7 @@ namespace pe
 		ubo.previousMvp = ubo.mvp;
 		ubo.mvp = camera.viewProjection * transform;
 		
-		Queue::memcpyRequest(&uniformBuffer, {{&ubo, sizeof(ubo), 0}});
-		//uniformBuffer.map();
-		//memcpy(uniformBuffer.data, &ubo, sizeof(ubo));
-		//uniformBuffer.flush();
-		//uniformBuffer.unmap();
+		uniformBuffer.CopyRequest({ &ubo, sizeof(ubo), 0 }, QueueType::AsyncDeferred);
 		
 		if (!animations.empty())
 		{

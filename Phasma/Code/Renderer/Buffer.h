@@ -24,6 +24,8 @@ SOFTWARE.
 
 #include "../Core/Base.h"
 #include "RendererEnums.h"
+#include <Code/MemoryHash/MemoryHash.h>
+#include <Code/Core/Queue.h>
 
 namespace pe
 {
@@ -56,6 +58,10 @@ namespace pe
 		size_t SizeRequested();
 		
 		void* Data();
+
+		void CopyRequest(const MemoryRange& ranges, QueueType queue);
+
+		void CopyRequest(const std::vector<MemoryRange>& ranges, QueueType queue);
 		
 		Ref<vk::Buffer> GetBufferVK();
 

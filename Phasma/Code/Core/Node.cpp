@@ -94,19 +94,11 @@ namespace pe
 				}
 				
 				mesh->ubo.jointcount = static_cast<float>(numJoints);
-				Queue::memcpyRequest(&mesh->uniformBuffer, {{&mesh->ubo, sizeof(mesh->ubo), 0}});
-				//mesh->uniformBuffer.map();
-				//memcpy(mesh->uniformBuffer.data, &mesh->ubo, sizeof(mesh->ubo));
-				//mesh->uniformBuffer.flush();
-				//mesh->uniformBuffer.unmap();
+				mesh->uniformBuffer.CopyRequest({ &mesh->ubo, sizeof(mesh->ubo), 0 }, QueueType::AsyncDeferred);
 			}
 			else
 			{
-				Queue::memcpyRequest(&mesh->uniformBuffer, {{&mesh->ubo, 2 * sizeof(mat4), 0}});
-				//mesh->uniformBuffer.map();
-				//memcpy(mesh->uniformBuffer.data, &mesh->ubo, 2 * sizeof(mat4));
-				//mesh->uniformBuffer.flush();
-				//mesh->uniformBuffer.unmap();
+				mesh->uniformBuffer.CopyRequest({ &mesh->ubo, 2 * sizeof(mat4), 0 }, QueueType::AsyncDeferred);
 			}
 		}
 	}

@@ -615,18 +615,18 @@ namespace pe
 			{
 				std::string path(result);
 				path = path.substr(0, path.find_last_of('.'));
-				Queue::addScript.emplace_back(modelItemSelected, path.substr(path.find_last_of('\\') + 1));
+				//Queue::s_addScript.emplace_back(modelItemSelected, path.substr(path.find_last_of('\\') + 1));
 			}
 			
 			ImGui::SameLine();
 			if (ImGui::Button("Compile Script"))
 			{
-				Queue::compileScript.push_back(modelItemSelected);
+				//Queue::s_compileScript.push_back(modelItemSelected);
 			}
 			
 			if (ImGui::Button("Remove Script"))
 			{
-				Queue::removeScript.push_back(modelItemSelected);
+				//Queue::s_removeScript.push_back(modelItemSelected);
 			}
 		}
 		
@@ -1174,8 +1174,8 @@ namespace pe
 				vertex_offset += vertex_ranges[n].size;
 				index_offset += index_ranges[n].size;
 			}
-			Queue::memcpyRequest(&vertexBuffer, vertex_ranges);
-			Queue::memcpyRequest(&indexBuffer, index_ranges);
+			vertexBuffer.CopyRequest(vertex_ranges, QueueType::AsyncDeferred);
+			indexBuffer.CopyRequest(index_ranges, QueueType::AsyncDeferred);
 		}
 		
 		//vk::CommandBufferBeginInfo beginInfo;

@@ -216,11 +216,7 @@ namespace pe
 				GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f
 		};
 		
-		Queue::memcpyRequest(&uniform, {{&ubo, sizeof(ubo), 0}});
-		//uniform.map();
-		//uniform.copyData(&ubo);
-		//uniform.flush();
-		//uniform.unmap();
+		uniform.CopyRequest({ &ubo, sizeof(ubo), 0 }, QueueType::AsyncDeferred);
 	}
 	
 	void Deferred::draw(

@@ -237,7 +237,7 @@ namespace pe
 		timerFenceWait.Start();
 		VulkanContext::Get()->waitFences((*VulkanContext::Get()->fences)[previousImageIndex]);
 		FrameTimer::Instance().timestamps[0] = timerFenceWait.Count();
-		Queue::exec_memcpyRequests();
+		Queue::ExecuteRequests();
 		
 		GUI::updatesTimeCount = static_cast<float>(timer.Count());
 	}

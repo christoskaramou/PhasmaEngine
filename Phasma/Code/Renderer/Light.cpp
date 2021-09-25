@@ -106,11 +106,20 @@ namespace pe
 			spot.start = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
 			spot.end = spot.start + normalize(vec4(rand(-1.f, 1.f), rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f));
 		}
-		Queue::memcpyRequest(&uniform, { {&lubo, sizeof(LightsUBO), 0} }, CopyRequestType::Sync);
+		uniform.CopyRequest({&lubo, sizeof(LightsUBO), 0}, QueueType::Sync);
 	}
 
 	void LightSystem::Update(double delta)
 	{
+		std::vector<MemoryRange> ranges{};
+
+		Camera& camera = *Context::Get()->GetSystem<CameraSystem>()->GetCamera(0);
+		lubo.camPos = { camera.position, 1.0f };
+		lubo.sun.color = { .9765f, .8431f, .9098f, GUI::sun_intensity };
+		lubo.sun.direction = { GUI::sun_direction[0], GUI::sun_direction[1], GUI::sun_direction[2], 1.f };
+
+		ranges.emplace_back(&lubo, 3 * sizeof(vec4), 0);
+
 		if (GUI::randomize_lights)
 		{
 			for (int i = 0; i < MAX_POINT_LIGHTS; i++)
@@ -121,15 +130,10 @@ namespace pe
 			}
 			GUI::randomize_lights = false;
 
-			Queue::memcpyRequest(&uniform, { {&lubo, sizeof(LightsUBO), 0} }, CopyRequestType::Sync);
+			ranges.emplace_back(lubo.pointLights, sizeof(PointLight) * MAX_POINT_LIGHTS, offsetof(LightsUBO, pointLights));
 		}
 
-		Camera& camera = *Context::Get()->GetSystem<CameraSystem>()->GetCamera(0);
-		lubo.camPos = { camera.position, 1.0f };
-		lubo.sun.color = { .9765f, .8431f, .9098f, GUI::sun_intensity };
-		lubo.sun.direction = { GUI::sun_direction[0], GUI::sun_direction[1], GUI::sun_direction[2], 1.f};
-
-		Queue::memcpyRequest(&uniform, { {&lubo, 3 * sizeof(vec4), 0} });
+		uniform.CopyRequest(ranges, QueueType::AsyncDeferred);
 	}
 
 	void LightSystem::Destroy()

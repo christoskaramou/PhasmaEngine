@@ -84,11 +84,7 @@ namespace pe
 			};
 			ubo.invProj = camera.invProjection;
 			
-			Queue::memcpyRequest(&uniform, {{&ubo, sizeof(ubo), 0}});
-			//uniform.map();
-			//memcpy(uniform.data, &ubo, sizeof(ubo));
-			//uniform.flush();
-			//uniform.unmap();
+			uniform.CopyRequest({ &ubo, sizeof(ubo), 0 }, QueueType::AsyncDeferred);
 		}
 	}
 	

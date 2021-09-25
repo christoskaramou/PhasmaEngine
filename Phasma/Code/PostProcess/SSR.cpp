@@ -104,11 +104,7 @@ namespace pe
 			reflectionInput[2] = camera.view;
 			reflectionInput[3] = camera.invProjection;
 			
-			Queue::memcpyRequest(&UBReflection, {{&reflectionInput, sizeof(reflectionInput), 0}});
-			//UBReflection.map();
-			//memcpy(UBReflection.data, &reflectionInput, sizeof(reflectionInput));
-			//UBReflection.flush();
-			//UBReflection.unmap();
+			UBReflection.CopyRequest({ &reflectionInput, sizeof(reflectionInput), 0 }, QueueType::AsyncDeferred);
 		}
 	}
 	

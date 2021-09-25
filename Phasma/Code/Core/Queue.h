@@ -28,81 +28,56 @@ SOFTWARE.
 #include <deque>
 #include <any>
 #include <mutex>
-#include "../Renderer/Buffer.h"
-#include "../MemoryHash/MemoryHash.h"
+#include "Code/Event/Delegate.h"
 
 namespace pe
 {
-	enum class CopyRequestType
+
+	enum class QueueType
 	{
 		Async,
 		AsyncDeferred,
 		Sync,
 		SyncDeferred,
 	};
-
-	class CopyRequest
-	{
-	public:
-		Buffer* buffer;
-		std::vector<MemoryRange> memory_ranges {};
-		
-		void exec_mem_copy()
-		{
-			buffer->Map();
-			for (auto& memory_range : memory_ranges)
-				buffer->CopyData(memory_range.data, memory_range.size, memory_range.offset);
-			buffer->Flush();
-			buffer->Unmap();
-		}
-	};
 	
 	class Queue
 	{
 	public:
-		inline static std::deque<std::tuple<int, std::string>> addScript {};
-		inline static std::deque<int> removeScript {};
-		inline static std::deque<int> compileScript {};
-	private:
-		inline static std::deque<CopyRequest> copy_requests{};
-		inline static std::deque<CopyRequest> sync_deferred_requests{};
-		inline static std::mutex mem_cpy_request_mutex {};
-		inline static std::vector<std::future<void>> futureNodes{};
-	public:
-		inline static void memcpyRequest(Buffer* buffer, const std::vector<MemoryRange>& ranges, CopyRequestType type = CopyRequestType::AsyncDeferred)
+		using Func = std::function<void()>;
+
+		inline static void Request(Func&& func, QueueType queueType)
 		{
-			std::lock_guard<std::mutex> guard(mem_cpy_request_mutex);
-			switch (type)
+			std::lock_guard<std::mutex> guard(s_bufferCopyRequestMutex);
+
+			switch (queueType)
 			{
-			case CopyRequestType::Async:
-				copy_requests.push_back({ buffer, ranges });
-				futureNodes.push_back(std::async(std::launch::async, std::bind(&CopyRequest::exec_mem_copy, copy_requests.back())));
+			case QueueType::Async:
+				s_futures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
+				s_requests += std::bind(&std::future<void>::get, &s_futures.back());
 				break;
-			case CopyRequestType::AsyncDeferred:
-				copy_requests.push_back({ buffer, ranges });
-				futureNodes.push_back(std::async(std::launch::deferred, std::bind(&CopyRequest::exec_mem_copy, copy_requests.back())));
+			case QueueType::AsyncDeferred:
+				s_futures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
+				s_requests += std::bind(&std::future<void>::get, &s_futures.back());
 				break;
-			case CopyRequestType::Sync:
-				copy_requests.push_back({ buffer, ranges });
-				copy_requests.back().exec_mem_copy();
+			case QueueType::Sync:
+				std::forward<Func>(func)();
 				break;
-			case CopyRequestType::SyncDeferred:
-				sync_deferred_requests.push_back({ buffer, ranges });
+			case QueueType::SyncDeferred:
+				s_requests += std::forward<Func>(func);
 				break;
 			}
 		}
 
-		inline static void exec_memcpyRequests()
+		inline static void ExecuteRequests()
 		{
-			for (auto& futureNode : futureNodes)
-				futureNode.get();
-
-			for (auto& syncDeferred : sync_deferred_requests)
-				syncDeferred.exec_mem_copy();
-
-			futureNodes.clear();
-			copy_requests.clear();
-			sync_deferred_requests.clear();
+			s_requests.Invoke();
+			s_requests.Clear();
 		}
+
+	private:
+		inline static Delegate s_requests{};
+		inline static std::deque<std::future<void>> s_futures;
+		inline static std::mutex s_bufferCopyRequestMutex;
 	};
 }

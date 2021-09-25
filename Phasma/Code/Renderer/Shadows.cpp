@@ -292,8 +292,8 @@ namespace pe
 			shadows_UBO[0].castShadows = 0.f;
 		}
 
-		Queue::memcpyRequest(&uniformBuffers[0], { {&shadows_UBO[0], sizeof(ShadowsUBO), 0} });
-		Queue::memcpyRequest(&uniformBuffers[1], { {&shadows_UBO[1], sizeof(ShadowsUBO), 0} });
-		Queue::memcpyRequest(&uniformBuffers[2], { {&shadows_UBO[2], sizeof(ShadowsUBO), 0} });
+		uniformBuffers[0].CopyRequest({ &shadows_UBO[0], sizeof(ShadowsUBO), 0 }, QueueType::AsyncDeferred);
+		uniformBuffers[1].CopyRequest({ &shadows_UBO[1], sizeof(ShadowsUBO), 0 }, QueueType::AsyncDeferred);
+		uniformBuffers[2].CopyRequest({ &shadows_UBO[2], sizeof(ShadowsUBO), 0 }, QueueType::AsyncDeferred);
 	}
 }

@@ -238,11 +238,7 @@ namespace pe
 			pvm[1] = camera.view;
 			pvm[2] = camera.invProjection;
 			
-			Queue::memcpyRequest(&UB_PVM, {{&pvm, sizeof(pvm), 0}});
-			//UB_PVM.map();
-			//memcpy(UB_PVM.data, pvm, sizeof(pvm));
-			//UB_PVM.flush();
-			//UB_PVM.unmap();
+			UB_PVM.CopyRequest({ &pvm, sizeof(pvm), 0 }, QueueType::AsyncDeferred);
 		}
 	}
 	
