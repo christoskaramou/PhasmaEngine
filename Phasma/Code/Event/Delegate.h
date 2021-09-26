@@ -22,7 +22,7 @@ SOFTWARE.
 
 #pragma once
 
-#include <vector>
+#include <deque>
 #include <functional>
 #include <utility>
 
@@ -62,12 +62,18 @@ namespace pe
 				function(args...);
 		}
 
+		inline void ReverseInvoke(const T& ... args)
+		{
+			for (int i = static_cast<int>(m_functions.size()) - 1; i >= 0; i--)
+				m_functions[i](args...);
+		}
+
 		inline void Clear()
 		{
 			m_functions.clear();
 		}
 	
 	private:
-		std::vector<Func_type> m_functions {};
+		std::deque<Func_type> m_functions;
 	};
 }

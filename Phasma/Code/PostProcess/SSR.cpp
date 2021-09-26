@@ -104,7 +104,7 @@ namespace pe
 			reflectionInput[2] = camera.view;
 			reflectionInput[3] = camera.invProjection;
 			
-			UBReflection.CopyRequest({ &reflectionInput, sizeof(reflectionInput), 0 }, QueueType::AsyncDeferred);
+			UBReflection.CopyRequest(QueueType::AsyncDeferred, { &reflectionInput, sizeof(reflectionInput), 0 });
 		}
 	}
 	

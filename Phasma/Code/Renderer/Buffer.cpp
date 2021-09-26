@@ -171,21 +171,21 @@ namespace pe
 		}
 	}
 
-	void Buffer::CopyRequest(const MemoryRange& range, QueueType queue)
+	void Buffer::CopyRequest(QueueType type, const MemoryRange& range)
 	{
-		auto lambda = [this, range, queue]()
+		auto lambda = [this, range]()
 		{
 			Map();
 			CopyData(range.data, range.size, range.offset);
 			Flush();
 			Unmap();
 		};
-		Queue::Request(lambda, queue);
+		Queue<1>::Request(type, lambda);
 	}
 
-	void Buffer::CopyRequest(const std::vector<MemoryRange>& ranges, QueueType queue)
+	void Buffer::CopyRequest(QueueType type, const std::vector<MemoryRange>& ranges)
 	{
-		auto lambda = [this, ranges, queue]()
+		auto lambda = [this, ranges]()
 		{
 			Map();
 			for (auto& range : ranges)
@@ -193,7 +193,7 @@ namespace pe
 			Flush();
 			Unmap();
 		};
-		Queue::Request(lambda, queue);
+		Queue<1>::Request(type, lambda);
 	}
 	
 	Ref<vk::Buffer> Buffer::GetBufferVK()

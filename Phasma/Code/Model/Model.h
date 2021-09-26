@@ -48,7 +48,8 @@ namespace pe
 
 		Model& operator=(const Model& other)
 		{
-			return Model();
+			throw std::runtime_error("");
+			//return Model();
 		}
 		
 		// Document holds all info about the gltf model

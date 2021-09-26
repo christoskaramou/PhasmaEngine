@@ -94,11 +94,11 @@ namespace pe
 				}
 				
 				mesh->ubo.jointcount = static_cast<float>(numJoints);
-				mesh->uniformBuffer.CopyRequest({ &mesh->ubo, sizeof(mesh->ubo), 0 }, QueueType::AsyncDeferred);
+				mesh->uniformBuffer.CopyRequest(QueueType::AsyncDeferred, { &mesh->ubo, sizeof(mesh->ubo), 0 });
 			}
 			else
 			{
-				mesh->uniformBuffer.CopyRequest({ &mesh->ubo, 2 * sizeof(mat4), 0 }, QueueType::AsyncDeferred);
+				mesh->uniformBuffer.CopyRequest(QueueType::AsyncDeferred, { &mesh->ubo, 2 * sizeof(mat4), 0 });
 			}
 		}
 	}

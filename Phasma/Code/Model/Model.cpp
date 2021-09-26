@@ -510,7 +510,7 @@ namespace pe
 		ubo.previousMvp = ubo.mvp;
 		ubo.mvp = camera.viewProjection * transform;
 		
-		uniformBuffer.CopyRequest({ &ubo, sizeof(ubo), 0 }, QueueType::AsyncDeferred);
+		uniformBuffer.CopyRequest(QueueType::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
 		
 		if (!animations.empty())
 		{

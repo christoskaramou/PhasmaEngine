@@ -41,14 +41,15 @@ namespace pe
 		SyncDeferred,
 	};
 	
+	template<int N>
 	class Queue
 	{
 	public:
 		using Func = std::function<void()>;
 
-		inline static void Request(Func&& func, QueueType queueType)
+		inline static void Request(QueueType queueType, Func&& func)
 		{
-			std::lock_guard<std::mutex> guard(s_bufferCopyRequestMutex);
+			std::lock_guard<std::mutex> guard(s_requestMutex);
 
 			switch (queueType)
 			{
@@ -57,7 +58,7 @@ namespace pe
 				s_requests += std::bind(&std::future<void>::get, &s_futures.back());
 				break;
 			case QueueType::AsyncDeferred:
-				s_futures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
+				s_futures.push_back(std::async(std::launch::deferred, std::forward<Func>(func)));
 				s_requests += std::bind(&std::future<void>::get, &s_futures.back());
 				break;
 			case QueueType::Sync:
@@ -71,13 +72,13 @@ namespace pe
 
 		inline static void ExecuteRequests()
 		{
-			s_requests.Invoke();
+			s_requests.ReverseInvoke();
 			s_requests.Clear();
 		}
 
 	private:
-		inline static Delegate s_requests{};
+		inline static Delegate<> s_requests{};
 		inline static std::deque<std::future<void>> s_futures;
-		inline static std::mutex s_bufferCopyRequestMutex;
+		inline static std::mutex s_requestMutex;
 	};
 }

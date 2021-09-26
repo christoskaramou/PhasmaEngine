@@ -55,7 +55,7 @@ namespace pe
 		void destroy();
 		
 		template<class T>
-		void copyDataTo(T* ptr, int elements)
+		void copyDataTo(T* ptr, size_t elements)
 		{
 			assert(elements * sizeof(T) <= SBOut.SizeRequested());
 

@@ -164,9 +164,6 @@ namespace pe
 	{
 		static Timer timer;
 		timer.Start();
-		
-		// check for commands in queue
-		CheckQueue();
 
 #ifndef IGNORE_SCRIPTS
 		// universal scripts
@@ -178,8 +175,6 @@ namespace pe
 		Camera* camera_main = cameraSystem->GetCamera(0);
 		
 		// Model updates + 8(the rest updates)
-		std::vector<std::future<void>> futureUpdates;
-		futureUpdates.reserve(Model::models.size() + 8);
 		
 		// MODELS
 		if (GUI::modelItemSelected > -1)
@@ -190,54 +185,44 @@ namespace pe
 		}
 		for (auto& model : Model::models)
 		{
-			const auto updateModel = [&]()
-			{ model.update(*camera_main, delta); };
-			futureUpdates.push_back(std::async(std::launch::async, updateModel));
+			auto updateModel = [&model, camera_main, delta]() { model.update(*camera_main, delta); };
+			Queue<0>::Request(QueueType::Async, updateModel);
 		}
 		
 		// GUI
-		auto updateGUI = [&]()
-		{ gui.update(); };
-		futureUpdates.push_back(std::async(std::launch::async, updateGUI));
+		auto updateGUI = [this]() { gui.update(); };
+		Queue<0>::Request(QueueType::Async, updateGUI);
 		
 		// SSAO
-		auto updateSSAO = [&]()
-		{ ssao.update(*camera_main); };
-		futureUpdates.push_back(std::async(std::launch::async, updateSSAO));
+		auto updateSSAO = [this, camera_main]() { ssao.update(*camera_main); };
+		Queue<0>::Request(QueueType::Async, updateSSAO);
 		
 		// SSR
-		auto updateSSR = [&]()
-		{ ssr.update(*camera_main); };
-		futureUpdates.push_back(std::async(std::launch::async, updateSSR));
+		auto updateSSR = [this, camera_main]() { ssr.update(*camera_main); };
+		Queue<0>::Request(QueueType::Async, updateSSR);
 		
 		// TAA
-		auto updateTAA = [&]()
-		{ taa.update(*camera_main); };
-		futureUpdates.push_back(std::async(std::launch::async, updateTAA));
+		auto updateTAA = [this, camera_main]() { taa.update(*camera_main); };
+		Queue<0>::Request(QueueType::Async, updateTAA);
 		
 		// MOTION BLUR
-		auto updateMotionBlur = [&]()
-		{ motionBlur.update(*camera_main); };
-		futureUpdates.push_back(std::async(std::launch::async, updateMotionBlur));
+		auto updateMotionBlur = [this, camera_main]() { motionBlur.update(*camera_main); };
+		Queue<0>::Request(QueueType::Async, updateMotionBlur);
 		
 		// SHADOWS
-		auto updateShadows = [&]()
-		{ shadows.update(*camera_main); };
-		futureUpdates.push_back(std::async(std::launch::async, updateShadows));
+		auto updateShadows = [this, camera_main]() { shadows.update(*camera_main); };
+		Queue<0>::Request(QueueType::Async, updateShadows);
 		
 		// COMPOSITION UNIFORMS
-		auto updateDeferred = [&]()
-		{ deferred.update(camera_main->invViewProjection); };
-		futureUpdates.push_back(std::async(std::launch::async, updateDeferred));
-		
-		for (auto& f : futureUpdates)
-			f.get();
+		auto updateDeferred = [this, camera_main]() { deferred.update(camera_main->invViewProjection); };
+		Queue<0>::Request(QueueType::Async, updateDeferred);
 		
 		static Timer timerFenceWait;
 		timerFenceWait.Start();
 		VulkanContext::Get()->waitFences((*VulkanContext::Get()->fences)[previousImageIndex]);
 		FrameTimer::Instance().timestamps[0] = timerFenceWait.Count();
-		Queue::ExecuteRequests();
+		Queue<0>::ExecuteRequests();
+		Queue<1>::ExecuteRequests();
 		
 		GUI::updatesTimeCount = static_cast<float>(timer.Count());
 	}

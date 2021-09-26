@@ -1174,8 +1174,8 @@ namespace pe
 				vertex_offset += vertex_ranges[n].size;
 				index_offset += index_ranges[n].size;
 			}
-			vertexBuffer.CopyRequest(vertex_ranges, QueueType::AsyncDeferred);
-			indexBuffer.CopyRequest(index_ranges, QueueType::AsyncDeferred);
+			vertexBuffer.CopyRequest(QueueType::AsyncDeferred, vertex_ranges);
+			indexBuffer.CopyRequest(QueueType::AsyncDeferred, index_ranges);
 		}
 		
 		//vk::CommandBufferBeginInfo beginInfo;

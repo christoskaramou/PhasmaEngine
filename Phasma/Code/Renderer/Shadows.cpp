@@ -292,8 +292,8 @@ namespace pe
 			shadows_UBO[0].castShadows = 0.f;
 		}
 
-		uniformBuffers[0].CopyRequest({ &shadows_UBO[0], sizeof(ShadowsUBO), 0 }, QueueType::AsyncDeferred);
-		uniformBuffers[1].CopyRequest({ &shadows_UBO[1], sizeof(ShadowsUBO), 0 }, QueueType::AsyncDeferred);
-		uniformBuffers[2].CopyRequest({ &shadows_UBO[2], sizeof(ShadowsUBO), 0 }, QueueType::AsyncDeferred);
+		uniformBuffers[0].CopyRequest(QueueType::AsyncDeferred, { &shadows_UBO[0], sizeof(ShadowsUBO), 0 });
+		uniformBuffers[1].CopyRequest(QueueType::AsyncDeferred, { &shadows_UBO[1], sizeof(ShadowsUBO), 0 });
+		uniformBuffers[2].CopyRequest(QueueType::AsyncDeferred, { &shadows_UBO[2], sizeof(ShadowsUBO), 0 });
 	}
 }

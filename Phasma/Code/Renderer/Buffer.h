@@ -59,9 +59,9 @@ namespace pe
 		
 		void* Data();
 
-		void CopyRequest(const MemoryRange& ranges, QueueType queue);
+		void CopyRequest(QueueType type, const MemoryRange& ranges);
 
-		void CopyRequest(const std::vector<MemoryRange>& ranges, QueueType queue);
+		void CopyRequest(QueueType type, const std::vector<MemoryRange>& ranges);
 		
 		Ref<vk::Buffer> GetBufferVK();
 

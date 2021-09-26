@@ -216,7 +216,7 @@ namespace pe
 				GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f
 		};
 		
-		uniform.CopyRequest({ &ubo, sizeof(ubo), 0 }, QueueType::AsyncDeferred);
+		uniform.CopyRequest(QueueType::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
 	}
 	
 	void Deferred::draw(

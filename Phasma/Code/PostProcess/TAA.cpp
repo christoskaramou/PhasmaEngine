@@ -84,7 +84,7 @@ namespace pe
 			};
 			ubo.invProj = camera.invProjection;
 			
-			uniform.CopyRequest({ &ubo, sizeof(ubo), 0 }, QueueType::AsyncDeferred);
+			uniform.CopyRequest(QueueType::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
 		}
 	}
 	

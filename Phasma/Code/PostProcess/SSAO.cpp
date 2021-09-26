@@ -238,7 +238,7 @@ namespace pe
 			pvm[1] = camera.view;
 			pvm[2] = camera.invProjection;
 			
-			UB_PVM.CopyRequest({ &pvm, sizeof(pvm), 0 }, QueueType::AsyncDeferred);
+			UB_PVM.CopyRequest(QueueType::AsyncDeferred, { &pvm, sizeof(pvm), 0 });
 		}
 	}
 	
