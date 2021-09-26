@@ -39,7 +39,7 @@ namespace pe
 		
 		~DOF();
 		
-		std::vector<Framebuffer> framebuffers {};
+		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;
 		Ref<vk::DescriptorSet> DSet;

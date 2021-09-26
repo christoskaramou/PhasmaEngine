@@ -20,46 +20,65 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#pragma once
-
-#include "Renderer/Pipeline.h"
-#include "Renderer/Image.h"
-#include "Renderer/RenderPass.h"
-#include "Renderer/Framebuffer.h"
-#include <vector>
-#include <map>
-#include <string>
-#include "ECS/Component.h"
+#include "CommandBuffer.h"
+#include "Renderer/Vulkan/Vulkan.h"
 
 namespace pe
 {
-	class FXAA : public IComponent
+	CommandBuffer::CommandBuffer()
 	{
-	public:
-		FXAA();
-		
-		~FXAA();
-		
-		std::vector<FrameBuffer> framebuffers {};
-		Pipeline pipeline;
-		RenderPass renderPass;
-		Ref<vk::DescriptorSet> DSet;
-		Image frameImage;
-		
-		void Init();
-		
-		void createUniforms(std::map<std::string, Image>& renderTargets);
-		
-		void updateDescriptorSets(std::map<std::string, Image>& renderTargets) const;
-		
-		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent);
-		
-		void createRenderPass(std::map<std::string, Image>& renderTargets);
-		
-		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
-		
-		void createPipeline(std::map<std::string, Image>& renderTargets);
-		
-		void destroy();
-	};
+		cmdVK = make_ref(vk::CommandBuffer());
+	}
+
+	CommandBuffer::~CommandBuffer()
+	{
+	}
+
+	void CommandBuffer::Begin()
+	{
+	}
+
+	void CommandBuffer::End()
+	{
+	}
+
+	void CommandBuffer::PipelineBarrier()
+	{
+	}
+
+	void CommandBuffer::BeginPass(RenderPass& pass, FrameBuffer& frameBuffer)
+	{
+	}
+
+	void CommandBuffer::EndPass()
+	{
+	}
+
+	void CommandBuffer::BindPipeline(Pipeline& pipeline)
+	{
+	}
+
+	void CommandBuffer::BindVertexBuffer(Buffer& buffer, size_t offset)
+	{
+	}
+
+	void CommandBuffer::BindIndexBuffer(Buffer& buffer, size_t offset)
+	{
+	}
+
+	void CommandBuffer::BindDescriptors(Pipeline& pipeline, uint32_t count, Descriptor* discriptors)
+	{
+	}
+
+	void CommandBuffer::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
+	{
+	}
+
+	void CommandBuffer::DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
+	{
+	}
+
+	void CommandBuffer::Submit()
+	{
+	}
 }

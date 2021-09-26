@@ -27,6 +27,8 @@ SOFTWARE.
 
 namespace pe
 {
+	class FrameBuffer;
+
 	class RenderPass
 	{
 	public:

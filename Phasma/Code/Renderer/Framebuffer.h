@@ -29,12 +29,12 @@ namespace pe
 {
 	class RenderPass;
 	
-	class Framebuffer
+	class FrameBuffer
 	{
 	public:
-		Framebuffer();
+		FrameBuffer();
 		
-		~Framebuffer() = default;
+		~FrameBuffer() = default;
 		
 		void Create(uint32_t width, uint32_t height, const vk::ImageView& view, const RenderPass& renderPass);
 		

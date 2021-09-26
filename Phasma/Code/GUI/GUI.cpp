@@ -45,7 +45,7 @@ namespace pe
 		descriptorSetLayout = make_ref(
 				vk::DescriptorSetLayout()
 		); // TODO: multiple instances will initialize this find an other way
-		framebuffers = std::vector<Framebuffer>();
+		framebuffers = std::vector<FrameBuffer>();
 	}
 	
 	GUI::~GUI()

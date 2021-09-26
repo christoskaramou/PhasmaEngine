@@ -27,17 +27,17 @@ SOFTWARE.
 
 namespace pe
 {
-	Framebuffer::Framebuffer()
+	FrameBuffer::FrameBuffer()
 	{
 		handle = make_ref(vk::Framebuffer());
 	}
 	
-	void Framebuffer::Create(uint32_t width, uint32_t height, const vk::ImageView& view, const RenderPass& renderPass)
+	void FrameBuffer::Create(uint32_t width, uint32_t height, const vk::ImageView& view, const RenderPass& renderPass)
 	{
 		Create(width, height, std::vector<vk::ImageView> {view}, renderPass);
 	}
 	
-	void Framebuffer::Create(
+	void FrameBuffer::Create(
 			uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, const RenderPass& renderPass
 	)
 	{
@@ -53,7 +53,7 @@ namespace pe
 		handle = make_ref(VulkanContext::Get()->device->createFramebuffer(fbci));
 	}
 	
-	void Framebuffer::Destroy()
+	void FrameBuffer::Destroy()
 	{
 		if (*handle)
 		{

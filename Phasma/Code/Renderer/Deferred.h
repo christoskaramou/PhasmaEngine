@@ -40,7 +40,7 @@ namespace pe
 		~Deferred();
 		
 		RenderPass renderPass, compositionRenderPass;
-		std::vector<Framebuffer> framebuffers {}, compositionFramebuffers {};
+		std::vector<FrameBuffer> framebuffers {}, compositionFramebuffers {};
 		Ref<vk::DescriptorSet> DSComposition;
 		Pipeline pipeline;
 		Pipeline pipelineComposition;

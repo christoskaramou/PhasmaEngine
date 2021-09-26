@@ -54,7 +54,7 @@ namespace pe
 		RenderPass renderPass;
 		std::vector<Image> textures {};
 		Ref<std::vector<vk::DescriptorSet>> descriptorSets;
-		std::vector<Framebuffer> framebuffers {};
+		std::vector<FrameBuffer> framebuffers {};
 		std::vector<Buffer> uniformBuffers {};
 		Pipeline pipeline;
 		

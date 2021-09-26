@@ -39,7 +39,7 @@ namespace pe
 		
 		~Bloom();
 		
-		std::vector<Framebuffer> framebuffers {};
+		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipelineBrightFilter;
 		Pipeline pipelineGaussianBlurHorizontal;
 		Pipeline pipelineGaussianBlurVertical;

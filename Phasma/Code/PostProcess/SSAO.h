@@ -46,7 +46,7 @@ namespace pe
 		Buffer UB_PVM;
 		Image noiseTex;
 		RenderPass renderPass, blurRenderPass;
-		std::vector<Framebuffer> framebuffers {}, blurFramebuffers {};
+		std::vector<FrameBuffer> framebuffers {}, blurFramebuffers {};
 		Pipeline pipeline;
 		Pipeline pipelineBlur;
 		Ref<vk::DescriptorSet> DSet, DSBlur;

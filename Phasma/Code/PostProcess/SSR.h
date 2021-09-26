@@ -43,7 +43,7 @@ namespace pe
 		
 		mat4 reflectionInput[4];
 		Buffer UBReflection;
-		std::vector<Framebuffer> framebuffers {};
+		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;
 		Ref<vk::DescriptorSet> DSet;

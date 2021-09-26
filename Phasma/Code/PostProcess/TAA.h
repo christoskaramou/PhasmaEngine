@@ -42,7 +42,7 @@ namespace pe
 		
 		~TAA();
 		
-		std::vector<Framebuffer> framebuffers {}, framebuffersSharpen {};
+		std::vector<FrameBuffer> framebuffers {}, framebuffersSharpen {};
 		Pipeline pipeline, pipelineSharpen;
 		RenderPass renderPass, renderPassSharpen;
 		Ref<vk::DescriptorSet> DSet, DSetSharpen;

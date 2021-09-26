@@ -22,44 +22,56 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Pipeline.h"
-#include "Renderer/Image.h"
-#include "Renderer/RenderPass.h"
-#include "Renderer/Framebuffer.h"
-#include <vector>
-#include <map>
-#include <string>
-#include "ECS/Component.h"
+#include "Core/Base.h"
 
 namespace pe
 {
-	class FXAA : public IComponent
+	class RenderPass;
+	class FrameBuffer;
+	class Pipeline;
+	class Compute;
+	class Buffer;
+	class Descriptor;
+
+	enum class BarrierType
+	{
+		Memory,
+		Buffer,
+		Image
+	};
+
+	class CommandBuffer
 	{
 	public:
-		FXAA();
-		
-		~FXAA();
-		
-		std::vector<FrameBuffer> framebuffers {};
-		Pipeline pipeline;
-		RenderPass renderPass;
-		Ref<vk::DescriptorSet> DSet;
-		Image frameImage;
-		
-		void Init();
-		
-		void createUniforms(std::map<std::string, Image>& renderTargets);
-		
-		void updateDescriptorSets(std::map<std::string, Image>& renderTargets) const;
-		
-		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent);
-		
-		void createRenderPass(std::map<std::string, Image>& renderTargets);
-		
-		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
-		
-		void createPipeline(std::map<std::string, Image>& renderTargets);
-		
-		void destroy();
+		CommandBuffer();
+
+		~CommandBuffer();
+
+		void Begin();
+
+		void End();
+
+		void PipelineBarrier();
+
+		void BeginPass(RenderPass& pass, FrameBuffer& frameBuffer);
+
+		void EndPass();
+
+		void BindPipeline(Pipeline& pipeline);
+
+		void BindVertexBuffer(Buffer& buffer, size_t offset);
+
+		void BindIndexBuffer(Buffer& buffer, size_t offset);
+
+		void BindDescriptors(Pipeline& pipeline, uint32_t count, Descriptor* discriptors);
+
+		void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
+
+		void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
+
+		void Submit();
+
+	private:
+		Ref<vk::CommandBuffer> cmdVK;
 	};
 }

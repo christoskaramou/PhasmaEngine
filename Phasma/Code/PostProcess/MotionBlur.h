@@ -44,7 +44,7 @@ namespace pe
 		
 		mat4 motionBlurInput[4];
 		Buffer UBmotionBlur;
-		std::vector<Framebuffer> framebuffers {};
+		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;
 		Ref<vk::DescriptorSet> DSet;

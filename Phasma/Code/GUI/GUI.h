@@ -131,7 +131,7 @@ namespace pe
         
         std::string name;
         RenderPass renderPass;
-        std::vector<Framebuffer> framebuffers;
+        std::vector<FrameBuffer> framebuffers;
         Pipeline pipeline;
         static Ref<vk::DescriptorSetLayout> descriptorSetLayout;
         

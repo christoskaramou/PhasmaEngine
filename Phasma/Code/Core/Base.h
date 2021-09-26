@@ -156,7 +156,7 @@ namespace pe
 	//using ImpRenderPass = Imposter<vk::RenderPass>;
 	//using ImpFormat = Imposter<vk::Format>;
 	//using ImpImageView = Imposter<vk::ImageView>;
-	//using ImpFramebuffer = Imposter<vk::Framebuffer>;
+	//using ImpFramebuffer = Imposter<vk::FrameBuffer>;
 	//using ImpCommandBuffer = Imposter<vk::CommandBuffer>;
 	//using ImpDescriptorSetLayout = Imposter<vk::DescriptorSetLayout>;
 	//using ImpDescriptorSet = Imposter<vk::DescriptorSet>;
