@@ -33,13 +33,6 @@ SOFTWARE.
 #include "Renderer/Compute.h"
 #include "Core/Timer.h"
 #include "Script/Script.h"
-#include "PostProcess/Bloom.h"
-#include "PostProcess/DOF.h"
-#include "PostProcess/FXAA.h"
-#include "PostProcess/MotionBlur.h"
-#include "PostProcess/SSAO.h"
-#include "PostProcess/SSR.h"
-#include "PostProcess/TAA.h"
 
 #define IGNORE_SCRIPTS
 
@@ -50,13 +43,6 @@ namespace pe
 	protected:
 		Shadows shadows;
 		Deferred deferred;
-		SSAO ssao;
-		SSR ssr;
-		FXAA fxaa;
-		TAA taa;
-		Bloom bloom;
-		DOF dof;
-		MotionBlur motionBlur;
 		SkyBox skyBoxDay;
 		SkyBox skyBoxNight;
 		GUI gui;
@@ -87,6 +73,8 @@ namespace pe
 		
 		uint32_t previousImageIndex = 0;
 		std::map<std::string, Image> renderTargets {};
+
+		std::map<std::string, Image>& GetRenderTargets() { return renderTargets; }
 	
 	private:		
 		static void CheckQueue();

@@ -29,10 +29,11 @@ SOFTWARE.
 #include <vector>
 #include <map>
 #include <string>
+#include "ECS/Component.h"
 
 namespace pe
 {
-	class FXAA
+	class FXAA : public IComponent
 	{
 	public:
 		FXAA();

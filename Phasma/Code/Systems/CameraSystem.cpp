@@ -54,7 +54,7 @@ namespace pe
 
     void CameraSystem::Destroy()
     {
-        std::vector<Camera*> components = GetComponentsOfType<Camera>();
+        std::vector<Camera*>& components = GetComponentsOfType<Camera>();
         for (auto camera : components)
             camera->Destroy();
     }

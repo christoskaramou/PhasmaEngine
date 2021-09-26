@@ -29,6 +29,7 @@ SOFTWARE.
 #include "ECS/Context.h"
 #include "Core/Path.h"
 #include "Systems/EventSystem.h"
+#include "Systems/PostProcessSystem.h"
 
 namespace pe
 {
@@ -121,6 +122,14 @@ namespace pe
 		for (auto& image : shadows.textures)
 			image.changeLayout(cmd, LayoutState::DepthRead);
 		
+		SSAO& ssao = *Context::Get()->MainEntity->GetComponent<SSAO>();
+		SSR& ssr = *Context::Get()->MainEntity->GetComponent<SSR>();
+		FXAA& fxaa = *Context::Get()->MainEntity->GetComponent<FXAA>();
+		TAA& taa = *Context::Get()->MainEntity->GetComponent<TAA>();
+		Bloom& bloom = *Context::Get()->MainEntity->GetComponent<Bloom>();
+		DOF& dof = *Context::Get()->MainEntity->GetComponent<DOF>();
+		MotionBlur& motionBlur = *Context::Get()->MainEntity->GetComponent<MotionBlur>();
+
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao)
 		{
@@ -478,22 +487,8 @@ namespace pe
 		// DESCRIPTOR SETS FOR SHADOWS
 		shadows.createUniformBuffers();
 		shadows.createDescriptorSets();
-		// DESCRIPTOR SETS FOR SSAO
-		ssao.createUniforms(renderTargets);
 		// DESCRIPTOR SETS FOR COMPOSITION PIPELINE
 		deferred.createDeferredUniforms(renderTargets);
-		// DESCRIPTOR SET FOR REFLECTION PIPELINE
-		ssr.createSSRUniforms(renderTargets);
-		// DESCRIPTOR SET FOR FXAA PIPELINE
-		fxaa.createUniforms(renderTargets);
-		// DESCRIPTOR SET FOR TAA PIPELINE
-		taa.createUniforms(renderTargets);
-		// DESCRIPTOR SET FOR BLOOM PIPELINES
-		bloom.createUniforms(renderTargets);
-		// DESCRIPTOR SET FOR DEPTH OF FIELD PIPELINE
-		dof.createUniforms(renderTargets);
-		// DESCRIPTOR SET FOR MOTIONBLUR PIPELINE
-		motionBlur.createMotionBlurUniforms(renderTargets);
 		// DESCRIPTOR SET FOR COMPUTE PIPELINE
 		//compute.createComputeUniforms(sizeof(SBOIn));
 	}
@@ -502,7 +497,15 @@ namespace pe
 	{
 		auto& vulkan = *VulkanContext::Get();
 		vulkan.graphicsQueue->waitIdle();
-		
+
+		SSAO& ssao = *Context::Get()->MainEntity->GetComponent<SSAO>();
+		SSR& ssr = *Context::Get()->MainEntity->GetComponent<SSR>();
+		FXAA& fxaa = *Context::Get()->MainEntity->GetComponent<FXAA>();
+		TAA& taa = *Context::Get()->MainEntity->GetComponent<TAA>();
+		Bloom& bloom = *Context::Get()->MainEntity->GetComponent<Bloom>();
+		DOF& dof = *Context::Get()->MainEntity->GetComponent<DOF>();
+		MotionBlur& motionBlur = *Context::Get()->MainEntity->GetComponent<MotionBlur>();
+
 		//- Free resources ----------------------
 		// render targets
 		for (auto& RT : renderTargets)
@@ -669,7 +672,15 @@ namespace pe
 	void Renderer::RecreatePipelines()
 	{
 		VulkanContext::Get()->graphicsQueue->waitIdle();
-		
+
+		SSAO& ssao = *Context::Get()->MainEntity->GetComponent<SSAO>();
+		SSR& ssr = *Context::Get()->MainEntity->GetComponent<SSR>();
+		FXAA& fxaa = *Context::Get()->MainEntity->GetComponent<FXAA>();
+		TAA& taa = *Context::Get()->MainEntity->GetComponent<TAA>();
+		Bloom& bloom = *Context::Get()->MainEntity->GetComponent<Bloom>();
+		DOF& dof = *Context::Get()->MainEntity->GetComponent<DOF>();
+		MotionBlur& motionBlur = *Context::Get()->MainEntity->GetComponent<MotionBlur>();
+
 		shadows.pipeline.destroy();
 		ssao.pipeline.destroy();
 		ssao.pipelineBlur.destroy();

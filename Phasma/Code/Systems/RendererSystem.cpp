@@ -1,8 +1,31 @@
+/*
+Copyright (c) 2018-2021 Christos Karamoustos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 #include "RendererSystem.h"
 #include "ECS/Context.h"
 #include "Systems/EventSystem.h"
 #include "Renderer/Vulkan/Vulkan.h"
 #include "Model/Mesh.h"
+#include "Systems/PostProcessSystem.h"
 
 namespace pe
 {
@@ -38,46 +61,19 @@ namespace pe
 		AddRenderTarget("emissive", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
 		AddRenderTarget("taa", vulkan->surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
 
-		taa.Init();
-		bloom.Init();
-		fxaa.Init();
-		motionBlur.Init();
-		dof.Init();
-
 		// render passes
 		shadows.createRenderPass();
-		ssao.createRenderPasses(renderTargets);
-		ssr.createRenderPass(renderTargets);
 		deferred.createRenderPasses(renderTargets);
-		fxaa.createRenderPass(renderTargets);
-		taa.createRenderPasses(renderTargets);
-		bloom.createRenderPasses(renderTargets);
-		dof.createRenderPass(renderTargets);
-		motionBlur.createRenderPass(renderTargets);
 		gui.createRenderPass();
 
 		// frame buffers
 		shadows.createFrameBuffers();
-		ssao.createFrameBuffers(renderTargets);
-		ssr.createFrameBuffers(renderTargets);
 		deferred.createFrameBuffers(renderTargets);
-		fxaa.createFrameBuffers(renderTargets);
-		taa.createFrameBuffers(renderTargets);
-		bloom.createFrameBuffers(renderTargets);
-		dof.createFrameBuffers(renderTargets);
-		motionBlur.createFrameBuffers(renderTargets);
 		gui.createFrameBuffers();
 
 		// pipelines
 		shadows.createPipeline();
-		ssao.createPipelines(renderTargets);
-		ssr.createPipeline(renderTargets);
 		deferred.createPipelines(renderTargets);
-		fxaa.createPipeline(renderTargets);
-		taa.createPipelines(renderTargets);
-		bloom.createPipelines(renderTargets);
-		dof.createPipeline(renderTargets);
-		motionBlur.createPipeline(renderTargets);
 		gui.createPipeline();
 
 		//transformsCompute = Compute::Create("Shaders/Compute/shader.comp", 64, 64);
@@ -123,22 +119,6 @@ namespace pe
 		auto updateGUI = [this]() { gui.update(); };
 		Queue<0>::Request(Launch::Async, updateGUI);
 
-		// SSAO
-		auto updateSSAO = [this, camera_main]() { ssao.update(*camera_main); };
-		Queue<0>::Request(Launch::Async, updateSSAO);
-
-		// SSR
-		auto updateSSR = [this, camera_main]() { ssr.update(*camera_main); };
-		Queue<0>::Request(Launch::Async, updateSSR);
-
-		// TAA
-		auto updateTAA = [this, camera_main]() { taa.update(*camera_main); };
-		Queue<0>::Request(Launch::Async, updateTAA);
-
-		// MOTION BLUR
-		auto updateMotionBlur = [this, camera_main]() { motionBlur.update(*camera_main); };
-		Queue<0>::Request(Launch::Async, updateMotionBlur);
-
 		// SHADOWS
 		auto updateShadows = [this, camera_main]() { shadows.update(*camera_main); };
 		Queue<0>::Request(Launch::Async, updateShadows);
@@ -151,8 +131,6 @@ namespace pe
 		timerFenceWait.Start();
 		VulkanContext::Get()->waitFences((*VulkanContext::Get()->fences)[previousImageIndex]);
 		FrameTimer::Instance().timestamps[0] = timerFenceWait.Count();
-		Queue<0>::ExecuteRequests();
-		Queue<1>::ExecuteRequests();
 
 		GUI::updatesTimeCount = static_cast<float>(timer.Count());
 	}
@@ -196,13 +174,6 @@ namespace pe
 		Compute::DestroyResources();
 		shadows.destroy();
 		deferred.destroy();
-		ssao.destroy();
-		ssr.destroy();
-		fxaa.destroy();
-		taa.destroy();
-		bloom.destroy();
-		dof.destroy();
-		motionBlur.destroy();
 		skyBoxDay.destroy();
 		skyBoxNight.destroy();
 		gui.destroy();

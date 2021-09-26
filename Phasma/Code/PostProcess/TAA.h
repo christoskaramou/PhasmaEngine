@@ -31,10 +31,11 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include <vector>
 #include <map>
+#include "ECS/Component.h"
 
 namespace pe
 {
-	class TAA
+	class TAA : public IComponent
 	{
 	public:
 		TAA();

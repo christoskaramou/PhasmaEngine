@@ -28,10 +28,11 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include <map>
 #include <string>
+#include "ECS/Component.h"
 
 namespace pe
 {
-	class Bloom
+	class Bloom : public IComponent
 	{
 	public:
 		Bloom();

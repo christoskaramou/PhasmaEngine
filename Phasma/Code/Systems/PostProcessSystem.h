@@ -22,43 +22,29 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Pipeline.h"
-#include "Renderer/Image.h"
-#include "Renderer/RenderPass.h"
-#include "Renderer/Framebuffer.h"
-#include <map>
-#include <string>
-#include "ECS/Component.h"
+#include "ECS/System.h"
+#include "ECS/Context.h"
+#include "PostProcess/Bloom.h"
+#include "PostProcess/DOF.h"
+#include "PostProcess/FXAA.h"
+#include "PostProcess/MotionBlur.h"
+#include "PostProcess/SSAO.h"
+#include "PostProcess/SSR.h"
+#include "PostProcess/TAA.h"
 
 namespace pe
 {
-	class DOF : public IComponent
+	class PostProcessSystem : public ISystem
 	{
 	public:
-		DOF();
-		
-		~DOF();
-		
-		std::vector<Framebuffer> framebuffers {};
-		Pipeline pipeline;
-		RenderPass renderPass;
-		Ref<vk::DescriptorSet> DSet;
-		Image frameImage;
-		
-		void Init();
-		
-		void createRenderPass(std::map<std::string, Image>& renderTargets);
-		
-		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
-		
-		void createPipeline(std::map<std::string, Image>& renderTargets);
-		
-		void createUniforms(std::map<std::string, Image>& renderTargets);
-		
-		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
-		
-		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets);
-		
-		void destroy();
+		PostProcessSystem();
+		~PostProcessSystem();
+
+		void Init() override;
+
+		void Update(double delta) override;
+
+		void Destroy() override;
+
 	};
 }

@@ -27,6 +27,7 @@ SOFTWARE.
 #include "Systems/RendererSystem.h"
 #include "Systems/LightSystem.h"
 #include "Systems/EventSystem.h"
+#include "Systems/PostProcessSystem.h"
 #include "Renderer/Vulkan/Vulkan.h"
 
 using namespace pe;
@@ -44,6 +45,7 @@ int main(int argc, char* argv[])
 
 	context.CreateSystem<LightSystem>();
 	context.CreateSystem<RendererSystem>();
+	context.CreateSystem<PostProcessSystem>();
 	context.CreateSystem<CameraSystem>();
 
 	context.InitSystems();
@@ -63,6 +65,8 @@ int main(int argc, char* argv[])
 		if (!window.isMinimized())
 		{
 			context.UpdateSystems(frame_timer.delta);
+			Queue<0>::ExecuteRequests();
+			Queue<1>::ExecuteRequests();
 			context.GetSystem<RendererSystem>()->Draw();
 		}
 		

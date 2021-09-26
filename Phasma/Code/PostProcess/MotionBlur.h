@@ -31,10 +31,11 @@ SOFTWARE.
 #include <vector>
 #include <string>
 #include <map>
+#include "ECS/Component.h"
 
 namespace pe
 {
-	class MotionBlur
+	class MotionBlur : public IComponent
 	{
 	public:
 		MotionBlur();

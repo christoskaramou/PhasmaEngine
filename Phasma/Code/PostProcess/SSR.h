@@ -30,10 +30,11 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include <vector>
 #include <map>
+#include "ECS/Component.h"
 
 namespace pe
 {
-	class SSR
+	class SSR : public IComponent
 	{
 	public:
 		SSR();

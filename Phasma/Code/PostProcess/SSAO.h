@@ -30,10 +30,11 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include <map>
 #include <string>
+#include "ECS/Component.h"
 
 namespace pe
 {
-	class SSAO
+	class SSAO : public IComponent
 	{
 	public:
 		SSAO();
