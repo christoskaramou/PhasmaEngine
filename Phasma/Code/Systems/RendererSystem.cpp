@@ -180,4 +180,73 @@ namespace pe
 		for (auto& metric : metrics)
 			metric.destroy();
 	}
+
+	void RendererSystem::Draw()
+	{
+		auto& vCtx = *VulkanContext::Get();
+
+		static const vk::PipelineStageFlags waitStages[] = {
+				vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader
+		};
+
+		//FIRE_EVENT(Event::OnRender);
+
+		GUI::use_compute = true;
+		if (GUI::use_compute)
+		{
+			//auto mat = transformsCompute.copyOutput<mat4, AUTO>();
+			//mat[0][0] = 1.0f;
+			//mat4* matp = static_cast<mat4*>(transformsCompute.mapOutput());
+			//mat4* matp1;
+			//float f = (*matp)[0][0];
+		}
+
+		// acquire the image
+		auto& aquireSignalSemaphore = (*vCtx.semaphores)[0];
+		const uint32_t imageIndex = vCtx.swapchain.Aquire(aquireSignalSemaphore, nullptr);
+		this->previousImageIndex = imageIndex;
+
+		//static Timer timer;
+		//timer.Start();
+		//vCtx.waitFences(vCtx.fences[imageIndex]);
+		//FrameTimer::Instance().timestamps[0] = timer.Count();
+
+		const auto& cmd = (*vCtx.dynamicCmdBuffers)[imageIndex];
+
+		vCtx.waitAndLockSubmits();
+
+		if (GUI::shadow_cast)
+		{
+
+			// record the shadow command buffers
+			RecordShadowsCmds(imageIndex);
+
+			// submit the shadow command buffers
+			const auto& shadowWaitSemaphore = aquireSignalSemaphore;
+			const auto& shadowSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 1];
+			const auto& scb = vCtx.shadowCmdBuffers;
+			const auto size = shadows.textures.size();
+			const auto i = size * imageIndex;
+			const std::vector<vk::CommandBuffer> activeShadowCmdBuffers(scb->begin() + i, scb->begin() + i + size);
+			vCtx.submit(activeShadowCmdBuffers, waitStages[0], shadowWaitSemaphore, shadowSignalSemaphore, nullptr);
+
+			aquireSignalSemaphore = shadowSignalSemaphore;
+		}
+
+		// record the command buffers
+		RecordDeferredCmds(imageIndex);
+
+		// submit the command buffers
+		const auto& deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
+		const auto& deferredWaitSemaphore = aquireSignalSemaphore;
+		const auto& deferredSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 2];
+		const auto& deferredSignalFence = (*vCtx.fences)[imageIndex];
+		vCtx.submit(cmd, deferredWaitStage, deferredWaitSemaphore, deferredSignalSemaphore, deferredSignalFence);
+
+		// Presentation
+		const auto& presentWaitSemaphore = deferredSignalSemaphore;
+		vCtx.swapchain.Present(imageIndex, presentWaitSemaphore, nullptr);
+
+		vCtx.unlockSubmits();
+	}
 }

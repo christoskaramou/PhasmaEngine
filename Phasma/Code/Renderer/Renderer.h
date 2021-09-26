@@ -59,8 +59,6 @@ namespace pe
 		
 		~Renderer();
 		
-		void Draw();
-		
 		void AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags);
 		
 		void LoadResources();
@@ -76,7 +74,7 @@ namespace pe
 
 		std::map<std::string, Image>& GetRenderTargets() { return renderTargets; }
 	
-	private:		
+	protected:		
 		static void CheckQueue();
 		
 		void ComputeAnimations();

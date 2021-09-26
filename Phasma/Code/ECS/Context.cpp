@@ -51,6 +51,15 @@ namespace pe
 				system.second->Update(delta);
 		}
 	}
+
+	void Context::DrawSystems()
+	{
+		for (auto& system : m_drawSystems)
+		{
+			if (system.second->IsEnabled())
+				system.second->Draw();
+		}
+	}
 	
 	Entity* Context::CreateEntity()
 	{

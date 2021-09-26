@@ -61,6 +61,8 @@ namespace pe
 		void DestroySystems();
 		
 		void UpdateSystems(double delta);
+
+		void DrawSystems();
 		
 		template<class T, class... Params>
 		inline T* CreateSystem(Params&& ... params);
@@ -84,6 +86,7 @@ namespace pe
 	
 	private:
 		std::unordered_map<size_t, Ref<ISystem>> m_systems;
+		std::unordered_map<size_t, IDrawSystem*> m_drawSystems; // Keep the pointers for draw systems. All are stored in m_systems
 		std::unordered_map<size_t, Ref<Entity>> m_entities;
 	};
 	
@@ -106,6 +109,9 @@ namespace pe
 			size_t id = GetTypeID<T>();
 			m_systems[id] = std::make_shared<T>(std::forward<Params>(params)...);
 			m_systems[id]->SetEnabled(true);
+
+			if (std::is_base_of<IDrawSystem, T>::value)
+				m_drawSystems[id] = static_cast<IDrawSystem*>(m_systems[id].get());
 			
 			return static_cast<T*>(m_systems[id].get());
 		}

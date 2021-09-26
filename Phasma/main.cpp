@@ -67,7 +67,7 @@ int main(int argc, char* argv[])
 			context.UpdateSystems(frame_timer.delta);
 			Queue<0>::ExecuteRequests();
 			Queue<1>::ExecuteRequests();
-			context.GetSystem<RendererSystem>()->Draw();
+			context.DrawSystems();
 		}
 		
 		// Metrics every 0.75 sec

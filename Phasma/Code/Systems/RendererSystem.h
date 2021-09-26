@@ -27,10 +27,11 @@ SOFTWARE.
 
 namespace pe
 {
-	class RendererSystem : public Renderer, public ISystem
+	class RendererSystem : public Renderer, public IDrawSystem
 	{
 		void Init() override;
 		void Update(double delta) override;
 		void Destroy() override;
+		void Draw() override;
 	};
 }
