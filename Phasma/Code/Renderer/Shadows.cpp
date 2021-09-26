@@ -22,11 +22,11 @@ SOFTWARE.
 
 #include "PhasmaPch.h"
 #include "Shadows.h"
-#include "../GUI/GUI.h"
+#include "GUI/GUI.h"
 #include "Swapchain.h"
 #include "Vertex.h"
-#include "../Shader/Shader.h"
-#include "../Core/Queue.h"
+#include "Shader/Shader.h"
+#include "Core/Queue.h"
 #include "RenderApi.h"
 
 namespace pe
@@ -292,8 +292,8 @@ namespace pe
 			shadows_UBO[0].castShadows = 0.f;
 		}
 
-		uniformBuffers[0].CopyRequest(QueueType::AsyncDeferred, { &shadows_UBO[0], sizeof(ShadowsUBO), 0 });
-		uniformBuffers[1].CopyRequest(QueueType::AsyncDeferred, { &shadows_UBO[1], sizeof(ShadowsUBO), 0 });
-		uniformBuffers[2].CopyRequest(QueueType::AsyncDeferred, { &shadows_UBO[2], sizeof(ShadowsUBO), 0 });
+		uniformBuffers[0].CopyRequest(Launch::AsyncDeferred, { &shadows_UBO[0], sizeof(ShadowsUBO), 0 });
+		uniformBuffers[1].CopyRequest(Launch::AsyncDeferred, { &shadows_UBO[1], sizeof(ShadowsUBO), 0 });
+		uniformBuffers[2].CopyRequest(Launch::AsyncDeferred, { &shadows_UBO[2], sizeof(ShadowsUBO), 0 });
 	}
 }

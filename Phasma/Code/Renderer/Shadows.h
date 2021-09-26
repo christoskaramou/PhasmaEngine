@@ -25,8 +25,8 @@ SOFTWARE.
 #include "Buffer.h"
 #include "Image.h"
 #include "Pipeline.h"
-#include "../Core/Math.h"
-#include "../Camera/Camera.h"
+#include "Core/Math.h"
+#include "Systems/CameraSystem.h"
 #include "RenderPass.h"
 #include "Framebuffer.h"
 

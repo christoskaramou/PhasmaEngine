@@ -22,11 +22,11 @@ SOFTWARE.
 
 #include "PhasmaPch.h"
 #include "Bloom.h"
-#include "../GUI/GUI.h"
-#include "../Renderer/Swapchain.h"
-#include "../Renderer/Surface.h"
-#include "../Shader/Shader.h"
-#include "../Renderer/Vulkan/Vulkan.h"
+#include "GUI/GUI.h"
+#include "Renderer/Swapchain.h"
+#include "Renderer/Surface.h"
+#include "Shader/Shader.h"
+#include "Renderer/Vulkan/Vulkan.h"
 #include <deque>
 
 namespace pe

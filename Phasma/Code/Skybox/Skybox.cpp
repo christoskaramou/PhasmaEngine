@@ -22,10 +22,10 @@ SOFTWARE.
 
 #include "PhasmaPch.h"
 #include "Skybox.h"
-#include "../Renderer/Pipeline.h"
-#include "../GUI/GUI.h"
+#include "Renderer/Pipeline.h"
+#include "GUI/GUI.h"
 #include "tinygltf/stb_image.h"
-#include "../Renderer/RenderApi.h"
+#include "Renderer/RenderApi.h"
 
 namespace pe
 {

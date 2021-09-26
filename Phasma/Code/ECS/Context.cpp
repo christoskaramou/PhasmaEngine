@@ -21,7 +21,7 @@ SOFTWARE.
 */
 
 #include "Context.h"
-#include "../Renderer/RenderApi.h"
+#include "Renderer/RenderApi.h"
 
 namespace pe
 {

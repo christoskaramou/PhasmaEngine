@@ -22,8 +22,8 @@ SOFTWARE.
 
 #include "PhasmaPch.h"
 #include "Surface.h"
-#include "../ECS/Context.h"
-#include "Renderer.h"
+#include "ECS/Context.h"
+#include "Systems/RendererSystem.h"
 #include "RenderApi.h"
 
 namespace pe

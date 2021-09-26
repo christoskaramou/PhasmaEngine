@@ -28,12 +28,11 @@ SOFTWARE.
 #include <deque>
 #include <any>
 #include <mutex>
-#include "Code/Event/Delegate.h"
+#include "Core/Delegate.h"
 
 namespace pe
 {
-
-	enum class QueueType
+	enum class Launch
 	{
 		Async,
 		AsyncDeferred,
@@ -47,24 +46,24 @@ namespace pe
 	public:
 		using Func = std::function<void()>;
 
-		inline static void Request(QueueType queueType, Func&& func)
+		inline static void Request(Launch launch, Func&& func)
 		{
 			std::lock_guard<std::mutex> guard(s_requestMutex);
 
-			switch (queueType)
+			switch (launch)
 			{
-			case QueueType::Async:
+			case Launch::Async:
 				s_futures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
 				s_requests += std::bind(&std::future<void>::get, &s_futures.back());
 				break;
-			case QueueType::AsyncDeferred:
+			case Launch::AsyncDeferred:
 				s_futures.push_back(std::async(std::launch::deferred, std::forward<Func>(func)));
 				s_requests += std::bind(&std::future<void>::get, &s_futures.back());
 				break;
-			case QueueType::Sync:
+			case Launch::Sync:
 				std::forward<Func>(func)();
 				break;
-			case QueueType::SyncDeferred:
+			case Launch::SyncDeferred:
 				s_requests += std::forward<Func>(func);
 				break;
 			}

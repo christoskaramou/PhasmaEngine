@@ -23,18 +23,18 @@ SOFTWARE.
 #include "PhasmaPch.h"
 #include "GUI.h"
 #include <filesystem>
-#include "../Include/TinyFileDialogs/tinyfiledialogs.h"
-#include "../Core/Queue.h"
-#include "../Console/Console.h"
-#include "../Renderer/Vertex.h"
-#include "../Renderer/Swapchain.h"
-#include "../Renderer/Surface.h"
-#include "../Shader/Shader.h"
-#include "../Renderer/RenderApi.h"
-#include "../Core/Path.h"
-#include "../Event/EventSystem.h"
-#include "../ECS/Context.h"
-#include "../Model/Model.h"
+#include "TinyFileDialogs/tinyfiledialogs.h"
+#include "Core/Queue.h"
+#include "Console/Console.h"
+#include "Renderer/Vertex.h"
+#include "Renderer/Swapchain.h"
+#include "Renderer/Surface.h"
+#include "Shader/Shader.h"
+#include "Renderer/RenderApi.h"
+#include "Core/Path.h"
+#include "Systems/EventSystem.h"
+#include "ECS/Context.h"
+#include "Model/Model.h"
 
 namespace pe
 {
@@ -235,8 +235,9 @@ namespace pe
 		ImGui::SetNextWindowSize(ImVec2(LEFT_PANEL_WIDTH, HEIGHT_f - LOWER_PANEL_HEIGHT - MENU_HEIGHT));
 		ImGui::Begin("Metrics", &metrics_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 		ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
+		auto framerate = ImGui::GetIO().Framerate;
 		ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::InputFloat("FPS", &fps, 1.0f, 15.0f, 1);
+		ImGui::InputFloat("FPS", &fps, 1.0f, 15.0f);
 		fps = maximum(fps, 10.0f);
 		ImGui::Separator();
 		ImGui::Separator();
@@ -442,7 +443,7 @@ namespace pe
 		ImGui::SetNextWindowPos(ImVec2(WIDTH_f - RIGHT_PANEL_WIDTH, MENU_HEIGHT));
 		ImGui::SetNextWindowSize(ImVec2(RIGHT_PANEL_WIDTH, HEIGHT_f - LOWER_PANEL_HEIGHT - MENU_HEIGHT));
 		ImGui::Begin("Global Properties", &propetries_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-		ImGui::InputFloat("Quality.", &rtScale, 0.01f, 0.05f, 2);
+		ImGui::InputFloat("Quality.", &rtScale, 0.01f, 0.05f);
 		if (ImGui::Button("Apply"))
 		{
 			renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
@@ -497,12 +498,12 @@ namespace pe
 			if (use_TAA)
 			{
 				ImGui::Indent(16.0f);
-				ImGui::InputFloat("Jitter", &TAA_jitter_scale, 0.01f, 0.1f, 5);
-				ImGui::InputFloat("FeedbackMin", &TAA_feedback_min, 0.005f, 0.05f, 3);
-				ImGui::InputFloat("FeedbackMax", &TAA_feedback_max, 0.005f, 0.05f, 3);
-				ImGui::InputFloat("Strength", &TAA_sharp_strength, 0.1f, 0.2f, 2);
-				ImGui::InputFloat("Clamp", &TAA_sharp_clamp, 0.01f, 0.05f, 3);
-				ImGui::InputFloat("Bias", &TAA_sharp_offset_bias, 0.1f, 0.3f, 1);
+				ImGui::InputFloat("Jitter", &TAA_jitter_scale, 0.01f, 0.1f);
+				ImGui::InputFloat("FeedbackMin", &TAA_feedback_min, 0.005f, 0.05f);
+				ImGui::InputFloat("FeedbackMax", &TAA_feedback_max, 0.005f, 0.05f);
+				ImGui::InputFloat("Strength", &TAA_sharp_strength, 0.1f, 0.2f);
+				ImGui::InputFloat("Clamp", &TAA_sharp_clamp, 0.01f, 0.05f);
+				ImGui::InputFloat("Bias", &TAA_sharp_offset_bias, 0.1f, 0.3f);
 				ImGui::Unindent(16.0f);
 			}
 			ImGui::Unindent(16.0f);
@@ -533,9 +534,9 @@ namespace pe
 		if (use_fog)
 		{
 			ImGui::Indent(16.0f);
-			ImGui::InputFloat("Ground Thickness", &fog_ground_thickness, 0.1f, 1.0f, 4);
-			ImGui::InputFloat("Global Thickness", &fog_global_thickness, 0.1f, 1.0f, 4);
-			ImGui::InputFloat("Max Height", &fog_max_height, 0.01f, 0.1f, 4);
+			ImGui::InputFloat("Ground Thickness", &fog_ground_thickness, 0.1f, 1.0f);
+			ImGui::InputFloat("Global Thickness", &fog_global_thickness, 0.1f, 1.0f);
+			ImGui::InputFloat("Max Height", &fog_max_height, 0.01f, 0.1f);
 			ImGui::Checkbox("Volumetric", &use_Volumetric_lights);
 			if (use_Volumetric_lights)
 			{
@@ -551,8 +552,8 @@ namespace pe
 		{
 			ImGui::Indent(16.0f);
 			ImGui::SliderFloat("Intst", &sun_intensity, 0.1f, 50.f);
-			ImGui::InputFloat3("Dir", sun_direction.data(), 3);
-			ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f, 5);
+			ImGui::InputFloat3("Dir", sun_direction.data());
+			ImGui::InputFloat("Slope", &depthBias[2], 0.15f, 0.5f);
 			ImGui::Separator();
 			ImGui::Separator();
 			{
@@ -563,7 +564,7 @@ namespace pe
 			}
 			ImGui::Unindent(16.0f);
 		}
-		ImGui::InputFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f, 3);
+		ImGui::InputFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f);
 		ImGui::SliderFloat4("ClearCol", clearColor.data(), 0.0f, 1.0f);
 		ImGui::InputFloat("TimeScale", &timeScale, 0.05f, 0.2f);
 		ImGui::Separator();
@@ -602,9 +603,9 @@ namespace pe
 			const std::string s = "Scale##" + toStr;
 			const std::string p = "Position##" + toStr;
 			const std::string r = "Rotation##" + toStr;
-			ImGui::InputFloat3(s.c_str(), model_scale[modelItemSelected].data(), 3);
-			ImGui::InputFloat3(p.c_str(), model_pos[modelItemSelected].data(), 3);
-			ImGui::InputFloat3(r.c_str(), model_rot[modelItemSelected].data(), 3);
+			ImGui::InputFloat3(s.c_str(), model_scale[modelItemSelected].data());
+			ImGui::InputFloat3(p.c_str(), model_pos[modelItemSelected].data());
+			ImGui::InputFloat3(r.c_str(), model_rot[modelItemSelected].data());
 			
 			ImGui::Separator();
 			ImGui::Separator();
@@ -1174,8 +1175,8 @@ namespace pe
 				vertex_offset += vertex_ranges[n].size;
 				index_offset += index_ranges[n].size;
 			}
-			vertexBuffer.CopyRequest(QueueType::AsyncDeferred, vertex_ranges);
-			indexBuffer.CopyRequest(QueueType::AsyncDeferred, index_ranges);
+			vertexBuffer.CopyRequest(Launch::AsyncDeferred, vertex_ranges);
+			indexBuffer.CopyRequest(Launch::AsyncDeferred, index_ranges);
 		}
 		
 		//vk::CommandBufferBeginInfo beginInfo;

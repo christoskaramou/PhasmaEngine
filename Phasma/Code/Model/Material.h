@@ -22,8 +22,8 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Renderer/Image.h"
-#include "../Core/Math.h"
+#include "Renderer/Image.h"
+#include "Core/Math.h"
 
 namespace pe
 {

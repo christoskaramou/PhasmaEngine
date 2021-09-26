@@ -21,7 +21,7 @@ SOFTWARE.
 */
 
 #include "Shader.h"
-#include "../Core/Path.h"
+#include "Core/Path.h"
 #include <fstream>
 #include <iostream>
 #include <filesystem>

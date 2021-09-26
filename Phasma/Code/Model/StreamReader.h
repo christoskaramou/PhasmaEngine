@@ -22,7 +22,7 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Include/GLTFSDK/IStreamReader.h"
+#include "GLTFSDK/IStreamReader.h"
 #include <filesystem>
 #include <fstream>
 #include <sstream>

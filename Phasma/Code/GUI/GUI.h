@@ -22,11 +22,11 @@ SOFTWARE.
 
 #pragma once
 
-#include "../../Include/imgui/imgui.h"
-#include "../Model/Object.h"
-#include "../Renderer/Pipeline.h"
-#include "../Renderer/RenderPass.h"
-#include "../Renderer/Framebuffer.h"
+#include "imgui/imgui.h"
+#include "Model/Object.h"
+#include "Renderer/Pipeline.h"
+#include "Renderer/RenderPass.h"
+#include "Renderer/Framebuffer.h"
 #include "SDL/SDL.h"
 #include <vector>
 #include <array>

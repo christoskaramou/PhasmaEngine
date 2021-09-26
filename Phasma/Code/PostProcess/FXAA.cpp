@@ -22,11 +22,11 @@ SOFTWARE.
 
 #include "PhasmaPch.h"
 #include "FXAA.h"
-#include "../GUI/GUI.h"
-#include "../Renderer/Swapchain.h"
-#include "../Renderer/Surface.h"
-#include"../Shader/Shader.h"
-#include "../Renderer/RenderApi.h"
+#include "GUI/GUI.h"
+#include "Renderer/Swapchain.h"
+#include "Renderer/Surface.h"
+#include "Shader/Shader.h"
+#include "Renderer/RenderApi.h"
 
 namespace pe
 {

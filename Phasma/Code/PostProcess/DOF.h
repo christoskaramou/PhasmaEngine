@@ -22,10 +22,10 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Renderer/Pipeline.h"
-#include "../Renderer/Image.h"
-#include "../Renderer/RenderPass.h"
-#include "../Renderer/Framebuffer.h"
+#include "Renderer/Pipeline.h"
+#include "Renderer/Image.h"
+#include "Renderer/RenderPass.h"
+#include "Renderer/Framebuffer.h"
 #include <map>
 #include <string>
 

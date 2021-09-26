@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include "Node.h"
 #include <future>
-#include "../Model/Mesh.h"
+#include "Model/Mesh.h"
 #include "Queue.h"
 
 namespace pe
@@ -94,11 +94,11 @@ namespace pe
 				}
 				
 				mesh->ubo.jointcount = static_cast<float>(numJoints);
-				mesh->uniformBuffer.CopyRequest(QueueType::AsyncDeferred, { &mesh->ubo, sizeof(mesh->ubo), 0 });
+				mesh->uniformBuffer.CopyRequest(Launch::AsyncDeferred, { &mesh->ubo, sizeof(mesh->ubo), 0 });
 			}
 			else
 			{
-				mesh->uniformBuffer.CopyRequest(QueueType::AsyncDeferred, { &mesh->ubo, 2 * sizeof(mat4), 0 });
+				mesh->uniformBuffer.CopyRequest(Launch::AsyncDeferred, { &mesh->ubo, 2 * sizeof(mat4), 0 });
 			}
 		}
 	}

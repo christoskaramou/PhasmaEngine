@@ -21,47 +21,11 @@ SOFTWARE.
 */
 
 #include "Camera.h"
-#include "../GUI/GUI.h"
-#include "../ECS/Entity.h"
-#include "../ECS/Context.h"
+#include "GUI/GUI.h"
+#include "Renderer/Compute.h"
 
 namespace pe
-{
-    CameraSystem::CameraSystem()
-    {
-        Camera* mainCamera = Context::Get()->MainEntity->CreateComponent<Camera>();
-        AttachComponent(mainCamera);
-    }
-
-    Camera* CameraSystem::GetCamera(size_t index)
-    {
-        return GetComponentOfTypeAt<Camera>(index);
-    }
-    
-    void CameraSystem::Init()
-    {
-    
-    }
-    
-    void CameraSystem::Update(double delta)
-    {
-        static auto updateBody = [](Camera* camera)
-        {
-            if (camera->IsEnabled())
-                camera->Update();
-        };
-        
-        std::vector<Camera*> components = GetComponentsOfType<Camera>();
-        ForEachParallel<Camera*>(components, updateBody);
-    }
-    
-    void CameraSystem::Destroy()
-    {
-		std::vector<Camera*> components = GetComponentsOfType<Camera>();
-        for (auto camera : components)
-            camera->Destroy();
-    }
-    
+{    
     Camera::Camera()
     {
         // gltf is right handed, reversing the x orientation makes the models left handed

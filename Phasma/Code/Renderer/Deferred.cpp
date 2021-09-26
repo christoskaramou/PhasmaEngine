@@ -22,19 +22,20 @@ SOFTWARE.
 
 #include "PhasmaPch.h"
 #include "Deferred.h"
-#include "../Model/Model.h"
-#include "../Model/Mesh.h"
+#include "Model/Model.h"
+#include "Model/Mesh.h"
 #include "Swapchain.h"
 #include "Surface.h"
-#include "../Shader/Shader.h"
-#include "../Core/Queue.h"
-#include "../GUI/GUI.h"
+#include "Shader/Shader.h"
+#include "Core/Queue.h"
+#include "GUI/GUI.h"
 #include "tinygltf/stb_image.h"
 #include <deque>
-#include "../Shader/Reflection.h"
+#include "Shader/Reflection.h"
 #include "RenderApi.h"
-#include "../Core/Path.h"
-#include "../ECS/Context.h"
+#include "Core/Path.h"
+#include "ECS/Context.h"
+#include "Systems/LightSystem.h"
 
 namespace pe
 {
@@ -216,7 +217,7 @@ namespace pe
 				GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f
 		};
 		
-		uniform.CopyRequest(QueueType::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
+		uniform.CopyRequest(Launch::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
 	}
 	
 	void Deferred::draw(

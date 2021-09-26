@@ -22,66 +22,30 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Core/Math.h"
-#include "Buffer.h"
-#include "../Camera/Camera.h"
-#include "../GUI/GUI.h"
-#include "../ECS/Component.h"
+#include "Core/Math.h"
 
 namespace pe
 {
-#define MAX_POINT_LIGHTS 10
-#define MAX_SPOT_LIGHTS 10
-	
 	struct Light
 	{
 	};
-	
+
 	struct DirectionalLight : public Light
 	{
 		vec4 color; // .w = intensity
 		vec4 direction;
 	};
-	
+
 	struct PointLight : public Light
 	{
 		vec4 color; // .w = intensity
 		vec4 position;
 	};
-	
+
 	struct SpotLight : public Light
 	{
 		vec4 color; // .w = intensity
 		vec4 start; // .w = radius;
 		vec4 end;
-	};
-	
-	struct LightsUBO
-	{
-		vec4 camPos;
-		DirectionalLight sun;
-		PointLight pointLights[MAX_POINT_LIGHTS];
-		SpotLight spotLights[MAX_SPOT_LIGHTS];
-	};
-
-	class LightSystem : public ISystem
-	{
-	public:
-		LightSystem();
-
-		~LightSystem();
-
-		void Init() override;
-
-		void Update(double delta) override;
-
-		void Destroy() override;
-
-		Buffer& GetUniform() { return uniform; }
-
-	private:
-		LightsUBO lubo;
-		Buffer uniform;
-		Ref<vk::DescriptorSet> descriptorSet;
 	};
 }

@@ -24,8 +24,8 @@ SOFTWARE.
 
 #include <vector>
 #include <mutex>
-#include "../Surface.h"
-#include "../Swapchain.h"
+#include "Renderer/Surface.h"
+#include "Renderer/Swapchain.h"
 
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 

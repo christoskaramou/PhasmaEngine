@@ -22,12 +22,12 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Renderer/Vertex.h"
+#include "Renderer/Vertex.h"
 #include "Material.h"
-#include "../Renderer/Buffer.h"
-#include "../../Include/GLTFSDK/GLTF.h"
-#include "../../Include/GLTFSDK/Document.h"
-#include "../../Include/GLTFSDK/GLTFResourceReader.h"
+#include "Renderer/Buffer.h"
+#include "GLTFSDK/GLTF.h"
+#include "GLTFSDK/Document.h"
+#include "GLTFSDK/GLTFResourceReader.h"
 #include <map>
 
 constexpr auto MAX_NUM_JOINTS = 128u;

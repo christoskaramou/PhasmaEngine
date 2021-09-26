@@ -22,33 +22,32 @@ SOFTWARE.
 
 #pragma once
 
-#include "../ECS/System.h"
-#include "Image.h"
-#include "Surface.h"
-#include "Swapchain.h"
-#include "../GUI/GUI.h"
-#include "../Skybox/Skybox.h"
-#include "Shadows.h"
-#include "Light.h"
-#include "../Model/Model.h"
-#include "Deferred.h"
-#include "Compute.h"
-#include "../Core/Timer.h"
-#include "../Script/Script.h"
-#include "../PostProcess/Bloom.h"
-#include "../PostProcess/DOF.h"
-#include "../PostProcess/FXAA.h"
-#include "../PostProcess/MotionBlur.h"
-#include "../PostProcess/SSAO.h"
-#include "../PostProcess/SSR.h"
-#include "../PostProcess/TAA.h"
+#include "Renderer/Image.h"
+#include "Renderer/Surface.h"
+#include "Renderer/Swapchain.h"
+#include "GUI/GUI.h"
+#include "Skybox/Skybox.h"
+#include "Renderer/Shadows.h"
+#include "Model/Model.h"
+#include "Renderer/Deferred.h"
+#include "Renderer/Compute.h"
+#include "Core/Timer.h"
+#include "Script/Script.h"
+#include "PostProcess/Bloom.h"
+#include "PostProcess/DOF.h"
+#include "PostProcess/FXAA.h"
+#include "PostProcess/MotionBlur.h"
+#include "PostProcess/SSAO.h"
+#include "PostProcess/SSR.h"
+#include "PostProcess/TAA.h"
 
 #define IGNORE_SCRIPTS
 
 namespace pe
 {
-	class Renderer final : public ISystem
+	class Renderer
 	{
+	protected:
 		Shadows shadows;
 		Deferred deferred;
 		SSAO ssao;
@@ -72,13 +71,7 @@ namespace pe
 	public:
 		Renderer();
 		
-		~Renderer() override;
-		
-		void Init() override;
-		
-		void Update(double delta) override;
-		
-		void Destroy() override;
+		~Renderer();
 		
 		void Draw();
 		

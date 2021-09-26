@@ -23,12 +23,12 @@ SOFTWARE.
 #include "PhasmaPch.h"
 #include "SSR.h"
 #include <deque>
-#include "../GUI/GUI.h"
-#include "../Renderer/Swapchain.h"
-#include "../Renderer/Surface.h"
-#include "../Shader/Shader.h"
-#include "../Core/Queue.h"
-#include "../Renderer/RenderApi.h"
+#include "GUI/GUI.h"
+#include "Renderer/Swapchain.h"
+#include "Renderer/Surface.h"
+#include "Shader/Shader.h"
+#include "Core/Queue.h"
+#include "Renderer/RenderApi.h"
 
 namespace pe
 {
@@ -104,7 +104,7 @@ namespace pe
 			reflectionInput[2] = camera.view;
 			reflectionInput[3] = camera.invProjection;
 			
-			UBReflection.CopyRequest(QueueType::AsyncDeferred, { &reflectionInput, sizeof(reflectionInput), 0 });
+			UBReflection.CopyRequest(Launch::AsyncDeferred, { &reflectionInput, sizeof(reflectionInput), 0 });
 		}
 	}
 	

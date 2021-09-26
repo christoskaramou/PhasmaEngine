@@ -22,14 +22,14 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Core/Base.h"
-#include "Delegate.h"
+#include "Core/Base.h"
+#include "Core/Delegate.h"
 #include <map>
 #include <deque>
 #include <utility>
 #include <any>
 #include <unordered_set>
-#include "../ECS/System.h"
+#include "ECS/System.h"
 
 namespace pe
 {
@@ -48,11 +48,10 @@ namespace pe
         ScaleRenderTargets
     };
     
-    using Func = Delegate<std::any>::Func_type;
-    
     class EventSystem : public ISystem
     {
     public:
+        using Func = Delegate<std::any>::Func_type;
 
         void Init() override;
 

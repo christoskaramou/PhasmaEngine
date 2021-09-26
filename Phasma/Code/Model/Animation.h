@@ -22,8 +22,8 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Core/Math.h"
-#include "../Core/Node.h"
+#include "Core/Math.h"
+#include "Core/Node.h"
 #include <vector>
 
 #undef max

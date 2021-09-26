@@ -22,9 +22,9 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Core/Base.h"
-#include "../Shader/Shader.h"
-#include "../Renderer/RenderPass.h"
+#include "Core/Base.h"
+#include "Shader/Shader.h"
+#include "Renderer/RenderPass.h"
 
 namespace pe
 {

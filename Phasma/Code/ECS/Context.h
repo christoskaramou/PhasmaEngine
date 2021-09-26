@@ -24,7 +24,7 @@ SOFTWARE.
 
 #include "Entity.h"
 #include "System.h"
-#include "../Core/Base.h"
+#include "Core/Base.h"
 #include <vector>
 
 namespace pe

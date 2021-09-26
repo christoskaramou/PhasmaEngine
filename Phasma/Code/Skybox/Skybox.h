@@ -22,7 +22,7 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Model/Object.h"
+#include "Model/Object.h"
 
 namespace pe
 {

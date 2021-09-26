@@ -22,15 +22,15 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Renderer/Buffer.h"
-#include "../Core/Math.h"
-#include "../Script/Script.h"
-#include "../Camera/Camera.h"
-#include "../Model/Animation.h"
-#include "../Core/Node.h"
-#include "../../Include/GLTFSDK/GLTF.h"
-#include "../../Include/GLTFSDK/GLTFResourceReader.h"
-#include "../../Include/GLTFSDK/Document.h"
+#include "Renderer/Buffer.h"
+#include "Core/Math.h"
+#include "Script/Script.h"
+#include "Systems/CameraSystem.h"
+#include "Model/Animation.h"
+#include "Core/Node.h"
+#include "GLTFSDK/GLTF.h"
+#include "GLTFSDK/GLTFResourceReader.h"
+#include "GLTFSDK/Document.h"
 #include "StreamReader.h"
 #include <future>
 #include <deque>

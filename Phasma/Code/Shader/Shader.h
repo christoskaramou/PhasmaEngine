@@ -26,7 +26,7 @@ SOFTWARE.
 #include <unordered_set>
 #include <string>
 #include <vector>
-#include "../../Include/shaderc/shaderc.hpp"
+#include "shaderc/shaderc.hpp"
 
 #define ONLINE_COMPILE
 

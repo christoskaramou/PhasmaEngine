@@ -22,12 +22,12 @@ SOFTWARE.
 
 #include "PhasmaPch.h"
 #include "TAA.h"
-#include "../GUI/GUI.h"
-#include "../Renderer/Surface.h"
-#include "../Renderer/Swapchain.h"
-#include "../Shader/Shader.h"
-#include "../Core/Queue.h"
-#include "../Renderer/RenderApi.h"
+#include "GUI/GUI.h"
+#include "Renderer/Surface.h"
+#include "Renderer/Swapchain.h"
+#include "Shader/Shader.h"
+#include "Core/Queue.h"
+#include "Renderer/RenderApi.h"
 #include <deque>
 
 namespace pe
@@ -84,7 +84,7 @@ namespace pe
 			};
 			ubo.invProj = camera.invProjection;
 			
-			uniform.CopyRequest(QueueType::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
+			uniform.CopyRequest(Launch::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
 		}
 	}
 	

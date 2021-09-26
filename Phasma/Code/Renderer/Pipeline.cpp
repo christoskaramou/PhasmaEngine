@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include "PhasmaPch.h"
 #include "Pipeline.h"
-#include "../Shader/Shader.h"
+#include "Shader/Shader.h"
 #include "Descriptor.h"
 #include "RenderApi.h"
 

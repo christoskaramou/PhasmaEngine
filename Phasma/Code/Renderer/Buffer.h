@@ -22,10 +22,10 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Core/Base.h"
+#include "Core/Base.h"
 #include "RendererEnums.h"
-#include <Code/MemoryHash/MemoryHash.h>
-#include <Code/Core/Queue.h>
+#include <MemoryHash/MemoryHash.h>
+#include <Core/Queue.h>
 
 namespace pe
 {
@@ -59,9 +59,9 @@ namespace pe
 		
 		void* Data();
 
-		void CopyRequest(QueueType type, const MemoryRange& ranges);
+		void CopyRequest(Launch type, const MemoryRange& ranges);
 
-		void CopyRequest(QueueType type, const std::vector<MemoryRange>& ranges);
+		void CopyRequest(Launch type, const std::vector<MemoryRange>& ranges);
 		
 		Ref<vk::Buffer> GetBufferVK();
 

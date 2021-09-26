@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include "Image.h"
 #include "RenderApi.h"
-#include "../ECS/Context.h"
+#include "ECS/Context.h"
 #include <utility>
 
 namespace pe

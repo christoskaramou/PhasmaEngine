@@ -24,9 +24,8 @@ SOFTWARE.
 
 #include "Pipeline.h"
 #include "Image.h"
-#include "Light.h"
 #include "Shadows.h"
-#include "../Skybox/Skybox.h"
+#include "Skybox/Skybox.h"
 #include "RenderPass.h"
 #include "Framebuffer.h"
 #include <map>

@@ -171,7 +171,7 @@ namespace pe
 		}
 	}
 
-	void Buffer::CopyRequest(QueueType type, const MemoryRange& range)
+	void Buffer::CopyRequest(Launch type, const MemoryRange& range)
 	{
 		auto lambda = [this, range]()
 		{
@@ -183,7 +183,7 @@ namespace pe
 		Queue<1>::Request(type, lambda);
 	}
 
-	void Buffer::CopyRequest(QueueType type, const std::vector<MemoryRange>& ranges)
+	void Buffer::CopyRequest(Launch type, const std::vector<MemoryRange>& ranges)
 	{
 		auto lambda = [this, ranges]()
 		{

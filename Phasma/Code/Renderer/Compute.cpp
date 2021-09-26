@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include "PhasmaPch.h"
 #include "Compute.h"
-#include "../Shader/Shader.h"
+#include "Code/Shader/Shader.h"
 #include "RenderApi.h"
 #include <deque>
 #include <cassert>

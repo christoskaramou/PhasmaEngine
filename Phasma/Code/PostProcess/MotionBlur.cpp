@@ -23,13 +23,13 @@ SOFTWARE.
 #include "PhasmaPch.h"
 #include "MotionBlur.h"
 #include <deque>
-#include "../Renderer/Surface.h"
-#include "../Renderer/Swapchain.h"
-#include "../GUI/GUI.h"
-#include "../Shader/Shader.h"
-#include "../Core/Queue.h"
-#include "../Core/Timer.h"
-#include "../Renderer/RenderApi.h"
+#include "Renderer/Surface.h"
+#include "Renderer/Swapchain.h"
+#include "GUI/GUI.h"
+#include "Shader/Shader.h"
+#include "Core/Queue.h"
+#include "Core/Timer.h"
+#include "Renderer/RenderApi.h"
 
 namespace pe
 {
@@ -167,7 +167,7 @@ namespace pe
 			
 			previousView = camera.view;
 			
-			UBmotionBlur.CopyRequest(QueueType::AsyncDeferred, { &motionBlurInput, sizeof(motionBlurInput), 0 });
+			UBmotionBlur.CopyRequest(Launch::AsyncDeferred, { &motionBlurInput, sizeof(motionBlurInput), 0 });
 		}
 	}
 	

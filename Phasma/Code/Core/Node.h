@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Math.h"
-#include "../Camera/Camera.h"
 
 namespace pe
 {

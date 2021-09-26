@@ -22,8 +22,8 @@ SOFTWARE.
 
 #pragma once
 
-#include "../../Core/Base.h"
-#include "../RendererEnums.h"
+#include "Core/Base.h"
+#include "Renderer/RendererEnums.h"
 
 namespace pe
 {

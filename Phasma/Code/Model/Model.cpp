@@ -23,14 +23,14 @@ SOFTWARE.
 #include "PhasmaPch.h"
 #include "Model.h"
 #include "Mesh.h"
-#include "../Core/Queue.h"
-#include "../Renderer/Pipeline.h"
+#include "Core/Queue.h"
+#include "Renderer/Pipeline.h"
 #include <iostream>
 #include <future>
 #include <deque>
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
-#include "../Renderer/RenderApi.h"
+#include "Renderer/RenderApi.h"
 
 #undef max
 
@@ -510,7 +510,7 @@ namespace pe
 		ubo.previousMvp = ubo.mvp;
 		ubo.mvp = camera.viewProjection * transform;
 		
-		uniformBuffer.CopyRequest(QueueType::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
+		uniformBuffer.CopyRequest(Launch::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
 		
 		if (!animations.empty())
 		{

@@ -20,13 +20,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#include "ECS/Context.h"
 #include "PhasmaPch.h"
 #include "Window.h"
-#include "../Console/Console.h"
-#include "../Renderer/RenderApi.h"
-#include "../Renderer/Renderer.h"
-#include "../ECS/Context.h"
-#include "../Event/EventSystem.h"
+#include "Console/Console.h"
+#include "Renderer/RenderApi.h"
+#include "Systems/RendererSystem.h"
+#include "Systems/EventSystem.h"
+#include "Systems/CameraSystem.h"
 #include <iostream>
 
 namespace pe
@@ -74,7 +75,7 @@ namespace pe
 		static float dx, dy = 0.f;
 		
 		EventSystem* eventSystem = Context::Get()->GetSystem<EventSystem>();
-		Renderer* renderer = Context::Get()->GetSystem<Renderer>();
+		RendererSystem* renderer = Context::Get()->GetSystem<RendererSystem>();
 		CameraSystem* cameraSystem = Context::Get()->GetSystem<CameraSystem>();
 		Camera* camera_main = cameraSystem->GetCamera(0);
 		

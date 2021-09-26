@@ -22,8 +22,8 @@ SOFTWARE.
 
 #include "PhasmaPch.h"
 #include "Vulkan.h"
-#include "../../ECS/Context.h"
-#include "../../Renderer/Renderer.h"
+#include "ECS/Context.h"
+#include "Systems/RendererSystem.h"
 #include <iostream>
 
 namespace pe

@@ -22,13 +22,13 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Renderer/Buffer.h"
-#include "../Renderer/Pipeline.h"
-#include "../Renderer/Image.h"
-#include "../Core/Math.h"
-#include "../Camera/Camera.h"
-#include "../Renderer/RenderPass.h"
-#include "../Renderer/Framebuffer.h"
+#include "Renderer/Buffer.h"
+#include "Renderer/Pipeline.h"
+#include "Renderer/Image.h"
+#include "Core/Math.h"
+#include "Systems/CameraSystem.h"
+#include "Renderer/RenderPass.h"
+#include "Renderer/Framebuffer.h"
 #include <vector>
 #include <map>
 

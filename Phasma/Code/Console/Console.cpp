@@ -21,7 +21,7 @@ SOFTWARE.
 */
 
 #include "Console.h"
-#include "../Core/Queue.h"  // for Queue, Queue::loadModel
+#include "Core/Queue.h"
 
 namespace pe
 {

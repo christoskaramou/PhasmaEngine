@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Renderer/Renderer.h"
-
 namespace pe
 {
 	class Context;

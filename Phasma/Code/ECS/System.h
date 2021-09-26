@@ -91,31 +91,12 @@ namespace pe
 		}
 		
 		template<class T>
-		T* GetComponentOfTypeAt(size_t index)
-		{
-			if (HasComponents<T>())
-			{
-				if (index < m_components[GetTypeID<T>()].size())
-					return static_cast<T*>(m_components[GetTypeID<T>()][index]);
-			}
-			
-			return nullptr;
-		}
-		
-		template<class T>
-		std::vector<T*> GetComponentsOfType()
+		std::vector<T*>& GetComponentsOfType()
 		{
 			if (HasComponents<T>())
 			{
 				size_t id = GetTypeID<T>();
-				std::vector<IComponent*>& icomponents = m_components[id];
-				size_t size = m_components[id].size();
-
-				std::vector<T*> components(size);
-				for (int i = 0; i < size; i++)
-					components[i] = static_cast<T*>(icomponents[i]);
-
-				return components;
+				return *reinterpret_cast<std::vector<T*>*>(&m_components[id]);
 			}
 			
 			return std::vector<T*>();

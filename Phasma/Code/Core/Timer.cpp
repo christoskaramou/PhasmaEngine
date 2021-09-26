@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include "PhasmaPch.h"
 #include "Timer.h"
-#include "../Renderer/RenderApi.h"
+#include "Renderer/RenderApi.h"
 #include <thread>
 
 namespace pe
@@ -54,6 +54,9 @@ namespace pe
 	
 	void FrameTimer::Delay(double seconds)
 	{
+		if (seconds <= 0.0f)
+			return;
+
 		const std::chrono::nanoseconds delay {SECONDS_TO_NANOSECONDS<size_t>(seconds) - system_delay};
 		
 		timer.Start();

@@ -22,32 +22,12 @@ SOFTWARE.
 
 #pragma once
 
-#include "../ECS/Component.h"
-#include "../ECS/System.h"
-#include "../Core/Math.h"
-#include "../Renderer/Compute.h"
+#include "ECS/Component.h"
+#include "Core/Math.h"
+#include "Renderer/Compute.h"
 
 namespace pe
-{
-	class Camera;
-	
-	class CameraSystem : public ISystem
-	{
-	public:
-		CameraSystem();
-		
-		~CameraSystem() override = default;
-		
-		Camera* GetCamera(size_t index);
-		
-		// Inherited via ISystem
-		void Init() override;
-		
-		void Update(double delta) override;
-		
-		void Destroy() override;
-	};
-	
+{	
 	class Camera : public IComponent
 	{
 	public:

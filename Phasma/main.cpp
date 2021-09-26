@@ -20,13 +20,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Code/Window/Window.h"
-#include "Code/Core/Timer.h"
-#include "Code/ECS/Context.h"
-#include "Code/Camera/Camera.h"
-#include "Code/Renderer/Light.h"
-#include "Code/Event/EventSystem.h"
-#include "Code/Renderer/Vulkan/Vulkan.h"
+#include "Window/Window.h"
+#include "Core/Timer.h"
+#include "ECS/Context.h"
+#include "Systems/CameraSystem.h"
+#include "Systems/RendererSystem.h"
+#include "Systems/LightSystem.h"
+#include "Systems/EventSystem.h"
+#include "Renderer/Vulkan/Vulkan.h"
 
 using namespace pe;
 
@@ -42,7 +43,7 @@ int main(int argc, char* argv[])
 	VulkanContext::Get()->Init(window.Create()); // TODO: Remove this from here (was in Renderer)
 
 	context.CreateSystem<LightSystem>();
-	context.CreateSystem<Renderer>();
+	context.CreateSystem<RendererSystem>();
 	context.CreateSystem<CameraSystem>();
 
 	context.InitSystems();
@@ -62,7 +63,7 @@ int main(int argc, char* argv[])
 		if (!window.isMinimized())
 		{
 			context.UpdateSystems(frame_timer.delta);
-			context.GetSystem<Renderer>()->Draw();
+			context.GetSystem<RendererSystem>()->Draw();
 		}
 		
 		// Metrics every 0.75 sec

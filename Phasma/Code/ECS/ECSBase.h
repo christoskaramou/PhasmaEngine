@@ -24,6 +24,7 @@ SOFTWARE.
 
 #include <algorithm>
 #include <execution>
+#include <functional>
 
 namespace pe
 {
@@ -46,20 +47,6 @@ namespace pe
 		static_assert(
 				std::is_base_of<T, U>::value, "ValidateBaseClass<T, U>(): \"T is not the base class of U\" assertion"
 		);
-	}
-	
-	template<class T>
-	void ForEachParallel(const std::vector<T>& container, void(* func)(T))
-	{
-		if (container.size() > 3)
-		{
-			std::for_each(std::execution::par_unseq, container.begin(), container.end(), func);
-		}
-		else
-		{
-			for (auto& elem : container)
-				func(elem);
-		}
 	}
 	
 	class BaseBehaviour

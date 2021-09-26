@@ -22,7 +22,7 @@ SOFTWARE.
 
 #pragma once
 
-#include "../Core/Math.h"
+#include "Core/Math.h"
 
 namespace pe
 {
