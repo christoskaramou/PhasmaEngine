@@ -16,6 +16,7 @@ message("CMAKE_CURRENT_SOURCE_DIR = ${CMAKE_CURRENT_SOURCE_DIR}")
 message("CMAKE_BINARY_DIR = ${CMAKE_BINARY_DIR}")
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Code")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/imgui")
 
