@@ -65,8 +65,9 @@ int main(int argc, char* argv[])
 		if (!window.isMinimized())
 		{
 			context.UpdateSystems(frame_timer.delta);
-			Queue<0>::ExecuteRequests();
-			Queue<1>::ExecuteRequests();
+			Queue<0>::ExecuteRequests(); // Top level functions
+			Queue<1>::ExecuteRequests(); // Buffer and simlar copies
+			Queue<2>::ExecuteRequests(); // No wait async requests, i.e. loading
 			context.DrawSystems();
 		}
 		

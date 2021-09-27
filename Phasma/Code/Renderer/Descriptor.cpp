@@ -21,11 +21,17 @@ SOFTWARE.
 */
 
 #include "Descriptor.h"
+#include "Renderer/Vulkan/Vulkan.h"
 
 namespace pe
 {
 	DescriptorBinding::DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags)
 		: binding(binding), descriptorType(descriptorType), descriptorCount(1), stageFlags(stageFlags), pImmutableSamplers(nullptr)
 	{
+	}
+
+	Descriptor::Descriptor()
+	{
+		descriptorVK = make_ref(vk::DescriptorSet());
 	}
 }

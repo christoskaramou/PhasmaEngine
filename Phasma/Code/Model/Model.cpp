@@ -31,6 +31,7 @@ SOFTWARE.
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
 #include "Renderer/RenderApi.h"
+#include "Core/Queue.h"
 
 #undef max
 
@@ -370,26 +371,28 @@ namespace pe
 		}
 	}
 	
-	void Model::Load(const std::string& folderPath, const std::string& modelName, bool show)
+	void Model::Load(const std::string& folderPath, const std::string& modelName)
 	{
+		// This works as a flag to when the loading is done
+		render = false;
+
 		loadModelGltf(folderPath, modelName);
 		//calculateBoundingSphere();
 		name = modelName;
 		fullPathName = folderPath + modelName;
-		render = show;
 		createVertexBuffer();
 		createIndexBuffer();
 		createUniformBuffers();
 		createDescriptorSets();
-	}
 
-	std::map<Model*, std::future<void>> futures{};
+		render = true;
+	}
 
 	void Model::LoadAsync(const std::string& folderPath, const std::string& modelName)
 	{
-		render = false;
 		VulkanContext::Get()->device->waitIdle();
-		futures[this] = std::async(std::launch::async, &Model::Load, this, folderPath, modelName, false);
+		auto loadAsync = [this, folderPath, modelName]() { Load(folderPath, modelName); };
+		Queue<2>::Request(Launch::AsyncNoWait, loadAsync);
 	}
 	
 	void Model::updateAnimation(uint32_t index, float time)
@@ -480,20 +483,6 @@ namespace pe
 	
 	void Model::update(pe::Camera& camera, double delta)
 	{
-		for (auto it = futures.begin(); it != futures.end();)
-		{
-			if (it->second.wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
-			{
-				it->second.get();
-				render = true;
-				it = futures.erase(it);
-			}
-			else
-			{
-				++it;
-			}
-		}
-
 		if (!render)
 			return;
 

@@ -36,6 +36,7 @@ namespace pe
 	{
 		Async,
 		AsyncDeferred,
+		AsyncNoWait,
 		Sync,
 		SyncDeferred,
 	};
@@ -60,6 +61,9 @@ namespace pe
 				s_futures.push_back(std::async(std::launch::deferred, std::forward<Func>(func)));
 				s_requests += std::bind(&std::future<void>::get, &s_futures.back());
 				break;
+			case Launch::AsyncNoWait:
+				s_noWaitFutures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
+				break;
 			case Launch::Sync:
 				std::forward<Func>(func)();
 				break;
@@ -71,13 +75,33 @@ namespace pe
 
 		inline static void ExecuteRequests()
 		{
+			CheckNoWaitFutures();
 			s_requests.ReverseInvoke();
 			s_requests.Clear();
+			s_futures.clear();
+		}
+
+	private:
+		inline static void CheckNoWaitFutures()
+		{
+			for (auto it = s_noWaitFutures.begin(); it != s_noWaitFutures.end();)
+			{
+				if (it->wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
+				{
+					it->get();
+					it = s_noWaitFutures.erase(it);
+				}
+				else
+				{
+					++it;
+				}
+			}
 		}
 
 	private:
 		inline static Delegate<> s_requests{};
 		inline static std::deque<std::future<void>> s_futures;
+		inline static std::deque<std::future<void>> s_noWaitFutures;
 		inline static std::mutex s_requestMutex;
 	};
 }

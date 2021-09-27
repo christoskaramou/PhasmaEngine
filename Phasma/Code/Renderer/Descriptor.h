@@ -22,6 +22,7 @@ SOFTWARE.
 
 #pragma once
 
+#include "Core/Base.h"
 #include "RendererEnums.h"
 
 namespace pe
@@ -44,9 +45,10 @@ namespace pe
 
 	class Descriptor
 	{
-		Descriptor()
-		{
+	public:
+		Descriptor();
 
-		}
+	private:
+		Ref<vk::DescriptorSet> descriptorVK;
 	};
 }
