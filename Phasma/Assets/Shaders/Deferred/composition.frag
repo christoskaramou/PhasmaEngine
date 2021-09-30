@@ -100,7 +100,7 @@ void main()
 
 	// screenSpace.effects3.z -> shadow cast
 	if (screenSpace.effects3.z > 0.5)
-		fragColor += directLight(material, frag_pos, ubo.camPos.xyz, normal, factor_occlusion, depth);
+		fragColor += directLight(material, frag_pos, ubo.camPos.xyz, normal, factor_occlusion, length(frag_pos - ubo.camPos.xyz));
 
 	for(int i = 0; i < MAX_POINT_LIGHTS; ++i)
 		fragColor += compute_point_light(i, material, frag_pos, ubo.camPos.xyz, normal, factor_occlusion);
@@ -166,67 +166,46 @@ vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 materi
 		lit = 0.0;
 
 		const float bias = 0.0007;
-		const float power = 15.0;
 
-		if (depth > pushConst.max_cascade_dist0)
+		if (depth < pushConst.max_cascade_dist0)
 		{
 			//return vec3(1.0, 0.0, 0.0);
 
 			vec4 s_coords0 = sun.cascades[0] * vec4(world_pos, 1.0);
 			s_coords0 = s_coords0 / s_coords0.w;
 			s_coords0.xy = s_coords0.xy * 0.5 + 0.5;
-			s_coords0.z = s_coords0.z * 0.5 + 0.5;
-
-			vec4 s_coords1 = sun.cascades[1] * vec4(world_pos, 1.0);
-			s_coords1 = s_coords1 / s_coords1.w;
-			s_coords1.xy = s_coords1.xy * 0.5 + 0.5;
-			s_coords1.z = s_coords1.z * 0.5 + 0.5;
 
 			for (int i = 0; i < 4; i++)
 			{
 				float cascade0 = texture(sampler_shadow_map0, vec3(s_coords0.xy + poissonDisk[i] * 0.0008, s_coords0.z + bias));
-				float cascade1 = texture(sampler_shadow_map1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias));
-				float mix_factor = pow(depth / pushConst.max_cascade_dist0, power);
-
-				lit += 0.25 * mix(cascade0, cascade1, mix_factor);
+				lit += 0.25 * cascade0;
 			}
 		}
-		else if (depth > pushConst.max_cascade_dist1)
+		else if (depth < pushConst.max_cascade_dist1)
 		{
 			//return vec3(0.0, 1.0, 0.0);
 
 			vec4 s_coords1 = sun.cascades[1] * vec4(world_pos, 1.0);
 			s_coords1 = s_coords1 / s_coords1.w;
 			s_coords1.xy = s_coords1.xy * 0.5 + 0.5;
-			s_coords1.z = s_coords1.z * 0.5 + 0.5;
-
-			vec4 s_coords2 = sun.cascades[2] * vec4(world_pos, 1.0);
-			s_coords2 = s_coords2 / s_coords2.w;
-			s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
-			s_coords2.z = s_coords2.z * 0.5 + 0.5;
 
 			for (int i = 0; i < 4; i++)
 			{
 				float cascade1 = texture(sampler_shadow_map1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias));
-				float cascade2 = texture(sampler_shadow_map2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias));
-				float mix_factor = pow(depth / pushConst.max_cascade_dist1, power);
-
-				lit += 0.25 * mix(cascade1, cascade2, mix_factor);
+				lit += 0.25 * cascade1;
 			}
 		}
-		else if (depth > pushConst.max_cascade_dist2)
+		else if (depth < pushConst.max_cascade_dist2)
 		{
 			//return vec3(0.0, 0.0, 1.0);
 
 			vec4 s_coords2 = sun.cascades[2] * vec4(world_pos, 1.0);
 			s_coords2 = s_coords2 / s_coords2.w;
 			s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
-			s_coords2.z = s_coords2.z * 0.5 + 0.5;
 
 			for (int i = 0; i < 4; i++)
 			{
 				float cascade2 = texture(sampler_shadow_map2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias));
-
 				lit += 0.25 * cascade2;
 			}
 		}

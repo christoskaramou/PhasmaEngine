@@ -119,7 +119,7 @@ namespace pe
 		texture.addressMode = make_ref(vk::SamplerAddressMode::eClampToEdge);
 		texture.createSampler();
 		static int skyboxIdx = 0;
-		texture.SetDebugName("Skybox_TextureArray" + skyboxIdx++);
+		texture.SetDebugName("Skybox_TextureArray" + std::to_string(skyboxIdx++));
 	}
 	
 	void SkyBox::destroy()

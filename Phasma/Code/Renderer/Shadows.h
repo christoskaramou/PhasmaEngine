@@ -32,7 +32,6 @@ SOFTWARE.
 
 namespace pe
 {
-	
 	class Shadows
 	{
 	public:
@@ -41,7 +40,7 @@ namespace pe
 		~Shadows();
 		
 		mat4 cascades[3];
-		vec3 viewClipZ;
+		vec3 viewZ;
 		static uint32_t imageSize;
 		RenderPass renderPass;
 		std::vector<Image> textures {};

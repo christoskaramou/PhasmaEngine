@@ -63,54 +63,35 @@ namespace pe
 			dii.imageView = *textures[i].view;
 			dii.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
 
-			textureWriteSets[i].dstSet = *descriptorSetDeferred;
-			textureWriteSets[i].dstBinding = i;
-			textureWriteSets[i].dstArrayElement = 0;
-			textureWriteSets[i].descriptorCount = 1;
-			textureWriteSets[i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-			textureWriteSets[i].pImageInfo = &dii;
+			vk::WriteDescriptorSet textureWriteSet;
+			textureWriteSet.dstSet = *descriptorSetDeferred;
+			textureWriteSet.dstBinding = i;
+			textureWriteSet.dstArrayElement = 0;
+			textureWriteSet.descriptorCount = 1;
+			textureWriteSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+			textureWriteSet.pImageInfo = &dii;
+			VulkanContext::Get()->device->updateDescriptorSets(textureWriteSet, nullptr);
 		}
 
 		vk::DescriptorBufferInfo dbi;
 		dbi.buffer = *uniformBuffer.GetBufferVK();
 		dbi.offset = 0;
 		dbi.range = 3 * sizeof(mat4);
-		textureWriteSets[3].dstSet = *descriptorSetDeferred;
-		textureWriteSets[3].dstBinding = 3;
-		textureWriteSets[3].dstArrayElement = 0;
-		textureWriteSets[3].descriptorCount = 1;
-		textureWriteSets[3].descriptorType = vk::DescriptorType::eUniformBuffer;
-		textureWriteSets[3].pBufferInfo = &dbi;
 
-		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+		vk::WriteDescriptorSet bufferWriteSet;
+		bufferWriteSet.dstSet = *descriptorSetDeferred;
+		bufferWriteSet.dstBinding = 3;
+		bufferWriteSet.dstArrayElement = 0;
+		bufferWriteSet.descriptorCount = 1;
+		bufferWriteSet.descriptorType = vk::DescriptorType::eUniformBuffer;
+		bufferWriteSet.pBufferInfo = &dbi;
+
+		VulkanContext::Get()->device->updateDescriptorSets(bufferWriteSet, nullptr);
 	}
 
 	void Shadows::createRenderPass()
 	{
-		vk::AttachmentDescription attachment;
-		attachment.format = *VulkanContext::Get()->depth.format;
-		attachment.samples = vk::SampleCountFlagBits::e1;
-		attachment.loadOp = vk::AttachmentLoadOp::eClear;
-		attachment.storeOp = vk::AttachmentStoreOp::eStore;
-		attachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-		attachment.stencilStoreOp = vk::AttachmentStoreOp::eStore;
-		attachment.initialLayout = vk::ImageLayout::eUndefined;
-		attachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-		vk::AttachmentReference depthAttachmentRef;
-		depthAttachmentRef.attachment = 0;
-		depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-		vk::SubpassDescription subpassDesc;
-		subpassDesc.pDepthStencilAttachment = &depthAttachmentRef;
-
-		vk::RenderPassCreateInfo rpci;
-		rpci.attachmentCount = 1;
-		rpci.pAttachments = &attachment;
-		rpci.subpassCount = 1;
-		rpci.pSubpasses = &subpassDesc;
-
-		renderPass.handle = make_ref(VulkanContext::Get()->device->createRenderPass(rpci));
+		renderPass.Create(*VulkanContext::Get()->depth.format);
 	}
 
 	void Shadows::createFrameBuffers()
@@ -136,7 +117,8 @@ namespace pe
 			texture.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 			texture.createImageView(vk::ImageAspectFlagBits::eDepth);
 			texture.createSampler();
-			texture.SetDebugName("ShadowPass_DepthImage" + textureIdx++);
+			texture.name = "ShadowPass_DepthImage" + std::to_string(textureIdx++);
+			texture.SetDebugName(texture.name);
 		}
 
 		framebuffers.resize(VulkanContext::Get()->swapchain.images.size() * textures.size());
@@ -223,20 +205,20 @@ namespace pe
 		const mat4 view = camera.view;
 		const mat4 invView = camera.invView;
 		const vec3 sunDirection = vec3(&GUI::sun_direction[0]);// *camera.worldOrientation;
-		const vec3 sunFront = -sunDirection;
+		const vec3 sunFront = sunDirection;
 		const vec3 sunRight = normalize(cross(sunFront, camera.WorldUp()));
 		const vec3 sunUp = normalize(cross(sunRight, sunFront));
 		const mat4 sunView = lookAt(-sunFront * (camera.nearPlane - 5.f), sunFront, sunRight, sunUp);
 
 		const float aspect = camera.renderArea.viewport.width / camera.renderArea.viewport.height;
-		const float tanHalfHFOV = tanf(radians(camera.FOV * .5f));
-		const float tanHalfVFOV = tanf(radians(camera.FOV * .5f * aspect));
+		const float tanHalfHFOV = tanf(radians(camera.FOV * .5f * aspect));
+		const float tanHalfVFOV = tanf(radians(camera.FOV * .5f));
 
 		const float cascadeEnd[] = {
-			camera.farPlane,
-			camera.nearPlane * 0.1f,
-			camera.nearPlane * 0.4f,
-			camera.nearPlane
+			-10.f,
+			10.f,
+			40.f,
+			130.f
 		};
 
 		for (uint32_t i = 0; i < 3; i++)
@@ -287,10 +269,9 @@ namespace pe
 			//std::swap(minZ, maxZ); // reverse Z
 			//std::swap(minY, maxY); // reverse Y
 			mat4 sunProj = ortho(minX, maxX, minY, maxY, minZ, maxZ);
-			vec4 vView(0.0f, 0.0f, cascadeEnd[i + 1], 1.0f);
 
 			cascades[i] = sunProj * sunView;
-			viewClipZ[i] = (camera.projection * vView).z;
+			viewZ[i] = cascadeEnd[i + 1];
 		}
 	}
 }

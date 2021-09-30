@@ -237,7 +237,7 @@ namespace pe
 		rpi.pClearValues = clearValues.data();
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-		const vec4 values(shadows.viewClipZ, GUI::shadow_cast);
+		const vec4 values(shadows.viewZ, GUI::shadow_cast);
 		cmd.pushConstants<vec4>(*pipelineComposition.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineComposition.handle);
 		cmd.bindDescriptorSets(

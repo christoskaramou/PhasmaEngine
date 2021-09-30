@@ -56,12 +56,11 @@ float PDsrand(vec2 n)
 
 // inverse_projection gives view space
 // inverse_view_projection gives world space
-// depth is the gl_FragCoord.z
 vec3 getPosFromUV(vec2 UV, float depth, mat4 mat)
 {
 	vec4 ndcPos;
 	ndcPos.xy = UV * 2.0 - 1.0;
-	ndcPos.z = depth; // sample from the gl_FragCoord.z image
+	ndcPos.z = depth;
 	ndcPos.w = 1.0;
 
 	vec4 clipPos = mat * ndcPos;

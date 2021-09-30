@@ -270,15 +270,13 @@ namespace pe
 								*shadows.pipeline.layout,
 								0,
 								{ *node->mesh->descriptorSet, *model.descriptorSet },
-								nullptr
-							);
+								nullptr);
+
 							for (auto& primitive : node->mesh->primitives)
 							{
-								if (primitive.render)
-									cmd.drawIndexed(
-											primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset,
-											node->mesh->vertexOffset + primitive.vertexOffset, 0
-									);
+								//if (primitive.render)
+									cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset,
+											node->mesh->vertexOffset + primitive.vertexOffset, 0);
 							}
 						}
 					}

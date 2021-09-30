@@ -189,9 +189,8 @@ namespace pe
         
         using Object::createVertexBuffer;
         
-        void createVertexBuffer(
-                size_t vertex_size
-        ); // using the base func so the derived func can not hide it, because they have the same name
+        void createVertexBuffer(size_t vertex_size); // using the base func so the derived func can not hide it, because they have the same name
+
         void createIndexBuffer(size_t index_size);
         
         void createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout) override;
