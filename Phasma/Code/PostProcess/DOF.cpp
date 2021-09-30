@@ -59,7 +59,7 @@ namespace pe
 	
 	void DOF::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
+		renderPass.Create(*renderTargets["viewport"].format);
 	}
 	
 	void DOF::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -92,9 +92,9 @@ namespace pe
 	void DOF::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image)
+		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
 		{
-			dsii.emplace_back(*image.sampler, *image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
+			dsii.emplace_back(*image.sampler, *image.view, layout);
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};
@@ -102,7 +102,7 @@ namespace pe
 		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets {
 				wSetImage(*DSet, 0, frameImage),
-				wSetImage(*DSet, 1, renderTargets["depth"])
+				wSetImage(*DSet, 1, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal)
 		};
 		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}

@@ -26,17 +26,9 @@ SOFTWARE.
 #include "Light.glsl"
 
 layout (location = 0) in vec2 in_UV;
-layout (location = 1) in float cast_shadows;
-layout (location = 2) in float max_cascade_dist0;
-layout (location = 3) in float max_cascade_dist1;
-layout (location = 4) in float max_cascade_dist2;
-layout (location = 5) in mat4 shadow_coords0; // small area
-layout (location = 9) in mat4 shadow_coords1; // medium area
-layout (location = 13) in mat4 shadow_coords2; // large area
-
 layout (location = 0) out vec4 outColor;
 
-vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao);
+vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao, float depth);
 
 void main() 
 {
@@ -75,7 +67,7 @@ void main()
 
 			// Volumetric light
 			if (screenSpace.effects1.y > 0.5)
-				outColor.xyz += VolumetricLighting(ubo.sun, frag_pos, in_UV, shadow_coords1, fogFactor);
+				outColor.xyz += VolumetricLighting(ubo.sun, frag_pos, in_UV, sun.cascades[1], fogFactor);
 		}
 
 		return;
@@ -108,7 +100,7 @@ void main()
 
 	// screenSpace.effects3.z -> shadow cast
 	if (screenSpace.effects3.z > 0.5)
-		fragColor += directLight(material, frag_pos, ubo.camPos.xyz, normal, factor_occlusion);
+		fragColor += directLight(material, frag_pos, ubo.camPos.xyz, normal, factor_occlusion, depth);
 
 	for(int i = 0; i < MAX_POINT_LIGHTS; ++i)
 		fragColor += compute_point_light(i, material, frag_pos, ubo.camPos.xyz, normal, factor_occlusion);
@@ -151,7 +143,7 @@ void main()
 
 		// Volumetric light
 		if (screenSpace.effects1.y > 0.5)
-			outColor.xyz += VolumetricLighting(ubo.sun, frag_pos, in_UV, shadow_coords1, fogFactor);
+			outColor.xyz += VolumetricLighting(ubo.sun, frag_pos, in_UV, sun.cascades[1], fogFactor);
 	}
 }
 
@@ -165,52 +157,78 @@ vec2 poissonDisk[8] = vec2[](
 	vec2(0.015656f, 0.749779f),
 	vec2(0.758385f, 0.49617f));
 
-vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao)
+vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao, float depth)
 {
-	// calculate shadow texture coords of each cascade
-	vec4 s_coords0 = shadow_coords0 * vec4(world_pos, 1.0);
-	s_coords0.xy = s_coords0.xy * 0.5 + 0.5;
-	s_coords0 = s_coords0 / s_coords0.w;
+	float lit = 1.0;
 
-	vec4 s_coords1 = shadow_coords1 * vec4(world_pos, 1.0);
-	s_coords1.xy = s_coords1.xy * 0.5 + 0.5;
-	s_coords1 = s_coords1 / s_coords1.w;
+	if (pushConst.cast_shadows > 0.5)
+	{
+		lit = 0.0;
 
-	vec4 s_coords2 = shadow_coords2 * vec4(world_pos, 1.0);
-	s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
-	s_coords2 = s_coords2 / s_coords2.w;
+		const float bias = 0.0007;
+		const float power = 15.0;
 
-	const float bias = 0.0007;
-	const float power = 15.0;
-	float lit = 0.0;
-	float dist = distance(world_pos, camera_pos);
+		if (depth > pushConst.max_cascade_dist0)
+		{
+			//return vec3(1.0, 0.0, 0.0);
 
-	if (dist < max_cascade_dist0) {
-		for (int i = 0; i < 4 * cast_shadows; i++) {
+			vec4 s_coords0 = sun.cascades[0] * vec4(world_pos, 1.0);
+			s_coords0 = s_coords0 / s_coords0.w;
+			s_coords0.xy = s_coords0.xy * 0.5 + 0.5;
+			s_coords0.z = s_coords0.z * 0.5 + 0.5;
 
-			float cascade0 = texture(sampler_shadow_map0, vec3(s_coords0.xy + poissonDisk[i] * 0.0008, s_coords0.z + bias));
-			float cascade1 = texture(sampler_shadow_map1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias));
-			float mix_factor = pow(dist / max_cascade_dist0, power);
+			vec4 s_coords1 = sun.cascades[1] * vec4(world_pos, 1.0);
+			s_coords1 = s_coords1 / s_coords1.w;
+			s_coords1.xy = s_coords1.xy * 0.5 + 0.5;
+			s_coords1.z = s_coords1.z * 0.5 + 0.5;
 
-			lit += 0.25 * mix(cascade0, cascade1, mix_factor);
+			for (int i = 0; i < 4; i++)
+			{
+				float cascade0 = texture(sampler_shadow_map0, vec3(s_coords0.xy + poissonDisk[i] * 0.0008, s_coords0.z + bias));
+				float cascade1 = texture(sampler_shadow_map1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias));
+				float mix_factor = pow(depth / pushConst.max_cascade_dist0, power);
+
+				lit += 0.25 * mix(cascade0, cascade1, mix_factor);
+			}
 		}
-	}
-	else if (dist < max_cascade_dist1) {
-		for (int i = 0; i < 4 * cast_shadows; i++) {
+		else if (depth > pushConst.max_cascade_dist1)
+		{
+			//return vec3(0.0, 1.0, 0.0);
 
-			float cascade1 = texture(sampler_shadow_map1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias));
-			float cascade2 = texture(sampler_shadow_map2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias));
-			float mix_factor = pow(dist / max_cascade_dist1, power);
+			vec4 s_coords1 = sun.cascades[1] * vec4(world_pos, 1.0);
+			s_coords1 = s_coords1 / s_coords1.w;
+			s_coords1.xy = s_coords1.xy * 0.5 + 0.5;
+			s_coords1.z = s_coords1.z * 0.5 + 0.5;
 
-			lit += 0.25 * mix(cascade1, cascade2, mix_factor);
+			vec4 s_coords2 = sun.cascades[2] * vec4(world_pos, 1.0);
+			s_coords2 = s_coords2 / s_coords2.w;
+			s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
+			s_coords2.z = s_coords2.z * 0.5 + 0.5;
+
+			for (int i = 0; i < 4; i++)
+			{
+				float cascade1 = texture(sampler_shadow_map1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias));
+				float cascade2 = texture(sampler_shadow_map2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias));
+				float mix_factor = pow(depth / pushConst.max_cascade_dist1, power);
+
+				lit += 0.25 * mix(cascade1, cascade2, mix_factor);
+			}
 		}
-	}
-	else {
-		for (int i = 0; i < 4 * cast_shadows; i++) {
+		else if (depth > pushConst.max_cascade_dist2)
+		{
+			//return vec3(0.0, 0.0, 1.0);
 
-			float cascade2 = texture(sampler_shadow_map2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias));
+			vec4 s_coords2 = sun.cascades[2] * vec4(world_pos, 1.0);
+			s_coords2 = s_coords2 / s_coords2.w;
+			s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
+			s_coords2.z = s_coords2.z * 0.5 + 0.5;
 
-			lit += 0.25 * cascade2;
+			for (int i = 0; i < 4; i++)
+			{
+				float cascade2 = texture(sampler_shadow_map2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias));
+
+				lit += 0.25 * cascade2;
+			}
 		}
 	}
 

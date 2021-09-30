@@ -43,6 +43,8 @@ namespace pe
 		
 		~Image();
 
+		std::string name{};
+
 		Ref<vk::Image> image;
 		VmaAllocation allocation {};
 		Ref<vk::ImageView> view;

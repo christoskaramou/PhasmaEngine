@@ -28,64 +28,63 @@ SOFTWARE.
 #include "Shader/Shader.h"
 #include "Core/Queue.h"
 #include "RenderApi.h"
+#include <limits>
 
 namespace pe
 {
 	uint32_t Shadows::imageSize = 4096;
-	
+
 	Shadows::Shadows()
 	{
-		descriptorSets = make_ref(std::vector<vk::DescriptorSet>());
+		descriptorSetDeferred = make_ref(vk::DescriptorSet());
 	}
-	
+
 	Shadows::~Shadows()
 	{
 	}
-	
+
 	void Shadows::createDescriptorSets()
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutShadows();
-		
-		descriptorSets->resize(textures.size()); // size of wanted number of cascaded shadows
-		for (uint32_t i = 0; i < descriptorSets->size(); i++)
+		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutShadowsDeferred();
+
+		*descriptorSetDeferred = VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0);
+		VulkanContext::Get()->SetDebugObjectName(*descriptorSetDeferred, "Shadows");
+
+		std::vector<vk::WriteDescriptorSet> textureWriteSets(4);
+
+		for (int i = 0; i < 3; i++)
 		{
-			(*descriptorSets)[i] = VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0);
-			VulkanContext::Get()->SetDebugObjectName((*descriptorSets)[i], "Shadows" + std::to_string(i));
-			
-			std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
-			// MVP
-			vk::DescriptorBufferInfo dbi;
-			dbi.buffer = *uniformBuffers[i].GetBufferVK();
-			dbi.offset = 0;
-			dbi.range = sizeof(ShadowsUBO);
-			
-			textureWriteSets[0].dstSet = (*descriptorSets)[i];
-			textureWriteSets[0].dstBinding = 0;
-			textureWriteSets[0].dstArrayElement = 0;
-			textureWriteSets[0].descriptorCount = 1;
-			textureWriteSets[0].descriptorType = vk::DescriptorType::eUniformBuffer;
-			textureWriteSets[0].pBufferInfo = &dbi;
-			
 			// sampler
 			vk::DescriptorImageInfo dii;
 			dii.sampler = *textures[i].sampler;
 			dii.imageView = *textures[i].view;
 			dii.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
-			
-			textureWriteSets[1].dstSet = (*descriptorSets)[i];
-			textureWriteSets[1].dstBinding = 1;
-			textureWriteSets[1].dstArrayElement = 0;
-			textureWriteSets[1].descriptorCount = 1;
-			textureWriteSets[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-			textureWriteSets[1].pImageInfo = &dii;
-			
-			VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+
+			textureWriteSets[i].dstSet = *descriptorSetDeferred;
+			textureWriteSets[i].dstBinding = i;
+			textureWriteSets[i].dstArrayElement = 0;
+			textureWriteSets[i].descriptorCount = 1;
+			textureWriteSets[i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+			textureWriteSets[i].pImageInfo = &dii;
 		}
+
+		vk::DescriptorBufferInfo dbi;
+		dbi.buffer = *uniformBuffer.GetBufferVK();
+		dbi.offset = 0;
+		dbi.range = 3 * sizeof(mat4);
+		textureWriteSets[3].dstSet = *descriptorSetDeferred;
+		textureWriteSets[3].dstBinding = 3;
+		textureWriteSets[3].dstArrayElement = 0;
+		textureWriteSets[3].descriptorCount = 1;
+		textureWriteSets[3].descriptorType = vk::DescriptorType::eUniformBuffer;
+		textureWriteSets[3].pBufferInfo = &dbi;
+
+		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
-	
+
 	void Shadows::createRenderPass()
 	{
 		vk::AttachmentDescription attachment;
@@ -97,23 +96,23 @@ namespace pe
 		attachment.stencilStoreOp = vk::AttachmentStoreOp::eStore;
 		attachment.initialLayout = vk::ImageLayout::eUndefined;
 		attachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-		
+
 		vk::AttachmentReference depthAttachmentRef;
 		depthAttachmentRef.attachment = 0;
 		depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-		
+
 		vk::SubpassDescription subpassDesc;
 		subpassDesc.pDepthStencilAttachment = &depthAttachmentRef;
-		
+
 		vk::RenderPassCreateInfo rpci;
 		rpci.attachmentCount = 1;
 		rpci.pAttachments = &attachment;
 		rpci.subpassCount = 1;
 		rpci.pSubpasses = &subpassDesc;
-		
+
 		renderPass.handle = make_ref(VulkanContext::Get()->device->createRenderPass(rpci));
 	}
-	
+
 	void Shadows::createFrameBuffers()
 	{
 		textures.resize(3);
@@ -128,18 +127,18 @@ namespace pe
 			texture.samplerCompareEnable = VK_TRUE;
 			texture.compareOp = make_ref(vk::CompareOp::eGreaterOrEqual);
 			texture.samplerMipmapMode = make_ref(vk::SamplerMipmapMode::eLinear);
-			
+
 			texture.createImage(
-					Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal,
-					vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
-					vk::MemoryPropertyFlagBits::eDeviceLocal
+				Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
+				vk::MemoryPropertyFlagBits::eDeviceLocal
 			);
 			texture.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 			texture.createImageView(vk::ImageAspectFlagBits::eDepth);
 			texture.createSampler();
 			texture.SetDebugName("ShadowPass_DepthImage" + textureIdx++);
 		}
-		
+
 		framebuffers.resize(VulkanContext::Get()->swapchain.images.size() * textures.size());
 		for (uint32_t i = 0; i < framebuffers.size(); ++i)
 		{
@@ -149,151 +148,149 @@ namespace pe
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
-	
+
 	void Shadows::createPipeline()
 	{
-		Shader vert {"Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true};
-		
+		Shader vert{ "Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true };
+
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.vertexInputBindingDescriptions = make_ref(Vertex::getBindingDescriptionGeneral());
 		pipeline.info.vertexInputAttributeDescriptions = make_ref(Vertex::getAttributeDescriptionGeneral());
 		pipeline.info.width = static_cast<float>(Shadows::imageSize);
 		pipeline.info.height = static_cast<float>(Shadows::imageSize);
 		pipeline.info.cullMode = CullMode::Front;
+		pipeline.info.pushConstantStage = PushConstantStage::Vertex;
+		pipeline.info.pushConstantSize = sizeof(mat4);
 		pipeline.info.colorBlendAttachments = make_ref(
-				std::vector<vk::PipelineColorBlendAttachmentState> {*textures[0].blentAttachment}
+			std::vector<vk::PipelineColorBlendAttachmentState> {*textures[0].blentAttachment}
 		);
 		pipeline.info.dynamicStates = make_ref(std::vector<vk::DynamicState> {vk::DynamicState::eDepthBias});
-		pipeline.info.descriptorSetLayouts = make_ref(
-				std::vector<vk::DescriptorSetLayout>
-						{
-								Pipeline::getDescriptorSetLayoutShadows(),
-								Pipeline::getDescriptorSetLayoutMesh(),
-								Pipeline::getDescriptorSetLayoutModel()
-						}
-		);
+		pipeline.info.descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>
+		{
+			Pipeline::getDescriptorSetLayoutMesh(),
+			Pipeline::getDescriptorSetLayoutModel()
+		});
 		pipeline.info.renderPass = renderPass;
-		
+
 		pipeline.createGraphicsPipeline();
 	}
-	
+
 	void Shadows::createUniformBuffers()
 	{
-		uniformBuffers.resize(textures.size());
-		int ubIdx = 0;
-		for (auto& buffer : uniformBuffers)
-		{
-			buffer.CreateBuffer(
-				sizeof(ShadowsUBO),
-				(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
-				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-			buffer.Map();
-			buffer.Zero();
-			buffer.Flush();
-			buffer.Unmap();
-			buffer.SetDebugName("Shadows_UB" + ubIdx++);
-		}
+		uniformBuffer.CreateBuffer(
+			3 * sizeof(mat4),
+			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
+			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+		uniformBuffer.Map();
+		uniformBuffer.Zero();
+		uniformBuffer.Flush();
+		uniformBuffer.Unmap();
+		uniformBuffer.SetDebugName("Shadows_UB_Fragment");
 	}
-	
+
 	void Shadows::destroy()
 	{
 		if (*renderPass.handle)
 			VulkanContext::Get()->device->destroyRenderPass(*renderPass.handle);
-		
+
 		if (Pipeline::getDescriptorSetLayoutShadows())
 		{
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutShadows());
 			Pipeline::getDescriptorSetLayoutShadows() = nullptr;
 		}
-		
+
 		for (auto& texture : textures)
 			texture.destroy();
-		
+
 		for (auto& fb : framebuffers)
 			VulkanContext::Get()->device->destroyFramebuffer(*fb.handle);
-		
-		for (auto& buffer : uniformBuffers)
-			buffer.Destroy();
-		
+
+		uniformBuffer.Destroy();
 		pipeline.destroy();
 	}
-	
+
 	void Shadows::update(Camera& camera)
 	{
 		if (GUI::shadow_cast)
 		{
-			//       Fustum
-			//
-			//  opposite opposite
-			//     \    |    /
-			//      \   |   /
-			//       \ adj /
-			//        \ | /
-			//         \|/
-			//        theta
-			// 
-			// opposite = adj*tan(theta)
-			// 
-			
-			const float theta = radians(camera.FOV * .5f);
-			const float adj = camera.nearPlane; // reversed near/far plane
-			const float opposite = adj * tan(theta);
-			const vec3 sunDirection = vec3(&GUI::sun_direction[0]) * camera.worldOrientation;
-			const vec3 sunPosition = camera.position + ((-sunDirection) * adj * 0.5f);
-			const vec3 sunFront = sunDirection;
-			const vec3 sunRight = normalize(cross(sunFront, camera.WorldUp()));
-			const vec3 sunUp = normalize(cross(sunRight, sunFront));
-			const mat4 lookAt = pe::lookAt(sunPosition, sunFront, sunRight, sunUp);
-			const float scale0 = 0.05f; // small area
-			const float scale1 = 0.15f; // medium area
-			const float scale2 = 0.5f; // large area
-			const float maxDistance0 = adj * scale0 * .43f;
-			const float maxDistance1 = adj * scale1 * .43f;
-			const float maxDistance2 = adj * scale2 * .43f;
-
-			float orthoSide = opposite * scale0;
-			mat4 ortho = pe::ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane);
-			shadows_UBO[0] =
-			{
-				ortho,
-				lookAt,
-				1.0f,
-				maxDistance0,
-				maxDistance1,
-				maxDistance2
-			};
-
-			orthoSide = opposite * scale1;
-			ortho = pe::ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane);
-			shadows_UBO[1] =
-			{
-				ortho,
-				lookAt,
-				1.0f,
-				maxDistance0,
-				maxDistance1,
-				maxDistance2
-			};
-
-			orthoSide = opposite * scale2;
-			ortho = pe::ortho(-orthoSide, orthoSide, -orthoSide, orthoSide, camera.nearPlane, camera.farPlane);
-			shadows_UBO[2] =
-			{
-				ortho,
-				lookAt,
-				1.0f,
-				maxDistance0,
-				maxDistance1,
-				maxDistance2
-			};
+			CalculateCascades(camera);
+			uniformBuffer.CopyRequest(Launch::AsyncDeferred, { cascades, 3 * sizeof(mat4), 0 });
 		}
-		else
+	}
+
+	void Shadows::CalculateCascades(Camera& camera)
+	{
+		const mat4 view = camera.view;
+		const mat4 invView = camera.invView;
+		const vec3 sunDirection = vec3(&GUI::sun_direction[0]);// *camera.worldOrientation;
+		const vec3 sunFront = -sunDirection;
+		const vec3 sunRight = normalize(cross(sunFront, camera.WorldUp()));
+		const vec3 sunUp = normalize(cross(sunRight, sunFront));
+		const mat4 sunView = lookAt(-sunFront * (camera.nearPlane - 5.f), sunFront, sunRight, sunUp);
+
+		const float aspect = camera.renderArea.viewport.width / camera.renderArea.viewport.height;
+		const float tanHalfHFOV = tanf(radians(camera.FOV * .5f));
+		const float tanHalfVFOV = tanf(radians(camera.FOV * .5f * aspect));
+
+		const float cascadeEnd[] = {
+			camera.farPlane,
+			camera.nearPlane * 0.1f,
+			camera.nearPlane * 0.4f,
+			camera.nearPlane
+		};
+
+		for (uint32_t i = 0; i < 3; i++)
 		{
-			shadows_UBO[0].castShadows = 0.f;
-		}
+			float xn = cascadeEnd[i + 0] * tanHalfHFOV;
+			float xf = cascadeEnd[i + 1] * tanHalfHFOV;
+			float yn = cascadeEnd[i + 0] * tanHalfVFOV;
+			float yf = cascadeEnd[i + 1] * tanHalfVFOV;
 
-		uniformBuffers[0].CopyRequest(Launch::AsyncDeferred, { &shadows_UBO[0], sizeof(ShadowsUBO), 0 });
-		uniformBuffers[1].CopyRequest(Launch::AsyncDeferred, { &shadows_UBO[1], sizeof(ShadowsUBO), 0 });
-		uniformBuffers[2].CopyRequest(Launch::AsyncDeferred, { &shadows_UBO[2], sizeof(ShadowsUBO), 0 });
+			vec4 frustumCorners[] = {
+				// near face
+				vec4( xn,  yn, cascadeEnd[i], 1.0),
+				vec4(-xn,  yn, cascadeEnd[i], 1.0),
+				vec4( xn, -yn, cascadeEnd[i], 1.0),
+				vec4(-xn, -yn, cascadeEnd[i], 1.0),
+
+				// far face
+				vec4( xf,  yf, cascadeEnd[i + 1], 1.0),
+				vec4(-xf,  yf, cascadeEnd[i + 1], 1.0),
+				vec4( xf, -yf, cascadeEnd[i + 1], 1.0),
+				vec4(-xf, -yf, cascadeEnd[i + 1], 1.0)
+			};
+
+			vec4 frustumCornersL[8];
+
+			float minX = std::numeric_limits<float>::max();
+			float maxX = std::numeric_limits<float>::min();
+			float minY = std::numeric_limits<float>::max();
+			float maxY = std::numeric_limits<float>::min();
+			float minZ = std::numeric_limits<float>::max();
+			float maxZ = std::numeric_limits<float>::min();
+
+			for (uint32_t j = 0; j < 8; j++) {
+
+				// Transform the frustum coordinate from view to world space
+				vec4 vW = invView * frustumCorners[j];// *vec4(camera.worldOrientation, 1.f);
+
+				// Transform the frustum coordinate from world to light space
+				frustumCornersL[j] = sunView * vW;
+
+				minX = minimum(minX, frustumCornersL[j].x);
+				maxX = maximum(maxX, frustumCornersL[j].x);
+				minY = minimum(minY, frustumCornersL[j].y);
+				maxY = maximum(maxY, frustumCornersL[j].y);
+				minZ = minimum(minZ, frustumCornersL[j].z);
+				maxZ = maximum(maxZ, frustumCornersL[j].z);
+			}
+			//std::swap(minZ, maxZ); // reverse Z
+			//std::swap(minY, maxY); // reverse Y
+			mat4 sunProj = ortho(minX, maxX, minY, maxY, minZ, maxZ);
+			vec4 vView(0.0f, 0.0f, cascadeEnd[i + 1], 1.0f);
+
+			cascades[i] = sunProj * sunView;
+			viewClipZ[i] = (camera.projection * vView).z;
+		}
 	}
 }

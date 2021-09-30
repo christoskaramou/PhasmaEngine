@@ -37,9 +37,7 @@ namespace pe
 		Create(width, height, std::vector<vk::ImageView> {view}, renderPass);
 	}
 	
-	void FrameBuffer::Create(
-			uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, const RenderPass& renderPass
-	)
+	void FrameBuffer::Create(uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, const RenderPass& renderPass)
 	{
 		
 		vk::FramebufferCreateInfo fbci;

@@ -206,8 +206,7 @@ namespace pe
     // center x,y,z - radius w
     bool Camera::SphereInFrustum(const vec4& boundingSphere) const
     {
-        for (auto& plane : frustum
-                )
+        for (auto& plane : frustum)
         {
             const float dist = dot(plane.normal, vec3(boundingSphere)) + plane.d;
             

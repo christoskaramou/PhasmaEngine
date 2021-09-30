@@ -50,6 +50,12 @@ struct SpotLight
 	vec4 end; // .w = radius
 };
 
+layout(push_constant) uniform Constants {
+	float max_cascade_dist0;
+	float max_cascade_dist1;
+	float max_cascade_dist2;
+	float cast_shadows;
+} pushConst;
 layout(set = 0, binding = 0) uniform sampler2D sampler_depth;
 layout(set = 0, binding = 1) uniform sampler2D sampler_normal;
 layout(set = 0, binding = 2) uniform sampler2D sampler_albedo;
@@ -66,10 +72,11 @@ layout(set = 0, binding = 6) uniform sampler2D sampler_ssr;
 layout(set = 0, binding = 7) uniform sampler2D sampler_emission;
 layout(set = 0, binding = 8) uniform sampler2D sampler_lut_IBL;
 layout(set = 0, binding = 9) uniform SS { mat4 invViewProj; vec4 effects0; vec4 effects1; vec4 effects2; vec4 effects3;} screenSpace;
-layout(set = 1, binding = 1) uniform sampler2DShadow sampler_shadow_map0;
-layout(set = 2, binding = 1) uniform sampler2DShadow sampler_shadow_map1;
-layout(set = 3, binding = 1) uniform sampler2DShadow sampler_shadow_map2;
-layout(set = 4, binding = 0) uniform samplerCube sampler_cube_map;
+layout(set = 1, binding = 0) uniform sampler2DShadow sampler_shadow_map0;
+layout(set = 1, binding = 1) uniform sampler2DShadow sampler_shadow_map1;
+layout(set = 1, binding = 2) uniform sampler2DShadow sampler_shadow_map2;
+layout(set = 1, binding = 3) uniform shadow_buffer0 { mat4 cascades[3]; } sun;
+layout(set = 2, binding = 0) uniform samplerCube sampler_cube_map;
 
 vec3 compute_point_light(int lightIndex, Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao)
 {

@@ -134,13 +134,10 @@ namespace pe
 	void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
-		const auto wSetImage = [&dsii](
-				const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image,
-				vk::ImageLayout imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-		)
+		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
 		{
-			dsii.emplace_back(*image.sampler, *image.view, imageLayout);
-			return vk::WriteDescriptorSet {
+			dsii.emplace_back(*image.sampler, *image.view, layout);
+			return vk::WriteDescriptorSet{
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};
 		};
@@ -154,7 +151,7 @@ namespace pe
 		};
 		
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets {
-				wSetImage(*DSet, 0, renderTargets["depth"]),
+				wSetImage(*DSet, 0, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
 				wSetImage(*DSet, 1, renderTargets["normal"]),
 				wSetImage(*DSet, 2, noiseTex),
 				wSetBuffer(*DSet, 3, UB_Kernel),
@@ -244,8 +241,8 @@ namespace pe
 	
 	void SSAO::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(*renderTargets["ssao"].format, vk::Format::eUndefined);
-		blurRenderPass.Create(*renderTargets["ssaoBlur"].format, vk::Format::eUndefined);
+		renderPass.Create(*renderTargets["ssao"].format);
+		blurRenderPass.Create(*renderTargets["ssaoBlur"].format);
 	}
 	
 	void SSAO::createFrameBuffers(std::map<std::string, Image>& renderTargets)

@@ -320,6 +320,31 @@ namespace pe
 		ImGui::Separator();
 		ImGui::Separator();
 		ImGui::Text("Total: %i (%.3f ms)", totalPasses, totalTime);
+
+		ImGui::Separator();
+		ImGui::Separator();
+		ImGui::Separator();
+		ImGui::Text("Render Target");
+		static const char* current_item = "viewport";
+		std::vector<const char*> items(s_renderImages.size());
+		for (int i = 0; i < items.size(); i++)
+			items[i] = s_renderImages[i]->name.c_str();
+
+		if (ImGui::BeginCombo("##combo", current_item))
+		{
+			for (int n = 0; n < items.size(); n++)
+			{
+				bool is_selected = (current_item == items[n]);
+				if (ImGui::Selectable(items[n], is_selected))
+				{
+					current_item = items[n];
+					s_currRenderImage = s_renderImages[n];
+				}
+				if (is_selected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
 		
 		tlPanelPos = ImGui::GetWindowPos();
 		tlPanelSize = ImGui::GetWindowSize();
@@ -926,9 +951,7 @@ namespace pe
 		
 		vk::ImageBlit blit;
 		blit.srcOffsets[0] = vk::Offset3D {0, 0, 0};
-		blit.srcOffsets[1] = vk::Offset3D {
-				static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 1
-		};
+		blit.srcOffsets[1] = vk::Offset3D{ static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 1 };
 		blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		blit.srcSubresource.layerCount = 1;
 		blit.dstOffsets[0] = vk::Offset3D {static_cast<int32_t>(winPos.x), static_cast<int32_t>(winPos.y), 0};

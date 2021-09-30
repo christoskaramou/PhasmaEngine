@@ -66,10 +66,10 @@ namespace pe
 	void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
-		const auto wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image)
+		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
 		{
-			dsii.emplace_back(*image.sampler, *image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
-			return vk::WriteDescriptorSet {
+			dsii.emplace_back(*image.sampler, *image.view, layout);
+			return vk::WriteDescriptorSet{
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};
 		};
@@ -84,7 +84,7 @@ namespace pe
 		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets {
 				wSetImage(*DSet, 0, renderTargets["albedo"]),
-				wSetImage(*DSet, 1, renderTargets["depth"]),
+				wSetImage(*DSet, 1, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
 				wSetImage(*DSet, 2, renderTargets["normal"]),
 				wSetImage(*DSet, 3, renderTargets["srm"]),
 				wSetBuffer(*DSet, 4, UBReflection)
@@ -133,7 +133,7 @@ namespace pe
 	
 	void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(*renderTargets["ssr"].format, vk::Format::eUndefined);
+		renderPass.Create(*renderTargets["ssr"].format);
 	}
 	
 	void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)

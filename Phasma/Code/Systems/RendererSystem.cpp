@@ -47,7 +47,6 @@ namespace pe
 
 		// INIT RENDERING
 		AddRenderTarget("viewport", vulkan->surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
-		AddRenderTarget("depth", vk::Format::eR32Sfloat, vk::ImageUsageFlags());
 		AddRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat, vk::ImageUsageFlags());
 		AddRenderTarget("albedo", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
 		AddRenderTarget("srm", vulkan->surface.formatKHR->format, vk::ImageUsageFlags()); // Specular Roughness Metallic

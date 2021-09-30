@@ -478,9 +478,11 @@ namespace pe
 			throw std::runtime_error("Depth format is undefined");
 		
 		depth.createImage(
-				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale), vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal
+			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+			vk::ImageTiling::eOptimal,
+			vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
+			vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
 		depth.createImageView(vk::ImageAspectFlagBits::eDepth);
 		
@@ -490,6 +492,7 @@ namespace pe
 		depth.samplerCompareEnable = VK_TRUE;
 		depth.createSampler();
 		depth.SetDebugName("DepthImage");
+		depth.name = "DepthImage";
 		
 		depth.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 	}

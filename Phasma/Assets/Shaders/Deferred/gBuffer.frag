@@ -41,12 +41,11 @@ layout (location = 6) in vec4 positionCS;
 layout (location = 7) in vec4 previousPositionCS;
 layout (location = 8) in vec4 positionWS;
 
-layout (location = 0) out float outDepth;
-layout (location = 1) out vec3 outNormal;
-layout (location = 2) out vec4 outAlbedo;
-layout (location = 3) out vec3 outMetRough;
-layout (location = 4) out vec2 outVelocity;
-layout (location = 5) out vec4 outEmissive;
+layout (location = 0) out vec3 outNormal;
+layout (location = 1) out vec4 outAlbedo;
+layout (location = 2) out vec3 outMetRough;
+layout (location = 3) out vec2 outVelocity;
+layout (location = 4) out vec4 outEmissive;
 
 void main() {
 	vec4 basicColor = texture(bcSampler, inUV) + inColor; 
@@ -55,7 +54,6 @@ void main() {
 	vec3 emissive = texture(eSampler, inUV).xyz;
 	float ao = texture(oSampler, inUV).r;
 
-	outDepth = gl_FragCoord.z;
 	outNormal = getNormal(positionWS.xyz, nSampler, inNormal, inUV);
 	outAlbedo = vec4(basicColor.xyz * ao, basicColor.a) * baseColorFactor;
 	outMetRough = vec3(0.0, metRough.y, metRough.z);

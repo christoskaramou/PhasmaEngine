@@ -35,49 +35,62 @@ namespace pe
 	{
 	}
 	
-	void RenderPass::Create(const vk::Format& format, const vk::Format& depthFormat)
+	void RenderPass::Create(const vk::Format& format)
 	{
-		Create(std::vector<vk::Format> {format}, depthFormat);
+		Create(std::vector<vk::Format> {format});
+	}
+
+	bool IsDepthFormat(vk::Format& format)
+	{
+		return format == vk::Format::eD32SfloatS8Uint ||
+			format == vk::Format::eD32Sfloat ||
+			format == vk::Format::eD24UnormS8Uint;
 	}
 	
-	void RenderPass::Create(const std::vector<vk::Format>& formats, const vk::Format& depthFormat)
+	void RenderPass::Create(const std::vector<vk::Format>& formats)
 	{
-		uint32_t size = static_cast<uint32_t>(formats.size());
-		bool hasDepth =
-				depthFormat == vk::Format::eD32SfloatS8Uint ||
-				depthFormat == vk::Format::eD32Sfloat ||
-				depthFormat == vk::Format::eD24UnormS8Uint;
-		
-		std::vector<vk::AttachmentDescription> attachments(size);
-		std::vector<vk::AttachmentReference> colorReferences(size);
+		std::vector<vk::AttachmentDescription> attachments{};
+		std::vector<vk::AttachmentReference> colorReferences{};
 		vk::AttachmentReference depthReference;
-		
-		for (uint32_t i = 0; i < size; i++)
+
+		bool hasDepth = false;
+		uint32_t size = static_cast<uint32_t>(formats.size());
+		uint32_t attachmentIndex = 0;
+		for (auto format : formats)
 		{
-			attachments[i].format = formats[i];
-			attachments[i].samples = vk::SampleCountFlagBits::e1;
-			attachments[i].loadOp = vk::AttachmentLoadOp::eClear;
-			attachments[i].storeOp = vk::AttachmentStoreOp::eStore;
-			attachments[i].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-			attachments[i].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-			attachments[i].initialLayout = vk::ImageLayout::eUndefined;
-			attachments[i].finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-			colorReferences[i] = {i, vk::ImageLayout::eColorAttachmentOptimal};
-		}
-		
-		if (hasDepth)
-		{
-			vk::AttachmentDescription attachmentDescription;
-			attachmentDescription.format = depthFormat;
-			attachmentDescription.samples = vk::SampleCountFlagBits::e1;
-			attachmentDescription.loadOp = vk::AttachmentLoadOp::eClear;
-			attachmentDescription.storeOp = vk::AttachmentStoreOp::eDontCare;
-			attachmentDescription.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-			attachmentDescription.stencilStoreOp = vk::AttachmentStoreOp::eStore;
-			attachmentDescription.initialLayout = vk::ImageLayout::eUndefined;
-			attachmentDescription.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-			attachments.push_back(attachmentDescription);
-			depthReference = {size, vk::ImageLayout::eDepthStencilAttachmentOptimal};
+			if (!IsDepthFormat(format))
+			{
+				vk::AttachmentDescription attachment{};
+
+				attachment.format = format;
+				attachment.samples = vk::SampleCountFlagBits::e1;
+				attachment.loadOp = vk::AttachmentLoadOp::eClear;
+				attachment.storeOp = vk::AttachmentStoreOp::eStore;
+				attachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+				attachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+				attachment.initialLayout = vk::ImageLayout::eUndefined;
+				attachment.finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+				attachments.push_back(attachment);
+
+				vk::AttachmentReference reference{ attachmentIndex++, vk::ImageLayout::eColorAttachmentOptimal };
+				colorReferences.push_back(reference);
+			}
+			else
+			{
+				// Only one depth reference sould make it in here, else it will be overwrite
+				vk::AttachmentDescription attachmentDescription;
+				attachmentDescription.format = format;
+				attachmentDescription.samples = vk::SampleCountFlagBits::e1;
+				attachmentDescription.loadOp = vk::AttachmentLoadOp::eClear;
+				attachmentDescription.storeOp = vk::AttachmentStoreOp::eStore;
+				attachmentDescription.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+				attachmentDescription.stencilStoreOp = vk::AttachmentStoreOp::eStore;
+				attachmentDescription.initialLayout = vk::ImageLayout::eUndefined;
+				attachmentDescription.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+				attachments.push_back(attachmentDescription);
+				depthReference = { attachmentIndex++, vk::ImageLayout::eDepthStencilAttachmentOptimal };
+				hasDepth = true;
+			}
 		}
 		
 		std::array<vk::SubpassDescription, 1> subpassDescriptions {};

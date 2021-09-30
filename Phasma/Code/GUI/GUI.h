@@ -90,7 +90,7 @@ namespace pe
         static inline float fog_max_height = 3.0f;
         static inline bool shadow_cast = false;
         static inline float sun_intensity = 7.f;
-        static inline std::array<float, 3> sun_direction { -0.196116f, 0.98058f, 0.f};
+        static inline std::array<float, 3> sun_direction { 0.7f, 0.7f, 0.7f};
         static inline float fps = 60.0f;
         static inline float cameraSpeed = 3.5f;
         static inline std::array<float, 3> depthBias {0.0f, 0.0f, -6.2f};
@@ -109,6 +109,8 @@ namespace pe
         static inline std::vector<std::array<float, 3>> model_pos {};
         static inline std::vector<std::array<float, 3>> model_rot {};
         static inline int modelItemSelected = -1;
+        static inline Image* s_currRenderImage = nullptr;
+        static inline std::vector<Image*> s_renderImages{};
         static inline ImVec2 tlPanelPos = ImVec2();
         static inline ImVec2 tlPanelSize = ImVec2();
         static inline ImVec2 mlPanelPos = ImVec2();

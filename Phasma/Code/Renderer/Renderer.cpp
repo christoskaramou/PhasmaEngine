@@ -109,9 +109,8 @@ namespace pe
 			deferred.batchEnd();
 			metrics[2].end(&GUI::metrics[2]);
 		}
-		
 		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorRead);
-		renderTargets["depth"].changeLayout(cmd, LayoutState::ColorRead);
+		VulkanContext::Get()->depth.changeLayout(cmd, LayoutState::DepthRead);
 		renderTargets["normal"].changeLayout(cmd, LayoutState::ColorRead);
 		renderTargets["srm"].changeLayout(cmd, LayoutState::ColorRead);
 		renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorRead);
@@ -201,9 +200,9 @@ namespace pe
 			motionBlur.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
 			metrics[9].end(&GUI::metrics[9]);
 		}
-		
+
 		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorWrite);
-		renderTargets["depth"].changeLayout(cmd, LayoutState::ColorWrite);
+		VulkanContext::Get()->depth.changeLayout(cmd, LayoutState::DepthWrite);
 		renderTargets["normal"].changeLayout(cmd, LayoutState::ColorWrite);
 		renderTargets["srm"].changeLayout(cmd, LayoutState::ColorWrite);
 		renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorWrite);
@@ -216,7 +215,7 @@ namespace pe
 		
 		// GUI
 		metrics[10].start(&cmd);
-		gui.scaleToRenderArea(cmd, renderTargets["viewport"], imageIndex);
+		gui.scaleToRenderArea(cmd, GUI::s_currRenderImage ? *GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
 		gui.draw(cmd, imageIndex);
 		metrics[10].end(&GUI::metrics[10]);
 		
@@ -265,11 +264,13 @@ namespace pe
 					{
 						if (node->mesh)
 						{
+							cmd.pushConstants<mat4>(*shadows.pipeline.layout, vk::ShaderStageFlagBits::eVertex, 0, shadows.cascades[i]);
 							cmd.bindDescriptorSets(
-									vk::PipelineBindPoint::eGraphics, *shadows.pipeline.layout, 0, {
-											(*shadows.descriptorSets)[i], *node->mesh->descriptorSet,
-											*model.descriptorSet
-									}, nullptr
+								vk::PipelineBindPoint::eGraphics,
+								*shadows.pipeline.layout,
+								0,
+								{ *node->mesh->descriptorSet, *model.descriptorSet },
+								nullptr
 							);
 							for (auto& primitive : node->mesh->primitives)
 							{
@@ -297,6 +298,7 @@ namespace pe
 			return;
 		
 		renderTargets[name] = Image();
+		renderTargets[name].name = name;
 		renderTargets[name].format = make_ref(format);
 		renderTargets[name].initialLayout = make_ref(vk::ImageLayout::eUndefined);
 		renderTargets[name].createImage(
@@ -323,6 +325,8 @@ namespace pe
 		renderTargets[name].blentAttachment->colorWriteMask =
 				vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
 				vk::ColorComponentFlagBits::eA;
+
+		GUI::s_renderImages.push_back(&renderTargets[name]);
 	}
 
 #ifndef IGNORE_SCRIPTS
@@ -441,6 +445,7 @@ namespace pe
 		for (auto& RT : renderTargets)
 			RT.second.destroy();
 		renderTargets.clear();
+		GUI::s_renderImages.clear();
 		
 		// GUI
 		gui.renderPass.Destroy();
@@ -530,7 +535,6 @@ namespace pe
 		vulkan.CreateDepth();
 		
 		AddRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
-		AddRenderTarget("depth", vk::Format::eR32Sfloat, vk::ImageUsageFlags());
 		AddRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat, vk::ImageUsageFlags());
 		AddRenderTarget("albedo", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
 		AddRenderTarget("srm", vulkan.surface.formatKHR->format, vk::ImageUsageFlags()); // Specular Roughness Metallic

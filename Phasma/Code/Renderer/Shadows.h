@@ -32,15 +32,6 @@ SOFTWARE.
 
 namespace pe
 {
-	struct ShadowsUBO
-	{
-		mat4 projection;
-		mat4 view;
-		float castShadows; // TODO: put it in pushconstants
-		float maxCascadeDist0;
-		float maxCascadeDist1;
-		float maxCascadeDist2;
-	};
 	
 	class Shadows
 	{
@@ -49,13 +40,14 @@ namespace pe
 		
 		~Shadows();
 		
-		ShadowsUBO shadows_UBO[3] {};
+		mat4 cascades[3];
+		vec3 viewClipZ;
 		static uint32_t imageSize;
 		RenderPass renderPass;
 		std::vector<Image> textures {};
-		Ref<std::vector<vk::DescriptorSet>> descriptorSets;
+		Ref<vk::DescriptorSet> descriptorSetDeferred;
 		std::vector<FrameBuffer> framebuffers {};
-		std::vector<Buffer> uniformBuffers {};
+		Buffer uniformBuffer;
 		Pipeline pipeline;
 		
 		void update(Camera& camera);
@@ -69,6 +61,8 @@ namespace pe
 		void createFrameBuffers();
 		
 		void createPipeline();
+
+		void CalculateCascades(Camera& camera);
 		
 		void destroy();
 	};

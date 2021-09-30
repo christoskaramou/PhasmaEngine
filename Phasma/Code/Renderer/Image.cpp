@@ -107,6 +107,8 @@ namespace pe
 			const vk::MemoryPropertyFlags& properties
 	)
 	{
+		auto _usage = usage | vk::ImageUsageFlagBits::eTransferSrc; // All images can be copied
+
 		auto vCtx = VulkanContext::Get();
 		
 		const auto fProps = vCtx->gpu->getFormatProperties(*format);
@@ -128,7 +130,7 @@ namespace pe
 		
 		auto const ifProps = vCtx->gpu
 		                         ->getImageFormatProperties(
-				                         *format, vk::ImageType::e2D, tiling, usage, vk::ImageCreateFlags());
+				                         *format, vk::ImageType::e2D, tiling, _usage, vk::ImageCreateFlags());
 		if (ifProps.maxArrayLayers < arrayLayers ||
 		    ifProps.maxExtent.width < width ||
 		    ifProps.maxExtent.height < height ||
@@ -153,7 +155,7 @@ namespace pe
 		imageInfo.arrayLayers = arrayLayers;
 		imageInfo.samples = *samples;
 		imageInfo.tiling = tiling;
-		imageInfo.usage = usage;
+		imageInfo.usage = _usage;
 		imageInfo.sharingMode = vk::SharingMode::eExclusive;
 		imageInfo.initialLayout = *initialLayout;
 		VkImageCreateInfo vkImageInfo = VkImageCreateInfo(imageInfo);

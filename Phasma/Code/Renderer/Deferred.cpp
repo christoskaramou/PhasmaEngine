@@ -165,9 +165,9 @@ namespace pe
 	void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image)
+		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
 		{
-			dsii.emplace_back(*image.sampler, *image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
+			dsii.emplace_back(*image.sampler, *image.view, layout);
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};
@@ -183,7 +183,7 @@ namespace pe
 		
 		Buffer& lightsUniform = Context::Get()->GetSystem<LightSystem>()->GetUniform();
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
-				wSetImage(*DSComposition, 0, renderTargets["depth"]),
+				wSetImage(*DSComposition, 0, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
 				wSetImage(*DSComposition, 1, renderTargets["normal"]),
 				wSetImage(*DSComposition, 2, renderTargets["albedo"]),
 				wSetImage(*DSComposition, 3, renderTargets["srm"]),
@@ -220,9 +220,7 @@ namespace pe
 		uniform.CopyRequest(Launch::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
 	}
 	
-	void Deferred::draw(
-			vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent
-	)
+	void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent)
 	{
 		// Begin Composition
 		vk::ClearValue clearColor;
@@ -238,13 +236,16 @@ namespace pe
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		rpi.pClearValues = clearValues.data();
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		
+
+		const vec4 values(shadows.viewClipZ, GUI::shadow_cast);
+		cmd.pushConstants<vec4>(*pipelineComposition.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineComposition.handle);
 		cmd.bindDescriptorSets(
-				vk::PipelineBindPoint::eGraphics, *pipelineComposition.layout, 0, {
-						*DSComposition, (*shadows.descriptorSets)[0], (*shadows.descriptorSets)[1],
-						(*shadows.descriptorSets)[2], *skybox.descriptorSet
-				}, nullptr
+			vk::PipelineBindPoint::eGraphics,
+			*pipelineComposition.layout,
+			0,
+			{ *DSComposition, *shadows.descriptorSetDeferred, *skybox.descriptorSet },
+			nullptr
 		);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
@@ -253,17 +254,16 @@ namespace pe
 	
 	void Deferred::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
-		std::vector<vk::Format> formats
-				{
-						*renderTargets["depth"].format,
-						*renderTargets["normal"].format,
-						*renderTargets["albedo"].format,
-						*renderTargets["srm"].format,
-						*renderTargets["velocity"].format,
-						*renderTargets["emissive"].format
-				};
-		renderPass.Create(formats, *VulkanContext::Get()->depth.format);
-		compositionRenderPass.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
+		std::vector<vk::Format> formats {
+			*renderTargets["normal"].format,
+			*renderTargets["albedo"].format,
+			*renderTargets["srm"].format,
+			*renderTargets["velocity"].format,
+			*renderTargets["emissive"].format,
+			*VulkanContext::Get()->depth.format
+		};
+		renderPass.Create(formats);
+		compositionRenderPass.Create(*renderTargets["viewport"].format);
 	}
 	
 	void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -281,14 +281,13 @@ namespace pe
 		{
 			uint32_t width = renderTargets["albedo"].width;
 			uint32_t height = renderTargets["albedo"].height;
-			std::vector<vk::ImageView> views = {
-					*renderTargets["depth"].view,
-					*renderTargets["normal"].view,
-					*renderTargets["albedo"].view,
-					*renderTargets["srm"].view,
-					*renderTargets["velocity"].view,
-					*renderTargets["emissive"].view,
-					*VulkanContext::Get()->depth.view
+			std::vector<vk::ImageView> views {
+				*renderTargets["normal"].view,
+				*renderTargets["albedo"].view,
+				*renderTargets["srm"].view,
+				*renderTargets["velocity"].view,
+				*renderTargets["emissive"].view,
+				* VulkanContext::Get()->depth.view
 			};
 			framebuffers[i].Create(width, height, views, renderPass);
 		}
@@ -329,7 +328,6 @@ namespace pe
 		pipeline.info.colorBlendAttachments = make_ref(
 				std::vector<vk::PipelineColorBlendAttachmentState>
 						{
-								*renderTargets["depth"].blentAttachment,
 								*renderTargets["normal"].blentAttachment,
 								*renderTargets["albedo"].blentAttachment,
 								*renderTargets["srm"].blentAttachment,
@@ -360,6 +358,8 @@ namespace pe
 		pipelineComposition.info.width = renderTargets["viewport"].width_f;
 		pipelineComposition.info.height = renderTargets["viewport"].height_f;
 		pipelineComposition.info.cullMode = CullMode::Back;
+		pipelineComposition.info.pushConstantStage = PushConstantStage::Fragment;
+		pipelineComposition.info.pushConstantSize = 4 * sizeof(float);
 		pipelineComposition.info.colorBlendAttachments = make_ref(
 				std::vector<vk::PipelineColorBlendAttachmentState> {
 						*renderTargets["viewport"].blentAttachment
@@ -369,9 +369,7 @@ namespace pe
 				std::vector<vk::DescriptorSetLayout>
 						{
 								Pipeline::getDescriptorSetLayoutComposition(),
-								Pipeline::getDescriptorSetLayoutShadows(),
-								Pipeline::getDescriptorSetLayoutShadows(),
-								Pipeline::getDescriptorSetLayoutShadows(),
+								Pipeline::getDescriptorSetLayoutShadowsDeferred(),
 								Pipeline::getDescriptorSetLayoutSkybox()
 						}
 		);

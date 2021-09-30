@@ -66,7 +66,7 @@ int main(int argc, char* argv[])
 		{
 			context.UpdateSystems(frame_timer.delta);
 			Queue<0>::ExecuteRequests(); // Top level functions
-			Queue<1>::ExecuteRequests(); // Buffer and simlar copies
+			Queue<1>::ExecuteRequests(); // Buffer and similar copies
 			Queue<2>::ExecuteRequests(); // No wait async requests, i.e. loading
 			context.DrawSystems();
 		}

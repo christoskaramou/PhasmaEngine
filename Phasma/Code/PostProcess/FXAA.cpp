@@ -111,7 +111,7 @@ namespace pe
 	
 	void FXAA::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
+		renderPass.Create(*renderTargets["viewport"].format);
 	}
 	
 	void FXAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)

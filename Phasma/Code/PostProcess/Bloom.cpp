@@ -62,9 +62,9 @@ namespace pe
 	
 	void Bloom::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
-		renderPassBrightFilter.Create(*renderTargets["brightFilter"].format, vk::Format::eUndefined);
-		renderPassGaussianBlur.Create(*renderTargets["gaussianBlurHorizontal"].format, vk::Format::eUndefined);
-		renderPassCombine.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
+		renderPassBrightFilter.Create(*renderTargets["brightFilter"].format);
+		renderPassGaussianBlur.Create(*renderTargets["gaussianBlurHorizontal"].format);
+		renderPassCombine.Create(*renderTargets["viewport"].format);
 	}
 	
 	void Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)

@@ -117,10 +117,10 @@ namespace pe
 	void TAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		std::deque<vk::DescriptorImageInfo> dsii {};
-		const auto wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image)
+		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
 		{
-			dsii.emplace_back(*image.sampler, *image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
-			return vk::WriteDescriptorSet {
+			dsii.emplace_back(*image.sampler, *image.view, layout);
+			return vk::WriteDescriptorSet{
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};
 		};
@@ -136,7 +136,7 @@ namespace pe
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
 				wSetImage(*DSet, 0, previous),
 				wSetImage(*DSet, 1, frameImage),
-				wSetImage(*DSet, 2, renderTargets["depth"]),
+				wSetImage(*DSet, 2, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
 				wSetImage(*DSet, 3, renderTargets["velocity"]),
 				wSetBuffer(*DSet, 4, uniform),
 				wSetImage(*DSetSharpen, 0, renderTargets["taa"]),
@@ -190,8 +190,8 @@ namespace pe
 	
 	void TAA::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(*renderTargets["taa"].format, vk::Format::eUndefined);
-		renderPassSharpen.Create(*renderTargets["viewport"].format, vk::Format::eUndefined);
+		renderPass.Create(*renderTargets["taa"].format);
+		renderPassSharpen.Create(*renderTargets["viewport"].format);
 	}
 	
 	void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)

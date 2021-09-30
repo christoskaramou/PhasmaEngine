@@ -109,6 +109,8 @@ namespace pe
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutTAASharpen();
 		
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutShadows();
+
+		static vk::DescriptorSetLayout& getDescriptorSetLayoutShadowsDeferred();
 		
 		static vk::DescriptorSetLayout& getDescriptorSetLayoutMesh();
 		

@@ -31,13 +31,9 @@ layout(location = 3) in vec4 inColor;
 layout(location = 4) in ivec4 inJoint;
 layout(location = 5) in vec4 inWeights;
 
-layout( set = 0, binding = 0 ) uniform UniformBuffer0 {
-	mat4 projection;
-	mat4 lightView;
-	float dummy[16];
-}ubo;
+layout(push_constant) uniform Constants { mat4 viewProjection; } pushConst;
 
-layout( set = 1, binding = 0 ) uniform UniformBuffer1 {	
+layout( set = 0, binding = 0 ) uniform UniformBuffer1 {	
 	mat4 matrix;
 	mat4 previousMatrix;
 	mat4 jointMatrix[MAX_NUM_JOINTS];
@@ -45,7 +41,7 @@ layout( set = 1, binding = 0 ) uniform UniformBuffer1 {
 	float dummy[3];
 }mesh;
 
-layout( set = 2, binding = 0 ) uniform UniformBuffer2 {	
+layout( set = 1, binding = 0 ) uniform UniformBuffer2 {	
 	mat4 matrix;
 	mat4 dummy[3];
 }model;
@@ -60,5 +56,5 @@ void main() {
 		inWeights[3] * mesh.jointMatrix[inJoint[3]]; 
 	}
 
-	gl_Position = ubo.projection * ubo.lightView * model.matrix * mesh.matrix * boneTransform * vec4(inPosition, 1.0);
+	gl_Position = pushConst.viewProjection * model.matrix * mesh.matrix * boneTransform * vec4(inPosition, 1.0);
 }

@@ -249,9 +249,6 @@ namespace pe
 
 	const vk::DescriptorSetLayout& CreateDescriptorSetLayout(const std::vector<DescriptorBinding>& descriptionBindings)
 	{
-		if (!descriptionBindings.size())
-			return nullptr;
-
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{};
 		for (const auto& layoutBinding : descriptionBindings)
 		{
@@ -516,12 +513,30 @@ namespace pe
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
-					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eVertex),
-					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment)
+					//DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
 			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Shadows");
 		}
 		
+		return DSLayout;
+	}
+
+	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutShadowsDeferred()
+	{
+		static vk::DescriptorSetLayout DSLayout = nullptr;
+
+		if (!DSLayout)
+		{
+			DSLayout = CreateDescriptorSetLayout(
+				{
+					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(2, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
+					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
+				});
+			VulkanContext::Get()->SetDebugObjectName(DSLayout, "ShadowCascades");
+		}
+
 		return DSLayout;
 	}
 	
