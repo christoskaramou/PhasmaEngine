@@ -196,7 +196,7 @@ namespace pe
 		if (GUI::shadow_cast)
 		{
 			CalculateCascades(camera);
-			uniformBuffer.CopyRequest(Launch::AsyncDeferred, { cascades, 3 * sizeof(mat4), 0 });
+			uniformBuffer.CopyRequest<Launch::AsyncDeferred>({ cascades, 3 * sizeof(mat4), 0 });
 		}
 	}
 

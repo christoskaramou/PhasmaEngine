@@ -36,40 +36,42 @@ namespace pe
 	{
 		Async,
 		AsyncDeferred,
-		AsyncNoWait,
+		AsyncNoWait, // Does not block the main thread, useful for loading. 
 		Sync,
 		SyncDeferred,
 	};
 	
-	template<int N>
+	template<Launch launch>
 	class Queue
 	{
 	public:
 		using Func = std::function<void()>;
 
-		inline static void Request(Launch launch, Func&& func)
+		inline static void Request(Func&& func)
 		{
 			std::lock_guard<std::mutex> guard(s_requestMutex);
 
-			switch (launch)
+			if constexpr(launch == Launch::Async)
 			{
-			case Launch::Async:
 				s_futures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
 				s_requests += std::bind(&std::future<void>::get, &s_futures.back());
-				break;
-			case Launch::AsyncDeferred:
+			}
+			else if constexpr (launch == Launch::AsyncDeferred)
+			{
 				s_futures.push_back(std::async(std::launch::deferred, std::forward<Func>(func)));
 				s_requests += std::bind(&std::future<void>::get, &s_futures.back());
-				break;
-			case Launch::AsyncNoWait:
+			}
+			else if constexpr (launch == Launch::AsyncNoWait)
+			{
 				s_noWaitFutures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
-				break;
-			case Launch::Sync:
+			}
+			else if constexpr (launch == Launch::Sync)
+			{
 				std::forward<Func>(func)();
-				break;
-			case Launch::SyncDeferred:
+			}
+			else // if constexpr (launch == Launch::SyncDeferred)
+			{
 				s_requests += std::forward<Func>(func);
-				break;
 			}
 		}
 

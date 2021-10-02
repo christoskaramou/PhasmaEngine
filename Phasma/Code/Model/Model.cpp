@@ -392,7 +392,7 @@ namespace pe
 	{
 		VulkanContext::Get()->device->waitIdle();
 		auto loadAsync = [this, folderPath, modelName]() { Load(folderPath, modelName); };
-		Queue<2>::Request(Launch::AsyncNoWait, loadAsync);
+		Queue<Launch::AsyncNoWait>::Request(loadAsync);
 	}
 	
 	void Model::updateAnimation(uint32_t index, float time)
@@ -499,7 +499,7 @@ namespace pe
 		ubo.previousMvp = ubo.mvp;
 		ubo.mvp = camera.viewProjection * transform;
 		
-		uniformBuffer.CopyRequest(Launch::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
+		uniformBuffer.CopyRequest<Launch::AsyncDeferred>({ &ubo, sizeof(ubo), 0 });
 		
 		if (!animations.empty())
 		{

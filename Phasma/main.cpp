@@ -50,9 +50,6 @@ int main(int argc, char* argv[])
 
 	context.InitSystems();
 
-	Timer interval;
-	interval.Start();
-
 	FrameTimer& frame_timer = FrameTimer::Instance();
 
 	while (true)
@@ -65,20 +62,14 @@ int main(int argc, char* argv[])
 		if (!window.isMinimized())
 		{
 			context.UpdateSystems(frame_timer.delta);
-			Queue<0>::ExecuteRequests(); // Top level functions
-			Queue<1>::ExecuteRequests(); // Buffer and similar copies
-			Queue<2>::ExecuteRequests(); // No wait async requests, i.e. loading
+
+			Queue<Launch::AsyncNoWait>::ExecuteRequests();
+			Queue<Launch::Async>::ExecuteRequests();
+			Queue<Launch::SyncDeferred>::ExecuteRequests();
+			Queue<Launch::AsyncDeferred>::ExecuteRequests();
+			frame_timer.timestamps[0] = static_cast<float>(frame_timer.Count());
+
 			context.DrawSystems();
-		}
-		
-		// Metrics every 0.75 sec
-		if (interval.Count() > 0.75) {
-			interval.Start();
-			GUI::cpuWaitingTime = SECONDS_TO_MILLISECONDS<float>(frame_timer.timestamps[0]);
-			GUI::updatesTime = SECONDS_TO_MILLISECONDS<float>(GUI::updatesTimeCount);
-			GUI::cpuTime = static_cast<float>(frame_timer.delta * 1000.0) - GUI::cpuWaitingTime;
-			for (int i = 0; i < GUI::metrics.size(); i++)
-				GUI::stats[i] = GUI::metrics[i];
 		}
 		
 		frame_timer.Delay(1.0 / static_cast<double>(GUI::fps) - frame_timer.Count());

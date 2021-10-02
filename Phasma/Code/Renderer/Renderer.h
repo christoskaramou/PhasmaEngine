@@ -48,8 +48,6 @@ namespace pe
 		GUI gui;
 		Compute animationsCompute;
 		Compute nodesCompute;
-		
-		std::vector<GPUTimer> metrics {};
 
 #ifndef IGNORE_SCRIPTS
 		std::vector<Script*> scripts{};

@@ -58,14 +58,37 @@ namespace pe
 		size_t SizeRequested();
 		
 		void* Data();
-
-		void CopyRequest(Launch type, const MemoryRange& ranges);
-
-		void CopyRequest(Launch type, const std::vector<MemoryRange>& ranges);
 		
 		Ref<vk::Buffer> GetBufferVK();
 
 		void SetDebugName(const std::string& debugName);
+
+		template<Launch launch>
+		void CopyRequest(const MemoryRange& range)
+		{
+			auto lambda = [this, range]()
+			{
+				Map();
+				CopyData(range.data, range.size, range.offset);
+				Flush();
+				Unmap();
+			};
+			Queue<launch>::Request(lambda);
+		}
+
+		template<Launch launch>
+		void CopyRequest(const std::vector<MemoryRange>& ranges)
+		{
+			auto lambda = [this, ranges]()
+			{
+				Map();
+				for (auto& range : ranges)
+					CopyData(range.data, range.size, range.offset);
+				Flush();
+				Unmap();
+			};
+			Queue<launch>::Request(lambda);
+		}
 		
 	private:
 		Ref<BufferVK> m_bufferVK;

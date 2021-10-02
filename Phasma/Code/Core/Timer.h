@@ -27,21 +27,9 @@ SOFTWARE.
 #include <vector>
 #include <memory>
 
-#define Arithmetic_Template(T1, T2) \
-template < \
-    typename T1, \
-    typename = typename std::enable_if<std::is_arithmetic<T1>::value, Return_T>::type, \
-    typename T2, \
-    typename = typename std::enable_if<std::is_arithmetic<T2>::value, Param_T>::type>
-
-Arithmetic_Template(Return_T, Param_T) constexpr Return_T SECONDS_TO_MILLISECONDS(Param_T seconds)
-{ return static_cast<Return_T>(seconds * static_cast<Param_T>(1000)); }
-
-Arithmetic_Template(Return_T, Param_T) constexpr Return_T SECONDS_TO_MICROSECONDS(Param_T seconds)
-{ return static_cast<Return_T>(seconds * static_cast<Param_T>(1000000)); }
-
-Arithmetic_Template(Return_T, Param_T) constexpr Return_T SECONDS_TO_NANOSECONDS(Param_T seconds)
-{ return static_cast<Return_T>(seconds * static_cast<Param_T>(1000000000)); }
+constexpr double MILLI(double seconds) { return seconds * 1000.0; }
+constexpr double MICRO(double seconds) { return seconds * 1000000.0; }
+constexpr double NANO(double seconds) { return seconds * 1000000000.0; }
 
 namespace pe
 {
@@ -69,7 +57,6 @@ namespace pe
 		double time;
 		std::vector<double> timestamps {};
 	private:
-		Timer timer;
 		size_t system_delay;
 		std::chrono::duration<double> m_duration {};
 	
@@ -88,26 +75,25 @@ namespace pe
 		~FrameTimer() = default;                            // destructor
 		FrameTimer();                                        // default constructor
 	};
-}
 
-namespace pe
-{
 	class GPUTimer
 	{
 	public:
 		GPUTimer();
 		
-		void start(const vk::CommandBuffer* cmd) noexcept;
+		void Start(const vk::CommandBuffer* cmd);
+
+		float End();
 		
-		void end(float* res = nullptr);
-		
-		float getTime();
-		
-		void destroy() const noexcept;
+		void Destroy() const noexcept;
 	
 	private:
+		float GetTime();
+
+		void Reset();
+
 		std::unique_ptr<vk::QueryPool> queryPool;
-		std::vector<uint64_t> queryTimes {};
+		uint64_t queries[2]{};
 		float timestampPeriod;
 		const vk::CommandBuffer* _cmd;
 	};

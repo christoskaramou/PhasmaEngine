@@ -49,7 +49,7 @@ namespace pe
 		m_duration = {};
 		delta = 0.0f;
 		time = 0.0f;
-		timestamps.resize(1);
+		timestamps.resize(22);
 	}
 	
 	void FrameTimer::Delay(double seconds)
@@ -57,11 +57,12 @@ namespace pe
 		if (seconds <= 0.0f)
 			return;
 
-		const std::chrono::nanoseconds delay {SECONDS_TO_NANOSECONDS<size_t>(seconds) - system_delay};
+		const std::chrono::nanoseconds delay{ (static_cast<size_t>(NANO(seconds)) - system_delay) };
 		
+		static Timer timer;
 		timer.Start();
 		std::this_thread::sleep_for(delay);
-		system_delay = SECONDS_TO_NANOSECONDS<size_t>(timer.Count()) - delay.count();
+		system_delay = static_cast<size_t>(NANO(timer.Count())) - delay.count();
 	}
 	
 	
@@ -71,7 +72,7 @@ namespace pe
 		delta = m_duration.count();
 		time += delta;
 	}
-	
+
 	GPUTimer::GPUTimer()
 	{
 		const auto gpuProps = VulkanContext::Get()->gpu->getProperties();
@@ -85,36 +86,39 @@ namespace pe
 		qpci.queryCount = 2;
 		
 		queryPool = std::make_unique<vk::QueryPool>(VulkanContext::Get()->device->createQueryPool(qpci));
-		
-		queryTimes.resize(2, 0);
+	}
+
+	void GPUTimer::Reset()
+	{
+		_cmd->resetQueryPool(*queryPool, 0, 2);
 	}
 	
-	void GPUTimer::start(const vk::CommandBuffer* cmd) noexcept
+	void GPUTimer::Start(const vk::CommandBuffer* cmd)
 	{
 		_cmd = cmd;
-		_cmd->resetQueryPool(*queryPool, 0, 2);
+		Reset();
 		_cmd->writeTimestamp(vk::PipelineStageFlagBits::eTopOfPipe, *queryPool, 0);
 	}
-	
-	void GPUTimer::end(float* res)
+
+	float GPUTimer::End()
 	{
 		_cmd->writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, *queryPool, 1);
-		if (res)
-			*res = getTime();
+		return GetTime();
 	}
 	
-	float GPUTimer::getTime()
+	float GPUTimer::GetTime()
 	{
 		const auto res = VulkanContext::Get()->device->getQueryPoolResults(
-				*queryPool, 0, 2, sizeof(uint64_t) * queryTimes.size(), queryTimes.data(), sizeof(uint64_t),
-				vk::QueryResultFlagBits::e64
-		);
+			*queryPool, 0, 2, 2 * sizeof(uint64_t), &queries, sizeof(uint64_t),
+			vk::QueryResultFlagBits::e64);
+
 		if (res != vk::Result::eSuccess)
-			return 0.0f;
-		return static_cast<float>(queryTimes[1] - queryTimes[0]) * timestampPeriod * 1e-6f;
+			return 0.f;
+
+		return static_cast<float>(queries[1] - queries[0]) * timestampPeriod * 1e-6f;
 	}
 	
-	void GPUTimer::destroy() const noexcept
+	void GPUTimer::Destroy() const noexcept
 	{
 		VulkanContext::Get()->device->destroyQueryPool(*queryPool);
 	}

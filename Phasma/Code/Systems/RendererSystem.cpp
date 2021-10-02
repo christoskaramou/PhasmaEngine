@@ -77,19 +77,14 @@ namespace pe
 
 		//transformsCompute = Compute::Create("Shaders/Compute/shader.comp", 64, 64);
 
-		metrics.resize(20);
 		//LOAD RESOURCES
 		LoadResources();
 		// CREATE UNIFORMS AND DESCRIPTOR SETS
 		CreateUniforms();
 	}
 
-
 	void RendererSystem::Update(double delta)
 	{
-		static Timer timer;
-		timer.Start();
-
 #ifndef IGNORE_SCRIPTS
 		// universal scripts
 		for (auto& s : scripts)
@@ -111,78 +106,30 @@ namespace pe
 		for (auto& model : Model::models)
 		{
 			auto updateModel = [&model, camera_main, delta]() { model.update(*camera_main, delta); };
-			Queue<0>::Request(Launch::Async, updateModel);
+			Queue<Launch::Async>::Request(updateModel);
 		}
 
 		// GUI
 		auto updateGUI = [this]() { gui.update(); };
-		Queue<0>::Request(Launch::Async, updateGUI);
+		Queue<Launch::Async>::Request(updateGUI);
 
 		// SHADOWS
 		auto updateShadows = [this, camera_main]() { shadows.update(*camera_main); };
-		Queue<0>::Request(Launch::Async, updateShadows);
+		Queue<Launch::Async>::Request(updateShadows);
 
 		// COMPOSITION UNIFORMS
 		auto updateDeferred = [this, camera_main]() { deferred.update(camera_main->invViewProjection); };
-		Queue<0>::Request(Launch::Async, updateDeferred);
-
-		static Timer timerFenceWait;
-		timerFenceWait.Start();
-		VulkanContext::Get()->waitFences((*VulkanContext::Get()->fences)[previousImageIndex]);
-		FrameTimer::Instance().timestamps[0] = timerFenceWait.Count();
-
-		GUI::updatesTimeCount = static_cast<float>(timer.Count());
-	}
-
-	void RendererSystem::Destroy()
-	{
-		VulkanContext::Get()->device->waitIdle();
-
-		for (auto& rt : renderTargets)
-			rt.second.destroy();
-
-		if (Model::models.empty())
-		{
-			if (Pipeline::getDescriptorSetLayoutModel())
-			{
-				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
-				Pipeline::getDescriptorSetLayoutModel() = nullptr;
-			}
-			if (Pipeline::getDescriptorSetLayoutMesh())
-			{
-				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
-				Pipeline::getDescriptorSetLayoutMesh() = nullptr;
-			}
-			if (Pipeline::getDescriptorSetLayoutPrimitive())
-			{
-				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
-				Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
-			}
-		}
-
-#ifndef IGNORE_SCRIPTS
-		for (auto& script : scripts)
-			delete script;
-#endif
-		for (auto& model : Model::models)
-			model.destroy();
-		for (auto& texture : Mesh::uniqueTextures)
-			texture.second.destroy();
-		Mesh::uniqueTextures.clear();
-
-		Compute::DestroyResources();
-		shadows.destroy();
-		deferred.destroy();
-		skyBoxDay.destroy();
-		skyBoxNight.destroy();
-		gui.destroy();
-		for (auto& metric : metrics)
-			metric.destroy();
+		Queue<Launch::Async>::Request(updateDeferred);
 	}
 
 	void RendererSystem::Draw()
 	{
 		auto& vCtx = *VulkanContext::Get();
+
+		static Timer timerFenceWait;
+		timerFenceWait.Start();
+		VulkanContext::Get()->waitFences((*VulkanContext::Get()->fences)[previousImageIndex]);
+		FrameTimer::Instance().timestamps[1] = timerFenceWait.Count();
 
 		static const vk::PipelineStageFlags waitStages[] = {
 				vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader
@@ -247,5 +194,50 @@ namespace pe
 		vCtx.swapchain.Present(imageIndex, presentWaitSemaphore, nullptr);
 
 		vCtx.unlockSubmits();
+	}
+
+
+	void RendererSystem::Destroy()
+	{
+		VulkanContext::Get()->device->waitIdle();
+
+		for (auto& rt : renderTargets)
+			rt.second.destroy();
+
+		if (Model::models.empty())
+		{
+			if (Pipeline::getDescriptorSetLayoutModel())
+			{
+				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
+				Pipeline::getDescriptorSetLayoutModel() = nullptr;
+			}
+			if (Pipeline::getDescriptorSetLayoutMesh())
+			{
+				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
+				Pipeline::getDescriptorSetLayoutMesh() = nullptr;
+			}
+			if (Pipeline::getDescriptorSetLayoutPrimitive())
+			{
+				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
+				Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
+			}
+		}
+
+#ifndef IGNORE_SCRIPTS
+		for (auto& script : scripts)
+			delete script;
+#endif
+		for (auto& model : Model::models)
+			model.destroy();
+		for (auto& texture : Mesh::uniqueTextures)
+			texture.second.destroy();
+		Mesh::uniqueTextures.clear();
+
+		Compute::DestroyResources();
+		shadows.destroy();
+		deferred.destroy();
+		skyBoxDay.destroy();
+		skyBoxNight.destroy();
+		gui.destroy();
 	}
 }

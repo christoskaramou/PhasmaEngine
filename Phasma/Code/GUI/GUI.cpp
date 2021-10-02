@@ -35,6 +35,7 @@ SOFTWARE.
 #include "Systems/EventSystem.h"
 #include "ECS/Context.h"
 #include "Model/Model.h"
+#include "COre/Timer.h"
 
 namespace pe
 {
@@ -241,15 +242,19 @@ namespace pe
 		fps = maximum(fps, 10.0f);
 		ImGui::Separator();
 		ImGui::Separator();
-		
-		ImGui::Text("CPU Total: %.3f (waited %.3f) ms", cpuTime, cpuWaitingTime);
+
+		const FrameTimer& frameTimer = FrameTimer::Instance();
+		ImGui::Text("CPU Total: %.3f ms", static_cast<float>(frameTimer.delta * 1000.0));
 		ImGui::Indent(16.0f);
-		ImGui::Text("Updates Total: %.3f ms", updatesTime);
+		ImGui::Text("Draw wait %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[1])));
+		ImGui::Text("Updates Total: %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[0])));
 		ImGui::Unindent(16.0f);
 		ImGui::Separator();
 		ImGui::Text(
-				"GPU Total: %.3f ms",
-				stats[0] + (shadow_cast ? stats[11] + stats[12] + stats[13] : 0.f) + (use_compute ? stats[14] : 0.f)
+			"GPU Total: %.3f ms",
+			frameTimer.timestamps[2] +
+			(shadow_cast ? frameTimer.timestamps[13] + frameTimer.timestamps[14] + frameTimer.timestamps[15] : 0.f) +
+			(use_compute ? frameTimer.timestamps[16] : 0.f)
 		);
 		ImGui::Separator();
 		ImGui::Text("Render Passes:");
@@ -260,62 +265,62 @@ namespace pe
 		ImGui::Indent(16.0f);
 		if (shadow_cast)
 		{
-			ImGui::Text("Depth: %.3f ms", stats[11]);
+			ImGui::Text("Depth: %.3f ms", frameTimer.timestamps[13]);
 			totalPasses++;
-			totalTime += stats[11];
-			ImGui::Text("Depth: %.3f ms", stats[12]);
+			totalTime += (float)frameTimer.timestamps[13];
+			ImGui::Text("Depth: %.3f ms", frameTimer.timestamps[14]);
 			totalPasses++;
-			totalTime += stats[12];
-			ImGui::Text("Depth: %.3f ms", stats[13]);
+			totalTime += (float)frameTimer.timestamps[14];
+			ImGui::Text("Depth: %.3f ms", frameTimer.timestamps[15]);
 			totalPasses++;
-			totalTime += stats[13];
+			totalTime += (float)frameTimer.timestamps[15];
 		}
-		ImGui::Text("GBuffer: %.3f ms", stats[2]);
+		ImGui::Text("GBuffer: %.3f ms", frameTimer.timestamps[4]);
 		totalPasses++;
-		totalTime += stats[2];
+		totalTime += (float)frameTimer.timestamps[4];
 		if (show_ssao)
 		{
-			ImGui::Text("SSAO: %.3f ms", stats[3]);
+			ImGui::Text("SSAO: %.3f ms", frameTimer.timestamps[5]);
 			totalPasses++;
-			totalTime += stats[3];
+			totalTime += (float)frameTimer.timestamps[5];
 		}
 		if (show_ssr)
 		{
-			ImGui::Text("SSR: %.3f ms", stats[4]);
+			ImGui::Text("SSR: %.3f ms", frameTimer.timestamps[6]);
 			totalPasses++;
-			totalTime += stats[4];
+			totalTime += (float)frameTimer.timestamps[6];
 		}
-		ImGui::Text("Lights: %.3f ms", stats[5]);
+		ImGui::Text("Lights: %.3f ms", frameTimer.timestamps[7]);
 		totalPasses++;
-		totalTime += stats[5];
+		totalTime += (float)frameTimer.timestamps[7];
 		if ((use_FXAA || use_TAA) && use_AntiAliasing)
 		{
-			ImGui::Text("Anti aliasing: %.3f ms", stats[6]);
+			ImGui::Text("Anti aliasing: %.3f ms", frameTimer.timestamps[8]);
 			totalPasses++;
-			totalTime += stats[6];
+			totalTime += (float)frameTimer.timestamps[8];
 		}
 		if (show_Bloom)
 		{
-			ImGui::Text("Bloom: %.3f ms", stats[7]);
+			ImGui::Text("Bloom: %.3f ms", frameTimer.timestamps[9]);
 			totalPasses++;
-			totalTime += stats[7];
+			totalTime += (float)frameTimer.timestamps[9];
 		}
 		if (use_DOF)
 		{
-			ImGui::Text("Depth of Field: %.3f ms", stats[8]);
+			ImGui::Text("Depth of Field: %.3f ms", frameTimer.timestamps[10]);
 			totalPasses++;
-			totalTime += stats[8];
+			totalTime += (float)frameTimer.timestamps[10];
 		}
 		if (show_motionBlur)
 		{
-			ImGui::Text("Motion Blur: %.3f ms", stats[9]);
+			ImGui::Text("Motion Blur: %.3f ms", frameTimer.timestamps[11]);
 			totalPasses++;
-			totalTime += stats[9];
+			totalTime += (float)frameTimer.timestamps[11];
 		}
-		
-		ImGui::Text("GUI: %.3f ms", stats[10]);
+
+		ImGui::Text("GUI: %.3f ms", frameTimer.timestamps[12]);
 		totalPasses++;
-		totalTime += stats[10];
+		totalTime += (float)frameTimer.timestamps[12];
 		ImGui::Unindent(16.0f);
 		ImGui::Separator();
 		ImGui::Separator();
@@ -1198,8 +1203,8 @@ namespace pe
 				vertex_offset += vertex_ranges[n].size;
 				index_offset += index_ranges[n].size;
 			}
-			vertexBuffer.CopyRequest(Launch::AsyncDeferred, vertex_ranges);
-			indexBuffer.CopyRequest(Launch::AsyncDeferred, index_ranges);
+			vertexBuffer.CopyRequest<Launch::AsyncDeferred>(vertex_ranges);
+			indexBuffer.CopyRequest<Launch::AsyncDeferred>(index_ranges);
 		}
 		
 		//vk::CommandBufferBeginInfo beginInfo;

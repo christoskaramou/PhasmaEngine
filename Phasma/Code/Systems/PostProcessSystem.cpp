@@ -103,10 +103,10 @@ namespace pe
 		auto updateTAA = [camera_main, taa]() { taa->update(*camera_main); };
 		auto updateMotionBlur = [camera_main, motionBlur]() { motionBlur->update(*camera_main); };
 
-		Queue<0>::Request(Launch::Async, updateSSAO);
-		Queue<0>::Request(Launch::Async, updateSSR);
-		Queue<0>::Request(Launch::Async, updateTAA);
-		Queue<0>::Request(Launch::Async, updateMotionBlur);
+		Queue<Launch::Async>::Request(updateSSAO);
+		Queue<Launch::Async>::Request(updateSSR);
+		Queue<Launch::Async>::Request(updateTAA);
+		Queue<Launch::Async>::Request(updateMotionBlur);
 	}
 
 	void PostProcessSystem::Destroy()

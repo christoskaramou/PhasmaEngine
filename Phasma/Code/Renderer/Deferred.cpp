@@ -217,7 +217,7 @@ namespace pe
 				GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f
 		};
 		
-		uniform.CopyRequest(Launch::AsyncDeferred, { &ubo, sizeof(ubo), 0 });
+		uniform.CopyRequest<Launch::AsyncDeferred>({ &ubo, sizeof(ubo), 0 });
 	}
 	
 	void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent)

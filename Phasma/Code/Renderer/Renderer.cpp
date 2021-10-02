@@ -80,21 +80,24 @@ namespace pe
 
 	void Renderer::RecordDeferredCmds(const uint32_t& imageIndex)
 	{
+		static GPUTimer gpuTimer[12]{};
+
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 		
 		const auto& cmd = (*VulkanContext::Get()->dynamicCmdBuffers)[imageIndex];
-		
+		FrameTimer& frameTimer = FrameTimer::Instance();
+
 		cmd.begin(beginInfo);
 		// TODO: add more queries (times the swapchain images), so they are not overlapped from previous frame
-		metrics[0].start(&cmd);
-		
+
+		gpuTimer[0].Start(&cmd);
 		// SKYBOX
 		SkyBox& skybox = GUI::shadow_cast ? skyBoxDay : skyBoxNight;
 		
 		// MODELS
 		{
-			metrics[2].start(&cmd);
+			gpuTimer[1].Start(&cmd);
 			deferred.batchStart(cmd, imageIndex, *renderTargets["viewport"].extent);
 			
 			for (auto& model : Model::models)
@@ -107,7 +110,7 @@ namespace pe
 				model.draw((uint16_t) RenderQueue::AlphaBlend);
 			
 			deferred.batchEnd();
-			metrics[2].end(&GUI::metrics[2]);
+			frameTimer.timestamps[4] = gpuTimer[1].End();
 		}
 		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorRead);
 		VulkanContext::Get()->depth.changeLayout(cmd, LayoutState::DepthRead);
@@ -132,73 +135,73 @@ namespace pe
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao)
 		{
-			metrics[3].start(&cmd);
+			gpuTimer[2].Start(&cmd);
 			renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorWrite);
 			ssao.draw(cmd, imageIndex, renderTargets["ssao"]);
 			renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorRead);
-			metrics[3].end(&GUI::metrics[3]);
+			frameTimer.timestamps[5] = gpuTimer[2].End();
 		}
 		
 		// SCREEN SPACE REFLECTIONS
 		if (GUI::show_ssr)
 		{
-			metrics[4].start(&cmd);
+			gpuTimer[3].Start(&cmd);
 			renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorWrite);
 			ssr.draw(cmd, imageIndex, *renderTargets["ssr"].extent);
 			renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorRead);
-			metrics[4].end(&GUI::metrics[4]);
+			frameTimer.timestamps[6] = gpuTimer[3].End();
 		}
 		
 		// COMPOSITION
-		metrics[5].start(&cmd);
+		gpuTimer[4].Start(&cmd);
 		deferred.draw(cmd, imageIndex, shadows, skybox, *renderTargets["viewport"].extent);
-		metrics[5].end(&GUI::metrics[5]);
+		frameTimer.timestamps[7] = gpuTimer[4].End();
 		
 		if (GUI::use_AntiAliasing)
 		{
 			// TAA
 			if (GUI::use_TAA)
 			{
-				metrics[6].start(&cmd);
+				gpuTimer[5].Start(&cmd);
 				taa.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 				taa.draw(cmd, imageIndex, renderTargets);
-				metrics[6].end(&GUI::metrics[6]);
+				frameTimer.timestamps[8] = gpuTimer[5].End();
 			}
 				// FXAA
 			else if (GUI::use_FXAA)
 			{
-				metrics[6].start(&cmd);
+				gpuTimer[6].Start(&cmd);
 				fxaa.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 				fxaa.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
-				metrics[6].end(&GUI::metrics[6]);
+				frameTimer.timestamps[8] = gpuTimer[6].End();
 			}
 		}
 		
 		// BLOOM
 		if (GUI::show_Bloom)
 		{
-			metrics[7].start(&cmd);
+			gpuTimer[7].Start(&cmd);
 			bloom.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 			bloom.draw(cmd, imageIndex, renderTargets);
-			metrics[7].end(&GUI::metrics[7]);
+			frameTimer.timestamps[9] = gpuTimer[7].End();
 		}
 		
 		// Depth of Field
 		if (GUI::use_DOF)
 		{
-			metrics[8].start(&cmd);
+			gpuTimer[8].Start(&cmd);
 			dof.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 			dof.draw(cmd, imageIndex, renderTargets);
-			metrics[8].end(&GUI::metrics[8]);
+			frameTimer.timestamps[10] = gpuTimer[8].End();
 		}
 		
 		// MOTION BLUR
 		if (GUI::show_motionBlur)
 		{
-			metrics[9].start(&cmd);
+			gpuTimer[9].Start(&cmd);
 			motionBlur.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
 			motionBlur.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
-			metrics[9].end(&GUI::metrics[9]);
+			frameTimer.timestamps[11] = gpuTimer[9].End();
 		}
 
 		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorWrite);
@@ -214,12 +217,12 @@ namespace pe
 			image.changeLayout(cmd, LayoutState::DepthWrite);
 		
 		// GUI
-		metrics[10].start(&cmd);
+		gpuTimer[10].Start(&cmd);
 		gui.scaleToRenderArea(cmd, GUI::s_currRenderImage ? *GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
 		gui.draw(cmd, imageIndex);
-		metrics[10].end(&GUI::metrics[10]);
+		frameTimer.timestamps[12] = gpuTimer[10].End();
 		
-		metrics[0].end(&GUI::metrics[0]);
+		frameTimer.timestamps[2] = gpuTimer[0].End();
 		
 		cmd.end();
 	}
@@ -240,16 +243,20 @@ namespace pe
 		renderPassInfoShadows.renderArea = vk::Rect2D{ {0, 0}, {Shadows::imageSize, Shadows::imageSize} };
 		renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
 		renderPassInfoShadows.pClearValues = clearValuesShadows.data();
+
+		static GPUTimer gpuTimer[3]{};
 		
 		for (uint32_t i = 0; i < shadows.textures.size(); i++)
 		{
 			auto& cmd = (*VulkanContext::Get()->shadowCmdBuffers)[
 					static_cast<uint32_t>(shadows.textures.size()) * imageIndex + i];
 			cmd.begin(beginInfoShadows);
-			metrics[11 + static_cast<size_t>(i)].start(&cmd);
+
+			FrameTimer& frameTimer = FrameTimer::Instance();
+			gpuTimer[i].Start(&cmd);
+
 			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
-			
-			// depth[i] image ===========================================================
+
 			renderPassInfoShadows.framebuffer = *shadows.framebuffers[shadows.textures.size() * imageIndex + i].handle;
 			cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadows.pipeline.handle);
@@ -283,8 +290,9 @@ namespace pe
 				}
 			}
 			cmd.endRenderPass();
-			metrics[11 + static_cast<size_t>(i)].end(&GUI::metrics[11 + static_cast<size_t>(i)]);
-			// ==========================================================================
+
+			frameTimer.timestamps[13 + static_cast<size_t>(i)] = gpuTimer[i].End();
+
 			cmd.end();
 		}
 	}
