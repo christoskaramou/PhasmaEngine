@@ -57,8 +57,7 @@ namespace pe
 	
 	void calculateMeshJointMatrix(Mesh* mesh, Skin* skin, const mat4& inverseTransform, const size_t index)
 	{
-		mesh->ubo.jointMatrix[index] =
-				inverseTransform * skin->joints[index]->getMatrix() * skin->inverseBindMatrices[index];
+		mesh->ubo.jointMatrix[index] = inverseTransform * skin->joints[index]->getMatrix() * skin->inverseBindMatrices[index];
 	}
 	
 	void Node::update()

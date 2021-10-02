@@ -35,7 +35,8 @@ SOFTWARE.
 #include "Systems/EventSystem.h"
 #include "ECS/Context.h"
 #include "Model/Model.h"
-#include "COre/Timer.h"
+#include "Core/Timer.h"
+#include "Systems/CameraSystem.h"
 
 namespace pe
 {
@@ -681,10 +682,15 @@ namespace pe
 			);
 		}
 		ImGui::Begin("Rendering Window", &active, flags);
+		static ImVec2 winPos;
+		static ImVec2 winSize;
 		winPos = ImGui::GetWindowPos();
 		winSize = ImGui::GetWindowSize();
 		ImGui::End();
 		style->Colors[ImGuiCol_WindowBg].w = 1.0f;
+
+		Camera::TargetArea& ta = Context::Get()->GetSystem<CameraSystem>()->GetCamera(0)->renderArea;
+		ta.Update(winPos.x, winPos.y, winSize.x, winSize.y);
 	}
 	
 	const vk::DescriptorSetLayout& GUI::getDescriptorSetLayout(vk::Device device)
@@ -959,10 +965,11 @@ namespace pe
 		blit.srcOffsets[1] = vk::Offset3D{ static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 1 };
 		blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		blit.srcSubresource.layerCount = 1;
-		blit.dstOffsets[0] = vk::Offset3D {static_cast<int32_t>(winPos.x), static_cast<int32_t>(winPos.y), 0};
+		Camera::Viewport& vp = Context::Get()->GetSystem<CameraSystem>()->GetCamera(0)->renderArea.viewport;
+		blit.dstOffsets[0] = vk::Offset3D {static_cast<int32_t>(vp.x), static_cast<int32_t>(vp.y), 0};
 		blit.dstOffsets[1] = vk::Offset3D {
-				static_cast<int32_t>(winPos.x) + static_cast<int32_t>(winSize.x),
-				static_cast<int32_t>(winPos.y) + static_cast<int32_t>(winSize.y), 1
+				static_cast<int32_t>(vp.x) + static_cast<int32_t>(vp.width),
+				static_cast<int32_t>(vp.y) + static_cast<int32_t>(vp.height), 1
 		};
 		blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		blit.dstSubresource.layerCount = 1;

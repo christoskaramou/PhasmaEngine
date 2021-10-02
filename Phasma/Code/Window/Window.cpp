@@ -195,14 +195,8 @@ namespace pe
 	
 	void Window::WrapInsideRenderWindow(int& x, int& y)
 	{
-		Rect2D rect2D
-				{
-						static_cast<int>(GUI::winPos.x),
-						static_cast<int>(GUI::winPos.y),
-						static_cast<int>(GUI::winSize.x),
-						static_cast<int>(GUI::winSize.y)
-				};
-		
+		const Rect2D& rect2D = Context::Get()->GetSystem<CameraSystem>()->GetCamera(0)->renderArea.scissor;
+
 		if (x < rect2D.x)
 		{
 			x = rect2D.x + rect2D.width;
@@ -226,13 +220,7 @@ namespace pe
 	
 	bool Window::IsInsideRenderWindow(int x, int y)
 	{
-		Rect2D rect2D
-				{
-						static_cast<int>(GUI::winPos.x),
-						static_cast<int>(GUI::winPos.y),
-						static_cast<int>(GUI::winSize.x),
-						static_cast<int>(GUI::winSize.y)
-				};
+		const Rect2D& rect2D = Context::Get()->GetSystem<CameraSystem>()->GetCamera(0)->renderArea.scissor;
 		
 		return x >= rect2D.x && y >= rect2D.y && x <= rect2D.x + rect2D.width &&
 		       y <= rect2D.y + rect2D.height;

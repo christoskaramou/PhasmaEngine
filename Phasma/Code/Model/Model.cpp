@@ -312,9 +312,7 @@ namespace pe
 			const auto occlusionImage = getImage(material.occlusionTexture.textureId);
 			const auto emissiveImage = getImage(material.emissiveTexture.textureId);
 			myPrimitive.loadTexture(MaterialType::BaseColor, folderPath, baseColorImage, document, resourceReader);
-			myPrimitive.loadTexture(
-					MaterialType::MetallicRoughness, folderPath, metallicRoughnessImage, document, resourceReader
-			);
+			myPrimitive.loadTexture(MaterialType::MetallicRoughness, folderPath, metallicRoughnessImage, document, resourceReader);
 			myPrimitive.loadTexture(MaterialType::Normal, folderPath, normalImage, document, resourceReader);
 			myPrimitive.loadTexture(MaterialType::Occlusion, folderPath, occlusionImage, document, resourceReader);
 			myPrimitive.loadTexture(MaterialType::Emissive, folderPath, emissiveImage, document, resourceReader);

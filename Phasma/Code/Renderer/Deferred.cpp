@@ -326,23 +326,21 @@ namespace pe
 		pipeline.info.height = renderTargets["albedo"].height_f;
 		pipeline.info.cullMode = CullMode::Front;
 		pipeline.info.colorBlendAttachments = make_ref(
-				std::vector<vk::PipelineColorBlendAttachmentState>
-						{
-								*renderTargets["normal"].blentAttachment,
-								*renderTargets["albedo"].blentAttachment,
-								*renderTargets["srm"].blentAttachment,
-								*renderTargets["velocity"].blentAttachment,
-								*renderTargets["emissive"].blentAttachment,
-						}
-		);
+			std::vector<vk::PipelineColorBlendAttachmentState>
+			{
+				*renderTargets["normal"].blentAttachment,
+				*renderTargets["albedo"].blentAttachment,
+				*renderTargets["srm"].blentAttachment,
+				*renderTargets["velocity"].blentAttachment,
+				*renderTargets["emissive"].blentAttachment,
+			});
 		pipeline.info.descriptorSetLayouts = make_ref(
-				std::vector<vk::DescriptorSetLayout>
-						{
-								Pipeline::getDescriptorSetLayoutMesh(),
-								Pipeline::getDescriptorSetLayoutPrimitive(),
-								Pipeline::getDescriptorSetLayoutModel()
-						}
-		);
+			std::vector<vk::DescriptorSetLayout>
+			{
+				Pipeline::getDescriptorSetLayoutMesh(),
+				Pipeline::getDescriptorSetLayoutPrimitive(),
+				Pipeline::getDescriptorSetLayoutModel()
+			});
 		pipeline.info.renderPass = renderPass;
 		
 		pipeline.createGraphicsPipeline();

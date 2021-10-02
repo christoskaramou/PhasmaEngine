@@ -34,6 +34,7 @@ namespace pe
 
     void EventSystem::Destroy()
     {
+        ClearEvents();
     }
 
     void EventSystem::DispatchEvent(EventType type, const std::any& data)

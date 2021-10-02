@@ -27,7 +27,7 @@ SOFTWARE.
 
 namespace pe
 {
-	enum MaterialType
+	enum class MaterialType
 	{
 		BaseColor,
 		MetallicRoughness,

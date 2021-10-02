@@ -46,9 +46,9 @@ namespace pe
         frustum.resize(6);
         
         frustumCompute = Compute::Create("Shaders/Compute/frustum.comp", 64, 96);
-        
-        renderArea.Update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
-        
+
+        renderArea.viewport.minDepth = 0.f;
+        renderArea.viewport.maxDepth = 1.f;
     }
     
     void Camera::ReCreateComputePipelines()
@@ -63,7 +63,6 @@ namespace pe
     
     void Camera::Update()
     {
-        renderArea.Update(vec2(GUI::winPos.x, GUI::winPos.y), vec2(GUI::winSize.x, GUI::winSize.y));
         front = orientation * WorldFront();
         right = orientation * WorldRight();
         up = orientation * WorldUp();
@@ -219,18 +218,18 @@ namespace pe
         return true;
     }
     
-    void Camera::TargetArea::Update(const vec2& position, const vec2& size, float minDepth, float maxDepth)
+    void Camera::TargetArea::Update(float x, float y, float w, float h, float minDepth, float maxDepth)
     {
-        viewport.x = position.x;
-        viewport.y = position.y;
-        viewport.width = size.x;
-        viewport.height = size.y;
+        viewport.x = x;
+        viewport.y = y;
+        viewport.width = w;
+        viewport.height = h;
         viewport.minDepth = minDepth;
         viewport.maxDepth = maxDepth;
         
-        scissor.x = static_cast<int>(position.x);
-        scissor.y = static_cast<int>(position.y);
-        scissor.width = static_cast<int>(size.x);
-        scissor.height = static_cast<int>(size.y);
+        scissor.x = static_cast<int>(x);
+        scissor.y = static_cast<int>(y);
+        scissor.width = static_cast<int>(w);
+        scissor.height = static_cast<int>(h);
     }
 }

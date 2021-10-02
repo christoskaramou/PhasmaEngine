@@ -54,7 +54,7 @@ namespace pe
 			Viewport viewport;
 			Rect2D scissor;
 			
-			void Update(const vec2& position, const vec2& size, float minDepth = 0.f, float maxDepth = 1.f);
+			void Update(float x, float y, float w, float h, float minDepth = 0.f, float maxDepth = 1.f);
 		};
 		
 		struct Plane
