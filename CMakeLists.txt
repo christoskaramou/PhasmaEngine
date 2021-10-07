@@ -19,6 +19,7 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Code")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/imgui")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/SDL")
 
 link_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Libs")
 
@@ -75,7 +76,7 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/D3D12.dll" DESTINATION ${CMAKE_BINARY_DIR})  
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/imgui.ini" DESTINATION ${CMAKE_BINARY_DIR})
+#file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/imgui.ini" DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/SDL2.dll" DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/shaderc_shared.dll" DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Assets" DESTINATION ${CMAKE_BINARY_DIR})
