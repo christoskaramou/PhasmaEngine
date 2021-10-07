@@ -72,6 +72,7 @@ namespace vk
 	enum class PresentModeKHR;
 	class SwapchainKHR;
 	class QueryPool;
+	class PipelineCache;
 
 	template<class T1> class Flags;
 	enum class PipelineStageFlagBits : uint32_t; using PipelineStageFlags = Flags<PipelineStageFlagBits>;

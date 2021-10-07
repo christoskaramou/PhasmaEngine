@@ -29,6 +29,8 @@ SOFTWARE.
 #include "Core/Queue.h"
 #include "RenderApi.h"
 #include <limits>
+#include "ECS/Context.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
@@ -210,7 +212,8 @@ namespace pe
 		const vec3 sunUp = normalize(cross(sunRight, sunFront));
 		const mat4 sunView = lookAt(-sunFront * (camera.nearPlane - 5.f), sunFront, sunRight, sunUp);
 
-		const float aspect = camera.renderArea.viewport.width / camera.renderArea.viewport.height;
+		auto& renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
+		const float aspect = renderArea.viewport.width / renderArea.viewport.height;
 		const float tanHalfHFOV = tanf(radians(camera.FOV * .5f * aspect));
 		const float tanHalfVFOV = tanf(radians(camera.FOV * .5f));
 

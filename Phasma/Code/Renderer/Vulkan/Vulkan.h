@@ -29,8 +29,9 @@ SOFTWARE.
 
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
-#define WIDTH VulkanContext::Get()->surface.actualExtent->width
-#define HEIGHT VulkanContext::Get()->surface.actualExtent->height
+#define VULKAN (*VulkanContext::Get())
+#define WIDTH VULKAN.surface.actualExtent->width
+#define HEIGHT VULKAN.surface.actualExtent->height
 #define WIDTH_f static_cast<float>(WIDTH)
 #define HEIGHT_f static_cast<float>(HEIGHT)
 
@@ -59,6 +60,7 @@ SOFTWARE.
 namespace pe
 {
 	class Context;
+	class Surface;
 	
 	class VulkanContext : public NoCopy, public NoMove
 	{
@@ -94,7 +96,7 @@ namespace pe
 		
 		void GetQueues();
 		
-		void CreateSwapchain(uint32_t requestImageCount);
+		void CreateSwapchain(Surface* surface);
 		
 		void CreateCommandPools();
 		
@@ -142,8 +144,7 @@ namespace pe
 				const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
 				const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
 				const vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
-				const vk::Fence signalFence
-		) const;
+				const vk::Fence signalFence) const;
 		
 		void waitFences(const vk::ArrayProxy<const vk::Fence> fences) const;
 		
@@ -151,16 +152,19 @@ namespace pe
 				const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
 				const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
 				const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
-				const vk::ArrayProxy<const vk::Semaphore> signalSemaphores
-		);
+				const vk::ArrayProxy<const vk::Semaphore> signalSemaphores);
+
+		void Present(
+			vk::ArrayProxy<const vk::SwapchainKHR> swapchains,
+			vk::ArrayProxy<const uint32_t> imageIndices,
+			vk::ArrayProxy<const vk::Semaphore> semaphores);
 
 #if _DEBUG
 		static VKAPI_ATTR uint32_t VKAPI_CALL MessageCallback(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 			uint32_t messageType,
 			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-			void* pUserData
-			);
+			void* pUserData);
 
 		void CreateDebugMessenger();
 

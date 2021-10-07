@@ -44,6 +44,8 @@ namespace pe
 		void FindPresentationMode();
 		
 		void FindProperties();
+
+		void Destroy();
 		
 		Ref<vk::SurfaceKHR> surface;
 		Ref<vk::Extent2D> actualExtent;

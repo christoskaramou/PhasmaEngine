@@ -1366,6 +1366,11 @@ namespace pe
 				maximum(v1.z, v2.z)
 		);
 	}
+
+	float saturate(float x)
+	{
+		return clamp(x, 0.0f, 1.0f);
+	}
 	
 	float rand(cfloat a, cfloat b)
 	{
@@ -1377,7 +1382,38 @@ namespace pe
 	
 	float lerp(cfloat a, cfloat b, cfloat f)
 	{
-		return a + f * (b - a);
+		//return a * (1.0f - f) + b * f; // might lose precision
+		return a + f * (b - a); // faster
+	}
+
+	vec2 lerp(cvec2& a, cvec2& b, float f)
+	{
+		return vec2
+		{
+			lerp(a.x, b.x, f),
+			lerp(a.y, b.y, f)
+		};
+	}
+
+	vec3 lerp(cvec3& a, cvec3& b, float f)
+	{
+		return vec3
+		{
+			lerp(a.x, b.x, f),
+			lerp(a.y, b.y, f),
+			lerp(a.z, b.z, f)
+		};
+	}
+
+	vec4 lerp(cvec4& a, cvec4& b, float f)
+	{
+		return vec4
+		{
+			lerp(a.x, b.x, f),
+			lerp(a.y, b.y, f),
+			lerp(a.z, b.z, f),
+			lerp(a.w, b.w, f)
+		};
 	}
 	
 	Transform::Transform() : matrix(mat4::identity()), scale(1.0f), rotation(quat::identity()), position(0.0f)

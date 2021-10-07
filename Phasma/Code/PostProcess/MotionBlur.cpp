@@ -112,8 +112,9 @@ namespace pe
 	
 	void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
 	{
+		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
 		vk::ClearValue clearColor;
-		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
+		memcpy(clearColor.color.float32, &color, sizeof(vec4));
 		
 		std::vector<vk::ClearValue> clearValues = {clearColor};
 		

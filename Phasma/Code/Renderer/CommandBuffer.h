@@ -32,6 +32,7 @@ namespace pe
 	class Compute;
 	class Buffer;
 	class Descriptor;
+	class CommandPool;
 
 	enum class BarrierType
 	{
@@ -46,6 +47,8 @@ namespace pe
 		CommandBuffer();
 
 		~CommandBuffer();
+
+		void Create(CommandPool* commandPool = nullptr); // TODO: Add command pool wrapper
 
 		void Begin();
 
@@ -71,7 +74,6 @@ namespace pe
 
 		void Submit();
 
-	private:
-		Ref<vk::CommandBuffer> cmdVK;
+		Ref<vk::CommandBuffer> handle;
 	};
 }

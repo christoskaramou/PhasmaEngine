@@ -38,9 +38,30 @@ SOFTWARE.
 
 namespace pe
 {
+	class Viewport
+	{
+	public:
+		float x;
+		float y;
+		float width;
+		float height;
+		float minDepth;
+		float maxDepth;
+	};
+
+	class RenderArea
+	{
+	public:
+		Viewport viewport;
+		Rect2D scissor;
+
+		void Update(float x, float y, float w, float h, float minDepth = 0.f, float maxDepth = 1.f);
+	};
+
 	class Renderer
 	{
 	protected:
+		RenderArea renderArea;
 		Shadows shadows;
 		Deferred deferred;
 		SkyBox skyBoxDay;
@@ -56,6 +77,8 @@ namespace pe
 		Renderer();
 		
 		~Renderer();
+
+		RenderArea& GetRenderArea() { return renderArea; }
 		
 		void AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags);
 		
@@ -64,13 +87,15 @@ namespace pe
 		void CreateUniforms();
 		
 		void ResizeViewport(uint32_t width, uint32_t height);
+
+		void BlitToViewport(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex);
 		
 		void RecreatePipelines();
-		
-		uint32_t previousImageIndex = 0;
-		std::map<std::string, Image> renderTargets {};
 
 		std::map<std::string, Image>& GetRenderTargets() { return renderTargets; }
+
+		uint32_t previousImageIndex = 0;
+		std::map<std::string, Image> renderTargets {};
 	
 	protected:		
 		static void CheckQueue();

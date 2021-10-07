@@ -67,11 +67,9 @@ namespace pe
 		ScrollToBottom = true;
 	}
 	
-	void Console::Draw(const char* title, bool* p_open, ImVec2 pos, ImVec2 size)
+	void Console::Draw(const char* title, bool* p_open)
 	{
-		ImGui::SetNextWindowPos(pos);
-		ImGui::SetNextWindowSize(size);// , ImGuiCond_FirstUseEver);
-		if (!ImGui::Begin(title, p_open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
+		if (!ImGui::Begin(title, p_open))
 		{
 			ImGui::End();
 			return;

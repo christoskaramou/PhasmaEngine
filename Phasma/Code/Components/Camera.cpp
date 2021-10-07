@@ -23,6 +23,8 @@ SOFTWARE.
 #include "Camera.h"
 #include "GUI/GUI.h"
 #include "Renderer/Compute.h"
+#include "ECS/Context.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {    
@@ -46,9 +48,6 @@ namespace pe
         frustum.resize(6);
         
         frustumCompute = Compute::Create("Shaders/Compute/frustum.comp", 64, 96);
-
-        renderArea.viewport.minDepth = 0.f;
-        renderArea.viewport.maxDepth = 1.f;
     }
     
     void Camera::ReCreateComputePipelines()
@@ -63,6 +62,8 @@ namespace pe
     
     void Camera::Update()
     {
+        auto& renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
+
         front = orientation * WorldFront();
         right = orientation * WorldRight();
         up = orientation * WorldUp();
@@ -99,6 +100,7 @@ namespace pe
     
     void Camera::UpdatePerspective()
     {
+        auto& renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
         const float aspect = renderArea.viewport.width / renderArea.viewport.height;
         projection = perspective(radians(FOV), aspect, nearPlane, farPlane, projOffset, worldOrientation.z);
     }
@@ -216,20 +218,5 @@ namespace pe
                 return true;
         }
         return true;
-    }
-    
-    void Camera::TargetArea::Update(float x, float y, float w, float h, float minDepth, float maxDepth)
-    {
-        viewport.x = x;
-        viewport.y = y;
-        viewport.width = w;
-        viewport.height = h;
-        viewport.minDepth = minDepth;
-        viewport.maxDepth = maxDepth;
-        
-        scissor.x = static_cast<int>(x);
-        scissor.y = static_cast<int>(y);
-        scissor.width = static_cast<int>(w);
-        scissor.height = static_cast<int>(h);
     }
 }

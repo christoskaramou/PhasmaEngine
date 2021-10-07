@@ -33,23 +33,28 @@ SOFTWARE.
 
 namespace pe
 {
-    constexpr float LOWER_PANEL_HEIGHT = 150.f;
-    constexpr float LEFT_PANEL_WIDTH = 250.f;
-    constexpr float RIGHT_PANEL_WIDTH = 250.f;
-    constexpr float MENU_HEIGHT = 19.f;
-    
+    constexpr float TITLEBAR_HEIGHT = 19.f;
+
     class Context;
-    
-    class GUI : public Object
+    class Window;
+    class Surface;
+    class Swapchain;
+    class FrameBuffer;
+    class RenderPass;
+    class CommandPool;
+    class CommandBuffer;
+    class Fence;
+    class Semaphore;
+
+    class GUI
     {
-    public:        
+    public:
         GUI();
-        
+
         ~GUI();
-        
+
         // Data
         static inline float renderTargetsScale = 1.0f;//0.71f;
-        static inline bool lock_render_window = true;
         static inline bool use_IBL = false;
         static inline bool use_Volumetric_lights = false;
         static inline int volumetric_steps = 32;
@@ -88,113 +93,64 @@ namespace pe
         static inline float fog_max_height = 3.0f;
         static inline bool shadow_cast = false;
         static inline float sun_intensity = 7.f;
-        static inline std::array<float, 3> sun_direction { 0.7f, 0.7f, 0.7f};
-        static inline float fps = 60.0f;
+        static inline std::array<float, 3> sun_direction{ 0.7f, 0.7f, 0.7f };
+        static inline int fps = 60;
         static inline float cameraSpeed = 3.5f;
-        static inline std::array<float, 3> depthBias {0.0f, 0.0f, -6.2f};
-        static inline std::array<float, 4> clearColor {0.0f, 0.0f, 0.0f, 1.0f};
+        static inline std::array<float, 3> depthBias{ 0.0f, 0.0f, -6.2f };
         static inline float timeScale = 1.f;
-        static inline std::vector<std::string> fileList {};
-        static inline std::vector<std::string> shaderList {};
-        static inline std::vector<std::string> modelList {};
-        static inline std::vector<std::array<float, 3>> model_scale {};
-        static inline std::vector<std::array<float, 3>> model_pos {};
-        static inline std::vector<std::array<float, 3>> model_rot {};
+        static inline std::vector<std::string> fileList{};
+        static inline std::vector<std::string> shaderList{};
+        static inline std::vector<std::string> modelList{};
+        static inline std::vector<std::array<float, 3>> model_scale{};
+        static inline std::vector<std::array<float, 3>> model_pos{};
+        static inline std::vector<std::array<float, 3>> model_rot{};
         static inline int modelItemSelected = -1;
         static inline Image* s_currRenderImage = nullptr;
         static inline std::vector<Image*> s_renderImages{};
-        static inline ImVec2 tlPanelPos = ImVec2();
-        static inline ImVec2 tlPanelSize = ImVec2();
-        static inline ImVec2 mlPanelPos = ImVec2();
-        static inline ImVec2 mlPanelSize = ImVec2();
-        static inline SDL_Window* g_Window = nullptr;
-        static inline Uint64 g_Time = 0;
-        static inline bool g_MousePressed[3] = {false, false, false};
-        static inline SDL_Cursor* g_MouseCursors[ImGuiMouseCursor_COUNT] = {nullptr};
-        static inline char* g_ClipboardTextData = nullptr;
-        
+
         bool show_demo_window = false;
-        
-        static const char* ImGui_ImplSDL2_GetClipboardText(void*);
-        
-        static void ImGui_ImplSDL2_SetClipboardText(void*, const char* text);
-        
-        void initImGui();
-        
-        void newFrame();
-        
+
+        void InitImGui();
+
+        bool render = true;
         std::string name;
         RenderPass renderPass;
         std::vector<FrameBuffer> framebuffers;
-        Pipeline pipeline;
-        static Ref<vk::DescriptorSetLayout> descriptorSetLayout;
-        
-        static const vk::DescriptorSetLayout& getDescriptorSetLayout(vk::Device device);
-        
-        void update();
-        
-        void loadGUI(bool show = true);
-        
-        static void scaleToRenderArea(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex);
-        
-        void draw(vk::CommandBuffer cmd, uint32_t imageIndex);
-        
-        static void windowStyle(ImGuiStyle* dst = nullptr);
-        
-        void setWindows();
-        
-        void LeftPanel() const;
-        
-        void RightPanel() const;
-        
-        void BottomPanel() const;
-        
-        void Menu() const;
-        
-        void Metrics() const;
-        
-        static void ConsoleWindow();
-        
-        static const char* async_fileDialog_ImGuiButton(
-                const char* buttonLabel, const char* dialogTitle, const std::vector<const char*>& filter
-        );
-        
-        static const char*
-        async_inputBox_ImGuiButton(const char* buttonLabel, const char* dialogTitle, const char* message);
-        
-        static const char* async_fileDialog_ImGuiMenuItem(
-                const char* menuLabel, const char* dialogTitle, const std::vector<const char*>& filter
-        );
-        
-        static int
-        async_messageBox_ImGuiMenuItem(const char* menuLabel, const char* messageBoxTitle, const char* message);
-        
-        void Scripts() const;
-        
-        void Shaders() const;
-        
-        void Models() const;
-        
-        void Properties() const;
-        
-        void RenderingWindowBox() const;
-        
-        using Object::createVertexBuffer;
-        
-        void createVertexBuffer(size_t vertex_size); // using the base func so the derived func can not hide it, because they have the same name
 
-        void createIndexBuffer(size_t index_size);
-        
-        void createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout) override;
-        
-        void updateDescriptorSets() const;
-        
-        void createRenderPass();
-        
-        void createFrameBuffers();
-        
-        void createPipeline();
-        
-        void destroy() override;
+        void Update();
+
+        void RenderViewPorts();
+
+        void InitGUI(bool show = true);
+
+        void Draw(vk::CommandBuffer cmd, uint32_t imageIndex);
+
+        static void SetWindowStyle(ImGuiStyle* dst = nullptr);
+
+        void UpdateWindows();
+
+        void Menu() const;
+
+        void Metrics() const;
+
+        static void ConsoleWindow();
+
+        static void async_fileDialog_ImGuiMenuItem(const char* menuLabel, const char* dialogTitle, const std::vector<const char*>& filter);
+
+        static void async_messageBox_ImGuiMenuItem(const char* menuLabel, const char* messageBoxTitle, const char* message);
+
+        void Scripts() const;
+
+        void Shaders() const;
+
+        void Models() const;
+
+        void Properties() const;
+
+        void CreateRenderPass();
+
+        void CreateFrameBuffers();
+
+        void Destroy();
     };
 }

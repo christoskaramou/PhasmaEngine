@@ -89,7 +89,7 @@ namespace pe
 		
 		void AddLog(const char* fmt, ...) IM_FMTARGS(2);
 		
-		void Draw(const char* title, bool* p_open, ImVec2 pos, ImVec2 size);
+		void Draw(const char* title, bool* p_open);
 		
 		void ExecCommand(const char* command_line);
 		

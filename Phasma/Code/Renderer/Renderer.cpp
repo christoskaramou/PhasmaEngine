@@ -42,6 +42,21 @@ namespace pe
 		Context::Get()->GetVKContext()->Destroy();
 		Context::Get()->GetVKContext()->Remove();
 	}
+
+	void RenderArea::Update(float x, float y, float w, float h, float minDepth, float maxDepth)
+	{
+		viewport.x = x;
+		viewport.y = y;
+		viewport.width = w;
+		viewport.height = h;
+		viewport.minDepth = minDepth;
+		viewport.maxDepth = maxDepth;
+
+		scissor.x = static_cast<int>(x);
+		scissor.y = static_cast<int>(y);
+		scissor.width = static_cast<int>(w);
+		scissor.height = static_cast<int>(h);
+	}
 	
 	void Renderer::CheckQueue()
 	{
@@ -215,11 +230,12 @@ namespace pe
 		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorWrite);
 		for (auto& image : shadows.textures)
 			image.changeLayout(cmd, LayoutState::DepthWrite);
-		
+
+		BlitToViewport(cmd, GUI::s_currRenderImage ? *GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
+
 		// GUI
 		gpuTimer[10].Start(&cmd);
-		gui.scaleToRenderArea(cmd, GUI::s_currRenderImage ? *GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
-		gui.draw(cmd, imageIndex);
+		gui.Draw(cmd, imageIndex);
 		frameTimer.timestamps[12] = gpuTimer[10].End();
 		
 		frameTimer.timestamps[2] = gpuTimer[0].End();
@@ -399,9 +415,6 @@ namespace pe
 				Path::Assets + "Objects/lmcity/lmcity_ft.png"
 		};
 		skyBoxNight.loadSkyBox(skyTextures, 512);
-		
-		// GUI LOAD
-		gui.loadGUI();
 
 #ifndef IGNORE_SCRIPTS
 		// SCRIPTS
@@ -419,8 +432,6 @@ namespace pe
 	
 	void Renderer::CreateUniforms()
 	{
-		// DESCRIPTOR SETS FOR GUI
-		gui.createDescriptorSet(GUI::getDescriptorSetLayout(*VulkanContext::Get()->device));
 		// DESCRIPTOR SETS FOR SKYBOX
 		skyBoxDay.createDescriptorSet();
 		skyBoxNight.createDescriptorSet();
@@ -437,6 +448,8 @@ namespace pe
 	{
 		auto& vulkan = *VulkanContext::Get();
 		vulkan.graphicsQueue->waitIdle();
+
+		renderArea.Update(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
 
 		SSAO& ssao = *Context::Get()->MainEntity->GetComponent<SSAO>();
 		SSR& ssr = *Context::Get()->MainEntity->GetComponent<SSR>();
@@ -455,9 +468,6 @@ namespace pe
 		
 		// GUI
 		gui.renderPass.Destroy();
-		for (auto& framebuffer : gui.framebuffers)
-			framebuffer.Destroy();
-		gui.pipeline.destroy();
 		
 		// deferred
 		deferred.renderPass.Destroy();
@@ -537,7 +547,7 @@ namespace pe
 		//- Recreate resources ------------------
 		WIDTH = width;
 		HEIGHT = height;
-		vulkan.CreateSwapchain(3);
+		vulkan.CreateSwapchain(&VULKAN.surface);
 		vulkan.CreateDepth();
 		
 		AddRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
@@ -599,14 +609,83 @@ namespace pe
 		ssao.createPipelines(renderTargets);
 		ssao.updateDescriptorSets(renderTargets);
 		
-		gui.createRenderPass();
-		gui.createFrameBuffers();
-		gui.createPipeline();
-		gui.updateDescriptorSets();
+		gui.CreateRenderPass();
+		gui.CreateFrameBuffers();
 		
 		//compute.pipeline = createComputePipeline();
 		//compute.updateDescriptorSets();
+
 		//- Recreate resources end --------------
+	}
+			
+	void Renderer::BlitToViewport(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
+	{
+		Image& s_chain_Image = VulkanContext::Get()->swapchain.images[imageIndex];
+		
+		renderedImage.transitionImageLayout(
+			cmd,
+			vk::ImageLayout::eColorAttachmentOptimal,
+			vk::ImageLayout::eTransferSrcOptimal,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::AccessFlagBits::eColorAttachmentWrite,
+			vk::AccessFlagBits::eTransferRead,
+			vk::ImageAspectFlagBits::eColor
+		);
+		s_chain_Image.transitionImageLayout(
+			cmd,
+			vk::ImageLayout::ePresentSrcKHR,
+			vk::ImageLayout::eTransferDstOptimal,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::AccessFlagBits::eColorAttachmentRead,
+			vk::AccessFlagBits::eTransferWrite,
+			vk::ImageAspectFlagBits::eColor
+		);
+		
+		vk::ImageBlit blit;
+		blit.srcOffsets[0] = vk::Offset3D {0, 0, 0};
+		blit.srcOffsets[1] = vk::Offset3D{ static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 1 };
+		blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		blit.srcSubresource.layerCount = 1;
+		Viewport& vp = renderArea.viewport;
+		blit.dstOffsets[0] = vk::Offset3D {static_cast<int32_t>(vp.x), static_cast<int32_t>(vp.y), 0};
+		blit.dstOffsets[1] = vk::Offset3D {
+				static_cast<int32_t>(vp.x) + static_cast<int32_t>(vp.width),
+				static_cast<int32_t>(vp.y) + static_cast<int32_t>(vp.height), 1
+		};
+		blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		blit.dstSubresource.layerCount = 1;
+		
+		cmd.blitImage(
+			*renderedImage.image,
+			vk::ImageLayout::eTransferSrcOptimal,
+			*s_chain_Image.image,
+			vk::ImageLayout::eTransferDstOptimal,
+			blit,
+			vk::Filter::eLinear
+		);
+		
+		renderedImage.transitionImageLayout(
+			cmd,
+			vk::ImageLayout::eTransferSrcOptimal,
+			vk::ImageLayout::eColorAttachmentOptimal,
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::AccessFlagBits::eTransferRead,
+			vk::AccessFlagBits::eColorAttachmentWrite,
+			vk::ImageAspectFlagBits::eColor
+		);
+		s_chain_Image.transitionImageLayout(
+			cmd,
+			vk::ImageLayout::eTransferDstOptimal,
+			vk::ImageLayout::ePresentSrcKHR,
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eColorAttachmentRead,
+			vk::ImageAspectFlagBits::eColor
+		);
 	}
 	
 	void Renderer::RecreatePipelines()
@@ -636,7 +715,6 @@ namespace pe
 		//bloom.pipelineGaussianBlurVertical.destroy();
 		dof.pipeline.destroy();
 		motionBlur.pipeline.destroy();
-		gui.pipeline.destroy();
 		
 		shadows.createPipeline();
 		ssao.createPipelines(renderTargets);
@@ -647,7 +725,6 @@ namespace pe
 		bloom.createPipelines(renderTargets);
 		dof.createPipeline(renderTargets);
 		motionBlur.createPipeline(renderTargets);
-		gui.createPipeline();
 		
 		Context::Get()->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
 	}

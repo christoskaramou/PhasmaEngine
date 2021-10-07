@@ -43,6 +43,7 @@ namespace pe
 		colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>());
 		dynamicStates = make_ref(std::vector<vk::DynamicState>());
 		descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>());
+		pipelineCache = make_ref(vk::PipelineCache());
 	}
 	
 	PipelineCreateInfo::~PipelineCreateInfo()
@@ -206,7 +207,10 @@ namespace pe
 		// Base Pipeline Index
 		pipeinfo.basePipelineIndex = -1;
 		
-		handle = make_ref(VulkanContext::Get()->device->createGraphicsPipeline(nullptr, pipeinfo).value);
+		handle = make_ref(VULKAN.device->createGraphicsPipeline(nullptr, pipeinfo).value);
+
+		//vk::PipelineCacheCreateInfo pcci;
+		//VULKAN.device->createPipelineCache()
 	}
 	
 	void Pipeline::createComputePipeline()

@@ -44,14 +44,13 @@ namespace pe
 	void Surface::Create(SDL_Window* window)
 	{
 		VkSurfaceKHR _vkSurface;
-		if (!SDL_Vulkan_CreateSurface(
-			window, VkInstance(*Context::Get()->GetVKContext()->instance), &_vkSurface
-		))
+		if (!SDL_Vulkan_CreateSurface(window, VkInstance(*Context::Get()->GetVKContext()->instance), &_vkSurface))
 			throw std::runtime_error(SDL_GetError());
-		
-		int width, height;
-		SDL_GL_GetDrawableSize(window, &width, &height);
-		actualExtent = make_ref(vk::Extent2D {static_cast<uint32_t>(width), static_cast<uint32_t>(height)});
+
+		int w, h;
+		SDL_GL_GetDrawableSize(window, &w, &h);
+
+		actualExtent = make_ref(vk::Extent2D {static_cast<uint32_t>(w), static_cast<uint32_t>(h)});
 		surface = make_ref(vk::SurfaceKHR(_vkSurface));
 	}
 	
@@ -111,8 +110,20 @@ namespace pe
 	
 	void Surface::FindProperties()
 	{
+		// Needs to be called?
+		VkBool32 supported = false;
+		vkGetPhysicalDeviceSurfaceSupportKHR(*VULKAN.gpu, VULKAN.graphicsFamilyId, *surface, &supported);
+
 		FindCapabilities();
 		FindFormat();
 		FindPresentationMode();
+	}
+
+	void Surface::Destroy()
+	{
+		if (*surface)
+		{
+			VULKAN.instance->destroySurfaceKHR(*surface);
+		}
 	}
 }

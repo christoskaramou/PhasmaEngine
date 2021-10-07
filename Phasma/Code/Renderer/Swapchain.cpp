@@ -30,52 +30,51 @@ namespace pe
 {
 	Swapchain::Swapchain()
 	{
-		swapchain = make_ref(vk::SwapchainKHR());
+		handle = make_ref(vk::SwapchainKHR());
 	}
 	
 	Swapchain::~Swapchain()
 	{
 	}
 	
-	void Swapchain::Create(uint32_t requestImageCount)
+	void Swapchain::Create(Surface* surface)
 	{
-		auto& vulkan = *Context::Get()->GetVKContext();
-		const VkExtent2D extent = *vulkan.surface.actualExtent;
+		const VkExtent2D extent = *surface->actualExtent;
 		
 		vk::SwapchainCreateInfoKHR swapchainCreateInfo;
-		swapchainCreateInfo.surface = *vulkan.surface.surface;
+		swapchainCreateInfo.surface = *surface->surface;
 		swapchainCreateInfo.minImageCount = clamp(
-				requestImageCount, vulkan.surface.capabilities->minImageCount,
-				vulkan.surface.capabilities->maxImageCount
+			SWAPCHAIN_IMAGES, surface->capabilities->minImageCount,
+			surface->capabilities->maxImageCount
 		);
-		swapchainCreateInfo.imageFormat = vulkan.surface.formatKHR->format;
-		swapchainCreateInfo.imageColorSpace = vulkan.surface.formatKHR->colorSpace;
+		swapchainCreateInfo.imageFormat = surface->formatKHR->format;
+		swapchainCreateInfo.imageColorSpace = surface->formatKHR->colorSpace;
 		swapchainCreateInfo.imageExtent = extent;
 		swapchainCreateInfo.imageArrayLayers = 1;
 		swapchainCreateInfo.imageUsage =
 				vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
-		swapchainCreateInfo.preTransform = vulkan.surface.capabilities->currentTransform;
+		swapchainCreateInfo.preTransform = surface->capabilities->currentTransform;
 		swapchainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-		swapchainCreateInfo.presentMode = *vulkan.surface.presentModeKHR;
+		swapchainCreateInfo.presentMode = *surface->presentModeKHR;
 		swapchainCreateInfo.clipped = VK_TRUE;
 		swapchainCreateInfo.oldSwapchain =
-				*swapchain ?
-				*swapchain :
+				*handle ?
+				*handle :
 				nullptr;
 		
 		// new swapchain with old create info
 		Swapchain newSwapchain;
-		newSwapchain.swapchain = make_ref(vulkan.device->createSwapchainKHR(swapchainCreateInfo));
+		newSwapchain.handle = make_ref(VULKAN.device->createSwapchainKHR(swapchainCreateInfo));
 		
 		// destroy old swapchain
-		if (*swapchain)
+		if (*handle)
 		{
-			vulkan.device->destroySwapchainKHR(*swapchain);
-			*swapchain = nullptr;
+			VULKAN.device->destroySwapchainKHR(*handle);
+			*handle = nullptr;
 		}
 		
 		// get the swapchain image handlers
-		std::vector<vk::Image> images = vulkan.device->getSwapchainImagesKHR(*newSwapchain.swapchain);
+		std::vector<vk::Image> images = VULKAN.device->getSwapchainImagesKHR(*newSwapchain.handle);
 		
 		newSwapchain.images.resize(images.size());
 		for (unsigned i = 0; i < images.size(); i++)
@@ -100,57 +99,40 @@ namespace pe
 			vk::ImageViewCreateInfo imageViewCreateInfo;
 			imageViewCreateInfo.image = *image.image;
 			imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
-			imageViewCreateInfo.format = VulkanContext::Get()->surface.formatKHR->format;
+			imageViewCreateInfo.format = VULKAN.surface.formatKHR->format;
 			imageViewCreateInfo.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-			image.view = make_ref(VulkanContext::Get()->device->createImageView(imageViewCreateInfo));
+			image.view = make_ref(VULKAN.device->createImageView(imageViewCreateInfo));
 		}
 		
 		*this = newSwapchain;
-		vulkan.SetDebugObjectName(*swapchain, "");
+		VULKAN.SetDebugObjectName(*handle, "");
 	}
 	
 	uint32_t Swapchain::Aquire(vk::Semaphore semaphore, vk::Fence fence) const
 	{
-		const auto aquire = VulkanContext::Get()->device->acquireNextImageKHR(*swapchain, UINT64_MAX, semaphore, fence);
+		const auto aquire = VULKAN.device->acquireNextImageKHR(*handle, UINT64_MAX, semaphore, fence);
 		if (aquire.result != vk::Result::eSuccess)
 			throw std::runtime_error("Aquire Next Image error");
 		
 		return aquire.value;
 	}
-	
-	void Swapchain::Present(
-			vk::ArrayProxy<const uint32_t> imageIndices, vk::ArrayProxy<const vk::Semaphore> semaphores,
-			vk::ArrayProxy<const vk::SwapchainKHR> additionalSwapchains
-	) const
-	{
-		if (imageIndices.size() <= additionalSwapchains.size())
-			throw std::runtime_error("Not enough image indices");
-		std::vector<vk::SwapchainKHR> swapchains(static_cast<size_t>(additionalSwapchains.size()) + 1);
-		swapchains[0] = *swapchain;
-		if (!additionalSwapchains.empty())
-			memcpy(&swapchains[1], additionalSwapchains.data(), additionalSwapchains.size() * sizeof(vk::SwapchainKHR));
-		
-		vk::PresentInfoKHR pi;
-		pi.waitSemaphoreCount = semaphores.size();
-		pi.pWaitSemaphores = semaphores.data();
-		pi.swapchainCount = static_cast<uint32_t>(swapchains.size());
-		pi.pSwapchains = swapchains.data();
-		pi.pImageIndices = imageIndices.data();
-		if (VulkanContext::Get()->graphicsQueue->presentKHR(pi) != vk::Result::eSuccess)
-			throw std::runtime_error("Present error!");
+	//vk::ArrayProxy<const vk::SwapchainKHR> additionalSwapchains
+	void Swapchain::Present(uint32_t imageIndex, vk::ArrayProxy<const vk::Semaphore> semaphores) const
+	{		
+		VULKAN.Present(*handle, imageIndex, semaphores);
 	}
 	
 	void Swapchain::Destroy()
 	{
 		for (auto& image : images)
 		{
-			VulkanContext::Get()->device->destroyImageView(*image.view);
+			VULKAN.device->destroyImageView(*image.view);
 			*image.view = nullptr;
 		}
-		if (*swapchain)
+		if (*handle)
 		{
-			VulkanContext::Get()->device->destroySwapchainKHR(*swapchain);
-			*swapchain = nullptr;
+			VULKAN.device->destroySwapchainKHR(*handle);
+			*handle = nullptr;
 		}
 	}
 }

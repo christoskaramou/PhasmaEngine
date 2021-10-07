@@ -159,8 +159,9 @@ namespace pe
 	{
 		uint32_t totalImages = static_cast<uint32_t>(VulkanContext::Get()->swapchain.images.size());
 		
+		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
 		vk::ClearValue clearColor;
-		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
+		memcpy(clearColor.color.float32, &color, sizeof(vec4));
 		
 		std::vector<vk::ClearValue> clearValues = {clearColor};
 		

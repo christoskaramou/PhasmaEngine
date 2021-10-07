@@ -22,32 +22,19 @@ SOFTWARE.
 
 #pragma once
 
+#include "Core/Base.h"
+
 namespace pe
 {
-	class Context;
-	
-	class Window
+	class Semaphore
 	{
 	public:
-		SDL_Window* Create(int x = 50, int y = 50, int w = 1280, int h = 720,
-			uint32_t flags = /*SDL_WINDOW_MAXIMIZED |*/ SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
-		
+		Semaphore();
+		~Semaphore();
+
+		void Create();
 		void Destroy();
-		
-		bool ProcessEvents(double delta);
-		
-		void WrapMouse(int& x, int& y);
-		
-		bool IsInsideRenderWindow(int x, int y);
-		
-		bool isMinimized();
-		
-		void SetTitle(const std::string& title);
-		
-		SDL_Window* Handle()
-		{ return m_handle; }
-	
-	private:
-		SDL_Window* m_handle = nullptr;
+
+		Ref<vk::Semaphore> handle;
 	};
 }

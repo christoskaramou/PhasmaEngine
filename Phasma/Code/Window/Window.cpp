@@ -32,7 +32,7 @@ SOFTWARE.
 
 namespace pe
 {
-	SDL_Window* Window::Create(uint32_t flags)
+	SDL_Window* Window::Create(int x, int y, int w, int h, uint32_t flags)
 	{
 		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
 		{
@@ -40,7 +40,7 @@ namespace pe
 			return nullptr;
 		}
 		
-		if (!((m_handle = SDL_CreateWindow("", 50, 50, 800, 600, flags))))
+		if (!((m_handle = SDL_CreateWindow("", x, y, w, h, flags))))
 		{
 			std::cout << SDL_GetError();
 			return nullptr;
@@ -62,7 +62,7 @@ namespace pe
 		SDL_SetWindowTitle(m_handle, title.c_str());
 	}
 	
-	void Window::DestroyAll()
+	void Window::Destroy()
 	{
 		SDL_DestroyWindow(m_handle);
 		SDL_Quit();
@@ -100,16 +100,6 @@ namespace pe
 				if (event.wheel.y < 0) io.MouseWheel -= 1;
 			}
 			
-			if (event.type == SDL_MOUSEBUTTONDOWN)
-			{
-				if (event.button.button == SDL_BUTTON_LEFT) GUI::g_MousePressed[0] = true;
-				if (event.button.button == SDL_BUTTON_RIGHT) GUI::g_MousePressed[1] = true;
-				if (event.button.button == SDL_BUTTON_MIDDLE) GUI::g_MousePressed[2] = true;
-			}
-			
-			if (event.type == SDL_TEXTINPUT)
-				io.AddInputCharactersUTF8(event.text.text);
-			
 			if (event.type == SDL_KEYDOWN)
 			{
 				const int key = event.key.keysym.scancode;
@@ -137,7 +127,7 @@ namespace pe
 			dx = static_cast<float>(x - px);
 			dy = static_cast<float>(y - py);
 			camera_main->Rotate(dx, dy);
-			WrapInsideRenderWindow(x, y);
+			WrapMouse(x, y);
 		}
 		
 		px = x;
@@ -193,26 +183,26 @@ namespace pe
 		return true;
 	}
 	
-	void Window::WrapInsideRenderWindow(int& x, int& y)
+	void Window::WrapMouse(int& x, int& y)
 	{
-		const Rect2D& rect2D = Context::Get()->GetSystem<CameraSystem>()->GetCamera(0)->renderArea.scissor;
+		const Rect2D& rect2D = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea().scissor;
 
-		if (x < rect2D.x)
+		if (x <= rect2D.x + 15)
 		{
-			x = rect2D.x + rect2D.width;
+			x = rect2D.x + rect2D.width - 15;
 		}
-		else if (x > rect2D.x + rect2D.width)
+		else if (x >= rect2D.x + rect2D.width - 15)
 		{
-			x = rect2D.x;
+			x = rect2D.x + 15;
 		}
 		
-		if (y < rect2D.y)
+		if (y <= rect2D.y + 15)
 		{
-			y = rect2D.y + rect2D.height;
+			y = rect2D.y + rect2D.height - 15;
 		}
-		else if (y > rect2D.y + rect2D.height)
+		else if (y >= rect2D.y + rect2D.height - 15)
 		{
-			y = rect2D.y;
+			y = rect2D.y + 15;
 		}
 		
 		SDL_WarpMouseInWindow(m_handle, x, y);
@@ -220,7 +210,7 @@ namespace pe
 	
 	bool Window::IsInsideRenderWindow(int x, int y)
 	{
-		const Rect2D& rect2D = Context::Get()->GetSystem<CameraSystem>()->GetCamera(0)->renderArea.scissor;
+		const Rect2D& rect2D = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea().scissor;
 		
 		return x >= rect2D.x && y >= rect2D.y && x <= rect2D.x + rect2D.width &&
 		       y <= rect2D.y + rect2D.height;

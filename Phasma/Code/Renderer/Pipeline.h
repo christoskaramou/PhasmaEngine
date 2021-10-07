@@ -63,6 +63,7 @@ namespace pe
 		uint32_t pushConstantSize;
 		Ref<std::vector<vk::DescriptorSetLayout>> descriptorSetLayouts;
 		RenderPass renderPass;
+		Ref<vk::PipelineCache> pipelineCache;
 	};
 	
 	class Pipeline

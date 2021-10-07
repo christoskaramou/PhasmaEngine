@@ -39,24 +39,6 @@ namespace pe
 			RIGHT
 		};
 		
-		struct Viewport
-		{
-			float x;
-			float y;
-			float width;
-			float height;
-			float minDepth;
-			float maxDepth;
-		};
-		
-		struct TargetArea
-		{
-			Viewport viewport;
-			Rect2D scissor;
-			
-			void Update(float x, float y, float w, float h, float minDepth = 0.f, float maxDepth = 1.f);
-		};
-		
 		struct Plane
 		{
 			vec3 normal;
@@ -72,7 +54,6 @@ namespace pe
 		vec3 front, right, up;
 		float nearPlane, farPlane, FOV, speed, rotationSpeed;
 		vec2 projOffset, projOffsetPrevious;
-		TargetArea renderArea;
 		std::vector<Plane> frustum {};
 		Compute frustumCompute;
 		

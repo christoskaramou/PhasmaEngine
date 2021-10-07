@@ -20,34 +20,33 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#pragma once
+#include "Semaphore.h"
+#include "Renderer/Vulkan/Vulkan.h"
 
 namespace pe
 {
-	class Context;
-	
-	class Window
+	Semaphore::Semaphore()
 	{
-	public:
-		SDL_Window* Create(int x = 50, int y = 50, int w = 1280, int h = 720,
-			uint32_t flags = /*SDL_WINDOW_MAXIMIZED |*/ SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
-		
-		void Destroy();
-		
-		bool ProcessEvents(double delta);
-		
-		void WrapMouse(int& x, int& y);
-		
-		bool IsInsideRenderWindow(int x, int y);
-		
-		bool isMinimized();
-		
-		void SetTitle(const std::string& title);
-		
-		SDL_Window* Handle()
-		{ return m_handle; }
-	
-	private:
-		SDL_Window* m_handle = nullptr;
-	};
+		handle = make_ref(vk::Semaphore());
+	}
+
+	Semaphore::~Semaphore()
+	{
+	}
+
+	void Semaphore::Create()
+	{
+		const vk::SemaphoreCreateInfo si;
+		handle = make_ref(VULKAN.device->createSemaphore(si));
+		VULKAN.SetDebugObjectName(*handle, "Semaphore");
+	}
+
+	void Semaphore::Destroy()
+	{
+		if (*handle)
+		{
+			VULKAN.device->destroySemaphore(*handle);
+			handle = nullptr;
+		}
+	}
 }

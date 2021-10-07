@@ -27,9 +27,7 @@ SOFTWARE.
 #include <iostream>
 
 namespace pe
-{
-	constexpr uint32_t SWAPCHAIN_IMAGES = 3;
-	
+{	
 	VulkanContext::VulkanContext()
 	{
 		instance = make_ref(vk::Instance());
@@ -370,9 +368,9 @@ namespace pe
 		GetComputeQueue();
 	}
 	
-	void VulkanContext::CreateSwapchain(uint32_t requestImageCount)
+	void VulkanContext::CreateSwapchain(Surface* surface)
 	{
-		swapchain.Create(requestImageCount);
+		swapchain.Create(surface);
 	}
 	
 	void VulkanContext::CreateCommandPools()
@@ -512,7 +510,7 @@ namespace pe
 		CreateAllocator();
 		GetQueues();
 		CreateCommandPools();
-		CreateSwapchain(SWAPCHAIN_IMAGES);
+		CreateSwapchain(&surface);
 		CreateDescriptorPool(15000); // max number of all descriptor sets to allocate
 		CreateCmdBuffers(SWAPCHAIN_IMAGES);
 		CreateSemaphores(SWAPCHAIN_IMAGES * 3);
@@ -620,6 +618,24 @@ namespace pe
 		if (device->waitForFences(fence, VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
 			throw std::runtime_error("wait fences error!");
 		device->destroyFence(fence);
+	}
+
+	void VulkanContext::Present(
+		vk::ArrayProxy<const vk::SwapchainKHR> swapchains,
+		vk::ArrayProxy<const uint32_t> imageIndices,
+		vk::ArrayProxy<const vk::Semaphore> semaphores)
+	{
+		if (swapchains.size() != imageIndices.size())
+			throw std::runtime_error("Arguments mismatch");
+
+		vk::PresentInfoKHR pi;
+		pi.waitSemaphoreCount = semaphores.size();
+		pi.pWaitSemaphores = semaphores.data();
+		pi.swapchainCount = swapchains.size();
+		pi.pSwapchains = swapchains.data();
+		pi.pImageIndices = imageIndices.data();
+		if (VulkanContext::Get()->graphicsQueue->presentKHR(pi) != vk::Result::eSuccess)
+			throw std::runtime_error("Present error!");
 	}
 	
 	void VulkanContext::waitAndLockSubmits()

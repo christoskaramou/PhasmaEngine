@@ -63,17 +63,14 @@ namespace pe
 		// render passes
 		shadows.createRenderPass();
 		deferred.createRenderPasses(renderTargets);
-		gui.createRenderPass();
 
 		// frame buffers
 		shadows.createFrameBuffers();
 		deferred.createFrameBuffers(renderTargets);
-		gui.createFrameBuffers();
 
 		// pipelines
 		shadows.createPipeline();
 		deferred.createPipelines(renderTargets);
-		gui.createPipeline();
 
 		//transformsCompute = Compute::Create("Shaders/Compute/shader.comp", 64, 64);
 
@@ -81,6 +78,13 @@ namespace pe
 		LoadResources();
 		// CREATE UNIFORMS AND DESCRIPTOR SETS
 		CreateUniforms();
+
+		// GUI LOAD
+		gui.CreateRenderPass();
+		gui.CreateFrameBuffers();
+		gui.InitGUI();
+
+		renderArea.Update(0.0f, 0.0f, WIDTH_f, HEIGHT_f);
 	}
 
 	void RendererSystem::Update(double delta)
@@ -110,7 +114,7 @@ namespace pe
 		}
 
 		// GUI
-		auto updateGUI = [this]() { gui.update(); };
+		auto updateGUI = [this]() { gui.Update(); };
 		Queue<Launch::Async>::Request(updateGUI);
 
 		// SHADOWS
@@ -191,11 +195,12 @@ namespace pe
 
 		// Presentation
 		const auto& presentWaitSemaphore = deferredSignalSemaphore;
-		vCtx.swapchain.Present(imageIndex, presentWaitSemaphore, nullptr);
+		vCtx.Present(*vCtx.swapchain.handle, imageIndex, presentWaitSemaphore);
 
 		vCtx.unlockSubmits();
-	}
 
+		gui.RenderViewPorts();
+	}
 
 	void RendererSystem::Destroy()
 	{
@@ -238,6 +243,6 @@ namespace pe
 		deferred.destroy();
 		skyBoxDay.destroy();
 		skyBoxNight.destroy();
-		gui.destroy();
+		gui.Destroy();
 	}
 }

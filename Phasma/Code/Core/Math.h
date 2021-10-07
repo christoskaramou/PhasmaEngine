@@ -536,10 +536,18 @@ namespace pe
 	template<typename T>
 	inline void clamp(T* const x, const T& minX, const T& maxX)
 	{ *x = clamp(*x, minX, maxX); };
+
+	float saturate(float x);
 	
 	float rand(cfloat a, cfloat b);
 	
 	float lerp(cfloat a, cfloat b, cfloat f);
+
+	vec2 lerp(cvec2& a, cvec2& b, float f);
+
+	vec3 lerp(cvec3& a, cvec3& b, float f);
+
+	vec4 lerp(cvec4& a, cvec4& b, float f);
 	
 	float halton(uint32_t index, uint32_t base);
 	

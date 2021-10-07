@@ -50,8 +50,9 @@ namespace pe
 	
 	void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
 	{
+		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
 		vk::ClearValue clearColor;
-		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
+		memcpy(clearColor.color.float32, &color, sizeof(vec4));
 		
 		vk::ClearDepthStencilValue depthStencil;
 		depthStencil.depth = 0.f;
@@ -223,8 +224,9 @@ namespace pe
 	void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent)
 	{
 		// Begin Composition
+		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
 		vk::ClearValue clearColor;
-		memcpy(clearColor.color.float32, GUI::clearColor.data(), 4 * sizeof(float));
+		memcpy(clearColor.color.float32, &color, sizeof(vec4));
 		
 		std::vector<vk::ClearValue> clearValues = {clearColor, clearColor};
 		

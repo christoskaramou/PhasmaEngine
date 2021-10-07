@@ -27,7 +27,10 @@ SOFTWARE.
 
 namespace pe
 {
+	constexpr uint32_t SWAPCHAIN_IMAGES = 3;
+
 	class Context;
+	class Surface;
 	
 	class Swapchain
 	{
@@ -36,18 +39,16 @@ namespace pe
 		
 		~Swapchain();
 		
-		void Create(uint32_t requestImageCount);
+		void Create(Surface* surface);
 		
 		uint32_t Aquire(vk::Semaphore semaphore, vk::Fence fence) const;
 		
-		void Present(
-				vk::ArrayProxy<const uint32_t> imageIndices, vk::ArrayProxy<const vk::Semaphore> semaphores,
-				vk::ArrayProxy<const vk::SwapchainKHR> additionalSwapchains
-		) const;
+		void Present(uint32_t imageIndex, vk::ArrayProxy<const vk::Semaphore> semaphores) const;
 		
 		void Destroy();
 		
-		Ref<vk::SwapchainKHR> swapchain;
+		Ref<vk::SwapchainKHR> handle;
 		std::vector<Image> images {};
+		uint32_t previousImageIndex = 0;
 	};
 }
