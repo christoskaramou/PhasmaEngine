@@ -29,39 +29,41 @@ SOFTWARE.
 
 namespace pe
 {
-	class BufferVK;
-	class BufferDX;
-	
-	class Buffer
+	class Buffer : public NoCopy, public NoMove
 	{
 	public:
-		Buffer();
-		
-		void CreateBuffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
-		
-		void Map();
-		
-		void Unmap();
-		
-		void Zero() const;
-		
-		void CopyData(const void* srcData, size_t srcSize = 0, size_t offset = 0);
-		
-		void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) const;
-		
-		void Flush(size_t offset = 0, size_t flushSize = 0) const;
-		
-		void Destroy() const;
-		
-		size_t Size();
-		
-		size_t SizeRequested();
-		
-		void* Data();
-		
-		Ref<vk::Buffer> GetBufferVK();
+		static SPtr<Buffer> Create(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
 
-		void SetDebugName(const std::string& debugName);
+		virtual ~Buffer() {};
+		
+		virtual void Map() = 0;
+		
+		virtual void Unmap() = 0;
+		
+		virtual void Zero() const = 0;
+		
+		virtual void CopyData(const void* srcData, size_t srcSize = 0, size_t offset = 0) = 0;
+		
+		virtual void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) const = 0;
+		
+		virtual void Flush(size_t offset = 0, size_t flushSize = 0) const = 0;
+		
+		virtual void Destroy() = 0;
+		
+		virtual size_t Size() = 0;
+		
+		virtual size_t SizeRequested() = 0;
+		
+		virtual void* Data() = 0;
+
+		virtual void SetDebugName(const std::string& debugName) = 0;
+
+	protected:
+		virtual void* Handle() = 0;
+
+	public:
+		template<class T>
+		T& Handle() { return *static_cast<T*>(Handle()); }
 
 		template<Launch launch>
 		void CopyRequest(const MemoryRange& range)
@@ -89,9 +91,5 @@ namespace pe
 			};
 			Queue<launch>::Request(lambda);
 		}
-		
-	private:
-		Ref<BufferVK> m_bufferVK;
-		Ref<BufferDX> m_bufferDX;
 	};
 }

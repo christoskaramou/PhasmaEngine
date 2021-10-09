@@ -27,7 +27,7 @@ namespace pe
 {
 	Semaphore::Semaphore()
 	{
-		handle = make_ref(vk::Semaphore());
+		handle = make_sptr(vk::Semaphore());
 	}
 
 	Semaphore::~Semaphore()
@@ -37,7 +37,7 @@ namespace pe
 	void Semaphore::Create()
 	{
 		const vk::SemaphoreCreateInfo si;
-		handle = make_ref(VULKAN.device->createSemaphore(si));
+		handle = make_sptr(VULKAN.device->createSemaphore(si));
 		VULKAN.SetDebugObjectName(*handle, "Semaphore");
 	}
 

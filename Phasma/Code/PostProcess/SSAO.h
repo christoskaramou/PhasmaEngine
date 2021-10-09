@@ -42,14 +42,14 @@ namespace pe
 		~SSAO();
 		
 		mat4 pvm[3];
-		Buffer UB_Kernel;
-		Buffer UB_PVM;
+		SPtr<Buffer> UB_Kernel;
+		SPtr<Buffer> UB_PVM;
 		Image noiseTex;
 		RenderPass renderPass, blurRenderPass;
 		std::vector<FrameBuffer> framebuffers {}, blurFramebuffers {};
 		Pipeline pipeline;
 		Pipeline pipelineBlur;
-		Ref<vk::DescriptorSet> DSet, DSBlur;
+		SPtr<vk::DescriptorSet> DSet, DSBlur;
 		
 		void update(Camera& camera);
 		

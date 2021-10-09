@@ -45,7 +45,7 @@ namespace pe
 		std::vector<FrameBuffer> framebuffers {}, framebuffersSharpen {};
 		Pipeline pipeline, pipelineSharpen;
 		RenderPass renderPass, renderPassSharpen;
-		Ref<vk::DescriptorSet> DSet, DSetSharpen;
+		SPtr<vk::DescriptorSet> DSet, DSetSharpen;
 		Image previous;
 		Image frameImage;
 		
@@ -55,7 +55,7 @@ namespace pe
 			vec4 sharpenValues;
 			mat4 invProj;
 		} ubo;
-		Buffer uniform;
+		SPtr<Buffer> uniform;
 		
 		void Init();
 		

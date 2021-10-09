@@ -41,7 +41,7 @@ namespace pe
 {
 	Deferred::Deferred()
 	{
-		DSComposition = make_ref(vk::DescriptorSet());
+		DSComposition = make_sptr(vk::DescriptorSet());
 	}
 	
 	Deferred::~Deferred()
@@ -85,15 +85,15 @@ namespace pe
 	
 	void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		uniform.CreateBuffer(
+		uniform = Buffer::Create(
 			sizeof(ubo),
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		uniform.Map();
-		uniform.Zero();
-		uniform.Flush();
-		uniform.Unmap();
-		uniform.SetDebugName("Deferred_UB");
+		uniform->Map();
+		uniform->Zero();
+		uniform->Flush();
+		uniform->Unmap();
+		uniform->SetDebugName("Deferred_UB");
 		
 		auto vulkan = VulkanContext::Get();
 		const vk::DescriptorSetAllocateInfo allocInfo =
@@ -102,7 +102,7 @@ namespace pe
 						1,                                        //uint32_t descriptorSetCount;
 						&Pipeline::getDescriptorSetLayoutComposition() //const DescriptorSetLayout* pSetLayouts;
 				};
-		DSComposition = make_ref(vulkan->device->allocateDescriptorSets(allocInfo).at(0));
+		DSComposition = make_sptr(vulkan->device->allocateDescriptorSets(allocInfo).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSComposition, "Composition");
 		
 		// Check if ibl_brdf_lut is already loaded
@@ -124,20 +124,19 @@ namespace pe
 			vulkan->graphicsQueue->waitIdle();
 			vulkan->waitAndLockSubmits();
 			
-			Buffer staging;
-			staging.CreateBuffer(
+			SPtr<Buffer> staging = Buffer::Create(
 				imageSize,
 				(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
 				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-			staging.Map();
-			staging.CopyData(pixels);
-			staging.Flush();
-			staging.Unmap();
-			staging.SetDebugName("Staging");
+			staging->Map();
+			staging->CopyData(pixels);
+			staging->Flush();
+			staging->Unmap();
+			staging->SetDebugName("Staging");
 			
 			stbi_image_free(pixels);
 			
-			ibl_brdf_lut.format = make_ref(vk::Format::eR8G8B8A8Unorm);
+			ibl_brdf_lut.format = make_sptr(vk::Format::eR8G8B8A8Unorm);
 			ibl_brdf_lut.mipLevels =
 					static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
 			ibl_brdf_lut.createImage(
@@ -146,14 +145,14 @@ namespace pe
 					vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal
 			);
 			ibl_brdf_lut.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-			ibl_brdf_lut.copyBufferToImage(*staging.GetBufferVK());
+			ibl_brdf_lut.copyBufferToImage(staging->Handle<vk::Buffer>());
 			ibl_brdf_lut.generateMipMaps();
 			ibl_brdf_lut.createImageView(vk::ImageAspectFlagBits::eColor);
 			ibl_brdf_lut.maxLod = static_cast<float>(ibl_brdf_lut.mipLevels);
 			ibl_brdf_lut.createSampler();
 			ibl_brdf_lut.SetDebugName("ibl_brdf_lut");
 			
-			staging.Destroy();
+			staging->Destroy();
 			
 			vulkan->unlockSubmits();
 			
@@ -176,7 +175,7 @@ namespace pe
 		std::deque<vk::DescriptorBufferInfo> dsbi {};
 		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
+			dsbi.emplace_back(buffer.Handle<vk::Buffer>(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
@@ -193,7 +192,7 @@ namespace pe
 				wSetImage(*DSComposition, 6, renderTargets["ssr"]),
 				wSetImage(*DSComposition, 7, renderTargets["emissive"]),
 				wSetImage(*DSComposition, 8, ibl_brdf_lut),
-				wSetBuffer(*DSComposition, 9, uniform)
+				wSetBuffer(*DSComposition, 9, *uniform)
 		};
 		
 		VulkanContext::Get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
@@ -218,7 +217,7 @@ namespace pe
 				GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f
 		};
 		
-		uniform.CopyRequest<Launch::AsyncDeferred>({ &ubo, sizeof(ubo), 0 });
+		uniform->CopyRequest<Launch::AsyncDeferred>({ &ubo, sizeof(ubo), 0 });
 	}
 	
 	void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent)
@@ -322,12 +321,12 @@ namespace pe
 		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
-		pipeline.info.vertexInputBindingDescriptions = make_ref(Vertex::getBindingDescriptionGeneral());
-		pipeline.info.vertexInputAttributeDescriptions = make_ref(Vertex::getAttributeDescriptionGeneral());
+		pipeline.info.vertexInputBindingDescriptions = make_sptr(Vertex::getBindingDescriptionGeneral());
+		pipeline.info.vertexInputAttributeDescriptions = make_sptr(Vertex::getAttributeDescriptionGeneral());
 		pipeline.info.width = renderTargets["albedo"].width_f;
 		pipeline.info.height = renderTargets["albedo"].height_f;
 		pipeline.info.cullMode = CullMode::Front;
-		pipeline.info.colorBlendAttachments = make_ref(
+		pipeline.info.colorBlendAttachments = make_sptr(
 			std::vector<vk::PipelineColorBlendAttachmentState>
 			{
 				*renderTargets["normal"].blentAttachment,
@@ -336,7 +335,7 @@ namespace pe
 				*renderTargets["velocity"].blentAttachment,
 				*renderTargets["emissive"].blentAttachment,
 			});
-		pipeline.info.descriptorSetLayouts = make_ref(
+		pipeline.info.descriptorSetLayouts = make_sptr(
 			std::vector<vk::DescriptorSetLayout>
 			{
 				Pipeline::getDescriptorSetLayoutMesh(),
@@ -360,12 +359,12 @@ namespace pe
 		pipelineComposition.info.cullMode = CullMode::Back;
 		pipelineComposition.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineComposition.info.pushConstantSize = 4 * sizeof(float);
-		pipelineComposition.info.colorBlendAttachments = make_ref(
+		pipelineComposition.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {
 						*renderTargets["viewport"].blentAttachment
 				}
 		);
-		pipelineComposition.info.descriptorSetLayouts = make_ref(
+		pipelineComposition.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout>
 						{
 								Pipeline::getDescriptorSetLayoutComposition(),
@@ -395,7 +394,7 @@ namespace pe
 			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutComposition());
 			Pipeline::getDescriptorSetLayoutComposition() = nullptr;
 		}
-		uniform.Destroy();
+		uniform->Destroy();
 		pipeline.destroy();
 		pipelineComposition.destroy();
 	}

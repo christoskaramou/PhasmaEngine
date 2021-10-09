@@ -44,9 +44,9 @@ namespace pe
 		static uint32_t imageSize;
 		RenderPass renderPass;
 		std::vector<Image> textures {};
-		Ref<vk::DescriptorSet> descriptorSetDeferred;
+		SPtr<vk::DescriptorSet> descriptorSetDeferred;
 		std::vector<FrameBuffer> framebuffers {};
-		Buffer uniformBuffer;
+		SPtr<Buffer> uniformBuffer;
 		Pipeline pipeline;
 		
 		void update(Camera& camera);

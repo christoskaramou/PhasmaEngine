@@ -42,6 +42,6 @@ namespace pe
 		
 		void Destroy();
 		
-		Ref<vk::RenderPass> handle;
+		SPtr<vk::RenderPass> handle;
 	};
 }

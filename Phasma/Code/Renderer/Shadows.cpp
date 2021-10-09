@@ -38,7 +38,7 @@ namespace pe
 
 	Shadows::Shadows()
 	{
-		descriptorSetDeferred = make_ref(vk::DescriptorSet());
+		descriptorSetDeferred = make_sptr(vk::DescriptorSet());
 	}
 
 	Shadows::~Shadows()
@@ -76,7 +76,7 @@ namespace pe
 		}
 
 		vk::DescriptorBufferInfo dbi;
-		dbi.buffer = *uniformBuffer.GetBufferVK();
+		dbi.buffer = uniformBuffer->Handle<vk::Buffer>();
 		dbi.offset = 0;
 		dbi.range = 3 * sizeof(mat4);
 
@@ -103,13 +103,13 @@ namespace pe
 		for (auto& texture : textures)
 		{
 			texture.format = VulkanContext::Get()->depth.format;
-			texture.initialLayout = make_ref(vk::ImageLayout::eUndefined);
-			texture.addressMode = make_ref(vk::SamplerAddressMode::eClampToEdge);
+			texture.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
+			texture.addressMode = make_sptr(vk::SamplerAddressMode::eClampToEdge);
 			texture.maxAnisotropy = 1.f;
-			texture.borderColor = make_ref(vk::BorderColor::eFloatOpaqueWhite);
+			texture.borderColor = make_sptr(vk::BorderColor::eFloatOpaqueWhite);
 			texture.samplerCompareEnable = VK_TRUE;
-			texture.compareOp = make_ref(vk::CompareOp::eGreaterOrEqual);
-			texture.samplerMipmapMode = make_ref(vk::SamplerMipmapMode::eLinear);
+			texture.compareOp = make_sptr(vk::CompareOp::eGreaterOrEqual);
+			texture.samplerMipmapMode = make_sptr(vk::SamplerMipmapMode::eLinear);
 
 			texture.createImage(
 				Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal,
@@ -138,18 +138,18 @@ namespace pe
 		Shader vert{ "Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true };
 
 		pipeline.info.pVertShader = &vert;
-		pipeline.info.vertexInputBindingDescriptions = make_ref(Vertex::getBindingDescriptionGeneral());
-		pipeline.info.vertexInputAttributeDescriptions = make_ref(Vertex::getAttributeDescriptionGeneral());
+		pipeline.info.vertexInputBindingDescriptions = make_sptr(Vertex::getBindingDescriptionGeneral());
+		pipeline.info.vertexInputAttributeDescriptions = make_sptr(Vertex::getAttributeDescriptionGeneral());
 		pipeline.info.width = static_cast<float>(Shadows::imageSize);
 		pipeline.info.height = static_cast<float>(Shadows::imageSize);
 		pipeline.info.cullMode = CullMode::Front;
 		pipeline.info.pushConstantStage = PushConstantStage::Vertex;
 		pipeline.info.pushConstantSize = sizeof(mat4);
-		pipeline.info.colorBlendAttachments = make_ref(
+		pipeline.info.colorBlendAttachments = make_sptr(
 			std::vector<vk::PipelineColorBlendAttachmentState> {*textures[0].blentAttachment}
 		);
-		pipeline.info.dynamicStates = make_ref(std::vector<vk::DynamicState> {vk::DynamicState::eDepthBias});
-		pipeline.info.descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>
+		pipeline.info.dynamicStates = make_sptr(std::vector<vk::DynamicState> {vk::DynamicState::eDepthBias});
+		pipeline.info.descriptorSetLayouts = make_sptr(std::vector<vk::DescriptorSetLayout>
 		{
 			Pipeline::getDescriptorSetLayoutMesh(),
 			Pipeline::getDescriptorSetLayoutModel()
@@ -161,15 +161,15 @@ namespace pe
 
 	void Shadows::createUniformBuffers()
 	{
-		uniformBuffer.CreateBuffer(
+		uniformBuffer = Buffer::Create(
 			3 * sizeof(mat4),
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		uniformBuffer.Map();
-		uniformBuffer.Zero();
-		uniformBuffer.Flush();
-		uniformBuffer.Unmap();
-		uniformBuffer.SetDebugName("Shadows_UB_Fragment");
+		uniformBuffer->Map();
+		uniformBuffer->Zero();
+		uniformBuffer->Flush();
+		uniformBuffer->Unmap();
+		uniformBuffer->SetDebugName("Shadows_UB_Fragment");
 	}
 
 	void Shadows::destroy()
@@ -189,7 +189,7 @@ namespace pe
 		for (auto& fb : framebuffers)
 			VulkanContext::Get()->device->destroyFramebuffer(*fb.handle);
 
-		uniformBuffer.Destroy();
+		uniformBuffer->Destroy();
 		pipeline.destroy();
 	}
 
@@ -198,7 +198,7 @@ namespace pe
 		if (GUI::shadow_cast)
 		{
 			CalculateCascades(camera);
-			uniformBuffer.CopyRequest<Launch::AsyncDeferred>({ cascades, 3 * sizeof(mat4), 0 });
+			uniformBuffer->CopyRequest<Launch::AsyncDeferred>({ cascades, 3 * sizeof(mat4), 0 });
 		}
 	}
 

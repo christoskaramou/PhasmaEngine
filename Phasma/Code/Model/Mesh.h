@@ -43,8 +43,8 @@ namespace pe
 		
 		std::string name;
 		
-		Ref<vk::DescriptorSet> descriptorSet;
-		Buffer uniformBuffer;
+		SPtr<vk::DescriptorSet> descriptorSet;
+		SPtr<Buffer> uniformBuffer;
 		
 		bool render = true, cull = true;
 		uint32_t vertexOffset = 0, indexOffset = 0;
@@ -94,8 +94,8 @@ namespace pe
 		static std::map<std::string, Image> uniqueTextures;
 		std::vector<Primitive> primitives {};
 		
-		Ref<vk::DescriptorSet> descriptorSet;
-		Buffer uniformBuffer;
+		SPtr<vk::DescriptorSet> descriptorSet;
+		SPtr<Buffer> uniformBuffer;
 		std::vector<Vertex> vertices {};
 		std::vector<uint32_t> indices {};
 		uint32_t vertexOffset = 0, indexOffset = 0;

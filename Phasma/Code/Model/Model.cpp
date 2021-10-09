@@ -39,16 +39,16 @@ namespace pe
 {
 	using namespace Microsoft;
 	
-	Ref<vk::CommandBuffer> Model::commandBuffer = make_ref(vk::CommandBuffer());
+	SPtr<vk::CommandBuffer> Model::commandBuffer = make_sptr(vk::CommandBuffer());
 	std::deque<Model> Model::models = {};
 	Pipeline* Model::pipeline = nullptr;
 	
 	Model::Model()
 	{
 		if (commandBuffer == nullptr)
-			commandBuffer = make_ref(vk::CommandBuffer());
+			commandBuffer = make_sptr(vk::CommandBuffer());
 		
-		descriptorSet = make_ref(vk::DescriptorSet());
+		descriptorSet = make_sptr(vk::DescriptorSet());
 	}
 	
 	Model::~Model()
@@ -497,7 +497,7 @@ namespace pe
 		ubo.previousMvp = ubo.mvp;
 		ubo.mvp = camera.viewProjection * transform;
 		
-		uniformBuffer.CopyRequest<Launch::AsyncDeferred>({ &ubo, sizeof(ubo), 0 });
+		uniformBuffer->CopyRequest<Launch::AsyncDeferred>({ &ubo, sizeof(ubo), 0 });
 		
 		if (!animations.empty())
 		{
@@ -536,8 +536,8 @@ namespace pe
 		const vk::DeviceSize offset {0};
 		
 		cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, *Model::pipeline->handle);
-		cmd->bindVertexBuffers(0, 1, &*vertexBuffer.GetBufferVK(), &offset);
-		cmd->bindIndexBuffer(*indexBuffer.GetBufferVK(), 0, vk::IndexType::eUint32);
+		cmd->bindVertexBuffers(0, 1, &vertexBuffer->Handle<vk::Buffer>(), &offset);
+		cmd->bindIndexBuffer(indexBuffer->Handle<vk::Buffer>(), 0, vk::IndexType::eUint32);
 		
 		int culled = 0;
 		int total = 0;
@@ -821,24 +821,23 @@ namespace pe
 		}
 		numberOfVertices = static_cast<uint32_t>(vertices.size());
 		auto size = sizeof(Vertex) * numberOfVertices;
-		vertexBuffer.CreateBuffer(
+		vertexBuffer = Buffer::Create(
 			size,
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferDst | (BufferUsageFlags)vk::BufferUsageFlagBits::eVertexBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
-		vertexBuffer.SetDebugName("Vertex_" + name);
+		vertexBuffer->SetDebugName("Vertex_" + name);
 		
 		// Staging buffer
-		Buffer staging;
-		staging.CreateBuffer(size, (BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		staging.Map();
-		staging.CopyData(vertices.data());
-		staging.Flush();
-		staging.Unmap();
-		staging.SetDebugName("Staging");
+		SPtr<Buffer> staging = Buffer::Create(size, (BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+		staging->Map();
+		staging->CopyData(vertices.data());
+		staging->Flush();
+		staging->Unmap();
+		staging->SetDebugName("Staging");
 		
-		vertexBuffer.CopyBuffer(&staging, staging.Size());
-		staging.Destroy();
+		vertexBuffer->CopyBuffer(staging.get(), staging->Size());
+		staging->Destroy();
 	}
 	
 	void Model::createIndexBuffer()
@@ -857,36 +856,35 @@ namespace pe
 		}
 		numberOfIndices = static_cast<uint32_t>(indices.size());
 		auto size = sizeof(uint32_t) * numberOfIndices;
-		indexBuffer.CreateBuffer(
+		indexBuffer = Buffer::Create(
 			size,
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferDst | (BufferUsageFlags)vk::BufferUsageFlagBits::eIndexBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
-		indexBuffer.SetDebugName("Index_" + name);
+		indexBuffer->SetDebugName("Index_" + name);
 		
 		// Staging buffer
-		Buffer staging;
-		staging.CreateBuffer(size, (BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		staging.Map();
-		staging.CopyData(indices.data());
-		staging.Flush();
-		staging.Unmap();
-		staging.SetDebugName("Staging");
+		SPtr<Buffer> staging = Buffer::Create(size, (BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+		staging->Map();
+		staging->CopyData(indices.data());
+		staging->Flush();
+		staging->Unmap();
+		staging->SetDebugName("Staging");
 		
-		indexBuffer.CopyBuffer(&staging, staging.Size());
-		staging.Destroy();
+		indexBuffer->CopyBuffer(staging.get(), staging->Size());
+		staging->Destroy();
 	}
 	
 	void Model::createUniformBuffers()
 	{
-		uniformBuffer.CreateBuffer(
+		uniformBuffer = Buffer::Create(
 				sizeof(ubo), (BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
 		);
-		uniformBuffer.SetDebugName("UB_" + name);
-		uniformBuffer.Map();
-		uniformBuffer.Zero();
-		uniformBuffer.Flush();
-		uniformBuffer.Unmap();
+		uniformBuffer->SetDebugName("UB_" + name);
+		uniformBuffer->Map();
+		uniformBuffer->Zero();
+		uniformBuffer->Flush();
+		uniformBuffer->Unmap();
 		for (auto& node : linearNodes)
 		{
 			if (node->mesh)
@@ -909,7 +907,7 @@ namespace pe
 		std::deque<vk::DescriptorBufferInfo> dsbi {};
 		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
+			dsbi.emplace_back(buffer.Handle<vk::Buffer>(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
@@ -920,10 +918,10 @@ namespace pe
 		allocateInfo0.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo0.descriptorSetCount = 1;
 		allocateInfo0.pSetLayouts = &Pipeline::getDescriptorSetLayoutModel();
-		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo0).at(0));
+		descriptorSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo0).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Model_" + name);
 		
-		VulkanContext::Get()->device->updateDescriptorSets(wSetBuffer(*descriptorSet, 0, uniformBuffer), nullptr);
+		VulkanContext::Get()->device->updateDescriptorSets(wSetBuffer(*descriptorSet, 0, *uniformBuffer), nullptr);
 		
 		// mesh dSets
 		for (auto& node : linearNodes)
@@ -936,12 +934,12 @@ namespace pe
 			allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 			allocateInfo.descriptorSetCount = 1;
 			allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMesh();
-			mesh->descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
+			mesh->descriptorSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
 			VulkanContext::Get()->SetDebugObjectName(*mesh->descriptorSet, "Mesh_" + mesh->name);
 			
 			VulkanContext::Get()->device
 			                    ->updateDescriptorSets(
-					                    wSetBuffer(*mesh->descriptorSet, 0, mesh->uniformBuffer), nullptr
+					                    wSetBuffer(*mesh->descriptorSet, 0, *mesh->uniformBuffer), nullptr
 			                    );
 			
 			// primitive dSets
@@ -952,7 +950,7 @@ namespace pe
 				allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 				allocateInfo2.descriptorSetCount = 1;
 				allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutPrimitive();
-				primitive.descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+				primitive.descriptorSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
 				VulkanContext::Get()->SetDebugObjectName(*mesh->descriptorSet, "Primitive_" + primitive.name);
 				
 				std::vector<vk::WriteDescriptorSet> textureWriteSets {
@@ -961,7 +959,7 @@ namespace pe
 						wSetImage(*primitive.descriptorSet, 2, primitive.pbrMaterial.normalTexture),
 						wSetImage(*primitive.descriptorSet, 3, primitive.pbrMaterial.occlusionTexture),
 						wSetImage(*primitive.descriptorSet, 4, primitive.pbrMaterial.emissiveTexture),
-						wSetBuffer(*primitive.descriptorSet, 5, primitive.uniformBuffer)
+						wSetBuffer(*primitive.descriptorSet, 5, *primitive.uniformBuffer)
 				};
 				VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 			}
@@ -975,7 +973,7 @@ namespace pe
 			delete script;
 			script = nullptr;
 		}
-		uniformBuffer.Destroy();
+		uniformBuffer->Destroy();
 		delete document;
 		delete resourceReader;
 		if (Pipeline::getDescriptorSetLayoutModel())
@@ -1002,7 +1000,7 @@ namespace pe
 		//for (auto& texture : Mesh::uniqueTextures)
 		//	texture.second.destroy();
 		//Mesh::uniqueTextures.clear();
-		vertexBuffer.Destroy();
-		indexBuffer.Destroy();
+		vertexBuffer->Destroy();
+		indexBuffer->Destroy();
 	}
 }

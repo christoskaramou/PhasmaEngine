@@ -35,7 +35,7 @@ namespace pe
 {
 	MotionBlur::MotionBlur()
 	{
-		DSet = make_ref(vk::DescriptorSet());
+		DSet = make_sptr(vk::DescriptorSet());
 	}
 	
 	MotionBlur::~MotionBlur()
@@ -44,8 +44,8 @@ namespace pe
 	
 	void MotionBlur::Init()
 	{
-		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
-		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
+		frameImage.format = make_sptr(VulkanContext::Get()->surface.formatKHR->format);
+		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
 				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
@@ -62,21 +62,21 @@ namespace pe
 	void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		auto size = 4 * sizeof(mat4);
-		UBmotionBlur.CreateBuffer(
+		UBmotionBlur = Buffer::Create(
 			size,
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		UBmotionBlur.Map();
-		UBmotionBlur.Zero();
-		UBmotionBlur.Flush();
-		UBmotionBlur.Unmap();
-		UBmotionBlur.SetDebugName("MotionBlur_UB");
+		UBmotionBlur->Map();
+		UBmotionBlur->Zero();
+		UBmotionBlur->Flush();
+		UBmotionBlur->Unmap();
+		UBmotionBlur->SetDebugName("MotionBlur_UB");
 		
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMotionBlur();
-		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		DSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSet, "MotionBlur");
 		
 		updateDescriptorSets(renderTargets);
@@ -95,7 +95,7 @@ namespace pe
 		std::deque<vk::DescriptorBufferInfo> dsbi {};
 		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
+			dsbi.emplace_back(buffer.Handle<vk::Buffer>(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
@@ -105,7 +105,7 @@ namespace pe
 				wSetImage(*DSet, 0, frameImage),
 				wSetImage(*DSet, 1, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
 				wSetImage(*DSet, 2, renderTargets["velocity"]),
-				wSetBuffer(*DSet, 3, UBmotionBlur)
+				wSetBuffer(*DSet, 3, *UBmotionBlur)
 		};
 		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
@@ -151,7 +151,7 @@ namespace pe
 			Pipeline::getDescriptorSetLayoutMotionBlur() = nullptr;
 		}
 		frameImage.destroy();
-		UBmotionBlur.Destroy();
+		UBmotionBlur->Destroy();
 		pipeline.destroy();
 	}
 	
@@ -168,7 +168,7 @@ namespace pe
 			
 			previousView = camera.view;
 			
-			UBmotionBlur.CopyRequest<Launch::AsyncDeferred>({ &motionBlurInput, sizeof(motionBlurInput), 0 });
+			UBmotionBlur->CopyRequest<Launch::AsyncDeferred>({ &motionBlurInput, sizeof(motionBlurInput), 0 });
 		}
 	}
 	
@@ -201,12 +201,12 @@ namespace pe
 		pipeline.info.width = renderTargets["viewport"].width_f;
 		pipeline.info.height = renderTargets["viewport"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_ref(
+		pipeline.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["viewport"].blentAttachment}
 		);
 		pipeline.info.pushConstantStage = PushConstantStage::Fragment;
 		pipeline.info.pushConstantSize = sizeof(vec4);
-		pipeline.info.descriptorSetLayouts = make_ref(
+		pipeline.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutMotionBlur()}
 		);
 		pipeline.info.renderPass = renderPass;

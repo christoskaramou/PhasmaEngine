@@ -30,24 +30,24 @@ namespace pe
 {	
 	VulkanContext::VulkanContext()
 	{
-		instance = make_ref(vk::Instance());
-		debugMessenger = make_ref(vk::DebugUtilsMessengerEXT());
-		gpu = make_ref(vk::PhysicalDevice());
-		gpuProperties = make_ref(vk::PhysicalDeviceProperties());
-		gpuFeatures = make_ref(vk::PhysicalDeviceFeatures());
-		device = make_ref(vk::Device());
-		graphicsQueue = make_ref(vk::Queue());
-		computeQueue = make_ref(vk::Queue());
-		transferQueue = make_ref(vk::Queue());
-		commandPool = make_ref(vk::CommandPool());
-		commandPool2 = make_ref(vk::CommandPool());
-		descriptorPool = make_ref(vk::DescriptorPool());
-		dispatchLoaderDynamic = make_ref(vk::DispatchLoaderDynamic());
-		queueFamilyProperties = make_ref(std::vector<vk::QueueFamilyProperties>());
-		dynamicCmdBuffers = make_ref(std::vector<vk::CommandBuffer>());
-		shadowCmdBuffers = make_ref(std::vector<vk::CommandBuffer>());
-		fences = make_ref(std::vector<vk::Fence>());
-		semaphores = make_ref(std::vector<vk::Semaphore>());
+		instance = make_sptr(vk::Instance());
+		debugMessenger = make_sptr(vk::DebugUtilsMessengerEXT());
+		gpu = make_sptr(vk::PhysicalDevice());
+		gpuProperties = make_sptr(vk::PhysicalDeviceProperties());
+		gpuFeatures = make_sptr(vk::PhysicalDeviceFeatures());
+		device = make_sptr(vk::Device());
+		graphicsQueue = make_sptr(vk::Queue());
+		computeQueue = make_sptr(vk::Queue());
+		transferQueue = make_sptr(vk::Queue());
+		commandPool = make_sptr(vk::CommandPool());
+		commandPool2 = make_sptr(vk::CommandPool());
+		descriptorPool = make_sptr(vk::DescriptorPool());
+		dispatchLoaderDynamic = make_sptr(vk::DispatchLoaderDynamic());
+		queueFamilyProperties = make_sptr(std::vector<vk::QueueFamilyProperties>());
+		dynamicCmdBuffers = make_sptr(std::vector<vk::CommandBuffer>());
+		shadowCmdBuffers = make_sptr(std::vector<vk::CommandBuffer>());
+		fences = make_sptr(std::vector<vk::Fence>());
+		semaphores = make_sptr(std::vector<vk::Semaphore>());
 		
 		window = nullptr;
 		graphicsFamilyId = 0;
@@ -124,7 +124,7 @@ namespace pe
 		instInfo.ppEnabledExtensionNames = instanceExtensions.data();
 		instInfo.pNext = &validationFeatures;
 		
-		instance = make_ref(vk::createInstance(instInfo));
+		instance = make_sptr(vk::createInstance(instInfo));
 	}
 	
 #if _DEBUG
@@ -161,7 +161,7 @@ namespace pe
 				vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
 		dumci.pfnUserCallback = VulkanContext::MessageCallback;
 		
-		debugMessenger = make_ref(instance->createDebugUtilsMessengerEXT(dumci, nullptr, *dispatchLoaderDynamic));
+		debugMessenger = make_sptr(instance->createDebugUtilsMessengerEXT(dumci, nullptr, *dispatchLoaderDynamic));
 	}
 	
 	void VulkanContext::DestroyDebugMessenger()
@@ -188,7 +188,7 @@ namespace pe
 		
 		for (auto& GPU : gpuList)
 		{
-			queueFamilyProperties = make_ref(GPU.getQueueFamilyProperties());
+			queueFamilyProperties = make_sptr(GPU.getQueueFamilyProperties());
 			vk::QueueFlags flags;
 			
 			for (auto& qfp : *queueFamilyProperties)
@@ -216,12 +216,12 @@ namespace pe
 			}
 		}
 
-		gpu = discreteGpu ? make_ref(discreteGpu) : make_ref(validGpuList[0]);
+		gpu = discreteGpu ? make_sptr(discreteGpu) : make_sptr(validGpuList[0]);
 		GetGraphicsFamilyId();
 		GetComputeFamilyId();
 		GetTransferFamilyId();
-		gpuProperties = make_ref(gpu->getProperties());
-		gpuFeatures = make_ref(gpu->getFeatures());
+		gpuProperties = make_sptr(gpu->getProperties());
+		gpuFeatures = make_sptr(gpu->getFeatures());
 	}
 	
 	void VulkanContext::GetGraphicsFamilyId()
@@ -328,7 +328,7 @@ namespace pe
 		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
 		deviceCreateInfo.pEnabledFeatures = &*gpuFeatures;
 		
-		device = make_ref(gpu->createDevice(deviceCreateInfo));
+		device = make_sptr(gpu->createDevice(deviceCreateInfo));
 		SetDebugObjectName(*device, "");
 		//SetDebugObjectName(*instance, "");
 		SetDebugObjectName(*surface.surface, "");
@@ -348,17 +348,17 @@ namespace pe
 	
 	void VulkanContext::GetGraphicsQueue()
 	{
-		graphicsQueue = make_ref(device->getQueue(graphicsFamilyId, 0));
+		graphicsQueue = make_sptr(device->getQueue(graphicsFamilyId, 0));
 	}
 	
 	void VulkanContext::GetTransferQueue()
 	{
-		transferQueue = make_ref(device->getQueue(transferFamilyId, 0));
+		transferQueue = make_sptr(device->getQueue(transferFamilyId, 0));
 	}
 	
 	void VulkanContext::GetComputeQueue()
 	{
-		computeQueue = make_ref(device->getQueue(computeFamilyId, 0));
+		computeQueue = make_sptr(device->getQueue(computeFamilyId, 0));
 	}
 	
 	void VulkanContext::GetQueues()
@@ -379,8 +379,8 @@ namespace pe
 		cpci.queueFamilyIndex = graphicsFamilyId;
 		cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
 		
-		commandPool = make_ref(device->createCommandPool(cpci));
-		commandPool2 = make_ref(device->createCommandPool(cpci));
+		commandPool = make_sptr(device->createCommandPool(cpci));
+		commandPool2 = make_sptr(device->createCommandPool(cpci));
 		SetDebugObjectName(*commandPool, "");
 		SetDebugObjectName(*commandPool2, "");
 	}
@@ -402,7 +402,7 @@ namespace pe
 		createInfo.pPoolSizes = descPoolsize.data();
 		createInfo.maxSets = maxDescriptorSets;
 		
-		descriptorPool = make_ref(device->createDescriptorPool(createInfo));
+		descriptorPool = make_sptr(device->createDescriptorPool(createInfo));
 		SetDebugObjectName(*descriptorPool, "");
 	}
 	
@@ -412,12 +412,12 @@ namespace pe
 		cbai.commandPool = *commandPool;
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = bufferCount;
-		dynamicCmdBuffers = make_ref(device->allocateCommandBuffers(cbai));
+		dynamicCmdBuffers = make_sptr(device->allocateCommandBuffers(cbai));
 		for (int i = 0; i < dynamicCmdBuffers->size(); i++)
 			SetDebugObjectName((*dynamicCmdBuffers)[i], "Dynamic" + std::to_string(i));
 		
 		cbai.commandBufferCount = bufferCount * 3;
-		shadowCmdBuffers = make_ref(device->allocateCommandBuffers(cbai));
+		shadowCmdBuffers = make_sptr(device->allocateCommandBuffers(cbai));
 		for (int i = 0; i < shadowCmdBuffers->size(); i++)
 			SetDebugObjectName((*shadowCmdBuffers)[i], "Shadow" + std::to_string(i));
 	}
@@ -436,7 +436,7 @@ namespace pe
 			_fences[i] = device->createFence(vk::FenceCreateInfo());
 		}
 		
-		fences = make_ref(_fences);
+		fences = make_sptr(_fences);
 		for (int i = 0; i < fences->size(); i++)
 			SetDebugObjectName((*fences)[i], "Frame" + std::to_string(i));
 	}
@@ -451,14 +451,14 @@ namespace pe
 			_semaphores[i] = device->createSemaphore(si);
 		}
 		
-		semaphores = make_ref(_semaphores);
+		semaphores = make_sptr(_semaphores);
 		for (int i = 0; i < semaphores->size(); i++)
 			SetDebugObjectName((*semaphores)[i], std::to_string(i));
 	}
 	
 	void VulkanContext::CreateDepth()
 	{
-		depth.format = make_ref(vk::Format::eUndefined);
+		depth.format = make_sptr(vk::Format::eUndefined);
 		std::vector<vk::Format> candidates = {
 				vk::Format::eD32SfloatS8Uint, vk::Format::eD32Sfloat, vk::Format::eD24UnormS8Uint
 		};
@@ -468,7 +468,7 @@ namespace pe
 			if ((props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) ==
 			    vk::FormatFeatureFlagBits::eDepthStencilAttachment)
 			{
-				depth.format = make_ref(format);
+				depth.format = make_sptr(format);
 				break;
 			}
 		}
@@ -484,9 +484,9 @@ namespace pe
 		);
 		depth.createImageView(vk::ImageAspectFlagBits::eDepth);
 		
-		depth.addressMode = make_ref(vk::SamplerAddressMode::eClampToEdge);
+		depth.addressMode = make_sptr(vk::SamplerAddressMode::eClampToEdge);
 		depth.maxAnisotropy = 1.f;
-		depth.borderColor = make_ref(vk::BorderColor::eFloatOpaqueWhite);
+		depth.borderColor = make_sptr(vk::BorderColor::eFloatOpaqueWhite);
 		depth.samplerCompareEnable = VK_TRUE;
 		depth.createSampler();
 		depth.SetDebugName("DepthImage");

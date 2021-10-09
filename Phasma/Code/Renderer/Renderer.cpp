@@ -280,8 +280,8 @@ namespace pe
 			{
 				if (model.render)
 				{
-					cmd.bindVertexBuffers(0, *model.vertexBuffer.GetBufferVK(), offset);
-					cmd.bindIndexBuffer(*model.indexBuffer.GetBufferVK(), 0, vk::IndexType::eUint32);
+					cmd.bindVertexBuffers(0, model.vertexBuffer->Handle<vk::Buffer>(), offset);
+					cmd.bindIndexBuffer(model.indexBuffer->Handle<vk::Buffer>(), 0, vk::IndexType::eUint32);
 					
 					for (auto& node : model.linearNodes)
 					{
@@ -321,8 +321,8 @@ namespace pe
 		
 		renderTargets[name] = Image();
 		renderTargets[name].name = name;
-		renderTargets[name].format = make_ref(format);
-		renderTargets[name].initialLayout = make_ref(vk::ImageLayout::eUndefined);
+		renderTargets[name].format = make_sptr(format);
+		renderTargets[name].initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 		renderTargets[name].createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
 				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),

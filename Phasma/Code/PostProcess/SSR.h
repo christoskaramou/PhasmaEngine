@@ -42,11 +42,11 @@ namespace pe
 		~SSR();
 		
 		mat4 reflectionInput[4];
-		Buffer UBReflection;
+		SPtr<Buffer> UBReflection;
 		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		Ref<vk::DescriptorSet> DSet;
+		SPtr<vk::DescriptorSet> DSet;
 		
 		void update(Camera& camera);
 		

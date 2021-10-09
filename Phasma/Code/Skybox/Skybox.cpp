@@ -31,7 +31,7 @@ namespace pe
 {
 	SkyBox::SkyBox()
 	{
-		descriptorSet = make_ref(vk::DescriptorSet());
+		descriptorSet = make_sptr(vk::DescriptorSet());
 	}
 	
 	SkyBox::~SkyBox()
@@ -44,7 +44,7 @@ namespace pe
 		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutSkybox();
-		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		descriptorSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Skybox");
 		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
@@ -74,8 +74,8 @@ namespace pe
 		assert(paths.size() == 6);
 		
 		texture.arrayLayers = 6;
-		texture.format = make_ref(vk::Format::eR8G8B8A8Unorm);
-		texture.imageCreateFlags = make_ref<vk::ImageCreateFlags>(vk::ImageCreateFlagBits::eCubeCompatible);
+		texture.format = make_sptr(vk::Format::eR8G8B8A8Unorm);
+		texture.imageCreateFlags = make_sptr<vk::ImageCreateFlags>(vk::ImageCreateFlagBits::eCubeCompatible);
 		texture.createImage(
 				imageSideSize, imageSideSize, vk::ImageTiling::eOptimal,
 				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
@@ -95,28 +95,27 @@ namespace pe
 			if (!pixels)
 				throw std::runtime_error("No pixel data loaded");
 			
-			Buffer staging;
-			staging.CreateBuffer(
+			SPtr<Buffer> staging = Buffer::Create(
 				imageSize,
 				(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
 				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-			staging.Map();
-			staging.CopyData(pixels);
-			staging.Flush();
-			staging.Unmap();
-			staging.SetDebugName("Staging");
+			staging->Map();
+			staging->CopyData(pixels);
+			staging->Flush();
+			staging->Unmap();
+			staging->SetDebugName("Staging");
 			
 			stbi_image_free(pixels);
 			
-			texture.copyBufferToImage(*staging.GetBufferVK(), i);
-			staging.Destroy();
+			texture.copyBufferToImage(staging->Handle<vk::Buffer>(), i);
+			staging->Destroy();
 		}
 		texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		
-		texture.viewType = make_ref(vk::ImageViewType::eCube);
+		texture.viewType = make_sptr(vk::ImageViewType::eCube);
 		texture.createImageView(vk::ImageAspectFlagBits::eColor);
 		
-		texture.addressMode = make_ref(vk::SamplerAddressMode::eClampToEdge);
+		texture.addressMode = make_sptr(vk::SamplerAddressMode::eClampToEdge);
 		texture.createSampler();
 		static int skyboxIdx = 0;
 		texture.SetDebugName("Skybox_TextureArray" + std::to_string(skyboxIdx++));

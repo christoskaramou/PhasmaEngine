@@ -100,24 +100,30 @@ namespace pe
 namespace pe
 {
 	template<class T>
-	using Ref = std::shared_ptr<T>;
+	using SPtr = std::shared_ptr<T>;
 
 	template<class T>
-	Ref<T> make_ref(T& obj)
+	SPtr<T> make_sptr(T& obj)
 	{
 		return std::make_shared<T>(obj);
 	}
 
 	template<class T>
-	Ref<T> make_ref(const T& obj)
+	SPtr<T> make_sptr(const T& obj)
 	{
 		return std::make_shared<T>(obj);
 	}
 
 	template<class T>
-	Ref<T> make_ref(T&& obj)
+	SPtr<T> make_sptr(T&& obj)
 	{
 		return std::make_shared<T>(std::forward<T>(obj));
+	}
+
+	template<class T, class ... Params>
+	SPtr<T> make_sptr(Params&& ... params)
+	{
+		return std::make_shared<T>(std::forward<Params>(params)...);
 	}
 
 	class NoCopy
@@ -138,71 +144,13 @@ namespace pe
 	{
 	public:
 		NoMove() = default;
-		
+
 		NoMove(const NoMove&) = default;
-		
+
 		NoMove& operator=(const NoMove&) = default;
-		
+
 		NoMove(NoMove&&) = delete;
-		
+
 		NoMove& operator=(NoMove&&) = delete;
 	};
-
-	//template<class T>
-	//class Imposter : public T
-	//{
-	//	using BaseType = T;
-	//};
-	//
-	//using ImpRenderPass = Imposter<vk::RenderPass>;
-	//using ImpFormat = Imposter<vk::Format>;
-	//using ImpImageView = Imposter<vk::ImageView>;
-	//using ImpFramebuffer = Imposter<vk::Framebuffer>;
-	//using ImpCommandBuffer = Imposter<vk::CommandBuffer>;
-	//using ImpDescriptorSetLayout = Imposter<vk::DescriptorSetLayout>;
-	//using ImpDescriptorSet = Imposter<vk::DescriptorSet>;
-	//using ImpDevice = Imposter<vk::Device>;
-	//using ImpVertexInputBindingDescription = Imposter<vk::VertexInputBindingDescription>;
-	//using ImpVertexInputAttributeDescription = Imposter<vk::VertexInputAttributeDescription>;
-	//using ImpPipelineColorBlendAttachmentState = Imposter<vk::PipelineColorBlendAttachmentState>;
-	//using ImpDynamicState = Imposter<vk::DynamicState>;
-	//using ImpPipeline = Imposter<vk::Pipeline>;
-	//using ImpPipelineLayout = Imposter<vk::PipelineLayout>;
-	//using ImpExtent2D = Imposter<vk::Extent2D>;
-	//using ImpInstance = Imposter<vk::Instance>;
-	//using ImpDebugUtilsMessengerEXT = Imposter<vk::DebugUtilsMessengerEXT>;
-	//using ImpPhysicalDevice = Imposter<vk::PhysicalDevice>;
-	//using ImpPhysicalDeviceProperties = Imposter<vk::PhysicalDeviceProperties>;
-	//using ImpPhysicalDeviceFeatures = Imposter<vk::PhysicalDeviceFeatures>;
-	//using ImpQueue = Imposter<vk::Queue>;
-	//using ImpCommandPool = Imposter<vk::CommandPool>;
-	//using ImpDescriptorPool = Imposter<vk::DescriptorPool>;
-	//using ImpDispatchLoaderDynamic = Imposter<vk::DispatchLoaderDynamic>;
-	//using ImpQueueFamilyProperties = Imposter<vk::QueueFamilyProperties>;
-	//using ImpFence = Imposter<vk::Fence>;
-	//using ImpSemaphore = Imposter<vk::Semaphore>;
-	//using ImpPipelineStageFlags = Imposter<vk::PipelineStageFlags>;
-	//using ImpImage = Imposter<vk::Image>;
-	//using ImpImageView = Imposter<vk::ImageView>;
-	//using ImpSampler = Imposter<vk::Sampler>;
-	//using ImpImageLayout = Imposter<vk::ImageLayout>;
-	//using ImpImageTiling = Imposter<vk::ImageTiling>;
-	//using ImpFilter = Imposter<vk::Filter>;
-	//using ImpImageCreateFlags = Imposter<vk::ImageCreateFlags>;
-	//using ImpImageViewType = Imposter<vk::ImageViewType>;
-	//using ImpSamplerAddressMode = Imposter<vk::SamplerAddressMode>;
-	//using ImpBorderColor = Imposter<vk::BorderColor>;
-	//using ImpCompareOp = Imposter<vk::CompareOp>;
-	//using ImpSamplerMipmapMode = Imposter<vk::SamplerMipmapMode>;
-	//using ImpAccessFlags = Imposter<vk::AccessFlags>;
-	//using ImpImageAspectFlags = Imposter<vk::ImageAspectFlags>;
-	//using ImpImageUsageFlags = Imposter<vk::ImageUsageFlags>;
-	//using ImpMemoryPropertyFlags = Imposter<vk::MemoryPropertyFlags>;
-	//using ImpBuffer = Imposter<vk::Buffer>;
-	//using ImpSurfaceKHR = Imposter<vk::SurfaceKHR>;
-	//using ImpSurfaceCapabilitiesKHR = Imposter<vk::SurfaceCapabilitiesKHR>;
-	//using ImpSurfaceFormatKHR = Imposter<vk::SurfaceFormatKHR>;
-	//using ImpPresentModeKHR = Imposter<vk::PresentModeKHR>;
-	//using ImpSwapchainKHR = Imposter<vk::SwapchainKHR>;
-	//using ImpSampleCountFlagBits = Imposter<vk::SampleCountFlagBits>;
 }

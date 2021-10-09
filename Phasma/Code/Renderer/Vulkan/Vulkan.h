@@ -114,22 +114,22 @@ namespace pe
 		
 		void Destroy();
 		
-		Ref<vk::Instance> instance;
-		Ref<vk::DebugUtilsMessengerEXT> debugMessenger;
-		Ref<vk::PhysicalDevice> gpu;
-		Ref<vk::PhysicalDeviceProperties> gpuProperties;
-		Ref<vk::PhysicalDeviceFeatures> gpuFeatures;
-		Ref<vk::Device> device;
-		Ref<vk::Queue> graphicsQueue, computeQueue, transferQueue;
-		Ref<vk::CommandPool> commandPool;
-		Ref<vk::CommandPool> commandPool2;
-		Ref<vk::DescriptorPool> descriptorPool;
-		Ref<vk::DispatchLoaderDynamic> dispatchLoaderDynamic;
-		Ref<std::vector<vk::QueueFamilyProperties>> queueFamilyProperties;
-		Ref<std::vector<vk::CommandBuffer>> dynamicCmdBuffers;
-		Ref<std::vector<vk::CommandBuffer>> shadowCmdBuffers;
-		Ref<std::vector<vk::Fence>> fences;
-		Ref<std::vector<vk::Semaphore>> semaphores;
+		SPtr<vk::Instance> instance;
+		SPtr<vk::DebugUtilsMessengerEXT> debugMessenger;
+		SPtr<vk::PhysicalDevice> gpu;
+		SPtr<vk::PhysicalDeviceProperties> gpuProperties;
+		SPtr<vk::PhysicalDeviceFeatures> gpuFeatures;
+		SPtr<vk::Device> device;
+		SPtr<vk::Queue> graphicsQueue, computeQueue, transferQueue;
+		SPtr<vk::CommandPool> commandPool;
+		SPtr<vk::CommandPool> commandPool2;
+		SPtr<vk::DescriptorPool> descriptorPool;
+		SPtr<vk::DispatchLoaderDynamic> dispatchLoaderDynamic;
+		SPtr<std::vector<vk::QueueFamilyProperties>> queueFamilyProperties;
+		SPtr<std::vector<vk::CommandBuffer>> dynamicCmdBuffers;
+		SPtr<std::vector<vk::CommandBuffer>> shadowCmdBuffers;
+		SPtr<std::vector<vk::Fence>> fences;
+		SPtr<std::vector<vk::Semaphore>> semaphores;
 		VmaAllocator allocator = nullptr;
 		
 		SDL_Window* window;

@@ -27,7 +27,7 @@ namespace pe
 {
 	Fence::Fence()
 	{
-		handle = make_ref(vk::Fence());
+		handle = make_sptr(vk::Fence());
 	}
 
 	Fence::~Fence()
@@ -39,11 +39,11 @@ namespace pe
 		if (signaled)
 		{
 			vk::FenceCreateInfo fi{ vk::FenceCreateFlagBits::eSignaled };
-			handle = make_ref(VULKAN.device->createFence(fi));
+			handle = make_sptr(VULKAN.device->createFence(fi));
 		}
 		else
 		{
-			handle = make_ref(VULKAN.device->createFence(vk::FenceCreateInfo()));
+			handle = make_sptr(VULKAN.device->createFence(vk::FenceCreateInfo()));
 		}
 
 		VULKAN.SetDebugObjectName(*handle, "Fence");

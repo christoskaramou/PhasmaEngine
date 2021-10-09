@@ -62,27 +62,27 @@ namespace pe
 
 	void LightSystem::Init()
 	{
-		uniform.CreateBuffer(
+		uniform = Buffer::Create(
 			sizeof(LightsUBO),
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		uniform.Map();
-		uniform.Zero();
-		uniform.Flush();
-		uniform.Unmap();
-		uniform.SetDebugName("Light_UB");
+		uniform->Map();
+		uniform->Zero();
+		uniform->Flush();
+		uniform->Unmap();
+		uniform->SetDebugName("Light_UB");
 
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &GetDescriptorSetLayout();
-		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		descriptorSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Lights");
 
 		vk::DescriptorBufferInfo dbi;
-		dbi.buffer = *uniform.GetBufferVK();
+		dbi.buffer = uniform->Handle<vk::Buffer>();
 		dbi.offset = 0;
-		dbi.range = uniform.Size();
+		dbi.range = uniform->Size();
 
 		vk::WriteDescriptorSet writeSet;
 		writeSet.dstSet = *descriptorSet;
@@ -107,7 +107,7 @@ namespace pe
 			spot.start = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
 			spot.end = spot.start + normalize(vec4(rand(-1.f, 1.f), rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f));
 		}
-		uniform.CopyRequest<Launch::Sync>({ &lubo, sizeof(LightsUBO), 0 });
+		uniform->CopyRequest<Launch::Sync>({ &lubo, sizeof(LightsUBO), 0 });
 	}
 
 	void LightSystem::Update(double delta)
@@ -134,12 +134,12 @@ namespace pe
 			ranges.emplace_back(lubo.pointLights, sizeof(PointLight) * MAX_POINT_LIGHTS, offsetof(LightsUBO, pointLights));
 		}
 
-		uniform.CopyRequest<Launch::AsyncDeferred>(ranges);
+		uniform->CopyRequest<Launch::AsyncDeferred>(ranges);
 	}
 
 	void LightSystem::Destroy()
 	{
-		uniform.Destroy();
+		uniform->Destroy();
 		if (GetDescriptorSetLayout())
 		{
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(GetDescriptorSetLayout());

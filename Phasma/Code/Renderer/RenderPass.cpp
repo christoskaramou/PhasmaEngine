@@ -28,7 +28,7 @@ namespace pe
 {
 	RenderPass::RenderPass()
 	{
-		handle = make_ref(vk::RenderPass());
+		handle = make_sptr(vk::RenderPass());
 	}
 	
 	RenderPass::~RenderPass()
@@ -105,7 +105,7 @@ namespace pe
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 		
-		handle = make_ref(VulkanContext::Get()->device->createRenderPass(renderPassInfo));
+		handle = make_sptr(VulkanContext::Get()->device->createRenderPass(renderPassInfo));
 	}
 	
 	void RenderPass::Destroy()

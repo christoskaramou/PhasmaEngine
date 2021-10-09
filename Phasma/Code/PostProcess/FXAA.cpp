@@ -32,7 +32,7 @@ namespace pe
 {
 	FXAA::FXAA()
 	{
-		DSet = make_ref(vk::DescriptorSet());
+		DSet = make_sptr(vk::DescriptorSet());
 	}
 	
 	FXAA::~FXAA()
@@ -41,8 +41,8 @@ namespace pe
 	
 	void FXAA::Init()
 	{
-		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
-		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
+		frameImage.format = make_sptr(VulkanContext::Get()->surface.formatKHR->format);
+		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
 				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
@@ -62,7 +62,7 @@ namespace pe
 		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutFXAA();
-		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+		DSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSet, "FXAA");
 		
 		updateDescriptorSets(renderTargets);
@@ -138,10 +138,10 @@ namespace pe
 		pipeline.info.width = renderTargets["viewport"].width_f;
 		pipeline.info.height = renderTargets["viewport"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_ref(
+		pipeline.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["viewport"].blentAttachment}
 		);
-		pipeline.info.descriptorSetLayouts = make_ref(
+		pipeline.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutFXAA()}
 		);
 		pipeline.info.renderPass = renderPass;

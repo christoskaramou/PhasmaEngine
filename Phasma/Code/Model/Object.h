@@ -36,12 +36,12 @@ namespace pe
 		virtual ~Object() = default;
 		
 		bool render = true, cull = false;
-		Ref<vk::DescriptorSet> descriptorSet;
+		SPtr<vk::DescriptorSet> descriptorSet;
 		Image texture;
 		std::vector<float> vertices {};
-		Buffer vertexBuffer;
-		Buffer indexBuffer;
-		Buffer uniformBuffer;
+		SPtr<Buffer> vertexBuffer;
+		SPtr<Buffer> indexBuffer;
+		SPtr<Buffer> uniformBuffer;
 		
 		virtual void createVertexBuffer();
 		

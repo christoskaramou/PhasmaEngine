@@ -52,18 +52,18 @@ namespace pe
 		Shader* pVertShader;
 		Shader* pFragShader;
 		Shader* pCompShader;
-		Ref<std::vector<vk::VertexInputBindingDescription>> vertexInputBindingDescriptions;
-		Ref<std::vector<vk::VertexInputAttributeDescription>> vertexInputAttributeDescriptions;
+		SPtr<std::vector<vk::VertexInputBindingDescription>> vertexInputBindingDescriptions;
+		SPtr<std::vector<vk::VertexInputAttributeDescription>> vertexInputAttributeDescriptions;
 		float width;
 		float height;
 		CullMode cullMode;
-		Ref<std::vector<vk::PipelineColorBlendAttachmentState>> colorBlendAttachments;
-		Ref<std::vector<vk::DynamicState>> dynamicStates;
+		SPtr<std::vector<vk::PipelineColorBlendAttachmentState>> colorBlendAttachments;
+		SPtr<std::vector<vk::DynamicState>> dynamicStates;
 		PushConstantStage pushConstantStage;
 		uint32_t pushConstantSize;
-		Ref<std::vector<vk::DescriptorSetLayout>> descriptorSetLayouts;
+		SPtr<std::vector<vk::DescriptorSetLayout>> descriptorSetLayouts;
 		RenderPass renderPass;
-		Ref<vk::PipelineCache> pipelineCache;
+		SPtr<vk::PipelineCache> pipelineCache;
 	};
 	
 	class Pipeline
@@ -74,8 +74,8 @@ namespace pe
 		~Pipeline();
 		
 		PipelineCreateInfo info;
-		Ref<vk::Pipeline> handle;
-		Ref<vk::PipelineLayout> layout;
+		SPtr<vk::Pipeline> handle;
+		SPtr<vk::PipelineLayout> layout;
 		
 		void createGraphicsPipeline();
 		

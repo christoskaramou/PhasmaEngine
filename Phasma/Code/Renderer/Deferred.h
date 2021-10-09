@@ -41,7 +41,7 @@ namespace pe
 		
 		RenderPass renderPass, compositionRenderPass;
 		std::vector<FrameBuffer> framebuffers {}, compositionFramebuffers {};
-		Ref<vk::DescriptorSet> DSComposition;
+		SPtr<vk::DescriptorSet> DSComposition;
 		Pipeline pipeline;
 		Pipeline pipelineComposition;
 		Image ibl_brdf_lut;
@@ -50,7 +50,7 @@ namespace pe
 		{
 			vec4 screenSpace[8];
 		} ubo;
-		Buffer uniform;
+		SPtr<Buffer> uniform;
 		
 		void batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent);
 		

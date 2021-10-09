@@ -28,7 +28,7 @@ namespace pe
 {
 	CommandBuffer::CommandBuffer()
 	{
-		handle = make_ref(vk::CommandBuffer());
+		handle = make_sptr(vk::CommandBuffer());
 	}
 
 	CommandBuffer::~CommandBuffer()
@@ -41,7 +41,7 @@ namespace pe
 		cbai.commandPool = commandPool ? commandPool->Handle() : *VULKAN.commandPool;
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = 1;
-		handle = make_ref(VULKAN.device->allocateCommandBuffers(cbai).at(0));
+		handle = make_sptr(VULKAN.device->allocateCommandBuffers(cbai).at(0));
 		VULKAN.SetDebugObjectName(*handle, "CommandBuffer");
 	}
 

@@ -74,6 +74,6 @@ namespace pe
 
 		void Submit();
 
-		Ref<vk::CommandBuffer> handle;
+		SPtr<vk::CommandBuffer> handle;
 	};
 }

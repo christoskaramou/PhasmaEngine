@@ -53,11 +53,11 @@ namespace pe
 
 		void Destroy() override;
 
-		Buffer& GetUniform() { return uniform; }
+		Buffer& GetUniform() { return *uniform; }
 
 	private:
 		LightsUBO lubo;
-		Buffer uniform;
-		Ref<vk::DescriptorSet> descriptorSet;
+		SPtr<Buffer> uniform;
+		SPtr<vk::DescriptorSet> descriptorSet;
 	};
 }

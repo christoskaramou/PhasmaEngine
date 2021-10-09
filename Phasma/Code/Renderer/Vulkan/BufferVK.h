@@ -24,39 +24,53 @@ SOFTWARE.
 
 #include "Core/Base.h"
 #include "Renderer/RendererEnums.h"
+#include "Renderer/Buffer.h"
 
+struct VkBuffer_T;
 namespace pe
 {
-	class BufferVK
+	class BufferVK : public Buffer
 	{
 	public:
-		BufferVK();
+		BufferVK(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
+
+		~BufferVK();
 		
-		Ref<vk::Buffer> buffer;
+		void Map() override;
+		
+		void Unmap() override;
+		
+		void Zero() const override;
+		
+		void CopyData(const void* srcData, size_t srcSize = 0, size_t offset = 0) override;
+		
+		void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) const override;
+		
+		void Flush(size_t offset = 0, size_t flushSize = 0) const override;
+		
+		void Destroy() override;
+
+		void SetDebugName(const std::string& debugName) override;
+
+		size_t Size() override;
+
+		size_t SizeRequested() override;
+
+		void* Data() override;
+
+	protected:
+		void* Handle() override;
+
+	private:
+		VkBuffer_T* handle;
 		VmaAllocation allocation;
 		size_t size{};
 		// sizeRequested is the size asked from user during the creation, afterwards the size can be
 		// changed dynamically based on the system's minimum alignment on the specific buffer type
 		// and it will always be less or equal than the actual size of the created buffer
-		size_t sizeRequested {};
-		void* data = nullptr;
-		
-		void CreateBuffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
-		
-		void Map();
-		
-		void Unmap();
-		
-		void Zero() const;
-		
-		void CopyData(const void* srcData, size_t srcSize = 0, size_t offset = 0);
-		
-		void CopyBuffer(vk::Buffer srcBuffer, size_t srcSize = 0) const;
-		
-		void Flush(size_t offset = 0, size_t flushSize = 0) const;
-		
-		void Destroy() const;
+		size_t sizeRequested{};
 
-		void SetDebugName(const std::string& debugName);
+		void* data = nullptr;
+
 	};
 }

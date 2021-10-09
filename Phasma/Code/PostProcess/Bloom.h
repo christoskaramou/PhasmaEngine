@@ -47,10 +47,10 @@ namespace pe
 		RenderPass renderPassBrightFilter;
 		RenderPass renderPassGaussianBlur;
 		RenderPass renderPassCombine;
-		Ref<vk::DescriptorSet> DSBrightFilter;
-		Ref<vk::DescriptorSet> DSGaussianBlurHorizontal;
-		Ref<vk::DescriptorSet> DSGaussianBlurVertical;
-		Ref<vk::DescriptorSet> DSCombine;
+		SPtr<vk::DescriptorSet> DSBrightFilter;
+		SPtr<vk::DescriptorSet> DSGaussianBlurHorizontal;
+		SPtr<vk::DescriptorSet> DSGaussianBlurVertical;
+		SPtr<vk::DescriptorSet> DSCombine;
 		Image frameImage;
 		
 		void Init();

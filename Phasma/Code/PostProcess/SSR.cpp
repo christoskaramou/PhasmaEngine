@@ -34,7 +34,7 @@ namespace pe
 {
 	SSR::SSR()
 	{
-		DSet = make_ref(vk::DescriptorSet());
+		DSet = make_sptr(vk::DescriptorSet());
 	}
 	
 	SSR::~SSR()
@@ -43,21 +43,21 @@ namespace pe
 	
 	void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		UBReflection.CreateBuffer(
+		UBReflection = Buffer::Create(
 			4 * sizeof(mat4),
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		UBReflection.Map();
-		UBReflection.Zero();
-		UBReflection.Flush();
-		UBReflection.Unmap();
-		UBReflection.SetDebugName("SSR_UB_Reflection");
+		UBReflection->Map();
+		UBReflection->Zero();
+		UBReflection->Flush();
+		UBReflection->Unmap();
+		UBReflection->SetDebugName("SSR_UB_Reflection");
 		
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutSSR();
-		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+		DSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSet, "SSR");
 		
 		updateDescriptorSets(renderTargets);
@@ -76,7 +76,7 @@ namespace pe
 		std::deque<vk::DescriptorBufferInfo> dsbi {};
 		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
+			dsbi.emplace_back(buffer.Handle<vk::Buffer>(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
@@ -87,7 +87,7 @@ namespace pe
 				wSetImage(*DSet, 1, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
 				wSetImage(*DSet, 2, renderTargets["normal"]),
 				wSetImage(*DSet, 3, renderTargets["srm"]),
-				wSetBuffer(*DSet, 4, UBReflection)
+				wSetBuffer(*DSet, 4, *UBReflection)
 		};
 		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
@@ -104,7 +104,7 @@ namespace pe
 			reflectionInput[2] = camera.view;
 			reflectionInput[3] = camera.invProjection;
 			
-			UBReflection.CopyRequest<Launch::AsyncDeferred>({ &reflectionInput, sizeof(reflectionInput), 0 });
+			UBReflection->CopyRequest<Launch::AsyncDeferred>({ &reflectionInput, sizeof(reflectionInput), 0 });
 		}
 	}
 	
@@ -160,10 +160,10 @@ namespace pe
 		pipeline.info.width = renderTargets["ssr"].width_f;
 		pipeline.info.height = renderTargets["ssr"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_ref(
+		pipeline.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["ssr"].blentAttachment}
 		);
-		pipeline.info.descriptorSetLayouts = make_ref(
+		pipeline.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutSSR()}
 		);
 		pipeline.info.renderPass = renderPass;
@@ -183,7 +183,7 @@ namespace pe
 			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSR());
 			Pipeline::getDescriptorSetLayoutSSR() = nullptr;
 		}
-		UBReflection.Destroy();
+		UBReflection->Destroy();
 		pipeline.destroy();
 	}
 }

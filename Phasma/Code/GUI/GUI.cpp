@@ -680,7 +680,7 @@ namespace pe
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 		
-		renderPass.handle = make_ref(VulkanContext::Get()->device->createRenderPass(renderPassInfo));
+		renderPass.handle = make_sptr(VulkanContext::Get()->device->createRenderPass(renderPassInfo));
 	}
 
 	void GUI::CreateFrameBuffers()

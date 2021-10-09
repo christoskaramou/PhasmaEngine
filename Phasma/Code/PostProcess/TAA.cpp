@@ -34,8 +34,8 @@ namespace pe
 {
 	TAA::TAA()
 	{
-		DSet = make_ref(vk::DescriptorSet());
-		DSetSharpen = make_ref(vk::DescriptorSet());
+		DSet = make_sptr(vk::DescriptorSet());
+		DSetSharpen = make_sptr(vk::DescriptorSet());
 	}
 	
 	TAA::~TAA()
@@ -44,8 +44,8 @@ namespace pe
 	
 	void TAA::Init()
 	{
-		previous.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
-		previous.initialLayout = make_ref(vk::ImageLayout::eUndefined);
+		previous.format = make_sptr(VulkanContext::Get()->surface.formatKHR->format);
+		previous.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 		previous.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
 				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
@@ -58,8 +58,8 @@ namespace pe
 		previous.createSampler();
 		previous.SetDebugName("TAA_PreviousFrameImage");
 		
-		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
-		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
+		frameImage.format = make_sptr(VulkanContext::Get()->surface.formatKHR->format);
+		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
 				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
@@ -84,31 +84,31 @@ namespace pe
 			};
 			ubo.invProj = camera.invProjection;
 			
-			uniform.CopyRequest<Launch::AsyncDeferred>({ &ubo, sizeof(ubo), 0 });
+			uniform->CopyRequest<Launch::AsyncDeferred>({ &ubo, sizeof(ubo), 0 });
 		}
 	}
 	
 	void TAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		uniform.CreateBuffer(
+		uniform = Buffer::Create(
 			sizeof(UBO),
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		uniform.Map();
-		uniform.Zero();
-		uniform.Flush();
-		uniform.Unmap();
-		uniform.SetDebugName("TAA_UB");
+		uniform->Map();
+		uniform->Zero();
+		uniform->Flush();
+		uniform->Unmap();
+		uniform->SetDebugName("TAA_UB");
 		
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutTAA();
-		DSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+		DSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSet, "TAA");
 		
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutTAASharpen();
-		DSetSharpen = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
+		DSetSharpen = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSetSharpen, "TAA_Sharpen");
 		
 		updateDescriptorSets(renderTargets);
@@ -127,7 +127,7 @@ namespace pe
 		std::deque<vk::DescriptorBufferInfo> dsbi {};
 		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
+			dsbi.emplace_back(buffer.Handle<vk::Buffer>(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
 			};
@@ -138,9 +138,9 @@ namespace pe
 				wSetImage(*DSet, 1, frameImage),
 				wSetImage(*DSet, 2, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
 				wSetImage(*DSet, 3, renderTargets["velocity"]),
-				wSetBuffer(*DSet, 4, uniform),
+				wSetBuffer(*DSet, 4, *uniform),
 				wSetImage(*DSetSharpen, 0, renderTargets["taa"]),
-				wSetBuffer(*DSetSharpen, 1, uniform)
+				wSetBuffer(*DSetSharpen, 1, *uniform)
 		};
 		
 		VulkanContext::Get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
@@ -234,10 +234,10 @@ namespace pe
 		pipeline.info.width = renderTargets["taa"].width_f;
 		pipeline.info.height = renderTargets["taa"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_ref(
+		pipeline.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["taa"].blentAttachment}
 		);
-		pipeline.info.descriptorSetLayouts = make_ref(
+		pipeline.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutTAA()}
 		);
 		pipeline.info.renderPass = renderPass;
@@ -255,10 +255,10 @@ namespace pe
 		pipelineSharpen.info.width = renderTargets["viewport"].width_f;
 		pipelineSharpen.info.height = renderTargets["viewport"].height_f;
 		pipelineSharpen.info.cullMode = CullMode::Back;
-		pipelineSharpen.info.colorBlendAttachments = make_ref(
+		pipelineSharpen.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["viewport"].blentAttachment}
 		);
-		pipelineSharpen.info.descriptorSetLayouts = make_ref(
+		pipelineSharpen.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutTAASharpen()}
 		);
 		pipelineSharpen.info.renderPass = renderPassSharpen;
@@ -335,7 +335,7 @@ namespace pe
 	
 	void TAA::destroy()
 	{
-		uniform.Destroy();
+		uniform->Destroy();
 		previous.destroy();
 		frameImage.destroy();
 		

@@ -35,6 +35,6 @@ namespace pe
 		void Create(bool signaled = true);
 		void Destroy();
 
-		Ref<vk::Fence> handle;
+		SPtr<vk::Fence> handle;
 	};
 }

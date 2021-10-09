@@ -43,7 +43,7 @@ namespace pe
 		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		Ref<vk::DescriptorSet> DSet;
+		SPtr<vk::DescriptorSet> DSet;
 		Image frameImage;
 		
 		void Init();

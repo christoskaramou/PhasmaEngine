@@ -40,6 +40,6 @@ namespace pe
 		vk::CommandPool& Handle();
 
 	private:
-		Ref<vk::CommandPool> cmdPoolVK;
+		SPtr<vk::CommandPool> cmdPoolVK;
 	};
 }

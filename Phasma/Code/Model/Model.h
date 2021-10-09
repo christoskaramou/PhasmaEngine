@@ -58,9 +58,9 @@ namespace pe
 		
 		static std::deque<Model> models;
 		static Pipeline* pipeline;
-		static Ref<vk::CommandBuffer> commandBuffer;
-		Ref<vk::DescriptorSet> descriptorSet;
-		Buffer uniformBuffer;
+		static SPtr<vk::CommandBuffer> commandBuffer;
+		SPtr<vk::DescriptorSet> descriptorSet;
+		SPtr<Buffer> uniformBuffer;
 		struct UBOModel
 		{
 			mat4 matrix = mat4::identity();
@@ -89,8 +89,8 @@ namespace pe
 		void* script = nullptr;
 #endif
 		
-		Buffer vertexBuffer;
-		Buffer indexBuffer;
+		SPtr<Buffer> vertexBuffer;
+		SPtr<Buffer> indexBuffer;
 		uint32_t numberOfVertices = 0, numberOfIndices = 0;
 		
 		void draw(uint16_t renderQueue);

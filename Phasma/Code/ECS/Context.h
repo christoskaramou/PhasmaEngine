@@ -85,9 +85,9 @@ namespace pe
 		VulkanContext* GetVKContext();
 	
 	private:
-		std::unordered_map<size_t, Ref<ISystem>> m_systems;
+		std::unordered_map<size_t, SPtr<ISystem>> m_systems;
 		std::unordered_map<size_t, IDrawSystem*> m_drawSystems; // Keep the pointers for draw systems. All are stored in m_systems
-		std::unordered_map<size_t, Ref<Entity>> m_entities;
+		std::unordered_map<size_t, SPtr<Entity>> m_entities;
 	};
 	
 	template<class T>

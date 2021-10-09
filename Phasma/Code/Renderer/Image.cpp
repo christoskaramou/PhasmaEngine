@@ -29,26 +29,26 @@ namespace pe
 {
 	Image::Image()
 	{
-		samples = make_ref(vk::SampleCountFlagBits::e1);
+		samples = make_sptr(vk::SampleCountFlagBits::e1);
 		layoutState = LayoutState::ColorWrite;
-		format = make_ref(vk::Format::eUndefined);
-		initialLayout = make_ref(vk::ImageLayout::ePreinitialized);
-		tiling = make_ref(vk::ImageTiling::eOptimal);
+		format = make_sptr(vk::Format::eUndefined);
+		initialLayout = make_sptr(vk::ImageLayout::ePreinitialized);
+		tiling = make_sptr(vk::ImageTiling::eOptimal);
 		mipLevels = 1;
 		arrayLayers = 1;
 		anisotropyEnabled = VK_TRUE;
 		minLod = 0.f;
 		maxLod = 1.f;
 		maxAnisotropy = 16.f;
-		filter = make_ref(vk::Filter::eLinear);
-		imageCreateFlags = make_ref(vk::ImageCreateFlags());
-		viewType = make_ref(vk::ImageViewType::e2D);
-		addressMode = make_ref(vk::SamplerAddressMode::eRepeat);
-		borderColor = make_ref(vk::BorderColor::eFloatOpaqueBlack);
+		filter = make_sptr(vk::Filter::eLinear);
+		imageCreateFlags = make_sptr(vk::ImageCreateFlags());
+		viewType = make_sptr(vk::ImageViewType::e2D);
+		addressMode = make_sptr(vk::SamplerAddressMode::eRepeat);
+		borderColor = make_sptr(vk::BorderColor::eFloatOpaqueBlack);
 		samplerCompareEnable = VK_FALSE;
-		compareOp = make_ref(vk::CompareOp::eLess);
-		samplerMipmapMode = make_ref(vk::SamplerMipmapMode::eLinear);
-		blentAttachment = make_ref(vk::PipelineColorBlendAttachmentState());
+		compareOp = make_sptr(vk::CompareOp::eLess);
+		samplerMipmapMode = make_sptr(vk::SamplerMipmapMode::eLinear);
+		blentAttachment = make_sptr(vk::PipelineColorBlendAttachmentState());
 	}
 	
 	Image::~Image()
@@ -139,12 +139,12 @@ namespace pe
 			throw std::runtime_error("createImage(): image format properties error!");
 		
 		
-		this->tiling = make_ref(tiling);
+		this->tiling = make_sptr(tiling);
 		this->width = width % 2 != 0 ? width - 1 : width;
 		this->height = height % 2 != 0 ? height - 1 : height;
 		width_f = static_cast<float>(this->width);
 		height_f = static_cast<float>(this->height);
-		extent = make_ref(vk::Extent2D {this->width, this->height});
+		extent = make_sptr(vk::Extent2D {this->width, this->height});
 		
 		vk::ImageCreateInfo imageInfo;
 		imageInfo.flags = *imageCreateFlags;
@@ -169,7 +169,7 @@ namespace pe
 				VulkanContext::Get()->allocator, &vkImageInfo, &allocationCreateInfo, &vkImage, &allocation,
 				&allocationInfo
 		);
-		image = make_ref(vk::Image(vkImage));
+		image = make_sptr(vk::Image(vkImage));
 	}
 	
 	void Image::createImageView(const vk::ImageAspectFlags& aspectFlags)
@@ -182,7 +182,7 @@ namespace pe
 		viewInfo.format = *format;
 		viewInfo.subresourceRange = {aspectFlags, 0, mipLevels, 0, arrayLayers};
 		
-		view = make_ref(vCtx->device->createImageView(viewInfo));
+		view = make_sptr(vCtx->device->createImageView(viewInfo));
 		
 		vCtx->SetDebugObjectName(*view, "");
 	}
@@ -613,7 +613,7 @@ namespace pe
 		samplerInfo.compareOp = *compareOp;
 		samplerInfo.borderColor = *borderColor;
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
-		sampler = make_ref(vCtx->device->createSampler(samplerInfo));
+		sampler = make_sptr(vCtx->device->createSampler(samplerInfo));
 	}
 	
 	void Image::destroy() const

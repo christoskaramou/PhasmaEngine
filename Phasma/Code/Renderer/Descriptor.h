@@ -49,6 +49,6 @@ namespace pe
 		Descriptor();
 
 	private:
-		Ref<vk::DescriptorSet> descriptorVK;
+		SPtr<vk::DescriptorSet> descriptorVK;
 	};
 }

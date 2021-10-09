@@ -29,22 +29,22 @@ SOFTWARE.
 
 namespace pe
 {
-	Ref<vk::CommandPool> Compute::s_commandPool = make_ref(vk::CommandPool());
+	SPtr<vk::CommandPool> Compute::s_commandPool = make_sptr(vk::CommandPool());
 	
 	Compute::Compute()
 	{
-		fence = make_ref(vk::Fence());
-		semaphore = make_ref(vk::Semaphore());
-		DSCompute = make_ref(vk::DescriptorSet());
-		commandBuffer = make_ref(vk::CommandBuffer());
+		fence = make_sptr(vk::Fence());
+		semaphore = make_sptr(vk::Semaphore());
+		DSCompute = make_sptr(vk::DescriptorSet());
+		commandBuffer = make_sptr(vk::CommandBuffer());
 	}
 	
 	void Compute::updateInput(const void* srcData, size_t srcSize, size_t offset)
 	{
-		SBIn.Map();
-		SBIn.CopyData(srcData, srcSize, offset);
-		SBIn.Flush();
-		SBIn.Unmap();
+		SBIn->Map();
+		SBIn->CopyData(srcData, srcSize, offset);
+		SBIn->Flush();
+		SBIn->Unmap();
 	}
 	
 	void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, const std::vector<vk::Semaphore>& waitFor)
@@ -76,25 +76,25 @@ namespace pe
 	
 	void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
 	{
-		SBIn.CreateBuffer(
+		SBIn = Buffer::Create(
 			sizeIn,
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eStorageBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		SBIn.Map();
-		SBIn.Zero();
-		SBIn.Flush();
-		SBIn.Unmap();
-		SBIn.SetDebugName("Compute_SB_In");
+		SBIn->Map();
+		SBIn->Zero();
+		SBIn->Flush();
+		SBIn->Unmap();
+		SBIn->SetDebugName("Compute_SB_In");
 		
-		SBOut.CreateBuffer(
+		SBOut = Buffer::Create(
 			sizeOut,
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eStorageBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		SBOut.Map();
-		SBOut.Zero();
-		SBOut.Flush();
-		SBOut.Unmap();
-		SBOut.SetDebugName("Compute_SB_Out");
+		SBOut->Map();
+		SBOut->Zero();
+		SBOut->Flush();
+		SBOut->Unmap();
+		SBOut->SetDebugName("Compute_SB_Out");
 	}
 	
 	void Compute::createDescriptorSet()
@@ -103,7 +103,7 @@ namespace pe
 		allocInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocInfo.descriptorSetCount = 1;
 		allocInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutCompute();
-		DSCompute = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocInfo).at(0));
+		DSCompute = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocInfo).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSCompute, "Compute");
 	}
 	
@@ -114,13 +114,13 @@ namespace pe
 				const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer, vk::DescriptorType type
 		)
 		{
-			dsbi.emplace_back(*buffer.GetBufferVK(), 0, buffer.Size());
+			dsbi.emplace_back(buffer.Handle<vk::Buffer>(), 0, buffer.Size());
 			return vk::WriteDescriptorSet {dstSet, dstBinding, 0, 1, type, nullptr, &dsbi.back(), nullptr};
 		};
 		std::vector<vk::WriteDescriptorSet> writeCompDescriptorSets
 				{
-						wSetBuffer(*DSCompute, 0, SBIn, vk::DescriptorType::eStorageBuffer),
-						wSetBuffer(*DSCompute, 1, SBOut, vk::DescriptorType::eStorageBuffer),
+						wSetBuffer(*DSCompute, 0, *SBIn, vk::DescriptorType::eStorageBuffer),
+						wSetBuffer(*DSCompute, 1, *SBOut, vk::DescriptorType::eStorageBuffer),
 				};
 		VulkanContext::Get()->device->updateDescriptorSets(writeCompDescriptorSets, nullptr);
 	}
@@ -132,7 +132,7 @@ namespace pe
 		Shader shader {shaderName, ShaderType::Compute, true};
 		
 		pipeline.info.pCompShader = &shader;
-		pipeline.info.descriptorSetLayouts = make_ref(
+		pipeline.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutCompute()}
 		);
 		
@@ -142,8 +142,8 @@ namespace pe
 	
 	void Compute::destroy()
 	{
-		SBIn.Destroy();
-		SBOut.Destroy();
+		SBIn->Destroy();
+		SBOut->Destroy();
 		pipeline.destroy();
 		if (*semaphore)
 		{
@@ -169,15 +169,15 @@ namespace pe
 		VulkanContext::Get()->SetDebugObjectName(commandBuffer, "Compute");
 		
 		Compute compute;
-		compute.commandBuffer = make_ref(commandBuffer);
+		compute.commandBuffer = make_sptr(commandBuffer);
 		compute.createPipeline(shaderName);
 		compute.createDescriptorSet();
 		compute.createComputeStorageBuffers(sizeIn, sizeOut);
 		compute.updateDescriptorSet();
-		compute.fence = make_ref(
+		compute.fence = make_sptr(
 				VulkanContext::Get()->device->createFence(vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled})
 		);
-		compute.semaphore = make_ref(VulkanContext::Get()->device->createSemaphore(vk::SemaphoreCreateInfo{}));
+		compute.semaphore = make_sptr(VulkanContext::Get()->device->createSemaphore(vk::SemaphoreCreateInfo{}));
 		VulkanContext::Get()->SetDebugObjectName(*compute.fence, "Compute");
 		VulkanContext::Get()->SetDebugObjectName(*compute.semaphore, "Compute");
 		
@@ -201,15 +201,15 @@ namespace pe
 			VulkanContext::Get()->SetDebugObjectName(commandBuffer, "Compute");
 
 			Compute compute;
-			compute.commandBuffer = make_ref(commandBuffer);
+			compute.commandBuffer = make_sptr(commandBuffer);
 			compute.createPipeline(shaderName);
 			compute.createDescriptorSet();
 			compute.createComputeStorageBuffers(sizeIn, sizeOut);
 			compute.updateDescriptorSet();
-			compute.fence = make_ref(
+			compute.fence = make_sptr(
 					VulkanContext::Get()->device->createFence(vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled})
 			);
-			compute.semaphore = make_ref(VulkanContext::Get()->device->createSemaphore(vk::SemaphoreCreateInfo{}));
+			compute.semaphore = make_sptr(VulkanContext::Get()->device->createSemaphore(vk::SemaphoreCreateInfo{}));
 
 			VulkanContext::Get()->SetDebugObjectName(*compute.fence, "Compute");
 			VulkanContext::Get()->SetDebugObjectName(*compute.semaphore, "Compute");
@@ -227,7 +227,7 @@ namespace pe
 			vk::CommandPoolCreateInfo cpci;
 			cpci.queueFamilyIndex = VulkanContext::Get()->computeFamilyId;
 			cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-			s_commandPool = make_ref(VulkanContext::Get()->device->createCommandPool(cpci));
+			s_commandPool = make_sptr(VulkanContext::Get()->device->createCommandPool(cpci));
 			VulkanContext::Get()->SetDebugObjectName(*s_commandPool, "Compute");
 		}
 	}

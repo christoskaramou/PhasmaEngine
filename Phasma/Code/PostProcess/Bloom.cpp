@@ -33,10 +33,10 @@ namespace pe
 {
 	Bloom::Bloom()
 	{
-		DSBrightFilter = make_ref(vk::DescriptorSet());
-		DSGaussianBlurHorizontal = make_ref(vk::DescriptorSet());
-		DSGaussianBlurVertical = make_ref(vk::DescriptorSet());
-		DSCombine = make_ref(vk::DescriptorSet());
+		DSBrightFilter = make_sptr(vk::DescriptorSet());
+		DSGaussianBlurHorizontal = make_sptr(vk::DescriptorSet());
+		DSGaussianBlurVertical = make_sptr(vk::DescriptorSet());
+		DSCombine = make_sptr(vk::DescriptorSet());
 	}
 	
 	Bloom::~Bloom()
@@ -45,8 +45,8 @@ namespace pe
 	
 	void Bloom::Init()
 	{
-		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
-		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
+		frameImage.format = make_sptr(VulkanContext::Get()->surface.formatKHR->format);
+		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
 				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
@@ -113,22 +113,22 @@ namespace pe
 		
 		// Composition image to Bright Filter shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutBrightFilter();
-		DSBrightFilter = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
+		DSBrightFilter = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSBrightFilter, "Bloom_BloomBrightFilter");
 		
 		// Bright Filter image to Gaussian Blur Horizontal shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutGaussianBlurH();
-		DSGaussianBlurHorizontal = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
+		DSGaussianBlurHorizontal = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSGaussianBlurHorizontal, "Bloom_GaussianBlurHorizontal");
 		
 		// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutGaussianBlurV();
-		DSGaussianBlurVertical = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
+		DSGaussianBlurVertical = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSGaussianBlurVertical, "Bloom_GaussianBlurVertical");
 		
 		// Gaussian Blur Vertical image to Combine shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutCombine();
-		DSCombine = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
+		DSCombine = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSCombine, "Bloom_Combine");
 		
 		updateDescriptorSets(renderTargets);
@@ -246,12 +246,12 @@ namespace pe
 		pipelineBrightFilter.info.width = renderTargets["brightFilter"].width_f;
 		pipelineBrightFilter.info.height = renderTargets["brightFilter"].height_f;
 		pipelineBrightFilter.info.cullMode = CullMode::Back;
-		pipelineBrightFilter.info.colorBlendAttachments = make_ref(
+		pipelineBrightFilter.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["brightFilter"].blentAttachment}
 		);
 		pipelineBrightFilter.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineBrightFilter.info.pushConstantSize = 5 * sizeof(vec4);
-		pipelineBrightFilter.info.descriptorSetLayouts = make_ref(
+		pipelineBrightFilter.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutBrightFilter()}
 		);
 		pipelineBrightFilter.info.renderPass = renderPassBrightFilter;
@@ -269,14 +269,14 @@ namespace pe
 		pipelineGaussianBlurHorizontal.info.width = renderTargets["gaussianBlurHorizontal"].width_f;
 		pipelineGaussianBlurHorizontal.info.height = renderTargets["gaussianBlurHorizontal"].height_f;
 		pipelineGaussianBlurHorizontal.info.cullMode = CullMode::Back;
-		pipelineGaussianBlurHorizontal.info.colorBlendAttachments = make_ref(
+		pipelineGaussianBlurHorizontal.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {
 						*renderTargets["gaussianBlurHorizontal"].blentAttachment
 				}
 		);
 		pipelineGaussianBlurHorizontal.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineGaussianBlurHorizontal.info.pushConstantSize = 5 * sizeof(vec4);
-		pipelineGaussianBlurHorizontal.info.descriptorSetLayouts = make_ref(
+		pipelineGaussianBlurHorizontal.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutGaussianBlurH()}
 		);
 		pipelineGaussianBlurHorizontal.info.renderPass = renderPassGaussianBlur;
@@ -294,14 +294,14 @@ namespace pe
 		pipelineGaussianBlurVertical.info.width = renderTargets["gaussianBlurVertical"].width_f;
 		pipelineGaussianBlurVertical.info.height = renderTargets["gaussianBlurVertical"].height_f;
 		pipelineGaussianBlurVertical.info.cullMode = CullMode::Back;
-		pipelineGaussianBlurVertical.info.colorBlendAttachments = make_ref(
+		pipelineGaussianBlurVertical.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {
 						*renderTargets["gaussianBlurVertical"].blentAttachment
 				}
 		);
 		pipelineGaussianBlurVertical.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineGaussianBlurVertical.info.pushConstantSize = 5 * sizeof(vec4);
-		pipelineGaussianBlurVertical.info.descriptorSetLayouts = make_ref(
+		pipelineGaussianBlurVertical.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutGaussianBlurV()}
 		);
 		pipelineGaussianBlurVertical.info.renderPass = renderPassGaussianBlur;
@@ -320,12 +320,12 @@ namespace pe
 		pipelineCombine.info.width = renderTargets["viewport"].width_f;
 		pipelineCombine.info.height = renderTargets["viewport"].height_f;
 		pipelineCombine.info.cullMode = CullMode::Back;
-		pipelineCombine.info.colorBlendAttachments = make_ref(
+		pipelineCombine.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["viewport"].blentAttachment}
 		);
 		pipelineCombine.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineCombine.info.pushConstantSize = 5 * sizeof(vec4);
-		pipelineCombine.info.descriptorSetLayouts = make_ref(
+		pipelineCombine.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutCombine()}
 		);
 		pipelineCombine.info.renderPass = renderPassCombine;

@@ -33,7 +33,7 @@ namespace pe
 {
 	DOF::DOF()
 	{
-		DSet = make_ref(vk::DescriptorSet());
+		DSet = make_sptr(vk::DescriptorSet());
 	}
 	
 	DOF::~DOF()
@@ -42,8 +42,8 @@ namespace pe
 	
 	void DOF::Init()
 	{
-		frameImage.format = make_ref(VulkanContext::Get()->surface.formatKHR->format);
-		frameImage.initialLayout = make_ref(vk::ImageLayout::eUndefined);
+		frameImage.format = make_sptr(VulkanContext::Get()->surface.formatKHR->format);
+		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
 				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
@@ -83,7 +83,7 @@ namespace pe
 		allocateInfo.descriptorSetCount = 1;
 		
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutDOF();
-		DSet = make_ref(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
+		DSet = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*DSet, "DOF");
 		
 		updateDescriptorSets(renderTargets);
@@ -143,12 +143,12 @@ namespace pe
 		pipeline.info.width = renderTargets["viewport"].width_f;
 		pipeline.info.height = renderTargets["viewport"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_ref(
+		pipeline.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["viewport"].blentAttachment}
 		);
 		pipeline.info.pushConstantStage = PushConstantStage::Fragment;
 		pipeline.info.pushConstantSize = 5 * sizeof(vec4);
-		pipeline.info.descriptorSetLayouts = make_ref(
+		pipeline.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutDOF()}
 		);
 		pipeline.info.renderPass = renderPass;

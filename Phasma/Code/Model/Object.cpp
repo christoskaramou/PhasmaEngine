@@ -29,44 +29,43 @@ namespace pe
 {
 	Object::Object()
 	{
-		descriptorSet = make_ref(vk::DescriptorSet());
+		descriptorSet = make_sptr(vk::DescriptorSet());
 	}
 	
 	void Object::createVertexBuffer()
 	{
-		vertexBuffer.CreateBuffer(
+		vertexBuffer = Buffer::Create(
 			sizeof(float) * vertices.size(),
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferDst | (BufferUsageFlags)vk::BufferUsageFlagBits::eVertexBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eDeviceLocal);
-		vertexBuffer.SetDebugName("Object_Vertex");
+		vertexBuffer->SetDebugName("Object_Vertex");
 
 		// Staging buffer
-		Buffer staging;
-		staging.CreateBuffer(
+		SPtr<Buffer> staging = Buffer::Create(
 				sizeof(float) * vertices.size(),
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		staging.Map();
-		staging.CopyData(vertices.data());
-		staging.Flush();
-		staging.Unmap();
-		staging.SetDebugName("Staging");
+		staging->Map();
+		staging->CopyData(vertices.data());
+		staging->Flush();
+		staging->Unmap();
+		staging->SetDebugName("Staging");
 		
-		vertexBuffer.CopyBuffer(&staging, staging.Size());
-		staging.Destroy();
+		vertexBuffer->CopyBuffer(staging.get(), staging->Size());
+		staging->Destroy();
 	}
 	
 	void Object::createUniformBuffer(size_t size)
 	{
-		uniformBuffer.CreateBuffer(
+		uniformBuffer = Buffer::Create(
 			size,
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		uniformBuffer.Map();
-		uniformBuffer.Zero();
-		uniformBuffer.Flush();
-		uniformBuffer.Unmap();
-		uniformBuffer.SetDebugName("Object_UB");
+		uniformBuffer->Map();
+		uniformBuffer->Zero();
+		uniformBuffer->Flush();
+		uniformBuffer->Unmap();
+		uniformBuffer->SetDebugName("Object_UB");
 	}
 	
 	void Object::loadTexture(const std::string& path)
@@ -80,20 +79,19 @@ namespace pe
 		if (!pixels)
 			throw std::runtime_error("No pixel data loaded");
 		
-		Buffer staging;
-		staging.CreateBuffer(
+		SPtr<Buffer> staging = Buffer::Create(
 			imageSize,
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
-		staging.Map();
-		staging.CopyData(pixels);
-		staging.Flush();
-		staging.Unmap();
-		staging.SetDebugName("Staging");
+		staging->Map();
+		staging->CopyData(pixels);
+		staging->Flush();
+		staging->Unmap();
+		staging->SetDebugName("Staging");
 		
 		stbi_image_free(pixels);
 		
-		texture.format = make_ref(vk::Format::eR8G8B8A8Unorm);
+		texture.format = make_sptr(vk::Format::eR8G8B8A8Unorm);
 		texture.mipLevels = 1;
 		texture.createImage(
 				texWidth, texHeight, vk::ImageTiling::eOptimal,
@@ -101,13 +99,13 @@ namespace pe
 				vk::MemoryPropertyFlagBits::eDeviceLocal
 		);
 		texture.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-		texture.copyBufferToImage(*staging.GetBufferVK());
+		texture.copyBufferToImage(staging->Handle<vk::Buffer>());
 		texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		texture.createImageView(vk::ImageAspectFlagBits::eColor);
 		texture.createSampler();
 		texture.SetDebugName(path.c_str());
 		
-		staging.Destroy();
+		staging->Destroy();
 	}
 	
 	void Object::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
@@ -116,15 +114,15 @@ namespace pe
 		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &descriptorSetLayout;
-		descriptorSet = make_ref(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
+		descriptorSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
 		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Object");
 		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 		// MVP
 		vk::DescriptorBufferInfo dbi;
-		dbi.buffer = *uniformBuffer.GetBufferVK();
+		dbi.buffer = uniformBuffer->Handle<vk::Buffer>();
 		dbi.offset = 0;
-		dbi.range = uniformBuffer.Size();
+		dbi.range = uniformBuffer->Size();
 		
 		textureWriteSets[0].dstSet = *descriptorSet;
 		textureWriteSets[0].dstBinding = 0;
@@ -151,9 +149,9 @@ namespace pe
 	void Object::destroy()
 	{
 		texture.destroy();
-		vertexBuffer.Destroy();
-		indexBuffer.Destroy();
-		uniformBuffer.Destroy();
+		vertexBuffer->Destroy();
+		indexBuffer->Destroy();
+		uniformBuffer->Destroy();
 		vertices.clear();
 		vertices.shrink_to_fit();
 	}

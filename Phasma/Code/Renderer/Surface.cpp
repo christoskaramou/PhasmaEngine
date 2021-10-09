@@ -30,11 +30,11 @@ namespace pe
 {
 	Surface::Surface()
 	{
-		surface = make_ref(vk::SurfaceKHR());
-		actualExtent = make_ref(vk::Extent2D());
-		capabilities = make_ref(vk::SurfaceCapabilitiesKHR());
-		formatKHR = make_ref(vk::SurfaceFormatKHR());
-		presentModeKHR = make_ref(vk::PresentModeKHR::eFifo);
+		surface = make_sptr(vk::SurfaceKHR());
+		actualExtent = make_sptr(vk::Extent2D());
+		capabilities = make_sptr(vk::SurfaceCapabilitiesKHR());
+		formatKHR = make_sptr(vk::SurfaceFormatKHR());
+		presentModeKHR = make_sptr(vk::PresentModeKHR::eFifo);
 	}
 	
 	Surface::~Surface()
@@ -50,8 +50,8 @@ namespace pe
 		int w, h;
 		SDL_GL_GetDrawableSize(window, &w, &h);
 
-		actualExtent = make_ref(vk::Extent2D {static_cast<uint32_t>(w), static_cast<uint32_t>(h)});
-		surface = make_ref(vk::SurfaceKHR(_vkSurface));
+		actualExtent = make_sptr(vk::Extent2D {static_cast<uint32_t>(w), static_cast<uint32_t>(h)});
+		surface = make_sptr(vk::SurfaceKHR(_vkSurface));
 	}
 	
 	void Surface::FindCapabilities()
@@ -61,7 +61,7 @@ namespace pe
 		// Ensure eTransferSrc bit for blit operations
 		if (!(caps.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferSrc))
 			throw std::runtime_error("Surface doesnt support vk::ImageUsageFlagBits::eTransferSrc");
-		capabilities = make_ref(caps);
+		capabilities = make_sptr(caps);
 	}
 	
 	void Surface::FindFormat()
@@ -82,7 +82,7 @@ namespace pe
 		if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eBlitDst))
 			throw std::runtime_error("No blit destination operation supported");
 		
-		formatKHR = make_ref(format);
+		formatKHR = make_sptr(format);
 	}
 	
 	void Surface::FindPresentationMode()
@@ -93,18 +93,18 @@ namespace pe
 		for (const auto& i : presentModes)
 			if (i == vk::PresentModeKHR::eMailbox)
 			{
-				presentModeKHR = make_ref(i);
+				presentModeKHR = make_sptr(i);
 				return;
 			}
 		
 		for (const auto& i : presentModes)
 			if (i == vk::PresentModeKHR::eImmediate)
 			{
-				presentModeKHR = make_ref(i);
+				presentModeKHR = make_sptr(i);
 				return;
 			}
 		
-		presentModeKHR = make_ref(vk::PresentModeKHR::eFifo);
+		presentModeKHR = make_sptr(vk::PresentModeKHR::eFifo);
 	}
 	
 	

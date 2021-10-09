@@ -29,7 +29,7 @@ namespace pe
 {
 	FrameBuffer::FrameBuffer()
 	{
-		handle = make_ref(vk::Framebuffer());
+		handle = make_sptr(vk::Framebuffer());
 	}
 	
 	void FrameBuffer::Create(uint32_t width, uint32_t height, const vk::ImageView& view, const RenderPass& renderPass)
@@ -48,7 +48,7 @@ namespace pe
 		fbci.height = height;
 		fbci.layers = 1;
 		
-		handle = make_ref(VulkanContext::Get()->device->createFramebuffer(fbci));
+		handle = make_sptr(VulkanContext::Get()->device->createFramebuffer(fbci));
 	}
 	
 	void FrameBuffer::Destroy()

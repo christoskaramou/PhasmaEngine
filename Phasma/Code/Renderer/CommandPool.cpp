@@ -27,7 +27,7 @@ namespace pe
 {
 	CommandPool::CommandPool()
 	{
-		cmdPoolVK = make_ref(vk::CommandPool());
+		cmdPoolVK = make_sptr(vk::CommandPool());
 	}
 
 	CommandPool::~CommandPool()
@@ -40,7 +40,7 @@ namespace pe
 		cpci.queueFamilyIndex = VULKAN.graphicsFamilyId;
 		cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
 
-		cmdPoolVK = make_ref(VULKAN.device->createCommandPool(cpci));
+		cmdPoolVK = make_sptr(VULKAN.device->createCommandPool(cpci));
 		VULKAN.SetDebugObjectName(*cmdPoolVK, "CommandPool");
 	}
 

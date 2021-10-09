@@ -43,11 +43,11 @@ namespace pe
 		~MotionBlur();
 		
 		mat4 motionBlurInput[4];
-		Buffer UBmotionBlur;
+		SPtr<Buffer> UBmotionBlur;
 		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		Ref<vk::DescriptorSet> DSet;
+		SPtr<vk::DescriptorSet> DSet;
 		Image frameImage;
 		
 		void Init();

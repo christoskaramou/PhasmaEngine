@@ -45,35 +45,35 @@ namespace pe
 
 		std::string name{};
 
-		Ref<vk::Image> image;
+		SPtr<vk::Image> image;
 		VmaAllocation allocation {};
-		Ref<vk::ImageView> view;
-		Ref<vk::Sampler> sampler;
+		SPtr<vk::ImageView> view;
+		SPtr<vk::Sampler> sampler;
 		uint32_t width {};
 		uint32_t height {};
 		float width_f {};
 		float height_f {};
-		Ref<vk::Extent2D> extent;
+		SPtr<vk::Extent2D> extent;
 		
 		// values
-		Ref<vk::SampleCountFlagBits> samples;
+		SPtr<vk::SampleCountFlagBits> samples;
 		LayoutState layoutState;
-		Ref<vk::Format> format;
-		Ref<vk::ImageLayout> initialLayout;
-		Ref<vk::ImageTiling> tiling;
+		SPtr<vk::Format> format;
+		SPtr<vk::ImageLayout> initialLayout;
+		SPtr<vk::ImageTiling> tiling;
 		uint32_t mipLevels;
 		uint32_t arrayLayers;
 		bool anisotropyEnabled;
 		float minLod, maxLod, maxAnisotropy;
-		Ref<vk::Filter> filter;
-		Ref<vk::ImageCreateFlags> imageCreateFlags;
-		Ref<vk::ImageViewType> viewType;
-		Ref<vk::SamplerAddressMode> addressMode;
-		Ref<vk::BorderColor> borderColor;
+		SPtr<vk::Filter> filter;
+		SPtr<vk::ImageCreateFlags> imageCreateFlags;
+		SPtr<vk::ImageViewType> viewType;
+		SPtr<vk::SamplerAddressMode> addressMode;
+		SPtr<vk::BorderColor> borderColor;
 		bool samplerCompareEnable;
-		Ref<vk::CompareOp> compareOp;
-		Ref<vk::SamplerMipmapMode> samplerMipmapMode;
-		Ref<vk::PipelineColorBlendAttachmentState> blentAttachment;
+		SPtr<vk::CompareOp> compareOp;
+		SPtr<vk::SamplerMipmapMode> samplerMipmapMode;
+		SPtr<vk::PipelineColorBlendAttachmentState> blentAttachment;
 		
 		void transitionImageLayout(
 				vk::CommandBuffer cmd,

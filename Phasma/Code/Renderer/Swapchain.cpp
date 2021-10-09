@@ -30,7 +30,7 @@ namespace pe
 {
 	Swapchain::Swapchain()
 	{
-		handle = make_ref(vk::SwapchainKHR());
+		handle = make_sptr(vk::SwapchainKHR());
 	}
 	
 	Swapchain::~Swapchain()
@@ -64,7 +64,7 @@ namespace pe
 		
 		// new swapchain with old create info
 		Swapchain newSwapchain;
-		newSwapchain.handle = make_ref(VULKAN.device->createSwapchainKHR(swapchainCreateInfo));
+		newSwapchain.handle = make_sptr(VULKAN.device->createSwapchainKHR(swapchainCreateInfo));
 		
 		// destroy old swapchain
 		if (*handle)
@@ -79,7 +79,7 @@ namespace pe
 		newSwapchain.images.resize(images.size());
 		for (unsigned i = 0; i < images.size(); i++)
 		{
-			newSwapchain.images[i].image = make_ref(images[i]); // hold the image handlers
+			newSwapchain.images[i].image = make_sptr(images[i]); // hold the image handlers
 			newSwapchain.images[i].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
 			newSwapchain.images[i].blentAttachment->blendEnable = VK_TRUE;
 			newSwapchain.images[i].blentAttachment->srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
@@ -101,7 +101,7 @@ namespace pe
 			imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
 			imageViewCreateInfo.format = VULKAN.surface.formatKHR->format;
 			imageViewCreateInfo.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-			image.view = make_ref(VULKAN.device->createImageView(imageViewCreateInfo));
+			image.view = make_sptr(VULKAN.device->createImageView(imageViewCreateInfo));
 		}
 		
 		*this = newSwapchain;

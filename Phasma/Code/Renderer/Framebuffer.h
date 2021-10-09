@@ -43,6 +43,6 @@ namespace pe
 		
 		void Destroy();
 		
-		Ref<vk::Framebuffer> handle;
+		SPtr<vk::Framebuffer> handle;
 	};
 }

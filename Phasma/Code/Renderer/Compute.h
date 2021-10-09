@@ -57,24 +57,24 @@ namespace pe
 		template<class T>
 		void copyDataTo(T* ptr, size_t elements)
 		{
-			assert(elements * sizeof(T) <= SBOut.SizeRequested());
+			assert(elements * sizeof(T) <= SBOut->SizeRequested());
 
-			SBOut.Map();
-			memcpy(ptr, SBOut.Data(), elements * sizeof(T));
-			SBOut.Unmap();
+			SBOut->Map();
+			memcpy(ptr, SBOut->Data(), elements * sizeof(T));
+			SBOut->Unmap();
 		}
 		
 		void createPipeline(const std::string& shaderName);
 	
 	private:
-		static Ref<vk::CommandPool> s_commandPool;
-		Buffer SBIn;
-		Buffer SBOut;
+		static SPtr<vk::CommandPool> s_commandPool;
+		SPtr<Buffer> SBIn;
+		SPtr<Buffer> SBOut;
 		Pipeline pipeline;
-		Ref<vk::Fence> fence;
-		Ref<vk::Semaphore> semaphore;
-		Ref<vk::DescriptorSet> DSCompute;
-		Ref<vk::CommandBuffer> commandBuffer;
+		SPtr<vk::Fence> fence;
+		SPtr<vk::Semaphore> semaphore;
+		SPtr<vk::DescriptorSet> DSCompute;
+		SPtr<vk::CommandBuffer> commandBuffer;
 		
 		void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
 		

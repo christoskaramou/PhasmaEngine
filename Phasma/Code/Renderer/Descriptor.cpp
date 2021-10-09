@@ -32,6 +32,6 @@ namespace pe
 
 	Descriptor::Descriptor()
 	{
-		descriptorVK = make_ref(vk::DescriptorSet());
+		descriptorVK = make_sptr(vk::DescriptorSet());
 	}
 }

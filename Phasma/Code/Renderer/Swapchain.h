@@ -47,7 +47,7 @@ namespace pe
 		
 		void Destroy();
 		
-		Ref<vk::SwapchainKHR> handle;
+		SPtr<vk::SwapchainKHR> handle;
 		std::vector<Image> images {};
 		uint32_t previousImageIndex = 0;
 	};

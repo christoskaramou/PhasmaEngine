@@ -33,17 +33,17 @@ namespace pe
 		pVertShader = nullptr;
 		pFragShader = nullptr;
 		pCompShader = nullptr;
-		vertexInputBindingDescriptions = make_ref(std::vector<vk::VertexInputBindingDescription>());
-		vertexInputAttributeDescriptions = make_ref(std::vector<vk::VertexInputAttributeDescription>());
+		vertexInputBindingDescriptions = make_sptr(std::vector<vk::VertexInputBindingDescription>());
+		vertexInputAttributeDescriptions = make_sptr(std::vector<vk::VertexInputAttributeDescription>());
 		width = 0.f;
 		height = 0.f;
 		pushConstantStage = PushConstantStage::Vertex;
 		pushConstantSize = 0;
 		cullMode = CullMode::None;
-		colorBlendAttachments = make_ref(std::vector<vk::PipelineColorBlendAttachmentState>());
-		dynamicStates = make_ref(std::vector<vk::DynamicState>());
-		descriptorSetLayouts = make_ref(std::vector<vk::DescriptorSetLayout>());
-		pipelineCache = make_ref(vk::PipelineCache());
+		colorBlendAttachments = make_sptr(std::vector<vk::PipelineColorBlendAttachmentState>());
+		dynamicStates = make_sptr(std::vector<vk::DynamicState>());
+		descriptorSetLayouts = make_sptr(std::vector<vk::DescriptorSetLayout>());
+		pipelineCache = make_sptr(vk::PipelineCache());
 	}
 	
 	PipelineCreateInfo::~PipelineCreateInfo()
@@ -52,8 +52,8 @@ namespace pe
 	
 	Pipeline::Pipeline()
 	{
-		handle = make_ref(vk::Pipeline());
-		layout = make_ref(vk::PipelineLayout());
+		handle = make_sptr(vk::Pipeline());
+		layout = make_sptr(vk::PipelineLayout());
 	}
 	
 	Pipeline::~Pipeline()
@@ -192,7 +192,7 @@ namespace pe
 		plci.pSetLayouts = info.descriptorSetLayouts->data();
 		plci.pushConstantRangeCount = info.pushConstantSize ? 1 : 0;
 		plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
-		layout = make_ref(VulkanContext::Get()->device->createPipelineLayout(plci));
+		layout = make_sptr(VulkanContext::Get()->device->createPipelineLayout(plci));
 		pipeinfo.layout = *layout;
 		
 		// Render Pass
@@ -207,7 +207,7 @@ namespace pe
 		// Base Pipeline Index
 		pipeinfo.basePipelineIndex = -1;
 		
-		handle = make_ref(VULKAN.device->createGraphicsPipeline(nullptr, pipeinfo).value);
+		handle = make_sptr(VULKAN.device->createGraphicsPipeline(nullptr, pipeinfo).value);
 
 		//vk::PipelineCacheCreateInfo pcci;
 		//VULKAN.device->createPipelineCache()
@@ -230,10 +230,10 @@ namespace pe
 		compinfo.stage.module = module.get();
 		compinfo.stage.pName = "main";
 		compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
-		layout = make_ref(VulkanContext::Get()->device->createPipelineLayout(plci));
+		layout = make_sptr(VulkanContext::Get()->device->createPipelineLayout(plci));
 		compinfo.layout = *layout;
 		
-		handle = make_ref(VulkanContext::Get()->device->createComputePipeline(nullptr, compinfo).value);
+		handle = make_sptr(VulkanContext::Get()->device->createComputePipeline(nullptr, compinfo).value);
 	}
 	
 	void Pipeline::destroy()

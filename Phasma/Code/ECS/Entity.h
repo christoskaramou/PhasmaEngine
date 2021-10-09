@@ -70,7 +70,7 @@ namespace pe
 	private:
 		size_t m_id;
 		Context* m_context;
-		std::unordered_map<size_t, Ref<IComponent>> m_components;
+		std::unordered_map<size_t, SPtr<IComponent>> m_components;
 		bool m_enabled;
 	};
 	

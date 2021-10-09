@@ -35,6 +35,6 @@ namespace pe
 		void Create();
 		void Destroy();
 
-		Ref<vk::Semaphore> handle;
+		SPtr<vk::Semaphore> handle;
 	};
 }
