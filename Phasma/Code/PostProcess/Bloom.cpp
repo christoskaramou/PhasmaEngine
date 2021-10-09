@@ -45,7 +45,7 @@ namespace pe
 	
 	void Bloom::Init()
 	{
-		frameImage.format = make_sptr(VulkanContext::Get()->surface.formatKHR->format);
+		frameImage.format = make_sptr(VULKAN.surface.formatKHR->format);
 		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -114,22 +114,22 @@ namespace pe
 		// Composition image to Bright Filter shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutBrightFilter();
 		DSBrightFilter = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*DSBrightFilter, "Bloom_BloomBrightFilter");
+		VULKAN.SetDebugObjectName(*DSBrightFilter, "Bloom_BloomBrightFilter");
 		
 		// Bright Filter image to Gaussian Blur Horizontal shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutGaussianBlurH();
 		DSGaussianBlurHorizontal = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*DSGaussianBlurHorizontal, "Bloom_GaussianBlurHorizontal");
+		VULKAN.SetDebugObjectName(*DSGaussianBlurHorizontal, "Bloom_GaussianBlurHorizontal");
 		
 		// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutGaussianBlurV();
 		DSGaussianBlurVertical = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*DSGaussianBlurVertical, "Bloom_GaussianBlurVertical");
+		VULKAN.SetDebugObjectName(*DSGaussianBlurVertical, "Bloom_GaussianBlurVertical");
 		
 		// Gaussian Blur Vertical image to Combine shader
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutCombine();
 		DSCombine = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*DSCombine, "Bloom_Combine");
+		VULKAN.SetDebugObjectName(*DSCombine, "Bloom_Combine");
 		
 		updateDescriptorSets(renderTargets);
 	}
@@ -152,12 +152,12 @@ namespace pe
 				wSetImage(*DSCombine, 0, frameImage),
 				wSetImage(*DSCombine, 1, renderTargets["gaussianBlurVertical"])
 		};
-		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+		VULKAN.device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 	
 	void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{
-		uint32_t totalImages = static_cast<uint32_t>(VulkanContext::Get()->swapchain.images.size());
+		uint32_t totalImages = static_cast<uint32_t>(VULKAN.swapchain.images.size());
 		
 		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
 		vk::ClearValue clearColor;

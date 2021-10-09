@@ -37,11 +37,11 @@ int main(int argc, char* argv[])
 	//freopen("log.txt", "w", stdout);
 	//freopen("errors.txt", "w", stderr);
 
-	Context& context = *Context::Get();
+	Context& context = *CONTEXT;
 	context.CreateSystem<EventSystem>();
 
 	Window* window = Window::Create();
-	VulkanContext::Get()->Init(window->Handle()); // TODO: Remove this from here (was in Renderer)
+	VULKAN.Init(window->Handle()); // TODO: Remove this from here (was in Renderer)
 
 	context.CreateSystem<LightSystem>();
 	context.CreateSystem<RendererSystem>();

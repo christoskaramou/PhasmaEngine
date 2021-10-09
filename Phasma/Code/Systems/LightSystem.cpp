@@ -46,8 +46,8 @@ namespace pe
 			createInfo.bindingCount = 1;
 			createInfo.pBindings = &descriptorSetLayoutBinding;
 
-			descriptorSetLayout = VulkanContext::Get()->device->createDescriptorSetLayout(createInfo);
-			VulkanContext::Get()->SetDebugObjectName(descriptorSetLayout, "Lights");
+			descriptorSetLayout = VULKAN.device->createDescriptorSetLayout(createInfo);
+			VULKAN.SetDebugObjectName(descriptorSetLayout, "Lights");
 		}
 		return descriptorSetLayout;
 	}
@@ -73,11 +73,11 @@ namespace pe
 		uniform->SetDebugName("Light_UB");
 
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
+		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &GetDescriptorSetLayout();
-		descriptorSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Lights");
+		descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
+		VULKAN.SetDebugObjectName(*descriptorSet, "Lights");
 
 		vk::DescriptorBufferInfo dbi;
 		dbi.buffer = uniform->Handle<vk::Buffer>();
@@ -91,7 +91,7 @@ namespace pe
 		writeSet.descriptorCount = 1;
 		writeSet.descriptorType = vk::DescriptorType::eUniformBuffer;
 		writeSet.pBufferInfo = &dbi;
-		VulkanContext::Get()->device->updateDescriptorSets(writeSet, nullptr);
+		VULKAN.device->updateDescriptorSets(writeSet, nullptr);
 
 		for (int i = 0; i < MAX_POINT_LIGHTS; i++)
 		{
@@ -114,7 +114,7 @@ namespace pe
 	{
 		std::vector<MemoryRange> ranges{};
 
-		Camera& camera = *Context::Get()->GetSystem<CameraSystem>()->GetCamera(0);
+		Camera& camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
 		lubo.camPos = { camera.position, 1.0f };
 		lubo.sun.color = { .9765f, .8431f, .9098f, GUI::sun_intensity };
 		lubo.sun.direction = { GUI::sun_direction[0], GUI::sun_direction[1], GUI::sun_direction[2], 1.f };
@@ -142,7 +142,7 @@ namespace pe
 		uniform->Destroy();
 		if (GetDescriptorSetLayout())
 		{
-			VulkanContext::Get()->device->destroyDescriptorSetLayout(GetDescriptorSetLayout());
+			VULKAN.device->destroyDescriptorSetLayout(GetDescriptorSetLayout());
 			GetDescriptorSetLayout() = nullptr;
 		}
 	}

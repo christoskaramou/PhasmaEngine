@@ -54,11 +54,11 @@ namespace pe
 		UBReflection->SetDebugName("SSR_UB_Reflection");
 		
 		vk::DescriptorSetAllocateInfo allocateInfo2;
-		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
+		allocateInfo2.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutSSR();
-		DSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*DSet, "SSR");
+		DSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo2).at(0));
+		VULKAN.SetDebugObjectName(*DSet, "SSR");
 		
 		updateDescriptorSets(renderTargets);
 	}
@@ -84,12 +84,12 @@ namespace pe
 		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets {
 				wSetImage(*DSet, 0, renderTargets["albedo"]),
-				wSetImage(*DSet, 1, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
+				wSetImage(*DSet, 1, VULKAN.depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
 				wSetImage(*DSet, 2, renderTargets["normal"]),
 				wSetImage(*DSet, 3, renderTargets["srm"]),
 				wSetBuffer(*DSet, 4, *UBReflection)
 		};
-		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+		VULKAN.device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 	
 	void SSR::update(Camera& camera)
@@ -180,7 +180,7 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutSSR())
 		{
-			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSR());
+			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSR());
 			Pipeline::getDescriptorSetLayoutSSR() = nullptr;
 		}
 		UBReflection->Destroy();

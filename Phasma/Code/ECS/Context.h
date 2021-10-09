@@ -27,6 +27,9 @@ SOFTWARE.
 #include "Core/Base.h"
 #include <vector>
 
+#define CONTEXT Context::Get()
+#define WORLD_ENTITY CONTEXT->WorldEntity
+
 namespace pe
 {
 	class VulkanContext;
@@ -54,7 +57,7 @@ namespace pe
 		Context() = default;
 
 	public:
-		static Entity* MainEntity;
+		static Entity* WorldEntity;
 
 		void InitSystems();
 

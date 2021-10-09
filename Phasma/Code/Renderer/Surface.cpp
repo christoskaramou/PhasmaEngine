@@ -44,7 +44,7 @@ namespace pe
 	void Surface::Create(SDL_Window* window)
 	{
 		VkSurfaceKHR _vkSurface;
-		if (!SDL_Vulkan_CreateSurface(window, VkInstance(*Context::Get()->GetVKContext()->instance), &_vkSurface))
+		if (!SDL_Vulkan_CreateSurface(window, VkInstance(*CONTEXT->GetVKContext()->instance), &_vkSurface))
 			throw std::runtime_error(SDL_GetError());
 
 		int w, h;
@@ -56,7 +56,7 @@ namespace pe
 	
 	void Surface::FindCapabilities()
 	{
-		auto gpu = VulkanContext::Get()->gpu;
+		auto gpu = VULKAN.gpu;
 		auto caps = gpu->getSurfaceCapabilitiesKHR(*surface);
 		// Ensure eTransferSrc bit for blit operations
 		if (!(caps.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferSrc))
@@ -66,7 +66,7 @@ namespace pe
 	
 	void Surface::FindFormat()
 	{
-		auto gpu = VulkanContext::Get()->gpu;
+		auto gpu = VULKAN.gpu;
 		std::vector<vk::SurfaceFormatKHR> formats = gpu->getSurfaceFormatsKHR(*surface);
 		auto format = formats[0];
 		for (const auto& f : formats)
@@ -87,7 +87,7 @@ namespace pe
 	
 	void Surface::FindPresentationMode()
 	{
-		auto gpu = VulkanContext::Get()->gpu;
+		auto gpu = VULKAN.gpu;
 		std::vector<vk::PresentModeKHR> presentModes = gpu->getSurfacePresentModesKHR(*surface);
 		
 		for (const auto& i : presentModes)

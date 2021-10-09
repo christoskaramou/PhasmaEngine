@@ -634,7 +634,7 @@ namespace pe
 		pi.swapchainCount = swapchains.size();
 		pi.pSwapchains = swapchains.data();
 		pi.pImageIndices = imageIndices.data();
-		if (VulkanContext::Get()->graphicsQueue->presentKHR(pi) != vk::Result::eSuccess)
+		if (VULKAN.graphicsQueue->presentKHR(pi) != vk::Result::eSuccess)
 			throw std::runtime_error("Present error!");
 	}
 	

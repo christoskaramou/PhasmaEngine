@@ -75,7 +75,7 @@ namespace pe
 
 	GPUTimer::GPUTimer()
 	{
-		const auto gpuProps = VulkanContext::Get()->gpu->getProperties();
+		const auto gpuProps = VULKAN.gpu->getProperties();
 		if (!gpuProps.limits.timestampComputeAndGraphics)
 			throw std::runtime_error("Timestamps not supported");
 		
@@ -85,7 +85,7 @@ namespace pe
 		qpci.queryType = vk::QueryType::eTimestamp;
 		qpci.queryCount = 2;
 		
-		queryPool = std::make_unique<vk::QueryPool>(VulkanContext::Get()->device->createQueryPool(qpci));
+		queryPool = std::make_unique<vk::QueryPool>(VULKAN.device->createQueryPool(qpci));
 	}
 
 	void GPUTimer::Reset()
@@ -108,7 +108,7 @@ namespace pe
 	
 	float GPUTimer::GetTime()
 	{
-		const auto res = VulkanContext::Get()->device->getQueryPoolResults(
+		const auto res = VULKAN.device->getQueryPoolResults(
 			*queryPool, 0, 2, 2 * sizeof(uint64_t), &queries, sizeof(uint64_t),
 			vk::QueryResultFlagBits::e64);
 
@@ -120,6 +120,6 @@ namespace pe
 	
 	void GPUTimer::Destroy() const noexcept
 	{
-		VulkanContext::Get()->device->destroyQueryPool(*queryPool);
+		VULKAN.device->destroyQueryPool(*queryPool);
 	}
 }

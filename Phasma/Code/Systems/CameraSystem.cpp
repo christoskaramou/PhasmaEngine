@@ -28,7 +28,7 @@ namespace pe
 {
     CameraSystem::CameraSystem()
     {
-        Camera* mainCamera = Context::Get()->MainEntity->CreateComponent<Camera>();
+        Camera* mainCamera = WORLD_ENTITY->CreateComponent<Camera>();
         AttachComponent(mainCamera);
     }
 

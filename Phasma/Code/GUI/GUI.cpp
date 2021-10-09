@@ -338,8 +338,8 @@ namespace pe
 		ImGui::Begin("Shaders Folder", &shaders_open);
 		if (ImGui::Button("Compile Shaders"))
 		{
-			VulkanContext::Get()->device->waitIdle();
-			Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders);
+			VULKAN.device->waitIdle();
+			CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders);
 		}
 		for (uint32_t i = 0; i < shaderList.size(); i++)
 		{
@@ -384,8 +384,8 @@ namespace pe
 		if (ImGui::Button("Apply"))
 		{
 			renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
-			VulkanContext::Get()->device->waitIdle();
-			Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::ScaleRenderTargets);
+			VULKAN.device->waitIdle();
+			CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::ScaleRenderTargets);
 		}
 		//ImGui::Checkbox("Lock Render Window", &lock_render_window);
 		ImGui::Checkbox("IBL", &use_IBL);
@@ -489,7 +489,7 @@ namespace pe
 		{
 			ImGui::Indent(16.0f);
 			ImGui::SliderFloat("Intst", &sun_intensity, 0.1f, 50.f);
-			ImGui::DragFloat("Dir", sun_direction.data());
+			ImGui::DragFloat3("Dir", sun_direction.data(), 0.01f);
 			ImGui::DragFloat("Slope", &depthBias[2], 0.15f, 0.5f);
 			ImGui::Separator();
 			ImGui::Separator();
@@ -525,7 +525,7 @@ namespace pe
 			ImGui::Separator();
 			if (ImGui::Button("Unload Model"))
 			{
-				VulkanContext::Get()->device->waitIdle();
+				VULKAN.device->waitIdle();
 				Model::models[modelItemSelected].destroy();
 				Model::models.erase(Model::models.begin() + modelItemSelected);
 				GUI::modelList.erase(GUI::modelList.begin() + modelItemSelected);
@@ -638,7 +638,7 @@ namespace pe
 			vk::RenderPassBeginInfo rpi;
 			rpi.renderPass = *renderPass.handle;
 			rpi.framebuffer = *framebuffers[imageIndex].handle;
-			rpi.renderArea = vk::Rect2D{ {0, 0}, *VulkanContext::Get()->surface.actualExtent };
+			rpi.renderArea = vk::Rect2D{ {0, 0}, *VULKAN.surface.actualExtent };
 			rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			rpi.pClearValues = clearValues.data();
 
@@ -657,7 +657,7 @@ namespace pe
 	{
 		std::array<vk::AttachmentDescription, 1> attachments {};
 		// Color attachment
-		attachments[0].format = VulkanContext::Get()->surface.formatKHR->format;
+		attachments[0].format = VULKAN.surface.formatKHR->format;
 		attachments[0].samples = vk::SampleCountFlagBits::e1;
 		attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
 		attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
@@ -680,7 +680,7 @@ namespace pe
 		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
 		renderPassInfo.pSubpasses = subpassDescriptions.data();
 		
-		renderPass.handle = make_sptr(VulkanContext::Get()->device->createRenderPass(renderPassInfo));
+		renderPass.handle = make_sptr(VULKAN.device->createRenderPass(renderPassInfo));
 	}
 
 	void GUI::CreateFrameBuffers()

@@ -36,13 +36,13 @@ namespace pe
 
 	void PostProcessSystem::Init()
 	{
-		Bloom& bloom = *Context::Get()->MainEntity->CreateComponent<Bloom>();
-		DOF& dof = *Context::Get()->MainEntity->CreateComponent<DOF>();
-		FXAA& fxaa = *Context::Get()->MainEntity->CreateComponent<FXAA>();
-		MotionBlur& motionBlur = *Context::Get()->MainEntity->CreateComponent<MotionBlur>();
-		SSAO& ssao = *Context::Get()->MainEntity->CreateComponent<SSAO>();
-		SSR& ssr = *Context::Get()->MainEntity->CreateComponent<SSR>();
-		TAA& taa = *Context::Get()->MainEntity->CreateComponent<TAA>();
+		Bloom& bloom = *WORLD_ENTITY->CreateComponent<Bloom>();
+		DOF& dof = *WORLD_ENTITY->CreateComponent<DOF>();
+		FXAA& fxaa = *WORLD_ENTITY->CreateComponent<FXAA>();
+		MotionBlur& motionBlur = *WORLD_ENTITY->CreateComponent<MotionBlur>();
+		SSAO& ssao = *WORLD_ENTITY->CreateComponent<SSAO>();
+		SSR& ssr = *WORLD_ENTITY->CreateComponent<SSR>();
+		TAA& taa = *WORLD_ENTITY->CreateComponent<TAA>();
 
 		bloom.Init();
 		dof.Init();
@@ -50,7 +50,7 @@ namespace pe
 		motionBlur.Init();
 		taa.Init();
 
-		auto& renderTargets = Context::Get()->GetSystem<RendererSystem>()->GetRenderTargets();
+		auto& renderTargets = CONTEXT->GetSystem<RendererSystem>()->GetRenderTargets();
 
 		// Render passes
 		ssao.createRenderPasses(renderTargets);
@@ -91,12 +91,12 @@ namespace pe
 
 	void PostProcessSystem::Update(double delta)
 	{
-		SSAO* ssao = Context::Get()->MainEntity->GetComponent<SSAO>();
-		SSR* ssr = Context::Get()->MainEntity->GetComponent<SSR>();
-		TAA* taa = Context::Get()->MainEntity->GetComponent<TAA>();
-		MotionBlur* motionBlur = Context::Get()->MainEntity->GetComponent<MotionBlur>();
+		SSAO* ssao = WORLD_ENTITY->GetComponent<SSAO>();
+		SSR* ssr = WORLD_ENTITY->GetComponent<SSR>();
+		TAA* taa = WORLD_ENTITY->GetComponent<TAA>();
+		MotionBlur* motionBlur = WORLD_ENTITY->GetComponent<MotionBlur>();
 
-		Camera* camera_main = Context::Get()->GetSystem<CameraSystem>()->GetCamera(0);
+		Camera* camera_main = CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
 
 		auto updateSSAO = [camera_main, ssao]() { ssao->update(*camera_main); };
 		auto updateSSR = [camera_main, ssr]() { ssr->update(*camera_main); };
@@ -111,12 +111,12 @@ namespace pe
 
 	void PostProcessSystem::Destroy()
 	{
-		Context::Get()->MainEntity->GetComponent<Bloom>()->destroy();
-		Context::Get()->MainEntity->GetComponent<DOF>()->destroy();
-		Context::Get()->MainEntity->GetComponent<FXAA>()->destroy();
-		Context::Get()->MainEntity->GetComponent<MotionBlur>()->destroy();
-		Context::Get()->MainEntity->GetComponent<SSAO>()->destroy();
-		Context::Get()->MainEntity->GetComponent<SSR>()->destroy();
-		Context::Get()->MainEntity->GetComponent<TAA>()->destroy();
+		WORLD_ENTITY->GetComponent<Bloom>()->destroy();
+		WORLD_ENTITY->GetComponent<DOF>()->destroy();
+		WORLD_ENTITY->GetComponent<FXAA>()->destroy();
+		WORLD_ENTITY->GetComponent<MotionBlur>()->destroy();
+		WORLD_ENTITY->GetComponent<SSAO>()->destroy();
+		WORLD_ENTITY->GetComponent<SSR>()->destroy();
+		WORLD_ENTITY->GetComponent<TAA>()->destroy();
 	}
 }

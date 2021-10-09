@@ -57,7 +57,7 @@ namespace pe
 	void Image::SetDebugName(const std::string& debugName)
 	{
 #if _DEBUG
-		VulkanContext::Get()->SetDebugObjectName(*image, debugName);
+		VULKAN.SetDebugObjectName(*image, debugName);
 #else
 		return;
 #endif
@@ -166,7 +166,7 @@ namespace pe
 		VkImage vkImage;
 		VmaAllocationInfo allocationInfo;
 		vmaCreateImage(
-				VulkanContext::Get()->allocator, &vkImageInfo, &allocationCreateInfo, &vkImage, &allocation,
+				VULKAN.allocator, &vkImageInfo, &allocationCreateInfo, &vkImage, &allocation,
 				&allocationInfo
 		);
 		image = make_sptr(vk::Image(vkImage));
@@ -621,7 +621,7 @@ namespace pe
 		auto vCtx = VulkanContext::Get();
 		
 		if (*view) vCtx->device->destroyImageView(*view);
-		if (*image) vmaDestroyImage(VulkanContext::Get()->allocator, VkImage(*image), allocation);
+		if (*image) vmaDestroyImage(VULKAN.allocator, VkImage(*image), allocation);
 		if (*sampler) vCtx->device->destroySampler(*sampler);
 		*view = nullptr;
 		*image = nullptr;

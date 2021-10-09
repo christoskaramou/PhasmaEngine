@@ -44,7 +44,7 @@ namespace pe
 	
 	void MotionBlur::Init()
 	{
-		frameImage.format = make_sptr(VulkanContext::Get()->surface.formatKHR->format);
+		frameImage.format = make_sptr(VULKAN.surface.formatKHR->format);
 		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -73,11 +73,11 @@ namespace pe
 		UBmotionBlur->SetDebugName("MotionBlur_UB");
 		
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
+		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMotionBlur();
-		DSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*DSet, "MotionBlur");
+		DSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
+		VULKAN.SetDebugObjectName(*DSet, "MotionBlur");
 		
 		updateDescriptorSets(renderTargets);
 	}
@@ -103,11 +103,11 @@ namespace pe
 		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets {
 				wSetImage(*DSet, 0, frameImage),
-				wSetImage(*DSet, 1, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
+				wSetImage(*DSet, 1, VULKAN.depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
 				wSetImage(*DSet, 2, renderTargets["velocity"]),
 				wSetBuffer(*DSet, 3, *UBmotionBlur)
 		};
-		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+		VULKAN.device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 	
 	void MotionBlur::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
@@ -147,7 +147,7 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutMotionBlur())
 		{
-			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMotionBlur());
+			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMotionBlur());
 			Pipeline::getDescriptorSetLayoutMotionBlur() = nullptr;
 		}
 		frameImage.destroy();

@@ -103,7 +103,7 @@ namespace pe
 						&Pipeline::getDescriptorSetLayoutComposition() //const DescriptorSetLayout* pSetLayouts;
 				};
 		DSComposition = make_sptr(vulkan->device->allocateDescriptorSets(allocInfo).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*DSComposition, "Composition");
+		VULKAN.SetDebugObjectName(*DSComposition, "Composition");
 		
 		// Check if ibl_brdf_lut is already loaded
 		const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
@@ -181,9 +181,9 @@ namespace pe
 			};
 		};
 		
-		Buffer& lightsUniform = Context::Get()->GetSystem<LightSystem>()->GetUniform();
+		Buffer& lightsUniform = CONTEXT->GetSystem<LightSystem>()->GetUniform();
 		std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
-				wSetImage(*DSComposition, 0, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
+				wSetImage(*DSComposition, 0, VULKAN.depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
 				wSetImage(*DSComposition, 1, renderTargets["normal"]),
 				wSetImage(*DSComposition, 2, renderTargets["albedo"]),
 				wSetImage(*DSComposition, 3, renderTargets["srm"]),
@@ -195,7 +195,7 @@ namespace pe
 				wSetBuffer(*DSComposition, 9, *uniform)
 		};
 		
-		VulkanContext::Get()->device->updateDescriptorSets(writeDescriptorSets, nullptr);
+		VULKAN.device->updateDescriptorSets(writeDescriptorSets, nullptr);
 	}
 	
 	void Deferred::update(mat4& invViewProj)
@@ -261,7 +261,7 @@ namespace pe
 			*renderTargets["srm"].format,
 			*renderTargets["velocity"].format,
 			*renderTargets["emissive"].format,
-			*VulkanContext::Get()->depth.format
+			*VULKAN.depth.format
 		};
 		renderPass.Create(formats);
 		compositionRenderPass.Create(*renderTargets["viewport"].format);
@@ -288,7 +288,7 @@ namespace pe
 				*renderTargets["srm"].view,
 				*renderTargets["velocity"].view,
 				*renderTargets["emissive"].view,
-				* VulkanContext::Get()->depth.view
+				* VULKAN.depth.view
 			};
 			framebuffers[i].Create(width, height, views, renderPass);
 		}

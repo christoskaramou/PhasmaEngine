@@ -42,7 +42,7 @@ namespace pe
 	
 	void DOF::Init()
 	{
-		frameImage.format = make_sptr(VulkanContext::Get()->surface.formatKHR->format);
+		frameImage.format = make_sptr(VULKAN.surface.formatKHR->format);
 		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -84,7 +84,7 @@ namespace pe
 		
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutDOF();
 		DSet = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*DSet, "DOF");
+		VULKAN.SetDebugObjectName(*DSet, "DOF");
 		
 		updateDescriptorSets(renderTargets);
 	}
@@ -102,9 +102,9 @@ namespace pe
 		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets {
 				wSetImage(*DSet, 0, frameImage),
-				wSetImage(*DSet, 1, VulkanContext::Get()->depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal)
+				wSetImage(*DSet, 1, VULKAN.depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal)
 		};
-		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+		VULKAN.device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 	
 	void DOF::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)

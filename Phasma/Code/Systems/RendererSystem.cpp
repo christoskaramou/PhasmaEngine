@@ -43,7 +43,7 @@ namespace pe
 #else
 		title += " - Configuration: Release";
 #endif // _DEBUG
-		Context::Get()->GetSystem<EventSystem>()->DispatchEvent(EventType::SetWindowTitle, title);
+		CONTEXT->GetSystem<EventSystem>()->DispatchEvent(EventType::SetWindowTitle, title);
 
 		// INIT RENDERING
 		AddRenderTarget("viewport", vulkan->surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
@@ -95,7 +95,7 @@ namespace pe
 			s->update(static_cast<float>(delta));
 #endif
 
-		CameraSystem* cameraSystem = Context::Get()->GetSystem<CameraSystem>();
+		CameraSystem* cameraSystem = CONTEXT->GetSystem<CameraSystem>();
 		Camera* camera_main = cameraSystem->GetCamera(0);
 
 		// Model updates + 8(the rest updates)
@@ -132,7 +132,7 @@ namespace pe
 
 		static Timer timerFenceWait;
 		timerFenceWait.Start();
-		VulkanContext::Get()->waitFences((*VulkanContext::Get()->fences)[previousImageIndex]);
+		VULKAN.waitFences((*VULKAN.fences)[previousImageIndex]);
 		FrameTimer::Instance().timestamps[1] = timerFenceWait.Count();
 
 		static const vk::PipelineStageFlags waitStages[] = {
@@ -204,7 +204,7 @@ namespace pe
 
 	void RendererSystem::Destroy()
 	{
-		VulkanContext::Get()->device->waitIdle();
+		VULKAN.device->waitIdle();
 
 		for (auto& rt : renderTargets)
 			rt.second.destroy();
@@ -213,17 +213,17 @@ namespace pe
 		{
 			if (Pipeline::getDescriptorSetLayoutModel())
 			{
-				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
+				VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
 				Pipeline::getDescriptorSetLayoutModel() = nullptr;
 			}
 			if (Pipeline::getDescriptorSetLayoutMesh())
 			{
-				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
+				VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
 				Pipeline::getDescriptorSetLayoutMesh() = nullptr;
 			}
 			if (Pipeline::getDescriptorSetLayoutPrimitive())
 			{
-				VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
+				VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
 				Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
 			}
 		}

@@ -41,7 +41,7 @@ namespace pe
 	
 	void FXAA::Init()
 	{
-		frameImage.format = make_sptr(VulkanContext::Get()->surface.formatKHR->format);
+		frameImage.format = make_sptr(VULKAN.surface.formatKHR->format);
 		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 		frameImage.createImage(
 				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -59,11 +59,11 @@ namespace pe
 	void FXAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo2;
-		allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
+		allocateInfo2.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
 		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutFXAA();
-		DSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*DSet, "FXAA");
+		DSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo2).at(0));
+		VULKAN.SetDebugObjectName(*DSet, "FXAA");
 		
 		updateDescriptorSets(renderTargets);
 	}
@@ -84,7 +84,7 @@ namespace pe
 		textureWriteSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
 		textureWriteSet.pImageInfo = &dii;
 		
-		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSet, nullptr);
+		VULKAN.device->updateDescriptorSets(textureWriteSet, nullptr);
 	}
 	
 	void FXAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
@@ -158,7 +158,7 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutFXAA())
 		{
-			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutFXAA());
+			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutFXAA());
 			Pipeline::getDescriptorSetLayoutFXAA() = nullptr;
 		}
 		frameImage.destroy();

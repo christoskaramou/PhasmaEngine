@@ -48,14 +48,14 @@ namespace pe
 		fbci.height = height;
 		fbci.layers = 1;
 		
-		handle = make_sptr(VulkanContext::Get()->device->createFramebuffer(fbci));
+		handle = make_sptr(VULKAN.device->createFramebuffer(fbci));
 	}
 	
 	void FrameBuffer::Destroy()
 	{
 		if (*handle)
 		{
-			VulkanContext::Get()->device->destroyFramebuffer(*handle);
+			VULKAN.device->destroyFramebuffer(*handle);
 			*handle = nullptr;
 		}
 	}

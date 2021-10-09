@@ -48,12 +48,12 @@ namespace pe
 	void Shadows::createDescriptorSets()
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
+		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutShadowsDeferred();
 
-		*descriptorSetDeferred = VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0);
-		VulkanContext::Get()->SetDebugObjectName(*descriptorSetDeferred, "Shadows");
+		*descriptorSetDeferred = VULKAN.device->allocateDescriptorSets(allocateInfo).at(0);
+		VULKAN.SetDebugObjectName(*descriptorSetDeferred, "Shadows");
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(4);
 
@@ -72,7 +72,7 @@ namespace pe
 			textureWriteSet.descriptorCount = 1;
 			textureWriteSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
 			textureWriteSet.pImageInfo = &dii;
-			VulkanContext::Get()->device->updateDescriptorSets(textureWriteSet, nullptr);
+			VULKAN.device->updateDescriptorSets(textureWriteSet, nullptr);
 		}
 
 		vk::DescriptorBufferInfo dbi;
@@ -88,12 +88,12 @@ namespace pe
 		bufferWriteSet.descriptorType = vk::DescriptorType::eUniformBuffer;
 		bufferWriteSet.pBufferInfo = &dbi;
 
-		VulkanContext::Get()->device->updateDescriptorSets(bufferWriteSet, nullptr);
+		VULKAN.device->updateDescriptorSets(bufferWriteSet, nullptr);
 	}
 
 	void Shadows::createRenderPass()
 	{
-		renderPass.Create(*VulkanContext::Get()->depth.format);
+		renderPass.Create(*VULKAN.depth.format);
 	}
 
 	void Shadows::createFrameBuffers()
@@ -102,7 +102,7 @@ namespace pe
 		int textureIdx = 0;
 		for (auto& texture : textures)
 		{
-			texture.format = VulkanContext::Get()->depth.format;
+			texture.format = VULKAN.depth.format;
 			texture.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
 			texture.addressMode = make_sptr(vk::SamplerAddressMode::eClampToEdge);
 			texture.maxAnisotropy = 1.f;
@@ -123,7 +123,7 @@ namespace pe
 			texture.SetDebugName(texture.name);
 		}
 
-		framebuffers.resize(VulkanContext::Get()->swapchain.images.size() * textures.size());
+		framebuffers.resize(VULKAN.swapchain.images.size() * textures.size());
 		for (uint32_t i = 0; i < framebuffers.size(); ++i)
 		{
 			uint32_t width = Shadows::imageSize;
@@ -175,11 +175,11 @@ namespace pe
 	void Shadows::destroy()
 	{
 		if (*renderPass.handle)
-			VulkanContext::Get()->device->destroyRenderPass(*renderPass.handle);
+			VULKAN.device->destroyRenderPass(*renderPass.handle);
 
 		if (Pipeline::getDescriptorSetLayoutShadows())
 		{
-			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutShadows());
+			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutShadows());
 			Pipeline::getDescriptorSetLayoutShadows() = nullptr;
 		}
 
@@ -187,7 +187,7 @@ namespace pe
 			texture.destroy();
 
 		for (auto& fb : framebuffers)
-			VulkanContext::Get()->device->destroyFramebuffer(*fb.handle);
+			VULKAN.device->destroyFramebuffer(*fb.handle);
 
 		uniformBuffer->Destroy();
 		pipeline.destroy();
@@ -212,7 +212,7 @@ namespace pe
 		const vec3 sunUp = normalize(cross(sunRight, sunFront));
 		const mat4 sunView = lookAt(-sunFront * (camera.nearPlane - 5.f), sunFront, sunRight, sunUp);
 
-		auto& renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
+		auto& renderArea = CONTEXT->GetSystem<RendererSystem>()->GetRenderArea();
 		const float aspect = renderArea.viewport.width / renderArea.viewport.height;
 		const float tanHalfHFOV = tanf(radians(camera.FOV * .5f * aspect));
 		const float tanHalfVFOV = tanf(radians(camera.FOV * .5f));

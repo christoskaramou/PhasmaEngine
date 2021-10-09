@@ -52,7 +52,7 @@ namespace pe
 			window->SetTitle(std::any_cast<std::string>(title));
 		};
 
-		EventSystem* eventSystem = Context::Get()->GetSystem<EventSystem>();
+		EventSystem* eventSystem = CONTEXT->GetSystem<EventSystem>();
 		eventSystem->RegisterEventAction(EventType::SetWindowTitle, lambda);
 		
 		return window;
@@ -75,9 +75,9 @@ namespace pe
 		static int x, y, w, h, px, py = 0;
 		static float dx, dy = 0.f;
 		
-		EventSystem* eventSystem = Context::Get()->GetSystem<EventSystem>();
-		RendererSystem* renderer = Context::Get()->GetSystem<RendererSystem>();
-		CameraSystem* cameraSystem = Context::Get()->GetSystem<CameraSystem>();
+		EventSystem* eventSystem = CONTEXT->GetSystem<EventSystem>();
+		RendererSystem* renderer = CONTEXT->GetSystem<RendererSystem>();
+		CameraSystem* cameraSystem = CONTEXT->GetSystem<CameraSystem>();
 		Camera* camera_main = cameraSystem->GetCamera(0);
 		
 		bool combineDirections = false;
@@ -186,7 +186,7 @@ namespace pe
 	
 	void Window::WrapMouse(int& x, int& y)
 	{
-		const Rect2D& rect2D = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea().scissor;
+		const Rect2D& rect2D = CONTEXT->GetSystem<RendererSystem>()->GetRenderArea().scissor;
 
 		if (x <= rect2D.x + 15)
 		{
@@ -211,7 +211,7 @@ namespace pe
 	
 	bool Window::IsInsideRenderWindow(int x, int y)
 	{
-		const Rect2D& rect2D = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea().scissor;
+		const Rect2D& rect2D = CONTEXT->GetSystem<RendererSystem>()->GetRenderArea().scissor;
 		
 		return x >= rect2D.x && y >= rect2D.y && x <= rect2D.x + rect2D.width &&
 		       y <= rect2D.y + rect2D.height;

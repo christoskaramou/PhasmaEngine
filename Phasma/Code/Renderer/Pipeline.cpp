@@ -67,7 +67,7 @@ namespace pe
 		vk::ShaderModuleCreateInfo vsmci;
 		vsmci.codeSize = info.pVertShader->byte_size();
 		vsmci.pCode = info.pVertShader->get_spriv();
-		vk::UniqueShaderModule vertModule = VulkanContext::Get()->device->createShaderModuleUnique(vsmci);
+		vk::UniqueShaderModule vertModule = VULKAN.device->createShaderModuleUnique(vsmci);
 		
 		vk::PipelineShaderStageCreateInfo pssci1;
 		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
@@ -81,7 +81,7 @@ namespace pe
 		{
 			fsmci.codeSize = info.pFragShader->byte_size();
 			fsmci.pCode = info.pFragShader->get_spriv();
-			fragModule = VulkanContext::Get()->device->createShaderModuleUnique(fsmci);
+			fragModule = VULKAN.device->createShaderModuleUnique(fsmci);
 			
 			pssci2.stage = vk::ShaderStageFlagBits::eFragment;
 			pssci2.module = fragModule.get();
@@ -192,7 +192,7 @@ namespace pe
 		plci.pSetLayouts = info.descriptorSetLayouts->data();
 		plci.pushConstantRangeCount = info.pushConstantSize ? 1 : 0;
 		plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
-		layout = make_sptr(VulkanContext::Get()->device->createPipelineLayout(plci));
+		layout = make_sptr(VULKAN.device->createPipelineLayout(plci));
 		pipeinfo.layout = *layout;
 		
 		// Render Pass
@@ -225,28 +225,28 @@ namespace pe
 		plci.setLayoutCount = static_cast<uint32_t>(info.descriptorSetLayouts->size());
 		plci.pSetLayouts = info.descriptorSetLayouts->data();
 		
-		vk::UniqueShaderModule module = VulkanContext::Get()->device->createShaderModuleUnique(csmci);
+		vk::UniqueShaderModule module = VULKAN.device->createShaderModuleUnique(csmci);
 		
 		compinfo.stage.module = module.get();
 		compinfo.stage.pName = "main";
 		compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
-		layout = make_sptr(VulkanContext::Get()->device->createPipelineLayout(plci));
+		layout = make_sptr(VULKAN.device->createPipelineLayout(plci));
 		compinfo.layout = *layout;
 		
-		handle = make_sptr(VulkanContext::Get()->device->createComputePipeline(nullptr, compinfo).value);
+		handle = make_sptr(VULKAN.device->createComputePipeline(nullptr, compinfo).value);
 	}
 	
 	void Pipeline::destroy()
 	{
 		if (*layout)
 		{
-			VulkanContext::Get()->device->destroyPipelineLayout(*layout);
+			VULKAN.device->destroyPipelineLayout(*layout);
 			*layout = nullptr;
 		}
 		
 		if (*handle)
 		{
-			VulkanContext::Get()->device->destroyPipeline(*handle);
+			VULKAN.device->destroyPipeline(*handle);
 			*handle = nullptr;
 		}
 	}
@@ -271,7 +271,7 @@ namespace pe
 		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		return VulkanContext::Get()->device->createDescriptorSetLayout(descriptorLayout);
+		return VULKAN.device->createDescriptorSetLayout(descriptorLayout);
 	}
 	
 	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutComposition()
@@ -293,7 +293,7 @@ namespace pe
 					DescriptorBinding(8, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(9, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Composition");
+			VULKAN.SetDebugObjectName(DSLayout, "Composition");
 		}
 		
 		return DSLayout;
@@ -309,7 +309,7 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "BrightFilter");
+			VULKAN.SetDebugObjectName(DSLayout, "BrightFilter");
 		}
 		
 		return DSLayout;
@@ -325,7 +325,7 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "GaussianBlurH");
+			VULKAN.SetDebugObjectName(DSLayout, "GaussianBlurH");
 		}
 		
 		return DSLayout;
@@ -341,7 +341,7 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "GaussianBlurV");
+			VULKAN.SetDebugObjectName(DSLayout, "GaussianBlurV");
 		}
 		
 		return DSLayout;
@@ -358,7 +358,7 @@ namespace pe
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Combine");
+			VULKAN.SetDebugObjectName(DSLayout, "Combine");
 		}
 		
 		return DSLayout;
@@ -375,7 +375,7 @@ namespace pe
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "DOF");
+			VULKAN.SetDebugObjectName(DSLayout, "DOF");
 		}
 		
 		return DSLayout;
@@ -391,7 +391,7 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "FXAA");
+			VULKAN.SetDebugObjectName(DSLayout, "FXAA");
 		}
 		
 		return DSLayout;
@@ -410,7 +410,7 @@ namespace pe
 					DescriptorBinding(2, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "MotionBlur");
+			VULKAN.SetDebugObjectName(DSLayout, "MotionBlur");
 		}
 		
 		return DSLayout;
@@ -430,7 +430,7 @@ namespace pe
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "SSAO");
+			VULKAN.SetDebugObjectName(DSLayout, "SSAO");
 		}
 		
 		return DSLayout;
@@ -446,7 +446,7 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "SSAOBlur");
+			VULKAN.SetDebugObjectName(DSLayout, "SSAOBlur");
 		}
 		
 		return DSLayout;
@@ -466,7 +466,7 @@ namespace pe
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "SSR");
+			VULKAN.SetDebugObjectName(DSLayout, "SSR");
 		}
 		
 		return DSLayout;
@@ -486,7 +486,7 @@ namespace pe
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "TAA");
+			VULKAN.SetDebugObjectName(DSLayout, "TAA");
 		}
 		
 		return DSLayout;
@@ -503,7 +503,7 @@ namespace pe
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "TAASharpen");
+			VULKAN.SetDebugObjectName(DSLayout, "TAASharpen");
 		}
 		
 		return DSLayout;
@@ -519,7 +519,7 @@ namespace pe
 				{
 					//DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Shadows");
+			VULKAN.SetDebugObjectName(DSLayout, "Shadows");
 		}
 		
 		return DSLayout;
@@ -538,7 +538,7 @@ namespace pe
 					DescriptorBinding(2, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "ShadowCascades");
+			VULKAN.SetDebugObjectName(DSLayout, "ShadowCascades");
 		}
 
 		return DSLayout;
@@ -554,7 +554,7 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Mesh");
+			VULKAN.SetDebugObjectName(DSLayout, "Mesh");
 		}
 		
 		return DSLayout;
@@ -575,7 +575,7 @@ namespace pe
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(5, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Primitive");
+			VULKAN.SetDebugObjectName(DSLayout, "Primitive");
 		}
 		
 		return DSLayout;
@@ -591,7 +591,7 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Model");
+			VULKAN.SetDebugObjectName(DSLayout, "Model");
 		}
 		
 		return DSLayout;
@@ -607,7 +607,7 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "SkyBox");
+			VULKAN.SetDebugObjectName(DSLayout, "SkyBox");
 		}
 		return DSLayout;
 	}
@@ -623,7 +623,7 @@ namespace pe
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eStorageBuffer, (uint32_t)vk::ShaderStageFlagBits::eCompute),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eStorageBuffer, (uint32_t)vk::ShaderStageFlagBits::eCompute)
 				});
-			VulkanContext::Get()->SetDebugObjectName(DSLayout, "Compute");
+			VULKAN.SetDebugObjectName(DSLayout, "Compute");
 		}
 		
 		return DSLayout;

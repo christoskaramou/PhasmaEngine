@@ -388,7 +388,7 @@ namespace pe
 
 	void Model::LoadAsync(const std::string& folderPath, const std::string& modelName)
 	{
-		VulkanContext::Get()->device->waitIdle();
+		VULKAN.device->waitIdle();
 		auto loadAsync = [this, folderPath, modelName]() { Load(folderPath, modelName); };
 		Queue<Launch::AsyncNoWait>::Request(loadAsync);
 	}
@@ -915,13 +915,13 @@ namespace pe
 		
 		// model dSet
 		vk::DescriptorSetAllocateInfo allocateInfo0;
-		allocateInfo0.descriptorPool = *VulkanContext::Get()->descriptorPool;
+		allocateInfo0.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo0.descriptorSetCount = 1;
 		allocateInfo0.pSetLayouts = &Pipeline::getDescriptorSetLayoutModel();
-		descriptorSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo0).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Model_" + name);
+		descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo0).at(0));
+		VULKAN.SetDebugObjectName(*descriptorSet, "Model_" + name);
 		
-		VulkanContext::Get()->device->updateDescriptorSets(wSetBuffer(*descriptorSet, 0, *uniformBuffer), nullptr);
+		VULKAN.device->updateDescriptorSets(wSetBuffer(*descriptorSet, 0, *uniformBuffer), nullptr);
 		
 		// mesh dSets
 		for (auto& node : linearNodes)
@@ -931,13 +931,13 @@ namespace pe
 			auto& mesh = node->mesh;
 			
 			vk::DescriptorSetAllocateInfo allocateInfo;
-			allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
+			allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 			allocateInfo.descriptorSetCount = 1;
 			allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMesh();
-			mesh->descriptorSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
-			VulkanContext::Get()->SetDebugObjectName(*mesh->descriptorSet, "Mesh_" + mesh->name);
+			mesh->descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
+			VULKAN.SetDebugObjectName(*mesh->descriptorSet, "Mesh_" + mesh->name);
 			
-			VulkanContext::Get()->device
+			VULKAN.device
 			                    ->updateDescriptorSets(
 					                    wSetBuffer(*mesh->descriptorSet, 0, *mesh->uniformBuffer), nullptr
 			                    );
@@ -947,11 +947,11 @@ namespace pe
 			{
 				
 				vk::DescriptorSetAllocateInfo allocateInfo2;
-				allocateInfo2.descriptorPool = *VulkanContext::Get()->descriptorPool;
+				allocateInfo2.descriptorPool = *VULKAN.descriptorPool;
 				allocateInfo2.descriptorSetCount = 1;
 				allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutPrimitive();
-				primitive.descriptorSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo2).at(0));
-				VulkanContext::Get()->SetDebugObjectName(*mesh->descriptorSet, "Primitive_" + primitive.name);
+				primitive.descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo2).at(0));
+				VULKAN.SetDebugObjectName(*mesh->descriptorSet, "Primitive_" + primitive.name);
 				
 				std::vector<vk::WriteDescriptorSet> textureWriteSets {
 						wSetImage(*primitive.descriptorSet, 0, primitive.pbrMaterial.baseColorTexture),
@@ -961,7 +961,7 @@ namespace pe
 						wSetImage(*primitive.descriptorSet, 4, primitive.pbrMaterial.emissiveTexture),
 						wSetBuffer(*primitive.descriptorSet, 5, *primitive.uniformBuffer)
 				};
-				VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+				VULKAN.device->updateDescriptorSets(textureWriteSets, nullptr);
 			}
 		}
 	}
@@ -978,7 +978,7 @@ namespace pe
 		delete resourceReader;
 		if (Pipeline::getDescriptorSetLayoutModel())
 		{
-			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
+			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
 			Pipeline::getDescriptorSetLayoutModel() = nullptr;
 		}
 		for (auto& node : linearNodes)

@@ -159,8 +159,8 @@ namespace pe
 			
 			const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 			
-			VulkanContext::Get()->graphicsQueue->waitIdle();
-			VulkanContext::Get()->waitAndLockSubmits();
+			VULKAN.graphicsQueue->waitIdle();
+			VULKAN.waitAndLockSubmits();
 			
 			SPtr<Buffer> staging = Buffer::Create(
 				imageSize,
@@ -193,7 +193,7 @@ namespace pe
 			
 			staging->Destroy();
 			
-			VulkanContext::Get()->unlockSubmits();
+			VULKAN.unlockSubmits();
 			
 			Mesh::uniqueTextures[path] = *tex;
 		}
@@ -217,7 +217,7 @@ namespace pe
 		uniformBuffer->Destroy();
 		if (Pipeline::getDescriptorSetLayoutMesh())
 		{
-			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
+			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
 			Pipeline::getDescriptorSetLayoutMesh() = nullptr;
 		}
 		
@@ -231,7 +231,7 @@ namespace pe
 		indices.shrink_to_fit();
 		if (Pipeline::getDescriptorSetLayoutPrimitive())
 		{
-			VulkanContext::Get()->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
+			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
 			Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
 		}
 	}

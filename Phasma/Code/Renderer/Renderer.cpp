@@ -39,8 +39,8 @@ namespace pe
 	
 	Renderer::~Renderer()
 	{
-		Context::Get()->GetVKContext()->Destroy();
-		Context::Get()->GetVKContext()->Remove();
+		CONTEXT->GetVKContext()->Destroy();
+		CONTEXT->GetVKContext()->Remove();
 	}
 
 	void RenderArea::Update(float x, float y, float w, float h, float minDepth, float maxDepth)
@@ -107,7 +107,7 @@ namespace pe
 		vk::CommandBufferBeginInfo beginInfo;
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 		
-		const auto& cmd = (*VulkanContext::Get()->dynamicCmdBuffers)[imageIndex];
+		const auto& cmd = (*VULKAN.dynamicCmdBuffers)[imageIndex];
 		FrameTimer& frameTimer = FrameTimer::Instance();
 
 		cmd.begin(beginInfo);
@@ -135,7 +135,7 @@ namespace pe
 			frameTimer.timestamps[4] = gpuTimer[1].End();
 		}
 		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorRead);
-		VulkanContext::Get()->depth.changeLayout(cmd, LayoutState::DepthRead);
+		VULKAN.depth.changeLayout(cmd, LayoutState::DepthRead);
 		renderTargets["normal"].changeLayout(cmd, LayoutState::ColorRead);
 		renderTargets["srm"].changeLayout(cmd, LayoutState::ColorRead);
 		renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorRead);
@@ -146,13 +146,13 @@ namespace pe
 		for (auto& image : shadows.textures)
 			image.changeLayout(cmd, LayoutState::DepthRead);
 		
-		SSAO& ssao = *Context::Get()->MainEntity->GetComponent<SSAO>();
-		SSR& ssr = *Context::Get()->MainEntity->GetComponent<SSR>();
-		FXAA& fxaa = *Context::Get()->MainEntity->GetComponent<FXAA>();
-		TAA& taa = *Context::Get()->MainEntity->GetComponent<TAA>();
-		Bloom& bloom = *Context::Get()->MainEntity->GetComponent<Bloom>();
-		DOF& dof = *Context::Get()->MainEntity->GetComponent<DOF>();
-		MotionBlur& motionBlur = *Context::Get()->MainEntity->GetComponent<MotionBlur>();
+		SSAO& ssao = *WORLD_ENTITY->GetComponent<SSAO>();
+		SSR& ssr = *WORLD_ENTITY->GetComponent<SSR>();
+		FXAA& fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
+		TAA& taa = *WORLD_ENTITY->GetComponent<TAA>();
+		Bloom& bloom = *WORLD_ENTITY->GetComponent<Bloom>();
+		DOF& dof = *WORLD_ENTITY->GetComponent<DOF>();
+		MotionBlur& motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao)
@@ -227,7 +227,7 @@ namespace pe
 		}
 
 		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorWrite);
-		VulkanContext::Get()->depth.changeLayout(cmd, LayoutState::DepthWrite);
+		VULKAN.depth.changeLayout(cmd, LayoutState::DepthWrite);
 		renderTargets["normal"].changeLayout(cmd, LayoutState::ColorWrite);
 		renderTargets["srm"].changeLayout(cmd, LayoutState::ColorWrite);
 		renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorWrite);
@@ -271,7 +271,7 @@ namespace pe
 		
 		for (uint32_t i = 0; i < shadows.textures.size(); i++)
 		{
-			auto& cmd = (*VulkanContext::Get()->shadowCmdBuffers)[
+			auto& cmd = (*VULKAN.shadowCmdBuffers)[
 					static_cast<uint32_t>(shadows.textures.size()) * imageIndex + i];
 			cmd.begin(beginInfoShadows);
 
@@ -458,13 +458,13 @@ namespace pe
 
 		renderArea.Update(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
 
-		SSAO& ssao = *Context::Get()->MainEntity->GetComponent<SSAO>();
-		SSR& ssr = *Context::Get()->MainEntity->GetComponent<SSR>();
-		FXAA& fxaa = *Context::Get()->MainEntity->GetComponent<FXAA>();
-		TAA& taa = *Context::Get()->MainEntity->GetComponent<TAA>();
-		Bloom& bloom = *Context::Get()->MainEntity->GetComponent<Bloom>();
-		DOF& dof = *Context::Get()->MainEntity->GetComponent<DOF>();
-		MotionBlur& motionBlur = *Context::Get()->MainEntity->GetComponent<MotionBlur>();
+		SSAO& ssao = *WORLD_ENTITY->GetComponent<SSAO>();
+		SSR& ssr = *WORLD_ENTITY->GetComponent<SSR>();
+		FXAA& fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
+		TAA& taa = *WORLD_ENTITY->GetComponent<TAA>();
+		Bloom& bloom = *WORLD_ENTITY->GetComponent<Bloom>();
+		DOF& dof = *WORLD_ENTITY->GetComponent<DOF>();
+		MotionBlur& motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
 		//- Free resources ----------------------
 		// render targets
@@ -627,7 +627,7 @@ namespace pe
 			
 	void Renderer::BlitToViewport(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
 	{
-		Image& s_chain_Image = VulkanContext::Get()->swapchain.images[imageIndex];
+		Image& s_chain_Image = VULKAN.swapchain.images[imageIndex];
 		
 		renderedImage.transitionImageLayout(
 			cmd,
@@ -697,15 +697,15 @@ namespace pe
 	
 	void Renderer::RecreatePipelines()
 	{
-		VulkanContext::Get()->graphicsQueue->waitIdle();
+		VULKAN.graphicsQueue->waitIdle();
 
-		SSAO& ssao = *Context::Get()->MainEntity->GetComponent<SSAO>();
-		SSR& ssr = *Context::Get()->MainEntity->GetComponent<SSR>();
-		FXAA& fxaa = *Context::Get()->MainEntity->GetComponent<FXAA>();
-		TAA& taa = *Context::Get()->MainEntity->GetComponent<TAA>();
-		Bloom& bloom = *Context::Get()->MainEntity->GetComponent<Bloom>();
-		DOF& dof = *Context::Get()->MainEntity->GetComponent<DOF>();
-		MotionBlur& motionBlur = *Context::Get()->MainEntity->GetComponent<MotionBlur>();
+		SSAO& ssao = *WORLD_ENTITY->GetComponent<SSAO>();
+		SSR& ssr = *WORLD_ENTITY->GetComponent<SSR>();
+		FXAA& fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
+		TAA& taa = *WORLD_ENTITY->GetComponent<TAA>();
+		Bloom& bloom = *WORLD_ENTITY->GetComponent<Bloom>();
+		DOF& dof = *WORLD_ENTITY->GetComponent<DOF>();
+		MotionBlur& motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
 		shadows.pipeline.destroy();
 		ssao.pipeline.destroy();
@@ -733,6 +733,6 @@ namespace pe
 		dof.createPipeline(renderTargets);
 		motionBlur.createPipeline(renderTargets);
 		
-		Context::Get()->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
+		CONTEXT->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
 	}
 }

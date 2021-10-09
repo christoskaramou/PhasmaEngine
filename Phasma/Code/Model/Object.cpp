@@ -111,11 +111,11 @@ namespace pe
 	void Object::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
 	{
 		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VulkanContext::Get()->descriptorPool;
+		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &descriptorSetLayout;
-		descriptorSet = make_sptr(VulkanContext::Get()->device->allocateDescriptorSets(allocateInfo).at(0));
-		VulkanContext::Get()->SetDebugObjectName(*descriptorSet, "Object");
+		descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
+		VULKAN.SetDebugObjectName(*descriptorSet, "Object");
 		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 		// MVP
@@ -143,7 +143,7 @@ namespace pe
 		textureWriteSets[1].descriptorCount = 1;
 		textureWriteSets[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
 		textureWriteSets[1].pImageInfo = &dii;
-		VulkanContext::Get()->device->updateDescriptorSets(textureWriteSets, nullptr);
+		VULKAN.device->updateDescriptorSets(textureWriteSets, nullptr);
 	}
 	
 	void Object::destroy()
