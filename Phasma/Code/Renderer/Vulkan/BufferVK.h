@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Base.h"
-#include "Renderer/RendererEnums.h"
 #include "Renderer/Buffer.h"
 
 struct VkBuffer_T;

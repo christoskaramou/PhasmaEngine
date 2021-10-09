@@ -23,12 +23,14 @@ SOFTWARE.
 #pragma once
 
 #include "Core/Base.h"
-#include "RendererEnums.h"
 #include <MemoryHash/MemoryHash.h>
 #include <Core/Queue.h>
 
 namespace pe
 {
+	using MemoryPropertyFlags = uint64_t;
+	using BufferUsageFlags = uint64_t;
+
 	class Buffer : public NoCopy, public NoMove
 	{
 	public:

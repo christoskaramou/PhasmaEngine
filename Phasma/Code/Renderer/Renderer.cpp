@@ -93,6 +93,13 @@ namespace pe
 	
 	}
 
+	enum class RenderQueue
+	{
+		Opaque = 1,
+		AlphaCut = 2,
+		AlphaBlend = 3
+	};
+
 	void Renderer::RecordDeferredCmds(const uint32_t& imageIndex)
 	{
 		static GPUTimer gpuTimer[12]{};

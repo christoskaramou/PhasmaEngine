@@ -527,7 +527,7 @@ namespace pe
 		}
 	}
 	
-	void Model::draw(uint16_t renderQueue)
+	void Model::draw(uint16_t alphaMode)
 	{
 		if (!render || !Model::pipeline)
 			return;
@@ -547,7 +547,7 @@ namespace pe
 			{
 				for (auto& primitive : node->mesh->primitives)
 				{
-					if (primitive.pbrMaterial.alphaMode == renderQueue && primitive.render)
+					if (primitive.pbrMaterial.alphaMode == alphaMode && primitive.render)
 					{
 						total++;
 						if (!primitive.cull)

@@ -93,7 +93,7 @@ namespace pe
 		SPtr<Buffer> indexBuffer;
 		uint32_t numberOfVertices = 0, numberOfIndices = 0;
 		
-		void draw(uint16_t renderQueue);
+		void draw(uint16_t alphaMode);
 		
 		void update(Camera& camera, double delta);
 		
