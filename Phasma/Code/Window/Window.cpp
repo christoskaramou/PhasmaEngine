@@ -32,29 +32,30 @@ SOFTWARE.
 
 namespace pe
 {
-	SDL_Window* Window::Create(int x, int y, int w, int h, uint32_t flags)
+	Window* Window::Create(int x, int y, int w, int h, uint32_t flags)
 	{
+		Window* window = new Window();
 		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
 		{
 			std::cout << SDL_GetError();
 			return nullptr;
 		}
 		
-		if (!((m_handle = SDL_CreateWindow("", x, y, w, h, flags))))
+		if (!((window->m_handle = SDL_CreateWindow("", x, y, w, h, flags))))
 		{
 			std::cout << SDL_GetError();
 			return nullptr;
 		}
 		
-		auto lambda = [this](const std::any& title)
+		auto lambda = [window](const std::any& title)
 		{
-			SetTitle(std::any_cast<std::string>(title));
+			window->SetTitle(std::any_cast<std::string>(title));
 		};
 
 		EventSystem* eventSystem = Context::Get()->GetSystem<EventSystem>();
 		eventSystem->RegisterEventAction(EventType::SetWindowTitle, lambda);
 		
-		return m_handle;
+		return window;
 	}
 	
 	void Window::SetTitle(const std::string& title)

@@ -29,7 +29,7 @@ namespace pe
 	class Window
 	{
 	public:
-		SDL_Window* Create(int x = 50, int y = 50, int w = 1280, int h = 720,
+		static Window* Create(int x = 50, int y = 50, int w = 1280, int h = 720,
 			uint32_t flags = /*SDL_WINDOW_MAXIMIZED |*/ SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
 		
 		void Destroy();

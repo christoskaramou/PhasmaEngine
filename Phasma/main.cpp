@@ -40,8 +40,8 @@ int main(int argc, char* argv[])
 	Context& context = *Context::Get();
 	context.CreateSystem<EventSystem>();
 
-	Window window;
-	VulkanContext::Get()->Init(window.Create()); // TODO: Remove this from here (was in Renderer)
+	Window* window = Window::Create();
+	VulkanContext::Get()->Init(window->Handle()); // TODO: Remove this from here (was in Renderer)
 
 	context.CreateSystem<LightSystem>();
 	context.CreateSystem<RendererSystem>();
@@ -56,10 +56,10 @@ int main(int argc, char* argv[])
 	{
 		frame_timer.Start();
 		
-		if (!window.ProcessEvents(frame_timer.delta))
+		if (!window->ProcessEvents(frame_timer.delta))
 			break;
 		
-		if (!window.isMinimized())
+		if (!window->isMinimized())
 		{
 			context.UpdateSystems(frame_timer.delta);
 
@@ -77,6 +77,7 @@ int main(int argc, char* argv[])
 	}
 
 	context.DestroySystems();
+	delete window;
 
 	return 0;
 }
