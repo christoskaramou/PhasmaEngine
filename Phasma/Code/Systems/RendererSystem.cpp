@@ -207,7 +207,7 @@ namespace pe
 		VULKAN.device->waitIdle();
 
 		for (auto& rt : renderTargets)
-			rt.second.destroy();
+			rt.second.Destroy();
 
 		if (Model::models.empty())
 		{
@@ -235,7 +235,7 @@ namespace pe
 		for (auto& model : Model::models)
 			model.destroy();
 		for (auto& texture : Mesh::uniqueTextures)
-			texture.second.destroy();
+			texture.second.Destroy();
 		Mesh::uniqueTextures.clear();
 
 		Compute::DestroyResources();

@@ -892,7 +892,7 @@ namespace pe
 		std::deque<vk::DescriptorImageInfo> dsii {};
 		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image)
 		{
-			dsii.emplace_back(*image.sampler, *image.view, vk::ImageLayout::eShaderReadOnlyOptimal);
+			dsii.emplace_back(vk::Sampler(image.sampler), vk::ImageView(image.view), vk::ImageLayout::eShaderReadOnlyOptimal);
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};

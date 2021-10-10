@@ -24,6 +24,7 @@ SOFTWARE.
 
 #include "Core/Base.h"
 
+struct VkCommandBuffer_T;
 namespace pe
 {
 	class RenderPass;
@@ -44,10 +45,6 @@ namespace pe
 	class CommandBuffer
 	{
 	public:
-		CommandBuffer();
-
-		~CommandBuffer();
-
 		void Create(CommandPool* commandPool = nullptr); // TODO: Add command pool wrapper
 
 		void Begin();
@@ -74,6 +71,10 @@ namespace pe
 
 		void Submit();
 
-		SPtr<vk::CommandBuffer> handle;
+		template<class T>
+		inline T& Handle() { return *static_cast<T*>(&m_handle); }
+
+	private:
+		VkCommandBuffer_T* m_handle;
 	};
 }

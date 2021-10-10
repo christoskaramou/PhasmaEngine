@@ -43,5 +43,7 @@ namespace pe
 		void Destroy();
 		
 		SPtr<vk::RenderPass> handle;
+
+		std::vector<vk::Format> formats;
 	};
 }

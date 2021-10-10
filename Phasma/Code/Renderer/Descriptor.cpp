@@ -29,9 +29,4 @@ namespace pe
 		: binding(binding), descriptorType(descriptorType), descriptorCount(1), stageFlags(stageFlags), pImmutableSamplers(nullptr)
 	{
 	}
-
-	Descriptor::Descriptor()
-	{
-		descriptorVK = make_sptr(vk::DescriptorSet());
-	}
 }

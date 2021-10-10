@@ -30,6 +30,7 @@ SOFTWARE.
 #include "Core/Path.h"
 #include "Systems/EventSystem.h"
 #include "Systems/PostProcessSystem.h"
+#include "Renderer/CommandBuffer.h"
 
 namespace pe
 {
@@ -103,24 +104,23 @@ namespace pe
 	void Renderer::RecordDeferredCmds(const uint32_t& imageIndex)
 	{
 		static GPUTimer gpuTimer[12]{};
-
-		vk::CommandBufferBeginInfo beginInfo;
-		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 		
-		const auto& cmd = (*VULKAN.dynamicCmdBuffers)[imageIndex];
 		FrameTimer& frameTimer = FrameTimer::Instance();
 
-		cmd.begin(beginInfo);
+		vk::CommandBuffer* vkHandle = &(*VULKAN.dynamicCmdBuffers)[imageIndex];
+		CommandBuffer* cmd = reinterpret_cast<CommandBuffer*>(vkHandle);
+		cmd->Begin();
 		// TODO: add more queries (times the swapchain images), so they are not overlapped from previous frame
 
-		gpuTimer[0].Start(&cmd);
+		gpuTimer[0].Start(vkHandle);
 		// SKYBOX
 		SkyBox& skybox = GUI::shadow_cast ? skyBoxDay : skyBoxNight;
 		
 		// MODELS
 		{
-			gpuTimer[1].Start(&cmd);
-			deferred.batchStart(cmd, imageIndex, *renderTargets["viewport"].extent);
+			gpuTimer[1].Start(vkHandle);
+			VkExtent2D extent{ renderTargets["viewport"].width, renderTargets["viewport"].height };
+			deferred.batchStart(*vkHandle, imageIndex, extent);
 			
 			for (auto& model : Model::models)
 				model.draw((uint16_t) RenderQueue::Opaque);
@@ -134,17 +134,17 @@ namespace pe
 			deferred.batchEnd();
 			frameTimer.timestamps[4] = gpuTimer[1].End();
 		}
-		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorRead);
-		VULKAN.depth.changeLayout(cmd, LayoutState::DepthRead);
-		renderTargets["normal"].changeLayout(cmd, LayoutState::ColorRead);
-		renderTargets["srm"].changeLayout(cmd, LayoutState::ColorRead);
-		renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorRead);
-		renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorRead);
-		renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorRead);
-		renderTargets["velocity"].changeLayout(cmd, LayoutState::ColorRead);
-		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["albedo"].ChangeLayout(cmd, LayoutState::ColorRead);
+		VULKAN.depth.ChangeLayout(cmd, LayoutState::DepthRead);
+		renderTargets["normal"].ChangeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["srm"].ChangeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["emissive"].ChangeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["ssr"].ChangeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["ssaoBlur"].ChangeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["velocity"].ChangeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["taa"].ChangeLayout(cmd, LayoutState::ColorRead);
 		for (auto& image : shadows.textures)
-			image.changeLayout(cmd, LayoutState::DepthRead);
+			image.ChangeLayout(cmd, LayoutState::DepthRead);
 		
 		SSAO& ssao = *WORLD_ENTITY->GetComponent<SSAO>();
 		SSR& ssr = *WORLD_ENTITY->GetComponent<SSR>();
@@ -157,26 +157,28 @@ namespace pe
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao)
 		{
-			gpuTimer[2].Start(&cmd);
-			renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorWrite);
+			gpuTimer[2].Start(vkHandle);
+			renderTargets["ssaoBlur"].ChangeLayout(cmd, LayoutState::ColorWrite);
 			ssao.draw(cmd, imageIndex, renderTargets["ssao"]);
-			renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorRead);
+			renderTargets["ssaoBlur"].ChangeLayout(cmd, LayoutState::ColorRead);
 			frameTimer.timestamps[5] = gpuTimer[2].End();
 		}
 		
 		// SCREEN SPACE REFLECTIONS
 		if (GUI::show_ssr)
 		{
-			gpuTimer[3].Start(&cmd);
-			renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorWrite);
-			ssr.draw(cmd, imageIndex, *renderTargets["ssr"].extent);
-			renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorRead);
+			gpuTimer[3].Start(vkHandle);
+			renderTargets["ssr"].ChangeLayout(cmd, LayoutState::ColorWrite);
+			VkExtent2D extent{ renderTargets["ssr"].width, renderTargets["ssr"].height };
+			ssr.draw(*vkHandle, imageIndex, extent);
+			renderTargets["ssr"].ChangeLayout(cmd, LayoutState::ColorRead);
 			frameTimer.timestamps[6] = gpuTimer[3].End();
 		}
 		
 		// COMPOSITION
-		gpuTimer[4].Start(&cmd);
-		deferred.draw(cmd, imageIndex, shadows, skybox, *renderTargets["viewport"].extent);
+		gpuTimer[4].Start(vkHandle);
+		VkExtent2D extent{ renderTargets["viewport"].width, renderTargets["viewport"].height };
+		deferred.draw(*vkHandle, imageIndex, shadows, skybox, extent);
 		frameTimer.timestamps[7] = gpuTimer[4].End();
 		
 		if (GUI::use_AntiAliasing)
@@ -184,17 +186,18 @@ namespace pe
 			// TAA
 			if (GUI::use_TAA)
 			{
-				gpuTimer[5].Start(&cmd);
-				taa.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
-				taa.draw(cmd, imageIndex, renderTargets);
+				gpuTimer[5].Start(vkHandle);
+				taa.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
+				taa.draw(*vkHandle, imageIndex, renderTargets);
 				frameTimer.timestamps[8] = gpuTimer[5].End();
 			}
 				// FXAA
 			else if (GUI::use_FXAA)
 			{
-				gpuTimer[6].Start(&cmd);
-				fxaa.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
-				fxaa.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
+				gpuTimer[6].Start(vkHandle);
+				fxaa.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
+				VkExtent2D extent{ renderTargets["viewport"].width, renderTargets["viewport"].height };
+				fxaa.draw(*vkHandle, imageIndex, extent);
 				frameTimer.timestamps[8] = gpuTimer[6].End();
 			}
 		}
@@ -202,52 +205,53 @@ namespace pe
 		// BLOOM
 		if (GUI::show_Bloom)
 		{
-			gpuTimer[7].Start(&cmd);
-			bloom.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
-			bloom.draw(cmd, imageIndex, renderTargets);
+			gpuTimer[7].Start(vkHandle);
+			bloom.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
+			bloom.draw(*vkHandle, imageIndex, renderTargets);
 			frameTimer.timestamps[9] = gpuTimer[7].End();
 		}
 		
 		// Depth of Field
 		if (GUI::use_DOF)
 		{
-			gpuTimer[8].Start(&cmd);
-			dof.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
-			dof.draw(cmd, imageIndex, renderTargets);
+			gpuTimer[8].Start(vkHandle);
+			dof.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
+			dof.draw(*vkHandle, imageIndex, renderTargets);
 			frameTimer.timestamps[10] = gpuTimer[8].End();
 		}
 		
 		// MOTION BLUR
 		if (GUI::show_motionBlur)
 		{
-			gpuTimer[9].Start(&cmd);
-			motionBlur.frameImage.copyColorAttachment(cmd, renderTargets["viewport"]);
-			motionBlur.draw(cmd, imageIndex, *renderTargets["viewport"].extent);
+			gpuTimer[9].Start(vkHandle);
+			motionBlur.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
+			VkExtent2D extent{ renderTargets["viewport"].width, renderTargets["viewport"].height };
+			motionBlur.draw(*vkHandle, imageIndex, extent);
 			frameTimer.timestamps[11] = gpuTimer[9].End();
 		}
 
-		renderTargets["albedo"].changeLayout(cmd, LayoutState::ColorWrite);
-		VULKAN.depth.changeLayout(cmd, LayoutState::DepthWrite);
-		renderTargets["normal"].changeLayout(cmd, LayoutState::ColorWrite);
-		renderTargets["srm"].changeLayout(cmd, LayoutState::ColorWrite);
-		renderTargets["emissive"].changeLayout(cmd, LayoutState::ColorWrite);
-		renderTargets["ssr"].changeLayout(cmd, LayoutState::ColorWrite);
-		renderTargets["ssaoBlur"].changeLayout(cmd, LayoutState::ColorWrite);
-		renderTargets["velocity"].changeLayout(cmd, LayoutState::ColorWrite);
-		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["albedo"].ChangeLayout(cmd, LayoutState::ColorWrite);
+		VULKAN.depth.ChangeLayout(cmd, LayoutState::DepthWrite);
+		renderTargets["normal"].ChangeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["srm"].ChangeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["emissive"].ChangeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["ssr"].ChangeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["ssaoBlur"].ChangeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["velocity"].ChangeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["taa"].ChangeLayout(cmd, LayoutState::ColorWrite);
 		for (auto& image : shadows.textures)
-			image.changeLayout(cmd, LayoutState::DepthWrite);
+			image.ChangeLayout(cmd, LayoutState::DepthWrite);
 
-		BlitToViewport(cmd, GUI::s_currRenderImage ? *GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
+		BlitToViewport(*vkHandle, GUI::s_currRenderImage ? *GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
 
 		// GUI
-		gpuTimer[10].Start(&cmd);
-		gui.Draw(cmd, imageIndex);
+		gpuTimer[10].Start(vkHandle);
+		gui.Draw(*vkHandle, imageIndex);
 		frameTimer.timestamps[12] = gpuTimer[10].End();
 		
 		frameTimer.timestamps[2] = gpuTimer[0].End();
 		
-		cmd.end();
+		cmd->End();
 	}
 	
 	void Renderer::RecordShadowsCmds(const uint32_t& imageIndex)
@@ -328,32 +332,29 @@ namespace pe
 		
 		renderTargets[name] = Image();
 		renderTargets[name].name = name;
-		renderTargets[name].format = make_sptr(format);
-		renderTargets[name].initialLayout = make_sptr(vk::ImageLayout::eUndefined);
-		renderTargets[name].createImage(
-				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | additionalFlags,
-				vk::MemoryPropertyFlagBits::eDeviceLocal
+		renderTargets[name].format = (Format)format;
+		renderTargets[name].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		renderTargets[name].CreateImage(
+			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | (VkFlags)additionalFlags,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 		);
-		renderTargets[name]
-				.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
-		renderTargets[name].createImageView(vk::ImageAspectFlagBits::eColor);
-		renderTargets[name].createSampler();
+		renderTargets[name].TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		renderTargets[name].CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
+		renderTargets[name].CreateSampler();
 		renderTargets[name].SetDebugName("RenderTarget_" + name);
 		
 		//std::string str = to_string(format); str.find("A8") != std::string::npos
-		renderTargets[name].blentAttachment->blendEnable = name == "albedo" ? VK_TRUE : VK_FALSE;
-		renderTargets[name].blentAttachment->srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-		renderTargets[name].blentAttachment->dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-		renderTargets[name].blentAttachment->colorBlendOp = vk::BlendOp::eAdd;
-		renderTargets[name].blentAttachment->srcAlphaBlendFactor = vk::BlendFactor::eOne;
-		renderTargets[name].blentAttachment->dstAlphaBlendFactor = vk::BlendFactor::eZero;
-		renderTargets[name].blentAttachment->alphaBlendOp = vk::BlendOp::eAdd;
-		renderTargets[name].blentAttachment->colorWriteMask =
-				vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
-				vk::ColorComponentFlagBits::eA;
+		renderTargets[name].blendAttachment.blendEnable = name == "albedo" ? VK_TRUE : VK_FALSE;
+		renderTargets[name].blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+		renderTargets[name].blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+		renderTargets[name].blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+		renderTargets[name].blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		renderTargets[name].blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+		renderTargets[name].blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+		renderTargets[name].blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
 		GUI::s_renderImages.push_back(&renderTargets[name]);
 	}
@@ -469,7 +470,7 @@ namespace pe
 		//- Free resources ----------------------
 		// render targets
 		for (auto& RT : renderTargets)
-			RT.second.destroy();
+			RT.second.Destroy();
 		renderTargets.clear();
 		GUI::s_renderImages.clear();
 		
@@ -497,11 +498,11 @@ namespace pe
 			framebuffer.Destroy();
 		fxaa.renderPass.Destroy();
 		fxaa.pipeline.destroy();
-		fxaa.frameImage.destroy();
+		fxaa.frameImage.Destroy();
 		
 		// TAA
-		taa.previous.destroy();
-		taa.frameImage.destroy();
+		taa.previous.Destroy();
+		taa.frameImage.Destroy();
 		for (auto& framebuffer : taa.framebuffers)
 			framebuffer.Destroy();
 		for (auto& framebuffer : taa.framebuffersSharpen)
@@ -521,21 +522,21 @@ namespace pe
 		bloom.pipelineGaussianBlurHorizontal.destroy();
 		bloom.pipelineGaussianBlurVertical.destroy();
 		bloom.pipelineCombine.destroy();
-		bloom.frameImage.destroy();
+		bloom.frameImage.Destroy();
 		
 		// Depth of Field
 		for (auto& framebuffer : dof.framebuffers)
 			framebuffer.Destroy();
 		dof.renderPass.Destroy();
 		dof.pipeline.destroy();
-		dof.frameImage.destroy();
+		dof.frameImage.Destroy();
 		
 		// Motion blur
 		for (auto& framebuffer : motionBlur.framebuffers)
 			framebuffer.Destroy();
 		motionBlur.renderPass.Destroy();
 		motionBlur.pipeline.destroy();
-		motionBlur.frameImage.destroy();
+		motionBlur.frameImage.Destroy();
 		
 		// SSAO
 		ssao.renderPass.Destroy();
@@ -547,7 +548,7 @@ namespace pe
 		ssao.pipeline.destroy();
 		ssao.pipelineBlur.destroy();
 		
-		vulkan.depth.destroy();
+		vulkan.depth.Destroy();
 		vulkan.swapchain.Destroy();
 		//- Free resources end ------------------
 		
@@ -628,26 +629,28 @@ namespace pe
 	void Renderer::BlitToViewport(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
 	{
 		Image& s_chain_Image = VULKAN.swapchain.images[imageIndex];
+
+		CommandBuffer* cmdBuf = reinterpret_cast<CommandBuffer*>(&cmd);
 		
-		renderedImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::ImageLayout::eTransferSrcOptimal,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::AccessFlagBits::eTransferRead,
-			vk::ImageAspectFlagBits::eColor
+		renderedImage.TransitionImageLayout(
+			cmdBuf,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_ACCESS_TRANSFER_READ_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
-		s_chain_Image.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::ePresentSrcKHR,
-			vk::ImageLayout::eTransferDstOptimal,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::AccessFlagBits::eColorAttachmentRead,
-			vk::AccessFlagBits::eTransferWrite,
-			vk::ImageAspectFlagBits::eColor
+		s_chain_Image.TransitionImageLayout(
+			cmdBuf,
+			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
 		
 		vk::ImageBlit blit;
@@ -664,34 +667,32 @@ namespace pe
 		blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		blit.dstSubresource.layerCount = 1;
 		
-		cmd.blitImage(
-			*renderedImage.image,
-			vk::ImageLayout::eTransferSrcOptimal,
-			*s_chain_Image.image,
-			vk::ImageLayout::eTransferDstOptimal,
-			blit,
-			vk::Filter::eLinear
-		);
+		vkCmdBlitImage(
+			cmd,
+			renderedImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			s_chain_Image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			1, &VkImageBlit(blit),
+			VK_FILTER_LINEAR);
 		
-		renderedImage.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eTransferSrcOptimal,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::AccessFlagBits::eTransferRead,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::ImageAspectFlagBits::eColor
+		renderedImage.TransitionImageLayout(
+			cmdBuf,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_ACCESS_TRANSFER_READ_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
-		s_chain_Image.transitionImageLayout(
-			cmd,
-			vk::ImageLayout::eTransferDstOptimal,
-			vk::ImageLayout::ePresentSrcKHR,
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::AccessFlagBits::eTransferWrite,
-			vk::AccessFlagBits::eColorAttachmentRead,
-			vk::ImageAspectFlagBits::eColor
+		s_chain_Image.TransitionImageLayout(
+			cmdBuf,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
 	}
 	

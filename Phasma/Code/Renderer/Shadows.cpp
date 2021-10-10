@@ -61,8 +61,8 @@ namespace pe
 		{
 			// sampler
 			vk::DescriptorImageInfo dii;
-			dii.sampler = *textures[i].sampler;
-			dii.imageView = *textures[i].view;
+			dii.sampler = textures[i].sampler;
+			dii.imageView = textures[i].view;
 			dii.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
 
 			vk::WriteDescriptorSet textureWriteSet;
@@ -93,7 +93,7 @@ namespace pe
 
 	void Shadows::createRenderPass()
 	{
-		renderPass.Create(*VULKAN.depth.format);
+		renderPass.Create((vk::Format)VULKAN.depth.format);
 	}
 
 	void Shadows::createFrameBuffers()
@@ -103,22 +103,22 @@ namespace pe
 		for (auto& texture : textures)
 		{
 			texture.format = VULKAN.depth.format;
-			texture.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
-			texture.addressMode = make_sptr(vk::SamplerAddressMode::eClampToEdge);
+			texture.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			texture.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 			texture.maxAnisotropy = 1.f;
-			texture.borderColor = make_sptr(vk::BorderColor::eFloatOpaqueWhite);
+			texture.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 			texture.samplerCompareEnable = VK_TRUE;
-			texture.compareOp = make_sptr(vk::CompareOp::eGreaterOrEqual);
-			texture.samplerMipmapMode = make_sptr(vk::SamplerMipmapMode::eLinear);
+			texture.compareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
+			texture.samplerMipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-			texture.createImage(
-				Shadows::imageSize, Shadows::imageSize, vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
-				vk::MemoryPropertyFlagBits::eDeviceLocal
+			texture.CreateImage(
+				Shadows::imageSize, Shadows::imageSize, VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 			);
-			texture.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
-			texture.createImageView(vk::ImageAspectFlagBits::eDepth);
-			texture.createSampler();
+			texture.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+			texture.CreateImageView(VK_IMAGE_ASPECT_DEPTH_BIT);
+			texture.CreateSampler();
 			texture.name = "ShadowPass_DepthImage" + std::to_string(textureIdx++);
 			texture.SetDebugName(texture.name);
 		}
@@ -128,7 +128,7 @@ namespace pe
 		{
 			uint32_t width = Shadows::imageSize;
 			uint32_t height = Shadows::imageSize;
-			vk::ImageView view = *textures[i % textures.size()].view;
+			vk::ImageView view = textures[i % textures.size()].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -146,7 +146,7 @@ namespace pe
 		pipeline.info.pushConstantStage = PushConstantStage::Vertex;
 		pipeline.info.pushConstantSize = sizeof(mat4);
 		pipeline.info.colorBlendAttachments = make_sptr(
-			std::vector<vk::PipelineColorBlendAttachmentState> {*textures[0].blentAttachment}
+			std::vector<vk::PipelineColorBlendAttachmentState> {textures[0].blendAttachment}
 		);
 		pipeline.info.dynamicStates = make_sptr(std::vector<vk::DynamicState> {vk::DynamicState::eDepthBias});
 		pipeline.info.descriptorSetLayouts = make_sptr(std::vector<vk::DescriptorSetLayout>
@@ -184,7 +184,7 @@ namespace pe
 		}
 
 		for (auto& texture : textures)
-			texture.destroy();
+			texture.Destroy();
 
 		for (auto& fb : framebuffers)
 			VULKAN.device->destroyFramebuffer(*fb.handle);

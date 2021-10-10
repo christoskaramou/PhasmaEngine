@@ -79,29 +79,31 @@ namespace pe
 		newSwapchain.images.resize(images.size());
 		for (unsigned i = 0; i < images.size(); i++)
 		{
-			newSwapchain.images[i].image = make_sptr(images[i]); // hold the image handlers
-			newSwapchain.images[i].transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
-			newSwapchain.images[i].blentAttachment->blendEnable = VK_TRUE;
-			newSwapchain.images[i].blentAttachment->srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-			newSwapchain.images[i].blentAttachment->dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-			newSwapchain.images[i].blentAttachment->colorBlendOp = vk::BlendOp::eAdd;
-			newSwapchain.images[i].blentAttachment->srcAlphaBlendFactor = vk::BlendFactor::eOne;
-			newSwapchain.images[i].blentAttachment->dstAlphaBlendFactor = vk::BlendFactor::eZero;
-			newSwapchain.images[i].blentAttachment->alphaBlendOp = vk::BlendOp::eAdd;
-			newSwapchain.images[i].blentAttachment->colorWriteMask =
-					vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
-					vk::ColorComponentFlagBits::eA;
+			newSwapchain.images[i].image = images[i]; // hold the image handlers
+			newSwapchain.images[i].TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+			newSwapchain.images[i].blendAttachment.blendEnable = VK_TRUE;
+			newSwapchain.images[i].blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+			newSwapchain.images[i].blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+			newSwapchain.images[i].blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+			newSwapchain.images[i].blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+			newSwapchain.images[i].blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+			newSwapchain.images[i].blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+			newSwapchain.images[i].blendAttachment.colorWriteMask =
+				VK_COLOR_COMPONENT_R_BIT |
+				VK_COLOR_COMPONENT_G_BIT |
+				VK_COLOR_COMPONENT_B_BIT |
+				VK_COLOR_COMPONENT_A_BIT;
 		}
 		
 		// create image views for each swapchain image
 		for (auto& image : newSwapchain.images)
 		{
 			vk::ImageViewCreateInfo imageViewCreateInfo;
-			imageViewCreateInfo.image = *image.image;
+			imageViewCreateInfo.image = image.image;
 			imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
 			imageViewCreateInfo.format = VULKAN.surface.formatKHR->format;
 			imageViewCreateInfo.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-			image.view = make_sptr(VULKAN.device->createImageView(imageViewCreateInfo));
+			image.view = VULKAN.device->createImageView(imageViewCreateInfo);
 		}
 		
 		*this = newSwapchain;
@@ -126,8 +128,8 @@ namespace pe
 	{
 		for (auto& image : images)
 		{
-			VULKAN.device->destroyImageView(*image.view);
-			*image.view = nullptr;
+			VULKAN.device->destroyImageView(image.view);
+			image.view = nullptr;
 		}
 		if (*handle)
 		{

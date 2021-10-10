@@ -44,32 +44,32 @@ namespace pe
 	
 	void TAA::Init()
 	{
-		previous.format = make_sptr(VULKAN.surface.formatKHR->format);
-		previous.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
-		previous.createImage(
-				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-				vk::MemoryPropertyFlagBits::eDeviceLocal
+		previous.format = (VkFormat)VULKAN.surface.formatKHR->format;
+		previous.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		previous.CreateImage(
+			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 		);
-		previous.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
-		previous.createImageView(vk::ImageAspectFlagBits::eColor);
-		previous.createSampler();
+		previous.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		previous.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
+		previous.CreateSampler();
 		previous.SetDebugName("TAA_PreviousFrameImage");
 		
-		frameImage.format = make_sptr(VULKAN.surface.formatKHR->format);
-		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
-		frameImage.createImage(
-				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-				vk::MemoryPropertyFlagBits::eDeviceLocal
+		frameImage.format = (VkFormat)VULKAN.surface.formatKHR->format;
+		frameImage.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		frameImage.CreateImage(
+			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 		);
-		frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
-		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
-		frameImage.createSampler();
+		frameImage.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		frameImage.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
+		frameImage.CreateSampler();
 		frameImage.SetDebugName("TAA_FrameImage");
 	}
 	
@@ -119,7 +119,7 @@ namespace pe
 		std::deque<vk::DescriptorImageInfo> dsii {};
 		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
 		{
-			dsii.emplace_back(*image.sampler, *image.view, layout);
+			dsii.emplace_back(vk::Sampler(image.sampler), vk::ImageView(image.view), layout);
 			return vk::WriteDescriptorSet{
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};
@@ -148,6 +148,8 @@ namespace pe
 	
 	void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{
+		CommandBuffer* cmdBuf = reinterpret_cast<CommandBuffer*>(&cmd);
+
 		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, &color, sizeof(vec4));
@@ -159,17 +161,18 @@ namespace pe
 		rpi.renderPass = *renderPass.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
-		rpi.renderArea.extent = *renderTargets["taa"].extent;
+		vk::Extent2D extent{ renderTargets["taa"].width, renderTargets["taa"].height };
+		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
 		
-		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorWrite);
+		renderTargets["taa"].ChangeLayout(cmdBuf, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
 		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *DSet, nullptr);
 		cmd.draw(3, 1, 0, 0);
 		cmd.endRenderPass();
-		renderTargets["taa"].changeLayout(cmd, LayoutState::ColorRead);
+		renderTargets["taa"].ChangeLayout(cmdBuf, LayoutState::ColorRead);
 		
 		saveImage(cmd, renderTargets["taa"]);
 		
@@ -178,7 +181,8 @@ namespace pe
 		rpi2.renderPass = *renderPassSharpen.handle;
 		rpi2.framebuffer = *framebuffersSharpen[imageIndex].handle;
 		rpi2.renderArea.offset = vk::Offset2D {0, 0};
-		rpi2.renderArea.extent = *renderTargets["viewport"].extent;
+		extent = vk::Extent2D{ renderTargets["viewport"].width, renderTargets["viewport"].height };
+		rpi2.renderArea.extent = extent;
 		rpi2.clearValueCount = 1;
 		rpi2.pClearValues = clearValues.data();
 		
@@ -191,8 +195,8 @@ namespace pe
 	
 	void TAA::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(*renderTargets["taa"].format);
-		renderPassSharpen.Create(*renderTargets["viewport"].format);
+		renderPass.Create((vk::Format)renderTargets["taa"].format);
+		renderPassSharpen.Create((vk::Format)renderTargets["viewport"].format);
 	}
 	
 	void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -204,7 +208,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["taa"].width;
 			uint32_t height = renderTargets["taa"].height;
-			vk::ImageView view = *renderTargets["taa"].view;
+			vk::ImageView view = renderTargets["taa"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 		
@@ -213,7 +217,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
-			vk::ImageView view = *renderTargets["viewport"].view;
+			vk::ImageView view = renderTargets["viewport"].view;
 			framebuffersSharpen[i].Create(width, height, view, renderPassSharpen);
 		}
 	}
@@ -235,7 +239,7 @@ namespace pe
 		pipeline.info.height = renderTargets["taa"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
 		pipeline.info.colorBlendAttachments = make_sptr(
-				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["taa"].blentAttachment}
+				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["taa"].blendAttachment}
 		);
 		pipeline.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutTAA()}
@@ -256,7 +260,7 @@ namespace pe
 		pipelineSharpen.info.height = renderTargets["viewport"].height_f;
 		pipelineSharpen.info.cullMode = CullMode::Back;
 		pipelineSharpen.info.colorBlendAttachments = make_sptr(
-				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["viewport"].blentAttachment}
+				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["viewport"].blendAttachment}
 		);
 		pipelineSharpen.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutTAASharpen()}
@@ -266,34 +270,33 @@ namespace pe
 		pipelineSharpen.createGraphicsPipeline();
 	}
 	
-	void TAA::saveImage(const vk::CommandBuffer& cmd, Image& source) const
+	void TAA::saveImage(vk::CommandBuffer& cmd, Image& source) const
 	{
-		previous.transitionImageLayout(
-				cmd,
-				vk::ImageLayout::eShaderReadOnlyOptimal,
-				vk::ImageLayout::eTransferDstOptimal,
-				vk::PipelineStageFlagBits::eFragmentShader,
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::AccessFlagBits::eShaderRead,
-				vk::AccessFlagBits::eTransferWrite,
-				vk::ImageAspectFlagBits::eColor
+		CommandBuffer* cmdBuf = reinterpret_cast<CommandBuffer*>(&cmd);
+
+		previous.TransitionImageLayout(
+			cmdBuf,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_ACCESS_SHADER_READ_BIT,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
-		source.transitionImageLayout(
-				cmd,
-				source.layoutState == LayoutState::ColorRead ? vk::ImageLayout::eShaderReadOnlyOptimal :
-				vk::ImageLayout::eColorAttachmentOptimal,
-				vk::ImageLayout::eTransferSrcOptimal,
-				source.layoutState == LayoutState::ColorRead ? vk::PipelineStageFlagBits::eFragmentShader :
-				vk::PipelineStageFlagBits::eColorAttachmentOutput,
-				vk::PipelineStageFlagBits::eTransfer,
-				source.layoutState == LayoutState::ColorRead ? vk::AccessFlagBits::eShaderRead :
-				vk::AccessFlagBits::eColorAttachmentWrite,
-				vk::AccessFlagBits::eTransferRead,
-				vk::ImageAspectFlagBits::eColor
+		source.TransitionImageLayout(
+			cmdBuf,
+			source.layoutState == LayoutState::ColorRead ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			source.layoutState == LayoutState::ColorRead ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			source.layoutState == LayoutState::ColorRead ? VK_ACCESS_SHADER_READ_BIT : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_ACCESS_TRANSFER_READ_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
 		
 		// copy the image
-		vk::ImageCopy region;
+		vk::ImageCopy region{};
 		region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		region.srcSubresource.layerCount = 1;
 		region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
@@ -303,32 +306,32 @@ namespace pe
 		region.extent.depth = 1;
 		
 		cmd.copyImage(
-				*source.image,
+				source.image,
 				vk::ImageLayout::eTransferSrcOptimal,
-				*previous.image,
+				previous.image,
 				vk::ImageLayout::eTransferDstOptimal,
 				region
 		);
 		
-		previous.transitionImageLayout(
-				cmd,
-				vk::ImageLayout::eTransferDstOptimal,
-				vk::ImageLayout::eShaderReadOnlyOptimal,
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::PipelineStageFlagBits::eFragmentShader,
-				vk::AccessFlagBits::eTransferWrite,
-				vk::AccessFlagBits::eShaderRead,
-				vk::ImageAspectFlagBits::eColor
+		previous.TransitionImageLayout(
+			cmdBuf,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_ACCESS_SHADER_READ_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
-		source.transitionImageLayout(
-				cmd,
-				vk::ImageLayout::eTransferSrcOptimal,
-				vk::ImageLayout::eShaderReadOnlyOptimal,
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::PipelineStageFlagBits::eFragmentShader,
-				vk::AccessFlagBits::eTransferRead,
-				vk::AccessFlagBits::eShaderRead,
-				vk::ImageAspectFlagBits::eColor
+		source.TransitionImageLayout(
+			cmdBuf,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_TRANSFER_READ_BIT,
+			VK_ACCESS_SHADER_READ_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
 		source.layoutState = LayoutState::ColorRead;
 	}
@@ -336,8 +339,8 @@ namespace pe
 	void TAA::destroy()
 	{
 		uniform->Destroy();
-		previous.destroy();
-		frameImage.destroy();
+		previous.Destroy();
+		frameImage.Destroy();
 		
 		for (auto& framebuffer : framebuffers)
 			framebuffer.Destroy();

@@ -30,6 +30,7 @@ namespace pe
 {
 	PipelineCreateInfo::PipelineCreateInfo()
 	{
+		blendEnable = false;
 		pVertShader = nullptr;
 		pFragShader = nullptr;
 		pCompShader = nullptr;
@@ -164,7 +165,7 @@ namespace pe
 		pdssci.minDepthBounds = 0.0f;
 		pdssci.maxDepthBounds = 0.0f;
 		pipeinfo.pDepthStencilState = &pdssci;
-		
+
 		// Color Blending state
 		vk::PipelineColorBlendStateCreateInfo pcbsci;
 		pcbsci.logicOpEnable = VK_FALSE;

@@ -458,7 +458,7 @@ namespace pe
 	
 	void VulkanContext::CreateDepth()
 	{
-		depth.format = make_sptr(vk::Format::eUndefined);
+		depth.format = (Format)VK_FORMAT_UNDEFINED;
 		std::vector<vk::Format> candidates = {
 				vk::Format::eD32SfloatS8Uint, vk::Format::eD32Sfloat, vk::Format::eD24UnormS8Uint
 		};
@@ -468,31 +468,31 @@ namespace pe
 			if ((props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) ==
 			    vk::FormatFeatureFlagBits::eDepthStencilAttachment)
 			{
-				depth.format = make_sptr(format);
+				depth.format = (Format)format;
 				break;
 			}
 		}
-		if (*depth.format == vk::Format::eUndefined)
+		if (depth.format == VK_FORMAT_UNDEFINED)
 			throw std::runtime_error("Depth format is undefined");
 		
-		depth.createImage(
+		depth.CreateImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
 			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-			vk::ImageTiling::eOptimal,
-			vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
-			vk::MemoryPropertyFlagBits::eDeviceLocal
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 		);
-		depth.createImageView(vk::ImageAspectFlagBits::eDepth);
+		depth.CreateImageView(VK_IMAGE_ASPECT_DEPTH_BIT);
 		
-		depth.addressMode = make_sptr(vk::SamplerAddressMode::eClampToEdge);
+		depth.addressMode = (SamplerAddressMode)vk::SamplerAddressMode::eClampToEdge;
 		depth.maxAnisotropy = 1.f;
-		depth.borderColor = make_sptr(vk::BorderColor::eFloatOpaqueWhite);
+		depth.borderColor = (BorderColor)VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 		depth.samplerCompareEnable = VK_TRUE;
-		depth.createSampler();
+		depth.CreateSampler();
 		depth.SetDebugName("DepthImage");
 		depth.name = "DepthImage";
 		
-		depth.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+		depth.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 	}
 	
 	void VulkanContext::Init(SDL_Window* window)
@@ -539,7 +539,7 @@ namespace pe
 			}
 		}
 		
-		depth.destroy();
+		depth.Destroy();
 		
 		if (*descriptorPool)
 		{

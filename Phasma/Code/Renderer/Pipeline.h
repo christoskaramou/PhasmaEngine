@@ -49,6 +49,7 @@ namespace pe
 		
 		~PipelineCreateInfo();
 		
+		bool blendEnable;
 		Shader* pVertShader;
 		Shader* pFragShader;
 		Shader* pCompShader;

@@ -34,13 +34,11 @@ SOFTWARE.
 
 namespace pe
 {
+	class CommandBuffer;
+
 	class SSAO : public IComponent
 	{
 	public:
-		SSAO();
-		
-		~SSAO();
-		
 		mat4 pvm[3];
 		SPtr<Buffer> UB_Kernel;
 		SPtr<Buffer> UB_PVM;
@@ -49,7 +47,7 @@ namespace pe
 		std::vector<FrameBuffer> framebuffers {}, blurFramebuffers {};
 		Pipeline pipeline;
 		Pipeline pipelineBlur;
-		SPtr<vk::DescriptorSet> DSet, DSBlur;
+		VkDescriptorSet DSet, DSBlur;
 		
 		void update(Camera& camera);
 		
@@ -71,7 +69,7 @@ namespace pe
 		
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		
-		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, Image& image);
+		void draw(CommandBuffer* cmd, uint32_t imageIndex, Image& image);
 		
 		void destroy();
 	};

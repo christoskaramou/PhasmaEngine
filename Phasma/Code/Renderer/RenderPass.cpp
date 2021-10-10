@@ -29,6 +29,7 @@ namespace pe
 	RenderPass::RenderPass()
 	{
 		handle = make_sptr(vk::RenderPass());
+		formats = {};
 	}
 	
 	RenderPass::~RenderPass()
@@ -49,6 +50,7 @@ namespace pe
 	
 	void RenderPass::Create(const std::vector<vk::Format>& formats)
 	{
+		this->formats = formats;
 		std::vector<vk::AttachmentDescription> attachments{};
 		std::vector<vk::AttachmentReference> colorReferences{};
 		vk::AttachmentReference depthReference;
@@ -77,7 +79,7 @@ namespace pe
 			}
 			else
 			{
-				// Only one depth reference sould make it in here, else it will be overwrite
+				// Only one depth reference sould make it in here, else there will be an overwrite
 				vk::AttachmentDescription attachmentDescription;
 				attachmentDescription.format = format;
 				attachmentDescription.samples = vk::SampleCountFlagBits::e1;

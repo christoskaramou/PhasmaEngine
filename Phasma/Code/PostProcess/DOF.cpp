@@ -42,24 +42,24 @@ namespace pe
 	
 	void DOF::Init()
 	{
-		frameImage.format = make_sptr(VULKAN.surface.formatKHR->format);
-		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
-		frameImage.createImage(
-				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-				vk::MemoryPropertyFlagBits::eDeviceLocal
+		frameImage.format = (VkFormat)VULKAN.surface.formatKHR->format;
+		frameImage.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		frameImage.CreateImage(
+			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 		);
-		frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
-		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
-		frameImage.createSampler();
+		frameImage.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		frameImage.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
+		frameImage.CreateSampler();
 		frameImage.SetDebugName("DOF_FrameImage");
 	}
 	
 	void DOF::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(*renderTargets["viewport"].format);
+		renderPass.Create((vk::Format)renderTargets["viewport"].format);
 	}
 	
 	void DOF::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -70,7 +70,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
-			vk::ImageView view = *renderTargets["viewport"].view;
+			vk::ImageView view = renderTargets["viewport"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -94,7 +94,7 @@ namespace pe
 		std::deque<vk::DescriptorImageInfo> dsii {};
 		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
 		{
-			dsii.emplace_back(*image.sampler, *image.view, layout);
+			dsii.emplace_back(vk::Sampler(image.sampler), vk::ImageView(image.view), layout);
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};
@@ -121,7 +121,8 @@ namespace pe
 		rpi.renderPass = *renderPass.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
-		rpi.renderArea.extent = *renderTargets["viewport"].extent;
+		vk::Extent2D extent{ renderTargets["viewport"].width, renderTargets["viewport"].height };
+		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = 1;
 		rpi.pClearValues = clearValues.data();
 		
@@ -144,7 +145,7 @@ namespace pe
 		pipeline.info.height = renderTargets["viewport"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
 		pipeline.info.colorBlendAttachments = make_sptr(
-				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["viewport"].blentAttachment}
+				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["viewport"].blendAttachment}
 		);
 		pipeline.info.pushConstantStage = PushConstantStage::Fragment;
 		pipeline.info.pushConstantSize = 5 * sizeof(vec4);
@@ -170,7 +171,7 @@ namespace pe
 			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutDOF());
 			Pipeline::getDescriptorSetLayoutDOF() = nullptr;
 		}
-		frameImage.destroy();
+		frameImage.Destroy();
 		pipeline.destroy();
 	}
 }

@@ -28,9 +28,6 @@ SOFTWARE.
 
 namespace pe
 {
-	using MemoryPropertyFlags = uint64_t;
-	using BufferUsageFlags = uint64_t;
-
 	class Buffer : public NoCopy, public NoMove
 	{
 	public:

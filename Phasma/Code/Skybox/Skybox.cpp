@@ -50,8 +50,8 @@ namespace pe
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
 		// texture sampler
 		vk::DescriptorImageInfo dii;
-		dii.sampler = *texture.sampler;
-		dii.imageView = *texture.view;
+		dii.sampler = texture.sampler;
+		dii.imageView = texture.view;
 		dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 		
 		textureWriteSets[0].dstSet = *descriptorSet;
@@ -74,15 +74,15 @@ namespace pe
 		assert(paths.size() == 6);
 		
 		texture.arrayLayers = 6;
-		texture.format = make_sptr(vk::Format::eR8G8B8A8Unorm);
-		texture.imageCreateFlags = make_sptr<vk::ImageCreateFlags>(vk::ImageCreateFlagBits::eCubeCompatible);
-		texture.createImage(
-				imageSideSize, imageSideSize, vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
-				vk::MemoryPropertyFlagBits::eDeviceLocal
+		texture.format = VK_FORMAT_R8G8B8A8_UNORM;
+		texture.imageCreateFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+		texture.CreateImage(
+			imageSideSize, imageSideSize, VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 		);
 		
-		texture.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 		for (uint32_t i = 0; i < texture.arrayLayers; ++i)
 		{
 			// Texture Load
@@ -107,23 +107,23 @@ namespace pe
 			
 			stbi_image_free(pixels);
 			
-			texture.copyBufferToImage(staging->Handle<vk::Buffer>(), i);
+			texture.CopyBufferToImage(staging.get(), i);
 			staging->Destroy();
 		}
-		texture.transitionImageLayout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		
-		texture.viewType = make_sptr(vk::ImageViewType::eCube);
-		texture.createImageView(vk::ImageAspectFlagBits::eColor);
+		texture.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		texture.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 		
-		texture.addressMode = make_sptr(vk::SamplerAddressMode::eClampToEdge);
-		texture.createSampler();
+		texture.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		texture.CreateSampler();
 		static int skyboxIdx = 0;
 		texture.SetDebugName("Skybox_TextureArray" + std::to_string(skyboxIdx++));
 	}
 	
 	void SkyBox::destroy()
 	{
-		texture.destroy();
+		texture.Destroy();
 		if (Pipeline::getDescriptorSetLayoutSkybox())
 		{
 			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSkybox());

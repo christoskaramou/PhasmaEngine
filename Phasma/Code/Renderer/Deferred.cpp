@@ -136,20 +136,20 @@ namespace pe
 			
 			stbi_image_free(pixels);
 			
-			ibl_brdf_lut.format = make_sptr(vk::Format::eR8G8B8A8Unorm);
+			ibl_brdf_lut.format = (Format)VK_FORMAT_R8G8B8A8_UNORM;
 			ibl_brdf_lut.mipLevels =
 					static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
-			ibl_brdf_lut.createImage(
-					texWidth, texHeight, vk::ImageTiling::eOptimal,
-					vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
-					vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal
+			ibl_brdf_lut.CreateImage(
+				texWidth, texHeight, VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 			);
-			ibl_brdf_lut.transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-			ibl_brdf_lut.copyBufferToImage(staging->Handle<vk::Buffer>());
-			ibl_brdf_lut.generateMipMaps();
-			ibl_brdf_lut.createImageView(vk::ImageAspectFlagBits::eColor);
+			ibl_brdf_lut.TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			ibl_brdf_lut.CopyBufferToImage(staging.get());
+			ibl_brdf_lut.GenerateMipMaps();
+			ibl_brdf_lut.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 			ibl_brdf_lut.maxLod = static_cast<float>(ibl_brdf_lut.mipLevels);
-			ibl_brdf_lut.createSampler();
+			ibl_brdf_lut.CreateSampler();
 			ibl_brdf_lut.SetDebugName("ibl_brdf_lut");
 			
 			staging->Destroy();
@@ -167,7 +167,7 @@ namespace pe
 		std::deque<vk::DescriptorImageInfo> dsii {};
 		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
 		{
-			dsii.emplace_back(*image.sampler, *image.view, layout);
+			dsii.emplace_back(vk::Sampler(image.sampler), vk::ImageView(image.view), layout);
 			return vk::WriteDescriptorSet {
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};
@@ -256,15 +256,15 @@ namespace pe
 	void Deferred::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
 		std::vector<vk::Format> formats {
-			*renderTargets["normal"].format,
-			*renderTargets["albedo"].format,
-			*renderTargets["srm"].format,
-			*renderTargets["velocity"].format,
-			*renderTargets["emissive"].format,
-			*VULKAN.depth.format
+			(vk::Format)renderTargets["normal"].format,
+			(vk::Format)renderTargets["albedo"].format,
+			(vk::Format)renderTargets["srm"].format,
+			(vk::Format)renderTargets["velocity"].format,
+			(vk::Format)renderTargets["emissive"].format,
+			(vk::Format)VULKAN.depth.format
 		};
 		renderPass.Create(formats);
-		compositionRenderPass.Create(*renderTargets["viewport"].format);
+		compositionRenderPass.Create((vk::Format)renderTargets["viewport"].format);
 	}
 	
 	void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -283,12 +283,12 @@ namespace pe
 			uint32_t width = renderTargets["albedo"].width;
 			uint32_t height = renderTargets["albedo"].height;
 			std::vector<vk::ImageView> views {
-				*renderTargets["normal"].view,
-				*renderTargets["albedo"].view,
-				*renderTargets["srm"].view,
-				*renderTargets["velocity"].view,
-				*renderTargets["emissive"].view,
-				* VULKAN.depth.view
+				renderTargets["normal"].view,
+				renderTargets["albedo"].view,
+				renderTargets["srm"].view,
+				renderTargets["velocity"].view,
+				renderTargets["emissive"].view,
+				VULKAN.depth.view
 			};
 			framebuffers[i].Create(width, height, views, renderPass);
 		}
@@ -303,7 +303,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
-			vk::ImageView view = *renderTargets["viewport"].view;
+			vk::ImageView view = renderTargets["viewport"].view;
 			compositionFramebuffers[i].Create(width, height, view, compositionRenderPass);
 		}
 	}
@@ -329,11 +329,11 @@ namespace pe
 		pipeline.info.colorBlendAttachments = make_sptr(
 			std::vector<vk::PipelineColorBlendAttachmentState>
 			{
-				*renderTargets["normal"].blentAttachment,
-				*renderTargets["albedo"].blentAttachment,
-				*renderTargets["srm"].blentAttachment,
-				*renderTargets["velocity"].blentAttachment,
-				*renderTargets["emissive"].blentAttachment,
+				renderTargets["normal"].blendAttachment,
+				renderTargets["albedo"].blendAttachment,
+				renderTargets["srm"].blendAttachment,
+				renderTargets["velocity"].blendAttachment,
+				renderTargets["emissive"].blendAttachment,
 			});
 		pipeline.info.descriptorSetLayouts = make_sptr(
 			std::vector<vk::DescriptorSetLayout>
@@ -361,7 +361,7 @@ namespace pe
 		pipelineComposition.info.pushConstantSize = 4 * sizeof(float);
 		pipelineComposition.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {
-						*renderTargets["viewport"].blentAttachment
+						renderTargets["viewport"].blendAttachment
 				}
 		);
 		pipelineComposition.info.descriptorSetLayouts = make_sptr(

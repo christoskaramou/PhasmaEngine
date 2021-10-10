@@ -23,32 +23,35 @@ SOFTWARE.
 #include "Image.h"
 #include "RenderApi.h"
 #include "ECS/Context.h"
+#include "Renderer/CommandBuffer.h"
+#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/Buffer.h"
 #include <utility>
 
 namespace pe
 {
 	Image::Image()
 	{
-		samples = make_sptr(vk::SampleCountFlagBits::e1);
+		samples = VK_SAMPLE_COUNT_1_BIT;
 		layoutState = LayoutState::ColorWrite;
-		format = make_sptr(vk::Format::eUndefined);
-		initialLayout = make_sptr(vk::ImageLayout::ePreinitialized);
-		tiling = make_sptr(vk::ImageTiling::eOptimal);
+		format = VK_FORMAT_UNDEFINED;
+		initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+		tiling = VK_IMAGE_TILING_OPTIMAL;
 		mipLevels = 1;
 		arrayLayers = 1;
 		anisotropyEnabled = VK_TRUE;
 		minLod = 0.f;
 		maxLod = 1.f;
 		maxAnisotropy = 16.f;
-		filter = make_sptr(vk::Filter::eLinear);
-		imageCreateFlags = make_sptr(vk::ImageCreateFlags());
-		viewType = make_sptr(vk::ImageViewType::e2D);
-		addressMode = make_sptr(vk::SamplerAddressMode::eRepeat);
-		borderColor = make_sptr(vk::BorderColor::eFloatOpaqueBlack);
+		filter = VK_FILTER_LINEAR;
+		imageCreateFlags = VkImageCreateFlags();
+		viewType = VK_IMAGE_VIEW_TYPE_2D;
+		addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
 		samplerCompareEnable = VK_FALSE;
-		compareOp = make_sptr(vk::CompareOp::eLess);
-		samplerMipmapMode = make_sptr(vk::SamplerMipmapMode::eLinear);
-		blentAttachment = make_sptr(vk::PipelineColorBlendAttachmentState());
+		compareOp = VK_COMPARE_OP_LESS;
+		samplerMipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		blendAttachment = {};
 	}
 	
 	Image::~Image()
@@ -57,29 +60,30 @@ namespace pe
 	void Image::SetDebugName(const std::string& debugName)
 	{
 #if _DEBUG
-		VULKAN.SetDebugObjectName(*image, debugName);
+		VULKAN.SetDebugObjectName(vk::Image(image), debugName);
 #else
 		return;
 #endif
 	}
 	
-	void Image::transitionImageLayout(
-			vk::CommandBuffer cmd,
-			vk::ImageLayout oldLayout,
-			vk::ImageLayout newLayout,
-			const vk::PipelineStageFlags& oldStageMask,
-			const vk::PipelineStageFlags& newStageMask,
-			const vk::AccessFlags& srcMask,
-			const vk::AccessFlags& dstMask,
-			const vk::ImageAspectFlags& aspectFlags
+	void Image::TransitionImageLayout(
+		CommandBuffer* cmd,
+		ImageLayout oldLayout,
+		ImageLayout newLayout,
+		PipelineStageFlags oldStageMask,
+		PipelineStageFlags newStageMask,
+		AccessFlags srcMask,
+		AccessFlags dstMask,
+		ImageAspectFlags aspectFlags
 	) const
 	{
-		vk::ImageMemoryBarrier barrier;
+		VkImageMemoryBarrier barrier{};
+		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		barrier.srcAccessMask = srcMask;
 		barrier.dstAccessMask = dstMask;
-		barrier.image = *image;
-		barrier.oldLayout = oldLayout;
-		barrier.newLayout = newLayout;
+		barrier.image = image;
+		barrier.oldLayout = (VkImageLayout)oldLayout;
+		barrier.newLayout = (VkImageLayout)newLayout;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.subresourceRange.aspectMask = aspectFlags;
@@ -87,38 +91,32 @@ namespace pe
 		barrier.subresourceRange.levelCount = mipLevels;
 		barrier.subresourceRange.baseArrayLayer = 0;
 		barrier.subresourceRange.layerCount = arrayLayers;
-		if (*format == vk::Format::eD32SfloatS8Uint || *format == vk::Format::eD24UnormS8Uint)
-		{
-			barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eStencil;
-		}
+		if (format == VkFormat::VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT)
+			barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 		
-		cmd.pipelineBarrier(
-				oldStageMask,
-				newStageMask,
-				vk::DependencyFlagBits::eByRegion,
-				nullptr,
-				nullptr,
-				barrier
-		);
+		vkCmdPipelineBarrier(
+			cmd->Handle<VkCommandBuffer>(),
+			oldStageMask,
+			newStageMask,
+			VK_DEPENDENCY_BY_REGION_BIT,
+			0, nullptr,
+			0, nullptr,
+			1, &barrier);
 	}
 	
-	void Image::createImage(
-			uint32_t width, uint32_t height, vk::ImageTiling tiling, const vk::ImageUsageFlags& usage,
-			const vk::MemoryPropertyFlags& properties
-	)
+	void Image::CreateImage(uint32_t width, uint32_t height, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties)
 	{
-		auto _usage = usage | vk::ImageUsageFlagBits::eTransferSrc; // All images can be copied
+		auto _usage = usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT; // All images can be copied
 
-		auto vCtx = VulkanContext::Get();
+		VkFormatProperties fProps;
+		vkGetPhysicalDeviceFormatProperties(*VULKAN.gpu.get(), (VkFormat)format, &fProps);
 		
-		const auto fProps = vCtx->gpu->getFormatProperties(*format);
-		
-		if (tiling == vk::ImageTiling::eOptimal)
+		if (tiling == VK_IMAGE_TILING_OPTIMAL)
 		{
 			if (!fProps.optimalTilingFeatures)
 				throw std::runtime_error("createImage(): wrong format error, no optimal tiling features supported.");
 		}
-		else if (tiling == vk::ImageTiling::eLinear)
+		else if (tiling == VK_IMAGE_TILING_LINEAR)
 		{
 			if (!fProps.linearTilingFeatures)
 				throw std::runtime_error("createImage(): wrong format error, no linear tiling features supported.");
@@ -127,352 +125,347 @@ namespace pe
 		{
 			throw std::runtime_error("createImage(): wrong format error.");
 		}
-		
-		auto const ifProps = vCtx->gpu
-		                         ->getImageFormatProperties(
-				                         *format, vk::ImageType::e2D, tiling, _usage, vk::ImageCreateFlags());
+
+		VkImageFormatProperties ifProps;
+		vkGetPhysicalDeviceImageFormatProperties(*VULKAN.gpu.get(), (VkFormat)format, VK_IMAGE_TYPE_2D, (VkImageTiling)tiling, _usage, VkImageCreateFlags(), &ifProps);
+
 		if (ifProps.maxArrayLayers < arrayLayers ||
-		    ifProps.maxExtent.width < width ||
-		    ifProps.maxExtent.height < height ||
-		    ifProps.maxMipLevels < mipLevels ||
-		    !(ifProps.sampleCounts & *samples))
+			ifProps.maxExtent.width < width ||
+			ifProps.maxExtent.height < height ||
+			ifProps.maxMipLevels < mipLevels ||
+			!(ifProps.sampleCounts & samples))
 			throw std::runtime_error("createImage(): image format properties error!");
 		
 		
-		this->tiling = make_sptr(tiling);
+		this->tiling = (VkImageTiling)tiling;
 		this->width = width % 2 != 0 ? width - 1 : width;
 		this->height = height % 2 != 0 ? height - 1 : height;
 		width_f = static_cast<float>(this->width);
 		height_f = static_cast<float>(this->height);
-		extent = make_sptr(vk::Extent2D {this->width, this->height});
 		
-		vk::ImageCreateInfo imageInfo;
-		imageInfo.flags = *imageCreateFlags;
-		imageInfo.imageType = vk::ImageType::e2D;
-		imageInfo.format = *format;
-		imageInfo.extent = vk::Extent3D {this->width, this->height, 1};
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.flags = imageCreateFlags;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageInfo.format = (VkFormat)format;
+		imageInfo.extent = VkExtent3D {this->width, this->height, 1};
 		imageInfo.mipLevels = mipLevels;
 		imageInfo.arrayLayers = arrayLayers;
-		imageInfo.samples = *samples;
-		imageInfo.tiling = tiling;
+		imageInfo.samples = (VkSampleCountFlagBits)samples;
+		imageInfo.tiling = (VkImageTiling)tiling;
 		imageInfo.usage = _usage;
-		imageInfo.sharingMode = vk::SharingMode::eExclusive;
-		imageInfo.initialLayout = *initialLayout;
-		VkImageCreateInfo vkImageInfo = VkImageCreateInfo(imageInfo);
+		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		imageInfo.initialLayout = (VkImageLayout)initialLayout;
 		
 		VmaAllocationCreateInfo allocationCreateInfo = {};
 		allocationCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 		
-		VkImage vkImage;
 		VmaAllocationInfo allocationInfo;
-		vmaCreateImage(
-				VULKAN.allocator, &vkImageInfo, &allocationCreateInfo, &vkImage, &allocation,
-				&allocationInfo
-		);
-		image = make_sptr(vk::Image(vkImage));
+		vmaCreateImage(VULKAN.allocator, &imageInfo, &allocationCreateInfo, &image, &allocation, &allocationInfo);
 	}
 	
-	void Image::createImageView(const vk::ImageAspectFlags& aspectFlags)
+	void Image::CreateImageView(ImageAspectFlags aspectFlags)
 	{
-		auto vCtx = VulkanContext::Get();
+		VkImageViewCreateInfo viewInfo{};
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = image;
+		viewInfo.viewType = (VkImageViewType)viewType;
+		viewInfo.format = (VkFormat)format;
+		viewInfo.subresourceRange = { (VkImageAspectFlags)aspectFlags, 0, mipLevels, 0, arrayLayers };
 		
-		vk::ImageViewCreateInfo viewInfo;
-		viewInfo.image = *image;
-		viewInfo.viewType = *viewType;
-		viewInfo.format = *format;
-		viewInfo.subresourceRange = {aspectFlags, 0, mipLevels, 0, arrayLayers};
+		vkCreateImageView(*VULKAN.device.get(), &viewInfo, nullptr, &view);
 		
-		view = make_sptr(vCtx->device->createImageView(viewInfo));
-		
-		vCtx->SetDebugObjectName(*view, "");
+		VULKAN.SetDebugObjectName(vk::ImageView(view), "");
 	}
 	
-	void Image::transitionImageLayout(const vk::ImageLayout oldLayout, const vk::ImageLayout newLayout) const
+	void Image::TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout) const
 	{
-		auto vCtx = VulkanContext::Get();
-		
-		vk::CommandBufferAllocateInfo allocInfo;
-		allocInfo.level = vk::CommandBufferLevel::ePrimary;
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = *vCtx->commandPool2;
+		allocInfo.commandPool = *VULKAN.commandPool2.get();
+
+		VkCommandBuffer commandBuffer;
+		vkAllocateCommandBuffers(*VULKAN.device.get(), &allocInfo, &commandBuffer);
 		
-		const vk::CommandBuffer commandBuffer = vCtx->device->allocateCommandBuffers(allocInfo).at(0);
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		vkBeginCommandBuffer(commandBuffer, &beginInfo);
 		
-		vk::CommandBufferBeginInfo beginInfo;
-		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-		commandBuffer.begin(beginInfo);
-		
-		vk::ImageMemoryBarrier barrier;
-		barrier.oldLayout = oldLayout;
-		barrier.newLayout = newLayout;
+		VkImageMemoryBarrier barrier{};
+		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.oldLayout = (VkImageLayout)oldLayout;
+		barrier.newLayout = (VkImageLayout)newLayout;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.image = *image;
+		barrier.image = image;
 		
-		vk::PipelineStageFlags srcStage;
-		vk::PipelineStageFlags dstStage;
+		VkPipelineStageFlags srcStage;
+		VkPipelineStageFlags dstStage;
 		
 		// Subresource aspectMask
-		if (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal)
+		if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
 		{
-			barrier.subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, mipLevels, 0, arrayLayers};
-			if (*format == vk::Format::eD32SfloatS8Uint || *format == vk::Format::eD24UnormS8Uint)
+			barrier.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, mipLevels, 0, arrayLayers};
+			if (format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT)
 			{
-				barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eStencil;
+				barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 			}
 		}
-		else barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, mipLevels, 0, arrayLayers};
+		else barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, arrayLayers};
 		
 		// Src, Dst AccessMasks and Pipeline Stages for pipelineBarrier
-		if (oldLayout == vk::ImageLayout::ePreinitialized && newLayout == vk::ImageLayout::eTransferSrcOptimal)
+		if (oldLayout == VK_IMAGE_LAYOUT_PREINITIALIZED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
 		{
-			barrier.srcAccessMask = vk::AccessFlagBits::eHostWrite;
-			barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+			barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 			
-			srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
-			dstStage = vk::PipelineStageFlagBits::eTransfer;
+			srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		}
-		else if (oldLayout == vk::ImageLayout::ePreinitialized && newLayout == vk::ImageLayout::eTransferDstOptimal)
+		else if (oldLayout == VK_IMAGE_LAYOUT_PREINITIALIZED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
 		{
-			barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 			
-			srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
-			dstStage = vk::PipelineStageFlagBits::eTransfer;
+			srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		}
-		else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal)
+		else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
 		{
-			barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			
-			srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
-			dstStage = vk::PipelineStageFlagBits::eTransfer;
+			srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		}
-		else if (oldLayout == vk::ImageLayout::eTransferDstOptimal &&
-		         newLayout == vk::ImageLayout::eShaderReadOnlyOptimal)
+		else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+		         newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 		{
-			barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-			barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			
-			srcStage = vk::PipelineStageFlagBits::eTransfer;
-			dstStage = vk::PipelineStageFlagBits::eFragmentShader;
+			srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+			dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 		}
-		else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal)
+		else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 		{
-			barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			
-			srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
-			dstStage = vk::PipelineStageFlagBits::eFragmentShader;
+			srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 		}
-		else if (oldLayout == vk::ImageLayout::eUndefined &&
-		         newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal)
+		else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+		         newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
 		{
-			barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+			barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 			
-			srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
-			dstStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+			srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 		}
-		else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eColorAttachmentOptimal)
+		else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 		{
-			srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
-			dstStage = vk::PipelineStageFlagBits::eFragmentShader;
+			srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 		}
-		else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::ePresentSrcKHR)
+		else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
 		{
-			srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
-			dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+			srcStage =VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		}
 		else
 		{
 			throw std::runtime_error("Transition image layout invalid combination of layouts");
 		}
 		
-		commandBuffer.pipelineBarrier(
-				srcStage,
-				dstStage,
-				vk::DependencyFlagBits::eByRegion,
-				nullptr,
-				nullptr,
-				barrier
-		);
+		vkCmdPipelineBarrier(
+			commandBuffer,
+			srcStage,
+			dstStage,
+			VK_DEPENDENCY_BY_REGION_BIT,
+			0, nullptr,
+			0, nullptr,
+			1, &barrier);
 		
-		commandBuffer.end();
+		vkEndCommandBuffer(commandBuffer);
 		
-		vCtx->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
+		VULKAN.submitAndWaitFence(vk::CommandBuffer(commandBuffer), nullptr, nullptr, nullptr);
 		
-		vCtx->device->freeCommandBuffers(*vCtx->commandPool2, commandBuffer);
+		VULKAN.device->freeCommandBuffers(*VULKAN.commandPool2, vk::CommandBuffer(commandBuffer));
 	}
 	
-	void Image::changeLayout(const vk::CommandBuffer& cmd, LayoutState state)
+	void Image::ChangeLayout(CommandBuffer* cmd, LayoutState state)
 	{
 		if (state != layoutState)
 		{
 			if (state == LayoutState::ColorRead)
 			{
-				transitionImageLayout(
-						cmd,
-						vk::ImageLayout::eColorAttachmentOptimal,
-						vk::ImageLayout::eShaderReadOnlyOptimal,
-						vk::PipelineStageFlagBits::eColorAttachmentOutput,
-						vk::PipelineStageFlagBits::eFragmentShader,
-						vk::AccessFlagBits::eColorAttachmentWrite,
-						vk::AccessFlagBits::eShaderRead,
-						vk::ImageAspectFlagBits::eColor
+				TransitionImageLayout(
+					cmd,
+					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+					VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+					VK_ACCESS_SHADER_READ_BIT,
+					VK_IMAGE_ASPECT_COLOR_BIT
 				);
 			}
 			else if (state == LayoutState::ColorWrite)
 			{
-				transitionImageLayout(
-						cmd,
-						vk::ImageLayout::eShaderReadOnlyOptimal,
-						vk::ImageLayout::eColorAttachmentOptimal,
-						vk::PipelineStageFlagBits::eFragmentShader,
-						vk::PipelineStageFlagBits::eColorAttachmentOutput,
-						vk::AccessFlagBits::eShaderRead,
-						vk::AccessFlagBits::eColorAttachmentWrite,
-						vk::ImageAspectFlagBits::eColor
+				TransitionImageLayout(
+					cmd,
+					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+					VK_ACCESS_SHADER_READ_BIT,
+					VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+					VK_IMAGE_ASPECT_COLOR_BIT
 				);
 			}
 			else if (state == LayoutState::DepthRead)
 			{
-				transitionImageLayout(
-						cmd,
-						vk::ImageLayout::eDepthStencilAttachmentOptimal,
-						vk::ImageLayout::eDepthStencilReadOnlyOptimal,
-						vk::PipelineStageFlagBits::eEarlyFragmentTests,
-						vk::PipelineStageFlagBits::eFragmentShader,
-						vk::AccessFlagBits::eDepthStencilAttachmentWrite,
-						vk::AccessFlagBits::eShaderRead,
-						vk::ImageAspectFlagBits::eDepth
+				TransitionImageLayout(
+					cmd,
+					VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+					VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+					VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+					VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+					VK_ACCESS_SHADER_READ_BIT,
+					VK_IMAGE_ASPECT_DEPTH_BIT
 				);
 			}
 			else if (state == LayoutState::DepthWrite)
 			{
-				transitionImageLayout(
-						cmd,
-						vk::ImageLayout::eDepthStencilReadOnlyOptimal,
-						vk::ImageLayout::eDepthStencilAttachmentOptimal,
-						vk::PipelineStageFlagBits::eFragmentShader,
-						vk::PipelineStageFlagBits::eEarlyFragmentTests,
-						vk::AccessFlagBits::eShaderRead,
-						vk::AccessFlagBits::eDepthStencilAttachmentWrite,
-						vk::ImageAspectFlagBits::eDepth
+				TransitionImageLayout(
+					cmd,
+					VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+					VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+					VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+					VK_ACCESS_SHADER_READ_BIT,
+					VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+					VK_IMAGE_ASPECT_DEPTH_BIT
 				);
 			}
 			layoutState = state;
 		}
 	}
 	
-	void Image::copyBufferToImage(const vk::Buffer buffer, const uint32_t baseLayer) const
+	void Image::CopyBufferToImage(Buffer* buffer, uint32_t baseLayer) const
 	{
-		auto vCtx = VulkanContext::Get();
-		
-		vk::CommandBufferAllocateInfo allocInfo;
-		allocInfo.level = vk::CommandBufferLevel::ePrimary;
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = *vCtx->commandPool2;
+		allocInfo.commandPool = *VULKAN.commandPool2;
 		
-		const vk::CommandBuffer commandBuffer = vCtx->device->allocateCommandBuffers(allocInfo).at(0);
+		VkCommandBuffer commandBuffer;
+		vkAllocateCommandBuffers(*VULKAN.device, &allocInfo, &commandBuffer);
 		
-		vk::CommandBufferBeginInfo beginInfo;
-		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-		commandBuffer.begin(beginInfo);
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		vkBeginCommandBuffer(commandBuffer, &beginInfo);
 		
-		vk::BufferImageCopy region;
+		VkBufferImageCopy region;
 		region.bufferOffset = 0;
 		region.bufferRowLength = 0;
 		region.bufferImageHeight = 0;
-		region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		region.imageSubresource.mipLevel = 0;
 		region.imageSubresource.baseArrayLayer = baseLayer;
 		region.imageSubresource.layerCount = 1;
 		region.imageOffset = vk::Offset3D(0, 0, 0);
 		region.imageExtent = vk::Extent3D(width, height, 1);
 		
-		commandBuffer.copyBufferToImage(buffer, *image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
+		vkCmdCopyBufferToImage(commandBuffer, buffer->Handle<VkBuffer>(), image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 		
-		commandBuffer.end();
+		vkEndCommandBuffer(commandBuffer);
 		
-		vCtx->submitAndWaitFence(commandBuffer, nullptr, nullptr, nullptr);
+		VULKAN.submitAndWaitFence(vk::CommandBuffer(commandBuffer), nullptr, nullptr, nullptr);
 		
-		vCtx->device->freeCommandBuffers(*vCtx->commandPool2, commandBuffer);
+		vkFreeCommandBuffers(*VULKAN.device, *VULKAN.commandPool2, 1, &commandBuffer);
 	}
 	
-	void Image::copyColorAttachment(const vk::CommandBuffer& cmd, Image& renderedImage) const
+	void Image::CopyColorAttachment(CommandBuffer* cmd, Image& renderedImage) const
 	{
-		transitionImageLayout(
-				cmd,
-				vk::ImageLayout::eShaderReadOnlyOptimal,
-				vk::ImageLayout::eTransferDstOptimal,
-				vk::PipelineStageFlagBits::eFragmentShader,
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::AccessFlagBits::eShaderRead,
-				vk::AccessFlagBits::eTransferWrite,
-				vk::ImageAspectFlagBits::eColor
+		TransitionImageLayout(
+			cmd,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_ACCESS_SHADER_READ_BIT,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
-		renderedImage.transitionImageLayout(
-				cmd,
-				vk::ImageLayout::eColorAttachmentOptimal,
-				vk::ImageLayout::eTransferSrcOptimal,
-				vk::PipelineStageFlagBits::eColorAttachmentOutput,
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::AccessFlagBits::eColorAttachmentWrite,
-				vk::AccessFlagBits::eTransferRead,
-				vk::ImageAspectFlagBits::eColor
+		renderedImage.TransitionImageLayout(
+			cmd,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_ACCESS_TRANSFER_READ_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
 		
 		// copy the image
-		vk::ImageCopy region;
-		region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		VkImageCopy region{};
+		region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		region.srcSubresource.layerCount = 1;
-		region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		region.dstSubresource.layerCount = 1;
 		region.extent.width = renderedImage.width;
 		region.extent.height = renderedImage.height;
 		region.extent.depth = 1;
 		
-		cmd.copyImage(
-				*renderedImage.image,
-				vk::ImageLayout::eTransferSrcOptimal,
-				*image,
-				vk::ImageLayout::eTransferDstOptimal,
-				region
-		);
+		vkCmdCopyImage(
+			cmd->Handle<VkCommandBuffer>(),
+			renderedImage.image,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			image,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			1, &region);
 		
-		transitionImageLayout(
-				cmd,
-				vk::ImageLayout::eTransferDstOptimal,
-				vk::ImageLayout::eShaderReadOnlyOptimal,
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::PipelineStageFlagBits::eFragmentShader,
-				vk::AccessFlagBits::eTransferWrite,
-				vk::AccessFlagBits::eShaderRead,
-				vk::ImageAspectFlagBits::eColor
+		TransitionImageLayout(
+			cmd,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_ACCESS_SHADER_READ_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
-		renderedImage.transitionImageLayout(
-				cmd,
-				vk::ImageLayout::eTransferSrcOptimal,
-				vk::ImageLayout::eColorAttachmentOptimal,
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::PipelineStageFlagBits::eColorAttachmentOutput,
-				vk::AccessFlagBits::eTransferRead,
-				vk::AccessFlagBits::eColorAttachmentWrite,
-				vk::ImageAspectFlagBits::eColor
+		renderedImage.TransitionImageLayout(
+			cmd,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_ACCESS_TRANSFER_READ_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_IMAGE_ASPECT_COLOR_BIT
 		);
 	}
 	
-	void Image::generateMipMaps() const
+	void Image::GenerateMipMaps() const
 	{
-		auto vCtx = VulkanContext::Get();
+		VkFormatProperties fProps;
+		vkGetPhysicalDeviceFormatProperties(*VULKAN.gpu, (VkFormat)format, &fProps);
 		
-		const auto fProps = vCtx->gpu->getFormatProperties(*format);
-		
-		if (*tiling == vk::ImageTiling::eOptimal)
+		if (tiling == VK_IMAGE_TILING_OPTIMAL)
 		{
-			if (!(fProps.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear))
+			if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
 				throw std::runtime_error("generateMipMaps(): Image tiling error, linear filter is not supported.");
 		}
-		else if (*tiling == vk::ImageTiling::eLinear)
+		else if (tiling == VK_IMAGE_TILING_LINEAR)
 		{
-			if (!(fProps.linearTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear))
+			if (!(fProps.linearTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
 				throw std::runtime_error("generateMipMaps(): Image tiling error, linear filter is not supported.");
 		}
 		else
@@ -480,151 +473,149 @@ namespace pe
 			throw std::runtime_error("generateMipMaps(): Image tiling error.");
 		}
 		
-		vk::CommandBufferAllocateInfo allocInfo;
-		allocInfo.level = vk::CommandBufferLevel::ePrimary;
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = mipLevels;
-		allocInfo.commandPool = *vCtx->commandPool2;
+		allocInfo.commandPool = *VULKAN.commandPool2;
 		
-		const auto commandBuffers = vCtx->device->allocateCommandBuffers(allocInfo);
+		std::vector<VkCommandBuffer> commandBuffers(mipLevels);
+		vkAllocateCommandBuffers(*VULKAN.device, &allocInfo, commandBuffers.data());
 		
 		auto mipWidth = static_cast<int32_t>(width);
 		auto mipHeight = static_cast<int32_t>(height);
 		
-		vk::CommandBufferBeginInfo beginInfo;
-		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 		
-		vk::ImageMemoryBarrier barrier = {};
-		barrier.image = *image;
+		VkImageMemoryBarrier barrier{};
+		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.image = image;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		barrier.subresourceRange.baseArrayLayer = 0;
 		barrier.subresourceRange.layerCount = 1;
 		barrier.subresourceRange.levelCount = 1;
 		
-		vk::ImageBlit blit = {};
+		VkImageBlit blit;
 		blit.srcOffsets[0] = vk::Offset3D {0, 0, 0};
-		blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		blit.srcSubresource.baseArrayLayer = 0;
 		blit.srcSubresource.layerCount = 1;
 		blit.dstOffsets[0] = vk::Offset3D {0, 0, 0};
-		blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		blit.dstSubresource.baseArrayLayer = 0;
 		blit.dstSubresource.layerCount = 1;
 		
 		for (uint32_t i = 1; i < mipLevels; i++)
 		{
-			
-			commandBuffers[i].begin(beginInfo);
+			vkBeginCommandBuffer(commandBuffers[i], &beginInfo);
 			
 			barrier.subresourceRange.baseMipLevel = i - 1;
-			barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-			barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
-			barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-			barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+			barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 			
-			commandBuffers[i].pipelineBarrier(
-					vk::PipelineStageFlagBits::eTransfer,
-					vk::PipelineStageFlagBits::eTransfer,
-					vk::DependencyFlagBits(),
-					nullptr,
-					nullptr,
-					barrier
-			);
-			
+			vkCmdPipelineBarrier(
+				commandBuffers[i],
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VkDependencyFlagBits(),
+				0, nullptr,
+				0, nullptr,
+				1, &barrier);
 			
 			blit.srcOffsets[1] = vk::Offset3D {mipWidth, mipHeight, 1};
 			blit.dstOffsets[1] = vk::Offset3D {mipWidth / 2, mipHeight / 2, 1};
 			blit.srcSubresource.mipLevel = i - 1;
 			blit.dstSubresource.mipLevel = i;
 			
-			commandBuffers[i].blitImage(
-					*image,
-					vk::ImageLayout::eTransferSrcOptimal,
-					*image,
-					vk::ImageLayout::eTransferDstOptimal,
-					blit,
-					vk::Filter::eLinear
-			);
+			vkCmdBlitImage(
+				commandBuffers[i],
+				image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				1, &blit,
+				VK_FILTER_LINEAR);
 			
-			barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
-			barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-			barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
-			barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+			barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+			barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			
-			commandBuffers[i].pipelineBarrier(
-					vk::PipelineStageFlagBits::eTransfer,
-					vk::PipelineStageFlagBits::eFragmentShader,
-					vk::DependencyFlagBits::eByRegion,
-					nullptr,
-					nullptr,
-					barrier
-			);
+			vkCmdPipelineBarrier(
+				commandBuffers[i],
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				VK_DEPENDENCY_BY_REGION_BIT,
+				0, nullptr,
+				0, nullptr,
+				1, &barrier);
 			
 			if (mipWidth > 1) mipWidth /= 2;
 			if (mipHeight > 1) mipHeight /= 2;
 			
-			commandBuffers[i].end();
+			vkEndCommandBuffer(commandBuffers[i]);
 			
-			vCtx->submitAndWaitFence(commandBuffers[i], nullptr, nullptr, nullptr);
+			VULKAN.submitAndWaitFence(vk::CommandBuffer(commandBuffers[i]), nullptr, nullptr, nullptr);
 		}
 		
-		commandBuffers.front().begin(beginInfo);
+		vkBeginCommandBuffer(commandBuffers[0], &beginInfo);
 		
 		barrier.subresourceRange.baseMipLevel = mipLevels - 1;
-		barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-		barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-		barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-		barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 		
-		commandBuffers.front().pipelineBarrier(
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::PipelineStageFlagBits::eFragmentShader,
-				vk::DependencyFlagBits::eByRegion,
-				nullptr,
-				nullptr,
-				barrier
-		);
+		vkCmdPipelineBarrier(
+			commandBuffers[0],
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_DEPENDENCY_BY_REGION_BIT,
+			0, nullptr,
+			0, nullptr,
+			1, &barrier);
 		
-		commandBuffers.front().end();
+		vkEndCommandBuffer(commandBuffers[0]);
 		
-		vCtx->submitAndWaitFence(commandBuffers.front(), nullptr, nullptr, nullptr);
+		VULKAN.submitAndWaitFence(vk::CommandBuffer(commandBuffers[0]), nullptr, nullptr, nullptr);
 		
-		vCtx->device->freeCommandBuffers(*vCtx->commandPool2, commandBuffers);
+		vkFreeCommandBuffers(*VULKAN.device, *VULKAN.commandPool2, mipLevels, commandBuffers.data());
 	}
 	
-	void Image::createSampler()
+	void Image::CreateSampler()
 	{
-		auto vCtx = VulkanContext::Get();
-		
-		vk::SamplerCreateInfo samplerInfo;
-		samplerInfo.magFilter = *filter;
-		samplerInfo.minFilter = *filter;
-		samplerInfo.mipmapMode = *samplerMipmapMode;
+		VkSamplerCreateInfo samplerInfo{};
+		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		samplerInfo.magFilter = (VkFilter)filter;
+		samplerInfo.minFilter = (VkFilter)filter;
+		samplerInfo.mipmapMode = (VkSamplerMipmapMode)samplerMipmapMode;
 		samplerInfo.minLod = minLod;
 		samplerInfo.maxLod = maxLod;
 		samplerInfo.mipLodBias = 0.f;
-		samplerInfo.addressModeU = *addressMode;
-		samplerInfo.addressModeV = *addressMode;
-		samplerInfo.addressModeW = *addressMode;
+		samplerInfo.addressModeU = (VkSamplerAddressMode)addressMode;
+		samplerInfo.addressModeV = (VkSamplerAddressMode)addressMode;
+		samplerInfo.addressModeW = (VkSamplerAddressMode)addressMode;
 		samplerInfo.anisotropyEnable = anisotropyEnabled;
 		samplerInfo.maxAnisotropy = maxAnisotropy;
 		samplerInfo.compareEnable = samplerCompareEnable;
-		samplerInfo.compareOp = *compareOp;
-		samplerInfo.borderColor = *borderColor;
+		samplerInfo.compareOp = (VkCompareOp)compareOp;
+		samplerInfo.borderColor = (VkBorderColor)borderColor;
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
-		sampler = make_sptr(vCtx->device->createSampler(samplerInfo));
+
+		vkCreateSampler(*VULKAN.device, &samplerInfo, nullptr, &sampler);
 	}
 	
-	void Image::destroy() const
+	void Image::Destroy()
 	{
-		auto vCtx = VulkanContext::Get();
-		
-		if (*view) vCtx->device->destroyImageView(*view);
-		if (*image) vmaDestroyImage(VULKAN.allocator, VkImage(*image), allocation);
-		if (*sampler) vCtx->device->destroySampler(*sampler);
-		*view = nullptr;
-		*image = nullptr;
-		*sampler = nullptr;
+		if (view) vkDestroyImageView(*VULKAN.device, view, nullptr);
+		if (image) vmaDestroyImage(VULKAN.allocator, image, allocation);
+		if (sampler) vkDestroySampler(*VULKAN.device, sampler, nullptr);
+		view = nullptr;
+		image = nullptr;
+		sampler = nullptr;
 	}
 }

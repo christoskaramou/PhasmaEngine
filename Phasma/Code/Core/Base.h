@@ -25,6 +25,29 @@ SOFTWARE.
 #include <memory>
 #include <type_traits>
 
+struct VkImage_T;
+struct VkImageView_T;
+struct VkSampler_T;
+struct VkCommandBuffer_T;
+
+using SampleCountFlagBits = uint32_t;
+using Format = uint32_t;
+using ImageLayout = uint32_t;
+using ImageTiling = uint32_t;
+using Filter = uint32_t;
+using ImageViewType = uint32_t;
+using SamplerAddressMode = uint32_t;
+using BorderColor = uint32_t;
+using CompareOp = uint32_t;
+using SamplerMipmapMode = uint32_t;
+using ImageCreateFlags = uint32_t;
+using PipelineStageFlags = uint32_t;
+using AccessFlags = uint32_t;
+using MemoryPropertyFlags = uint32_t;
+using BufferUsageFlags = uint32_t;
+using ImageAspectFlags = uint32_t;
+using ImageUsageFlags = uint32_t;
+
 namespace vk
 {
 	class RenderPass;

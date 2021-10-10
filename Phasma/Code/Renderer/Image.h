@@ -33,8 +33,10 @@ namespace pe
 		DepthRead,
 		DepthWrite
 	};
-	
+
 	class Context;
+	class CommandBuffer;
+	class Buffer;
 	
 	class Image
 	{
@@ -45,67 +47,63 @@ namespace pe
 
 		std::string name{};
 
-		SPtr<vk::Image> image;
+		VkImage_T* image;
 		VmaAllocation allocation {};
-		SPtr<vk::ImageView> view;
-		SPtr<vk::Sampler> sampler;
+		VkImageView_T* view;
+		VkSampler_T* sampler;
 		uint32_t width {};
 		uint32_t height {};
 		float width_f {};
 		float height_f {};
-		SPtr<vk::Extent2D> extent;
 		
 		// values
-		SPtr<vk::SampleCountFlagBits> samples;
+		SampleCountFlagBits samples;
 		LayoutState layoutState;
-		SPtr<vk::Format> format;
-		SPtr<vk::ImageLayout> initialLayout;
-		SPtr<vk::ImageTiling> tiling;
+		Format format;
+		ImageLayout initialLayout;
+		ImageTiling tiling;
 		uint32_t mipLevels;
 		uint32_t arrayLayers;
 		bool anisotropyEnabled;
 		float minLod, maxLod, maxAnisotropy;
-		SPtr<vk::Filter> filter;
-		SPtr<vk::ImageCreateFlags> imageCreateFlags;
-		SPtr<vk::ImageViewType> viewType;
-		SPtr<vk::SamplerAddressMode> addressMode;
-		SPtr<vk::BorderColor> borderColor;
+		Filter filter;
+		ImageCreateFlags imageCreateFlags;
+		ImageViewType viewType;
+		SamplerAddressMode addressMode;
+		BorderColor borderColor;
 		bool samplerCompareEnable;
-		SPtr<vk::CompareOp> compareOp;
-		SPtr<vk::SamplerMipmapMode> samplerMipmapMode;
-		SPtr<vk::PipelineColorBlendAttachmentState> blentAttachment;
+		CompareOp compareOp;
+		SamplerMipmapMode samplerMipmapMode;
+		VkPipelineColorBlendAttachmentState blendAttachment;
 		
-		void transitionImageLayout(
-				vk::CommandBuffer cmd,
-				vk::ImageLayout oldLayout,
-				vk::ImageLayout newLayout,
-				const vk::PipelineStageFlags& oldStageMask,
-				const vk::PipelineStageFlags& newStageMask,
-				const vk::AccessFlags& srcMask,
-				const vk::AccessFlags& dstMask,
-				const vk::ImageAspectFlags& aspectFlags
+		void TransitionImageLayout(
+			CommandBuffer* cmd,
+			ImageLayout oldLayout,
+			ImageLayout newLayout,
+			PipelineStageFlags oldStageMask,
+			PipelineStageFlags newStageMask,
+			AccessFlags srcMask,
+			AccessFlags dstMask,
+			ImageAspectFlags aspectFlags
 		) const;
 		
-		void createImage(
-				uint32_t width, uint32_t height, vk::ImageTiling tiling, const vk::ImageUsageFlags& usage,
-				const vk::MemoryPropertyFlags& properties
-		);
+		void CreateImage(uint32_t width, uint32_t height, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties);
 		
-		void createImageView(const vk::ImageAspectFlags& aspectFlags);
+		void CreateImageView(ImageAspectFlags aspectFlags);
 		
-		void transitionImageLayout(vk::ImageLayout oldLayout, vk::ImageLayout newLayout) const;
+		void TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout) const;
 		
-		void changeLayout(const vk::CommandBuffer& cmd, LayoutState state);
+		void ChangeLayout(CommandBuffer* cmd, LayoutState state);
 		
-		void copyBufferToImage(vk::Buffer buffer, uint32_t baseLayer = 0) const;
+		void CopyBufferToImage(Buffer* buffer, uint32_t baseLayer = 0) const;
 		
-		void copyColorAttachment(const vk::CommandBuffer& cmd, Image& renderedImage) const;
+		void CopyColorAttachment(CommandBuffer* cmd, Image& renderedImage) const;
 		
-		void generateMipMaps() const;
+		void GenerateMipMaps() const;
 		
-		void createSampler();
+		void CreateSampler();
 		
-		void destroy() const;
+		void Destroy();
 
 		void SetDebugName(const std::string& debugName);
 	};

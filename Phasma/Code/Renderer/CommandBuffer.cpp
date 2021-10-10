@@ -23,50 +23,90 @@ SOFTWARE.
 #include "CommandBuffer.h"
 #include "Renderer/Vulkan/Vulkan.h"
 #include "Renderer/CommandPool.h"
+#include "Renderer/RenderPass.h"
+#include "Renderer/FrameBuffer.h"
+#include "Renderer/Pipeline.h"
+#include "Renderer/Descriptor.h"
+#include "Core/Math.h"
 
 namespace pe
 {
-	CommandBuffer::CommandBuffer()
-	{
-		handle = make_sptr(vk::CommandBuffer());
-	}
-
-	CommandBuffer::~CommandBuffer()
-	{
-	}
-
 	void CommandBuffer::Create(CommandPool* commandPool)
 	{
-		vk::CommandBufferAllocateInfo cbai;
+		VkCommandBufferAllocateInfo cbai{};
+		cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		cbai.commandPool = commandPool ? commandPool->Handle() : *VULKAN.commandPool;
-		cbai.level = vk::CommandBufferLevel::ePrimary;
+		cbai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		cbai.commandBufferCount = 1;
-		handle = make_sptr(VULKAN.device->allocateCommandBuffers(cbai).at(0));
-		VULKAN.SetDebugObjectName(*handle, "CommandBuffer");
+		vkAllocateCommandBuffers(*VULKAN.device, &cbai, &m_handle);
+		VULKAN.SetDebugObjectName(vk::CommandBuffer(m_handle), "CommandBuffer");
 	}
 
 	void CommandBuffer::Begin()
 	{
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		vkBeginCommandBuffer(m_handle, &beginInfo);
 	}
 
 	void CommandBuffer::End()
 	{
+		vkEndCommandBuffer(m_handle);
 	}
 
 	void CommandBuffer::PipelineBarrier()
 	{
 	}
 
+	bool DepthFormat(vk::Format& format)
+	{
+		return format == vk::Format::eD32SfloatS8Uint ||
+			format == vk::Format::eD32Sfloat ||
+			format == vk::Format::eD24UnormS8Uint;
+	}
+
 	void CommandBuffer::BeginPass(RenderPass& pass, FrameBuffer& frameBuffer)
 	{
+		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
+		VkClearValue clearColor;
+		memcpy(clearColor.color.float32, &color, sizeof(vec4));
+
+		VkClearDepthStencilValue depthStencil;
+		depthStencil.depth = 0.f;
+		depthStencil.stencil = 0;
+
+		std::vector<VkClearValue> clearValues(pass.formats.size());
+		for (int i = 0; i < pass.formats.size(); i++)
+		{
+			if (DepthFormat(pass.formats[i]))
+				clearValues[i].depthStencil = depthStencil;
+			else
+				clearValues[i].color = clearColor.color;
+
+		}
+
+		VkRenderPassBeginInfo rpi{};
+		rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		rpi.renderPass = *pass.handle;
+		rpi.framebuffer = *frameBuffer.handle;
+		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
+		rpi.renderArea.extent = vk::Extent2D{ frameBuffer.width, frameBuffer.height };
+		rpi.clearValueCount = clearValues.size();
+		rpi.pClearValues = clearValues.data();
+
+		vkCmdBeginRenderPass(m_handle, &rpi, VK_SUBPASS_CONTENTS_INLINE);
 	}
 
 	void CommandBuffer::EndPass()
 	{
+		vkCmdEndRenderPass(m_handle);
 	}
 
 	void CommandBuffer::BindPipeline(Pipeline& pipeline)
 	{
+		vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline.handle);
 	}
 
 	void CommandBuffer::BindVertexBuffer(Buffer& buffer, size_t offset)
@@ -79,10 +119,12 @@ namespace pe
 
 	void CommandBuffer::BindDescriptors(Pipeline& pipeline, uint32_t count, Descriptor* discriptors)
 	{
+		vkCmdBindDescriptorSets(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline.layout, 0, count, reinterpret_cast<VkDescriptorSet*>(discriptors), 0, nullptr);
 	}
 
 	void CommandBuffer::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
 	{
+		vkCmdDraw(m_handle, vertexCount, instanceCount, firstVertex, firstInstance);
 	}
 
 	void CommandBuffer::DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)

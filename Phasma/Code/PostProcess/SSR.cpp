@@ -68,7 +68,7 @@ namespace pe
 		std::deque<vk::DescriptorImageInfo> dsii {};
 		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
 		{
-			dsii.emplace_back(*image.sampler, *image.view, layout);
+			dsii.emplace_back(vk::Sampler(image.sampler), vk::ImageView(image.view), layout);
 			return vk::WriteDescriptorSet{
 					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
 			};
@@ -134,7 +134,7 @@ namespace pe
 	
 	void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(*renderTargets["ssr"].format);
+		renderPass.Create((vk::Format)renderTargets["ssr"].format);
 	}
 	
 	void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -145,7 +145,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["ssr"].width;
 			uint32_t height = renderTargets["ssr"].height;
-			vk::ImageView view = *renderTargets["ssr"].view;
+			vk::ImageView view = renderTargets["ssr"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -161,7 +161,7 @@ namespace pe
 		pipeline.info.height = renderTargets["ssr"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
 		pipeline.info.colorBlendAttachments = make_sptr(
-				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["ssr"].blentAttachment}
+				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["ssr"].blendAttachment}
 		);
 		pipeline.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutSSR()}

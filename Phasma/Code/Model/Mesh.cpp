@@ -175,20 +175,20 @@ namespace pe
 			
 			stbi_image_free(pixels);
 			
-			tex->format = make_sptr(vk::Format::eR8G8B8A8Unorm);
+			tex->format = VK_FORMAT_R8G8B8A8_UNORM;
 			tex->mipLevels =
 					static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
-			tex->createImage(
-					texWidth, texHeight, vk::ImageTiling::eOptimal,
-					vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
-					vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal
+			tex->CreateImage(
+				texWidth, texHeight, VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 			);
-			tex->transitionImageLayout(vk::ImageLayout::ePreinitialized, vk::ImageLayout::eTransferDstOptimal);
-			tex->copyBufferToImage(staging->Handle<VkBuffer>());
-			tex->generateMipMaps();
-			tex->createImageView(vk::ImageAspectFlagBits::eColor);
+			tex->TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			tex->CopyBufferToImage(staging.get());
+			tex->GenerateMipMaps();
+			tex->CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 			tex->maxLod = static_cast<float>(tex->mipLevels);
-			tex->createSampler();
+			tex->CreateSampler();
 			tex->SetDebugName(path.c_str());
 			
 			staging->Destroy();

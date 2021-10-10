@@ -77,7 +77,7 @@ namespace pe
 		
 		void createPipelines(std::map<std::string, Image>& renderTargets);
 		
-		void saveImage(const vk::CommandBuffer& cmd, Image& source) const;
+		void saveImage(vk::CommandBuffer& cmd, Image& source) const;
 		
 		void destroy();
 	};

@@ -39,7 +39,8 @@ namespace pe
 	
 	void FrameBuffer::Create(uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, const RenderPass& renderPass)
 	{
-		
+		this->width = width;
+		this->height = height;
 		vk::FramebufferCreateInfo fbci;
 		fbci.renderPass = *renderPass.handle;
 		fbci.attachmentCount = static_cast<uint32_t>(views.size());

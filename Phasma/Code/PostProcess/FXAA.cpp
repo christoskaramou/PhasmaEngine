@@ -41,18 +41,18 @@ namespace pe
 	
 	void FXAA::Init()
 	{
-		frameImage.format = make_sptr(VULKAN.surface.formatKHR->format);
-		frameImage.initialLayout = make_sptr(vk::ImageLayout::eUndefined);
-		frameImage.createImage(
-				static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-				static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-				vk::MemoryPropertyFlagBits::eDeviceLocal
+		frameImage.format = (VkFormat)VULKAN.surface.formatKHR->format;
+		frameImage.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		frameImage.CreateImage(
+			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
+			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 		);
-		frameImage.transitionImageLayout(vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
-		frameImage.createImageView(vk::ImageAspectFlagBits::eColor);
-		frameImage.createSampler();
+		frameImage.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		frameImage.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
+		frameImage.CreateSampler();
 		frameImage.SetDebugName("FXAA_FrameImage");
 	}
 	
@@ -72,8 +72,8 @@ namespace pe
 	{
 		// Composition sampler
 		vk::DescriptorImageInfo dii;
-		dii.sampler = *frameImage.sampler;
-		dii.imageView = *frameImage.view;
+		dii.sampler = frameImage.sampler;
+		dii.imageView = frameImage.view;
 		dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 		
 		vk::WriteDescriptorSet textureWriteSet;
@@ -112,7 +112,7 @@ namespace pe
 	
 	void FXAA::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create(*renderTargets["viewport"].format);
+		renderPass.Create((vk::Format)renderTargets["viewport"].format);
 	}
 	
 	void FXAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -123,7 +123,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
-			vk::ImageView view = *renderTargets["viewport"].view;
+			vk::ImageView view = renderTargets["viewport"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -139,7 +139,7 @@ namespace pe
 		pipeline.info.height = renderTargets["viewport"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
 		pipeline.info.colorBlendAttachments = make_sptr(
-				std::vector<vk::PipelineColorBlendAttachmentState> {*renderTargets["viewport"].blentAttachment}
+				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["viewport"].blendAttachment}
 		);
 		pipeline.info.descriptorSetLayouts = make_sptr(
 				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutFXAA()}
@@ -161,7 +161,7 @@ namespace pe
 			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutFXAA());
 			Pipeline::getDescriptorSetLayoutFXAA() = nullptr;
 		}
-		frameImage.destroy();
+		frameImage.Destroy();
 		pipeline.destroy();
 	}
 }

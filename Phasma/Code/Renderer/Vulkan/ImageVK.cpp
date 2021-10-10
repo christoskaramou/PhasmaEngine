@@ -20,36 +20,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#pragma once
-
-#include "Core/Base.h"
+#include "ImageVK.h"
 
 namespace pe
 {
-	using ShaderStageFlags = uint32_t;
-	using DescriptorType = uint32_t;
-	using Sampler = void*;
 
-	class DescriptorBinding
-	{
-	public:
-		DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags);
-
-		uint32_t binding;
-		DescriptorType descriptorType;
-		uint32_t descriptorCount;
-		ShaderStageFlags stageFlags;
-		Sampler pImmutableSamplers;
-	};
-
-	class Descriptor
-	{
-	public:
-		Descriptor(VkDescriptorSet_T* descriptorSet) : m_handle(descriptorSet) {}
-		operator VkDescriptorSet() { return m_handle; }
-		//VkDescriptorSet Handle() { return m_handle; }
-
-	private:
-		VkDescriptorSet_T* m_handle;
-	};
 }
