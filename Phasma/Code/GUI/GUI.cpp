@@ -711,6 +711,7 @@ namespace pe
 	void GUI::SetWindowStyle(ImGuiStyle* dst)
 	{
 		ImGui::StyleColorsClassic();
+		ImGui::GetStyle().Colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.3f);
 	}
 
 	void GUI::CreateRenderPass()
