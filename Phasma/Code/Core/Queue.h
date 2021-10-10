@@ -67,6 +67,8 @@ namespace pe
 			}
 			else if constexpr (launch == Launch::AsyncNoWait)
 			{
+				if (update)
+					update();
 				s_updatesNoWait.push_back(std::forward<Func>(update));
 				s_noWaitFutures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
 				s_signalsNoWait.push_back(std::forward<Func>(signal));
