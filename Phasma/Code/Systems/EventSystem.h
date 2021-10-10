@@ -42,6 +42,7 @@ namespace pe
     
     enum class EventType
     {
+        Quit,
         Custom,
         SetWindowTitle,
         CompileShaders,

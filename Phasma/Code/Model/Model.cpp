@@ -385,13 +385,6 @@ namespace pe
 
 		render = true;
 	}
-
-	void Model::LoadAsync(const std::string& folderPath, const std::string& modelName)
-	{
-		VULKAN.device->waitIdle();
-		auto loadAsync = [this, folderPath, modelName]() { Load(folderPath, modelName); };
-		Queue<Launch::AsyncNoWait>::Request(loadAsync);
-	}
 	
 	void Model::updateAnimation(uint32_t index, float time)
 	{

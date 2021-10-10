@@ -121,8 +121,6 @@ namespace pe
 		Microsoft::glTF::Image* getImage(const std::string& textureID) const;
 		
 		void Load(const std::string& folderPath, const std::string& modelName);
-
-		void LoadAsync(const std::string& folderPath, const std::string& modelName);
 		
 		void createVertexBuffer();
 		

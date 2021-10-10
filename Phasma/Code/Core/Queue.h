@@ -47,27 +47,37 @@ namespace pe
 	public:
 		using Func = std::function<void()>;
 
-		inline static void Request(Func&& func)
+		inline static void Request(Func&& func, Func&& update = nullptr, Func&& signal = nullptr)
 		{
 			std::lock_guard<std::mutex> guard(s_requestMutex);
 
 			if constexpr(launch == Launch::Async)
 			{
+				if (update)
+					update();
 				s_futures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
-				s_requests += std::bind(&std::future<void>::get, &s_futures.back());
+				s_signals.push_back(std::forward<Func>(signal));
 			}
 			else if constexpr (launch == Launch::AsyncDeferred)
 			{
+				if (update)
+					update();
 				s_futures.push_back(std::async(std::launch::deferred, std::forward<Func>(func)));
-				s_requests += std::bind(&std::future<void>::get, &s_futures.back());
+				s_signals.push_back(std::forward<Func>(signal));
 			}
 			else if constexpr (launch == Launch::AsyncNoWait)
 			{
+				s_updatesNoWait.push_back(std::forward<Func>(update));
 				s_noWaitFutures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
+				s_signalsNoWait.push_back(std::forward<Func>(signal));
 			}
 			else if constexpr (launch == Launch::Sync)
 			{
+				if (update)
+					update();
 				std::forward<Func>(func)();
+				if (signal)
+					signal();
 			}
 			else // if constexpr (launch == Launch::SyncDeferred)
 			{
@@ -78,32 +88,53 @@ namespace pe
 		inline static void ExecuteRequests()
 		{
 			CheckNoWaitFutures();
-			s_requests.ReverseInvoke();
-			s_requests.Clear();
+
+			for (int i = static_cast<int>(s_futures.size()) - 1; i >= 0; i--)
+			{
+				s_futures[i].get();
+
+				if (s_signals[i])
+					s_signals[i]();
+			}
+
 			s_futures.clear();
+			s_signals.clear();
 		}
 
 	private:
 		inline static void CheckNoWaitFutures()
 		{
+			int i = 0;
 			for (auto it = s_noWaitFutures.begin(); it != s_noWaitFutures.end();)
 			{
 				if (it->wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
 				{
 					it->get();
 					it = s_noWaitFutures.erase(it);
+
+					if (s_signalsNoWait[i])
+						s_signalsNoWait[i]();
+
+					s_updatesNoWait.erase(s_updatesNoWait.begin() + i);
+					s_signalsNoWait.erase(s_signalsNoWait.begin() + i);
 				}
 				else
 				{
+					if (s_updatesNoWait[i])
+						s_updatesNoWait[i]();
+
 					++it;
+					++i;
 				}
 			}
 		}
 
 	private:
-		inline static Delegate<> s_requests{};
 		inline static std::deque<std::future<void>> s_futures;
+		inline static std::deque<Func> s_signals;
 		inline static std::deque<std::future<void>> s_noWaitFutures;
+		inline static std::deque<Func> s_updatesNoWait;
+		inline static std::deque<Func> s_signalsNoWait;
 		inline static std::mutex s_requestMutex;
 	};
 }

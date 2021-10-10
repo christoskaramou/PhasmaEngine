@@ -131,6 +131,8 @@ namespace pe
 
         void Menu() const;
 
+        void Loading() const;
+
         void Metrics() const;
 
         static void ConsoleWindow();

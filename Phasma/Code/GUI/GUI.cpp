@@ -47,6 +47,7 @@ SOFTWARE.
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl.h"
+#include "imgui/imgui_internal.h"
 
 namespace pe
 {	
@@ -63,6 +64,42 @@ namespace pe
 		return mainStr.size() >= toMatch.size() &&
 		       mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0;
 	}
+
+	// https://github.com/ocornut/imgui/issues/1901#issuecomment-444929973
+	void LoadingIndicatorCircle(const char* label, const float indicator_radius,
+		const ImVec4& main_color, const ImVec4& backdrop_color,
+		const int circle_count, const float speed) {
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		if (window->SkipItems)
+			return;
+
+		ImGuiContext& g = *GImGui;
+		const ImGuiID id = window->GetID(label);
+
+		const ImVec2 pos = window->DC.CursorPos;
+		const float circle_radius = indicator_radius / 10.f;
+		const ImRect bb(pos, ImVec2(pos.x + indicator_radius * 2.0f, pos.y + indicator_radius * 2.0f));
+		ImGui::ItemSize(bb, ImGui::GetStyle().FramePadding.y);
+		if (!ImGui::ItemAdd(bb, id))
+			return;
+
+		const float t = g.Time;
+		const auto degree_offset = 2.0f * IM_PI / circle_count;
+		for (int i = 0; i < circle_count; ++i) {
+			const auto x = indicator_radius * std::sin(degree_offset * i) * 0.9f;
+			const auto y = indicator_radius * std::cos(degree_offset * i) * 0.9f;
+			const auto growth = std::max(0.0f, std::sin(t * speed - i * degree_offset));
+			ImVec4 color;
+			color.x = main_color.x * growth + backdrop_color.x * (1.0f - growth);
+			color.y = main_color.y * growth + backdrop_color.y * (1.0f - growth);
+			color.z = main_color.z * growth + backdrop_color.z * (1.0f - growth);
+			color.w = 1.0f;
+			window->DrawList->AddCircleFilled(ImVec2(pos.x + indicator_radius + x,
+				pos.y + indicator_radius - y),
+				circle_radius + growth * circle_radius,
+				ImGui::GetColorU32(color));
+		}
+	}
 	
 	void GUI::UpdateWindows()
 	{
@@ -70,6 +107,7 @@ namespace pe
 			ImGui::ShowDemoWindow(&show_demo_window);
 
 		Menu();
+		Loading();
 		Metrics();
 		Properties();
 		Shaders();
@@ -78,6 +116,7 @@ namespace pe
 		Scripts();
 	}
 
+	static bool s_modelLoading = false;
 	void GUI::async_fileDialog_ImGuiMenuItem(const char* menuLabel, const char* dialogTitle, const std::vector<const char*>& filter)
 	{
 		if (ImGui::MenuItem(menuLabel))
@@ -91,13 +130,19 @@ namespace pe
 					std::string folderPath = path.substr(0, path.find_last_of('\\') + 1);
 					std::string modelName = path.substr(path.find_last_of('\\') + 1);
 					Model::models.emplace_back();
-					Model::models.back().LoadAsync(folderPath, modelName);
+					Model& model = Model::models.back();
+					auto update = []() { s_modelLoading = true; };
+					auto signal = []() { s_modelLoading = false; };
+					VULKAN.device->waitIdle();
+					auto loadAsync = [&model, folderPath, modelName]() { model.Load(folderPath, modelName); };
+					Queue<Launch::AsyncNoWait>::Request(loadAsync, update, signal);
 					GUI::modelList.push_back(modelName);
 					GUI::model_scale.push_back({ 1.f, 1.f, 1.f });
 					GUI::model_pos.push_back({ 0.f, 0.f, 0.f });
 					GUI::model_rot.push_back({ 0.f, 0.f, 0.f });
 				}
 			};
+
 			Queue<Launch::AsyncNoWait>::Request(lambda);
 		}
 	}
@@ -111,9 +156,8 @@ namespace pe
 				int result = tinyfd_messageBox(messageBoxTitle, message, "yesno", "warning", 0);
 				if (result == 1)
 				{
-					SDL_Event sdlevent;
-					sdlevent.type = SDL_QUIT;
-					SDL_PushEvent(&sdlevent);
+					EventSystem* eventSystem = CONTEXT->GetSystem<EventSystem>();
+					eventSystem->PushEvent(EventType::Quit);
 				}
 			};
 			Queue<Launch::AsyncNoWait>::Request(lambda);
@@ -150,6 +194,22 @@ namespace pe
 				ImGui::EndMenu();
 			}
 			ImGui::EndMainMenuBar();
+		}
+	}
+
+	void GUI::Loading() const
+	{
+		static const ImVec4 color{ 0, 232.f / 256, 224.f / 256, 1.f };
+		static const ImVec4 bdcolor{ 0.f, 168.f / 256, 162.f / 256, 1.f };
+		static const float radius = 25.f;
+		static const int flags = ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground;
+
+		if (s_modelLoading)
+		{
+			ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 2, HEIGHT_f / 2));
+			ImGui::Begin("Loading", &metrics_open, flags);
+			LoadingIndicatorCircle("Loading", radius, color, bdcolor, 10, 4.5f);
+			ImGui::End();
 		}
 	}
 	
@@ -489,7 +549,7 @@ namespace pe
 		{
 			ImGui::Indent(16.0f);
 			ImGui::SliderFloat("Intst", &sun_intensity, 0.1f, 50.f);
-			ImGui::DragFloat3("Dir", sun_direction.data(), 0.01f);
+			ImGui::DragFloat3("Dir", sun_direction.data(), 0.01f, -1.f, 1.f);
 			ImGui::DragFloat("Slope", &depthBias[2], 0.15f, 0.5f);
 			ImGui::Separator();
 			ImGui::Separator();

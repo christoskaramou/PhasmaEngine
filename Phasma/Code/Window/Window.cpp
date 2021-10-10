@@ -87,8 +87,7 @@ namespace pe
 		{
 			if (event.type == SDL_QUIT)
 			{
-				//FIRE_EVENT(Event::OnExit);
-				return false;
+				eventSystem->PushEvent(EventType::Quit);
 			}
 			
 			if (event.type == SDL_MOUSEWHEEL)
@@ -119,6 +118,9 @@ namespace pe
 				eventSystem->PushEvent(EventType::ScaleRenderTargets);
 			}
 		}
+
+		if (eventSystem->PollEvent(EventType::Quit))
+			return false;
 
 		int x, y;
 		if (SDL_GetMouseState(&x, &y) & SDL_BUTTON(SDL_BUTTON_RIGHT))
@@ -178,7 +180,7 @@ namespace pe
 		{
 			renderer->RecreatePipelines();
 		}
-		
+
 		if (eventSystem->PollEvent(EventType::ScaleRenderTargets))
 		{
 			if (!isMinimized())
