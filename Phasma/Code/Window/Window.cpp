@@ -72,8 +72,6 @@ namespace pe
 	bool Window::ProcessEvents(double delta)
 	{
 		if (Console::close_app) return false;
-		static int x, y, w, h, px, py = 0;
-		static float dx, dy = 0.f;
 		
 		EventSystem* eventSystem = CONTEXT->GetSystem<EventSystem>();
 		RendererSystem* renderer = CONTEXT->GetSystem<RendererSystem>();
@@ -121,18 +119,29 @@ namespace pe
 				eventSystem->PushEvent(EventType::ScaleRenderTargets);
 			}
 		}
-		
-		
-		if (SDL_GetMouseState(&x, &y) & SDL_BUTTON(SDL_BUTTON_RIGHT) && IsInsideRenderWindow(px, py))
+
+		int x, y;
+		if (SDL_GetMouseState(&x, &y) & SDL_BUTTON(SDL_BUTTON_RIGHT))
 		{
-			dx = static_cast<float>(x - px);
-			dy = static_cast<float>(y - py);
-			camera_main->Rotate(dx, dy);
-			WrapMouse(x, y);
+			bool skipFrame = false;
+			if (!SDL_GetRelativeMouseMode())
+			{
+				SDL_SetRelativeMouseMode(SDL_TRUE);
+				skipFrame = true;
+			}
+			SDL_GetRelativeMouseState(&x, &y);
+
+			if (!skipFrame)
+				camera_main->Rotate(static_cast<float>(x), static_cast<float>(y));
 		}
-		
-		px = x;
-		py = y;
+		else
+		{
+			if (SDL_GetRelativeMouseMode())
+			{
+				SDL_SetRelativeMouseMode(SDL_FALSE);
+				WrapMouse(x, y);
+			}
+		}
 		
 		if (io.KeysDown[SDL_SCANCODE_ESCAPE])
 		{
@@ -174,6 +183,7 @@ namespace pe
 		{
 			if (!isMinimized())
 			{
+				int w, h;
 				SDL_GL_GetDrawableSize(m_handle, &w, &h);
 				renderer->ResizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
 			}
@@ -188,22 +198,22 @@ namespace pe
 	{
 		const Rect2D& rect2D = CONTEXT->GetSystem<RendererSystem>()->GetRenderArea().scissor;
 
-		if (x <= rect2D.x + 15)
-		{
-			x = rect2D.x + rect2D.width - 15;
-		}
-		else if (x >= rect2D.x + rect2D.width - 15)
+		if (x < rect2D.x + 15)
 		{
 			x = rect2D.x + 15;
 		}
-		
-		if (y <= rect2D.y + 15)
+		else if (x > rect2D.x + rect2D.width - 15)
 		{
-			y = rect2D.y + rect2D.height - 15;
+			x = rect2D.x + rect2D.width - 15;
 		}
-		else if (y >= rect2D.y + rect2D.height - 15)
+		
+		if (y < rect2D.y + 15)
 		{
 			y = rect2D.y + 15;
+		}
+		else if (y > rect2D.y + rect2D.height - 15)
+		{
+			y = rect2D.y + rect2D.height - 15;
 		}
 		
 		SDL_WarpMouseInWindow(m_handle, x, y);
@@ -213,8 +223,8 @@ namespace pe
 	{
 		const Rect2D& rect2D = CONTEXT->GetSystem<RendererSystem>()->GetRenderArea().scissor;
 		
-		return x >= rect2D.x && y >= rect2D.y && x <= rect2D.x + rect2D.width &&
-		       y <= rect2D.y + rect2D.height;
+		return x > rect2D.x && y > rect2D.y && x < rect2D.x + rect2D.width &&
+		       y < rect2D.y + rect2D.height;
 	}
 	
 	bool Window::isMinimized()
