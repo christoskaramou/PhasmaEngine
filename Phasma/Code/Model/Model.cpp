@@ -30,7 +30,7 @@ SOFTWARE.
 #include <deque>
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
-#include "Renderer/RenderApi.h"
+#include "Renderer/Vulkan/Vulkan.h"
 #include "Core/Queue.h"
 
 #undef max
@@ -317,7 +317,10 @@ namespace pe
 			myPrimitive.loadTexture(MaterialType::Occlusion, folderPath, occlusionImage, document, resourceReader);
 			myPrimitive.loadTexture(MaterialType::Emissive, folderPath, emissiveImage, document, resourceReader);
 			
-			myPrimitive.name = baseColorImage->name;
+			if (baseColorImage)
+				myPrimitive.name = baseColorImage->name;
+			else
+				myPrimitive.name = "null";
 			
 			std::string accessorId;
 			primitive.TryGetAttributeAccessorId(glTF::ACCESSOR_POSITION, accessorId);
