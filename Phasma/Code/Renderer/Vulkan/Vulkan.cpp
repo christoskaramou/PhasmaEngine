@@ -424,17 +424,11 @@ namespace pe
 	
 	void VulkanContext::CreateFences(uint32_t fenceCount)
 	{
-		if (fenceCount == 0)
-			return;
-
 		std::vector<vk::Fence> _fences(fenceCount);
 		vk::FenceCreateInfo fi{ vk::FenceCreateFlagBits::eSignaled };
-		_fences[0] = device->createFence(fi);
 
-		for (uint32_t i = 1; i < fenceCount; i++)
-		{
-			_fences[i] = device->createFence(vk::FenceCreateInfo());
-		}
+		for (uint32_t i = 0; i < fenceCount; i++)
+			_fences[i] = device->createFence(fi);
 		
 		fences = make_sptr(_fences);
 		for (int i = 0; i < fences->size(); i++)

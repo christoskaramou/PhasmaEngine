@@ -102,7 +102,7 @@ namespace pe
 		AlphaBlend = 3
 	};
 
-	void Renderer::RecordDeferredCmds(const uint32_t& imageIndex)
+	void Renderer::RecordDeferredCmds(uint32_t imageIndex)
 	{
 		static GPUTimer gpuTimer[12]{};
 		
@@ -111,7 +111,6 @@ namespace pe
 		vk::CommandBuffer* vkHandle = &(*VULKAN.dynamicCmdBuffers)[imageIndex];
 		CommandBuffer* cmd = reinterpret_cast<CommandBuffer*>(vkHandle);
 		cmd->Begin();
-		// TODO: add more queries (times the swapchain images), so they are not overlapped from previous frame
 
 		gpuTimer[0].Start(vkHandle);
 		// SKYBOX
@@ -255,7 +254,7 @@ namespace pe
 		cmd->End();
 	}
 	
-	void Renderer::RecordShadowsCmds(const uint32_t& imageIndex)
+	void Renderer::RecordShadowsCmds(uint32_t imageIndex)
 	{
 		// Render Pass (shadows mapping) (outputs the depth image with the light POV)
 		
@@ -326,8 +325,7 @@ namespace pe
 		}
 	}
 	
-	void
-	Renderer::AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
+	void Renderer::AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
 	{
 		if (renderTargets.find(name) != renderTargets.end())
 			return;

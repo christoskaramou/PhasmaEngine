@@ -33,6 +33,7 @@ SOFTWARE.
 #include "Renderer/Compute.h"
 #include "Core/Timer.h"
 #include "Script/Script.h"
+#include "Renderer/CommandPool.h"
 
 #define IGNORE_SCRIPTS
 
@@ -94,7 +95,6 @@ namespace pe
 
 		std::map<std::string, Image>& GetRenderTargets() { return renderTargets; }
 
-		uint32_t previousImageIndex = 0;
 		std::map<std::string, Image> renderTargets {};
 	
 	protected:		
@@ -102,8 +102,8 @@ namespace pe
 		
 		void ComputeAnimations();
 		
-		void RecordDeferredCmds(const uint32_t& imageIndex);
+		void RecordDeferredCmds(uint32_t imageIndex);
 		
-		void RecordShadowsCmds(const uint32_t& imageIndex);
+		void RecordShadowsCmds(uint32_t imageIndex);
 	};
 }

@@ -43,37 +43,37 @@ int main(int argc, char* argv[])
 	Window* window = Window::Create();
 	VULKAN.Init(window->Handle()); // TODO: Remove this from here (was in Renderer)
 
-	context.CreateSystem<LightSystem>();
-	context.CreateSystem<RendererSystem>();
-	context.CreateSystem<PostProcessSystem>();
-	context.CreateSystem<CameraSystem>();
+	auto* cs = context.CreateSystem<CameraSystem>();
+	auto* ls = context.CreateSystem<LightSystem>();
+	auto* rs = context.CreateSystem<RendererSystem>();
+	auto* pps = context.CreateSystem<PostProcessSystem>();
 
 	context.InitSystems();
 
-	FrameTimer& frame_timer = FrameTimer::Instance();
+	FrameTimer& frameTimer = FrameTimer::Instance();
 
 	while (true)
 	{
-		frame_timer.Start();
+		frameTimer.Start();
 		
-		if (!window->ProcessEvents(frame_timer.delta))
+		if (!window->ProcessEvents(frameTimer.delta))
 			break;
 		
 		if (!window->isMinimized())
 		{
-			context.UpdateSystems(frame_timer.delta);
+			context.UpdateSystems(frameTimer.delta);
 
 			Queue<Launch::AsyncNoWait>::ExecuteRequests();
 			Queue<Launch::Async>::ExecuteRequests();
 			Queue<Launch::SyncDeferred>::ExecuteRequests();
 			Queue<Launch::AsyncDeferred>::ExecuteRequests();
-			frame_timer.timestamps[0] = static_cast<float>(frame_timer.Count());
+			frameTimer.timestamps[0] = static_cast<float>(frameTimer.Count());
 
 			context.DrawSystems();
 		}
 		
-		frame_timer.Delay(1.0 / static_cast<double>(GUI::fps) - frame_timer.Count());
-		frame_timer.Tick();
+		frameTimer.Delay(1.0 / static_cast<double>(GUI::fps) - frameTimer.Count());
+		frameTimer.Tick();
 	}
 
 	context.DestroySystems();

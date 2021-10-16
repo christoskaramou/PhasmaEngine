@@ -128,38 +128,25 @@ namespace pe
 
 	void RendererSystem::Draw()
 	{
+		static int frameIndex = 0;
 		auto& vCtx = *VulkanContext::Get();
 
-		static Timer timerFenceWait;
-		timerFenceWait.Start();
-		VULKAN.waitFences((*VULKAN.fences)[previousImageIndex]);
-		FrameTimer::Instance().timestamps[1] = timerFenceWait.Count();
-
-		static const vk::PipelineStageFlags waitStages[] = {
-				vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader
+		static const vk::PipelineStageFlags waitStages[] =
+		{
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::PipelineStageFlagBits::eFragmentShader
 		};
 
 		//FIRE_EVENT(Event::OnRender);
 
-		GUI::use_compute = true;
-		if (GUI::use_compute)
-		{
-			//auto mat = transformsCompute.copyOutput<mat4, AUTO>();
-			//mat[0][0] = 1.0f;
-			//mat4* matp = static_cast<mat4*>(transformsCompute.mapOutput());
-			//mat4* matp1;
-			//float f = (*matp)[0][0];
-		}
-
 		// acquire the image
-		auto& aquireSignalSemaphore = (*vCtx.semaphores)[0];
+		auto& aquireSignalSemaphore = (*vCtx.semaphores)[frameIndex];
 		const uint32_t imageIndex = vCtx.swapchain.Aquire(aquireSignalSemaphore, nullptr);
-		this->previousImageIndex = imageIndex;
 
-		//static Timer timer;
-		//timer.Start();
-		//vCtx.waitFences(vCtx.fences[imageIndex]);
-		//FrameTimer::Instance().timestamps[0] = timer.Count();
+		static Timer timer;
+		timer.Start();
+		vCtx.waitFences((*vCtx.fences)[imageIndex]);
+		FrameTimer::Instance().timestamps[0] = timer.Count();
 
 		const auto& cmd = (*vCtx.dynamicCmdBuffers)[imageIndex];
 
@@ -200,6 +187,10 @@ namespace pe
 		vCtx.unlockSubmits();
 
 		gui.RenderViewPorts();
+
+
+
+		frameIndex = (frameIndex + 1) % SWAPCHAIN_IMAGES;
 	}
 
 	void RendererSystem::Destroy()
