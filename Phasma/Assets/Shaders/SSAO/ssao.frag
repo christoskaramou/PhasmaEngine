@@ -43,7 +43,7 @@ const float bias = -0.001;
 void main() 
 {
 	// Get G-Buffer values
-	vec3 fragPos = getPosFromUV(inUV, texture(samplerDepth, inUV).x, pvm.invProjection);
+	vec3 fragPos = GetPosFromUV(inUV, texture(samplerDepth, inUV).x, pvm.invProjection);
 	vec4 normal = pvm.view * texture(samplerNormal, inUV);
 
 	// Get a random vector using a noise lookup
@@ -73,7 +73,7 @@ void main()
 		samplePosition.xy = samplePosition.xy * 0.5f + 0.5f;
 		
 		float currentDepth = newViewPos.z;
-		float sampledDepth = getPosFromUV(samplePosition.xy, texture(samplerDepth, samplePosition.xy).x, pvm.invProjection).z;
+		float sampledDepth = GetPosFromUV(samplePosition.xy, texture(samplerDepth, samplePosition.xy).x, pvm.invProjection).z;
 
 		// Range check
 

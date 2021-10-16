@@ -79,39 +79,130 @@ layout(set = 1, binding = 2) uniform sampler2DShadow sampler_shadow_map2;
 layout(set = 1, binding = 3) uniform shadow_buffer0 { mat4 cascades[3]; } sun;
 layout(set = 2, binding = 0) uniform samplerCube sampler_cube_map;
 
-vec3 compute_point_light(int lightIndex, Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao)
+vec2 poissonDisk[8] = vec2[](
+	vec2(0.493393f, 0.394269f),
+	vec2(0.798547f, 0.885922f),
+	vec2(0.247322f, 0.92645f),
+	vec2(0.0514542f, 0.140782f),
+	vec2(0.831843f, 0.00955229f),
+	vec2(0.428632f, 0.0171514f),
+	vec2(0.015656f, 0.749779f),
+	vec2(0.758385f, 0.49617f));
+
+vec3 DirectLight(Material material, vec3 worldPos, vec3 cameraPos, vec3 materialNormal, float ssao, float depth)
 {
-	vec3 light_dir_full = world_pos - ubo.pointLights[lightIndex].position.xyz;
-	float light_dist = max(0.1, length(light_dir_full));
-	if (light_dist > screenSpace.effects2.z) // max range
-		return vec3(0.0);
+	float lit = 1.0;
 
-	vec3 light_dir = normalize(-light_dir_full);
-	float attenuation = 1 / (light_dist * light_dist);
-	vec3 point_color = ubo.pointLights[lightIndex].color.xyz * attenuation;
-	point_color *= screenSpace.effects2.y * ssao; // intensity
+#if 0
+	if (pushConst.cast_shadows > 0.5)
+	{
+		lit = 0.0;
 
+		const float bias = 0.0007;
+
+		if (depth < pushConst.max_cascade_dist0)
+		{
+			//return vec3(1.0, 0.0, 0.0);
+
+			vec4 s_coords0 = sun.cascades[0] * vec4(world_pos, 1.0);
+			s_coords0 = s_coords0 / s_coords0.w;
+			s_coords0.xy = s_coords0.xy * 0.5 + 0.5;
+
+			for (int i = 0; i < 4; i++)
+			{
+				float cascade0 = texture(sampler_shadow_map0, vec3(s_coords0.xy + poissonDisk[i] * 0.0008, s_coords0.z + bias));
+				lit += 0.25 * cascade0;
+			}
+		}
+		else if (depth < pushConst.max_cascade_dist1)
+		{
+			//return vec3(0.0, 1.0, 0.0);
+
+			vec4 s_coords1 = sun.cascades[1] * vec4(world_pos, 1.0);
+			s_coords1 = s_coords1 / s_coords1.w;
+			s_coords1.xy = s_coords1.xy * 0.5 + 0.5;
+
+			for (int i = 0; i < 4; i++)
+			{
+				float cascade1 = texture(sampler_shadow_map1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias));
+				lit += 0.25 * cascade1;
+			}
+		}
+		else if (depth < pushConst.max_cascade_dist2)
+		{
+			//return vec3(0.0, 0.0, 1.0);
+
+			vec4 s_coords2 = sun.cascades[2] * vec4(world_pos, 1.0);
+			s_coords2 = s_coords2 / s_coords2.w;
+			s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
+
+			for (int i = 0; i < 4; i++)
+			{
+				float cascade2 = texture(sampler_shadow_map2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias));
+				lit += 0.25 * cascade2;
+			}
+		}
+	}
+#endif
 	float roughness = material.roughness * 0.75 + 0.25;
 
-	vec3 L = light_dir;
-	vec3 V = normalize(camera_pos - world_pos);
+	// Compute directional light.
+	vec3 lightDir = ubo.sun.direction.xyz;
+	vec3 L = lightDir;
+	vec3 V = normalize(cameraPos - worldPos);
 	vec3 H = normalize(V + L);
-	vec3 N = material_normal;
+	vec3 N = materialNormal;
 
 	float NoV = clamp(dot(N, V), 0.001, 1.0);
 	float NoL = clamp(dot(N, L), 0.001, 1.0);
 	float HoV = clamp(dot(H, V), 0.001, 1.0);
 	float LoV = clamp(dot(L, V), 0.001, 1.0);
 
-	vec3 F0 = compute_F0(material.albedo, material.metallic);
-	vec3 specular_fresnel = fresnel(F0, HoV);
-	vec3 specref = NoL * cook_torrance_specular(N, H, NoL, NoV, specular_fresnel, roughness);
-	vec3 diffref = NoL * (1.0 - specular_fresnel) * (1.0 / PI);
+	vec3 F0 = ComputeF0(material.albedo, material.metallic);
+	vec3 specularFresnel = Fresnel(F0, HoV);
+	vec3 specRef = ubo.sun.color.xyz * NoL * lit * CookTorranceSpecular(N, H, NoL, NoV, specularFresnel, roughness);
+	vec3 diffRef = ubo.sun.color.xyz * NoL * lit * (1.0 - specularFresnel) * (1.0 / PI);
 
-	vec3 reflected_light = specref;
-	vec3 diffuse_light = diffref * material.albedo * (1.0 - material.metallic);
+	vec3 reflectedLight = specRef;
+	vec3 diffuseLight = diffRef * material.albedo * (1.0 - material.metallic);
+	vec3 lighting = reflectedLight + diffuseLight;
 
-	vec3 res = point_color * (reflected_light + diffuse_light);
+	return lighting * ubo.sun.color.a;
+}
+
+vec3 ComputePointLight(int lightIndex, Material material, vec3 worldPos, vec3 cameraPos, vec3 materialNormal, float ssao)
+{
+	vec3 lightDirFull = worldPos - ubo.pointLights[lightIndex].position.xyz;
+	float lightDist = max(0.1, length(lightDirFull));
+	if (lightDist > screenSpace.effects2.z) // max range
+		return vec3(0.0);
+
+	vec3 lightDir = normalize(-lightDirFull);
+	float attenuation = 1 / (lightDist * lightDist);
+	vec3 pointColor = ubo.pointLights[lightIndex].color.xyz * attenuation;
+	pointColor *= screenSpace.effects2.y * ssao; // intensity
+
+	float roughness = material.roughness * 0.75 + 0.25;
+
+	vec3 L = lightDir;
+	vec3 V = normalize(cameraPos - worldPos);
+	vec3 H = normalize(V + L);
+	vec3 N = materialNormal;
+
+	float NoV = clamp(dot(N, V), 0.001, 1.0);
+	float NoL = clamp(dot(N, L), 0.001, 1.0);
+	float HoV = clamp(dot(H, V), 0.001, 1.0);
+	float LoV = clamp(dot(L, V), 0.001, 1.0);
+
+	vec3 F0 = ComputeF0(material.albedo, material.metallic);
+	vec3 specularFresnel = Fresnel(F0, HoV);
+	vec3 specRef = NoL * CookTorranceSpecular(N, H, NoL, NoV, specularFresnel, roughness);
+	vec3 diffRef = NoL * (1.0 - specularFresnel) * (1.0 / PI);
+
+	vec3 reflectedLight = specRef;
+	vec3 diffuseLight = diffRef * material.albedo * (1.0 - material.metallic);
+
+	vec3 res = pointColor * (reflectedLight + diffuseLight);
 
 	return res;
 }
@@ -198,9 +289,9 @@ IBL ImageBasedLighting(Material material, float3 normal, float3 camera_to_pixel,
 // Reference for volumetric lighting:
 // https://github.com/PanosK92/SpartanEngine/blob/master/Data/shaders/VolumetricLighting.hlsl
 
-vec3 Dither_Valve(vec2 screen_pos)
+vec3 DitherValve(vec2 screenPos)
 {
-	float _dot = dot(vec2(171.0, 231.0), screen_pos);
+	float _dot = dot(vec2(171.0, 231.0), screenPos);
     vec3 dither = vec3(_dot, _dot, _dot);
     dither = fract(dither / vec3(103.0, 71.0, 97.0));
     
@@ -211,53 +302,53 @@ vec3 Dither_Valve(vec2 screen_pos)
 float3 Dither(float2 uv)
 {
 	int2 texDim = textureSize(sampler_albedo, 0);
-	float2 screen_pos = uv * float2(float(texDim.x), float(texDim.y));
+	float2 screenPos = uv * float2(float(texDim.x), float(texDim.y));
 
 	// bit-depth of display. Normally 8 but some LCD monitors are 7 or even 6-bit.
-	float dither_bit = 8.0; 
+	float ditherBit = 8.0; 
 	
 	// compute grid position
-	float grid_position = frac(dot(screen_pos.xy - float2(0.5, 0.5), float2(1.0/16.0,10.0/36.0) + 0.25));
+	float gridPosition = frac(dot(screenPos.xy - float2(0.5, 0.5), float2(1.0/16.0,10.0/36.0) + 0.25));
 	
 	// compute how big the shift should be
-	float dither_shift = (0.25) * (1.0 / (pow(2.0, dither_bit) - 1.0));
+	float ditherShift = (0.25) * (1.0 / (pow(2.0, ditherBit) - 1.0));
 	
 	// shift the individual colors differently, thus making it even harder to see the dithering pattern
-	//float3 dither_shift_RGB = float3(dither_shift, -dither_shift, dither_shift); //subpixel dithering (chromatic)
-	float3 dither_shift_RGB = float3(dither_shift, dither_shift, dither_shift); //non-chromatic dithering
+	//float3 ditherShiftRGB = float3(ditherShift, -ditherShift, ditherShift); //subpixel dithering (chromatic)
+	float3 ditherShiftRGB = float3(ditherShift, ditherShift, ditherShift); //non-chromatic dithering
 	
 	// modify shift acording to grid position.
-	dither_shift_RGB = lerp(2.0 * dither_shift_RGB, -2.0 * dither_shift_RGB, grid_position); //shift acording to grid position.
+	ditherShiftRGB = lerp(2.0 * ditherShiftRGB, -2.0 * ditherShiftRGB, gridPosition); //shift acording to grid position.
 	
 	// return dither shift
-	return 0.5/255.0 + dither_shift_RGB; 
+	return 0.5/255.0 + ditherShiftRGB;
 }
 
 // Mie scattering approximated with Henyey-Greenstein phase function.
-float ComputeScattering(float dir_dot_l)
+float ComputeScattering(float dirDotL)
 {
 	float scattering = 0.95f;
 	float result = 1.0f - scattering * scattering;
-	float e = abs(1.0f + scattering * scattering - (2.0f * scattering) * dir_dot_l);
+	float e = abs(1.0f + scattering * scattering - (2.0f * scattering) * dirDotL);
 	result /= pow(e, 0.1f);
 	return result;
 }
 
-vec3 VolumetricLighting(DirectionalLight light, vec3 pos_world, vec2 uv, mat4 lightViewProj, float fog_factor)
+vec3 VolumetricLighting(DirectionalLight light, vec3 worldPos, vec2 uv, mat4 lightViewProj, float fogFactor)
 {
 	float iterations = screenSpace.effects1.z;
 
-	vec3 pixel_to_camera 			= ubo.camPos.xyz - pos_world;
-	float pixel_to_camera_length 	= length(pixel_to_camera);
-	vec3 ray_dir					= pixel_to_camera / pixel_to_camera_length;
-	float step_length 				= pixel_to_camera_length / iterations;
-	vec3 ray_step 					= ray_dir * step_length;
-	vec3 ray_pos 					= pos_world;
+	vec3 pixelToCamera 			= ubo.camPos.xyz - worldPos;
+	float pixelToCameraLength 	= length(pixelToCamera);
+	vec3 rayDir					= pixelToCamera / pixelToCameraLength;
+	float stepLength 				= pixelToCameraLength / iterations;
+	vec3 rayStep 					= rayDir * stepLength;
+	vec3 rayPos 					= worldPos;
 
 	// Apply dithering as it will allows us to get away with a crazy low sample count ;-)
 	ivec2 texDim = textureSize(sampler_albedo, 0);
-	vec3 dither_value = Dither(uv * vec2(float(texDim.x), float(texDim.y))) * screenSpace.effects1.w; // dithering strength 400 default
-	ray_pos += ray_step * dither_value;
+	vec3 ditherValue = Dither(uv * vec2(float(texDim.x), float(texDim.y))) * screenSpace.effects1.w; // dithering strength 400 default
+	rayPos += rayStep * ditherValue;
 
 
 	// screenSpace.effects2.w -> fog height position
@@ -268,23 +359,23 @@ vec3 VolumetricLighting(DirectionalLight light, vec3 pos_world, vec2 uv, mat4 li
 	for (int i = 0; i < iterations; i++)
 	{
 		// Compute position in light space
-		vec4 pos_light = lightViewProj * vec4(ray_pos, 1.0f);
-		pos_light /= pos_light.w;
+		vec4 posLight = lightViewProj * vec4(rayPos, 1.0f);
+		posLight /= posLight.w;
 		
 		// Compute ray uv
-		vec2 ray_uv = pos_light.xy * vec2(0.5f, 0.5f) + 0.5f;
+		vec2 rayUV = posLight.xy * vec2(0.5f, 0.5f) + 0.5f;
 		
 		// Check to see if the light can "see" the pixel		
-		float depth_delta = texture(sampler_shadow_map1, vec3(ray_uv, pos_light.z)).r;
-		if (depth_delta > 0.0f)
+		float depthDelta = texture(sampler_shadow_map1, vec3(rayUV, posLight.z)).r;
+		if (depthDelta > 0.0f)
 		{
-			volumetricFactor += ComputeScattering(dot(ray_dir, light.direction.xyz));
+			volumetricFactor += ComputeScattering(dot(rayDir, light.direction.xyz));
 		}
-		ray_pos += ray_step;
+		rayPos += rayStep;
 	}
 	volumetricFactor /= iterations;
 
-	return volumetricFactor * light.color.xyz * light.color.a * fog_factor * 10.0;
+	return volumetricFactor * light.color.xyz * light.color.a * fogFactor * 10.0;
 }
 // ----------------------------------------------------
 

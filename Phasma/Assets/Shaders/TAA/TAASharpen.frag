@@ -34,5 +34,5 @@ layout (location = 0) out vec4 outColor;
 
 void main()
 {
-	outColor = vec4(LumaSharpen(taa, inUV, ubo.sharp_values.x, ubo.sharp_values.y, ubo.sharp_values.z), texture(taa, inUV).a);
+	outColor = vec4(SharpenLuma(taa, inUV, ubo.sharp_values.x, ubo.sharp_values.y, ubo.sharp_values.z), texture(taa, inUV).a);
 }

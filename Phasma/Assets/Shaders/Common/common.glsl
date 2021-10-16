@@ -38,8 +38,8 @@ SOFTWARE.
 #define int3 ivec3
 #define int4 ivec4
 
-bool is_saturated(float x) 	{ return x == saturate(x); }
-bool is_saturated(vec2 x) { return is_saturated(x.x) && is_saturated(x.y); }
+bool IsSaturated(float x) 	{ return x == saturate(x); }
+bool IsSaturated(vec2 x) { return IsSaturated(x.x) && IsSaturated(x.y); }
 
 // [0.0, 1.0]
 float PDnrand(vec2 n)
@@ -56,7 +56,7 @@ float PDsrand(vec2 n)
 
 // inverse_projection gives view space
 // inverse_view_projection gives world space
-vec3 getPosFromUV(vec2 UV, float depth, mat4 mat)
+vec3 GetPosFromUV(vec2 UV, float depth, mat4 mat)
 {
 	vec4 ndcPos;
 	ndcPos.xy = UV * 2.0 - 1.0;
@@ -69,7 +69,7 @@ vec3 getPosFromUV(vec2 UV, float depth, mat4 mat)
 
 // Find the normal for this fragment, pulling either from a predefined normal map
 // or from the interpolated mesh normal and tangent attributes.
-vec3 getNormal(vec3 positionWS, sampler2D normalMap, vec3 inNormal, vec2 inUV)
+vec3 GetNormal(vec3 positionWS, sampler2D normalMap, vec3 inNormal, vec2 inUV)
 {
 	// Perturb normal, see http://www.thetenthplanet.de/archives/1180
 	vec3 tangentNormal = texture(normalMap, inUV).xyz * 2.0f - 1.0f;
@@ -88,7 +88,7 @@ vec3 getNormal(vec3 positionWS, sampler2D normalMap, vec3 inNormal, vec2 inUV)
 }
 
 // Return average velocity
-vec3 dilate_Average(sampler2D samplerVelocity, vec2 texCoord)
+vec3 DilateAverage(sampler2D samplerVelocity, vec2 texCoord)
 {
 	ivec2 texDim = textureSize(samplerVelocity, 0);
 	float dx = 2.0f * float(texDim.x);
@@ -104,7 +104,7 @@ vec3 dilate_Average(sampler2D samplerVelocity, vec2 texCoord)
 }
 
 // Returns velocity with closest depth
-vec3 dilate_Depth3X3(sampler2D samplerVelocity, sampler2D samplerDepth, vec2 texCoord)
+vec3 DilateDepth3X3(sampler2D samplerVelocity, sampler2D samplerDepth, vec2 texCoord)
 {
 	ivec2 texDim = textureSize(samplerDepth, 0);
 	vec2 texelSize = 1.0 / vec2(float(texDim.x), float(texDim.y));
@@ -134,7 +134,7 @@ float Luminance(vec3 color)
 	return dot(color, HDR);
 }
 
-vec3 sharpenSimple(sampler2D tex, vec2 UV)
+vec3 SharpenSimple(sampler2D tex, vec2 UV)
 {
 	ivec2 texDim = textureSize(tex, 0);
 	vec2 texelSize = 1.0 / vec2(float(texDim.x), float(texDim.y));
@@ -150,7 +150,7 @@ vec3 sharpenSimple(sampler2D tex, vec2 UV)
 	return sum;
 }
 
-vec3 LumaSharpen(sampler2D tex, vec2 UV, float sharp_strength, float sharp_clamp, float offset_bias)
+vec3 SharpenLuma(sampler2D tex, vec2 UV, float sharp_strength, float sharp_clamp, float offset_bias)
 {
 	/*
 		LumaSharpen 1.4.1
@@ -207,11 +207,11 @@ vec3 LumaSharpen(sampler2D tex, vec2 UV, float sharp_strength, float sharp_clamp
 	return clamp(colorInput, 0.0f, 1.0f).rgb;
 }
 
-float mip_map_level(vec2 texture_coordinate) // in texel units
+float MipMapLevel(vec2 texture_coordinate) // in texel units
 {
-    vec2  dx_vtc        = dFdx(texture_coordinate);
-    vec2  dy_vtc        = dFdy(texture_coordinate);
-    float delta_max_sqr = max(dot(dx_vtc, dx_vtc), dot(dy_vtc, dy_vtc));
+    vec2  dxVtc        = dFdx(texture_coordinate);
+    vec2  dyVtc        = dFdy(texture_coordinate);
+    float delta_max_sqr = max(dot(dxVtc, dxVtc), dot(dyVtc, dyVtc));
     float mml = 0.5 * log2(delta_max_sqr);
     return max( 0, mml);
 }

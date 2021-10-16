@@ -54,7 +54,7 @@ void main() {
 	vec3 emissive = texture(eSampler, inUV).xyz;
 	float ao = texture(oSampler, inUV).r;
 
-	outNormal = getNormal(positionWS.xyz, nSampler, inNormal, inUV);
+	outNormal = GetNormal(positionWS.xyz, nSampler, inNormal, inUV);
 	outAlbedo = vec4(basicColor.xyz * ao, basicColor.a) * baseColorFactor;
 	outMetRough = vec3(0.0, metRough.y, metRough.z);
 	outVelocity = (positionCS.xy / positionCS.w - previousPositionCS.xy / previousPositionCS.w) * vec2(0.5f, 0.5f); // ndc space

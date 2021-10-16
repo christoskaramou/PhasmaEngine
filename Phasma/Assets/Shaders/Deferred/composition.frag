@@ -28,8 +28,6 @@ SOFTWARE.
 layout (location = 0) in vec2 in_UV;
 layout (location = 0) out vec4 outColor;
 
-vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao, float depth);
-
 void main() 
 {
 	float depth = texture(sampler_depth, in_UV).x;
@@ -38,7 +36,7 @@ void main()
 	if (depth == 0.0)
 	{
 		// Skybox
-		vec3 wolrdPos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
+		vec3 wolrdPos = GetPosFromUV(in_UV, depth, screenSpace.invViewProj);
 		vec3 samplePos = normalize(wolrdPos - ubo.camPos.xyz);
 		samplePos.xy *= -1.0f; // the final image is blitted to the swapchain with -x and -y
 		outColor = vec4(texture(sampler_cube_map, samplePos).xyz, 1.0);
@@ -76,7 +74,7 @@ void main()
 		return;
 	}
 
-	vec3 wolrdPos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
+	vec3 wolrdPos = GetPosFromUV(in_UV, depth, screenSpace.invViewProj);
 	vec3 normal = texture(sampler_normal, in_UV).xyz;
 	vec3 metRough = texture(sampler_met_rough, in_UV).xyz;
 	vec4 albedo = texture(sampler_albedo, in_UV);
@@ -88,10 +86,10 @@ void main()
 	material.F0 = mix(vec3(0.04f), material.albedo, material.metallic);
 
 	// Ambient
-	float factor_occlusion = screenSpace.effects0.x > 0.5 ? texture(sampler_ssao_blur, in_UV).x : 1.0;
-	float factor_sky_light = clamp(ubo.sun.color.a, 0.025f, 1.0f);
-	factor_sky_light *= screenSpace.effects3.z > 0.5 ? 0.25 : 0.15;
-	float ambient_light = factor_sky_light * factor_occlusion;
+	float factorOcclusion = screenSpace.effects0.x > 0.5 ? texture(sampler_ssao_blur, in_UV).x : 1.0;
+	float factorSkyLight = clamp(ubo.sun.color.a, 0.025f, 1.0f);
+	factorSkyLight *= screenSpace.effects3.z > 0.5 ? 0.25 : 0.15;
+	float ambientLight = factorSkyLight * factorOcclusion;
 	vec3 fragColor = vec3(0.0);// 0.1 * material.albedo.xyz;
 
 	// IBL
@@ -99,15 +97,15 @@ void main()
 	ibl.reflectivity = vec3(0.5);
 	if (screenSpace.effects1.x > 0.5) {
 		ibl = ImageBasedLighting(material, normal, normalize(wolrdPos - ubo.camPos.xyz), sampler_cube_map, sampler_lut_IBL);
-		fragColor += ibl.final_color * ambient_light;
+		fragColor += ibl.final_color * ambientLight;
 	}
 
 	// screenSpace.effects3.z -> shadow cast
 	if (screenSpace.effects3.z > 0.5)
-		fragColor += directLight(material, wolrdPos, ubo.camPos.xyz, normal, factor_occlusion, length(wolrdPos - ubo.camPos.xyz));
+		fragColor += DirectLight(material, wolrdPos, ubo.camPos.xyz, normal, factorOcclusion, length(wolrdPos - ubo.camPos.xyz));
 
 	for(int i = 0; i < MAX_POINT_LIGHTS; ++i)
-		fragColor += compute_point_light(i, material, wolrdPos, ubo.camPos.xyz, normal, factor_occlusion);
+		fragColor += ComputePointLight(i, material, wolrdPos, ubo.camPos.xyz, normal, factorOcclusion);
 
 	outColor = vec4(fragColor, albedo.a) + texture(sampler_emission, in_UV);
 
@@ -149,95 +147,4 @@ void main()
 		if (screenSpace.effects1.y > 0.5)
 			outColor.xyz += VolumetricLighting(ubo.sun, wolrdPos, in_UV, sun.cascades[1], fogFactor);
 	}
-}
-
-vec2 poissonDisk[8] = vec2[](
-	vec2(0.493393f, 0.394269f),
-	vec2(0.798547f, 0.885922f),
-	vec2(0.247322f, 0.92645f),
-	vec2(0.0514542f, 0.140782f),
-	vec2(0.831843f, 0.00955229f),
-	vec2(0.428632f, 0.0171514f),
-	vec2(0.015656f, 0.749779f),
-	vec2(0.758385f, 0.49617f));
-
-vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 material_normal, float ssao, float depth)
-{
-	float lit = 1.0;
-
-#if 0
-	if (pushConst.cast_shadows > 0.5)
-	{
-		lit = 0.0;
-
-		const float bias = 0.0007;
-
-		if (depth < pushConst.max_cascade_dist0)
-		{
-			//return vec3(1.0, 0.0, 0.0);
-
-			vec4 s_coords0 = sun.cascades[0] * vec4(world_pos, 1.0);
-			s_coords0 = s_coords0 / s_coords0.w;
-			s_coords0.xy = s_coords0.xy * 0.5 + 0.5;
-
-			for (int i = 0; i < 4; i++)
-			{
-				float cascade0 = texture(sampler_shadow_map0, vec3(s_coords0.xy + poissonDisk[i] * 0.0008, s_coords0.z + bias));
-				lit += 0.25 * cascade0;
-			}
-		}
-		else if (depth < pushConst.max_cascade_dist1)
-		{
-			//return vec3(0.0, 1.0, 0.0);
-
-			vec4 s_coords1 = sun.cascades[1] * vec4(world_pos, 1.0);
-			s_coords1 = s_coords1 / s_coords1.w;
-			s_coords1.xy = s_coords1.xy * 0.5 + 0.5;
-
-			for (int i = 0; i < 4; i++)
-			{
-				float cascade1 = texture(sampler_shadow_map1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias));
-				lit += 0.25 * cascade1;
-			}
-		}
-		else if (depth < pushConst.max_cascade_dist2)
-		{
-			//return vec3(0.0, 0.0, 1.0);
-
-			vec4 s_coords2 = sun.cascades[2] * vec4(world_pos, 1.0);
-			s_coords2 = s_coords2 / s_coords2.w;
-			s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
-
-			for (int i = 0; i < 4; i++)
-			{
-				float cascade2 = texture(sampler_shadow_map2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias));
-				lit += 0.25 * cascade2;
-			}
-		}
-	}
-#endif
-	float roughness = material.roughness * 0.75 + 0.25;
-
-	// Compute directional light.
-	vec3 light_dir = ubo.sun.direction.xyz;
-	vec3 L = light_dir;
-	vec3 V = normalize(camera_pos - world_pos);
-	vec3 H = normalize(V + L);
-	vec3 N = material_normal;
-
-	float NoV = clamp(dot(N, V), 0.001, 1.0);
-	float NoL = clamp(dot(N, L), 0.001, 1.0);
-	float HoV = clamp(dot(H, V), 0.001, 1.0);
-	float LoV = clamp(dot(L, V), 0.001, 1.0);
-
-	vec3 F0 = compute_F0(material.albedo, material.metallic);
-	vec3 specular_fresnel = fresnel(F0, HoV);
-	vec3 specref = ubo.sun.color.xyz * NoL * lit * cook_torrance_specular(N, H, NoL, NoV, specular_fresnel, roughness);
-	vec3 diffref = ubo.sun.color.xyz * NoL * lit * (1.0 - specular_fresnel) * (1.0 / PI);
-
-	vec3 reflected_light = specref;
-	vec3 diffuse_light = diffref * material.albedo * (1.0 - material.metallic);
-	vec3 lighting = reflected_light + diffuse_light;
-
-	return lighting * ubo.sun.color.a;
 }

@@ -48,7 +48,7 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal);
 
 void main()
 {
-	vec3 position = getPosFromUV(inUV, texture(depthSampler, inUV).x, ubo.invProj);
+	vec3 position = GetPosFromUV(inUV, texture(depthSampler, inUV).x, ubo.invProj);
 	vec4 normal = ubo.view * vec4(texture(normalSampler, inUV).xyz, 0.0);
 
 	outColor = vec4(ScreenSpaceReflections(position, normalize(normal.xyz)) , 1.0);
@@ -80,7 +80,7 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal)
 		}
 
 		float currentDepth = abs(newViewPos.z);
-		float sampledDepth = abs(getPosFromUV(samplePosition.xy, texture(depthSampler, samplePosition.xy).x, ubo.invProj).z);
+		float sampledDepth = abs(GetPosFromUV(samplePosition.xy, texture(depthSampler, samplePosition.xy).x, ubo.invProj).z);
 
 		float delta = abs(currentDepth - sampledDepth);
 		if(delta < 0.01f)

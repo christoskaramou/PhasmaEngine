@@ -41,7 +41,7 @@ const int max_samples = 16;
 void main() 
 {
 	vec2 UV = inUV;
-	vec2 velocity = dilate_Depth3X3(velocitySampler, depthSampler, UV).xy;
+	vec2 velocity = DilateDepth3X3(velocitySampler, depthSampler, UV).xy;
 	velocity *= pushConst.values.z; // strength 
 	
 	if (length2(velocity) < FLT_EPS){
@@ -60,7 +60,7 @@ void main()
 	UV += velocity * 0.5; // make samples centered from (UV+velocity/2) to (UV-velocity/2) instead of (UV) to (UV-velocity)
 	for (int i = 0; i < max_samples; i++, UV -= step)
 	{
-		if (!is_saturated(UV))
+		if (!IsSaturated(UV))
 		{
 			continue;
 		}
