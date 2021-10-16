@@ -38,8 +38,8 @@ void main()
 	if (depth == 0.0)
 	{
 		// Skybox
-		vec3 frag_pos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
-		vec3 samplePos = normalize(frag_pos - ubo.camPos.xyz);
+		vec3 wolrdPos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
+		vec3 samplePos = normalize(wolrdPos - ubo.camPos.xyz);
 		samplePos.xy *= -1.0f; // the final image is blitted to the swapchain with -x and -y
 		outColor = vec4(texture(sampler_cube_map, samplePos).xyz, 1.0);
 		
@@ -53,14 +53,14 @@ void main()
 
 			float fogNear = 0.5;
 			float fogFar = 1000.0;
-			float depth = length(frag_pos - ubo.camPos.xyz);
+			float depth = length(wolrdPos - ubo.camPos.xyz);
 			float groundHeightMin = -100.0;
 			float groundHeightMax = screenSpace.effects2.w * 20.0;
 			float globalThickness = 1.0;
 			float groundThickness = 2.0;
 
 			float depthFactor = clamp(1.0 - (fogFar - depth) / (fogFar - fogNear), 0.0, 1.0);
-			float heightFactor = clamp(1.0 - (frag_pos.y - groundHeightMin) / (groundHeightMax - groundHeightMin), 0.0, 1.0);
+			float heightFactor = clamp(1.0 - (wolrdPos.y - groundHeightMin) / (groundHeightMax - groundHeightMin), 0.0, 1.0);
 			float globalFactor = depthFactor * globalThickness;
 			float noiseFactor = 1.0; // texture(NoiseMap, position.xz).x;
 			float groundFactor = heightFactor * depthFactor * noiseFactor * groundThickness;
@@ -70,13 +70,13 @@ void main()
 
 			// Volumetric light
 			if (screenSpace.effects1.y > 0.5)
-				outColor.xyz += VolumetricLighting(ubo.sun, frag_pos, in_UV, sun.cascades[1], fogFactor);
+				outColor.xyz += VolumetricLighting(ubo.sun, wolrdPos, in_UV, sun.cascades[1], fogFactor);
 		}
 
 		return;
 	}
 
-	vec3 frag_pos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
+	vec3 wolrdPos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
 	vec3 normal = texture(sampler_normal, in_UV).xyz;
 	vec3 metRough = texture(sampler_met_rough, in_UV).xyz;
 	vec4 albedo = texture(sampler_albedo, in_UV);
@@ -98,16 +98,16 @@ void main()
 	IBL ibl;
 	ibl.reflectivity = vec3(0.5);
 	if (screenSpace.effects1.x > 0.5) {
-		ibl = ImageBasedLighting(material, normal, normalize(frag_pos - ubo.camPos.xyz), sampler_cube_map, sampler_lut_IBL);
+		ibl = ImageBasedLighting(material, normal, normalize(wolrdPos - ubo.camPos.xyz), sampler_cube_map, sampler_lut_IBL);
 		fragColor += ibl.final_color * ambient_light;
 	}
 
 	// screenSpace.effects3.z -> shadow cast
 	if (screenSpace.effects3.z > 0.5)
-		fragColor += directLight(material, frag_pos, ubo.camPos.xyz, normal, factor_occlusion, length(frag_pos - ubo.camPos.xyz));
+		fragColor += directLight(material, wolrdPos, ubo.camPos.xyz, normal, factor_occlusion, length(wolrdPos - ubo.camPos.xyz));
 
 	for(int i = 0; i < MAX_POINT_LIGHTS; ++i)
-		fragColor += compute_point_light(i, material, frag_pos, ubo.camPos.xyz, normal, factor_occlusion);
+		fragColor += compute_point_light(i, material, wolrdPos, ubo.camPos.xyz, normal, factor_occlusion);
 
 	outColor = vec4(fragColor, albedo.a) + texture(sampler_emission, in_UV);
 
@@ -130,14 +130,14 @@ void main()
 		
 		float fogNear = 0.5;
 		float fogFar = 1000.0;
-		float depth = length(frag_pos - ubo.camPos.xyz);
+		float depth = length(wolrdPos - ubo.camPos.xyz);
 		float groundHeightMin = -2.0;
 		float groundHeightMax = screenSpace.effects2.w;
 		float globalThickness = screenSpace.effects2.x;
 		float groundThickness = screenSpace.effects3.x;
 
 		float depthFactor = clamp(1.0 - (fogFar - depth) / (fogFar - fogNear), 0.0, 1.0);
-		float heightFactor = clamp(1.0 - (frag_pos.y - groundHeightMin) / (groundHeightMax - groundHeightMin), 0.0, 1.0);
+		float heightFactor = clamp(1.0 - (wolrdPos.y - groundHeightMin) / (groundHeightMax - groundHeightMin), 0.0, 1.0);
 		float globalFactor = depthFactor * globalThickness;
 		float noiseFactor = 1.0; // texture(NoiseMap, position.xz).x;
 		float groundFactor = heightFactor * depthFactor * noiseFactor * groundThickness;
@@ -147,7 +147,7 @@ void main()
 
 		// Volumetric light
 		if (screenSpace.effects1.y > 0.5)
-			outColor.xyz += VolumetricLighting(ubo.sun, frag_pos, in_UV, sun.cascades[1], fogFactor);
+			outColor.xyz += VolumetricLighting(ubo.sun, wolrdPos, in_UV, sun.cascades[1], fogFactor);
 	}
 }
 
@@ -165,7 +165,8 @@ vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 materi
 {
 	float lit = 1.0;
 
-	if (1 != 0)//(pushConst.cast_shadows > 0.5)
+#if 0
+	if (pushConst.cast_shadows > 0.5)
 	{
 		lit = 0.0;
 
@@ -214,7 +215,7 @@ vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 materi
 			}
 		}
 	}
-
+#endif
 	float roughness = material.roughness * 0.75 + 0.25;
 
 	// Compute directional light.
