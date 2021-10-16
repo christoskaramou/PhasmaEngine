@@ -31,7 +31,6 @@ SOFTWARE.
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
 #include "Renderer/Vulkan/Vulkan.h"
-#include "Renderer/RenderApi.h"
 #include "Core/Queue.h"
 
 #undef max

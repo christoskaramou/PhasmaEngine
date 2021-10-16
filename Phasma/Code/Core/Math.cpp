@@ -23,6 +23,7 @@ SOFTWARE.
 #include "Math.h"
 #include <cassert>
 #include <chrono>
+#include "Core/Settings.h"
 
 namespace pe
 {
@@ -443,7 +444,7 @@ namespace pe
 		return &x;
 	}
 	
-	mat4::mat4() : m_v {
+	mat4::mat4() : m_v{
 			vec4(0.f, 0.f, 0.f, 0.f),
 			vec4(0.f, 0.f, 0.f, 0.f),
 			vec4(0.f, 0.f, 0.f, 0.f),
@@ -451,7 +452,7 @@ namespace pe
 	}
 	{}
 	
-	mat4::mat4(cfloat diagonal) : m_v {
+	mat4::mat4(cfloat diagonal) : m_v{
 			vec4(diagonal, 0.f, 0.f, 0.f),
 			vec4(0.f, diagonal, 0.f, 0.f),
 			vec4(0.f, 0.f, diagonal, 0.f),
@@ -459,7 +460,7 @@ namespace pe
 	}
 	{}
 	
-	mat4::mat4(cfloat* m) : m_v {
+	mat4::mat4(cfloat* m) : m_v{
 			vec4(m[0], m[1], m[2], m[3]),
 			vec4(m[4], m[5], m[6], m[7]),
 			vec4(m[8], m[9], m[10], m[11]),
@@ -470,7 +471,7 @@ namespace pe
 	mat4::mat4(cmat4& m) : m_v { m.m_v[0], m.m_v[1], m.m_v[2], m.m_v[3] }
 	{}
 	
-	mat4::mat4(cmat4* m) : m_v {
+	mat4::mat4(cmat4* m) : m_v{
 			m->m_v[0],
 			m->m_v[1],
 			m->m_v[2],
@@ -560,9 +561,9 @@ namespace pe
 		cfloat zSign = m_v[2].x * m_v[2].y * m_v[2].z * m_v[2].w < 0.f ? -1.f : 1.f;
 		
 		return vec3(
-				xSign * length(vec3(m_v[0])),
-				ySign * length(vec3(m_v[1])),
-				zSign * length(vec3(m_v[2]))
+			xSign * length(vec3(m_v[0])),
+			ySign * length(vec3(m_v[1])),
+			zSign * length(vec3(m_v[2]))
 		);
 	}
 	
@@ -573,12 +574,11 @@ namespace pe
 			return quat::identity();
 		
 		return quat(
-				mat4(
-						m_v[0].x / s.x, m_v[0].y / s.x, m_v[0].z / s.x, 0.f,
-						m_v[1].x / s.y, m_v[1].y / s.y, m_v[1].z / s.y, 0.f,
-						m_v[2].x / s.z, m_v[2].y / s.z, m_v[2].z / s.z, 0.f,
-						0.f, 0.f, 0.f, 1.f
-				)
+			mat4(
+				m_v[0].x / s.x, m_v[0].y / s.x, m_v[0].z / s.x, 0.f,
+				m_v[1].x / s.y, m_v[1].y / s.y, m_v[1].z / s.y, 0.f,
+				m_v[2].x / s.z, m_v[2].y / s.z, m_v[2].z / s.z, 0.f,
+				0.f, 0.f, 0.f, 1.f)
 		);
 	}
 	
@@ -593,39 +593,39 @@ namespace pe
 	mat4 mat4::operator*(cmat4& m) const
 	{
 		return mat4(
-				m_v[0] * m.m_v[0].x + m_v[1] * m.m_v[0].y + m_v[2] * m.m_v[0].z + m_v[3] * m.m_v[0].w,
-				m_v[0] * m.m_v[1].x + m_v[1] * m.m_v[1].y + m_v[2] * m.m_v[1].z + m_v[3] * m.m_v[1].w,
-				m_v[0] * m.m_v[2].x + m_v[1] * m.m_v[2].y + m_v[2] * m.m_v[2].z + m_v[3] * m.m_v[2].w,
-				m_v[0] * m.m_v[3].x + m_v[1] * m.m_v[3].y + m_v[2] * m.m_v[3].z + m_v[3] * m.m_v[3].w
+			m_v[0] * m.m_v[0].x + m_v[1] * m.m_v[0].y + m_v[2] * m.m_v[0].z + m_v[3] * m.m_v[0].w,
+			m_v[0] * m.m_v[1].x + m_v[1] * m.m_v[1].y + m_v[2] * m.m_v[1].z + m_v[3] * m.m_v[1].w,
+			m_v[0] * m.m_v[2].x + m_v[1] * m.m_v[2].y + m_v[2] * m.m_v[2].z + m_v[3] * m.m_v[2].w,
+			m_v[0] * m.m_v[3].x + m_v[1] * m.m_v[3].y + m_v[2] * m.m_v[3].z + m_v[3] * m.m_v[3].w
 		);
 	}
 	
 	vec4 mat4::operator*(cvec4& v) const
 	{
 		return
-				m_v[0] * vec4(v.x) +
-				m_v[1] * vec4(v.y) +
-				m_v[2] * vec4(v.z) +
-				m_v[3] * vec4(v.w);
+			m_v[0] * vec4(v.x) +
+			m_v[1] * vec4(v.y) +
+			m_v[2] * vec4(v.z) +
+			m_v[3] * vec4(v.w);
 	}
 	
 	mat4 mat4::operator*(cfloat scalar) const
 	{
 		return mat4(
-				m_v[0] * scalar,
-				m_v[1] * scalar,
-				m_v[2] * scalar,
-				m_v[3] * scalar
+			m_v[0] * scalar,
+			m_v[1] * scalar,
+			m_v[2] * scalar,
+			m_v[3] * scalar
 		);
 	}
 	
 	bool mat4::operator==(cfloat* m) const
 	{
 		return
-				m_v[0].x == m[0] && m_v[0].y == m[1] && m_v[0].z == m[2] && m_v[0].w == m[3] &&
-				m_v[1].x == m[4] && m_v[1].y == m[5] && m_v[1].z == m[6] && m_v[1].w == m[7] &&
-				m_v[2].x == m[8] && m_v[2].y == m[9] && m_v[2].z == m[10] && m_v[2].w == m[11] &&
-				m_v[3].x == m[12] && m_v[3].y == m[13] && m_v[3].z == m[14] && m_v[3].w == m[15];
+			m_v[0].x == m[0] && m_v[0].y == m[1] && m_v[0].z == m[2] && m_v[0].w == m[3] &&
+			m_v[1].x == m[4] && m_v[1].y == m[5] && m_v[1].z == m[6] && m_v[1].w == m[7] &&
+			m_v[2].x == m[8] && m_v[2].y == m[9] && m_v[2].z == m[10] && m_v[2].w == m[11] &&
+			m_v[3].x == m[12] && m_v[3].y == m[13] && m_v[3].z == m[14] && m_v[3].w == m[15];
 	}
 	
 	bool mat4::operator==(cmat4* m) const
@@ -754,36 +754,36 @@ namespace pe
 		
 		switch (biggestIndex)
 		{
-			case 0:
-				w = biggestVal;
-				x = (m[1][2] - m[2][1]) * mult;
-				y = (m[2][0] - m[0][2]) * mult;
-				z = (m[0][1] - m[1][0]) * mult;
-				break;
-			case 1:
-				w = (m[1][2] - m[2][1]) * mult;
-				x = biggestVal;
-				y = (m[0][1] + m[1][0]) * mult;
-				z = (m[2][0] + m[0][2]) * mult;
-				break;
-			case 2:
-				w = (m[2][0] - m[0][2]) * mult;
-				x = (m[0][1] + m[1][0]) * mult;
-				y = biggestVal;
-				z = (m[1][2] + m[2][1]) * mult;
-				break;
-			case 3:
-				w = (m[0][1] - m[1][0]) * mult;
-				x = (m[2][0] + m[0][2]) * mult;
-				y = (m[1][2] + m[2][1]) * mult;
-				z = biggestVal;
-				break;
-			default: // Silence a -Wswitch-default warning in GCC. Should never actually get here. Assert is just for sanity.
-				assert(false);
-				w = 1.f;
-				x = 0.f;
-				y = 0.f;
-				z = 0.f;
+		case 0:
+			w = biggestVal;
+			x = (m[1][2] - m[2][1]) * mult;
+			y = (m[2][0] - m[0][2]) * mult;
+			z = (m[0][1] - m[1][0]) * mult;
+			break;
+		case 1:
+			w = (m[1][2] - m[2][1]) * mult;
+			x = biggestVal;
+			y = (m[0][1] + m[1][0]) * mult;
+			z = (m[2][0] + m[0][2]) * mult;
+			break;
+		case 2:
+			w = (m[2][0] - m[0][2]) * mult;
+			x = (m[0][1] + m[1][0]) * mult;
+			y = biggestVal;
+			z = (m[1][2] + m[2][1]) * mult;
+			break;
+		case 3:
+			w = (m[0][1] - m[1][0]) * mult;
+			x = (m[2][0] + m[0][2]) * mult;
+			y = (m[1][2] + m[2][1]) * mult;
+			z = biggestVal;
+			break;
+		default: // Silence a -Wswitch-default warning in GCC. Should never actually get here. Assert is just for sanity.
+			assert(false);
+			w = 1.f;
+			x = 0.f;
+			y = 0.f;
+			z = 0.f;
 		}
 	}
 	
@@ -865,10 +865,10 @@ namespace pe
 	quat quat::operator*(cquat& q) const
 	{
 		return quat(
-				w * q.w - x * q.x - y * q.y - z * q.z,
-				w * q.x + x * q.w + y * q.z - z * q.y,
-				w * q.y + y * q.w + z * q.x - x * q.z,
-				w * q.z + z * q.w + x * q.y - y * q.x
+			w * q.w - x * q.x - y * q.y - z * q.z,
+			w * q.x + x * q.w + y * q.z - z * q.y,
+			w * q.y + y * q.w + z * q.x - x * q.z,
+			w * q.z + z * q.w + x * q.y - y * q.x
 		);
 	}
 	
@@ -999,30 +999,30 @@ namespace pe
 	mat4 transpose(mat4& m)
 	{
 		return mat4(
-				m[0][0], m[1][0], m[2][0], m[3][0],
-				m[0][1], m[1][1], m[2][1], m[3][1],
-				m[0][2], m[1][2], m[2][2], m[3][2],
-				m[0][3], m[1][3], m[2][3], m[3][3]
+			m[0][0], m[1][0], m[2][0], m[3][0],
+			m[0][1], m[1][1], m[2][1], m[3][1],
+			m[0][2], m[1][2], m[2][2], m[3][2],
+			m[0][3], m[1][3], m[2][3], m[3][3]
 		);
 	}
 	
 	mat4 translate(mat4& m, cvec3& v)
 	{
 		return mat4(
-				m[0],
-				m[1],
-				m[2],
-				m[0] * v.x + m[1] * v.y + m[2] * v.z + m[3]
+			m[0],
+			m[1],
+			m[2],
+			m[0] * v.x + m[1] * v.y + m[2] * v.z + m[3]
 		);
 	}
 	
 	mat4 scale(mat4& m, cvec3& v)
 	{
 		return mat4(
-				m[0] * v.x,
-				m[1] * v.y,
-				m[2] * v.z,
-				m[3]
+			m[0] * v.x,
+			m[1] * v.y,
+			m[2] * v.z,
+			m[3]
 		);
 	}
 	
@@ -1047,10 +1047,10 @@ namespace pe
 		cfloat r22 = c + temp.z * naxis.z;
 		
 		return mat4(
-				m[0] * r00 + m[1] * r01 + m[2] * r02,
-				m[0] * r10 + m[1] * r11 + m[2] * r12,
-				m[0] * r20 + m[1] * r21 + m[2] * r22,
-				m[3]
+			m[0] * r00 + m[1] * r01 + m[2] * r02,
+			m[0] * r10 + m[1] * r11 + m[2] * r12,
+			m[0] * r20 + m[1] * r21 + m[2] * r22,
+			m[3]
 		);
 	}
 	
@@ -1069,35 +1069,85 @@ namespace pe
 	{
 		mat4 m = r.matrix();
 		return mat4(
-				m[0] * s.x,
-				m[1] * s.y,
-				m[2] * s.z,
-				vec4(t, 1.0f)
+			m[0] * s.x,
+			m[1] * s.y,
+			m[2] * s.z,
+			vec4(t, 1.0f)
 		);
 	}
-	
-	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar, cvec2& projOffset, float zDirection)
+
+	mat4 perspective(float fovy, float aspect, float zNear, float zFar, bool reverseZ)
 	{
+		if (GlobalSettings::RightHanded)
+			return perspectiveRH(fovy, aspect, zNear, zFar, reverseZ);
+		else
+			return perspectiveLH(fovy, aspect, zNear, zFar, reverseZ);
+	}
+	
+	// Left handed https://thxforthefish.com/posts/reverse_z/
+	// or https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_clip_space.inl
+	mat4 perspectiveLH(float fovy, float aspect, float zNear, float zFar, bool reverseZ)
+	{
+		if (reverseZ)
+			std::swap(zNear, zFar);
+	
+		cfloat tanHalfFovy = tan(fovy * .5f);
+	
+		cfloat m00 = 1.f / (aspect * tanHalfFovy);
+		cfloat m11 = 1.f / (tanHalfFovy);
+		//cfloat m20 = projOffset.x;
+		//cfloat m21 = projOffset.y;
+		cfloat m22 = zFar / (zFar - zNear);
+		cfloat m23 = reverseZ ? -1.0f : 1.0f;
+		cfloat m32 = -(zFar * zNear) / (zFar - zNear);
+	
+		return mat4(
+			m00, 0.f, 0.f, 0.f,
+			0.f, m11, 0.f, 0.f,
+			0.f, 0.f, m22, m23,
+			0.f, 0.f, m32, 0.f
+		);
+	}
+	// https://thxforthefish.com/posts/reverse_z/
+	// https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_clip_space.inl
+	mat4 perspectiveRH(float fovy, float aspect, float zNear, float zFar, bool reverseZ)
+	{
+		if (reverseZ)
+			std::swap(zNear, zFar);
+
 		cfloat tanHalfFovy = tan(fovy * .5f);
 
 		cfloat m00 = 1.f / (aspect * tanHalfFovy);
 		cfloat m11 = 1.f / (tanHalfFovy);
-		cfloat m20 = projOffset.x;
-		cfloat m21 = projOffset.y;
-		cfloat m22 = zFar / (zFar - zNear) * zDirection;
-		cfloat m23 = zDirection;
+		//cfloat m20 = projOffset.x;
+		//cfloat m21 = projOffset.y;
+		cfloat m22 = zFar / (zNear - zFar);
+		cfloat m23 = reverseZ ? 1.0f : -1.0f;
 		cfloat m32 = -(zFar * zNear) / (zFar - zNear);
 
 		return mat4(
 			m00, 0.f, 0.f, 0.f,
 			0.f, m11, 0.f, 0.f,
-			m20, m21, m22, m23,
+			0.f, 0.f, m22, m23,
 			0.f, 0.f, m32, 0.f
 		);
 	}
-	
-	mat4 ortho(cfloat left, cfloat right, cfloat bottom, cfloat top, cfloat zNear, cfloat zFar)
+
+	mat4 ortho(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ)
 	{
+		if (GlobalSettings::RightHanded)
+			return orthoRH(left, right, bottom, top, zNear, zFar, reverseZ);
+		else
+			return orthoLH(left, right, bottom, top, zNear, zFar, reverseZ);
+	}
+
+	// https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_clip_space.inl
+	mat4 orthoLH(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ)
+	{
+
+		if (reverseZ)
+			std::swap(zNear, zFar);
+
 		cfloat m00 = 2.f / (right - left);
 		cfloat m11 = 2.f / (top - bottom);
 		cfloat m22 = 1.f / (zFar - zNear);
@@ -1106,41 +1156,76 @@ namespace pe
 		cfloat m32 = -zNear / (zFar - zNear);
 		
 		return mat4(
-				m00, 0.f, 0.f, 0.f,
-				0.f, m11, 0.f, 0.f,
-				0.f, 0.f, m22, 0.f,
-				m30, m31, m32, 1.f
+			m00, 0.f, 0.f, 0.f,
+			0.f, m11, 0.f, 0.f,
+			0.f, 0.f, m22, 0.f,
+			m30, m31, m32, 1.f
 		);
 	}
-	
+
+	// https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_clip_space.inl
+	mat4 orthoRH(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ)
+	{
+		if (reverseZ)
+			std::swap(zNear, zFar);
+
+		cfloat m00 = 2.f / (right - left);
+		cfloat m11 = 2.f / (top - bottom);
+		cfloat m22 = -1.f / (zFar - zNear);
+		cfloat m30 = -(right + left) / (right - left);
+		cfloat m31 = -(top + bottom) / (top - bottom);
+		cfloat m32 = -zNear / (zFar - zNear);
+
+		return mat4(
+			m00, 0.f, 0.f, 0.f,
+			0.f, m11, 0.f, 0.f,
+			0.f, 0.f, m22, 0.f,
+			m30, m31, m32, 1.f
+		);
+	}
+
+	mat4 lookAt(cvec3& eye, cvec3& center, cvec3& up)
+	{
+		if (GlobalSettings::RightHanded)
+			return lookAtRH(eye, center, up);
+		else
+			return lookAtLH(eye, center, up);
+	}
+
+	// https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_transform.inl
+	mat4 lookAtLH(cvec3& eye, cvec3& center, cvec3& up)
+	{
+		cvec3 f(normalize(center - eye));
+		cvec3 r(normalize(cross(up, f)));
+		cvec3 u(cross(f, r));
+
+		return lookAt(eye, f, r, u);
+	}
+
+	// https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_transform.inl
+	mat4 lookAtRH(cvec3& eye, cvec3& center, cvec3& up)
+	{
+		cvec3 f(normalize(center - eye));
+		cvec3 r(normalize(cross(f, up)));
+		cvec3 u(cross(r, f));
+
+		return lookAt(eye, f, r, u);
+	}
+
 	mat4 lookAt(cvec3& eye, cvec3& front, cvec3& right, cvec3& up)
 	{
-		cvec3 f(front);
-		cvec3 r(right);
-		cvec3 u(up);
+		cvec3& f(front);
+		cvec3& r(right);
+		cvec3& u(up);
 		
 		cfloat m30 = -dot(r, eye);
 		cfloat m31 = -dot(u, eye);
 		cfloat m32 = -dot(f, eye);
 		return mat4(
-				r.x, u.x, f.x, 0.f,
-				r.y, u.y, f.y, 0.f,
-				r.z, u.z, f.z, 0.f,
-				m30, m31, m32, 1.f
-		);
-	}
-	
-	quat lookAt(cvec3& front, cvec3& right, cvec3& up)
-	{
-		cvec3& f = front;
-		cvec3& r = right;
-		cvec3& u = up;
-		
-		return mat4(
 			r.x, u.x, f.x, 0.f,
 			r.y, u.y, f.y, 0.f,
 			r.z, u.z, f.z, 0.f,
-			0.f, 0.f, 0.f, 1.f
+			m30, m31, m32, 1.f
 		);
 	}
 	
@@ -1235,19 +1320,19 @@ namespace pe
 	vec3 cross(cvec3& v1, cvec3& v2)
 	{
 		return vec3(
-				v1.y * v2.z - v2.y * v1.z,
-				v1.z * v2.x - v2.z * v1.x,
-				v1.x * v2.y - v2.x * v1.y
+			v1.y * v2.z - v2.y * v1.z,
+			v1.z * v2.x - v2.z * v1.x,
+			v1.x * v2.y - v2.x * v1.y
 		);
 	}
 	
 	quat cross(cquat& q1, cquat& q2)
 	{
 		return quat(
-				q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z,
-				q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y,
-				q1.w * q2.y + q1.y * q2.w + q1.z * q2.x - q1.x * q2.z,
-				q1.w * q2.z + q1.z * q2.w + q1.x * q2.y - q1.y * q2.x
+			q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z,
+			q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y,
+			q1.w * q2.y + q1.y * q2.w + q1.z * q2.x - q1.x * q2.z,
+			q1.w * q2.z + q1.z * q2.w + q1.x * q2.y - q1.y * q2.x
 		);
 	}
 	
@@ -1299,10 +1384,10 @@ namespace pe
 		if (cosTheta > 1.f - FLT_EPSILON)
 		{
 			return quat(
-					mix(q1.w, q2.w, a),
-					mix(q1.x, q2.x, a),
-					mix(q1.y, q2.y, a),
-					mix(q1.z, q2.z, a)
+				mix(q1.w, q2.w, a),
+				mix(q1.x, q2.x, a),
+				mix(q1.y, q2.y, a),
+				mix(q1.z, q2.z, a)
 			);
 		}
 		else
@@ -1336,10 +1421,10 @@ namespace pe
 		if (cosTheta > 1.f - FLT_EPSILON)
 		{
 			return quat(
-					mix(q1.w, q3.w, a),
-					mix(q1.x, q3.x, a),
-					mix(q1.y, q3.y, a),
-					mix(q1.z, q3.z, a)
+				mix(q1.w, q3.w, a),
+				mix(q1.x, q3.x, a),
+				mix(q1.y, q3.y, a),
+				mix(q1.z, q3.z, a)
 			);
 		}
 		else
@@ -1352,18 +1437,18 @@ namespace pe
 	vec3 minimum(cvec3& v1, cvec3& v2)
 	{
 		return vec3(
-				minimum(v1.x, v2.x),
-				minimum(v1.y, v2.y),
-				minimum(v1.z, v2.z)
+			minimum(v1.x, v2.x),
+			minimum(v1.y, v2.y),
+			minimum(v1.z, v2.z)
 		);
 	}
 	
 	vec3 maximum(cvec3& v1, cvec3& v2)
 	{
 		return vec3(
-				maximum(v1.x, v2.x),
-				maximum(v1.y, v2.y),
-				maximum(v1.z, v2.z)
+			maximum(v1.x, v2.x),
+			maximum(v1.y, v2.y),
+			maximum(v1.z, v2.z)
 		);
 	}
 
@@ -1419,8 +1504,7 @@ namespace pe
 	Transform::Transform() : matrix(mat4::identity()), scale(1.0f), rotation(quat::identity()), position(0.0f)
 	{}
 	
-	Transform::Transform(cvec3& scale, cquat& rotation, cvec3& position) :
-			matrix(transform(rotation, scale, position)), scale(scale), rotation(rotation), position(position)
+	Transform::Transform(cvec3& scale, cquat& rotation, cvec3& position) : matrix(transform(rotation, scale, position)), scale(scale), rotation(rotation), position(position)
 	{}
 	
 	float halton(uint32_t index, uint32_t base)

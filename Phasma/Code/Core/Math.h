@@ -450,14 +450,26 @@ namespace pe
 	quat rotate(cquat& q, cfloat angle, cvec3& axis);
 	
 	mat4 transform(cquat& r, cvec3& s, cvec3& t);
+
+	mat4 perspective(float fovy, float aspect, float zNear, float zFar, bool reverseZ);
 	
-	mat4 perspective(cfloat fovy, cfloat aspect, cfloat zNear, cfloat zFar, cvec2& projOffset = vec2(0.f), float zDirection = 1.f);
+	mat4 perspectiveLH(float fovy, float aspect, float zNear, float zFar, bool reverseZ);
+
+	mat4 perspectiveRH(float fovy, float aspect, float zNear, float zFar, bool reverseZ);
 	
-	mat4 ortho(cfloat left, cfloat right, cfloat bottom, cfloat top, cfloat zNear, cfloat zFar);
+	mat4 ortho(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ);
+
+	mat4 orthoLH(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ);
+
+	mat4 orthoRH(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ);
 	
+	mat4 lookAt(cvec3& eye, cvec3& center, cvec3& up);
+
+	mat4 lookAtLH(cvec3& eye, cvec3& center, cvec3& up);
+			   
+	mat4 lookAtRH(cvec3& eye, cvec3& center, cvec3& up);
+
 	mat4 lookAt(cvec3& eye, cvec3& front, cvec3& right, cvec3& up);
-	
-	quat lookAt(cvec3& front, cvec3& right, cvec3& up);
 	
 	float length(cvec2& v);
 	

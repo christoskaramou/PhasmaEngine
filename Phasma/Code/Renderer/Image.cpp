@@ -21,7 +21,7 @@ SOFTWARE.
 */
 
 #include "Image.h"
-#include "RenderApi.h"
+#include "Renderer/Vulkan/Vulkan.h"
 #include "ECS/Context.h"
 #include "Renderer/CommandBuffer.h"
 #include "Renderer/Vulkan/Vulkan.h"

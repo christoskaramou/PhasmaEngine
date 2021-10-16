@@ -25,23 +25,23 @@ SOFTWARE.
 #include "Renderer/Compute.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
+#include "Core/Settings.h"
 
 namespace pe
 {    
     Camera::Camera()
     {
-        // gltf is right handed, reversing the x orientation makes the models left handed
-        // reversing the y axis to match the vulkan y axis too
-        worldOrientation = vec3(-1.f, -1.f, 1.f);
+        // Right handed
+        worldOrientation = vec3(1.f, 1.f, 1.f);
         
         // total pitch, yaw, roll
-        euler = vec3(0.f, radians(180.f), 0.f);
+        euler = vec3(0.f, 0.0f, 0.f);
         orientation = quat(euler);
         position = vec3(0.f, 0.f, 0.f);
         
-        nearPlane = 500.0f;
-        farPlane = 0.005f;
-        FOV = 45.0f;
+        nearPlane = 0.005f;
+        farPlane = 500.0f;
+        FOV = radians(87.0f);
         speed = 0.35f;
         rotationSpeed = 0.05f;
         
@@ -102,32 +102,29 @@ namespace pe
     {
         auto& renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
         const float aspect = renderArea.viewport.width / renderArea.viewport.height;
-        projection = perspective(radians(FOV), aspect, nearPlane, farPlane, projOffset, worldOrientation.z);
+        projection = perspective(FovxToFovy(FOV, aspect), aspect, nearPlane, farPlane, GlobalSettings::ReverseZ);
+        projection[2][0] = projOffset.x;
+        projection[2][1] = projOffset.y;
     }
     
     void Camera::UpdateView()
     {        
+        //view = lookAt(position, position + front, WorldUp());
         view = lookAt(position, front, right, up);
     }
     
     void Camera::Move(RelativeDirection direction, float velocity)
     {
-        // prediction of where the submit happens
-        //const float prediction = (Timer::cleanDelta - Timer::waitingTime) / Timer::cleanDelta;
-        //velocity -= velocity * prediction;
-        
-        if (direction == RelativeDirection::FORWARD) position += front * (velocity * worldOrientation.z);
-        if (direction == RelativeDirection::BACKWARD) position -= front * (velocity * worldOrientation.z);
-        if (direction == RelativeDirection::RIGHT) position += right * velocity;
-        if (direction == RelativeDirection::LEFT) position -= right * velocity;
+        if (direction == RelativeDirection::FORWARD) position += front * velocity;
+        if (direction == RelativeDirection::BACKWARD) position -= front * velocity;
+        if (direction == RelativeDirection::RIGHT) position -= right * velocity;
+        if (direction == RelativeDirection::LEFT) position += right * velocity;
     }
     
     void Camera::Rotate(float xoffset, float yoffset)
     {
-        // prediction of where the submit happens
-        //const float prediction = (Timer::cleanDelta - Timer::waitingTime) / Timer::cleanDelta;
-        const float x = radians(-yoffset * rotationSpeed) * worldOrientation.y;    // pitch
-        const float y = radians(xoffset * rotationSpeed) * worldOrientation.x;    // yaw
+        const float x = radians(yoffset * rotationSpeed);   // pitch
+        const float y = radians(-xoffset * rotationSpeed);  // yaw
         
         euler.x += x;
         euler.y += y;

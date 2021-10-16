@@ -44,7 +44,7 @@ namespace pe
 
     void CameraSystem::Update(double delta)
     {
-        std::vector<Camera*>& components = GetComponentsOfType<Camera>();
+        const std::vector<Camera*>& components = GetComponentsOfType<Camera>();
         for (Camera* camera : components)
         {
             if (camera->IsEnabled())
@@ -54,7 +54,7 @@ namespace pe
 
     void CameraSystem::Destroy()
     {
-        std::vector<Camera*>& components = GetComponentsOfType<Camera>();
+       const std::vector<Camera*>& components = GetComponentsOfType<Camera>();
         for (auto camera : components)
             camera->Destroy();
     }

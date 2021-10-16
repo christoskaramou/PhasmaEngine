@@ -24,10 +24,11 @@ SOFTWARE.
 #include "Renderer.h"
 #include "Core/Queue.h"
 #include "Model/Mesh.h"
-#include "Renderer/RenderApi.h"
+#include "Renderer/Vulkan/Vulkan.h"
 #include "Systems/CameraSystem.h"
 #include "ECS/Context.h"
 #include "Core/Path.h"
+#include "Core/Settings.h"
 #include "Systems/EventSystem.h"
 #include "Systems/PostProcessSystem.h"
 #include "Renderer/CommandBuffer.h"
@@ -260,7 +261,8 @@ namespace pe
 		
 		const vk::DeviceSize offset = vk::DeviceSize();
 		std::array<vk::ClearValue, 1> clearValuesShadows {};
-		clearValuesShadows[0].depthStencil = vk::ClearDepthStencilValue {0.0f, 0};
+		clearValuesShadows[0].depthStencil.depth = GlobalSettings::ReverseZ ? 0.f : 1.f;
+		clearValuesShadows[0].depthStencil.stencil = 0;
 		
 		vk::CommandBufferBeginInfo beginInfoShadows;
 		beginInfoShadows.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -654,8 +656,8 @@ namespace pe
 		);
 		
 		vk::ImageBlit blit;
-		blit.srcOffsets[0] = vk::Offset3D {0, 0, 0};
-		blit.srcOffsets[1] = vk::Offset3D{ static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 1 };
+		blit.srcOffsets[0] = vk::Offset3D{ static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 0 };
+		blit.srcOffsets[1] = vk::Offset3D{ 0, 0, 1 };
 		blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 		blit.srcSubresource.layerCount = 1;
 		Viewport& vp = renderArea.viewport;

@@ -20,17 +20,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#version 450
+#pragma once
 
-layout (location = 0) out vec2 out_UV;
-
-out gl_PerVertex
+namespace pe
 {
-	vec4 gl_Position;
-};
+	enum class RenderApi
+	{
+		Vulkan,
+		Dx12 // Not implemented yet
+	};
 
-void main() 
-{
-	out_UV = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
-	gl_Position = vec4(out_UV * 2.0f - 1.0f, 0.0f, 1.0f);
+	struct GlobalSettings
+	{
+		inline static RenderApi Api = RenderApi::Vulkan;
+		inline static bool RightHanded = true;
+		inline static bool ReverseZ = true;
+	};
 }

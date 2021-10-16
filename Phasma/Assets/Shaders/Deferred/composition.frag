@@ -35,18 +35,21 @@ void main()
 	float depth = texture(sampler_depth, in_UV).x;
 
 	// if the depth is maximum it hits the skybox
-	if (depth == 0.0) {
-
+	if (depth == 0.0)
+	{
 		// Skybox
 		vec3 frag_pos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
-		outColor = vec4(texture(sampler_cube_map, normalize(frag_pos - ubo.camPos.xyz)).xyz, 1.0);
+		vec3 samplePos = normalize(frag_pos - ubo.camPos.xyz);
+		samplePos.xy *= -1.0f; // the final image is blitted to the swapchain with -x and -y
+		outColor = vec4(texture(sampler_cube_map, samplePos).xyz, 1.0);
 		
 		// Fog
-		if (screenSpace.effects3.y > 0.5) {
-			// screenSpace.effects3.y -> fog on/off
-			// screenSpace.effects2.w -> fog max height
-			// screenSpace.effects2.x -> fog global thickness
-			// screenSpace.effects3.x -> fog ground thickness
+		// screenSpace.effects3.y -> fog on/off
+		// screenSpace.effects2.w -> fog max height
+		// screenSpace.effects2.x -> fog global thickness
+		// screenSpace.effects3.x -> fog ground thickness
+		if (screenSpace.effects3.y > 0.5)
+		{
 
 			float fogNear = 0.5;
 			float fogFar = 1000.0;
@@ -72,6 +75,7 @@ void main()
 
 		return;
 	}
+
 	vec3 frag_pos = getPosFromUV(in_UV, depth, screenSpace.invViewProj);
 	vec3 normal = texture(sampler_normal, in_UV).xyz;
 	vec3 metRough = texture(sampler_met_rough, in_UV).xyz;
@@ -161,7 +165,7 @@ vec3 directLight(Material material, vec3 world_pos, vec3 camera_pos, vec3 materi
 {
 	float lit = 1.0;
 
-	if (pushConst.cast_shadows > 0.5)
+	if (1 != 0)//(pushConst.cast_shadows > 0.5)
 	{
 		lit = 0.0;
 

@@ -91,15 +91,16 @@ namespace pe
 		}
 		
 		template<class T>
-		std::vector<T*>& GetComponentsOfType()
+		const std::vector<T*>& GetComponentsOfType()
 		{
 			if (HasComponents<T>())
 			{
 				size_t id = GetTypeID<T>();
 				return *reinterpret_cast<std::vector<T*>*>(&m_components[id]);
 			}
-			
-			return std::vector<T*>();
+
+			static const std::vector<T*> empty{};
+			return empty;
 		}
 		
 		bool IsEnabled() { return m_enabled; }

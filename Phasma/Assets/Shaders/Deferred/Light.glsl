@@ -66,7 +66,8 @@ layout(set = 0, binding = 4) uniform UBO
 	DirectionalLight sun;
 	PointLight pointLights[MAX_POINT_LIGHTS];
 	SpotLight spotLights[MAX_SPOT_LIGHTS];
-} ubo;
+}
+ubo;
 layout(set = 0, binding = 5) uniform sampler2D sampler_ssao_blur;
 layout(set = 0, binding = 6) uniform sampler2D sampler_ssr;
 layout(set = 0, binding = 7) uniform sampler2D sampler_emission;
@@ -244,7 +245,7 @@ float ComputeScattering(float dir_dot_l)
 
 vec3 VolumetricLighting(DirectionalLight light, vec3 pos_world, vec2 uv, mat4 lightViewProj, float fog_factor)
 {
-	float iterations = screenSpace.effects1.z; // 32 iterations default
+	float iterations = screenSpace.effects1.z;
 
 	vec3 pixel_to_camera 			= ubo.camPos.xyz - pos_world;
 	float pixel_to_camera_length 	= length(pixel_to_camera);

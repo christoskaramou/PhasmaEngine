@@ -28,6 +28,7 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "Renderer/Descriptor.h"
 #include "Core/Math.h"
+#include "Core/Settings.h"
 
 namespace pe
 {
@@ -74,7 +75,7 @@ namespace pe
 		memcpy(clearColor.color.float32, &color, sizeof(vec4));
 
 		VkClearDepthStencilValue depthStencil;
-		depthStencil.depth = 0.f;
+		depthStencil.depth = GlobalSettings::ReverseZ ? 0.f : 1.f;
 		depthStencil.stencil = 0;
 
 		std::vector<VkClearValue> clearValues(pass.formats.size());
@@ -93,7 +94,7 @@ namespace pe
 		rpi.framebuffer = *frameBuffer.handle;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = vk::Extent2D{ frameBuffer.width, frameBuffer.height };
-		rpi.clearValueCount = clearValues.size();
+		rpi.clearValueCount = (uint32_t)clearValues.size();
 		rpi.pClearValues = clearValues.data();
 
 		vkCmdBeginRenderPass(m_handle, &rpi, VK_SUBPASS_CONTENTS_INLINE);

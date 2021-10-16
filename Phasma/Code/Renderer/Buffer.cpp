@@ -21,21 +21,22 @@ SOFTWARE.
 */
 
 #include "Buffer.h"
-#include "RenderApi.h"
+#include "Renderer/Vulkan/Vulkan.h"
 #include "Vulkan/BufferVK.h"
 //#include "Dx12/BufferDX.h"
+#include "Core/Settings.h"
 
 namespace pe
 {
 	SPtr<Buffer> Buffer::Create(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties)
 	{
-		if DYNAMIC_CONSTEXPR (PE_VULKAN)
+		if (GlobalSettings::Api == RenderApi::Vulkan)
 		{
 			return make_sptr<BufferVK>(size, usage, properties);
 		}
 		else //if (PE_DX12)
 		{
-		
+			return nullptr;
 		}
 	}
 }

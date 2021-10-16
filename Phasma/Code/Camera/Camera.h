@@ -62,6 +62,12 @@ namespace pe
 		void Update();
 		
 		void UpdatePerspective();
+
+		// In radians
+		inline float FovyToFovx(float fovy, float aspect) { return 2.0f * atan(tan(fovy * 0.5f) * aspect); }
+
+		// In radians
+		inline float FovxToFovy(float fovx, float aspect) { return 2.0f * atan(tan(fovx * 0.5f) / aspect); }
 		
 		void UpdateView();
 		

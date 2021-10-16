@@ -32,8 +32,9 @@ SOFTWARE.
 #include "tinygltf/stb_image.h"
 #include <deque>
 #include "Shader/Reflection.h"
-#include "RenderApi.h"
+#include "Renderer/Vulkan/Vulkan.h"
 #include "Core/Path.h"
+#include "Core/Settings.h"
 #include "ECS/Context.h"
 #include "Systems/LightSystem.h"
 
@@ -55,7 +56,7 @@ namespace pe
 		memcpy(clearColor.color.float32, &color, sizeof(vec4));
 		
 		vk::ClearDepthStencilValue depthStencil;
-		depthStencil.depth = 0.f;
+		depthStencil.depth = GlobalSettings::ReverseZ ? 0.f : 1.f;
 		depthStencil.stencil = 0;
 		
 		std::vector<vk::ClearValue> clearValues = {
@@ -316,8 +317,8 @@ namespace pe
 	
 	void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"Shaders/Deferred/gBuffer.vert", ShaderType::Vertex, true};
-		Shader frag {"Shaders/Deferred/gBuffer.frag", ShaderType::Fragment, true};
+		Shader vert{ "Shaders/Deferred/gBuffer.vert", ShaderType::Vertex, true };
+		Shader frag{ "Shaders/Deferred/gBuffer.frag", ShaderType::Fragment, true };
 		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
@@ -349,14 +350,17 @@ namespace pe
 	
 	void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTargets)
 	{
-		Shader vert {"Shaders/Deferred/composition.vert", ShaderType::Vertex, true};
-		Shader frag {"Shaders/Deferred/composition.frag", ShaderType::Fragment, true};
+		const std::vector<Define> defines{
+			Define { "REVERSE_Z", GlobalSettings::ReverseZ ? "1" : "0" }
+		};
+
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader frag{ "Shaders/Deferred/composition.frag", ShaderType::Fragment, true, defines };
 		
 		pipelineComposition.info.pVertShader = &vert;
 		pipelineComposition.info.pFragShader = &frag;
 		pipelineComposition.info.width = renderTargets["viewport"].width_f;
 		pipelineComposition.info.height = renderTargets["viewport"].height_f;
-		pipelineComposition.info.cullMode = CullMode::Back;
 		pipelineComposition.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineComposition.info.pushConstantSize = 4 * sizeof(float);
 		pipelineComposition.info.colorBlendAttachments = make_sptr(

@@ -84,9 +84,7 @@ namespace pe
 		delete include_result;
 	}
 	
-	Shader::Shader(
-			const std::string& filename, ShaderType shaderType, bool online_compile, const std::vector<Define>& defs
-	)
+	Shader::Shader(const std::string& filename, ShaderType shaderType, bool online_compile, const std::vector<Define>& defs)
 	{
 		std::string path = filename;
 		if (path.find(Path::Assets) == std::string::npos)

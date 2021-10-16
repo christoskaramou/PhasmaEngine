@@ -24,7 +24,8 @@ SOFTWARE.
 #include "Pipeline.h"
 #include "Shader/Shader.h"
 #include "Descriptor.h"
-#include "RenderApi.h"
+#include "Renderer/Vulkan/Vulkan.h"
+#include "Core/Settings.h"
 
 namespace pe
 {
@@ -40,7 +41,6 @@ namespace pe
 		height = 0.f;
 		pushConstantStage = PushConstantStage::Vertex;
 		pushConstantSize = 0;
-		cullMode = CullMode::None;
 		colorBlendAttachments = make_sptr(std::vector<vk::PipelineColorBlendAttachmentState>());
 		dynamicStates = make_sptr(std::vector<vk::DynamicState>());
 		descriptorSetLayouts = make_sptr(std::vector<vk::DescriptorSetLayout>());
@@ -157,7 +157,7 @@ namespace pe
 		vk::PipelineDepthStencilStateCreateInfo pdssci;
 		pdssci.depthTestEnable = VK_TRUE;
 		pdssci.depthWriteEnable = VK_TRUE;
-		pdssci.depthCompareOp = vk::CompareOp::eGreater;
+		pdssci.depthCompareOp = GlobalSettings::ReverseZ ? vk::CompareOp::eGreater : vk::CompareOp::eLessOrEqual;
 		pdssci.depthBoundsTestEnable = VK_FALSE;
 		pdssci.stencilTestEnable = VK_FALSE;
 		pdssci.front.compareOp = vk::CompareOp::eAlways;
@@ -252,7 +252,7 @@ namespace pe
 		}
 	}
 
-	const vk::DescriptorSetLayout& CreateDescriptorSetLayout(const std::vector<DescriptorBinding>& descriptionBindings)
+	vk::DescriptorSetLayout CreateDescriptorSetLayout(const std::vector<DescriptorBinding>& descriptionBindings)
 	{
 		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{};
 		for (const auto& layoutBinding : descriptionBindings)

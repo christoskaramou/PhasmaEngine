@@ -28,7 +28,7 @@ SOFTWARE.
 #include "Console/Console.h"
 #include "Renderer/Vertex.h"
 #include "Shader/Shader.h"
-#include "Renderer/RenderApi.h"
+#include "Renderer/Vulkan/Vulkan.h"
 #include "Core/Path.h"
 #include "Systems/EventSystem.h"
 #include "ECS/Context.h"
@@ -83,7 +83,7 @@ namespace pe
 		if (!ImGui::ItemAdd(bb, id))
 			return;
 
-		const float t = g.Time;
+		const float t = (float)g.Time;
 		const auto degree_offset = 2.0f * IM_PI / circle_count;
 		for (int i = 0; i < circle_count; ++i) {
 			const auto x = indicator_radius * std::sin(degree_offset * i) * 0.9f;
@@ -648,7 +648,7 @@ namespace pe
 		info.DescriptorPool = *VULKAN.descriptorPool;
 		info.Subpass = 0;
 		info.MinImageCount = VULKAN.surface.capabilities->minImageCount;
-		info.ImageCount = VULKAN.swapchain.images.size();
+		info.ImageCount = (uint32_t)VULKAN.swapchain.images.size();
 		info.MSAASamples = VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT;
 		info.Allocator = nullptr;
 		info.CheckVkResultFn = nullptr;

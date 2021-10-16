@@ -27,10 +27,11 @@ SOFTWARE.
 #include "Vertex.h"
 #include "Shader/Shader.h"
 #include "Core/Queue.h"
-#include "RenderApi.h"
+#include "Renderer/Vulkan/Vulkan.h"
 #include <limits>
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
+#include "Core/Settings.h"
 
 namespace pe
 {
@@ -142,7 +143,6 @@ namespace pe
 		pipeline.info.vertexInputAttributeDescriptions = make_sptr(Vertex::getAttributeDescriptionGeneral());
 		pipeline.info.width = static_cast<float>(Shadows::imageSize);
 		pipeline.info.height = static_cast<float>(Shadows::imageSize);
-		pipeline.info.cullMode = CullMode::Front;
 		pipeline.info.pushConstantStage = PushConstantStage::Vertex;
 		pipeline.info.pushConstantSize = sizeof(mat4);
 		pipeline.info.colorBlendAttachments = make_sptr(
@@ -204,77 +204,7 @@ namespace pe
 
 	void Shadows::CalculateCascades(Camera& camera)
 	{
-		const mat4 view = camera.view;
-		const mat4 invView = camera.invView;
-		const vec3 sunDirection = vec3(&GUI::sun_direction[0]);// *camera.worldOrientation;
-		const vec3 sunFront = sunDirection;
-		const vec3 sunRight = normalize(cross(sunFront, camera.WorldUp()));
-		const vec3 sunUp = normalize(cross(sunRight, sunFront));
-		const mat4 sunView = lookAt(-sunFront * (camera.nearPlane - 5.f), sunFront, sunRight, sunUp);
-
-		auto& renderArea = CONTEXT->GetSystem<RendererSystem>()->GetRenderArea();
-		const float aspect = renderArea.viewport.width / renderArea.viewport.height;
-		const float tanHalfHFOV = tanf(radians(camera.FOV * .5f * aspect));
-		const float tanHalfVFOV = tanf(radians(camera.FOV * .5f));
-
-		const float cascadeEnd[] = {
-			-10.f,
-			10.f,
-			40.f,
-			130.f
-		};
-
-		for (uint32_t i = 0; i < 3; i++)
-		{
-			float xn = cascadeEnd[i + 0] * tanHalfHFOV;
-			float xf = cascadeEnd[i + 1] * tanHalfHFOV;
-			float yn = cascadeEnd[i + 0] * tanHalfVFOV;
-			float yf = cascadeEnd[i + 1] * tanHalfVFOV;
-
-			vec4 frustumCorners[] = {
-				// near face
-				vec4( xn,  yn, cascadeEnd[i], 1.0),
-				vec4(-xn,  yn, cascadeEnd[i], 1.0),
-				vec4( xn, -yn, cascadeEnd[i], 1.0),
-				vec4(-xn, -yn, cascadeEnd[i], 1.0),
-
-				// far face
-				vec4( xf,  yf, cascadeEnd[i + 1], 1.0),
-				vec4(-xf,  yf, cascadeEnd[i + 1], 1.0),
-				vec4( xf, -yf, cascadeEnd[i + 1], 1.0),
-				vec4(-xf, -yf, cascadeEnd[i + 1], 1.0)
-			};
-
-			vec4 frustumCornersL[8];
-
-			float minX = std::numeric_limits<float>::max();
-			float maxX = std::numeric_limits<float>::min();
-			float minY = std::numeric_limits<float>::max();
-			float maxY = std::numeric_limits<float>::min();
-			float minZ = std::numeric_limits<float>::max();
-			float maxZ = std::numeric_limits<float>::min();
-
-			for (uint32_t j = 0; j < 8; j++) {
-
-				// Transform the frustum coordinate from view to world space
-				vec4 vW = invView * frustumCorners[j];// *vec4(camera.worldOrientation, 1.f);
-
-				// Transform the frustum coordinate from world to light space
-				frustumCornersL[j] = sunView * vW;
-
-				minX = minimum(minX, frustumCornersL[j].x);
-				maxX = maximum(maxX, frustumCornersL[j].x);
-				minY = minimum(minY, frustumCornersL[j].y);
-				maxY = maximum(maxY, frustumCornersL[j].y);
-				minZ = minimum(minZ, frustumCornersL[j].z);
-				maxZ = maximum(maxZ, frustumCornersL[j].z);
-			}
-			//std::swap(minZ, maxZ); // reverse Z
-			//std::swap(minY, maxY); // reverse Y
-			mat4 sunProj = ortho(minX, maxX, minY, maxY, minZ, maxZ);
-
-			cascades[i] = sunProj * sunView;
-			viewZ[i] = cascadeEnd[i + 1];
-		}
+		//cascades[i] = sunProj * sunView;
+		//viewZ[i] = cascadeEnd[i + 1];
 	}
 }
