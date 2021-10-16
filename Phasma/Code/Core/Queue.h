@@ -81,26 +81,36 @@ namespace pe
 				if (signal)
 					signal();
 			}
-			else // if constexpr (launch == Launch::SyncDeferred)
+			else if constexpr (launch == Launch::SyncDeferred)
 			{
-				s_requests += std::forward<Func>(func);
+				if (update)
+					update();
+				s_deferredSync.push_back(std::forward<Func>(func));
+				s_signals.push_back(std::forward<Func>(signal));
 			}
 		}
 
 		inline static void ExecuteRequests()
 		{
-			CheckNoWaitFutures();
-
-			for (int i = static_cast<int>(s_futures.size()) - 1; i >= 0; i--)
+			if constexpr (launch == Launch::Async)
 			{
-				s_futures[i].get();
-
-				if (s_signals[i])
-					s_signals[i]();
+				GetFutures();
 			}
-
-			s_futures.clear();
-			s_signals.clear();
+			else if constexpr (launch == Launch::AsyncDeferred)
+			{
+				GetFutures();
+			}
+			else if constexpr (launch == Launch::AsyncNoWait)
+			{
+				CheckNoWaitFutures();
+			}
+			else if constexpr (launch == Launch::Sync)
+			{
+			}
+			else if constexpr (launch == Launch::SyncDeferred)
+			{
+				DeferredSync();
+			}
 		}
 
 	private:
@@ -130,6 +140,34 @@ namespace pe
 				}
 			}
 		}
+		
+		inline static void GetFutures()
+		{
+			for (int i = static_cast<int>(s_futures.size()) - 1; i >= 0; i--)
+			{
+				s_futures[i].get();
+
+				if (s_signals[i])
+					s_signals[i]();
+			}
+
+			s_futures.clear();
+			s_signals.clear();
+		}
+
+		inline static void DeferredSync()
+		{
+			for (int i = static_cast<int>(s_deferredSync.size()) - 1; i >= 0; i--)
+			{
+				s_deferredSync[i]();
+
+				if (s_signals[i])
+					s_signals[i]();
+			}
+
+			s_deferredSync.clear();
+			s_signals.clear();
+		}
 
 	private:
 		inline static std::deque<std::future<void>> s_futures;
@@ -137,6 +175,7 @@ namespace pe
 		inline static std::deque<std::future<void>> s_noWaitFutures;
 		inline static std::deque<Func> s_updatesNoWait;
 		inline static std::deque<Func> s_signalsNoWait;
+		inline static std::deque<Func> s_deferredSync;
 		inline static std::mutex s_requestMutex;
 	};
 }

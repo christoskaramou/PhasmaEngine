@@ -137,8 +137,6 @@ namespace pe
 			vk::PipelineStageFlagBits::eFragmentShader
 		};
 
-		//FIRE_EVENT(Event::OnRender);
-
 		// acquire the image
 		auto& aquireSignalSemaphore = (*vCtx.semaphores)[frameIndex];
 		const uint32_t imageIndex = vCtx.swapchain.Aquire(aquireSignalSemaphore, nullptr);
@@ -187,8 +185,6 @@ namespace pe
 		vCtx.unlockSubmits();
 
 		gui.RenderViewPorts();
-
-
 
 		frameIndex = (frameIndex + 1) % SWAPCHAIN_IMAGES;
 	}
