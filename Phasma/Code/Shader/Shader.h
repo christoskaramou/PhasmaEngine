@@ -27,8 +27,7 @@ SOFTWARE.
 #include <string>
 #include <vector>
 #include "shaderc/shaderc.hpp"
-
-#define ONLINE_COMPILE
+#include "Shader/Reflection.h"
 
 namespace pe
 {
@@ -56,8 +55,7 @@ namespace pe
 		
 		void ReleaseInclude(shaderc_include_result* include_result) override;
 		
-		inline const std::unordered_set<std::string>& file_path_trace() const
-		{ return included_files_; }
+		inline const std::unordered_set<std::string>& file_path_trace() const { return included_files_; }
 	
 	private:
 		struct FileInfo
@@ -67,19 +65,21 @@ namespace pe
 		};
 		std::unordered_set<std::string> included_files_;
 	};
+
+	class Reflection;
 	
 	class Shader
 	{
 	public:
-		Shader(const std::string& filename, ShaderType shaderType, bool online_compile, const std::vector<Define>& defs = {});
+		Shader(const std::string& filename, ShaderType shaderType, bool runtimeCompile, const std::vector<Define>& defs = {});
 		
-		const uint32_t* GetSpriv();
+		inline const uint32_t* GetSpriv() { return m_spirv.data(); }
 		
-		ShaderType GetShaderType();
+		inline ShaderType GetShaderType() { return shaderType; }
 		
-		size_t BytesCount();
+		inline size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
 		
-		size_t Size();
+		inline size_t Size() { return m_spirv.size(); }
 	
 	private:
 		void InitSource(const std::string& filename);
@@ -93,7 +93,8 @@ namespace pe
 		void AddDefine(Define& define);
 		
 		void AddDefines(const std::vector<Define>& defines);
-		
+
+		Reflection reflection;
 		ShaderType shaderType;
 		shaderc::Compiler m_compiler;
 		shaderc::CompileOptions m_options;

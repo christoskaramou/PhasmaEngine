@@ -32,49 +32,57 @@ namespace pe
 	{
 		return new shaderc_include_result {"", 0, message, strlen(message)};
 	}
+
+	std::vector<char> ReadFile(const std::string& filename)
+	{
+		std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+		if (!file.is_open())
+			throw std::runtime_error("failed to open file!");
+
+		const size_t fileSize = static_cast<size_t>(file.tellg());
+		std::vector<char> buffer(fileSize);
+		file.seekg(0);
+		file.read(buffer.data(), fileSize);
+		file.close();
+
+		return buffer;
+	}
 	
-	shaderc_include_result*
-	FileIncluder::GetInclude(const char* requested_source, shaderc_include_type, const char* requesting_source, size_t)
+	shaderc_include_result* FileIncluder::GetInclude(const char* requested_source, shaderc_include_type, const char* requesting_source, size_t)
 	{
 		std::filesystem::path requesting_source_path(requesting_source);
 		
 		std::string full_path;
 		if (requesting_source_path.is_relative())
+		{
 			full_path =
-					std::filesystem::current_path().string() + "\\" + requesting_source_path.parent_path().string() +
-					"\\" + requested_source;
+				std::filesystem::current_path().string() + "\\" +
+				requesting_source_path.parent_path().string() + "\\" +
+				requested_source;
+		}
 		else
 			full_path = requesting_source_path.parent_path().string() + "\\" + requested_source;
 		
 		if (full_path.empty())
 			return MakeErrorIncludeResult("Cannot find or open include file.");
 		
-		FileInfo* file_info = new FileInfo {
-				full_path,
-				[](const std::string& filename)
-				{
-					std::ifstream file(filename, std::ios::ate | std::ios::binary);
-					if (!file.is_open())
-					{
-						throw std::runtime_error("failed to open file!");
-					}
-					const size_t fileSize = static_cast<size_t>(file.tellg());
-					std::vector<char> buffer(fileSize);
-					file.seekg(0);
-					file.read(buffer.data(), fileSize);
-					file.close();
-					
-					return buffer;
-				}(full_path)
+		FileInfo* file_info = new FileInfo
+		{
+			full_path,
+			ReadFile(full_path)
 		};
 		
 		included_files_.insert(full_path);
 		
-		return new shaderc_include_result {
-				file_info->full_path.data(), file_info->full_path.length(),
-				file_info->contents.data(), file_info->contents.size(),
-				file_info
-		};
+		shaderc_include_result* inlc_result = new shaderc_include_result();
+		inlc_result->source_name = file_info->full_path.data();
+		inlc_result->source_name_length = file_info->full_path.length();
+		inlc_result->content = file_info->contents.data();
+		inlc_result->content_length = file_info->contents.size();
+		inlc_result->user_data = file_info;
+
+		return inlc_result;
 	}
 	
 	void FileIncluder::ReleaseInclude(shaderc_include_result* include_result)
@@ -84,7 +92,7 @@ namespace pe
 		delete include_result;
 	}
 	
-	Shader::Shader(const std::string& filename, ShaderType shaderType, bool online_compile, const std::vector<Define>& defs)
+	Shader::Shader(const std::string& filename, ShaderType shaderType, bool runtimeCompile, const std::vector<Define>& defs)
 	{
 		std::string path = filename;
 		if (path.find(Path::Assets) == std::string::npos)
@@ -93,7 +101,7 @@ namespace pe
 		}
 		
 		this->shaderType = shaderType;
-		if (online_compile)
+		if (runtimeCompile)
 		{
 			InitSource(path);
 			
@@ -123,26 +131,9 @@ namespace pe
 			m_spirv.resize(buffer.size() / sizeof(uint32_t));
 			memcpy(m_spirv.data(), buffer.data(), buffer.size());
 		}
-	}
-	
-	const uint32_t* Shader::GetSpriv()
-	{
-		return m_spirv.data();
-	}
-	
-	ShaderType Shader::GetShaderType()
-	{
-		return shaderType;
-	}
-	
-	size_t Shader::BytesCount()
-	{
-		return m_spirv.size() * sizeof(uint32_t);
-	}
-	
-	size_t Shader::Size()
-	{
-		return m_spirv.size();
+
+		if (m_spirv.size() > 0)
+			reflection.Init(this);
 	}
 	
 	void Shader::AddDefine(Define& def)

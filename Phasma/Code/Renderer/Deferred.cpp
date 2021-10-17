@@ -354,14 +354,14 @@ namespace pe
 	{
 		const std::vector<Define> definesFrag
 		{
-			Define { "SHADOWMAP_CASCADES", std::to_string(SHADOWMAP_CASCADES) },
-			Define { "SHADOWMAP_SIZE", std::to_string((float)SHADOWMAP_SIZE) },
-			Define { "SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)SHADOWMAP_SIZE) },
-			Define { "MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS) },
-			Define { "MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS) }
+			Define{ "SHADOWMAP_CASCADES",		std::to_string(SHADOWMAP_CASCADES) },
+			Define{ "SHADOWMAP_SIZE",			std::to_string((float)SHADOWMAP_SIZE) },
+			Define{ "SHADOWMAP_TEXEL_SIZE",		std::to_string(1.0f / (float)SHADOWMAP_SIZE) },
+			Define{ "MAX_POINT_LIGHTS",			std::to_string(MAX_POINT_LIGHTS) },
+			Define{ "MAX_SPOT_LIGHTS",			std::to_string(MAX_SPOT_LIGHTS) }
 		};
 
-		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
+		Shader vert{ "Shaders/Common/quad.vert", ShaderType::Vertex, true };
 		Shader frag{ "Shaders/Deferred/composition.frag", ShaderType::Fragment, true, definesFrag };
 		
 		pipelineComposition.info.pVertShader = &vert;

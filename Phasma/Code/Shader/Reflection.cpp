@@ -27,9 +27,34 @@ SOFTWARE.
 
 namespace pe
 {
-	Reflection::Reflection(Shader* vert, Shader* frag) : m_vert(vert), m_frag(frag)
+	ShaderInOutDesc::ShaderInOutDesc()
 	{
-		spirv_cross::Compiler compiler {vert->GetSpriv(), vert->Size()};
+		name = "";
+		location = -1;
+		//type = make_sptr(spirv_cross::SPIRType());
+	}
+
+	CombinedImageSamplerDesc::CombinedImageSamplerDesc()
+	{
+		name = "";
+		set = -1;
+		binding = -1;
+	}
+
+	BufferDesc::BufferDesc()
+	{
+		name = "";
+		set = -1;
+		binding = -1;
+		//type = make_sptr(spirv_cross::SPIRType());
+		bufferSize = 0;
+	}
+
+	void Reflection::Init(Shader* shader)
+	{
+		m_shader = shader;
+
+		spirv_cross::Compiler compiler { shader->GetSpriv(), shader->Size()};
 		spirv_cross::ShaderResources resources = compiler.get_shader_resources();
 		
 		auto active = compiler.get_active_interface_variables();
@@ -93,28 +118,5 @@ namespace pe
 			
 			pushConstantBuffers.push_back(desc);
 		}
-	}
-	
-	Reflection::ShaderInOutDesc::ShaderInOutDesc()
-	{
-		name = "";
-		location = -1;
-		//type = make_sptr(spirv_cross::SPIRType());
-	}
-	
-	Reflection::CombinedImageSamplerDesc::CombinedImageSamplerDesc()
-	{
-		name = "";
-		set = -1;
-		binding = -1;
-	}
-	
-	Reflection::BufferDesc::BufferDesc()
-	{
-		name = "";
-		set = -1;
-		binding = -1;
-		//type = make_sptr(spirv_cross::SPIRType());
-		bufferSize = 0;
 	}
 }
