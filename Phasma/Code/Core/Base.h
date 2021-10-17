@@ -47,6 +47,7 @@ using MemoryPropertyFlags = uint32_t;
 using BufferUsageFlags = uint32_t;
 using ImageAspectFlags = uint32_t;
 using ImageUsageFlags = uint32_t;
+using ImageType = uint32_t;
 
 namespace vk
 {

@@ -33,7 +33,7 @@ namespace pe
 	struct GlobalSettings
 	{
 		inline static RenderApi Api = RenderApi::Vulkan;
-		inline static bool RightHanded = true;
+		inline static bool RightHanded = false;
 		inline static bool ReverseZ = true;
 	};
 }

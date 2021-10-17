@@ -416,7 +416,7 @@ namespace pe
 		for (int i = 0; i < dynamicCmdBuffers->size(); i++)
 			SetDebugObjectName((*dynamicCmdBuffers)[i], "Dynamic" + std::to_string(i));
 		
-		cbai.commandBufferCount = bufferCount * 3;
+		cbai.commandBufferCount = bufferCount * SHADOWMAP_CASCADES;
 		shadowCmdBuffers = make_sptr(device->allocateCommandBuffers(cbai));
 		for (int i = 0; i < shadowCmdBuffers->size(); i++)
 			SetDebugObjectName((*shadowCmdBuffers)[i], "Shadow" + std::to_string(i));

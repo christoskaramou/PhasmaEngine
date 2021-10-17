@@ -30,6 +30,7 @@ SOFTWARE.
 
 #define MAX_POINT_LIGHTS 10
 #define MAX_SPOT_LIGHTS 10
+#define SHADOWMAP_CASCADES 4
 
 struct DirectionalLight
 {
@@ -54,7 +55,9 @@ layout(push_constant) uniform Constants {
 	float max_cascade_dist0;
 	float max_cascade_dist1;
 	float max_cascade_dist2;
+	float max_cascade_dist3;
 	float cast_shadows;
+	float dummy[11];
 } pushConst;
 layout(set = 0, binding = 0) uniform sampler2D sampler_depth;
 layout(set = 0, binding = 1) uniform sampler2D sampler_normal;
@@ -76,7 +79,8 @@ layout(set = 0, binding = 9) uniform SS { mat4 invViewProj; vec4 effects0; vec4 
 layout(set = 1, binding = 0) uniform sampler2DShadow sampler_shadow_map0;
 layout(set = 1, binding = 1) uniform sampler2DShadow sampler_shadow_map1;
 layout(set = 1, binding = 2) uniform sampler2DShadow sampler_shadow_map2;
-layout(set = 1, binding = 3) uniform shadow_buffer0 { mat4 cascades[3]; } sun;
+layout(set = 1, binding = 3) uniform sampler2DShadow sampler_shadow_map3;
+layout(set = 1, binding = 4) uniform shadow_buffer0 { mat4 cascades[SHADOWMAP_CASCADES]; } sun;
 layout(set = 2, binding = 0) uniform samplerCube sampler_cube_map;
 
 vec2 poissonDisk[8] = vec2[](
@@ -89,61 +93,111 @@ vec2 poissonDisk[8] = vec2[](
 	vec2(0.015656f, 0.749779f),
 	vec2(0.758385f, 0.49617f));
 
-vec3 DirectLight(Material material, vec3 worldPos, vec3 cameraPos, vec3 materialNormal, float ssao, float depth)
-{
-	float lit = 1.0;
+#define SHADOWMAP_SIZE 4096.0f
+#define SHADOWMAP_TEXEL_SIZE (1.0f / SHADOWMAP_SIZE)
+#define SAMPLES 8
 
-#if 0
+float textureProjLinear(sampler2DShadow shadowSampler, vec4 sc, float offsetScaled)
+{
+	vec2 pixelPos = sc.xy * SHADOWMAP_SIZE + vec2(0.5f);
+	vec2 f = fract(pixelPos);
+	vec2 pos = (pixelPos - f) * SHADOWMAP_TEXEL_SIZE;
+
+	float dx = offsetScaled;
+	float dy = offsetScaled;
+
+	float tlTexel = textureProj(shadowSampler, vec4(pos + vec2(-dx, +dy), sc.z, sc.w));
+	float trTexel = textureProj(shadowSampler, vec4(pos + vec2(+dx, +dy), sc.z, sc.w));
+	float blTexel = textureProj(shadowSampler, vec4(pos + vec2(-dx, -dy), sc.z, sc.w));
+	float brTexel = textureProj(shadowSampler, vec4(pos + vec2(+dx, -dy), sc.z, sc.w));
+
+	float mixA = mix(tlTexel, trTexel, f.x);
+	float mixB = mix(blTexel, brTexel, f.x);
+	
+	return mix(mixA, mixB, 1-f.y);
+}
+
+float FilterPoisson(vec4 sc, sampler2DShadow shadowSampler)
+{
+	float offsetScaled = 0.75 * SHADOWMAP_TEXEL_SIZE;
+
+	float shadowFactor = 0.0;
+
+	for (int i = 0; i < SAMPLES; i++)
+		shadowFactor += textureProjLinear(shadowSampler, vec4(sc.xy + poissonDisk[i] * offsetScaled, sc.z, sc.w), offsetScaled);
+
+	return shadowFactor / float(SAMPLES);
+}
+
+float FilterPCF(vec4 sc, sampler2DShadow shadowSampler)
+{
+	float offsetScaled = 0.75 * SHADOWMAP_TEXEL_SIZE;
+	float dx = offsetScaled;
+	float dy = offsetScaled;
+	
+	float shadowFactor = 0.0;
+	int count = 0;
+	int range = 1;
+	
+	for (int x = -range; x <= range; x++) {
+		for (int y = -range; y <= range; y++) {
+			shadowFactor += textureProjLinear(shadowSampler, vec4(sc.xy + vec2(dx * x, dy * y), sc.z, sc.w), offsetScaled);
+			count++;
+		}
+	}
+
+	return shadowFactor / count;
+}
+
+const mat4 biasMat = mat4(
+	0.5, 0.0, 0.0, 0.0,
+	0.0, 0.5, 0.0, 0.0,
+	0.0, 0.0, 1.0, 0.0,
+	0.5, 0.5, 0.0, 1.0
+);
+
+float CalculateShadows(vec3 worldPos, float depth, float NdL)
+{
+	float shadow = 1.0;
+
 	if (pushConst.cast_shadows > 0.5)
 	{
-		lit = 0.0;
+		float bias = SHADOWMAP_TEXEL_SIZE * tan(acos(NdL)); // cosTheta is dot( n,l ), clamped between 0 and 1
+		bias = clamp(bias, 0, SHADOWMAP_TEXEL_SIZE * 2.0f);
 
-		const float bias = 0.0007;
+		shadow = 0.0;
 
 		if (depth < pushConst.max_cascade_dist0)
 		{
-			//return vec3(1.0, 0.0, 0.0);
-
-			vec4 s_coords0 = sun.cascades[0] * vec4(world_pos, 1.0);
-			s_coords0 = s_coords0 / s_coords0.w;
-			s_coords0.xy = s_coords0.xy * 0.5 + 0.5;
-
-			for (int i = 0; i < 4; i++)
-			{
-				float cascade0 = texture(sampler_shadow_map0, vec3(s_coords0.xy + poissonDisk[i] * 0.0008, s_coords0.z + bias));
-				lit += 0.25 * cascade0;
-			}
+			vec4 s_coords0 = biasMat * sun.cascades[0] * vec4(worldPos, 1.0);
+			s_coords0.z += bias;
+			shadow = FilterPCF(s_coords0, sampler_shadow_map0);
 		}
 		else if (depth < pushConst.max_cascade_dist1)
 		{
-			//return vec3(0.0, 1.0, 0.0);
-
-			vec4 s_coords1 = sun.cascades[1] * vec4(world_pos, 1.0);
-			s_coords1 = s_coords1 / s_coords1.w;
-			s_coords1.xy = s_coords1.xy * 0.5 + 0.5;
-
-			for (int i = 0; i < 4; i++)
-			{
-				float cascade1 = texture(sampler_shadow_map1, vec3(s_coords1.xy + poissonDisk[i] * 0.0008, s_coords1.z + bias));
-				lit += 0.25 * cascade1;
-			}
+			vec4 s_coords1 = biasMat * sun.cascades[1] * vec4(worldPos, 1.0);
+			s_coords1.z += bias;
+			shadow = FilterPCF(s_coords1, sampler_shadow_map1);
 		}
 		else if (depth < pushConst.max_cascade_dist2)
 		{
-			//return vec3(0.0, 0.0, 1.0);
-
-			vec4 s_coords2 = sun.cascades[2] * vec4(world_pos, 1.0);
-			s_coords2 = s_coords2 / s_coords2.w;
-			s_coords2.xy = s_coords2.xy * 0.5 + 0.5;
-
-			for (int i = 0; i < 4; i++)
-			{
-				float cascade2 = texture(sampler_shadow_map2, vec3(s_coords2.xy + poissonDisk[i] * 0.0008, s_coords2.z + bias));
-				lit += 0.25 * cascade2;
-			}
+			vec4 s_coords2 = biasMat * sun.cascades[2] * vec4(worldPos, 1.0);
+			s_coords2.z += bias * 2.0f;
+			shadow = FilterPCF(s_coords2, sampler_shadow_map2);
+		}
+		else if (depth < pushConst.max_cascade_dist3)
+		{
+			vec4 s_coords3 = biasMat * sun.cascades[3] * vec4(worldPos, 1.0);
+			s_coords3.z += bias * 2.0f;
+			shadow = FilterPCF(s_coords3, sampler_shadow_map3);
 		}
 	}
-#endif
+
+	return shadow;
+}
+
+vec3 DirectLight(Material material, vec3 worldPos, vec3 cameraPos, vec3 materialNormal, float occlusion, float shadow)
+{
 	float roughness = material.roughness * 0.75 + 0.25;
 
 	// Compute directional light.
@@ -160,8 +214,8 @@ vec3 DirectLight(Material material, vec3 worldPos, vec3 cameraPos, vec3 material
 
 	vec3 F0 = ComputeF0(material.albedo, material.metallic);
 	vec3 specularFresnel = Fresnel(F0, HoV);
-	vec3 specRef = ubo.sun.color.xyz * NoL * lit * CookTorranceSpecular(N, H, NoL, NoV, specularFresnel, roughness);
-	vec3 diffRef = ubo.sun.color.xyz * NoL * lit * (1.0 - specularFresnel) * (1.0 / PI);
+	vec3 specRef = ubo.sun.color.xyz * NoL * shadow * CookTorranceSpecular(N, H, NoL, NoV, specularFresnel, roughness);
+	vec3 diffRef = ubo.sun.color.xyz * NoL * shadow * (1.0 - specularFresnel) * (1.0 / PI);
 
 	vec3 reflectedLight = specRef;
 	vec3 diffuseLight = diffRef * material.albedo * (1.0 - material.metallic);
@@ -170,7 +224,7 @@ vec3 DirectLight(Material material, vec3 worldPos, vec3 cameraPos, vec3 material
 	return lighting * ubo.sun.color.a;
 }
 
-vec3 ComputePointLight(int lightIndex, Material material, vec3 worldPos, vec3 cameraPos, vec3 materialNormal, float ssao)
+vec3 ComputePointLight(int lightIndex, Material material, vec3 worldPos, vec3 cameraPos, vec3 materialNormal, float occlusion)
 {
 	vec3 lightDirFull = worldPos - ubo.pointLights[lightIndex].position.xyz;
 	float lightDist = max(0.1, length(lightDirFull));
@@ -180,7 +234,7 @@ vec3 ComputePointLight(int lightIndex, Material material, vec3 worldPos, vec3 ca
 	vec3 lightDir = normalize(-lightDirFull);
 	float attenuation = 1 / (lightDist * lightDist);
 	vec3 pointColor = ubo.pointLights[lightIndex].color.xyz * attenuation;
-	pointColor *= screenSpace.effects2.y * ssao; // intensity
+	pointColor *= screenSpace.effects2.y * occlusion; // intensity
 
 	float roughness = material.roughness * 0.75 + 0.25;
 
@@ -366,7 +420,7 @@ vec3 VolumetricLighting(DirectionalLight light, vec3 worldPos, vec2 uv, mat4 lig
 		vec2 rayUV = posLight.xy * vec2(0.5f, 0.5f) + 0.5f;
 		
 		// Check to see if the light can "see" the pixel		
-		float depthDelta = texture(sampler_shadow_map1, vec3(rayUV, posLight.z)).r;
+		float depthDelta = texture(sampler_shadow_map1, vec3(rayUV, posLight.z));
 		if (depthDelta > 0.0f)
 		{
 			volumetricFactor += ComputeScattering(dot(rayDir, light.direction.xyz));

@@ -165,7 +165,7 @@ namespace pe
 	}
 
 	static bool metrics_open = true;
-	static bool properties_open = false;
+	static bool properties_open = true;
 	static bool shaders_open = false;
 	static bool models_open = false;
 	static bool console_open = false;
@@ -252,15 +252,13 @@ namespace pe
 		ImGui::Indent(16.0f);
 		if (shadow_cast)
 		{
-			ImGui::Text("Depth: %.3f ms", frameTimer.timestamps[13]);
-			totalPasses++;
-			totalTime += (float)frameTimer.timestamps[13];
-			ImGui::Text("Depth: %.3f ms", frameTimer.timestamps[14]);
-			totalPasses++;
-			totalTime += (float)frameTimer.timestamps[14];
-			ImGui::Text("Depth: %.3f ms", frameTimer.timestamps[15]);
-			totalPasses++;
-			totalTime += (float)frameTimer.timestamps[15];
+			for (int i = 0; i < SHADOWMAP_CASCADES; i++)
+			{
+				int index = 13 + i;
+				ImGui::Text("ShadowPass%i: %.3f ms", i, frameTimer.timestamps[index]);
+				totalPasses++;
+				totalTime += (float)frameTimer.timestamps[index];
+			}
 		}
 		ImGui::Text("GBuffer: %.3f ms", frameTimer.timestamps[4]);
 		totalPasses++;

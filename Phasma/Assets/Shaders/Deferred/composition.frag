@@ -38,7 +38,7 @@ void main()
 		// Skybox
 		vec3 wolrdPos = GetPosFromUV(in_UV, depth, screenSpace.invViewProj);
 		vec3 samplePos = normalize(wolrdPos - ubo.camPos.xyz);
-		samplePos.xy *= -1.0f; // the final image is blitted to the swapchain with -x and -y
+		//samplePos.xy *= -1.0f; // the final image is blitted to the swapchain with -x and -y
 		outColor = vec4(texture(sampler_cube_map, samplePos).xyz, 1.0);
 		
 		// Fog
@@ -86,10 +86,10 @@ void main()
 	material.F0 = mix(vec3(0.04f), material.albedo, material.metallic);
 
 	// Ambient
-	float factorOcclusion = screenSpace.effects0.x > 0.5 ? texture(sampler_ssao_blur, in_UV).x : 1.0;
-	float factorSkyLight = clamp(ubo.sun.color.a, 0.025f, 1.0f);
-	factorSkyLight *= screenSpace.effects3.z > 0.5 ? 0.25 : 0.15;
-	float ambientLight = factorSkyLight * factorOcclusion;
+	float occlusion = screenSpace.effects0.x > 0.5 ? texture(sampler_ssao_blur, in_UV).x : 1.0;
+	float skyLight = clamp(ubo.sun.color.a, 0.025f, 1.0f);
+	skyLight *= screenSpace.effects3.z > 0.5 ? 0.25 : 0.15;
+	float ambientLight = skyLight * occlusion;
 	vec3 fragColor = vec3(0.0);// 0.1 * material.albedo.xyz;
 
 	// IBL
@@ -102,10 +102,13 @@ void main()
 
 	// screenSpace.effects3.z -> shadow cast
 	if (screenSpace.effects3.z > 0.5)
-		fragColor += DirectLight(material, wolrdPos, ubo.camPos.xyz, normal, factorOcclusion, length(wolrdPos - ubo.camPos.xyz));
+	{
+		float shadow = CalculateShadows(wolrdPos, length(wolrdPos - ubo.camPos.xyz), dot(normal, ubo.sun.direction.xyz));
+		fragColor += DirectLight(material, wolrdPos, ubo.camPos.xyz, normal, occlusion, shadow);
+	}
 
 	for(int i = 0; i < MAX_POINT_LIGHTS; ++i)
-		fragColor += ComputePointLight(i, material, wolrdPos, ubo.camPos.xyz, normal, factorOcclusion);
+		fragColor += ComputePointLight(i, material, wolrdPos, ubo.camPos.xyz, normal, occlusion);
 
 	outColor = vec4(fragColor, albedo.a) + texture(sampler_emission, in_UV);
 

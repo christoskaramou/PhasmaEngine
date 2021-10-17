@@ -57,13 +57,12 @@ namespace pe
 	Image::~Image()
 	{
 	}
+
 	void Image::SetDebugName(const std::string& debugName)
 	{
-#if _DEBUG
+	#if _DEBUG
 		VULKAN.SetDebugObjectName(vk::Image(image), debugName);
-#else
-		return;
-#endif
+	#endif
 	}
 	
 	void Image::TransitionImageLayout(

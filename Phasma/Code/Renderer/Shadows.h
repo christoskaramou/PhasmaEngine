@@ -32,6 +32,9 @@ SOFTWARE.
 
 namespace pe
 {
+	constexpr uint32_t SHADOWMAP_CASCADES = 4;
+	constexpr uint32_t SHADOWMAP_SIZE = 4096;
+
 	class Shadows
 	{
 	public:
@@ -39,9 +42,8 @@ namespace pe
 		
 		~Shadows();
 		
-		mat4 cascades[3];
-		vec3 viewZ;
-		static uint32_t imageSize;
+		mat4 cascades[SHADOWMAP_CASCADES];
+		vec4 viewZ;
 		RenderPass renderPass;
 		std::vector<Image> textures {};
 		SPtr<vk::DescriptorSet> descriptorSetDeferred;

@@ -227,20 +227,22 @@ namespace pe
 		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
 		vk::ClearValue clearColor;
 		memcpy(clearColor.color.float32, &color, sizeof(vec4));
-		
-		std::vector<vk::ClearValue> clearValues = {clearColor, clearColor};
-		
+
+		std::vector<vk::ClearValue> clearValues = { clearColor, clearColor };
+
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = *compositionRenderPass.handle;
 		rpi.framebuffer = *compositionFramebuffers[imageIndex].handle;
-		rpi.renderArea.offset = vk::Offset2D {0, 0};
+		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 		rpi.pClearValues = clearValues.data();
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-		const vec4 values(shadows.viewZ, GUI::shadow_cast);
-		cmd.pushConstants<vec4>(*pipelineComposition.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
+		mat4 values{};
+		values[0] = shadows.viewZ;
+		values[1] = vec4(GUI::shadow_cast);
+		cmd.pushConstants<mat4>(*pipelineComposition.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineComposition.handle);
 		cmd.bindDescriptorSets(
 			vk::PipelineBindPoint::eGraphics,
@@ -362,7 +364,7 @@ namespace pe
 		pipelineComposition.info.width = renderTargets["viewport"].width_f;
 		pipelineComposition.info.height = renderTargets["viewport"].height_f;
 		pipelineComposition.info.pushConstantStage = PushConstantStage::Fragment;
-		pipelineComposition.info.pushConstantSize = 4 * sizeof(float);
+		pipelineComposition.info.pushConstantSize = sizeof(mat4);
 		pipelineComposition.info.colorBlendAttachments = make_sptr(
 				std::vector<vk::PipelineColorBlendAttachmentState> {
 						renderTargets["viewport"].blendAttachment

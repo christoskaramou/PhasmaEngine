@@ -1098,7 +1098,7 @@ namespace pe
 		//cfloat m20 = projOffset.x;
 		//cfloat m21 = projOffset.y;
 		cfloat m22 = zFar / (zFar - zNear);
-		cfloat m23 = reverseZ ? -1.0f : 1.0f;
+		cfloat m23 = 1.0f;// reverseZ ? -1.0f : 1.0f;
 		cfloat m32 = -(zFar * zNear) / (zFar - zNear);
 	
 		return mat4(
@@ -1122,7 +1122,7 @@ namespace pe
 		//cfloat m20 = projOffset.x;
 		//cfloat m21 = projOffset.y;
 		cfloat m22 = zFar / (zNear - zFar);
-		cfloat m23 = reverseZ ? 1.0f : -1.0f;
+		cfloat m23 = -1.0f;// reverseZ ? 1.0f : -1.0f;
 		cfloat m32 = -(zFar * zNear) / (zFar - zNear);
 
 		return mat4(
@@ -1150,7 +1150,7 @@ namespace pe
 
 		cfloat m00 = 2.f / (right - left);
 		cfloat m11 = 2.f / (top - bottom);
-		cfloat m22 = 1.f / (zFar - zNear);
+		cfloat m22 = 1.f / (zFar - zNear);// *(reverseZ ? -1.0f : 1.0f);
 		cfloat m30 = -(right + left) / (right - left);
 		cfloat m31 = -(top + bottom) / (top - bottom);
 		cfloat m32 = -zNear / (zFar - zNear);
@@ -1171,7 +1171,7 @@ namespace pe
 
 		cfloat m00 = 2.f / (right - left);
 		cfloat m11 = 2.f / (top - bottom);
-		cfloat m22 = -1.f / (zFar - zNear);
+		cfloat m22 = -1.f / (zFar - zNear);// * (reverseZ ? -1.0f : 1.0f);
 		cfloat m30 = -(right + left) / (right - left);
 		cfloat m31 = -(top + bottom) / (top - bottom);
 		cfloat m32 = -zNear / (zFar - zNear);

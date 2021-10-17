@@ -31,7 +31,6 @@ namespace pe
 {    
     Camera::Camera()
     {
-        // Right handed
         worldOrientation = vec3(1.f, 1.f, 1.f);
         
         // total pitch, yaw, roll
@@ -40,7 +39,7 @@ namespace pe
         position = vec3(0.f, 0.f, 0.f);
         
         nearPlane = 0.005f;
-        farPlane = 500.0f;
+        farPlane = 100.0f;
         FOV = radians(87.0f);
         speed = 0.35f;
         rotationSpeed = 0.05f;

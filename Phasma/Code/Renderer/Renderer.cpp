@@ -268,16 +268,17 @@ namespace pe
 		
 		vk::RenderPassBeginInfo renderPassInfoShadows;
 		renderPassInfoShadows.renderPass = *shadows.renderPass.handle;
-		renderPassInfoShadows.renderArea = vk::Rect2D{ {0, 0}, {Shadows::imageSize, Shadows::imageSize} };
+		renderPassInfoShadows.renderArea = vk::Rect2D{ {0, 0}, {SHADOWMAP_SIZE, SHADOWMAP_SIZE} };
 		renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
 		renderPassInfoShadows.pClearValues = clearValuesShadows.data();
 
-		static GPUTimer gpuTimer[3]{};
+		static GPUTimer gpuTimer[SHADOWMAP_CASCADES]{};
 		
-		for (uint32_t i = 0; i < shadows.textures.size(); i++)
+		for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
 		{
-			auto& cmd = (*VULKAN.shadowCmdBuffers)[
-					static_cast<uint32_t>(shadows.textures.size()) * imageIndex + i];
+			uint32_t index = SHADOWMAP_CASCADES * imageIndex + i;
+
+			auto& cmd = (*VULKAN.shadowCmdBuffers)[index];
 			cmd.begin(beginInfoShadows);
 
 			FrameTimer& frameTimer = FrameTimer::Instance();
@@ -285,7 +286,7 @@ namespace pe
 
 			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
-			renderPassInfoShadows.framebuffer = *shadows.framebuffers[shadows.textures.size() * imageIndex + i].handle;
+			renderPassInfoShadows.framebuffer = *shadows.framebuffers[index].handle;
 			cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadows.pipeline.handle);
 			for (auto& model : Model::models)
