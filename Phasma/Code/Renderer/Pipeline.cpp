@@ -66,8 +66,8 @@ namespace pe
 		vk::GraphicsPipelineCreateInfo pipeinfo;
 		
 		vk::ShaderModuleCreateInfo vsmci;
-		vsmci.codeSize = info.pVertShader->byte_size();
-		vsmci.pCode = info.pVertShader->get_spriv();
+		vsmci.codeSize = info.pVertShader->BytesCount();
+		vsmci.pCode = info.pVertShader->GetSpriv();
 		vk::UniqueShaderModule vertModule = VULKAN.device->createShaderModuleUnique(vsmci);
 		
 		vk::PipelineShaderStageCreateInfo pssci1;
@@ -80,8 +80,8 @@ namespace pe
 		vk::PipelineShaderStageCreateInfo pssci2;
 		if (info.pFragShader)
 		{
-			fsmci.codeSize = info.pFragShader->byte_size();
-			fsmci.pCode = info.pFragShader->get_spriv();
+			fsmci.codeSize = info.pFragShader->BytesCount();
+			fsmci.pCode = info.pFragShader->GetSpriv();
 			fragModule = VULKAN.device->createShaderModuleUnique(fsmci);
 			
 			pssci2.stage = vk::ShaderStageFlagBits::eFragment;
@@ -219,8 +219,8 @@ namespace pe
 		vk::ComputePipelineCreateInfo compinfo;
 		
 		vk::ShaderModuleCreateInfo csmci;
-		csmci.codeSize = info.pCompShader->byte_size();
-		csmci.pCode = info.pCompShader->get_spriv();
+		csmci.codeSize = info.pCompShader->BytesCount();
+		csmci.pCode = info.pCompShader->GetSpriv();
 		
 		vk::PipelineLayoutCreateInfo plci;
 		plci.setLayoutCount = static_cast<uint32_t>(info.descriptorSetLayouts->size());

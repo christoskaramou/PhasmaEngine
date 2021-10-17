@@ -28,10 +28,6 @@ SOFTWARE.
 #include "pbr.glsl"
 #include "Material.glsl"
 
-#define MAX_POINT_LIGHTS 10
-#define MAX_SPOT_LIGHTS 10
-#define SHADOWMAP_CASCADES 4
-
 struct DirectionalLight
 {
 	vec4 color; // .a is the intensity
@@ -93,9 +89,7 @@ vec2 poissonDisk[8] = vec2[](
 	vec2(0.015656f, 0.749779f),
 	vec2(0.758385f, 0.49617f));
 
-#define SHADOWMAP_SIZE 4096.0f
-#define SHADOWMAP_TEXEL_SIZE (1.0f / SHADOWMAP_SIZE)
-#define SAMPLES 8
+#define POISSON_SAMPLES 8
 
 float textureProjLinear(sampler2DShadow shadowSampler, vec4 sc, float offsetScaled)
 {
@@ -123,10 +117,10 @@ float FilterPoisson(vec4 sc, sampler2DShadow shadowSampler)
 
 	float shadowFactor = 0.0;
 
-	for (int i = 0; i < SAMPLES; i++)
+	for (int i = 0; i < POISSON_SAMPLES; i++)
 		shadowFactor += textureProjLinear(shadowSampler, vec4(sc.xy + poissonDisk[i] * offsetScaled, sc.z, sc.w), offsetScaled);
 
-	return shadowFactor / float(SAMPLES);
+	return shadowFactor / float(POISSON_SAMPLES);
 }
 
 float FilterPCF(vec4 sc, sampler2DShadow shadowSampler)

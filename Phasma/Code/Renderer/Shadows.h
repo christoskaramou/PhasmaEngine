@@ -33,7 +33,7 @@ SOFTWARE.
 namespace pe
 {
 	constexpr uint32_t SHADOWMAP_CASCADES = 4;
-	constexpr uint32_t SHADOWMAP_SIZE = 4096;
+	constexpr uint32_t SHADOWMAP_SIZE = 2048;
 
 	class Shadows
 	{

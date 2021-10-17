@@ -29,7 +29,7 @@ namespace pe
 {
 	Reflection::Reflection(Shader* vert, Shader* frag) : m_vert(vert), m_frag(frag)
 	{
-		spirv_cross::Compiler compiler {vert->get_spriv(), vert->size()};
+		spirv_cross::Compiler compiler {vert->GetSpriv(), vert->Size()};
 		spirv_cross::ShaderResources resources = compiler.get_shader_resources();
 		
 		auto active = compiler.get_active_interface_variables();

@@ -71,40 +71,39 @@ namespace pe
 	class Shader
 	{
 	public:
-		Shader(
-				const std::string& filename, ShaderType shaderType, bool online_compile,
-				const std::vector<Define>& defs = {}
-		);
+		Shader(const std::string& filename, ShaderType shaderType, bool online_compile, const std::vector<Define>& defs = {});
 		
-		const uint32_t* get_spriv();
+		const uint32_t* GetSpriv();
 		
-		ShaderType get_shader_type();
+		ShaderType GetShaderType();
 		
-		size_t byte_size();
+		size_t BytesCount();
 		
-		size_t size();
+		size_t Size();
 	
 	private:
-		void init_source(const std::string& filename);
+		void InitSource(const std::string& filename);
 		
-		void preprocess_shader(shaderc_shader_kind kind);
+		void PreprocessShader(shaderc_shader_kind kind);
 		
-		void compile_file_to_assembly(shaderc_shader_kind kind);
+		void CompileFileToAssembly(shaderc_shader_kind kind);
 		
-		void compile_file(shaderc_shader_kind kind);
+		void CompileFile(shaderc_shader_kind kind);
 		
-		void addDefine(Define& define);
+		void AddDefine(Define& define);
 		
-		void addDefines(const std::vector<Define>& defines);
+		void AddDefines(const std::vector<Define>& defines);
 		
 		ShaderType shaderType;
 		shaderc::Compiler m_compiler;
 		shaderc::CompileOptions m_options;
-		std::string m_source_name {};
-		std::string m_source {};
-		std::string m_preprocessed {};
-		std::string m_assembly {};
-		std::vector<uint32_t> m_spirv {};
-		std::vector<Define> defines {};
+		std::string m_source_name{};
+		std::string m_source{};
+		std::string m_preprocessed{};
+		std::string m_assembly{};
+		std::vector<uint32_t> m_spirv{};
+		std::vector<Define> defines{};
+
+		inline static std::vector<Define> globalDefines{};
 	};
 }

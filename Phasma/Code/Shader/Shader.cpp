@@ -95,16 +95,17 @@ namespace pe
 		this->shaderType = shaderType;
 		if (online_compile)
 		{
-			init_source(path);
+			InitSource(path);
 			
 			m_options.SetIncluder(std::make_unique<FileIncluder>());
 			m_options.SetOptimizationLevel(
 					shaderc_optimization_level_zero
 			); // Validation Layers reporting error in spirv with other flags
 			
-			addDefines(defs);
+			AddDefines(globalDefines);
+			AddDefines(defs);
 			
-			compile_file(static_cast<shaderc_shader_kind>(shaderType));
+			CompileFile(static_cast<shaderc_shader_kind>(shaderType));
 		}
 		else
 		{
@@ -124,27 +125,27 @@ namespace pe
 		}
 	}
 	
-	const uint32_t* Shader::get_spriv()
+	const uint32_t* Shader::GetSpriv()
 	{
 		return m_spirv.data();
 	}
 	
-	ShaderType Shader::get_shader_type()
+	ShaderType Shader::GetShaderType()
 	{
 		return shaderType;
 	}
 	
-	size_t Shader::byte_size()
+	size_t Shader::BytesCount()
 	{
 		return m_spirv.size() * sizeof(uint32_t);
 	}
 	
-	size_t Shader::size()
+	size_t Shader::Size()
 	{
 		return m_spirv.size();
 	}
 	
-	void Shader::addDefine(Define& def)
+	void Shader::AddDefine(Define& def)
 	{
 		if (def.name.empty()) return;
 		
@@ -157,13 +158,13 @@ namespace pe
 		
 	}
 	
-	void Shader::addDefines(const std::vector<Define>& defs)
+	void Shader::AddDefines(const std::vector<Define>& defs)
 	{
 		for (auto def : defs)
-			addDefine(def);
+			AddDefine(def);
 	}
 	
-	void Shader::init_source(const std::string& filename)
+	void Shader::InitSource(const std::string& filename)
 	{
 		if (filename.empty())
 			throw std::runtime_error("file name was empty");
@@ -184,7 +185,7 @@ namespace pe
 		file.close();
 	}
 	
-	void Shader::preprocess_shader(shaderc_shader_kind kind)
+	void Shader::PreprocessShader(shaderc_shader_kind kind)
 	{
 		if (m_source.empty() || m_source_name.empty())
 			throw std::runtime_error("source file was empty");
@@ -202,7 +203,7 @@ namespace pe
 		m_preprocessed = {result.cbegin(), result.cend()};
 	}
 	
-	void Shader::compile_file_to_assembly(shaderc_shader_kind kind)
+	void Shader::CompileFileToAssembly(shaderc_shader_kind kind)
 	{
 		if (m_source.empty() || m_source_name.empty())
 			throw std::runtime_error("source file was empty");
@@ -221,7 +222,7 @@ namespace pe
 		m_assembly = {result.cbegin(), result.cend()};
 	}
 	
-	void Shader::compile_file(shaderc_shader_kind kind)
+	void Shader::CompileFile(shaderc_shader_kind kind)
 	{
 		if (m_source.empty() || m_source_name.empty())
 			throw std::runtime_error("source file was empty");

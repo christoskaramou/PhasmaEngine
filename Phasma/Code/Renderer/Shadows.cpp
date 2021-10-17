@@ -200,7 +200,7 @@ namespace pe
 		}
 	}
 
-	constexpr float cascadeSplitLambda = 0.85f;
+	constexpr float cascadeSplitLambda = 0.95f;
 	void Shadows::CalculateCascades(Camera& camera)
 	{
 		float cascadeSplits[SHADOWMAP_CASCADES];

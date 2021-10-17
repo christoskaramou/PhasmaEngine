@@ -29,8 +29,8 @@ SOFTWARE.
 
 namespace pe
 {
-#define MAX_POINT_LIGHTS 10
-#define MAX_SPOT_LIGHTS 10
+	constexpr uint32_t MAX_POINT_LIGHTS = 10;
+	constexpr uint32_t MAX_SPOT_LIGHTS = 10;
 
 	struct LightsUBO
 	{
