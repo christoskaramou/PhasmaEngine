@@ -109,8 +109,8 @@ namespace pe
 		FrameTimer& frameTimer = FrameTimer::Instance();
 
 		vk::CommandBuffer* vkHandle = &(*VULKAN.dynamicCmdBuffers)[imageIndex];
-		CommandBuffer* cmd = reinterpret_cast<CommandBuffer*>(vkHandle);
-		cmd->Begin();
+		CommandBuffer cmd = VkCommandBuffer(*vkHandle);
+		cmd.Begin();
 
 		gpuTimer[0].Start(vkHandle);
 		// SKYBOX
@@ -159,7 +159,7 @@ namespace pe
 		{
 			gpuTimer[2].Start(vkHandle);
 			renderTargets["ssaoBlur"].ChangeLayout(cmd, LayoutState::ColorWrite);
-			ssao.draw(cmd, imageIndex, renderTargets["ssao"]);
+			ssao.draw(&cmd, imageIndex, renderTargets["ssao"]);
 			renderTargets["ssaoBlur"].ChangeLayout(cmd, LayoutState::ColorRead);
 			frameTimer.timestamps[5] = gpuTimer[2].End();
 		}
@@ -242,16 +242,16 @@ namespace pe
 		for (auto& image : shadows.textures)
 			image.ChangeLayout(cmd, LayoutState::DepthWrite);
 
-		BlitToViewport(*vkHandle, GUI::s_currRenderImage ? *GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
+		BlitToViewport(cmd, GUI::s_currRenderImage ? *GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
 
 		// GUI
 		gpuTimer[10].Start(vkHandle);
-		gui.Draw(*vkHandle, imageIndex);
+		gui.Draw(cmd, imageIndex);
 		frameTimer.timestamps[12] = gpuTimer[10].End();
 		
 		frameTimer.timestamps[2] = gpuTimer[0].End();
 		
-		cmd->End();
+		cmd.End();
 	}
 	
 	void Renderer::RecordShadowsCmds(uint32_t imageIndex)
@@ -627,14 +627,12 @@ namespace pe
 		//- Recreate resources end --------------
 	}
 			
-	void Renderer::BlitToViewport(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
+	void Renderer::BlitToViewport(CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
 	{
 		Image& s_chain_Image = VULKAN.swapchain.images[imageIndex];
-
-		CommandBuffer* cmdBuf = reinterpret_cast<CommandBuffer*>(&cmd);
 		
 		renderedImage.TransitionImageLayout(
-			cmdBuf,
+			cmd,
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -644,7 +642,7 @@ namespace pe
 			VK_IMAGE_ASPECT_COLOR_BIT
 		);
 		s_chain_Image.TransitionImageLayout(
-			cmdBuf,
+			cmd,
 			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -669,14 +667,14 @@ namespace pe
 		blit.dstSubresource.layerCount = 1;
 		
 		vkCmdBlitImage(
-			cmd,
+			cmd.Handle(),
 			renderedImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			s_chain_Image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1, &VkImageBlit(blit),
 			VK_FILTER_LINEAR);
 		
 		renderedImage.TransitionImageLayout(
-			cmdBuf,
+			cmd,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -686,7 +684,7 @@ namespace pe
 			VK_IMAGE_ASPECT_COLOR_BIT
 		);
 		s_chain_Image.TransitionImageLayout(
-			cmdBuf,
+			cmd,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 			VK_PIPELINE_STAGE_TRANSFER_BIT,

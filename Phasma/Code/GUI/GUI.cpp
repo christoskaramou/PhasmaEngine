@@ -652,12 +652,11 @@ namespace pe
 		info.CheckVkResultFn = nullptr;
 		ImGui_ImplVulkan_Init(&info, *renderPass.handle);
 
-		vk::CommandBufferBeginInfo beginInfo;
-		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-		(*VULKAN.dynamicCmdBuffers)[0].begin(beginInfo);
-		ImGui_ImplVulkan_CreateFontsTexture((*VULKAN.dynamicCmdBuffers)[0]);
-		(*VULKAN.dynamicCmdBuffers)[0].end();
-		VULKAN.submitAndWaitFence((*VULKAN.dynamicCmdBuffers)[0], nullptr, nullptr, nullptr);
+		CommandBuffer cmd = VkCommandBuffer((*VULKAN.dynamicCmdBuffers)[0]);
+		cmd.Begin();
+		ImGui_ImplVulkan_CreateFontsTexture(cmd.Handle());
+		cmd.End();
+		VULKAN.submitAndWaitFence(vk::CommandBuffer(cmd.Handle()), nullptr, nullptr, nullptr);
 	}
 	
 	void GUI::InitGUI(bool show)
@@ -676,7 +675,7 @@ namespace pe
 		InitImGui();
 	}
 
-	void GUI::Draw(vk::CommandBuffer cmd, uint32_t imageIndex)
+	void GUI::Draw(CommandBuffer cmd, uint32_t imageIndex)
 	{
 		if (!render)
 			return;
@@ -700,9 +699,9 @@ namespace pe
 			rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			rpi.pClearValues = clearValues.data();
 
-			cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
-			cmd.endRenderPass();
+			cmd.BeginPass(renderPass, framebuffers[imageIndex]);
+			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd.Handle());
+			cmd.EndPass();
 		}
 	}
 

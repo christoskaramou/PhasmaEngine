@@ -89,7 +89,7 @@ namespace pe
 		
 		void ResizeViewport(uint32_t width, uint32_t height);
 
-		void BlitToViewport(vk::CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex);
+		void BlitToViewport(CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex);
 		
 		void RecreatePipelines();
 

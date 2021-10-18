@@ -26,9 +26,15 @@ SOFTWARE.
 
 namespace pe
 {
-	using ShaderStageFlags = uint32_t;
-	using DescriptorType = uint32_t;
-	using Sampler = void*;
+	class Test
+	{
+	public:
+
+	};
+
+	using DescriptorLayoutHandle = ApiHandle<VkDescriptorSetLayout_T*, void*>;
+	using DescriptorHandle = ApiHandle<VkDescriptorSet_T*, void*>;
+	using SamplerHandle = ApiHandle<VkSampler_T*, Test*>;
 
 	class DescriptorBinding
 	{
@@ -39,17 +45,7 @@ namespace pe
 		DescriptorType descriptorType;
 		uint32_t descriptorCount;
 		ShaderStageFlags stageFlags;
-		Sampler pImmutableSamplers;
+		SamplerHandle pImmutableSamplers;
 	};
 
-	class Descriptor
-	{
-	public:
-		Descriptor(VkDescriptorSet_T* descriptorSet) : m_handle(descriptorSet) {}
-		operator VkDescriptorSet() { return m_handle; }
-		//VkDescriptorSet Handle() { return m_handle; }
-
-	private:
-		VkDescriptorSet_T* m_handle;
-	};
 }

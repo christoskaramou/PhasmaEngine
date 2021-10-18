@@ -23,8 +23,8 @@ SOFTWARE.
 #pragma once
 
 #include "Core/Base.h"
+#include "Renderer/Descriptor.h"
 
-struct VkCommandBuffer_T;
 namespace pe
 {
 	class RenderPass;
@@ -32,8 +32,9 @@ namespace pe
 	class Pipeline;
 	class Compute;
 	class Buffer;
-	class Descriptor;
 	class CommandPool;
+
+	using CommandBufferHandle = ApiHandle<VkCommandBuffer_T*, void*>;
 
 	enum class BarrierType
 	{
@@ -45,6 +46,8 @@ namespace pe
 	class CommandBuffer
 	{
 	public:
+		CommandBuffer(CommandBufferHandle handle) : m_handle(handle) {}
+
 		void Create(CommandPool* commandPool = nullptr); // TODO: Add command pool wrapper
 
 		void Begin();
@@ -63,7 +66,7 @@ namespace pe
 
 		void BindIndexBuffer(Buffer& buffer, size_t offset);
 
-		void BindDescriptors(Pipeline& pipeline, uint32_t count, Descriptor* discriptors);
+		void BindDescriptors(Pipeline& pipeline, uint32_t count, DescriptorHandle descriptors);
 
 		void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
 
@@ -71,10 +74,9 @@ namespace pe
 
 		void Submit();
 
-		template<class T>
-		inline T& Handle() { return *static_cast<T*>(&m_handle); }
+		CommandBufferHandle& Handle() { return m_handle; }
 
 	private:
-		VkCommandBuffer_T* m_handle;
+		CommandBufferHandle m_handle;
 	};
 }

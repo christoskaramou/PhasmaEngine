@@ -28,6 +28,7 @@ SOFTWARE.
 #include "Shader/Shader.h"
 #include "Core/Queue.h"
 #include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/CommandBuffer.h"
 #include <deque>
 
 namespace pe
@@ -148,7 +149,7 @@ namespace pe
 	
 	void TAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{
-		CommandBuffer* cmdBuf = reinterpret_cast<CommandBuffer*>(&cmd);
+		CommandBuffer cmdBuf = VkCommandBuffer(cmd);
 
 		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
 		vk::ClearValue clearColor;
@@ -272,7 +273,7 @@ namespace pe
 	
 	void TAA::saveImage(vk::CommandBuffer& cmd, Image& source) const
 	{
-		CommandBuffer* cmdBuf = reinterpret_cast<CommandBuffer*>(&cmd);
+		CommandBuffer cmdBuf = VkCommandBuffer(cmd);
 
 		previous.TransitionImageLayout(
 			cmdBuf,

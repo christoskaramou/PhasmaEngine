@@ -155,22 +155,22 @@ namespace pe
 	void SSAO::draw(CommandBuffer* cmd, uint32_t imageIndex, Image& image)
 	{
 		// SSAO image
-		image.ChangeLayout(cmd, LayoutState::ColorWrite);
+		image.ChangeLayout(*cmd, LayoutState::ColorWrite);
 		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 		cmd->BindPipeline(pipeline);
-		cmd->BindDescriptors(pipeline, 1, &Descriptor(DSet));
+		cmd->BindDescriptors(pipeline, 1, DSet);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 		
-		image.ChangeLayout(cmd, LayoutState::ColorRead);
+		image.ChangeLayout(*cmd, LayoutState::ColorRead);
 
 		// new blurry SSAO image
 		cmd->BeginPass(blurRenderPass, blurFramebuffers[imageIndex]);
 		cmd->BindPipeline(pipelineBlur);
-		cmd->BindDescriptors(pipelineBlur, 1, &Descriptor(DSBlur));
+		cmd->BindDescriptors(pipelineBlur, 1, DSBlur);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
-		image.ChangeLayout(cmd, LayoutState::ColorRead);
+		image.ChangeLayout(*cmd, LayoutState::ColorRead);
 	}
 	
 	void SSAO::destroy()

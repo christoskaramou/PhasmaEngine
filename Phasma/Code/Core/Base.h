@@ -24,11 +24,15 @@ SOFTWARE.
 
 #include <memory>
 #include <type_traits>
+#include <variant>
 
 struct VkImage_T;
 struct VkImageView_T;
 struct VkSampler_T;
 struct VkCommandBuffer_T;
+struct VkDescriptorSetLayout_T;
+struct VkDescriptorSet_T;
+struct VkPipelineCache_T;
 
 using SampleCountFlagBits = uint32_t;
 using Format = uint32_t;
@@ -48,6 +52,14 @@ using BufferUsageFlags = uint32_t;
 using ImageAspectFlags = uint32_t;
 using ImageUsageFlags = uint32_t;
 using ImageType = uint32_t;
+using VertexInputRate = uint32_t;
+using DynamicState = uint32_t;
+using ShaderStageFlags = uint32_t;
+using DescriptorType = uint32_t;
+
+struct SDL_Window;
+enum VkDebugUtilsMessageSeverityFlagBitsEXT;
+struct VkDebugUtilsMessengerCallbackDataEXT;
 
 namespace vk
 {
@@ -112,10 +124,6 @@ namespace vk
 	template <typename T> class ArrayProxy;
 }
 
-struct SDL_Window;
-enum VkDebugUtilsMessageSeverityFlagBitsEXT;
-struct VkDebugUtilsMessengerCallbackDataEXT;
-
 namespace pe
 {
 	class BufferVK;
@@ -123,6 +131,26 @@ namespace pe
 
 namespace pe
 {
+	template<class VK_HANDLE, class DX_HANDLE>
+	class ApiHandle final
+	{
+		static_assert(std::is_pointer_v<VK_HANDLE>, "ApiHandle type needs to be a pointer");
+		static_assert(std::is_pointer_v<DX_HANDLE>, "ApiHandle type needs to be a pointer");
+	public:
+		ApiHandle() {};
+
+		ApiHandle(VK_HANDLE handle) : m_handle(handle) {}
+
+		ApiHandle(DX_HANDLE handle) : m_handle(handle) {}
+
+		operator VK_HANDLE () { return std::get<VK_HANDLE>(m_handle); }
+
+		operator DX_HANDLE () { return std::get<DX_HANDLE>(m_handle); }
+
+	protected:
+		std::variant<VK_HANDLE, DX_HANDLE> m_handle;
+	};
+
 	template<class T>
 	using SPtr = std::shared_ptr<T>;
 

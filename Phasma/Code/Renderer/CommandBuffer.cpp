@@ -39,7 +39,7 @@ namespace pe
 		cbai.commandPool = commandPool ? commandPool->Handle() : *VULKAN.commandPool;
 		cbai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		cbai.commandBufferCount = 1;
-		vkAllocateCommandBuffers(*VULKAN.device, &cbai, &m_handle);
+		vkAllocateCommandBuffers(*VULKAN.device, &cbai, (VkCommandBuffer*)&m_handle);
 		VULKAN.SetDebugObjectName(vk::CommandBuffer(m_handle), "CommandBuffer");
 	}
 
@@ -118,9 +118,10 @@ namespace pe
 	{
 	}
 
-	void CommandBuffer::BindDescriptors(Pipeline& pipeline, uint32_t count, Descriptor* discriptors)
+	void CommandBuffer::BindDescriptors(Pipeline& pipeline, uint32_t count, DescriptorHandle descriptors)
 	{
-		vkCmdBindDescriptorSets(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline.layout, 0, count, reinterpret_cast<VkDescriptorSet*>(discriptors), 0, nullptr);
+		VkDescriptorSet descriptorsVK = descriptors;
+		vkCmdBindDescriptorSets(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline.layout, 0, count, &descriptorsVK, 0, nullptr);
 	}
 
 	void CommandBuffer::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)

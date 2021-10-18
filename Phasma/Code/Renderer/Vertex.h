@@ -22,10 +22,28 @@ SOFTWARE.
 
 #pragma once
 
+#include "Core/Base.h"
 #include "Core/Math.h"
 
 namespace pe
 {
+	class VertexInputBindingDescription
+	{
+	public:
+		uint32_t binding;
+		uint32_t stride;
+		VertexInputRate inputRate;
+	};
+
+	class VertexInputAttributeDescription
+	{
+	public:
+		uint32_t location;
+		uint32_t binding;
+		Format format;
+		uint32_t offset;
+	};
+
 	class Vertex
 	{
 	public:

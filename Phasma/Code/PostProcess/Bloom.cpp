@@ -27,6 +27,7 @@ SOFTWARE.
 #include "Renderer/Surface.h"
 #include "Shader/Shader.h"
 #include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/CommandBuffer.h"
 #include <deque>
 
 namespace pe
@@ -157,7 +158,7 @@ namespace pe
 	
 	void Bloom::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{
-		CommandBuffer* cmdBuf = reinterpret_cast<CommandBuffer*>(&cmd);
+		CommandBuffer cmdBuf = VkCommandBuffer(cmd);
 
 		uint32_t totalImages = static_cast<uint32_t>(VULKAN.swapchain.images.size());
 		

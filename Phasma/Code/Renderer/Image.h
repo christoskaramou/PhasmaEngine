@@ -77,7 +77,7 @@ namespace pe
 		VkPipelineColorBlendAttachmentState blendAttachment;
 		
 		void TransitionImageLayout(
-			CommandBuffer* cmd,
+			CommandBuffer cmd,
 			ImageLayout oldLayout,
 			ImageLayout newLayout,
 			PipelineStageFlags oldStageMask,
@@ -93,11 +93,11 @@ namespace pe
 		
 		void TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout) const;
 		
-		void ChangeLayout(CommandBuffer* cmd, LayoutState state);
+		void ChangeLayout(CommandBuffer cmd, LayoutState state);
 		
 		void CopyBufferToImage(Buffer* buffer, uint32_t baseLayer = 0) const;
 		
-		void CopyColorAttachment(CommandBuffer* cmd, Image& renderedImage) const;
+		void CopyColorAttachment(CommandBuffer cmd, Image& renderedImage) const;
 		
 		void GenerateMipMaps() const;
 		

@@ -66,7 +66,7 @@ namespace pe
 	}
 	
 	void Image::TransitionImageLayout(
-		CommandBuffer* cmd,
+		CommandBuffer cmd,
 		ImageLayout oldLayout,
 		ImageLayout newLayout,
 		PipelineStageFlags oldStageMask,
@@ -94,7 +94,7 @@ namespace pe
 			barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 		
 		vkCmdPipelineBarrier(
-			cmd->Handle<VkCommandBuffer>(),
+			cmd.Handle(),
 			oldStageMask,
 			newStageMask,
 			VK_DEPENDENCY_BY_REGION_BIT,
@@ -293,7 +293,7 @@ namespace pe
 		VULKAN.device->freeCommandBuffers(*VULKAN.commandPool2, vk::CommandBuffer(commandBuffer));
 	}
 	
-	void Image::ChangeLayout(CommandBuffer* cmd, LayoutState state)
+	void Image::ChangeLayout(CommandBuffer cmd, LayoutState state)
 	{
 		if (state != layoutState)
 		{
@@ -389,7 +389,7 @@ namespace pe
 		vkFreeCommandBuffers(*VULKAN.device, *VULKAN.commandPool2, 1, &commandBuffer);
 	}
 	
-	void Image::CopyColorAttachment(CommandBuffer* cmd, Image& renderedImage) const
+	void Image::CopyColorAttachment(CommandBuffer cmd, Image& renderedImage) const
 	{
 		TransitionImageLayout(
 			cmd,
@@ -421,9 +421,9 @@ namespace pe
 		region.extent.width = renderedImage.width;
 		region.extent.height = renderedImage.height;
 		region.extent.depth = 1;
-		
+
 		vkCmdCopyImage(
-			cmd->Handle<VkCommandBuffer>(),
+			cmd.Handle(),
 			renderedImage.image,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			image,
