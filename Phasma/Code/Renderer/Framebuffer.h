@@ -36,9 +36,9 @@ namespace pe
 		
 		~FrameBuffer() = default;
 		
-		void Create(uint32_t width, uint32_t height, const vk::ImageView& view, const RenderPass& renderPass);
+		void Create(uint32_t width, uint32_t height, const vk::ImageView& view, RenderPass renderPass);
 		
-		void Create(uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, const RenderPass& renderPass);
+		void Create(uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, RenderPass renderPass);
 		
 		void Destroy();
 		

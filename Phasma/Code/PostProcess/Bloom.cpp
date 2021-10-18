@@ -63,9 +63,15 @@ namespace pe
 	
 	void Bloom::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
-		renderPassBrightFilter.Create((vk::Format)renderTargets["brightFilter"].format);
-		renderPassGaussianBlur.Create((vk::Format)renderTargets["gaussianBlurHorizontal"].format);
-		renderPassCombine.Create((vk::Format)renderTargets["viewport"].format);
+		Attachment attachment{};
+		attachment.format = renderTargets["brightFilter"].format;
+		renderPassBrightFilter.Create(attachment);
+
+		attachment.format = renderTargets["gaussianBlurHorizontal"].format;
+		renderPassGaussianBlur.Create(attachment);
+
+		attachment.format = renderTargets["viewport"].format;
+		renderPassCombine.Create(attachment);
 	}
 	
 	void Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
@@ -174,7 +180,7 @@ namespace pe
 		};
 		
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *renderPassBrightFilter.handle;
+		rpi.renderPass = renderPassBrightFilter.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		vk::Extent2D extent{ renderTargets["brightFilter"].width, renderTargets["brightFilter"].height };
@@ -193,7 +199,7 @@ namespace pe
 		cmd.endRenderPass();
 		renderTargets["brightFilter"].ChangeLayout(cmdBuf, LayoutState::ColorRead);
 		
-		rpi.renderPass = *renderPassGaussianBlur.handle;
+		rpi.renderPass = renderPassGaussianBlur.handle;
 		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)].handle;
 		
 		renderTargets["gaussianBlurHorizontal"].ChangeLayout(cmdBuf, LayoutState::ColorWrite);
@@ -221,7 +227,7 @@ namespace pe
 		cmd.endRenderPass();
 		renderTargets["gaussianBlurVertical"].ChangeLayout(cmdBuf, LayoutState::ColorRead);
 		
-		rpi.renderPass = *renderPassCombine.handle;
+		rpi.renderPass = renderPassCombine.handle;
 		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)].handle;
 		
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);

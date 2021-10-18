@@ -215,8 +215,12 @@ namespace pe
 	
 	void SSAO::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create((vk::Format)renderTargets["ssao"].format);
-		blurRenderPass.Create((vk::Format)renderTargets["ssaoBlur"].format);
+		Attachment attachment{};
+		attachment.format = renderTargets["ssao"].format;
+		renderPass.Create(attachment);
+
+		attachment.format = renderTargets["ssaoBlur"].format;
+		blurRenderPass.Create(attachment);
 	}
 	
 	void SSAO::createFrameBuffers(std::map<std::string, Image>& renderTargets)

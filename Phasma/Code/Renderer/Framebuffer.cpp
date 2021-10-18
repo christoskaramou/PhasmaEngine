@@ -32,17 +32,17 @@ namespace pe
 		handle = make_sptr(vk::Framebuffer());
 	}
 	
-	void FrameBuffer::Create(uint32_t width, uint32_t height, const vk::ImageView& view, const RenderPass& renderPass)
+	void FrameBuffer::Create(uint32_t width, uint32_t height, const vk::ImageView& view, RenderPass renderPass)
 	{
 		Create(width, height, std::vector<vk::ImageView> {view}, renderPass);
 	}
 	
-	void FrameBuffer::Create(uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, const RenderPass& renderPass)
+	void FrameBuffer::Create(uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, RenderPass renderPass)
 	{
 		this->width = width;
 		this->height = height;
 		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = *renderPass.handle;
+		fbci.renderPass = (VkRenderPass)renderPass.handle;
 		fbci.attachmentCount = static_cast<uint32_t>(views.size());
 		fbci.pAttachments = views.data();
 		fbci.width = width;

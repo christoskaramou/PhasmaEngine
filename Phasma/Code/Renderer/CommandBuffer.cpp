@@ -39,7 +39,11 @@ namespace pe
 		cbai.commandPool = commandPool ? commandPool->Handle() : *VULKAN.commandPool;
 		cbai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		cbai.commandBufferCount = 1;
-		vkAllocateCommandBuffers(*VULKAN.device, &cbai, (VkCommandBuffer*)&m_handle);
+
+		VkCommandBuffer commandBuffer;
+		vkAllocateCommandBuffers(*VULKAN.device, &cbai, &commandBuffer);
+		m_handle = commandBuffer;
+
 		VULKAN.SetDebugObjectName(vk::CommandBuffer(m_handle), "CommandBuffer");
 	}
 
@@ -61,11 +65,11 @@ namespace pe
 	{
 	}
 
-	bool DepthFormat(vk::Format& format)
+	bool DepthFormat(Format format)
 	{
-		return format == vk::Format::eD32SfloatS8Uint ||
-			format == vk::Format::eD32Sfloat ||
-			format == vk::Format::eD24UnormS8Uint;
+		return format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
+			format == VK_FORMAT_D32_SFLOAT ||
+			format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 
 	void CommandBuffer::BeginPass(RenderPass& pass, FrameBuffer& frameBuffer)
@@ -78,10 +82,10 @@ namespace pe
 		depthStencil.depth = GlobalSettings::ReverseZ ? 0.f : 1.f;
 		depthStencil.stencil = 0;
 
-		std::vector<VkClearValue> clearValues(pass.formats.size());
-		for (int i = 0; i < pass.formats.size(); i++)
+		std::vector<VkClearValue> clearValues(pass.attachments.size());
+		for (int i = 0; i < pass.attachments.size(); i++)
 		{
-			if (DepthFormat(pass.formats[i]))
+			if (DepthFormat(pass.attachments[i].format))
 				clearValues[i].depthStencil = depthStencil;
 			else
 				clearValues[i].color = clearColor.color;
@@ -90,7 +94,7 @@ namespace pe
 
 		VkRenderPassBeginInfo rpi{};
 		rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		rpi.renderPass = *pass.handle;
+		rpi.renderPass = pass.handle;
 		rpi.framebuffer = *frameBuffer.handle;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = vk::Extent2D{ frameBuffer.width, frameBuffer.height };

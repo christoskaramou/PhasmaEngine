@@ -267,7 +267,7 @@ namespace pe
 		beginInfoShadows.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 		
 		vk::RenderPassBeginInfo renderPassInfoShadows;
-		renderPassInfoShadows.renderPass = *shadows.renderPass.handle;
+		renderPassInfoShadows.renderPass = shadows.renderPass.handle;
 		renderPassInfoShadows.renderArea = vk::Rect2D{ {0, 0}, {SHADOWMAP_SIZE, SHADOWMAP_SIZE} };
 		renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
 		renderPassInfoShadows.pClearValues = clearValuesShadows.data();

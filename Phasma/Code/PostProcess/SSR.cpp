@@ -118,7 +118,7 @@ namespace pe
 		std::vector<vk::ClearValue> clearValues = {clearColor};
 		
 		vk::RenderPassBeginInfo renderPassInfo;
-		renderPassInfo.renderPass = *renderPass.handle;
+		renderPassInfo.renderPass = renderPass.handle;
 		renderPassInfo.framebuffer = *framebuffers[imageIndex].handle;
 		renderPassInfo.renderArea.offset = vk::Offset2D {0, 0};
 		renderPassInfo.renderArea.extent = extent;
@@ -134,7 +134,9 @@ namespace pe
 	
 	void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create((vk::Format)renderTargets["ssr"].format);
+		Attachment attachment{};
+		attachment.format = renderTargets["ssr"].format;
+		renderPass.Create(attachment);
 	}
 	
 	void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)

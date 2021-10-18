@@ -197,7 +197,7 @@ namespace pe
 		pipeinfo.layout = *layout;
 		
 		// Render Pass
-		pipeinfo.renderPass = *info.renderPass.handle;
+		pipeinfo.renderPass = info.renderPass.handle;
 		
 		// Subpass (Index of subpass this pipeline will be used in)
 		pipeinfo.subpass = 0;

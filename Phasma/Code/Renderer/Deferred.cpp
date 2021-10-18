@@ -64,7 +64,7 @@ namespace pe
 		};
 		
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *renderPass.handle;
+		rpi.renderPass = renderPass.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		rpi.renderArea.extent = extent;
@@ -231,7 +231,7 @@ namespace pe
 		std::vector<vk::ClearValue> clearValues = { clearColor, clearColor };
 
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *compositionRenderPass.handle;
+		rpi.renderPass = compositionRenderPass.handle;
 		rpi.framebuffer = *compositionFramebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = extent;
@@ -258,16 +258,31 @@ namespace pe
 	
 	void Deferred::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
-		std::vector<vk::Format> formats {
-			(vk::Format)renderTargets["normal"].format,
-			(vk::Format)renderTargets["albedo"].format,
-			(vk::Format)renderTargets["srm"].format,
-			(vk::Format)renderTargets["velocity"].format,
-			(vk::Format)renderTargets["emissive"].format,
-			(vk::Format)VULKAN.depth.format
-		};
-		renderPass.Create(formats);
-		compositionRenderPass.Create((vk::Format)renderTargets["viewport"].format);
+		std::vector<Attachment> attachments(6);
+
+		// Target attachments are initialized to match render targets by default
+		attachments[0].format = renderTargets["normal"].format;
+		attachments[1].format = renderTargets["albedo"].format;
+		attachments[2].format = renderTargets["srm"].format;
+		attachments[3].format = renderTargets["velocity"].format;
+		attachments[4].format = renderTargets["emissive"].format;
+
+		// Depth
+		attachments[5].flags = {};
+		attachments[5].format = VULKAN.depth.format;
+		attachments[5].samples = VK_SAMPLE_COUNT_1_BIT;
+		attachments[5].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachments[5].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachments[5].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachments[5].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachments[5].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachments[5].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		renderPass.Create(attachments);
+
+		Attachment attachment{};
+		attachment.format = renderTargets["viewport"].format;
+		compositionRenderPass.Create(attachment);
 	}
 	
 	void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)

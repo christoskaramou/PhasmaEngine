@@ -27,7 +27,23 @@ SOFTWARE.
 
 namespace pe
 {
-	class FrameBuffer;
+	class Attachment
+	{
+	public:
+		Attachment();
+
+		AttachmentDescriptionFlags flags;
+		Format format;
+		SampleCountFlagBits samples;
+		AttachmentLoadOp loadOp;
+		AttachmentStoreOp storeOp;
+		AttachmentLoadOp stencilLoadOp;
+		AttachmentStoreOp stencilStoreOp;
+		ImageLayout initialLayout;
+		ImageLayout finalLayout;
+	};
+
+	using RenderPassHandle = ApiHandle<VkRenderPass_T*, void*>;
 
 	class RenderPass
 	{
@@ -36,14 +52,14 @@ namespace pe
 		
 		~RenderPass();
 		
-		void Create(const vk::Format& format);
+		void Create(const Attachment& format);
 		
-		void Create(const std::vector<vk::Format>& formats);
+		void Create(const std::vector<Attachment>& formats);
 		
 		void Destroy();
 		
-		SPtr<vk::RenderPass> handle;
+		RenderPassHandle handle;
 
-		std::vector<vk::Format> formats;
+		std::vector<Attachment> attachments;
 	};
 }

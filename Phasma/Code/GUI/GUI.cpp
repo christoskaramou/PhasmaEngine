@@ -650,7 +650,7 @@ namespace pe
 		info.MSAASamples = VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT;
 		info.Allocator = nullptr;
 		info.CheckVkResultFn = nullptr;
-		ImGui_ImplVulkan_Init(&info, *renderPass.handle);
+		ImGui_ImplVulkan_Init(&info, renderPass.handle);
 
 		CommandBuffer cmd = VkCommandBuffer((*VULKAN.dynamicCmdBuffers)[0]);
 		cmd.Begin();
@@ -682,23 +682,6 @@ namespace pe
 
 		if (render && ImGui::GetDrawData()->TotalVtxCount > 0)
 		{
-			const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
-			vk::ClearValue clearColor;
-			memcpy(clearColor.color.float32, &color, 4 * sizeof(float));
-
-			vk::ClearDepthStencilValue depthStencil;
-			depthStencil.depth = 1.f;
-			depthStencil.stencil = 0;
-
-			std::vector<vk::ClearValue> clearValues = { clearColor, depthStencil };
-
-			vk::RenderPassBeginInfo rpi;
-			rpi.renderPass = *renderPass.handle;
-			rpi.framebuffer = *framebuffers[imageIndex].handle;
-			rpi.renderArea = vk::Rect2D{ {0, 0}, *VULKAN.surface.actualExtent };
-			rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
-			rpi.pClearValues = clearValues.data();
-
 			cmd.BeginPass(renderPass, framebuffers[imageIndex]);
 			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd.Handle());
 			cmd.EndPass();
@@ -713,32 +696,17 @@ namespace pe
 
 	void GUI::CreateRenderPass()
 	{
-		std::array<vk::AttachmentDescription, 1> attachments {};
-		// Color attachment
-		attachments[0].format = VULKAN.surface.formatKHR->format;
-		attachments[0].samples = vk::SampleCountFlagBits::e1;
-		attachments[0].loadOp = vk::AttachmentLoadOp::eLoad;
-		attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
-		attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-		attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-		attachments[0].initialLayout = vk::ImageLayout::ePresentSrcKHR;
-		attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
-		
-		std::array<vk::SubpassDescription, 1> subpassDescriptions {};
-		
-		vk::AttachmentReference colorReference = {0, vk::ImageLayout::eColorAttachmentOptimal};
-		
-		subpassDescriptions[0].pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-		subpassDescriptions[0].colorAttachmentCount = 1;
-		subpassDescriptions[0].pColorAttachments = &colorReference;
-		
-		vk::RenderPassCreateInfo renderPassInfo = {};
-		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-		renderPassInfo.pAttachments = attachments.data();
-		renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
-		renderPassInfo.pSubpasses = subpassDescriptions.data();
-		
-		renderPass.handle = make_sptr(VULKAN.device->createRenderPass(renderPassInfo));
+		Attachment colorAttachment;
+		colorAttachment.format = (Format)VULKAN.surface.formatKHR->format;
+		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+		renderPass.Create(colorAttachment);
 	}
 
 	void GUI::CreateFrameBuffers()

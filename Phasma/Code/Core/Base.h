@@ -33,6 +33,7 @@ struct VkCommandBuffer_T;
 struct VkDescriptorSetLayout_T;
 struct VkDescriptorSet_T;
 struct VkPipelineCache_T;
+struct VkRenderPass_T;
 
 using SampleCountFlagBits = uint32_t;
 using Format = uint32_t;
@@ -56,6 +57,9 @@ using VertexInputRate = uint32_t;
 using DynamicState = uint32_t;
 using ShaderStageFlags = uint32_t;
 using DescriptorType = uint32_t;
+using AttachmentDescriptionFlags = uint32_t;
+using AttachmentLoadOp = uint32_t;
+using AttachmentStoreOp = uint32_t;
 
 struct SDL_Window;
 enum VkDebugUtilsMessageSeverityFlagBitsEXT;

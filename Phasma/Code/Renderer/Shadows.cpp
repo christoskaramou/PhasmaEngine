@@ -92,7 +92,16 @@ namespace pe
 
 	void Shadows::createRenderPass()
 	{
-		renderPass.Create((vk::Format)VULKAN.depth.format);
+		Attachment attachment{};
+		attachment.format = VULKAN.depth.format;
+		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		renderPass.Create(attachment);
 	}
 
 	void Shadows::createFrameBuffers()
@@ -172,8 +181,11 @@ namespace pe
 
 	void Shadows::destroy()
 	{
-		if (*renderPass.handle)
-			VULKAN.device->destroyRenderPass(*renderPass.handle);
+		if (VkRenderPass(renderPass.handle))
+		{
+			vkDestroyRenderPass(*VULKAN.device, renderPass.handle, nullptr);
+			renderPass.handle = {};
+		}
 
 		if (Pipeline::getDescriptorSetLayoutShadows())
 		{

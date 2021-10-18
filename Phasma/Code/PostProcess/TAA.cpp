@@ -159,7 +159,7 @@ namespace pe
 		
 		// Main TAA pass
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *renderPass.handle;
+		rpi.renderPass = renderPass.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		vk::Extent2D extent{ renderTargets["taa"].width, renderTargets["taa"].height };
@@ -179,7 +179,7 @@ namespace pe
 		
 		// TAA Sharpen pass
 		vk::RenderPassBeginInfo rpi2;
-		rpi2.renderPass = *renderPassSharpen.handle;
+		rpi2.renderPass = renderPassSharpen.handle;
 		rpi2.framebuffer = *framebuffersSharpen[imageIndex].handle;
 		rpi2.renderArea.offset = vk::Offset2D {0, 0};
 		extent = vk::Extent2D{ renderTargets["viewport"].width, renderTargets["viewport"].height };
@@ -196,8 +196,12 @@ namespace pe
 	
 	void TAA::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create((vk::Format)renderTargets["taa"].format);
-		renderPassSharpen.Create((vk::Format)renderTargets["viewport"].format);
+		Attachment attachment{};
+		attachment.format = renderTargets["taa"].format;
+		renderPass.Create(attachment);
+
+		attachment.format = renderTargets["viewport"].format;
+		renderPassSharpen.Create(attachment);
 	}
 	
 	void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)

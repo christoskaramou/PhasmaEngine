@@ -119,7 +119,7 @@ namespace pe
 		std::vector<vk::ClearValue> clearValues = {clearColor};
 		
 		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = *renderPass.handle;
+		rpi.renderPass = renderPass.handle;
 		rpi.framebuffer = *framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		rpi.renderArea.extent = extent;
@@ -174,7 +174,9 @@ namespace pe
 	
 	void MotionBlur::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
-		renderPass.Create((vk::Format)renderTargets["viewport"].format);
+		Attachment attachment{};
+		attachment.format = renderTargets["viewport"].format;
+		renderPass.Create(attachment);
 	}
 	
 	void MotionBlur::createFrameBuffers(std::map<std::string, Image>& renderTargets)
