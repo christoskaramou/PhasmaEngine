@@ -301,12 +301,12 @@ namespace pe
 			uint32_t width = renderTargets["albedo"].width;
 			uint32_t height = renderTargets["albedo"].height;
 			std::vector<vk::ImageView> views {
-				renderTargets["normal"].view,
-				renderTargets["albedo"].view,
-				renderTargets["srm"].view,
-				renderTargets["velocity"].view,
-				renderTargets["emissive"].view,
-				VULKAN.depth.view
+				(VkImageView)renderTargets["normal"].view,
+				(VkImageView)renderTargets["albedo"].view,
+				(VkImageView)renderTargets["srm"].view,
+				(VkImageView)renderTargets["velocity"].view,
+				(VkImageView)renderTargets["emissive"].view,
+				(VkImageView)VULKAN.depth.view
 			};
 			framebuffers[i].Create(width, height, views, renderPass);
 		}

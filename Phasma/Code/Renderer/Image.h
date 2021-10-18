@@ -38,6 +38,10 @@ namespace pe
 	class CommandBuffer;
 	class Buffer;
 	
+	using ImageHandle = ApiHandle<VkImage_T*, void*>;
+	using ImageViewHandle = ApiHandle<VkImageView_T*, void*>;
+	using SamplerHandle = ApiHandle<VkSampler_T*, void*>;
+
 	class Image
 	{
 	public:
@@ -47,10 +51,10 @@ namespace pe
 
 		std::string name{};
 
-		VkImage_T* image;
+		ImageHandle image;
+		ImageViewHandle view;
+		SamplerHandle sampler;
 		VmaAllocation allocation {};
-		VkImageView_T* view;
-		VkSampler_T* sampler;
 		uint32_t width {};
 		uint32_t height {};
 		float width_f {};
@@ -85,21 +89,21 @@ namespace pe
 			AccessFlags srcMask,
 			AccessFlags dstMask,
 			ImageAspectFlags aspectFlags
-		) const;
+		);
 		
 		void CreateImage(uint32_t width, uint32_t height, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties);
 		
 		void CreateImageView(ImageAspectFlags aspectFlags);
 		
-		void TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout) const;
+		void TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout);
 		
 		void ChangeLayout(CommandBuffer cmd, LayoutState state);
 		
-		void CopyBufferToImage(Buffer* buffer, uint32_t baseLayer = 0) const;
+		void CopyBufferToImage(Buffer* buffer, uint32_t baseLayer = 0);
 		
-		void CopyColorAttachment(CommandBuffer cmd, Image& renderedImage) const;
+		void CopyColorAttachment(CommandBuffer cmd, Image& renderedImage);
 		
-		void GenerateMipMaps() const;
+		void GenerateMipMaps();
 		
 		void CreateSampler();
 		

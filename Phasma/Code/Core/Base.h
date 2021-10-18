@@ -34,6 +34,7 @@ struct VkDescriptorSetLayout_T;
 struct VkDescriptorSet_T;
 struct VkPipelineCache_T;
 struct VkRenderPass_T;
+struct VkFramebuffer_T;
 
 using SampleCountFlagBits = uint32_t;
 using Format = uint32_t;

@@ -23,18 +23,12 @@ SOFTWARE.
 #pragma once
 
 #include "Core/Base.h"
+#include "Renderer/Image.h"
 
 namespace pe
 {
-	class Test
-	{
-	public:
-
-	};
-
 	using DescriptorLayoutHandle = ApiHandle<VkDescriptorSetLayout_T*, void*>;
 	using DescriptorHandle = ApiHandle<VkDescriptorSet_T*, void*>;
-	using SamplerHandle = ApiHandle<VkSampler_T*, Test*>;
 
 	class DescriptorBinding
 	{

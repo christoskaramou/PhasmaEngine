@@ -50,7 +50,7 @@ namespace pe
 		
 		void createUniforms(std::map<std::string, Image>& renderTargets);
 		
-		void updateDescriptorSets(std::map<std::string, Image>& renderTargets) const;
+		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		
 		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent);
 		

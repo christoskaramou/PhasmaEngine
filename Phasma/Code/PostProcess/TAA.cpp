@@ -275,7 +275,7 @@ namespace pe
 		pipelineSharpen.createGraphicsPipeline();
 	}
 	
-	void TAA::saveImage(vk::CommandBuffer& cmd, Image& source) const
+	void TAA::saveImage(vk::CommandBuffer& cmd, Image& source)
 	{
 		CommandBuffer cmdBuf = VkCommandBuffer(cmd);
 
@@ -301,21 +301,22 @@ namespace pe
 		);
 		
 		// copy the image
-		vk::ImageCopy region{};
-		region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		VkImageCopy region{};
+		region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		region.srcSubresource.layerCount = 1;
-		region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		region.dstSubresource.layerCount = 1;
 		region.extent.width = source.width;
 		region.extent.height = source.height;
 		region.extent.depth = 1;
 		
-		cmd.copyImage(
-				source.image,
-				vk::ImageLayout::eTransferSrcOptimal,
-				previous.image,
-				vk::ImageLayout::eTransferDstOptimal,
-				region
+		vkCmdCopyImage(
+			cmdBuf.Handle(),
+			source.image,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			previous.image,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			1, &region
 		);
 		
 		previous.TransitionImageLayout(

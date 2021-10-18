@@ -32,6 +32,9 @@ namespace pe
 {
 	Image::Image()
 	{
+		image = {};
+		view = {};
+		sampler = {};
 		samples = VK_SAMPLE_COUNT_1_BIT;
 		layoutState = LayoutState::ColorWrite;
 		format = VK_FORMAT_UNDEFINED;
@@ -74,7 +77,7 @@ namespace pe
 		AccessFlags srcMask,
 		AccessFlags dstMask,
 		ImageAspectFlags aspectFlags
-	) const
+	)
 	{
 		VkImageMemoryBarrier barrier{};
 		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -160,7 +163,9 @@ namespace pe
 		allocationCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 		
 		VmaAllocationInfo allocationInfo;
-		vmaCreateImage(VULKAN.allocator, &imageInfo, &allocationCreateInfo, &image, &allocation, &allocationInfo);
+		VkImage vkImage;
+		vmaCreateImage(VULKAN.allocator, &imageInfo, &allocationCreateInfo, &vkImage, &allocation, &allocationInfo);
+		image = vkImage;
 	}
 	
 	void Image::CreateImageView(ImageAspectFlags aspectFlags)
@@ -172,12 +177,14 @@ namespace pe
 		viewInfo.format = (VkFormat)format;
 		viewInfo.subresourceRange = { (VkImageAspectFlags)aspectFlags, 0, mipLevels, 0, arrayLayers };
 		
-		vkCreateImageView(*VULKAN.device.get(), &viewInfo, nullptr, &view);
+		VkImageView vkView;
+		vkCreateImageView(*VULKAN.device.get(), &viewInfo, nullptr, &vkView);
+		view = vkView;
 		
 		VULKAN.SetDebugObjectName(vk::ImageView(view), "");
 	}
 	
-	void Image::TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout) const
+	void Image::TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout)
 	{
 		VkCommandBufferAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -353,7 +360,7 @@ namespace pe
 		}
 	}
 	
-	void Image::CopyBufferToImage(Buffer* buffer, uint32_t baseLayer) const
+	void Image::CopyBufferToImage(Buffer* buffer, uint32_t baseLayer)
 	{
 		VkCommandBufferAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -389,7 +396,7 @@ namespace pe
 		vkFreeCommandBuffers(*VULKAN.device, *VULKAN.commandPool2, 1, &commandBuffer);
 	}
 	
-	void Image::CopyColorAttachment(CommandBuffer cmd, Image& renderedImage) const
+	void Image::CopyColorAttachment(CommandBuffer cmd, Image& renderedImage)
 	{
 		TransitionImageLayout(
 			cmd,
@@ -452,7 +459,7 @@ namespace pe
 		);
 	}
 	
-	void Image::GenerateMipMaps() const
+	void Image::GenerateMipMaps()
 	{
 		VkFormatProperties fProps;
 		vkGetPhysicalDeviceFormatProperties(*VULKAN.gpu, (VkFormat)format, &fProps);
@@ -605,16 +612,18 @@ namespace pe
 		samplerInfo.borderColor = (VkBorderColor)borderColor;
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
-		vkCreateSampler(*VULKAN.device, &samplerInfo, nullptr, &sampler);
+		VkSampler vkSampler;
+		vkCreateSampler(*VULKAN.device, &samplerInfo, nullptr, &vkSampler);
+		sampler = vkSampler;
 	}
 	
 	void Image::Destroy()
 	{
-		if (view) vkDestroyImageView(*VULKAN.device, view, nullptr);
-		if (image) vmaDestroyImage(VULKAN.allocator, image, allocation);
-		if (sampler) vkDestroySampler(*VULKAN.device, sampler, nullptr);
-		view = nullptr;
-		image = nullptr;
-		sampler = nullptr;
+		if (VkImageView(view)) vkDestroyImageView(*VULKAN.device, view, nullptr);
+		if (VkImage(image)) vmaDestroyImage(VULKAN.allocator, image, allocation);
+		if (VkSampler(sampler)) vkDestroySampler(*VULKAN.device, sampler, nullptr);
+		view = {};
+		image = {};
+		sampler = {};
 	}
 }

@@ -79,7 +79,7 @@ namespace pe
 		newSwapchain.images.resize(images.size());
 		for (unsigned i = 0; i < images.size(); i++)
 		{
-			newSwapchain.images[i].image = images[i]; // hold the image handlers
+			newSwapchain.images[i].image = VkImage(images[i]); // hold the image handlers
 			newSwapchain.images[i].TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 			newSwapchain.images[i].blendAttachment.blendEnable = VK_TRUE;
 			newSwapchain.images[i].blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
@@ -103,7 +103,7 @@ namespace pe
 			imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
 			imageViewCreateInfo.format = VULKAN.surface.formatKHR->format;
 			imageViewCreateInfo.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-			image.view = VULKAN.device->createImageView(imageViewCreateInfo);
+			image.view = VkImageView(VULKAN.device->createImageView(imageViewCreateInfo));
 		}
 		
 		*this = newSwapchain;
@@ -128,8 +128,8 @@ namespace pe
 	{
 		for (auto& image : images)
 		{
-			VULKAN.device->destroyImageView(image.view);
-			image.view = nullptr;
+			vkDestroyImageView(*VULKAN.device, image.view, nullptr);
+			image.view = {};
 		}
 		if (*handle)
 		{

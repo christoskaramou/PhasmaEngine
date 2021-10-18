@@ -68,12 +68,12 @@ namespace pe
 		updateDescriptorSets(renderTargets);
 	}
 	
-	void FXAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets) const
+	void FXAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		// Composition sampler
 		vk::DescriptorImageInfo dii;
-		dii.sampler = frameImage.sampler;
-		dii.imageView = frameImage.view;
+		dii.sampler = (VkSampler)frameImage.sampler;
+		dii.imageView = (VkImageView)frameImage.view;
 		dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 		
 		vk::WriteDescriptorSet textureWriteSet;
