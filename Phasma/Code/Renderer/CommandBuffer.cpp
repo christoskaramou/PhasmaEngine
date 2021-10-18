@@ -95,7 +95,7 @@ namespace pe
 		VkRenderPassBeginInfo rpi{};
 		rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		rpi.renderPass = pass.handle;
-		rpi.framebuffer = *frameBuffer.handle;
+		rpi.framebuffer = frameBuffer.handle;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = vk::Extent2D{ frameBuffer.width, frameBuffer.height };
 		rpi.clearValueCount = (uint32_t)clearValues.size();
@@ -122,7 +122,7 @@ namespace pe
 	{
 	}
 
-	void CommandBuffer::BindDescriptors(Pipeline& pipeline, uint32_t count, DescriptorHandle descriptors)
+	void CommandBuffer::BindDescriptors(Pipeline& pipeline, uint32_t count, DescriptorSetHandle descriptors)
 	{
 		VkDescriptorSet descriptorsVK = descriptors;
 		vkCmdBindDescriptorSets(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline.layout, 0, count, &descriptorsVK, 0, nullptr);

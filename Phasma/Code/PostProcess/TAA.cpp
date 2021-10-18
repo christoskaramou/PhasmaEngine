@@ -104,11 +104,11 @@ namespace pe
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
-		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutTAA();
+		allocateInfo2.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutTAA();
 		DSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo2).at(0));
 		VULKAN.SetDebugObjectName(*DSet, "TAA");
 		
-		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutTAASharpen();
+		allocateInfo2.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutTAASharpen();
 		DSetSharpen = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo2).at(0));
 		VULKAN.SetDebugObjectName(*DSetSharpen, "TAA_Sharpen");
 		
@@ -160,7 +160,7 @@ namespace pe
 		// Main TAA pass
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = renderPass.handle;
-		rpi.framebuffer = *framebuffers[imageIndex].handle;
+		rpi.framebuffer = framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		vk::Extent2D extent{ renderTargets["taa"].width, renderTargets["taa"].height };
 		rpi.renderArea.extent = extent;
@@ -180,7 +180,7 @@ namespace pe
 		// TAA Sharpen pass
 		vk::RenderPassBeginInfo rpi2;
 		rpi2.renderPass = renderPassSharpen.handle;
-		rpi2.framebuffer = *framebuffersSharpen[imageIndex].handle;
+		rpi2.framebuffer = framebuffersSharpen[imageIndex].handle;
 		rpi2.renderArea.offset = vk::Offset2D {0, 0};
 		extent = vk::Extent2D{ renderTargets["viewport"].width, renderTargets["viewport"].height };
 		rpi2.renderArea.extent = extent;
@@ -213,7 +213,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["taa"].width;
 			uint32_t height = renderTargets["taa"].height;
-			vk::ImageView view = renderTargets["taa"].view;
+			ImageViewHandle view = renderTargets["taa"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 		
@@ -222,7 +222,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
-			vk::ImageView view = renderTargets["viewport"].view;
+			ImageViewHandle view = renderTargets["viewport"].view;
 			framebuffersSharpen[i].Create(width, height, view, renderPassSharpen);
 		}
 	}
@@ -247,7 +247,7 @@ namespace pe
 				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["taa"].blendAttachment}
 		);
 		pipeline.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutTAA()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutTAA()}
 		);
 		pipeline.info.renderPass = renderPass;
 		
@@ -268,7 +268,7 @@ namespace pe
 				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["viewport"].blendAttachment}
 		);
 		pipelineSharpen.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutTAASharpen()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutTAASharpen()}
 		);
 		pipelineSharpen.info.renderPass = renderPassSharpen;
 		
@@ -358,13 +358,13 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutTAA())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutTAA());
-			Pipeline::getDescriptorSetLayoutTAA() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutTAA(), nullptr);
+			Pipeline::getDescriptorSetLayoutTAA() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutTAASharpen())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutTAASharpen());
-			Pipeline::getDescriptorSetLayoutTAASharpen() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutTAASharpen(), nullptr);
+			Pipeline::getDescriptorSetLayoutTAASharpen() = {};
 		}
 		pipeline.destroy();
 		pipelineSharpen.destroy();

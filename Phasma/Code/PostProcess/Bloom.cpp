@@ -82,7 +82,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["brightFilter"].width;
 			uint32_t height = renderTargets["brightFilter"].height;
-			vk::ImageView view = renderTargets["brightFilter"].view;
+			ImageViewHandle view = renderTargets["brightFilter"].view;
 			framebuffers[i].Create(width, height, view, renderPassBrightFilter);
 		}
 		
@@ -90,7 +90,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["gaussianBlurHorizontal"].width;
 			uint32_t height = renderTargets["gaussianBlurHorizontal"].height;
-			vk::ImageView view = renderTargets["gaussianBlurHorizontal"].view;
+			ImageViewHandle view = renderTargets["gaussianBlurHorizontal"].view;
 			framebuffers[i].Create(width, height, view, renderPassGaussianBlur);
 		}
 		
@@ -98,7 +98,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["gaussianBlurVertical"].width;
 			uint32_t height = renderTargets["gaussianBlurVertical"].height;
-			vk::ImageView view = renderTargets["gaussianBlurVertical"].view;
+			ImageViewHandle view = renderTargets["gaussianBlurVertical"].view;
 			framebuffers[i].Create(width, height, view, renderPassGaussianBlur);
 		}
 		
@@ -106,7 +106,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
-			vk::ImageView view = renderTargets["viewport"].view;
+			ImageViewHandle view = renderTargets["viewport"].view;
 			framebuffers[i].Create(width, height, view, renderPassCombine);
 		}
 	}
@@ -119,22 +119,22 @@ namespace pe
 		allocateInfo.descriptorSetCount = 1;
 		
 		// Composition image to Bright Filter shader
-		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutBrightFilter();
+		allocateInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutBrightFilter();
 		DSBrightFilter = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
 		VULKAN.SetDebugObjectName(*DSBrightFilter, "Bloom_BloomBrightFilter");
 		
 		// Bright Filter image to Gaussian Blur Horizontal shader
-		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutGaussianBlurH();
+		allocateInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutGaussianBlurH();
 		DSGaussianBlurHorizontal = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
 		VULKAN.SetDebugObjectName(*DSGaussianBlurHorizontal, "Bloom_GaussianBlurHorizontal");
 		
 		// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
-		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutGaussianBlurV();
+		allocateInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutGaussianBlurV();
 		DSGaussianBlurVertical = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
 		VULKAN.SetDebugObjectName(*DSGaussianBlurVertical, "Bloom_GaussianBlurVertical");
 		
 		// Gaussian Blur Vertical image to Combine shader
-		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutCombine();
+		allocateInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutCombine();
 		DSCombine = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
 		VULKAN.SetDebugObjectName(*DSCombine, "Bloom_Combine");
 		
@@ -181,7 +181,7 @@ namespace pe
 		
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = renderPassBrightFilter.handle;
-		rpi.framebuffer = *framebuffers[imageIndex].handle;
+		rpi.framebuffer = framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		vk::Extent2D extent{ renderTargets["brightFilter"].width, renderTargets["brightFilter"].height };
 		rpi.renderArea.extent = extent;
@@ -200,7 +200,7 @@ namespace pe
 		renderTargets["brightFilter"].ChangeLayout(cmdBuf, LayoutState::ColorRead);
 		
 		rpi.renderPass = renderPassGaussianBlur.handle;
-		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)].handle;
+		rpi.framebuffer = framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)].handle;
 		
 		renderTargets["gaussianBlurHorizontal"].ChangeLayout(cmdBuf, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
@@ -213,7 +213,7 @@ namespace pe
 		cmd.endRenderPass();
 		renderTargets["gaussianBlurHorizontal"].ChangeLayout(cmdBuf, LayoutState::ColorRead);
 		
-		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)].handle;
+		rpi.framebuffer = framebuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)].handle;
 		
 		renderTargets["gaussianBlurVertical"].ChangeLayout(cmdBuf, LayoutState::ColorWrite);
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
@@ -228,7 +228,7 @@ namespace pe
 		renderTargets["gaussianBlurVertical"].ChangeLayout(cmdBuf, LayoutState::ColorRead);
 		
 		rpi.renderPass = renderPassCombine.handle;
-		rpi.framebuffer = *framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)].handle;
+		rpi.framebuffer = framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)].handle;
 		
 		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
 		cmd.pushConstants<float>(*pipelineCombine.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
@@ -262,7 +262,7 @@ namespace pe
 		pipelineBrightFilter.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineBrightFilter.info.pushConstantSize = 5 * sizeof(vec4);
 		pipelineBrightFilter.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutBrightFilter()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutBrightFilter()}
 		);
 		pipelineBrightFilter.info.renderPass = renderPassBrightFilter;
 		
@@ -287,7 +287,7 @@ namespace pe
 		pipelineGaussianBlurHorizontal.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineGaussianBlurHorizontal.info.pushConstantSize = 5 * sizeof(vec4);
 		pipelineGaussianBlurHorizontal.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutGaussianBlurH()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutGaussianBlurH()}
 		);
 		pipelineGaussianBlurHorizontal.info.renderPass = renderPassGaussianBlur;
 		
@@ -312,7 +312,7 @@ namespace pe
 		pipelineGaussianBlurVertical.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineGaussianBlurVertical.info.pushConstantSize = 5 * sizeof(vec4);
 		pipelineGaussianBlurVertical.info.descriptorSetLayouts = make_sptr(
-			std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutGaussianBlurV()}
+			std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutGaussianBlurV()}
 		);
 		pipelineGaussianBlurVertical.info.renderPass = renderPassGaussianBlur;
 		
@@ -336,7 +336,7 @@ namespace pe
 		pipelineCombine.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineCombine.info.pushConstantSize = 5 * sizeof(vec4);
 		pipelineCombine.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutCombine()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutCombine()}
 		);
 		pipelineCombine.info.renderPass = renderPassCombine;
 		
@@ -345,7 +345,6 @@ namespace pe
 	
 	void Bloom::destroy()
 	{
-		auto vulkan = VulkanContext::Get();
 		for (auto& frameBuffer : framebuffers)
 			frameBuffer.Destroy();
 		
@@ -355,23 +354,23 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutBrightFilter())
 		{
-			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutBrightFilter());
-			Pipeline::getDescriptorSetLayoutBrightFilter() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutBrightFilter(), nullptr);
+			Pipeline::getDescriptorSetLayoutBrightFilter() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutGaussianBlurH())
 		{
-			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutGaussianBlurH());
-			Pipeline::getDescriptorSetLayoutGaussianBlurH() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutGaussianBlurH(), nullptr);
+			Pipeline::getDescriptorSetLayoutGaussianBlurH() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutGaussianBlurV())
 		{
-			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutGaussianBlurV());
-			Pipeline::getDescriptorSetLayoutGaussianBlurV() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutGaussianBlurV(), nullptr);
+			Pipeline::getDescriptorSetLayoutGaussianBlurV() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutCombine())
 		{
-			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutCombine());
-			Pipeline::getDescriptorSetLayoutCombine() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutCombine(), nullptr);
+			Pipeline::getDescriptorSetLayoutCombine() = {};
 		}
 		frameImage.Destroy();
 		pipelineBrightFilter.destroy();

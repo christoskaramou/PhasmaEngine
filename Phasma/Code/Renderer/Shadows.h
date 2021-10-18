@@ -46,7 +46,7 @@ namespace pe
 		vec4 viewZ;
 		RenderPass renderPass;
 		std::vector<Image> textures {};
-		SPtr<vk::DescriptorSet> descriptorSetDeferred;
+		DescriptorSetHandle descriptorSetDeferred;
 		std::vector<FrameBuffer> framebuffers {};
 		SPtr<Buffer> uniformBuffer;
 		Pipeline pipeline;

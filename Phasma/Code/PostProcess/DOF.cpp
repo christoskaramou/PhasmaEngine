@@ -72,7 +72,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
-			vk::ImageView view = renderTargets["viewport"].view;
+			ImageViewHandle view = renderTargets["viewport"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -84,7 +84,7 @@ namespace pe
 		allocateInfo.descriptorPool = *vulkan->descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		
-		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutDOF();
+		allocateInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutDOF();
 		DSet = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
 		VULKAN.SetDebugObjectName(*DSet, "DOF");
 		
@@ -121,7 +121,7 @@ namespace pe
 		
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = renderPass.handle;
-		rpi.framebuffer = *framebuffers[imageIndex].handle;
+		rpi.framebuffer = framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		vk::Extent2D extent{ renderTargets["viewport"].width, renderTargets["viewport"].height };
 		rpi.renderArea.extent = extent;
@@ -152,7 +152,7 @@ namespace pe
 		pipeline.info.pushConstantStage = PushConstantStage::Fragment;
 		pipeline.info.pushConstantSize = 5 * sizeof(vec4);
 		pipeline.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutDOF()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutDOF()}
 		);
 		pipeline.info.renderPass = renderPass;
 		
@@ -162,16 +162,15 @@ namespace pe
 	
 	void DOF::destroy()
 	{
-		auto vulkan = VulkanContext::Get();
 		for (auto& framebuffer : framebuffers)
 			framebuffer.Destroy();
 		
 		renderPass.Destroy();
 		
-		if (Pipeline::getDescriptorSetLayoutDOF())
+		if ((VkDescriptorSetLayout)Pipeline::getDescriptorSetLayoutDOF())
 		{
-			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutDOF());
-			Pipeline::getDescriptorSetLayoutDOF() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutDOF(), nullptr);
+			Pipeline::getDescriptorSetLayoutDOF() = {};
 		}
 		frameImage.Destroy();
 		pipeline.destroy();

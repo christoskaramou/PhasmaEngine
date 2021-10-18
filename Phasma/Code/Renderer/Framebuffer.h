@@ -36,13 +36,13 @@ namespace pe
 		
 		~FrameBuffer() = default;
 		
-		void Create(uint32_t width, uint32_t height, const vk::ImageView& view, RenderPass renderPass);
+		void Create(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass renderPass);
 		
-		void Create(uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, RenderPass renderPass);
+		void Create(uint32_t width, uint32_t height, std::vector<ImageViewHandle>& views, RenderPass renderPass);
 		
 		void Destroy();
 		
-		SPtr<vk::Framebuffer> handle;
+		FrameBufferHandle handle;
 
 		uint32_t width, height;
 	};

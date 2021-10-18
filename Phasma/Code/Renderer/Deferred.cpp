@@ -65,7 +65,7 @@ namespace pe
 		
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = renderPass.handle;
-		rpi.framebuffer = *framebuffers[imageIndex].handle;
+		rpi.framebuffer = framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -101,7 +101,7 @@ namespace pe
 				vk::DescriptorSetAllocateInfo {
 						*vulkan->descriptorPool,            //DescriptorPool descriptorPool;
 						1,                                        //uint32_t descriptorSetCount;
-						&Pipeline::getDescriptorSetLayoutComposition() //const DescriptorSetLayout* pSetLayouts;
+						&(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutComposition() //const DescriptorSetLayout* pSetLayouts;
 				};
 		DSComposition = make_sptr(vulkan->device->allocateDescriptorSets(allocInfo).at(0));
 		VULKAN.SetDebugObjectName(*DSComposition, "Composition");
@@ -232,7 +232,7 @@ namespace pe
 
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = compositionRenderPass.handle;
-		rpi.framebuffer = *compositionFramebuffers[imageIndex].handle;
+		rpi.framebuffer = compositionFramebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -248,7 +248,7 @@ namespace pe
 			vk::PipelineBindPoint::eGraphics,
 			*pipelineComposition.layout,
 			0,
-			{ *DSComposition, *shadows.descriptorSetDeferred, *skybox.descriptorSet },
+			{ *DSComposition, (vk::DescriptorSet)shadows.descriptorSetDeferred, *skybox.descriptorSet },
 			nullptr
 		);
 		cmd.draw(3, 1, 0, 0);
@@ -300,13 +300,13 @@ namespace pe
 		{
 			uint32_t width = renderTargets["albedo"].width;
 			uint32_t height = renderTargets["albedo"].height;
-			std::vector<vk::ImageView> views {
-				(VkImageView)renderTargets["normal"].view,
-				(VkImageView)renderTargets["albedo"].view,
-				(VkImageView)renderTargets["srm"].view,
-				(VkImageView)renderTargets["velocity"].view,
-				(VkImageView)renderTargets["emissive"].view,
-				(VkImageView)VULKAN.depth.view
+			std::vector<ImageViewHandle> views {
+				renderTargets["normal"].view,
+				renderTargets["albedo"].view,
+				renderTargets["srm"].view,
+				renderTargets["velocity"].view,
+				renderTargets["emissive"].view,
+				VULKAN.depth.view
 			};
 			framebuffers[i].Create(width, height, views, renderPass);
 		}
@@ -321,7 +321,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
-			vk::ImageView view = renderTargets["viewport"].view;
+			ImageViewHandle view = renderTargets["viewport"].view;
 			compositionFramebuffers[i].Create(width, height, view, compositionRenderPass);
 		}
 	}
@@ -356,9 +356,9 @@ namespace pe
 		pipeline.info.descriptorSetLayouts = make_sptr(
 			std::vector<vk::DescriptorSetLayout>
 			{
-				Pipeline::getDescriptorSetLayoutMesh(),
-				Pipeline::getDescriptorSetLayoutPrimitive(),
-				Pipeline::getDescriptorSetLayoutModel()
+				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutMesh(),
+				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutPrimitive(),
+				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutModel()
 			});
 		pipeline.info.renderPass = renderPass;
 		
@@ -391,12 +391,12 @@ namespace pe
 				}
 		);
 		pipelineComposition.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout>
-						{
-								Pipeline::getDescriptorSetLayoutComposition(),
-								Pipeline::getDescriptorSetLayoutShadowsDeferred(),
-								Pipeline::getDescriptorSetLayoutSkybox()
-						}
+			std::vector<vk::DescriptorSetLayout>
+			{
+				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutComposition(),
+				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutShadowsDeferred(),
+				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSkybox()
+			}
 		);
 		pipelineComposition.info.renderPass = compositionRenderPass;
 		
@@ -417,8 +417,8 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutComposition())
 		{
-			vulkan->device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutComposition());
-			Pipeline::getDescriptorSetLayoutComposition() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutComposition(), nullptr);
+			Pipeline::getDescriptorSetLayoutComposition() = {};
 		}
 		uniform->Destroy();
 		pipeline.destroy();

@@ -37,10 +37,6 @@ namespace pe
 	class Context;
 	class CommandBuffer;
 	class Buffer;
-	
-	using ImageHandle = ApiHandle<VkImage_T*, void*>;
-	using ImageViewHandle = ApiHandle<VkImageView_T*, void*>;
-	using SamplerHandle = ApiHandle<VkSampler_T*, void*>;
 
 	class Image
 	{

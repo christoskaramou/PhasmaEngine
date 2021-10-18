@@ -286,7 +286,7 @@ namespace pe
 
 			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 
-			renderPassInfoShadows.framebuffer = *shadows.framebuffers[index].handle;
+			renderPassInfoShadows.framebuffer = shadows.framebuffers[index].handle;
 			cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
 			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadows.pipeline.handle);
 			for (auto& model : Model::models)

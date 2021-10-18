@@ -252,34 +252,39 @@ namespace pe
 		}
 	}
 
-	vk::DescriptorSetLayout CreateDescriptorSetLayout(const std::vector<DescriptorBinding>& descriptionBindings)
+	DescriptorSetLayoutHandle CreateDescriptorSetLayout(const std::vector<DescriptorBinding>& descriptionBindings)
 	{
-		std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{};
+		std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{};
 		for (const auto& layoutBinding : descriptionBindings)
 		{
 			setLayoutBindings.push_back(
-				vk::DescriptorSetLayoutBinding
+				VkDescriptorSetLayoutBinding
 				{
 					layoutBinding.binding,
-					(vk::DescriptorType)layoutBinding.descriptorType,
+					(VkDescriptorType)layoutBinding.descriptorType,
 					1,
-					(vk::ShaderStageFlags)layoutBinding.stageFlags,
+					(VkShaderStageFlags)layoutBinding.stageFlags,
 					nullptr
 				}
 			);
 		}
 
-		vk::DescriptorSetLayoutCreateInfo descriptorLayout;
+		VkDescriptorSetLayoutCreateInfo descriptorLayout{};
+		descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
 		descriptorLayout.pBindings = setLayoutBindings.data();
-		return VULKAN.device->createDescriptorSetLayout(descriptorLayout);
+
+		VkDescriptorSetLayout layout;
+		vkCreateDescriptorSetLayout(*VULKAN.device, &descriptorLayout, nullptr, &layout);
+
+		return layout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutComposition()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutComposition()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
@@ -294,115 +299,115 @@ namespace pe
 					DescriptorBinding(8, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(9, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "Composition");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Composition");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutBrightFilter()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutBrightFilter()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "BrightFilter");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "BrightFilter");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutGaussianBlurH()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutGaussianBlurH()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "GaussianBlurH");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "GaussianBlurH");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutGaussianBlurV()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutGaussianBlurV()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "GaussianBlurV");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "GaussianBlurV");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutCombine()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutCombine()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "Combine");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Combine");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutDOF()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutDOF()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "DOF");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "DOF");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutFXAA()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutFXAA()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "FXAA");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "FXAA");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutMotionBlur()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutMotionBlur()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
@@ -411,17 +416,17 @@ namespace pe
 					DescriptorBinding(2, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "MotionBlur");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "MotionBlur");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutSSAO()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutSSAO()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
@@ -431,33 +436,33 @@ namespace pe
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "SSAO");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "SSAO");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutSSAOBlur()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutSSAOBlur()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "SSAOBlur");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "SSAOBlur");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutSSR()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutSSR()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
@@ -467,17 +472,17 @@ namespace pe
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "SSR");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "SSR");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutTAA()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutTAA()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
@@ -487,50 +492,50 @@ namespace pe
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "TAA");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "TAA");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutTAASharpen()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutTAASharpen()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "TAASharpen");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "TAASharpen");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutShadows()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutShadows()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					//DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "Shadows");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Shadows");
 		}
 		
 		return DSLayout;
 	}
 
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutShadowsDeferred()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutShadowsDeferred()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
@@ -540,33 +545,33 @@ namespace pe
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "ShadowCascades");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "ShadowCascades");
 		}
 
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutMesh()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutMesh()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "Mesh");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Mesh");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutPrimitive()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutPrimitive()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
@@ -577,55 +582,55 @@ namespace pe
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(5, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "Primitive");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Primitive");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutModel()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutModel()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "Model");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Model");
 		}
 		
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutSkybox()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutSkybox()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "SkyBox");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "SkyBox");
 		}
 		return DSLayout;
 	}
 	
-	vk::DescriptorSetLayout& Pipeline::getDescriptorSetLayoutCompute()
+	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutCompute()
 	{
-		static vk::DescriptorSetLayout DSLayout = nullptr;
+		static DescriptorSetLayoutHandle DSLayout = {};
 		
-		if (!DSLayout)
+		if (!VkDescriptorSetLayout(DSLayout))
 		{
 			DSLayout = CreateDescriptorSetLayout(
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eStorageBuffer, (uint32_t)vk::ShaderStageFlagBits::eCompute),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eStorageBuffer, (uint32_t)vk::ShaderStageFlagBits::eCompute)
 				});
-			VULKAN.SetDebugObjectName(DSLayout, "Compute");
+			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Compute");
 		}
 		
 		return DSLayout;

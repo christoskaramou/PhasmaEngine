@@ -43,7 +43,7 @@ namespace pe
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutSkybox();
+		allocateInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSkybox();
 		descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
 		VULKAN.SetDebugObjectName(*descriptorSet, "Skybox");
 		
@@ -126,8 +126,8 @@ namespace pe
 		texture.Destroy();
 		if (Pipeline::getDescriptorSetLayoutSkybox())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSkybox());
-			Pipeline::getDescriptorSetLayoutSkybox() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutSkybox(), nullptr);
+			Pipeline::getDescriptorSetLayoutSkybox() = {};
 		}
 	}
 }

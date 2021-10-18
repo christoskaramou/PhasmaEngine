@@ -61,7 +61,7 @@ namespace pe
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
-		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutFXAA();
+		allocateInfo2.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutFXAA();
 		DSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo2).at(0));
 		VULKAN.SetDebugObjectName(*DSet, "FXAA");
 		
@@ -97,7 +97,7 @@ namespace pe
 		
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = renderPass.handle;
-		rpi.framebuffer = *framebuffers[imageIndex].handle;
+		rpi.framebuffer = framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = 1;
@@ -125,7 +125,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
-			vk::ImageView view = renderTargets["viewport"].view;
+			ImageViewHandle view = renderTargets["viewport"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -144,7 +144,7 @@ namespace pe
 				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["viewport"].blendAttachment}
 		);
 		pipeline.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutFXAA()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutFXAA()}
 		);
 		pipeline.info.renderPass = renderPass;
 		
@@ -160,8 +160,8 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutFXAA())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutFXAA());
-			Pipeline::getDescriptorSetLayoutFXAA() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutFXAA(), nullptr);
+			Pipeline::getDescriptorSetLayoutFXAA() = {};
 		}
 		frameImage.Destroy();
 		pipeline.destroy();

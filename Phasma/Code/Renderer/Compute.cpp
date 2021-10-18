@@ -102,7 +102,7 @@ namespace pe
 		vk::DescriptorSetAllocateInfo allocInfo;
 		allocInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutCompute();
+		allocInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutCompute();
 		DSCompute = make_sptr(VULKAN.device->allocateDescriptorSets(allocInfo).at(0));
 		VULKAN.SetDebugObjectName(*DSCompute, "Compute");
 	}
@@ -133,7 +133,7 @@ namespace pe
 		
 		pipeline.info.pCompShader = &shader;
 		pipeline.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutCompute()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutCompute()}
 		);
 		
 		pipeline.createComputePipeline();
@@ -242,8 +242,8 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutCompute())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutCompute());
-			Pipeline::getDescriptorSetLayoutCompute() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutCompute(), nullptr);
+			Pipeline::getDescriptorSetLayoutCompute() = {};
 		}
 	}
 }

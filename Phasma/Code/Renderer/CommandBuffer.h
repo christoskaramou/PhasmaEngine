@@ -34,8 +34,6 @@ namespace pe
 	class Buffer;
 	class CommandPool;
 
-	using CommandBufferHandle = ApiHandle<VkCommandBuffer_T*, void*>;
-
 	enum class BarrierType
 	{
 		Memory,
@@ -66,7 +64,7 @@ namespace pe
 
 		void BindIndexBuffer(Buffer& buffer, size_t offset);
 
-		void BindDescriptors(Pipeline& pipeline, uint32_t count, DescriptorHandle descriptors);
+		void BindDescriptors(Pipeline& pipeline, uint32_t count, DescriptorSetHandle descriptors);
 
 		void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
 

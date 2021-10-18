@@ -29,35 +29,43 @@ namespace pe
 {
 	FrameBuffer::FrameBuffer()
 	{
-		handle = make_sptr(vk::Framebuffer());
+		handle = {};
 	}
 	
-	void FrameBuffer::Create(uint32_t width, uint32_t height, const vk::ImageView& view, RenderPass renderPass)
+	void FrameBuffer::Create(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass renderPass)
 	{
-		Create(width, height, std::vector<vk::ImageView> {view}, renderPass);
+		Create(width, height, std::vector<ImageViewHandle> {view}, renderPass);
 	}
 	
-	void FrameBuffer::Create(uint32_t width, uint32_t height, const std::vector<vk::ImageView>& views, RenderPass renderPass)
+	void FrameBuffer::Create(uint32_t width, uint32_t height, std::vector<ImageViewHandle>& views, RenderPass renderPass)
 	{
 		this->width = width;
 		this->height = height;
-		vk::FramebufferCreateInfo fbci;
-		fbci.renderPass = (VkRenderPass)renderPass.handle;
-		fbci.attachmentCount = static_cast<uint32_t>(views.size());
-		fbci.pAttachments = views.data();
+
+		std::vector<VkImageView> _views(views.size());
+		for (int i = 0; i < views.size(); i++)
+			_views[i] = views[i];
+
+		VkFramebufferCreateInfo fbci{};
+		fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		fbci.renderPass = renderPass.handle;
+		fbci.attachmentCount = static_cast<uint32_t>(_views.size());
+		fbci.pAttachments = _views.data();
 		fbci.width = width;
 		fbci.height = height;
 		fbci.layers = 1;
 		
-		handle = make_sptr(VULKAN.device->createFramebuffer(fbci));
+		VkFramebuffer frameBuffer;
+		vkCreateFramebuffer(*VULKAN.device, &fbci, nullptr, &frameBuffer);
+		handle = frameBuffer;
 	}
 	
 	void FrameBuffer::Destroy()
 	{
-		if (*handle)
+		if (VkFramebuffer(handle))
 		{
-			VULKAN.device->destroyFramebuffer(*handle);
-			*handle = nullptr;
+			vkDestroyFramebuffer(*VULKAN.device, handle, nullptr);
+			handle = {};
 		}
 	}
 }

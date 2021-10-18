@@ -56,7 +56,7 @@ namespace pe
 		vk::DescriptorSetAllocateInfo allocateInfo2;
 		allocateInfo2.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo2.descriptorSetCount = 1;
-		allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutSSR();
+		allocateInfo2.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSR();
 		DSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo2).at(0));
 		VULKAN.SetDebugObjectName(*DSet, "SSR");
 		
@@ -119,7 +119,7 @@ namespace pe
 		
 		vk::RenderPassBeginInfo renderPassInfo;
 		renderPassInfo.renderPass = renderPass.handle;
-		renderPassInfo.framebuffer = *framebuffers[imageIndex].handle;
+		renderPassInfo.framebuffer = framebuffers[imageIndex].handle;
 		renderPassInfo.renderArea.offset = vk::Offset2D {0, 0};
 		renderPassInfo.renderArea.extent = extent;
 		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -147,7 +147,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["ssr"].width;
 			uint32_t height = renderTargets["ssr"].height;
-			vk::ImageView view = renderTargets["ssr"].view;
+			ImageViewHandle view = renderTargets["ssr"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -166,7 +166,7 @@ namespace pe
 				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["ssr"].blendAttachment}
 		);
 		pipeline.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutSSR()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSR()}
 		);
 		pipeline.info.renderPass = renderPass;
 		
@@ -182,8 +182,8 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutSSR())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSR());
-			Pipeline::getDescriptorSetLayoutSSR() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutSSR(), nullptr);
+			Pipeline::getDescriptorSetLayoutSSR() = {};
 		}
 		UBReflection->Destroy();
 		pipeline.destroy();

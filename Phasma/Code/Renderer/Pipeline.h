@@ -84,44 +84,44 @@ namespace pe
 		
 		void destroy();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutComposition();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutComposition();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutBrightFilter();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutBrightFilter();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutGaussianBlurH();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutGaussianBlurH();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutGaussianBlurV();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutGaussianBlurV();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutCombine();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutCombine();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutDOF();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutDOF();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutFXAA();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutFXAA();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutMotionBlur();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutMotionBlur();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutSSAO();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutSSAO();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutSSAOBlur();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutSSAOBlur();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutSSR();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutSSR();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutTAA();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutTAA();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutTAASharpen();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutTAASharpen();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutShadows();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutShadows();
 
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutShadowsDeferred();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutShadowsDeferred();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutMesh();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutMesh();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutPrimitive();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutPrimitive();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutModel();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutModel();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutSkybox();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutSkybox();
 		
-		static vk::DescriptorSetLayout& getDescriptorSetLayoutCompute();
+		static DescriptorSetLayoutHandle& getDescriptorSetLayoutCompute();
 	};
 }

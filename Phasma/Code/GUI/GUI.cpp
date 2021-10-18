@@ -716,7 +716,7 @@ namespace pe
 		{
 			uint32_t width = WIDTH;
 			uint32_t height = HEIGHT;
-			vk::ImageView view = VULKAN.swapchain.images[i].view;
+			ImageViewHandle view = VULKAN.swapchain.images[i].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}

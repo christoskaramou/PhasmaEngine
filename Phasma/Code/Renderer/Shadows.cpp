@@ -37,7 +37,7 @@ namespace pe
 {
 	Shadows::Shadows()
 	{
-		descriptorSetDeferred = make_sptr(vk::DescriptorSet());
+		descriptorSetDeferred = {};
 	}
 
 	Shadows::~Shadows()
@@ -46,13 +46,17 @@ namespace pe
 
 	void Shadows::createDescriptorSets()
 	{
-		vk::DescriptorSetAllocateInfo allocateInfo;
+		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutShadowsDeferred();
+		VkDescriptorSetAllocateInfo allocateInfo{};
+		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutShadowsDeferred();
+		allocateInfo.pSetLayouts = &dsetLayout;
 
-		*descriptorSetDeferred = VULKAN.device->allocateDescriptorSets(allocateInfo).at(0);
-		VULKAN.SetDebugObjectName(*descriptorSetDeferred, "Shadows");
+		VkDescriptorSet dset;
+		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		descriptorSetDeferred = dset;
+		VULKAN.SetDebugObjectName(vk::DescriptorSet(descriptorSetDeferred), "Shadows");
 
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(SHADOWMAP_CASCADES + 1);
 
@@ -65,7 +69,7 @@ namespace pe
 			dii.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
 
 			vk::WriteDescriptorSet textureWriteSet;
-			textureWriteSet.dstSet = *descriptorSetDeferred;
+			textureWriteSet.dstSet = descriptorSetDeferred;
 			textureWriteSet.dstBinding = i;
 			textureWriteSet.dstArrayElement = 0;
 			textureWriteSet.descriptorCount = 1;
@@ -80,7 +84,7 @@ namespace pe
 		dbi.range = SHADOWMAP_CASCADES * sizeof(mat4);
 
 		vk::WriteDescriptorSet bufferWriteSet;
-		bufferWriteSet.dstSet = *descriptorSetDeferred;
+		bufferWriteSet.dstSet = descriptorSetDeferred;
 		bufferWriteSet.dstBinding = SHADOWMAP_CASCADES;
 		bufferWriteSet.dstArrayElement = 0;
 		bufferWriteSet.descriptorCount = 1;
@@ -136,7 +140,7 @@ namespace pe
 		{
 			uint32_t width = SHADOWMAP_SIZE;
 			uint32_t height = SHADOWMAP_SIZE;
-			vk::ImageView view = textures[i % textures.size()].view;
+			ImageViewHandle view = textures[i % textures.size()].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -158,8 +162,8 @@ namespace pe
 		pipeline.info.dynamicStates = make_sptr(std::vector<vk::DynamicState> {vk::DynamicState::eDepthBias});
 		pipeline.info.descriptorSetLayouts = make_sptr(std::vector<vk::DescriptorSetLayout>
 		{
-			Pipeline::getDescriptorSetLayoutMesh(),
-			Pipeline::getDescriptorSetLayoutModel()
+			(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutMesh(),
+			(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutModel()
 		});
 		pipeline.info.renderPass = renderPass;
 
@@ -189,15 +193,15 @@ namespace pe
 
 		if (Pipeline::getDescriptorSetLayoutShadows())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutShadows());
-			Pipeline::getDescriptorSetLayoutShadows() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutShadows(), nullptr);
+			Pipeline::getDescriptorSetLayoutShadows() = {};
 		}
 
 		for (auto& texture : textures)
 			texture.Destroy();
 
 		for (auto& fb : framebuffers)
-			VULKAN.device->destroyFramebuffer(*fb.handle);
+			fb.Destroy();
 
 		uniformBuffer->Destroy();
 		pipeline.destroy();

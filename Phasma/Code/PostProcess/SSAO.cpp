@@ -104,7 +104,7 @@ namespace pe
 		const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo {
 				*VULKAN.descriptorPool,    //DescriptorPool descriptorPool;
 				1,                                                //uint32_t descriptorSetCount;
-				&Pipeline::getDescriptorSetLayoutSSAO()            //const DescriptorSetLayout* pSetLayouts;
+				&(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSAO()            //const DescriptorSetLayout* pSetLayouts;
 		};
 		DSet = VULKAN.device->allocateDescriptorSets(allocInfo).at(0);
 		VULKAN.SetDebugObjectName(vk::DescriptorSet(DSet), "SSAO");
@@ -113,7 +113,7 @@ namespace pe
 		const vk::DescriptorSetAllocateInfo allocInfoBlur = vk::DescriptorSetAllocateInfo {
 				*VULKAN.descriptorPool,    //DescriptorPool descriptorPool;
 				1,                                                //uint32_t descriptorSetCount;
-				&Pipeline::getDescriptorSetLayoutSSAOBlur()    //const DescriptorSetLayout* pSetLayouts;
+				&(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSAOBlur()    //const DescriptorSetLayout* pSetLayouts;
 		};
 		DSBlur = VULKAN.device->allocateDescriptorSets(allocInfoBlur).at(0);
 		VULKAN.SetDebugObjectName(vk::DescriptorSet(DSBlur), "SSAO_Blur");
@@ -191,13 +191,13 @@ namespace pe
 		pipelineBlur.destroy();
 		if (Pipeline::getDescriptorSetLayoutSSAO())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSAO());
-			Pipeline::getDescriptorSetLayoutSSAO() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutSSAO(), nullptr);
+			Pipeline::getDescriptorSetLayoutSSAO() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutSSAOBlur())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutSSAOBlur());
-			Pipeline::getDescriptorSetLayoutSSAOBlur() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutSSAOBlur(), nullptr);
+			Pipeline::getDescriptorSetLayoutSSAOBlur() = {};
 		}
 	}
 	
@@ -237,7 +237,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["ssao"].width;
 			uint32_t height = renderTargets["ssao"].height;
-			vk::ImageView view = renderTargets["ssao"].view;
+			ImageViewHandle view = renderTargets["ssao"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -250,7 +250,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["ssaoBlur"].width;
 			uint32_t height = renderTargets["ssaoBlur"].height;
-			vk::ImageView view = renderTargets["ssaoBlur"].view;
+			ImageViewHandle view = renderTargets["ssaoBlur"].view;
 			blurFramebuffers[i].Create(width, height, view, blurRenderPass);
 		}
 	}
@@ -275,7 +275,7 @@ namespace pe
 				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["ssao"].blendAttachment}
 		);
 		pipeline.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutSSAO()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSAO()}
 		);
 		pipeline.info.renderPass = renderPass;
 		
@@ -296,7 +296,7 @@ namespace pe
 				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["ssaoBlur"].blendAttachment}
 		);
 		pipelineBlur.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutSSAOBlur()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSAOBlur()}
 		);
 		pipelineBlur.info.renderPass = blurRenderPass;
 		

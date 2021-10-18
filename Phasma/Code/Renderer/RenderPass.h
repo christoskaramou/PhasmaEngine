@@ -43,8 +43,6 @@ namespace pe
 		ImageLayout finalLayout;
 	};
 
-	using RenderPassHandle = ApiHandle<VkRenderPass_T*, void*>;
-
 	class RenderPass
 	{
 	public:

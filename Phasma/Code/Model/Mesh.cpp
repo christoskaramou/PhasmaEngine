@@ -217,8 +217,8 @@ namespace pe
 		uniformBuffer->Destroy();
 		if (Pipeline::getDescriptorSetLayoutMesh())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
-			Pipeline::getDescriptorSetLayoutMesh() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutMesh(), nullptr);
+			Pipeline::getDescriptorSetLayoutMesh() = {};
 		}
 		
 		for (auto& primitive : primitives)
@@ -231,8 +231,8 @@ namespace pe
 		indices.shrink_to_fit();
 		if (Pipeline::getDescriptorSetLayoutPrimitive())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
-			Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutPrimitive(), nullptr);
+			Pipeline::getDescriptorSetLayoutPrimitive() = {};
 		}
 	}
 }

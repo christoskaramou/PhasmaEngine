@@ -200,18 +200,18 @@ namespace pe
 		{
 			if (Pipeline::getDescriptorSetLayoutModel())
 			{
-				VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
-				Pipeline::getDescriptorSetLayoutModel() = nullptr;
+				vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
+				Pipeline::getDescriptorSetLayoutModel() = {};
 			}
 			if (Pipeline::getDescriptorSetLayoutMesh())
 			{
-				VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMesh());
-				Pipeline::getDescriptorSetLayoutMesh() = nullptr;
+				vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutMesh(), nullptr);
+				Pipeline::getDescriptorSetLayoutMesh() = {};
 			}
 			if (Pipeline::getDescriptorSetLayoutPrimitive())
 			{
-				VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutPrimitive());
-				Pipeline::getDescriptorSetLayoutPrimitive() = nullptr;
+				vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutPrimitive(), nullptr);
+				Pipeline::getDescriptorSetLayoutPrimitive() = {};
 			}
 		}
 

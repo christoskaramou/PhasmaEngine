@@ -131,11 +131,6 @@ namespace vk
 
 namespace pe
 {
-	class BufferVK;
-}
-
-namespace pe
-{
 	template<class VK_HANDLE, class DX_HANDLE>
 	class ApiHandle final
 	{
@@ -151,6 +146,10 @@ namespace pe
 		operator VK_HANDLE () { return std::get<VK_HANDLE>(m_handle); }
 
 		operator DX_HANDLE () { return std::get<DX_HANDLE>(m_handle); }
+
+		operator bool() { return m_handle.index() != std::variant_npos; }
+
+		bool operator!() { return m_handle.index() == std::variant_npos; }
 
 	protected:
 		std::variant<VK_HANDLE, DX_HANDLE> m_handle;
@@ -210,4 +209,14 @@ namespace pe
 
 		NoMove& operator=(NoMove&&) = delete;
 	};
+
+	class BufferVK;
+	using CommandBufferHandle = ApiHandle<VkCommandBuffer_T*, void*>;
+	using DescriptorSetLayoutHandle = ApiHandle<VkDescriptorSetLayout_T*, void*>;
+	using DescriptorSetHandle = ApiHandle<VkDescriptorSet_T*, void*>;
+	using FrameBufferHandle = ApiHandle<VkFramebuffer_T*, void*>;
+	using ImageHandle = ApiHandle<VkImage_T*, void*>;
+	using ImageViewHandle = ApiHandle<VkImageView_T*, void*>;
+	using SamplerHandle = ApiHandle<VkSampler_T*, void*>;
+	using RenderPassHandle = ApiHandle<VkRenderPass_T*, void*>;
 }

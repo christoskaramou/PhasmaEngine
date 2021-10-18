@@ -27,9 +27,6 @@ SOFTWARE.
 
 namespace pe
 {
-	using DescriptorLayoutHandle = ApiHandle<VkDescriptorSetLayout_T*, void*>;
-	using DescriptorHandle = ApiHandle<VkDescriptorSet_T*, void*>;
-
 	class DescriptorBinding
 	{
 	public:

@@ -75,7 +75,7 @@ namespace pe
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMotionBlur();
+		allocateInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutMotionBlur();
 		DSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
 		VULKAN.SetDebugObjectName(*DSet, "MotionBlur");
 		
@@ -120,7 +120,7 @@ namespace pe
 		
 		vk::RenderPassBeginInfo rpi;
 		rpi.renderPass = renderPass.handle;
-		rpi.framebuffer = *framebuffers[imageIndex].handle;
+		rpi.framebuffer = framebuffers[imageIndex].handle;
 		rpi.renderArea.offset = vk::Offset2D {0, 0};
 		rpi.renderArea.extent = extent;
 		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -147,8 +147,8 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutMotionBlur())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutMotionBlur());
-			Pipeline::getDescriptorSetLayoutMotionBlur() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutMotionBlur(), nullptr);
+			Pipeline::getDescriptorSetLayoutMotionBlur() = {};
 		}
 		frameImage.Destroy();
 		UBmotionBlur->Destroy();
@@ -187,7 +187,7 @@ namespace pe
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
-			vk::ImageView view = renderTargets["viewport"].view;
+			ImageViewHandle view = renderTargets["viewport"].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}
@@ -209,7 +209,7 @@ namespace pe
 		pipeline.info.pushConstantStage = PushConstantStage::Fragment;
 		pipeline.info.pushConstantSize = sizeof(vec4);
 		pipeline.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {Pipeline::getDescriptorSetLayoutMotionBlur()}
+				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutMotionBlur()}
 		);
 		pipeline.info.renderPass = renderPass;
 		

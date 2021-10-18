@@ -913,7 +913,7 @@ namespace pe
 		vk::DescriptorSetAllocateInfo allocateInfo0;
 		allocateInfo0.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo0.descriptorSetCount = 1;
-		allocateInfo0.pSetLayouts = &Pipeline::getDescriptorSetLayoutModel();
+		allocateInfo0.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutModel();
 		descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo0).at(0));
 		VULKAN.SetDebugObjectName(*descriptorSet, "Model_" + name);
 		
@@ -929,7 +929,7 @@ namespace pe
 			vk::DescriptorSetAllocateInfo allocateInfo;
 			allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 			allocateInfo.descriptorSetCount = 1;
-			allocateInfo.pSetLayouts = &Pipeline::getDescriptorSetLayoutMesh();
+			allocateInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutMesh();
 			mesh->descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
 			VULKAN.SetDebugObjectName(*mesh->descriptorSet, "Mesh_" + mesh->name);
 			
@@ -945,7 +945,7 @@ namespace pe
 				vk::DescriptorSetAllocateInfo allocateInfo2;
 				allocateInfo2.descriptorPool = *VULKAN.descriptorPool;
 				allocateInfo2.descriptorSetCount = 1;
-				allocateInfo2.pSetLayouts = &Pipeline::getDescriptorSetLayoutPrimitive();
+				allocateInfo2.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutPrimitive();
 				primitive.descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo2).at(0));
 				VULKAN.SetDebugObjectName(*mesh->descriptorSet, "Primitive_" + primitive.name);
 				
@@ -974,8 +974,8 @@ namespace pe
 		delete resourceReader;
 		if (Pipeline::getDescriptorSetLayoutModel())
 		{
-			VULKAN.device->destroyDescriptorSetLayout(Pipeline::getDescriptorSetLayoutModel());
-			Pipeline::getDescriptorSetLayoutModel() = nullptr;
+			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
+			Pipeline::getDescriptorSetLayoutModel() = {};
 		}
 		for (auto& node : linearNodes)
 		{
