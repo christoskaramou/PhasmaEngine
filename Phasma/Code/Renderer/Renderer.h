@@ -81,7 +81,7 @@ namespace pe
 
 		RenderArea& GetRenderArea() { return renderArea; }
 		
-		void AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags);
+		void AddRenderTarget(const std::string& name, Format format, ImageUsageFlags additionalFlags = 0);
 		
 		void LoadResources();
 		

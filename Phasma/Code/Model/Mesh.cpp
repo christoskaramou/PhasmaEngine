@@ -33,7 +33,7 @@ namespace pe
 	
 	Primitive::Primitive() : pbrMaterial({})
 	{
-		descriptorSet = make_sptr(vk::DescriptorSet());
+		descriptorSet = {};
 	}
 	
 	Primitive::~Primitive()
@@ -42,7 +42,7 @@ namespace pe
 	
 	Mesh::Mesh()
 	{
-		descriptorSet = make_sptr(vk::DescriptorSet());
+		descriptorSet = {};
 	}
 	
 	Mesh::~Mesh()
@@ -53,14 +53,13 @@ namespace pe
 	{
 		uniformBuffer = Buffer::Create(
 			sizeof(ubo),
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
 		);
 		uniformBuffer->Map();
 		uniformBuffer->Zero();
 		uniformBuffer->Flush();
 		uniformBuffer->Unmap();
-		uniformBuffer->SetDebugName(name);
 		
 		for (auto& primitive : primitives)
 		{
@@ -78,14 +77,13 @@ namespace pe
 			const size_t size = sizeof(mat4);
 			primitive.uniformBuffer = Buffer::Create(
 				size,
-				(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
-				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
+				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
 			);
 			primitive.uniformBuffer->Map();
 			primitive.uniformBuffer->CopyData(&factors);
 			primitive.uniformBuffer->Flush();
 			primitive.uniformBuffer->Unmap();
-			primitive.uniformBuffer->SetDebugName(primitive.name);
 		}
 	}
 	
@@ -157,21 +155,20 @@ namespace pe
 			if (!pixels)
 				throw std::runtime_error("No pixel data loaded");
 			
-			const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
+			const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 			
 			VULKAN.graphicsQueue->waitIdle();
 			VULKAN.waitAndLockSubmits();
 			
 			SPtr<Buffer> staging = Buffer::Create(
 				imageSize,
-				(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
-				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
+				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
 			);
 			staging->Map();
 			staging->CopyData(pixels);
 			staging->Flush();
 			staging->Unmap();
-			staging->SetDebugName("Staging");
 			
 			stbi_image_free(pixels);
 			
@@ -189,7 +186,6 @@ namespace pe
 			tex->CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 			tex->maxLod = static_cast<float>(tex->mipLevels);
 			tex->CreateSampler();
-			tex->SetDebugName(path.c_str());
 			
 			staging->Destroy();
 			

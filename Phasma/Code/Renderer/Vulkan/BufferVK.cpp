@@ -21,6 +21,8 @@ SOFTWARE.
 */
 
 #include "Renderer/Buffer.h"
+#include "Renderer/CommandPool.h"
+#include "Renderer/CommandBuffer.h"
 #include "BufferVK.h"
 #include "Vulkan.h"
 
@@ -28,30 +30,26 @@ namespace pe
 {
 	BufferVK::BufferVK(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties)
 	{
-		vk::BufferUsageFlags usageVK = vk::BufferUsageFlags(usage);
-		vk::MemoryPropertyFlags propertiesVK = vk::MemoryPropertyFlags(properties);
-
 		sizeRequested = size;
 		this->size = size;
 		data = nullptr;
 
-		vk::BufferCreateInfo bufferInfo;
+		VkBufferCreateInfo bufferInfo{};
+		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufferInfo.size = size;
-		bufferInfo.usage = usageVK;
-		bufferInfo.sharingMode = vk::SharingMode::eExclusive;
-		VkBufferCreateInfo vkBufferCreateInfo = VkBufferCreateInfo(bufferInfo);
+		bufferInfo.usage = usage;
+		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		VmaAllocationCreateInfo allocationCreateInfo = {};
 		allocationCreateInfo.usage =
-			usageVK & vk::BufferUsageFlagBits::eTransferSrc ?
-			VMA_MEMORY_USAGE_CPU_ONLY : propertiesVK & vk::MemoryPropertyFlagBits::eDeviceLocal ?
+			usage & VK_BUFFER_USAGE_TRANSFER_SRC_BIT ?
+			VMA_MEMORY_USAGE_CPU_ONLY : properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT ?
 			VMA_MEMORY_USAGE_GPU_ONLY : VMA_MEMORY_USAGE_CPU_TO_GPU;
-		allocationCreateInfo.preferredFlags = VkMemoryPropertyFlags(propertiesVK);
+		allocationCreateInfo.preferredFlags = properties;
 
+		VkBuffer buffer;
 		VmaAllocationInfo allocationInfo;
-		vmaCreateBuffer(
-			VULKAN.allocator, &vkBufferCreateInfo, &allocationCreateInfo, &handle, &allocation,
-			&allocationInfo
-		);
+		vmaCreateBuffer(VULKAN.allocator, &bufferInfo, &allocationCreateInfo, &buffer, &allocation, &allocationInfo);
+		m_handle = buffer;
 	}
 
 	BufferVK::~BufferVK()
@@ -89,30 +87,21 @@ namespace pe
 		memcpy((char*) data + offset, srcData, srcSize > 0 ? srcSize : size);
 	}
 	
-	void BufferVK::CopyBuffer(Buffer* srcBuffer, const size_t srcSize) const
+	void BufferVK::CopyBuffer(Buffer* srcBuffer, const size_t srcSize)
 	{
-		VkBuffer scrBufferVk = static_cast<BufferVK*>(srcBuffer)->handle;
 		assert(srcSize <= size);
-		vk::CommandBufferAllocateInfo cbai;
-		cbai.level = vk::CommandBufferLevel::ePrimary;
-		cbai.commandPool = *VULKAN.commandPool2;
-		cbai.commandBufferCount = 1;
-		const vk::CommandBuffer copyCmd = VULKAN.device->allocateCommandBuffers(cbai).at(0);
-		
-		vk::CommandBufferBeginInfo beginInfo;
-		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-		copyCmd.begin(beginInfo);
-		
-		vk::BufferCopy bufferCopy {};
+
+		BufferCopy bufferCopy{};
 		bufferCopy.size = srcSize > 0 ? srcSize : size;
-		
-		copyCmd.copyBuffer(scrBufferVk, handle, bufferCopy);
-		
-		copyCmd.end();
-		
-		VULKAN.submitAndWaitFence(copyCmd, nullptr, nullptr, nullptr);
-		
-		VULKAN.device->freeCommandBuffers(*VULKAN.commandPool2, copyCmd);
+
+		CommandPool pool(VkCommandPool(*VULKAN.commandPool2));
+		CommandBuffer copyCmd;
+		copyCmd.Create(pool);
+		copyCmd.Begin();
+		copyCmd.CopyBuffer(*srcBuffer, *this, 1, &bufferCopy);
+		copyCmd.End();
+		VULKAN.submitAndWaitFence(vk::CommandBuffer(copyCmd.Handle()), nullptr, nullptr, nullptr);
+		copyCmd.Destroy();
 	}
 	
 	void BufferVK::Flush(size_t offset, size_t flushSize) const
@@ -125,17 +114,11 @@ namespace pe
 	
 	void BufferVK::Destroy()
 	{
-		if (handle)
-			vmaDestroyBuffer(VULKAN.allocator, handle, allocation);
-		handle = nullptr;
+		if (m_handle)
+			vmaDestroyBuffer(VULKAN.allocator, m_handle, allocation);
+		m_handle = {};
 	}
 
-	void BufferVK::SetDebugName(const std::string& debugName)
-	{
-#if _DEBUG
-		VULKAN.SetDebugObjectName(vk::Buffer(handle), debugName);
-#endif
-	}
 	size_t BufferVK::Size()
 	{
 		return size;
@@ -149,10 +132,5 @@ namespace pe
 	void* BufferVK::Data()
 	{
 		return data;
-	}
-
-	void* BufferVK::Handle()
-	{
-		return &handle;
 	}
 }

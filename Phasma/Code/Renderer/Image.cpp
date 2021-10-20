@@ -60,13 +60,6 @@ namespace pe
 	Image::~Image()
 	{
 	}
-
-	void Image::SetDebugName(const std::string& debugName)
-	{
-	#if _DEBUG
-		VULKAN.SetDebugObjectName(vk::Image(image), debugName);
-	#endif
-	}
 	
 	void Image::TransitionImageLayout(
 		CommandBuffer cmd,
@@ -180,8 +173,6 @@ namespace pe
 		VkImageView vkView;
 		vkCreateImageView(*VULKAN.device.get(), &viewInfo, nullptr, &vkView);
 		view = vkView;
-		
-		VULKAN.SetDebugObjectName(vk::ImageView(view), "");
 	}
 	
 	void Image::TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout)
@@ -387,7 +378,7 @@ namespace pe
 		region.imageOffset = vk::Offset3D(0, 0, 0);
 		region.imageExtent = vk::Extent3D(width, height, 1);
 		
-		vkCmdCopyBufferToImage(commandBuffer, buffer->Handle<VkBuffer>(), image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+		vkCmdCopyBufferToImage(commandBuffer, buffer->Handle(), image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 		
 		vkEndCommandBuffer(commandBuffer);
 		

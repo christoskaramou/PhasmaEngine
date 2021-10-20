@@ -31,15 +31,17 @@ namespace pe
 	public:
 		CommandPool();
 
+		CommandPool(CommandPoolHandle handle);
+
 		~CommandPool();
 
-		void Create();
+		void Create(uint32_t graphicsFamilyId);
 
 		void Destroy();
 
-		vk::CommandPool& Handle();
+		CommandPoolHandle& Handle();
 
 	private:
-		SPtr<vk::CommandPool> cmdPoolVK;
+		CommandPoolHandle m_handle;
 	};
 }

@@ -29,12 +29,13 @@ SOFTWARE.
 #include "Shader/Shader.h"
 #include "Core/Queue.h"
 #include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/CommandBuffer.h"
 
 namespace pe
 {
 	SSR::SSR()
 	{
-		DSet = make_sptr(vk::DescriptorSet());
+		DSet = {};
 	}
 	
 	SSR::~SSR()
@@ -45,51 +46,74 @@ namespace pe
 	{
 		UBReflection = Buffer::Create(
 			4 * sizeof(mat4),
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		UBReflection->Map();
 		UBReflection->Zero();
 		UBReflection->Flush();
 		UBReflection->Unmap();
-		UBReflection->SetDebugName("SSR_UB_Reflection");
-		
-		vk::DescriptorSetAllocateInfo allocateInfo2;
-		allocateInfo2.descriptorPool = *VULKAN.descriptorPool;
-		allocateInfo2.descriptorSetCount = 1;
-		allocateInfo2.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSR();
-		DSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo2).at(0));
-		VULKAN.SetDebugObjectName(*DSet, "SSR");
-		
+
+		VkDescriptorSetAllocateInfo allocateInfo{};
+		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
+		allocateInfo.descriptorSetCount = 1;
+		allocateInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutSSR();
+
+		VkDescriptorSet dset;
+		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		DSet = dset;
+
 		updateDescriptorSets(renderTargets);
 	}
 	
 	void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		std::deque<vk::DescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
+		std::deque<VkDescriptorImageInfo> dsii{};
+		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image, ImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 		{
-			dsii.emplace_back(vk::Sampler(image.sampler), vk::ImageView(image.view), layout);
-			return vk::WriteDescriptorSet{
-					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
-			};
+			VkDescriptorImageInfo info{ image.sampler, image.view, (VkImageLayout)layout };
+			dsii.push_back(info);
+
+			VkWriteDescriptorSet textureWriteSet{};
+			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			textureWriteSet.dstSet = dstSet;
+			textureWriteSet.dstBinding = dstBinding;
+			textureWriteSet.dstArrayElement = 0;
+			textureWriteSet.descriptorCount = 1;
+			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			textureWriteSet.pImageInfo = &dsii.back();
+
+			return textureWriteSet;
 		};
-		std::deque<vk::DescriptorBufferInfo> dsbi {};
-		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
+
+		std::deque<VkDescriptorBufferInfo> dsbi{};
+		auto const wSetBuffer = [&dsbi](DescriptorSetHandle dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(buffer.Handle<vk::Buffer>(), 0, buffer.Size());
-			return vk::WriteDescriptorSet {
-					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
-			};
+			VkDescriptorBufferInfo info{ buffer.Handle(), 0, buffer.Size() };
+			dsbi.push_back(info);
+
+			VkWriteDescriptorSet textureWriteSet{};
+			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			textureWriteSet.dstSet = dstSet;
+			textureWriteSet.dstBinding = dstBinding;
+			textureWriteSet.dstArrayElement = 0;
+			textureWriteSet.descriptorCount = 1;
+			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			textureWriteSet.pBufferInfo = &dsbi.back();
+
+			return textureWriteSet;
 		};
 		
-		std::vector<vk::WriteDescriptorSet> textureWriteSets {
-				wSetImage(*DSet, 0, renderTargets["albedo"]),
-				wSetImage(*DSet, 1, VULKAN.depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
-				wSetImage(*DSet, 2, renderTargets["normal"]),
-				wSetImage(*DSet, 3, renderTargets["srm"]),
-				wSetBuffer(*DSet, 4, *UBReflection)
+		std::vector<VkWriteDescriptorSet> textureWriteSets
+		{
+			wSetImage(DSet, 0, renderTargets["albedo"]),
+			wSetImage(DSet, 1, VULKAN.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
+			wSetImage(DSet, 2, renderTargets["normal"]),
+			wSetImage(DSet, 3, renderTargets["srm"]),
+			wSetBuffer(DSet, 4, *UBReflection)
 		};
-		VULKAN.device->updateDescriptorSets(textureWriteSets, nullptr);
+
+		vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 	}
 	
 	void SSR::update(Camera& camera)
@@ -109,27 +133,13 @@ namespace pe
 	}
 	
 	
-	void SSR::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
+	void SSR::draw(CommandBuffer* cmd, uint32_t imageIndex)
 	{
-		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
-		vk::ClearValue clearColor;
-		memcpy(clearColor.color.float32, &color, sizeof(vec4));
-		
-		std::vector<vk::ClearValue> clearValues = {clearColor};
-		
-		vk::RenderPassBeginInfo renderPassInfo;
-		renderPassInfo.renderPass = renderPass.handle;
-		renderPassInfo.framebuffer = framebuffers[imageIndex].handle;
-		renderPassInfo.renderArea.offset = vk::Offset2D {0, 0};
-		renderPassInfo.renderArea.extent = extent;
-		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-		renderPassInfo.pClearValues = clearValues.data();
-		
-		cmd.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *DSet, nullptr);
-		cmd.draw(3, 1, 0, 0);
-		cmd.endRenderPass();
+		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+		cmd->BindPipeline(pipeline);
+		cmd->BindDescriptors(pipeline, 1, &DSet);
+		cmd->Draw(3, 1, 0, 0);
+		cmd->EndPass();
 	}
 	
 	void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
@@ -162,12 +172,8 @@ namespace pe
 		pipeline.info.width = renderTargets["ssr"].width_f;
 		pipeline.info.height = renderTargets["ssr"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_sptr(
-				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["ssr"].blendAttachment}
-		);
-		pipeline.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSR()}
-		);
+		pipeline.info.colorBlendAttachments = { renderTargets["ssr"].blendAttachment };
+		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSR() };
 		pipeline.info.renderPass = renderPass;
 		
 		pipeline.createGraphicsPipeline();

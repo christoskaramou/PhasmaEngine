@@ -47,10 +47,10 @@ namespace pe
 		RenderPass renderPassBrightFilter;
 		RenderPass renderPassGaussianBlur;
 		RenderPass renderPassCombine;
-		SPtr<vk::DescriptorSet> DSBrightFilter;
-		SPtr<vk::DescriptorSet> DSGaussianBlurHorizontal;
-		SPtr<vk::DescriptorSet> DSGaussianBlurVertical;
-		SPtr<vk::DescriptorSet> DSCombine;
+		DescriptorSetHandle DSBrightFilter;
+		DescriptorSetHandle DSGaussianBlurHorizontal;
+		DescriptorSetHandle DSGaussianBlurVertical;
+		DescriptorSetHandle DSCombine;
 		Image frameImage;
 		
 		void Init();
@@ -73,7 +73,7 @@ namespace pe
 		
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		
-		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets);
+		void draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets);
 		
 		void destroy();
 	};

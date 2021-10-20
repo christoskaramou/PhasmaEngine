@@ -38,6 +38,7 @@ SOFTWARE.
 namespace pe
 {
 	class Pipeline;
+	class CommandBuffer;
 	
 	class Model : public NoCopy
 	{
@@ -58,8 +59,8 @@ namespace pe
 		
 		static std::deque<Model> models;
 		static Pipeline* pipeline;
-		static SPtr<vk::CommandBuffer> commandBuffer;
-		SPtr<vk::DescriptorSet> descriptorSet;
+		static CommandBuffer* commandBuffer;
+		DescriptorSetHandle descriptorSet;
 		SPtr<Buffer> uniformBuffer;
 		struct UBOModel
 		{

@@ -31,13 +31,11 @@ namespace pe
 {
 	void RendererSystem::Init()
 	{
-		auto vulkan = VulkanContext::Get();
-
 		// SET WINDOW TITLE
 		std::string title = "PhasmaEngine";
-		title += " - Device: " + std::string(vulkan->gpuProperties->deviceName.data());
+		title += " - Device: " + std::string(VULKAN.gpuProperties->deviceName.data());
 		title += " - API: Vulkan";
-		title += " - Present Mode: " + vk::to_string(*vulkan->surface.presentModeKHR);
+		title += " - Present Mode: " + vk::to_string(*VULKAN.surface.presentModeKHR);
 #ifdef _DEBUG
 		title += " - Configuration: Debug";
 #else
@@ -46,19 +44,19 @@ namespace pe
 		CONTEXT->GetSystem<EventSystem>()->DispatchEvent(EventType::SetWindowTitle, title);
 
 		// INIT RENDERING
-		AddRenderTarget("viewport", vulkan->surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
-		AddRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat, vk::ImageUsageFlags());
-		AddRenderTarget("albedo", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("srm", vulkan->surface.formatKHR->format, vk::ImageUsageFlags()); // Specular Roughness Metallic
-		AddRenderTarget("ssao", vk::Format::eR16Unorm, vk::ImageUsageFlags());
-		AddRenderTarget("ssaoBlur", vk::Format::eR8Unorm, vk::ImageUsageFlags());
-		AddRenderTarget("ssr", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("velocity", vk::Format::eR16G16Sfloat, vk::ImageUsageFlags());
-		AddRenderTarget("brightFilter", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("gaussianBlurHorizontal", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("gaussianBlurVertical", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("emissive", vulkan->surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("taa", vulkan->surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
+		AddRenderTarget("viewport", (VkFormat)VULKAN.surface.formatKHR->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
+		AddRenderTarget("albedo", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("srm", (VkFormat)VULKAN.surface.formatKHR->format); // Specular Roughness Metallic
+		AddRenderTarget("ssao", VK_FORMAT_R16_UNORM);
+		AddRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
+		AddRenderTarget("ssr", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
+		AddRenderTarget("brightFilter", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("gaussianBlurHorizontal", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("gaussianBlurVertical", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("emissive", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("taa", (VkFormat)VULKAN.surface.formatKHR->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
 		// render passes
 		shadows.createRenderPass();
@@ -129,7 +127,6 @@ namespace pe
 	void RendererSystem::Draw()
 	{
 		static int frameIndex = 0;
-		auto& vCtx = *VulkanContext::Get();
 
 		static const vk::PipelineStageFlags waitStages[] =
 		{
@@ -138,17 +135,17 @@ namespace pe
 		};
 
 		// acquire the image
-		auto& aquireSignalSemaphore = (*vCtx.semaphores)[frameIndex];
-		const uint32_t imageIndex = vCtx.swapchain.Aquire(aquireSignalSemaphore, nullptr);
+		auto& aquireSignalSemaphore = (*VULKAN.semaphores)[frameIndex];
+		const uint32_t imageIndex = VULKAN.swapchain.Aquire(aquireSignalSemaphore, nullptr);
 
 		static Timer timer;
 		timer.Start();
-		vCtx.waitFences((*vCtx.fences)[imageIndex]);
+		VULKAN.waitFences((*VULKAN.fences)[imageIndex]);
 		FrameTimer::Instance().timestamps[0] = timer.Count();
 
-		const auto& cmd = (*vCtx.dynamicCmdBuffers)[imageIndex];
+		const auto& cmd = (*VULKAN.dynamicCmdBuffers)[imageIndex];
 
-		vCtx.waitAndLockSubmits();
+		VULKAN.waitAndLockSubmits();
 
 		if (GUI::shadow_cast)
 		{
@@ -158,12 +155,12 @@ namespace pe
 
 			// submit the shadow command buffers
 			const auto& shadowWaitSemaphore = aquireSignalSemaphore;
-			const auto& shadowSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 1];
-			const auto& scb = vCtx.shadowCmdBuffers;
+			const auto& shadowSignalSemaphore = (*VULKAN.semaphores)[imageIndex * 3 + 1];
+			const auto& scb = VULKAN.shadowCmdBuffers;
 			const auto size = shadows.textures.size();
 			const auto i = size * imageIndex;
 			const std::vector<vk::CommandBuffer> activeShadowCmdBuffers(scb->begin() + i, scb->begin() + i + size);
-			vCtx.submit(activeShadowCmdBuffers, waitStages[0], shadowWaitSemaphore, shadowSignalSemaphore, nullptr);
+			VULKAN.submit(activeShadowCmdBuffers, waitStages[0], shadowWaitSemaphore, shadowSignalSemaphore, nullptr);
 
 			aquireSignalSemaphore = shadowSignalSemaphore;
 		}
@@ -174,15 +171,15 @@ namespace pe
 		// submit the command buffers
 		const auto& deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
 		const auto& deferredWaitSemaphore = aquireSignalSemaphore;
-		const auto& deferredSignalSemaphore = (*vCtx.semaphores)[imageIndex * 3 + 2];
-		const auto& deferredSignalFence = (*vCtx.fences)[imageIndex];
-		vCtx.submit(cmd, deferredWaitStage, deferredWaitSemaphore, deferredSignalSemaphore, deferredSignalFence);
+		const auto& deferredSignalSemaphore = (*VULKAN.semaphores)[imageIndex * 3 + 2];
+		const auto& deferredSignalFence = (*VULKAN.fences)[imageIndex];
+		VULKAN.submit(cmd, deferredWaitStage, deferredWaitSemaphore, deferredSignalSemaphore, deferredSignalFence);
 
 		// Presentation
 		const auto& presentWaitSemaphore = deferredSignalSemaphore;
-		vCtx.Present(*vCtx.swapchain.handle, imageIndex, presentWaitSemaphore);
+		VULKAN.Present(*VULKAN.swapchain.handle, imageIndex, presentWaitSemaphore);
 
-		vCtx.unlockSubmits();
+		VULKAN.unlockSubmits();
 
 		gui.RenderViewPorts();
 

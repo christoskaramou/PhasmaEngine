@@ -41,7 +41,7 @@ namespace pe
 		
 		RenderPass renderPass, compositionRenderPass;
 		std::vector<FrameBuffer> framebuffers {}, compositionFramebuffers {};
-		SPtr<vk::DescriptorSet> DSComposition;
+		DescriptorSetHandle DSComposition;
 		Pipeline pipeline;
 		Pipeline pipelineComposition;
 		Image ibl_brdf_lut;
@@ -52,7 +52,7 @@ namespace pe
 		} ubo;
 		SPtr<Buffer> uniform;
 		
-		void batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent);
+		void batchStart(CommandBuffer* cmd, uint32_t imageIndex);
 		
 		static void batchEnd();
 		
@@ -62,8 +62,7 @@ namespace pe
 		
 		void update(mat4& invViewProj);
 		
-		void
-		draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent);
+		void draw(CommandBuffer* cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox);
 		
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
 		

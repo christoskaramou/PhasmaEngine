@@ -27,13 +27,14 @@ SOFTWARE.
 #include "Renderer/Surface.h"
 #include "Shader/Shader.h"
 #include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/CommandBuffer.h"
 #include <deque>
 
 namespace pe
 {
 	DOF::DOF()
 	{
-		DSet = make_sptr(vk::DescriptorSet());
+		DSet = {};
 	}
 	
 	DOF::~DOF()
@@ -54,7 +55,6 @@ namespace pe
 		frameImage.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		frameImage.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 		frameImage.CreateSampler();
-		frameImage.SetDebugName("DOF_FrameImage");
 	}
 	
 	void DOF::createRenderPass(std::map<std::string, Image>& renderTargets)
@@ -79,61 +79,58 @@ namespace pe
 	
 	void DOF::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::Get();
-		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *vulkan->descriptorPool;
+		VkDescriptorSetAllocateInfo allocateInfo{};
+		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-		
-		allocateInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutDOF();
-		DSet = make_sptr(vulkan->device->allocateDescriptorSets(allocateInfo).at(0));
-		VULKAN.SetDebugObjectName(*DSet, "DOF");
-		
+		allocateInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutDOF();
+
+		VkDescriptorSet dset;
+		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		DSet = dset;
+
 		updateDescriptorSets(renderTargets);
 	}
 	
 	void DOF::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		std::deque<vk::DescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
+		std::deque<VkDescriptorImageInfo> dsii {};
+		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image, ImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 		{
-			dsii.emplace_back(vk::Sampler(image.sampler), vk::ImageView(image.view), layout);
-			return vk::WriteDescriptorSet {
-					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
-			};
+			VkDescriptorImageInfo info{ image.sampler, image.view, (VkImageLayout)layout };
+			dsii.push_back(info);
+
+			VkWriteDescriptorSet textureWriteSet{};
+			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			textureWriteSet.dstSet = dstSet;
+			textureWriteSet.dstBinding = dstBinding;
+			textureWriteSet.dstArrayElement = 0;
+			textureWriteSet.descriptorCount = 1;
+			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			textureWriteSet.pImageInfo = &dsii.back();
+
+			return textureWriteSet;
 		};
 		
-		std::vector<vk::WriteDescriptorSet> textureWriteSets {
-				wSetImage(*DSet, 0, frameImage),
-				wSetImage(*DSet, 1, VULKAN.depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal)
+		std::vector<VkWriteDescriptorSet> textureWriteSets
+		{
+			wSetImage(DSet, 0, frameImage),
+			wSetImage(DSet, 1, VULKAN.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL)
 		};
-		VULKAN.device->updateDescriptorSets(textureWriteSets, nullptr);
+
+		vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 	}
 	
-	void DOF::draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
-	{
-		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
-		vk::ClearValue clearColor;
-		memcpy(clearColor.color.float32, &color, sizeof(vec4));
-		
-		std::vector<vk::ClearValue> clearValues = {clearColor};
-		
+	void DOF::draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
+	{		
 		std::vector<float> values {GUI::DOF_focus_scale, GUI::DOF_blur_range, 0.0f, 0.0f};
-		
-		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = renderPass.handle;
-		rpi.framebuffer = framebuffers[imageIndex].handle;
-		rpi.renderArea.offset = vk::Offset2D {0, 0};
-		vk::Extent2D extent{ renderTargets["viewport"].width, renderTargets["viewport"].height };
-		rpi.renderArea.extent = extent;
-		rpi.clearValueCount = 1;
-		rpi.pClearValues = clearValues.data();
-		
-		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		cmd.pushConstants<float>(*pipeline.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *DSet, nullptr);
-		cmd.draw(3, 1, 0, 0);
-		cmd.endRenderPass();
+
+		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+		cmd->PushConstants(pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
+		cmd->BindPipeline(pipeline);
+		cmd->BindDescriptors(pipeline, 1, &DSet);
+		cmd->Draw(3, 1, 0, 0);
+		cmd->EndPass();
 	}
 	
 	void DOF::createPipeline(std::map<std::string, Image>& renderTargets)
@@ -146,14 +143,10 @@ namespace pe
 		pipeline.info.width = renderTargets["viewport"].width_f;
 		pipeline.info.height = renderTargets["viewport"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_sptr(
-				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["viewport"].blendAttachment}
-		);
+		pipeline.info.colorBlendAttachments = { renderTargets["viewport"].blendAttachment };
 		pipeline.info.pushConstantStage = PushConstantStage::Fragment;
 		pipeline.info.pushConstantSize = 5 * sizeof(vec4);
-		pipeline.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutDOF()}
-		);
+		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutDOF() };
 		pipeline.info.renderPass = renderPass;
 		
 		pipeline.createGraphicsPipeline();
@@ -167,7 +160,7 @@ namespace pe
 		
 		renderPass.Destroy();
 		
-		if ((VkDescriptorSetLayout)Pipeline::getDescriptorSetLayoutDOF())
+		if (Pipeline::getDescriptorSetLayoutDOF())
 		{
 			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutDOF(), nullptr);
 			Pipeline::getDescriptorSetLayoutDOF() = {};

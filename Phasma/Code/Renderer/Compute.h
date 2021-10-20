@@ -24,6 +24,10 @@ SOFTWARE.
 
 #include "Buffer.h"
 #include "Pipeline.h"
+#include "Renderer/Fence.h"
+#include "Renderer/Semaphore.h"
+#include "Renderer/CommandPool.h"
+#include "Renderer/CommandBuffer.h"
 #include <vector>
 
 namespace pe
@@ -48,7 +52,7 @@ namespace pe
 		
 		void updateInput(const void* srcData, size_t srcSize = 0, size_t offset = 0);
 		
-		void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ, const std::vector<vk::Semaphore>& waitFor = {});
+		void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ, uint32_t count = 0, SemaphoreHandle* waitForHandles = nullptr);
 		
 		void waitFence();
 		
@@ -67,14 +71,14 @@ namespace pe
 		void createPipeline(const std::string& shaderName);
 	
 	private:
-		static SPtr<vk::CommandPool> s_commandPool;
+		static CommandPool s_commandPool;
 		SPtr<Buffer> SBIn;
 		SPtr<Buffer> SBOut;
 		Pipeline pipeline;
-		SPtr<vk::Fence> fence;
-		SPtr<vk::Semaphore> semaphore;
-		SPtr<vk::DescriptorSet> DSCompute;
-		SPtr<vk::CommandBuffer> commandBuffer;
+		Fence fence;
+		Semaphore semaphore;
+		DescriptorSetHandle DSCompute;
+		CommandBuffer commandBuffer;
 		
 		void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
 		

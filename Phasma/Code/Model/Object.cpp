@@ -38,7 +38,6 @@ namespace pe
 			sizeof(float) * vertices.size(),
 			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferDst | (BufferUsageFlags)vk::BufferUsageFlagBits::eVertexBuffer,
 			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eDeviceLocal);
-		vertexBuffer->SetDebugName("Object_Vertex");
 
 		// Staging buffer
 		SPtr<Buffer> staging = Buffer::Create(
@@ -49,7 +48,6 @@ namespace pe
 		staging->CopyData(vertices.data());
 		staging->Flush();
 		staging->Unmap();
-		staging->SetDebugName("Staging");
 		
 		vertexBuffer->CopyBuffer(staging.get(), staging->Size());
 		staging->Destroy();
@@ -65,7 +63,6 @@ namespace pe
 		uniformBuffer->Zero();
 		uniformBuffer->Flush();
 		uniformBuffer->Unmap();
-		uniformBuffer->SetDebugName("Object_UB");
 	}
 	
 	void Object::loadTexture(const std::string& path)
@@ -87,7 +84,6 @@ namespace pe
 		staging->CopyData(pixels);
 		staging->Flush();
 		staging->Unmap();
-		staging->SetDebugName("Staging");
 		
 		stbi_image_free(pixels);
 		
@@ -103,7 +99,6 @@ namespace pe
 		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		texture.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 		texture.CreateSampler();
-		texture.SetDebugName(path.c_str());
 		
 		staging->Destroy();
 	}
@@ -115,12 +110,11 @@ namespace pe
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &descriptorSetLayout;
 		descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
-		VULKAN.SetDebugObjectName(*descriptorSet, "Object");
 		
 		std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
 		// MVP
 		vk::DescriptorBufferInfo dbi;
-		dbi.buffer = uniformBuffer->Handle<vk::Buffer>();
+		dbi.buffer = uniformBuffer->Handle();
 		dbi.offset = 0;
 		dbi.range = uniformBuffer->Size();
 		

@@ -40,46 +40,49 @@ namespace pe
 			weights(weights)
 	{}
 	
-	std::vector<vk::VertexInputBindingDescription> Vertex::getBindingDescriptionGeneral()
+	std::vector<VertexInputBindingDescription> Vertex::GetBindingDescriptionGeneral()
 	{
-		return {{0, sizeof(Vertex), vk::VertexInputRate::eVertex}};
+		return {{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}};
 	}
 	
-	std::vector<vk::VertexInputBindingDescription> Vertex::getBindingDescriptionGUI()
+	std::vector<VertexInputBindingDescription> Vertex::GetBindingDescriptionGUI()
 	{
-		return {{0, sizeof(ImDrawVert), vk::VertexInputRate::eVertex}};
+		return {{0, sizeof(ImDrawVert), VK_VERTEX_INPUT_RATE_VERTEX}};
 	}
 	
-	std::vector<vk::VertexInputBindingDescription> Vertex::getBindingDescriptionSkyBox()
+	std::vector<VertexInputBindingDescription> Vertex::GetBindingDescriptionSkyBox()
 	{
-		return {{0, sizeof(vec4), vk::VertexInputRate::eVertex}};
+		return {{0, sizeof(vec4), VK_VERTEX_INPUT_RATE_VERTEX}};
 	}
 	
-	std::vector<vk::VertexInputAttributeDescription> Vertex::getAttributeDescriptionGeneral()
+	std::vector<VertexInputAttributeDescription> Vertex::GetAttributeDescriptionGeneral()
 	{
-		return {
-				{0, 0, vk::Format::eR32G32B32Sfloat,    VertexOffset(position)},    // vec3
-				{1, 0, vk::Format::eR32G32Sfloat,       VertexOffset(uv)},            // vec2
-				{2, 0, vk::Format::eR32G32B32Sfloat,    VertexOffset(normals)},    // vec3
-				{3, 0, vk::Format::eR32G32B32A32Sfloat, VertexOffset(color)},        // vec4
-				{4, 0, vk::Format::eR32G32B32A32Sint,   VertexOffset(bonesIDs)},    // ivec4
-				{5, 0, vk::Format::eR32G32B32A32Sfloat, VertexOffset(weights)}        // vec4
+		return
+		{
+			{0, 0, VK_FORMAT_R32G32B32_SFLOAT,    VertexOffset(position)},		// vec3
+			{1, 0, VK_FORMAT_R32G32_SFLOAT,       VertexOffset(uv)},			// vec2
+			{2, 0, VK_FORMAT_R32G32B32_SFLOAT,    VertexOffset(normals)},		// vec3
+			{3, 0, VK_FORMAT_R32G32B32A32_SFLOAT, VertexOffset(color)},			// vec4
+			{4, 0, VK_FORMAT_R32G32B32A32_SINT,   VertexOffset(bonesIDs)},		// ivec4
+			{5, 0, VK_FORMAT_R32G32B32A32_SFLOAT, VertexOffset(weights)}		// vec4
 		};
 	}
 	
-	std::vector<vk::VertexInputAttributeDescription> Vertex::getAttributeDescriptionGUI()
+	std::vector<VertexInputAttributeDescription> Vertex::GetAttributeDescriptionGUI()
 	{
-		return {
-				{0, 0, vk::Format::eR32G32Sfloat,  IM_OFFSETOF(ImDrawVert, pos)},                // vec2
-				{1, 0, vk::Format::eR32G32Sfloat,  IM_OFFSETOF(ImDrawVert, uv)},                // vec2
-				{2, 0, vk::Format::eR8G8B8A8Unorm, IM_OFFSETOF(ImDrawVert, ImDrawVert::col)}    // color packed to uint
+		return
+		{
+			{0, 0, VK_FORMAT_R32G32_SFLOAT,  IM_OFFSETOF(ImDrawVert, pos)},				// vec2
+			{1, 0, VK_FORMAT_R32G32_SFLOAT,  IM_OFFSETOF(ImDrawVert, uv)},				// vec2
+			{2, 0, VK_FORMAT_R8G8B8A8_UNORM, IM_OFFSETOF(ImDrawVert, ImDrawVert::col)}	// color packed to uint
 		};
 	}
 	
-	std::vector<vk::VertexInputAttributeDescription> Vertex::getAttributeDescriptionSkyBox()
+	std::vector<VertexInputAttributeDescription> Vertex::GetAttributeDescriptionSkyBox()
 	{
-		return {
-				{0, 0, vk::Format::eR32G32B32A32Sfloat, 0}    // vec4
+		return 
+		{
+			{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 0}    // vec4
 		};
 	}
 }

@@ -23,6 +23,7 @@ SOFTWARE.
 #include "PhasmaPch.h"
 #include "Timer.h"
 #include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/CommandBuffer.h"
 #include <thread>
 
 namespace pe
@@ -81,45 +82,47 @@ namespace pe
 		
 		timestampPeriod = gpuProps.limits.timestampPeriod;
 		
-		vk::QueryPoolCreateInfo qpci;
-		qpci.queryType = vk::QueryType::eTimestamp;
+		VkQueryPoolCreateInfo qpci{};
+		qpci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+		qpci.queryType = VK_QUERY_TYPE_TIMESTAMP;
 		qpci.queryCount = 2;
 		
-		queryPool = std::make_unique<vk::QueryPool>(VULKAN.device->createQueryPool(qpci));
+		VkQueryPool pool;
+		vkCreateQueryPool(*VULKAN.device, &qpci, nullptr, &pool);
+		queryPool = pool;
 	}
 
 	void GPUTimer::Reset()
 	{
-		_cmd->resetQueryPool(*queryPool, 0, 2);
+		vkCmdResetQueryPool(_cmd->Handle(), queryPool, 0, 2);
 	}
 	
-	void GPUTimer::Start(const vk::CommandBuffer* cmd)
+	void GPUTimer::Start(CommandBuffer* cmd)
 	{
 		_cmd = cmd;
 		Reset();
-		_cmd->writeTimestamp(vk::PipelineStageFlagBits::eTopOfPipe, *queryPool, 0);
+		vkCmdWriteTimestamp(_cmd->Handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
 	}
 
 	float GPUTimer::End()
 	{
-		_cmd->writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, *queryPool, 1);
+		vkCmdWriteTimestamp(_cmd->Handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
 		return GetTime();
 	}
 	
 	float GPUTimer::GetTime()
 	{
-		const auto res = VULKAN.device->getQueryPoolResults(
-			*queryPool, 0, 2, 2 * sizeof(uint64_t), &queries, sizeof(uint64_t),
-			vk::QueryResultFlagBits::e64);
+		VkResult res = vkGetQueryPoolResults(*VULKAN.device, queryPool, 0, 2, 2 * sizeof(uint64_t), &queries, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
 
-		if (res != vk::Result::eSuccess)
+		if (res != VK_SUCCESS)
 			return 0.f;
 
 		return static_cast<float>(queries[1] - queries[0]) * timestampPeriod * 1e-6f;
 	}
 	
-	void GPUTimer::Destroy() const noexcept
+	void GPUTimer::Destroy()
 	{
-		VULKAN.device->destroyQueryPool(*queryPool);
+		if (queryPool)
+			vkDestroyQueryPool(*VULKAN.device, queryPool, nullptr);
 	}
 }

@@ -43,7 +43,7 @@ namespace pe
 		
 		std::string name;
 		
-		SPtr<vk::DescriptorSet> descriptorSet;
+		DescriptorSetHandle descriptorSet;
 		SPtr<Buffer> uniformBuffer;
 		
 		bool render = true, cull = true;
@@ -94,7 +94,7 @@ namespace pe
 		static std::map<std::string, Image> uniqueTextures;
 		std::vector<Primitive> primitives {};
 		
-		SPtr<vk::DescriptorSet> descriptorSet;
+		DescriptorSetHandle descriptorSet;
 		SPtr<Buffer> uniformBuffer;
 		std::vector<Vertex> vertices {};
 		std::vector<uint32_t> indices {};

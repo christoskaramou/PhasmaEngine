@@ -47,7 +47,6 @@ namespace pe
 			createInfo.pBindings = &descriptorSetLayoutBinding;
 
 			descriptorSetLayout = VULKAN.device->createDescriptorSetLayout(createInfo);
-			VULKAN.SetDebugObjectName(descriptorSetLayout, "Lights");
 		}
 		return descriptorSetLayout;
 	}
@@ -70,17 +69,15 @@ namespace pe
 		uniform->Zero();
 		uniform->Flush();
 		uniform->Unmap();
-		uniform->SetDebugName("Light_UB");
 
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &GetDescriptorSetLayout();
 		descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
-		VULKAN.SetDebugObjectName(*descriptorSet, "Lights");
 
 		vk::DescriptorBufferInfo dbi;
-		dbi.buffer = uniform->Handle<vk::Buffer>();
+		dbi.buffer = uniform->Handle();
 		dbi.offset = 0;
 		dbi.range = uniform->Size();
 

@@ -46,7 +46,7 @@ namespace pe
 		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		SPtr<vk::DescriptorSet> DSet;
+		DescriptorSetHandle DSet;
 		
 		void update(Camera& camera);
 		
@@ -54,7 +54,7 @@ namespace pe
 		
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		
-		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent);
+		void draw(CommandBuffer* cmd, uint32_t imageIndex);
 		
 		void createRenderPass(std::map<std::string, Image>& renderTargets);
 		

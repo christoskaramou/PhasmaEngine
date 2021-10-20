@@ -27,12 +27,13 @@ SOFTWARE.
 #include "Renderer/Surface.h"
 #include "Shader/Shader.h"
 #include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/CommandBuffer.h"
 
 namespace pe
 {
 	FXAA::FXAA()
 	{
-		DSet = make_sptr(vk::DescriptorSet());
+		DSet = {};
 	}
 	
 	FXAA::~FXAA()
@@ -53,17 +54,19 @@ namespace pe
 		frameImage.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		frameImage.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 		frameImage.CreateSampler();
-		frameImage.SetDebugName("FXAA_FrameImage");
 	}
 	
 	void FXAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		vk::DescriptorSetAllocateInfo allocateInfo2;
-		allocateInfo2.descriptorPool = *VULKAN.descriptorPool;
-		allocateInfo2.descriptorSetCount = 1;
-		allocateInfo2.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutFXAA();
-		DSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo2).at(0));
-		VULKAN.SetDebugObjectName(*DSet, "FXAA");
+		VkDescriptorSetAllocateInfo allocateInfo{};
+		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
+		allocateInfo.descriptorSetCount = 1;
+		allocateInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutFXAA();
+
+		VkDescriptorSet dset;
+		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		DSet = dset;
 		
 		updateDescriptorSets(renderTargets);
 	}
@@ -71,43 +74,30 @@ namespace pe
 	void FXAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
 		// Composition sampler
-		vk::DescriptorImageInfo dii;
-		dii.sampler = (VkSampler)frameImage.sampler;
-		dii.imageView = (VkImageView)frameImage.view;
-		dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+		VkDescriptorImageInfo dii{};
+		dii.sampler = frameImage.sampler;
+		dii.imageView = frameImage.view;
+		dii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		
-		vk::WriteDescriptorSet textureWriteSet;
-		textureWriteSet.dstSet = *DSet;
+		VkWriteDescriptorSet textureWriteSet{};
+		textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		textureWriteSet.dstSet = DSet;
 		textureWriteSet.dstBinding = 0;
 		textureWriteSet.dstArrayElement = 0;
 		textureWriteSet.descriptorCount = 1;
-		textureWriteSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+		textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		textureWriteSet.pImageInfo = &dii;
 		
-		VULKAN.device->updateDescriptorSets(textureWriteSet, nullptr);
+		vkUpdateDescriptorSets(*VULKAN.device, 1, &textureWriteSet, 0, nullptr);
 	}
 	
-	void FXAA::draw(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
+	void FXAA::draw(CommandBuffer* cmd, uint32_t imageIndex)
 	{
-		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
-		vk::ClearValue clearColor;
-		memcpy(clearColor.color.float32, &color, sizeof(vec4));
-		
-		std::vector<vk::ClearValue> clearValues = {clearColor};
-		
-		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = renderPass.handle;
-		rpi.framebuffer = framebuffers[imageIndex].handle;
-		rpi.renderArea.offset = vk::Offset2D {0, 0};
-		rpi.renderArea.extent = extent;
-		rpi.clearValueCount = 1;
-		rpi.pClearValues = clearValues.data();
-		
-		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.layout, 0, *DSet, nullptr);
-		cmd.draw(3, 1, 0, 0);
-		cmd.endRenderPass();
+		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+		cmd->BindPipeline(pipeline);
+		cmd->BindDescriptors(pipeline, 1, &DSet);
+		cmd->Draw(3, 1, 0, 0);
+		cmd->EndPass();
 	}
 	
 	void FXAA::createRenderPass(std::map<std::string, Image>& renderTargets)
@@ -140,12 +130,8 @@ namespace pe
 		pipeline.info.width = renderTargets["viewport"].width_f;
 		pipeline.info.height = renderTargets["viewport"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_sptr(
-				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["viewport"].blendAttachment}
-		);
-		pipeline.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutFXAA()}
-		);
+		pipeline.info.colorBlendAttachments = { renderTargets["viewport"].blendAttachment };
+		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutFXAA() };
 		pipeline.info.renderPass = renderPass;
 		
 		pipeline.createGraphicsPipeline();

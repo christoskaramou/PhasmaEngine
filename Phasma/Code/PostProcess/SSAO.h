@@ -47,7 +47,7 @@ namespace pe
 		std::vector<FrameBuffer> framebuffers {}, blurFramebuffers {};
 		Pipeline pipeline;
 		Pipeline pipelineBlur;
-		VkDescriptorSet DSet, DSBlur;
+		DescriptorSetHandle DSet, DSBlur;
 		
 		void update(Camera& camera);
 		

@@ -42,13 +42,11 @@ namespace pe
 		
 		void CopyData(const void* srcData, size_t srcSize = 0, size_t offset = 0) override;
 		
-		void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) const override;
+		void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) override;
 		
 		void Flush(size_t offset = 0, size_t flushSize = 0) const override;
 		
 		void Destroy() override;
-
-		void SetDebugName(const std::string& debugName) override;
 
 		size_t Size() override;
 
@@ -56,11 +54,7 @@ namespace pe
 
 		void* Data() override;
 
-	protected:
-		void* Handle() override;
-
 	private:
-		VkBuffer_T* handle;
 		VmaAllocation allocation;
 		size_t size{};
 		// sizeRequested is the size asked from user during the creation, afterwards the size can be

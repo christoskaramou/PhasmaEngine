@@ -27,7 +27,7 @@ namespace pe
 {
 	Fence::Fence()
 	{
-		handle = make_sptr(vk::Fence());
+		handle = {};
 	}
 
 	Fence::~Fence()
@@ -36,25 +36,21 @@ namespace pe
 
 	void Fence::Create(bool signaled)
 	{
-		if (signaled)
-		{
-			vk::FenceCreateInfo fi{ vk::FenceCreateFlagBits::eSignaled };
-			handle = make_sptr(VULKAN.device->createFence(fi));
-		}
-		else
-		{
-			handle = make_sptr(VULKAN.device->createFence(vk::FenceCreateInfo()));
-		}
+		VkFenceCreateInfo fi{};
+		fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		fi.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
 
-		VULKAN.SetDebugObjectName(*handle, "Fence");
+		VkFence fence;
+		vkCreateFence(*VULKAN.device, &fi, nullptr, &fence);
+		handle = fence;
 	}
 
 	void Fence::Destroy()
 	{
-		if (*handle)
+		if (handle)
 		{
-			VULKAN.device->destroyFence(*handle);
-			handle = nullptr;
+			vkDestroyFence(*VULKAN.device, handle, nullptr);
+			handle = {};
 		}
 	}
 }

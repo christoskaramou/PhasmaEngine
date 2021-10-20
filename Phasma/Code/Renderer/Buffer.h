@@ -43,7 +43,7 @@ namespace pe
 		
 		virtual void CopyData(const void* srcData, size_t srcSize = 0, size_t offset = 0) = 0;
 		
-		virtual void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) const = 0;
+		virtual void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) = 0;
 		
 		virtual void Flush(size_t offset = 0, size_t flushSize = 0) const = 0;
 		
@@ -54,15 +54,6 @@ namespace pe
 		virtual size_t SizeRequested() = 0;
 		
 		virtual void* Data() = 0;
-
-		virtual void SetDebugName(const std::string& debugName) = 0;
-
-	protected:
-		virtual void* Handle() = 0;
-
-	public:
-		template<class T>
-		T& Handle() { return *static_cast<T*>(Handle()); }
 
 		template<Launch launch>
 		void CopyRequest(const MemoryRange& range)
@@ -90,5 +81,10 @@ namespace pe
 			};
 			Queue<launch>::Request(lambda);
 		}
+
+		BufferHandle& Handle() { return m_handle; }
+
+	protected:
+		BufferHandle m_handle;
 	};
 }

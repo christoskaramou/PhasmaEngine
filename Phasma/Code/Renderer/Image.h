@@ -23,6 +23,7 @@ SOFTWARE.
 #pragma once
 
 #include "Core/Base.h"
+#include "Renderer/Pipeline.h"
 
 namespace pe
 {
@@ -74,7 +75,7 @@ namespace pe
 		bool samplerCompareEnable;
 		CompareOp compareOp;
 		SamplerMipmapMode samplerMipmapMode;
-		VkPipelineColorBlendAttachmentState blendAttachment;
+		PipelineColorBlendAttachmentState blendAttachment;
 		
 		void TransitionImageLayout(
 			CommandBuffer cmd,
@@ -104,7 +105,5 @@ namespace pe
 		void CreateSampler();
 		
 		void Destroy();
-
-		void SetDebugName(const std::string& debugName);
 	};
 }

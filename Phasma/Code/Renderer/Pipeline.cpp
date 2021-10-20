@@ -29,22 +29,34 @@ SOFTWARE.
 
 namespace pe
 {
+	PipelineColorBlendAttachmentState::PipelineColorBlendAttachmentState()
+	{
+		blendEnable = {};
+		srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+		dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+		colorBlendOp = VK_BLEND_OP_ADD;
+		srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+		dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+		alphaBlendOp = VK_BLEND_OP_ADD;
+		colorWriteMask = {};
+	}
+
 	PipelineCreateInfo::PipelineCreateInfo()
 	{
 		blendEnable = false;
 		pVertShader = nullptr;
 		pFragShader = nullptr;
 		pCompShader = nullptr;
-		vertexInputBindingDescriptions = make_sptr(std::vector<vk::VertexInputBindingDescription>());
-		vertexInputAttributeDescriptions = make_sptr(std::vector<vk::VertexInputAttributeDescription>());
+		vertexInputBindingDescriptions = {};
+		vertexInputAttributeDescriptions = {};
 		width = 0.f;
 		height = 0.f;
 		pushConstantStage = PushConstantStage::Vertex;
 		pushConstantSize = 0;
-		colorBlendAttachments = make_sptr(std::vector<vk::PipelineColorBlendAttachmentState>());
-		dynamicStates = make_sptr(std::vector<vk::DynamicState>());
-		descriptorSetLayouts = make_sptr(std::vector<vk::DescriptorSetLayout>());
-		pipelineCache = make_sptr(vk::PipelineCache());
+		colorBlendAttachments = {};
+		dynamicStates = {};
+		descriptorSetLayouts = {};
+		pipelineCache = {};
 	}
 	
 	PipelineCreateInfo::~PipelineCreateInfo()
@@ -53,8 +65,8 @@ namespace pe
 	
 	Pipeline::Pipeline()
 	{
-		handle = make_sptr(vk::Pipeline());
-		layout = make_sptr(vk::PipelineLayout());
+		handle = {};
+		layout = {};
 	}
 	
 	Pipeline::~Pipeline()
@@ -63,33 +75,40 @@ namespace pe
 	
 	void Pipeline::createGraphicsPipeline()
 	{
-		vk::GraphicsPipelineCreateInfo pipeinfo;
+		VkGraphicsPipelineCreateInfo pipeinfo{};
+		pipeinfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		
-		vk::ShaderModuleCreateInfo vsmci;
+		VkShaderModuleCreateInfo vsmci{};
+		vsmci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		vsmci.codeSize = info.pVertShader->BytesCount();
 		vsmci.pCode = info.pVertShader->GetSpriv();
-		vk::UniqueShaderModule vertModule = VULKAN.device->createShaderModuleUnique(vsmci);
+
+		VkShaderModule vertModule;
+		vkCreateShaderModule(*VULKAN.device, &vsmci, nullptr, &vertModule);
 		
-		vk::PipelineShaderStageCreateInfo pssci1;
-		pssci1.stage = vk::ShaderStageFlagBits::eVertex;
-		pssci1.module = vertModule.get();
+		VkPipelineShaderStageCreateInfo pssci1{};
+		pssci1.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		pssci1.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		pssci1.module = vertModule;
 		pssci1.pName = "main";
 		
-		vk::ShaderModuleCreateInfo fsmci;
-		vk::UniqueShaderModule fragModule;
-		vk::PipelineShaderStageCreateInfo pssci2;
+		VkShaderModuleCreateInfo fsmci{};
+		VkShaderModule fragModule;
+		VkPipelineShaderStageCreateInfo pssci2{};
 		if (info.pFragShader)
 		{
+			fsmci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 			fsmci.codeSize = info.pFragShader->BytesCount();
 			fsmci.pCode = info.pFragShader->GetSpriv();
-			fragModule = VULKAN.device->createShaderModuleUnique(fsmci);
-			
-			pssci2.stage = vk::ShaderStageFlagBits::eFragment;
-			pssci2.module = fragModule.get();
+			vkCreateShaderModule(*VULKAN.device, &fsmci, nullptr, &fragModule);
+
+			pssci2.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			pssci2.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+			pssci2.module = fragModule;
 			pssci2.pName = "main";
 		}
 		
-		std::vector<vk::PipelineShaderStageCreateInfo> stages {pssci1};
+		std::vector<VkPipelineShaderStageCreateInfo> stages {pssci1};
 		if (info.pFragShader)
 			stages.push_back(pssci2);
 		
@@ -97,21 +116,23 @@ namespace pe
 		pipeinfo.pStages = stages.data();
 		
 		// Vertex Input state
-		vk::PipelineVertexInputStateCreateInfo pvisci;
-		pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(info.vertexInputBindingDescriptions->size());
-		pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(info.vertexInputAttributeDescriptions->size());
-		pvisci.pVertexBindingDescriptions = info.vertexInputBindingDescriptions->data();
-		pvisci.pVertexAttributeDescriptions = info.vertexInputAttributeDescriptions->data();
+		VkPipelineVertexInputStateCreateInfo pvisci{};
+		pvisci.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(info.vertexInputBindingDescriptions.size());
+		pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(info.vertexInputAttributeDescriptions.size());
+		pvisci.pVertexBindingDescriptions = (VkVertexInputBindingDescription*)info.vertexInputBindingDescriptions.data();
+		pvisci.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription*)info.vertexInputAttributeDescriptions.data();
 		pipeinfo.pVertexInputState = &pvisci;
 		
 		// Input Assembly stage
-		vk::PipelineInputAssemblyStateCreateInfo piasci;
-		piasci.topology = vk::PrimitiveTopology::eTriangleList;
+		VkPipelineInputAssemblyStateCreateInfo piasci{};
+		piasci.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+		piasci.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		piasci.primitiveRestartEnable = VK_FALSE;
 		pipeinfo.pInputAssemblyState = &piasci;
 		
 		// Viewports and Scissors
-		vk::Viewport vp;
+		VkViewport vp{};
 		vp.x = 0.0f;
 		vp.y = 0.0f;
 		vp.width = info.width;
@@ -119,10 +140,11 @@ namespace pe
 		vp.minDepth = 0.0f;
 		vp.maxDepth = 1.0f;
 		
-		vk::Rect2D r2d;
-		r2d.extent = vk::Extent2D {static_cast<uint32_t>(info.width), static_cast<uint32_t>(info.height)};
+		VkRect2D r2d{};
+		r2d.extent = VkExtent2D {static_cast<uint32_t>(info.width), static_cast<uint32_t>(info.height)};
 		
-		vk::PipelineViewportStateCreateInfo pvsci;
+		VkPipelineViewportStateCreateInfo pvsci{};
+		pvsci.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 		pvsci.viewportCount = 1;
 		pvsci.pViewports = &vp;
 		pvsci.scissorCount = 1;
@@ -130,12 +152,13 @@ namespace pe
 		pipeinfo.pViewportState = &pvsci;
 		
 		// Rasterization state
-		vk::PipelineRasterizationStateCreateInfo prsci;
+		VkPipelineRasterizationStateCreateInfo prsci{};
+		prsci.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 		prsci.depthClampEnable = VK_FALSE;
 		prsci.rasterizerDiscardEnable = VK_FALSE;
-		prsci.polygonMode = vk::PolygonMode::eFill;
-		prsci.cullMode = static_cast<vk::CullModeFlagBits>(info.cullMode);
-		prsci.frontFace = vk::FrontFace::eClockwise;
+		prsci.polygonMode = VK_POLYGON_MODE_FILL;
+		prsci.cullMode = static_cast<VkCullModeFlagBits>(info.cullMode);
+		prsci.frontFace = VK_FRONT_FACE_CLOCKWISE;
 		prsci.depthBiasEnable = VK_FALSE;
 		prsci.depthBiasConstantFactor = 0.0f;
 		prsci.depthBiasClamp = 0.0f;
@@ -144,8 +167,9 @@ namespace pe
 		pipeinfo.pRasterizationState = &prsci;
 		
 		// Multisample state
-		vk::PipelineMultisampleStateCreateInfo pmsci;
-		pmsci.rasterizationSamples = vk::SampleCountFlagBits::e1;
+		VkPipelineMultisampleStateCreateInfo pmsci{};
+		pmsci.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		pmsci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 		pmsci.sampleShadingEnable = VK_FALSE;
 		pmsci.minSampleShading = 1.0f;
 		pmsci.pSampleMask = nullptr;
@@ -154,47 +178,56 @@ namespace pe
 		pipeinfo.pMultisampleState = &pmsci;
 		
 		// Depth stencil state
-		vk::PipelineDepthStencilStateCreateInfo pdssci;
+		VkPipelineDepthStencilStateCreateInfo pdssci{};
+		pdssci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 		pdssci.depthTestEnable = VK_TRUE;
 		pdssci.depthWriteEnable = VK_TRUE;
-		pdssci.depthCompareOp = GlobalSettings::ReverseZ ? vk::CompareOp::eGreater : vk::CompareOp::eLessOrEqual;
+		pdssci.depthCompareOp = GlobalSettings::ReverseZ ? VK_COMPARE_OP_GREATER : VK_COMPARE_OP_LESS_OR_EQUAL;
 		pdssci.depthBoundsTestEnable = VK_FALSE;
 		pdssci.stencilTestEnable = VK_FALSE;
-		pdssci.front.compareOp = vk::CompareOp::eAlways;
-		pdssci.back.compareOp = vk::CompareOp::eAlways;
+		pdssci.front.compareOp = VK_COMPARE_OP_ALWAYS;
+		pdssci.back.compareOp = VK_COMPARE_OP_ALWAYS;
 		pdssci.minDepthBounds = 0.0f;
 		pdssci.maxDepthBounds = 0.0f;
 		pipeinfo.pDepthStencilState = &pdssci;
 
 		// Color Blending state
-		vk::PipelineColorBlendStateCreateInfo pcbsci;
+		VkPipelineColorBlendStateCreateInfo pcbsci{};
+		pcbsci.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 		pcbsci.logicOpEnable = VK_FALSE;
-		pcbsci.logicOp = vk::LogicOp::eAnd;
-		pcbsci.attachmentCount = static_cast<uint32_t>(info.colorBlendAttachments->size());
-		pcbsci.pAttachments = info.colorBlendAttachments->data();
+		pcbsci.logicOp = VK_LOGIC_OP_AND;
+		pcbsci.attachmentCount = static_cast<uint32_t>(info.colorBlendAttachments.size());
+		pcbsci.pAttachments = (VkPipelineColorBlendAttachmentState*)info.colorBlendAttachments.data();
 		float blendConstants[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 		memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
 		pipeinfo.pColorBlendState = &pcbsci;
 		
 		// Dynamic state
-		vk::PipelineDynamicStateCreateInfo dsi;
-		dsi.dynamicStateCount = static_cast<uint32_t>(info.dynamicStates->size());
-		dsi.pDynamicStates = info.dynamicStates->data();
+		VkPipelineDynamicStateCreateInfo dsi{};
+		dsi.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		dsi.dynamicStateCount = static_cast<uint32_t>(info.dynamicStates.size());
+		dsi.pDynamicStates = (VkDynamicState*)info.dynamicStates.data();
 		pipeinfo.pDynamicState = &dsi;
 		
 		// Push Constant Range
-		vk::PushConstantRange pcr;
-		pcr.stageFlags = static_cast<vk::ShaderStageFlagBits>(info.pushConstantStage);
+		VkPushConstantRange pcr{};
+		pcr.stageFlags = static_cast<VkShaderStageFlags>(info.pushConstantStage);
+		pcr.offset = 0;
 		pcr.size = info.pushConstantSize;
 		
 		// Pipeline Layout
-		vk::PipelineLayoutCreateInfo plci;
-		plci.setLayoutCount = static_cast<uint32_t>(info.descriptorSetLayouts->size());
-		plci.pSetLayouts = info.descriptorSetLayouts->data();
+		auto layouts = ApiHandleVectorCopy<VkDescriptorSetLayout>(info.descriptorSetLayouts);
+		VkPipelineLayoutCreateInfo plci{};
+		plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		plci.setLayoutCount = static_cast<uint32_t>(layouts.size());
+		plci.pSetLayouts = layouts.data();
 		plci.pushConstantRangeCount = info.pushConstantSize ? 1 : 0;
 		plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
-		layout = make_sptr(VULKAN.device->createPipelineLayout(plci));
-		pipeinfo.layout = *layout;
+
+		VkPipelineLayout pipelineLayout;
+		vkCreatePipelineLayout(*VULKAN.device, &plci, nullptr, &pipelineLayout);
+		layout = pipelineLayout;
+		pipeinfo.layout = layout;
 		
 		// Render Pass
 		pipeinfo.renderPass = info.renderPass.handle;
@@ -208,7 +241,13 @@ namespace pe
 		// Base Pipeline Index
 		pipeinfo.basePipelineIndex = -1;
 		
-		handle = make_sptr(VULKAN.device->createGraphicsPipeline(nullptr, pipeinfo).value);
+		VkPipeline pipeline;
+		vkCreateGraphicsPipelines(*VULKAN.device, nullptr, 1, &pipeinfo, nullptr, &pipeline);
+		handle = pipeline;
+
+		vkDestroyShaderModule(*VULKAN.device, vertModule, nullptr);
+		if (info.pFragShader && fragModule)
+			vkDestroyShaderModule(*VULKAN.device, fragModule, nullptr);
 
 		//vk::PipelineCacheCreateInfo pcci;
 		//VULKAN.device->createPipelineCache()
@@ -216,39 +255,51 @@ namespace pe
 	
 	void Pipeline::createComputePipeline()
 	{
-		vk::ComputePipelineCreateInfo compinfo;
+		VkComputePipelineCreateInfo compinfo{};
+		compinfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
 		
-		vk::ShaderModuleCreateInfo csmci;
+		VkShaderModuleCreateInfo csmci{};
+		csmci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		csmci.codeSize = info.pCompShader->BytesCount();
 		csmci.pCode = info.pCompShader->GetSpriv();
+
+		auto layouts = ApiHandleVectorCopy<VkDescriptorSetLayout>(info.descriptorSetLayouts);
+		VkPipelineLayoutCreateInfo plci{};
+		plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		plci.setLayoutCount = static_cast<uint32_t>(layouts.size());
+		plci.pSetLayouts = layouts.data();
 		
-		vk::PipelineLayoutCreateInfo plci;
-		plci.setLayoutCount = static_cast<uint32_t>(info.descriptorSetLayouts->size());
-		plci.pSetLayouts = info.descriptorSetLayouts->data();
+		VkShaderModule module;
+		vkCreateShaderModule(*VULKAN.device, &csmci, nullptr, &module);
 		
-		vk::UniqueShaderModule module = VULKAN.device->createShaderModuleUnique(csmci);
-		
-		compinfo.stage.module = module.get();
+		compinfo.stage.module = module;
 		compinfo.stage.pName = "main";
-		compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
-		layout = make_sptr(VULKAN.device->createPipelineLayout(plci));
-		compinfo.layout = *layout;
+		compinfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+
+		VkPipelineLayout vklayout;
+		vkCreatePipelineLayout(*VULKAN.device, &plci, nullptr, &vklayout);
+		layout = vklayout;
+		compinfo.layout = layout;
 		
-		handle = make_sptr(VULKAN.device->createComputePipeline(nullptr, compinfo).value);
+		VkPipeline vkPipeline;
+		vkCreateComputePipelines(*VULKAN.device, nullptr, 1, &compinfo, nullptr, &vkPipeline);
+		handle = vkPipeline;
+
+		vkDestroyShaderModule(*VULKAN.device, module, nullptr);
 	}
 	
 	void Pipeline::destroy()
 	{
-		if (*layout)
+		if (layout)
 		{
-			VULKAN.device->destroyPipelineLayout(*layout);
-			*layout = nullptr;
+			vkDestroyPipelineLayout(*VULKAN.device, layout, nullptr);
+			layout = {};
 		}
 		
-		if (*handle)
+		if (handle)
 		{
-			VULKAN.device->destroyPipeline(*handle);
-			*handle = nullptr;
+			vkDestroyPipeline(*VULKAN.device, handle, nullptr);
+			handle = {};
 		}
 	}
 
@@ -299,7 +350,6 @@ namespace pe
 					DescriptorBinding(8, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(9, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Composition");
 		}
 		
 		return DSLayout;
@@ -315,7 +365,6 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "BrightFilter");
 		}
 		
 		return DSLayout;
@@ -331,7 +380,6 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "GaussianBlurH");
 		}
 		
 		return DSLayout;
@@ -347,7 +395,6 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "GaussianBlurV");
 		}
 		
 		return DSLayout;
@@ -364,7 +411,6 @@ namespace pe
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Combine");
 		}
 		
 		return DSLayout;
@@ -381,7 +427,6 @@ namespace pe
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "DOF");
 		}
 		
 		return DSLayout;
@@ -397,7 +442,6 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "FXAA");
 		}
 		
 		return DSLayout;
@@ -416,7 +460,6 @@ namespace pe
 					DescriptorBinding(2, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "MotionBlur");
 		}
 		
 		return DSLayout;
@@ -436,7 +479,6 @@ namespace pe
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "SSAO");
 		}
 		
 		return DSLayout;
@@ -452,7 +494,6 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "SSAOBlur");
 		}
 		
 		return DSLayout;
@@ -472,7 +513,6 @@ namespace pe
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "SSR");
 		}
 		
 		return DSLayout;
@@ -492,7 +532,6 @@ namespace pe
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "TAA");
 		}
 		
 		return DSLayout;
@@ -509,7 +548,6 @@ namespace pe
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "TAASharpen");
 		}
 		
 		return DSLayout;
@@ -525,7 +563,6 @@ namespace pe
 				{
 					//DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Shadows");
 		}
 		
 		return DSLayout;
@@ -545,7 +582,6 @@ namespace pe
 					DescriptorBinding(3, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "ShadowCascades");
 		}
 
 		return DSLayout;
@@ -561,7 +597,6 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Mesh");
 		}
 		
 		return DSLayout;
@@ -582,7 +617,6 @@ namespace pe
 					DescriptorBinding(4, (uint32_t)vk::DescriptorType::eCombinedImageSampler,	(uint32_t)vk::ShaderStageFlagBits::eFragment),
 					DescriptorBinding(5, (uint32_t)vk::DescriptorType::eUniformBuffer,			(uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Primitive");
 		}
 		
 		return DSLayout;
@@ -598,7 +632,6 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eUniformBuffer, (uint32_t)vk::ShaderStageFlagBits::eVertex)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Model");
 		}
 		
 		return DSLayout;
@@ -614,7 +647,6 @@ namespace pe
 				{
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eCombinedImageSampler, (uint32_t)vk::ShaderStageFlagBits::eFragment)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "SkyBox");
 		}
 		return DSLayout;
 	}
@@ -630,7 +662,6 @@ namespace pe
 					DescriptorBinding(0, (uint32_t)vk::DescriptorType::eStorageBuffer, (uint32_t)vk::ShaderStageFlagBits::eCompute),
 					DescriptorBinding(1, (uint32_t)vk::DescriptorType::eStorageBuffer, (uint32_t)vk::ShaderStageFlagBits::eCompute)
 				});
-			VULKAN.SetDebugObjectName(vk::DescriptorSetLayout(DSLayout), "Compute");
 		}
 		
 		return DSLayout;

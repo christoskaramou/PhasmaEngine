@@ -25,33 +25,41 @@ SOFTWARE.
 
 namespace pe
 {
-	CommandPool::CommandPool()
+	CommandPool::CommandPool() : m_handle {}
 	{
-		cmdPoolVK = make_sptr(vk::CommandPool());
+	}
+
+	CommandPool::CommandPool(CommandPoolHandle handle) : m_handle(handle)
+	{
 	}
 
 	CommandPool::~CommandPool()
 	{
 	}
 
-	void CommandPool::Create()
+	void CommandPool::Create(uint32_t graphicsFamilyId)
 	{
-		vk::CommandPoolCreateInfo cpci;
-		cpci.queueFamilyIndex = VULKAN.graphicsFamilyId;
-		cpci.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+		VkCommandPoolCreateInfo cpci;
+		cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		cpci.queueFamilyIndex = graphicsFamilyId;
+		cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
-		cmdPoolVK = make_sptr(VULKAN.device->createCommandPool(cpci));
-		VULKAN.SetDebugObjectName(*cmdPoolVK, "CommandPool");
+		VkCommandPool commandPool;
+		vkCreateCommandPool(*VULKAN.device, &cpci, nullptr, &commandPool);
+		m_handle = commandPool;
 	}
 
 	void CommandPool::Destroy()
 	{
-		if (*cmdPoolVK)
-			VULKAN.device->destroyCommandPool(*cmdPoolVK);
+		if (m_handle)
+		{
+			vkDestroyCommandPool(*VULKAN.device, m_handle, nullptr);
+			m_handle = {};
+		}
 	}
 
-	vk::CommandPool& CommandPool::Handle()
+	CommandPoolHandle& CommandPool::Handle()
 	{
-		return *cmdPoolVK;
+		return m_handle;
 	}
 }

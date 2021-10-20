@@ -33,6 +33,7 @@ SOFTWARE.
 #include <deque>
 #include "Shader/Reflection.h"
 #include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/CommandBuffer.h"
 #include "Core/Path.h"
 #include "Core/Settings.h"
 #include "ECS/Context.h"
@@ -42,45 +43,25 @@ namespace pe
 {
 	Deferred::Deferred()
 	{
-		DSComposition = make_sptr(vk::DescriptorSet());
+		DSComposition = {};
 	}
 	
 	Deferred::~Deferred()
 	{
 	}
 	
-	void Deferred::batchStart(vk::CommandBuffer cmd, uint32_t imageIndex, const vk::Extent2D& extent)
+	void Deferred::batchStart(CommandBuffer* cmd, uint32_t imageIndex)
 	{
-		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
-		vk::ClearValue clearColor;
-		memcpy(clearColor.color.float32, &color, sizeof(vec4));
+		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 		
-		vk::ClearDepthStencilValue depthStencil;
-		depthStencil.depth = GlobalSettings::ReverseZ ? 0.f : 1.f;
-		depthStencil.stencil = 0;
-		
-		std::vector<vk::ClearValue> clearValues = {
-				clearColor, clearColor, clearColor, clearColor, clearColor, clearColor, depthStencil
-		};
-		
-		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = renderPass.handle;
-		rpi.framebuffer = framebuffers[imageIndex].handle;
-		rpi.renderArea.offset = vk::Offset2D {0, 0};
-		rpi.renderArea.extent = extent;
-		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
-		rpi.pClearValues = clearValues.data();
-		
-		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-		
-		*Model::commandBuffer = cmd;
+		Model::commandBuffer = cmd;
 		Model::pipeline = &pipeline;
 	}
 	
 	void Deferred::batchEnd()
 	{
-		Model::commandBuffer->endRenderPass();
-		*Model::commandBuffer = nullptr;
+		Model::commandBuffer->EndPass();
+		Model::commandBuffer = nullptr;
 		Model::pipeline = nullptr;
 	}
 	
@@ -88,23 +69,24 @@ namespace pe
 	{
 		uniform = Buffer::Create(
 			sizeof(ubo),
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		uniform->Map();
 		uniform->Zero();
 		uniform->Flush();
 		uniform->Unmap();
-		uniform->SetDebugName("Deferred_UB");
 		
-		auto vulkan = VulkanContext::Get();
-		const vk::DescriptorSetAllocateInfo allocInfo =
-				vk::DescriptorSetAllocateInfo {
-						*vulkan->descriptorPool,            //DescriptorPool descriptorPool;
-						1,                                        //uint32_t descriptorSetCount;
-						&(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutComposition() //const DescriptorSetLayout* pSetLayouts;
-				};
-		DSComposition = make_sptr(vulkan->device->allocateDescriptorSets(allocInfo).at(0));
-		VULKAN.SetDebugObjectName(*DSComposition, "Composition");
+		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutComposition();
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.pNext = nullptr;
+		allocInfo.descriptorPool = *VULKAN.descriptorPool;
+		allocInfo.descriptorSetCount = 1;
+		allocInfo.pSetLayouts = &dsetLayout;
+
+		VkDescriptorSet dset;
+		vkAllocateDescriptorSets(*VULKAN.device, &allocInfo, &dset);
+		DSComposition = dset;
 		
 		// Check if ibl_brdf_lut is already loaded
 		const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
@@ -120,20 +102,16 @@ namespace pe
 			stbi_set_flip_vertically_on_load(false);
 			if (!pixels)
 				throw std::runtime_error("No pixel data loaded");
-			const vk::DeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
+			const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 			
-			vulkan->graphicsQueue->waitIdle();
-			vulkan->waitAndLockSubmits();
+			VULKAN.graphicsQueue->waitIdle();
+			VULKAN.waitAndLockSubmits();
 			
-			SPtr<Buffer> staging = Buffer::Create(
-				imageSize,
-				(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
-				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+			SPtr<Buffer> staging = Buffer::Create(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 			staging->Map();
 			staging->CopyData(pixels);
 			staging->Flush();
 			staging->Unmap();
-			staging->SetDebugName("Staging");
 			
 			stbi_image_free(pixels);
 			
@@ -151,11 +129,10 @@ namespace pe
 			ibl_brdf_lut.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 			ibl_brdf_lut.maxLod = static_cast<float>(ibl_brdf_lut.mipLevels);
 			ibl_brdf_lut.CreateSampler();
-			ibl_brdf_lut.SetDebugName("ibl_brdf_lut");
 			
 			staging->Destroy();
 			
-			vulkan->unlockSubmits();
+			VULKAN.unlockSubmits();
 			
 			Mesh::uniqueTextures[path] = ibl_brdf_lut;
 		}
@@ -165,38 +142,61 @@ namespace pe
 	
 	void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		std::deque<vk::DescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
+		std::deque<VkDescriptorImageInfo> dsii{};
+		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image, ImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 		{
-			dsii.emplace_back(vk::Sampler(image.sampler), vk::ImageView(image.view), layout);
-			return vk::WriteDescriptorSet {
-					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
-			};
+			VkDescriptorImageInfo info{ image.sampler, image.view, (VkImageLayout)layout };
+			dsii.push_back(info);
+
+			VkWriteDescriptorSet writeSet{};
+			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writeSet.dstSet = dstSet;
+			writeSet.dstBinding = dstBinding;
+			writeSet.dstArrayElement = 0;
+			writeSet.descriptorCount = 1;
+			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			writeSet.pImageInfo = &dsii.back();
+			writeSet.pBufferInfo = nullptr;
+			writeSet.pTexelBufferView = nullptr;
+
+			return writeSet;
 		};
-		std::deque<vk::DescriptorBufferInfo> dsbi {};
-		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
+		std::deque<VkDescriptorBufferInfo> dsbi{};
+		const auto wSetBuffer = [&dsbi](DescriptorSetHandle dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(buffer.Handle<vk::Buffer>(), 0, buffer.Size());
-			return vk::WriteDescriptorSet {
-					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
-			};
+			VkDescriptorBufferInfo info{ buffer.Handle(), 0, buffer.Size() };
+			dsbi.push_back(info);
+
+			VkWriteDescriptorSet writeSet{};
+			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writeSet.dstSet = dstSet;
+			writeSet.dstBinding = dstBinding;
+			writeSet.dstArrayElement = 0;
+			writeSet.descriptorCount = 1;
+			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			writeSet.pImageInfo = nullptr;
+			writeSet.pBufferInfo = &dsbi.back();
+			writeSet.pTexelBufferView = nullptr;
+
+			return writeSet;
 		};
 		
 		Buffer& lightsUniform = CONTEXT->GetSystem<LightSystem>()->GetUniform();
-		std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
-				wSetImage(*DSComposition, 0, VULKAN.depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
-				wSetImage(*DSComposition, 1, renderTargets["normal"]),
-				wSetImage(*DSComposition, 2, renderTargets["albedo"]),
-				wSetImage(*DSComposition, 3, renderTargets["srm"]),
-				wSetBuffer(*DSComposition, 4, lightsUniform),
-				wSetImage(*DSComposition, 5, renderTargets["ssaoBlur"]),
-				wSetImage(*DSComposition, 6, renderTargets["ssr"]),
-				wSetImage(*DSComposition, 7, renderTargets["emissive"]),
-				wSetImage(*DSComposition, 8, ibl_brdf_lut),
-				wSetBuffer(*DSComposition, 9, *uniform)
+		std::vector<VkWriteDescriptorSet> writeDescriptorSets =
+		{
+			wSetImage(DSComposition, 0, VULKAN.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
+			wSetImage(DSComposition, 1, renderTargets["normal"]),
+			wSetImage(DSComposition, 2, renderTargets["albedo"]),
+			wSetImage(DSComposition, 3, renderTargets["srm"]),
+			wSetBuffer(DSComposition, 4, lightsUniform),
+			wSetImage(DSComposition, 5, renderTargets["ssaoBlur"]),
+			wSetImage(DSComposition, 6, renderTargets["ssr"]),
+			wSetImage(DSComposition, 7, renderTargets["emissive"]),
+			wSetImage(DSComposition, 8, ibl_brdf_lut),
+			wSetBuffer(DSComposition, 9, *uniform)
 		};
-		
-		VULKAN.device->updateDescriptorSets(writeDescriptorSets, nullptr);
+
+		vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
 	}
 	
 	void Deferred::update(mat4& invViewProj)
@@ -221,39 +221,19 @@ namespace pe
 		uniform->CopyRequest<Launch::AsyncDeferred>({ &ubo, sizeof(ubo), 0 });
 	}
 	
-	void Deferred::draw(vk::CommandBuffer cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox, const vk::Extent2D& extent)
+	void Deferred::draw(CommandBuffer* cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox)
 	{
-		// Begin Composition
-		const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
-		vk::ClearValue clearColor;
-		memcpy(clearColor.color.float32, &color, sizeof(vec4));
-
-		std::vector<vk::ClearValue> clearValues = { clearColor, clearColor };
-
-		vk::RenderPassBeginInfo rpi;
-		rpi.renderPass = compositionRenderPass.handle;
-		rpi.framebuffer = compositionFramebuffers[imageIndex].handle;
-		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
-		rpi.renderArea.extent = extent;
-		rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
-		rpi.pClearValues = clearValues.data();
-		cmd.beginRenderPass(rpi, vk::SubpassContents::eInline);
-
 		mat4 values{};
 		values[0] = shadows.viewZ;
 		values[1] = vec4(GUI::shadow_cast);
-		cmd.pushConstants<mat4>(*pipelineComposition.layout, vk::ShaderStageFlagBits::eFragment, 0, values);
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineComposition.handle);
-		cmd.bindDescriptorSets(
-			vk::PipelineBindPoint::eGraphics,
-			*pipelineComposition.layout,
-			0,
-			{ *DSComposition, (vk::DescriptorSet)shadows.descriptorSetDeferred, *skybox.descriptorSet },
-			nullptr
-		);
-		cmd.draw(3, 1, 0, 0);
-		cmd.endRenderPass();
-		// End Composition
+		std::vector<DescriptorSetHandle> handles{ DSComposition, shadows.descriptorSetDeferred, skybox.descriptorSet };
+
+		cmd->BeginPass(compositionRenderPass, compositionFramebuffers[imageIndex]);
+		cmd->PushConstants(pipelineComposition, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(mat4), &values);
+		cmd->BindPipeline(pipelineComposition);
+		cmd->BindDescriptors(pipelineComposition, (uint32_t)handles.size(), handles.data());
+		cmd->Draw(3, 1, 0, 0);
+		cmd->EndPass();
 	}
 	
 	void Deferred::createRenderPasses(std::map<std::string, Image>& renderTargets)
@@ -339,27 +319,25 @@ namespace pe
 		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
-		pipeline.info.vertexInputBindingDescriptions = make_sptr(Vertex::getBindingDescriptionGeneral());
-		pipeline.info.vertexInputAttributeDescriptions = make_sptr(Vertex::getAttributeDescriptionGeneral());
+		pipeline.info.vertexInputBindingDescriptions = Vertex::GetBindingDescriptionGeneral();
+		pipeline.info.vertexInputAttributeDescriptions = Vertex::GetAttributeDescriptionGeneral();
 		pipeline.info.width = renderTargets["albedo"].width_f;
 		pipeline.info.height = renderTargets["albedo"].height_f;
 		pipeline.info.cullMode = CullMode::Front;
-		pipeline.info.colorBlendAttachments = make_sptr(
-			std::vector<vk::PipelineColorBlendAttachmentState>
-			{
-				renderTargets["normal"].blendAttachment,
-				renderTargets["albedo"].blendAttachment,
-				renderTargets["srm"].blendAttachment,
-				renderTargets["velocity"].blendAttachment,
-				renderTargets["emissive"].blendAttachment,
-			});
-		pipeline.info.descriptorSetLayouts = make_sptr(
-			std::vector<vk::DescriptorSetLayout>
-			{
-				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutMesh(),
-				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutPrimitive(),
-				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutModel()
-			});
+		pipeline.info.colorBlendAttachments =
+		{
+			renderTargets["normal"].blendAttachment,
+			renderTargets["albedo"].blendAttachment,
+			renderTargets["srm"].blendAttachment,
+			renderTargets["velocity"].blendAttachment,
+			renderTargets["emissive"].blendAttachment,
+		};
+		pipeline.info.descriptorSetLayouts =
+		{
+			Pipeline::getDescriptorSetLayoutMesh(),
+			Pipeline::getDescriptorSetLayoutPrimitive(),
+			Pipeline::getDescriptorSetLayoutModel()
+		};
 		pipeline.info.renderPass = renderPass;
 		
 		pipeline.createGraphicsPipeline();
@@ -385,19 +363,13 @@ namespace pe
 		pipelineComposition.info.height = renderTargets["viewport"].height_f;
 		pipelineComposition.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineComposition.info.pushConstantSize = sizeof(mat4);
-		pipelineComposition.info.colorBlendAttachments = make_sptr(
-				std::vector<vk::PipelineColorBlendAttachmentState> {
-						renderTargets["viewport"].blendAttachment
-				}
-		);
-		pipelineComposition.info.descriptorSetLayouts = make_sptr(
-			std::vector<vk::DescriptorSetLayout>
-			{
-				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutComposition(),
-				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutShadowsDeferred(),
-				(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSkybox()
-			}
-		);
+		pipelineComposition.info.colorBlendAttachments = { renderTargets["viewport"].blendAttachment };
+		pipelineComposition.info.descriptorSetLayouts =
+		{
+			Pipeline::getDescriptorSetLayoutComposition(),
+			Pipeline::getDescriptorSetLayoutShadowsDeferred(),
+			Pipeline::getDescriptorSetLayoutSkybox()
+		};
 		pipelineComposition.info.renderPass = compositionRenderPass;
 		
 		pipelineComposition.createGraphicsPipeline();

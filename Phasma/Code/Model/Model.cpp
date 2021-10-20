@@ -25,6 +25,7 @@ SOFTWARE.
 #include "Mesh.h"
 #include "Core/Queue.h"
 #include "Renderer/Pipeline.h"
+#include "Renderer/CommandBuffer.h"
 #include <iostream>
 #include <future>
 #include <deque>
@@ -39,16 +40,13 @@ namespace pe
 {
 	using namespace Microsoft;
 	
-	SPtr<vk::CommandBuffer> Model::commandBuffer = make_sptr(vk::CommandBuffer());
+	CommandBuffer* Model::commandBuffer = nullptr;
 	std::deque<Model> Model::models = {};
 	Pipeline* Model::pipeline = nullptr;
 	
 	Model::Model()
-	{
-		if (commandBuffer == nullptr)
-			commandBuffer = make_sptr(vk::CommandBuffer());
-		
-		descriptorSet = make_sptr(vk::DescriptorSet());
+	{		
+		descriptorSet = {};
 	}
 	
 	Model::~Model()
@@ -528,12 +526,11 @@ namespace pe
 		if (!render || !Model::pipeline)
 			return;
 		
-		auto& cmd = Model::commandBuffer;
-		const vk::DeviceSize offset {0};
+		auto& cmd = *Model::commandBuffer;
 		
-		cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, *Model::pipeline->handle);
-		cmd->bindVertexBuffers(0, 1, &vertexBuffer->Handle<vk::Buffer>(), &offset);
-		cmd->bindIndexBuffer(indexBuffer->Handle<vk::Buffer>(), 0, vk::IndexType::eUint32);
+		cmd.BindPipeline(*Model::pipeline);
+		cmd.BindVertexBuffer(*vertexBuffer, 0);
+		cmd.BindIndexBuffer(*indexBuffer, 0);
 		
 		int culled = 0;
 		int total = 0;
@@ -548,14 +545,15 @@ namespace pe
 						total++;
 						if (!primitive.cull)
 						{
-							cmd->bindDescriptorSets(
-									vk::PipelineBindPoint::eGraphics, *Model::pipeline->layout, 0, {
-											*node->mesh->descriptorSet, *primitive.descriptorSet, *descriptorSet
-									}, nullptr
-							);
-							cmd->drawIndexed(
-									primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset,
-									node->mesh->vertexOffset + primitive.vertexOffset, 0
+							// Cache this vector
+							std::vector<DescriptorSetHandle> dsetHandles{ node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet };
+							cmd.BindDescriptors(*Model::pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
+							cmd.DrawIndexed(
+								primitive.indicesSize,
+								1,
+								node->mesh->indexOffset + primitive.indexOffset,
+								node->mesh->vertexOffset + primitive.vertexOffset,
+								0
 							);
 						}
 						else
@@ -819,18 +817,16 @@ namespace pe
 		auto size = sizeof(Vertex) * numberOfVertices;
 		vertexBuffer = Buffer::Create(
 			size,
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferDst | (BufferUsageFlags)vk::BufferUsageFlagBits::eVertexBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eDeviceLocal
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 		);
-		vertexBuffer->SetDebugName("Vertex_" + name);
 		
 		// Staging buffer
-		SPtr<Buffer> staging = Buffer::Create(size, (BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+		SPtr<Buffer> staging = Buffer::Create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		staging->Map();
 		staging->CopyData(vertices.data());
 		staging->Flush();
 		staging->Unmap();
-		staging->SetDebugName("Staging");
 		
 		vertexBuffer->CopyBuffer(staging.get(), staging->Size());
 		staging->Destroy();
@@ -854,18 +850,16 @@ namespace pe
 		auto size = sizeof(uint32_t) * numberOfIndices;
 		indexBuffer = Buffer::Create(
 			size,
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferDst | (BufferUsageFlags)vk::BufferUsageFlagBits::eIndexBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eDeviceLocal
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 		);
-		indexBuffer->SetDebugName("Index_" + name);
 		
 		// Staging buffer
-		SPtr<Buffer> staging = Buffer::Create(size, (BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+		SPtr<Buffer> staging = Buffer::Create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		staging->Map();
 		staging->CopyData(indices.data());
 		staging->Flush();
 		staging->Unmap();
-		staging->SetDebugName("Staging");
 		
 		indexBuffer->CopyBuffer(staging.get(), staging->Size());
 		staging->Destroy();
@@ -873,10 +867,7 @@ namespace pe
 	
 	void Model::createUniformBuffers()
 	{
-		uniformBuffer = Buffer::Create(
-				sizeof(ubo), (BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer, (MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible
-		);
-		uniformBuffer->SetDebugName("UB_" + name);
+		uniformBuffer = Buffer::Create(sizeof(ubo), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		uniformBuffer->Map();
 		uniformBuffer->Zero();
 		uniformBuffer->Flush();
@@ -892,72 +883,108 @@ namespace pe
 	
 	void Model::createDescriptorSets()
 	{
-		std::deque<vk::DescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image)
+		std::deque<VkDescriptorImageInfo> dsii {};
+		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image)
 		{
-			dsii.emplace_back(vk::Sampler(image.sampler), vk::ImageView(image.view), vk::ImageLayout::eShaderReadOnlyOptimal);
-			return vk::WriteDescriptorSet {
-					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
-			};
+			VkDescriptorImageInfo info{ image.sampler, image.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+			dsii.push_back(info);
+
+			VkWriteDescriptorSet writeSet{};
+			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writeSet.pNext = nullptr;
+			writeSet.dstSet = dstSet;
+			writeSet.dstBinding = dstBinding;
+			writeSet.dstArrayElement = 0;
+			writeSet.descriptorCount = 1;
+			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			writeSet.pImageInfo = &dsii.back();
+			writeSet.pBufferInfo = nullptr;
+			writeSet.pTexelBufferView = nullptr;
+
+			return writeSet;
 		};
-		std::deque<vk::DescriptorBufferInfo> dsbi {};
-		auto const wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
+		std::deque<VkDescriptorBufferInfo> dsbi {};
+		auto const wSetBuffer = [&dsbi](DescriptorSetHandle dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(buffer.Handle<vk::Buffer>(), 0, buffer.Size());
-			return vk::WriteDescriptorSet {
-					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
-			};
+			VkDescriptorBufferInfo info{ buffer.Handle(), 0, buffer.Size() };
+			dsbi.push_back(info);
+
+			VkWriteDescriptorSet writeSet{};
+			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writeSet.pNext = nullptr;
+			writeSet.dstSet = dstSet;
+			writeSet.dstBinding = dstBinding;
+			writeSet.dstArrayElement = 0;
+			writeSet.descriptorCount = 1;
+			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			writeSet.pImageInfo = nullptr;
+			writeSet.pBufferInfo = &dsbi.back();
+			writeSet.pTexelBufferView = nullptr;
+
+			return writeSet;
 		};
 		
 		// model dSet
-		vk::DescriptorSetAllocateInfo allocateInfo0;
+		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutModel();
+		VkDescriptorSetAllocateInfo allocateInfo0{};
+		allocateInfo0.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocateInfo0.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo0.descriptorSetCount = 1;
-		allocateInfo0.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutModel();
-		descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo0).at(0));
-		VULKAN.SetDebugObjectName(*descriptorSet, "Model_" + name);
+		allocateInfo0.pSetLayouts = &dsetLayout;
+
+		VkDescriptorSet dset;
+		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo0, &dset);
+		descriptorSet = dset;
 		
-		VULKAN.device->updateDescriptorSets(wSetBuffer(*descriptorSet, 0, *uniformBuffer), nullptr);
+		vkUpdateDescriptorSets(*VULKAN.device, 1, &wSetBuffer(descriptorSet, 0, *uniformBuffer), 0, nullptr);
 		
 		// mesh dSets
 		for (auto& node : linearNodes)
 		{
-			
-			if (!node->mesh) continue;
+			if (!node->mesh)
+				continue;
+
 			auto& mesh = node->mesh;
 			
-			vk::DescriptorSetAllocateInfo allocateInfo;
+			VkDescriptorSetLayout dsetLayoutMesh = Pipeline::getDescriptorSetLayoutMesh();
+			VkDescriptorSetAllocateInfo allocateInfo{};
+			allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 			allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 			allocateInfo.descriptorSetCount = 1;
-			allocateInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutMesh();
-			mesh->descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
-			VULKAN.SetDebugObjectName(*mesh->descriptorSet, "Mesh_" + mesh->name);
-			
-			VULKAN.device
-			                    ->updateDescriptorSets(
-					                    wSetBuffer(*mesh->descriptorSet, 0, *mesh->uniformBuffer), nullptr
-			                    );
+			allocateInfo.pSetLayouts = &dsetLayoutMesh;
+
+			VkDescriptorSet dsetMesh;
+			vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dsetMesh);
+			mesh->descriptorSet = dsetMesh;
+
+			vkUpdateDescriptorSets(*VULKAN.device, 1, &wSetBuffer(mesh->descriptorSet, 0, *mesh->uniformBuffer), 0, nullptr);
 			
 			// primitive dSets
 			for (auto& primitive : mesh->primitives)
 			{
-				
-				vk::DescriptorSetAllocateInfo allocateInfo2;
+
+				VkDescriptorSetLayout dsetLayoutPrimitive = Pipeline::getDescriptorSetLayoutPrimitive();
+				VkDescriptorSetAllocateInfo allocateInfo2{};
+				allocateInfo2.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 				allocateInfo2.descriptorPool = *VULKAN.descriptorPool;
 				allocateInfo2.descriptorSetCount = 1;
-				allocateInfo2.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutPrimitive();
-				primitive.descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo2).at(0));
-				VULKAN.SetDebugObjectName(*mesh->descriptorSet, "Primitive_" + primitive.name);
+				allocateInfo2.pSetLayouts = &dsetLayoutPrimitive;
+
+				VkDescriptorSet dsetPrimitive;
+				vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo2, &dsetPrimitive);
+				primitive.descriptorSet = dsetPrimitive;
 				
-				std::vector<vk::WriteDescriptorSet> textureWriteSets {
-						wSetImage(*primitive.descriptorSet, 0, primitive.pbrMaterial.baseColorTexture),
-						wSetImage(*primitive.descriptorSet, 1, primitive.pbrMaterial.metallicRoughnessTexture),
-						wSetImage(*primitive.descriptorSet, 2, primitive.pbrMaterial.normalTexture),
-						wSetImage(*primitive.descriptorSet, 3, primitive.pbrMaterial.occlusionTexture),
-						wSetImage(*primitive.descriptorSet, 4, primitive.pbrMaterial.emissiveTexture),
-						wSetBuffer(*primitive.descriptorSet, 5, *primitive.uniformBuffer)
+				std::vector<VkWriteDescriptorSet> textureWriteSets
+				{
+					wSetImage(primitive.descriptorSet, 0, primitive.pbrMaterial.baseColorTexture),
+					wSetImage(primitive.descriptorSet, 1, primitive.pbrMaterial.metallicRoughnessTexture),
+					wSetImage(primitive.descriptorSet, 2, primitive.pbrMaterial.normalTexture),
+					wSetImage(primitive.descriptorSet, 3, primitive.pbrMaterial.occlusionTexture),
+					wSetImage(primitive.descriptorSet, 4, primitive.pbrMaterial.emissiveTexture),
+					wSetBuffer(primitive.descriptorSet, 5, *primitive.uniformBuffer)
 				};
-				VULKAN.device->updateDescriptorSets(textureWriteSets, nullptr);
+
+				vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 			}
 		}
 	}

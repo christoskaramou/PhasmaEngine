@@ -76,25 +76,27 @@ namespace pe
 		FrameTimer();                                        // default constructor
 	};
 
+	class CommandBuffer;
+
 	class GPUTimer
 	{
 	public:
 		GPUTimer();
 		
-		void Start(const vk::CommandBuffer* cmd);
+		void Start(CommandBuffer* cmd);
 
 		float End();
 		
-		void Destroy() const noexcept;
+		void Destroy();
 	
 	private:
 		float GetTime();
 
 		void Reset();
 
-		std::unique_ptr<vk::QueryPool> queryPool;
+		QueryPoolHandle queryPool;
 		uint64_t queries[2]{};
 		float timestampPeriod;
-		const vk::CommandBuffer* _cmd;
+		CommandBuffer* _cmd;
 	};
 }

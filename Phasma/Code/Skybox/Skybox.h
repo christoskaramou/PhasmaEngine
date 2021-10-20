@@ -34,7 +34,7 @@ namespace pe
 		~SkyBox();
 		
 		Image texture;
-		SPtr<vk::DescriptorSet> descriptorSet;
+		DescriptorSetHandle descriptorSet;
 		
 		void createDescriptorSet();
 		

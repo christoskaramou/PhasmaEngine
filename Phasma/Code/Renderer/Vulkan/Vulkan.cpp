@@ -329,10 +329,6 @@ namespace pe
 		deviceCreateInfo.pEnabledFeatures = &*gpuFeatures;
 		
 		device = make_sptr(gpu->createDevice(deviceCreateInfo));
-		SetDebugObjectName(*device, "");
-		//SetDebugObjectName(*instance, "");
-		SetDebugObjectName(*surface.surface, "");
-		SetDebugObjectName(*gpu, "");
 	}
 	
 	void VulkanContext::CreateAllocator()
@@ -381,8 +377,6 @@ namespace pe
 		
 		commandPool = make_sptr(device->createCommandPool(cpci));
 		commandPool2 = make_sptr(device->createCommandPool(cpci));
-		SetDebugObjectName(*commandPool, "");
-		SetDebugObjectName(*commandPool2, "");
 	}
 	
 	void VulkanContext::CreateDescriptorPool(uint32_t maxDescriptorSets)
@@ -403,7 +397,6 @@ namespace pe
 		createInfo.maxSets = maxDescriptorSets;
 		
 		descriptorPool = make_sptr(device->createDescriptorPool(createInfo));
-		SetDebugObjectName(*descriptorPool, "");
 	}
 	
 	void VulkanContext::CreateCmdBuffers(uint32_t bufferCount)
@@ -413,13 +406,9 @@ namespace pe
 		cbai.level = vk::CommandBufferLevel::ePrimary;
 		cbai.commandBufferCount = bufferCount;
 		dynamicCmdBuffers = make_sptr(device->allocateCommandBuffers(cbai));
-		for (int i = 0; i < dynamicCmdBuffers->size(); i++)
-			SetDebugObjectName((*dynamicCmdBuffers)[i], "Dynamic" + std::to_string(i));
 		
 		cbai.commandBufferCount = bufferCount * SHADOWMAP_CASCADES;
 		shadowCmdBuffers = make_sptr(device->allocateCommandBuffers(cbai));
-		for (int i = 0; i < shadowCmdBuffers->size(); i++)
-			SetDebugObjectName((*shadowCmdBuffers)[i], "Shadow" + std::to_string(i));
 	}
 	
 	void VulkanContext::CreateFences(uint32_t fenceCount)
@@ -431,8 +420,6 @@ namespace pe
 			_fences[i] = device->createFence(fi);
 		
 		fences = make_sptr(_fences);
-		for (int i = 0; i < fences->size(); i++)
-			SetDebugObjectName((*fences)[i], "Frame" + std::to_string(i));
 	}
 	
 	void VulkanContext::CreateSemaphores(uint32_t semaphoresCount)
@@ -446,8 +433,6 @@ namespace pe
 		}
 		
 		semaphores = make_sptr(_semaphores);
-		for (int i = 0; i < semaphores->size(); i++)
-			SetDebugObjectName((*semaphores)[i], std::to_string(i));
 	}
 	
 	void VulkanContext::CreateDepth()
@@ -483,7 +468,6 @@ namespace pe
 		depth.borderColor = (BorderColor)VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 		depth.samplerCompareEnable = VK_TRUE;
 		depth.CreateSampler();
-		depth.SetDebugName("DepthImage");
 		depth.name = "DepthImage";
 		
 		depth.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
@@ -605,7 +589,6 @@ namespace pe
 	{
 		const vk::FenceCreateInfo fi;
 		const vk::Fence fence = device->createFence(fi);
-		SetDebugObjectName(fence, "SubmitFence");
 		
 		submit(commandBuffers, waitStages, waitSemaphores, signalSemaphores, fence);
 		

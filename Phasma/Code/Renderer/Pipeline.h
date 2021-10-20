@@ -25,6 +25,7 @@ SOFTWARE.
 #include "Core/Base.h"
 #include "Shader/Shader.h"
 #include "Renderer/RenderPass.h"
+#include "Renderer/Vertex.h"
 
 namespace pe
 {
@@ -41,6 +42,21 @@ namespace pe
 		Fragment = 16,
 		Compute = 32
 	};
+
+	class PipelineColorBlendAttachmentState
+	{
+	public:
+		PipelineColorBlendAttachmentState();
+
+		uint32_t blendEnable;
+		BlendFactor srcColorBlendFactor;
+		BlendFactor dstColorBlendFactor;
+		BlendOp colorBlendOp;
+		BlendFactor srcAlphaBlendFactor;
+		BlendFactor dstAlphaBlendFactor;
+		BlendOp alphaBlendOp;
+		ColorComponentFlags colorWriteMask;
+	};
 	
 	class PipelineCreateInfo
 	{
@@ -53,18 +69,18 @@ namespace pe
 		Shader* pVertShader;
 		Shader* pFragShader;
 		Shader* pCompShader;
-		SPtr<std::vector<vk::VertexInputBindingDescription>> vertexInputBindingDescriptions;
-		SPtr<std::vector<vk::VertexInputAttributeDescription>> vertexInputAttributeDescriptions;
+		std::vector<VertexInputBindingDescription> vertexInputBindingDescriptions;
+		std::vector<VertexInputAttributeDescription> vertexInputAttributeDescriptions;
 		float width;
 		float height;
 		CullMode cullMode;
-		SPtr<std::vector<vk::PipelineColorBlendAttachmentState>> colorBlendAttachments;
-		SPtr<std::vector<vk::DynamicState>> dynamicStates;
+		std::vector<PipelineColorBlendAttachmentState> colorBlendAttachments;
+		std::vector<DynamicState> dynamicStates;
 		PushConstantStage pushConstantStage;
 		uint32_t pushConstantSize;
-		SPtr<std::vector<vk::DescriptorSetLayout>> descriptorSetLayouts;
+		std::vector<DescriptorSetLayoutHandle> descriptorSetLayouts;
 		RenderPass renderPass;
-		SPtr<vk::PipelineCache> pipelineCache;
+		PipelineCacheHandle pipelineCache;
 	};
 	
 	class Pipeline
@@ -75,8 +91,8 @@ namespace pe
 		~Pipeline();
 		
 		PipelineCreateInfo info;
-		SPtr<vk::Pipeline> handle;
-		SPtr<vk::PipelineLayout> layout;
+		PipelineHandle handle;
+		PipelineLayoutHandle layout;
 		
 		void createGraphicsPipeline();
 		

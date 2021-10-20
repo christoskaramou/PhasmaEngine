@@ -56,42 +56,44 @@ namespace pe
 		VkDescriptorSet dset;
 		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
 		descriptorSetDeferred = dset;
-		VULKAN.SetDebugObjectName(vk::DescriptorSet(descriptorSetDeferred), "Shadows");
 
-		std::vector<vk::WriteDescriptorSet> textureWriteSets(SHADOWMAP_CASCADES + 1);
+		std::vector<VkWriteDescriptorSet> textureWriteSets(SHADOWMAP_CASCADES + 1);
 
 		for (int i = 0; i < SHADOWMAP_CASCADES; i++)
 		{
 			// sampler
-			vk::DescriptorImageInfo dii;
+			VkDescriptorImageInfo dii{};
 			dii.sampler = textures[i].sampler;
 			dii.imageView = textures[i].view;
-			dii.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+			dii.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
-			vk::WriteDescriptorSet textureWriteSet;
+			VkWriteDescriptorSet textureWriteSet{};
+			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			textureWriteSet.dstSet = descriptorSetDeferred;
 			textureWriteSet.dstBinding = i;
 			textureWriteSet.dstArrayElement = 0;
 			textureWriteSet.descriptorCount = 1;
-			textureWriteSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			textureWriteSet.pImageInfo = &dii;
-			VULKAN.device->updateDescriptorSets(textureWriteSet, nullptr);
+
+			vkUpdateDescriptorSets(*VULKAN.device, 1, &textureWriteSet, 0, nullptr);
 		}
 
-		vk::DescriptorBufferInfo dbi;
-		dbi.buffer = uniformBuffer->Handle<vk::Buffer>();
+		VkDescriptorBufferInfo dbi;
+		dbi.buffer = uniformBuffer->Handle();
 		dbi.offset = 0;
 		dbi.range = SHADOWMAP_CASCADES * sizeof(mat4);
 
-		vk::WriteDescriptorSet bufferWriteSet;
+		VkWriteDescriptorSet bufferWriteSet{};
+		bufferWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		bufferWriteSet.dstSet = descriptorSetDeferred;
 		bufferWriteSet.dstBinding = SHADOWMAP_CASCADES;
 		bufferWriteSet.dstArrayElement = 0;
 		bufferWriteSet.descriptorCount = 1;
-		bufferWriteSet.descriptorType = vk::DescriptorType::eUniformBuffer;
+		bufferWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bufferWriteSet.pBufferInfo = &dbi;
 
-		VULKAN.device->updateDescriptorSets(bufferWriteSet, nullptr);
+		vkUpdateDescriptorSets(*VULKAN.device, 1, &bufferWriteSet, 0, nullptr);
 	}
 
 	void Shadows::createRenderPass()
@@ -131,8 +133,6 @@ namespace pe
 			texture.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 			texture.CreateImageView(VK_IMAGE_ASPECT_DEPTH_BIT);
 			texture.CreateSampler();
-			texture.name = "ShadowPass_DepthImage" + std::to_string(textureIdx++);
-			texture.SetDebugName(texture.name);
 		}
 
 		framebuffers.resize(VULKAN.swapchain.images.size() * textures.size());
@@ -150,21 +150,15 @@ namespace pe
 		Shader vert{ "Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true };
 
 		pipeline.info.pVertShader = &vert;
-		pipeline.info.vertexInputBindingDescriptions = make_sptr(Vertex::getBindingDescriptionGeneral());
-		pipeline.info.vertexInputAttributeDescriptions = make_sptr(Vertex::getAttributeDescriptionGeneral());
+		pipeline.info.vertexInputBindingDescriptions = Vertex::GetBindingDescriptionGeneral();
+		pipeline.info.vertexInputAttributeDescriptions = Vertex::GetAttributeDescriptionGeneral();
 		pipeline.info.width = static_cast<float>(SHADOWMAP_SIZE);
 		pipeline.info.height = static_cast<float>(SHADOWMAP_SIZE);
 		pipeline.info.pushConstantStage = PushConstantStage::Vertex;
 		pipeline.info.pushConstantSize = sizeof(mat4);
-		pipeline.info.colorBlendAttachments = make_sptr(
-			std::vector<vk::PipelineColorBlendAttachmentState> {textures[0].blendAttachment}
-		);
-		pipeline.info.dynamicStates = make_sptr(std::vector<vk::DynamicState> {vk::DynamicState::eDepthBias});
-		pipeline.info.descriptorSetLayouts = make_sptr(std::vector<vk::DescriptorSetLayout>
-		{
-			(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutMesh(),
-			(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutModel()
-		});
+		pipeline.info.colorBlendAttachments = { textures[0].blendAttachment };
+		pipeline.info.dynamicStates = { VK_DYNAMIC_STATE_DEPTH_BIAS };
+		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutMesh(), Pipeline::getDescriptorSetLayoutModel() };
 		pipeline.info.renderPass = renderPass;
 
 		pipeline.createGraphicsPipeline();
@@ -174,13 +168,12 @@ namespace pe
 	{
 		uniformBuffer = Buffer::Create(
 			SHADOWMAP_CASCADES * sizeof(mat4),
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		uniformBuffer->Map();
 		uniformBuffer->Zero();
 		uniformBuffer->Flush();
 		uniformBuffer->Unmap();
-		uniformBuffer->SetDebugName("Shadows_UB_Fragment");
 	}
 
 	void Shadows::destroy()

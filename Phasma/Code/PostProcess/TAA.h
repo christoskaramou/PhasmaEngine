@@ -45,7 +45,7 @@ namespace pe
 		std::vector<FrameBuffer> framebuffers {}, framebuffersSharpen {};
 		Pipeline pipeline, pipelineSharpen;
 		RenderPass renderPass, renderPassSharpen;
-		SPtr<vk::DescriptorSet> DSet, DSetSharpen;
+		DescriptorSetHandle DSet, DSetSharpen;
 		Image previous;
 		Image frameImage;
 		
@@ -65,7 +65,7 @@ namespace pe
 		
 		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
 		
-		void draw(vk::CommandBuffer cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets);
+		void draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets);
 		
 		void createRenderPasses(std::map<std::string, Image>& renderTargets);
 		
@@ -77,7 +77,7 @@ namespace pe
 		
 		void createPipelines(std::map<std::string, Image>& renderTargets);
 		
-		void saveImage(vk::CommandBuffer& cmd, Image& source);
+		void saveImage(CommandBuffer* cmd, Image& source);
 		
 		void destroy();
 	};

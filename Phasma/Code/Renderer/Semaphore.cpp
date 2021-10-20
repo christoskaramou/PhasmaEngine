@@ -27,7 +27,7 @@ namespace pe
 {
 	Semaphore::Semaphore()
 	{
-		handle = make_sptr(vk::Semaphore());
+		handle = {};
 	}
 
 	Semaphore::~Semaphore()
@@ -36,17 +36,20 @@ namespace pe
 
 	void Semaphore::Create()
 	{
-		const vk::SemaphoreCreateInfo si;
-		handle = make_sptr(VULKAN.device->createSemaphore(si));
-		VULKAN.SetDebugObjectName(*handle, "Semaphore");
+		VkSemaphoreCreateInfo si{};
+		si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		VkSemaphore semaphore;
+		vkCreateSemaphore(*VULKAN.device, &si, nullptr, &semaphore);
+		handle = semaphore;
 	}
 
 	void Semaphore::Destroy()
 	{
-		if (*handle)
+		if (handle)
 		{
-			VULKAN.device->destroySemaphore(*handle);
-			handle = nullptr;
+			vkDestroySemaphore(*VULKAN.device, handle, nullptr);
+			handle = {};
 		}
 	}
 }

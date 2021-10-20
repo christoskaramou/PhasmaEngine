@@ -31,23 +31,17 @@ namespace pe
 	class IComponent
 	{
 	public:
-		IComponent() : m_entity(nullptr), m_enabled(false)
-		{}
+		IComponent() : m_entity(nullptr), m_enabled(false) {}
 		
-		virtual ~IComponent()
-		{}
+		virtual ~IComponent() {}
 		
-		Entity* GetEntity()
-		{ return m_entity; }
+		Entity* GetEntity() { return m_entity; }
 		
-		void SetEntity(Entity* entity)
-		{ m_entity = entity; }
+		void SetEntity(Entity* entity) { m_entity = entity; }
 		
-		bool IsEnabled()
-		{ return m_enabled; }
+		bool IsEnabled() { return m_enabled; }
 		
-		void SetEnabled(bool enabled)
-		{ m_enabled = enabled; }
+		void SetEnabled(bool enabled) { m_enabled = enabled; }
 
 		virtual void Destroy() {}
 	

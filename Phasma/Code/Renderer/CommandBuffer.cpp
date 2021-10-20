@@ -27,24 +27,46 @@ SOFTWARE.
 #include "Renderer/FrameBuffer.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Buffer.h"
 #include "Core/Math.h"
 #include "Core/Settings.h"
 
 namespace pe
 {
-	void CommandBuffer::Create(CommandPool* commandPool)
+	void CommandBuffer::Create(CommandPool& commandPool)
 	{
 		VkCommandBufferAllocateInfo cbai{};
 		cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		cbai.commandPool = commandPool ? commandPool->Handle() : *VULKAN.commandPool;
+		cbai.commandPool = commandPool.Handle();
 		cbai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		cbai.commandBufferCount = 1;
 
 		VkCommandBuffer commandBuffer;
 		vkAllocateCommandBuffers(*VULKAN.device, &cbai, &commandBuffer);
 		m_handle = commandBuffer;
+	}
 
-		VULKAN.SetDebugObjectName(vk::CommandBuffer(m_handle), "CommandBuffer");
+	void CommandBuffer::Destroy()
+	{
+		if (m_handle)
+		{
+			VkCommandBuffer cmd = m_handle;
+			vkFreeCommandBuffers(*VULKAN.device, *VULKAN.commandPool2, 1, &cmd);
+			m_handle = {};
+		}
+	}
+
+	void CommandBuffer::CopyBuffer(Buffer& srcBuffer, Buffer& dstBuffer, uint32_t regionCount, BufferCopy* pRegions)
+	{
+		std::vector<VkBufferCopy> regions(regionCount);
+		for (uint32_t i = 0; i < regionCount; i++)
+		{
+			regions[i].srcOffset = pRegions[i].srcOffset;
+			regions[i].dstOffset = pRegions[i].dstOffset;
+			regions[i].size = pRegions[i].size;
+		}
+
+		vkCmdCopyBuffer(m_handle, srcBuffer.Handle(), dstBuffer.Handle(), regionCount, regions.data());
 	}
 
 	void CommandBuffer::Begin()
@@ -63,6 +85,49 @@ namespace pe
 
 	void CommandBuffer::PipelineBarrier()
 	{
+	}
+
+	void CommandBuffer::SetDepthBias(float constantFactor, float clamp, float slopeFactor)
+	{
+		vkCmdSetDepthBias(m_handle, constantFactor, clamp, slopeFactor);
+	}
+
+	void CommandBuffer::BlitImage(
+		Image& srcImage, ImageLayout srcImageLayout,
+		Image& dstImage, ImageLayout dstImageLayout,
+		uint32_t regionCount, ImageBlit* pRegions,
+		Filter filter)
+	{
+		std::vector<VkImageBlit> regions(regionCount);
+		for (uint32_t i = 0; i < regionCount; i++)
+		{
+			regions[i].srcOffsets[0].x = pRegions[i].srcOffsets[0].x;
+			regions[i].srcOffsets[0].y = pRegions[i].srcOffsets[0].y;
+			regions[i].srcOffsets[0].z = pRegions[i].srcOffsets[0].z;
+			regions[i].srcOffsets[1].x = pRegions[i].srcOffsets[1].x;
+			regions[i].srcOffsets[1].y = pRegions[i].srcOffsets[1].y;
+			regions[i].srcOffsets[1].z = pRegions[i].srcOffsets[1].z;
+			regions[i].srcSubresource.aspectMask = pRegions[i].srcSubresource.aspectMask;
+			regions[i].srcSubresource.mipLevel = pRegions[i].srcSubresource.mipLevel;
+			regions[i].srcSubresource.baseArrayLayer = pRegions[i].srcSubresource.baseArrayLayer;
+			regions[i].srcSubresource.layerCount = pRegions[i].srcSubresource.layerCount;
+			regions[i].dstOffsets[0].x = pRegions[i].dstOffsets[0].x;
+			regions[i].dstOffsets[0].y = pRegions[i].dstOffsets[0].y;
+			regions[i].dstOffsets[0].z = pRegions[i].dstOffsets[0].z;
+			regions[i].dstOffsets[1].x = pRegions[i].dstOffsets[1].x;
+			regions[i].dstOffsets[1].y = pRegions[i].dstOffsets[1].y;
+			regions[i].dstOffsets[1].z = pRegions[i].dstOffsets[1].z;
+			regions[i].dstSubresource.aspectMask = pRegions[i].dstSubresource.aspectMask;
+			regions[i].dstSubresource.mipLevel = pRegions[i].dstSubresource.mipLevel;
+			regions[i].dstSubresource.baseArrayLayer = pRegions[i].dstSubresource.baseArrayLayer;
+			regions[i].dstSubresource.layerCount = pRegions[i].dstSubresource.layerCount;
+		}
+
+		vkCmdBlitImage(m_handle,
+			srcImage.image, (VkImageLayout)srcImageLayout,
+			dstImage.image, (VkImageLayout)dstImageLayout,
+			regionCount, regions.data(),
+			(VkFilter)filter);
 	}
 
 	bool DepthFormat(Format format)
@@ -111,21 +176,51 @@ namespace pe
 
 	void CommandBuffer::BindPipeline(Pipeline& pipeline)
 	{
-		vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline.handle);
+		vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle);
+	}
+
+	void CommandBuffer::BindComputePipeline(Pipeline& pipeline)
+	{
+		vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.handle);
 	}
 
 	void CommandBuffer::BindVertexBuffer(Buffer& buffer, size_t offset)
 	{
+		VkBuffer buff = buffer.Handle();
+		vkCmdBindVertexBuffers(m_handle, 0, 1, &buff, &offset);
 	}
 
 	void CommandBuffer::BindIndexBuffer(Buffer& buffer, size_t offset)
 	{
+		vkCmdBindIndexBuffer(m_handle, buffer.Handle(), offset, VK_INDEX_TYPE_UINT32);
 	}
 
-	void CommandBuffer::BindDescriptors(Pipeline& pipeline, uint32_t count, DescriptorSetHandle descriptors)
+	void CommandBuffer::BindDescriptors(Pipeline& pipeline, uint32_t count, DescriptorSetHandle* descriptors)
 	{
-		VkDescriptorSet descriptorsVK = descriptors;
-		vkCmdBindDescriptorSets(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline.layout, 0, count, &descriptorsVK, 0, nullptr);
+		std::vector<VkDescriptorSet> dsets(count);
+		for (uint32_t i = 0; i < count; i++)
+			dsets[i] = descriptors[i];
+
+		vkCmdBindDescriptorSets(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, count, dsets.data(), 0, nullptr);
+	}
+
+	void CommandBuffer::BindComputeDescriptors(Pipeline& pipeline, uint32_t count, DescriptorSetHandle* descriptors)
+	{
+		std::vector<VkDescriptorSet> dsets(count);
+		for (uint32_t i = 0; i < count; i++)
+			dsets[i] = descriptors[i];
+
+		vkCmdBindDescriptorSets(m_handle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.layout, 0, count, dsets.data(), 0, nullptr);
+	}
+
+	void CommandBuffer::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+	{
+		vkCmdDispatch(m_handle, groupCountX, groupCountY, groupCountZ);
+	}
+
+	void CommandBuffer::PushConstants(Pipeline& pipeline, ShaderStageFlags shaderStageFlags, uint32_t offset, uint32_t size, const void* pValues)
+	{
+		vkCmdPushConstants(m_handle, pipeline.layout, shaderStageFlags, offset, size, pValues);
 	}
 
 	void CommandBuffer::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
@@ -135,6 +230,7 @@ namespace pe
 
 	void CommandBuffer::DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
 	{
+		vkCmdDrawIndexed(m_handle, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 	}
 
 	void CommandBuffer::Submit()

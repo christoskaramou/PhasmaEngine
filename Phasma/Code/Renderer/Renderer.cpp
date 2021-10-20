@@ -108,19 +108,17 @@ namespace pe
 		
 		FrameTimer& frameTimer = FrameTimer::Instance();
 
-		vk::CommandBuffer* vkHandle = &(*VULKAN.dynamicCmdBuffers)[imageIndex];
-		CommandBuffer cmd = VkCommandBuffer(*vkHandle);
+		CommandBuffer cmd = VkCommandBuffer((*VULKAN.dynamicCmdBuffers)[imageIndex]);
 		cmd.Begin();
 
-		gpuTimer[0].Start(vkHandle);
+		gpuTimer[0].Start(&cmd);
 		// SKYBOX
 		SkyBox& skybox = GUI::shadow_cast ? skyBoxDay : skyBoxNight;
 		
 		// MODELS
 		{
-			gpuTimer[1].Start(vkHandle);
-			VkExtent2D extent{ renderTargets["viewport"].width, renderTargets["viewport"].height };
-			deferred.batchStart(*vkHandle, imageIndex, extent);
+			gpuTimer[1].Start(&cmd);
+			deferred.batchStart(&cmd, imageIndex);
 			
 			for (auto& model : Model::models)
 				model.draw((uint16_t) RenderQueue::Opaque);
@@ -157,7 +155,7 @@ namespace pe
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao)
 		{
-			gpuTimer[2].Start(vkHandle);
+			gpuTimer[2].Start(&cmd);
 			renderTargets["ssaoBlur"].ChangeLayout(cmd, LayoutState::ColorWrite);
 			ssao.draw(&cmd, imageIndex, renderTargets["ssao"]);
 			renderTargets["ssaoBlur"].ChangeLayout(cmd, LayoutState::ColorRead);
@@ -167,18 +165,16 @@ namespace pe
 		// SCREEN SPACE REFLECTIONS
 		if (GUI::show_ssr)
 		{
-			gpuTimer[3].Start(vkHandle);
+			gpuTimer[3].Start(&cmd);
 			renderTargets["ssr"].ChangeLayout(cmd, LayoutState::ColorWrite);
-			VkExtent2D extent{ renderTargets["ssr"].width, renderTargets["ssr"].height };
-			ssr.draw(*vkHandle, imageIndex, extent);
+			ssr.draw(&cmd, imageIndex);
 			renderTargets["ssr"].ChangeLayout(cmd, LayoutState::ColorRead);
 			frameTimer.timestamps[6] = gpuTimer[3].End();
 		}
 		
 		// COMPOSITION
-		gpuTimer[4].Start(vkHandle);
-		VkExtent2D extent{ renderTargets["viewport"].width, renderTargets["viewport"].height };
-		deferred.draw(*vkHandle, imageIndex, shadows, skybox, extent);
+		gpuTimer[4].Start(&cmd);
+		deferred.draw(&cmd, imageIndex, shadows, skybox);
 		frameTimer.timestamps[7] = gpuTimer[4].End();
 		
 		if (GUI::use_AntiAliasing)
@@ -186,18 +182,17 @@ namespace pe
 			// TAA
 			if (GUI::use_TAA)
 			{
-				gpuTimer[5].Start(vkHandle);
+				gpuTimer[5].Start(&cmd);
 				taa.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
-				taa.draw(*vkHandle, imageIndex, renderTargets);
+				taa.draw(&cmd, imageIndex, renderTargets);
 				frameTimer.timestamps[8] = gpuTimer[5].End();
 			}
 				// FXAA
 			else if (GUI::use_FXAA)
 			{
-				gpuTimer[6].Start(vkHandle);
+				gpuTimer[6].Start(&cmd);
 				fxaa.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
-				VkExtent2D extent{ renderTargets["viewport"].width, renderTargets["viewport"].height };
-				fxaa.draw(*vkHandle, imageIndex, extent);
+				fxaa.draw(&cmd, imageIndex);
 				frameTimer.timestamps[8] = gpuTimer[6].End();
 			}
 		}
@@ -205,28 +200,27 @@ namespace pe
 		// BLOOM
 		if (GUI::show_Bloom)
 		{
-			gpuTimer[7].Start(vkHandle);
+			gpuTimer[7].Start(&cmd);
 			bloom.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
-			bloom.draw(*vkHandle, imageIndex, renderTargets);
+			bloom.draw(&cmd, imageIndex, renderTargets);
 			frameTimer.timestamps[9] = gpuTimer[7].End();
 		}
 		
 		// Depth of Field
 		if (GUI::use_DOF)
 		{
-			gpuTimer[8].Start(vkHandle);
+			gpuTimer[8].Start(&cmd);
 			dof.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
-			dof.draw(*vkHandle, imageIndex, renderTargets);
+			dof.draw(&cmd, imageIndex, renderTargets);
 			frameTimer.timestamps[10] = gpuTimer[8].End();
 		}
 		
 		// MOTION BLUR
 		if (GUI::show_motionBlur)
 		{
-			gpuTimer[9].Start(vkHandle);
+			gpuTimer[9].Start(&cmd);
 			motionBlur.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
-			VkExtent2D extent{ renderTargets["viewport"].width, renderTargets["viewport"].height };
-			motionBlur.draw(*vkHandle, imageIndex, extent);
+			motionBlur.draw(&cmd, imageIndex);
 			frameTimer.timestamps[11] = gpuTimer[9].End();
 		}
 
@@ -245,7 +239,7 @@ namespace pe
 		BlitToViewport(cmd, GUI::s_currRenderImage ? *GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
 
 		// GUI
-		gpuTimer[10].Start(vkHandle);
+		gpuTimer[10].Start(&cmd);
 		gui.Draw(cmd, imageIndex);
 		frameTimer.timestamps[12] = gpuTimer[10].End();
 		
@@ -256,96 +250,71 @@ namespace pe
 	
 	void Renderer::RecordShadowsCmds(uint32_t imageIndex)
 	{
-		// Render Pass (shadows mapping) (outputs the depth image with the light POV)
-		
-		const vk::DeviceSize offset = vk::DeviceSize();
-		std::array<vk::ClearValue, 1> clearValuesShadows {};
-		clearValuesShadows[0].depthStencil.depth = GlobalSettings::ReverseZ ? 0.f : 1.f;
-		clearValuesShadows[0].depthStencil.stencil = 0;
-		
-		vk::CommandBufferBeginInfo beginInfoShadows;
-		beginInfoShadows.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-		
-		vk::RenderPassBeginInfo renderPassInfoShadows;
-		renderPassInfoShadows.renderPass = shadows.renderPass.handle;
-		renderPassInfoShadows.renderArea = vk::Rect2D{ {0, 0}, {SHADOWMAP_SIZE, SHADOWMAP_SIZE} };
-		renderPassInfoShadows.clearValueCount = static_cast<uint32_t>(clearValuesShadows.size());
-		renderPassInfoShadows.pClearValues = clearValuesShadows.data();
-
 		static GPUTimer gpuTimer[SHADOWMAP_CASCADES]{};
 		
 		for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
 		{
 			uint32_t index = SHADOWMAP_CASCADES * imageIndex + i;
-
-			auto& cmd = (*VULKAN.shadowCmdBuffers)[index];
-			cmd.begin(beginInfoShadows);
+			CommandBuffer cmd = VkCommandBuffer((*VULKAN.shadowCmdBuffers)[index]);
+			cmd.Begin();
 
 			FrameTimer& frameTimer = FrameTimer::Instance();
 			gpuTimer[i].Start(&cmd);
 
-			cmd.setDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
-
-			renderPassInfoShadows.framebuffer = shadows.framebuffers[index].handle;
-			cmd.beginRenderPass(renderPassInfoShadows, vk::SubpassContents::eInline);
-			cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadows.pipeline.handle);
+			cmd.SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
+			cmd.BeginPass(shadows.renderPass, shadows.framebuffers[index]);
+			cmd.BindPipeline(shadows.pipeline);
 			for (auto& model : Model::models)
 			{
 				if (model.render)
 				{
-					cmd.bindVertexBuffers(0, model.vertexBuffer->Handle<vk::Buffer>(), offset);
-					cmd.bindIndexBuffer(model.indexBuffer->Handle<vk::Buffer>(), 0, vk::IndexType::eUint32);
+					cmd.BindVertexBuffer(*model.vertexBuffer, 0);
+					cmd.BindIndexBuffer(*model.indexBuffer, 0);
 					
 					for (auto& node : model.linearNodes)
 					{
 						if (node->mesh)
 						{
-							cmd.pushConstants<mat4>(*shadows.pipeline.layout, vk::ShaderStageFlagBits::eVertex, 0, shadows.cascades[i]);
-							cmd.bindDescriptorSets(
-								vk::PipelineBindPoint::eGraphics,
-								*shadows.pipeline.layout,
-								0,
-								{ *node->mesh->descriptorSet, *model.descriptorSet },
-								nullptr);
-
+							std::array<DescriptorSetHandle, 2> descriptors{ node->mesh->descriptorSet, model.descriptorSet };
+							cmd.PushConstants(shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), &shadows.cascades[i]);
+							cmd.BindDescriptors(shadows.pipeline, 2, descriptors.data());
 							for (auto& primitive : node->mesh->primitives)
 							{
 								//if (primitive.render)
-									cmd.drawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset,
-											node->mesh->vertexOffset + primitive.vertexOffset, 0);
+									cmd.DrawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset,
+										node->mesh->vertexOffset + primitive.vertexOffset, 0);
 							}
 						}
 					}
 				}
 			}
-			cmd.endRenderPass();
+			cmd.EndPass();
 
 			frameTimer.timestamps[13 + static_cast<size_t>(i)] = gpuTimer[i].End();
 
-			cmd.end();
+			cmd.End();
 		}
 	}
 	
-	void Renderer::AddRenderTarget(const std::string& name, vk::Format format, const vk::ImageUsageFlags& additionalFlags)
+	void Renderer::AddRenderTarget(const std::string& name, Format format, ImageUsageFlags additionalFlags)
 	{
 		if (renderTargets.find(name) != renderTargets.end())
 			return;
 		
 		renderTargets[name] = Image();
 		renderTargets[name].name = name;
-		renderTargets[name].format = (Format)format;
+		renderTargets[name].format = format;
 		renderTargets[name].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		renderTargets[name].CreateImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
 			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
 			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | (VkFlags)additionalFlags,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | additionalFlags,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 		);
 		renderTargets[name].TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 		renderTargets[name].CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 		renderTargets[name].CreateSampler();
-		renderTargets[name].SetDebugName("RenderTarget_" + name);
 		
 		//std::string str = to_string(format); str.find("A8") != std::string::npos
 		renderTargets[name].blendAttachment.blendEnable = name == "albedo" ? VK_TRUE : VK_FALSE;
@@ -455,8 +424,7 @@ namespace pe
 	
 	void Renderer::ResizeViewport(uint32_t width, uint32_t height)
 	{
-		auto& vulkan = *VulkanContext::Get();
-		vulkan.graphicsQueue->waitIdle();
+		VULKAN.graphicsQueue->waitIdle();
 
 		renderArea.Update(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
 
@@ -549,29 +517,29 @@ namespace pe
 		ssao.pipeline.destroy();
 		ssao.pipelineBlur.destroy();
 		
-		vulkan.depth.Destroy();
-		vulkan.swapchain.Destroy();
+		VULKAN.depth.Destroy();
+		VULKAN.swapchain.Destroy();
 		//- Free resources end ------------------
 		
 		//- Recreate resources ------------------
 		WIDTH = width;
 		HEIGHT = height;
-		vulkan.CreateSwapchain(&VULKAN.surface);
-		vulkan.CreateDepth();
+		VULKAN.CreateSwapchain(&VULKAN.surface);
+		VULKAN.CreateDepth();
 		
-		AddRenderTarget("viewport", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
-		AddRenderTarget("normal", vk::Format::eR32G32B32A32Sfloat, vk::ImageUsageFlags());
-		AddRenderTarget("albedo", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("srm", vulkan.surface.formatKHR->format, vk::ImageUsageFlags()); // Specular Roughness Metallic
-		AddRenderTarget("ssao", vk::Format::eR16Unorm, vk::ImageUsageFlags());
-		AddRenderTarget("ssaoBlur", vk::Format::eR8Unorm, vk::ImageUsageFlags());
-		AddRenderTarget("ssr", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("velocity", vk::Format::eR16G16Sfloat, vk::ImageUsageFlags());
-		AddRenderTarget("brightFilter", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("gaussianBlurHorizontal", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("gaussianBlurVertical", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("emissive", vulkan.surface.formatKHR->format, vk::ImageUsageFlags());
-		AddRenderTarget("taa", vulkan.surface.formatKHR->format, vk::ImageUsageFlagBits::eTransferSrc);
+		AddRenderTarget("viewport", (VkFormat)VULKAN.surface.formatKHR->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
+		AddRenderTarget("albedo", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("srm", (VkFormat)VULKAN.surface.formatKHR->format); // Specular Roughness Metallic
+		AddRenderTarget("ssao", VK_FORMAT_R16_UNORM);
+		AddRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
+		AddRenderTarget("ssr", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
+		AddRenderTarget("brightFilter", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("gaussianBlurHorizontal", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("gaussianBlurVertical", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("emissive", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("taa", (VkFormat)VULKAN.surface.formatKHR->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 		
 		deferred.createRenderPasses(renderTargets);
 		deferred.createFrameBuffers(renderTargets);
@@ -652,25 +620,21 @@ namespace pe
 			VK_IMAGE_ASPECT_COLOR_BIT
 		);
 		
-		vk::ImageBlit blit;
-		blit.srcOffsets[0] = vk::Offset3D{ static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 0 };
-		blit.srcOffsets[1] = vk::Offset3D{ 0, 0, 1 };
-		blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		ImageBlit blit{};
+		blit.srcOffsets[0] = Offset3D{ static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 0 };
+		blit.srcOffsets[1] = Offset3D{ 0, 0, 1 };
+		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		blit.srcSubresource.layerCount = 1;
 		Viewport& vp = renderArea.viewport;
-		blit.dstOffsets[0] = vk::Offset3D {static_cast<int32_t>(vp.x), static_cast<int32_t>(vp.y), 0};
-		blit.dstOffsets[1] = vk::Offset3D {
-				static_cast<int32_t>(vp.x) + static_cast<int32_t>(vp.width),
-				static_cast<int32_t>(vp.y) + static_cast<int32_t>(vp.height), 1
-		};
-		blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+		blit.dstOffsets[0] = Offset3D{ (int32_t)vp.x, (int32_t)vp.y, 0 };
+		blit.dstOffsets[1] = Offset3D{ (int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1 };
+		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		blit.dstSubresource.layerCount = 1;
 		
-		vkCmdBlitImage(
-			cmd.Handle(),
-			renderedImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-			s_chain_Image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			1, &VkImageBlit(blit),
+		cmd.BlitImage(
+			renderedImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			s_chain_Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			1, &blit,
 			VK_FILTER_LINEAR);
 		
 		renderedImage.TransitionImageLayout(

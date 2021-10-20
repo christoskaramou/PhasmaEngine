@@ -51,17 +51,17 @@ namespace pe
 		
 		Vertex(vec3& pos, vec2& uv, vec3& norm, vec4& color, ivec4& bonesIDs, vec4& weights);
 		
-		static std::vector<vk::VertexInputBindingDescription> getBindingDescriptionGeneral();
+		static std::vector<VertexInputBindingDescription> GetBindingDescriptionGeneral();
 		
-		static std::vector<vk::VertexInputBindingDescription> getBindingDescriptionGUI();
+		static std::vector<VertexInputBindingDescription> GetBindingDescriptionGUI();
 		
-		static std::vector<vk::VertexInputBindingDescription> getBindingDescriptionSkyBox();
+		static std::vector<VertexInputBindingDescription> GetBindingDescriptionSkyBox();
 		
-		static std::vector<vk::VertexInputAttributeDescription> getAttributeDescriptionGeneral();
+		static std::vector<VertexInputAttributeDescription> GetAttributeDescriptionGeneral();
 		
-		static std::vector<vk::VertexInputAttributeDescription> getAttributeDescriptionGUI();
+		static std::vector<VertexInputAttributeDescription> GetAttributeDescriptionGUI();
 		
-		static std::vector<vk::VertexInputAttributeDescription> getAttributeDescriptionSkyBox();
+		static std::vector<VertexInputAttributeDescription> GetAttributeDescriptionSkyBox();
 		
 		vec3 position;
 		vec2 uv;

@@ -47,15 +47,11 @@ namespace pe
 			scale = lerp(.1f, 1.f, scale * scale);
 			kernel.emplace_back(sample * scale, 0.f);
 		}
-		UB_Kernel = Buffer::Create(
-			sizeof(vec4) * 16,
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+		UB_Kernel = Buffer::Create(sizeof(vec4) * 16, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		UB_Kernel->Map();
 		UB_Kernel->CopyData(kernel.data());
 		UB_Kernel->Flush();
 		UB_Kernel->Unmap();
-		UB_Kernel->SetDebugName("SSAO_UB_Kernel");
 		
 		// noise image
 		std::vector<vec4> noise {};
@@ -63,15 +59,11 @@ namespace pe
 			noise.emplace_back(rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f, 1.f);
 
 		const uint64_t bufSize = sizeof(vec4) * 16;
-		SPtr<Buffer> staging = Buffer::Create(
-			bufSize,
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+		SPtr<Buffer> staging = Buffer::Create(bufSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		staging->Map();
 		staging->CopyData(noise.data());
 		staging->Flush();
 		staging->Unmap();
-		staging->SetDebugName("Staging");
 		
 		noiseTex.filter = VK_FILTER_NEAREST;
 		noiseTex.minLod = 0.0f;
@@ -87,69 +79,95 @@ namespace pe
 		noiseTex.TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		noiseTex.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 		noiseTex.CreateSampler();
-		noiseTex.SetDebugName("SSAO_NoiseTexture");
 		staging->Destroy();
 		// pvm uniform
-		UB_PVM = Buffer::Create(
-			3 * sizeof(mat4),
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+		UB_PVM = Buffer::Create(3 * sizeof(mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		UB_PVM->Map();
 		UB_PVM->Zero();
 		UB_PVM->Flush();
 		UB_PVM->Unmap();
-		UB_PVM->SetDebugName("SSAO_UB_PVM");
 		
 		// DESCRIPTOR SET FOR SSAO
-		const vk::DescriptorSetAllocateInfo allocInfo = vk::DescriptorSetAllocateInfo {
-				*VULKAN.descriptorPool,    //DescriptorPool descriptorPool;
-				1,                                                //uint32_t descriptorSetCount;
-				&(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSAO()            //const DescriptorSetLayout* pSetLayouts;
-		};
-		DSet = VULKAN.device->allocateDescriptorSets(allocInfo).at(0);
-		VULKAN.SetDebugObjectName(vk::DescriptorSet(DSet), "SSAO");
+		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutSSAO();
+		VkDescriptorSetAllocateInfo allocInfo = {};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.pNext = nullptr;
+		allocInfo.descriptorPool = *VULKAN.descriptorPool;
+		allocInfo.descriptorSetCount = 1;
+		allocInfo.pSetLayouts = &dsetLayout;
+
+		VkDescriptorSet dset;
+		vkAllocateDescriptorSets(*VULKAN.device, &allocInfo, &dset);
+		DSet = dset;
 		
 		// DESCRIPTOR SET FOR SSAO BLUR
-		const vk::DescriptorSetAllocateInfo allocInfoBlur = vk::DescriptorSetAllocateInfo {
-				*VULKAN.descriptorPool,    //DescriptorPool descriptorPool;
-				1,                                                //uint32_t descriptorSetCount;
-				&(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSAOBlur()    //const DescriptorSetLayout* pSetLayouts;
-		};
-		DSBlur = VULKAN.device->allocateDescriptorSets(allocInfoBlur).at(0);
-		VULKAN.SetDebugObjectName(vk::DescriptorSet(DSBlur), "SSAO_Blur");
+		VkDescriptorSetLayout dsetLayoutBlur = Pipeline::getDescriptorSetLayoutSSAOBlur();
+		VkDescriptorSetAllocateInfo allocInfoBlur = {};
+		allocInfoBlur.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfoBlur.pNext = nullptr;
+		allocInfoBlur.descriptorPool = *VULKAN.descriptorPool;
+		allocInfoBlur.descriptorSetCount = 1;
+		allocInfoBlur.pSetLayouts = &dsetLayoutBlur;
+
+		VkDescriptorSet dsetBlur;
+		vkAllocateDescriptorSets(*VULKAN.device, &allocInfoBlur, &dsetBlur);
+		DSBlur = dsetBlur;
 		
 		updateDescriptorSets(renderTargets);
 	}
 	
 	void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		std::deque<vk::DescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Image& image, vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal)
+		std::deque<VkDescriptorImageInfo> dsii {};
+		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image, ImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 		{
-			dsii.emplace_back(vk::Sampler(image.sampler), vk::ImageView(image.view), layout);
-			return vk::WriteDescriptorSet{
-					dstSet, dstBinding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &dsii.back(), nullptr, nullptr
-			};
+			VkDescriptorImageInfo info{ image.sampler, image.view, (VkImageLayout)layout };
+			dsii.push_back(info);
+
+			VkWriteDescriptorSet writeSet{};
+			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writeSet.dstSet = dstSet;
+			writeSet.dstBinding = dstBinding;
+			writeSet.dstArrayElement = 0;
+			writeSet.descriptorCount = 1;
+			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			writeSet.pImageInfo = &dsii.back();
+			writeSet.pBufferInfo = nullptr;
+			writeSet.pTexelBufferView = nullptr;
+
+			return writeSet;
 		};
-		std::deque<vk::DescriptorBufferInfo> dsbi {};
-		const auto wSetBuffer = [&dsbi](const vk::DescriptorSet& dstSet, uint32_t dstBinding, Buffer& buffer)
+		std::deque<VkDescriptorBufferInfo> dsbi {};
+		const auto wSetBuffer = [&dsbi](DescriptorSetHandle dstSet, uint32_t dstBinding, Buffer& buffer)
 		{
-			dsbi.emplace_back(buffer.Handle<vk::Buffer>(), 0, buffer.Size());
-			return vk::WriteDescriptorSet {
-					dstSet, dstBinding, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &dsbi.back(), nullptr
-			};
+			VkDescriptorBufferInfo info{ buffer.Handle(), 0, buffer.Size() };
+			dsbi.push_back(info);
+
+			VkWriteDescriptorSet writeSet{};
+			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writeSet.dstSet = dstSet;
+			writeSet.dstBinding = dstBinding;
+			writeSet.dstArrayElement = 0;
+			writeSet.descriptorCount = 1;
+			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			writeSet.pImageInfo = nullptr;
+			writeSet.pBufferInfo = &dsbi.back();
+			writeSet.pTexelBufferView = nullptr;
+
+			return writeSet;
 		};
 		
-		std::vector<vk::WriteDescriptorSet> writeDescriptorSets {
-				wSetImage(DSet, 0, VULKAN.depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal),
-				wSetImage(DSet, 1, renderTargets["normal"]),
-				wSetImage(DSet, 2, noiseTex),
-				wSetBuffer(DSet, 3, *UB_Kernel),
-				wSetBuffer(DSet, 4, *UB_PVM),
-				wSetImage(DSBlur, 0, renderTargets["ssao"])
+		std::vector<VkWriteDescriptorSet> writeDescriptorSets
+		{
+			wSetImage(DSet, 0, VULKAN.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
+			wSetImage(DSet, 1, renderTargets["normal"]),
+			wSetImage(DSet, 2, noiseTex),
+			wSetBuffer(DSet, 3, *UB_Kernel),
+			wSetBuffer(DSet, 4, *UB_PVM),
+			wSetImage(DSBlur, 0, renderTargets["ssao"])
 		};
-		VULKAN.device->updateDescriptorSets(writeDescriptorSets, nullptr);
-		//VULKAN.device->updateDescriptorSets(writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
+
+		vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
 	}
 	
 	void SSAO::draw(CommandBuffer* cmd, uint32_t imageIndex, Image& image)
@@ -158,7 +176,7 @@ namespace pe
 		image.ChangeLayout(*cmd, LayoutState::ColorWrite);
 		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 		cmd->BindPipeline(pipeline);
-		cmd->BindDescriptors(pipeline, 1, DSet);
+		cmd->BindDescriptors(pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 		
@@ -167,7 +185,7 @@ namespace pe
 		// new blurry SSAO image
 		cmd->BeginPass(blurRenderPass, blurFramebuffers[imageIndex]);
 		cmd->BindPipeline(pipelineBlur);
-		cmd->BindDescriptors(pipelineBlur, 1, DSBlur);
+		cmd->BindDescriptors(pipelineBlur, 1, &DSBlur);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 		image.ChangeLayout(*cmd, LayoutState::ColorRead);
@@ -271,12 +289,8 @@ namespace pe
 		pipeline.info.width = renderTargets["ssao"].width_f;
 		pipeline.info.height = renderTargets["ssao"].height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = make_sptr(
-				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["ssao"].blendAttachment}
-		);
-		pipeline.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSAO()}
-		);
+		pipeline.info.colorBlendAttachments = { renderTargets["ssao"].blendAttachment };
+		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSAO() };
 		pipeline.info.renderPass = renderPass;
 		
 		pipeline.createGraphicsPipeline();
@@ -292,12 +306,8 @@ namespace pe
 		pipelineBlur.info.width = renderTargets["ssaoBlur"].width_f;
 		pipelineBlur.info.height = renderTargets["ssaoBlur"].height_f;
 		pipelineBlur.info.cullMode = CullMode::Back;
-		pipelineBlur.info.colorBlendAttachments = make_sptr(
-				std::vector<vk::PipelineColorBlendAttachmentState> {renderTargets["ssaoBlur"].blendAttachment}
-		);
-		pipelineBlur.info.descriptorSetLayouts = make_sptr(
-				std::vector<vk::DescriptorSetLayout> {(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSSAOBlur()}
-		);
+		pipelineBlur.info.colorBlendAttachments = { renderTargets["ssaoBlur"].blendAttachment };
+		pipelineBlur.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSAOBlur() };
 		pipelineBlur.info.renderPass = blurRenderPass;
 		
 		pipelineBlur.createGraphicsPipeline();

@@ -33,8 +33,15 @@ struct VkCommandBuffer_T;
 struct VkDescriptorSetLayout_T;
 struct VkDescriptorSet_T;
 struct VkPipelineCache_T;
+struct VkPipelineLayout_T;
+struct VkPipeline_T;
 struct VkRenderPass_T;
 struct VkFramebuffer_T;
+struct VkCommandPool_T;
+struct VkBuffer_T;
+struct VkFence_T;
+struct VkSemaphore_T;
+struct VkQueryPool_T;
 
 using SampleCountFlagBits = uint32_t;
 using Format = uint32_t;
@@ -61,6 +68,10 @@ using DescriptorType = uint32_t;
 using AttachmentDescriptionFlags = uint32_t;
 using AttachmentLoadOp = uint32_t;
 using AttachmentStoreOp = uint32_t;
+using IndexType = uint32_t;
+using BlendFactor = uint32_t;
+using BlendOp = uint32_t;
+using ColorComponentFlags = uint32_t;
 
 struct SDL_Window;
 enum VkDebugUtilsMessageSeverityFlagBitsEXT;
@@ -134,8 +145,8 @@ namespace pe
 	template<class VK_HANDLE, class DX_HANDLE>
 	class ApiHandle final
 	{
-		static_assert(std::is_pointer_v<VK_HANDLE>, "ApiHandle type needs to be a pointer");
-		static_assert(std::is_pointer_v<DX_HANDLE>, "ApiHandle type needs to be a pointer");
+		static_assert(std::is_pointer_v<VK_HANDLE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_pointer_v<DX_HANDLE>, "ApiHandle type is not a pointer");
 	public:
 		ApiHandle() {};
 
@@ -147,13 +158,55 @@ namespace pe
 
 		operator DX_HANDLE () { return std::get<DX_HANDLE>(m_handle); }
 
-		operator bool() { return m_handle.index() != std::variant_npos; }
+		operator bool()
+		{
+			if (std::holds_alternative<VK_HANDLE>(m_handle))
+				return std::get<VK_HANDLE>(m_handle) != nullptr;
 
-		bool operator!() { return m_handle.index() == std::variant_npos; }
+			if (std::holds_alternative<DX_HANDLE>(m_handle))
+				return std::get<DX_HANDLE>(m_handle) != nullptr;
 
-	protected:
+			return false;
+		}
+
+		bool operator!()
+		{
+			return !operator bool();
+		}
+
+	private:
 		std::variant<VK_HANDLE, DX_HANDLE> m_handle;
 	};
+
+	template<class T, class VK_HANDLE, class DX_HANDLE>
+	std::vector<T> ApiHandleVectorCopy(std::vector<ApiHandle<VK_HANDLE, DX_HANDLE>>& apiHandles)
+	{
+		static_assert(std::is_pointer_v<VK_HANDLE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_pointer_v<DX_HANDLE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_same_v<T, VK_HANDLE> || std::is_same_v<T, DX_HANDLE>, "T does not match any of ApiHandle types");
+
+		std::vector<T> copyVec(apiHandles.size());
+
+		for (int i = 0; i < apiHandles.size(); i++)
+			copyVec[i] = apiHandles[i];
+
+		return copyVec;
+	}
+
+	template<class T, class VK_HANDLE, class DX_HANDLE>
+	std::vector<T> ApiHandleVectorCopy(uint32_t count, ApiHandle<VK_HANDLE, DX_HANDLE>* apiHandles)
+	{
+		static_assert(std::is_pointer_v<VK_HANDLE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_pointer_v<DX_HANDLE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_same_v<T, VK_HANDLE> || std::is_same_v<T, DX_HANDLE>, "T does not match any of ApiHandle types");
+
+		std::vector<T> copyVec(count);
+
+		for (uint32_t i = 0; i < count; i++)
+			copyVec[i] = apiHandles[i];
+
+		return copyVec;
+	}
 
 	template<class T>
 	using SPtr = std::shared_ptr<T>;
@@ -219,4 +272,12 @@ namespace pe
 	using ImageViewHandle = ApiHandle<VkImageView_T*, void*>;
 	using SamplerHandle = ApiHandle<VkSampler_T*, void*>;
 	using RenderPassHandle = ApiHandle<VkRenderPass_T*, void*>;
+	using CommandPoolHandle = ApiHandle<VkCommandPool_T*, void*>;
+	using BufferHandle = ApiHandle<VkBuffer_T*, void*>;
+	using PipelineCacheHandle = ApiHandle<VkPipelineCache_T*, void*>;
+	using PipelineLayoutHandle = ApiHandle<VkPipelineLayout_T*, void*>;
+	using PipelineHandle = ApiHandle<VkPipeline_T*, void*>;
+	using FenceHandle = ApiHandle<VkFence_T*, void*>;
+	using SemaphoreHandle = ApiHandle<VkSemaphore_T*, void*>;
+	using QueryPoolHandle = ApiHandle<VkQueryPool_T*, void*>;
 }
