@@ -39,7 +39,7 @@ namespace pe
 
 	void CommandPool::Create(uint32_t graphicsFamilyId)
 	{
-		VkCommandPoolCreateInfo cpci;
+		VkCommandPoolCreateInfo cpci{};
 		cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 		cpci.queueFamilyIndex = graphicsFamilyId;
 		cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;

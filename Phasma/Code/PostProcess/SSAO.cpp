@@ -89,7 +89,7 @@ namespace pe
 		
 		// DESCRIPTOR SET FOR SSAO
 		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutSSAO();
-		VkDescriptorSetAllocateInfo allocInfo = {};
+		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.pNext = nullptr;
 		allocInfo.descriptorPool = *VULKAN.descriptorPool;
@@ -102,7 +102,7 @@ namespace pe
 		
 		// DESCRIPTOR SET FOR SSAO BLUR
 		VkDescriptorSetLayout dsetLayoutBlur = Pipeline::getDescriptorSetLayoutSSAOBlur();
-		VkDescriptorSetAllocateInfo allocInfoBlur = {};
+		VkDescriptorSetAllocateInfo allocInfoBlur{};
 		allocInfoBlur.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfoBlur.pNext = nullptr;
 		allocInfoBlur.descriptorPool = *VULKAN.descriptorPool;

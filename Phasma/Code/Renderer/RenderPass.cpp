@@ -110,13 +110,13 @@ namespace pe
 			}
 		}
 		
-		VkSubpassDescription subpassDescription {};
+		VkSubpassDescription subpassDescription{};
 		subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpassDescription.colorAttachmentCount = static_cast<uint32_t>(colorReferences.size());
 		subpassDescription.pColorAttachments = colorReferences.data();
 		subpassDescription.pDepthStencilAttachment = hasDepth ? &depthReference : nullptr;
 		
-		VkRenderPassCreateInfo renderPassInfo = {};
+		VkRenderPassCreateInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 		renderPassInfo.attachmentCount = static_cast<uint32_t>(_attachments.size());
 		renderPassInfo.pAttachments = _attachments.data();

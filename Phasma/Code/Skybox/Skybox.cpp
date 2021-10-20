@@ -40,10 +40,11 @@ namespace pe
 	
 	void SkyBox::createDescriptorSet()
 	{
+		vk::DescriptorSetLayout setLayout = Pipeline::getDescriptorSetLayoutSkybox();
 		vk::DescriptorSetAllocateInfo allocateInfo;
 		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &(vk::DescriptorSetLayout)Pipeline::getDescriptorSetLayoutSkybox();
+		allocateInfo.pSetLayouts = &setLayout;
 
 		descriptorSet = VkDescriptorSet(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
 		

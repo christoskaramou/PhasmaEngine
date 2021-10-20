@@ -58,11 +58,12 @@ namespace pe
 	
 	void FXAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
+		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutFXAA();
 		VkDescriptorSetAllocateInfo allocateInfo{};
 		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutFXAA();
+		allocateInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
 		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);

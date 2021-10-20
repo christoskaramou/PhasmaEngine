@@ -120,22 +120,26 @@ namespace pe
 		VkDescriptorSet dset;
 
 		// Composition image to Bright Filter shader
-		allocateInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutBrightFilter();
+		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutBrightFilter();
+		allocateInfo.pSetLayouts = &dsetLayout;
 		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
 		DSBrightFilter = dset;
 		
 		// Bright Filter image to Gaussian Blur Horizontal shader
-		allocateInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutGaussianBlurH();
+		dsetLayout = Pipeline::getDescriptorSetLayoutGaussianBlurH();
+		allocateInfo.pSetLayouts = &dsetLayout;
 		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
 		DSGaussianBlurHorizontal = dset;
 		
 		// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
-		allocateInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutGaussianBlurV();
+		dsetLayout = Pipeline::getDescriptorSetLayoutGaussianBlurV();
+		allocateInfo.pSetLayouts = &dsetLayout;
 		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
 		DSGaussianBlurVertical = dset;
 		
 		// Gaussian Blur Vertical image to Combine shader
-		allocateInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutCombine();
+		dsetLayout = Pipeline::getDescriptorSetLayoutCombine();
+		allocateInfo.pSetLayouts = &dsetLayout;
 		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
 		DSCombine = dset;
 		

@@ -56,13 +56,15 @@ namespace pe
 		commandBuffer.End();
 		
 		std::vector<VkSemaphore> waitSemaphores = ApiHandleVectorCopy<VkSemaphore>(count, waitForHandles);
+		VkCommandBuffer cmdBuffer = commandBuffer.Handle();
+		VkSemaphore vksemaphore = semaphore.handle;
 		VkSubmitInfo siCompute{};
 		siCompute.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		siCompute.commandBufferCount = 1;
-		siCompute.pCommandBuffers = (VkCommandBuffer*)&commandBuffer.Handle();
+		siCompute.pCommandBuffers = &cmdBuffer;
 		siCompute.waitSemaphoreCount = (uint32_t)waitSemaphores.size();
 		siCompute.pWaitSemaphores = waitSemaphores.data();
-		siCompute.pSignalSemaphores = (VkSemaphore*)&semaphore;
+		siCompute.pSignalSemaphores = &vksemaphore;
 
 		vkQueueSubmit(*VULKAN.computeQueue, 1, &siCompute, fence.handle);
 	}
@@ -95,11 +97,12 @@ namespace pe
 	
 	void Compute::createDescriptorSet()
 	{
+		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutCompute();
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutCompute();
+		allocInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
 		vkAllocateDescriptorSets(*VULKAN.device, &allocInfo, &dset);

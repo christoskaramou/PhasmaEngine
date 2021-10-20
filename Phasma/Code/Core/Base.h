@@ -148,7 +148,7 @@ namespace pe
 		static_assert(std::is_pointer_v<VK_HANDLE>, "ApiHandle type is not a pointer");
 		static_assert(std::is_pointer_v<DX_HANDLE>, "ApiHandle type is not a pointer");
 	public:
-		ApiHandle() {};
+		ApiHandle() : m_handle{} {};
 
 		ApiHandle(VK_HANDLE handle) : m_handle(handle) {}
 

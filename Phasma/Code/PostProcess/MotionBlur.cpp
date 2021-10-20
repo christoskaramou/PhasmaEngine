@@ -68,11 +68,12 @@ namespace pe
 		UBmotionBlur->Flush();
 		UBmotionBlur->Unmap();
 
+		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutMotionBlur();
 		VkDescriptorSetAllocateInfo allocateInfo{};
 		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutMotionBlur();
+		allocateInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
 		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);

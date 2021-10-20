@@ -105,11 +105,13 @@ namespace pe
 
 		VkDescriptorSet dset;
 
-		allocateInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutTAA();
+		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutTAA();
+		allocateInfo.pSetLayouts = &dsetLayout;
 		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
 		DSet = dset;
 
-		allocateInfo.pSetLayouts = (VkDescriptorSetLayout*)&Pipeline::getDescriptorSetLayoutTAASharpen();
+		dsetLayout = Pipeline::getDescriptorSetLayoutTAASharpen();
+		allocateInfo.pSetLayouts = &dsetLayout;
 		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
 		DSetSharpen = dset;
 
