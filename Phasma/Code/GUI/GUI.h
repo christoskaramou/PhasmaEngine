@@ -55,7 +55,7 @@ namespace pe
 
         // Data
         static inline float renderTargetsScale = 1.0f;//0.71f;
-        static inline bool use_IBL = false;
+        static inline bool use_IBL = true;
         static inline bool use_Volumetric_lights = false;
         static inline int volumetric_steps = 32;
         static inline int volumetric_dither_strength = 400;
@@ -91,9 +91,9 @@ namespace pe
         static inline float fog_ground_thickness = 30.0f;
         static inline float fog_global_thickness = 0.3f;
         static inline float fog_max_height = 3.0f;
-        static inline bool shadow_cast = false;
+        static inline bool shadow_cast = true;
         static inline float sun_intensity = 7.f;
-        static inline std::array<float, 3> sun_direction{ 0.7f, 0.7f, 0.7f };
+        static inline std::array<float, 3> sun_direction{ 0.1f, 0.9f, 0.1f };
         static inline int fps = 60;
         static inline float cameraSpeed = 3.5f;
         static inline std::array<float, 3> depthBias{ 0.0f, 0.0f, -6.2f };
