@@ -142,48 +142,45 @@ namespace vk
 
 namespace pe
 {
-	template<class VK_HANDLE, class DX_HANDLE>
+	template<class VK_TYPE, class DX_TYPE>
 	class ApiHandle final
 	{
-		static_assert(std::is_pointer_v<VK_HANDLE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_pointer_v<DX_HANDLE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
 	public:
-		ApiHandle() : m_handle{} {};
+		ApiHandle() : m_handle(nullptr) {};
 
-		ApiHandle(VK_HANDLE handle) : m_handle(handle) {}
+		ApiHandle(VK_TYPE handle) : m_handle(handle) {}
 
-		ApiHandle(DX_HANDLE handle) : m_handle(handle) {}
+		ApiHandle(DX_TYPE handle) : m_handle(handle) {}
 
-		operator VK_HANDLE () { return std::get<VK_HANDLE>(m_handle); }
+		operator VK_TYPE () { return static_cast<VK_TYPE>(m_handle); }
 
-		operator DX_HANDLE () { return std::get<DX_HANDLE>(m_handle); }
+		operator DX_TYPE () { return static_cast<DX_TYPE>(m_handle); }
+
+		void* raw() { return m_handle; }
 
 		operator bool()
 		{
-			if (std::holds_alternative<VK_HANDLE>(m_handle))
-				return std::get<VK_HANDLE>(m_handle) != nullptr;
-
-			if (std::holds_alternative<DX_HANDLE>(m_handle))
-				return std::get<DX_HANDLE>(m_handle) != nullptr;
-
-			return false;
-		}
-
-		bool operator!()
-		{
-			return !operator bool();
+			return m_handle != nullptr;
+		}				    
+						    
+		bool operator!()    
+		{				    
+			return m_handle == nullptr;
 		}
 
 	private:
-		std::variant<VK_HANDLE, DX_HANDLE> m_handle;
+		void* m_handle;
 	};
 
-	template<class T, class VK_HANDLE, class DX_HANDLE>
-	std::vector<T> ApiHandleVectorCopy(std::vector<ApiHandle<VK_HANDLE, DX_HANDLE>>& apiHandles)
+	template<class T, class VK_TYPE, class DX_TYPE>
+	std::vector<T> ApiHandleVectorCreate(std::vector<ApiHandle<VK_TYPE, DX_TYPE>>& apiHandles)
 	{
-		static_assert(std::is_pointer_v<VK_HANDLE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_pointer_v<DX_HANDLE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_same_v<T, VK_HANDLE> || std::is_same_v<T, DX_HANDLE>, "T does not match any of ApiHandle types");
+		static_assert(std::is_pointer_v<T>, "T type is not a pointer");
+		static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_same_v<T, VK_TYPE> || std::is_same_v<T, DX_TYPE>, "T does not match any of ApiHandle types");
 
 		std::vector<T> copyVec(apiHandles.size());
 
@@ -193,12 +190,14 @@ namespace pe
 		return copyVec;
 	}
 
-	template<class T, class VK_HANDLE, class DX_HANDLE>
-	std::vector<T> ApiHandleVectorCopy(uint32_t count, ApiHandle<VK_HANDLE, DX_HANDLE>* apiHandles)
+	template<class T, class VK_TYPE, class DX_TYPE>
+	std::vector<T> ApiHandleVectorCreate(uint32_t count, ApiHandle<VK_TYPE, DX_TYPE>* apiHandles)
 	{
-		static_assert(std::is_pointer_v<VK_HANDLE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_pointer_v<DX_HANDLE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_same_v<T, VK_HANDLE> || std::is_same_v<T, DX_HANDLE>, "T does not match any of ApiHandle types");
+		static_assert(std::is_pointer_v<T>, "T type is not a pointer");
+		static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_same_v<T, VK_TYPE> || std::is_same_v<T, DX_TYPE>, "T does not match any of ApiHandle types");
+		static_assert(sizeof(VK_TYPE) == sizeof(DX_TYPE));
 
 		std::vector<T> copyVec(count);
 
@@ -263,21 +262,23 @@ namespace pe
 		NoMove& operator=(NoMove&&) = delete;
 	};
 
+	struct Placeholder {};
+
 	class BufferVK;
-	using CommandBufferHandle = ApiHandle<VkCommandBuffer_T*, void*>;
-	using DescriptorSetLayoutHandle = ApiHandle<VkDescriptorSetLayout_T*, void*>;
-	using DescriptorSetHandle = ApiHandle<VkDescriptorSet_T*, void*>;
-	using FrameBufferHandle = ApiHandle<VkFramebuffer_T*, void*>;
-	using ImageHandle = ApiHandle<VkImage_T*, void*>;
-	using ImageViewHandle = ApiHandle<VkImageView_T*, void*>;
-	using SamplerHandle = ApiHandle<VkSampler_T*, void*>;
-	using RenderPassHandle = ApiHandle<VkRenderPass_T*, void*>;
-	using CommandPoolHandle = ApiHandle<VkCommandPool_T*, void*>;
-	using BufferHandle = ApiHandle<VkBuffer_T*, void*>;
-	using PipelineCacheHandle = ApiHandle<VkPipelineCache_T*, void*>;
-	using PipelineLayoutHandle = ApiHandle<VkPipelineLayout_T*, void*>;
-	using PipelineHandle = ApiHandle<VkPipeline_T*, void*>;
-	using FenceHandle = ApiHandle<VkFence_T*, void*>;
-	using SemaphoreHandle = ApiHandle<VkSemaphore_T*, void*>;
-	using QueryPoolHandle = ApiHandle<VkQueryPool_T*, void*>;
+	using CommandBufferHandle = ApiHandle<VkCommandBuffer_T*, Placeholder*>;
+	using DescriptorSetLayoutHandle = ApiHandle<VkDescriptorSetLayout_T*, Placeholder*>;
+	using DescriptorSetHandle = ApiHandle<VkDescriptorSet_T*, Placeholder*>;
+	using FrameBufferHandle = ApiHandle<VkFramebuffer_T*, Placeholder*>;
+	using ImageHandle = ApiHandle<VkImage_T*, Placeholder*>;
+	using ImageViewHandle = ApiHandle<VkImageView_T*, Placeholder*>;
+	using SamplerHandle = ApiHandle<VkSampler_T*, Placeholder*>;
+	using RenderPassHandle = ApiHandle<VkRenderPass_T*, Placeholder*>;
+	using CommandPoolHandle = ApiHandle<VkCommandPool_T*, Placeholder*>;
+	using BufferHandle = ApiHandle<VkBuffer_T*, Placeholder*>;
+	using PipelineCacheHandle = ApiHandle<VkPipelineCache_T*, Placeholder*>;
+	using PipelineLayoutHandle = ApiHandle<VkPipelineLayout_T*, Placeholder*>;
+	using PipelineHandle = ApiHandle<VkPipeline_T*, Placeholder*>;
+	using FenceHandle = ApiHandle<VkFence_T*, Placeholder*>;
+	using SemaphoreHandle = ApiHandle<VkSemaphore_T*, Placeholder*>;
+	using QueryPoolHandle = ApiHandle<VkQueryPool_T*, Placeholder*>;
 }

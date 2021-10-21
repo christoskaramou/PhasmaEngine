@@ -216,7 +216,7 @@ namespace pe
 		pcr.size = info.pushConstantSize;
 		
 		// Pipeline Layout
-		auto layouts = ApiHandleVectorCopy<VkDescriptorSetLayout>(info.descriptorSetLayouts);
+		auto layouts = ApiHandleVectorCreate<VkDescriptorSetLayout>(info.descriptorSetLayouts);
 		VkPipelineLayoutCreateInfo plci{};
 		plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		plci.setLayoutCount = static_cast<uint32_t>(layouts.size());
@@ -263,7 +263,7 @@ namespace pe
 		csmci.codeSize = info.pCompShader->BytesCount();
 		csmci.pCode = info.pCompShader->GetSpriv();
 
-		auto layouts = ApiHandleVectorCopy<VkDescriptorSetLayout>(info.descriptorSetLayouts);
+		auto layouts = ApiHandleVectorCreate<VkDescriptorSetLayout>(info.descriptorSetLayouts);
 		VkPipelineLayoutCreateInfo plci{};
 		plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		plci.setLayoutCount = static_cast<uint32_t>(layouts.size());

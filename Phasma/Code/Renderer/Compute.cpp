@@ -55,7 +55,7 @@ namespace pe
 		commandBuffer.Dispatch(sizeX, sizeY, sizeZ);
 		commandBuffer.End();
 		
-		std::vector<VkSemaphore> waitSemaphores = ApiHandleVectorCopy<VkSemaphore>(count, waitForHandles);
+		std::vector<VkSemaphore> waitSemaphores = ApiHandleVectorCreate<VkSemaphore>(count, waitForHandles);
 		VkCommandBuffer cmdBuffer = commandBuffer.Handle();
 		VkSemaphore vksemaphore = semaphore.handle;
 		VkSubmitInfo siCompute{};
