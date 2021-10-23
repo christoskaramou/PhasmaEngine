@@ -28,7 +28,6 @@ SOFTWARE.
 #include "Skybox/Skybox.h"
 #include "RenderPass.h"
 #include "Framebuffer.h"
-#include <map>
 
 namespace pe
 {

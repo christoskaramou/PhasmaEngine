@@ -28,7 +28,6 @@ SOFTWARE.
 #include "Renderer/Semaphore.h"
 #include "Renderer/CommandPool.h"
 #include "Renderer/CommandBuffer.h"
-#include <vector>
 
 namespace pe
 {

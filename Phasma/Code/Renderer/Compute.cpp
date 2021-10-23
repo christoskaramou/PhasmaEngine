@@ -20,12 +20,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "PhasmaPch.h"
 #include "Compute.h"
 #include "Code/Shader/Shader.h"
 #include "Renderer/Vulkan/Vulkan.h"
-#include <deque>
-#include <cassert>
 
 namespace pe
 {

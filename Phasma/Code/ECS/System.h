@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include <unordered_map>
-#include <vector>
 #include "ECSBase.h"
 
 namespace pe

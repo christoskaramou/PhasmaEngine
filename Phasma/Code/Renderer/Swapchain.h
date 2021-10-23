@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Image.h"
-#include <vector>
 
 namespace pe
 {

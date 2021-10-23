@@ -22,10 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include <algorithm>
-#include <execution>
-#include <functional>
-
 namespace pe
 {
 	inline size_t NextID()

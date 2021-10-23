@@ -23,10 +23,37 @@ SOFTWARE.
 #pragma once
 
 #define NOMINMAX
+
+#include <string>
+#include <vector>
+#include <memory>
+#include <type_traits>
+#include <future>
+#include <cassert>
+#include <tuple>
+#include <deque>
+#include <any>
+#include <mutex>
+#include <map>
+#include <unordered_map>
+#include <array>
+#include <functional>
+#include <utility>
+#include <algorithm>
+#include <execution>
+#include <unordered_set>
+#include <iostream>
+#include <fstream>
+#include <filesystem>
+#include <sstream>
+#include <limits>
+#include <chrono>
+#include <random>
+
 #include "SDL/SDL.h"
 #include "SDL/SDL_syswm.h"
 #include "SDL/SDL_vulkan.h"
-#include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan.h>
 #include "vma/vk_mem_alloc.h"
 #ifdef WIN32
     #include <DX12/d3d12.h>

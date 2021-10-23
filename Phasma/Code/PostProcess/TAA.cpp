@@ -20,7 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "PhasmaPch.h"
 #include "TAA.h"
 #include "GUI/GUI.h"
 #include "Renderer/Surface.h"
@@ -29,7 +28,6 @@ SOFTWARE.
 #include "Core/Queue.h"
 #include "Renderer/Vulkan/Vulkan.h"
 #include "Renderer/CommandBuffer.h"
-#include <deque>
 
 namespace pe
 {

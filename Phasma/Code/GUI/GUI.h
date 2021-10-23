@@ -28,8 +28,6 @@ SOFTWARE.
 #include "Renderer/RenderPass.h"
 #include "Renderer/Framebuffer.h"
 #include "SDL/SDL.h"
-#include <vector>
-#include <array>
 
 namespace pe
 {

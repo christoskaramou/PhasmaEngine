@@ -20,7 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "PhasmaPch.h"
 #include "Surface.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"

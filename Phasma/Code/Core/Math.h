@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include <random>
-
 namespace pe
 {
 	class vec2;

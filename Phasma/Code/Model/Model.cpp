@@ -20,15 +20,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "PhasmaPch.h"
 #include "Model.h"
 #include "Mesh.h"
 #include "Core/Queue.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/CommandBuffer.h"
-#include <iostream>
-#include <future>
-#include <deque>
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
 #include "Renderer/Vulkan/Vulkan.h"

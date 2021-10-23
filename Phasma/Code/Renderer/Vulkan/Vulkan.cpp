@@ -20,7 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "PhasmaPch.h"
 #include "Vulkan.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
@@ -28,7 +27,6 @@ SOFTWARE.
 #include "Renderer/CommandBuffer.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
-#include <iostream>
 
 namespace pe
 {	

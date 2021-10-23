@@ -23,9 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "GLTFSDK/IStreamReader.h"
-#include <filesystem>
-#include <fstream>
-#include <sstream>
 
 namespace pe
 {

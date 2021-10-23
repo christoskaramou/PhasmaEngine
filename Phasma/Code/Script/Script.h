@@ -29,9 +29,6 @@ SOFTWARE.
 #include <mono/metadata/debug-helpers.h>
 #include <mono/metadata/threads.h>
 #include <mono/metadata/mono-debug.h>
-#include <vector>
-#include <filesystem>
-#include <string>
 
 namespace pe
 {

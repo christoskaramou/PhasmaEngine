@@ -22,10 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include <deque>
-#include <functional>
-#include <utility>
-
 namespace pe
 {
 	template<typename ... T>

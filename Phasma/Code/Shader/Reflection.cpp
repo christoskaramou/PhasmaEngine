@@ -23,7 +23,6 @@ SOFTWARE.
 #include "Reflection.h"
 #include "Shader.h"
 #include "spirv_cross/spirv_cross.hpp"
-#include <vector>
 
 namespace pe
 {

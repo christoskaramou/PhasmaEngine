@@ -20,7 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "PhasmaPch.h"
 #include "Deferred.h"
 #include "Model/Model.h"
 #include "Model/Mesh.h"
@@ -30,7 +29,6 @@ SOFTWARE.
 #include "Core/Queue.h"
 #include "GUI/GUI.h"
 #include "tinygltf/stb_image.h"
-#include <deque>
 #include "Shader/Reflection.h"
 #include "Renderer/Vulkan/Vulkan.h"
 #include "Renderer/CommandBuffer.h"

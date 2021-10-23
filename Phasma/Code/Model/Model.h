@@ -32,8 +32,6 @@ SOFTWARE.
 #include "GLTFSDK/GLTFResourceReader.h"
 #include "GLTFSDK/Document.h"
 #include "StreamReader.h"
-#include <future>
-#include <deque>
 
 namespace pe
 {

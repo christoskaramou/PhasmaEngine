@@ -28,7 +28,6 @@ SOFTWARE.
 #include "GLTFSDK/GLTF.h"
 #include "GLTFSDK/Document.h"
 #include "GLTFSDK/GLTFResourceReader.h"
-#include <map>
 
 constexpr auto MAX_NUM_JOINTS = 128u;
 

@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Core/Base.h"
-#include <vector>
 
 namespace pe
 {

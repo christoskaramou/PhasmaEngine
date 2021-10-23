@@ -21,8 +21,6 @@ SOFTWARE.
 */
 
 #include "Math.h"
-#include <cassert>
-#include <chrono>
 #include "Core/Settings.h"
 
 namespace pe

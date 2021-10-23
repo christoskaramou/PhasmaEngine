@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "tinygltf/stb_image.h"
-#include "PhasmaPch.h"
 #include "Mesh.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Vulkan/Vulkan.h"

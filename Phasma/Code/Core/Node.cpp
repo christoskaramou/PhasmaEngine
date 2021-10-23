@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "Node.h"
-#include <future>
 #include "Model/Mesh.h"
 #include "Queue.h"
 

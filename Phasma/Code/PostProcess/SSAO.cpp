@@ -20,9 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "PhasmaPch.h"
 #include "SSAO.h"
-#include <deque>
 #include "Renderer/Swapchain.h"
 #include "Renderer/Surface.h"
 #include "GUI/GUI.h"

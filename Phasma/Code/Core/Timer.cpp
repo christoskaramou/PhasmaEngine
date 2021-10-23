@@ -20,11 +20,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "PhasmaPch.h"
 #include "Timer.h"
 #include "Renderer/Vulkan/Vulkan.h"
 #include "Renderer/CommandBuffer.h"
-#include <thread>
 
 namespace pe
 {

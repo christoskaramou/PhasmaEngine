@@ -24,12 +24,9 @@ SOFTWARE.
 
 #include "Core/Math.h"
 #include "Core/Node.h"
-#include <vector>
 
 #undef max
 #undef min
-
-#include <limits>
 
 namespace pe
 {

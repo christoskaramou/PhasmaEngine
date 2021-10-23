@@ -23,9 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Base.h"
-#include <chrono>
-#include <vector>
-#include <memory>
 
 constexpr double MILLI(double seconds) { return seconds * 1000.0; }
 constexpr double MICRO(double seconds) { return seconds * 1000000.0; }

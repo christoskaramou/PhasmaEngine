@@ -25,7 +25,6 @@ SOFTWARE.
 #include "Entity.h"
 #include "System.h"
 #include "Core/Base.h"
-#include <vector>
 
 #define CONTEXT Context::Get()
 #define WORLD_ENTITY CONTEXT->WorldEntity

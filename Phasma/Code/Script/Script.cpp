@@ -22,7 +22,6 @@ SOFTWARE.
 
 #if 0
 #include "Script.h"
-#include <fstream>
 
 namespace pe
 {

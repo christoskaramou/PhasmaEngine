@@ -24,11 +24,6 @@ SOFTWARE.
 
 #include "Core/Base.h"
 #include "Core/Delegate.h"
-#include <map>
-#include <deque>
-#include <utility>
-#include <any>
-#include <unordered_set>
 #include "ECS/System.h"
 
 namespace pe

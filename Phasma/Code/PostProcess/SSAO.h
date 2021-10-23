@@ -28,8 +28,6 @@ SOFTWARE.
 #include "Systems/CameraSystem.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Framebuffer.h"
-#include <map>
-#include <string>
 #include "ECS/Component.h"
 
 namespace pe

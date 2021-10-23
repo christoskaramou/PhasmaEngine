@@ -23,8 +23,8 @@ SOFTWARE.
 #pragma once
 
 #include "Core/Base.h"
-#include <MemoryHash/MemoryHash.h>
-#include <Core/Queue.h>
+#include "MemoryHash/MemoryHash.h"
+#include "Core/Queue.h"
 
 namespace pe
 {

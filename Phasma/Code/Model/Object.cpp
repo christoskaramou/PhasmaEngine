@@ -20,7 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "PhasmaPch.h"
 #include "Object.h"
 #include "tinygltf/stb_image.h"
 #include "Renderer/Vulkan/Vulkan.h"

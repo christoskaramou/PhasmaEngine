@@ -22,10 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include <fstream>
-#include <string>
-#include <filesystem>
-
 namespace pe
 {
 	class Path

@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include <unordered_map>
 #include "Component.h"
 #include "Core/Base.h"
 #include "Core/Node.h"

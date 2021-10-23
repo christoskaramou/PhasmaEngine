@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include <vector>
-#include <mutex>
 #include "Renderer/Surface.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/CommandPool.h"

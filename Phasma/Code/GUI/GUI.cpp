@@ -20,9 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "PhasmaPch.h"
 #include "GUI.h"
-#include <filesystem>
 #include "TinyFileDialogs/tinyfiledialogs.h"
 #include "Core/Queue.h"
 #include "Console/Console.h"
