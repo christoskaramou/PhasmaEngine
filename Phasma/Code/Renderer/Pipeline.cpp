@@ -84,7 +84,7 @@ namespace pe
 		vsmci.pCode = info.pVertShader->GetSpriv();
 
 		VkShaderModule vertModule;
-		vkCreateShaderModule(*VULKAN.device, &vsmci, nullptr, &vertModule);
+		vkCreateShaderModule(VULKAN.device, &vsmci, nullptr, &vertModule);
 		
 		VkPipelineShaderStageCreateInfo pssci1{};
 		pssci1.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -100,7 +100,7 @@ namespace pe
 			fsmci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 			fsmci.codeSize = info.pFragShader->BytesCount();
 			fsmci.pCode = info.pFragShader->GetSpriv();
-			vkCreateShaderModule(*VULKAN.device, &fsmci, nullptr, &fragModule);
+			vkCreateShaderModule(VULKAN.device, &fsmci, nullptr, &fragModule);
 
 			pssci2.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 			pssci2.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -225,7 +225,7 @@ namespace pe
 		plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
 
 		VkPipelineLayout pipelineLayout;
-		vkCreatePipelineLayout(*VULKAN.device, &plci, nullptr, &pipelineLayout);
+		vkCreatePipelineLayout(VULKAN.device, &plci, nullptr, &pipelineLayout);
 		layout = pipelineLayout;
 		pipeinfo.layout = layout;
 		
@@ -242,12 +242,12 @@ namespace pe
 		pipeinfo.basePipelineIndex = -1;
 		
 		VkPipeline pipeline;
-		vkCreateGraphicsPipelines(*VULKAN.device, nullptr, 1, &pipeinfo, nullptr, &pipeline);
+		vkCreateGraphicsPipelines(VULKAN.device, nullptr, 1, &pipeinfo, nullptr, &pipeline);
 		handle = pipeline;
 
-		vkDestroyShaderModule(*VULKAN.device, vertModule, nullptr);
+		vkDestroyShaderModule(VULKAN.device, vertModule, nullptr);
 		if (info.pFragShader && fragModule)
-			vkDestroyShaderModule(*VULKAN.device, fragModule, nullptr);
+			vkDestroyShaderModule(VULKAN.device, fragModule, nullptr);
 	}
 	
 	void Pipeline::createComputePipeline()
@@ -264,7 +264,7 @@ namespace pe
 		plci.pSetLayouts = layouts.data();
 		
 		VkShaderModule module;
-		vkCreateShaderModule(*VULKAN.device, &csmci, nullptr, &module);
+		vkCreateShaderModule(VULKAN.device, &csmci, nullptr, &module);
 
 		VkComputePipelineCreateInfo compinfo{};
 		compinfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -274,28 +274,28 @@ namespace pe
 		compinfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
 
 		VkPipelineLayout vklayout;
-		vkCreatePipelineLayout(*VULKAN.device, &plci, nullptr, &vklayout);
+		vkCreatePipelineLayout(VULKAN.device, &plci, nullptr, &vklayout);
 		layout = vklayout;
 		compinfo.layout = layout;
 		
 		VkPipeline vkPipeline;
-		vkCreateComputePipelines(*VULKAN.device, nullptr, 1, &compinfo, nullptr, &vkPipeline);
+		vkCreateComputePipelines(VULKAN.device, nullptr, 1, &compinfo, nullptr, &vkPipeline);
 		handle = vkPipeline;
 
-		vkDestroyShaderModule(*VULKAN.device, module, nullptr);
+		vkDestroyShaderModule(VULKAN.device, module, nullptr);
 	}
 	
 	void Pipeline::destroy()
 	{
 		if (layout)
 		{
-			vkDestroyPipelineLayout(*VULKAN.device, layout, nullptr);
+			vkDestroyPipelineLayout(VULKAN.device, layout, nullptr);
 			layout = {};
 		}
 		
 		if (handle)
 		{
-			vkDestroyPipeline(*VULKAN.device, handle, nullptr);
+			vkDestroyPipeline(VULKAN.device, handle, nullptr);
 			handle = {};
 		}
 	}
@@ -323,7 +323,7 @@ namespace pe
 		descriptorLayout.pBindings = setLayoutBindings.data();
 
 		VkDescriptorSetLayout layout;
-		vkCreateDescriptorSetLayout(*VULKAN.device, &descriptorLayout, nullptr, &layout);
+		vkCreateDescriptorSetLayout(VULKAN.device, &descriptorLayout, nullptr, &layout);
 
 		return layout;
 	}

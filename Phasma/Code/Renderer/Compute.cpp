@@ -105,7 +105,7 @@ namespace pe
 		allocInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocInfo, &dset);
 		DSCompute = dset;
 	}
 	
@@ -135,7 +135,7 @@ namespace pe
 			wSetBuffer(DSCompute, 1, *SBOut),
 		};
 
-		vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
 	}
 	
 	void Compute::createPipeline(const std::string& shaderName)
@@ -211,7 +211,7 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutCompute())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutCompute(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutCompute(), nullptr);
 			Pipeline::getDescriptorSetLayoutCompute() = {};
 		}
 	}

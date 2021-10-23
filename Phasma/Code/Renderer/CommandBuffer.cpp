@@ -42,7 +42,7 @@ namespace pe
 		cbai.commandBufferCount = 1;
 
 		VkCommandBuffer commandBuffer;
-		vkAllocateCommandBuffers(*VULKAN.device, &cbai, &commandBuffer);
+		vkAllocateCommandBuffers(VULKAN.device, &cbai, &commandBuffer);
 		m_handle = commandBuffer;
 	}
 
@@ -51,7 +51,7 @@ namespace pe
 		if (m_handle)
 		{
 			VkCommandBuffer cmd = m_handle;
-			vkFreeCommandBuffers(*VULKAN.device, commandPool.Handle(), 1, &cmd);
+			vkFreeCommandBuffers(VULKAN.device, commandPool.Handle(), 1, &cmd);
 			m_handle = {};
 		}
 	}

@@ -45,7 +45,7 @@ namespace pe
 		cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
 		VkCommandPool commandPool;
-		vkCreateCommandPool(*VULKAN.device, &cpci, nullptr, &commandPool);
+		vkCreateCommandPool(VULKAN.device, &cpci, nullptr, &commandPool);
 		m_handle = commandPool;
 	}
 
@@ -53,7 +53,7 @@ namespace pe
 	{
 		if (m_handle)
 		{
-			vkDestroyCommandPool(*VULKAN.device, m_handle, nullptr);
+			vkDestroyCommandPool(VULKAN.device, m_handle, nullptr);
 			m_handle = {};
 		}
 	}

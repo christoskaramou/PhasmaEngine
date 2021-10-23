@@ -122,25 +122,25 @@ namespace pe
 		// Composition image to Bright Filter shader
 		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutBrightFilter();
 		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
 		DSBrightFilter = dset;
 		
 		// Bright Filter image to Gaussian Blur Horizontal shader
 		dsetLayout = Pipeline::getDescriptorSetLayoutGaussianBlurH();
 		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
 		DSGaussianBlurHorizontal = dset;
 		
 		// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
 		dsetLayout = Pipeline::getDescriptorSetLayoutGaussianBlurV();
 		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
 		DSGaussianBlurVertical = dset;
 		
 		// Gaussian Blur Vertical image to Combine shader
 		dsetLayout = Pipeline::getDescriptorSetLayoutCombine();
 		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
 		DSCombine = dset;
 		
 		updateDescriptorSets(renderTargets);
@@ -175,7 +175,7 @@ namespace pe
 			wSetImage(DSCombine, 1, renderTargets["gaussianBlurVertical"])
 		};
 
-		vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 	}
 	
 	void Bloom::draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
@@ -322,22 +322,22 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutBrightFilter())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutBrightFilter(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutBrightFilter(), nullptr);
 			Pipeline::getDescriptorSetLayoutBrightFilter() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutGaussianBlurH())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutGaussianBlurH(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutGaussianBlurH(), nullptr);
 			Pipeline::getDescriptorSetLayoutGaussianBlurH() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutGaussianBlurV())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutGaussianBlurV(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutGaussianBlurV(), nullptr);
 			Pipeline::getDescriptorSetLayoutGaussianBlurV() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutCombine())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutCombine(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutCombine(), nullptr);
 			Pipeline::getDescriptorSetLayoutCombine() = {};
 		}
 		frameImage.Destroy();

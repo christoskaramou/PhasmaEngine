@@ -85,7 +85,7 @@ namespace pe
 		allocInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocInfo, &dset);
 		DSComposition = dset;
 		
 		// Check if ibl_brdf_lut is already loaded
@@ -196,7 +196,7 @@ namespace pe
 			wSetBuffer(DSComposition, 9, *uniform)
 		};
 
-		vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
 	}
 	
 	void Deferred::update(mat4& invViewProj)
@@ -389,7 +389,7 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutComposition())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutComposition(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutComposition(), nullptr);
 			Pipeline::getDescriptorSetLayoutComposition() = {};
 		}
 		uniform->Destroy();

@@ -171,7 +171,7 @@ namespace pe
 		viewInfo.subresourceRange = { (VkImageAspectFlags)aspectFlags, 0, mipLevels, 0, arrayLayers };
 		
 		VkImageView vkView;
-		vkCreateImageView(*VULKAN.device.get(), &viewInfo, nullptr, &vkView);
+		vkCreateImageView(VULKAN.device, &viewInfo, nullptr, &vkView);
 		view = vkView;
 	}
 	
@@ -184,7 +184,7 @@ namespace pe
 		allocInfo.commandPool = VULKAN.commandPool2.Handle();
 
 		VkCommandBuffer commandBuffer;
-		vkAllocateCommandBuffers(*VULKAN.device.get(), &allocInfo, &commandBuffer);
+		vkAllocateCommandBuffers(VULKAN.device, &allocInfo, &commandBuffer);
 		
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -289,7 +289,7 @@ namespace pe
 		CommandBuffer cmdBuffer(commandBuffer);
 		VULKAN.submitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 		
-		vkFreeCommandBuffers(*VULKAN.device, VULKAN.commandPool2.Handle(), 1, &commandBuffer);
+		vkFreeCommandBuffers(VULKAN.device, VULKAN.commandPool2.Handle(), 1, &commandBuffer);
 	}
 	
 	void Image::ChangeLayout(CommandBuffer cmd, LayoutState state)
@@ -361,7 +361,7 @@ namespace pe
 		allocInfo.commandPool = VULKAN.commandPool2.Handle();
 		
 		VkCommandBuffer commandBuffer;
-		vkAllocateCommandBuffers(*VULKAN.device, &allocInfo, &commandBuffer);
+		vkAllocateCommandBuffers(VULKAN.device, &allocInfo, &commandBuffer);
 		
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -386,7 +386,7 @@ namespace pe
 		CommandBuffer cmdBuffer(commandBuffer);
 		VULKAN.submitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 		
-		vkFreeCommandBuffers(*VULKAN.device, VULKAN.commandPool2.Handle(), 1, &commandBuffer);
+		vkFreeCommandBuffers(VULKAN.device, VULKAN.commandPool2.Handle(), 1, &commandBuffer);
 	}
 	
 	void Image::CopyColorAttachment(CommandBuffer cmd, Image& renderedImage)
@@ -479,7 +479,7 @@ namespace pe
 		allocInfo.commandPool = VULKAN.commandPool2.Handle();
 		
 		std::vector<VkCommandBuffer> commandBuffers(mipLevels);
-		vkAllocateCommandBuffers(*VULKAN.device, &allocInfo, commandBuffers.data());
+		vkAllocateCommandBuffers(VULKAN.device, &allocInfo, commandBuffers.data());
 		
 		auto mipWidth = static_cast<int32_t>(width);
 		auto mipHeight = static_cast<int32_t>(height);
@@ -584,7 +584,7 @@ namespace pe
 		CommandBuffer cmdBuffer(commandBuffers[0]);
 		VULKAN.submitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 		
-		vkFreeCommandBuffers(*VULKAN.device, VULKAN.commandPool2.Handle(), mipLevels, commandBuffers.data());
+		vkFreeCommandBuffers(VULKAN.device, VULKAN.commandPool2.Handle(), mipLevels, commandBuffers.data());
 	}
 	
 	void Image::CreateSampler()
@@ -608,15 +608,15 @@ namespace pe
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
 		VkSampler vkSampler;
-		vkCreateSampler(*VULKAN.device, &samplerInfo, nullptr, &vkSampler);
+		vkCreateSampler(VULKAN.device, &samplerInfo, nullptr, &vkSampler);
 		sampler = vkSampler;
 	}
 	
 	void Image::Destroy()
 	{
-		if (VkImageView(view)) vkDestroyImageView(*VULKAN.device, view, nullptr);
+		if (VkImageView(view)) vkDestroyImageView(VULKAN.device, view, nullptr);
 		if (VkImage(image)) vmaDestroyImage(VULKAN.allocator, image, allocation);
-		if (VkSampler(sampler)) vkDestroySampler(*VULKAN.device, sampler, nullptr);
+		if (VkSampler(sampler)) vkDestroySampler(VULKAN.device, sampler, nullptr);
 		view = {};
 		image = {};
 		sampler = {};

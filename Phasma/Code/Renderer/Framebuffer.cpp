@@ -56,7 +56,7 @@ namespace pe
 		fbci.layers = 1;
 		
 		VkFramebuffer frameBuffer;
-		vkCreateFramebuffer(*VULKAN.device, &fbci, nullptr, &frameBuffer);
+		vkCreateFramebuffer(VULKAN.device, &fbci, nullptr, &frameBuffer);
 		handle = frameBuffer;
 	}
 	
@@ -64,7 +64,7 @@ namespace pe
 	{
 		if (VkFramebuffer(handle))
 		{
-			vkDestroyFramebuffer(*VULKAN.device, handle, nullptr);
+			vkDestroyFramebuffer(VULKAN.device, handle, nullptr);
 			handle = {};
 		}
 	}

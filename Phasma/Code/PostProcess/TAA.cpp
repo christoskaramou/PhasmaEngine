@@ -107,12 +107,12 @@ namespace pe
 
 		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutTAA();
 		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
 		DSet = dset;
 
 		dsetLayout = Pipeline::getDescriptorSetLayoutTAASharpen();
 		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
 		DSetSharpen = dset;
 
 		updateDescriptorSets(renderTargets);
@@ -167,7 +167,7 @@ namespace pe
 			wSetBuffer(DSetSharpen, 1, *uniform)
 		};
 
-		vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 	}
 	
 	void TAA::draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
@@ -344,12 +344,12 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutTAA())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutTAA(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutTAA(), nullptr);
 			Pipeline::getDescriptorSetLayoutTAA() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutTAASharpen())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutTAASharpen(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutTAASharpen(), nullptr);
 			Pipeline::getDescriptorSetLayoutTAASharpen() = {};
 		}
 		pipeline.destroy();

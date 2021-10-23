@@ -63,23 +63,23 @@ namespace pe
 		
 		// new swapchain with old create info
 		VkSwapchainKHR schain;
-		vkCreateSwapchainKHR(*VULKAN.device, &swapchainCreateInfo, nullptr, &schain);
+		vkCreateSwapchainKHR(VULKAN.device, &swapchainCreateInfo, nullptr, &schain);
 
 		Swapchain newSwapchain;
 		newSwapchain.handle = schain;
 		
 		if (handle)
 		{
-			vkDestroySwapchainKHR(*VULKAN.device, handle, nullptr);
+			vkDestroySwapchainKHR(VULKAN.device, handle, nullptr);
 			handle = {};
 		}
 		
 		// TODO: Maybe check the result in a loop?
 		uint32_t swapchainImageCount;
-		vkGetSwapchainImagesKHR(*VULKAN.device, newSwapchain.handle, &swapchainImageCount, nullptr);
+		vkGetSwapchainImagesKHR(VULKAN.device, newSwapchain.handle, &swapchainImageCount, nullptr);
 
 		std::vector<VkImage> images(swapchainImageCount);
-		vkGetSwapchainImagesKHR(*VULKAN.device, newSwapchain.handle, &swapchainImageCount, images.data());
+		vkGetSwapchainImagesKHR(VULKAN.device, newSwapchain.handle, &swapchainImageCount, images.data());
 		
 		newSwapchain.images.resize(images.size());
 		for (unsigned i = 0; i < images.size(); i++)
@@ -111,7 +111,7 @@ namespace pe
 			imageViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
 			VkImageView imageView;
-			vkCreateImageView(*VULKAN.device, &imageViewCreateInfo, nullptr, &imageView);
+			vkCreateImageView(VULKAN.device, &imageViewCreateInfo, nullptr, &imageView);
 			image.view = imageView;
 		}
 		
@@ -121,7 +121,7 @@ namespace pe
 	uint32_t Swapchain::Aquire(SemaphoreHandle semaphore, FenceHandle fence)
 	{
 		uint32_t imageIndex = 0;
-		VkResult result = vkAcquireNextImageKHR(*VULKAN.device, handle, UINT64_MAX, semaphore, fence, &imageIndex);
+		VkResult result = vkAcquireNextImageKHR(VULKAN.device, handle, UINT64_MAX, semaphore, fence, &imageIndex);
 
 		if (result != VK_SUCCESS)
 			throw std::runtime_error("Aquire Next Image error");
@@ -133,12 +133,12 @@ namespace pe
 	{
 		for (auto& image : images)
 		{
-			vkDestroyImageView(*VULKAN.device, image.view, nullptr);
+			vkDestroyImageView(VULKAN.device, image.view, nullptr);
 			image.view = {};
 		}
 		if (handle)
 		{
-			vkDestroySwapchainKHR(*VULKAN.device, handle, nullptr);
+			vkDestroySwapchainKHR(VULKAN.device, handle, nullptr);
 			handle = {};
 		}
 	}

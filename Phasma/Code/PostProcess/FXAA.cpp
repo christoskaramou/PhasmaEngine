@@ -66,7 +66,7 @@ namespace pe
 		allocateInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
 		DSet = dset;
 		
 		updateDescriptorSets(renderTargets);
@@ -89,7 +89,7 @@ namespace pe
 		textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		textureWriteSet.pImageInfo = &dii;
 		
-		vkUpdateDescriptorSets(*VULKAN.device, 1, &textureWriteSet, 0, nullptr);
+		vkUpdateDescriptorSets(VULKAN.device, 1, &textureWriteSet, 0, nullptr);
 	}
 	
 	void FXAA::draw(CommandBuffer* cmd, uint32_t imageIndex)
@@ -147,7 +147,7 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutFXAA())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutFXAA(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutFXAA(), nullptr);
 			Pipeline::getDescriptorSetLayoutFXAA() = {};
 		}
 		frameImage.Destroy();

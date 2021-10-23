@@ -61,7 +61,7 @@ namespace pe
 		allocateInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
 		DSet = dset;
 
 		updateDescriptorSets(renderTargets);
@@ -114,7 +114,7 @@ namespace pe
 			wSetBuffer(DSet, 4, *UBReflection)
 		};
 
-		vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 	}
 	
 	void SSR::update(Camera& camera)
@@ -189,7 +189,7 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutSSR())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutSSR(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutSSR(), nullptr);
 			Pipeline::getDescriptorSetLayoutSSR() = {};
 		}
 		UBReflection->Destroy();

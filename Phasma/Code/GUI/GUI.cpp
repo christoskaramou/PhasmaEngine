@@ -133,7 +133,7 @@ namespace pe
 					Model& model = Model::models.back();
 					auto update = []() { s_modelLoading = true; };
 					auto signal = []() { s_modelLoading = false; };
-					VULKAN.device->waitIdle();
+					VULKAN.waitDeviceIdle();
 					auto loadAsync = [&model, folderPath, modelName]() { model.Load(folderPath, modelName); };
 					Queue<Launch::AsyncNoWait>::Request(loadAsync, update, signal);
 					GUI::modelList.push_back(modelName);
@@ -396,7 +396,7 @@ namespace pe
 		ImGui::Begin("Shaders Folder", &shaders_open);
 		if (ImGui::Button("Compile Shaders"))
 		{
-			VULKAN.device->waitIdle();
+			VULKAN.waitDeviceIdle();
 			CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders);
 		}
 		for (uint32_t i = 0; i < shaderList.size(); i++)
@@ -442,7 +442,7 @@ namespace pe
 		if (ImGui::Button("Apply"))
 		{
 			renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
-			VULKAN.device->waitIdle();
+			VULKAN.waitDeviceIdle();
 			CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::ScaleRenderTargets);
 		}
 		//ImGui::Checkbox("Lock Render Window", &lock_render_window);
@@ -583,7 +583,7 @@ namespace pe
 			ImGui::Separator();
 			if (ImGui::Button("Unload Model"))
 			{
-				VULKAN.device->waitIdle();
+				VULKAN.waitDeviceIdle();
 				Model::models[modelItemSelected].destroy();
 				Model::models.erase(Model::models.begin() + modelItemSelected);
 				GUI::modelList.erase(GUI::modelList.begin() + modelItemSelected);
@@ -639,7 +639,7 @@ namespace pe
 		ImGui_ImplVulkan_InitInfo info;
 		info.Instance = VULKAN.instance;
 		info.PhysicalDevice = VULKAN.gpu;
-		info.Device = *VULKAN.device;
+		info.Device = VULKAN.device;
 		info.QueueFamily = VULKAN.graphicsFamilyId;
 		info.Queue = VULKAN.graphicsQueue;
 		info.PipelineCache = nullptr; // Will it help to use it?

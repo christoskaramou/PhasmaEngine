@@ -97,7 +97,7 @@ namespace pe
 		allocInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocInfo, &dset);
 		DSet = dset;
 		
 		// DESCRIPTOR SET FOR SSAO BLUR
@@ -110,7 +110,7 @@ namespace pe
 		allocInfoBlur.pSetLayouts = &dsetLayoutBlur;
 
 		VkDescriptorSet dsetBlur;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocInfoBlur, &dsetBlur);
+		vkAllocateDescriptorSets(VULKAN.device, &allocInfoBlur, &dsetBlur);
 		DSBlur = dsetBlur;
 		
 		updateDescriptorSets(renderTargets);
@@ -167,7 +167,7 @@ namespace pe
 			wSetImage(DSBlur, 0, renderTargets["ssao"])
 		};
 
-		vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
 	}
 	
 	void SSAO::draw(CommandBuffer* cmd, uint32_t imageIndex, Image& image)
@@ -209,12 +209,12 @@ namespace pe
 		pipelineBlur.destroy();
 		if (Pipeline::getDescriptorSetLayoutSSAO())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutSSAO(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutSSAO(), nullptr);
 			Pipeline::getDescriptorSetLayoutSSAO() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutSSAOBlur())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutSSAOBlur(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutSSAOBlur(), nullptr);
 			Pipeline::getDescriptorSetLayoutSSAOBlur() = {};
 		}
 	}

@@ -123,7 +123,7 @@ namespace pe
 		VkPhysicalDevice gpu;
 		VkPhysicalDeviceProperties gpuProperties;
 		VkPhysicalDeviceFeatures gpuFeatures;
-		SPtr<vk::Device> device;
+		VkDevice device;
 		VkQueue graphicsQueue, computeQueue, transferQueue;
 		CommandPool commandPool;
 		CommandPool commandPool2;
@@ -178,6 +178,8 @@ namespace pe
 		bool m_HasDebugUtils = false;
 	public:
 		void waitAndLockSubmits();
+		
+		void waitDeviceIdle();
 
 		void waitGraphicsQueue();
 		

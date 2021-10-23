@@ -209,7 +209,7 @@ namespace pe
 
 	void RendererSystem::Destroy()
 	{
-		VULKAN.device->waitIdle();
+		VULKAN.waitDeviceIdle();
 
 		for (auto& rt : renderTargets)
 			rt.second.Destroy();
@@ -218,17 +218,17 @@ namespace pe
 		{
 			if (Pipeline::getDescriptorSetLayoutModel())
 			{
-				vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
+				vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
 				Pipeline::getDescriptorSetLayoutModel() = {};
 			}
 			if (Pipeline::getDescriptorSetLayoutMesh())
 			{
-				vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutMesh(), nullptr);
+				vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutMesh(), nullptr);
 				Pipeline::getDescriptorSetLayoutMesh() = {};
 			}
 			if (Pipeline::getDescriptorSetLayoutPrimitive())
 			{
-				vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutPrimitive(), nullptr);
+				vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutPrimitive(), nullptr);
 				Pipeline::getDescriptorSetLayoutPrimitive() = {};
 			}
 		}

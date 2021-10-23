@@ -113,7 +113,7 @@ namespace pe
 		allocateInfo.pSetLayouts = &layout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
 		descriptorSet = dset;
 		
 		std::vector<VkWriteDescriptorSet> textureWriteSets(2);
@@ -145,7 +145,7 @@ namespace pe
 		textureWriteSets[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		textureWriteSets[1].pImageInfo = &dii;
 
-		vkUpdateDescriptorSets(*VULKAN.device, static_cast<uint32_t>(textureWriteSets.size()), textureWriteSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(VULKAN.device, static_cast<uint32_t>(textureWriteSets.size()), textureWriteSets.data(), 0, nullptr);
 	}
 	
 	void Object::destroy()

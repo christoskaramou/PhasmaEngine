@@ -76,7 +76,7 @@ namespace pe
 		allocateInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
 		DSet = dset;
 
 		updateDescriptorSets(renderTargets);
@@ -128,7 +128,7 @@ namespace pe
 			wSetBuffer(DSet, 3, *UBmotionBlur)
 		};
 
-		vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 	}
 	
 	void MotionBlur::draw(CommandBuffer* cmd, uint32_t imageIndex)
@@ -215,7 +215,7 @@ namespace pe
 
 		if (Pipeline::getDescriptorSetLayoutMotionBlur())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutMotionBlur(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutMotionBlur(), nullptr);
 			Pipeline::getDescriptorSetLayoutMotionBlur() = {};
 		}
 		frameImage.Destroy();

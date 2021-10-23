@@ -54,7 +54,7 @@ namespace pe
 		allocateInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
 		descriptorSetDeferred = dset;
 
 		std::vector<VkWriteDescriptorSet> textureWriteSets(SHADOWMAP_CASCADES + 1);
@@ -76,7 +76,7 @@ namespace pe
 			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			textureWriteSet.pImageInfo = &dii;
 
-			vkUpdateDescriptorSets(*VULKAN.device, 1, &textureWriteSet, 0, nullptr);
+			vkUpdateDescriptorSets(VULKAN.device, 1, &textureWriteSet, 0, nullptr);
 		}
 
 		VkDescriptorBufferInfo dbi;
@@ -93,7 +93,7 @@ namespace pe
 		bufferWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bufferWriteSet.pBufferInfo = &dbi;
 
-		vkUpdateDescriptorSets(*VULKAN.device, 1, &bufferWriteSet, 0, nullptr);
+		vkUpdateDescriptorSets(VULKAN.device, 1, &bufferWriteSet, 0, nullptr);
 	}
 
 	void Shadows::createRenderPass()
@@ -180,13 +180,13 @@ namespace pe
 	{
 		if (VkRenderPass(renderPass.handle))
 		{
-			vkDestroyRenderPass(*VULKAN.device, renderPass.handle, nullptr);
+			vkDestroyRenderPass(VULKAN.device, renderPass.handle, nullptr);
 			renderPass.handle = {};
 		}
 
 		if (Pipeline::getDescriptorSetLayoutShadows())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutShadows(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutShadows(), nullptr);
 			Pipeline::getDescriptorSetLayoutShadows() = {};
 		}
 

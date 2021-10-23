@@ -233,7 +233,7 @@ namespace pe
 			queueFamilyProperties.resize(queueFamPropCount);
 			vkGetPhysicalDeviceQueueFamilyProperties(GPU, &queueFamPropCount, queueFamilyProperties.data());
 
-			VkQueueFlags flags;
+			VkQueueFlags flags{};
 			
 			for (auto& qfp : queueFamilyProperties)
 			{
@@ -382,9 +382,7 @@ namespace pe
 		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
 		deviceCreateInfo.pEnabledFeatures = &gpuFeatures;
 		
-		VkDevice dev;
-		vkCreateDevice(gpu, &deviceCreateInfo, nullptr, &dev);
-		device = make_sptr(vk::Device(dev));
+		vkCreateDevice(gpu, &deviceCreateInfo, nullptr, &device);
 	}
 	
 	void VulkanContext::CreateAllocator()
@@ -394,7 +392,7 @@ namespace pe
 
 		VmaAllocatorCreateInfo allocator_info = {};
 		allocator_info.physicalDevice = gpu;
-		allocator_info.device = VkDevice(*device);
+		allocator_info.device = device;
 		allocator_info.instance = instance;
 		allocator_info.vulkanApiVersion = apiVersion;
 		
@@ -403,17 +401,17 @@ namespace pe
 	
 	void VulkanContext::GetGraphicsQueue()
 	{
-		vkGetDeviceQueue(*device, graphicsFamilyId, 0, &graphicsQueue);
+		vkGetDeviceQueue(device, graphicsFamilyId, 0, &graphicsQueue);
 	}
 	
 	void VulkanContext::GetTransferQueue()
 	{
-		vkGetDeviceQueue(*device, transferFamilyId, 0, &transferQueue);
+		vkGetDeviceQueue(device, transferFamilyId, 0, &transferQueue);
 	}
 	
 	void VulkanContext::GetComputeQueue()
 	{
-		vkGetDeviceQueue(*device, computeFamilyId, 0, &computeQueue);
+		vkGetDeviceQueue(device, computeFamilyId, 0, &computeQueue);
 	}
 	
 	void VulkanContext::GetQueues()
@@ -452,7 +450,7 @@ namespace pe
 		createInfo.pPoolSizes = descPoolsize.data();
 		createInfo.maxSets = maxDescriptorSets;
 		
-		vkCreateDescriptorPool(*VULKAN.device, &createInfo, nullptr, &descriptorPool);
+		vkCreateDescriptorPool(device, &createInfo, nullptr, &descriptorPool);
 	}
 	
 	void VulkanContext::CreateCmdBuffers(uint32_t bufferCount)
@@ -548,7 +546,7 @@ namespace pe
 	
 	void VulkanContext::Destroy()
 	{
-		device->waitIdle();
+		waitDeviceIdle();
 		
 		for (auto& fence : fences)
 			fence.Destroy();
@@ -560,7 +558,7 @@ namespace pe
 		
 		if (descriptorPool)
 		{
-			vkDestroyDescriptorPool(*device, descriptorPool, nullptr);
+			vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 			descriptorPool = nullptr;
 		}
 
@@ -569,8 +567,11 @@ namespace pe
 		
 		swapchain.Destroy();
 		
-		if (*device)
-			device->destroy();
+		if (device)
+		{
+			vkDestroyDevice(device, nullptr);
+			device = nullptr;
+		}
 		
 		surface.Destroy();
 
@@ -622,9 +623,9 @@ namespace pe
 	void VulkanContext::waitFence(Fence* fence)
 	{
 		VkFence fenceVK = fence->handle;
-		if (vkWaitForFences(*device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
+		if (vkWaitForFences(device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
 			throw std::runtime_error("wait fences error!");
-		vkResetFences(*device, 1, &fenceVK);
+		vkResetFences(device, 1, &fenceVK);
 	}
 	
 	void VulkanContext::submitAndWaitFence(
@@ -645,9 +646,9 @@ namespace pe
 			&fence);
 		
 		VkFence fenceVK = fence.handle;
-		if (vkWaitForFences(*device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
+		if (vkWaitForFences(device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
 			throw std::runtime_error("wait fences error!");
-		vkDestroyFence(*device, fence.handle, nullptr);
+		vkDestroyFence(device, fence.handle, nullptr);
 	}
 
 	void VulkanContext::Present(
@@ -689,6 +690,11 @@ namespace pe
 	{
 		static auto VkCTX = new VulkanContext();
 		return VkCTX;
+	}
+
+	void VulkanContext::waitDeviceIdle()
+	{
+		vkDeviceWaitIdle(device);
 	}
 
 	void VulkanContext::waitGraphicsQueue()

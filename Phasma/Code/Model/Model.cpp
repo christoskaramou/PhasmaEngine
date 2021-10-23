@@ -933,10 +933,10 @@ namespace pe
 		allocateInfo0.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo0, &dset);
+		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo0, &dset);
 		descriptorSet = dset;
 		
-		vkUpdateDescriptorSets(*VULKAN.device, 1, &wSetBuffer(descriptorSet, 0, *uniformBuffer), 0, nullptr);
+		vkUpdateDescriptorSets(VULKAN.device, 1, &wSetBuffer(descriptorSet, 0, *uniformBuffer), 0, nullptr);
 		
 		// mesh dSets
 		for (auto& node : linearNodes)
@@ -954,10 +954,10 @@ namespace pe
 			allocateInfo.pSetLayouts = &dsetLayoutMesh;
 
 			VkDescriptorSet dsetMesh;
-			vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dsetMesh);
+			vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dsetMesh);
 			mesh->descriptorSet = dsetMesh;
 
-			vkUpdateDescriptorSets(*VULKAN.device, 1, &wSetBuffer(mesh->descriptorSet, 0, *mesh->uniformBuffer), 0, nullptr);
+			vkUpdateDescriptorSets(VULKAN.device, 1, &wSetBuffer(mesh->descriptorSet, 0, *mesh->uniformBuffer), 0, nullptr);
 			
 			// primitive dSets
 			for (auto& primitive : mesh->primitives)
@@ -971,7 +971,7 @@ namespace pe
 				allocateInfo2.pSetLayouts = &dsetLayoutPrimitive;
 
 				VkDescriptorSet dsetPrimitive;
-				vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo2, &dsetPrimitive);
+				vkAllocateDescriptorSets(VULKAN.device, &allocateInfo2, &dsetPrimitive);
 				primitive.descriptorSet = dsetPrimitive;
 				
 				std::vector<VkWriteDescriptorSet> textureWriteSets
@@ -984,7 +984,7 @@ namespace pe
 					wSetBuffer(primitive.descriptorSet, 5, *primitive.uniformBuffer)
 				};
 
-				vkUpdateDescriptorSets(*VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+				vkUpdateDescriptorSets(VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 			}
 		}
 	}
@@ -1001,7 +1001,7 @@ namespace pe
 		delete resourceReader;
 		if (Pipeline::getDescriptorSetLayoutModel())
 		{
-			vkDestroyDescriptorSetLayout(*VULKAN.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
+			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
 			Pipeline::getDescriptorSetLayoutModel() = {};
 		}
 		for (auto& node : linearNodes)

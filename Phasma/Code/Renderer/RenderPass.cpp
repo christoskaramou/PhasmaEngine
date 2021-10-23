@@ -124,7 +124,7 @@ namespace pe
 		renderPassInfo.pSubpasses = &subpassDescription;
 		
 		VkRenderPass renderPass;
-		vkCreateRenderPass(*VULKAN.device, &renderPassInfo, nullptr, &renderPass);
+		vkCreateRenderPass(VULKAN.device, &renderPassInfo, nullptr, &renderPass);
 		handle = renderPass;
 	}
 	
@@ -132,7 +132,7 @@ namespace pe
 	{
 		if (VkRenderPass(handle))
 		{
-			vkDestroyRenderPass(*VULKAN.device, handle, nullptr);
+			vkDestroyRenderPass(VULKAN.device, handle, nullptr);
 			handle = {};
 		}
 	}
