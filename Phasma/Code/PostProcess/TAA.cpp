@@ -45,7 +45,7 @@ namespace pe
 	
 	void TAA::Init()
 	{
-		previous.format = (VkFormat)VULKAN.surface.formatKHR->format;
+		previous.format = VULKAN.surface.formatKHR.format;
 		previous.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		previous.CreateImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -58,7 +58,7 @@ namespace pe
 		previous.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 		previous.CreateSampler();
 		
-		frameImage.format = (VkFormat)VULKAN.surface.formatKHR->format;
+		frameImage.format = VULKAN.surface.formatKHR.format;
 		frameImage.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		frameImage.CreateImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -100,7 +100,7 @@ namespace pe
 
 		VkDescriptorSetAllocateInfo allocateInfo{};
 		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
+		allocateInfo.descriptorPool = VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 
 		VkDescriptorSet dset;

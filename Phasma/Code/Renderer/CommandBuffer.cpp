@@ -46,12 +46,12 @@ namespace pe
 		m_handle = commandBuffer;
 	}
 
-	void CommandBuffer::Destroy()
+	void CommandBuffer::Destroy(CommandPool& commandPool)
 	{
 		if (m_handle)
 		{
 			VkCommandBuffer cmd = m_handle;
-			vkFreeCommandBuffers(*VULKAN.device, *VULKAN.commandPool2, 1, &cmd);
+			vkFreeCommandBuffers(*VULKAN.device, commandPool.Handle(), 1, &cmd);
 			m_handle = {};
 		}
 	}
@@ -161,8 +161,8 @@ namespace pe
 		rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		rpi.renderPass = pass.handle;
 		rpi.framebuffer = frameBuffer.handle;
-		rpi.renderArea.offset = vk::Offset2D{ 0, 0 };
-		rpi.renderArea.extent = vk::Extent2D{ frameBuffer.width, frameBuffer.height };
+		rpi.renderArea.offset = VkOffset2D{ 0, 0 };
+		rpi.renderArea.extent = VkExtent2D{ frameBuffer.width, frameBuffer.height };
 		rpi.clearValueCount = (uint32_t)clearValues.size();
 		rpi.pClearValues = clearValues.data();
 

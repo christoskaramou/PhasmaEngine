@@ -80,7 +80,7 @@ namespace pe
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.pNext = nullptr;
-		allocInfo.descriptorPool = *VULKAN.descriptorPool;
+		allocInfo.descriptorPool = VULKAN.descriptorPool;
 		allocInfo.descriptorSetCount = 1;
 		allocInfo.pSetLayouts = &dsetLayout;
 
@@ -104,7 +104,7 @@ namespace pe
 				throw std::runtime_error("No pixel data loaded");
 			const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 			
-			VULKAN.graphicsQueue->waitIdle();
+			VULKAN.waitGraphicsQueue();
 			VULKAN.waitAndLockSubmits();
 			
 			SPtr<Buffer> staging = Buffer::Create(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);

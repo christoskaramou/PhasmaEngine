@@ -928,7 +928,7 @@ namespace pe
 		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutModel();
 		VkDescriptorSetAllocateInfo allocateInfo0{};
 		allocateInfo0.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo0.descriptorPool = *VULKAN.descriptorPool;
+		allocateInfo0.descriptorPool = VULKAN.descriptorPool;
 		allocateInfo0.descriptorSetCount = 1;
 		allocateInfo0.pSetLayouts = &dsetLayout;
 
@@ -949,7 +949,7 @@ namespace pe
 			VkDescriptorSetLayout dsetLayoutMesh = Pipeline::getDescriptorSetLayoutMesh();
 			VkDescriptorSetAllocateInfo allocateInfo{};
 			allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			allocateInfo.descriptorPool = *VULKAN.descriptorPool;
+			allocateInfo.descriptorPool = VULKAN.descriptorPool;
 			allocateInfo.descriptorSetCount = 1;
 			allocateInfo.pSetLayouts = &dsetLayoutMesh;
 
@@ -966,7 +966,7 @@ namespace pe
 				VkDescriptorSetLayout dsetLayoutPrimitive = Pipeline::getDescriptorSetLayoutPrimitive();
 				VkDescriptorSetAllocateInfo allocateInfo2{};
 				allocateInfo2.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-				allocateInfo2.descriptorPool = *VULKAN.descriptorPool;
+				allocateInfo2.descriptorPool = VULKAN.descriptorPool;
 				allocateInfo2.descriptorSetCount = 1;
 				allocateInfo2.pSetLayouts = &dsetLayoutPrimitive;
 

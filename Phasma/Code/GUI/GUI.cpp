@@ -637,26 +637,26 @@ namespace pe
 		ImGui_ImplSDL2_InitForVulkan(VULKAN.window);
 
 		ImGui_ImplVulkan_InitInfo info;
-		info.Instance = *VULKAN.instance;
-		info.PhysicalDevice = *VULKAN.gpu;
+		info.Instance = VULKAN.instance;
+		info.PhysicalDevice = VULKAN.gpu;
 		info.Device = *VULKAN.device;
 		info.QueueFamily = VULKAN.graphicsFamilyId;
-		info.Queue = *VULKAN.graphicsQueue;
+		info.Queue = VULKAN.graphicsQueue;
 		info.PipelineCache = nullptr; // Will it help to use it?
-		info.DescriptorPool = *VULKAN.descriptorPool;
+		info.DescriptorPool = VULKAN.descriptorPool;
 		info.Subpass = 0;
-		info.MinImageCount = VULKAN.surface.capabilities->minImageCount;
+		info.MinImageCount = VULKAN.surface.capabilities.minImageCount;
 		info.ImageCount = (uint32_t)VULKAN.swapchain.images.size();
 		info.MSAASamples = VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT;
 		info.Allocator = nullptr;
 		info.CheckVkResultFn = nullptr;
 		ImGui_ImplVulkan_Init(&info, renderPass.handle);
 
-		CommandBuffer cmd = VkCommandBuffer((*VULKAN.dynamicCmdBuffers)[0]);
+		CommandBuffer cmd = VULKAN.dynamicCmdBuffers[0];
 		cmd.Begin();
 		ImGui_ImplVulkan_CreateFontsTexture(cmd.Handle());
 		cmd.End();
-		VULKAN.submitAndWaitFence(vk::CommandBuffer(cmd.Handle()), nullptr, nullptr, nullptr);
+		VULKAN.submitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
 	}
 	
 	void GUI::InitGUI(bool show)
@@ -697,7 +697,7 @@ namespace pe
 	void GUI::CreateRenderPass()
 	{
 		Attachment colorAttachment;
-		colorAttachment.format = (Format)VULKAN.surface.formatKHR->format;
+		colorAttachment.format = VULKAN.surface.formatKHR.format;
 		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;

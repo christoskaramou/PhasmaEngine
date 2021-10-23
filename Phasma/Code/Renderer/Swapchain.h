@@ -31,6 +31,8 @@ namespace pe
 
 	class Context;
 	class Surface;
+	class Semaphore;
+	class Fence;
 	
 	class Swapchain
 	{
@@ -41,14 +43,11 @@ namespace pe
 		
 		void Create(Surface* surface);
 		
-		uint32_t Aquire(vk::Semaphore semaphore, vk::Fence fence) const;
-		
-		void Present(uint32_t imageIndex, vk::ArrayProxy<const vk::Semaphore> semaphores) const;
+		uint32_t Aquire(SemaphoreHandle semaphore, FenceHandle fence);
 		
 		void Destroy();
 		
-		SPtr<vk::SwapchainKHR> handle;
+		SwapchainHandle handle;
 		std::vector<Image> images {};
-		uint32_t previousImageIndex = 0;
 	};
 }

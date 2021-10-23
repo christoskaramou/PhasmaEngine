@@ -30,23 +30,26 @@ SOFTWARE.
 
 namespace pe
 {
-	vk::DescriptorSetLayout& GetDescriptorSetLayout()
+	VkDescriptorSetLayout& GetDescriptorSetLayout()
 	{
-		static vk::DescriptorSetLayout descriptorSetLayout;
+		static VkDescriptorSetLayout descriptorSetLayout;
 
 		if (!descriptorSetLayout)
 		{
-			vk::DescriptorSetLayoutBinding descriptorSetLayoutBinding;
+			VkDescriptorSetLayoutBinding descriptorSetLayoutBinding;
 			descriptorSetLayoutBinding.binding = 0;
 			descriptorSetLayoutBinding.descriptorCount = 1;
-			descriptorSetLayoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
-			descriptorSetLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+			descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-			vk::DescriptorSetLayoutCreateInfo createInfo;
+			VkDescriptorSetLayoutCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 			createInfo.bindingCount = 1;
 			createInfo.pBindings = &descriptorSetLayoutBinding;
 
-			descriptorSetLayout = VULKAN.device->createDescriptorSetLayout(createInfo);
+			VkDescriptorSetLayout dsetLayout;
+			vkCreateDescriptorSetLayout(*VULKAN.device, &createInfo, nullptr, &dsetLayout);
+			descriptorSetLayout = dsetLayout;
 		}
 		return descriptorSetLayout;
 	}
@@ -63,32 +66,38 @@ namespace pe
 	{
 		uniform = Buffer::Create(
 			sizeof(LightsUBO),
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		uniform->Map();
 		uniform->Zero();
 		uniform->Flush();
 		uniform->Unmap();
 
-		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
+		VkDescriptorSetAllocateInfo allocateInfo{};
+		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocateInfo.descriptorPool = VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &GetDescriptorSetLayout();
-		descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
 
-		vk::DescriptorBufferInfo dbi;
+		VkDescriptorSet dset;
+		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		descriptorSet = dset;
+
+		VkDescriptorBufferInfo dbi;
 		dbi.buffer = uniform->Handle();
 		dbi.offset = 0;
 		dbi.range = uniform->Size();
 
-		vk::WriteDescriptorSet writeSet;
-		writeSet.dstSet = *descriptorSet;
+		VkWriteDescriptorSet writeSet{};
+		writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writeSet.dstSet = descriptorSet;
 		writeSet.dstBinding = 0;
 		writeSet.dstArrayElement = 0;
 		writeSet.descriptorCount = 1;
-		writeSet.descriptorType = vk::DescriptorType::eUniformBuffer;
+		writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		writeSet.pBufferInfo = &dbi;
-		VULKAN.device->updateDescriptorSets(writeSet, nullptr);
+
+		vkUpdateDescriptorSets(*VULKAN.device, 1, &writeSet, 0, nullptr);
 
 		for (int i = 0; i < MAX_POINT_LIGHTS; i++)
 		{

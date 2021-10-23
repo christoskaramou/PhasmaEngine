@@ -94,14 +94,14 @@ namespace pe
 		BufferCopy bufferCopy{};
 		bufferCopy.size = srcSize > 0 ? srcSize : size;
 
-		CommandPool pool(VkCommandPool(*VULKAN.commandPool2));
+		CommandPool pool(VULKAN.commandPool2);
 		CommandBuffer copyCmd;
 		copyCmd.Create(pool);
 		copyCmd.Begin();
 		copyCmd.CopyBuffer(*srcBuffer, *this, 1, &bufferCopy);
 		copyCmd.End();
-		VULKAN.submitAndWaitFence(vk::CommandBuffer(copyCmd.Handle()), nullptr, nullptr, nullptr);
-		copyCmd.Destroy();
+		VULKAN.submitAndWaitFence(1, &copyCmd, nullptr, 0, nullptr, 0, nullptr);
+		copyCmd.Destroy(pool);
 	}
 	
 	void BufferVK::Flush(size_t offset, size_t flushSize) const

@@ -22,124 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include <memory>
-#include <type_traits>
-#include <variant>
-
-struct VkImage_T;
-struct VkImageView_T;
-struct VkSampler_T;
-struct VkCommandBuffer_T;
-struct VkDescriptorSetLayout_T;
-struct VkDescriptorSet_T;
-struct VkPipelineCache_T;
-struct VkPipelineLayout_T;
-struct VkPipeline_T;
-struct VkRenderPass_T;
-struct VkFramebuffer_T;
-struct VkCommandPool_T;
-struct VkBuffer_T;
-struct VkFence_T;
-struct VkSemaphore_T;
-struct VkQueryPool_T;
-
-using SampleCountFlagBits = uint32_t;
-using Format = uint32_t;
-using ImageLayout = uint32_t;
-using ImageTiling = uint32_t;
-using Filter = uint32_t;
-using ImageViewType = uint32_t;
-using SamplerAddressMode = uint32_t;
-using BorderColor = uint32_t;
-using CompareOp = uint32_t;
-using SamplerMipmapMode = uint32_t;
-using ImageCreateFlags = uint32_t;
-using PipelineStageFlags = uint32_t;
-using AccessFlags = uint32_t;
-using MemoryPropertyFlags = uint32_t;
-using BufferUsageFlags = uint32_t;
-using ImageAspectFlags = uint32_t;
-using ImageUsageFlags = uint32_t;
-using ImageType = uint32_t;
-using VertexInputRate = uint32_t;
-using DynamicState = uint32_t;
-using ShaderStageFlags = uint32_t;
-using DescriptorType = uint32_t;
-using AttachmentDescriptionFlags = uint32_t;
-using AttachmentLoadOp = uint32_t;
-using AttachmentStoreOp = uint32_t;
-using IndexType = uint32_t;
-using BlendFactor = uint32_t;
-using BlendOp = uint32_t;
-using ColorComponentFlags = uint32_t;
-
-struct SDL_Window;
-enum VkDebugUtilsMessageSeverityFlagBitsEXT;
-struct VkDebugUtilsMessengerCallbackDataEXT;
-
-namespace vk
-{
-	class RenderPass;
-	enum class Format;
-	class ImageView;
-	class Framebuffer;
-	class CommandBuffer;
-	class DescriptorSetLayout;
-	class DescriptorSet;
-	class Device;
-	struct VertexInputBindingDescription;
-	struct VertexInputAttributeDescription;
-	struct PipelineColorBlendAttachmentState;
-	enum class DynamicState;
-	class Pipeline;
-	class PipelineLayout;
-	struct Extent2D;
-	class Instance;
-	class DebugUtilsMessengerEXT;
-	class PhysicalDevice;
-	struct PhysicalDeviceProperties;
-	struct PhysicalDeviceFeatures;
-	class Queue;
-	class CommandPool;
-	class DescriptorPool;
-	class DispatchLoaderDynamic;
-	struct QueueFamilyProperties;
-	class Fence;
-	class Semaphore;
-	class Image;
-	class ImageView;
-	class Sampler;
-	enum class ImageLayout;
-	enum class ImageTiling;
-	enum class Filter;
-	enum class ImageViewType;
-	enum class SamplerAddressMode;
-	enum class BorderColor;
-	enum class CompareOp;
-	enum class SamplerMipmapMode;
-	class Buffer;
-	class SurfaceKHR;
-	struct SurfaceCapabilitiesKHR;
-	struct SurfaceFormatKHR;
-	enum class PresentModeKHR;
-	class SwapchainKHR;
-	class QueryPool;
-	class PipelineCache;
-
-	template<class T1> class Flags;
-	enum class PipelineStageFlagBits : uint32_t; using PipelineStageFlags = Flags<PipelineStageFlagBits>;
-	enum class ImageCreateFlagBits : uint32_t; using ImageCreateFlags = Flags<ImageCreateFlagBits>;
-	enum class AccessFlagBits : uint32_t; using AccessFlags = Flags<AccessFlagBits>;
-	enum class ImageAspectFlagBits : uint32_t; using ImageAspectFlags = Flags<ImageAspectFlagBits>;
-	enum class ImageUsageFlagBits : uint32_t; using ImageUsageFlags = Flags<ImageUsageFlagBits>;
-	enum class MemoryPropertyFlagBits : uint32_t; using MemoryPropertyFlags = Flags<MemoryPropertyFlagBits>;
-	enum class SampleCountFlagBits : uint32_t; using SampleCountFlags = Flags<SampleCountFlagBits>;
-
-	using Bool32 = uint32_t;
-
-	template <typename T> class ArrayProxy;
-}
-
 namespace pe
 {
 	template<class VK_TYPE, class DX_TYPE>
@@ -264,21 +146,52 @@ namespace pe
 
 	struct Placeholder {};
 
-	class BufferVK;
-	using CommandBufferHandle = ApiHandle<VkCommandBuffer_T*, Placeholder*>;
-	using DescriptorSetLayoutHandle = ApiHandle<VkDescriptorSetLayout_T*, Placeholder*>;
-	using DescriptorSetHandle = ApiHandle<VkDescriptorSet_T*, Placeholder*>;
-	using FrameBufferHandle = ApiHandle<VkFramebuffer_T*, Placeholder*>;
-	using ImageHandle = ApiHandle<VkImage_T*, Placeholder*>;
-	using ImageViewHandle = ApiHandle<VkImageView_T*, Placeholder*>;
-	using SamplerHandle = ApiHandle<VkSampler_T*, Placeholder*>;
-	using RenderPassHandle = ApiHandle<VkRenderPass_T*, Placeholder*>;
-	using CommandPoolHandle = ApiHandle<VkCommandPool_T*, Placeholder*>;
-	using BufferHandle = ApiHandle<VkBuffer_T*, Placeholder*>;
-	using PipelineCacheHandle = ApiHandle<VkPipelineCache_T*, Placeholder*>;
-	using PipelineLayoutHandle = ApiHandle<VkPipelineLayout_T*, Placeholder*>;
-	using PipelineHandle = ApiHandle<VkPipeline_T*, Placeholder*>;
-	using FenceHandle = ApiHandle<VkFence_T*, Placeholder*>;
-	using SemaphoreHandle = ApiHandle<VkSemaphore_T*, Placeholder*>;
-	using QueryPoolHandle = ApiHandle<VkQueryPool_T*, Placeholder*>;
+	using SampleCountFlagBits = uint32_t;
+	using Format = uint32_t;
+	using ImageLayout = uint32_t;
+	using ImageTiling = uint32_t;
+	using Filter = uint32_t;
+	using ImageViewType = uint32_t;
+	using SamplerAddressMode = uint32_t;
+	using BorderColor = uint32_t;
+	using CompareOp = uint32_t;
+	using SamplerMipmapMode = uint32_t;
+	using ImageCreateFlags = uint32_t;
+	using PipelineStageFlags = uint32_t;
+	using AccessFlags = uint32_t;
+	using MemoryPropertyFlags = uint32_t;
+	using BufferUsageFlags = uint32_t;
+	using ImageAspectFlags = uint32_t;
+	using ImageUsageFlags = uint32_t;
+	using ImageType = uint32_t;
+	using VertexInputRate = uint32_t;
+	using DynamicState = uint32_t;
+	using ShaderStageFlags = uint32_t;
+	using DescriptorType = uint32_t;
+	using AttachmentDescriptionFlags = uint32_t;
+	using AttachmentLoadOp = uint32_t;
+	using AttachmentStoreOp = uint32_t;
+	using IndexType = uint32_t;
+	using BlendFactor = uint32_t;
+	using BlendOp = uint32_t;
+	using ColorComponentFlags = uint32_t;
+
+	using CommandBufferHandle = ApiHandle<VkCommandBuffer, Placeholder*>;
+	using DescriptorSetLayoutHandle = ApiHandle<VkDescriptorSetLayout, Placeholder*>;
+	using DescriptorSetHandle = ApiHandle<VkDescriptorSet, Placeholder*>;
+	using FrameBufferHandle = ApiHandle<VkFramebuffer, Placeholder*>;
+	using ImageHandle = ApiHandle<VkImage, Placeholder*>;
+	using ImageViewHandle = ApiHandle<VkImageView, Placeholder*>;
+	using SamplerHandle = ApiHandle<VkSampler, Placeholder*>;
+	using RenderPassHandle = ApiHandle<VkRenderPass, Placeholder*>;
+	using CommandPoolHandle = ApiHandle<VkCommandPool, Placeholder*>;
+	using BufferHandle = ApiHandle<VkBuffer, Placeholder*>;
+	using PipelineCacheHandle = ApiHandle<VkPipelineCache, Placeholder*>;
+	using PipelineLayoutHandle = ApiHandle<VkPipelineLayout, Placeholder*>;
+	using PipelineHandle = ApiHandle<VkPipeline, Placeholder*>;
+	using FenceHandle = ApiHandle<VkFence, Placeholder*>;
+	using SemaphoreHandle = ApiHandle<VkSemaphore, Placeholder*>;
+	using QueryPoolHandle = ApiHandle<VkQueryPool, Placeholder*>;
+	using SwapchainHandle = ApiHandle<VkSwapchainKHR, Placeholder*>;
+	using DeviceHandle = ApiHandle<VkDevice, Placeholder*>;
 }

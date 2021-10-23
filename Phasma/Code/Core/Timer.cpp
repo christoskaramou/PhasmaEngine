@@ -76,7 +76,9 @@ namespace pe
 
 	GPUTimer::GPUTimer()
 	{
-		const auto gpuProps = VULKAN.gpu->getProperties();
+		VkPhysicalDeviceProperties gpuProps;
+		vkGetPhysicalDeviceProperties(VULKAN.gpu, &gpuProps);
+
 		if (!gpuProps.limits.timestampComputeAndGraphics)
 			throw std::runtime_error("Timestamps not supported");
 		

@@ -36,7 +36,7 @@ namespace pe
 		virtual ~Object() = default;
 		
 		bool render = true, cull = false;
-		SPtr<vk::DescriptorSet> descriptorSet;
+		DescriptorSetHandle descriptorSet;
 		Image texture;
 		std::vector<float> vertices {};
 		SPtr<Buffer> vertexBuffer;
@@ -49,7 +49,7 @@ namespace pe
 		
 		virtual void loadTexture(const std::string& path);
 		
-		virtual void createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout);
+		virtual void createDescriptorSet(DescriptorSetLayoutHandle descriptorSetLayout);
 		
 		virtual void destroy();
 	};

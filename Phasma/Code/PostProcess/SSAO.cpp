@@ -92,7 +92,7 @@ namespace pe
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.pNext = nullptr;
-		allocInfo.descriptorPool = *VULKAN.descriptorPool;
+		allocInfo.descriptorPool = VULKAN.descriptorPool;
 		allocInfo.descriptorSetCount = 1;
 		allocInfo.pSetLayouts = &dsetLayout;
 
@@ -105,7 +105,7 @@ namespace pe
 		VkDescriptorSetAllocateInfo allocInfoBlur{};
 		allocInfoBlur.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfoBlur.pNext = nullptr;
-		allocInfoBlur.descriptorPool = *VULKAN.descriptorPool;
+		allocInfoBlur.descriptorPool = VULKAN.descriptorPool;
 		allocInfoBlur.descriptorSetCount = 1;
 		allocInfoBlur.pSetLayouts = &dsetLayoutBlur;
 

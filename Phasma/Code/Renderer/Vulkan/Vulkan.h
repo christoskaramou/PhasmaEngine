@@ -26,12 +26,16 @@ SOFTWARE.
 #include <mutex>
 #include "Renderer/Surface.h"
 #include "Renderer/Swapchain.h"
+#include "Renderer/CommandPool.h"
+#include "Renderer/CommandBuffer.h"
+#include "Renderer/Fence.h"
+#include "Renderer/Semaphore.h"
 
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
 #define VULKAN (*VulkanContext::Get())
-#define WIDTH VULKAN.surface.actualExtent->width
-#define HEIGHT VULKAN.surface.actualExtent->height
+#define WIDTH VULKAN.surface.actualExtent.width
+#define HEIGHT VULKAN.surface.actualExtent.height
 #define WIDTH_f static_cast<float>(WIDTH)
 #define HEIGHT_f static_cast<float>(HEIGHT)
 
@@ -114,22 +118,21 @@ namespace pe
 		
 		void Destroy();
 		
-		SPtr<vk::Instance> instance;
-		SPtr<vk::DebugUtilsMessengerEXT> debugMessenger;
-		SPtr<vk::PhysicalDevice> gpu;
-		SPtr<vk::PhysicalDeviceProperties> gpuProperties;
-		SPtr<vk::PhysicalDeviceFeatures> gpuFeatures;
+		VkInstance instance;
+		VkDebugUtilsMessengerEXT debugMessenger;
+		VkPhysicalDevice gpu;
+		VkPhysicalDeviceProperties gpuProperties;
+		VkPhysicalDeviceFeatures gpuFeatures;
 		SPtr<vk::Device> device;
-		SPtr<vk::Queue> graphicsQueue, computeQueue, transferQueue;
-		SPtr<vk::CommandPool> commandPool;
-		SPtr<vk::CommandPool> commandPool2;
-		SPtr<vk::DescriptorPool> descriptorPool;
-		SPtr<vk::DispatchLoaderDynamic> dispatchLoaderDynamic;
-		SPtr<std::vector<vk::QueueFamilyProperties>> queueFamilyProperties;
-		SPtr<std::vector<vk::CommandBuffer>> dynamicCmdBuffers;
-		SPtr<std::vector<vk::CommandBuffer>> shadowCmdBuffers;
-		SPtr<std::vector<vk::Fence>> fences;
-		SPtr<std::vector<vk::Semaphore>> semaphores;
+		VkQueue graphicsQueue, computeQueue, transferQueue;
+		CommandPool commandPool;
+		CommandPool commandPool2;
+		VkDescriptorPool descriptorPool;
+		std::vector<VkQueueFamilyProperties> queueFamilyProperties;
+		std::vector<CommandBuffer> dynamicCmdBuffers;
+		std::vector<CommandBuffer> shadowCmdBuffers;
+		std::vector<Fence> fences;
+		std::vector<Semaphore> semaphores;
 		VmaAllocator allocator = nullptr;
 		
 		SDL_Window* window;
@@ -140,24 +143,24 @@ namespace pe
 		
 		// Helpers
 		void submit(
-				const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
-				const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
-				const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
-				const vk::ArrayProxy<const vk::Semaphore> signalSemaphores,
-				const vk::Fence signalFence) const;
+			uint32_t commandBufferCount, CommandBuffer* commandBuffer,
+			PipelineStageFlags* waitStage,
+			uint32_t waitSemaphoreCount, Semaphore* waitSemaphore,
+			uint32_t signalSemaphoreCount, Semaphore* signalSemaphore,
+			Fence* signalFence);
 		
-		void waitFences(const vk::ArrayProxy<const vk::Fence> fences) const;
+		void waitFence(Fence* fence);
 		
 		void submitAndWaitFence(
-				const vk::ArrayProxy<const vk::CommandBuffer> commandBuffers,
-				const vk::ArrayProxy<const vk::PipelineStageFlags> waitStages,
-				const vk::ArrayProxy<const vk::Semaphore> waitSemaphores,
-				const vk::ArrayProxy<const vk::Semaphore> signalSemaphores);
+			uint32_t commandBuffersCount, CommandBuffer* commandBuffers,
+			PipelineStageFlags* waitStages,
+			uint32_t waitSemaphoresCount, Semaphore* waitSemaphores,
+			uint32_t signalSemaphoresCount, Semaphore* signalSemaphores);
 
 		void Present(
-			vk::ArrayProxy<const vk::SwapchainKHR> swapchains,
-			vk::ArrayProxy<const uint32_t> imageIndices,
-			vk::ArrayProxy<const vk::Semaphore> semaphores);
+			uint32_t swapchainCount, Swapchain* swapchains,
+			uint32_t* imageIndices,
+			uint32_t semaphorescount, Semaphore* semaphores);
 
 #if _DEBUG
 		static VKAPI_ATTR uint32_t VKAPI_CALL MessageCallback(
@@ -169,31 +172,14 @@ namespace pe
 		void CreateDebugMessenger();
 
 		void DestroyDebugMessenger();
-
-		template<typename T>
-		void SetDebugObjectName(const T& validHandle, const std::string& debugName)
-		{
-			if (!m_HasDebugUtils)
-				return;
-
-			std::string name = vk::to_string(validHandle.objectType) + "-" + debugName;
-
-			vk::DebugUtilsObjectNameInfoEXT duoni;
-			duoni.objectType = validHandle.objectType;
-			duoni.objectHandle = reinterpret_cast<uint64_t>(static_cast<void*>(validHandle));
-			duoni.pObjectName = name.c_str();
-			device->setDebugUtilsObjectNameEXT(duoni, *dispatchLoaderDynamic);
-		}
-#else
-		template<typename T>
-		void SetDebugObjectName(const T& validHandle, const std::string& debugName)
-		{}
 #endif
 	private:
 		static inline std::mutex m_submit_mutex{};
 		bool m_HasDebugUtils = false;
 	public:
 		void waitAndLockSubmits();
+
+		void waitGraphicsQueue();
 		
 		void unlockSubmits();
 		

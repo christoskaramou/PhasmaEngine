@@ -58,6 +58,6 @@ namespace pe
 	private:
 		LightsUBO lubo;
 		SPtr<Buffer> uniform;
-		SPtr<vk::DescriptorSet> descriptorSet;
+		DescriptorSetHandle descriptorSet;
 	};
 }

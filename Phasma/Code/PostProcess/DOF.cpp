@@ -43,7 +43,7 @@ namespace pe
 	
 	void DOF::Init()
 	{
-		frameImage.format = (VkFormat)VULKAN.surface.formatKHR->format;
+		frameImage.format = VULKAN.surface.formatKHR.format;
 		frameImage.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		frameImage.CreateImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -82,7 +82,7 @@ namespace pe
 		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutDOF();
 		VkDescriptorSetAllocateInfo allocateInfo{};
 		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
+		allocateInfo.descriptorPool = VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &dsetLayout;
 

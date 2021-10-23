@@ -25,9 +25,12 @@ SOFTWARE.
 
 namespace pe
 {
-	Fence::Fence()
+	Fence::Fence() : handle{}
 	{
-		handle = {};
+	}
+
+	Fence::Fence(FenceHandle handle) : handle(handle)
+	{
 	}
 
 	Fence::~Fence()

@@ -40,28 +40,33 @@ namespace pe
 	
 	void SkyBox::createDescriptorSet()
 	{
-		vk::DescriptorSetLayout setLayout = Pipeline::getDescriptorSetLayoutSkybox();
-		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
+		VkDescriptorSetLayout setLayout = Pipeline::getDescriptorSetLayoutSkybox();
+		VkDescriptorSetAllocateInfo allocateInfo{};
+		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocateInfo.descriptorPool = VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &setLayout;
 
-		descriptorSet = VkDescriptorSet(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
+		VkDescriptorSet dset;
+		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		descriptorSet = dset;
 		
-		std::vector<vk::WriteDescriptorSet> textureWriteSets(1);
+		VkWriteDescriptorSet textureWriteSet{};
 		// texture sampler
-		vk::DescriptorImageInfo dii;
+		VkDescriptorImageInfo dii;
 		dii.sampler = texture.sampler;
 		dii.imageView = texture.view;
-		dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+		dii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		
-		textureWriteSets[0].dstSet = descriptorSet;
-		textureWriteSets[0].dstBinding = 0;
-		textureWriteSets[0].dstArrayElement = 0;
-		textureWriteSets[0].descriptorCount = 1;
-		textureWriteSets[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-		textureWriteSets[0].pImageInfo = &dii;
-		VULKAN.device->updateDescriptorSets(textureWriteSets, nullptr);
+		textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		textureWriteSet.dstSet = descriptorSet;
+		textureWriteSet.dstBinding = 0;
+		textureWriteSet.dstArrayElement = 0;
+		textureWriteSet.descriptorCount = 1;
+		textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		textureWriteSet.pImageInfo = &dii;
+
+		vkUpdateDescriptorSets(*VULKAN.device, 1, &textureWriteSet, 0, nullptr);
 	}
 	
 	void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, bool show)
@@ -92,14 +97,14 @@ namespace pe
 			stbi_uc* pixels = stbi_load(paths[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 			assert(imageSideSize == texWidth && imageSideSize == texHeight);
 			
-			const vk::DeviceSize imageSize = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * 4;
+			VkDeviceSize imageSize = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * 4;
 			if (!pixels)
 				throw std::runtime_error("No pixel data loaded");
 			
 			SPtr<Buffer> staging = Buffer::Create(
 				imageSize,
-				(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
-				(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 			staging->Map();
 			staging->CopyData(pixels);
 			staging->Flush();

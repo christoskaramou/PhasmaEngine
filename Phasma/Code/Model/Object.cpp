@@ -29,21 +29,21 @@ namespace pe
 {
 	Object::Object()
 	{
-		descriptorSet = make_sptr(vk::DescriptorSet());
+		descriptorSet = {};
 	}
 	
 	void Object::createVertexBuffer()
 	{
 		vertexBuffer = Buffer::Create(
 			sizeof(float) * vertices.size(),
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferDst | (BufferUsageFlags)vk::BufferUsageFlagBits::eVertexBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eDeviceLocal);
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 		// Staging buffer
 		SPtr<Buffer> staging = Buffer::Create(
 				sizeof(float) * vertices.size(),
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		staging->Map();
 		staging->CopyData(vertices.data());
 		staging->Flush();
@@ -57,8 +57,8 @@ namespace pe
 	{
 		uniformBuffer = Buffer::Create(
 			size,
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eUniformBuffer,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		uniformBuffer->Map();
 		uniformBuffer->Zero();
 		uniformBuffer->Flush();
@@ -71,15 +71,15 @@ namespace pe
 		int texWidth, texHeight, texChannels;
 		//stbi_set_flip_vertically_on_load(true);
 		stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-		const vk::DeviceSize imageSize = texWidth * texHeight * 4;
+		VkDeviceSize imageSize = texWidth * texHeight * 4;
 		
 		if (!pixels)
 			throw std::runtime_error("No pixel data loaded");
 		
 		SPtr<Buffer> staging = Buffer::Create(
 			imageSize,
-			(BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc,
-			(MemoryPropertyFlags)vk::MemoryPropertyFlagBits::eHostVisible);
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		staging->Map();
 		staging->CopyData(pixels);
 		staging->Flush();
@@ -103,41 +103,49 @@ namespace pe
 		staging->Destroy();
 	}
 	
-	void Object::createDescriptorSet(const vk::DescriptorSetLayout& descriptorSetLayout)
+	void Object::createDescriptorSet(DescriptorSetLayoutHandle descriptorSetLayout)
 	{
-		vk::DescriptorSetAllocateInfo allocateInfo;
-		allocateInfo.descriptorPool = *VULKAN.descriptorPool;
+		VkDescriptorSetLayout layout = descriptorSetLayout;
+		VkDescriptorSetAllocateInfo allocateInfo{};
+		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocateInfo.descriptorPool = VULKAN.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &descriptorSetLayout;
-		descriptorSet = make_sptr(VULKAN.device->allocateDescriptorSets(allocateInfo).at(0));
+		allocateInfo.pSetLayouts = &layout;
+
+		VkDescriptorSet dset;
+		vkAllocateDescriptorSets(*VULKAN.device, &allocateInfo, &dset);
+		descriptorSet = dset;
 		
-		std::vector<vk::WriteDescriptorSet> textureWriteSets(2);
+		std::vector<VkWriteDescriptorSet> textureWriteSets(2);
 		// MVP
-		vk::DescriptorBufferInfo dbi;
+		VkDescriptorBufferInfo dbi{};
 		dbi.buffer = uniformBuffer->Handle();
 		dbi.offset = 0;
 		dbi.range = uniformBuffer->Size();
 		
-		textureWriteSets[0].dstSet = *descriptorSet;
+		textureWriteSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		textureWriteSets[0].dstSet = descriptorSet;
 		textureWriteSets[0].dstBinding = 0;
 		textureWriteSets[0].dstArrayElement = 0;
 		textureWriteSets[0].descriptorCount = 1;
-		textureWriteSets[0].descriptorType = vk::DescriptorType::eUniformBuffer;
+		textureWriteSets[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		textureWriteSets[0].pBufferInfo = &dbi;
 		
 		// texture sampler
-		vk::DescriptorImageInfo dii;
+		VkDescriptorImageInfo dii;
 		dii.sampler = texture.sampler;
 		dii.imageView = texture.view;
-		dii.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-		
-		textureWriteSets[1].dstSet = *descriptorSet;
+		dii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+		textureWriteSets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		textureWriteSets[1].dstSet = descriptorSet;
 		textureWriteSets[1].dstBinding = 1;
 		textureWriteSets[1].dstArrayElement = 0;
 		textureWriteSets[1].descriptorCount = 1;
-		textureWriteSets[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+		textureWriteSets[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		textureWriteSets[1].pImageInfo = &dii;
-		VULKAN.device->updateDescriptorSets(textureWriteSets, nullptr);
+
+		vkUpdateDescriptorSets(*VULKAN.device, static_cast<uint32_t>(textureWriteSets.size()), textureWriteSets.data(), 0, nullptr);
 	}
 	
 	void Object::destroy()

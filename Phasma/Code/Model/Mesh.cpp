@@ -157,7 +157,7 @@ namespace pe
 			
 			const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 			
-			VULKAN.graphicsQueue->waitIdle();
+			VULKAN.waitGraphicsQueue();
 			VULKAN.waitAndLockSubmits();
 			
 			SPtr<Buffer> staging = Buffer::Create(

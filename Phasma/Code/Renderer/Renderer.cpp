@@ -108,7 +108,7 @@ namespace pe
 		
 		FrameTimer& frameTimer = FrameTimer::Instance();
 
-		CommandBuffer cmd = VkCommandBuffer((*VULKAN.dynamicCmdBuffers)[imageIndex]);
+		CommandBuffer cmd = VULKAN.dynamicCmdBuffers[imageIndex];
 		cmd.Begin();
 
 		gpuTimer[0].Start(&cmd);
@@ -255,7 +255,7 @@ namespace pe
 		for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
 		{
 			uint32_t index = SHADOWMAP_CASCADES * imageIndex + i;
-			CommandBuffer cmd = VkCommandBuffer((*VULKAN.shadowCmdBuffers)[index]);
+			CommandBuffer cmd = VULKAN.shadowCmdBuffers[index];
 			cmd.Begin();
 
 			FrameTimer& frameTimer = FrameTimer::Instance();
@@ -424,7 +424,7 @@ namespace pe
 	
 	void Renderer::ResizeViewport(uint32_t width, uint32_t height)
 	{
-		VULKAN.graphicsQueue->waitIdle();
+		VULKAN.waitGraphicsQueue();
 
 		renderArea.Update(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
 
@@ -527,19 +527,19 @@ namespace pe
 		VULKAN.CreateSwapchain(&VULKAN.surface);
 		VULKAN.CreateDepth();
 		
-		AddRenderTarget("viewport", (VkFormat)VULKAN.surface.formatKHR->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("viewport", VULKAN.surface.formatKHR.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 		AddRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-		AddRenderTarget("albedo", (VkFormat)VULKAN.surface.formatKHR->format);
-		AddRenderTarget("srm", (VkFormat)VULKAN.surface.formatKHR->format); // Specular Roughness Metallic
+		AddRenderTarget("albedo", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("srm", VULKAN.surface.formatKHR.format); // Specular Roughness Metallic
 		AddRenderTarget("ssao", VK_FORMAT_R16_UNORM);
 		AddRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-		AddRenderTarget("ssr", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("ssr", VULKAN.surface.formatKHR.format);
 		AddRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-		AddRenderTarget("brightFilter", (VkFormat)VULKAN.surface.formatKHR->format);
-		AddRenderTarget("gaussianBlurHorizontal", (VkFormat)VULKAN.surface.formatKHR->format);
-		AddRenderTarget("gaussianBlurVertical", (VkFormat)VULKAN.surface.formatKHR->format);
-		AddRenderTarget("emissive", (VkFormat)VULKAN.surface.formatKHR->format);
-		AddRenderTarget("taa", (VkFormat)VULKAN.surface.formatKHR->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("brightFilter", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("gaussianBlurHorizontal", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("gaussianBlurVertical", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("emissive", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("taa", VULKAN.surface.formatKHR.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 		
 		deferred.createRenderPasses(renderTargets);
 		deferred.createFrameBuffers(renderTargets);
@@ -661,7 +661,7 @@ namespace pe
 	
 	void Renderer::RecreatePipelines()
 	{
-		VULKAN.graphicsQueue->waitIdle();
+		VULKAN.waitGraphicsQueue();
 
 		SSAO& ssao = *WORLD_ENTITY->GetComponent<SSAO>();
 		SSR& ssr = *WORLD_ENTITY->GetComponent<SSR>();

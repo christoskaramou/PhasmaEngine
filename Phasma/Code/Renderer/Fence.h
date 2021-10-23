@@ -30,6 +30,7 @@ namespace pe
 	{
 	public:
 		Fence();
+		Fence(FenceHandle handle);
 		~Fence();
 
 		void Create(bool signaled = true);

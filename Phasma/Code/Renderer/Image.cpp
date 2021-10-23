@@ -104,7 +104,7 @@ namespace pe
 		auto _usage = usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT; // All images can be copied
 
 		VkFormatProperties fProps;
-		vkGetPhysicalDeviceFormatProperties(*VULKAN.gpu.get(), (VkFormat)format, &fProps);
+		vkGetPhysicalDeviceFormatProperties(VULKAN.gpu, (VkFormat)format, &fProps);
 		
 		if (tiling == VK_IMAGE_TILING_OPTIMAL)
 		{
@@ -122,7 +122,7 @@ namespace pe
 		}
 
 		VkImageFormatProperties ifProps;
-		vkGetPhysicalDeviceImageFormatProperties(*VULKAN.gpu.get(), (VkFormat)format, VK_IMAGE_TYPE_2D, (VkImageTiling)tiling, _usage, VkImageCreateFlags(), &ifProps);
+		vkGetPhysicalDeviceImageFormatProperties(VULKAN.gpu, (VkFormat)format, VK_IMAGE_TYPE_2D, (VkImageTiling)tiling, _usage, VkImageCreateFlags(), &ifProps);
 
 		if (ifProps.maxArrayLayers < arrayLayers ||
 			ifProps.maxExtent.width < width ||
@@ -181,7 +181,7 @@ namespace pe
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = *VULKAN.commandPool2.get();
+		allocInfo.commandPool = VULKAN.commandPool2.Handle();
 
 		VkCommandBuffer commandBuffer;
 		vkAllocateCommandBuffers(*VULKAN.device.get(), &allocInfo, &commandBuffer);
@@ -286,9 +286,10 @@ namespace pe
 		
 		vkEndCommandBuffer(commandBuffer);
 		
-		VULKAN.submitAndWaitFence(vk::CommandBuffer(commandBuffer), nullptr, nullptr, nullptr);
+		CommandBuffer cmdBuffer(commandBuffer);
+		VULKAN.submitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 		
-		VULKAN.device->freeCommandBuffers(*VULKAN.commandPool2, vk::CommandBuffer(commandBuffer));
+		vkFreeCommandBuffers(*VULKAN.device, VULKAN.commandPool2.Handle(), 1, &commandBuffer);
 	}
 	
 	void Image::ChangeLayout(CommandBuffer cmd, LayoutState state)
@@ -357,7 +358,7 @@ namespace pe
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = *VULKAN.commandPool2;
+		allocInfo.commandPool = VULKAN.commandPool2.Handle();
 		
 		VkCommandBuffer commandBuffer;
 		vkAllocateCommandBuffers(*VULKAN.device, &allocInfo, &commandBuffer);
@@ -375,16 +376,17 @@ namespace pe
 		region.imageSubresource.mipLevel = 0;
 		region.imageSubresource.baseArrayLayer = baseLayer;
 		region.imageSubresource.layerCount = 1;
-		region.imageOffset = vk::Offset3D(0, 0, 0);
-		region.imageExtent = vk::Extent3D(width, height, 1);
+		region.imageOffset = VkOffset3D{ 0, 0, 0 };
+		region.imageExtent = VkExtent3D{ width, height, 1 };
 		
 		vkCmdCopyBufferToImage(commandBuffer, buffer->Handle(), image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 		
 		vkEndCommandBuffer(commandBuffer);
+
+		CommandBuffer cmdBuffer(commandBuffer);
+		VULKAN.submitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 		
-		VULKAN.submitAndWaitFence(vk::CommandBuffer(commandBuffer), nullptr, nullptr, nullptr);
-		
-		vkFreeCommandBuffers(*VULKAN.device, *VULKAN.commandPool2, 1, &commandBuffer);
+		vkFreeCommandBuffers(*VULKAN.device, VULKAN.commandPool2.Handle(), 1, &commandBuffer);
 	}
 	
 	void Image::CopyColorAttachment(CommandBuffer cmd, Image& renderedImage)
@@ -453,7 +455,7 @@ namespace pe
 	void Image::GenerateMipMaps()
 	{
 		VkFormatProperties fProps;
-		vkGetPhysicalDeviceFormatProperties(*VULKAN.gpu, (VkFormat)format, &fProps);
+		vkGetPhysicalDeviceFormatProperties(VULKAN.gpu, (VkFormat)format, &fProps);
 		
 		if (tiling == VK_IMAGE_TILING_OPTIMAL)
 		{
@@ -474,7 +476,7 @@ namespace pe
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = mipLevels;
-		allocInfo.commandPool = *VULKAN.commandPool2;
+		allocInfo.commandPool = VULKAN.commandPool2.Handle();
 		
 		std::vector<VkCommandBuffer> commandBuffers(mipLevels);
 		vkAllocateCommandBuffers(*VULKAN.device, &allocInfo, commandBuffers.data());
@@ -497,11 +499,11 @@ namespace pe
 		barrier.subresourceRange.levelCount = 1;
 		
 		VkImageBlit blit;
-		blit.srcOffsets[0] = vk::Offset3D {0, 0, 0};
+		blit.srcOffsets[0] = VkOffset3D{ 0, 0, 0 };
 		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		blit.srcSubresource.baseArrayLayer = 0;
 		blit.srcSubresource.layerCount = 1;
-		blit.dstOffsets[0] = vk::Offset3D {0, 0, 0};
+		blit.dstOffsets[0] = VkOffset3D{ 0, 0, 0 };
 		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		blit.dstSubresource.baseArrayLayer = 0;
 		blit.dstSubresource.layerCount = 1;
@@ -525,8 +527,8 @@ namespace pe
 				0, nullptr,
 				1, &barrier);
 			
-			blit.srcOffsets[1] = vk::Offset3D {mipWidth, mipHeight, 1};
-			blit.dstOffsets[1] = vk::Offset3D {mipWidth / 2, mipHeight / 2, 1};
+			blit.srcOffsets[1] = VkOffset3D{ mipWidth, mipHeight, 1 };
+			blit.dstOffsets[1] = VkOffset3D{ mipWidth / 2, mipHeight / 2, 1 };
 			blit.srcSubresource.mipLevel = i - 1;
 			blit.dstSubresource.mipLevel = i;
 			
@@ -555,8 +557,9 @@ namespace pe
 			if (mipHeight > 1) mipHeight /= 2;
 			
 			vkEndCommandBuffer(commandBuffers[i]);
-			
-			VULKAN.submitAndWaitFence(vk::CommandBuffer(commandBuffers[i]), nullptr, nullptr, nullptr);
+
+			CommandBuffer cmdBuffer(commandBuffers[i]);
+			VULKAN.submitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 		}
 		
 		vkBeginCommandBuffer(commandBuffers[0], &beginInfo);
@@ -577,10 +580,11 @@ namespace pe
 			1, &barrier);
 		
 		vkEndCommandBuffer(commandBuffers[0]);
+
+		CommandBuffer cmdBuffer(commandBuffers[0]);
+		VULKAN.submitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 		
-		VULKAN.submitAndWaitFence(vk::CommandBuffer(commandBuffers[0]), nullptr, nullptr, nullptr);
-		
-		vkFreeCommandBuffers(*VULKAN.device, *VULKAN.commandPool2, mipLevels, commandBuffers.data());
+		vkFreeCommandBuffers(*VULKAN.device, VULKAN.commandPool2.Handle(), mipLevels, commandBuffers.data());
 	}
 	
 	void Image::CreateSampler()

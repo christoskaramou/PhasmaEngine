@@ -29,13 +29,24 @@ SOFTWARE.
 
 namespace pe
 {
+	std::string PresentModeToString(VkPresentModeKHR presentModeKHR)
+	{
+		switch (presentModeKHR)
+		{
+		case VK_PRESENT_MODE_IMMEDIATE_KHR: return "Immediate";
+		case VK_PRESENT_MODE_MAILBOX_KHR: return "Mailbox";
+		case VK_PRESENT_MODE_FIFO_KHR: return "Fifo";
+		default: return "";
+		}
+	}
+
 	void RendererSystem::Init()
 	{
 		// SET WINDOW TITLE
 		std::string title = "PhasmaEngine";
-		title += " - Device: " + std::string(VULKAN.gpuProperties->deviceName.data());
+		title += " - Device: " + std::string(VULKAN.gpuProperties.deviceName);
 		title += " - API: Vulkan";
-		title += " - Present Mode: " + vk::to_string(*VULKAN.surface.presentModeKHR);
+		title += " - Present Mode: " + PresentModeToString(VULKAN.surface.presentModeKHR);
 #ifdef _DEBUG
 		title += " - Configuration: Debug";
 #else
@@ -44,19 +55,19 @@ namespace pe
 		CONTEXT->GetSystem<EventSystem>()->DispatchEvent(EventType::SetWindowTitle, title);
 
 		// INIT RENDERING
-		AddRenderTarget("viewport", (VkFormat)VULKAN.surface.formatKHR->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("viewport", VULKAN.surface.formatKHR.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 		AddRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-		AddRenderTarget("albedo", (VkFormat)VULKAN.surface.formatKHR->format);
-		AddRenderTarget("srm", (VkFormat)VULKAN.surface.formatKHR->format); // Specular Roughness Metallic
+		AddRenderTarget("albedo", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("srm", VULKAN.surface.formatKHR.format); // Specular Roughness Metallic
 		AddRenderTarget("ssao", VK_FORMAT_R16_UNORM);
 		AddRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-		AddRenderTarget("ssr", (VkFormat)VULKAN.surface.formatKHR->format);
+		AddRenderTarget("ssr", VULKAN.surface.formatKHR.format);
 		AddRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-		AddRenderTarget("brightFilter", (VkFormat)VULKAN.surface.formatKHR->format);
-		AddRenderTarget("gaussianBlurHorizontal", (VkFormat)VULKAN.surface.formatKHR->format);
-		AddRenderTarget("gaussianBlurVertical", (VkFormat)VULKAN.surface.formatKHR->format);
-		AddRenderTarget("emissive", (VkFormat)VULKAN.surface.formatKHR->format);
-		AddRenderTarget("taa", (VkFormat)VULKAN.surface.formatKHR->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("brightFilter", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("gaussianBlurHorizontal", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("gaussianBlurVertical", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("emissive", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("taa", VULKAN.surface.formatKHR.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
 		// render passes
 		shadows.createRenderPass();
@@ -128,22 +139,22 @@ namespace pe
 	{
 		static int frameIndex = 0;
 
-		static const vk::PipelineStageFlags waitStages[] =
+		static VkPipelineStageFlags waitStages[] =
 		{
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eFragmentShader
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
 		};
 
 		// acquire the image
-		auto& aquireSignalSemaphore = (*VULKAN.semaphores)[frameIndex];
-		const uint32_t imageIndex = VULKAN.swapchain.Aquire(aquireSignalSemaphore, nullptr);
+		auto& aquireSignalSemaphore = VULKAN.semaphores[frameIndex];
+		uint32_t imageIndex = VULKAN.swapchain.Aquire(aquireSignalSemaphore.handle, {});
 
 		static Timer timer;
 		timer.Start();
-		VULKAN.waitFences((*VULKAN.fences)[imageIndex]);
+		VULKAN.waitFence(&VULKAN.fences[imageIndex]);
 		FrameTimer::Instance().timestamps[0] = timer.Count();
 
-		const auto& cmd = (*VULKAN.dynamicCmdBuffers)[imageIndex];
+		auto& cmd = VULKAN.dynamicCmdBuffers[imageIndex];
 
 		VULKAN.waitAndLockSubmits();
 
@@ -154,13 +165,18 @@ namespace pe
 			RecordShadowsCmds(imageIndex);
 
 			// submit the shadow command buffers
-			const auto& shadowWaitSemaphore = aquireSignalSemaphore;
-			const auto& shadowSignalSemaphore = (*VULKAN.semaphores)[imageIndex * 3 + 1];
-			const auto& scb = VULKAN.shadowCmdBuffers;
-			const auto size = shadows.textures.size();
-			const auto i = size * imageIndex;
-			const std::vector<vk::CommandBuffer> activeShadowCmdBuffers(scb->begin() + i, scb->begin() + i + size);
-			VULKAN.submit(activeShadowCmdBuffers, waitStages[0], shadowWaitSemaphore, shadowSignalSemaphore, nullptr);
+			auto& shadowWaitSemaphore = aquireSignalSemaphore;
+			auto& shadowSignalSemaphore = VULKAN.semaphores[imageIndex * 3 + 1];
+			auto& scb = VULKAN.shadowCmdBuffers;
+			auto size = shadows.textures.size();
+			auto i = size * imageIndex;
+			std::vector<CommandBuffer> activeShadowCmdBuffers(scb.begin() + i, scb.begin() + i + size);
+			VULKAN.submit(
+				static_cast<uint32_t>(activeShadowCmdBuffers.size()), activeShadowCmdBuffers.data(),
+				&waitStages[0],
+				1, &shadowWaitSemaphore,
+				1, &shadowSignalSemaphore,
+				nullptr);
 
 			aquireSignalSemaphore = shadowSignalSemaphore;
 		}
@@ -169,15 +185,20 @@ namespace pe
 		RecordDeferredCmds(imageIndex);
 
 		// submit the command buffers
-		const auto& deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
-		const auto& deferredWaitSemaphore = aquireSignalSemaphore;
-		const auto& deferredSignalSemaphore = (*VULKAN.semaphores)[imageIndex * 3 + 2];
-		const auto& deferredSignalFence = (*VULKAN.fences)[imageIndex];
-		VULKAN.submit(cmd, deferredWaitStage, deferredWaitSemaphore, deferredSignalSemaphore, deferredSignalFence);
+		auto& deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
+		auto& deferredWaitSemaphore = aquireSignalSemaphore;
+		auto& deferredSignalSemaphore = VULKAN.semaphores[imageIndex * 3 + 2];
+		auto& deferredSignalFence = VULKAN.fences[imageIndex];
+		VULKAN.submit(
+			1, &cmd,
+			&deferredWaitStage,
+			1, &deferredWaitSemaphore,
+			1, &deferredSignalSemaphore,
+			&deferredSignalFence);
 
 		// Presentation
-		const auto& presentWaitSemaphore = deferredSignalSemaphore;
-		VULKAN.Present(*VULKAN.swapchain.handle, imageIndex, presentWaitSemaphore);
+		auto& presentWaitSemaphore = deferredSignalSemaphore;
+		VULKAN.Present(1, &VULKAN.swapchain, &imageIndex, 1, &presentWaitSemaphore);
 
 		VULKAN.unlockSubmits();
 

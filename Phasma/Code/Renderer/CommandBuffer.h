@@ -80,7 +80,7 @@ namespace pe
 
 		void Create(CommandPool& commandPool);
 		
-		void Destroy();
+		void Destroy(CommandPool& commandPool);
 
 		void CopyBuffer(Buffer& srcBuffer, Buffer& dstBuffer, uint32_t regionCount, BufferCopy* pRegions);
 

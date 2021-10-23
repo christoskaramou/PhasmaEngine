@@ -66,12 +66,12 @@ namespace pe
 		siCompute.pWaitSemaphores = waitSemaphores.data();
 		siCompute.pSignalSemaphores = &vksemaphore;
 
-		vkQueueSubmit(*VULKAN.computeQueue, 1, &siCompute, fence.handle);
+		vkQueueSubmit(VULKAN.computeQueue, 1, &siCompute, fence.handle);
 	}
 	
 	void Compute::waitFence()
 	{
-		VULKAN.waitFences(vk::Fence(fence.handle));
+		VULKAN.waitFence(&fence);
 	}
 	
 	void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
@@ -100,7 +100,7 @@ namespace pe
 		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutCompute();
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = *VULKAN.descriptorPool;
+		allocInfo.descriptorPool = VULKAN.descriptorPool;
 		allocInfo.descriptorSetCount = 1;
 		allocInfo.pSetLayouts = &dsetLayout;
 

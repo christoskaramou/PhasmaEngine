@@ -47,10 +47,10 @@ namespace pe
 
 		void Destroy();
 		
-		SPtr<vk::SurfaceKHR> surface;
-		SPtr<vk::Extent2D> actualExtent;
-		SPtr<vk::SurfaceCapabilitiesKHR> capabilities;
-		SPtr<vk::SurfaceFormatKHR> formatKHR {};
-		SPtr<vk::PresentModeKHR> presentModeKHR {};
+		VkSurfaceKHR surface;
+		VkExtent2D actualExtent;
+		VkSurfaceCapabilitiesKHR capabilities;
+		VkSurfaceFormatKHR formatKHR;
+		VkPresentModeKHR presentModeKHR;
 	};
 }
