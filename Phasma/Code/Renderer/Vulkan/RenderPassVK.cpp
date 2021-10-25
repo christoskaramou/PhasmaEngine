@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "RenderPass.h"
+#if PE_VULKAN
+#include "Renderer/RenderPass.h"
 #include "Renderer/Vulkan/Vulkan.h"
 
 namespace pe
@@ -136,3 +137,4 @@ namespace pe
 		}
 	}
 }
+#endif

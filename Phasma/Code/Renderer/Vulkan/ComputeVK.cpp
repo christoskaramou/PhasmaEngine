@@ -20,8 +20,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Compute.h"
-#include "Code/Shader/Shader.h"
+#if PE_VULKAN
+#include "Renderer/Compute.h"
+#include "Shader/Shader.h"
 #include "Renderer/Vulkan/Vulkan.h"
 
 namespace pe
@@ -213,3 +214,4 @@ namespace pe
 		}
 	}
 }
+#endif

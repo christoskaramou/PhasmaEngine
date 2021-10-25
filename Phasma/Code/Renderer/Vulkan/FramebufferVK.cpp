@@ -20,46 +20,53 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "CommandPool.h"
+#if PE_VULKAN
+#include "Renderer/Framebuffer.h"
+#include "Renderer/RenderPass.h"
 #include "Renderer/Vulkan/Vulkan.h"
 
 namespace pe
 {
-	CommandPool::CommandPool() : m_handle {}
+	FrameBuffer::FrameBuffer()
 	{
+		handle = {};
 	}
-
-	CommandPool::CommandPool(CommandPoolHandle handle) : m_handle(handle)
+	
+	void FrameBuffer::Create(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass renderPass)
 	{
+		Create(width, height, std::vector<ImageViewHandle> {view}, renderPass);
 	}
-
-	CommandPool::~CommandPool()
+	
+	void FrameBuffer::Create(uint32_t width, uint32_t height, std::vector<ImageViewHandle>& views, RenderPass renderPass)
 	{
+		this->width = width;
+		this->height = height;
+
+		std::vector<VkImageView> _views(views.size());
+		for (int i = 0; i < views.size(); i++)
+			_views[i] = views[i];
+
+		VkFramebufferCreateInfo fbci{};
+		fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		fbci.renderPass = renderPass.handle;
+		fbci.attachmentCount = static_cast<uint32_t>(_views.size());
+		fbci.pAttachments = _views.data();
+		fbci.width = width;
+		fbci.height = height;
+		fbci.layers = 1;
+		
+		VkFramebuffer frameBuffer;
+		vkCreateFramebuffer(VULKAN.device, &fbci, nullptr, &frameBuffer);
+		handle = frameBuffer;
 	}
-
-	void CommandPool::Create(uint32_t graphicsFamilyId)
+	
+	void FrameBuffer::Destroy()
 	{
-		VkCommandPoolCreateInfo cpci{};
-		cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		cpci.queueFamilyIndex = graphicsFamilyId;
-		cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-
-		VkCommandPool commandPool;
-		vkCreateCommandPool(VULKAN.device, &cpci, nullptr, &commandPool);
-		m_handle = commandPool;
-	}
-
-	void CommandPool::Destroy()
-	{
-		if (m_handle)
+		if (VkFramebuffer(handle))
 		{
-			vkDestroyCommandPool(VULKAN.device, m_handle, nullptr);
-			m_handle = {};
+			vkDestroyFramebuffer(VULKAN.device, handle, nullptr);
+			handle = {};
 		}
 	}
-
-	CommandPoolHandle& CommandPool::Handle()
-	{
-		return m_handle;
-	}
 }
+#endif

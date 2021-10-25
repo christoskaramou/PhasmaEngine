@@ -43,7 +43,7 @@ namespace pe
 	
 	void TAA::Init()
 	{
-		previous.format = VULKAN.surface.formatKHR.format;
+		previous.format = VULKAN.surface.format;
 		previous.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		previous.CreateImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -56,7 +56,7 @@ namespace pe
 		previous.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 		previous.CreateSampler();
 		
-		frameImage.format = VULKAN.surface.formatKHR.format;
+		frameImage.format = VULKAN.surface.format;
 		frameImage.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		frameImage.CreateImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),

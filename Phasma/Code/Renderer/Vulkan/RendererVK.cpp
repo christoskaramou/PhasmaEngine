@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Renderer.h"
+#if PE_VULKAN
+#include "Renderer/Renderer.h"
 #include "Core/Queue.h"
 #include "Model/Mesh.h"
 #include "Renderer/Vulkan/Vulkan.h"
@@ -526,19 +527,19 @@ namespace pe
 		VULKAN.CreateSwapchain(&VULKAN.surface);
 		VULKAN.CreateDepth();
 		
-		AddRenderTarget("viewport", VULKAN.surface.formatKHR.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("viewport", VULKAN.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 		AddRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-		AddRenderTarget("albedo", VULKAN.surface.formatKHR.format);
-		AddRenderTarget("srm", VULKAN.surface.formatKHR.format); // Specular Roughness Metallic
+		AddRenderTarget("albedo", VULKAN.surface.format);
+		AddRenderTarget("srm", VULKAN.surface.format); // Specular Roughness Metallic
 		AddRenderTarget("ssao", VK_FORMAT_R16_UNORM);
 		AddRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-		AddRenderTarget("ssr", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("ssr", VULKAN.surface.format);
 		AddRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-		AddRenderTarget("brightFilter", VULKAN.surface.formatKHR.format);
-		AddRenderTarget("gaussianBlurHorizontal", VULKAN.surface.formatKHR.format);
-		AddRenderTarget("gaussianBlurVertical", VULKAN.surface.formatKHR.format);
-		AddRenderTarget("emissive", VULKAN.surface.formatKHR.format);
-		AddRenderTarget("taa", VULKAN.surface.formatKHR.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("brightFilter", VULKAN.surface.format);
+		AddRenderTarget("gaussianBlurHorizontal", VULKAN.surface.format);
+		AddRenderTarget("gaussianBlurVertical", VULKAN.surface.format);
+		AddRenderTarget("emissive", VULKAN.surface.format);
+		AddRenderTarget("taa", VULKAN.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 		
 		deferred.createRenderPasses(renderTargets);
 		deferred.createFrameBuffers(renderTargets);
@@ -699,3 +700,4 @@ namespace pe
 		CONTEXT->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
 	}
 }
+#endif

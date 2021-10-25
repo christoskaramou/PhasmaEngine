@@ -20,9 +20,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Pipeline.h"
+#if PE_VULKAN
+#include "Renderer/Pipeline.h"
 #include "Shader/Shader.h"
-#include "Descriptor.h"
+#include "Renderer/Descriptor.h"
 #include "Renderer/Vulkan/Vulkan.h"
 #include "Core/Settings.h"
 
@@ -665,3 +666,4 @@ namespace pe
 		return DSLayout;
 	}
 }
+#endif

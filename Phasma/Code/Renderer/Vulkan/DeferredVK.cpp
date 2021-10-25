@@ -20,11 +20,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Deferred.h"
+#if PE_VULKAN
+#include "Renderer/Deferred.h"
 #include "Model/Model.h"
 #include "Model/Mesh.h"
-#include "Swapchain.h"
-#include "Surface.h"
+#include "Renderer/Swapchain.h"
+#include "Renderer/Surface.h"
 #include "Shader/Shader.h"
 #include "Core/Queue.h"
 #include "GUI/GUI.h"
@@ -395,3 +396,4 @@ namespace pe
 		pipelineComposition.destroy();
 	}
 }
+#endif

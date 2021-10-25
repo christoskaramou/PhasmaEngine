@@ -163,6 +163,7 @@ namespace pe
 
 	using SampleCountFlagBits = uint32_t;
 	using Format = uint32_t;
+	using ColorSpace = uint32_t;
 	using ImageLayout = uint32_t;
 	using ImageTiling = uint32_t;
 	using Filter = uint32_t;
@@ -190,6 +191,7 @@ namespace pe
 	using BlendFactor = uint32_t;
 	using BlendOp = uint32_t;
 	using ColorComponentFlags = uint32_t;
+	using PresentMode = uint32_t;
 
 	using CommandBufferHandle = ApiHandle<VkCommandBuffer, Placeholder*>;
 	using DescriptorSetLayoutHandle = ApiHandle<VkDescriptorSetLayout, Placeholder*>;
@@ -209,4 +211,5 @@ namespace pe
 	using QueryPoolHandle = ApiHandle<VkQueryPool, Placeholder*>;
 	using SwapchainHandle = ApiHandle<VkSwapchainKHR, Placeholder*>;
 	using DeviceHandle = ApiHandle<VkDevice, Placeholder*>;
+	using SurfaceHandle = ApiHandle<VkSurfaceKHR, Placeholder*>;
 }

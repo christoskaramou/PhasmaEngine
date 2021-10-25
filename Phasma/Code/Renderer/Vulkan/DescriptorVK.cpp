@@ -20,40 +20,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Fence.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#if PE_VULKAN
+#include "Renderer/Descriptor.h"
 
 namespace pe
 {
-	Fence::Fence() : handle{}
+	DescriptorBinding::DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags)
+		: binding(binding), descriptorType(descriptorType), descriptorCount(1), stageFlags(stageFlags), pImmutableSamplers()
 	{
-	}
-
-	Fence::Fence(FenceHandle handle) : handle(handle)
-	{
-	}
-
-	Fence::~Fence()
-	{
-	}
-
-	void Fence::Create(bool signaled)
-	{
-		VkFenceCreateInfo fi{};
-		fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-		fi.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
-
-		VkFence fence;
-		vkCreateFence(VULKAN.device, &fi, nullptr, &fence);
-		handle = fence;
-	}
-
-	void Fence::Destroy()
-	{
-		if (handle)
-		{
-			vkDestroyFence(VULKAN.device, handle, nullptr);
-			handle = {};
-		}
 	}
 }
+#endif

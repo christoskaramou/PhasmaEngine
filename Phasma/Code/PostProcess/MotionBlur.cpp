@@ -43,7 +43,7 @@ namespace pe
 	
 	void MotionBlur::Init()
 	{
-		frameImage.format = VULKAN.surface.formatKHR.format;
+		frameImage.format = VULKAN.surface.format;
 		frameImage.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		frameImage.CreateImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),

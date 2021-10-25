@@ -20,10 +20,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Shadows.h"
+#if PE_VULKAN
+#include "Renderer/Shadows.h"
 #include "GUI/GUI.h"
-#include "Swapchain.h"
-#include "Vertex.h"
+#include "Renderer/Swapchain.h"
+#include "Renderer/Vertex.h"
 #include "Shader/Shader.h"
 #include "Core/Queue.h"
 #include "Renderer/Vulkan/Vulkan.h"
@@ -299,3 +300,4 @@ namespace pe
 		}
 	}
 }
+#endif

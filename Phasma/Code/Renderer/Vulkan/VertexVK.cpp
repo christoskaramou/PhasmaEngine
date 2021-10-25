@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Vertex.h"
+#if PE_VULKAN
+#include "Renderer/Vertex.h"
 #include "imgui/imgui.h"
 
 namespace pe
@@ -85,3 +86,4 @@ namespace pe
 		};
 	}
 }
+#endif

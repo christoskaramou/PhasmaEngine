@@ -29,7 +29,7 @@ SOFTWARE.
 
 namespace pe
 {
-	std::string PresentModeToString(VkPresentModeKHR presentModeKHR)
+	std::string PresentModeToString(PresentMode presentModeKHR)
 	{
 		switch (presentModeKHR)
 		{
@@ -46,7 +46,7 @@ namespace pe
 		std::string title = "PhasmaEngine";
 		title += " - Device: " + std::string(VULKAN.gpuProperties.deviceName);
 		title += " - API: Vulkan";
-		title += " - Present Mode: " + PresentModeToString(VULKAN.surface.presentModeKHR);
+		title += " - Present Mode: " + PresentModeToString(VULKAN.surface.presentMode);
 #ifdef _DEBUG
 		title += " - Configuration: Debug";
 #else
@@ -55,19 +55,19 @@ namespace pe
 		CONTEXT->GetSystem<EventSystem>()->DispatchEvent(EventType::SetWindowTitle, title);
 
 		// INIT RENDERING
-		AddRenderTarget("viewport", VULKAN.surface.formatKHR.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("viewport", VULKAN.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 		AddRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-		AddRenderTarget("albedo", VULKAN.surface.formatKHR.format);
-		AddRenderTarget("srm", VULKAN.surface.formatKHR.format); // Specular Roughness Metallic
+		AddRenderTarget("albedo", VULKAN.surface.format);
+		AddRenderTarget("srm", VULKAN.surface.format); // Specular Roughness Metallic
 		AddRenderTarget("ssao", VK_FORMAT_R16_UNORM);
 		AddRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-		AddRenderTarget("ssr", VULKAN.surface.formatKHR.format);
+		AddRenderTarget("ssr", VULKAN.surface.format);
 		AddRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-		AddRenderTarget("brightFilter", VULKAN.surface.formatKHR.format);
-		AddRenderTarget("gaussianBlurHorizontal", VULKAN.surface.formatKHR.format);
-		AddRenderTarget("gaussianBlurVertical", VULKAN.surface.formatKHR.format);
-		AddRenderTarget("emissive", VULKAN.surface.formatKHR.format);
-		AddRenderTarget("taa", VULKAN.surface.formatKHR.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("brightFilter", VULKAN.surface.format);
+		AddRenderTarget("gaussianBlurHorizontal", VULKAN.surface.format);
+		AddRenderTarget("gaussianBlurVertical", VULKAN.surface.format);
+		AddRenderTarget("emissive", VULKAN.surface.format);
+		AddRenderTarget("taa", VULKAN.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
 		// render passes
 		shadows.createRenderPass();

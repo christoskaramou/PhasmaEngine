@@ -20,9 +20,42 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Debug.h"
+#if PE_VULKAN
+#include "Renderer/Fence.h"
+#include "Renderer/Vulkan/Vulkan.h"
 
 namespace pe
 {
+	Fence::Fence() : handle{}
+	{
+	}
 
+	Fence::Fence(FenceHandle handle) : handle(handle)
+	{
+	}
+
+	Fence::~Fence()
+	{
+	}
+
+	void Fence::Create(bool signaled)
+	{
+		VkFenceCreateInfo fi{};
+		fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		fi.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
+
+		VkFence fence;
+		vkCreateFence(VULKAN.device, &fi, nullptr, &fence);
+		handle = fence;
+	}
+
+	void Fence::Destroy()
+	{
+		if (handle)
+		{
+			vkDestroyFence(VULKAN.device, handle, nullptr);
+			handle = {};
+		}
+	}
 }
+#endif

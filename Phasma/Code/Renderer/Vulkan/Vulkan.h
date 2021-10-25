@@ -61,9 +61,6 @@ SOFTWARE.
 
 namespace pe
 {
-	class Context;
-	class Surface;
-	
 	class VulkanContext : public NoCopy, public NoMove
 	{
 	private:

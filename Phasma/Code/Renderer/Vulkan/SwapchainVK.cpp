@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Swapchain.h"
+#if PE_VULKAN
+#include "Renderer/Swapchain.h"
 #include "Renderer/Vulkan/Vulkan.h"
 #include "Core/Math.h"
 #include "ECS/Context.h"
@@ -38,24 +39,29 @@ namespace pe
 	
 	void Swapchain::Create(Surface* surface)
 	{
-		VkExtent2D extent = surface->actualExtent;
+		VkSurfaceCapabilitiesKHR capabilities;
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VULKAN.gpu, surface->surface, &capabilities);
+
+		VkExtent2D extent;
+		extent.width = surface->actualExtent.width;
+		extent.height = surface->actualExtent.height;
 		
 		VkSwapchainCreateInfoKHR swapchainCreateInfo{};
 		swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 		swapchainCreateInfo.surface = surface->surface;
 		swapchainCreateInfo.minImageCount = clamp(
 			SWAPCHAIN_IMAGES,
-			surface->capabilities.minImageCount,
-			surface->capabilities.maxImageCount
+			capabilities.minImageCount,
+			capabilities.maxImageCount
 		);
-		swapchainCreateInfo.imageFormat = surface->formatKHR.format;
-		swapchainCreateInfo.imageColorSpace = surface->formatKHR.colorSpace;
+		swapchainCreateInfo.imageFormat = (VkFormat)surface->format;
+		swapchainCreateInfo.imageColorSpace = (VkColorSpaceKHR)surface->colorSpace;
 		swapchainCreateInfo.imageExtent = extent;
 		swapchainCreateInfo.imageArrayLayers = 1;
 		swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-		swapchainCreateInfo.preTransform = surface->capabilities.currentTransform;
+		swapchainCreateInfo.preTransform = capabilities.currentTransform;
 		swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-		swapchainCreateInfo.presentMode = surface->presentModeKHR;
+		swapchainCreateInfo.presentMode = (VkPresentModeKHR)surface->presentMode;
 		swapchainCreateInfo.clipped = VK_TRUE;
 		if (handle)
 			swapchainCreateInfo.oldSwapchain = handle;
@@ -106,7 +112,7 @@ namespace pe
 			imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 			imageViewCreateInfo.image = image.image;
 			imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			imageViewCreateInfo.format = VULKAN.surface.formatKHR.format;
+			imageViewCreateInfo.format = (VkFormat)VULKAN.surface.format;
 			imageViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
 			VkImageView imageView;
@@ -142,3 +148,4 @@ namespace pe
 		}
 	}
 }
+#endif

@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Surface.h"
+#if PE_VULKAN
+#include "Renderer/Surface.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
 #include "Renderer/Vulkan/Vulkan.h"
@@ -31,9 +32,9 @@ namespace pe
 	{
 		surface = {};
 		actualExtent = {};
-		capabilities = {};
-		formatKHR = {};
-		presentModeKHR = {};
+		format = {};
+		colorSpace = {};
+		presentMode = {};
 	}
 	
 	Surface::~Surface()
@@ -42,17 +43,21 @@ namespace pe
 	
 	void Surface::Create(SDL_Window* window)
 	{
-		if (!SDL_Vulkan_CreateSurface(window, VULKAN.instance, &surface))
+		VkSurfaceKHR surfaceVK;
+		if (!SDL_Vulkan_CreateSurface(window, VULKAN.instance, &surfaceVK))
 			throw std::runtime_error(SDL_GetError());
+
+		surface = surfaceVK;
 
 		int w, h;
 		SDL_GL_GetDrawableSize(window, &w, &h);
 
-		actualExtent = VkExtent2D {static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
+		actualExtent = Rect2D{ 0, 0, w, h };
 	}
 	
-	void Surface::FindCapabilities()
+	void Surface::CheckTransfer()
 	{
+		VkSurfaceCapabilitiesKHR capabilities;
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VULKAN.gpu, surface, &capabilities);
 
 		// Ensure eTransferSrc bit for blit operations
@@ -68,16 +73,20 @@ namespace pe
 		std::vector<VkSurfaceFormatKHR> formats(formatsCount);
 		vkGetPhysicalDeviceSurfaceFormatsKHR(VULKAN.gpu, surface, &formatsCount, formats.data());
 
-		formatKHR = formats[0];
+		format = formats[0].format;
+		colorSpace = formats[0].colorSpace;
 		for (const auto& f : formats)
 		{
 			if (f.format == VK_FORMAT_B8G8R8A8_UNORM && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-				formatKHR = f;
+			{
+				format = f.format;
+				colorSpace = f.colorSpace;
+			}
 		}
 		
 		// Check for blit operation
 		VkFormatProperties fProps;
-		vkGetPhysicalDeviceFormatProperties(VULKAN.gpu, formatKHR.format, &fProps);
+		vkGetPhysicalDeviceFormatProperties(VULKAN.gpu, (VkFormat)format, &fProps);
 		if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT))
 			throw std::runtime_error("No blit source operation supported");
 		if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
@@ -95,18 +104,18 @@ namespace pe
 		for (const auto& i : presentModes)
 			if (i == VK_PRESENT_MODE_MAILBOX_KHR)
 			{
-				presentModeKHR = i;
+				presentMode = i;
 				return;
 			}
 		
 		for (const auto& i : presentModes)
 			if (i == VK_PRESENT_MODE_IMMEDIATE_KHR)
 			{
-				presentModeKHR = i;
+				presentMode = i;
 				return;
 			}
 		
-		presentModeKHR = VK_PRESENT_MODE_FIFO_KHR;
+		presentMode = VK_PRESENT_MODE_FIFO_KHR;
 	}
 	
 	
@@ -116,7 +125,7 @@ namespace pe
 		VkBool32 supported = false;
 		vkGetPhysicalDeviceSurfaceSupportKHR(VULKAN.gpu, VULKAN.graphicsFamilyId, surface, &supported);
 
-		FindCapabilities();
+		CheckTransfer();
 		FindFormat();
 		FindPresentationMode();
 	}
@@ -126,7 +135,8 @@ namespace pe
 		if (surface)
 		{
 			vkDestroySurfaceKHR(VULKAN.instance, surface, nullptr);
-			surface = nullptr;
+			surface = {};
 		}
 	}
 }
+#endif

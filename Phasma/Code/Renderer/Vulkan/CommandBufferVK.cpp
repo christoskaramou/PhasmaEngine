@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "CommandBuffer.h"
+#if PE_VULKAN
+#include "Renderer/CommandBuffer.h"
 #include "Renderer/Vulkan/Vulkan.h"
 #include "Renderer/CommandPool.h"
 #include "Renderer/RenderPass.h"
@@ -237,3 +238,4 @@ namespace pe
 	{
 	}
 }
+#endif

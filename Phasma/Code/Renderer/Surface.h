@@ -23,6 +23,7 @@ SOFTWARE.
 #pragma once
 
 #include "Core/Base.h"
+#include "Core/Math.h"
 
 namespace pe
 {
@@ -37,7 +38,7 @@ namespace pe
 		
 		void Create(SDL_Window* window);
 		
-		void FindCapabilities();
+		void CheckTransfer();
 		
 		void FindFormat();
 		
@@ -47,10 +48,10 @@ namespace pe
 
 		void Destroy();
 		
-		VkSurfaceKHR surface;
-		VkExtent2D actualExtent;
-		VkSurfaceCapabilitiesKHR capabilities;
-		VkSurfaceFormatKHR formatKHR;
-		VkPresentModeKHR presentModeKHR;
+		SurfaceHandle surface;
+		Rect2D actualExtent;
+		Format format;
+		ColorSpace colorSpace;
+		PresentMode presentMode;
 	};
 }

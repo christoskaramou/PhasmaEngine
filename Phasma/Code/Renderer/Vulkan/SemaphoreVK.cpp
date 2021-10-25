@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Semaphore.h"
+#if PE_VULKAN
+#include "Renderer/Semaphore.h"
 #include "Renderer/Vulkan/Vulkan.h"
 
 namespace pe
@@ -53,3 +54,4 @@ namespace pe
 		}
 	}
 }
+#endif

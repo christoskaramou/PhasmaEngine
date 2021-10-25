@@ -643,7 +643,7 @@ namespace pe
 		info.PipelineCache = nullptr; // Will it help to use it?
 		info.DescriptorPool = VULKAN.descriptorPool;
 		info.Subpass = 0;
-		info.MinImageCount = VULKAN.surface.capabilities.minImageCount;
+		info.MinImageCount = static_cast<uint32_t>(VULKAN.swapchain.images.size());
 		info.ImageCount = (uint32_t)VULKAN.swapchain.images.size();
 		info.MSAASamples = VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT;
 		info.Allocator = nullptr;
@@ -695,7 +695,7 @@ namespace pe
 	void GUI::CreateRenderPass()
 	{
 		Attachment colorAttachment;
-		colorAttachment.format = VULKAN.surface.formatKHR.format;
+		colorAttachment.format = VULKAN.surface.format;
 		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
