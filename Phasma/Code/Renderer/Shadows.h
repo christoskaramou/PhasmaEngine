@@ -48,7 +48,7 @@ namespace pe
 		std::vector<Image> textures {};
 		DescriptorSetHandle descriptorSetDeferred;
 		std::vector<FrameBuffer> framebuffers {};
-		SPtr<Buffer> uniformBuffer;
+		Buffer* uniformBuffer;
 		Pipeline pipeline;
 		
 		void update(Camera& camera);

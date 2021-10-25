@@ -53,7 +53,7 @@ namespace pe
 			vec4 sharpenValues;
 			mat4 invProj;
 		} ubo;
-		SPtr<Buffer> uniform;
+		Buffer* uniform;
 		
 		void Init();
 		

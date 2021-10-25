@@ -105,7 +105,7 @@ namespace pe
 			VULKAN.waitGraphicsQueue();
 			VULKAN.waitAndLockSubmits();
 			
-			SPtr<Buffer> staging = Buffer::Create(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+			Buffer* staging = Buffer::Create(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 			staging->Map();
 			staging->CopyData(pixels);
 			staging->Flush();
@@ -122,7 +122,7 @@ namespace pe
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 			);
 			ibl_brdf_lut.TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-			ibl_brdf_lut.CopyBufferToImage(staging.get());
+			ibl_brdf_lut.CopyBufferToImage(staging);
 			ibl_brdf_lut.GenerateMipMaps();
 			ibl_brdf_lut.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 			ibl_brdf_lut.maxLod = static_cast<float>(ibl_brdf_lut.mipLevels);

@@ -83,7 +83,9 @@ namespace pe
 		
 		void ExtractFrustum();
 		
-		bool SphereInFrustum(const vec4& boundingSphere) const;
+		bool PointInFrustum(const vec3& point, float radius) const;
+
+		bool AABBInFrustum(const AABB& aabb) const;
 		
 		void ReCreateComputePipelines();
 

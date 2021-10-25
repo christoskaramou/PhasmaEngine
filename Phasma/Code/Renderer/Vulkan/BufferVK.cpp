@@ -20,20 +20,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#if PE_VULKAN
 #include "Renderer/Buffer.h"
 #include "Renderer/CommandPool.h"
 #include "Renderer/CommandBuffer.h"
-#include "BufferVK.h"
 #include "Vulkan.h"
 
 namespace pe
 {
-	BufferVK::BufferVK(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties)
+	Buffer* Buffer::Create(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties)
 	{
-		sizeRequested = size;
-		this->size = size;
-		data = nullptr;
+		Buffer* buffer = new Buffer(size, usage, properties);
+		sm_Buffers[buffer->id] = buffer;
+		return buffer;
+	}
 
+	Buffer::Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties) : size(size), data(nullptr), id(NextID())
+	{
 		VkBufferCreateInfo bufferInfo{};
 		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufferInfo.size = size;
@@ -46,25 +49,29 @@ namespace pe
 			VMA_MEMORY_USAGE_GPU_ONLY : VMA_MEMORY_USAGE_CPU_TO_GPU;
 		allocationCreateInfo.preferredFlags = properties;
 
-		VkBuffer buffer;
+		VkBuffer bufferVK;
 		VmaAllocationInfo allocationInfo;
-		vmaCreateBuffer(VULKAN.allocator, &bufferInfo, &allocationCreateInfo, &buffer, &allocation, &allocationInfo);
-		m_handle = buffer;
+		vmaCreateBuffer(VULKAN.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocation, &allocationInfo);
+		m_handle = bufferVK;
 	}
 
-	BufferVK::~BufferVK()
+	Buffer::~Buffer()
 	{
-		Destroy();
+		if (m_handle)
+		{
+			vmaDestroyBuffer(VULKAN.allocator, m_handle, allocation);
+			m_handle = {};
+		}
 	}
-	
-	void BufferVK::Map()
+
+	void Buffer::Map()
 	{
 		if (data)
 			return;
 		vmaMapMemory(VULKAN.allocator, allocation, &data);
 	}
 	
-	void BufferVK::Unmap()
+	void Buffer::Unmap()
 	{
 		if (!data)
 			return;
@@ -72,14 +79,14 @@ namespace pe
 		data = nullptr;
 	}
 	
-	void BufferVK::Zero() const
+	void Buffer::Zero() const
 	{
 		if (!data)
 			return;
 		memset(data, 0, size);
 	}
 	
-	void BufferVK::CopyData(const void* srcData, size_t srcSize, size_t offset)
+	void Buffer::CopyData(const void* srcData, size_t srcSize, size_t offset)
 	{
 		if (!data)
 			return;
@@ -87,7 +94,7 @@ namespace pe
 		memcpy((char*) data + offset, srcData, srcSize > 0 ? srcSize : size);
 	}
 	
-	void BufferVK::CopyBuffer(Buffer* srcBuffer, const size_t srcSize)
+	void Buffer::CopyBuffer(Buffer* srcBuffer, const size_t srcSize)
 	{
 		assert(srcSize <= size);
 
@@ -104,7 +111,7 @@ namespace pe
 		copyCmd.Destroy(pool);
 	}
 	
-	void BufferVK::Flush(size_t offset, size_t flushSize) const
+	void Buffer::Flush(size_t offset, size_t flushSize) const
 	{
 		if (!data)
 			return;
@@ -112,25 +119,24 @@ namespace pe
 		vmaFlushAllocation(VULKAN.allocator, allocation, offset, flushSize);
 	}
 	
-	void BufferVK::Destroy()
+	void Buffer::Destroy()
 	{
-		if (m_handle)
-			vmaDestroyBuffer(VULKAN.allocator, m_handle, allocation);
-		m_handle = {};
+		auto it = sm_Buffers.find(id);
+		if (it != sm_Buffers.end())
+		{
+			delete sm_Buffers[id];
+			sm_Buffers.erase(it);
+		}
 	}
 
-	size_t BufferVK::Size()
+	size_t Buffer::Size()
 	{
 		return size;
 	}
 
-	size_t BufferVK::SizeRequested()
-	{
-		return sizeRequested;
-	}
-
-	void* BufferVK::Data()
+	void* Buffer::Data()
 	{
 		return data;
 	}
 }
+#endif

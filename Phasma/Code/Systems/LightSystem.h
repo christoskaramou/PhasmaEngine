@@ -57,7 +57,7 @@ namespace pe
 
 	private:
 		LightsUBO lubo;
-		SPtr<Buffer> uniform;
+		Buffer* uniform;
 		DescriptorSetHandle descriptorSet;
 	};
 }

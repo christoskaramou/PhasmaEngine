@@ -159,7 +159,7 @@ namespace pe
 			VULKAN.waitGraphicsQueue();
 			VULKAN.waitAndLockSubmits();
 			
-			SPtr<Buffer> staging = Buffer::Create(
+			Buffer* staging = Buffer::Create(
 				imageSize,
 				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
@@ -180,7 +180,7 @@ namespace pe
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 			);
 			tex->TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-			tex->CopyBufferToImage(staging.get());
+			tex->CopyBufferToImage(staging);
 			tex->GenerateMipMaps();
 			tex->CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 			tex->maxLod = static_cast<float>(tex->mipLevels);

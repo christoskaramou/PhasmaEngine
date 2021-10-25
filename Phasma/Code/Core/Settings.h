@@ -24,15 +24,8 @@ SOFTWARE.
 
 namespace pe
 {
-	enum class RenderApi
-	{
-		Vulkan,
-		Dx12 // Not implemented yet
-	};
-
 	struct GlobalSettings
 	{
-		inline static RenderApi Api = RenderApi::Vulkan;
 		inline static bool RightHanded = false;
 		inline static bool ReverseZ = true;
 	};

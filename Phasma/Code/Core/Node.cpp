@@ -26,7 +26,7 @@ SOFTWARE.
 
 namespace pe
 {
-	mat4 Node::localMatrix() const
+	mat4 Node::LocalMatrix() const
 	{
 		switch (transformationType)
 		{
@@ -42,29 +42,29 @@ namespace pe
 		}
 	}
 	
-	mat4 Node::getMatrix() const
+	mat4 Node::GetMatrix() const
 	{
-		mat4 m = localMatrix();
+		mat4 m = LocalMatrix();
 		Node* p = parent;
 		while (p)
 		{
-			m = p->localMatrix() * m;
+			m = p->LocalMatrix() * m;
 			p = p->parent;
 		}
 		return m;
 	}
 	
-	void calculateMeshJointMatrix(Mesh* mesh, Skin* skin, const mat4& inverseTransform, const size_t index)
+	void CalculateJointMatrixAsync(Mesh* mesh, Skin* skin, const mat4& inverseTransform, const size_t index)
 	{
-		mesh->ubo.jointMatrix[index] = inverseTransform * skin->joints[index]->getMatrix() * skin->inverseBindMatrices[index];
+		mesh->ubo.jointMatrix[index] = inverseTransform * skin->joints[index]->GetMatrix() * skin->inverseBindMatrices[index];
 	}
 	
-	void Node::update()
+	void Node::Update()
 	{
 		if (mesh)
 		{
 			mesh->ubo.previousMatrix = mesh->ubo.matrix;
-			mesh->ubo.matrix = getMatrix();
+			mesh->ubo.matrix = GetMatrix();
 			
 			if (skin)
 			{
@@ -78,9 +78,7 @@ namespace pe
 					std::vector<std::future<void>> futures(numJoints);
 					
 					for (size_t i = 0; i < numJoints; i++)
-						futures[i] = std::async(
-								std::launch::async, calculateMeshJointMatrix, mesh, skin, inverseTransform, i
-						);
+						futures[i] = std::async(std::launch::async, CalculateJointMatrixAsync, mesh, skin, inverseTransform, i);
 					
 					for (auto& f : futures)
 						f.get();
@@ -88,7 +86,7 @@ namespace pe
 				else
 				{
 					for (size_t i = 0; i < numJoints; i++)
-						calculateMeshJointMatrix(mesh, skin, inverseTransform, i);
+						CalculateJointMatrixAsync(mesh, skin, inverseTransform, i);
 				}
 				
 				mesh->ubo.jointcount = static_cast<float>(numJoints);

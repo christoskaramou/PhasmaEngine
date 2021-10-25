@@ -31,29 +31,27 @@ namespace pe
 	class Buffer : public NoCopy, public NoMove
 	{
 	public:
-		static SPtr<Buffer> Create(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
+		static Buffer* Create(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
 
-		virtual ~Buffer() {};
+		~Buffer();
 		
-		virtual void Map() = 0;
+		void Map();
 		
-		virtual void Unmap() = 0;
+		void Unmap();
 		
-		virtual void Zero() const = 0;
+		void Zero() const;
 		
-		virtual void CopyData(const void* srcData, size_t srcSize = 0, size_t offset = 0) = 0;
+		void CopyData(const void* srcData, size_t srcSize = 0, size_t offset = 0);
 		
-		virtual void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) = 0;
+		void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) ;
 		
-		virtual void Flush(size_t offset = 0, size_t flushSize = 0) const = 0;
+		void Flush(size_t offset = 0, size_t flushSize = 0) const;
 		
-		virtual void Destroy() = 0;
+		void Destroy();
 		
-		virtual size_t Size() = 0;
+		size_t Size();
 		
-		virtual size_t SizeRequested() = 0;
-		
-		virtual void* Data() = 0;
+		void* Data();
 
 		template<Launch launch>
 		void CopyRequest(const MemoryRange& range)
@@ -84,7 +82,14 @@ namespace pe
 
 		BufferHandle& Handle() { return m_handle; }
 
-	protected:
+	private:
+		Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
+		inline static std::unordered_map<size_t, Buffer*> sm_Buffers{};
+
+		size_t id;
+		size_t size;
+		void* data;
+		VmaAllocation allocation; // TODO: Move this from here
 		BufferHandle m_handle;
 	};
 }

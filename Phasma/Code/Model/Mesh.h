@@ -43,7 +43,7 @@ namespace pe
 		std::string name;
 		
 		DescriptorSetHandle descriptorSet;
-		SPtr<Buffer> uniformBuffer;
+		Buffer* uniformBuffer;
 		
 		bool render = true, cull = true;
 		uint32_t vertexOffset = 0, indexOffset = 0;
@@ -52,6 +52,7 @@ namespace pe
 		vec3 min;
 		vec3 max;
 		vec4 boundingSphere;
+		AABB boundingBox;
 		vec4 transformedBS;
 		bool hasBones = false;
 		
@@ -60,6 +61,12 @@ namespace pe
 			const vec3 center = (max + min) * .5f;
 			const float sphereRadius = length(max - center);
 			boundingSphere = vec4(center, sphereRadius);
+		}
+
+		void calculateBoundinhBox()
+		{
+			boundingBox.min = min;
+			boundingBox.max = max;
 		}
 		
 		void loadTexture(
@@ -94,7 +101,7 @@ namespace pe
 		std::vector<Primitive> primitives {};
 		
 		DescriptorSetHandle descriptorSet;
-		SPtr<Buffer> uniformBuffer;
+		Buffer* uniformBuffer;
 		std::vector<Vertex> vertices {};
 		std::vector<uint32_t> indices {};
 		uint32_t vertexOffset = 0, indexOffset = 0;

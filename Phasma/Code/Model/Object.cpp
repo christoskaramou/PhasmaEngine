@@ -39,7 +39,7 @@ namespace pe
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 		// Staging buffer
-		SPtr<Buffer> staging = Buffer::Create(
+		Buffer* staging = Buffer::Create(
 				sizeof(float) * vertices.size(),
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
@@ -48,7 +48,7 @@ namespace pe
 		staging->Flush();
 		staging->Unmap();
 		
-		vertexBuffer->CopyBuffer(staging.get(), staging->Size());
+		vertexBuffer->CopyBuffer(staging, staging->Size());
 		staging->Destroy();
 	}
 	
@@ -75,7 +75,7 @@ namespace pe
 		if (!pixels)
 			throw std::runtime_error("No pixel data loaded");
 		
-		SPtr<Buffer> staging = Buffer::Create(
+		Buffer* staging = Buffer::Create(
 			imageSize,
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
@@ -94,7 +94,7 @@ namespace pe
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 		);
 		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		texture.CopyBufferToImage(staging.get());
+		texture.CopyBufferToImage(staging);
 		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		texture.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 		texture.CreateSampler();

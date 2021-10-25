@@ -40,7 +40,7 @@ namespace pe
 		~SSR();
 		
 		mat4 reflectionInput[4];
-		SPtr<Buffer> UBReflection;
+		Buffer* UBReflection;
 		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;

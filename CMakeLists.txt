@@ -48,6 +48,8 @@ set(ADDITIONAL_COMPILE_DEFINITIONS
         "_CONSOLE;"
         "UNICODE;"
         "_UNICODE"
+        "PE_VULKAN=1"
+        "PE_DX12=0"
 )
 target_compile_definitions(${PROJECT_NAME} PRIVATE "${ADDITIONAL_COMPILE_DEFINITIONS}")
 

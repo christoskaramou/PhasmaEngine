@@ -20,49 +20,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#pragma once
+#include "Debug.h"
 
-#include "Renderer/Buffer.h"
-
-struct VkBuffer_T;
 namespace pe
 {
-	class BufferVK : public Buffer
-	{
-	public:
-		BufferVK(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
 
-		~BufferVK();
-		
-		void Map() override;
-		
-		void Unmap() override;
-		
-		void Zero() const override;
-		
-		void CopyData(const void* srcData, size_t srcSize = 0, size_t offset = 0) override;
-		
-		void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) override;
-		
-		void Flush(size_t offset = 0, size_t flushSize = 0) const override;
-		
-		void Destroy() override;
-
-		size_t Size() override;
-
-		size_t SizeRequested() override;
-
-		void* Data() override;
-
-	private:
-		VmaAllocation allocation;
-		size_t size{};
-		// sizeRequested is the size asked from user during the creation, afterwards the size can be
-		// changed dynamically based on the system's minimum alignment on the specific buffer type
-		// and it will always be less or equal than the actual size of the created buffer
-		size_t sizeRequested{};
-
-		void* data = nullptr;
-
-	};
 }

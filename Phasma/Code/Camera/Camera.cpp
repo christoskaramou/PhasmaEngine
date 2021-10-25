@@ -200,19 +200,45 @@ namespace pe
 //		frustum[5].d = temp.w;
     }
     
-    // center x,y,z - radius w
-    bool Camera::SphereInFrustum(const vec4& boundingSphere) const
+    bool Camera::PointInFrustum(const vec3& point, float radius) const
     {
         for (auto& plane : frustum)
         {
-            const float dist = dot(plane.normal, vec3(boundingSphere)) + plane.d;
+            const float dist = dot(plane.normal, point) + plane.d;
             
-            if (dist < -boundingSphere.w)
+            if (dist < -radius)
                 return false;
             
-            if (fabs(dist) < boundingSphere.w)
+            if (fabs(dist) < radius)
                 return true;
         }
         return true;
+    }
+
+    bool Camera::AABBInFrustum(const AABB& aabb) const
+    {
+        const vec3& min = aabb.min;
+        const vec3& max = aabb.max;
+
+        vec3 center = (max - min) * 0.5f;
+        if (PointInFrustum(center, 0.0f))
+            return true;
+
+        vec3 corners[8];
+        corners[0] = min;                           // blb
+        corners[1] = vec3(min.x, min.y, max.z);     // blf
+        corners[2] = vec3(min.x, max.y, min.z);     // tlb
+        corners[3] = vec3(min.x, max.y, max.z);     // tlf
+        corners[4] = vec3(max.x, min.y, min.z);     // brb
+        corners[5] = vec3(max.x, min.y, max.z);     // brf
+        corners[6] = vec3(max.x, max.y, min.z);     // trb
+        corners[7] = max;                           // trf
+
+        for (int i = 0; i < 8; i++)
+        {
+            if (PointInFrustum(corners[i], 0.0f))
+                return true;
+        }
+        return false;
     }
 }

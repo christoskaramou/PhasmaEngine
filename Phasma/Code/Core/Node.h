@@ -67,10 +67,10 @@ namespace pe
 		quat rotation;
 		TransformationType transformationType;
 		
-		mat4 localMatrix() const;
+		mat4 LocalMatrix() const;
 		
-		mat4 getMatrix() const;
+		mat4 GetMatrix() const;
 		
-		void update();
+		void Update();
 	};
 }

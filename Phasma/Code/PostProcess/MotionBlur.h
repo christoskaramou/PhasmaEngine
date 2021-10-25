@@ -40,7 +40,7 @@ namespace pe
 		~MotionBlur();
 		
 		mat4 motionBlurInput[4];
-		SPtr<Buffer> UBmotionBlur;
+		Buffer* UBmotionBlur;
 		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;

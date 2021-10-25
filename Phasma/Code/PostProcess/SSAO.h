@@ -38,8 +38,8 @@ namespace pe
 	{
 	public:
 		mat4 pvm[3];
-		SPtr<Buffer> UB_Kernel;
-		SPtr<Buffer> UB_PVM;
+		Buffer* UB_Kernel;
+		Buffer* UB_PVM;
 		Image noiseTex;
 		RenderPass renderPass, blurRenderPass;
 		std::vector<FrameBuffer> framebuffers {}, blurFramebuffers {};

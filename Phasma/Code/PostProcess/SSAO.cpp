@@ -57,7 +57,7 @@ namespace pe
 			noise.emplace_back(rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f, 1.f);
 
 		const uint64_t bufSize = sizeof(vec4) * 16;
-		SPtr<Buffer> staging = Buffer::Create(bufSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+		Buffer* staging = Buffer::Create(bufSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		staging->Map();
 		staging->CopyData(noise.data());
 		staging->Flush();
@@ -73,7 +73,7 @@ namespace pe
 			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		noiseTex.TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		noiseTex.CopyBufferToImage(staging.get());
+		noiseTex.CopyBufferToImage(staging);
 		noiseTex.TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		noiseTex.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 		noiseTex.CreateSampler();

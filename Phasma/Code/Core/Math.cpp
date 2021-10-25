@@ -492,17 +492,25 @@ namespace pe
 		cfloat qwy(q.w * q.y);
 		cfloat qwz(q.w * q.z);
 		
-		m_v[0].x = 1.f - 2.f * (qyy + qzz);
-		m_v[0].y = 2.f * (qxy + qwz);
-		m_v[0].z = 2.f * (qxz - qwy);
+		m_v[0][0] = 1.0f - 2.0f * (qyy + qzz);
+		m_v[0][1] = 2.0f * (qxy + qwz);
+		m_v[0][2] = 2.0f * (qxz - qwy);
+		m_v[0][3] = 0.0f;
 		
-		m_v[1].x = 2.f * (qxy - qwz);
-		m_v[1].y = 1.f - 2.f * (qxx + qzz);
-		m_v[1].z = 2.f * (qyz + qwx);
+		m_v[1][0] = 2.0f * (qxy - qwz);
+		m_v[1][1] = 1.0f - 2.0f * (qxx + qzz);
+		m_v[1][2] = 2.0f * (qyz + qwx);
+		m_v[1][3] = 0.0f;
 		
-		m_v[2].x = 2.f * (qxz + qwy);
-		m_v[2].y = 2.f * (qyz - qwx);
-		m_v[2].z = 1.f - 2.f * (qxx + qyy);
+		m_v[2][0] = 2.0f * (qxz + qwy);
+		m_v[2][1] = 2.0f * (qyz - qwx);
+		m_v[2][2] = 1.0f - 2.0f * (qxx + qyy);
+		m_v[2][3] = 0.0f;
+
+		m_v[3][0] = 0.0f;
+		m_v[3][1] = 0.0f;
+		m_v[3][2] = 0.0f;
+		m_v[3][3] = 1.0f;
 	}
 	
 	mat4::mat4(

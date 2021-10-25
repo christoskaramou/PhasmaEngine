@@ -418,6 +418,13 @@ namespace pe
 		int width;
 		int height;
 	};
+
+	class AABB
+	{
+	public:
+		vec3 min;
+		vec3 max;
+	};
 	
 	vec2 operator*(cfloat scalar, cvec2& v);
 	

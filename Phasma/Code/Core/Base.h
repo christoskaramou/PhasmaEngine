@@ -22,8 +22,23 @@ SOFTWARE.
 
 #pragma once
 
+#include "Core/Settings.h"
+
 namespace pe
 {
+	inline size_t NextID()
+	{
+		static size_t ID = 0;
+		return ID++;
+	}
+
+	template<class T>
+	inline size_t GetTypeID()
+	{
+		static size_t typeID = NextID();
+		return typeID;
+	}
+
 	template<class VK_TYPE, class DX_TYPE>
 	class ApiHandle final
 	{
@@ -32,9 +47,9 @@ namespace pe
 	public:
 		ApiHandle() : m_handle(nullptr) {};
 
-		ApiHandle(VK_TYPE handle) : m_handle(handle) {}
+		ApiHandle(const VK_TYPE& handle) : m_handle(handle) {}
 
-		ApiHandle(DX_TYPE handle) : m_handle(handle) {}
+		ApiHandle(const DX_TYPE& handle) : m_handle(handle) {}
 
 		operator VK_TYPE () { return static_cast<VK_TYPE>(m_handle); }
 

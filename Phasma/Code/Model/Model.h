@@ -59,7 +59,7 @@ namespace pe
 		static Pipeline* pipeline;
 		static CommandBuffer* commandBuffer;
 		DescriptorSetHandle descriptorSet;
-		SPtr<Buffer> uniformBuffer;
+		Buffer* uniformBuffer;
 		struct UBOModel
 		{
 			mat4 matrix = mat4::identity();
@@ -88,8 +88,8 @@ namespace pe
 		void* script = nullptr;
 #endif
 		
-		SPtr<Buffer> vertexBuffer;
-		SPtr<Buffer> indexBuffer;
+		Buffer* vertexBuffer;
+		Buffer* indexBuffer;
 		uint32_t numberOfVertices = 0, numberOfIndices = 0;
 		
 		void draw(uint16_t alphaMode);

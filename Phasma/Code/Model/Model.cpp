@@ -326,6 +326,7 @@ namespace pe
 			myPrimitive.min = vec3(&accessorPos->min[0]);
 			myPrimitive.max = vec3(&accessorPos->max[0]);
 			myPrimitive.calculateBoundingSphere();
+			myPrimitive.calculateBoundinhBox();
 			myPrimitive.hasBones = !bonesIDs.empty() && !weights.empty();
 			
 			for (size_t i = 0; i < accessorPos->count; i++)
@@ -434,21 +435,26 @@ namespace pe
 		}
 	}
 	
-	void frustumCheckAsync(Model* model, Mesh* mesh, const Camera& camera, uint32_t index)
+	void CullPrimitiveAsync(Model* model, Mesh* mesh, const Camera& camera, uint32_t index)
 	{
-		cmat4 trans = model->transform * mesh->ubo.matrix;
-		vec4 bs = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
-		
-		bs.w = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale 
-		mesh->primitives[index].cull = !camera.SphereInFrustum(bs);
-		mesh->primitives[index].transformedBS = bs;
+		mat4 trans = model->transform * mesh->ubo.matrix;
+
+		vec3 point = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
+		float range = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale 
+		mesh->primitives[index].cull = !camera.PointInFrustum(point, range);
+		mesh->primitives[index].transformedBS = vec4(point, range);
+
+		//AABB aabb;
+		//aabb.min = trans * vec4(mesh->primitives[index].boundingBox.min, 1.0f);
+		//aabb.max = trans * vec4(mesh->primitives[index].boundingBox.max, 1.0f);
+		//mesh->primitives[index].cull = !camera.AABBInFrustum(aabb);
 	}
 	
-	void updateNodeAsync(Model* model, Node* node, const Camera& camera)
+	void UpdateNodeAsync(Model* model, Node* node, const Camera& camera)
 	{
 		if (node->mesh)
 		{
-			node->update();
+			node->Update();
 			
 			// async calls should be at least bigger than a number, else this will be slower
 			if (node->mesh->primitives.size() > 3)
@@ -456,7 +462,7 @@ namespace pe
 				std::vector<std::future<void>> futures(node->mesh->primitives.size());
 				
 				for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
-					futures[i] = std::async(std::launch::async, frustumCheckAsync, model, node->mesh, camera, i);
+					futures[i] = std::async(std::launch::async, CullPrimitiveAsync, model, node->mesh, camera, i);
 				
 				for (auto& f : futures)
 					f.get();
@@ -464,7 +470,7 @@ namespace pe
 			else
 			{
 				for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
-					frustumCheckAsync(model, node->mesh, camera, i);
+					CullPrimitiveAsync(model, node->mesh, camera, i);
 			}
 		}
 	}
@@ -505,7 +511,7 @@ namespace pe
 			std::vector<std::future<void>> futureNodes(linearNodes.size());
 			
 			for (uint32_t i = 0; i < linearNodes.size(); i++)
-				futureNodes[i] = std::async(std::launch::async, updateNodeAsync, this, linearNodes[i], camera);
+				futureNodes[i] = std::async(std::launch::async, UpdateNodeAsync, this, linearNodes[i], camera);
 			
 			for (auto& f : futureNodes)
 				f.get();
@@ -513,7 +519,7 @@ namespace pe
 		else
 		{
 			for (auto& linearNode : linearNodes)
-				updateNodeAsync(this, linearNode, camera);
+				UpdateNodeAsync(this, linearNode, camera);
 		}
 	}
 	
@@ -818,13 +824,13 @@ namespace pe
 		);
 		
 		// Staging buffer
-		SPtr<Buffer> staging = Buffer::Create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+		Buffer* staging = Buffer::Create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		staging->Map();
 		staging->CopyData(vertices.data());
 		staging->Flush();
 		staging->Unmap();
 		
-		vertexBuffer->CopyBuffer(staging.get(), staging->Size());
+		vertexBuffer->CopyBuffer(staging, staging->Size());
 		staging->Destroy();
 	}
 	
@@ -851,13 +857,13 @@ namespace pe
 		);
 		
 		// Staging buffer
-		SPtr<Buffer> staging = Buffer::Create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+		Buffer* staging = Buffer::Create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		staging->Map();
 		staging->CopyData(indices.data());
 		staging->Flush();
 		staging->Unmap();
 		
-		indexBuffer->CopyBuffer(staging.get(), staging->Size());
+		indexBuffer->CopyBuffer(staging, staging->Size());
 		staging->Destroy();
 	}
 	

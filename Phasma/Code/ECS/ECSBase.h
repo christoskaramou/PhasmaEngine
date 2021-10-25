@@ -22,21 +22,10 @@ SOFTWARE.
 
 #pragma once
 
+#include "Core/Base.h"
+
 namespace pe
 {
-	inline size_t NextID()
-	{
-		static size_t ID = 0;
-		return ID++;
-	}
-	
-	template<class T>
-	inline size_t GetTypeID()
-	{
-		static size_t typeID = NextID();
-		return typeID;
-	}
-	
 	template<class T, class U>
 	constexpr void ValidateBaseClass()
 	{

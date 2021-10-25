@@ -60,7 +60,7 @@ namespace pe
 		template<class T>
 		void copyDataTo(T* ptr, size_t elements)
 		{
-			assert(elements * sizeof(T) <= SBOut->SizeRequested());
+			assert(elements * sizeof(T) <= SBOut->Size());
 
 			SBOut->Map();
 			memcpy(ptr, SBOut->Data(), elements * sizeof(T));
@@ -71,8 +71,8 @@ namespace pe
 	
 	private:
 		static CommandPool s_commandPool;
-		SPtr<Buffer> SBIn;
-		SPtr<Buffer> SBOut;
+		Buffer* SBIn;
+		Buffer* SBOut;
 		Pipeline pipeline;
 		Fence fence;
 		Semaphore semaphore;

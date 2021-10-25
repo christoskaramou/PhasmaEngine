@@ -49,7 +49,7 @@ namespace pe
 		{
 			vec4 screenSpace[8];
 		} ubo;
-		SPtr<Buffer> uniform;
+		Buffer* uniform;
 		
 		void batchStart(CommandBuffer* cmd, uint32_t imageIndex);
 		

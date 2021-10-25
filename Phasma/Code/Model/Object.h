@@ -39,9 +39,9 @@ namespace pe
 		DescriptorSetHandle descriptorSet;
 		Image texture;
 		std::vector<float> vertices {};
-		SPtr<Buffer> vertexBuffer;
-		SPtr<Buffer> indexBuffer;
-		SPtr<Buffer> uniformBuffer;
+		Buffer* vertexBuffer;
+		Buffer* indexBuffer;
+		Buffer* uniformBuffer;
 		
 		virtual void createVertexBuffer();
 		

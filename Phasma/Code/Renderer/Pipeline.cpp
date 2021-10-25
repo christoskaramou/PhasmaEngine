@@ -50,11 +50,13 @@ namespace pe
 		vertexInputAttributeDescriptions = {};
 		width = 0.f;
 		height = 0.f;
-		pushConstantStage = PushConstantStage::Vertex;
-		pushConstantSize = 0;
+		cullMode = CullMode::Back;
 		colorBlendAttachments = {};
 		dynamicStates = {};
+		pushConstantStage = PushConstantStage::Vertex;
+		pushConstantSize = 0;
 		descriptorSetLayouts = {};
+		renderPass = {};
 		pipelineCache = {};
 	}
 	

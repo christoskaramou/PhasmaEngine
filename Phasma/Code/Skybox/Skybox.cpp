@@ -100,7 +100,7 @@ namespace pe
 			if (!pixels)
 				throw std::runtime_error("No pixel data loaded");
 			
-			SPtr<Buffer> staging = Buffer::Create(
+			Buffer* staging = Buffer::Create(
 				imageSize,
 				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
@@ -111,7 +111,7 @@ namespace pe
 			
 			stbi_image_free(pixels);
 			
-			texture.CopyBufferToImage(staging.get(), i);
+			texture.CopyBufferToImage(staging, i);
 			staging->Destroy();
 		}
 		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
