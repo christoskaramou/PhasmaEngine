@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
 	context.CreateSystem<EventSystem>();
 
 	Window* window = Window::Create();
-	VULKAN.Init(window->Handle()); // TODO: Remove this from here (was in Renderer)
+	RHII.Init(window->Handle()); // TODO: Remove this from here (was in Renderer)
 
 	auto* cs = context.CreateSystem<CameraSystem>();
 	auto* ls = context.CreateSystem<LightSystem>();

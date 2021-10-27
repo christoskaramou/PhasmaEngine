@@ -64,12 +64,12 @@ namespace pe
 		siCompute.pWaitSemaphores = waitSemaphores.data();
 		siCompute.pSignalSemaphores = &vksemaphore;
 
-		vkQueueSubmit(VULKAN.computeQueue, 1, &siCompute, fence.handle);
+		vkQueueSubmit(RHII.computeQueue, 1, &siCompute, fence.handle);
 	}
 	
 	void Compute::waitFence()
 	{
-		VULKAN.WaitFence(&fence);
+		RHII.WaitFence(&fence);
 	}
 	
 	void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
@@ -98,12 +98,12 @@ namespace pe
 		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutCompute();
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = VULKAN.descriptorPool;
+		allocInfo.descriptorPool = RHII.descriptorPool;
 		allocInfo.descriptorSetCount = 1;
 		allocInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(VULKAN.device, &allocInfo, &dset);
+		vkAllocateDescriptorSets(RHII.device, &allocInfo, &dset);
 		DSCompute = dset;
 	}
 	
@@ -133,7 +133,7 @@ namespace pe
 			wSetBuffer(DSCompute, 1, *SBOut),
 		};
 
-		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(RHII.device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
 	}
 	
 	void Compute::createPipeline(const std::string& shaderName)
@@ -200,7 +200,7 @@ namespace pe
 	void Compute::CreateResources()
 	{
 		if (!s_commandPool.Handle())
-			s_commandPool.Create(VULKAN.computeFamilyId);
+			s_commandPool.Create(RHII.computeFamilyId);
 	}
 	
 	void Compute::DestroyResources()
@@ -209,7 +209,7 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutCompute())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutCompute(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutCompute(), nullptr);
 			Pipeline::getDescriptorSetLayoutCompute() = {};
 		}
 	}

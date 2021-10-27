@@ -40,7 +40,7 @@ namespace pe
 	void Swapchain::Create(Surface* surface)
 	{
 		VkSurfaceCapabilitiesKHR capabilities;
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VULKAN.gpu, surface->surface, &capabilities);
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, surface->surface, &capabilities);
 
 		VkExtent2D extent;
 		extent.width = surface->actualExtent.width;
@@ -68,23 +68,23 @@ namespace pe
 		
 		// new swapchain with old create info
 		VkSwapchainKHR schain;
-		vkCreateSwapchainKHR(VULKAN.device, &swapchainCreateInfo, nullptr, &schain);
+		vkCreateSwapchainKHR(RHII.device, &swapchainCreateInfo, nullptr, &schain);
 
 		Swapchain newSwapchain;
 		newSwapchain.handle = schain;
 		
 		if (handle)
 		{
-			vkDestroySwapchainKHR(VULKAN.device, handle, nullptr);
+			vkDestroySwapchainKHR(RHII.device, handle, nullptr);
 			handle = {};
 		}
 		
 		// TODO: Maybe check the result in a loop?
 		uint32_t swapchainImageCount;
-		vkGetSwapchainImagesKHR(VULKAN.device, newSwapchain.handle, &swapchainImageCount, nullptr);
+		vkGetSwapchainImagesKHR(RHII.device, newSwapchain.handle, &swapchainImageCount, nullptr);
 
 		std::vector<VkImage> images(swapchainImageCount);
-		vkGetSwapchainImagesKHR(VULKAN.device, newSwapchain.handle, &swapchainImageCount, images.data());
+		vkGetSwapchainImagesKHR(RHII.device, newSwapchain.handle, &swapchainImageCount, images.data());
 		
 		newSwapchain.images.resize(images.size());
 		for (unsigned i = 0; i < images.size(); i++)
@@ -112,11 +112,11 @@ namespace pe
 			imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 			imageViewCreateInfo.image = image.image;
 			imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			imageViewCreateInfo.format = (VkFormat)VULKAN.surface.format;
+			imageViewCreateInfo.format = (VkFormat)RHII.surface.format;
 			imageViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
 			VkImageView imageView;
-			vkCreateImageView(VULKAN.device, &imageViewCreateInfo, nullptr, &imageView);
+			vkCreateImageView(RHII.device, &imageViewCreateInfo, nullptr, &imageView);
 			image.view = imageView;
 		}
 		
@@ -126,7 +126,7 @@ namespace pe
 	uint32_t Swapchain::Aquire(SemaphoreHandle semaphore, FenceHandle fence)
 	{
 		uint32_t imageIndex = 0;
-		VkResult result = vkAcquireNextImageKHR(VULKAN.device, handle, UINT64_MAX, semaphore, fence, &imageIndex);
+		VkResult result = vkAcquireNextImageKHR(RHII.device, handle, UINT64_MAX, semaphore, fence, &imageIndex);
 
 		if (result != VK_SUCCESS)
 			throw std::runtime_error("Aquire Next Image error");
@@ -138,12 +138,12 @@ namespace pe
 	{
 		for (auto& image : images)
 		{
-			vkDestroyImageView(VULKAN.device, image.view, nullptr);
+			vkDestroyImageView(RHII.device, image.view, nullptr);
 			image.view = {};
 		}
 		if (handle)
 		{
-			vkDestroySwapchainKHR(VULKAN.device, handle, nullptr);
+			vkDestroySwapchainKHR(RHII.device, handle, nullptr);
 			handle = {};
 		}
 	}

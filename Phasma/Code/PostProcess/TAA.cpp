@@ -43,7 +43,7 @@ namespace pe
 	
 	void TAA::Init()
 	{
-		previous.format = VULKAN.surface.format;
+		previous.format = RHII.surface.format;
 		previous.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		previous.CreateImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -56,7 +56,7 @@ namespace pe
 		previous.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
 		previous.CreateSampler();
 		
-		frameImage.format = VULKAN.surface.format;
+		frameImage.format = RHII.surface.format;
 		frameImage.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		frameImage.CreateImage(
 			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
@@ -98,19 +98,19 @@ namespace pe
 
 		VkDescriptorSetAllocateInfo allocateInfo{};
 		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = VULKAN.descriptorPool;
+		allocateInfo.descriptorPool = RHII.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 
 		VkDescriptorSet dset;
 
 		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutTAA();
 		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
 		DSet = dset;
 
 		dsetLayout = Pipeline::getDescriptorSetLayoutTAASharpen();
 		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
 		DSetSharpen = dset;
 
 		updateDescriptorSets(renderTargets);
@@ -158,14 +158,14 @@ namespace pe
 		{
 			wSetImage(DSet, 0, previous),
 			wSetImage(DSet, 1, frameImage),
-			wSetImage(DSet, 2, VULKAN.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
+			wSetImage(DSet, 2, RHII.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
 			wSetImage(DSet, 3, renderTargets["velocity"]),
 			wSetBuffer(DSet, 4, *uniform),
 			wSetImage(DSetSharpen, 0, renderTargets["taa"]),
 			wSetBuffer(DSetSharpen, 1, *uniform)
 		};
 
-		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 	}
 	
 	void TAA::draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
@@ -200,8 +200,8 @@ namespace pe
 	
 	void TAA::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		framebuffers.resize(VULKAN.swapchain.images.size());
-		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
+		framebuffers.resize(RHII.swapchain.images.size());
+		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["taa"].width;
 			uint32_t height = renderTargets["taa"].height;
@@ -209,8 +209,8 @@ namespace pe
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 		
-		framebuffersSharpen.resize(VULKAN.swapchain.images.size());
-		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
+		framebuffersSharpen.resize(RHII.swapchain.images.size());
+		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
@@ -340,12 +340,12 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutTAA())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutTAA(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutTAA(), nullptr);
 			Pipeline::getDescriptorSetLayoutTAA() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutTAASharpen())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutTAASharpen(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutTAASharpen(), nullptr);
 			Pipeline::getDescriptorSetLayoutTAASharpen() = {};
 		}
 		pipeline.destroy();

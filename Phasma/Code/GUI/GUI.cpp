@@ -131,7 +131,7 @@ namespace pe
 					Model& model = Model::models.back();
 					auto update = []() { s_modelLoading = true; };
 					auto signal = []() { s_modelLoading = false; };
-					VULKAN.WaitDeviceIdle();
+					RHII.WaitDeviceIdle();
 					auto loadAsync = [&model, folderPath, modelName]() { model.Load(folderPath, modelName); };
 					Queue<Launch::AsyncNoWait>::Request(loadAsync, update, signal);
 					GUI::modelList.push_back(modelName);
@@ -394,7 +394,7 @@ namespace pe
 		ImGui::Begin("Shaders Folder", &shaders_open);
 		if (ImGui::Button("Compile Shaders"))
 		{
-			VULKAN.WaitDeviceIdle();
+			RHII.WaitDeviceIdle();
 			CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders);
 		}
 		for (uint32_t i = 0; i < shaderList.size(); i++)
@@ -440,7 +440,7 @@ namespace pe
 		if (ImGui::Button("Apply"))
 		{
 			renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
-			VULKAN.WaitDeviceIdle();
+			RHII.WaitDeviceIdle();
 			CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::ScaleRenderTargets);
 		}
 		//ImGui::Checkbox("Lock Render Window", &lock_render_window);
@@ -581,7 +581,7 @@ namespace pe
 			ImGui::Separator();
 			if (ImGui::Button("Unload Model"))
 			{
-				VULKAN.WaitDeviceIdle();
+				RHII.WaitDeviceIdle();
 				Model::models[modelItemSelected].destroy();
 				Model::models.erase(Model::models.begin() + modelItemSelected);
 				GUI::modelList.erase(GUI::modelList.begin() + modelItemSelected);
@@ -632,29 +632,29 @@ namespace pe
 
 		SetWindowStyle();
 
-		ImGui_ImplSDL2_InitForVulkan(VULKAN.window);
+		ImGui_ImplSDL2_InitForVulkan(RHII.window);
 
 		ImGui_ImplVulkan_InitInfo info;
-		info.Instance = VULKAN.instance;
-		info.PhysicalDevice = VULKAN.gpu;
-		info.Device = VULKAN.device;
-		info.QueueFamily = VULKAN.graphicsFamilyId;
-		info.Queue = VULKAN.graphicsQueue;
+		info.Instance = RHII.instance;
+		info.PhysicalDevice = RHII.gpu;
+		info.Device = RHII.device;
+		info.QueueFamily = RHII.graphicsFamilyId;
+		info.Queue = RHII.graphicsQueue;
 		info.PipelineCache = nullptr; // Will it help to use it?
-		info.DescriptorPool = VULKAN.descriptorPool;
+		info.DescriptorPool = RHII.descriptorPool;
 		info.Subpass = 0;
-		info.MinImageCount = static_cast<uint32_t>(VULKAN.swapchain.images.size());
-		info.ImageCount = (uint32_t)VULKAN.swapchain.images.size();
+		info.MinImageCount = static_cast<uint32_t>(RHII.swapchain.images.size());
+		info.ImageCount = (uint32_t)RHII.swapchain.images.size();
 		info.MSAASamples = VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT;
 		info.Allocator = nullptr;
 		info.CheckVkResultFn = nullptr;
 		ImGui_ImplVulkan_Init(&info, renderPass.handle);
 
-		CommandBuffer cmd = VULKAN.dynamicCmdBuffers[0];
+		CommandBuffer cmd = RHII.dynamicCmdBuffers[0];
 		cmd.Begin();
 		ImGui_ImplVulkan_CreateFontsTexture(cmd.Handle());
 		cmd.End();
-		VULKAN.SubmitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
+		RHII.SubmitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
 	}
 	
 	void GUI::InitGUI(bool show)
@@ -695,7 +695,7 @@ namespace pe
 	void GUI::CreateRenderPass()
 	{
 		Attachment colorAttachment;
-		colorAttachment.format = VULKAN.surface.format;
+		colorAttachment.format = RHII.surface.format;
 		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -709,12 +709,12 @@ namespace pe
 
 	void GUI::CreateFrameBuffers()
 	{
-		framebuffers.resize(VULKAN.swapchain.images.size());
-		for (uint32_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
+		framebuffers.resize(RHII.swapchain.images.size());
+		for (uint32_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
 			uint32_t width = WIDTH;
 			uint32_t height = HEIGHT;
-			ImageViewHandle view = VULKAN.swapchain.images[i].view;
+			ImageViewHandle view = RHII.swapchain.images[i].view;
 			framebuffers[i].Create(width, height, view, renderPass);
 		}
 	}

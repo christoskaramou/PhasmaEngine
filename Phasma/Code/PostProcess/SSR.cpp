@@ -54,12 +54,12 @@ namespace pe
 		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutSSR();
 		VkDescriptorSetAllocateInfo allocateInfo{};
 		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = VULKAN.descriptorPool;
+		allocateInfo.descriptorPool = RHII.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
 		DSet = dset;
 
 		updateDescriptorSets(renderTargets);
@@ -106,13 +106,13 @@ namespace pe
 		std::vector<VkWriteDescriptorSet> textureWriteSets
 		{
 			wSetImage(DSet, 0, renderTargets["albedo"]),
-			wSetImage(DSet, 1, VULKAN.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
+			wSetImage(DSet, 1, RHII.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
 			wSetImage(DSet, 2, renderTargets["normal"]),
 			wSetImage(DSet, 3, renderTargets["srm"]),
 			wSetBuffer(DSet, 4, *UBReflection)
 		};
 
-		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 	}
 	
 	void SSR::update(Camera& camera)
@@ -150,8 +150,8 @@ namespace pe
 	
 	void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		framebuffers.resize(VULKAN.swapchain.images.size());
-		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
+		framebuffers.resize(RHII.swapchain.images.size());
+		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["ssr"].width;
 			uint32_t height = renderTargets["ssr"].height;
@@ -186,7 +186,7 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutSSR())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutSSR(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutSSR(), nullptr);
 			Pipeline::getDescriptorSetLayoutSSR() = {};
 		}
 		UBReflection->Destroy();

@@ -44,9 +44,9 @@ namespace pe
 	{
 		// SET WINDOW TITLE
 		std::string title = "PhasmaEngine";
-		title += " - Device: " + VULKAN.gpuName;
+		title += " - Device: " + RHII.gpuName;
 		title += " - API: Vulkan";
-		title += " - Present Mode: " + PresentModeToString(VULKAN.surface.presentMode);
+		title += " - Present Mode: " + PresentModeToString(RHII.surface.presentMode);
 #ifdef _DEBUG
 		title += " - Configuration: Debug";
 #else
@@ -55,19 +55,19 @@ namespace pe
 		CONTEXT->GetSystem<EventSystem>()->DispatchEvent(EventType::SetWindowTitle, title);
 
 		// INIT RENDERING
-		AddRenderTarget("viewport", VULKAN.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("viewport", RHII.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 		AddRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-		AddRenderTarget("albedo", VULKAN.surface.format);
-		AddRenderTarget("srm", VULKAN.surface.format); // Specular Roughness Metallic
+		AddRenderTarget("albedo", RHII.surface.format);
+		AddRenderTarget("srm", RHII.surface.format); // Specular Roughness Metallic
 		AddRenderTarget("ssao", VK_FORMAT_R16_UNORM);
 		AddRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-		AddRenderTarget("ssr", VULKAN.surface.format);
+		AddRenderTarget("ssr", RHII.surface.format);
 		AddRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-		AddRenderTarget("brightFilter", VULKAN.surface.format);
-		AddRenderTarget("gaussianBlurHorizontal", VULKAN.surface.format);
-		AddRenderTarget("gaussianBlurVertical", VULKAN.surface.format);
-		AddRenderTarget("emissive", VULKAN.surface.format);
-		AddRenderTarget("taa", VULKAN.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("brightFilter", RHII.surface.format);
+		AddRenderTarget("gaussianBlurHorizontal", RHII.surface.format);
+		AddRenderTarget("gaussianBlurVertical", RHII.surface.format);
+		AddRenderTarget("emissive", RHII.surface.format);
+		AddRenderTarget("taa", RHII.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
 		// render passes
 		shadows.createRenderPass();
@@ -146,17 +146,17 @@ namespace pe
 		};
 
 		// acquire the image
-		auto& aquireSignalSemaphore = VULKAN.semaphores[frameIndex];
-		uint32_t imageIndex = VULKAN.swapchain.Aquire(aquireSignalSemaphore.handle, {});
+		auto& aquireSignalSemaphore = RHII.semaphores[frameIndex];
+		uint32_t imageIndex = RHII.swapchain.Aquire(aquireSignalSemaphore.handle, {});
 
 		static Timer timer;
 		timer.Start();
-		VULKAN.WaitFence(&VULKAN.fences[imageIndex]);
+		RHII.WaitFence(&RHII.fences[imageIndex]);
 		FrameTimer::Instance().timestamps[0] = timer.Count();
 
-		auto& cmd = VULKAN.dynamicCmdBuffers[imageIndex];
+		auto& cmd = RHII.dynamicCmdBuffers[imageIndex];
 
-		VULKAN.WaitAndLockSubmits();
+		RHII.WaitAndLockSubmits();
 
 		if (GUI::shadow_cast)
 		{
@@ -166,12 +166,12 @@ namespace pe
 
 			// submit the shadow command buffers
 			auto& shadowWaitSemaphore = aquireSignalSemaphore;
-			auto& shadowSignalSemaphore = VULKAN.semaphores[imageIndex * 3 + 1];
-			auto& scb = VULKAN.shadowCmdBuffers;
+			auto& shadowSignalSemaphore = RHII.semaphores[imageIndex * 3 + 1];
+			auto& scb = RHII.shadowCmdBuffers;
 			auto size = shadows.textures.size();
 			auto i = size * imageIndex;
 			std::vector<CommandBuffer> activeShadowCmdBuffers(scb.begin() + i, scb.begin() + i + size);
-			VULKAN.Submit(
+			RHII.Submit(
 				static_cast<uint32_t>(activeShadowCmdBuffers.size()), activeShadowCmdBuffers.data(),
 				&waitStages[0],
 				1, &shadowWaitSemaphore,
@@ -187,9 +187,9 @@ namespace pe
 		// submit the command buffers
 		auto& deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
 		auto& deferredWaitSemaphore = aquireSignalSemaphore;
-		auto& deferredSignalSemaphore = VULKAN.semaphores[imageIndex * 3 + 2];
-		auto& deferredSignalFence = VULKAN.fences[imageIndex];
-		VULKAN.Submit(
+		auto& deferredSignalSemaphore = RHII.semaphores[imageIndex * 3 + 2];
+		auto& deferredSignalFence = RHII.fences[imageIndex];
+		RHII.Submit(
 			1, &cmd,
 			&deferredWaitStage,
 			1, &deferredWaitSemaphore,
@@ -198,9 +198,9 @@ namespace pe
 
 		// Presentation
 		auto& presentWaitSemaphore = deferredSignalSemaphore;
-		VULKAN.Present(1, &VULKAN.swapchain, &imageIndex, 1, &presentWaitSemaphore);
+		RHII.Present(1, &RHII.swapchain, &imageIndex, 1, &presentWaitSemaphore);
 
-		VULKAN.UnlockSubmits();
+		RHII.UnlockSubmits();
 
 		gui.RenderViewPorts();
 
@@ -209,7 +209,7 @@ namespace pe
 
 	void RendererSystem::Destroy()
 	{
-		VULKAN.WaitDeviceIdle();
+		RHII.WaitDeviceIdle();
 
 		for (auto& rt : renderTargets)
 			rt.second.Destroy();
@@ -218,17 +218,17 @@ namespace pe
 		{
 			if (Pipeline::getDescriptorSetLayoutModel())
 			{
-				vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
+				vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
 				Pipeline::getDescriptorSetLayoutModel() = {};
 			}
 			if (Pipeline::getDescriptorSetLayoutMesh())
 			{
-				vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutMesh(), nullptr);
+				vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutMesh(), nullptr);
 				Pipeline::getDescriptorSetLayoutMesh() = {};
 			}
 			if (Pipeline::getDescriptorSetLayoutPrimitive())
 			{
-				vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutPrimitive(), nullptr);
+				vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutPrimitive(), nullptr);
 				Pipeline::getDescriptorSetLayoutPrimitive() = {};
 			}
 		}

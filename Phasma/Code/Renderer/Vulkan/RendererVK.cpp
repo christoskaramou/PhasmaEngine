@@ -41,8 +41,8 @@ namespace pe
 	
 	Renderer::~Renderer()
 	{
-		VULKAN.Destroy();
-		VULKAN.Remove();
+		RHII.Destroy();
+		RHII.Remove();
 	}
 
 	void RenderArea::Update(float x, float y, float w, float h, float minDepth, float maxDepth)
@@ -108,7 +108,7 @@ namespace pe
 		
 		FrameTimer& frameTimer = FrameTimer::Instance();
 
-		CommandBuffer cmd = VULKAN.dynamicCmdBuffers[imageIndex];
+		CommandBuffer cmd = RHII.dynamicCmdBuffers[imageIndex];
 		cmd.Begin();
 
 		gpuTimer[0].Start(&cmd);
@@ -133,7 +133,7 @@ namespace pe
 			frameTimer.timestamps[4] = gpuTimer[1].End();
 		}
 		renderTargets["albedo"].ChangeLayout(cmd, LayoutState::ColorRead);
-		VULKAN.depth.ChangeLayout(cmd, LayoutState::DepthRead);
+		RHII.depth.ChangeLayout(cmd, LayoutState::DepthRead);
 		renderTargets["normal"].ChangeLayout(cmd, LayoutState::ColorRead);
 		renderTargets["srm"].ChangeLayout(cmd, LayoutState::ColorRead);
 		renderTargets["emissive"].ChangeLayout(cmd, LayoutState::ColorRead);
@@ -225,7 +225,7 @@ namespace pe
 		}
 
 		renderTargets["albedo"].ChangeLayout(cmd, LayoutState::ColorWrite);
-		VULKAN.depth.ChangeLayout(cmd, LayoutState::DepthWrite);
+		RHII.depth.ChangeLayout(cmd, LayoutState::DepthWrite);
 		renderTargets["normal"].ChangeLayout(cmd, LayoutState::ColorWrite);
 		renderTargets["srm"].ChangeLayout(cmd, LayoutState::ColorWrite);
 		renderTargets["emissive"].ChangeLayout(cmd, LayoutState::ColorWrite);
@@ -255,7 +255,7 @@ namespace pe
 		for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
 		{
 			uint32_t index = SHADOWMAP_CASCADES * imageIndex + i;
-			CommandBuffer cmd = VULKAN.shadowCmdBuffers[index];
+			CommandBuffer cmd = RHII.shadowCmdBuffers[index];
 			cmd.Begin();
 
 			FrameTimer& frameTimer = FrameTimer::Instance();
@@ -424,7 +424,7 @@ namespace pe
 	
 	void Renderer::ResizeViewport(uint32_t width, uint32_t height)
 	{
-		VULKAN.WaitGraphicsQueue();
+		RHII.WaitGraphicsQueue();
 
 		renderArea.Update(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
 
@@ -517,29 +517,29 @@ namespace pe
 		ssao.pipeline.destroy();
 		ssao.pipelineBlur.destroy();
 		
-		VULKAN.depth.Destroy();
-		VULKAN.swapchain.Destroy();
+		RHII.depth.Destroy();
+		RHII.swapchain.Destroy();
 		//- Free resources end ------------------
 		
 		//- Recreate resources ------------------
 		WIDTH = width;
 		HEIGHT = height;
-		VULKAN.CreateSwapchain(&VULKAN.surface);
-		VULKAN.CreateDepth();
+		RHII.CreateSwapchain(&RHII.surface);
+		RHII.CreateDepth();
 		
-		AddRenderTarget("viewport", VULKAN.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("viewport", RHII.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 		AddRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-		AddRenderTarget("albedo", VULKAN.surface.format);
-		AddRenderTarget("srm", VULKAN.surface.format); // Specular Roughness Metallic
+		AddRenderTarget("albedo", RHII.surface.format);
+		AddRenderTarget("srm", RHII.surface.format); // Specular Roughness Metallic
 		AddRenderTarget("ssao", VK_FORMAT_R16_UNORM);
 		AddRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-		AddRenderTarget("ssr", VULKAN.surface.format);
+		AddRenderTarget("ssr", RHII.surface.format);
 		AddRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-		AddRenderTarget("brightFilter", VULKAN.surface.format);
-		AddRenderTarget("gaussianBlurHorizontal", VULKAN.surface.format);
-		AddRenderTarget("gaussianBlurVertical", VULKAN.surface.format);
-		AddRenderTarget("emissive", VULKAN.surface.format);
-		AddRenderTarget("taa", VULKAN.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("brightFilter", RHII.surface.format);
+		AddRenderTarget("gaussianBlurHorizontal", RHII.surface.format);
+		AddRenderTarget("gaussianBlurVertical", RHII.surface.format);
+		AddRenderTarget("emissive", RHII.surface.format);
+		AddRenderTarget("taa", RHII.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 		
 		deferred.createRenderPasses(renderTargets);
 		deferred.createFrameBuffers(renderTargets);
@@ -597,7 +597,7 @@ namespace pe
 			
 	void Renderer::BlitToViewport(CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
 	{
-		Image& s_chain_Image = VULKAN.swapchain.images[imageIndex];
+		Image& s_chain_Image = RHII.swapchain.images[imageIndex];
 		
 		renderedImage.TransitionImageLayout(
 			cmd,
@@ -661,7 +661,7 @@ namespace pe
 	
 	void Renderer::RecreatePipelines()
 	{
-		VULKAN.WaitGraphicsQueue();
+		RHII.WaitGraphicsQueue();
 
 		SSAO& ssao = *WORLD_ENTITY->GetComponent<SSAO>();
 		SSR& ssr = *WORLD_ENTITY->GetComponent<SSR>();

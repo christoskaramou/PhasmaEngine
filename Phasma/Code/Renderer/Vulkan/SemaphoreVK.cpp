@@ -41,7 +41,7 @@ namespace pe
 		si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
 		VkSemaphore semaphore;
-		vkCreateSemaphore(VULKAN.device, &si, nullptr, &semaphore);
+		vkCreateSemaphore(RHII.device, &si, nullptr, &semaphore);
 		handle = semaphore;
 	}
 
@@ -49,7 +49,7 @@ namespace pe
 	{
 		if (handle)
 		{
-			vkDestroySemaphore(VULKAN.device, handle, nullptr);
+			vkDestroySemaphore(RHII.device, handle, nullptr);
 			handle = {};
 		}
 	}

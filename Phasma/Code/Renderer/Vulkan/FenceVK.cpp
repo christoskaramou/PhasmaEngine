@@ -45,7 +45,7 @@ namespace pe
 		fi.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
 
 		VkFence fence;
-		vkCreateFence(VULKAN.device, &fi, nullptr, &fence);
+		vkCreateFence(RHII.device, &fi, nullptr, &fence);
 		handle = fence;
 	}
 
@@ -53,7 +53,7 @@ namespace pe
 	{
 		if (handle)
 		{
-			vkDestroyFence(VULKAN.device, handle, nullptr);
+			vkDestroyFence(RHII.device, handle, nullptr);
 			handle = {};
 		}
 	}

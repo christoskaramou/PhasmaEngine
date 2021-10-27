@@ -79,12 +79,12 @@ namespace pe
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.pNext = nullptr;
-		allocInfo.descriptorPool = VULKAN.descriptorPool;
+		allocInfo.descriptorPool = RHII.descriptorPool;
 		allocInfo.descriptorSetCount = 1;
 		allocInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(VULKAN.device, &allocInfo, &dset);
+		vkAllocateDescriptorSets(RHII.device, &allocInfo, &dset);
 		DSComposition = dset;
 		
 		// Check if ibl_brdf_lut is already loaded
@@ -103,8 +103,8 @@ namespace pe
 				throw std::runtime_error("No pixel data loaded");
 			const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 			
-			VULKAN.WaitGraphicsQueue();
-			VULKAN.WaitAndLockSubmits();
+			RHII.WaitGraphicsQueue();
+			RHII.WaitAndLockSubmits();
 			
 			Buffer* staging = Buffer::Create(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 			staging->Map();
@@ -131,7 +131,7 @@ namespace pe
 			
 			staging->Destroy();
 			
-			VULKAN.UnlockSubmits();
+			RHII.UnlockSubmits();
 			
 			Mesh::uniqueTextures[path] = ibl_brdf_lut;
 		}
@@ -183,7 +183,7 @@ namespace pe
 		Buffer& lightsUniform = CONTEXT->GetSystem<LightSystem>()->GetUniform();
 		std::vector<VkWriteDescriptorSet> writeDescriptorSets =
 		{
-			wSetImage(DSComposition, 0, VULKAN.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
+			wSetImage(DSComposition, 0, RHII.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
 			wSetImage(DSComposition, 1, renderTargets["normal"]),
 			wSetImage(DSComposition, 2, renderTargets["albedo"]),
 			wSetImage(DSComposition, 3, renderTargets["srm"]),
@@ -195,7 +195,7 @@ namespace pe
 			wSetBuffer(DSComposition, 9, *uniform)
 		};
 
-		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(RHII.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
 	}
 	
 	void Deferred::update(mat4& invViewProj)
@@ -248,7 +248,7 @@ namespace pe
 
 		// Depth
 		attachments[5].flags = {};
-		attachments[5].format = VULKAN.depth.format;
+		attachments[5].format = RHII.depth.format;
 		attachments[5].samples = VK_SAMPLE_COUNT_1_BIT;
 		attachments[5].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachments[5].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -272,8 +272,8 @@ namespace pe
 	
 	void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		framebuffers.resize(VULKAN.swapchain.images.size());
-		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
+		framebuffers.resize(RHII.swapchain.images.size());
+		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["albedo"].width;
 			uint32_t height = renderTargets["albedo"].height;
@@ -283,7 +283,7 @@ namespace pe
 				renderTargets["srm"].view,
 				renderTargets["velocity"].view,
 				renderTargets["emissive"].view,
-				VULKAN.depth.view
+				RHII.depth.view
 			};
 			framebuffers[i].Create(width, height, views, renderPass);
 		}
@@ -291,8 +291,8 @@ namespace pe
 	
 	void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		compositionFramebuffers.resize(VULKAN.swapchain.images.size());
-		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
+		compositionFramebuffers.resize(RHII.swapchain.images.size());
+		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
@@ -382,7 +382,7 @@ namespace pe
 		
 		if (Pipeline::getDescriptorSetLayoutComposition())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutComposition(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutComposition(), nullptr);
 			Pipeline::getDescriptorSetLayoutComposition() = {};
 		}
 		uniform->Destroy();

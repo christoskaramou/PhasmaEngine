@@ -75,7 +75,7 @@ namespace pe
 	GPUTimer::GPUTimer()
 	{
 		VkPhysicalDeviceProperties gpuProps;
-		vkGetPhysicalDeviceProperties(VULKAN.gpu, &gpuProps);
+		vkGetPhysicalDeviceProperties(RHII.gpu, &gpuProps);
 
 		if (!gpuProps.limits.timestampComputeAndGraphics)
 			throw std::runtime_error("Timestamps not supported");
@@ -88,7 +88,7 @@ namespace pe
 		qpci.queryCount = 2;
 		
 		VkQueryPool pool;
-		vkCreateQueryPool(VULKAN.device, &qpci, nullptr, &pool);
+		vkCreateQueryPool(RHII.device, &qpci, nullptr, &pool);
 		queryPool = pool;
 	}
 
@@ -112,7 +112,7 @@ namespace pe
 	
 	float GPUTimer::GetTime()
 	{
-		VkResult res = vkGetQueryPoolResults(VULKAN.device, queryPool, 0, 2, 2 * sizeof(uint64_t), &queries, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+		VkResult res = vkGetQueryPoolResults(RHII.device, queryPool, 0, 2, 2 * sizeof(uint64_t), &queries, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
 
 		if (res != VK_SUCCESS)
 			return 0.f;
@@ -123,6 +123,6 @@ namespace pe
 	void GPUTimer::Destroy()
 	{
 		if (queryPool)
-			vkDestroyQueryPool(VULKAN.device, queryPool, nullptr);
+			vkDestroyQueryPool(RHII.device, queryPool, nullptr);
 	}
 }

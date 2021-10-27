@@ -90,12 +90,12 @@ namespace pe
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.pNext = nullptr;
-		allocInfo.descriptorPool = VULKAN.descriptorPool;
+		allocInfo.descriptorPool = RHII.descriptorPool;
 		allocInfo.descriptorSetCount = 1;
 		allocInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(VULKAN.device, &allocInfo, &dset);
+		vkAllocateDescriptorSets(RHII.device, &allocInfo, &dset);
 		DSet = dset;
 		
 		// DESCRIPTOR SET FOR SSAO BLUR
@@ -103,12 +103,12 @@ namespace pe
 		VkDescriptorSetAllocateInfo allocInfoBlur{};
 		allocInfoBlur.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfoBlur.pNext = nullptr;
-		allocInfoBlur.descriptorPool = VULKAN.descriptorPool;
+		allocInfoBlur.descriptorPool = RHII.descriptorPool;
 		allocInfoBlur.descriptorSetCount = 1;
 		allocInfoBlur.pSetLayouts = &dsetLayoutBlur;
 
 		VkDescriptorSet dsetBlur;
-		vkAllocateDescriptorSets(VULKAN.device, &allocInfoBlur, &dsetBlur);
+		vkAllocateDescriptorSets(RHII.device, &allocInfoBlur, &dsetBlur);
 		DSBlur = dsetBlur;
 		
 		updateDescriptorSets(renderTargets);
@@ -157,7 +157,7 @@ namespace pe
 		
 		std::vector<VkWriteDescriptorSet> writeDescriptorSets
 		{
-			wSetImage(DSet, 0, VULKAN.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
+			wSetImage(DSet, 0, RHII.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
 			wSetImage(DSet, 1, renderTargets["normal"]),
 			wSetImage(DSet, 2, noiseTex),
 			wSetBuffer(DSet, 3, *UB_Kernel),
@@ -165,7 +165,7 @@ namespace pe
 			wSetImage(DSBlur, 0, renderTargets["ssao"])
 		};
 
-		vkUpdateDescriptorSets(VULKAN.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
+		vkUpdateDescriptorSets(RHII.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
 	}
 	
 	void SSAO::draw(CommandBuffer* cmd, uint32_t imageIndex, Image& image)
@@ -207,12 +207,12 @@ namespace pe
 		pipelineBlur.destroy();
 		if (Pipeline::getDescriptorSetLayoutSSAO())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutSSAO(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutSSAO(), nullptr);
 			Pipeline::getDescriptorSetLayoutSSAO() = {};
 		}
 		if (Pipeline::getDescriptorSetLayoutSSAOBlur())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutSSAOBlur(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutSSAOBlur(), nullptr);
 			Pipeline::getDescriptorSetLayoutSSAOBlur() = {};
 		}
 	}
@@ -247,8 +247,8 @@ namespace pe
 	
 	void SSAO::createSSAOFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		framebuffers.resize(VULKAN.swapchain.images.size());
-		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
+		framebuffers.resize(RHII.swapchain.images.size());
+		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["ssao"].width;
 			uint32_t height = renderTargets["ssao"].height;
@@ -259,8 +259,8 @@ namespace pe
 	
 	void SSAO::createSSAOBlurFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		blurFramebuffers.resize(VULKAN.swapchain.images.size());
-		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
+		blurFramebuffers.resize(RHII.swapchain.images.size());
+		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["ssaoBlur"].width;
 			uint32_t height = renderTargets["ssaoBlur"].height;

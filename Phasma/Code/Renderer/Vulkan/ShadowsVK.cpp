@@ -48,12 +48,12 @@ namespace pe
 		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutShadowsDeferred();
 		VkDescriptorSetAllocateInfo allocateInfo{};
 		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = VULKAN.descriptorPool;
+		allocateInfo.descriptorPool = RHII.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
 		descriptorSetDeferred = dset;
 
 		std::vector<VkWriteDescriptorSet> textureWriteSets(SHADOWMAP_CASCADES + 1);
@@ -75,7 +75,7 @@ namespace pe
 			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			textureWriteSet.pImageInfo = &dii;
 
-			vkUpdateDescriptorSets(VULKAN.device, 1, &textureWriteSet, 0, nullptr);
+			vkUpdateDescriptorSets(RHII.device, 1, &textureWriteSet, 0, nullptr);
 		}
 
 		VkDescriptorBufferInfo dbi;
@@ -92,13 +92,13 @@ namespace pe
 		bufferWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bufferWriteSet.pBufferInfo = &dbi;
 
-		vkUpdateDescriptorSets(VULKAN.device, 1, &bufferWriteSet, 0, nullptr);
+		vkUpdateDescriptorSets(RHII.device, 1, &bufferWriteSet, 0, nullptr);
 	}
 
 	void Shadows::createRenderPass()
 	{
 		Attachment attachment{};
-		attachment.format = VULKAN.depth.format;
+		attachment.format = RHII.depth.format;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -115,7 +115,7 @@ namespace pe
 		int textureIdx = 0;
 		for (auto& texture : textures)
 		{
-			texture.format = VULKAN.depth.format;
+			texture.format = RHII.depth.format;
 			texture.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			texture.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 			texture.maxAnisotropy = 1.f;
@@ -134,7 +134,7 @@ namespace pe
 			texture.CreateSampler();
 		}
 
-		framebuffers.resize(VULKAN.swapchain.images.size() * textures.size());
+		framebuffers.resize(RHII.swapchain.images.size() * textures.size());
 		for (uint32_t i = 0; i < framebuffers.size(); ++i)
 		{
 			uint32_t width = SHADOWMAP_SIZE;
@@ -179,13 +179,13 @@ namespace pe
 	{
 		if (VkRenderPass(renderPass.handle))
 		{
-			vkDestroyRenderPass(VULKAN.device, renderPass.handle, nullptr);
+			vkDestroyRenderPass(RHII.device, renderPass.handle, nullptr);
 			renderPass.handle = {};
 		}
 
 		if (Pipeline::getDescriptorSetLayoutShadows())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutShadows(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutShadows(), nullptr);
 			Pipeline::getDescriptorSetLayoutShadows() = {};
 		}
 

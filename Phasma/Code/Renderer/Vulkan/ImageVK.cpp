@@ -103,7 +103,7 @@ namespace pe
 		auto _usage = usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT; // All images can be copied
 
 		VkFormatProperties fProps;
-		vkGetPhysicalDeviceFormatProperties(VULKAN.gpu, (VkFormat)format, &fProps);
+		vkGetPhysicalDeviceFormatProperties(RHII.gpu, (VkFormat)format, &fProps);
 
 		if (tiling == VK_IMAGE_TILING_OPTIMAL)
 		{
@@ -121,7 +121,7 @@ namespace pe
 		}
 
 		VkImageFormatProperties ifProps;
-		vkGetPhysicalDeviceImageFormatProperties(VULKAN.gpu, (VkFormat)format, VK_IMAGE_TYPE_2D, (VkImageTiling)tiling, _usage, VkImageCreateFlags(), &ifProps);
+		vkGetPhysicalDeviceImageFormatProperties(RHII.gpu, (VkFormat)format, VK_IMAGE_TYPE_2D, (VkImageTiling)tiling, _usage, VkImageCreateFlags(), &ifProps);
 
 		if (ifProps.maxArrayLayers < arrayLayers ||
 			ifProps.maxExtent.width < width ||
@@ -156,7 +156,7 @@ namespace pe
 
 		VmaAllocationInfo allocationInfo;
 		VkImage vkImage;
-		vmaCreateImage(VULKAN.allocator, &imageInfo, &allocationCreateInfo, &vkImage, &allocation, &allocationInfo);
+		vmaCreateImage(RHII.allocator, &imageInfo, &allocationCreateInfo, &vkImage, &allocation, &allocationInfo);
 		image = vkImage;
 	}
 
@@ -170,7 +170,7 @@ namespace pe
 		viewInfo.subresourceRange = { (VkImageAspectFlags)aspectFlags, 0, mipLevels, 0, arrayLayers };
 
 		VkImageView vkView;
-		vkCreateImageView(VULKAN.device, &viewInfo, nullptr, &vkView);
+		vkCreateImageView(RHII.device, &viewInfo, nullptr, &vkView);
 		view = vkView;
 	}
 
@@ -180,10 +180,10 @@ namespace pe
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = VULKAN.commandPool2.Handle();
+		allocInfo.commandPool = RHII.commandPool2.Handle();
 
 		VkCommandBuffer commandBuffer;
-		vkAllocateCommandBuffers(VULKAN.device, &allocInfo, &commandBuffer);
+		vkAllocateCommandBuffers(RHII.device, &allocInfo, &commandBuffer);
 
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -286,9 +286,9 @@ namespace pe
 		vkEndCommandBuffer(commandBuffer);
 
 		CommandBuffer cmdBuffer(commandBuffer);
-		VULKAN.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
+		RHII.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 
-		vkFreeCommandBuffers(VULKAN.device, VULKAN.commandPool2.Handle(), 1, &commandBuffer);
+		vkFreeCommandBuffers(RHII.device, RHII.commandPool2.Handle(), 1, &commandBuffer);
 	}
 
 	void Image::ChangeLayout(CommandBuffer cmd, LayoutState state)
@@ -357,10 +357,10 @@ namespace pe
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = VULKAN.commandPool2.Handle();
+		allocInfo.commandPool = RHII.commandPool2.Handle();
 
 		VkCommandBuffer commandBuffer;
-		vkAllocateCommandBuffers(VULKAN.device, &allocInfo, &commandBuffer);
+		vkAllocateCommandBuffers(RHII.device, &allocInfo, &commandBuffer);
 
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -383,9 +383,9 @@ namespace pe
 		vkEndCommandBuffer(commandBuffer);
 
 		CommandBuffer cmdBuffer(commandBuffer);
-		VULKAN.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
+		RHII.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 
-		vkFreeCommandBuffers(VULKAN.device, VULKAN.commandPool2.Handle(), 1, &commandBuffer);
+		vkFreeCommandBuffers(RHII.device, RHII.commandPool2.Handle(), 1, &commandBuffer);
 	}
 
 	void Image::CopyColorAttachment(CommandBuffer cmd, Image& renderedImage)
@@ -454,7 +454,7 @@ namespace pe
 	void Image::GenerateMipMaps()
 	{
 		VkFormatProperties fProps;
-		vkGetPhysicalDeviceFormatProperties(VULKAN.gpu, (VkFormat)format, &fProps);
+		vkGetPhysicalDeviceFormatProperties(RHII.gpu, (VkFormat)format, &fProps);
 
 		if (tiling == VK_IMAGE_TILING_OPTIMAL)
 		{
@@ -475,10 +475,10 @@ namespace pe
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = mipLevels;
-		allocInfo.commandPool = VULKAN.commandPool2.Handle();
+		allocInfo.commandPool = RHII.commandPool2.Handle();
 
 		std::vector<VkCommandBuffer> commandBuffers(mipLevels);
-		vkAllocateCommandBuffers(VULKAN.device, &allocInfo, commandBuffers.data());
+		vkAllocateCommandBuffers(RHII.device, &allocInfo, commandBuffers.data());
 
 		auto mipWidth = static_cast<int32_t>(width);
 		auto mipHeight = static_cast<int32_t>(height);
@@ -558,7 +558,7 @@ namespace pe
 			vkEndCommandBuffer(commandBuffers[i]);
 
 			CommandBuffer cmdBuffer(commandBuffers[i]);
-			VULKAN.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
+			RHII.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 		}
 
 		vkBeginCommandBuffer(commandBuffers[0], &beginInfo);
@@ -581,9 +581,9 @@ namespace pe
 		vkEndCommandBuffer(commandBuffers[0]);
 
 		CommandBuffer cmdBuffer(commandBuffers[0]);
-		VULKAN.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
+		RHII.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 
-		vkFreeCommandBuffers(VULKAN.device, VULKAN.commandPool2.Handle(), mipLevels, commandBuffers.data());
+		vkFreeCommandBuffers(RHII.device, RHII.commandPool2.Handle(), mipLevels, commandBuffers.data());
 	}
 
 	void Image::CreateSampler()
@@ -607,15 +607,15 @@ namespace pe
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
 		VkSampler vkSampler;
-		vkCreateSampler(VULKAN.device, &samplerInfo, nullptr, &vkSampler);
+		vkCreateSampler(RHII.device, &samplerInfo, nullptr, &vkSampler);
 		sampler = vkSampler;
 	}
 
 	void Image::Destroy()
 	{
-		if (VkImageView(view)) vkDestroyImageView(VULKAN.device, view, nullptr);
-		if (VkImage(image)) vmaDestroyImage(VULKAN.allocator, image, allocation);
-		if (VkSampler(sampler)) vkDestroySampler(VULKAN.device, sampler, nullptr);
+		if (VkImageView(view)) vkDestroyImageView(RHII.device, view, nullptr);
+		if (VkImage(image)) vmaDestroyImage(RHII.allocator, image, allocation);
+		if (VkSampler(sampler)) vkDestroySampler(RHII.device, sampler, nullptr);
 		view = {};
 		image = {};
 		sampler = {};

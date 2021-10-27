@@ -47,7 +47,7 @@ namespace pe
 			createInfo.pBindings = &descriptorSetLayoutBinding;
 
 			VkDescriptorSetLayout dsetLayout;
-			vkCreateDescriptorSetLayout(VULKAN.device, &createInfo, nullptr, &dsetLayout);
+			vkCreateDescriptorSetLayout(RHII.device, &createInfo, nullptr, &dsetLayout);
 			descriptorSetLayout = dsetLayout;
 		}
 		return descriptorSetLayout;
@@ -74,12 +74,12 @@ namespace pe
 
 		VkDescriptorSetAllocateInfo allocateInfo{};
 		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = VULKAN.descriptorPool;
+		allocateInfo.descriptorPool = RHII.descriptorPool;
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &GetDescriptorSetLayout();
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dset);
+		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
 		descriptorSet = dset;
 
 		VkDescriptorBufferInfo dbi;
@@ -96,7 +96,7 @@ namespace pe
 		writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		writeSet.pBufferInfo = &dbi;
 
-		vkUpdateDescriptorSets(VULKAN.device, 1, &writeSet, 0, nullptr);
+		vkUpdateDescriptorSets(RHII.device, 1, &writeSet, 0, nullptr);
 
 		for (int i = 0; i < MAX_POINT_LIGHTS; i++)
 		{
@@ -147,7 +147,7 @@ namespace pe
 		uniform->Destroy();
 		if (GetDescriptorSetLayout())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, GetDescriptorSetLayout(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, GetDescriptorSetLayout(), nullptr);
 			GetDescriptorSetLayout() = nullptr;
 		}
 	}

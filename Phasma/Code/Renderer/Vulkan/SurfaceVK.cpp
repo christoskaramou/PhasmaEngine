@@ -44,7 +44,7 @@ namespace pe
 	void Surface::Create(SDL_Window* window)
 	{
 		VkSurfaceKHR surfaceVK;
-		if (!SDL_Vulkan_CreateSurface(window, VULKAN.instance, &surfaceVK))
+		if (!SDL_Vulkan_CreateSurface(window, RHII.instance, &surfaceVK))
 			throw std::runtime_error(SDL_GetError());
 
 		surface = surfaceVK;
@@ -58,7 +58,7 @@ namespace pe
 	void Surface::CheckTransfer()
 	{
 		VkSurfaceCapabilitiesKHR capabilities;
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VULKAN.gpu, surface, &capabilities);
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, surface, &capabilities);
 
 		// Ensure eTransferSrc bit for blit operations
 		if (!(capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
@@ -68,10 +68,10 @@ namespace pe
 	void Surface::FindFormat()
 	{
 		uint32_t formatsCount;
-		vkGetPhysicalDeviceSurfaceFormatsKHR(VULKAN.gpu, surface, &formatsCount, nullptr);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, surface, &formatsCount, nullptr);
 
 		std::vector<VkSurfaceFormatKHR> formats(formatsCount);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(VULKAN.gpu, surface, &formatsCount, formats.data());
+		vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, surface, &formatsCount, formats.data());
 
 		format = formats[0].format;
 		colorSpace = formats[0].colorSpace;
@@ -86,7 +86,7 @@ namespace pe
 		
 		// Check for blit operation
 		VkFormatProperties fProps;
-		vkGetPhysicalDeviceFormatProperties(VULKAN.gpu, (VkFormat)format, &fProps);
+		vkGetPhysicalDeviceFormatProperties(RHII.gpu, (VkFormat)format, &fProps);
 		if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT))
 			throw std::runtime_error("No blit source operation supported");
 		if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
@@ -96,10 +96,10 @@ namespace pe
 	void Surface::FindPresentationMode()
 	{
 		uint32_t presentModesCount;
-		vkGetPhysicalDeviceSurfacePresentModesKHR(VULKAN.gpu, surface, &presentModesCount, nullptr);
+		vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, surface, &presentModesCount, nullptr);
 
 		std::vector<VkPresentModeKHR> presentModes(presentModesCount);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(VULKAN.gpu, surface, &presentModesCount, presentModes.data());
+		vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, surface, &presentModesCount, presentModes.data());
 		
 		for (const auto& i : presentModes)
 			if (i == VK_PRESENT_MODE_MAILBOX_KHR)
@@ -123,7 +123,7 @@ namespace pe
 	{
 		// Needs to be called?
 		VkBool32 supported = false;
-		vkGetPhysicalDeviceSurfaceSupportKHR(VULKAN.gpu, VULKAN.graphicsFamilyId, surface, &supported);
+		vkGetPhysicalDeviceSurfaceSupportKHR(RHII.gpu, RHII.graphicsFamilyId, surface, &supported);
 
 		CheckTransfer();
 		FindFormat();
@@ -134,7 +134,7 @@ namespace pe
 	{
 		if (surface)
 		{
-			vkDestroySurfaceKHR(VULKAN.instance, surface, nullptr);
+			vkDestroySurfaceKHR(RHII.instance, surface, nullptr);
 			surface = {};
 		}
 	}

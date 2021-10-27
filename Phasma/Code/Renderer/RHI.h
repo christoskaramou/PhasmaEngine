@@ -31,9 +31,10 @@ SOFTWARE.
 
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
-#define VULKAN (*RHI::Get())
-#define WIDTH VULKAN.surface.actualExtent.width
-#define HEIGHT VULKAN.surface.actualExtent.height
+// RHI Instance
+#define RHII (*RHI::Get())
+#define WIDTH RHII.surface.actualExtent.width
+#define HEIGHT RHII.surface.actualExtent.height
 #define WIDTH_f static_cast<float>(WIDTH)
 #define HEIGHT_f static_cast<float>(HEIGHT)
 

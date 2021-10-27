@@ -51,7 +51,7 @@ namespace pe
 
 		VkBuffer bufferVK;
 		VmaAllocationInfo allocationInfo;
-		vmaCreateBuffer(VULKAN.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocation, &allocationInfo);
+		vmaCreateBuffer(RHII.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocation, &allocationInfo);
 		m_handle = bufferVK;
 	}
 
@@ -59,7 +59,7 @@ namespace pe
 	{
 		if (m_handle)
 		{
-			vmaDestroyBuffer(VULKAN.allocator, m_handle, allocation);
+			vmaDestroyBuffer(RHII.allocator, m_handle, allocation);
 			m_handle = {};
 		}
 	}
@@ -68,14 +68,14 @@ namespace pe
 	{
 		if (data)
 			return;
-		vmaMapMemory(VULKAN.allocator, allocation, &data);
+		vmaMapMemory(RHII.allocator, allocation, &data);
 	}
 	
 	void Buffer::Unmap()
 	{
 		if (!data)
 			return;
-		vmaUnmapMemory(VULKAN.allocator, allocation);
+		vmaUnmapMemory(RHII.allocator, allocation);
 		data = nullptr;
 	}
 	
@@ -101,13 +101,13 @@ namespace pe
 		BufferCopy bufferCopy{};
 		bufferCopy.size = srcSize > 0 ? srcSize : size;
 
-		CommandPool pool(VULKAN.commandPool2);
+		CommandPool pool(RHII.commandPool2);
 		CommandBuffer copyCmd;
 		copyCmd.Create(pool);
 		copyCmd.Begin();
 		copyCmd.CopyBuffer(*srcBuffer, *this, 1, &bufferCopy);
 		copyCmd.End();
-		VULKAN.SubmitAndWaitFence(1, &copyCmd, nullptr, 0, nullptr, 0, nullptr);
+		RHII.SubmitAndWaitFence(1, &copyCmd, nullptr, 0, nullptr, 0, nullptr);
 		copyCmd.Destroy(pool);
 	}
 	
@@ -116,7 +116,7 @@ namespace pe
 		if (!data)
 			return;
 		
-		vmaFlushAllocation(VULKAN.allocator, allocation, offset, flushSize);
+		vmaFlushAllocation(RHII.allocator, allocation, offset, flushSize);
 	}
 	
 	void Buffer::Destroy()

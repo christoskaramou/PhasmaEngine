@@ -156,8 +156,8 @@ namespace pe
 			
 			const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 			
-			VULKAN.WaitGraphicsQueue();
-			VULKAN.WaitAndLockSubmits();
+			RHII.WaitGraphicsQueue();
+			RHII.WaitAndLockSubmits();
 			
 			Buffer* staging = Buffer::Create(
 				imageSize,
@@ -188,7 +188,7 @@ namespace pe
 			
 			staging->Destroy();
 			
-			VULKAN.UnlockSubmits();
+			RHII.UnlockSubmits();
 			
 			Mesh::uniqueTextures[path] = *tex;
 		}
@@ -212,7 +212,7 @@ namespace pe
 		uniformBuffer->Destroy();
 		if (Pipeline::getDescriptorSetLayoutMesh())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutMesh(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutMesh(), nullptr);
 			Pipeline::getDescriptorSetLayoutMesh() = {};
 		}
 		
@@ -226,7 +226,7 @@ namespace pe
 		indices.shrink_to_fit();
 		if (Pipeline::getDescriptorSetLayoutPrimitive())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutPrimitive(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutPrimitive(), nullptr);
 			Pipeline::getDescriptorSetLayoutPrimitive() = {};
 		}
 	}

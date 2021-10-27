@@ -930,15 +930,15 @@ namespace pe
 		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutModel();
 		VkDescriptorSetAllocateInfo allocateInfo0{};
 		allocateInfo0.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo0.descriptorPool = VULKAN.descriptorPool;
+		allocateInfo0.descriptorPool = RHII.descriptorPool;
 		allocateInfo0.descriptorSetCount = 1;
 		allocateInfo0.pSetLayouts = &dsetLayout;
 
 		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(VULKAN.device, &allocateInfo0, &dset);
+		vkAllocateDescriptorSets(RHII.device, &allocateInfo0, &dset);
 		descriptorSet = dset;
 		
-		vkUpdateDescriptorSets(VULKAN.device, 1, &wSetBuffer(descriptorSet, 0, *uniformBuffer), 0, nullptr);
+		vkUpdateDescriptorSets(RHII.device, 1, &wSetBuffer(descriptorSet, 0, *uniformBuffer), 0, nullptr);
 		
 		// mesh dSets
 		for (auto& node : linearNodes)
@@ -951,15 +951,15 @@ namespace pe
 			VkDescriptorSetLayout dsetLayoutMesh = Pipeline::getDescriptorSetLayoutMesh();
 			VkDescriptorSetAllocateInfo allocateInfo{};
 			allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			allocateInfo.descriptorPool = VULKAN.descriptorPool;
+			allocateInfo.descriptorPool = RHII.descriptorPool;
 			allocateInfo.descriptorSetCount = 1;
 			allocateInfo.pSetLayouts = &dsetLayoutMesh;
 
 			VkDescriptorSet dsetMesh;
-			vkAllocateDescriptorSets(VULKAN.device, &allocateInfo, &dsetMesh);
+			vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dsetMesh);
 			mesh->descriptorSet = dsetMesh;
 
-			vkUpdateDescriptorSets(VULKAN.device, 1, &wSetBuffer(mesh->descriptorSet, 0, *mesh->uniformBuffer), 0, nullptr);
+			vkUpdateDescriptorSets(RHII.device, 1, &wSetBuffer(mesh->descriptorSet, 0, *mesh->uniformBuffer), 0, nullptr);
 			
 			// primitive dSets
 			for (auto& primitive : mesh->primitives)
@@ -968,12 +968,12 @@ namespace pe
 				VkDescriptorSetLayout dsetLayoutPrimitive = Pipeline::getDescriptorSetLayoutPrimitive();
 				VkDescriptorSetAllocateInfo allocateInfo2{};
 				allocateInfo2.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-				allocateInfo2.descriptorPool = VULKAN.descriptorPool;
+				allocateInfo2.descriptorPool = RHII.descriptorPool;
 				allocateInfo2.descriptorSetCount = 1;
 				allocateInfo2.pSetLayouts = &dsetLayoutPrimitive;
 
 				VkDescriptorSet dsetPrimitive;
-				vkAllocateDescriptorSets(VULKAN.device, &allocateInfo2, &dsetPrimitive);
+				vkAllocateDescriptorSets(RHII.device, &allocateInfo2, &dsetPrimitive);
 				primitive.descriptorSet = dsetPrimitive;
 				
 				std::vector<VkWriteDescriptorSet> textureWriteSets
@@ -986,7 +986,7 @@ namespace pe
 					wSetBuffer(primitive.descriptorSet, 5, *primitive.uniformBuffer)
 				};
 
-				vkUpdateDescriptorSets(VULKAN.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+				vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 			}
 		}
 	}
@@ -1003,7 +1003,7 @@ namespace pe
 		delete resourceReader;
 		if (Pipeline::getDescriptorSetLayoutModel())
 		{
-			vkDestroyDescriptorSetLayout(VULKAN.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
+			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
 			Pipeline::getDescriptorSetLayoutModel() = {};
 		}
 		for (auto& node : linearNodes)
