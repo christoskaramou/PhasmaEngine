@@ -28,7 +28,7 @@ SOFTWARE.
 #include "Systems/LightSystem.h"
 #include "Systems/EventSystem.h"
 #include "Systems/PostProcessSystem.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 
 using namespace pe;
 

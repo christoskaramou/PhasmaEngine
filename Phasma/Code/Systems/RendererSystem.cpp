@@ -23,7 +23,7 @@ SOFTWARE.
 #include "RendererSystem.h"
 #include "ECS/Context.h"
 #include "Systems/EventSystem.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Model/Mesh.h"
 #include "Systems/PostProcessSystem.h"
 
@@ -44,7 +44,7 @@ namespace pe
 	{
 		// SET WINDOW TITLE
 		std::string title = "PhasmaEngine";
-		title += " - Device: " + std::string(VULKAN.gpuProperties.deviceName);
+		title += " - Device: " + VULKAN.gpuName;
 		title += " - API: Vulkan";
 		title += " - Present Mode: " + PresentModeToString(VULKAN.surface.presentMode);
 #ifdef _DEBUG
@@ -151,12 +151,12 @@ namespace pe
 
 		static Timer timer;
 		timer.Start();
-		VULKAN.waitFence(&VULKAN.fences[imageIndex]);
+		VULKAN.WaitFence(&VULKAN.fences[imageIndex]);
 		FrameTimer::Instance().timestamps[0] = timer.Count();
 
 		auto& cmd = VULKAN.dynamicCmdBuffers[imageIndex];
 
-		VULKAN.waitAndLockSubmits();
+		VULKAN.WaitAndLockSubmits();
 
 		if (GUI::shadow_cast)
 		{
@@ -171,7 +171,7 @@ namespace pe
 			auto size = shadows.textures.size();
 			auto i = size * imageIndex;
 			std::vector<CommandBuffer> activeShadowCmdBuffers(scb.begin() + i, scb.begin() + i + size);
-			VULKAN.submit(
+			VULKAN.Submit(
 				static_cast<uint32_t>(activeShadowCmdBuffers.size()), activeShadowCmdBuffers.data(),
 				&waitStages[0],
 				1, &shadowWaitSemaphore,
@@ -189,7 +189,7 @@ namespace pe
 		auto& deferredWaitSemaphore = aquireSignalSemaphore;
 		auto& deferredSignalSemaphore = VULKAN.semaphores[imageIndex * 3 + 2];
 		auto& deferredSignalFence = VULKAN.fences[imageIndex];
-		VULKAN.submit(
+		VULKAN.Submit(
 			1, &cmd,
 			&deferredWaitStage,
 			1, &deferredWaitSemaphore,
@@ -200,7 +200,7 @@ namespace pe
 		auto& presentWaitSemaphore = deferredSignalSemaphore;
 		VULKAN.Present(1, &VULKAN.swapchain, &imageIndex, 1, &presentWaitSemaphore);
 
-		VULKAN.unlockSubmits();
+		VULKAN.UnlockSubmits();
 
 		gui.RenderViewPorts();
 
@@ -209,7 +209,7 @@ namespace pe
 
 	void RendererSystem::Destroy()
 	{
-		VULKAN.waitDeviceIdle();
+		VULKAN.WaitDeviceIdle();
 
 		for (auto& rt : renderTargets)
 			rt.second.Destroy();

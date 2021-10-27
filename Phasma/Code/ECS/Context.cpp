@@ -21,7 +21,7 @@ SOFTWARE.
 */
 
 #include "Context.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 
 namespace pe
 {
@@ -83,10 +83,5 @@ namespace pe
 	{
 		if (m_entities.find(id) != m_entities.end())
 			m_entities.erase(id);
-	}
-	
-	VulkanContext* Context::GetVKContext()
-	{
-		return VulkanContext::Get();
 	}
 }

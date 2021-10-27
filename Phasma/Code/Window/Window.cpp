@@ -23,7 +23,7 @@ SOFTWARE.
 #include "ECS/Context.h"
 #include "Window.h"
 #include "Console/Console.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/EventSystem.h"
 #include "Systems/CameraSystem.h"

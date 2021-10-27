@@ -31,7 +31,7 @@ SOFTWARE.
 
 namespace pe
 {
-	class VulkanContext;
+	class RHI;
 	
 	class Context final
 	{
@@ -83,8 +83,6 @@ namespace pe
 		Entity* GetEntity(size_t id);
 		
 		void RemoveEntity(size_t id);
-		
-		VulkanContext* GetVKContext();
 	
 	private:
 		std::unordered_map<size_t, SPtr<ISystem>> m_systems;

@@ -22,7 +22,7 @@ SOFTWARE.
 
 #if PE_VULKAN
 #include "Renderer/CommandBuffer.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Renderer/CommandPool.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/FrameBuffer.h"

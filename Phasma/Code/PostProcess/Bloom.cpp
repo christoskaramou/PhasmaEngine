@@ -25,7 +25,7 @@ SOFTWARE.
 #include "Renderer/Swapchain.h"
 #include "Renderer/Surface.h"
 #include "Shader/Shader.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Renderer/CommandBuffer.h"
 
 namespace pe
@@ -73,9 +73,8 @@ namespace pe
 	
 	void Bloom::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::Get();
-		framebuffers.resize(vulkan->swapchain.images.size() * 4);
-		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
+		framebuffers.resize(VULKAN.swapchain.images.size() * 4);
+		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["brightFilter"].width;
 			uint32_t height = renderTargets["brightFilter"].height;
@@ -83,7 +82,7 @@ namespace pe
 			framebuffers[i].Create(width, height, view, renderPassBrightFilter);
 		}
 		
-		for (size_t i = vulkan->swapchain.images.size(); i < vulkan->swapchain.images.size() * 2; ++i)
+		for (size_t i = VULKAN.swapchain.images.size(); i < VULKAN.swapchain.images.size() * 2; ++i)
 		{
 			uint32_t width = renderTargets["gaussianBlurHorizontal"].width;
 			uint32_t height = renderTargets["gaussianBlurHorizontal"].height;
@@ -91,7 +90,7 @@ namespace pe
 			framebuffers[i].Create(width, height, view, renderPassGaussianBlur);
 		}
 		
-		for (size_t i = vulkan->swapchain.images.size() * 2; i < vulkan->swapchain.images.size() * 3; ++i)
+		for (size_t i = VULKAN.swapchain.images.size() * 2; i < VULKAN.swapchain.images.size() * 3; ++i)
 		{
 			uint32_t width = renderTargets["gaussianBlurVertical"].width;
 			uint32_t height = renderTargets["gaussianBlurVertical"].height;
@@ -99,7 +98,7 @@ namespace pe
 			framebuffers[i].Create(width, height, view, renderPassGaussianBlur);
 		}
 		
-		for (size_t i = vulkan->swapchain.images.size() * 3; i < vulkan->swapchain.images.size() * 4; ++i)
+		for (size_t i = VULKAN.swapchain.images.size() * 3; i < VULKAN.swapchain.images.size() * 4; ++i)
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;

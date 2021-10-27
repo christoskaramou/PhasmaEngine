@@ -23,7 +23,7 @@ SOFTWARE.
 #if PE_VULKAN
 #include "Renderer/Framebuffer.h"
 #include "Renderer/RenderPass.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 
 namespace pe
 {

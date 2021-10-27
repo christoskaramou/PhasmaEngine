@@ -21,10 +21,10 @@ SOFTWARE.
 */
 
 #if PE_VULKAN
+#include "Renderer/RHI.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/CommandPool.h"
 #include "Renderer/CommandBuffer.h"
-#include "Vulkan.h"
 
 namespace pe
 {
@@ -107,7 +107,7 @@ namespace pe
 		copyCmd.Begin();
 		copyCmd.CopyBuffer(*srcBuffer, *this, 1, &bufferCopy);
 		copyCmd.End();
-		VULKAN.submitAndWaitFence(1, &copyCmd, nullptr, 0, nullptr, 0, nullptr);
+		VULKAN.SubmitAndWaitFence(1, &copyCmd, nullptr, 0, nullptr, 0, nullptr);
 		copyCmd.Destroy(pool);
 	}
 	

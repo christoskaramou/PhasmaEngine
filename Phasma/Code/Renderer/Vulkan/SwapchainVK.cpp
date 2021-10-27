@@ -22,7 +22,7 @@ SOFTWARE.
 
 #if PE_VULKAN
 #include "Renderer/Swapchain.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Core/Math.h"
 #include "ECS/Context.h"
 

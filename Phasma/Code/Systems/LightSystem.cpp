@@ -23,7 +23,7 @@ SOFTWARE.
 #include "LightSystem.h"
 #include "Core/Queue.h"
 #include "GUI/GUI.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "ECS/Context.h"
 #include "Systems/CameraSystem.h"
 

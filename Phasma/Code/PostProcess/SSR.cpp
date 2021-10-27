@@ -26,7 +26,7 @@ SOFTWARE.
 #include "Renderer/Surface.h"
 #include "Shader/Shader.h"
 #include "Core/Queue.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Renderer/CommandBuffer.h"
 
 namespace pe
@@ -150,9 +150,8 @@ namespace pe
 	
 	void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::Get();
-		framebuffers.resize(vulkan->swapchain.images.size());
-		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
+		framebuffers.resize(VULKAN.swapchain.images.size());
+		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["ssr"].width;
 			uint32_t height = renderTargets["ssr"].height;

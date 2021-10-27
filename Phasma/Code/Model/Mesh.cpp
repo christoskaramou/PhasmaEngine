@@ -23,7 +23,7 @@ SOFTWARE.
 #include "tinygltf/stb_image.h"
 #include "Mesh.h"
 #include "Renderer/Pipeline.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Core/Path.h"
 
 namespace pe
@@ -156,8 +156,8 @@ namespace pe
 			
 			const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 			
-			VULKAN.waitGraphicsQueue();
-			VULKAN.waitAndLockSubmits();
+			VULKAN.WaitGraphicsQueue();
+			VULKAN.WaitAndLockSubmits();
 			
 			Buffer* staging = Buffer::Create(
 				imageSize,
@@ -188,7 +188,7 @@ namespace pe
 			
 			staging->Destroy();
 			
-			VULKAN.unlockSubmits();
+			VULKAN.UnlockSubmits();
 			
 			Mesh::uniqueTextures[path] = *tex;
 		}

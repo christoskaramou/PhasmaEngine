@@ -24,7 +24,7 @@ SOFTWARE.
 #include "Renderer/Surface.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 
 namespace pe
 {

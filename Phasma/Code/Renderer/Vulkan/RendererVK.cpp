@@ -24,7 +24,7 @@ SOFTWARE.
 #include "Renderer/Renderer.h"
 #include "Core/Queue.h"
 #include "Model/Mesh.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Systems/CameraSystem.h"
 #include "ECS/Context.h"
 #include "Core/Path.h"
@@ -41,8 +41,8 @@ namespace pe
 	
 	Renderer::~Renderer()
 	{
-		CONTEXT->GetVKContext()->Destroy();
-		CONTEXT->GetVKContext()->Remove();
+		VULKAN.Destroy();
+		VULKAN.Remove();
 	}
 
 	void RenderArea::Update(float x, float y, float w, float h, float minDepth, float maxDepth)
@@ -424,7 +424,7 @@ namespace pe
 	
 	void Renderer::ResizeViewport(uint32_t width, uint32_t height)
 	{
-		VULKAN.waitGraphicsQueue();
+		VULKAN.WaitGraphicsQueue();
 
 		renderArea.Update(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
 
@@ -661,7 +661,7 @@ namespace pe
 	
 	void Renderer::RecreatePipelines()
 	{
-		VULKAN.waitGraphicsQueue();
+		VULKAN.WaitGraphicsQueue();
 
 		SSAO& ssao = *WORLD_ENTITY->GetComponent<SSAO>();
 		SSR& ssr = *WORLD_ENTITY->GetComponent<SSR>();

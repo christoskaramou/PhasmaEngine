@@ -23,7 +23,7 @@ SOFTWARE.
 #if PE_VULKAN
 #include "Renderer/Compute.h"
 #include "Shader/Shader.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 
 namespace pe
 {
@@ -69,7 +69,7 @@ namespace pe
 	
 	void Compute::waitFence()
 	{
-		VULKAN.waitFence(&fence);
+		VULKAN.WaitFence(&fence);
 	}
 	
 	void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)

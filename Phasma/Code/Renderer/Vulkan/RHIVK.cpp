@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Vulkan.h"
+#include "Renderer/RHI.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
 #include "Renderer/CommandPool.h"
@@ -28,12 +28,20 @@ SOFTWARE.
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
 
+
+#if defined(_WIN32)
+// On Windows, Vulkan commands use the stdcall convention
+#define VKAPI_CALL __stdcall
+#else
+// On other platforms, use the default calling convention
+#define VKAPI_CALL
+#endif
+
 namespace pe
 {	
-	VulkanContext::VulkanContext()
+	RHI::RHI()
 	{
 		device = {};
-		queueFamilyProperties = {};
 		dynamicCmdBuffers = {};
 		shadowCmdBuffers = {};
 		fences = {};
@@ -45,12 +53,12 @@ namespace pe
 		transferFamilyId = 0;
 	}
 	
-	VulkanContext::~VulkanContext()
+	RHI::~RHI()
 	{
 	
 	}
 	
-	void VulkanContext::CreateInstance(SDL_Window* window)
+	void RHI::CreateInstance(SDL_Window* window)
 	{
 		std::vector<const char*> instanceExtensions;
 		std::vector<const char*> instanceLayers;
@@ -161,7 +169,7 @@ namespace pe
 		return "Unknown";
 	}
 
-	VKAPI_ATTR uint32_t VKAPI_CALL VulkanContext::MessageCallback(
+	uint32_t VKAPI_CALL MessageCallback(
 			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 			uint32_t messageType,
 			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
@@ -178,7 +186,7 @@ namespace pe
 		return VK_FALSE;
 	}
 	
-	void VulkanContext::CreateDebugMessenger()
+	void RHI::CreateDebugMessenger()
 	{		
 		VkDebugUtilsMessengerCreateInfoEXT dumci{};
 		dumci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -191,7 +199,7 @@ namespace pe
 			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		dumci.pfnUserCallback = VulkanContext::MessageCallback;
+		dumci.pfnUserCallback = MessageCallback;
 
 		auto vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
 		VkDebugUtilsMessengerEXT debugMessengerVK;
@@ -199,24 +207,24 @@ namespace pe
 		debugMessenger = debugMessengerVK;
 	}
 	
-	void VulkanContext::DestroyDebugMessenger()
+	void RHI::DestroyDebugMessenger()
 	{
 		auto vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
 		vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 	}
 #endif
 	
-	void VulkanContext::CreateSurface()
+	void RHI::CreateSurface()
 	{
 		surface.Create(window);
 	}
 	
-	void VulkanContext::GetSurfaceProperties()
+	void RHI::GetSurfaceProperties()
 	{
 		surface.FindProperties();
 	}
 	
-	void VulkanContext::GetGpu()
+	void RHI::GetGpu()
 	{
 		uint32_t gpuCount;
 		vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr);
@@ -232,7 +240,7 @@ namespace pe
 			uint32_t queueFamPropCount;
 			vkGetPhysicalDeviceQueueFamilyProperties(GPU, &queueFamPropCount, nullptr);
 
-			queueFamilyProperties.resize(queueFamPropCount);
+			std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
 			vkGetPhysicalDeviceQueueFamilyProperties(GPU, &queueFamPropCount, queueFamilyProperties.data());
 
 			VkQueueFlags flags{};
@@ -270,20 +278,22 @@ namespace pe
 
 		VkPhysicalDeviceProperties gpuPropertiesVK;
 		vkGetPhysicalDeviceProperties(gpu, &gpuPropertiesVK);
-		gpuProperties = gpuPropertiesVK;
-
-		VkPhysicalDeviceFeatures gpuFeaturesVK;
-		vkGetPhysicalDeviceFeatures(gpu, &gpuFeaturesVK);
-		gpuFeatures = gpuFeaturesVK;
+		gpuName = gpuPropertiesVK.deviceName;
 	}
 	
-	void VulkanContext::GetGraphicsFamilyId()
+	void RHI::GetGraphicsFamilyId()
 	{
 #ifdef UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 		VkQueueFlags flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT;
 #else
 		VkQueueFlags flags = VK_QUEUE_GRAPHICS_BIT;
 #endif
+		uint32_t queueFamPropCount;
+		vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
+
+		std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
+		vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
+
 		auto& properties = queueFamilyProperties;
 		for (uint32_t i = 0; i < properties.size(); i++)
 		{
@@ -299,11 +309,17 @@ namespace pe
 		graphicsFamilyId = -1;
 	}
 	
-	void VulkanContext::GetTransferFamilyId()
+	void RHI::GetTransferFamilyId()
 	{
 #ifdef UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE1
 		transferFamilyId = graphicsFamilyId;
-#else
+#else	
+		uint32_t queueFamPropCount;
+		vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
+
+		std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
+		vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
+
 		VkQueueFlags flags = VK_QUEUE_TRANSFER_BIT;
 		auto& properties = queueFamilyProperties;
 		// prefer different families for different queue types, thus the reverse check
@@ -320,8 +336,14 @@ namespace pe
 #endif
 	}
 	
-	void VulkanContext::GetComputeFamilyId()
+	void RHI::GetComputeFamilyId()
 	{
+		uint32_t queueFamPropCount;
+		vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
+
+		std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
+		vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
+
 		VkQueueFlags flags = VK_QUEUE_TRANSFER_BIT;
 		auto& properties = queueFamilyProperties;
 		// prefer different families for different queue types, thus the reverse check
@@ -338,7 +360,7 @@ namespace pe
 	}
 	
 	
-	void VulkanContext::CreateDevice()
+	void RHI::CreateDevice()
 	{
 		uint32_t propsCount;
 		vkEnumerateDeviceExtensionProperties(gpu, nullptr, &propsCount, nullptr);
@@ -381,8 +403,9 @@ namespace pe
 			queueCreateInfo.pQueuePriorities = priorities;
 			queueCreateInfos.push_back(queueCreateInfo);
 		}
-		
-		VkPhysicalDeviceFeatures gpuFeaturesVK = gpuFeatures;
+
+		VkPhysicalDeviceFeatures gpuFeaturesVK;
+		vkGetPhysicalDeviceFeatures(gpu, &gpuFeaturesVK);
 		VkDeviceCreateInfo deviceCreateInfo{};
 		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
@@ -396,7 +419,7 @@ namespace pe
 		device = deviceVK;
 	}
 	
-	void VulkanContext::CreateAllocator()
+	void RHI::CreateAllocator()
 	{
 		uint32_t apiVersion;
 		vkEnumerateInstanceVersion(&apiVersion);
@@ -410,46 +433,46 @@ namespace pe
 		vmaCreateAllocator(&allocator_info, &allocator);
 	}
 	
-	void VulkanContext::GetGraphicsQueue()
+	void RHI::GetGraphicsQueue()
 	{
 		VkQueue queue;
 		vkGetDeviceQueue(device, graphicsFamilyId, 0, &queue);
 		graphicsQueue = queue;
 	}
 	
-	void VulkanContext::GetTransferQueue()
+	void RHI::GetTransferQueue()
 	{
 		VkQueue queue;
 		vkGetDeviceQueue(device, transferFamilyId, 0, &queue);
 		transferQueue = queue;
 	}
 	
-	void VulkanContext::GetComputeQueue()
+	void RHI::GetComputeQueue()
 	{
 		VkQueue queue;
 		vkGetDeviceQueue(device, computeFamilyId, 0, &queue);
 		computeQueue = queue;
 	}
 	
-	void VulkanContext::GetQueues()
+	void RHI::GetQueues()
 	{
 		GetGraphicsQueue();
 		GetTransferQueue();
 		GetComputeQueue();
 	}
 	
-	void VulkanContext::CreateSwapchain(Surface* surface)
+	void RHI::CreateSwapchain(Surface* surface)
 	{
 		swapchain.Create(surface);
 	}
 	
-	void VulkanContext::CreateCommandPools()
+	void RHI::CreateCommandPools()
 	{
 		commandPool.Create(graphicsFamilyId);
 		commandPool2.Create(graphicsFamilyId);
 	}
 	
-	void VulkanContext::CreateDescriptorPool(uint32_t maxDescriptorSets)
+	void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
 	{
 		std::vector<VkDescriptorPoolSize> descPoolsize(4);
 		descPoolsize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -472,7 +495,7 @@ namespace pe
 		descriptorPool = descriptorPoolVK;
 	}
 	
-	void VulkanContext::CreateCmdBuffers(uint32_t bufferCount)
+	void RHI::CreateCmdBuffers(uint32_t bufferCount)
 	{
 		dynamicCmdBuffers.resize(bufferCount);
 		for (uint32_t i = 0; i < bufferCount; i++)
@@ -483,21 +506,21 @@ namespace pe
 			shadowCmdBuffers[i].Create(commandPool);
 	}
 	
-	void VulkanContext::CreateFences(uint32_t fenceCount)
+	void RHI::CreateFences(uint32_t fenceCount)
 	{
 		fences.resize(fenceCount);
 		for (uint32_t i = 0; i < fenceCount; i++)
 			fences[i].Create();
 	}
 	
-	void VulkanContext::CreateSemaphores(uint32_t semaphoresCount)
+	void RHI::CreateSemaphores(uint32_t semaphoresCount)
 	{
 		semaphores.resize(semaphoresCount);
 		for (uint32_t i = 0; i < semaphoresCount; i++)
 			semaphores[i].Create();
 	}
 	
-	void VulkanContext::CreateDepth()
+	void RHI::CreateDepth()
 	{
 		depth.format = VK_FORMAT_UNDEFINED;
 		std::vector<VkFormat> candidates =
@@ -540,7 +563,7 @@ namespace pe
 		depth.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 	}
 	
-	void VulkanContext::Init(SDL_Window* window)
+	void RHI::Init(SDL_Window* window)
 	{
 		this->window = window;
 
@@ -563,9 +586,9 @@ namespace pe
 		CreateDepth();
 	}
 	
-	void VulkanContext::Destroy()
+	void RHI::Destroy()
 	{
-		waitDeviceIdle();
+		WaitDeviceIdle();
 		
 		for (auto& fence : fences)
 			fence.Destroy();
@@ -602,7 +625,7 @@ namespace pe
 			vkDestroyInstance(instance, nullptr);
 	}
 	
-	void VulkanContext::submit(
+	void RHI::Submit(
 			uint32_t commandBuffersCount, CommandBuffer* commandBuffers,
 			PipelineStageFlags* waitStages,
 			uint32_t waitSemaphoresCount, Semaphore* waitSemaphores,
@@ -639,7 +662,7 @@ namespace pe
 		vkQueueSubmit(graphicsQueue, 1, &si, fence);
 	}
 	
-	void VulkanContext::waitFence(Fence* fence)
+	void RHI::WaitFence(Fence* fence)
 	{
 		VkFence fenceVK = fence->handle;
 		if (vkWaitForFences(device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
@@ -647,7 +670,7 @@ namespace pe
 		vkResetFences(device, 1, &fenceVK);
 	}
 	
-	void VulkanContext::submitAndWaitFence(
+	void RHI::SubmitAndWaitFence(
 		uint32_t commandBuffersCount, CommandBuffer* commandBuffers,
 		PipelineStageFlags* waitStages,
 		uint32_t waitSemaphoresCount, Semaphore* waitSemaphores,
@@ -657,7 +680,7 @@ namespace pe
 		Fence fence;
 		fence.Create(false);
 		
-		submit(
+		Submit(
 			commandBuffersCount, commandBuffers,
 			waitStages,
 			waitSemaphoresCount, waitSemaphores,
@@ -670,7 +693,7 @@ namespace pe
 		vkDestroyFence(device, fence.handle, nullptr);
 	}
 
-	void VulkanContext::Present(
+	void RHI::Present(
 		uint32_t swapchainCount, Swapchain* swapchains,
 		uint32_t* imageIndices,
 		uint32_t waitSemaphoreCount, Semaphore* waitSemaphores)
@@ -695,35 +718,23 @@ namespace pe
 			throw std::runtime_error("Present error!");
 	}
 	
-	void VulkanContext::waitAndLockSubmits()
+	void RHI::WaitAndLockSubmits()
 	{
 		m_submit_mutex.lock();
 	}
 	
-	void VulkanContext::unlockSubmits()
+	void RHI::UnlockSubmits()
 	{
 		m_submit_mutex.unlock();
 	}
-	
-	VulkanContext* VulkanContext::Get() noexcept
-	{
-		static auto VkCTX = new VulkanContext();
-		return VkCTX;
-	}
 
-	void VulkanContext::waitDeviceIdle()
+	void RHI::WaitDeviceIdle()
 	{
 		vkDeviceWaitIdle(device);
 	}
 
-	void VulkanContext::waitGraphicsQueue()
+	void RHI::WaitGraphicsQueue()
 	{
 		vkQueueWaitIdle(graphicsQueue);
-	}
-	
-	void VulkanContext::Remove() noexcept
-	{
-		if (Get())
-			delete Get();
 	}
 }

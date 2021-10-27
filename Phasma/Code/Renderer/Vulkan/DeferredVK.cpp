@@ -31,7 +31,7 @@ SOFTWARE.
 #include "GUI/GUI.h"
 #include "tinygltf/stb_image.h"
 #include "Shader/Reflection.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Renderer/CommandBuffer.h"
 #include "Core/Path.h"
 #include "Core/Settings.h"
@@ -103,8 +103,8 @@ namespace pe
 				throw std::runtime_error("No pixel data loaded");
 			const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 			
-			VULKAN.waitGraphicsQueue();
-			VULKAN.waitAndLockSubmits();
+			VULKAN.WaitGraphicsQueue();
+			VULKAN.WaitAndLockSubmits();
 			
 			Buffer* staging = Buffer::Create(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 			staging->Map();
@@ -131,7 +131,7 @@ namespace pe
 			
 			staging->Destroy();
 			
-			VULKAN.unlockSubmits();
+			VULKAN.UnlockSubmits();
 			
 			Mesh::uniqueTextures[path] = ibl_brdf_lut;
 		}
@@ -272,10 +272,8 @@ namespace pe
 	
 	void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::Get();
-		
-		framebuffers.resize(vulkan->swapchain.images.size());
-		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
+		framebuffers.resize(VULKAN.swapchain.images.size());
+		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["albedo"].width;
 			uint32_t height = renderTargets["albedo"].height;
@@ -293,10 +291,8 @@ namespace pe
 	
 	void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::Get();
-		
-		compositionFramebuffers.resize(vulkan->swapchain.images.size());
-		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
+		compositionFramebuffers.resize(VULKAN.swapchain.images.size());
+		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
@@ -376,8 +372,6 @@ namespace pe
 	
 	void Deferred::destroy()
 	{
-		auto vulkan = VulkanContext::Get();
-		
 		renderPass.Destroy();
 		compositionRenderPass.Destroy();
 		

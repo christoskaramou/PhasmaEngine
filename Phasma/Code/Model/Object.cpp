@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include "Object.h"
 #include "tinygltf/stb_image.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 
 namespace pe
 {

@@ -22,10 +22,9 @@ SOFTWARE.
 
 #if PE_VULKAN
 #include "Renderer/Image.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "ECS/Context.h"
 #include "Renderer/CommandBuffer.h"
-#include "Renderer/Vulkan/Vulkan.h"
 #include "Renderer/Buffer.h"
 
 namespace pe
@@ -287,7 +286,7 @@ namespace pe
 		vkEndCommandBuffer(commandBuffer);
 
 		CommandBuffer cmdBuffer(commandBuffer);
-		VULKAN.submitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
+		VULKAN.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 
 		vkFreeCommandBuffers(VULKAN.device, VULKAN.commandPool2.Handle(), 1, &commandBuffer);
 	}
@@ -384,7 +383,7 @@ namespace pe
 		vkEndCommandBuffer(commandBuffer);
 
 		CommandBuffer cmdBuffer(commandBuffer);
-		VULKAN.submitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
+		VULKAN.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 
 		vkFreeCommandBuffers(VULKAN.device, VULKAN.commandPool2.Handle(), 1, &commandBuffer);
 	}
@@ -559,7 +558,7 @@ namespace pe
 			vkEndCommandBuffer(commandBuffers[i]);
 
 			CommandBuffer cmdBuffer(commandBuffers[i]);
-			VULKAN.submitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
+			VULKAN.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 		}
 
 		vkBeginCommandBuffer(commandBuffers[0], &beginInfo);
@@ -582,7 +581,7 @@ namespace pe
 		vkEndCommandBuffer(commandBuffers[0]);
 
 		CommandBuffer cmdBuffer(commandBuffers[0]);
-		VULKAN.submitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
+		VULKAN.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
 
 		vkFreeCommandBuffers(VULKAN.device, VULKAN.commandPool2.Handle(), mipLevels, commandBuffers.data());
 	}

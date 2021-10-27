@@ -24,7 +24,7 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "Shader/Shader.h"
 #include "Renderer/Descriptor.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Core/Settings.h"
 
 namespace pe

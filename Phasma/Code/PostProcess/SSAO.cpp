@@ -26,7 +26,7 @@ SOFTWARE.
 #include "GUI/GUI.h"
 #include "Shader/Shader.h"
 #include "Core/Queue.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Renderer/CommandBuffer.h"
 #include "Renderer/Descriptor.h"
 
@@ -247,9 +247,8 @@ namespace pe
 	
 	void SSAO::createSSAOFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::Get();
-		framebuffers.resize(vulkan->swapchain.images.size());
-		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
+		framebuffers.resize(VULKAN.swapchain.images.size());
+		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["ssao"].width;
 			uint32_t height = renderTargets["ssao"].height;
@@ -260,9 +259,8 @@ namespace pe
 	
 	void SSAO::createSSAOBlurFrameBuffers(std::map<std::string, Image>& renderTargets)
 	{
-		auto vulkan = VulkanContext::Get();
-		blurFramebuffers.resize(vulkan->swapchain.images.size());
-		for (size_t i = 0; i < vulkan->swapchain.images.size(); ++i)
+		blurFramebuffers.resize(VULKAN.swapchain.images.size());
+		for (size_t i = 0; i < VULKAN.swapchain.images.size(); ++i)
 		{
 			uint32_t width = renderTargets["ssaoBlur"].width;
 			uint32_t height = renderTargets["ssaoBlur"].height;

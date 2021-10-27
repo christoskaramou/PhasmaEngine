@@ -26,7 +26,7 @@ SOFTWARE.
 #include "Console/Console.h"
 #include "Renderer/Vertex.h"
 #include "Shader/Shader.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Core/Path.h"
 #include "Systems/EventSystem.h"
 #include "ECS/Context.h"
@@ -131,7 +131,7 @@ namespace pe
 					Model& model = Model::models.back();
 					auto update = []() { s_modelLoading = true; };
 					auto signal = []() { s_modelLoading = false; };
-					VULKAN.waitDeviceIdle();
+					VULKAN.WaitDeviceIdle();
 					auto loadAsync = [&model, folderPath, modelName]() { model.Load(folderPath, modelName); };
 					Queue<Launch::AsyncNoWait>::Request(loadAsync, update, signal);
 					GUI::modelList.push_back(modelName);
@@ -394,7 +394,7 @@ namespace pe
 		ImGui::Begin("Shaders Folder", &shaders_open);
 		if (ImGui::Button("Compile Shaders"))
 		{
-			VULKAN.waitDeviceIdle();
+			VULKAN.WaitDeviceIdle();
 			CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders);
 		}
 		for (uint32_t i = 0; i < shaderList.size(); i++)
@@ -440,7 +440,7 @@ namespace pe
 		if (ImGui::Button("Apply"))
 		{
 			renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
-			VULKAN.waitDeviceIdle();
+			VULKAN.WaitDeviceIdle();
 			CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::ScaleRenderTargets);
 		}
 		//ImGui::Checkbox("Lock Render Window", &lock_render_window);
@@ -581,7 +581,7 @@ namespace pe
 			ImGui::Separator();
 			if (ImGui::Button("Unload Model"))
 			{
-				VULKAN.waitDeviceIdle();
+				VULKAN.WaitDeviceIdle();
 				Model::models[modelItemSelected].destroy();
 				Model::models.erase(Model::models.begin() + modelItemSelected);
 				GUI::modelList.erase(GUI::modelList.begin() + modelItemSelected);
@@ -654,7 +654,7 @@ namespace pe
 		cmd.Begin();
 		ImGui_ImplVulkan_CreateFontsTexture(cmd.Handle());
 		cmd.End();
-		VULKAN.submitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
+		VULKAN.SubmitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
 	}
 	
 	void GUI::InitGUI(bool show)

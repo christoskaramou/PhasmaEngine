@@ -24,7 +24,7 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "GUI/GUI.h"
 #include "tinygltf/stb_image.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 
 namespace pe
 {

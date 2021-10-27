@@ -21,7 +21,7 @@ SOFTWARE.
 */
 
 #include "Timer.h"
-#include "Renderer/Vulkan/Vulkan.h"
+#include "Renderer/RHI.h"
 #include "Renderer/CommandBuffer.h"
 
 namespace pe
