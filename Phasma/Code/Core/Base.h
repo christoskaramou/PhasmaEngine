@@ -212,4 +212,9 @@ namespace pe
 	using SwapchainHandle = ApiHandle<VkSwapchainKHR, Placeholder*>;
 	using DeviceHandle = ApiHandle<VkDevice, Placeholder*>;
 	using SurfaceHandle = ApiHandle<VkSurfaceKHR, Placeholder*>;
+	using InstanceHandle = ApiHandle<VkInstance, Placeholder*>;
+	using GpuHandle = ApiHandle<VkPhysicalDevice, Placeholder*>;
+	using DebugMessengerHandle = ApiHandle<VkDebugUtilsMessengerEXT, Placeholder*>;
+	using QueueHandle = ApiHandle<VkQueue, Placeholder*>;
+	using DescriptorPoolHandle = ApiHandle<VkDescriptorPool, Placeholder*>;
 }

@@ -130,7 +130,9 @@ namespace pe
 		instInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
 		instInfo.ppEnabledExtensionNames = instanceExtensions.data();
 		
-		vkCreateInstance(&instInfo, nullptr, &instance);
+		VkInstance instanceVK;
+		vkCreateInstance(&instInfo, nullptr, &instanceVK);
+		instance = instanceVK;
 	}
 	
 #if _DEBUG
@@ -192,7 +194,9 @@ namespace pe
 		dumci.pfnUserCallback = VulkanContext::MessageCallback;
 
 		auto vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-		vkCreateDebugUtilsMessengerEXT(instance, &dumci, nullptr, &debugMessenger);
+		VkDebugUtilsMessengerEXT debugMessengerVK;
+		vkCreateDebugUtilsMessengerEXT(instance, &dumci, nullptr, &debugMessengerVK);
+		debugMessenger = debugMessengerVK;
 	}
 	
 	void VulkanContext::DestroyDebugMessenger()
@@ -263,8 +267,14 @@ namespace pe
 		GetGraphicsFamilyId();
 		GetComputeFamilyId();
 		GetTransferFamilyId();
-		vkGetPhysicalDeviceProperties(gpu, &gpuProperties);
-		vkGetPhysicalDeviceFeatures(gpu, &gpuFeatures);
+
+		VkPhysicalDeviceProperties gpuPropertiesVK;
+		vkGetPhysicalDeviceProperties(gpu, &gpuPropertiesVK);
+		gpuProperties = gpuPropertiesVK;
+
+		VkPhysicalDeviceFeatures gpuFeaturesVK;
+		vkGetPhysicalDeviceFeatures(gpu, &gpuFeaturesVK);
+		gpuFeatures = gpuFeaturesVK;
 	}
 	
 	void VulkanContext::GetGraphicsFamilyId()
@@ -372,15 +382,18 @@ namespace pe
 			queueCreateInfos.push_back(queueCreateInfo);
 		}
 		
+		VkPhysicalDeviceFeatures gpuFeaturesVK = gpuFeatures;
 		VkDeviceCreateInfo deviceCreateInfo{};
 		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 		deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
 		deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
-		deviceCreateInfo.pEnabledFeatures = &gpuFeatures;
+		deviceCreateInfo.pEnabledFeatures = &gpuFeaturesVK;
 		
-		vkCreateDevice(gpu, &deviceCreateInfo, nullptr, &device);
+		VkDevice deviceVK;
+		vkCreateDevice(gpu, &deviceCreateInfo, nullptr, &deviceVK);
+		device = deviceVK;
 	}
 	
 	void VulkanContext::CreateAllocator()
@@ -399,17 +412,23 @@ namespace pe
 	
 	void VulkanContext::GetGraphicsQueue()
 	{
-		vkGetDeviceQueue(device, graphicsFamilyId, 0, &graphicsQueue);
+		VkQueue queue;
+		vkGetDeviceQueue(device, graphicsFamilyId, 0, &queue);
+		graphicsQueue = queue;
 	}
 	
 	void VulkanContext::GetTransferQueue()
 	{
-		vkGetDeviceQueue(device, transferFamilyId, 0, &transferQueue);
+		VkQueue queue;
+		vkGetDeviceQueue(device, transferFamilyId, 0, &queue);
+		transferQueue = queue;
 	}
 	
 	void VulkanContext::GetComputeQueue()
 	{
-		vkGetDeviceQueue(device, computeFamilyId, 0, &computeQueue);
+		VkQueue queue;
+		vkGetDeviceQueue(device, computeFamilyId, 0, &queue);
+		computeQueue = queue;
 	}
 	
 	void VulkanContext::GetQueues()
@@ -448,7 +467,9 @@ namespace pe
 		createInfo.pPoolSizes = descPoolsize.data();
 		createInfo.maxSets = maxDescriptorSets;
 		
-		vkCreateDescriptorPool(device, &createInfo, nullptr, &descriptorPool);
+		VkDescriptorPool descriptorPoolVK;
+		vkCreateDescriptorPool(device, &createInfo, nullptr, &descriptorPoolVK);
+		descriptorPool = descriptorPoolVK;
 	}
 	
 	void VulkanContext::CreateCmdBuffers(uint32_t bufferCount)
@@ -557,7 +578,7 @@ namespace pe
 		if (descriptorPool)
 		{
 			vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-			descriptorPool = nullptr;
+			descriptorPool = {};
 		}
 
 		commandPool.Destroy();
@@ -568,7 +589,7 @@ namespace pe
 		if (device)
 		{
 			vkDestroyDevice(device, nullptr);
-			device = nullptr;
+			device = {};
 		}
 		
 		surface.Destroy();

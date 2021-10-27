@@ -113,16 +113,16 @@ namespace pe
 		
 		void Destroy();
 		
-		VkInstance instance;
-		VkDebugUtilsMessengerEXT debugMessenger;
-		VkPhysicalDevice gpu;
+		InstanceHandle instance;
+		DebugMessengerHandle debugMessenger;
+		GpuHandle gpu;
 		VkPhysicalDeviceProperties gpuProperties;
 		VkPhysicalDeviceFeatures gpuFeatures;
-		VkDevice device;
-		VkQueue graphicsQueue, computeQueue, transferQueue;
+		DeviceHandle device;
+		QueueHandle graphicsQueue, computeQueue, transferQueue;
 		CommandPool commandPool;
 		CommandPool commandPool2;
-		VkDescriptorPool descriptorPool;
+		DescriptorPoolHandle descriptorPool;
 		std::vector<VkQueueFamilyProperties> queueFamilyProperties;
 		std::vector<CommandBuffer> dynamicCmdBuffers;
 		std::vector<CommandBuffer> shadowCmdBuffers;
