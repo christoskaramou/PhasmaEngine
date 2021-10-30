@@ -29,6 +29,7 @@ SOFTWARE.
 #include "Core/Queue.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Framebuffer.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
 #include "Core/Settings.h"
@@ -108,7 +109,7 @@ namespace pe
 			uint32_t width = SHADOWMAP_SIZE;
 			uint32_t height = SHADOWMAP_SIZE;
 			ImageViewHandle view = textures[i % textures.size()].view;
-			framebuffers[i].Create(width, height, view, renderPass);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}
 
@@ -156,8 +157,8 @@ namespace pe
 		for (auto& texture : textures)
 			texture.Destroy();
 
-		for (auto& fb : framebuffers)
-			fb.Destroy();
+		for (auto fb : framebuffers)
+			fb->Destroy();
 
 		uniformBuffer->Destroy();
 		pipeline.destroy();

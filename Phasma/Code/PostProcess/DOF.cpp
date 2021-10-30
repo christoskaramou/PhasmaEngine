@@ -28,6 +28,7 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Framebuffer.h"
 
 namespace pe
 {
@@ -71,7 +72,7 @@ namespace pe
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
 			ImageViewHandle view = renderTargets["viewport"].view;
-			framebuffers[i].Create(width, height, view, renderPass);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}
 	
@@ -96,7 +97,7 @@ namespace pe
 	{		
 		std::vector<float> values {GUI::DOF_focus_scale, GUI::DOF_blur_range, 0.0f, 0.0f};
 
-		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
 		cmd->PushConstants(&pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
 		cmd->BindPipeline(&pipeline);
 		cmd->BindDescriptors(&pipeline, 1, &DSet);
@@ -126,8 +127,8 @@ namespace pe
 	
 	void DOF::destroy()
 	{
-		for (auto& framebuffer : framebuffers)
-			framebuffer.Destroy();
+		for (auto framebuffer : framebuffers)
+			framebuffer->Destroy();
 		
 		renderPass.Destroy();
 		Pipeline::getDescriptorSetLayoutDOF()->Destroy();

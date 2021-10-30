@@ -45,5 +45,18 @@ namespace pe
 			m_apiHandle = {};
 		}
 	}
+
+	void Fence::Wait()
+	{
+		VkFence fenceVK = Handle();
+		if (vkWaitForFences(RHII.device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
+			throw std::runtime_error("wait fences error!");
+	}
+
+	void Fence::Reset()
+	{
+		VkFence fenceVK = Handle();
+		vkResetFences(RHII.device, 1, &fenceVK);
+	}
 }
 #endif

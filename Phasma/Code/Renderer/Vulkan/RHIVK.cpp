@@ -644,10 +644,8 @@ namespace pe
 	
 	void RHI::WaitFence(Fence* fence)
 	{
-		VkFence fenceVK = fence->Handle();
-		if (vkWaitForFences(device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
-			throw std::runtime_error("wait fences error!");
-		vkResetFences(device, 1, &fenceVK);
+		fence->Wait();
+		fence->Reset();
 	}
 	
 	void RHI::SubmitAndWaitFence(

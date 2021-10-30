@@ -25,6 +25,7 @@ SOFTWARE.
 #include "Systems/EventSystem.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Semaphore.h"
+#include "Renderer/Descriptor.h"
 #include "Model/Mesh.h"
 #include "Systems/PostProcessSystem.h"
 

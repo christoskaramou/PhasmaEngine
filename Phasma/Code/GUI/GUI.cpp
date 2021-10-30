@@ -41,6 +41,7 @@ SOFTWARE.
 #include "Renderer/Command.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
+#include "Renderer/Framebuffer.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl.h"
@@ -679,7 +680,7 @@ namespace pe
 
 		if (render && ImGui::GetDrawData()->TotalVtxCount > 0)
 		{
-			cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+			cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
 			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
 			cmd->EndPass();
 		}
@@ -714,7 +715,7 @@ namespace pe
 			uint32_t width = WIDTH;
 			uint32_t height = HEIGHT;
 			ImageViewHandle view = RHII.swapchain.images[i].view;
-			framebuffers[i].Create(width, height, view, renderPass);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}
 
@@ -722,7 +723,7 @@ namespace pe
 	{
 		renderPass.Destroy();
 		for (auto& framebuffer : framebuffers)
-			framebuffer.Destroy();
+			framebuffer->Destroy();
 	}
 	
 	void GUI::Update()

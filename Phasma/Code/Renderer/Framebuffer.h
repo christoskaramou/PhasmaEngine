@@ -28,20 +28,14 @@ namespace pe
 {
 	class RenderPass;
 	
-	class FrameBuffer
+	class FrameBuffer : public IHandle<FrameBuffer, FrameBufferHandle>
 	{
 	public:
-		FrameBuffer();
+		FrameBuffer(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass renderPass);
+
+		FrameBuffer(uint32_t width, uint32_t height, const std::vector<ImageViewHandle>& views, RenderPass renderPass);
 		
-		~FrameBuffer() = default;
-		
-		void Create(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass renderPass);
-		
-		void Create(uint32_t width, uint32_t height, std::vector<ImageViewHandle>& views, RenderPass renderPass);
-		
-		void Destroy();
-		
-		FrameBufferHandle handle;
+		~FrameBuffer();
 
 		uint32_t width, height;
 	};

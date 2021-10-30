@@ -27,12 +27,13 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Systems/CameraSystem.h"
 #include "Renderer/RenderPass.h"
-#include "Renderer/Framebuffer.h"
 #include "ECS/Component.h"
 
 namespace pe
 {
 	class Descriptor;
+	class FrameBuffer;
+
 	class MotionBlur : public IComponent
 	{
 	public:
@@ -42,7 +43,7 @@ namespace pe
 		
 		mat4 motionBlurInput[4];
 		Buffer* UBmotionBlur;
-		std::vector<FrameBuffer> framebuffers {};
+		std::vector<FrameBuffer*> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;
 		Descriptor* DSet;

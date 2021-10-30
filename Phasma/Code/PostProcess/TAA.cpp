@@ -29,6 +29,7 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Framebuffer.h"
 
 namespace pe
 {
@@ -140,7 +141,7 @@ namespace pe
 	{
 		
 		renderTargets["taa"].ChangeLayout(cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
 		cmd->BindPipeline(&pipeline);
 		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
@@ -149,7 +150,7 @@ namespace pe
 		
 		saveImage(cmd, renderTargets["taa"]);
 
-		cmd->BeginPass(&renderPassSharpen, &framebuffersSharpen[imageIndex]);
+		cmd->BeginPass(&renderPassSharpen, framebuffersSharpen[imageIndex]);
 		cmd->BindPipeline(&pipelineSharpen);
 		cmd->BindDescriptors(&pipelineSharpen, 1, &DSetSharpen);
 		cmd->Draw(3, 1, 0, 0);
@@ -174,7 +175,7 @@ namespace pe
 			uint32_t width = renderTargets["taa"].width;
 			uint32_t height = renderTargets["taa"].height;
 			ImageViewHandle view = renderTargets["taa"].view;
-			framebuffers[i].Create(width, height, view, renderPass);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 		
 		framebuffersSharpen.resize(RHII.swapchain.images.size());
@@ -183,7 +184,7 @@ namespace pe
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
 			ImageViewHandle view = renderTargets["viewport"].view;
-			framebuffersSharpen[i].Create(width, height, view, renderPassSharpen);
+			framebuffersSharpen[i] = FrameBuffer::Create(width, height, view, renderPassSharpen);
 		}
 	}
 	
@@ -298,10 +299,10 @@ namespace pe
 		previous.Destroy();
 		frameImage.Destroy();
 		
-		for (auto& framebuffer : framebuffers)
-			framebuffer.Destroy();
-		for (auto& framebuffer : framebuffersSharpen)
-			framebuffer.Destroy();
+		for (auto framebuffer : framebuffers)
+			framebuffer->Destroy();
+		for (auto framebuffer : framebuffersSharpen)
+			framebuffer->Destroy();
 		
 		renderPass.Destroy();
 		renderPassSharpen.Destroy();

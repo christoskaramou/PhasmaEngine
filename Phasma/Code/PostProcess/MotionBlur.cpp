@@ -30,6 +30,7 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Framebuffer.h"
 
 namespace pe
 {
@@ -101,7 +102,7 @@ namespace pe
 			0.f
 		};
 
-		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
 		cmd->PushConstants(&pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(vec4), &values);
 		cmd->BindPipeline(&pipeline);
 		cmd->BindDescriptors(&pipeline, 1, &DSet);
@@ -141,7 +142,7 @@ namespace pe
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
 			ImageViewHandle view = renderTargets["viewport"].view;
-			framebuffers[i].Create(width, height, view, renderPass);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}
 	
@@ -167,8 +168,8 @@ namespace pe
 
 	void MotionBlur::destroy()
 	{
-		for (auto& frameBuffer : framebuffers)
-			frameBuffer.Destroy();
+		for (auto frameBuffer : framebuffers)
+			frameBuffer->Destroy();
 
 		renderPass.Destroy();
 

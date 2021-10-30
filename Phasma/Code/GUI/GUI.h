@@ -26,7 +26,6 @@ SOFTWARE.
 #include "Model/Object.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/RenderPass.h"
-#include "Renderer/Framebuffer.h"
 #include "SDL/SDL.h"
 
 namespace pe
@@ -113,7 +112,7 @@ namespace pe
         bool render = true;
         std::string name;
         RenderPass renderPass;
-        std::vector<FrameBuffer> framebuffers;
+        std::vector<FrameBuffer*> framebuffers;
 
         void Update();
 

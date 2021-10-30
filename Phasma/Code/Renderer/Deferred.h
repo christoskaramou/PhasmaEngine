@@ -27,11 +27,12 @@ SOFTWARE.
 #include "Shadows.h"
 #include "Skybox/Skybox.h"
 #include "RenderPass.h"
-#include "Framebuffer.h"
 
 namespace pe
 {
 	class Descriptor;
+	class FrameBuffer;
+
 	class Deferred
 	{
 	public:
@@ -40,7 +41,7 @@ namespace pe
 		~Deferred();
 		
 		RenderPass renderPass, compositionRenderPass;
-		std::vector<FrameBuffer> framebuffers {}, compositionFramebuffers {};
+		std::vector<FrameBuffer*> framebuffers {}, compositionFramebuffers {};
 		Descriptor* DSComposition;
 		Pipeline pipeline;
 		Pipeline pipelineComposition;

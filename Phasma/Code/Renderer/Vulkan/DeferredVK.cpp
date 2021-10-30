@@ -37,6 +37,7 @@ SOFTWARE.
 #include "Core/Settings.h"
 #include "ECS/Context.h"
 #include "Systems/LightSystem.h"
+#include "Renderer/Framebuffer.h"
 
 namespace pe
 {
@@ -51,7 +52,7 @@ namespace pe
 	
 	void Deferred::batchStart(CommandBuffer* cmd, uint32_t imageIndex)
 	{
-		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
 		
 		Model::commandBuffer = cmd;
 		Model::pipeline = &pipeline;
@@ -197,7 +198,7 @@ namespace pe
 		values[1] = vec4(GUI::shadow_cast);
 		std::vector<Descriptor*> handles{ DSComposition, shadows.descriptorSetDeferred, skybox.descriptorSet };
 
-		cmd->BeginPass(&compositionRenderPass, &compositionFramebuffers[imageIndex]);
+		cmd->BeginPass(&compositionRenderPass, compositionFramebuffers[imageIndex]);
 		cmd->PushConstants(&pipelineComposition, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(mat4), &values);
 		cmd->BindPipeline(&pipelineComposition);
 		cmd->BindDescriptors(&pipelineComposition, (uint32_t)handles.size(), handles.data());
@@ -255,7 +256,7 @@ namespace pe
 				renderTargets["emissive"].view,
 				RHII.depth.view
 			};
-			framebuffers[i].Create(width, height, views, renderPass);
+			framebuffers[i] = FrameBuffer::Create(width, height, views, renderPass);
 		}
 	}
 	
@@ -267,7 +268,7 @@ namespace pe
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
 			ImageViewHandle view = renderTargets["viewport"].view;
-			compositionFramebuffers[i].Create(width, height, view, compositionRenderPass);
+			compositionFramebuffers[i] = FrameBuffer::Create(width, height, view, compositionRenderPass);
 		}
 	}
 	
@@ -346,9 +347,9 @@ namespace pe
 		compositionRenderPass.Destroy();
 		
 		for (auto& framebuffer : framebuffers)
-			framebuffer.Destroy();
+			framebuffer->Destroy();
 		for (auto& framebuffer : compositionFramebuffers)
-			framebuffer.Destroy();
+			framebuffer->Destroy();
 		
 		Pipeline::getDescriptorSetLayoutComposition()->Destroy();
 		uniform->Destroy();

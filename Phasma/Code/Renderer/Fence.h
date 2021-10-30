@@ -32,5 +32,9 @@ namespace pe
 		Fence(bool signaled);
 
 		~Fence();
+
+		void Wait();
+
+		void Reset();
 	};
 }

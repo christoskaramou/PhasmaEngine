@@ -27,6 +27,8 @@ SOFTWARE.
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
+#include "Renderer/Framebuffer.h"
+#include "Renderer/Descriptor.h"
 
 namespace pe
 {
@@ -75,7 +77,7 @@ namespace pe
 			uint32_t width = renderTargets["brightFilter"].width;
 			uint32_t height = renderTargets["brightFilter"].height;
 			ImageViewHandle view = renderTargets["brightFilter"].view;
-			framebuffers[i].Create(width, height, view, renderPassBrightFilter);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassBrightFilter);
 		}
 		
 		for (size_t i = RHII.swapchain.images.size(); i < RHII.swapchain.images.size() * 2; ++i)
@@ -83,7 +85,7 @@ namespace pe
 			uint32_t width = renderTargets["gaussianBlurHorizontal"].width;
 			uint32_t height = renderTargets["gaussianBlurHorizontal"].height;
 			ImageViewHandle view = renderTargets["gaussianBlurHorizontal"].view;
-			framebuffers[i].Create(width, height, view, renderPassGaussianBlur);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassGaussianBlur);
 		}
 		
 		for (size_t i = RHII.swapchain.images.size() * 2; i < RHII.swapchain.images.size() * 3; ++i)
@@ -91,7 +93,7 @@ namespace pe
 			uint32_t width = renderTargets["gaussianBlurVertical"].width;
 			uint32_t height = renderTargets["gaussianBlurVertical"].height;
 			ImageViewHandle view = renderTargets["gaussianBlurVertical"].view;
-			framebuffers[i].Create(width, height, view, renderPassGaussianBlur);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassGaussianBlur);
 		}
 		
 		for (size_t i = RHII.swapchain.images.size() * 3; i < RHII.swapchain.images.size() * 4; ++i)
@@ -99,7 +101,7 @@ namespace pe
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
 			ImageViewHandle view = renderTargets["viewport"].view;
-			framebuffers[i].Create(width, height, view, renderPassCombine);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassCombine);
 		}
 	}
 	
@@ -151,7 +153,7 @@ namespace pe
 		};
 		
 		renderTargets["brightFilter"].ChangeLayout(cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(&renderPassBrightFilter, &framebuffers[imageIndex]);
+		cmd->BeginPass(&renderPassBrightFilter, framebuffers[imageIndex]);
 		cmd->PushConstants(&pipelineBrightFilter, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
 		cmd->BindPipeline(&pipelineBrightFilter);
 		cmd->BindDescriptors(&pipelineBrightFilter, 1, &DSBrightFilter);
@@ -160,7 +162,7 @@ namespace pe
 		renderTargets["brightFilter"].ChangeLayout(cmd, LayoutState::ColorRead);
 		
 		renderTargets["gaussianBlurHorizontal"].ChangeLayout(cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(&renderPassGaussianBlur, &framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)]);
+		cmd->BeginPass(&renderPassGaussianBlur, framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)]);
 		cmd->PushConstants(&pipelineGaussianBlurHorizontal, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
 		cmd->BindPipeline(&pipelineGaussianBlurHorizontal);
 		cmd->BindDescriptors(&pipelineGaussianBlurHorizontal, 1, &DSGaussianBlurHorizontal);
@@ -169,7 +171,7 @@ namespace pe
 		renderTargets["gaussianBlurHorizontal"].ChangeLayout(cmd, LayoutState::ColorRead);
 		
 		renderTargets["gaussianBlurVertical"].ChangeLayout(cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(&renderPassGaussianBlur, &framebuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)]);
+		cmd->BeginPass(&renderPassGaussianBlur, framebuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)]);
 		cmd->PushConstants(&pipelineGaussianBlurVertical, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
 		cmd->BindPipeline(&pipelineGaussianBlurVertical);
 		cmd->BindDescriptors(&pipelineGaussianBlurVertical, 1, &DSGaussianBlurVertical);
@@ -177,7 +179,7 @@ namespace pe
 		cmd->EndPass();
 		renderTargets["gaussianBlurVertical"].ChangeLayout(cmd, LayoutState::ColorRead);
 		
-		cmd->BeginPass(&renderPassCombine, &framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)]);
+		cmd->BeginPass(&renderPassCombine, framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)]);
 		cmd->PushConstants(&pipelineCombine, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
 		cmd->BindPipeline(&pipelineCombine);
 		cmd->BindDescriptors(&pipelineCombine, 1, &DSCombine);
@@ -272,8 +274,8 @@ namespace pe
 	
 	void Bloom::destroy()
 	{
-		for (auto& frameBuffer : framebuffers)
-			frameBuffer.Destroy();
+		for (auto frameBuffer : framebuffers)
+			frameBuffer->Destroy();
 		
 		renderPassBrightFilter.Destroy();
 		renderPassGaussianBlur.Destroy();

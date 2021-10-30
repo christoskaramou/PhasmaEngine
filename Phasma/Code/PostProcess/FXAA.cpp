@@ -28,6 +28,7 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Framebuffer.h"
 
 namespace pe
 {
@@ -72,7 +73,7 @@ namespace pe
 	
 	void FXAA::draw(CommandBuffer* cmd, uint32_t imageIndex)
 	{
-		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
 		cmd->BindPipeline(&pipeline);
 		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
@@ -94,7 +95,7 @@ namespace pe
 			uint32_t width = renderTargets["viewport"].width;
 			uint32_t height = renderTargets["viewport"].height;
 			ImageViewHandle view = renderTargets["viewport"].view;
-			framebuffers[i].Create(width, height, view, renderPass);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}
 	
@@ -117,8 +118,8 @@ namespace pe
 	
 	void FXAA::destroy()
 	{
-		for (auto& frameBuffer : framebuffers)
-			frameBuffer.Destroy();
+		for (auto frameBuffer : framebuffers)
+			frameBuffer->Destroy();
 
 		Pipeline::getDescriptorSetLayoutFXAA()->Destroy();
 		renderPass.Destroy();

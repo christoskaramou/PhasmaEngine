@@ -29,6 +29,7 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/FrameBuffer.h"
 
 namespace pe
 {
@@ -127,7 +128,7 @@ namespace pe
 	{
 		// SSAO image
 		image.ChangeLayout(cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
 		cmd->BindPipeline(&pipeline);
 		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
@@ -136,7 +137,7 @@ namespace pe
 		image.ChangeLayout(cmd, LayoutState::ColorRead);
 
 		// new blurry SSAO image
-		cmd->BeginPass(&blurRenderPass, &blurFramebuffers[imageIndex]);
+		cmd->BeginPass(&blurRenderPass, blurFramebuffers[imageIndex]);
 		cmd->BindPipeline(&pipelineBlur);
 		cmd->BindDescriptors(&pipelineBlur, 1, &DSBlur);
 		cmd->Draw(3, 1, 0, 0);
@@ -153,10 +154,10 @@ namespace pe
 		renderPass.Destroy();
 		blurRenderPass.Destroy();
 		
-		for (auto& frameBuffer : framebuffers)
-			frameBuffer.Destroy();
-		for (auto& frameBuffer : blurFramebuffers)
-			frameBuffer.Destroy();
+		for (auto frameBuffer : framebuffers)
+			frameBuffer->Destroy();
+		for (auto frameBuffer : blurFramebuffers)
+			frameBuffer->Destroy();
 		
 		pipeline.destroy();
 		pipelineBlur.destroy();
@@ -200,7 +201,7 @@ namespace pe
 			uint32_t width = renderTargets["ssao"].width;
 			uint32_t height = renderTargets["ssao"].height;
 			ImageViewHandle view = renderTargets["ssao"].view;
-			framebuffers[i].Create(width, height, view, renderPass);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}
 	
@@ -212,7 +213,7 @@ namespace pe
 			uint32_t width = renderTargets["ssaoBlur"].width;
 			uint32_t height = renderTargets["ssaoBlur"].height;
 			ImageViewHandle view = renderTargets["ssaoBlur"].view;
-			blurFramebuffers[i].Create(width, height, view, blurRenderPass);
+			blurFramebuffers[i] = FrameBuffer::Create(width, height, view, blurRenderPass);
 		}
 	}
 	

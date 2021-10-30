@@ -29,6 +29,7 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Framebuffer.h"
 
 namespace pe
 {
@@ -99,7 +100,7 @@ namespace pe
 	
 	void SSR::draw(CommandBuffer* cmd, uint32_t imageIndex)
 	{
-		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
 		cmd->BindPipeline(&pipeline);
 		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
@@ -121,7 +122,7 @@ namespace pe
 			uint32_t width = renderTargets["ssr"].width;
 			uint32_t height = renderTargets["ssr"].height;
 			ImageViewHandle view = renderTargets["ssr"].view;
-			framebuffers[i].Create(width, height, view, renderPass);
+			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}
 	
@@ -144,8 +145,8 @@ namespace pe
 	
 	void SSR::destroy()
 	{
-		for (auto& framebuffer : framebuffers)
-			framebuffer.Destroy();
+		for (auto framebuffer : framebuffers)
+			framebuffer->Destroy();
 		
 		renderPass.Destroy();
 		

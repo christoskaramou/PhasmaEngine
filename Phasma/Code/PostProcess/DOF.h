@@ -25,12 +25,13 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
-#include "Renderer/Framebuffer.h"
 #include "ECS/Component.h"
 
 namespace pe
 {
 	class Descriptor;
+	class FrameBuffer;
+
 	class DOF : public IComponent
 	{
 	public:
@@ -38,7 +39,7 @@ namespace pe
 		
 		~DOF();
 		
-		std::vector<FrameBuffer> framebuffers {};
+		std::vector<FrameBuffer*> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;
 		Descriptor* DSet;

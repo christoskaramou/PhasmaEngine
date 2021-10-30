@@ -36,6 +36,8 @@ namespace pe
 	constexpr uint32_t SHADOWMAP_SIZE = 2048;
 
 	class Descriptor;
+	class FrameBuffer;
+
 	class Shadows
 	{
 	public:
@@ -48,7 +50,7 @@ namespace pe
 		RenderPass renderPass;
 		std::vector<Image> textures {};
 		Descriptor* descriptorSetDeferred;
-		std::vector<FrameBuffer> framebuffers {};
+		std::vector<FrameBuffer*> framebuffers {};
 		Buffer* uniformBuffer;
 		Pipeline pipeline;
 		
