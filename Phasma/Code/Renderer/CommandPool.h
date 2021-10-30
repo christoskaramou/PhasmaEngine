@@ -26,22 +26,11 @@ SOFTWARE.
 
 namespace pe
 {
-	class CommandPool
+	class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
 	{
 	public:
-		CommandPool();
-
-		CommandPool(CommandPoolHandle handle);
+		CommandPool(uint32_t graphicsFamilyId);
 
 		~CommandPool();
-
-		void Create(uint32_t graphicsFamilyId);
-
-		void Destroy();
-
-		CommandPoolHandle& Handle();
-
-	private:
-		CommandPoolHandle m_handle;
 	};
 }

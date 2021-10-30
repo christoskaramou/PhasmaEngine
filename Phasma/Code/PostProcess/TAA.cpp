@@ -28,6 +28,7 @@ SOFTWARE.
 #include "Core/Queue.h"
 #include "Renderer/RHI.h"
 #include "Renderer/CommandBuffer.h"
+#include "Renderer/Descriptor.h"
 
 namespace pe
 {
@@ -96,94 +97,61 @@ namespace pe
 		uniform->Flush();
 		uniform->Unmap();
 
-		VkDescriptorSetAllocateInfo allocateInfo{};
-		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = RHII.descriptorPool;
-		allocateInfo.descriptorSetCount = 1;
-
-		VkDescriptorSet dset;
-
-		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutTAA();
-		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		DSet = dset;
-
-		dsetLayout = Pipeline::getDescriptorSetLayoutTAASharpen();
-		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		DSetSharpen = dset;
+		DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAA());
+		DSetSharpen = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAASharpen());
 
 		updateDescriptorSets(renderTargets);
 	}
 	
 	void TAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		std::deque<VkDescriptorImageInfo> dsii{};
-		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image, ImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-		{
-			VkDescriptorImageInfo info{ image.sampler, image.view, (VkImageLayout)layout };
-			dsii.push_back(info);
+		std::array<DescriptorUpdateInfo, 5> infos{};
 
-			VkWriteDescriptorSet textureWriteSet{};
-			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			textureWriteSet.dstSet = dstSet;
-			textureWriteSet.dstBinding = dstBinding;
-			textureWriteSet.dstArrayElement = 0;
-			textureWriteSet.descriptorCount = 1;
-			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			textureWriteSet.pImageInfo = &dsii.back();
+		infos[0].binding = 0;
+		infos[0].pImage = &previous;
 
-			return textureWriteSet;
-		};
+		infos[1].binding = 1;
+		infos[1].pImage = &frameImage;
 
-		std::deque<VkDescriptorBufferInfo> dsbi{};
-		auto const wSetBuffer = [&dsbi](DescriptorSetHandle dstSet, uint32_t dstBinding, Buffer& buffer)
-		{
-			VkDescriptorBufferInfo info{ buffer.Handle(), 0, buffer.Size() };
-			dsbi.push_back(info);
+		infos[2].binding = 2;
+		infos[2].pImage = &RHII.depth;
+		infos[2].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
-			VkWriteDescriptorSet textureWriteSet{};
-			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			textureWriteSet.dstSet = dstSet;
-			textureWriteSet.dstBinding = dstBinding;
-			textureWriteSet.dstArrayElement = 0;
-			textureWriteSet.descriptorCount = 1;
-			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			textureWriteSet.pBufferInfo = &dsbi.back();
+		infos[3].binding = 3;
+		infos[3].pImage = &renderTargets["velocity"];
 
-			return textureWriteSet;
-		};
-		
-		std::vector<VkWriteDescriptorSet> textureWriteSets
-		{
-			wSetImage(DSet, 0, previous),
-			wSetImage(DSet, 1, frameImage),
-			wSetImage(DSet, 2, RHII.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
-			wSetImage(DSet, 3, renderTargets["velocity"]),
-			wSetBuffer(DSet, 4, *uniform),
-			wSetImage(DSetSharpen, 0, renderTargets["taa"]),
-			wSetBuffer(DSetSharpen, 1, *uniform)
-		};
+		infos[4].binding = 4;
+		infos[4].pBuffer = uniform;
 
-		vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+		DSet->UpdateDescriptor(5, infos.data());
+
+		std::array<DescriptorUpdateInfo, 2> infos2{};
+
+		infos2[0].binding = 0;
+		infos2[0].pImage = &renderTargets["taa"];
+
+		infos2[1].binding = 1;
+		infos2[1].pBuffer = uniform;
+
+		DSetSharpen->UpdateDescriptor(2, infos2.data());
 	}
 	
 	void TAA::draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{
 		
-		renderTargets["taa"].ChangeLayout(*cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-		cmd->BindPipeline(pipeline);
-		cmd->BindDescriptors(pipeline, 1, &DSet);
+		renderTargets["taa"].ChangeLayout(cmd, LayoutState::ColorWrite);
+		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->BindPipeline(&pipeline);
+		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
-		renderTargets["taa"].ChangeLayout(*cmd, LayoutState::ColorRead);
+		renderTargets["taa"].ChangeLayout(cmd, LayoutState::ColorRead);
 		
 		saveImage(cmd, renderTargets["taa"]);
 
-		cmd->BeginPass(renderPassSharpen, framebuffersSharpen[imageIndex]);
-		cmd->BindPipeline(pipelineSharpen);
-		cmd->BindDescriptors(pipelineSharpen, 1, &DSetSharpen);
+		cmd->BeginPass(&renderPassSharpen, &framebuffersSharpen[imageIndex]);
+		cmd->BindPipeline(&pipelineSharpen);
+		cmd->BindDescriptors(&pipelineSharpen, 1, &DSetSharpen);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 	}
@@ -262,7 +230,7 @@ namespace pe
 	void TAA::saveImage(CommandBuffer* cmd, Image& source)
 	{
 		previous.TransitionImageLayout(
-			*cmd,
+			cmd,
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
@@ -272,7 +240,7 @@ namespace pe
 			VK_IMAGE_ASPECT_COLOR_BIT
 		);
 		source.TransitionImageLayout(
-			*cmd,
+			cmd,
 			source.layoutState == LayoutState::ColorRead ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			source.layoutState == LayoutState::ColorRead ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -302,7 +270,7 @@ namespace pe
 		);
 		
 		previous.TransitionImageLayout(
-			*cmd,
+			cmd,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -312,7 +280,7 @@ namespace pe
 			VK_IMAGE_ASPECT_COLOR_BIT
 		);
 		source.TransitionImageLayout(
-			*cmd,
+			cmd,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -338,16 +306,8 @@ namespace pe
 		renderPass.Destroy();
 		renderPassSharpen.Destroy();
 		
-		if (Pipeline::getDescriptorSetLayoutTAA())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutTAA(), nullptr);
-			Pipeline::getDescriptorSetLayoutTAA() = {};
-		}
-		if (Pipeline::getDescriptorSetLayoutTAASharpen())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutTAASharpen(), nullptr);
-			Pipeline::getDescriptorSetLayoutTAASharpen() = {};
-		}
+		Pipeline::getDescriptorSetLayoutTAA()->Destroy();
+		Pipeline::getDescriptorSetLayoutTAASharpen()->Destroy();
 		pipeline.destroy();
 		pipelineSharpen.destroy();
 	}

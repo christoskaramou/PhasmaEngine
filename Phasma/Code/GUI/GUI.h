@@ -121,7 +121,7 @@ namespace pe
 
         void InitGUI(bool show = true);
 
-        void Draw(CommandBuffer cmd, uint32_t imageIndex);
+        void Draw(CommandBuffer* cmd, uint32_t imageIndex);
 
         static void SetWindowStyle(ImGuiStyle* dst = nullptr);
 

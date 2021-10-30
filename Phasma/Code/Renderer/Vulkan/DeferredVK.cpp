@@ -51,7 +51,7 @@ namespace pe
 	
 	void Deferred::batchStart(CommandBuffer* cmd, uint32_t imageIndex)
 	{
-		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
 		
 		Model::commandBuffer = cmd;
 		Model::pipeline = &pipeline;
@@ -74,18 +74,8 @@ namespace pe
 		uniform->Zero();
 		uniform->Flush();
 		uniform->Unmap();
-		
-		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutComposition();
-		VkDescriptorSetAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.pNext = nullptr;
-		allocInfo.descriptorPool = RHII.descriptorPool;
-		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &dsetLayout;
 
-		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(RHII.device, &allocInfo, &dset);
-		DSComposition = dset;
+		DSComposition = Descriptor::Create(Pipeline::getDescriptorSetLayoutComposition());
 		
 		// Check if ibl_brdf_lut is already loaded
 		const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
@@ -141,61 +131,41 @@ namespace pe
 	
 	void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		std::deque<VkDescriptorImageInfo> dsii{};
-		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image, ImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-		{
-			VkDescriptorImageInfo info{ image.sampler, image.view, (VkImageLayout)layout };
-			dsii.push_back(info);
+		std::array<DescriptorUpdateInfo, 10> infos{};
 
-			VkWriteDescriptorSet writeSet{};
-			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			writeSet.dstSet = dstSet;
-			writeSet.dstBinding = dstBinding;
-			writeSet.dstArrayElement = 0;
-			writeSet.descriptorCount = 1;
-			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			writeSet.pImageInfo = &dsii.back();
-			writeSet.pBufferInfo = nullptr;
-			writeSet.pTexelBufferView = nullptr;
+		infos[0].binding = 0;
+		infos[0].pImage = &RHII.depth;
+		infos[0].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
-			return writeSet;
-		};
-		std::deque<VkDescriptorBufferInfo> dsbi{};
-		const auto wSetBuffer = [&dsbi](DescriptorSetHandle dstSet, uint32_t dstBinding, Buffer& buffer)
-		{
-			VkDescriptorBufferInfo info{ buffer.Handle(), 0, buffer.Size() };
-			dsbi.push_back(info);
+		infos[1].binding = 1;
+		infos[1].pImage = &renderTargets["normal"];
 
-			VkWriteDescriptorSet writeSet{};
-			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			writeSet.dstSet = dstSet;
-			writeSet.dstBinding = dstBinding;
-			writeSet.dstArrayElement = 0;
-			writeSet.descriptorCount = 1;
-			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			writeSet.pImageInfo = nullptr;
-			writeSet.pBufferInfo = &dsbi.back();
-			writeSet.pTexelBufferView = nullptr;
+		infos[2].binding = 2;
+		infos[2].pImage = &renderTargets["albedo"];
 
-			return writeSet;
-		};
-		
-		Buffer& lightsUniform = CONTEXT->GetSystem<LightSystem>()->GetUniform();
-		std::vector<VkWriteDescriptorSet> writeDescriptorSets =
-		{
-			wSetImage(DSComposition, 0, RHII.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
-			wSetImage(DSComposition, 1, renderTargets["normal"]),
-			wSetImage(DSComposition, 2, renderTargets["albedo"]),
-			wSetImage(DSComposition, 3, renderTargets["srm"]),
-			wSetBuffer(DSComposition, 4, lightsUniform),
-			wSetImage(DSComposition, 5, renderTargets["ssaoBlur"]),
-			wSetImage(DSComposition, 6, renderTargets["ssr"]),
-			wSetImage(DSComposition, 7, renderTargets["emissive"]),
-			wSetImage(DSComposition, 8, ibl_brdf_lut),
-			wSetBuffer(DSComposition, 9, *uniform)
-		};
+		infos[3].binding = 3;
+		infos[3].pImage = &renderTargets["srm"];
 
-		vkUpdateDescriptorSets(RHII.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
+		Buffer* lightsUniform = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
+		infos[4].binding = 4;
+		infos[4].pBuffer = lightsUniform;
+
+		infos[5].binding = 5;
+		infos[5].pImage = &renderTargets["ssaoBlur"];
+
+		infos[6].binding = 6;
+		infos[6].pImage = &renderTargets["ssr"];
+
+		infos[7].binding = 7;
+		infos[7].pImage = &renderTargets["emissive"];
+
+		infos[8].binding = 8;
+		infos[8].pImage = &ibl_brdf_lut;
+
+		infos[9].binding = 9;
+		infos[9].pBuffer = uniform;
+
+		DSComposition->UpdateDescriptor(10, infos.data());
 	}
 	
 	void Deferred::update(mat4& invViewProj)
@@ -225,12 +195,12 @@ namespace pe
 		mat4 values{};
 		values[0] = shadows.viewZ;
 		values[1] = vec4(GUI::shadow_cast);
-		std::vector<DescriptorSetHandle> handles{ DSComposition, shadows.descriptorSetDeferred, skybox.descriptorSet };
+		std::vector<Descriptor*> handles{ DSComposition, shadows.descriptorSetDeferred, skybox.descriptorSet };
 
-		cmd->BeginPass(compositionRenderPass, compositionFramebuffers[imageIndex]);
-		cmd->PushConstants(pipelineComposition, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(mat4), &values);
-		cmd->BindPipeline(pipelineComposition);
-		cmd->BindDescriptors(pipelineComposition, (uint32_t)handles.size(), handles.data());
+		cmd->BeginPass(&compositionRenderPass, &compositionFramebuffers[imageIndex]);
+		cmd->PushConstants(&pipelineComposition, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(mat4), &values);
+		cmd->BindPipeline(&pipelineComposition);
+		cmd->BindDescriptors(&pipelineComposition, (uint32_t)handles.size(), handles.data());
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 	}
@@ -380,11 +350,7 @@ namespace pe
 		for (auto& framebuffer : compositionFramebuffers)
 			framebuffer.Destroy();
 		
-		if (Pipeline::getDescriptorSetLayoutComposition())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutComposition(), nullptr);
-			Pipeline::getDescriptorSetLayoutComposition() = {};
-		}
+		Pipeline::getDescriptorSetLayoutComposition()->Destroy();
 		uniform->Destroy();
 		pipeline.destroy();
 		pipelineComposition.destroy();

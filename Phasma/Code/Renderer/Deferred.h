@@ -31,6 +31,7 @@ SOFTWARE.
 
 namespace pe
 {
+	class Descriptor;
 	class Deferred
 	{
 	public:
@@ -40,7 +41,7 @@ namespace pe
 		
 		RenderPass renderPass, compositionRenderPass;
 		std::vector<FrameBuffer> framebuffers {}, compositionFramebuffers {};
-		DescriptorSetHandle DSComposition;
+		Descriptor* DSComposition;
 		Pipeline pipeline;
 		Pipeline pipelineComposition;
 		Image ibl_brdf_lut;

@@ -24,10 +24,12 @@ SOFTWARE.
 #include "Renderer/Compute.h"
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
+#include "Renderer/CommandPool.h"
+#include "Renderer/CommandBuffer.h"
 
 namespace pe
 {
-	CommandPool Compute::s_commandPool = {};
+	CommandPool* Compute::s_commandPool = nullptr;
 	
 	Compute::Compute()
 	{
@@ -47,14 +49,14 @@ namespace pe
 	
 	void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, uint32_t count, SemaphoreHandle* waitForHandles)
 	{
-		commandBuffer.Begin();
-		commandBuffer.BindComputePipeline(pipeline);
-		commandBuffer.BindComputeDescriptors(pipeline, 1, &DSCompute);
-		commandBuffer.Dispatch(sizeX, sizeY, sizeZ);
-		commandBuffer.End();
+		commandBuffer->Begin();
+		commandBuffer->BindComputePipeline(&pipeline);
+		commandBuffer->BindComputeDescriptors(&pipeline, 1, &DSCompute);
+		commandBuffer->Dispatch(sizeX, sizeY, sizeZ);
+		commandBuffer->End();
 		
 		std::vector<VkSemaphore> waitSemaphores = ApiHandleVectorCreate<VkSemaphore>(count, waitForHandles);
-		VkCommandBuffer cmdBuffer = commandBuffer.Handle();
+		VkCommandBuffer cmdBuffer = commandBuffer->Handle();
 		VkSemaphore vksemaphore = semaphore.handle;
 		VkSubmitInfo siCompute{};
 		siCompute.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -95,45 +97,22 @@ namespace pe
 	
 	void Compute::createDescriptorSet()
 	{
-		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutCompute();
-		VkDescriptorSetAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = RHII.descriptorPool;
-		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &dsetLayout;
-
-		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(RHII.device, &allocInfo, &dset);
-		DSCompute = dset;
+		DSCompute = Descriptor::Create(Pipeline::getDescriptorSetLayoutCompute());
 	}
 	
 	void Compute::updateDescriptorSet()
 	{
-		std::deque<VkDescriptorBufferInfo> dsbi {};
-		auto const wSetBuffer = [&dsbi](DescriptorSetHandle dstSet, uint32_t dstBinding, Buffer& buffer)
-		{
-			VkDescriptorBufferInfo info{ buffer.Handle(), 0, buffer.Size() };
-			dsbi.push_back(info);
+		std::array<DescriptorUpdateInfo, 2> infos{};
 
-			VkWriteDescriptorSet writeSet{};
-			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			writeSet.dstSet = dstSet;
-			writeSet.dstBinding = dstBinding;
-			writeSet.dstArrayElement = 0;
-			writeSet.descriptorCount = 1;
-			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-			writeSet.pBufferInfo = &dsbi.back();
+		infos[0].binding = 0;
+		infos[0].pBuffer = SBIn;
+		infos[0].bufferUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
-			return writeSet;
-		};
+		infos[1].binding = 1;
+		infos[1].pBuffer = SBOut;
+		infos[1].bufferUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
-		std::vector<VkWriteDescriptorSet> writeSets
-		{
-			wSetBuffer(DSCompute, 0, *SBIn),
-			wSetBuffer(DSCompute, 1, *SBOut),
-		};
-
-		vkUpdateDescriptorSets(RHII.device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
+		DSCompute->UpdateDescriptor(2, infos.data());
 	}
 	
 	void Compute::createPipeline(const std::string& shaderName)
@@ -162,7 +141,7 @@ namespace pe
 		CreateResources();
 		
 		Compute compute;
-		compute.commandBuffer.Create(s_commandPool);
+		compute.commandBuffer = CommandBuffer::Create(s_commandPool);
 		compute.createPipeline(shaderName);
 		compute.createDescriptorSet();
 		compute.createComputeStorageBuffers(sizeIn, sizeOut);
@@ -177,13 +156,13 @@ namespace pe
 	{
 		CreateResources();
 		
-		std::vector<CommandBuffer> commandBuffers(count);
+		std::vector<CommandBuffer*> commandBuffers(count);
 		std::vector<Compute> computes(count);
 		
 		for (auto& commandBuffer : commandBuffers)
 		{
 			Compute compute;
-			compute.commandBuffer.Create(s_commandPool);
+			compute.commandBuffer = CommandBuffer::Create(s_commandPool);
 			compute.createPipeline(shaderName);
 			compute.createDescriptorSet();
 			compute.createComputeStorageBuffers(sizeIn, sizeOut);
@@ -199,19 +178,14 @@ namespace pe
 	
 	void Compute::CreateResources()
 	{
-		if (!s_commandPool.Handle())
-			s_commandPool.Create(RHII.computeFamilyId);
+		if (!s_commandPool)
+			s_commandPool = CommandPool::Create(RHII.computeFamilyId);
 	}
 	
 	void Compute::DestroyResources()
 	{
-		s_commandPool.Destroy();
-		
-		if (Pipeline::getDescriptorSetLayoutCompute())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutCompute(), nullptr);
-			Pipeline::getDescriptorSetLayoutCompute() = {};
-		}
+		s_commandPool->Destroy();
+		Pipeline::getDescriptorSetLayoutCompute()->Destroy();
 	}
 }
 #endif

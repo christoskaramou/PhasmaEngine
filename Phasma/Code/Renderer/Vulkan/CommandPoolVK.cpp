@@ -26,19 +26,7 @@ SOFTWARE.
 
 namespace pe
 {
-	CommandPool::CommandPool() : m_handle {}
-	{
-	}
-
-	CommandPool::CommandPool(CommandPoolHandle handle) : m_handle(handle)
-	{
-	}
-
-	CommandPool::~CommandPool()
-	{
-	}
-
-	void CommandPool::Create(uint32_t graphicsFamilyId)
+	CommandPool::CommandPool(uint32_t graphicsFamilyId)
 	{
 		VkCommandPoolCreateInfo cpci{};
 		cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -47,21 +35,16 @@ namespace pe
 
 		VkCommandPool commandPool;
 		vkCreateCommandPool(RHII.device, &cpci, nullptr, &commandPool);
-		m_handle = commandPool;
+		m_apiHandle = commandPool;
 	}
 
-	void CommandPool::Destroy()
+	CommandPool::~CommandPool()
 	{
-		if (m_handle)
+		if (m_apiHandle)
 		{
-			vkDestroyCommandPool(RHII.device, m_handle, nullptr);
-			m_handle = {};
+			vkDestroyCommandPool(RHII.device, m_apiHandle, nullptr);
+			m_apiHandle = {};
 		}
-	}
-
-	CommandPoolHandle& CommandPool::Handle()
-	{
-		return m_handle;
 	}
 }
 #endif

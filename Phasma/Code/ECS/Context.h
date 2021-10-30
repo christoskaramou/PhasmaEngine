@@ -109,6 +109,7 @@ namespace pe
 			size_t id = GetTypeID<T>();
 			m_systems[id] = std::make_shared<T>(std::forward<Params>(params)...);
 			m_systems[id]->SetEnabled(true);
+			m_systems[id]->Init();
 
 			if (std::is_base_of<IDrawSystem, T>::value)
 				m_drawSystems[id] = static_cast<IDrawSystem*>(m_systems[id].get());

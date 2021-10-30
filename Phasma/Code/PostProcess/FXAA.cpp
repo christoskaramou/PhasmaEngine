@@ -27,6 +27,7 @@ SOFTWARE.
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/CommandBuffer.h"
+#include "Renderer/Descriptor.h"
 
 namespace pe
 {
@@ -57,45 +58,23 @@ namespace pe
 	
 	void FXAA::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutFXAA();
-		VkDescriptorSetAllocateInfo allocateInfo{};
-		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = RHII.descriptorPool;
-		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &dsetLayout;
-
-		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		DSet = dset;
-		
+		DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutFXAA());
 		updateDescriptorSets(renderTargets);
 	}
 	
 	void FXAA::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		// Composition sampler
-		VkDescriptorImageInfo dii{};
-		dii.sampler = frameImage.sampler;
-		dii.imageView = frameImage.view;
-		dii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		
-		VkWriteDescriptorSet textureWriteSet{};
-		textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		textureWriteSet.dstSet = DSet;
-		textureWriteSet.dstBinding = 0;
-		textureWriteSet.dstArrayElement = 0;
-		textureWriteSet.descriptorCount = 1;
-		textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		textureWriteSet.pImageInfo = &dii;
-		
-		vkUpdateDescriptorSets(RHII.device, 1, &textureWriteSet, 0, nullptr);
+		DescriptorUpdateInfo info{};
+		info.binding = 0;
+		info.pImage = &frameImage;
+		DSet->UpdateDescriptor(1, &info);
 	}
 	
 	void FXAA::draw(CommandBuffer* cmd, uint32_t imageIndex)
 	{
-		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-		cmd->BindPipeline(pipeline);
-		cmd->BindDescriptors(pipeline, 1, &DSet);
+		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->BindPipeline(&pipeline);
+		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 	}
@@ -140,14 +119,9 @@ namespace pe
 	{
 		for (auto& frameBuffer : framebuffers)
 			frameBuffer.Destroy();
-		
+
+		Pipeline::getDescriptorSetLayoutFXAA()->Destroy();
 		renderPass.Destroy();
-		
-		if (Pipeline::getDescriptorSetLayoutFXAA())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutFXAA(), nullptr);
-			Pipeline::getDescriptorSetLayoutFXAA() = {};
-		}
 		frameImage.Destroy();
 		pipeline.destroy();
 	}

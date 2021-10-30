@@ -170,7 +170,7 @@ namespace pe
 			auto& scb = RHII.shadowCmdBuffers;
 			auto size = shadows.textures.size();
 			auto i = size * imageIndex;
-			std::vector<CommandBuffer> activeShadowCmdBuffers(scb.begin() + i, scb.begin() + i + size);
+			std::vector<CommandBuffer*> activeShadowCmdBuffers(scb.begin() + i, scb.begin() + i + size);
 			RHII.Submit(
 				static_cast<uint32_t>(activeShadowCmdBuffers.size()), activeShadowCmdBuffers.data(),
 				&waitStages[0],
@@ -216,21 +216,9 @@ namespace pe
 
 		if (Model::models.empty())
 		{
-			if (Pipeline::getDescriptorSetLayoutModel())
-			{
-				vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
-				Pipeline::getDescriptorSetLayoutModel() = {};
-			}
-			if (Pipeline::getDescriptorSetLayoutMesh())
-			{
-				vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutMesh(), nullptr);
-				Pipeline::getDescriptorSetLayoutMesh() = {};
-			}
-			if (Pipeline::getDescriptorSetLayoutPrimitive())
-			{
-				vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutPrimitive(), nullptr);
-				Pipeline::getDescriptorSetLayoutPrimitive() = {};
-			}
+			Pipeline::getDescriptorSetLayoutModel()->Destroy();
+			Pipeline::getDescriptorSetLayoutMesh()->Destroy();
+			Pipeline::getDescriptorSetLayoutPrimitive()->Destroy();
 		}
 
 #ifndef IGNORE_SCRIPTS

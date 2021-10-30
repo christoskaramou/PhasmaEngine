@@ -61,7 +61,7 @@ namespace pe
 	}
 
 	void Image::TransitionImageLayout(
-		CommandBuffer cmd,
+		CommandBuffer* cmd,
 		ImageLayout oldLayout,
 		ImageLayout newLayout,
 		PipelineStageFlags oldStageMask,
@@ -89,7 +89,7 @@ namespace pe
 			barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 
 		vkCmdPipelineBarrier(
-			cmd.Handle(),
+			cmd->Handle(),
 			oldStageMask,
 			newStageMask,
 			VK_DEPENDENCY_BY_REGION_BIT,
@@ -176,19 +176,9 @@ namespace pe
 
 	void Image::TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout)
 	{
-		VkCommandBufferAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = RHII.commandPool2.Handle();
-
-		VkCommandBuffer commandBuffer;
-		vkAllocateCommandBuffers(RHII.device, &allocInfo, &commandBuffer);
-
-		VkCommandBufferBeginInfo beginInfo{};
-		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-		vkBeginCommandBuffer(commandBuffer, &beginInfo);
+		std::array<CommandBuffer*, 1> cmd{};
+		cmd[0] = CommandBuffer::Create(RHII.commandPool2);
+		cmd[0]->Begin();
 
 		VkImageMemoryBarrier barrier{};
 		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -275,23 +265,20 @@ namespace pe
 		}
 
 		vkCmdPipelineBarrier(
-			commandBuffer,
+			cmd[0]->Handle(),
 			srcStage,
 			dstStage,
 			VK_DEPENDENCY_BY_REGION_BIT,
 			0, nullptr,
 			0, nullptr,
 			1, &barrier);
-
-		vkEndCommandBuffer(commandBuffer);
-
-		CommandBuffer cmdBuffer(commandBuffer);
-		RHII.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
-
-		vkFreeCommandBuffers(RHII.device, RHII.commandPool2.Handle(), 1, &commandBuffer);
+		
+		cmd[0]->End();
+		RHII.SubmitAndWaitFence(1, cmd.data(), nullptr, 0, nullptr, 0, nullptr);
+		cmd[0]->Destroy();
 	}
 
-	void Image::ChangeLayout(CommandBuffer cmd, LayoutState state)
+	void Image::ChangeLayout(CommandBuffer* cmd, LayoutState state)
 	{
 		if (state != layoutState)
 		{
@@ -353,19 +340,9 @@ namespace pe
 
 	void Image::CopyBufferToImage(Buffer* buffer, uint32_t baseLayer)
 	{
-		VkCommandBufferAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = RHII.commandPool2.Handle();
-
-		VkCommandBuffer commandBuffer;
-		vkAllocateCommandBuffers(RHII.device, &allocInfo, &commandBuffer);
-
-		VkCommandBufferBeginInfo beginInfo{};
-		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-		vkBeginCommandBuffer(commandBuffer, &beginInfo);
+		std::array<CommandBuffer*, 1> cmd{};
+		cmd[0] = CommandBuffer::Create(RHII.commandPool2);
+		cmd[0]->Begin();
 
 		VkBufferImageCopy region;
 		region.bufferOffset = 0;
@@ -378,17 +355,14 @@ namespace pe
 		region.imageOffset = VkOffset3D{ 0, 0, 0 };
 		region.imageExtent = VkExtent3D{ width, height, 1 };
 
-		vkCmdCopyBufferToImage(commandBuffer, buffer->Handle(), image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+		vkCmdCopyBufferToImage(cmd[0]->Handle(), buffer->Handle(), image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-		vkEndCommandBuffer(commandBuffer);
-
-		CommandBuffer cmdBuffer(commandBuffer);
-		RHII.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
-
-		vkFreeCommandBuffers(RHII.device, RHII.commandPool2.Handle(), 1, &commandBuffer);
+		cmd[0]->End();
+		RHII.SubmitAndWaitFence(1, cmd.data(), nullptr, 0, nullptr, 0, nullptr);
+		cmd[0]->Destroy();
 	}
 
-	void Image::CopyColorAttachment(CommandBuffer cmd, Image& renderedImage)
+	void Image::CopyColorAttachment(CommandBuffer* cmd, Image& renderedImage)
 	{
 		TransitionImageLayout(
 			cmd,
@@ -422,7 +396,7 @@ namespace pe
 		region.extent.depth = 1;
 
 		vkCmdCopyImage(
-			cmd.Handle(),
+			cmd->Handle(),
 			renderedImage.image,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			image,
@@ -471,14 +445,9 @@ namespace pe
 			throw std::runtime_error("generateMipMaps(): Image tiling error.");
 		}
 
-		VkCommandBufferAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandBufferCount = mipLevels;
-		allocInfo.commandPool = RHII.commandPool2.Handle();
-
-		std::vector<VkCommandBuffer> commandBuffers(mipLevels);
-		vkAllocateCommandBuffers(RHII.device, &allocInfo, commandBuffers.data());
+		std::vector<CommandBuffer*> commandBuffers(mipLevels);
+		for (uint32_t i = 0; i < mipLevels; i++)
+			commandBuffers[i] = CommandBuffer::Create(RHII.commandPool2);
 
 		auto mipWidth = static_cast<int32_t>(width);
 		auto mipHeight = static_cast<int32_t>(height);
@@ -509,7 +478,7 @@ namespace pe
 
 		for (uint32_t i = 1; i < mipLevels; i++)
 		{
-			vkBeginCommandBuffer(commandBuffers[i], &beginInfo);
+			commandBuffers[i]->Begin();
 
 			barrier.subresourceRange.baseMipLevel = i - 1;
 			barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -518,7 +487,7 @@ namespace pe
 			barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
 			vkCmdPipelineBarrier(
-				commandBuffers[i],
+				commandBuffers[i]->Handle(),
 				VK_PIPELINE_STAGE_TRANSFER_BIT,
 				VK_PIPELINE_STAGE_TRANSFER_BIT,
 				VkDependencyFlagBits(),
@@ -532,7 +501,7 @@ namespace pe
 			blit.dstSubresource.mipLevel = i;
 
 			vkCmdBlitImage(
-				commandBuffers[i],
+				commandBuffers[i]->Handle(),
 				image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 				image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				1, &blit,
@@ -544,7 +513,7 @@ namespace pe
 			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
 			vkCmdPipelineBarrier(
-				commandBuffers[i],
+				commandBuffers[i]->Handle(),
 				VK_PIPELINE_STAGE_TRANSFER_BIT,
 				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 				VK_DEPENDENCY_BY_REGION_BIT,
@@ -555,13 +524,11 @@ namespace pe
 			if (mipWidth > 1) mipWidth /= 2;
 			if (mipHeight > 1) mipHeight /= 2;
 
-			vkEndCommandBuffer(commandBuffers[i]);
-
-			CommandBuffer cmdBuffer(commandBuffers[i]);
-			RHII.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
+			commandBuffers[i]->End();
+			RHII.SubmitAndWaitFence(1, &commandBuffers[i], nullptr, 0, nullptr, 0, nullptr);
 		}
 
-		vkBeginCommandBuffer(commandBuffers[0], &beginInfo);
+		commandBuffers[0]->Begin();
 
 		barrier.subresourceRange.baseMipLevel = mipLevels - 1;
 		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -570,7 +537,7 @@ namespace pe
 		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
 		vkCmdPipelineBarrier(
-			commandBuffers[0],
+			commandBuffers[0]->Handle(),
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			VK_DEPENDENCY_BY_REGION_BIT,
@@ -578,12 +545,11 @@ namespace pe
 			0, nullptr,
 			1, &barrier);
 
-		vkEndCommandBuffer(commandBuffers[0]);
+		commandBuffers[0]->End();
+		RHII.SubmitAndWaitFence(1, &commandBuffers[0], nullptr, 0, nullptr, 0, nullptr);
 
-		CommandBuffer cmdBuffer(commandBuffers[0]);
-		RHII.SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);
-
-		vkFreeCommandBuffers(RHII.device, RHII.commandPool2.Handle(), mipLevels, commandBuffers.data());
+		for (uint32_t i = 0; i < mipLevels; i++)
+			commandBuffers[i]->Destroy();
 	}
 
 	void Image::CreateSampler()

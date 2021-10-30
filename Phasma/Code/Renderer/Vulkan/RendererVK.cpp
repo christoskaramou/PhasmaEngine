@@ -108,17 +108,17 @@ namespace pe
 		
 		FrameTimer& frameTimer = FrameTimer::Instance();
 
-		CommandBuffer cmd = RHII.dynamicCmdBuffers[imageIndex];
-		cmd.Begin();
+		CommandBuffer* cmd = RHII.dynamicCmdBuffers[imageIndex];
+		cmd->Begin();
 
-		gpuTimer[0].Start(&cmd);
+		gpuTimer[0].Start(cmd);
 		// SKYBOX
 		SkyBox& skybox = GUI::shadow_cast ? skyBoxDay : skyBoxNight;
 		
 		// MODELS
 		{
-			gpuTimer[1].Start(&cmd);
-			deferred.batchStart(&cmd, imageIndex);
+			gpuTimer[1].Start(cmd);
+			deferred.batchStart(cmd, imageIndex);
 			
 			for (auto& model : Model::models)
 				model.draw((uint16_t) RenderQueue::Opaque);
@@ -155,9 +155,9 @@ namespace pe
 		// SCREEN SPACE AMBIENT OCCLUSION
 		if (GUI::show_ssao)
 		{
-			gpuTimer[2].Start(&cmd);
+			gpuTimer[2].Start(cmd);
 			renderTargets["ssaoBlur"].ChangeLayout(cmd, LayoutState::ColorWrite);
-			ssao.draw(&cmd, imageIndex, renderTargets["ssao"]);
+			ssao.draw(cmd, imageIndex, renderTargets["ssao"]);
 			renderTargets["ssaoBlur"].ChangeLayout(cmd, LayoutState::ColorRead);
 			frameTimer.timestamps[5] = gpuTimer[2].End();
 		}
@@ -165,16 +165,16 @@ namespace pe
 		// SCREEN SPACE REFLECTIONS
 		if (GUI::show_ssr)
 		{
-			gpuTimer[3].Start(&cmd);
+			gpuTimer[3].Start(cmd);
 			renderTargets["ssr"].ChangeLayout(cmd, LayoutState::ColorWrite);
-			ssr.draw(&cmd, imageIndex);
+			ssr.draw(cmd, imageIndex);
 			renderTargets["ssr"].ChangeLayout(cmd, LayoutState::ColorRead);
 			frameTimer.timestamps[6] = gpuTimer[3].End();
 		}
 		
 		// COMPOSITION
-		gpuTimer[4].Start(&cmd);
-		deferred.draw(&cmd, imageIndex, shadows, skybox);
+		gpuTimer[4].Start(cmd);
+		deferred.draw(cmd, imageIndex, shadows, skybox);
 		frameTimer.timestamps[7] = gpuTimer[4].End();
 		
 		if (GUI::use_AntiAliasing)
@@ -182,17 +182,17 @@ namespace pe
 			// TAA
 			if (GUI::use_TAA)
 			{
-				gpuTimer[5].Start(&cmd);
+				gpuTimer[5].Start(cmd);
 				taa.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
-				taa.draw(&cmd, imageIndex, renderTargets);
+				taa.draw(cmd, imageIndex, renderTargets);
 				frameTimer.timestamps[8] = gpuTimer[5].End();
 			}
 				// FXAA
 			else if (GUI::use_FXAA)
 			{
-				gpuTimer[6].Start(&cmd);
+				gpuTimer[6].Start(cmd);
 				fxaa.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
-				fxaa.draw(&cmd, imageIndex);
+				fxaa.draw(cmd, imageIndex);
 				frameTimer.timestamps[8] = gpuTimer[6].End();
 			}
 		}
@@ -200,27 +200,27 @@ namespace pe
 		// BLOOM
 		if (GUI::show_Bloom)
 		{
-			gpuTimer[7].Start(&cmd);
+			gpuTimer[7].Start(cmd);
 			bloom.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
-			bloom.draw(&cmd, imageIndex, renderTargets);
+			bloom.draw(cmd, imageIndex, renderTargets);
 			frameTimer.timestamps[9] = gpuTimer[7].End();
 		}
 		
 		// Depth of Field
 		if (GUI::use_DOF)
 		{
-			gpuTimer[8].Start(&cmd);
+			gpuTimer[8].Start(cmd);
 			dof.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
-			dof.draw(&cmd, imageIndex, renderTargets);
+			dof.draw(cmd, imageIndex, renderTargets);
 			frameTimer.timestamps[10] = gpuTimer[8].End();
 		}
 		
 		// MOTION BLUR
 		if (GUI::show_motionBlur)
 		{
-			gpuTimer[9].Start(&cmd);
+			gpuTimer[9].Start(cmd);
 			motionBlur.frameImage.CopyColorAttachment(cmd, renderTargets["viewport"]);
-			motionBlur.draw(&cmd, imageIndex);
+			motionBlur.draw(cmd, imageIndex);
 			frameTimer.timestamps[11] = gpuTimer[9].End();
 		}
 
@@ -239,13 +239,13 @@ namespace pe
 		BlitToViewport(cmd, GUI::s_currRenderImage ? *GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
 
 		// GUI
-		gpuTimer[10].Start(&cmd);
+		gpuTimer[10].Start(cmd);
 		gui.Draw(cmd, imageIndex);
 		frameTimer.timestamps[12] = gpuTimer[10].End();
 		
 		frameTimer.timestamps[2] = gpuTimer[0].End();
 		
-		cmd.End();
+		cmd->End();
 	}
 	
 	void Renderer::RecordShadowsCmds(uint32_t imageIndex)
@@ -255,29 +255,29 @@ namespace pe
 		for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
 		{
 			uint32_t index = SHADOWMAP_CASCADES * imageIndex + i;
-			CommandBuffer cmd = RHII.shadowCmdBuffers[index];
+			CommandBuffer& cmd = *RHII.shadowCmdBuffers[index];
 			cmd.Begin();
 
 			FrameTimer& frameTimer = FrameTimer::Instance();
 			gpuTimer[i].Start(&cmd);
 
 			cmd.SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
-			cmd.BeginPass(shadows.renderPass, shadows.framebuffers[index]);
-			cmd.BindPipeline(shadows.pipeline);
+			cmd.BeginPass(&shadows.renderPass, &shadows.framebuffers[index]);
+			cmd.BindPipeline(&shadows.pipeline);
 			for (auto& model : Model::models)
 			{
 				if (model.render)
 				{
-					cmd.BindVertexBuffer(*model.vertexBuffer, 0);
-					cmd.BindIndexBuffer(*model.indexBuffer, 0);
+					cmd.BindVertexBuffer(model.vertexBuffer, 0);
+					cmd.BindIndexBuffer(model.indexBuffer, 0);
 					
 					for (auto& node : model.linearNodes)
 					{
 						if (node->mesh)
 						{
-							std::array<DescriptorSetHandle, 2> descriptors{ node->mesh->descriptorSet, model.descriptorSet };
-							cmd.PushConstants(shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), &shadows.cascades[i]);
-							cmd.BindDescriptors(shadows.pipeline, 2, descriptors.data());
+							std::array<Descriptor*, 2> descriptors{ node->mesh->descriptorSet, model.descriptorSet };
+							cmd.PushConstants(&shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), &shadows.cascades[i]);
+							cmd.BindDescriptors(&shadows.pipeline, 2, descriptors.data());
 							for (auto& primitive : node->mesh->primitives)
 							{
 								//if (primitive.render)
@@ -595,7 +595,7 @@ namespace pe
 		//- Recreate resources end --------------
 	}
 			
-	void Renderer::BlitToViewport(CommandBuffer cmd, Image& renderedImage, uint32_t imageIndex)
+	void Renderer::BlitToViewport(CommandBuffer* cmd, Image& renderedImage, uint32_t imageIndex)
 	{
 		Image& s_chain_Image = RHII.swapchain.images[imageIndex];
 		
@@ -631,9 +631,9 @@ namespace pe
 		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		blit.dstSubresource.layerCount = 1;
 		
-		cmd.BlitImage(
-			renderedImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-			s_chain_Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		cmd->BlitImage(
+			&renderedImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			&s_chain_Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1, &blit,
 			VK_FILTER_LINEAR);
 		

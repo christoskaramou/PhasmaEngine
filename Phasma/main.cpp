@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
 	auto* rs = context.CreateSystem<RendererSystem>();
 	auto* pps = context.CreateSystem<PostProcessSystem>();
 
-	context.InitSystems();
+	//context.InitSystems();
 
 	FrameTimer& frameTimer = FrameTimer::Instance();
 

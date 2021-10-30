@@ -24,32 +24,20 @@ SOFTWARE.
 #include "Core/Queue.h"
 #include "GUI/GUI.h"
 #include "Renderer/RHI.h"
+#include "Renderer/Descriptor.h"
 #include "ECS/Context.h"
 #include "Systems/CameraSystem.h"
 
 namespace pe
 {
-	VkDescriptorSetLayout& GetDescriptorSetLayout()
+	DescriptorLayout* GetDescriptorSetLayout()
 	{
-		static VkDescriptorSetLayout descriptorSetLayout;
-
-		if (!descriptorSetLayout)
+		static std::vector<DescriptorBinding> bindings
 		{
-			VkDescriptorSetLayoutBinding descriptorSetLayoutBinding;
-			descriptorSetLayoutBinding.binding = 0;
-			descriptorSetLayoutBinding.descriptorCount = 1;
-			descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+		};
+		static DescriptorLayout* descriptorSetLayout = DescriptorLayout::Create(bindings);
 
-			VkDescriptorSetLayoutCreateInfo createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-			createInfo.bindingCount = 1;
-			createInfo.pBindings = &descriptorSetLayoutBinding;
-
-			VkDescriptorSetLayout dsetLayout;
-			vkCreateDescriptorSetLayout(RHII.device, &createInfo, nullptr, &dsetLayout);
-			descriptorSetLayout = dsetLayout;
-		}
 		return descriptorSetLayout;
 	}
 
@@ -72,31 +60,12 @@ namespace pe
 		uniform->Flush();
 		uniform->Unmap();
 
-		VkDescriptorSetAllocateInfo allocateInfo{};
-		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = RHII.descriptorPool;
-		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &GetDescriptorSetLayout();
+		descriptorSet = Descriptor::Create(GetDescriptorSetLayout());
 
-		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		descriptorSet = dset;
-
-		VkDescriptorBufferInfo dbi;
-		dbi.buffer = uniform->Handle();
-		dbi.offset = 0;
-		dbi.range = uniform->Size();
-
-		VkWriteDescriptorSet writeSet{};
-		writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writeSet.dstSet = descriptorSet;
-		writeSet.dstBinding = 0;
-		writeSet.dstArrayElement = 0;
-		writeSet.descriptorCount = 1;
-		writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		writeSet.pBufferInfo = &dbi;
-
-		vkUpdateDescriptorSets(RHII.device, 1, &writeSet, 0, nullptr);
+		DescriptorUpdateInfo info{};
+		info.binding = 0;
+		info.pBuffer = uniform;
+		descriptorSet->UpdateDescriptor(1, &info);
 
 		for (int i = 0; i < MAX_POINT_LIGHTS; i++)
 		{
@@ -145,10 +114,6 @@ namespace pe
 	void LightSystem::Destroy()
 	{
 		uniform->Destroy();
-		if (GetDescriptorSetLayout())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, GetDescriptorSetLayout(), nullptr);
-			GetDescriptorSetLayout() = nullptr;
-		}
+		GetDescriptorSetLayout()->Destroy();
 	}
 }

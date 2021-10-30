@@ -71,18 +71,14 @@ namespace pe
 		Offset3D dstOffsets[2];
 	};
 
-	class CommandBuffer
+	class CommandBuffer : public IHandle<CommandBuffer, CommandBufferHandle>
 	{
 	public:
-		CommandBuffer() : m_handle{} {}
+		CommandBuffer(CommandPool* commandPool);
 
-		CommandBuffer(CommandBufferHandle handle) : m_handle(handle) {}
+		~CommandBuffer();
 
-		void Create(CommandPool& commandPool);
-		
-		void Destroy(CommandPool& commandPool);
-
-		void CopyBuffer(Buffer& srcBuffer, Buffer& dstBuffer, uint32_t regionCount, BufferCopy* pRegions);
+		void CopyBuffer(Buffer* srcBuffer, Buffer* dstBuffer, uint32_t regionCount, BufferCopy* pRegions);
 
 		void Begin();
 
@@ -92,30 +88,30 @@ namespace pe
 
 		void SetDepthBias(float constantFactor, float clamp, float slopeFactor);
 
-		void BlitImage(Image& srcImage, ImageLayout srcImageLayout,
-			Image& dstImage, ImageLayout dstImageLayout,
+		void BlitImage(Image* srcImage, ImageLayout srcImageLayout,
+			Image* dstImage, ImageLayout dstImageLayout,
 			uint32_t regionCount, ImageBlit* pRegions,
 			Filter filter);
 
-		void BeginPass(RenderPass& pass, FrameBuffer& frameBuffer);
+		void BeginPass(RenderPass* pass, FrameBuffer* frameBuffer);
 
 		void EndPass();
 
-		void BindPipeline(Pipeline& pipeline);
+		void BindPipeline(Pipeline* pipeline);
 
-		void BindComputePipeline(Pipeline& pipeline);
+		void BindComputePipeline(Pipeline* pipeline);
 
-		void BindVertexBuffer(Buffer& buffer, size_t offset);
+		void BindVertexBuffer(Buffer* buffer, size_t offset);
 
-		void BindIndexBuffer(Buffer& buffer, size_t offset);
+		void BindIndexBuffer(Buffer* buffer, size_t offset);
 
-		void BindDescriptors(Pipeline& pipeline, uint32_t count, DescriptorSetHandle* descriptors);
+		void BindDescriptors(Pipeline* pipeline, uint32_t count, Descriptor** descriptors);
 
-		void BindComputeDescriptors(Pipeline& pipeline, uint32_t count, DescriptorSetHandle* descriptors);
+		void BindComputeDescriptors(Pipeline* pipeline, uint32_t count, Descriptor** descriptors);
 
 		void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
 
-		void PushConstants(Pipeline& pipeline, ShaderStageFlags shaderStageFlags, uint32_t offset, uint32_t size, const void* pValues);
+		void PushConstants(Pipeline* pipeline, ShaderStageFlags shaderStageFlags, uint32_t offset, uint32_t size, const void* pValues);
 
 		void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
 
@@ -123,9 +119,7 @@ namespace pe
 
 		void Submit();
 
-		CommandBufferHandle& Handle() { return m_handle; }
-
 	private:
-		CommandBufferHandle m_handle;
+		CommandPool* m_commandPool;
 	};
 }

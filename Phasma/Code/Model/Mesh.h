@@ -33,6 +33,7 @@ constexpr auto MAX_NUM_JOINTS = 128u;
 
 namespace pe
 {
+	class Descriptor;
 	class Primitive
 	{
 	public:
@@ -42,7 +43,7 @@ namespace pe
 		
 		std::string name;
 		
-		DescriptorSetHandle descriptorSet;
+		Descriptor* descriptorSet;
 		Buffer* uniformBuffer;
 		
 		bool render = true, cull = true;
@@ -100,7 +101,7 @@ namespace pe
 		static std::map<std::string, Image> uniqueTextures;
 		std::vector<Primitive> primitives {};
 		
-		DescriptorSetHandle descriptorSet;
+		Descriptor* descriptorSet;
 		Buffer* uniformBuffer;
 		std::vector<Vertex> vertices {};
 		std::vector<uint32_t> indices {};

@@ -78,7 +78,7 @@ namespace pe
 		PipelineColorBlendAttachmentState blendAttachment;
 		
 		void TransitionImageLayout(
-			CommandBuffer cmd,
+			CommandBuffer* cmd,
 			ImageLayout oldLayout,
 			ImageLayout newLayout,
 			PipelineStageFlags oldStageMask,
@@ -94,11 +94,11 @@ namespace pe
 		
 		void TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout);
 		
-		void ChangeLayout(CommandBuffer cmd, LayoutState state);
+		void ChangeLayout(CommandBuffer* cmd, LayoutState state);
 		
 		void CopyBufferToImage(Buffer* buffer, uint32_t baseLayer = 0);
 		
-		void CopyColorAttachment(CommandBuffer cmd, Image& renderedImage);
+		void CopyColorAttachment(CommandBuffer* cmd, Image& renderedImage);
 		
 		void GenerateMipMaps();
 		

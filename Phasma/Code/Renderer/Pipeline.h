@@ -57,7 +57,8 @@ namespace pe
 		BlendOp alphaBlendOp;
 		ColorComponentFlags colorWriteMask;
 	};
-	
+
+	class DescriptorLayout;
 	class PipelineCreateInfo
 	{
 	public:
@@ -78,7 +79,7 @@ namespace pe
 		std::vector<DynamicState> dynamicStates;
 		PushConstantStage pushConstantStage;
 		uint32_t pushConstantSize;
-		std::vector<DescriptorSetLayoutHandle> descriptorSetLayouts;
+		std::vector<DescriptorLayout*> descriptorSetLayouts;
 		RenderPass renderPass;
 		PipelineCacheHandle pipelineCache;
 	};
@@ -100,44 +101,44 @@ namespace pe
 		
 		void destroy();
 		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutComposition();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutBrightFilter();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutGaussianBlurH();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutGaussianBlurV();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutCombine();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutDOF();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutFXAA();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutMotionBlur();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutSSAO();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutSSAOBlur();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutSSR();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutTAA();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutTAASharpen();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutShadows();
+		static DescriptorLayout* getDescriptorSetLayoutComposition();
 
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutShadowsDeferred();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutMesh();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutPrimitive();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutModel();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutSkybox();
-		
-		static DescriptorSetLayoutHandle& getDescriptorSetLayoutCompute();
+		static DescriptorLayout* getDescriptorSetLayoutBrightFilter();
+
+		static DescriptorLayout* getDescriptorSetLayoutGaussianBlurH();
+
+		static DescriptorLayout* getDescriptorSetLayoutGaussianBlurV();
+
+		static DescriptorLayout* getDescriptorSetLayoutCombine();
+
+		static DescriptorLayout* getDescriptorSetLayoutDOF();
+
+		static DescriptorLayout* getDescriptorSetLayoutFXAA();
+
+		static DescriptorLayout* getDescriptorSetLayoutMotionBlur();
+
+		static DescriptorLayout* getDescriptorSetLayoutSSAO();
+
+		static DescriptorLayout* getDescriptorSetLayoutSSAOBlur();
+
+		static DescriptorLayout* getDescriptorSetLayoutSSR();
+
+		static DescriptorLayout* getDescriptorSetLayoutTAA();
+
+		static DescriptorLayout* getDescriptorSetLayoutTAASharpen();
+
+		static DescriptorLayout* getDescriptorSetLayoutShadows();
+
+		static DescriptorLayout* getDescriptorSetLayoutShadowsDeferred();
+
+		static DescriptorLayout* getDescriptorSetLayoutMesh();
+
+		static DescriptorLayout* getDescriptorSetLayoutPrimitive();
+
+		static DescriptorLayout* getDescriptorSetLayoutModel();
+
+		static DescriptorLayout* getDescriptorSetLayoutSkybox();
+
+		static DescriptorLayout* getDescriptorSetLayoutCompute();
 	};
 }

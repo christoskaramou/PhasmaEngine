@@ -39,71 +39,6 @@ namespace pe
 		return typeID;
 	}
 
-	template<class VK_TYPE, class DX_TYPE>
-	class ApiHandle final
-	{
-		static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
-	public:
-		ApiHandle() : m_handle(nullptr) {};
-
-		ApiHandle(const VK_TYPE& handle) : m_handle(handle) {}
-
-		ApiHandle(const DX_TYPE& handle) : m_handle(handle) {}
-
-		operator VK_TYPE () { return static_cast<VK_TYPE>(m_handle); }
-
-		operator DX_TYPE () { return static_cast<DX_TYPE>(m_handle); }
-
-		void* raw() { return m_handle; }
-
-		operator bool()
-		{
-			return m_handle != nullptr;
-		}				    
-						    
-		bool operator!()    
-		{				    
-			return m_handle == nullptr;
-		}
-
-	private:
-		void* m_handle;
-	};
-
-	template<class T, class VK_TYPE, class DX_TYPE>
-	std::vector<T> ApiHandleVectorCreate(std::vector<ApiHandle<VK_TYPE, DX_TYPE>>& apiHandles)
-	{
-		static_assert(std::is_pointer_v<T>, "T type is not a pointer");
-		static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_same_v<T, VK_TYPE> || std::is_same_v<T, DX_TYPE>, "T does not match any of ApiHandle types");
-
-		std::vector<T> copyVec(apiHandles.size());
-
-		for (int i = 0; i < apiHandles.size(); i++)
-			copyVec[i] = apiHandles[i];
-
-		return copyVec;
-	}
-
-	template<class T, class VK_TYPE, class DX_TYPE>
-	std::vector<T> ApiHandleVectorCreate(uint32_t count, ApiHandle<VK_TYPE, DX_TYPE>* apiHandles)
-	{
-		static_assert(std::is_pointer_v<T>, "T type is not a pointer");
-		static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_same_v<T, VK_TYPE> || std::is_same_v<T, DX_TYPE>, "T does not match any of ApiHandle types");
-		static_assert(sizeof(VK_TYPE) == sizeof(DX_TYPE));
-
-		std::vector<T> copyVec(count);
-
-		for (uint32_t i = 0; i < count; i++)
-			copyVec[i] = apiHandles[i];
-
-		return copyVec;
-	}
-
 	template<class T>
 	using SPtr = std::shared_ptr<T>;
 
@@ -158,6 +93,136 @@ namespace pe
 
 		NoMove& operator=(NoMove&&) = delete;
 	};
+
+	// Used to abstract rendering api handles
+	template<class VK_TYPE, class DX_TYPE>
+	class ApiHandle final
+	{
+		// Only work with pointers
+		static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
+	public:
+		using BaseVK = VK_TYPE;
+		using BaseDX = DX_TYPE;
+
+		ApiHandle() : m_handle(nullptr) {};
+
+		ApiHandle(const VK_TYPE& handle) : m_handle(handle) {}
+		ApiHandle(const DX_TYPE& handle) : m_handle(handle) {}
+
+		// Operators for auto casting
+		operator VK_TYPE() { return static_cast<VK_TYPE>(m_handle); }
+		operator VK_TYPE() const { return static_cast<VK_TYPE>(m_handle); }
+
+		operator DX_TYPE() { return static_cast<DX_TYPE>(m_handle); }
+		operator DX_TYPE() const { return static_cast<DX_TYPE>(m_handle); }
+		
+		// Not used at the moment
+		void* raw() { return m_handle; }
+
+		operator bool()
+		{
+			return m_handle != nullptr;
+		}
+
+		bool operator!()
+		{
+			return m_handle == nullptr;
+		}
+
+	private:
+		void* m_handle;
+	};
+
+	// Manages a class that contains handles
+	// Disallows moving the actual objects and prodiving a Create and Destroy funtion for every IHandle,
+	// which manages the memory for heap allocations through Create
+	// 
+	// Important: Every IHandle should provide a constructor and a destructor managing the 
+	// create and destroy of the HANDLE
+	template<class T, class HANDLE>
+	class IHandle : public NoCopy, public NoMove
+	{
+	public:
+		template<class ... Params>
+		inline static T* Create(Params&& ... params)
+		{
+			// This means the T class is IHandle and already defined
+			static_assert(std::is_base_of_v<IHandle<T, HANDLE>, T>);
+
+			T* ptr = new T(std::forward<Params>(params)...);
+
+			// m_heapId is used to check on Destroy if the object was created via Create
+			// Thus it is a heap allocated object and must be deleted
+			ptr->m_heapId = NextID();
+
+			sm_iHandles[ptr->m_heapId] = ptr;
+
+			return ptr;
+		}
+
+		virtual ~IHandle() {}
+
+		void Destroy()
+		{
+			// If the object is not created via Create function, return and let the actual class to manage
+			if (m_heapId == std::numeric_limits<size_t>::max())
+				return;
+
+			auto it = sm_iHandles.find(m_heapId);
+			if (it != sm_iHandles.end())
+			{
+				sm_iHandles.erase(it);
+
+				// This will call the derived object's destructor too, because the destructor of IHandle is virtual
+				delete this;
+			}
+		};
+
+		HANDLE& Handle() { return m_apiHandle; }
+		const HANDLE& Handle() const { return m_apiHandle; }
+
+	private:
+		inline static std::unordered_map<size_t, IHandle*> sm_iHandles{};
+		size_t m_heapId;
+
+	protected:
+		IHandle() : m_apiHandle{}, m_heapId{ std::numeric_limits<size_t>::max() } {}
+		HANDLE m_apiHandle;
+	};
+
+	template<class T, class VK_TYPE, class DX_TYPE>
+	std::vector<T> ApiHandleVectorCreate(std::vector<ApiHandle<VK_TYPE, DX_TYPE>>& apiHandles)
+	{
+		static_assert(std::is_pointer_v<T>, "T type is not a pointer");
+		static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_same_v<T, VK_TYPE> || std::is_same_v<T, DX_TYPE>, "T does not match any of ApiHandle types");
+
+		std::vector<T> copyVec(apiHandles.size());
+
+		for (int i = 0; i < apiHandles.size(); i++)
+			copyVec[i] = apiHandles[i];
+
+		return copyVec;
+	}
+
+	template<class T, class VK_TYPE, class DX_TYPE>
+	std::vector<T> ApiHandleVectorCreate(uint32_t count, ApiHandle<VK_TYPE, DX_TYPE>* apiHandles)
+	{
+		static_assert(std::is_pointer_v<T>, "T type is not a pointer");
+		static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
+		static_assert(std::is_same_v<T, VK_TYPE> || std::is_same_v<T, DX_TYPE>, "T does not match any of ApiHandle types");
+		static_assert(sizeof(VK_TYPE) == sizeof(DX_TYPE));
+
+		std::vector<T> copyVec(count);
+
+		for (uint32_t i = 0; i < count; i++)
+			copyVec[i] = apiHandles[i];
+
+		return copyVec;
+	}
 
 	struct Placeholder {};
 

@@ -32,6 +32,7 @@ SOFTWARE.
 
 namespace pe
 {
+	class Desscriptor;
 	class SSR : public IComponent
 	{
 	public:
@@ -44,7 +45,7 @@ namespace pe
 		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		DescriptorSetHandle DSet;
+		Descriptor* DSet;
 		
 		void update(Camera& camera);
 		

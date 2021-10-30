@@ -24,6 +24,7 @@ SOFTWARE.
 #include "Mesh.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/RHI.h"
+#include "Renderer/Descriptor.h"
 #include "Core/Path.h"
 
 namespace pe
@@ -210,12 +211,7 @@ namespace pe
 	void Mesh::destroy()
 	{
 		uniformBuffer->Destroy();
-		if (Pipeline::getDescriptorSetLayoutMesh())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutMesh(), nullptr);
-			Pipeline::getDescriptorSetLayoutMesh() = {};
-		}
-		
+		Pipeline::getDescriptorSetLayoutMesh()->Destroy();
 		for (auto& primitive : primitives)
 		{
 			primitive.uniformBuffer->Destroy();
@@ -224,10 +220,6 @@ namespace pe
 		vertices.shrink_to_fit();
 		indices.clear();
 		indices.shrink_to_fit();
-		if (Pipeline::getDescriptorSetLayoutPrimitive())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutPrimitive(), nullptr);
-			Pipeline::getDescriptorSetLayoutPrimitive() = {};
-		}
+		Pipeline::getDescriptorSetLayoutPrimitive()->Destroy();
 	}
 }

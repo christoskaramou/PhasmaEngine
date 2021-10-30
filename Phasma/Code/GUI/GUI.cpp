@@ -650,10 +650,10 @@ namespace pe
 		info.CheckVkResultFn = nullptr;
 		ImGui_ImplVulkan_Init(&info, renderPass.handle);
 
-		CommandBuffer cmd = RHII.dynamicCmdBuffers[0];
-		cmd.Begin();
-		ImGui_ImplVulkan_CreateFontsTexture(cmd.Handle());
-		cmd.End();
+		CommandBuffer* cmd = RHII.dynamicCmdBuffers[0];
+		cmd->Begin();
+		ImGui_ImplVulkan_CreateFontsTexture(cmd->Handle());
+		cmd->End();
 		RHII.SubmitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
 	}
 	
@@ -673,16 +673,16 @@ namespace pe
 		InitImGui();
 	}
 
-	void GUI::Draw(CommandBuffer cmd, uint32_t imageIndex)
+	void GUI::Draw(CommandBuffer* cmd, uint32_t imageIndex)
 	{
 		if (!render)
 			return;
 
 		if (render && ImGui::GetDrawData()->TotalVtxCount > 0)
 		{
-			cmd.BeginPass(renderPass, framebuffers[imageIndex]);
-			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd.Handle());
-			cmd.EndPass();
+			cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
+			cmd->EndPass();
 		}
 	}
 

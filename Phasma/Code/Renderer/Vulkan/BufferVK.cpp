@@ -28,14 +28,7 @@ SOFTWARE.
 
 namespace pe
 {
-	Buffer* Buffer::Create(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties)
-	{
-		Buffer* buffer = new Buffer(size, usage, properties);
-		sm_Buffers[buffer->id] = buffer;
-		return buffer;
-	}
-
-	Buffer::Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties) : size(size), data(nullptr), id(NextID())
+	Buffer::Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties) : size(size), data(nullptr)
 	{
 		VkBufferCreateInfo bufferInfo{};
 		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -52,15 +45,15 @@ namespace pe
 		VkBuffer bufferVK;
 		VmaAllocationInfo allocationInfo;
 		vmaCreateBuffer(RHII.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocation, &allocationInfo);
-		m_handle = bufferVK;
+		m_apiHandle = bufferVK;
 	}
 
 	Buffer::~Buffer()
 	{
-		if (m_handle)
+		if (m_apiHandle)
 		{
-			vmaDestroyBuffer(RHII.allocator, m_handle, allocation);
-			m_handle = {};
+			vmaDestroyBuffer(RHII.allocator, m_apiHandle, allocation);
+			m_apiHandle = {};
 		}
 	}
 
@@ -101,14 +94,13 @@ namespace pe
 		BufferCopy bufferCopy{};
 		bufferCopy.size = srcSize > 0 ? srcSize : size;
 
-		CommandPool pool(RHII.commandPool2);
-		CommandBuffer copyCmd;
-		copyCmd.Create(pool);
-		copyCmd.Begin();
-		copyCmd.CopyBuffer(*srcBuffer, *this, 1, &bufferCopy);
-		copyCmd.End();
-		RHII.SubmitAndWaitFence(1, &copyCmd, nullptr, 0, nullptr, 0, nullptr);
-		copyCmd.Destroy(pool);
+		std::array<CommandBuffer*, 1> copyCmd{};
+		copyCmd[0] = CommandBuffer::Create(RHII.commandPool2);
+		copyCmd[0]->Begin();
+		copyCmd[0]->CopyBuffer(srcBuffer, this, 1, &bufferCopy);
+		copyCmd[0]->End();
+		RHII.SubmitAndWaitFence(1, copyCmd.data(), nullptr, 0, nullptr, 0, nullptr);
+		copyCmd[0]->Destroy();
 	}
 	
 	void Buffer::Flush(size_t offset, size_t flushSize) const
@@ -117,16 +109,6 @@ namespace pe
 			return;
 		
 		vmaFlushAllocation(RHII.allocator, allocation, offset, flushSize);
-	}
-	
-	void Buffer::Destroy()
-	{
-		auto it = sm_Buffers.find(id);
-		if (it != sm_Buffers.end())
-		{
-			delete sm_Buffers[id];
-			sm_Buffers.erase(it);
-		}
 	}
 
 	size_t Buffer::Size()

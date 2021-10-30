@@ -33,6 +33,7 @@ SOFTWARE.
 namespace pe
 {
 	class CommandBuffer;
+	class Descriptor;
 
 	class SSAO : public IComponent
 	{
@@ -45,7 +46,8 @@ namespace pe
 		std::vector<FrameBuffer> framebuffers {}, blurFramebuffers {};
 		Pipeline pipeline;
 		Pipeline pipelineBlur;
-		DescriptorSetHandle DSet, DSBlur;
+		Descriptor* DSet;
+		Descriptor* DSBlur;
 		
 		void update(Camera& camera);
 		

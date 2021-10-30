@@ -27,6 +27,7 @@ SOFTWARE.
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/CommandBuffer.h"
+#include "Renderer/Descriptor.h"
 
 namespace pe
 {
@@ -76,57 +77,29 @@ namespace pe
 	
 	void DOF::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutDOF();
-		VkDescriptorSetAllocateInfo allocateInfo{};
-		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = RHII.descriptorPool;
-		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &dsetLayout;
-
-		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		DSet = dset;
-
+		DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutDOF());
 		updateDescriptorSets(renderTargets);
 	}
 	
 	void DOF::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		std::deque<VkDescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image, ImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-		{
-			VkDescriptorImageInfo info{ image.sampler, image.view, (VkImageLayout)layout };
-			dsii.push_back(info);
-
-			VkWriteDescriptorSet textureWriteSet{};
-			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			textureWriteSet.dstSet = dstSet;
-			textureWriteSet.dstBinding = dstBinding;
-			textureWriteSet.dstArrayElement = 0;
-			textureWriteSet.descriptorCount = 1;
-			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			textureWriteSet.pImageInfo = &dsii.back();
-
-			return textureWriteSet;
-		};
-		
-		std::vector<VkWriteDescriptorSet> textureWriteSets
-		{
-			wSetImage(DSet, 0, frameImage),
-			wSetImage(DSet, 1, RHII.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL)
-		};
-
-		vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+		std::array<DescriptorUpdateInfo, 2> infos{};
+		infos[0].binding = 0;
+		infos[0].pImage = &frameImage;
+		infos[1].binding = 1;
+		infos[1].pImage = &RHII.depth;
+		infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+		DSet->UpdateDescriptor(2, infos.data());
 	}
 	
 	void DOF::draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
 	{		
 		std::vector<float> values {GUI::DOF_focus_scale, GUI::DOF_blur_range, 0.0f, 0.0f};
 
-		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-		cmd->PushConstants(pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
-		cmd->BindPipeline(pipeline);
-		cmd->BindDescriptors(pipeline, 1, &DSet);
+		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->PushConstants(&pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
+		cmd->BindPipeline(&pipeline);
+		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 	}
@@ -157,12 +130,7 @@ namespace pe
 			framebuffer.Destroy();
 		
 		renderPass.Destroy();
-		
-		if (Pipeline::getDescriptorSetLayoutDOF())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutDOF(), nullptr);
-			Pipeline::getDescriptorSetLayoutDOF() = {};
-		}
+		Pipeline::getDescriptorSetLayoutDOF()->Destroy();
 		frameImage.Destroy();
 		pipeline.destroy();
 	}

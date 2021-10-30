@@ -98,11 +98,11 @@ namespace pe
 		std::string gpuName;
 		DeviceHandle device;
 		QueueHandle graphicsQueue, computeQueue, transferQueue;
-		CommandPool commandPool;
-		CommandPool commandPool2;
+		CommandPool* commandPool;
+		CommandPool* commandPool2;
 		DescriptorPoolHandle descriptorPool;
-		std::vector<CommandBuffer> dynamicCmdBuffers;
-		std::vector<CommandBuffer> shadowCmdBuffers;
+		std::vector<CommandBuffer*> dynamicCmdBuffers;
+		std::vector<CommandBuffer*> shadowCmdBuffers;
 		std::vector<Fence> fences;
 		std::vector<Semaphore> semaphores;
 		VmaAllocator allocator = nullptr;
@@ -115,7 +115,7 @@ namespace pe
 
 		// Helpers
 		void Submit(
-			uint32_t commandBufferCount, CommandBuffer* commandBuffer,
+			uint32_t commandBufferCount, CommandBuffer** commandBuffer,
 			PipelineStageFlags* waitStage,
 			uint32_t waitSemaphoreCount, Semaphore* waitSemaphore,
 			uint32_t signalSemaphoreCount, Semaphore* signalSemaphore,
@@ -124,7 +124,7 @@ namespace pe
 		void WaitFence(Fence* fence);
 
 		void SubmitAndWaitFence(
-			uint32_t commandBuffersCount, CommandBuffer* commandBuffers,
+			uint32_t commandBuffersCount, CommandBuffer** commandBuffers,
 			PipelineStageFlags* waitStages,
 			uint32_t waitSemaphoresCount, Semaphore* waitSemaphores,
 			uint32_t signalSemaphoresCount, Semaphore* signalSemaphores);

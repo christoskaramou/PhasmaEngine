@@ -32,10 +32,6 @@ namespace pe
 {
 	Bloom::Bloom()
 	{
-		DSBrightFilter = {};
-		DSGaussianBlurHorizontal = {};
-		DSGaussianBlurVertical = {};
-		DSCombine = {};
 	}
 	
 	Bloom::~Bloom()
@@ -109,70 +105,36 @@ namespace pe
 	
 	void Bloom::createUniforms(std::map<std::string, Image>& renderTargets)
 	{
-		VkDescriptorSetAllocateInfo allocateInfo{};
-		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = RHII.descriptorPool;
-		allocateInfo.descriptorSetCount = 1;
-
-		VkDescriptorSet dset;
-
-		// Composition image to Bright Filter shader
-		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutBrightFilter();
-		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		DSBrightFilter = dset;
-		
-		// Bright Filter image to Gaussian Blur Horizontal shader
-		dsetLayout = Pipeline::getDescriptorSetLayoutGaussianBlurH();
-		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		DSGaussianBlurHorizontal = dset;
-		
-		// Gaussian Blur Horizontal image to Gaussian Blur Vertical shader
-		dsetLayout = Pipeline::getDescriptorSetLayoutGaussianBlurV();
-		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		DSGaussianBlurVertical = dset;
-		
-		// Gaussian Blur Vertical image to Combine shader
-		dsetLayout = Pipeline::getDescriptorSetLayoutCombine();
-		allocateInfo.pSetLayouts = &dsetLayout;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		DSCombine = dset;
+		DSBrightFilter = Descriptor::Create(Pipeline::getDescriptorSetLayoutBrightFilter());
+		DSGaussianBlurHorizontal = Descriptor::Create(Pipeline::getDescriptorSetLayoutGaussianBlurH());
+		DSGaussianBlurVertical = Descriptor::Create(Pipeline::getDescriptorSetLayoutGaussianBlurV());
+		DSCombine = Descriptor::Create(Pipeline::getDescriptorSetLayoutCombine());
 		
 		updateDescriptorSets(renderTargets);
 	}
 	
 	void Bloom::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		std::deque<VkDescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image)
-		{
-			VkDescriptorImageInfo info{ image.sampler, image.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-			dsii.push_back(info);
+		DescriptorUpdateInfo info{};
+		std::array<DescriptorUpdateInfo, 2> infos{};
 
-			VkWriteDescriptorSet textureWriteSet{};
-			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			textureWriteSet.dstSet = dstSet;
-			textureWriteSet.dstBinding = dstBinding;
-			textureWriteSet.dstArrayElement = 0;
-			textureWriteSet.descriptorCount = 1;
-			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			textureWriteSet.pImageInfo = &dsii.back();
+		info.binding = 0;
+		info.pImage = &frameImage;
+		DSBrightFilter->UpdateDescriptor(1, &info);
 
-			return textureWriteSet;
-		};
-		
-		std::vector<VkWriteDescriptorSet> textureWriteSets
-		{
-			wSetImage(DSBrightFilter, 0, frameImage),
-			wSetImage(DSGaussianBlurHorizontal, 0, renderTargets["brightFilter"]),
-			wSetImage(DSGaussianBlurVertical, 0, renderTargets["gaussianBlurHorizontal"]),
-			wSetImage(DSCombine, 0, frameImage),
-			wSetImage(DSCombine, 1, renderTargets["gaussianBlurVertical"])
-		};
+		info.binding = 0;
+		info.pImage = &renderTargets["brightFilter"];
+		DSGaussianBlurHorizontal->UpdateDescriptor(1, &info);
 
-		vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+		info.binding = 0;
+		info.pImage = &renderTargets["gaussianBlurHorizontal"];
+		DSGaussianBlurVertical->UpdateDescriptor(1, &info);
+
+		infos[0].binding = 0;
+		infos[0].pImage = &frameImage;
+		infos[1].binding = 1;
+		infos[1].pImage = &renderTargets["gaussianBlurVertical"];
+		DSCombine->UpdateDescriptor(2, infos.data());
 	}
 	
 	void Bloom::draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
@@ -188,37 +150,37 @@ namespace pe
 			static_cast<float>(GUI::use_tonemap)
 		};
 		
-		renderTargets["brightFilter"].ChangeLayout(*cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(renderPassBrightFilter, framebuffers[imageIndex]);
-		cmd->PushConstants(pipelineBrightFilter, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
-		cmd->BindPipeline(pipelineBrightFilter);
-		cmd->BindDescriptors(pipelineBrightFilter, 1, &DSBrightFilter);
+		renderTargets["brightFilter"].ChangeLayout(cmd, LayoutState::ColorWrite);
+		cmd->BeginPass(&renderPassBrightFilter, &framebuffers[imageIndex]);
+		cmd->PushConstants(&pipelineBrightFilter, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
+		cmd->BindPipeline(&pipelineBrightFilter);
+		cmd->BindDescriptors(&pipelineBrightFilter, 1, &DSBrightFilter);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
-		renderTargets["brightFilter"].ChangeLayout(*cmd, LayoutState::ColorRead);
+		renderTargets["brightFilter"].ChangeLayout(cmd, LayoutState::ColorRead);
 		
-		renderTargets["gaussianBlurHorizontal"].ChangeLayout(*cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(renderPassGaussianBlur, framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)]);
-		cmd->PushConstants(pipelineGaussianBlurHorizontal, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
-		cmd->BindPipeline(pipelineGaussianBlurHorizontal);
-		cmd->BindDescriptors(pipelineGaussianBlurHorizontal, 1, &DSGaussianBlurHorizontal);
+		renderTargets["gaussianBlurHorizontal"].ChangeLayout(cmd, LayoutState::ColorWrite);
+		cmd->BeginPass(&renderPassGaussianBlur, &framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)]);
+		cmd->PushConstants(&pipelineGaussianBlurHorizontal, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
+		cmd->BindPipeline(&pipelineGaussianBlurHorizontal);
+		cmd->BindDescriptors(&pipelineGaussianBlurHorizontal, 1, &DSGaussianBlurHorizontal);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
-		renderTargets["gaussianBlurHorizontal"].ChangeLayout(*cmd, LayoutState::ColorRead);
+		renderTargets["gaussianBlurHorizontal"].ChangeLayout(cmd, LayoutState::ColorRead);
 		
-		renderTargets["gaussianBlurVertical"].ChangeLayout(*cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(renderPassGaussianBlur, framebuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)]);
-		cmd->PushConstants(pipelineGaussianBlurVertical, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
-		cmd->BindPipeline(pipelineGaussianBlurVertical);
-		cmd->BindDescriptors(pipelineGaussianBlurVertical, 1, &DSGaussianBlurVertical);
+		renderTargets["gaussianBlurVertical"].ChangeLayout(cmd, LayoutState::ColorWrite);
+		cmd->BeginPass(&renderPassGaussianBlur, &framebuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)]);
+		cmd->PushConstants(&pipelineGaussianBlurVertical, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
+		cmd->BindPipeline(&pipelineGaussianBlurVertical);
+		cmd->BindDescriptors(&pipelineGaussianBlurVertical, 1, &DSGaussianBlurVertical);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
-		renderTargets["gaussianBlurVertical"].ChangeLayout(*cmd, LayoutState::ColorRead);
+		renderTargets["gaussianBlurVertical"].ChangeLayout(cmd, LayoutState::ColorRead);
 		
-		cmd->BeginPass(renderPassCombine, framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)]);
-		cmd->PushConstants(pipelineCombine, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
-		cmd->BindPipeline(pipelineCombine);
-		cmd->BindDescriptors(pipelineCombine, 1, &DSCombine);
+		cmd->BeginPass(&renderPassCombine, &framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)]);
+		cmd->PushConstants(&pipelineCombine, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
+		cmd->BindPipeline(&pipelineCombine);
+		cmd->BindDescriptors(&pipelineCombine, 1, &DSCombine);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 	}
@@ -317,26 +279,10 @@ namespace pe
 		renderPassGaussianBlur.Destroy();
 		renderPassCombine.Destroy();
 		
-		if (Pipeline::getDescriptorSetLayoutBrightFilter())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutBrightFilter(), nullptr);
-			Pipeline::getDescriptorSetLayoutBrightFilter() = {};
-		}
-		if (Pipeline::getDescriptorSetLayoutGaussianBlurH())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutGaussianBlurH(), nullptr);
-			Pipeline::getDescriptorSetLayoutGaussianBlurH() = {};
-		}
-		if (Pipeline::getDescriptorSetLayoutGaussianBlurV())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutGaussianBlurV(), nullptr);
-			Pipeline::getDescriptorSetLayoutGaussianBlurV() = {};
-		}
-		if (Pipeline::getDescriptorSetLayoutCombine())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutCombine(), nullptr);
-			Pipeline::getDescriptorSetLayoutCombine() = {};
-		}
+		Pipeline::getDescriptorSetLayoutBrightFilter()->Destroy();
+		Pipeline::getDescriptorSetLayoutGaussianBlurH()->Destroy();
+		Pipeline::getDescriptorSetLayoutGaussianBlurV()->Destroy();
+		Pipeline::getDescriptorSetLayoutCombine()->Destroy();
 		frameImage.Destroy();
 		pipelineBrightFilter.destroy();
 		pipelineGaussianBlurHorizontal.destroy();

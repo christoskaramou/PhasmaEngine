@@ -26,6 +26,7 @@ SOFTWARE.
 
 namespace pe
 {
+	class Descriptor;
 	class SkyBox
 	{
 	public:
@@ -34,7 +35,7 @@ namespace pe
 		~SkyBox();
 		
 		Image texture;
-		DescriptorSetHandle descriptorSet;
+		Descriptor* descriptorSet;
 		
 		void createDescriptorSet();
 		

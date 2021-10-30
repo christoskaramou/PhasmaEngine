@@ -25,6 +25,7 @@ SOFTWARE.
 #include "GUI/GUI.h"
 #include "tinygltf/stb_image.h"
 #include "Renderer/RHI.h"
+#include "Renderer/Descriptor.h"
 
 namespace pe
 {
@@ -39,33 +40,12 @@ namespace pe
 	
 	void SkyBox::createDescriptorSet()
 	{
-		VkDescriptorSetLayout setLayout = Pipeline::getDescriptorSetLayoutSkybox();
-		VkDescriptorSetAllocateInfo allocateInfo{};
-		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = RHII.descriptorPool;
-		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &setLayout;
+		descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSkybox());
 
-		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		descriptorSet = dset;
-		
-		VkWriteDescriptorSet textureWriteSet{};
-		// texture sampler
-		VkDescriptorImageInfo dii;
-		dii.sampler = texture.sampler;
-		dii.imageView = texture.view;
-		dii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		
-		textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		textureWriteSet.dstSet = descriptorSet;
-		textureWriteSet.dstBinding = 0;
-		textureWriteSet.dstArrayElement = 0;
-		textureWriteSet.descriptorCount = 1;
-		textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		textureWriteSet.pImageInfo = &dii;
-
-		vkUpdateDescriptorSets(RHII.device, 1, &textureWriteSet, 0, nullptr);
+		DescriptorUpdateInfo info{};
+		info.binding = 0;
+		info.pImage = &texture;
+		descriptorSet->UpdateDescriptor(1, &info);
 	}
 	
 	void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, bool show)
@@ -126,10 +106,6 @@ namespace pe
 	void SkyBox::destroy()
 	{
 		texture.Destroy();
-		if (Pipeline::getDescriptorSetLayoutSkybox())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutSkybox(), nullptr);
-			Pipeline::getDescriptorSetLayoutSkybox() = {};
-		}
+		Pipeline::getDescriptorSetLayoutSkybox()->Destroy();
 	}
 }

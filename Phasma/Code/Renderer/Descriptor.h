@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Core/Base.h"
-#include "Renderer/Image.h"
 
 namespace pe
 {
@@ -37,6 +36,43 @@ namespace pe
 		uint32_t descriptorCount;
 		ShaderStageFlags stageFlags;
 		SamplerHandle pImmutableSamplers;
+	};
+
+	class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>
+	{
+	public:
+		DescriptorLayout(const std::vector<DescriptorBinding>& bindings);
+
+		~DescriptorLayout();
+
+		std::vector<DescriptorBinding> bindings;
+	};
+
+	class Image;
+	class Buffer;
+	class DescriptorUpdateInfo
+	{
+	public:
+		DescriptorUpdateInfo();
+
+		uint32_t binding;
+		Buffer* pBuffer;
+		BufferUsageFlags bufferUsage;
+		Image* pImage;
+		ImageLayout imageLayout;
+	};
+
+	class Descriptor : public IHandle<Descriptor, DescriptorSetHandle>
+	{
+	public:
+		Descriptor(DescriptorLayout* layout);
+
+		~Descriptor();
+
+		void UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo* pInfo);
+
+	private:
+		DescriptorLayout* layout;
 	};
 
 }

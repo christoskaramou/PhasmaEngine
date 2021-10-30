@@ -26,13 +26,14 @@ SOFTWARE.
 #include "Pipeline.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
-#include "Renderer/CommandPool.h"
-#include "Renderer/CommandBuffer.h"
 
 namespace pe
 {
 	constexpr uint32_t AUTO = UINT32_MAX;
 	
+	class Descriptor;
+	class CommandPool;
+	class CommandBuffer;
 	class Compute
 	{
 	public:
@@ -70,14 +71,14 @@ namespace pe
 		void createPipeline(const std::string& shaderName);
 	
 	private:
-		static CommandPool s_commandPool;
+		static CommandPool* s_commandPool;
 		Buffer* SBIn;
 		Buffer* SBOut;
 		Pipeline pipeline;
 		Fence fence;
 		Semaphore semaphore;
-		DescriptorSetHandle DSCompute;
-		CommandBuffer commandBuffer;
+		Descriptor* DSCompute;
+		CommandBuffer* commandBuffer;
 		
 		void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
 		

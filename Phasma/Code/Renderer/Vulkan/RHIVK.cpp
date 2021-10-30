@@ -468,8 +468,8 @@ namespace pe
 	
 	void RHI::CreateCommandPools()
 	{
-		commandPool.Create(graphicsFamilyId);
-		commandPool2.Create(graphicsFamilyId);
+		commandPool = CommandPool::Create(graphicsFamilyId);
+		commandPool2 = CommandPool::Create(graphicsFamilyId);
 	}
 	
 	void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
@@ -499,11 +499,11 @@ namespace pe
 	{
 		dynamicCmdBuffers.resize(bufferCount);
 		for (uint32_t i = 0; i < bufferCount; i++)
-			dynamicCmdBuffers[i].Create(commandPool);
+			dynamicCmdBuffers[i] = CommandBuffer::Create(commandPool);
 
 		shadowCmdBuffers.resize(bufferCount * SHADOWMAP_CASCADES);
 		for (uint32_t i = 0; i < bufferCount * SHADOWMAP_CASCADES; i++)
-			shadowCmdBuffers[i].Create(commandPool);
+			shadowCmdBuffers[i] = CommandBuffer::Create(commandPool);
 	}
 	
 	void RHI::CreateFences(uint32_t fenceCount)
@@ -604,8 +604,8 @@ namespace pe
 			descriptorPool = {};
 		}
 
-		commandPool.Destroy();
-		commandPool2.Destroy();
+		commandPool->Destroy();
+		commandPool2->Destroy();
 		
 		swapchain.Destroy();
 		
@@ -626,7 +626,7 @@ namespace pe
 	}
 	
 	void RHI::Submit(
-			uint32_t commandBuffersCount, CommandBuffer* commandBuffers,
+			uint32_t commandBuffersCount, CommandBuffer** commandBuffers,
 			PipelineStageFlags* waitStages,
 			uint32_t waitSemaphoresCount, Semaphore* waitSemaphores,
 			uint32_t signalSemaphoresCount, Semaphore* signalSemaphores,
@@ -635,7 +635,7 @@ namespace pe
 	{
 		std::vector<VkCommandBuffer> commandBuffersVK(commandBuffersCount);
 		for (uint32_t i = 0; i < commandBuffersCount; i++)
-			commandBuffersVK[i] = commandBuffers[i].Handle();
+			commandBuffersVK[i] = commandBuffers[i]->Handle();
 
 		std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoresCount);
 		for (uint32_t i = 0; i < waitSemaphoresCount; i++)
@@ -671,7 +671,7 @@ namespace pe
 	}
 	
 	void RHI::SubmitAndWaitFence(
-		uint32_t commandBuffersCount, CommandBuffer* commandBuffers,
+		uint32_t commandBuffersCount, CommandBuffer** commandBuffers,
 		PipelineStageFlags* waitStages,
 		uint32_t waitSemaphoresCount, Semaphore* waitSemaphores,
 		uint32_t signalSemaphoresCount, Semaphore* signalSemaphores

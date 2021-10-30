@@ -22,12 +22,132 @@ SOFTWARE.
 
 #if PE_VULKAN
 #include "Renderer/Descriptor.h"
+#include "Renderer/RHI.h"
+#include "Renderer/Image.h"
+#include "Renderer/Buffer.h"
 
 namespace pe
 {
-	DescriptorBinding::DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags)
-		: binding(binding), descriptorType(descriptorType), descriptorCount(1), stageFlags(stageFlags), pImmutableSamplers()
+	DescriptorBinding::DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags) :
+		binding(binding), descriptorType(descriptorType), descriptorCount(1), stageFlags(stageFlags), pImmutableSamplers()
 	{
+	}
+
+	DescriptorLayout::DescriptorLayout(const std::vector<DescriptorBinding>& bindings)
+	{
+		this->bindings = bindings;
+
+		std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{};
+		for (const auto& layoutBinding : bindings)
+		{
+			setLayoutBindings.push_back(
+				VkDescriptorSetLayoutBinding
+				{
+					layoutBinding.binding,
+					(VkDescriptorType)layoutBinding.descriptorType,
+					1,
+					(VkShaderStageFlags)layoutBinding.stageFlags,
+					nullptr
+				}
+			);
+		}
+
+		VkDescriptorSetLayoutCreateInfo descriptorLayout{};
+		descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
+		descriptorLayout.pBindings = setLayoutBindings.data();
+
+		VkDescriptorSetLayout layout;
+		vkCreateDescriptorSetLayout(RHII.device, &descriptorLayout, nullptr, &layout);
+		m_apiHandle = layout;
+	}
+
+	DescriptorLayout::~DescriptorLayout()
+	{
+		if (m_apiHandle)
+		{
+			vkDestroyDescriptorSetLayout(RHII.device, m_apiHandle, nullptr);
+			m_apiHandle = {};
+		}
+	}
+
+	Descriptor::Descriptor(DescriptorLayout* layout)
+	{
+		this->layout = layout;
+
+		VkDescriptorSetLayout dsetLayout = layout->Handle();
+		VkDescriptorSetAllocateInfo allocateInfo{};
+		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocateInfo.descriptorPool = RHII.descriptorPool;
+		allocateInfo.descriptorSetCount = 1;
+		allocateInfo.pSetLayouts = &dsetLayout;
+
+		VkDescriptorSet dset;
+		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
+		m_apiHandle = dset;
+	}
+
+	Descriptor::~Descriptor()
+	{
+	}
+
+	DescriptorUpdateInfo::DescriptorUpdateInfo() :
+		binding(0), pBuffer(nullptr), bufferUsage(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), pImage(nullptr), imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+	{
+	}
+
+	void Descriptor::UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo* pInfo)
+	{
+		std::deque<VkDescriptorImageInfo> dsii{};
+		auto const wSetImage = [this, &dsii](uint32_t dstBinding, Image* image, ImageLayout layout)
+		{
+			VkDescriptorImageInfo info{ image->sampler, image->view, (VkImageLayout)layout };
+			dsii.push_back(info);
+
+			VkWriteDescriptorSet textureWriteSet{};
+			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			textureWriteSet.dstSet = m_apiHandle;
+			textureWriteSet.dstBinding = dstBinding;
+			textureWriteSet.dstArrayElement = 0;
+			textureWriteSet.descriptorCount = 1;
+			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			textureWriteSet.pImageInfo = &dsii.back();
+
+			return textureWriteSet;
+		};
+
+		std::deque<VkDescriptorBufferInfo> dsbi{};
+		auto const wSetBuffer = [this, &dsbi](uint32_t dstBinding, Buffer* buffer, BufferUsageFlags bufferUsage)
+		{
+			VkDescriptorBufferInfo info{ buffer->Handle(), 0, buffer->Size() };
+			dsbi.push_back(info);
+
+			VkWriteDescriptorSet textureWriteSet{};
+			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			textureWriteSet.dstSet = m_apiHandle;
+			textureWriteSet.dstBinding = dstBinding;
+			textureWriteSet.dstArrayElement = 0;
+			textureWriteSet.descriptorCount = 1;
+			textureWriteSet.descriptorType = bufferUsage == VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT ?
+				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			textureWriteSet.pBufferInfo = &dsbi.back();
+
+			return textureWriteSet;
+		};
+
+		std::vector<VkWriteDescriptorSet> textureWriteSets(infoCount);
+
+		for(uint32_t i = 0; i < infoCount; i++)
+		{
+			if (pInfo[i].pImage != nullptr)
+				textureWriteSets[i] = wSetImage(pInfo[i].binding, pInfo[i].pImage, pInfo[i].imageLayout);
+			else if (pInfo[i].pBuffer != nullptr)
+				textureWriteSets[i] = wSetBuffer(pInfo[i].binding, pInfo[i].pBuffer, pInfo[i].bufferUsage);
+			else
+				throw std::runtime_error("Write set type mismatch");
+		}
+
+		vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
 	}
 }
 #endif

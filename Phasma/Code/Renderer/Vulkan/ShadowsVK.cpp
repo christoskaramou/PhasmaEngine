@@ -28,6 +28,7 @@ SOFTWARE.
 #include "Shader/Shader.h"
 #include "Core/Queue.h"
 #include "Renderer/RHI.h"
+#include "Renderer/Descriptor.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
 #include "Core/Settings.h"
@@ -45,54 +46,21 @@ namespace pe
 
 	void Shadows::createDescriptorSets()
 	{
-		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutShadowsDeferred();
-		VkDescriptorSetAllocateInfo allocateInfo{};
-		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = RHII.descriptorPool;
-		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &dsetLayout;
-
-		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		descriptorSetDeferred = dset;
-
-		std::vector<VkWriteDescriptorSet> textureWriteSets(SHADOWMAP_CASCADES + 1);
+		descriptorSetDeferred = Descriptor::Create(Pipeline::getDescriptorSetLayoutShadowsDeferred());
 
 		for (int i = 0; i < SHADOWMAP_CASCADES; i++)
 		{
-			// sampler
-			VkDescriptorImageInfo dii{};
-			dii.sampler = textures[i].sampler;
-			dii.imageView = textures[i].view;
-			dii.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-
-			VkWriteDescriptorSet textureWriteSet{};
-			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			textureWriteSet.dstSet = descriptorSetDeferred;
-			textureWriteSet.dstBinding = i;
-			textureWriteSet.dstArrayElement = 0;
-			textureWriteSet.descriptorCount = 1;
-			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			textureWriteSet.pImageInfo = &dii;
-
-			vkUpdateDescriptorSets(RHII.device, 1, &textureWriteSet, 0, nullptr);
+			DescriptorUpdateInfo info{};
+			info.binding = i;
+			info.pImage = &textures[i];
+			info.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			descriptorSetDeferred->UpdateDescriptor(1, &info);
 		}
 
-		VkDescriptorBufferInfo dbi;
-		dbi.buffer = uniformBuffer->Handle();
-		dbi.offset = 0;
-		dbi.range = SHADOWMAP_CASCADES * sizeof(mat4);
-
-		VkWriteDescriptorSet bufferWriteSet{};
-		bufferWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		bufferWriteSet.dstSet = descriptorSetDeferred;
-		bufferWriteSet.dstBinding = SHADOWMAP_CASCADES;
-		bufferWriteSet.dstArrayElement = 0;
-		bufferWriteSet.descriptorCount = 1;
-		bufferWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		bufferWriteSet.pBufferInfo = &dbi;
-
-		vkUpdateDescriptorSets(RHII.device, 1, &bufferWriteSet, 0, nullptr);
+		DescriptorUpdateInfo info{};
+		info.binding = SHADOWMAP_CASCADES;
+		info.pBuffer = uniformBuffer;
+		descriptorSetDeferred->UpdateDescriptor(1, &info);
 	}
 
 	void Shadows::createRenderPass()
@@ -183,11 +151,7 @@ namespace pe
 			renderPass.handle = {};
 		}
 
-		if (Pipeline::getDescriptorSetLayoutShadows())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutShadows(), nullptr);
-			Pipeline::getDescriptorSetLayoutShadows() = {};
-		}
+		Pipeline::getDescriptorSetLayoutShadows()->Destroy();
 
 		for (auto& texture : textures)
 			texture.Destroy();

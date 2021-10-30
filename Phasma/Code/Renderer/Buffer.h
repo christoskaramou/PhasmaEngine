@@ -28,10 +28,10 @@ SOFTWARE.
 
 namespace pe
 {
-	class Buffer : public NoCopy, public NoMove
+	class Buffer : public IHandle<Buffer, BufferHandle>
 	{
 	public:
-		static Buffer* Create(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
+		Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
 
 		~Buffer();
 		
@@ -46,8 +46,6 @@ namespace pe
 		void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) ;
 		
 		void Flush(size_t offset = 0, size_t flushSize = 0) const;
-		
-		void Destroy();
 		
 		size_t Size();
 		
@@ -80,16 +78,9 @@ namespace pe
 			Queue<launch>::Request(lambda);
 		}
 
-		BufferHandle& Handle() { return m_handle; }
-
 	private:
-		Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
-		inline static std::unordered_map<size_t, Buffer*> sm_Buffers{};
-
-		size_t id;
 		size_t size;
 		void* data;
 		VmaAllocation allocation; // TODO: Move this from here
-		BufferHandle m_handle;
 	};
 }

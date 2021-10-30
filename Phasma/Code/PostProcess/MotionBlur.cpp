@@ -29,6 +29,7 @@ SOFTWARE.
 #include "Core/Timer.h"
 #include "Renderer/RHI.h"
 #include "Renderer/CommandBuffer.h"
+#include "Renderer/Descriptor.h"
 
 namespace pe
 {
@@ -66,67 +67,28 @@ namespace pe
 		UBmotionBlur->Flush();
 		UBmotionBlur->Unmap();
 
-		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutMotionBlur();
-		VkDescriptorSetAllocateInfo allocateInfo{};
-		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = RHII.descriptorPool;
-		allocateInfo.descriptorSetCount = 1;
-		allocateInfo.pSetLayouts = &dsetLayout;
-
-		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		DSet = dset;
-
+		DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutMotionBlur());
 		updateDescriptorSets(renderTargets);
 	}
 	
 	void MotionBlur::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		std::deque<VkDescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image, ImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-		{
-			VkDescriptorImageInfo info{ image.sampler, image.view, (VkImageLayout)layout };
-			dsii.push_back(info);
+		std::array<DescriptorUpdateInfo, 4> infos{};
 
-			VkWriteDescriptorSet textureWriteSet{};
-			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			textureWriteSet.dstSet = dstSet;
-			textureWriteSet.dstBinding = dstBinding;
-			textureWriteSet.dstArrayElement = 0;
-			textureWriteSet.descriptorCount = 1;
-			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			textureWriteSet.pImageInfo = &dsii.back();
+		infos[0].binding = 0;
+		infos[0].pImage = &frameImage;
 
-			return textureWriteSet;
-		};
+		infos[1].binding = 1;
+		infos[1].pImage = &RHII.depth;
+		infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
-		std::deque<VkDescriptorBufferInfo> dsbi{};
-		auto const wSetBuffer = [&dsbi](DescriptorSetHandle dstSet, uint32_t dstBinding, Buffer& buffer)
-		{
-			VkDescriptorBufferInfo info{ buffer.Handle(), 0, buffer.Size() };
-			dsbi.push_back(info);
+		infos[2].binding = 2;
+		infos[2].pImage = &renderTargets["velocity"];
 
-			VkWriteDescriptorSet textureWriteSet{};
-			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			textureWriteSet.dstSet = dstSet;
-			textureWriteSet.dstBinding = dstBinding;
-			textureWriteSet.dstArrayElement = 0;
-			textureWriteSet.descriptorCount = 1;
-			textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			textureWriteSet.pBufferInfo = &dsbi.back();
+		infos[3].binding = 3;
+		infos[3].pBuffer = UBmotionBlur;
 
-			return textureWriteSet;
-		};
-		
-		std::vector<VkWriteDescriptorSet> textureWriteSets
-		{
-			wSetImage(DSet, 0, frameImage),
-			wSetImage(DSet, 1, RHII.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
-			wSetImage(DSet, 2, renderTargets["velocity"]),
-			wSetBuffer(DSet, 3, *UBmotionBlur)
-		};
-
-		vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+		DSet->UpdateDescriptor(4, infos.data());
 	}
 	
 	void MotionBlur::draw(CommandBuffer* cmd, uint32_t imageIndex)
@@ -139,10 +101,10 @@ namespace pe
 			0.f
 		};
 
-		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-		cmd->PushConstants(pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(vec4), &values);
-		cmd->BindPipeline(pipeline);
-		cmd->BindDescriptors(pipeline, 1, &DSet);
+		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->PushConstants(&pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(vec4), &values);
+		cmd->BindPipeline(&pipeline);
+		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 	}
@@ -210,11 +172,7 @@ namespace pe
 
 		renderPass.Destroy();
 
-		if (Pipeline::getDescriptorSetLayoutMotionBlur())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutMotionBlur(), nullptr);
-			Pipeline::getDescriptorSetLayoutMotionBlur() = {};
-		}
+		Pipeline::getDescriptorSetLayoutMotionBlur()->Destroy();
 		frameImage.Destroy();
 		UBmotionBlur->Destroy();
 		pipeline.destroy();

@@ -40,6 +40,7 @@ namespace pe
 		SpotLight spotLights[MAX_SPOT_LIGHTS];
 	};
 
+	class Descriptor;
 	class LightSystem : public ISystem
 	{
 	public:
@@ -58,6 +59,6 @@ namespace pe
 	private:
 		LightsUBO lubo;
 		Buffer* uniform;
-		DescriptorSetHandle descriptorSet;
+		Descriptor* descriptorSet;
 	};
 }

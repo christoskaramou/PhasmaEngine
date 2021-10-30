@@ -41,7 +41,7 @@ namespace pe
 	Pipeline* Model::pipeline = nullptr;
 	
 	Model::Model()
-	{		
+	{
 		descriptorSet = {};
 	}
 	
@@ -530,9 +530,9 @@ namespace pe
 		
 		auto& cmd = *Model::commandBuffer;
 		
-		cmd.BindPipeline(*Model::pipeline);
-		cmd.BindVertexBuffer(*vertexBuffer, 0);
-		cmd.BindIndexBuffer(*indexBuffer, 0);
+		cmd.BindPipeline(Model::pipeline);
+		cmd.BindVertexBuffer(vertexBuffer, 0);
+		cmd.BindIndexBuffer(indexBuffer, 0);
 		
 		int culled = 0;
 		int total = 0;
@@ -548,8 +548,8 @@ namespace pe
 						if (!primitive.cull)
 						{
 							// Cache this vector
-							std::vector<DescriptorSetHandle> dsetHandles{ node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet };
-							cmd.BindDescriptors(*Model::pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
+							std::vector<Descriptor*> dsetHandles{ node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet };
+							cmd.BindDescriptors(Model::pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
 							cmd.DrawIndexed(
 								primitive.indicesSize,
 								1,
@@ -824,14 +824,16 @@ namespace pe
 		);
 		
 		// Staging buffer
-		Buffer* staging = Buffer::Create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-		staging->Map();
-		staging->CopyData(vertices.data());
-		staging->Flush();
-		staging->Unmap();
+		//Buffer* staging = Buffer::Create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+		Buffer staging(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+		staging.Map();
+		staging.CopyData(vertices.data());
+		staging.Flush();
+		staging.Unmap();
 		
-		vertexBuffer->CopyBuffer(staging, staging->Size());
-		staging->Destroy();
+		vertexBuffer->CopyBuffer(&staging, staging.Size());
+		staging.Destroy();
 	}
 	
 	void Model::createIndexBuffer()
@@ -884,61 +886,14 @@ namespace pe
 	}
 	
 	void Model::createDescriptorSets()
-	{
-		std::deque<VkDescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image)
-		{
-			VkDescriptorImageInfo info{ image.sampler, image.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-			dsii.push_back(info);
-
-			VkWriteDescriptorSet writeSet{};
-			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			writeSet.pNext = nullptr;
-			writeSet.dstSet = dstSet;
-			writeSet.dstBinding = dstBinding;
-			writeSet.dstArrayElement = 0;
-			writeSet.descriptorCount = 1;
-			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			writeSet.pImageInfo = &dsii.back();
-			writeSet.pBufferInfo = nullptr;
-			writeSet.pTexelBufferView = nullptr;
-
-			return writeSet;
-		};
-		std::deque<VkDescriptorBufferInfo> dsbi {};
-		auto const wSetBuffer = [&dsbi](DescriptorSetHandle dstSet, uint32_t dstBinding, Buffer& buffer)
-		{
-			VkDescriptorBufferInfo info{ buffer.Handle(), 0, buffer.Size() };
-			dsbi.push_back(info);
-
-			VkWriteDescriptorSet writeSet{};
-			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			writeSet.pNext = nullptr;
-			writeSet.dstSet = dstSet;
-			writeSet.dstBinding = dstBinding;
-			writeSet.dstArrayElement = 0;
-			writeSet.descriptorCount = 1;
-			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			writeSet.pImageInfo = nullptr;
-			writeSet.pBufferInfo = &dsbi.back();
-			writeSet.pTexelBufferView = nullptr;
-
-			return writeSet;
-		};
-		
+	{		
 		// model dSet
-		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutModel();
-		VkDescriptorSetAllocateInfo allocateInfo0{};
-		allocateInfo0.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo0.descriptorPool = RHII.descriptorPool;
-		allocateInfo0.descriptorSetCount = 1;
-		allocateInfo0.pSetLayouts = &dsetLayout;
+		descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutModel());
 
-		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(RHII.device, &allocateInfo0, &dset);
-		descriptorSet = dset;
-		
-		vkUpdateDescriptorSets(RHII.device, 1, &wSetBuffer(descriptorSet, 0, *uniformBuffer), 0, nullptr);
+		DescriptorUpdateInfo info{};
+		info.binding = 0;
+		info.pBuffer = uniformBuffer;;
+		descriptorSet->UpdateDescriptor(1, &info);
 		
 		// mesh dSets
 		for (auto& node : linearNodes)
@@ -947,46 +902,40 @@ namespace pe
 				continue;
 
 			auto& mesh = node->mesh;
-			
-			VkDescriptorSetLayout dsetLayoutMesh = Pipeline::getDescriptorSetLayoutMesh();
-			VkDescriptorSetAllocateInfo allocateInfo{};
-			allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			allocateInfo.descriptorPool = RHII.descriptorPool;
-			allocateInfo.descriptorSetCount = 1;
-			allocateInfo.pSetLayouts = &dsetLayoutMesh;
 
-			VkDescriptorSet dsetMesh;
-			vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dsetMesh);
-			mesh->descriptorSet = dsetMesh;
+			mesh->descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutMesh());
 
-			vkUpdateDescriptorSets(RHII.device, 1, &wSetBuffer(mesh->descriptorSet, 0, *mesh->uniformBuffer), 0, nullptr);
+			DescriptorUpdateInfo info{};
+			info.binding = 0;
+			info.pBuffer = mesh->uniformBuffer;
+			mesh->descriptorSet->UpdateDescriptor(1, &info);
 			
 			// primitive dSets
 			for (auto& primitive : mesh->primitives)
 			{
+				primitive.descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutPrimitive());
 
-				VkDescriptorSetLayout dsetLayoutPrimitive = Pipeline::getDescriptorSetLayoutPrimitive();
-				VkDescriptorSetAllocateInfo allocateInfo2{};
-				allocateInfo2.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-				allocateInfo2.descriptorPool = RHII.descriptorPool;
-				allocateInfo2.descriptorSetCount = 1;
-				allocateInfo2.pSetLayouts = &dsetLayoutPrimitive;
+				std::array<DescriptorUpdateInfo, 6> infos{};
 
-				VkDescriptorSet dsetPrimitive;
-				vkAllocateDescriptorSets(RHII.device, &allocateInfo2, &dsetPrimitive);
-				primitive.descriptorSet = dsetPrimitive;
-				
-				std::vector<VkWriteDescriptorSet> textureWriteSets
-				{
-					wSetImage(primitive.descriptorSet, 0, primitive.pbrMaterial.baseColorTexture),
-					wSetImage(primitive.descriptorSet, 1, primitive.pbrMaterial.metallicRoughnessTexture),
-					wSetImage(primitive.descriptorSet, 2, primitive.pbrMaterial.normalTexture),
-					wSetImage(primitive.descriptorSet, 3, primitive.pbrMaterial.occlusionTexture),
-					wSetImage(primitive.descriptorSet, 4, primitive.pbrMaterial.emissiveTexture),
-					wSetBuffer(primitive.descriptorSet, 5, *primitive.uniformBuffer)
-				};
+				infos[0].binding = 0;
+				infos[0].pImage = &primitive.pbrMaterial.baseColorTexture;
 
-				vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+				infos[1].binding = 1;
+				infos[1].pImage = &primitive.pbrMaterial.metallicRoughnessTexture;
+
+				infos[2].binding = 2;
+				infos[2].pImage = &primitive.pbrMaterial.normalTexture;
+
+				infos[3].binding = 3;
+				infos[3].pImage = &primitive.pbrMaterial.occlusionTexture;
+
+				infos[4].binding = 4;
+				infos[4].pImage = &primitive.pbrMaterial.emissiveTexture;
+
+				infos[5].binding = 5;
+				infos[5].pBuffer = primitive.uniformBuffer;
+
+				primitive.descriptorSet->UpdateDescriptor(6, infos.data());
 			}
 		}
 	}
@@ -1001,11 +950,7 @@ namespace pe
 		uniformBuffer->Destroy();
 		delete document;
 		delete resourceReader;
-		if (Pipeline::getDescriptorSetLayoutModel())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutModel(), nullptr);
-			Pipeline::getDescriptorSetLayoutModel() = {};
-		}
+		Pipeline::getDescriptorSetLayoutModel()->Destroy();
 		for (auto& node : linearNodes)
 		{
 			if (node->mesh)

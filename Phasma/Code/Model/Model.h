@@ -37,6 +37,7 @@ namespace pe
 {
 	class Pipeline;
 	class CommandBuffer;
+	class Descriptor;
 	
 	class Model : public NoCopy
 	{
@@ -58,7 +59,7 @@ namespace pe
 		static std::deque<Model> models;
 		static Pipeline* pipeline;
 		static CommandBuffer* commandBuffer;
-		DescriptorSetHandle descriptorSet;
+		Descriptor* descriptorSet;
 		Buffer* uniformBuffer;
 		struct UBOModel
 		{

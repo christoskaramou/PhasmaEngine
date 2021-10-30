@@ -218,7 +218,9 @@ namespace pe
 		pcr.size = info.pushConstantSize;
 		
 		// Pipeline Layout
-		auto layouts = ApiHandleVectorCreate<VkDescriptorSetLayout>(info.descriptorSetLayouts);
+		std::vector<VkDescriptorSetLayout> layouts(info.descriptorSetLayouts.size());
+		for (uint32_t i = 0; i < info.descriptorSetLayouts.size(); i++)
+			layouts[i] = info.descriptorSetLayouts[i]->Handle();
 		VkPipelineLayoutCreateInfo plci{};
 		plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		plci.setLayoutCount = static_cast<uint32_t>(layouts.size());
@@ -259,7 +261,9 @@ namespace pe
 		csmci.codeSize = info.pCompShader->BytesCount();
 		csmci.pCode = info.pCompShader->GetSpriv();
 
-		auto layouts = ApiHandleVectorCreate<VkDescriptorSetLayout>(info.descriptorSetLayouts);
+		std::vector<VkDescriptorSetLayout> layouts(info.descriptorSetLayouts.size());
+		for (uint32_t i = 0; i < info.descriptorSetLayouts.size(); i++)
+			layouts[i] = info.descriptorSetLayouts[i]->Handle();
 		VkPipelineLayoutCreateInfo plci{};
 		plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		plci.setLayoutCount = static_cast<uint32_t>(layouts.size());
@@ -302,367 +306,288 @@ namespace pe
 		}
 	}
 
-	DescriptorSetLayoutHandle CreateDescriptorSetLayout(const std::vector<DescriptorBinding>& descriptionBindings)
-	{
-		std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{};
-		for (const auto& layoutBinding : descriptionBindings)
-		{
-			setLayoutBindings.push_back(
-				VkDescriptorSetLayoutBinding
-				{
-					layoutBinding.binding,
-					(VkDescriptorType)layoutBinding.descriptorType,
-					1,
-					(VkShaderStageFlags)layoutBinding.stageFlags,
-					nullptr
-				}
-			);
-		}
-
-		VkDescriptorSetLayoutCreateInfo descriptorLayout{};
-		descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-		descriptorLayout.pBindings = setLayoutBindings.data();
-
-		VkDescriptorSetLayout layout;
-		vkCreateDescriptorSetLayout(RHII.device, &descriptorLayout, nullptr, &layout);
-
-		return layout;
-	}
+	//DescriptorSetLayoutHandle CreateDescriptorSetLayout(const std::vector<DescriptorBinding>& descriptionBindings)
+	//{
+	//	std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{};
+	//	for (const auto& layoutBinding : descriptionBindings)
+	//	{
+	//		setLayoutBindings.push_back(
+	//			VkDescriptorSetLayoutBinding
+	//			{
+	//				layoutBinding.binding,
+	//				(VkDescriptorType)layoutBinding.descriptorType,
+	//				1,
+	//				(VkShaderStageFlags)layoutBinding.stageFlags,
+	//				nullptr
+	//			}
+	//		);
+	//	}
+	//
+	//	VkDescriptorSetLayoutCreateInfo descriptorLayout{};
+	//	descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	//	descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
+	//	descriptorLayout.pBindings = setLayoutBindings.data();
+	//
+	//	VkDescriptorSetLayout layout;
+	//	vkCreateDescriptorSetLayout(RHII.device, &descriptorLayout, nullptr, &layout);
+	//
+	//	return layout;
+	//}
 	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutComposition()
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutComposition()
 	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
+		static std::vector<DescriptorBinding> bindings
 		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(9, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(9, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
 		
 		return DSLayout;
 	}
 	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutBrightFilter()
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutBrightFilter()
 	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
+		static std::vector<DescriptorBinding> bindings
 		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutGaussianBlurH()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutGaussianBlurV()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutCombine()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutDOF()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutFXAA()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutMotionBlur()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutSSAO()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutSSAOBlur()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutSSR()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutTAA()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutTAASharpen()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutShadows()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					//DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
-				});
-		}
-		
-		return DSLayout;
-	}
-
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutShadowsDeferred()
-	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-
-		if (!VkDescriptorSetLayout(DSLayout))
-		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
 
 		return DSLayout;
 	}
 	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutMesh()
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutGaussianBlurH()
 	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
+		static std::vector<DescriptorBinding> bindings
 		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
-				});
-		}
-		
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
 		return DSLayout;
 	}
 	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutPrimitive()
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutGaussianBlurV()
 	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
+		static std::vector<DescriptorBinding> bindings
 		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
-					DescriptorBinding(5, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_VERTEX_BIT)
-				});
-		}
-		
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
 		return DSLayout;
 	}
 	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutModel()
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutCombine()
 	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
+		static std::vector<DescriptorBinding> bindings
 		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
-				});
-		}
-		
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
 		return DSLayout;
 	}
 	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutSkybox()
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutDOF()
 	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
+		static std::vector<DescriptorBinding> bindings
 		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-				});
-		}
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
 		return DSLayout;
 	}
 	
-	DescriptorSetLayoutHandle& Pipeline::getDescriptorSetLayoutCompute()
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutFXAA()
 	{
-		static DescriptorSetLayoutHandle DSLayout = {};
-		
-		if (!VkDescriptorSetLayout(DSLayout))
+		static std::vector<DescriptorBinding> bindings
 		{
-			DSLayout = CreateDescriptorSetLayout(
-				{
-					DescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT),
-					DescriptorBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
-				});
-		}
-		
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutMotionBlur()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutSSAO()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutSSAOBlur()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutSSR()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutTAA()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutTAASharpen()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutShadows()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			//DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutShadowsDeferred()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutMesh()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutPrimitive()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,	VK_SHADER_STAGE_FRAGMENT_BIT),
+			DescriptorBinding(5, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,			VK_SHADER_STAGE_VERTEX_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutModel()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutSkybox()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
+		return DSLayout;
+	}
+	
+	DescriptorLayout* Pipeline::getDescriptorSetLayoutCompute()
+	{
+		static std::vector<DescriptorBinding> bindings
+		{
+			DescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT),
+			DescriptorBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
+		};
+		static DescriptorLayout* DSLayout = DescriptorLayout::Create(bindings);
+
 		return DSLayout;
 	}
 }

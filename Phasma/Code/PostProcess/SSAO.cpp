@@ -86,107 +86,62 @@ namespace pe
 		UB_PVM->Unmap();
 		
 		// DESCRIPTOR SET FOR SSAO
-		VkDescriptorSetLayout dsetLayout = Pipeline::getDescriptorSetLayoutSSAO();
-		VkDescriptorSetAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.pNext = nullptr;
-		allocInfo.descriptorPool = RHII.descriptorPool;
-		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &dsetLayout;
-
-		VkDescriptorSet dset;
-		vkAllocateDescriptorSets(RHII.device, &allocInfo, &dset);
-		DSet = dset;
+		DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSSAO());
 		
 		// DESCRIPTOR SET FOR SSAO BLUR
-		VkDescriptorSetLayout dsetLayoutBlur = Pipeline::getDescriptorSetLayoutSSAOBlur();
-		VkDescriptorSetAllocateInfo allocInfoBlur{};
-		allocInfoBlur.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfoBlur.pNext = nullptr;
-		allocInfoBlur.descriptorPool = RHII.descriptorPool;
-		allocInfoBlur.descriptorSetCount = 1;
-		allocInfoBlur.pSetLayouts = &dsetLayoutBlur;
-
-		VkDescriptorSet dsetBlur;
-		vkAllocateDescriptorSets(RHII.device, &allocInfoBlur, &dsetBlur);
-		DSBlur = dsetBlur;
+		DSBlur = Descriptor::Create(Pipeline::getDescriptorSetLayoutSSAOBlur());
 		
 		updateDescriptorSets(renderTargets);
 	}
 	
 	void SSAO::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
 	{
-		std::deque<VkDescriptorImageInfo> dsii {};
-		auto const wSetImage = [&dsii](DescriptorSetHandle dstSet, uint32_t dstBinding, Image& image, ImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-		{
-			VkDescriptorImageInfo info{ image.sampler, image.view, (VkImageLayout)layout };
-			dsii.push_back(info);
+		std::array<DescriptorUpdateInfo, 5> infos{};
 
-			VkWriteDescriptorSet writeSet{};
-			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			writeSet.dstSet = dstSet;
-			writeSet.dstBinding = dstBinding;
-			writeSet.dstArrayElement = 0;
-			writeSet.descriptorCount = 1;
-			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			writeSet.pImageInfo = &dsii.back();
-			writeSet.pBufferInfo = nullptr;
-			writeSet.pTexelBufferView = nullptr;
+		infos[0].binding = 0;
+		infos[0].pImage = &RHII.depth;
+		infos[0].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
-			return writeSet;
-		};
-		std::deque<VkDescriptorBufferInfo> dsbi {};
-		const auto wSetBuffer = [&dsbi](DescriptorSetHandle dstSet, uint32_t dstBinding, Buffer& buffer)
-		{
-			VkDescriptorBufferInfo info{ buffer.Handle(), 0, buffer.Size() };
-			dsbi.push_back(info);
+		infos[1].binding = 1;
+		infos[1].pImage = &renderTargets["normal"];
 
-			VkWriteDescriptorSet writeSet{};
-			writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			writeSet.dstSet = dstSet;
-			writeSet.dstBinding = dstBinding;
-			writeSet.dstArrayElement = 0;
-			writeSet.descriptorCount = 1;
-			writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			writeSet.pImageInfo = nullptr;
-			writeSet.pBufferInfo = &dsbi.back();
-			writeSet.pTexelBufferView = nullptr;
+		infos[2].binding = 2;
+		infos[2].pImage = &noiseTex;
 
-			return writeSet;
-		};
-		
-		std::vector<VkWriteDescriptorSet> writeDescriptorSets
-		{
-			wSetImage(DSet, 0, RHII.depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
-			wSetImage(DSet, 1, renderTargets["normal"]),
-			wSetImage(DSet, 2, noiseTex),
-			wSetBuffer(DSet, 3, *UB_Kernel),
-			wSetBuffer(DSet, 4, *UB_PVM),
-			wSetImage(DSBlur, 0, renderTargets["ssao"])
-		};
+		infos[3].binding = 3;
+		infos[3].pBuffer = UB_Kernel;
 
-		vkUpdateDescriptorSets(RHII.device, (uint32_t)writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
+		infos[4].binding = 4;
+		infos[4].pBuffer = UB_PVM;
+
+		DSet->UpdateDescriptor(5, infos.data());
+
+		DescriptorUpdateInfo info{};
+		info.binding = 0;
+		info.pImage = &renderTargets["ssao"];
+
+		DSBlur->UpdateDescriptor(1, &info);
 	}
 	
 	void SSAO::draw(CommandBuffer* cmd, uint32_t imageIndex, Image& image)
 	{
 		// SSAO image
-		image.ChangeLayout(*cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-		cmd->BindPipeline(pipeline);
-		cmd->BindDescriptors(pipeline, 1, &DSet);
+		image.ChangeLayout(cmd, LayoutState::ColorWrite);
+		cmd->BeginPass(&renderPass, &framebuffers[imageIndex]);
+		cmd->BindPipeline(&pipeline);
+		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 		
-		image.ChangeLayout(*cmd, LayoutState::ColorRead);
+		image.ChangeLayout(cmd, LayoutState::ColorRead);
 
 		// new blurry SSAO image
-		cmd->BeginPass(blurRenderPass, blurFramebuffers[imageIndex]);
-		cmd->BindPipeline(pipelineBlur);
-		cmd->BindDescriptors(pipelineBlur, 1, &DSBlur);
+		cmd->BeginPass(&blurRenderPass, &blurFramebuffers[imageIndex]);
+		cmd->BindPipeline(&pipelineBlur);
+		cmd->BindDescriptors(&pipelineBlur, 1, &DSBlur);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
-		image.ChangeLayout(*cmd, LayoutState::ColorRead);
+		image.ChangeLayout(cmd, LayoutState::ColorRead);
 	}
 	
 	void SSAO::destroy()
@@ -205,16 +160,8 @@ namespace pe
 		
 		pipeline.destroy();
 		pipelineBlur.destroy();
-		if (Pipeline::getDescriptorSetLayoutSSAO())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutSSAO(), nullptr);
-			Pipeline::getDescriptorSetLayoutSSAO() = {};
-		}
-		if (Pipeline::getDescriptorSetLayoutSSAOBlur())
-		{
-			vkDestroyDescriptorSetLayout(RHII.device, Pipeline::getDescriptorSetLayoutSSAOBlur(), nullptr);
-			Pipeline::getDescriptorSetLayoutSSAOBlur() = {};
-		}
+		Pipeline::getDescriptorSetLayoutSSAO()->Destroy();
+		Pipeline::getDescriptorSetLayoutSSAOBlur()->Destroy();
 	}
 	
 	void SSAO::update(Camera& camera)

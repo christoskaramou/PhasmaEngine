@@ -35,6 +35,7 @@ namespace pe
 	constexpr uint32_t SHADOWMAP_CASCADES = 4;
 	constexpr uint32_t SHADOWMAP_SIZE = 2048;
 
+	class Descriptor;
 	class Shadows
 	{
 	public:
@@ -46,7 +47,7 @@ namespace pe
 		vec4 viewZ;
 		RenderPass renderPass;
 		std::vector<Image> textures {};
-		DescriptorSetHandle descriptorSetDeferred;
+		Descriptor* descriptorSetDeferred;
 		std::vector<FrameBuffer> framebuffers {};
 		Buffer* uniformBuffer;
 		Pipeline pipeline;

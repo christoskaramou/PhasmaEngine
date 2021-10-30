@@ -26,6 +26,7 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Framebuffer.h"
+#include "Renderer/Descriptor.h"
 #include "ECS/Component.h"
 
 namespace pe
@@ -45,10 +46,10 @@ namespace pe
 		RenderPass renderPassBrightFilter;
 		RenderPass renderPassGaussianBlur;
 		RenderPass renderPassCombine;
-		DescriptorSetHandle DSBrightFilter;
-		DescriptorSetHandle DSGaussianBlurHorizontal;
-		DescriptorSetHandle DSGaussianBlurVertical;
-		DescriptorSetHandle DSCombine;
+		Descriptor* DSBrightFilter;
+		Descriptor* DSGaussianBlurHorizontal;
+		Descriptor* DSGaussianBlurVertical;
+		Descriptor* DSCombine;
 		Image frameImage;
 		
 		void Init();

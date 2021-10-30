@@ -30,6 +30,7 @@ SOFTWARE.
 
 namespace pe
 {
+	class Descriptor;
 	class FXAA : public IComponent
 	{
 	public:
@@ -40,7 +41,7 @@ namespace pe
 		std::vector<FrameBuffer> framebuffers {};
 		Pipeline pipeline;
 		RenderPass renderPass;
-		DescriptorSetHandle DSet;
+		Descriptor* DSet;
 		Image frameImage;
 		
 		void Init();

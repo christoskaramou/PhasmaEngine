@@ -33,6 +33,7 @@ SOFTWARE.
 
 namespace pe
 {
+	class Descriptor;
 	class TAA : public IComponent
 	{
 	public:
@@ -43,7 +44,8 @@ namespace pe
 		std::vector<FrameBuffer> framebuffers {}, framebuffersSharpen {};
 		Pipeline pipeline, pipelineSharpen;
 		RenderPass renderPass, renderPassSharpen;
-		DescriptorSetHandle DSet, DSetSharpen;
+		Descriptor* DSet;
+		Descriptor* DSetSharpen;
 		Image previous;
 		Image frameImage;
 		
