@@ -24,7 +24,7 @@ SOFTWARE.
 #include "Mesh.h"
 #include "Core/Queue.h"
 #include "Renderer/Pipeline.h"
-#include "Renderer/CommandBuffer.h"
+#include "Renderer/Command.h"
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
 #include "Renderer/RHI.h"

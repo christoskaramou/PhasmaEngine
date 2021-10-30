@@ -31,7 +31,7 @@ SOFTWARE.
 #include "Core/Settings.h"
 #include "Systems/EventSystem.h"
 #include "Systems/PostProcessSystem.h"
-#include "Renderer/CommandBuffer.h"
+#include "Renderer/Command.h"
 
 namespace pe
 {

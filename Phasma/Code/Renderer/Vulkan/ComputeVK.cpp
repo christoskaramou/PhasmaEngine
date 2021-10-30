@@ -24,8 +24,7 @@ SOFTWARE.
 #include "Renderer/Compute.h"
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
-#include "Renderer/CommandPool.h"
-#include "Renderer/CommandBuffer.h"
+#include "Renderer/Command.h"
 
 namespace pe
 {

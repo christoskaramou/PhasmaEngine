@@ -32,7 +32,7 @@ SOFTWARE.
 #include "tinygltf/stb_image.h"
 #include "Shader/Reflection.h"
 #include "Renderer/RHI.h"
-#include "Renderer/CommandBuffer.h"
+#include "Renderer/Command.h"
 #include "Core/Path.h"
 #include "Core/Settings.h"
 #include "ECS/Context.h"

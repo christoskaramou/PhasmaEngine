@@ -23,8 +23,7 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
-#include "Renderer/CommandPool.h"
-#include "Renderer/CommandBuffer.h"
+#include "Renderer/Command.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
 
@@ -227,6 +226,7 @@ namespace pe
 	void RHI::GetGpu()
 	{
 		uint32_t gpuCount;
+		vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr);
 		vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr);
 
 		std::vector<VkPhysicalDevice> gpuList(gpuCount);

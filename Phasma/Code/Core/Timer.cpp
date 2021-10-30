@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include "Timer.h"
 #include "Renderer/RHI.h"
-#include "Renderer/CommandBuffer.h"
+#include "Renderer/Command.h"
 
 namespace pe
 {

@@ -32,7 +32,6 @@ namespace pe
 	class Pipeline;
 	class Compute;
 	class Buffer;
-	class CommandPool;
 
 	enum class BarrierType
 	{
@@ -69,6 +68,14 @@ namespace pe
 		Offset3D srcOffsets[2];
 		ImageSubresourceLayers dstSubresource;
 		Offset3D dstOffsets[2];
+	};
+
+	class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
+	{
+	public:
+		CommandPool(uint32_t graphicsFamilyId);
+
+		~CommandPool();
 	};
 
 	class CommandBuffer : public IHandle<CommandBuffer, CommandBufferHandle>

@@ -21,9 +21,8 @@ SOFTWARE.
 */
 
 #if PE_VULKAN
-#include "Renderer/CommandBuffer.h"
+#include "Renderer/Command.h"
 #include "Renderer/RHI.h"
-#include "Renderer/CommandPool.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/FrameBuffer.h"
 #include "Renderer/Pipeline.h"
@@ -34,6 +33,27 @@ SOFTWARE.
 
 namespace pe
 {
+	CommandPool::CommandPool(uint32_t graphicsFamilyId)
+	{
+		VkCommandPoolCreateInfo cpci{};
+		cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		cpci.queueFamilyIndex = graphicsFamilyId;
+		cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+		VkCommandPool commandPool;
+		vkCreateCommandPool(RHII.device, &cpci, nullptr, &commandPool);
+		m_apiHandle = commandPool;
+	}
+
+	CommandPool::~CommandPool()
+	{
+		if (m_apiHandle)
+		{
+			vkDestroyCommandPool(RHII.device, m_apiHandle, nullptr);
+			m_apiHandle = {};
+		}
+	}
+
 	CommandBuffer::CommandBuffer(CommandPool* commandPool) : m_commandPool(commandPool)
 	{
 		VkCommandBufferAllocateInfo cbai{};

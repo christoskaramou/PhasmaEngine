@@ -24,8 +24,7 @@ SOFTWARE.
 
 #include "Renderer/Surface.h"
 #include "Renderer/Swapchain.h"
-#include "Renderer/CommandPool.h"
-#include "Renderer/CommandBuffer.h"
+#include "Renderer/Command.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
 

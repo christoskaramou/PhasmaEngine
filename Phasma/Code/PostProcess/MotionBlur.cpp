@@ -28,7 +28,7 @@ SOFTWARE.
 #include "Core/Queue.h"
 #include "Core/Timer.h"
 #include "Renderer/RHI.h"
-#include "Renderer/CommandBuffer.h"
+#include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
 
 namespace pe

@@ -23,8 +23,7 @@ SOFTWARE.
 #if PE_VULKAN
 #include "Renderer/RHI.h"
 #include "Renderer/Buffer.h"
-#include "Renderer/CommandPool.h"
-#include "Renderer/CommandBuffer.h"
+#include "Renderer/Command.h"
 
 namespace pe
 {

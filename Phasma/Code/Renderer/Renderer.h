@@ -33,7 +33,6 @@ SOFTWARE.
 #include "Renderer/Compute.h"
 #include "Core/Timer.h"
 #include "Script/Script.h"
-#include "Renderer/CommandPool.h"
 
 #define IGNORE_SCRIPTS
 
@@ -59,6 +58,7 @@ namespace pe
 		void Update(float x, float y, float w, float h, float minDepth = 0.f, float maxDepth = 1.f);
 	};
 
+	class CommandBuffer;
 	class Renderer
 	{
 	protected:
