@@ -280,6 +280,6 @@ namespace pe
 	using InstanceHandle = ApiHandle<VkInstance, Placeholder*>;
 	using GpuHandle = ApiHandle<VkPhysicalDevice, Placeholder*>;
 	using DebugMessengerHandle = ApiHandle<VkDebugUtilsMessengerEXT, Placeholder*>;
-	using QueueHandle = ApiHandle<VkQueue, Placeholder*>;
+	using DeviceQueueHandle = ApiHandle<VkQueue, Placeholder*>;
 	using DescriptorPoolHandle = ApiHandle<VkDescriptorPool, Placeholder*>;
 }

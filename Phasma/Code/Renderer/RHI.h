@@ -99,7 +99,7 @@ namespace pe
 		GpuHandle gpu;
 		std::string gpuName;
 		DeviceHandle device;
-		QueueHandle graphicsQueue, computeQueue, transferQueue;
+		DeviceQueueHandle graphicsQueue, computeQueue, transferQueue;
 		CommandPool* commandPool;
 		CommandPool* commandPool2;
 		DescriptorPool* descriptorPool;
