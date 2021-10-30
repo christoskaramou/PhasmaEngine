@@ -27,6 +27,7 @@ SOFTWARE.
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Fence.h"
 
 
 #if defined(_WIN32)
@@ -493,14 +494,14 @@ namespace pe
 	{
 		fences.resize(fenceCount);
 		for (uint32_t i = 0; i < fenceCount; i++)
-			fences[i].Create();
+			fences[i] = Fence::Create(true);
 	}
 	
 	void RHI::CreateSemaphores(uint32_t semaphoresCount)
 	{
 		semaphores.resize(semaphoresCount);
 		for (uint32_t i = 0; i < semaphoresCount; i++)
-			semaphores[i].Create();
+			semaphores[i] = Semaphore::Create();
 	}
 	
 	void RHI::CreateDepth()
@@ -574,10 +575,10 @@ namespace pe
 		WaitDeviceIdle();
 		
 		for (auto& fence : fences)
-			fence.Destroy();
+			fence->Destroy();
 
 		for (auto& semaphore : semaphores)
-			semaphore.Destroy();
+			semaphore->Destroy();
 		
 		depth.Destroy();
 		
@@ -607,8 +608,8 @@ namespace pe
 	void RHI::Submit(
 			uint32_t commandBuffersCount, CommandBuffer** commandBuffers,
 			PipelineStageFlags* waitStages,
-			uint32_t waitSemaphoresCount, Semaphore* waitSemaphores,
-			uint32_t signalSemaphoresCount, Semaphore* signalSemaphores,
+			uint32_t waitSemaphoresCount, Semaphore** waitSemaphores,
+			uint32_t signalSemaphoresCount, Semaphore** signalSemaphores,
 			Fence* signalFence
 	)
 	{
@@ -618,15 +619,15 @@ namespace pe
 
 		std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoresCount);
 		for (uint32_t i = 0; i < waitSemaphoresCount; i++)
-			waitSemaphoresVK[i] = waitSemaphores[i].handle;
+			waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
 
 		std::vector<VkSemaphore> signalSemaphoresVK(signalSemaphoresCount);
 		for (uint32_t i = 0; i < signalSemaphoresCount; i++)
-			signalSemaphoresVK[i] = signalSemaphores[i].handle;
+			signalSemaphoresVK[i] = signalSemaphores[i]->Handle();
 
 		VkFence fence = nullptr;
 		if (signalFence)
-			fence = signalFence->handle;
+			fence = signalFence->Handle();
 
 		VkSubmitInfo si{};
 		si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -643,7 +644,7 @@ namespace pe
 	
 	void RHI::WaitFence(Fence* fence)
 	{
-		VkFence fenceVK = fence->handle;
+		VkFence fenceVK = fence->Handle();
 		if (vkWaitForFences(device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
 			throw std::runtime_error("wait fences error!");
 		vkResetFences(device, 1, &fenceVK);
@@ -652,30 +653,29 @@ namespace pe
 	void RHI::SubmitAndWaitFence(
 		uint32_t commandBuffersCount, CommandBuffer** commandBuffers,
 		PipelineStageFlags* waitStages,
-		uint32_t waitSemaphoresCount, Semaphore* waitSemaphores,
-		uint32_t signalSemaphoresCount, Semaphore* signalSemaphores
+		uint32_t waitSemaphoresCount, Semaphore** waitSemaphores,
+		uint32_t signalSemaphoresCount, Semaphore** signalSemaphores
 	)
 	{
-		Fence fence;
-		fence.Create(false);
+		Fence* fence = Fence::Create(false);
 		
 		Submit(
 			commandBuffersCount, commandBuffers,
 			waitStages,
 			waitSemaphoresCount, waitSemaphores,
 			signalSemaphoresCount, signalSemaphores,
-			&fence);
+			fence);
 		
-		VkFence fenceVK = fence.handle;
+		VkFence fenceVK = fence->Handle();
 		if (vkWaitForFences(device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
 			throw std::runtime_error("wait fences error!");
-		vkDestroyFence(device, fence.handle, nullptr);
+		fence->Destroy();
 	}
 
 	void RHI::Present(
 		uint32_t swapchainCount, Swapchain* swapchains,
 		uint32_t* imageIndices,
-		uint32_t waitSemaphoreCount, Semaphore* waitSemaphores)
+		uint32_t waitSemaphoreCount, Semaphore** waitSemaphores)
 	{
 		std::vector<VkSwapchainKHR> swapchainsVK(swapchainCount);
 		for (uint32_t i = 0; i < swapchainCount; i++)
@@ -683,7 +683,7 @@ namespace pe
 
 		std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoreCount);
 		for (uint32_t i = 0; i < waitSemaphoreCount; i++)
-			waitSemaphoresVK[i] = waitSemaphores[i].handle;
+			waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
 
 		VkPresentInfoKHR pi{};
 		pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;

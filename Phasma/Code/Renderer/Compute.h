@@ -24,8 +24,6 @@ SOFTWARE.
 
 #include "Buffer.h"
 #include "Pipeline.h"
-#include "Renderer/Fence.h"
-#include "Renderer/Semaphore.h"
 
 namespace pe
 {
@@ -34,6 +32,9 @@ namespace pe
 	class Descriptor;
 	class CommandPool;
 	class CommandBuffer;
+	class Fence;
+	class Semaphore;
+
 	class Compute
 	{
 	public:
@@ -75,8 +76,8 @@ namespace pe
 		Buffer* SBIn;
 		Buffer* SBOut;
 		Pipeline pipeline;
-		Fence fence;
-		Semaphore semaphore;
+		Fence* fence;
+		Semaphore* semaphore;
 		Descriptor* DSCompute;
 		CommandBuffer* commandBuffer;
 		

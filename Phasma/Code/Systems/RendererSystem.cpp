@@ -24,6 +24,7 @@ SOFTWARE.
 #include "ECS/Context.h"
 #include "Systems/EventSystem.h"
 #include "Renderer/RHI.h"
+#include "Renderer/Semaphore.h"
 #include "Model/Mesh.h"
 #include "Systems/PostProcessSystem.h"
 
@@ -146,12 +147,12 @@ namespace pe
 		};
 
 		// acquire the image
-		auto& aquireSignalSemaphore = RHII.semaphores[frameIndex];
-		uint32_t imageIndex = RHII.swapchain.Aquire(aquireSignalSemaphore.handle, {});
+		auto aquireSignalSemaphore = RHII.semaphores[frameIndex];
+		uint32_t imageIndex = RHII.swapchain.Aquire(aquireSignalSemaphore->Handle(), {});
 
 		static Timer timer;
 		timer.Start();
-		RHII.WaitFence(&RHII.fences[imageIndex]);
+		RHII.WaitFence(RHII.fences[imageIndex]);
 		FrameTimer::Instance().timestamps[0] = timer.Count();
 
 		auto& cmd = RHII.dynamicCmdBuffers[imageIndex];
@@ -185,19 +186,19 @@ namespace pe
 		RecordDeferredCmds(imageIndex);
 
 		// submit the command buffers
-		auto& deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
-		auto& deferredWaitSemaphore = aquireSignalSemaphore;
-		auto& deferredSignalSemaphore = RHII.semaphores[imageIndex * 3 + 2];
-		auto& deferredSignalFence = RHII.fences[imageIndex];
+		auto deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
+		auto deferredWaitSemaphore = aquireSignalSemaphore;
+		auto deferredSignalSemaphore = RHII.semaphores[imageIndex * 3 + 2];
+		auto deferredSignalFence = RHII.fences[imageIndex];
 		RHII.Submit(
 			1, &cmd,
 			&deferredWaitStage,
 			1, &deferredWaitSemaphore,
 			1, &deferredSignalSemaphore,
-			&deferredSignalFence);
+			deferredSignalFence);
 
 		// Presentation
-		auto& presentWaitSemaphore = deferredSignalSemaphore;
+		auto presentWaitSemaphore = deferredSignalSemaphore;
 		RHII.Present(1, &RHII.swapchain, &imageIndex, 1, &presentWaitSemaphore);
 
 		RHII.UnlockSubmits();

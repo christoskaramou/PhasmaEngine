@@ -26,15 +26,10 @@ SOFTWARE.
 
 namespace pe
 {
-	class Semaphore
+	class Semaphore : public IHandle<Semaphore, SemaphoreHandle>
 	{
 	public:
 		Semaphore();
 		~Semaphore();
-
-		void Create();
-		void Destroy();
-
-		SemaphoreHandle handle;
 	};
 }

@@ -28,29 +28,20 @@ namespace pe
 {
 	Semaphore::Semaphore()
 	{
-		handle = {};
-	}
-
-	Semaphore::~Semaphore()
-	{
-	}
-
-	void Semaphore::Create()
-	{
 		VkSemaphoreCreateInfo si{};
 		si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
 		VkSemaphore semaphore;
 		vkCreateSemaphore(RHII.device, &si, nullptr, &semaphore);
-		handle = semaphore;
+		m_apiHandle = semaphore;
 	}
 
-	void Semaphore::Destroy()
+	Semaphore::~Semaphore()
 	{
-		if (handle)
+		if (m_apiHandle)
 		{
-			vkDestroySemaphore(RHII.device, handle, nullptr);
-			handle = {};
+			vkDestroySemaphore(RHII.device, m_apiHandle, nullptr);
+			m_apiHandle = {};
 		}
 	}
 }

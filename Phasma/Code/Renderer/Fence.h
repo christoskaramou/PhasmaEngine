@@ -26,16 +26,11 @@ SOFTWARE.
 
 namespace pe
 {
-	class Fence
+	class Fence : public IHandle<Fence, FenceHandle>
 	{
 	public:
-		Fence();
-		Fence(FenceHandle handle);
+		Fence(bool signaled);
+
 		~Fence();
-
-		void Create(bool signaled = true);
-		void Destroy();
-
-		FenceHandle handle;
 	};
 }

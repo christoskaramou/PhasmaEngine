@@ -25,6 +25,8 @@ SOFTWARE.
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
+#include "Renderer/Fence.h"
+#include "Renderer/Semaphore.h"
 
 namespace pe
 {
@@ -56,7 +58,7 @@ namespace pe
 		
 		std::vector<VkSemaphore> waitSemaphores = ApiHandleVectorCreate<VkSemaphore>(count, waitForHandles);
 		VkCommandBuffer cmdBuffer = commandBuffer->Handle();
-		VkSemaphore vksemaphore = semaphore.handle;
+		VkSemaphore vksemaphore = semaphore->Handle();
 		VkSubmitInfo siCompute{};
 		siCompute.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		siCompute.commandBufferCount = 1;
@@ -65,12 +67,12 @@ namespace pe
 		siCompute.pWaitSemaphores = waitSemaphores.data();
 		siCompute.pSignalSemaphores = &vksemaphore;
 
-		vkQueueSubmit(RHII.computeQueue, 1, &siCompute, fence.handle);
+		vkQueueSubmit(RHII.computeQueue, 1, &siCompute, fence->Handle());
 	}
 	
 	void Compute::waitFence()
 	{
-		RHII.WaitFence(&fence);
+		RHII.WaitFence(fence);
 	}
 	
 	void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
@@ -131,8 +133,8 @@ namespace pe
 		SBIn->Destroy();
 		SBOut->Destroy();
 		pipeline.destroy();
-		semaphore.Destroy();
-		fence.Destroy();
+		semaphore->Destroy();
+		fence->Destroy();
 	}
 	
 	Compute Compute::Create(const std::string& shaderName, size_t sizeIn, size_t sizeOut)
@@ -145,8 +147,8 @@ namespace pe
 		compute.createDescriptorSet();
 		compute.createComputeStorageBuffers(sizeIn, sizeOut);
 		compute.updateDescriptorSet();
-		compute.fence.Create(true);
-		compute.semaphore.Create();
+		compute.fence = Fence::Create(true);
+		compute.semaphore = Semaphore::Create();
 		
 		return compute;
 	}
@@ -166,8 +168,8 @@ namespace pe
 			compute.createDescriptorSet();
 			compute.createComputeStorageBuffers(sizeIn, sizeOut);
 			compute.updateDescriptorSet();
-			compute.fence.Create(true);
-			compute.semaphore.Create();
+			compute.fence = Fence::Create(true);
+			compute.semaphore = Semaphore::Create();
 			
 			computes.push_back(compute);
 		}

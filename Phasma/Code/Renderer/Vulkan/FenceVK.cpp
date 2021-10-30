@@ -26,19 +26,7 @@ SOFTWARE.
 
 namespace pe
 {
-	Fence::Fence() : handle{}
-	{
-	}
-
-	Fence::Fence(FenceHandle handle) : handle(handle)
-	{
-	}
-
-	Fence::~Fence()
-	{
-	}
-
-	void Fence::Create(bool signaled)
+	Fence::Fence(bool signaled)
 	{
 		VkFenceCreateInfo fi{};
 		fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -46,15 +34,15 @@ namespace pe
 
 		VkFence fence;
 		vkCreateFence(RHII.device, &fi, nullptr, &fence);
-		handle = fence;
+		m_apiHandle = fence;
 	}
 
-	void Fence::Destroy()
+	Fence::~Fence()
 	{
-		if (handle)
+		if (m_apiHandle)
 		{
-			vkDestroyFence(RHII.device, handle, nullptr);
-			handle = {};
+			vkDestroyFence(RHII.device, m_apiHandle, nullptr);
+			m_apiHandle = {};
 		}
 	}
 }

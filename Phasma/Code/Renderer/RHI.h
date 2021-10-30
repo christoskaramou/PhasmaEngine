@@ -24,8 +24,6 @@ SOFTWARE.
 
 #include "Renderer/Surface.h"
 #include "Renderer/Swapchain.h"
-#include "Renderer/Fence.h"
-#include "Renderer/Semaphore.h"
 
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
@@ -41,6 +39,7 @@ namespace pe
 	class CommandPool;
 	class CommandBuffer;
 	class DescriptorPool;
+	class Fence;
 
 	class RHI : public NoCopy, public NoMove
 	{
@@ -105,8 +104,8 @@ namespace pe
 		DescriptorPool* descriptorPool;
 		std::vector<CommandBuffer*> dynamicCmdBuffers;
 		std::vector<CommandBuffer*> shadowCmdBuffers;
-		std::vector<Fence> fences;
-		std::vector<Semaphore> semaphores;
+		std::vector<Fence*> fences;
+		std::vector<Semaphore*> semaphores;
 		VmaAllocator allocator = nullptr;
 
 		SDL_Window* window;
@@ -119,8 +118,8 @@ namespace pe
 		void Submit(
 			uint32_t commandBufferCount, CommandBuffer** commandBuffer,
 			PipelineStageFlags* waitStage,
-			uint32_t waitSemaphoreCount, Semaphore* waitSemaphore,
-			uint32_t signalSemaphoreCount, Semaphore* signalSemaphore,
+			uint32_t waitSemaphoreCount, Semaphore** waitSemaphore,
+			uint32_t signalSemaphoreCount, Semaphore** signalSemaphore,
 			Fence* signalFence);
 
 		void WaitFence(Fence* fence);
@@ -128,13 +127,13 @@ namespace pe
 		void SubmitAndWaitFence(
 			uint32_t commandBuffersCount, CommandBuffer** commandBuffers,
 			PipelineStageFlags* waitStages,
-			uint32_t waitSemaphoresCount, Semaphore* waitSemaphores,
-			uint32_t signalSemaphoresCount, Semaphore* signalSemaphores);
+			uint32_t waitSemaphoresCount, Semaphore** waitSemaphores,
+			uint32_t signalSemaphoresCount, Semaphore** signalSemaphores);
 
 		void Present(
 			uint32_t swapchainCount, Swapchain* swapchains,
 			uint32_t* imageIndices,
-			uint32_t semaphorescount, Semaphore* semaphores);
+			uint32_t semaphorescount, Semaphore** semaphores);
 
 #if _DEBUG
 		void CreateDebugMessenger();
