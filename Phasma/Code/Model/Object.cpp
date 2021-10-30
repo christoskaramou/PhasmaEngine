@@ -23,6 +23,7 @@ SOFTWARE.
 #include "Object.h"
 #include "tinygltf/stb_image.h"
 #include "Renderer/RHI.h"
+#include "Renderer/Descriptor.h"
 
 namespace pe
 {
@@ -107,7 +108,7 @@ namespace pe
 		VkDescriptorSetLayout layout = descriptorSetLayout;
 		VkDescriptorSetAllocateInfo allocateInfo{};
 		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = RHII.descriptorPool;
+		allocateInfo.descriptorPool = RHII.descriptorPool->Handle();
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &layout;
 

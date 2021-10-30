@@ -640,7 +640,7 @@ namespace pe
 		info.QueueFamily = RHII.graphicsFamilyId;
 		info.Queue = RHII.graphicsQueue;
 		info.PipelineCache = nullptr; // Will it help to use it?
-		info.DescriptorPool = RHII.descriptorPool;
+		info.DescriptorPool = RHII.descriptorPool->Handle();
 		info.Subpass = 0;
 		info.MinImageCount = static_cast<uint32_t>(RHII.swapchain.images.size());
 		info.ImageCount = (uint32_t)RHII.swapchain.images.size();

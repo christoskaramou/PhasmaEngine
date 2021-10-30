@@ -24,7 +24,6 @@ SOFTWARE.
 
 #include "Renderer/Surface.h"
 #include "Renderer/Swapchain.h"
-#include "Renderer/Command.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
 
@@ -39,6 +38,10 @@ SOFTWARE.
 
 namespace pe
 {
+	class CommandPool;
+	class CommandBuffer;
+	class DescriptorPool;
+
 	class RHI : public NoCopy, public NoMove
 	{
 	private:
@@ -99,7 +102,7 @@ namespace pe
 		QueueHandle graphicsQueue, computeQueue, transferQueue;
 		CommandPool* commandPool;
 		CommandPool* commandPool2;
-		DescriptorPoolHandle descriptorPool;
+		DescriptorPool* descriptorPool;
 		std::vector<CommandBuffer*> dynamicCmdBuffers;
 		std::vector<CommandBuffer*> shadowCmdBuffers;
 		std::vector<Fence> fences;

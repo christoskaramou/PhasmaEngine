@@ -26,6 +26,7 @@ SOFTWARE.
 #include "Renderer/Command.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
+#include "Renderer/Descriptor.h"
 
 
 #if defined(_WIN32)
@@ -474,25 +475,7 @@ namespace pe
 	
 	void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
 	{
-		std::vector<VkDescriptorPoolSize> descPoolsize(4);
-		descPoolsize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		descPoolsize[0].descriptorCount = maxDescriptorSets;
-		descPoolsize[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		descPoolsize[1].descriptorCount = maxDescriptorSets;
-		descPoolsize[2].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-		descPoolsize[2].descriptorCount = maxDescriptorSets;
-		descPoolsize[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		descPoolsize[3].descriptorCount = maxDescriptorSets;
-		
-		VkDescriptorPoolCreateInfo createInfo{};
-		createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		createInfo.poolSizeCount = static_cast<uint32_t>(descPoolsize.size());
-		createInfo.pPoolSizes = descPoolsize.data();
-		createInfo.maxSets = maxDescriptorSets;
-		
-		VkDescriptorPool descriptorPoolVK;
-		vkCreateDescriptorPool(device, &createInfo, nullptr, &descriptorPoolVK);
-		descriptorPool = descriptorPoolVK;
+		descriptorPool = DescriptorPool::Create(maxDescriptorSets);
 	}
 	
 	void RHI::CreateCmdBuffers(uint32_t bufferCount)
@@ -598,11 +581,7 @@ namespace pe
 		
 		depth.Destroy();
 		
-		if (descriptorPool)
-		{
-			vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-			descriptorPool = {};
-		}
+		descriptorPool->Destroy();
 
 		commandPool->Destroy();
 		commandPool2->Destroy();

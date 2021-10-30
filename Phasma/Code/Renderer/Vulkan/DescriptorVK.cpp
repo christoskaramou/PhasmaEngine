@@ -32,6 +32,38 @@ namespace pe
 		binding(binding), descriptorType(descriptorType), descriptorCount(1), stageFlags(stageFlags), pImmutableSamplers()
 	{
 	}
+	
+	DescriptorPool::DescriptorPool(uint32_t maxDescriptorSets)
+	{
+		std::vector<VkDescriptorPoolSize> descPoolsize(4);
+		descPoolsize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descPoolsize[0].descriptorCount = maxDescriptorSets;
+		descPoolsize[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		descPoolsize[1].descriptorCount = maxDescriptorSets;
+		descPoolsize[2].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		descPoolsize[2].descriptorCount = maxDescriptorSets;
+		descPoolsize[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		descPoolsize[3].descriptorCount = maxDescriptorSets;
+
+		VkDescriptorPoolCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		createInfo.poolSizeCount = static_cast<uint32_t>(descPoolsize.size());
+		createInfo.pPoolSizes = descPoolsize.data();
+		createInfo.maxSets = maxDescriptorSets;
+
+		VkDescriptorPool descriptorPoolVK;
+		vkCreateDescriptorPool(RHII.device, &createInfo, nullptr, &descriptorPoolVK);
+		m_apiHandle = descriptorPoolVK;
+	}
+
+	DescriptorPool::~DescriptorPool()
+	{
+		if (m_apiHandle)
+		{
+			vkDestroyDescriptorPool(RHII.device, m_apiHandle, nullptr);
+			m_apiHandle = {};
+		}
+	}
 
 	DescriptorLayout::DescriptorLayout(const std::vector<DescriptorBinding>& bindings)
 	{
@@ -78,7 +110,7 @@ namespace pe
 		VkDescriptorSetLayout dsetLayout = layout->Handle();
 		VkDescriptorSetAllocateInfo allocateInfo{};
 		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocateInfo.descriptorPool = RHII.descriptorPool;
+		allocateInfo.descriptorPool = RHII.descriptorPool->Handle();
 		allocateInfo.descriptorSetCount = 1;
 		allocateInfo.pSetLayouts = &dsetLayout;
 

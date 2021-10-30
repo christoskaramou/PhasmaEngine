@@ -38,6 +38,14 @@ namespace pe
 		SamplerHandle pImmutableSamplers;
 	};
 
+	class DescriptorPool : public IHandle<DescriptorPool, DescriptorPoolHandle>
+	{
+	public:
+		DescriptorPool(uint32_t maxDescriptorSets);
+
+		~DescriptorPool();
+	};
+
 	class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>
 	{
 	public:
