@@ -32,6 +32,7 @@ namespace pe
 	class Pipeline;
 	class Compute;
 	class Buffer;
+	class Image;
 
 	enum class BarrierType
 	{

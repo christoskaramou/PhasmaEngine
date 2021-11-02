@@ -24,7 +24,6 @@ SOFTWARE.
 
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
-#include "Renderer/Image.h"
 #include "Systems/CameraSystem.h"
 #include "Renderer/RenderPass.h"
 #include "ECS/Component.h"
@@ -33,6 +32,7 @@ namespace pe
 {
 	class Descriptor;
 	class FrameBuffer;
+	class Image;
 
 	class MotionBlur : public IComponent
 	{
@@ -47,21 +47,21 @@ namespace pe
 		Pipeline pipeline;
 		RenderPass renderPass;
 		Descriptor* DSet;
-		Image frameImage;
+		Image* frameImage;
 		
 		void Init();
 		
 		void update(Camera& camera);
 		
-		void createRenderPass(std::map<std::string, Image>& renderTargets);
+		void createRenderPass(std::map<std::string, Image*>& renderTargets);
 		
-		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
 		
-		void createPipeline(std::map<std::string, Image>& renderTargets);
+		void createPipeline(std::map<std::string, Image*>& renderTargets);
 		
-		void createMotionBlurUniforms(std::map<std::string, Image>& renderTargets);
+		void createMotionBlurUniforms(std::map<std::string, Image*>& renderTargets);
 		
-		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
+		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
 		
 		void draw(CommandBuffer* cmd, uint32_t imageIndex);
 		

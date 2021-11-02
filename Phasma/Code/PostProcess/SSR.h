@@ -24,7 +24,6 @@ SOFTWARE.
 
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
-#include "Renderer/Image.h"
 #include "Systems/CameraSystem.h"
 #include "Renderer/RenderPass.h"
 #include "ECS/Component.h"
@@ -33,6 +32,7 @@ namespace pe
 {
 	class Desscriptor;
 	class FrameBuffer;
+	class Image;
 
 	class SSR : public IComponent
 	{
@@ -50,17 +50,17 @@ namespace pe
 		
 		void update(Camera& camera);
 		
-		void createSSRUniforms(std::map<std::string, Image>& renderTargets);
+		void createSSRUniforms(std::map<std::string, Image*>& renderTargets);
 		
-		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
+		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
 		
 		void draw(CommandBuffer* cmd, uint32_t imageIndex);
 		
-		void createRenderPass(std::map<std::string, Image>& renderTargets);
+		void createRenderPass(std::map<std::string, Image*>& renderTargets);
 		
-		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
 		
-		void createPipeline(std::map<std::string, Image>& renderTargets);
+		void createPipeline(std::map<std::string, Image*>& renderTargets);
 		
 		void destroy();
 	};

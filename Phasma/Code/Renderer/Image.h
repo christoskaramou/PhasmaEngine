@@ -98,46 +98,26 @@ namespace pe
 		LayoutState layoutState;
 	};
 
-	class Image
+	class Image : public IHandle<Image, ImageHandle>
 	{
 	public:
-		Image();
+		Image() {}
+
+		Image(const ImageCreateInfo& info);
 		
 		~Image();
 
 		std::string name{};
 
-		ImageHandle image;
 		ImageViewHandle view;
 		SamplerHandle sampler;
-		VmaAllocation allocation {};
+		VmaAllocation allocation{};
 		ImageCreateInfo imageInfo;
 		ImageViewCreateInfo viewInfo;
 		SamplerCreateInfo samplerInfo;
 
-		//uint32_t width {};
-		//uint32_t height {};
-		float width_f {};
-		float height_f {};
-		
-		// values
-		//SampleCountFlagBits samples;
-		//LayoutState layoutState;
-		//Format format;
-		//ImageLayout initialLayout;
-		//ImageTiling tiling;
-		//uint32_t mipLevels;
-		//uint32_t arrayLayers;
-		//bool anisotropyEnabled;
-		//float minLod, maxLod, maxAnisotropy;
-		//Filter filter;
-		//ImageCreateFlags imageCreateFlags;
-		//ImageViewType viewType;
-		//SamplerAddressMode addressMode;
-		//BorderColor borderColor;
-		//bool samplerCompareEnable;
-		//CompareOp compareOp;
-		//SamplerMipmapMode samplerMipmapMode;
+		float width_f{};
+		float height_f{};
 		PipelineColorBlendAttachmentState blendAttachment;
 		
 		void TransitionImageLayout(
@@ -150,8 +130,6 @@ namespace pe
 			AccessFlags dstMask
 		);
 		
-		void CreateImage(const ImageCreateInfo& info);
-		
 		void CreateImageView(const ImageViewCreateInfo& info);
 		
 		void TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout);
@@ -160,12 +138,10 @@ namespace pe
 		
 		void CopyBufferToImage(Buffer* buffer, uint32_t baseLayer = 0);
 		
-		void CopyColorAttachment(CommandBuffer* cmd, Image& renderedImage);
+		void CopyColorAttachment(CommandBuffer* cmd, Image* renderedImage);
 		
 		void GenerateMipMaps();
 		
 		void CreateSampler(const SamplerCreateInfo& info);
-		
-		void Destroy();
 	};
 }

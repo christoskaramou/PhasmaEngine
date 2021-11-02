@@ -38,6 +38,7 @@ SOFTWARE.
 #include "ECS/Context.h"
 #include "Systems/LightSystem.h"
 #include "Renderer/Framebuffer.h"
+#include "Renderer/Image.h"
 
 namespace pe
 {
@@ -65,7 +66,7 @@ namespace pe
 		Model::pipeline = nullptr;
 	}
 	
-	void Deferred::createDeferredUniforms(std::map<std::string, Image>& renderTargets)
+	void Deferred::createDeferredUniforms(std::map<std::string, Image*>& renderTargets)
 	{
 		uniform = Buffer::Create(
 			sizeof(ubo),
@@ -113,19 +114,19 @@ namespace pe
 			info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 			info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 			info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-			ibl_brdf_lut.CreateImage(info);
+			ibl_brdf_lut = Image::Create(info);
 
 			ImageViewCreateInfo viewInfo{};
-			viewInfo.image = &ibl_brdf_lut;
-			ibl_brdf_lut.CreateImageView(viewInfo);
+			viewInfo.image = ibl_brdf_lut;
+			ibl_brdf_lut->CreateImageView(viewInfo);
 
 			SamplerCreateInfo samplerInfo{};
 			samplerInfo.maxLod = static_cast<float>(info.mipLevels);
-			ibl_brdf_lut.CreateSampler(samplerInfo);
+			ibl_brdf_lut->CreateSampler(samplerInfo);
 
-			ibl_brdf_lut.TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-			ibl_brdf_lut.CopyBufferToImage(staging);
-			ibl_brdf_lut.GenerateMipMaps();
+			ibl_brdf_lut->TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			ibl_brdf_lut->CopyBufferToImage(staging);
+			ibl_brdf_lut->GenerateMipMaps();
 			
 			staging->Destroy();
 			
@@ -137,38 +138,38 @@ namespace pe
 		updateDescriptorSets(renderTargets);
 	}
 	
-	void Deferred::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
+	void Deferred::updateDescriptorSets(std::map<std::string, Image*>& renderTargets)
 	{
 		std::array<DescriptorUpdateInfo, 10> infos{};
 
 		infos[0].binding = 0;
-		infos[0].pImage = &RHII.depth;
+		infos[0].pImage = RHII.depth;
 		infos[0].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
 		infos[1].binding = 1;
-		infos[1].pImage = &renderTargets["normal"];
+		infos[1].pImage = renderTargets["normal"];
 
 		infos[2].binding = 2;
-		infos[2].pImage = &renderTargets["albedo"];
+		infos[2].pImage = renderTargets["albedo"];
 
 		infos[3].binding = 3;
-		infos[3].pImage = &renderTargets["srm"];
+		infos[3].pImage = renderTargets["srm"];
 
 		Buffer* lightsUniform = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
 		infos[4].binding = 4;
 		infos[4].pBuffer = lightsUniform;
 
 		infos[5].binding = 5;
-		infos[5].pImage = &renderTargets["ssaoBlur"];
+		infos[5].pImage = renderTargets["ssaoBlur"];
 
 		infos[6].binding = 6;
-		infos[6].pImage = &renderTargets["ssr"];
+		infos[6].pImage = renderTargets["ssr"];
 
 		infos[7].binding = 7;
-		infos[7].pImage = &renderTargets["emissive"];
+		infos[7].pImage = renderTargets["emissive"];
 
 		infos[8].binding = 8;
-		infos[8].pImage = &ibl_brdf_lut;
+		infos[8].pImage = ibl_brdf_lut;
 
 		infos[9].binding = 9;
 		infos[9].pBuffer = uniform;
@@ -213,20 +214,20 @@ namespace pe
 		cmd->EndPass();
 	}
 	
-	void Deferred::createRenderPasses(std::map<std::string, Image>& renderTargets)
+	void Deferred::createRenderPasses(std::map<std::string, Image*>& renderTargets)
 	{
 		std::vector<Attachment> attachments(6);
 
 		// Target attachments are initialized to match render targets by default
-		attachments[0].format = renderTargets["normal"].imageInfo.format;
-		attachments[1].format = renderTargets["albedo"].imageInfo.format;
-		attachments[2].format = renderTargets["srm"].imageInfo.format;
-		attachments[3].format = renderTargets["velocity"].imageInfo.format;
-		attachments[4].format = renderTargets["emissive"].imageInfo.format;
+		attachments[0].format = renderTargets["normal"]->imageInfo.format;
+		attachments[1].format = renderTargets["albedo"]->imageInfo.format;
+		attachments[2].format = renderTargets["srm"]->imageInfo.format;
+		attachments[3].format = renderTargets["velocity"]->imageInfo.format;
+		attachments[4].format = renderTargets["emissive"]->imageInfo.format;
 
 		// Depth
 		attachments[5].flags = {};
-		attachments[5].format = RHII.depth.imageInfo.format;
+		attachments[5].format = RHII.depth->imageInfo.format;
 		attachments[5].samples = VK_SAMPLE_COUNT_1_BIT;
 		attachments[5].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachments[5].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -238,54 +239,54 @@ namespace pe
 		renderPass.Create(attachments);
 
 		Attachment attachment{};
-		attachment.format = renderTargets["viewport"].imageInfo.format;
+		attachment.format = renderTargets["viewport"]->imageInfo.format;
 		compositionRenderPass.Create(attachment);
 	}
 	
-	void Deferred::createFrameBuffers(std::map<std::string, Image>& renderTargets)
+	void Deferred::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
 	{
 		createGBufferFrameBuffers(renderTargets);
 		createCompositionFrameBuffers(renderTargets);
 	}
 	
-	void Deferred::createGBufferFrameBuffers(std::map<std::string, Image>& renderTargets)
+	void Deferred::createGBufferFrameBuffers(std::map<std::string, Image*>& renderTargets)
 	{
 		framebuffers.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["albedo"].imageInfo.width;
-			uint32_t height = renderTargets["albedo"].imageInfo.height;
+			uint32_t width = renderTargets["albedo"]->imageInfo.width;
+			uint32_t height = renderTargets["albedo"]->imageInfo.height;
 			std::vector<ImageViewHandle> views {
-				renderTargets["normal"].view,
-				renderTargets["albedo"].view,
-				renderTargets["srm"].view,
-				renderTargets["velocity"].view,
-				renderTargets["emissive"].view,
-				RHII.depth.view
+				renderTargets["normal"]->view,
+				renderTargets["albedo"]->view,
+				renderTargets["srm"]->view,
+				renderTargets["velocity"]->view,
+				renderTargets["emissive"]->view,
+				RHII.depth->view
 			};
 			framebuffers[i] = FrameBuffer::Create(width, height, views, renderPass);
 		}
 	}
 	
-	void Deferred::createCompositionFrameBuffers(std::map<std::string, Image>& renderTargets)
+	void Deferred::createCompositionFrameBuffers(std::map<std::string, Image*>& renderTargets)
 	{
 		compositionFramebuffers.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["viewport"].imageInfo.width;
-			uint32_t height = renderTargets["viewport"].imageInfo.height;
-			ImageViewHandle view = renderTargets["viewport"].view;
+			uint32_t width = renderTargets["viewport"]->imageInfo.width;
+			uint32_t height = renderTargets["viewport"]->imageInfo.height;
+			ImageViewHandle view = renderTargets["viewport"]->view;
 			compositionFramebuffers[i] = FrameBuffer::Create(width, height, view, compositionRenderPass);
 		}
 	}
 	
-	void Deferred::createPipelines(std::map<std::string, Image>& renderTargets)
+	void Deferred::createPipelines(std::map<std::string, Image*>& renderTargets)
 	{
 		createGBufferPipeline(renderTargets);
 		createCompositionPipeline(renderTargets);
 	}
 	
-	void Deferred::createGBufferPipeline(std::map<std::string, Image>& renderTargets)
+	void Deferred::createGBufferPipeline(std::map<std::string, Image*>& renderTargets)
 	{
 		Shader vert{ "Shaders/Deferred/gBuffer.vert", ShaderType::Vertex, true };
 		Shader frag{ "Shaders/Deferred/gBuffer.frag", ShaderType::Fragment, true };
@@ -294,16 +295,16 @@ namespace pe
 		pipeline.info.pFragShader = &frag;
 		pipeline.info.vertexInputBindingDescriptions = Vertex::GetBindingDescriptionGeneral();
 		pipeline.info.vertexInputAttributeDescriptions = Vertex::GetAttributeDescriptionGeneral();
-		pipeline.info.width = renderTargets["albedo"].width_f;
-		pipeline.info.height = renderTargets["albedo"].height_f;
+		pipeline.info.width = renderTargets["albedo"]->width_f;
+		pipeline.info.height = renderTargets["albedo"]->height_f;
 		pipeline.info.cullMode = CullMode::Front;
 		pipeline.info.colorBlendAttachments =
 		{
-			renderTargets["normal"].blendAttachment,
-			renderTargets["albedo"].blendAttachment,
-			renderTargets["srm"].blendAttachment,
-			renderTargets["velocity"].blendAttachment,
-			renderTargets["emissive"].blendAttachment,
+			renderTargets["normal"]->blendAttachment,
+			renderTargets["albedo"]->blendAttachment,
+			renderTargets["srm"]->blendAttachment,
+			renderTargets["velocity"]->blendAttachment,
+			renderTargets["emissive"]->blendAttachment,
 		};
 		pipeline.info.descriptorSetLayouts =
 		{
@@ -316,7 +317,7 @@ namespace pe
 		pipeline.createGraphicsPipeline();
 	}
 	
-	void Deferred::createCompositionPipeline(std::map<std::string, Image>& renderTargets)
+	void Deferred::createCompositionPipeline(std::map<std::string, Image*>& renderTargets)
 	{
 		const std::vector<Define> definesFrag
 		{
@@ -332,11 +333,11 @@ namespace pe
 		
 		pipelineComposition.info.pVertShader = &vert;
 		pipelineComposition.info.pFragShader = &frag;
-		pipelineComposition.info.width = renderTargets["viewport"].width_f;
-		pipelineComposition.info.height = renderTargets["viewport"].height_f;
+		pipelineComposition.info.width = renderTargets["viewport"]->width_f;
+		pipelineComposition.info.height = renderTargets["viewport"]->height_f;
 		pipelineComposition.info.pushConstantStage = PushConstantStage::Fragment;
 		pipelineComposition.info.pushConstantSize = sizeof(mat4);
-		pipelineComposition.info.colorBlendAttachments = { renderTargets["viewport"].blendAttachment };
+		pipelineComposition.info.colorBlendAttachments = { renderTargets["viewport"]->blendAttachment };
 		pipelineComposition.info.descriptorSetLayouts =
 		{
 			Pipeline::getDescriptorSetLayoutComposition(),

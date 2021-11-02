@@ -24,6 +24,7 @@ SOFTWARE.
 #include "tinygltf/stb_image.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Image.h"
 
 namespace pe
 {
@@ -93,18 +94,18 @@ namespace pe
 		info.height = texHeight;
 		info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 		info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-		texture.CreateImage(info);
+		texture = Image::Create(info);
 
 		ImageViewCreateInfo viewInfo{};
-		viewInfo.image = &texture;
-		texture.CreateImageView(viewInfo);
+		viewInfo.image = texture;
+		texture->CreateImageView(viewInfo);
 
 		SamplerCreateInfo samplerInfo{};
-		texture.CreateSampler(samplerInfo);
+		texture->CreateSampler(samplerInfo);
 
-		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		texture.CopyBufferToImage(staging);
-		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		texture->TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		texture->CopyBufferToImage(staging);
+		texture->TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		
 		staging->Destroy();
 	}
@@ -139,8 +140,8 @@ namespace pe
 		
 		// texture sampler
 		VkDescriptorImageInfo dii;
-		dii.sampler = texture.sampler;
-		dii.imageView = texture.view;
+		dii.sampler = texture->sampler;
+		dii.imageView = texture->view;
 		dii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 		textureWriteSets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -156,7 +157,7 @@ namespace pe
 	
 	void Object::destroy()
 	{
-		texture.Destroy();
+		texture->Destroy();
 		vertexBuffer->Destroy();
 		indexBuffer->Destroy();
 		uniformBuffer->Destroy();

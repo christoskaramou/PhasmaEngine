@@ -22,11 +22,12 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Image.h"
 #include "Core/Math.h"
 
 namespace pe
 {
+	class Image;
+
 	enum class MaterialType
 	{
 		BaseColor,
@@ -46,10 +47,10 @@ namespace pe
 		bool doubleSided {};
 		uint16_t alphaMode {};
 		
-		Image baseColorTexture;
-		Image metallicRoughnessTexture;
-		Image normalTexture;
-		Image occlusionTexture;
-		Image emissiveTexture;
+		Image* baseColorTexture;
+		Image* metallicRoughnessTexture;
+		Image* normalTexture;
+		Image* occlusionTexture;
+		Image* emissiveTexture;
 	};
 }

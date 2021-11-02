@@ -28,6 +28,7 @@ SOFTWARE.
 #include "Renderer/Semaphore.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Fence.h"
+#include "Renderer/Image.h"
 
 
 #if defined(_WIN32)
@@ -529,12 +530,12 @@ namespace pe
 		if (info.format == VK_FORMAT_UNDEFINED)
 			throw std::runtime_error("Depth format is undefined");
 		
-		depth.CreateImage(info);
+		depth = Image::Create(info);
 
 		ImageViewCreateInfo viewInfo{};
-		viewInfo.image = &depth;
+		viewInfo.image = depth;
 		viewInfo.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-		depth.CreateImageView(viewInfo);
+		depth->CreateImageView(viewInfo);
 		
 		SamplerCreateInfo samplerInfo{};
 		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -543,11 +544,11 @@ namespace pe
 		samplerInfo.maxAnisotropy = 1.0f;
 		samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 		samplerInfo.compareEnable = VK_TRUE;
-		depth.CreateSampler(samplerInfo);
+		depth->CreateSampler(samplerInfo);
 
-		depth.name = "DepthImage";
+		depth->name = "DepthImage";
 		
-		depth.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		depth->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 	}
 	
 	void RHI::Init(SDL_Window* window)
@@ -583,7 +584,7 @@ namespace pe
 		for (auto& semaphore : semaphores)
 			semaphore->Destroy();
 		
-		depth.Destroy();
+		depth->Destroy();
 		
 		descriptorPool->Destroy();
 

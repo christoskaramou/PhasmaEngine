@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Pipeline.h"
-#include "Image.h"
 #include "Shadows.h"
 #include "Skybox/Skybox.h"
 #include "RenderPass.h"
@@ -32,6 +31,7 @@ namespace pe
 {
 	class Descriptor;
 	class FrameBuffer;
+	class Image;
 
 	class Deferred
 	{
@@ -45,7 +45,7 @@ namespace pe
 		Descriptor* DSComposition;
 		Pipeline pipeline;
 		Pipeline pipelineComposition;
-		Image ibl_brdf_lut;
+		Image* ibl_brdf_lut;
 		
 		struct UBO
 		{
@@ -57,27 +57,27 @@ namespace pe
 		
 		static void batchEnd();
 		
-		void createDeferredUniforms(std::map<std::string, Image>& renderTargets);
+		void createDeferredUniforms(std::map<std::string, Image*>& renderTargets);
 		
-		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
+		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
 		
 		void update(mat4& invViewProj);
 		
 		void draw(CommandBuffer* cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox);
 		
-		void createRenderPasses(std::map<std::string, Image>& renderTargets);
+		void createRenderPasses(std::map<std::string, Image*>& renderTargets);
 		
-		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
 		
-		void createGBufferFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createGBufferFrameBuffers(std::map<std::string, Image*>& renderTargets);
 		
-		void createCompositionFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createCompositionFrameBuffers(std::map<std::string, Image*>& renderTargets);
 		
-		void createPipelines(std::map<std::string, Image>& renderTargets);
+		void createPipelines(std::map<std::string, Image*>& renderTargets);
 		
-		void createGBufferPipeline(std::map<std::string, Image>& renderTargets);
+		void createGBufferPipeline(std::map<std::string, Image*>& renderTargets);
 		
-		void createCompositionPipeline(std::map<std::string, Image>& renderTargets);
+		void createCompositionPipeline(std::map<std::string, Image*>& renderTargets);
 		
 		void destroy();
 	};

@@ -24,7 +24,6 @@ SOFTWARE.
 
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
-#include "Renderer/Image.h"
 #include "Core/Math.h"
 #include "Systems/CameraSystem.h"
 #include "Renderer/RenderPass.h"
@@ -34,6 +33,7 @@ namespace pe
 {
 	class Descriptor;
 	class FrameBuffer;
+	class Image;
 
 	class TAA : public IComponent
 	{
@@ -47,8 +47,8 @@ namespace pe
 		RenderPass renderPass, renderPassSharpen;
 		Descriptor* DSet;
 		Descriptor* DSetSharpen;
-		Image previous;
-		Image frameImage;
+		Image* previous;
+		Image* frameImage;
 		
 		struct UBO
 		{
@@ -62,23 +62,23 @@ namespace pe
 		
 		void update(const Camera& camera);
 		
-		void createUniforms(std::map<std::string, Image>& renderTargets);
+		void createUniforms(std::map<std::string, Image*>& renderTargets);
 		
-		void updateDescriptorSets(std::map<std::string, Image>& renderTargets);
+		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
 		
-		void draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets);
+		void draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image*>& renderTargets);
 		
-		void createRenderPasses(std::map<std::string, Image>& renderTargets);
+		void createRenderPasses(std::map<std::string, Image*>& renderTargets);
 		
-		void createFrameBuffers(std::map<std::string, Image>& renderTargets);
+		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
 		
-		void createPipeline(std::map<std::string, Image>& renderTargets);
+		void createPipeline(std::map<std::string, Image*>& renderTargets);
 		
-		void createPipelineSharpen(std::map<std::string, Image>& renderTargets);
+		void createPipelineSharpen(std::map<std::string, Image*>& renderTargets);
 		
-		void createPipelines(std::map<std::string, Image>& renderTargets);
+		void createPipelines(std::map<std::string, Image*>& renderTargets);
 		
-		void saveImage(CommandBuffer* cmd, Image& source);
+		void saveImage(CommandBuffer* cmd, Image* source);
 		
 		void destroy();
 	};

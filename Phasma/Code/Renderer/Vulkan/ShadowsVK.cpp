@@ -30,6 +30,7 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
+#include "Renderer/Image.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
 #include "Core/Settings.h"
@@ -53,7 +54,7 @@ namespace pe
 		{
 			DescriptorUpdateInfo info{};
 			info.binding = i;
-			info.pImage = &textures[i];
+			info.pImage = textures[i];
 			info.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 			descriptorSetDeferred->UpdateDescriptor(1, &info);
 		}
@@ -67,7 +68,7 @@ namespace pe
 	void Shadows::createRenderPass()
 	{
 		Attachment attachment{};
-		attachment.format = RHII.depth.imageInfo.format;
+		attachment.format = RHII.depth->imageInfo.format;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -82,22 +83,22 @@ namespace pe
 	{
 		textures.resize(SHADOWMAP_CASCADES);
 		int textureIdx = 0;
-		for (auto& texture : textures)
+		for (auto*& texture : textures)
 		{
 			ImageCreateInfo info{};
-			info.format = RHII.depth.imageInfo.format;
+			info.format = RHII.depth->imageInfo.format;
 			info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			info.width = SHADOWMAP_SIZE;
 			info.height = SHADOWMAP_SIZE;
 			info.tiling = VK_IMAGE_TILING_OPTIMAL;
 			info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 			info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-			texture.CreateImage(info);
+			texture = Image::Create(info);
 
 			ImageViewCreateInfo viewInfo{};
-			viewInfo.image = &texture;
+			viewInfo.image = texture;
 			viewInfo.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-			texture.CreateImageView(viewInfo);
+			texture->CreateImageView(viewInfo);
 
 			SamplerCreateInfo samplerInfo{};
 			samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -107,9 +108,9 @@ namespace pe
 			samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 			samplerInfo.compareEnable = VK_TRUE;
 			samplerInfo.compareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
-			texture.CreateSampler(samplerInfo);
+			texture->CreateSampler(samplerInfo);
 
-			texture.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+			texture->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 		}
 
 		framebuffers.resize(RHII.swapchain.images.size() * textures.size());
@@ -117,7 +118,7 @@ namespace pe
 		{
 			uint32_t width = SHADOWMAP_SIZE;
 			uint32_t height = SHADOWMAP_SIZE;
-			ImageViewHandle view = textures[i % textures.size()].view;
+			ImageViewHandle view = textures[i % textures.size()]->view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}
@@ -133,7 +134,7 @@ namespace pe
 		pipeline.info.height = static_cast<float>(SHADOWMAP_SIZE);
 		pipeline.info.pushConstantStage = PushConstantStage::Vertex;
 		pipeline.info.pushConstantSize = sizeof(mat4);
-		pipeline.info.colorBlendAttachments = { textures[0].blendAttachment };
+		pipeline.info.colorBlendAttachments = { textures[0]->blendAttachment };
 		pipeline.info.dynamicStates = { VK_DYNAMIC_STATE_DEPTH_BIAS };
 		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutMesh(), Pipeline::getDescriptorSetLayoutModel() };
 		pipeline.info.renderPass = renderPass;
@@ -164,7 +165,7 @@ namespace pe
 		Pipeline::getDescriptorSetLayoutShadows()->Destroy();
 
 		for (auto& texture : textures)
-			texture.Destroy();
+			texture->Destroy();
 
 		for (auto fb : framebuffers)
 			fb->Destroy();

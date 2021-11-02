@@ -29,6 +29,7 @@ SOFTWARE.
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
+#include "Renderer/Image.h"
 
 namespace pe
 {
@@ -51,55 +52,55 @@ namespace pe
 		info.tiling = VK_IMAGE_TILING_OPTIMAL;
 		info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 		info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-		frameImage.CreateImage(info);
+		frameImage = Image::Create(info);
 
 		ImageViewCreateInfo viewInfo{};
-		viewInfo.image = &frameImage;
-		frameImage.CreateImageView(viewInfo);
+		viewInfo.image = frameImage;
+		frameImage->CreateImageView(viewInfo);
 
 		SamplerCreateInfo samplerInfo{};
-		frameImage.CreateSampler(samplerInfo);
+		frameImage->CreateSampler(samplerInfo);
 
-		frameImage.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		frameImage->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 	
-	void DOF::createRenderPass(std::map<std::string, Image>& renderTargets)
+	void DOF::createRenderPass(std::map<std::string, Image*>& renderTargets)
 	{
 		Attachment attachment{};
-		attachment.format = renderTargets["viewport"].imageInfo.format;
+		attachment.format = renderTargets["viewport"]->imageInfo.format;
 		renderPass.Create(attachment);
 	}
 	
-	void DOF::createFrameBuffers(std::map<std::string, Image>& renderTargets)
+	void DOF::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
 	{
 		framebuffers.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["viewport"].imageInfo.width;
-			uint32_t height = renderTargets["viewport"].imageInfo.height;
-			ImageViewHandle view = renderTargets["viewport"].view;
+			uint32_t width = renderTargets["viewport"]->imageInfo.width;
+			uint32_t height = renderTargets["viewport"]->imageInfo.height;
+			ImageViewHandle view = renderTargets["viewport"]->view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}
 	
-	void DOF::createUniforms(std::map<std::string, Image>& renderTargets)
+	void DOF::createUniforms(std::map<std::string, Image*>& renderTargets)
 	{
 		DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutDOF());
 		updateDescriptorSets(renderTargets);
 	}
 	
-	void DOF::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
+	void DOF::updateDescriptorSets(std::map<std::string, Image*>& renderTargets)
 	{
 		std::array<DescriptorUpdateInfo, 2> infos{};
 		infos[0].binding = 0;
-		infos[0].pImage = &frameImage;
+		infos[0].pImage = frameImage;
 		infos[1].binding = 1;
-		infos[1].pImage = &RHII.depth;
+		infos[1].pImage = RHII.depth;
 		infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 		DSet->UpdateDescriptor(2, infos.data());
 	}
 	
-	void DOF::draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image>& renderTargets)
+	void DOF::draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image*>& renderTargets)
 	{		
 		std::vector<float> values {GUI::DOF_focus_scale, GUI::DOF_blur_range, 0.0f, 0.0f};
 
@@ -111,17 +112,17 @@ namespace pe
 		cmd->EndPass();
 	}
 	
-	void DOF::createPipeline(std::map<std::string, Image>& renderTargets)
+	void DOF::createPipeline(std::map<std::string, Image*>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/DepthOfField/DOF.frag", ShaderType::Fragment, true};
 		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
-		pipeline.info.width = renderTargets["viewport"].width_f;
-		pipeline.info.height = renderTargets["viewport"].height_f;
+		pipeline.info.width = renderTargets["viewport"]->width_f;
+		pipeline.info.height = renderTargets["viewport"]->height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = { renderTargets["viewport"].blendAttachment };
+		pipeline.info.colorBlendAttachments = { renderTargets["viewport"]->blendAttachment };
 		pipeline.info.pushConstantStage = PushConstantStage::Fragment;
 		pipeline.info.pushConstantSize = 5 * sizeof(vec4);
 		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutDOF() };
@@ -138,7 +139,7 @@ namespace pe
 		
 		renderPass.Destroy();
 		Pipeline::getDescriptorSetLayoutDOF()->Destroy();
-		frameImage.Destroy();
+		frameImage->Destroy();
 		pipeline.destroy();
 	}
 }

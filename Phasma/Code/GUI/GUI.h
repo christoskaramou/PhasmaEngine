@@ -42,6 +42,7 @@ namespace pe
     class CommandBuffer;
     class Fence;
     class Semaphore;
+    class Image;
 
     class GUI
     {

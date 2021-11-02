@@ -111,7 +111,7 @@ namespace pe
 		SDL_Window* window;
 		Surface surface;
 		Swapchain swapchain;
-		Image depth;
+		Image* depth;
 		int graphicsFamilyId, computeFamilyId, transferFamilyId;
 
 		// Helpers

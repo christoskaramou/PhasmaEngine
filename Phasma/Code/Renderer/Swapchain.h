@@ -22,7 +22,7 @@ SOFTWARE.
 
 #pragma once
 
-#include "Image.h"
+#include "Core/Base.h"
 
 namespace pe
 {
@@ -32,6 +32,7 @@ namespace pe
 	class Surface;
 	class Semaphore;
 	class Fence;
+	class Image;
 	
 	class Swapchain
 	{
@@ -47,6 +48,6 @@ namespace pe
 		void Destroy();
 		
 		SwapchainHandle handle;
-		std::vector<Image> images {};
+		std::vector<Image*> images;
 	};
 }

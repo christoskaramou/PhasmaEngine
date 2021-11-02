@@ -28,6 +28,7 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Buffer.h"
+#include "Renderer/Image.h"
 #include "Core/Math.h"
 #include "Core/Settings.h"
 
@@ -145,8 +146,8 @@ namespace pe
 		}
 
 		vkCmdBlitImage(m_apiHandle,
-			srcImage->image, (VkImageLayout)srcImageLayout,
-			dstImage->image, (VkImageLayout)dstImageLayout,
+			srcImage->Handle(), (VkImageLayout)srcImageLayout,
+			dstImage->Handle(), (VkImageLayout)dstImageLayout,
 			regionCount, regions.data(),
 			(VkFilter)filter);
 	}

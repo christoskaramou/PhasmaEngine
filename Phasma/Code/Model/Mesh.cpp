@@ -25,11 +25,12 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Image.h"
 #include "Core/Path.h"
 
 namespace pe
 {
-	std::map<std::string, Image> Mesh::uniqueTextures {};
+	std::map<std::string, Image*> Mesh::uniqueTextures {};
 	
 	Primitive::Primitive() : pbrMaterial({})
 	{
@@ -100,7 +101,7 @@ namespace pe
 			path = folderPath + image->uri;
 		
 		// get the right texture
-		Image* tex;
+		Image** tex;
 		switch (type)
 		{
 			case MaterialType::BaseColor:
@@ -180,19 +181,19 @@ namespace pe
 			info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 			info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 			info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-			tex->CreateImage(info);
+			*tex = Image::Create(info);
 
 			ImageViewCreateInfo viewInfo{};
-			viewInfo.image = tex;
-			tex->CreateImageView(viewInfo);
+			viewInfo.image = *tex;
+			(*tex)->CreateImageView(viewInfo);
 
 			SamplerCreateInfo samplerInfo{};
 			samplerInfo.maxLod = static_cast<float>(info.mipLevels);
-			tex->CreateSampler(samplerInfo);
+			(*tex)->CreateSampler(samplerInfo);
 
-			tex->TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-			tex->CopyBufferToImage(staging);
-			tex->GenerateMipMaps();
+			(*tex)->TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			(*tex)->CopyBufferToImage(staging);
+			(*tex)->GenerateMipMaps();
 
 			
 			staging->Destroy();

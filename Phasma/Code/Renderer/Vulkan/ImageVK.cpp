@@ -76,9 +76,8 @@ namespace pe
 		layoutState = LayoutState::ColorRead;
 	}
 
-	Image::Image()
+	Image::Image(const ImageCreateInfo& info)
 	{
-		image = {};
 		view = {};
 		sampler = {};
 
@@ -86,71 +85,8 @@ namespace pe
 		viewInfo = {};
 		samplerInfo = {};
 
-		//samples = VK_SAMPLE_COUNT_1_BIT;
-		//layoutState = LayoutState::ColorWrite;
-		//format = VK_FORMAT_UNDEFINED;
-		//initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-		//tiling = VK_IMAGE_TILING_OPTIMAL;
-		//mipLevels = 1;
-		//arrayLayers = 1;
-		//anisotropyEnabled = VK_TRUE;
-		//minLod = 0.f;
-		//maxLod = 1.f;
-		//maxAnisotropy = 16.f;
-		//filter = VK_FILTER_LINEAR;
-		//imageCreateFlags = VkImageCreateFlags();
-		//viewType = VK_IMAGE_VIEW_TYPE_2D;
-		//addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		//borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-		//samplerCompareEnable = VK_FALSE;
-		//compareOp = VK_COMPARE_OP_LESS;
-		//samplerMipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 		blendAttachment = {};
-	}
 
-	Image::~Image()
-	{
-	}
-
-	void Image::TransitionImageLayout(
-		CommandBuffer* cmd,
-		ImageLayout oldLayout,
-		ImageLayout newLayout,
-		PipelineStageFlags oldStageMask,
-		PipelineStageFlags newStageMask,
-		AccessFlags srcMask,
-		AccessFlags dstMask
-	)
-	{
-		VkImageMemoryBarrier barrier{};
-		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier.srcAccessMask = srcMask;
-		barrier.dstAccessMask = dstMask;
-		barrier.image = image;
-		barrier.oldLayout = (VkImageLayout)oldLayout;
-		barrier.newLayout = (VkImageLayout)newLayout;
-		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.subresourceRange.aspectMask = viewInfo.aspectMask;
-		barrier.subresourceRange.baseMipLevel = 0;
-		barrier.subresourceRange.levelCount = imageInfo.mipLevels;
-		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.layerCount = imageInfo.arrayLayers;
-		if (imageInfo.format == VkFormat::VK_FORMAT_D32_SFLOAT_S8_UINT || imageInfo.format == VK_FORMAT_D24_UNORM_S8_UINT)
-			barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-
-		vkCmdPipelineBarrier(
-			cmd->Handle(),
-			oldStageMask,
-			newStageMask,
-			VK_DEPENDENCY_BY_REGION_BIT,
-			0, nullptr,
-			0, nullptr,
-			1, &barrier);
-	}
-
-	void Image::CreateImage(const ImageCreateInfo& info)
-	{
 		imageInfo = info;
 
 		VkImageUsageFlags _usage = imageInfo.usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT; // All images can be copied
@@ -209,7 +145,66 @@ namespace pe
 		VmaAllocationInfo allocationInfo;
 		VkImage vkImage;
 		vmaCreateImage(RHII.allocator, &imageInfoVK, &allocationCreateInfo, &vkImage, &allocation, &allocationInfo);
-		image = vkImage;
+		m_apiHandle = vkImage;
+	}
+
+
+	Image::~Image()
+	{
+		if (VkImageView(view))
+		{
+			vkDestroyImageView(RHII.device, view, nullptr);
+			view = {};
+		}
+
+		if (m_apiHandle)
+		{
+			vmaDestroyImage(RHII.allocator, m_apiHandle, allocation);
+			m_apiHandle = {};
+		}
+
+		if (VkSampler(sampler))
+		{
+			vkDestroySampler(RHII.device, sampler, nullptr);
+			sampler = {};
+		}
+	}
+
+	void Image::TransitionImageLayout(
+		CommandBuffer* cmd,
+		ImageLayout oldLayout,
+		ImageLayout newLayout,
+		PipelineStageFlags oldStageMask,
+		PipelineStageFlags newStageMask,
+		AccessFlags srcMask,
+		AccessFlags dstMask
+	)
+	{
+		VkImageMemoryBarrier barrier{};
+		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.srcAccessMask = srcMask;
+		barrier.dstAccessMask = dstMask;
+		barrier.image = m_apiHandle;
+		barrier.oldLayout = (VkImageLayout)oldLayout;
+		barrier.newLayout = (VkImageLayout)newLayout;
+		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.subresourceRange.aspectMask = viewInfo.aspectMask;
+		barrier.subresourceRange.baseMipLevel = 0;
+		barrier.subresourceRange.levelCount = imageInfo.mipLevels;
+		barrier.subresourceRange.baseArrayLayer = 0;
+		barrier.subresourceRange.layerCount = imageInfo.arrayLayers;
+		if (imageInfo.format == VkFormat::VK_FORMAT_D32_SFLOAT_S8_UINT || imageInfo.format == VK_FORMAT_D24_UNORM_S8_UINT)
+			barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+
+		vkCmdPipelineBarrier(
+			cmd->Handle(),
+			oldStageMask,
+			newStageMask,
+			VK_DEPENDENCY_BY_REGION_BIT,
+			0, nullptr,
+			0, nullptr,
+			1, &barrier);
 	}
 
 	void Image::CreateImageView(const ImageViewCreateInfo& info)
@@ -217,7 +212,7 @@ namespace pe
 		viewInfo = info;
 		VkImageViewCreateInfo viewInfoVK{};
 		viewInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		viewInfoVK.image = info.image->image;
+		viewInfoVK.image = info.image->m_apiHandle;
 		viewInfoVK.viewType = (VkImageViewType)viewInfo.viewType;
 		viewInfoVK.format = (VkFormat)imageInfo.format;
 		viewInfoVK.subresourceRange = 
@@ -246,7 +241,7 @@ namespace pe
 		barrier.newLayout = (VkImageLayout)newLayout;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.image = image;
+		barrier.image = m_apiHandle;
 
 		VkPipelineStageFlags srcStage;
 		VkPipelineStageFlags dstStage;
@@ -411,14 +406,14 @@ namespace pe
 		region.imageOffset = VkOffset3D{ 0, 0, 0 };
 		region.imageExtent = VkExtent3D{ imageInfo.width, imageInfo.height, imageInfo.depth };
 
-		vkCmdCopyBufferToImage(cmd[0]->Handle(), buffer->Handle(), image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+		vkCmdCopyBufferToImage(cmd[0]->Handle(), buffer->Handle(), m_apiHandle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 		cmd[0]->End();
 		RHII.SubmitAndWaitFence(1, cmd.data(), nullptr, 0, nullptr, 0, nullptr);
 		cmd[0]->Destroy();
 	}
 
-	void Image::CopyColorAttachment(CommandBuffer* cmd, Image& renderedImage)
+	void Image::CopyColorAttachment(CommandBuffer* cmd, Image* renderedImage)
 	{
 		TransitionImageLayout(
 			cmd,
@@ -429,7 +424,7 @@ namespace pe
 			VK_ACCESS_SHADER_READ_BIT,
 			VK_ACCESS_TRANSFER_WRITE_BIT
 		);
-		renderedImage.TransitionImageLayout(
+		renderedImage->TransitionImageLayout(
 			cmd,
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -443,17 +438,17 @@ namespace pe
 		VkImageCopy region{};
 		region.srcSubresource.aspectMask = viewInfo.aspectMask;
 		region.srcSubresource.layerCount = imageInfo.arrayLayers;
-		region.dstSubresource.aspectMask = renderedImage.viewInfo.aspectMask;
-		region.dstSubresource.layerCount = renderedImage.imageInfo.arrayLayers;
-		region.extent.width = renderedImage.imageInfo.width;
-		region.extent.height = renderedImage.imageInfo.height;
-		region.extent.depth = renderedImage.imageInfo.depth;
+		region.dstSubresource.aspectMask = renderedImage->viewInfo.aspectMask;
+		region.dstSubresource.layerCount = renderedImage->imageInfo.arrayLayers;
+		region.extent.width = renderedImage->imageInfo.width;
+		region.extent.height = renderedImage->imageInfo.height;
+		region.extent.depth = renderedImage->imageInfo.depth;
 
 		vkCmdCopyImage(
 			cmd->Handle(),
-			renderedImage.image,
+			renderedImage->m_apiHandle,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-			image,
+			m_apiHandle,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1, &region);
 
@@ -466,7 +461,7 @@ namespace pe
 			VK_ACCESS_TRANSFER_WRITE_BIT,
 			VK_ACCESS_SHADER_READ_BIT
 		);
-		renderedImage.TransitionImageLayout(
+		renderedImage->TransitionImageLayout(
 			cmd,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -510,7 +505,7 @@ namespace pe
 
 		VkImageMemoryBarrier barrier{};
 		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier.image = image;
+		barrier.image = m_apiHandle;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -554,8 +549,8 @@ namespace pe
 
 			vkCmdBlitImage(
 				commandBuffers[i]->Handle(),
-				image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				m_apiHandle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				m_apiHandle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				1, &blit,
 				VK_FILTER_LINEAR);
 
@@ -631,16 +626,6 @@ namespace pe
 		VkSampler vkSampler;
 		vkCreateSampler(RHII.device, &samplerInfoVK, nullptr, &vkSampler);
 		sampler = vkSampler;
-	}
-
-	void Image::Destroy()
-	{
-		if (VkImageView(view)) vkDestroyImageView(RHII.device, view, nullptr);
-		if (VkImage(image)) vmaDestroyImage(RHII.allocator, image, allocation);
-		if (VkSampler(sampler)) vkDestroySampler(RHII.device, sampler, nullptr);
-		view = {};
-		image = {};
-		sampler = {};
 	}
 }
 #endif

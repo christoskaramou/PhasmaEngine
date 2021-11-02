@@ -26,6 +26,7 @@ SOFTWARE.
 #include "tinygltf/stb_image.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Image.h"
 
 namespace pe
 {
@@ -44,7 +45,7 @@ namespace pe
 
 		DescriptorUpdateInfo info{};
 		info.binding = 0;
-		info.pImage = &texture;
+		info.pImage = texture;
 		descriptorSet->UpdateDescriptor(1, &info);
 	}
 	
@@ -66,22 +67,22 @@ namespace pe
 		info.height = imageSideSize;
 		info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 		info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-		texture.CreateImage(info);
+		texture = Image::Create(info);
 
 		ImageViewCreateInfo viewInfo{};
-		viewInfo.image = &texture;
+		viewInfo.image = texture;
 		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-		texture.CreateImageView(viewInfo);
+		texture->CreateImageView(viewInfo);
 
 		SamplerCreateInfo samplerInfo{};
 		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		texture.CreateSampler(samplerInfo);
+		texture->CreateSampler(samplerInfo);
 
-		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		texture->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-		for (uint32_t i = 0; i < texture.imageInfo.arrayLayers; ++i)
+		for (uint32_t i = 0; i < texture->imageInfo.arrayLayers; ++i)
 		{
 			// Texture Load
 			int texWidth, texHeight, texChannels;
@@ -104,16 +105,16 @@ namespace pe
 			
 			stbi_image_free(pixels);
 			
-			texture.CopyBufferToImage(staging, i);
+			texture->CopyBufferToImage(staging, i);
 			staging->Destroy();
 		}
 
-		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		texture->TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 	
 	void SkyBox::destroy()
 	{
-		texture.Destroy();
+		texture->Destroy();
 		Pipeline::getDescriptorSetLayoutSkybox()->Destroy();
 	}
 }

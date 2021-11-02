@@ -42,6 +42,7 @@ SOFTWARE.
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Framebuffer.h"
+#include "Renderer/Image.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl.h"
@@ -714,7 +715,7 @@ namespace pe
 		{
 			uint32_t width = WIDTH;
 			uint32_t height = HEIGHT;
-			ImageViewHandle view = RHII.swapchain.images[i].view;
+			ImageViewHandle view = RHII.swapchain.images[i]->view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}

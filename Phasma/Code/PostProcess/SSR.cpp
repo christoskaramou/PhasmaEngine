@@ -30,6 +30,7 @@ SOFTWARE.
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
+#include "Renderer/Image.h"
 
 namespace pe
 {
@@ -42,7 +43,7 @@ namespace pe
 	{
 	}
 	
-	void SSR::createSSRUniforms(std::map<std::string, Image>& renderTargets)
+	void SSR::createSSRUniforms(std::map<std::string, Image*>& renderTargets)
 	{
 		UBReflection = Buffer::Create(
 			4 * sizeof(mat4),
@@ -58,22 +59,22 @@ namespace pe
 		updateDescriptorSets(renderTargets);
 	}
 	
-	void SSR::updateDescriptorSets(std::map<std::string, Image>& renderTargets)
+	void SSR::updateDescriptorSets(std::map<std::string, Image*>& renderTargets)
 	{
 		std::array<DescriptorUpdateInfo, 5> infos{};
 
 		infos[0].binding = 0;
-		infos[0].pImage = &renderTargets["albedo"];
+		infos[0].pImage = renderTargets["albedo"];
 
 		infos[1].binding = 1;
-		infos[1].pImage = &RHII.depth;
+		infos[1].pImage = RHII.depth;
 		infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
 		infos[2].binding = 2;
-		infos[2].pImage = &renderTargets["normal"];
+		infos[2].pImage = renderTargets["normal"];
 
 		infos[3].binding = 3;
-		infos[3].pImage = &renderTargets["srm"];
+		infos[3].pImage = renderTargets["srm"];
 
 		infos[4].binding = 4;
 		infos[4].pBuffer = UBReflection;
@@ -107,36 +108,36 @@ namespace pe
 		cmd->EndPass();
 	}
 	
-	void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
+	void SSR::createRenderPass(std::map<std::string, Image*>& renderTargets)
 	{
 		Attachment attachment{};
-		attachment.format = renderTargets["ssr"].imageInfo.format;
+		attachment.format = renderTargets["ssr"]->imageInfo.format;
 		renderPass.Create(attachment);
 	}
 	
-	void SSR::createFrameBuffers(std::map<std::string, Image>& renderTargets)
+	void SSR::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
 	{
 		framebuffers.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["ssr"].imageInfo.width;
-			uint32_t height = renderTargets["ssr"].imageInfo.height;
-			ImageViewHandle view = renderTargets["ssr"].view;
+			uint32_t width = renderTargets["ssr"]->imageInfo.width;
+			uint32_t height = renderTargets["ssr"]->imageInfo.height;
+			ImageViewHandle view = renderTargets["ssr"]->view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}
 	
-	void SSR::createPipeline(std::map<std::string, Image>& renderTargets)
+	void SSR::createPipeline(std::map<std::string, Image*>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/SSR/ssr.frag", ShaderType::Fragment, true};
 		
 		pipeline.info.pVertShader = &vert;
 		pipeline.info.pFragShader = &frag;
-		pipeline.info.width = renderTargets["ssr"].width_f;
-		pipeline.info.height = renderTargets["ssr"].height_f;
+		pipeline.info.width = renderTargets["ssr"]->width_f;
+		pipeline.info.height = renderTargets["ssr"]->height_f;
 		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = { renderTargets["ssr"].blendAttachment };
+		pipeline.info.colorBlendAttachments = { renderTargets["ssr"]->blendAttachment };
 		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSR() };
 		pipeline.info.renderPass = renderPass;
 		

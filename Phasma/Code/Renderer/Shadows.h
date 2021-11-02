@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Buffer.h"
-#include "Image.h"
 #include "Pipeline.h"
 #include "Core/Math.h"
 #include "Systems/CameraSystem.h"
@@ -37,6 +36,7 @@ namespace pe
 
 	class Descriptor;
 	class FrameBuffer;
+	class Image;
 
 	class Shadows
 	{
@@ -48,7 +48,7 @@ namespace pe
 		mat4 cascades[SHADOWMAP_CASCADES];
 		vec4 viewZ;
 		RenderPass renderPass;
-		std::vector<Image> textures {};
+		std::vector<Image*> textures {};
 		Descriptor* descriptorSetDeferred;
 		std::vector<FrameBuffer*> framebuffers {};
 		Buffer* uniformBuffer;

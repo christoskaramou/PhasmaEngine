@@ -26,6 +26,7 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/Image.h"
 #include "Model/Mesh.h"
 #include "Systems/PostProcessSystem.h"
 
@@ -214,7 +215,7 @@ namespace pe
 		RHII.WaitDeviceIdle();
 
 		for (auto& rt : renderTargets)
-			rt.second.Destroy();
+			rt.second->Destroy();
 
 		if (Model::models.empty())
 		{
@@ -230,7 +231,7 @@ namespace pe
 		for (auto& model : Model::models)
 			model.destroy();
 		for (auto& texture : Mesh::uniqueTextures)
-			texture.second.Destroy();
+			texture.second->Destroy();
 		Mesh::uniqueTextures.clear();
 
 		Compute::DestroyResources();

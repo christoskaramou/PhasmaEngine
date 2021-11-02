@@ -22,12 +22,13 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
 #include "Core/Math.h"
 
 namespace pe
 {
+	class Image;
+
 	class Object
 	{
 	public:
@@ -37,7 +38,7 @@ namespace pe
 		
 		bool render = true, cull = false;
 		DescriptorSetHandle descriptorSet;
-		Image texture;
+		Image* texture;
 		std::vector<float> vertices {};
 		Buffer* vertexBuffer;
 		Buffer* indexBuffer;

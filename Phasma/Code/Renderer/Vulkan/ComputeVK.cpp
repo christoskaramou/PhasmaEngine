@@ -27,6 +27,7 @@ SOFTWARE.
 #include "Renderer/Command.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
+#include "Renderer/Image.h"
 
 namespace pe
 {

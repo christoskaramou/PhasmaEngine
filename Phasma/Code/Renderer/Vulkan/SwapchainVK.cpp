@@ -23,6 +23,9 @@ SOFTWARE.
 #if PE_VULKAN
 #include "Renderer/Swapchain.h"
 #include "Renderer/RHI.h"
+#include "Renderer/Image.h"
+#include "Renderer/Semaphore.h"
+#include "Renderer/Fence.h"
 #include "Core/Math.h"
 #include "ECS/Context.h"
 
@@ -31,6 +34,7 @@ namespace pe
 	Swapchain::Swapchain()
 	{
 		handle = {};
+		images = {};
 	}
 	
 	Swapchain::~Swapchain()
@@ -89,16 +93,17 @@ namespace pe
 		newSwapchain.images.resize(images.size());
 		for (unsigned i = 0; i < images.size(); i++)
 		{
-			newSwapchain.images[i].image = images[i];
-			newSwapchain.images[i].TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-			newSwapchain.images[i].blendAttachment.blendEnable = VK_TRUE;
-			newSwapchain.images[i].blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-			newSwapchain.images[i].blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-			newSwapchain.images[i].blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-			newSwapchain.images[i].blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-			newSwapchain.images[i].blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-			newSwapchain.images[i].blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-			newSwapchain.images[i].blendAttachment.colorWriteMask =
+			newSwapchain.images[i] = new Image();
+			newSwapchain.images[i]->Handle() = images[i];
+			newSwapchain.images[i]->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+			newSwapchain.images[i]->blendAttachment.blendEnable = VK_TRUE;
+			newSwapchain.images[i]->blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+			newSwapchain.images[i]->blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+			newSwapchain.images[i]->blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+			newSwapchain.images[i]->blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+			newSwapchain.images[i]->blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+			newSwapchain.images[i]->blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+			newSwapchain.images[i]->blendAttachment.colorWriteMask =
 				VK_COLOR_COMPONENT_R_BIT |
 				VK_COLOR_COMPONENT_G_BIT |
 				VK_COLOR_COMPONENT_B_BIT |
@@ -106,18 +111,18 @@ namespace pe
 		}
 		
 		// create image views for each swapchain image
-		for (auto& image : newSwapchain.images)
+		for (auto* image : newSwapchain.images)
 		{
 			VkImageViewCreateInfo imageViewCreateInfo{};
 			imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			imageViewCreateInfo.image = image.image;
+			imageViewCreateInfo.image = image->Handle();
 			imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 			imageViewCreateInfo.format = (VkFormat)RHII.surface.format;
 			imageViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
 			VkImageView imageView;
 			vkCreateImageView(RHII.device, &imageViewCreateInfo, nullptr, &imageView);
-			image.view = imageView;
+			image->view = imageView;
 		}
 		
 		*this = newSwapchain;
@@ -136,15 +141,17 @@ namespace pe
 	
 	void Swapchain::Destroy()
 	{
-		for (auto& image : images)
-		{
-			vkDestroyImageView(RHII.device, image.view, nullptr);
-			image.view = {};
-		}
 		if (handle)
 		{
 			vkDestroySwapchainKHR(RHII.device, handle, nullptr);
 			handle = {};
+		}
+
+		for (auto* image : images)
+		{
+			vkDestroyImageView(RHII.device, image->view, nullptr);
+			image->view = {};
+			delete image;
 		}
 	}
 }

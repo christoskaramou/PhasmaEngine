@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Image.h"
 #include "Renderer/Surface.h"
 #include "Renderer/Swapchain.h"
 #include "GUI/GUI.h"
@@ -38,6 +37,9 @@ SOFTWARE.
 
 namespace pe
 {
+	class CommandBuffer;
+	class Image;
+
 	class Viewport
 	{
 	public:
@@ -58,7 +60,6 @@ namespace pe
 		void Update(float x, float y, float w, float h, float minDepth = 0.f, float maxDepth = 1.f);
 	};
 
-	class CommandBuffer;
 	class Renderer
 	{
 	protected:
@@ -89,13 +90,13 @@ namespace pe
 		
 		void ResizeViewport(uint32_t width, uint32_t height);
 
-		void BlitToViewport(CommandBuffer* cmd, Image& renderedImage, uint32_t imageIndex);
+		void BlitToViewport(CommandBuffer* cmd, Image* renderedImage, uint32_t imageIndex);
 		
 		void RecreatePipelines();
 
-		std::map<std::string, Image>& GetRenderTargets() { return renderTargets; }
+		std::map<std::string, Image*>& GetRenderTargets() { return renderTargets; }
 
-		std::map<std::string, Image> renderTargets {};
+		std::map<std::string, Image*> renderTargets {};
 	
 	protected:		
 		static void CheckQueue();
