@@ -87,18 +87,24 @@ namespace pe
 		
 		stbi_image_free(pixels);
 		
-		texture.format = VK_FORMAT_R8G8B8A8_UNORM;
-		texture.mipLevels = 1;
-		texture.CreateImage(
-			texWidth, texHeight, VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-		);
+		ImageCreateInfo info{};
+		info.format = VK_FORMAT_R8G8B8A8_UNORM;
+		info.width = texWidth;
+		info.height = texHeight;
+		info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+		texture.CreateImage(info);
+
+		ImageViewCreateInfo viewInfo{};
+		viewInfo.image = &texture;
+		texture.CreateImageView(viewInfo);
+
+		SamplerCreateInfo samplerInfo{};
+		texture.CreateSampler(samplerInfo);
+
 		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 		texture.CopyBufferToImage(staging);
 		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		texture.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
-		texture.CreateSampler();
 		
 		staging->Destroy();
 	}

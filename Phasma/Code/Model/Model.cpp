@@ -609,9 +609,10 @@ namespace pe
 		
 		// Generate local node matrix
 		if (!node.HasValidTransformType())
-			throw glTF::InvalidGLTFException(
-					"Node " + node.name + " has Invalid TransformType"
-			);
+		{
+			throw glTF::InvalidGLTFException("Node " + node.name + " has Invalid TransformType");
+			delete newNode;
+		}
 		newNode->transformationType = static_cast<TransformationType>(node.GetTransformationType());
 		newNode->translation = vec3(&node.translation.x);
 		newNode->scale = vec3(&node.scale.x);

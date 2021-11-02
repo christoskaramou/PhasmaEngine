@@ -45,31 +45,45 @@ namespace pe
 	
 	void TAA::Init()
 	{
-		previous.format = RHII.surface.format;
-		previous.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		previous.CreateImage(
-			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-		);
+		// Previous Image
+		ImageCreateInfo info{};
+		info.format = RHII.surface.format;
+		info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
+		info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+		info.tiling = VK_IMAGE_TILING_OPTIMAL;
+		info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+		previous.CreateImage(info);
+
+		ImageViewCreateInfo viewInfo{};
+		viewInfo.image = &previous;
+		previous.CreateImageView(viewInfo);
+
+		SamplerCreateInfo samplerInfo{};
+		previous.CreateSampler(samplerInfo);
+
 		previous.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		previous.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
-		previous.CreateSampler();
 		
-		frameImage.format = RHII.surface.format;
-		frameImage.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		frameImage.CreateImage(
-			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-		);
+		// Frame Image
+		ImageCreateInfo info1{};
+		info1.format = RHII.surface.format;
+		info1.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		info1.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
+		info1.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+		info1.tiling = VK_IMAGE_TILING_OPTIMAL;
+		info1.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		info1.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+		frameImage.CreateImage(info1);
+
+		ImageViewCreateInfo viewInfo1{};
+		viewInfo1.image = &frameImage;
+		frameImage.CreateImageView(viewInfo1);
+
+		SamplerCreateInfo samplerInfo1{};
+		frameImage.CreateSampler(samplerInfo1);
+
 		frameImage.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		frameImage.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
-		frameImage.CreateSampler();
 	}
 	
 	void TAA::update(const Camera& camera)
@@ -160,10 +174,10 @@ namespace pe
 	void TAA::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
 		Attachment attachment{};
-		attachment.format = renderTargets["taa"].format;
+		attachment.format = renderTargets["taa"].imageInfo.format;
 		renderPass.Create(attachment);
 
-		attachment.format = renderTargets["viewport"].format;
+		attachment.format = renderTargets["viewport"].imageInfo.format;
 		renderPassSharpen.Create(attachment);
 	}
 	
@@ -172,8 +186,8 @@ namespace pe
 		framebuffers.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["taa"].width;
-			uint32_t height = renderTargets["taa"].height;
+			uint32_t width = renderTargets["taa"].imageInfo.width;
+			uint32_t height = renderTargets["taa"].imageInfo.height;
 			ImageViewHandle view = renderTargets["taa"].view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
@@ -181,8 +195,8 @@ namespace pe
 		framebuffersSharpen.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["viewport"].width;
-			uint32_t height = renderTargets["viewport"].height;
+			uint32_t width = renderTargets["viewport"].imageInfo.width;
+			uint32_t height = renderTargets["viewport"].imageInfo.height;
 			ImageViewHandle view = renderTargets["viewport"].view;
 			framebuffersSharpen[i] = FrameBuffer::Create(width, height, view, renderPassSharpen);
 		}
@@ -237,18 +251,16 @@ namespace pe
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
 			VK_ACCESS_SHADER_READ_BIT,
-			VK_ACCESS_TRANSFER_WRITE_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT
+			VK_ACCESS_TRANSFER_WRITE_BIT
 		);
 		source.TransitionImageLayout(
 			cmd,
-			source.layoutState == LayoutState::ColorRead ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			source.imageInfo.layoutState == LayoutState::ColorRead ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-			source.layoutState == LayoutState::ColorRead ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			source.imageInfo.layoutState == LayoutState::ColorRead ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			source.layoutState == LayoutState::ColorRead ? VK_ACCESS_SHADER_READ_BIT : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_ACCESS_TRANSFER_READ_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT
+			source.imageInfo.layoutState == LayoutState::ColorRead ? VK_ACCESS_SHADER_READ_BIT : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_ACCESS_TRANSFER_READ_BIT
 		);
 		
 		// copy the image
@@ -257,8 +269,8 @@ namespace pe
 		region.srcSubresource.layerCount = 1;
 		region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		region.dstSubresource.layerCount = 1;
-		region.extent.width = source.width;
-		region.extent.height = source.height;
+		region.extent.width = source.imageInfo.width;
+		region.extent.height = source.imageInfo.height;
 		region.extent.depth = 1;
 		
 		vkCmdCopyImage(
@@ -277,8 +289,7 @@ namespace pe
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			VK_ACCESS_TRANSFER_WRITE_BIT,
-			VK_ACCESS_SHADER_READ_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT
+			VK_ACCESS_SHADER_READ_BIT
 		);
 		source.TransitionImageLayout(
 			cmd,
@@ -287,10 +298,9 @@ namespace pe
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			VK_ACCESS_TRANSFER_READ_BIT,
-			VK_ACCESS_SHADER_READ_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT
+			VK_ACCESS_SHADER_READ_BIT
 		);
-		source.layoutState = LayoutState::ColorRead;
+		source.imageInfo.layoutState = LayoutState::ColorRead;
 	}
 	
 	void TAA::destroy()

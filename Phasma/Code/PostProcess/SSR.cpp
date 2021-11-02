@@ -110,7 +110,7 @@ namespace pe
 	void SSR::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
 		Attachment attachment{};
-		attachment.format = renderTargets["ssr"].format;
+		attachment.format = renderTargets["ssr"].imageInfo.format;
 		renderPass.Create(attachment);
 	}
 	
@@ -119,8 +119,8 @@ namespace pe
 		framebuffers.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["ssr"].width;
-			uint32_t height = renderTargets["ssr"].height;
+			uint32_t width = renderTargets["ssr"].imageInfo.width;
+			uint32_t height = renderTargets["ssr"].imageInfo.height;
 			ImageViewHandle view = renderTargets["ssr"].view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}

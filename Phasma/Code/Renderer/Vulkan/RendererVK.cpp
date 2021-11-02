@@ -301,20 +301,25 @@ namespace pe
 		if (renderTargets.find(name) != renderTargets.end())
 			return;
 		
+		ImageCreateInfo info{};
+		info.format = format;
+		info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
+		info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+		info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | additionalFlags;
+		info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 		renderTargets[name] = Image();
 		renderTargets[name].name = name;
-		renderTargets[name].format = format;
-		renderTargets[name].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		renderTargets[name].CreateImage(
-			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | additionalFlags,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-		);
+		renderTargets[name].CreateImage(info);
+
+		ImageViewCreateInfo viewInfo{};
+		viewInfo.image = &renderTargets[name];
+		renderTargets[name].CreateImageView(viewInfo);
+
+		SamplerCreateInfo samplerInfo{};
+		renderTargets[name].CreateSampler(samplerInfo);
+
 		renderTargets[name].TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-		renderTargets[name].CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
-		renderTargets[name].CreateSampler();
+		renderTargets[name].imageInfo.layoutState = LayoutState::ColorWrite;
 		
 		//std::string str = to_string(format); str.find("A8") != std::string::npos
 		renderTargets[name].blendAttachment.blendEnable = name == "albedo" ? VK_TRUE : VK_FALSE;
@@ -606,8 +611,7 @@ namespace pe
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
 			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_ACCESS_TRANSFER_READ_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT
+			VK_ACCESS_TRANSFER_READ_BIT
 		);
 		s_chain_Image.TransitionImageLayout(
 			cmd,
@@ -616,12 +620,11 @@ namespace pe
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
 			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
-			VK_ACCESS_TRANSFER_WRITE_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT
+			VK_ACCESS_TRANSFER_WRITE_BIT
 		);
 		
 		ImageBlit blit{};
-		blit.srcOffsets[0] = Offset3D{ static_cast<int32_t>(renderedImage.width), static_cast<int32_t>(renderedImage.height), 0 };
+		blit.srcOffsets[0] = Offset3D{ static_cast<int32_t>(renderedImage.imageInfo.width), static_cast<int32_t>(renderedImage.imageInfo.height), 0 };
 		blit.srcOffsets[1] = Offset3D{ 0, 0, 1 };
 		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		blit.srcSubresource.layerCount = 1;
@@ -644,8 +647,7 @@ namespace pe
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			VK_ACCESS_TRANSFER_READ_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
 		);
 		s_chain_Image.TransitionImageLayout(
 			cmd,
@@ -654,8 +656,7 @@ namespace pe
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			VK_ACCESS_TRANSFER_WRITE_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
-			VK_IMAGE_ASPECT_COLOR_BIT
+			VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
 		);
 	}
 	

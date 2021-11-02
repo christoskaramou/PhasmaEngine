@@ -43,24 +43,30 @@ namespace pe
 	
 	void DOF::Init()
 	{
-		frameImage.format = RHII.surface.format;
-		frameImage.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		frameImage.CreateImage(
-			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-		);
+		ImageCreateInfo info{};
+		info.format = RHII.surface.format;
+		info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
+		info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+		info.tiling = VK_IMAGE_TILING_OPTIMAL;
+		info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+		frameImage.CreateImage(info);
+
+		ImageViewCreateInfo viewInfo{};
+		viewInfo.image = &frameImage;
+		frameImage.CreateImageView(viewInfo);
+
+		SamplerCreateInfo samplerInfo{};
+		frameImage.CreateSampler(samplerInfo);
+
 		frameImage.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		frameImage.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
-		frameImage.CreateSampler();
 	}
 	
 	void DOF::createRenderPass(std::map<std::string, Image>& renderTargets)
 	{
 		Attachment attachment{};
-		attachment.format = renderTargets["viewport"].format;
+		attachment.format = renderTargets["viewport"].imageInfo.format;
 		renderPass.Create(attachment);
 	}
 	
@@ -69,8 +75,8 @@ namespace pe
 		framebuffers.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["viewport"].width;
-			uint32_t height = renderTargets["viewport"].height;
+			uint32_t width = renderTargets["viewport"].imageInfo.width;
+			uint32_t height = renderTargets["viewport"].imageInfo.height;
 			ImageViewHandle view = renderTargets["viewport"].view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}

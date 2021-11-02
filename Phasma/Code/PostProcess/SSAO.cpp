@@ -64,20 +64,31 @@ namespace pe
 		staging->Flush();
 		staging->Unmap();
 		
-		noiseTex.filter = VK_FILTER_NEAREST;
-		noiseTex.minLod = 0.0f;
-		noiseTex.maxLod = 0.0f;
-		noiseTex.maxAnisotropy = 1.0f;
-		noiseTex.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-		noiseTex.CreateImage(
-			4, 4, VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		ImageCreateInfo info{};
+		info.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+		info.width = 4;
+		info.height = 4;
+		info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+		info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+		noiseTex.CreateImage(info);
+
+		ImageViewCreateInfo viewInfo{};
+		viewInfo.image = &noiseTex;
+		noiseTex.CreateImageView(viewInfo);
+
+		SamplerCreateInfo samplerInfo{};
+		samplerInfo.minFilter = VK_FILTER_NEAREST;
+		samplerInfo.magFilter = VK_FILTER_NEAREST;
+		samplerInfo.minLod = 0.0f;
+		samplerInfo.maxLod = 0.0f;
+		samplerInfo.maxAnisotropy = 1.0f;
+		noiseTex.CreateSampler(samplerInfo);
+
 		noiseTex.TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 		noiseTex.CopyBufferToImage(staging);
 		noiseTex.TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		noiseTex.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
-		noiseTex.CreateSampler();
+
 		staging->Destroy();
 		// pvm uniform
 		UB_PVM = Buffer::Create(3 * sizeof(mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
@@ -180,10 +191,10 @@ namespace pe
 	void SSAO::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
 		Attachment attachment{};
-		attachment.format = renderTargets["ssao"].format;
+		attachment.format = renderTargets["ssao"].imageInfo.format;
 		renderPass.Create(attachment);
 
-		attachment.format = renderTargets["ssaoBlur"].format;
+		attachment.format = renderTargets["ssaoBlur"].imageInfo.format;
 		blurRenderPass.Create(attachment);
 	}
 	
@@ -198,8 +209,8 @@ namespace pe
 		framebuffers.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["ssao"].width;
-			uint32_t height = renderTargets["ssao"].height;
+			uint32_t width = renderTargets["ssao"].imageInfo.width;
+			uint32_t height = renderTargets["ssao"].imageInfo.height;
 			ImageViewHandle view = renderTargets["ssao"].view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
@@ -210,8 +221,8 @@ namespace pe
 		blurFramebuffers.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["ssaoBlur"].width;
-			uint32_t height = renderTargets["ssaoBlur"].height;
+			uint32_t width = renderTargets["ssaoBlur"].imageInfo.width;
+			uint32_t height = renderTargets["ssaoBlur"].imageInfo.height;
 			ImageViewHandle view = renderTargets["ssaoBlur"].view;
 			blurFramebuffers[i] = FrameBuffer::Create(width, height, view, blurRenderPass);
 		}

@@ -172,20 +172,28 @@ namespace pe
 			
 			stbi_image_free(pixels);
 			
-			tex->format = VK_FORMAT_R8G8B8A8_UNORM;
-			tex->mipLevels =
-					static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
-			tex->CreateImage(
-				texWidth, texHeight, VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-			);
+			ImageCreateInfo info{};
+			info.format = VK_FORMAT_R8G8B8A8_UNORM;
+			info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
+			info.width = texWidth;
+			info.height = texHeight;
+			info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+			info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+			tex->CreateImage(info);
+
+			ImageViewCreateInfo viewInfo{};
+			viewInfo.image = tex;
+			tex->CreateImageView(viewInfo);
+
+			SamplerCreateInfo samplerInfo{};
+			samplerInfo.maxLod = static_cast<float>(info.mipLevels);
+			tex->CreateSampler(samplerInfo);
+
 			tex->TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 			tex->CopyBufferToImage(staging);
 			tex->GenerateMipMaps();
-			tex->CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
-			tex->maxLod = static_cast<float>(tex->mipLevels);
-			tex->CreateSampler();
+
 			
 			staging->Destroy();
 			

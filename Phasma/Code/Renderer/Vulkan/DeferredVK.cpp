@@ -105,20 +105,27 @@ namespace pe
 			
 			stbi_image_free(pixels);
 			
-			ibl_brdf_lut.format = (Format)VK_FORMAT_R8G8B8A8_UNORM;
-			ibl_brdf_lut.mipLevels =
-					static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
-			ibl_brdf_lut.CreateImage(
-				texWidth, texHeight, VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-			);
+			ImageCreateInfo info{};
+			info.format = (Format)VK_FORMAT_R8G8B8A8_UNORM;
+			info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
+			info.width = texWidth;
+			info.height = texHeight;
+			info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+			info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+			ibl_brdf_lut.CreateImage(info);
+
+			ImageViewCreateInfo viewInfo{};
+			viewInfo.image = &ibl_brdf_lut;
+			ibl_brdf_lut.CreateImageView(viewInfo);
+
+			SamplerCreateInfo samplerInfo{};
+			samplerInfo.maxLod = static_cast<float>(info.mipLevels);
+			ibl_brdf_lut.CreateSampler(samplerInfo);
+
 			ibl_brdf_lut.TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 			ibl_brdf_lut.CopyBufferToImage(staging);
 			ibl_brdf_lut.GenerateMipMaps();
-			ibl_brdf_lut.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
-			ibl_brdf_lut.maxLod = static_cast<float>(ibl_brdf_lut.mipLevels);
-			ibl_brdf_lut.CreateSampler();
 			
 			staging->Destroy();
 			
@@ -211,15 +218,15 @@ namespace pe
 		std::vector<Attachment> attachments(6);
 
 		// Target attachments are initialized to match render targets by default
-		attachments[0].format = renderTargets["normal"].format;
-		attachments[1].format = renderTargets["albedo"].format;
-		attachments[2].format = renderTargets["srm"].format;
-		attachments[3].format = renderTargets["velocity"].format;
-		attachments[4].format = renderTargets["emissive"].format;
+		attachments[0].format = renderTargets["normal"].imageInfo.format;
+		attachments[1].format = renderTargets["albedo"].imageInfo.format;
+		attachments[2].format = renderTargets["srm"].imageInfo.format;
+		attachments[3].format = renderTargets["velocity"].imageInfo.format;
+		attachments[4].format = renderTargets["emissive"].imageInfo.format;
 
 		// Depth
 		attachments[5].flags = {};
-		attachments[5].format = RHII.depth.format;
+		attachments[5].format = RHII.depth.imageInfo.format;
 		attachments[5].samples = VK_SAMPLE_COUNT_1_BIT;
 		attachments[5].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachments[5].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -231,7 +238,7 @@ namespace pe
 		renderPass.Create(attachments);
 
 		Attachment attachment{};
-		attachment.format = renderTargets["viewport"].format;
+		attachment.format = renderTargets["viewport"].imageInfo.format;
 		compositionRenderPass.Create(attachment);
 	}
 	
@@ -246,8 +253,8 @@ namespace pe
 		framebuffers.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["albedo"].width;
-			uint32_t height = renderTargets["albedo"].height;
+			uint32_t width = renderTargets["albedo"].imageInfo.width;
+			uint32_t height = renderTargets["albedo"].imageInfo.height;
 			std::vector<ImageViewHandle> views {
 				renderTargets["normal"].view,
 				renderTargets["albedo"].view,
@@ -265,8 +272,8 @@ namespace pe
 		compositionFramebuffers.resize(RHII.swapchain.images.size());
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["viewport"].width;
-			uint32_t height = renderTargets["viewport"].height;
+			uint32_t width = renderTargets["viewport"].imageInfo.width;
+			uint32_t height = renderTargets["viewport"].imageInfo.height;
 			ImageViewHandle view = renderTargets["viewport"].view;
 			compositionFramebuffers[i] = FrameBuffer::Create(width, height, view, compositionRenderPass);
 		}

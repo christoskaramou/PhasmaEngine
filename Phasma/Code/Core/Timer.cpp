@@ -74,6 +74,8 @@ namespace pe
 
 	GPUTimer::GPUTimer()
 	{
+		_cmd = nullptr;
+
 		VkPhysicalDeviceProperties gpuProps;
 		vkGetPhysicalDeviceProperties(RHII.gpu, &gpuProps);
 

@@ -67,7 +67,7 @@ namespace pe
 	void Shadows::createRenderPass()
 	{
 		Attachment attachment{};
-		attachment.format = RHII.depth.format;
+		attachment.format = RHII.depth.imageInfo.format;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -84,23 +84,32 @@ namespace pe
 		int textureIdx = 0;
 		for (auto& texture : textures)
 		{
-			texture.format = RHII.depth.format;
-			texture.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			texture.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-			texture.maxAnisotropy = 1.f;
-			texture.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-			texture.samplerCompareEnable = VK_TRUE;
-			texture.compareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
-			texture.samplerMipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			ImageCreateInfo info{};
+			info.format = RHII.depth.imageInfo.format;
+			info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			info.width = SHADOWMAP_SIZE;
+			info.height = SHADOWMAP_SIZE;
+			info.tiling = VK_IMAGE_TILING_OPTIMAL;
+			info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+			info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			texture.CreateImage(info);
 
-			texture.CreateImage(
-				SHADOWMAP_SIZE, SHADOWMAP_SIZE, VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-			);
+			ImageViewCreateInfo viewInfo{};
+			viewInfo.image = &texture;
+			viewInfo.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			texture.CreateImageView(viewInfo);
+
+			SamplerCreateInfo samplerInfo{};
+			samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			samplerInfo.maxAnisotropy = 1.f;
+			samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+			samplerInfo.compareEnable = VK_TRUE;
+			samplerInfo.compareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
+			texture.CreateSampler(samplerInfo);
+
 			texture.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-			texture.CreateImageView(VK_IMAGE_ASPECT_DEPTH_BIT);
-			texture.CreateSampler();
 		}
 
 		framebuffers.resize(RHII.swapchain.images.size() * textures.size());

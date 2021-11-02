@@ -38,6 +38,65 @@ namespace pe
 	class Context;
 	class CommandBuffer;
 	class Buffer;
+	class Image;
+
+	class SamplerCreateInfo
+	{
+	public:
+		SamplerCreateInfo();
+
+		Filter magFilter;
+		Filter minFilter;
+		SamplerMipmapMode mipmapMode;
+		SamplerAddressMode addressModeU;
+		SamplerAddressMode addressModeV;
+		SamplerAddressMode addressModeW;
+		float mipLodBias;
+		uint32_t anisotropyEnable;
+		float maxAnisotropy;
+		uint32_t compareEnable;
+		CompareOp compareOp;
+		float minLod;
+		float maxLod;
+		BorderColor borderColor;
+		uint32_t unnormalizedCoordinates;
+	};
+
+	class ImageViewCreateInfo
+	{
+	public:
+		ImageViewCreateInfo();
+
+		Image* image;
+		ImageViewType viewType;
+		//VkComponentMapping         components;
+		//VkImageSubresourceRange    subresourceRange;
+		ImageAspectFlags aspectMask;
+	};
+
+	class ImageCreateInfo
+	{
+	public:
+		ImageCreateInfo();
+
+		uint32_t width;
+		uint32_t height;
+		uint32_t depth;
+		ImageTiling tiling;
+		ImageUsageFlags usage;
+		MemoryPropertyFlags properties;
+		Format format;
+		ImageCreateFlags imageFlags;
+		VkImageType imageType;
+		uint32_t mipLevels;
+		uint32_t arrayLayers;
+		SampleCountFlagBits samples;
+		SharingMode sharingMode;
+		uint32_t queueFamilyIndexCount;
+		const uint32_t* pQueueFamilyIndices;
+		ImageLayout initialLayout;
+		LayoutState layoutState;
+	};
 
 	class Image
 	{
@@ -52,29 +111,33 @@ namespace pe
 		ImageViewHandle view;
 		SamplerHandle sampler;
 		VmaAllocation allocation {};
-		uint32_t width {};
-		uint32_t height {};
+		ImageCreateInfo imageInfo;
+		ImageViewCreateInfo viewInfo;
+		SamplerCreateInfo samplerInfo;
+
+		//uint32_t width {};
+		//uint32_t height {};
 		float width_f {};
 		float height_f {};
 		
 		// values
-		SampleCountFlagBits samples;
-		LayoutState layoutState;
-		Format format;
-		ImageLayout initialLayout;
-		ImageTiling tiling;
-		uint32_t mipLevels;
-		uint32_t arrayLayers;
-		bool anisotropyEnabled;
-		float minLod, maxLod, maxAnisotropy;
-		Filter filter;
-		ImageCreateFlags imageCreateFlags;
-		ImageViewType viewType;
-		SamplerAddressMode addressMode;
-		BorderColor borderColor;
-		bool samplerCompareEnable;
-		CompareOp compareOp;
-		SamplerMipmapMode samplerMipmapMode;
+		//SampleCountFlagBits samples;
+		//LayoutState layoutState;
+		//Format format;
+		//ImageLayout initialLayout;
+		//ImageTiling tiling;
+		//uint32_t mipLevels;
+		//uint32_t arrayLayers;
+		//bool anisotropyEnabled;
+		//float minLod, maxLod, maxAnisotropy;
+		//Filter filter;
+		//ImageCreateFlags imageCreateFlags;
+		//ImageViewType viewType;
+		//SamplerAddressMode addressMode;
+		//BorderColor borderColor;
+		//bool samplerCompareEnable;
+		//CompareOp compareOp;
+		//SamplerMipmapMode samplerMipmapMode;
 		PipelineColorBlendAttachmentState blendAttachment;
 		
 		void TransitionImageLayout(
@@ -84,13 +147,12 @@ namespace pe
 			PipelineStageFlags oldStageMask,
 			PipelineStageFlags newStageMask,
 			AccessFlags srcMask,
-			AccessFlags dstMask,
-			ImageAspectFlags aspectFlags
+			AccessFlags dstMask
 		);
 		
-		void CreateImage(uint32_t width, uint32_t height, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties);
+		void CreateImage(const ImageCreateInfo& info);
 		
-		void CreateImageView(ImageAspectFlags aspectFlags);
+		void CreateImageView(const ImageViewCreateInfo& info);
 		
 		void TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout);
 		
@@ -102,7 +164,7 @@ namespace pe
 		
 		void GenerateMipMaps();
 		
-		void CreateSampler();
+		void CreateSampler(const SamplerCreateInfo& info);
 		
 		void Destroy();
 	};

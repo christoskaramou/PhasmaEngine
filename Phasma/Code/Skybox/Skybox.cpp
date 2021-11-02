@@ -58,17 +58,30 @@ namespace pe
 	{
 		assert(paths.size() == 6);
 		
-		texture.arrayLayers = 6;
-		texture.format = VK_FORMAT_R8G8B8A8_UNORM;
-		texture.imageCreateFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-		texture.CreateImage(
-			imageSideSize, imageSideSize, VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-		);
-		
+		ImageCreateInfo info{};
+		info.format = VK_FORMAT_R8G8B8A8_UNORM;
+		info.arrayLayers = 6;
+		info.imageFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+		info.width = imageSideSize;
+		info.height = imageSideSize;
+		info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+		info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+		texture.CreateImage(info);
+
+		ImageViewCreateInfo viewInfo{};
+		viewInfo.image = &texture;
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		texture.CreateImageView(viewInfo);
+
+		SamplerCreateInfo samplerInfo{};
+		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		texture.CreateSampler(samplerInfo);
+
 		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		for (uint32_t i = 0; i < texture.arrayLayers; ++i)
+
+		for (uint32_t i = 0; i < texture.imageInfo.arrayLayers; ++i)
 		{
 			// Texture Load
 			int texWidth, texHeight, texChannels;
@@ -94,13 +107,8 @@ namespace pe
 			texture.CopyBufferToImage(staging, i);
 			staging->Destroy();
 		}
+
 		texture.TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		
-		texture.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-		texture.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
-		
-		texture.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		texture.CreateSampler();
 	}
 	
 	void SkyBox::destroy()

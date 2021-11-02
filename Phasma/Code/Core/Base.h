@@ -227,6 +227,7 @@ namespace pe
 	struct Placeholder {};
 
 	using SampleCountFlagBits = uint32_t;
+	using SharingMode = uint32_t;
 	using Format = uint32_t;
 	using ColorSpace = uint32_t;
 	using ImageLayout = uint32_t;
@@ -237,11 +238,11 @@ namespace pe
 	using BorderColor = uint32_t;
 	using CompareOp = uint32_t;
 	using SamplerMipmapMode = uint32_t;
-	using ImageCreateFlags = uint32_t;
 	using PipelineStageFlags = uint32_t;
 	using AccessFlags = uint32_t;
 	using MemoryPropertyFlags = uint32_t;
 	using BufferUsageFlags = uint32_t;
+	using ImageCreateFlags = uint32_t;
 	using ImageAspectFlags = uint32_t;
 	using ImageUsageFlags = uint32_t;
 	using ImageType = uint32_t;

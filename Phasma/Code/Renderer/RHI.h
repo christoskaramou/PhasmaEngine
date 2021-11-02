@@ -152,7 +152,7 @@ namespace pe
 
 		void UnlockSubmits();
 
-		static RHI* Get() noexcept
+		static RHI* Get()
 		{
 			static auto rhi = new RHI();
 			return rhi;

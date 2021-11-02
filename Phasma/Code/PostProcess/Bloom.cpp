@@ -42,30 +42,36 @@ namespace pe
 	
 	void Bloom::Init()
 	{
-		frameImage.format = RHII.surface.format;
-		frameImage.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		frameImage.CreateImage(
-			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-		);
+		ImageCreateInfo info{};
+		info.format = RHII.surface.format;
+		info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
+		info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+		info.tiling = VK_IMAGE_TILING_OPTIMAL;
+		info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+		frameImage.CreateImage(info);
+
+		ImageViewCreateInfo viewInfo{};
+		viewInfo.image = &frameImage;
+		frameImage.CreateImageView(viewInfo);
+
+		SamplerCreateInfo samplerInfo{};
+		frameImage.CreateSampler(samplerInfo);
+
 		frameImage.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		frameImage.CreateImageView(VK_IMAGE_ASPECT_COLOR_BIT);
-		frameImage.CreateSampler();
 	}
 	
 	void Bloom::createRenderPasses(std::map<std::string, Image>& renderTargets)
 	{
 		Attachment attachment{};
-		attachment.format = renderTargets["brightFilter"].format;
+		attachment.format = renderTargets["brightFilter"].imageInfo.format;
 		renderPassBrightFilter.Create(attachment);
 
-		attachment.format = renderTargets["gaussianBlurHorizontal"].format;
+		attachment.format = renderTargets["gaussianBlurHorizontal"].imageInfo.format;
 		renderPassGaussianBlur.Create(attachment);
 
-		attachment.format = renderTargets["viewport"].format;
+		attachment.format = renderTargets["viewport"].imageInfo.format;
 		renderPassCombine.Create(attachment);
 	}
 	
@@ -74,32 +80,32 @@ namespace pe
 		framebuffers.resize(RHII.swapchain.images.size() * 4);
 		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
 		{
-			uint32_t width = renderTargets["brightFilter"].width;
-			uint32_t height = renderTargets["brightFilter"].height;
+			uint32_t width = renderTargets["brightFilter"].imageInfo.width;
+			uint32_t height = renderTargets["brightFilter"].imageInfo.height;
 			ImageViewHandle view = renderTargets["brightFilter"].view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassBrightFilter);
 		}
 		
 		for (size_t i = RHII.swapchain.images.size(); i < RHII.swapchain.images.size() * 2; ++i)
 		{
-			uint32_t width = renderTargets["gaussianBlurHorizontal"].width;
-			uint32_t height = renderTargets["gaussianBlurHorizontal"].height;
+			uint32_t width = renderTargets["gaussianBlurHorizontal"].imageInfo.width;
+			uint32_t height = renderTargets["gaussianBlurHorizontal"].imageInfo.height;
 			ImageViewHandle view = renderTargets["gaussianBlurHorizontal"].view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassGaussianBlur);
 		}
 		
 		for (size_t i = RHII.swapchain.images.size() * 2; i < RHII.swapchain.images.size() * 3; ++i)
 		{
-			uint32_t width = renderTargets["gaussianBlurVertical"].width;
-			uint32_t height = renderTargets["gaussianBlurVertical"].height;
+			uint32_t width = renderTargets["gaussianBlurVertical"].imageInfo.width;
+			uint32_t height = renderTargets["gaussianBlurVertical"].imageInfo.height;
 			ImageViewHandle view = renderTargets["gaussianBlurVertical"].view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassGaussianBlur);
 		}
 		
 		for (size_t i = RHII.swapchain.images.size() * 3; i < RHII.swapchain.images.size() * 4; ++i)
 		{
-			uint32_t width = renderTargets["viewport"].width;
-			uint32_t height = renderTargets["viewport"].height;
+			uint32_t width = renderTargets["viewport"].imageInfo.width;
+			uint32_t height = renderTargets["viewport"].imageInfo.height;
 			ImageViewHandle view = renderTargets["viewport"].view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassCombine);
 		}

@@ -392,8 +392,6 @@ namespace pe
 		if (computeFamilyId != graphicsFamilyId)
 		{
 			queueCreateInfo.queueFamilyIndex = computeFamilyId;
-			queueCreateInfo.queueCount = 1;
-			queueCreateInfo.pQueuePriorities = priorities;
 			queueCreateInfos.push_back(queueCreateInfo);
 		}
 		
@@ -401,8 +399,6 @@ namespace pe
 		if (transferFamilyId != graphicsFamilyId && transferFamilyId != computeFamilyId)
 		{
 			queueCreateInfo.queueFamilyIndex = transferFamilyId;
-			queueCreateInfo.queueCount = 1;
-			queueCreateInfo.pQueuePriorities = priorities;
 			queueCreateInfos.push_back(queueCreateInfo);
 		}
 
@@ -506,7 +502,12 @@ namespace pe
 	
 	void RHI::CreateDepth()
 	{
-		depth.format = VK_FORMAT_UNDEFINED;
+		ImageCreateInfo info{};
+		info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
+		info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+		info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
 		std::vector<VkFormat> candidates =
 		{
 			VK_FORMAT_D32_SFLOAT_S8_UINT,
@@ -521,27 +522,29 @@ namespace pe
 			if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) ==
 				VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
 			{
-				depth.format = (Format)format;
+				info.format = (Format)format;
 				break;
 			}
 		}
-		if (depth.format == VK_FORMAT_UNDEFINED)
+		if (info.format == VK_FORMAT_UNDEFINED)
 			throw std::runtime_error("Depth format is undefined");
 		
-		depth.CreateImage(
-			static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale),
-			static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale),
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-		);
-		depth.CreateImageView(VK_IMAGE_ASPECT_DEPTH_BIT);
+		depth.CreateImage(info);
+
+		ImageViewCreateInfo viewInfo{};
+		viewInfo.image = &depth;
+		viewInfo.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		depth.CreateImageView(viewInfo);
 		
-		depth.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		depth.maxAnisotropy = 1.f;
-		depth.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-		depth.samplerCompareEnable = VK_TRUE;
-		depth.CreateSampler();
+		SamplerCreateInfo samplerInfo{};
+		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerInfo.maxAnisotropy = 1.0f;
+		samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+		samplerInfo.compareEnable = VK_TRUE;
+		depth.CreateSampler(samplerInfo);
+
 		depth.name = "DepthImage";
 		
 		depth.TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);

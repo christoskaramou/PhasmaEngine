@@ -32,16 +32,18 @@ namespace pe
 {
 	Window* Window::Create(int x, int y, int w, int h, uint32_t flags)
 	{
-		Window* window = new Window();
 		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
 		{
 			std::cout << SDL_GetError();
 			return nullptr;
 		}
-		
+
+		Window* window = new Window();
+
 		if (!((window->m_handle = SDL_CreateWindow("", x, y, w, h, flags))))
 		{
 			std::cout << SDL_GetError();
+			delete window;
 			return nullptr;
 		}
 		

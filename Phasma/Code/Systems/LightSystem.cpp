@@ -43,6 +43,9 @@ namespace pe
 
 	LightSystem::LightSystem()
 	{
+		lubo = {};
+		uniform = nullptr;
+		descriptorSet = nullptr;
 	}
 
 	LightSystem::~LightSystem()

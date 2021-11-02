@@ -77,7 +77,7 @@ namespace pe
 		std::vector<BufferDesc> pushConstantBuffers {};
 	
 	private:
-		Shader* m_shader;
+		Shader* m_shader{};
 	};
 	
 }
