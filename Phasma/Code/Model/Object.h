@@ -22,12 +22,13 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Buffer.h"
+#include "Core/Base.h"
 #include "Core/Math.h"
 
 namespace pe
 {
 	class Image;
+	class Buffer;
 
 	class Object
 	{

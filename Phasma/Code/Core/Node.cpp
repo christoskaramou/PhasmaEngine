@@ -20,9 +20,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Node.h"
+#include "Core/Node.h"
+#include "Core/Queue.h"
 #include "Model/Mesh.h"
-#include "Queue.h"
+#include "Renderer/Buffer.h"
 
 namespace pe
 {

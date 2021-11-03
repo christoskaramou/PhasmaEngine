@@ -40,6 +40,8 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
+#include "Renderer/Buffer.h"
+#include "Renderer/Pipeline.h"
 
 namespace pe
 {

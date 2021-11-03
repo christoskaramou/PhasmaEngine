@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Buffer.h"
 #include "GUI/GUI.h"
 #include "ECS/System.h"
 #include "Renderer/Light.h"
@@ -41,6 +40,8 @@ namespace pe
 	};
 
 	class Descriptor;
+	class Buffer;
+
 	class LightSystem : public ISystem
 	{
 	public:

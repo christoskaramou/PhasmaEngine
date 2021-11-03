@@ -22,10 +22,8 @@ SOFTWARE.
 
 #pragma once
 
-#include "Pipeline.h"
-#include "Shadows.h"
 #include "Skybox/Skybox.h"
-#include "RenderPass.h"
+#include "Renderer/Shadows.h"
 
 namespace pe
 {
@@ -33,6 +31,7 @@ namespace pe
 	class FrameBuffer;
 	class Image;
 	class RenderPass;
+	class Pipeline;
 
 	class Deferred
 	{

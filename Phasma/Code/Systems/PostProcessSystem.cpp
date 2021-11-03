@@ -20,9 +20,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "PostProcessSystem.h"
+#include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
+#include "ECS/Context.h"
+#include "PostProcess/Bloom.h"
+#include "PostProcess/DOF.h"
+#include "PostProcess/FXAA.h"
+#include "PostProcess/MotionBlur.h"
+#include "PostProcess/SSAO.h"
+#include "PostProcess/SSR.h"
+#include "PostProcess/TAA.h"
+#include "Core/Queue.h"
 
 namespace pe
 {

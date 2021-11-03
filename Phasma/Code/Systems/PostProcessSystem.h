@@ -23,14 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "ECS/System.h"
-#include "ECS/Context.h"
-#include "PostProcess/Bloom.h"
-#include "PostProcess/DOF.h"
-#include "PostProcess/FXAA.h"
-#include "PostProcess/MotionBlur.h"
-#include "PostProcess/SSAO.h"
-#include "PostProcess/SSR.h"
-#include "PostProcess/TAA.h"
 
 namespace pe
 {

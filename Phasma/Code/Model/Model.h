@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Buffer.h"
 #include "Core/Math.h"
 #include "Script/Script.h"
 #include "Systems/CameraSystem.h"
@@ -38,6 +37,7 @@ namespace pe
 	class Pipeline;
 	class CommandBuffer;
 	class Descriptor;
+	class Buffer;
 	
 	class Model : public NoCopy
 	{

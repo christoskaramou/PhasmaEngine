@@ -35,6 +35,13 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/FrameBuffer.h"
+#include "PostProcess/Bloom.h"
+#include "PostProcess/DOF.h"
+#include "PostProcess/FXAA.h"
+#include "PostProcess/MotionBlur.h"
+#include "PostProcess/SSAO.h"
+#include "PostProcess/SSR.h"
+#include "PostProcess/TAA.h"
 
 namespace pe
 {

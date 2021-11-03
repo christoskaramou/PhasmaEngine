@@ -24,7 +24,6 @@ SOFTWARE.
 
 #include "imgui/imgui.h"
 #include "Model/Object.h"
-#include "Renderer/Pipeline.h"
 #include "SDL/SDL.h"
 
 namespace pe

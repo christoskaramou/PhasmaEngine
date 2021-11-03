@@ -25,6 +25,7 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
+#include "Renderer/Buffer.h"
 
 namespace pe
 {

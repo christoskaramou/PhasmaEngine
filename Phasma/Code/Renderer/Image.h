@@ -27,6 +27,11 @@ SOFTWARE.
 
 namespace pe
 {
+	class Context;
+	class CommandBuffer;
+	class Buffer;
+	class Image;
+
 	enum class LayoutState
 	{
 		ColorRead,
@@ -34,11 +39,6 @@ namespace pe
 		DepthRead,
 		DepthWrite
 	};
-
-	class Context;
-	class CommandBuffer;
-	class Buffer;
-	class Image;
 
 	class SamplerCreateInfo
 	{

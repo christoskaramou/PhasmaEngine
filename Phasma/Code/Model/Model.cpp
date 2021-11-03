@@ -26,6 +26,7 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "Renderer/Command.h"
 #include "Renderer/Image.h"
+#include "Renderer/Buffer.h"
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
 #include "Renderer/RHI.h"

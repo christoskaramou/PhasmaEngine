@@ -22,6 +22,7 @@ SOFTWARE.
 
 #include "Window/Window.h"
 #include "Core/Timer.h"
+#include "Core/Queue.h"
 #include "ECS/Context.h"
 #include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"

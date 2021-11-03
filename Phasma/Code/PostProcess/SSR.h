@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Buffer.h"
 #include "Systems/CameraSystem.h"
 #include "ECS/Component.h"
 
@@ -33,6 +32,7 @@ namespace pe
 	class Image;
 	class RenderPass;
 	class Pipeline;
+	class Buffer;
 
 	class SSR : public IComponent
 	{

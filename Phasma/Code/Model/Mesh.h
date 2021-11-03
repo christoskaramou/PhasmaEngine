@@ -24,7 +24,6 @@ SOFTWARE.
 
 #include "Renderer/Vertex.h"
 #include "Material.h"
-#include "Renderer/Buffer.h"
 #include "GLTFSDK/GLTF.h"
 #include "GLTFSDK/Document.h"
 #include "GLTFSDK/GLTFResourceReader.h"
@@ -35,6 +34,7 @@ namespace pe
 {
 	class Descriptor;
 	class Image;
+	class Buffer;
 
 	class Primitive
 	{

@@ -34,6 +34,7 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
+#include "Renderer/Buffer.h"
 
 namespace pe
 {

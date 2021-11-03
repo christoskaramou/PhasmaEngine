@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Buffer.h"
 #include "Systems/CameraSystem.h"
 #include "ECS/Component.h"
 
@@ -32,6 +31,7 @@ namespace pe
 	class FrameBuffer;
 	class Image;
 	class RenderPass;
+	class Buffer;
 	class Pipeline;
 
 	class MotionBlur : public IComponent

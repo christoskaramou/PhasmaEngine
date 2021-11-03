@@ -27,6 +27,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "ECS/Context.h"
 #include "Systems/CameraSystem.h"
+#include "Renderer/Buffer.h"
 
 namespace pe
 {
