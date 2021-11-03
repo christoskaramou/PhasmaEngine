@@ -67,9 +67,9 @@ namespace pe
 	
 	void DOF::createRenderPass(std::map<std::string, Image*>& renderTargets)
 	{
-		std::vector<Attachment> attachments(1);
-		attachments[0].format = renderTargets["viewport"]->imageInfo.format;
-		renderPass = RenderPass::Create(attachments);
+		Attachment attachment{};
+		attachment.format = renderTargets["viewport"]->imageInfo.format;
+		renderPass = RenderPass::Create(attachment);
 	}
 	
 	void DOF::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
