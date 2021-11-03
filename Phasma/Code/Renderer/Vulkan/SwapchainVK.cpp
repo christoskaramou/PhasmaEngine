@@ -72,11 +72,7 @@ namespace pe
 		vkGetSwapchainImagesKHR(RHII.device, schain, &swapchainImageCount, imagesVK.data());
 
 		for (auto* image : images)
-		{
-			vkDestroyImageView(RHII.device, image->view, nullptr);
-			image->view = {};
-			delete image;
-		}
+			image->Destroy();
 		
 		images.resize(imagesVK.size());
 		for (unsigned i = 0; i < images.size(); i++)
@@ -131,11 +127,7 @@ namespace pe
 		}
 
 		for (auto* image : images)
-		{
-			vkDestroyImageView(RHII.device, image->view, nullptr);
-			image->view = {};
 			delete image;
-		}
 	}
 	
 	uint32_t Swapchain::Aquire(Semaphore* semaphore, Fence* fence)

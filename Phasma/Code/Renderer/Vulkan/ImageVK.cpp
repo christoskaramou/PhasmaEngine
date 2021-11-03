@@ -151,7 +151,7 @@ namespace pe
 
 	Image::~Image()
 	{
-		if (VkImageView(view))
+		if (view)
 		{
 			vkDestroyImageView(RHII.device, view, nullptr);
 			view = {};
