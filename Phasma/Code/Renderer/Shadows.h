@@ -26,8 +26,6 @@ SOFTWARE.
 #include "Pipeline.h"
 #include "Core/Math.h"
 #include "Systems/CameraSystem.h"
-#include "RenderPass.h"
-#include "Framebuffer.h"
 
 namespace pe
 {
@@ -37,6 +35,7 @@ namespace pe
 	class Descriptor;
 	class FrameBuffer;
 	class Image;
+	class RenderPass;
 
 	class Shadows
 	{
@@ -47,7 +46,7 @@ namespace pe
 		
 		mat4 cascades[SHADOWMAP_CASCADES];
 		vec4 viewZ;
-		RenderPass renderPass;
+		RenderPass* renderPass;
 		std::vector<Image*> textures {};
 		Descriptor* descriptorSetDeferred;
 		std::vector<FrameBuffer*> framebuffers {};

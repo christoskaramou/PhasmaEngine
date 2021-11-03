@@ -32,6 +32,7 @@ namespace pe
 	class Descriptor;
 	class FrameBuffer;
 	class Image;
+	class RenderPass;
 
 	class Deferred
 	{
@@ -40,7 +41,8 @@ namespace pe
 		
 		~Deferred();
 		
-		RenderPass renderPass, compositionRenderPass;
+		RenderPass* renderPass;
+		RenderPass* compositionRenderPass;
 		std::vector<FrameBuffer*> framebuffers {}, compositionFramebuffers {};
 		Descriptor* DSComposition;
 		Pipeline pipeline;

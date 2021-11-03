@@ -31,6 +31,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
+#include "Renderer/RenderPass.h"
 
 namespace pe
 {
@@ -156,7 +157,7 @@ namespace pe
 	{
 		
 		renderTargets["taa"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
+		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 		cmd->BindPipeline(&pipeline);
 		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
@@ -165,7 +166,7 @@ namespace pe
 		
 		saveImage(cmd, renderTargets["taa"]);
 
-		cmd->BeginPass(&renderPassSharpen, framebuffersSharpen[imageIndex]);
+		cmd->BeginPass(renderPassSharpen, framebuffersSharpen[imageIndex]);
 		cmd->BindPipeline(&pipelineSharpen);
 		cmd->BindDescriptors(&pipelineSharpen, 1, &DSetSharpen);
 		cmd->Draw(3, 1, 0, 0);
@@ -176,10 +177,10 @@ namespace pe
 	{
 		Attachment attachment{};
 		attachment.format = renderTargets["taa"]->imageInfo.format;
-		renderPass.Create(attachment);
+		renderPass = RenderPass::Create(attachment);
 
 		attachment.format = renderTargets["viewport"]->imageInfo.format;
-		renderPassSharpen.Create(attachment);
+		renderPassSharpen = RenderPass::Create(attachment);
 	}
 	
 	void TAA::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
@@ -315,8 +316,8 @@ namespace pe
 		for (auto framebuffer : framebuffersSharpen)
 			framebuffer->Destroy();
 		
-		renderPass.Destroy();
-		renderPassSharpen.Destroy();
+		renderPass->Destroy();
+		renderPassSharpen->Destroy();
 		
 		Pipeline::getDescriptorSetLayoutTAA()->Destroy();
 		Pipeline::getDescriptorSetLayoutTAASharpen()->Destroy();

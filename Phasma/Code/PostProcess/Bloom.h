@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Renderer/Pipeline.h"
-#include "Renderer/RenderPass.h"
 #include "ECS/Component.h"
 
 namespace pe
@@ -32,6 +31,7 @@ namespace pe
 	class FrameBuffer;
 	class Image;
 	class CommandBuffer;
+	class RenderPass;
 
 	class Bloom : public IComponent
 	{
@@ -45,9 +45,9 @@ namespace pe
 		Pipeline pipelineGaussianBlurHorizontal;
 		Pipeline pipelineGaussianBlurVertical;
 		Pipeline pipelineCombine;
-		RenderPass renderPassBrightFilter;
-		RenderPass renderPassGaussianBlur;
-		RenderPass renderPassCombine;
+		RenderPass* renderPassBrightFilter;
+		RenderPass* renderPassGaussianBlur;
+		RenderPass* renderPassCombine;
 		Descriptor* DSBrightFilter;
 		Descriptor* DSGaussianBlurHorizontal;
 		Descriptor* DSGaussianBlurVertical;

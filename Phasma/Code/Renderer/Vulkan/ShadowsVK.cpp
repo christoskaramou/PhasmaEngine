@@ -31,6 +31,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
+#include "Renderer/Framebuffer.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
 #include "Core/Settings.h"
@@ -76,7 +77,7 @@ namespace pe
 		attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		renderPass.Create(attachment);
+		renderPass = RenderPass::Create(attachment);
 	}
 
 	void Shadows::createFrameBuffers()
@@ -156,10 +157,10 @@ namespace pe
 
 	void Shadows::destroy()
 	{
-		if (VkRenderPass(renderPass.handle))
+		if (VkRenderPass(renderPass->Handle()))
 		{
-			vkDestroyRenderPass(RHII.device, renderPass.handle, nullptr);
-			renderPass.handle = {};
+			vkDestroyRenderPass(RHII.device, renderPass->Handle(), nullptr);
+			renderPass->Handle() = {};
 		}
 
 		Pipeline::getDescriptorSetLayoutShadows()->Destroy();

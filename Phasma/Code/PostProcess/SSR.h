@@ -25,7 +25,6 @@ SOFTWARE.
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
 #include "Systems/CameraSystem.h"
-#include "Renderer/RenderPass.h"
 #include "ECS/Component.h"
 
 namespace pe
@@ -33,6 +32,7 @@ namespace pe
 	class Desscriptor;
 	class FrameBuffer;
 	class Image;
+	class RenderPass;
 
 	class SSR : public IComponent
 	{
@@ -45,7 +45,7 @@ namespace pe
 		Buffer* UBReflection;
 		std::vector<FrameBuffer*> framebuffers {};
 		Pipeline pipeline;
-		RenderPass renderPass;
+		RenderPass* renderPass;
 		Descriptor* DSet;
 		
 		void update(Camera& camera);

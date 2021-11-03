@@ -43,6 +43,7 @@ SOFTWARE.
 #include "Renderer/Semaphore.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
+#include "Renderer/RenderPass.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl.h"
@@ -649,7 +650,7 @@ namespace pe
 		info.MSAASamples = VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT;
 		info.Allocator = nullptr;
 		info.CheckVkResultFn = nullptr;
-		ImGui_ImplVulkan_Init(&info, renderPass.handle);
+		ImGui_ImplVulkan_Init(&info, renderPass->Handle());
 
 		CommandBuffer* cmd = RHII.dynamicCmdBuffers[0];
 		cmd->Begin();
@@ -681,7 +682,7 @@ namespace pe
 
 		if (render && ImGui::GetDrawData()->TotalVtxCount > 0)
 		{
-			cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
+			cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
 			cmd->EndPass();
 		}
@@ -705,7 +706,7 @@ namespace pe
 		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-		renderPass.Create(colorAttachment);
+		renderPass = RenderPass::Create(colorAttachment);
 	}
 
 	void GUI::CreateFrameBuffers()
@@ -722,7 +723,7 @@ namespace pe
 
 	void GUI::Destroy()
 	{
-		renderPass.Destroy();
+		renderPass->Destroy();
 		for (auto& framebuffer : framebuffers)
 			framebuffer->Destroy();
 	}

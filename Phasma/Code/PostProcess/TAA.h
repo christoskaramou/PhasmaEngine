@@ -26,7 +26,6 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "Core/Math.h"
 #include "Systems/CameraSystem.h"
-#include "Renderer/RenderPass.h"
 #include "ECS/Component.h"
 
 namespace pe
@@ -34,6 +33,7 @@ namespace pe
 	class Descriptor;
 	class FrameBuffer;
 	class Image;
+	class RenderPass;
 
 	class TAA : public IComponent
 	{
@@ -44,7 +44,8 @@ namespace pe
 		
 		std::vector<FrameBuffer*> framebuffers {}, framebuffersSharpen {};
 		Pipeline pipeline, pipelineSharpen;
-		RenderPass renderPass, renderPassSharpen;
+		RenderPass* renderPass;
+		RenderPass* renderPassSharpen;
 		Descriptor* DSet;
 		Descriptor* DSetSharpen;
 		Image* previous;

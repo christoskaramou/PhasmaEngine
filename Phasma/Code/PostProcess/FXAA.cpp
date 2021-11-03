@@ -30,6 +30,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
+#include "Renderer/RenderPass.h"
 
 namespace pe
 {
@@ -80,7 +81,7 @@ namespace pe
 	
 	void FXAA::draw(CommandBuffer* cmd, uint32_t imageIndex)
 	{
-		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
+		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 		cmd->BindPipeline(&pipeline);
 		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
@@ -91,7 +92,7 @@ namespace pe
 	{
 		Attachment attachment{};
 		attachment.format = renderTargets["viewport"]->imageInfo.format;
-		renderPass.Create(attachment);
+		renderPass = RenderPass::Create(attachment);
 	}
 	
 	void FXAA::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
@@ -129,7 +130,7 @@ namespace pe
 			frameBuffer->Destroy();
 
 		Pipeline::getDescriptorSetLayoutFXAA()->Destroy();
-		renderPass.Destroy();
+		renderPass->Destroy();
 		frameImage->Destroy();
 		pipeline.destroy();
 	}

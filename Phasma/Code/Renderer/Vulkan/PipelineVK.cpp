@@ -24,6 +24,7 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "Shader/Shader.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/RenderPass.h"
 #include "Renderer/RHI.h"
 #include "Core/Settings.h"
 
@@ -57,7 +58,7 @@ namespace pe
 		pushConstantStage = PushConstantStage::Vertex;
 		pushConstantSize = 0;
 		descriptorSetLayouts = {};
-		renderPass = {};
+		renderPass = nullptr;
 		pipelineCache = {};
 	}
 	
@@ -234,7 +235,7 @@ namespace pe
 		pipeinfo.layout = layout;
 		
 		// Render Pass
-		pipeinfo.renderPass = info.renderPass.handle;
+		pipeinfo.renderPass = info.renderPass->Handle();
 		
 		// Subpass (Index of subpass this pipeline will be used in)
 		pipeinfo.subpass = 0;

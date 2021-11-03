@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Renderer/Pipeline.h"
-#include "Renderer/RenderPass.h"
 #include "ECS/Component.h"
 
 namespace pe
@@ -32,6 +31,7 @@ namespace pe
 	class FrameBuffer;
 	class Image;
 	class CommandBuffer;
+	class RenderPass;
 
 	class FXAA : public IComponent
 	{
@@ -42,7 +42,7 @@ namespace pe
 		
 		std::vector<FrameBuffer*> framebuffers {};
 		Pipeline pipeline;
-		RenderPass renderPass;
+		RenderPass* renderPass;
 		Descriptor* DSet;
 		Image* frameImage;
 		

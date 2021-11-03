@@ -31,6 +31,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/FrameBuffer.h"
 #include "Renderer/Image.h"
+#include "Renderer/RenderPass.h"
 
 namespace pe
 {
@@ -140,7 +141,7 @@ namespace pe
 	{
 		// SSAO image
 		image->ChangeLayout(cmd, LayoutState::ColorWrite);
-		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
+		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 		cmd->BindPipeline(&pipeline);
 		cmd->BindDescriptors(&pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
@@ -149,7 +150,7 @@ namespace pe
 		image->ChangeLayout(cmd, LayoutState::ColorRead);
 
 		// new blurry SSAO image
-		cmd->BeginPass(&blurRenderPass, blurFramebuffers[imageIndex]);
+		cmd->BeginPass(blurRenderPass, blurFramebuffers[imageIndex]);
 		cmd->BindPipeline(&pipelineBlur);
 		cmd->BindDescriptors(&pipelineBlur, 1, &DSBlur);
 		cmd->Draw(3, 1, 0, 0);
@@ -163,8 +164,8 @@ namespace pe
 		UB_PVM->Destroy();
 		noiseTex->Destroy();
 		
-		renderPass.Destroy();
-		blurRenderPass.Destroy();
+		renderPass->Destroy();
+		blurRenderPass->Destroy();
 		
 		for (auto frameBuffer : framebuffers)
 			frameBuffer->Destroy();
@@ -193,10 +194,10 @@ namespace pe
 	{
 		Attachment attachment{};
 		attachment.format = renderTargets["ssao"]->imageInfo.format;
-		renderPass.Create(attachment);
+		renderPass = RenderPass::Create(attachment);
 
 		attachment.format = renderTargets["ssaoBlur"]->imageInfo.format;
-		blurRenderPass.Create(attachment);
+		blurRenderPass = RenderPass::Create(attachment);
 	}
 	
 	void SSAO::createFrameBuffers(std::map<std::string, Image*>& renderTargets)

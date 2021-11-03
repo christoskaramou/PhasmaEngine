@@ -24,11 +24,13 @@ SOFTWARE.
 
 #include "Core/Base.h"
 #include "Shader/Shader.h"
-#include "Renderer/RenderPass.h"
 #include "Renderer/Vertex.h"
 
 namespace pe
 {
+	class RenderPass;
+	class DescriptorLayout;
+
 	enum class CullMode
 	{
 		None = 0,
@@ -58,7 +60,6 @@ namespace pe
 		ColorComponentFlags colorWriteMask;
 	};
 
-	class DescriptorLayout;
 	class PipelineCreateInfo
 	{
 	public:
@@ -80,7 +81,7 @@ namespace pe
 		PushConstantStage pushConstantStage;
 		uint32_t pushConstantSize;
 		std::vector<DescriptorLayout*> descriptorSetLayouts;
-		RenderPass renderPass;
+		RenderPass* renderPass;
 		PipelineCacheHandle pipelineCache;
 	};
 	

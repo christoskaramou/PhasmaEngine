@@ -25,7 +25,6 @@ SOFTWARE.
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
 #include "Systems/CameraSystem.h"
-#include "Renderer/RenderPass.h"
 #include "ECS/Component.h"
 
 namespace pe
@@ -34,6 +33,7 @@ namespace pe
 	class Descriptor;
 	class FrameBuffer;
 	class Image;
+	class RenderPass;
 
 	class SSAO : public IComponent
 	{
@@ -42,7 +42,8 @@ namespace pe
 		Buffer* UB_Kernel;
 		Buffer* UB_PVM;
 		Image* noiseTex;
-		RenderPass renderPass, blurRenderPass;
+		RenderPass* renderPass;
+		RenderPass* blurRenderPass;
 		std::vector<FrameBuffer*> framebuffers {}, blurFramebuffers {};
 		Pipeline pipeline;
 		Pipeline pipelineBlur;

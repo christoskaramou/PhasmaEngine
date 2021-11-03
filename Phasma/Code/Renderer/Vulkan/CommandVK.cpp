@@ -181,7 +181,7 @@ namespace pe
 
 		VkRenderPassBeginInfo rpi{};
 		rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		rpi.renderPass = pass->handle;
+		rpi.renderPass = pass->Handle();
 		rpi.framebuffer = frameBuffer->Handle();
 		rpi.renderArea.offset = VkOffset2D{ 0, 0 };
 		rpi.renderArea.extent = VkExtent2D{ frameBuffer->width, frameBuffer->height };

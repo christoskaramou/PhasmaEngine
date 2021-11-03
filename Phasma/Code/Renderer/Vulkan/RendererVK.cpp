@@ -33,6 +33,8 @@ SOFTWARE.
 #include "Systems/PostProcessSystem.h"
 #include "Renderer/Command.h"
 #include "Renderer/Image.h"
+#include "Renderer/RenderPass.h"
+#include "Renderer/FrameBuffer.h"
 
 namespace pe
 {
@@ -263,7 +265,7 @@ namespace pe
 			gpuTimer[i].Start(&cmd);
 
 			cmd.SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
-			cmd.BeginPass(&shadows.renderPass, shadows.framebuffers[index]);
+			cmd.BeginPass(shadows.renderPass, shadows.framebuffers[index]);
 			cmd.BindPipeline(&shadows.pipeline);
 			for (auto& model : Model::models)
 			{
@@ -449,14 +451,14 @@ namespace pe
 		GUI::s_renderImages.clear();
 		
 		// GUI
-		gui.renderPass.Destroy();
+		gui.renderPass->Destroy();
 		
 		// deferred
-		deferred.renderPass.Destroy();
-		deferred.compositionRenderPass.Destroy();
-		for (auto framebuffer : deferred.framebuffers)
+		deferred.renderPass->Destroy();
+		deferred.compositionRenderPass->Destroy();
+		for (auto* framebuffer : deferred.framebuffers)
 			framebuffer->Destroy();
-		for (auto& framebuffer : deferred.compositionFramebuffers)
+		for (auto* framebuffer : deferred.compositionFramebuffers)
 			framebuffer->Destroy();
 		deferred.pipeline.destroy();
 		deferred.pipelineComposition.destroy();
@@ -464,13 +466,13 @@ namespace pe
 		// SSR
 		for (auto framebuffer : ssr.framebuffers)
 			framebuffer->Destroy();
-		ssr.renderPass.Destroy();
+		ssr.renderPass->Destroy();
 		ssr.pipeline.destroy();
 		
 		// FXAA
 		for (auto& framebuffer : fxaa.framebuffers)
 			framebuffer->Destroy();
-		fxaa.renderPass.Destroy();
+		fxaa.renderPass->Destroy();
 		fxaa.pipeline.destroy();
 		fxaa.frameImage->Destroy();
 		
@@ -481,17 +483,17 @@ namespace pe
 			framebuffer->Destroy();
 		for (auto& framebuffer : taa.framebuffersSharpen)
 			framebuffer->Destroy();
-		taa.renderPass.Destroy();
-		taa.renderPassSharpen.Destroy();
+		taa.renderPass->Destroy();
+		taa.renderPassSharpen->Destroy();
 		taa.pipeline.destroy();
 		taa.pipelineSharpen.destroy();
 		
 		// Bloom
-		for (auto& frameBuffer : bloom.framebuffers)
+		for (auto* frameBuffer : bloom.framebuffers)
 			frameBuffer->Destroy();
-		bloom.renderPassBrightFilter.Destroy();
-		bloom.renderPassGaussianBlur.Destroy();
-		bloom.renderPassCombine.Destroy();
+		bloom.renderPassBrightFilter->Destroy();
+		bloom.renderPassGaussianBlur->Destroy();
+		bloom.renderPassCombine->Destroy();
 		bloom.pipelineBrightFilter.destroy();
 		bloom.pipelineGaussianBlurHorizontal.destroy();
 		bloom.pipelineGaussianBlurVertical.destroy();
@@ -501,20 +503,20 @@ namespace pe
 		// Depth of Field
 		for (auto& framebuffer : dof.framebuffers)
 			framebuffer->Destroy();
-		dof.renderPass.Destroy();
+		dof.renderPass->Destroy();
 		dof.pipeline.destroy();
 		dof.frameImage->Destroy();
 		
 		// Motion blur
 		for (auto& framebuffer : motionBlur.framebuffers)
 			framebuffer->Destroy();
-		motionBlur.renderPass.Destroy();
+		motionBlur.renderPass->Destroy();
 		motionBlur.pipeline.destroy();
 		motionBlur.frameImage->Destroy();
 		
 		// SSAO
-		ssao.renderPass.Destroy();
-		ssao.blurRenderPass.Destroy();
+		ssao.renderPass->Destroy();
+		ssao.blurRenderPass->Destroy();
 		for (auto& framebuffer : ssao.framebuffers)
 			framebuffer->Destroy();
 		for (auto& framebuffer : ssao.blurFramebuffers)

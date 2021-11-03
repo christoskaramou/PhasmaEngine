@@ -39,6 +39,7 @@ SOFTWARE.
 #include "Systems/LightSystem.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
+#include "Renderer/RenderPass.h"
 
 namespace pe
 {
@@ -53,7 +54,7 @@ namespace pe
 	
 	void Deferred::batchStart(CommandBuffer* cmd, uint32_t imageIndex)
 	{
-		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
+		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 		
 		Model::commandBuffer = cmd;
 		Model::pipeline = &pipeline;
@@ -206,7 +207,7 @@ namespace pe
 		values[1] = vec4(GUI::shadow_cast);
 		std::vector<Descriptor*> handles{ DSComposition, shadows.descriptorSetDeferred, skybox.descriptorSet };
 
-		cmd->BeginPass(&compositionRenderPass, compositionFramebuffers[imageIndex]);
+		cmd->BeginPass(compositionRenderPass, compositionFramebuffers[imageIndex]);
 		cmd->PushConstants(&pipelineComposition, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(mat4), &values);
 		cmd->BindPipeline(&pipelineComposition);
 		cmd->BindDescriptors(&pipelineComposition, (uint32_t)handles.size(), handles.data());
@@ -236,11 +237,11 @@ namespace pe
 		attachments[5].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		attachments[5].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-		renderPass.Create(attachments);
+		renderPass = RenderPass::Create(attachments);
 
 		Attachment attachment{};
 		attachment.format = renderTargets["viewport"]->imageInfo.format;
-		compositionRenderPass.Create(attachment);
+		compositionRenderPass = RenderPass::Create(attachment);
 	}
 	
 	void Deferred::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
@@ -351,8 +352,8 @@ namespace pe
 	
 	void Deferred::destroy()
 	{
-		renderPass.Destroy();
-		compositionRenderPass.Destroy();
+		renderPass->Destroy();
+		compositionRenderPass->Destroy();
 		
 		for (auto& framebuffer : framebuffers)
 			framebuffer->Destroy();

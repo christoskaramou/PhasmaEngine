@@ -30,6 +30,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
+#include "Renderer/RenderPass.h"
 
 namespace pe
 {
@@ -66,9 +67,9 @@ namespace pe
 	
 	void DOF::createRenderPass(std::map<std::string, Image*>& renderTargets)
 	{
-		Attachment attachment{};
-		attachment.format = renderTargets["viewport"]->imageInfo.format;
-		renderPass.Create(attachment);
+		std::vector<Attachment> attachments(1);
+		attachments[0].format = renderTargets["viewport"]->imageInfo.format;
+		renderPass = RenderPass::Create(attachments);
 	}
 	
 	void DOF::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
@@ -104,7 +105,7 @@ namespace pe
 	{		
 		std::vector<float> values {GUI::DOF_focus_scale, GUI::DOF_blur_range, 0.0f, 0.0f};
 
-		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
+		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 		cmd->PushConstants(&pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()), values.data());
 		cmd->BindPipeline(&pipeline);
 		cmd->BindDescriptors(&pipeline, 1, &DSet);
@@ -137,7 +138,7 @@ namespace pe
 		for (auto framebuffer : framebuffers)
 			framebuffer->Destroy();
 		
-		renderPass.Destroy();
+		renderPass->Destroy();
 		Pipeline::getDescriptorSetLayoutDOF()->Destroy();
 		frameImage->Destroy();
 		pipeline.destroy();

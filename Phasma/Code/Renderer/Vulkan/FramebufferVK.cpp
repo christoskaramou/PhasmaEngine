@@ -27,12 +27,12 @@ SOFTWARE.
 
 namespace pe
 {
-	FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass renderPass)
+	FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass* renderPass)
 		: FrameBuffer(width, height, std::vector<ImageViewHandle>{ view }, renderPass)
 	{
 	}
 	
-	FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, const std::vector<ImageViewHandle>& views, RenderPass renderPass)
+	FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, const std::vector<ImageViewHandle>& views, RenderPass* renderPass)
 	{
 		this->width = width;
 		this->height = height;
@@ -43,7 +43,7 @@ namespace pe
 
 		VkFramebufferCreateInfo fbci{};
 		fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-		fbci.renderPass = renderPass.handle;
+		fbci.renderPass = renderPass->Handle();
 		fbci.attachmentCount = static_cast<uint32_t>(_views.size());
 		fbci.pAttachments = _views.data();
 		fbci.width = width;

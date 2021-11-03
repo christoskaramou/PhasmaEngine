@@ -40,21 +40,6 @@ namespace pe
 		finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 	}
 
-	RenderPass::RenderPass()
-	{
-		handle = {};
-		attachments = {};
-	}
-	
-	RenderPass::~RenderPass()
-	{
-	}
-	
-	void RenderPass::Create(const Attachment& attachment)
-	{
-		Create(std::vector<Attachment> {attachment});
-	}
-
 	bool IsDepthFormat(Format format)
 	{
 		return format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
@@ -62,7 +47,7 @@ namespace pe
 			format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 	
-	void RenderPass::Create(const std::vector<Attachment>& attachments)
+	RenderPass::RenderPass(const std::vector<Attachment>& attachments)
 	{
 		this->attachments = attachments;
 		std::vector<VkAttachmentDescription> _attachments{};
@@ -93,17 +78,6 @@ namespace pe
 			}
 			else
 			{
-				//vk::AttachmentDescription attachmentDescription;
-				//attachmentDescription.format = format;
-				//attachmentDescription.samples = vk::SampleCountFlagBits::e1;
-				//attachmentDescription.loadOp = vk::AttachmentLoadOp::eClear;
-				//attachmentDescription.storeOp = vk::AttachmentStoreOp::eStore;
-				//attachmentDescription.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-				//attachmentDescription.stencilStoreOp = vk::AttachmentStoreOp::eStore;
-				//attachmentDescription.initialLayout = vk::ImageLayout::eUndefined;
-				//attachmentDescription.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-				//attachments.push_back(attachmentDescription);
-
 				// Only one depth reference sould make it in here, else there will be an overwrite
 				depthReference = { attachmentIndex++, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 				hasDepth = true;
@@ -125,15 +99,19 @@ namespace pe
 		
 		VkRenderPass renderPass;
 		vkCreateRenderPass(RHII.device, &renderPassInfo, nullptr, &renderPass);
-		handle = renderPass;
+		m_apiHandle = renderPass;
 	}
 	
-	void RenderPass::Destroy()
+	RenderPass::RenderPass(const Attachment& attachment) : RenderPass(std::vector<Attachment>{ attachment })
 	{
-		if (VkRenderPass(handle))
+	}
+	
+	RenderPass::~RenderPass()
+	{
+		if (m_apiHandle)
 		{
-			vkDestroyRenderPass(RHII.device, handle, nullptr);
-			handle = {};
+			vkDestroyRenderPass(RHII.device, m_apiHandle, nullptr);
+			m_apiHandle = {};
 		}
 	}
 }

@@ -32,6 +32,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
+#include "Renderer/RenderPass.h"
 
 namespace pe
 {
@@ -109,7 +110,7 @@ namespace pe
 			0.f
 		};
 
-		cmd->BeginPass(&renderPass, framebuffers[imageIndex]);
+		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 		cmd->PushConstants(&pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(vec4), &values);
 		cmd->BindPipeline(&pipeline);
 		cmd->BindDescriptors(&pipeline, 1, &DSet);
@@ -138,7 +139,7 @@ namespace pe
 	{
 		Attachment attachment{};
 		attachment.format = renderTargets["viewport"]->imageInfo.format;
-		renderPass.Create(attachment);
+		renderPass = RenderPass::Create(attachment);
 	}
 	
 	void MotionBlur::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
@@ -178,7 +179,7 @@ namespace pe
 		for (auto frameBuffer : framebuffers)
 			frameBuffer->Destroy();
 
-		renderPass.Destroy();
+		renderPass->Destroy();
 
 		Pipeline::getDescriptorSetLayoutMotionBlur()->Destroy();
 		frameImage->Destroy();

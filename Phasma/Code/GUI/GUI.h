@@ -25,7 +25,6 @@ SOFTWARE.
 #include "imgui/imgui.h"
 #include "Model/Object.h"
 #include "Renderer/Pipeline.h"
-#include "Renderer/RenderPass.h"
 #include "SDL/SDL.h"
 
 namespace pe
@@ -43,6 +42,7 @@ namespace pe
     class Fence;
     class Semaphore;
     class Image;
+    class RenderPass;
 
     class GUI
     {
@@ -112,7 +112,7 @@ namespace pe
 
         bool render = true;
         std::string name;
-        RenderPass renderPass;
+        RenderPass* renderPass;
         std::vector<FrameBuffer*> framebuffers;
 
         void Update();
