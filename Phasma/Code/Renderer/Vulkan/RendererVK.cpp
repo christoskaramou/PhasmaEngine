@@ -266,7 +266,7 @@ namespace pe
 
 			cmd.SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
 			cmd.BeginPass(shadows.renderPass, shadows.framebuffers[index]);
-			cmd.BindPipeline(&shadows.pipeline);
+			cmd.BindPipeline(shadows.pipeline);
 			for (auto& model : Model::models)
 			{
 				if (model.render)
@@ -279,8 +279,8 @@ namespace pe
 						if (node->mesh)
 						{
 							std::array<Descriptor*, 2> descriptors{ node->mesh->descriptorSet, model.descriptorSet };
-							cmd.PushConstants(&shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), &shadows.cascades[i]);
-							cmd.BindDescriptors(&shadows.pipeline, 2, descriptors.data());
+							cmd.PushConstants(shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), &shadows.cascades[i]);
+							cmd.BindDescriptors(shadows.pipeline, 2, descriptors.data());
 							for (auto& primitive : node->mesh->primitives)
 							{
 								//if (primitive.render)
@@ -460,20 +460,20 @@ namespace pe
 			framebuffer->Destroy();
 		for (auto* framebuffer : deferred.compositionFramebuffers)
 			framebuffer->Destroy();
-		deferred.pipeline.destroy();
-		deferred.pipelineComposition.destroy();
+		deferred.pipeline->Destroy();
+		deferred.pipelineComposition->Destroy();
 		
 		// SSR
 		for (auto framebuffer : ssr.framebuffers)
 			framebuffer->Destroy();
 		ssr.renderPass->Destroy();
-		ssr.pipeline.destroy();
+		ssr.pipeline->Destroy();
 		
 		// FXAA
 		for (auto& framebuffer : fxaa.framebuffers)
 			framebuffer->Destroy();
 		fxaa.renderPass->Destroy();
-		fxaa.pipeline.destroy();
+		fxaa.pipeline->Destroy();
 		fxaa.frameImage->Destroy();
 		
 		// TAA
@@ -485,8 +485,8 @@ namespace pe
 			framebuffer->Destroy();
 		taa.renderPass->Destroy();
 		taa.renderPassSharpen->Destroy();
-		taa.pipeline.destroy();
-		taa.pipelineSharpen.destroy();
+		taa.pipeline->Destroy();
+		taa.pipelineSharpen->Destroy();
 		
 		// Bloom
 		for (auto* frameBuffer : bloom.framebuffers)
@@ -494,24 +494,24 @@ namespace pe
 		bloom.renderPassBrightFilter->Destroy();
 		bloom.renderPassGaussianBlur->Destroy();
 		bloom.renderPassCombine->Destroy();
-		bloom.pipelineBrightFilter.destroy();
-		bloom.pipelineGaussianBlurHorizontal.destroy();
-		bloom.pipelineGaussianBlurVertical.destroy();
-		bloom.pipelineCombine.destroy();
+		bloom.pipelineBrightFilter->Destroy();
+		bloom.pipelineGaussianBlurHorizontal->Destroy();
+		bloom.pipelineGaussianBlurVertical->Destroy();
+		bloom.pipelineCombine->Destroy();
 		bloom.frameImage->Destroy();
 		
 		// Depth of Field
 		for (auto& framebuffer : dof.framebuffers)
 			framebuffer->Destroy();
 		dof.renderPass->Destroy();
-		dof.pipeline.destroy();
+		dof.pipeline->Destroy();
 		dof.frameImage->Destroy();
 		
 		// Motion blur
 		for (auto& framebuffer : motionBlur.framebuffers)
 			framebuffer->Destroy();
 		motionBlur.renderPass->Destroy();
-		motionBlur.pipeline.destroy();
+		motionBlur.pipeline->Destroy();
 		motionBlur.frameImage->Destroy();
 		
 		// SSAO
@@ -521,8 +521,8 @@ namespace pe
 			framebuffer->Destroy();
 		for (auto& framebuffer : ssao.blurFramebuffers)
 			framebuffer->Destroy();
-		ssao.pipeline.destroy();
-		ssao.pipelineBlur.destroy();
+		ssao.pipeline->Destroy();
+		ssao.pipelineBlur->Destroy();
 		
 		RHII.depth->Destroy();
 		RHII.swapchain->Destroy();
@@ -674,21 +674,21 @@ namespace pe
 		DOF& dof = *WORLD_ENTITY->GetComponent<DOF>();
 		MotionBlur& motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
-		shadows.pipeline.destroy();
-		ssao.pipeline.destroy();
-		ssao.pipelineBlur.destroy();
-		ssr.pipeline.destroy();
-		deferred.pipeline.destroy();
-		deferred.pipelineComposition.destroy();
-		fxaa.pipeline.destroy();
-		taa.pipeline.destroy();
-		taa.pipelineSharpen.destroy();
+		shadows.pipeline->Destroy();
+		ssao.pipeline->Destroy();
+		ssao.pipelineBlur->Destroy();
+		ssr.pipeline->Destroy();
+		deferred.pipeline->Destroy();
+		deferred.pipelineComposition->Destroy();
+		fxaa.pipeline->Destroy();
+		taa.pipeline->Destroy();
+		taa.pipelineSharpen->Destroy();
 		//bloom.pipelineBrightFilter.destroy();
 		//bloom.pipelineCombine.destroy();
 		//bloom.pipelineGaussianBlurHorizontal.destroy();
 		//bloom.pipelineGaussianBlurVertical.destroy();
-		dof.pipeline.destroy();
-		motionBlur.pipeline.destroy();
+		dof.pipeline->Destroy();
+		motionBlur.pipeline->Destroy();
 		
 		shadows.createPipeline();
 		ssao.createPipelines(renderTargets);

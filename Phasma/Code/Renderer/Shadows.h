@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Buffer.h"
-#include "Pipeline.h"
 #include "Core/Math.h"
 #include "Systems/CameraSystem.h"
 
@@ -36,6 +34,8 @@ namespace pe
 	class FrameBuffer;
 	class Image;
 	class RenderPass;
+	class Buffer;
+	class Pipeline;
 
 	class Shadows
 	{
@@ -51,7 +51,7 @@ namespace pe
 		Descriptor* descriptorSetDeferred;
 		std::vector<FrameBuffer*> framebuffers {};
 		Buffer* uniformBuffer;
-		Pipeline pipeline;
+		Pipeline* pipeline;
 		
 		void update(Camera& camera);
 		

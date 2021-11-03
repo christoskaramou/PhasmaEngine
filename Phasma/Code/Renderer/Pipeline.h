@@ -85,22 +85,16 @@ namespace pe
 		PipelineCacheHandle pipelineCache;
 	};
 	
-	class Pipeline
+	class Pipeline : public IHandle<Pipeline, PipelineHandle>
 	{
 	public:
-		Pipeline();
+		Pipeline(const PipelineCreateInfo& info);
 		
 		~Pipeline();
 		
-		PipelineCreateInfo info;
-		PipelineHandle handle;
 		PipelineLayoutHandle layout;
 		
-		void createGraphicsPipeline();
-		
 		void createComputePipeline();
-		
-		void destroy();
 		
 		static DescriptorLayout* getDescriptorSetLayoutComposition();
 
@@ -141,5 +135,8 @@ namespace pe
 		static DescriptorLayout* getDescriptorSetLayoutSkybox();
 
 		static DescriptorLayout* getDescriptorSetLayoutCompute();
+
+	private:
+		PipelineCreateInfo info;
 	};
 }

@@ -198,12 +198,12 @@ namespace pe
 
 	void CommandBuffer::BindPipeline(Pipeline* pipeline)
 	{
-		vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->handle);
+		vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->Handle());
 	}
 
 	void CommandBuffer::BindComputePipeline(Pipeline* pipeline)
 	{
-		vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->handle);
+		vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->Handle());
 	}
 
 	void CommandBuffer::BindVertexBuffer(Buffer* buffer, size_t offset)

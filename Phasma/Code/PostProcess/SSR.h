@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Renderer/Buffer.h"
-#include "Renderer/Pipeline.h"
 #include "Systems/CameraSystem.h"
 #include "ECS/Component.h"
 
@@ -33,6 +32,7 @@ namespace pe
 	class FrameBuffer;
 	class Image;
 	class RenderPass;
+	class Pipeline;
 
 	class SSR : public IComponent
 	{
@@ -44,7 +44,7 @@ namespace pe
 		mat4 reflectionInput[4];
 		Buffer* UBReflection;
 		std::vector<FrameBuffer*> framebuffers {};
-		Pipeline pipeline;
+		Pipeline* pipeline;
 		RenderPass* renderPass;
 		Descriptor* DSet;
 		

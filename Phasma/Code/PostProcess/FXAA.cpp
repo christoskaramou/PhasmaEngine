@@ -31,6 +31,7 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
+#include "Renderer/Pipeline.h"
 
 namespace pe
 {
@@ -82,8 +83,8 @@ namespace pe
 	void FXAA::draw(CommandBuffer* cmd, uint32_t imageIndex)
 	{
 		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-		cmd->BindPipeline(&pipeline);
-		cmd->BindDescriptors(&pipeline, 1, &DSet);
+		cmd->BindPipeline(pipeline);
+		cmd->BindDescriptors(pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 	}
@@ -112,16 +113,17 @@ namespace pe
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/FXAA/FXAA.frag", ShaderType::Fragment, true};
 		
-		pipeline.info.pVertShader = &vert;
-		pipeline.info.pFragShader = &frag;
-		pipeline.info.width = renderTargets["viewport"]->width_f;
-		pipeline.info.height = renderTargets["viewport"]->height_f;
-		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = { renderTargets["viewport"]->blendAttachment };
-		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutFXAA() };
-		pipeline.info.renderPass = renderPass;
+		PipelineCreateInfo info{};
+		info.pVertShader = &vert;
+		info.pFragShader = &frag;
+		info.width = renderTargets["viewport"]->width_f;
+		info.height = renderTargets["viewport"]->height_f;
+		info.cullMode = CullMode::Back;
+		info.colorBlendAttachments = { renderTargets["viewport"]->blendAttachment };
+		info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutFXAA() };
+		info.renderPass = renderPass;
 		
-		pipeline.createGraphicsPipeline();
+		pipeline = Pipeline::Create(info);
 	}
 	
 	void FXAA::destroy()
@@ -132,6 +134,6 @@ namespace pe
 		Pipeline::getDescriptorSetLayoutFXAA()->Destroy();
 		renderPass->Destroy();
 		frameImage->Destroy();
-		pipeline.destroy();
+		pipeline->Destroy();
 	}
 }

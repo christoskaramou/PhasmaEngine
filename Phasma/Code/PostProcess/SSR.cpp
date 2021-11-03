@@ -32,6 +32,7 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
+#include "Renderer/Pipeline.h"
 
 namespace pe
 {
@@ -103,8 +104,8 @@ namespace pe
 	void SSR::draw(CommandBuffer* cmd, uint32_t imageIndex)
 	{
 		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-		cmd->BindPipeline(&pipeline);
-		cmd->BindDescriptors(&pipeline, 1, &DSet);
+		cmd->BindPipeline(pipeline);
+		cmd->BindDescriptors(pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 	}
@@ -133,16 +134,17 @@ namespace pe
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/SSR/ssr.frag", ShaderType::Fragment, true};
 		
-		pipeline.info.pVertShader = &vert;
-		pipeline.info.pFragShader = &frag;
-		pipeline.info.width = renderTargets["ssr"]->width_f;
-		pipeline.info.height = renderTargets["ssr"]->height_f;
-		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = { renderTargets["ssr"]->blendAttachment };
-		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSR() };
-		pipeline.info.renderPass = renderPass;
+		PipelineCreateInfo info{};
+		info.pVertShader = &vert;
+		info.pFragShader = &frag;
+		info.width = renderTargets["ssr"]->width_f;
+		info.height = renderTargets["ssr"]->height_f;
+		info.cullMode = CullMode::Back;
+		info.colorBlendAttachments = { renderTargets["ssr"]->blendAttachment };
+		info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSR() };
+		info.renderPass = renderPass;
 		
-		pipeline.createGraphicsPipeline();
+		pipeline = Pipeline::Create(info);
 	}
 	
 	void SSR::destroy()
@@ -154,6 +156,6 @@ namespace pe
 		
 		Pipeline::getDescriptorSetLayoutSSR()->Destroy();
 		UBReflection->Destroy();
-		pipeline.destroy();
+		pipeline->Destroy();
 	}
 }

@@ -22,8 +22,7 @@ SOFTWARE.
 
 #pragma once
 
-#include "Buffer.h"
-#include "Pipeline.h"
+#include "Core/Base.h"
 
 namespace pe
 {
@@ -34,6 +33,8 @@ namespace pe
 	class CommandBuffer;
 	class Fence;
 	class Semaphore;
+	class Buffer;
+	class Pipeline;
 
 	class Compute
 	{
@@ -53,7 +54,7 @@ namespace pe
 		
 		void updateInput(const void* srcData, size_t srcSize = 0, size_t offset = 0);
 		
-		void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ, uint32_t count = 0, SemaphoreHandle* waitForHandles = nullptr);
+		void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ, uint32_t count = 0, Semaphore** waitForHandles = nullptr);
 		
 		void waitFence();
 		
@@ -75,7 +76,7 @@ namespace pe
 		static CommandPool* s_commandPool;
 		Buffer* SBIn;
 		Buffer* SBOut;
-		Pipeline pipeline;
+		Pipeline* pipeline;
 		Fence* fence;
 		Semaphore* semaphore;
 		Descriptor* DSCompute;

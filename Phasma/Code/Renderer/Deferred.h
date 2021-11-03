@@ -45,8 +45,8 @@ namespace pe
 		RenderPass* compositionRenderPass;
 		std::vector<FrameBuffer*> framebuffers {}, compositionFramebuffers {};
 		Descriptor* DSComposition;
-		Pipeline pipeline;
-		Pipeline pipelineComposition;
+		Pipeline* pipeline;
+		Pipeline* pipelineComposition;
 		Image* ibl_brdf_lut;
 		
 		struct UBO

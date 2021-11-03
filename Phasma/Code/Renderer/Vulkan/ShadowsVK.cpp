@@ -32,6 +32,8 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
 #include "Renderer/Framebuffer.h"
+#include "Renderer/Buffer.h"
+#include "Renderer/Pipeline.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
 #include "Core/Settings.h"
@@ -128,19 +130,20 @@ namespace pe
 	{
 		Shader vert{ "Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true };
 
-		pipeline.info.pVertShader = &vert;
-		pipeline.info.vertexInputBindingDescriptions = Vertex::GetBindingDescriptionGeneral();
-		pipeline.info.vertexInputAttributeDescriptions = Vertex::GetAttributeDescriptionGeneral();
-		pipeline.info.width = static_cast<float>(SHADOWMAP_SIZE);
-		pipeline.info.height = static_cast<float>(SHADOWMAP_SIZE);
-		pipeline.info.pushConstantStage = PushConstantStage::Vertex;
-		pipeline.info.pushConstantSize = sizeof(mat4);
-		pipeline.info.colorBlendAttachments = { textures[0]->blendAttachment };
-		pipeline.info.dynamicStates = { VK_DYNAMIC_STATE_DEPTH_BIAS };
-		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutMesh(), Pipeline::getDescriptorSetLayoutModel() };
-		pipeline.info.renderPass = renderPass;
+		PipelineCreateInfo info{};
+		info.pVertShader = &vert;
+		info.vertexInputBindingDescriptions = Vertex::GetBindingDescriptionGeneral();
+		info.vertexInputAttributeDescriptions = Vertex::GetAttributeDescriptionGeneral();
+		info.width = static_cast<float>(SHADOWMAP_SIZE);
+		info.height = static_cast<float>(SHADOWMAP_SIZE);
+		info.pushConstantStage = PushConstantStage::Vertex;
+		info.pushConstantSize = sizeof(mat4);
+		info.colorBlendAttachments = { textures[0]->blendAttachment };
+		info.dynamicStates = { VK_DYNAMIC_STATE_DEPTH_BIAS };
+		info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutMesh(), Pipeline::getDescriptorSetLayoutModel() };
+		info.renderPass = renderPass;
 
-		pipeline.createGraphicsPipeline();
+		pipeline = Pipeline::Create(info);
 	}
 
 	void Shadows::createUniformBuffers()
@@ -172,7 +175,7 @@ namespace pe
 			fb->Destroy();
 
 		uniformBuffer->Destroy();
-		pipeline.destroy();
+		pipeline->Destroy();
 	}
 
 	void Shadows::update(Camera& camera)

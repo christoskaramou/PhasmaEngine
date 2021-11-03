@@ -57,7 +57,7 @@ namespace pe
 		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 		
 		Model::commandBuffer = cmd;
-		Model::pipeline = &pipeline;
+		Model::pipeline = pipeline;
 	}
 	
 	void Deferred::batchEnd()
@@ -208,9 +208,9 @@ namespace pe
 		std::vector<Descriptor*> handles{ DSComposition, shadows.descriptorSetDeferred, skybox.descriptorSet };
 
 		cmd->BeginPass(compositionRenderPass, compositionFramebuffers[imageIndex]);
-		cmd->PushConstants(&pipelineComposition, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(mat4), &values);
-		cmd->BindPipeline(&pipelineComposition);
-		cmd->BindDescriptors(&pipelineComposition, (uint32_t)handles.size(), handles.data());
+		cmd->PushConstants(pipelineComposition, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(mat4), &values);
+		cmd->BindPipeline(pipelineComposition);
+		cmd->BindDescriptors(pipelineComposition, (uint32_t)handles.size(), handles.data());
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 	}
@@ -292,14 +292,15 @@ namespace pe
 		Shader vert{ "Shaders/Deferred/gBuffer.vert", ShaderType::Vertex, true };
 		Shader frag{ "Shaders/Deferred/gBuffer.frag", ShaderType::Fragment, true };
 		
-		pipeline.info.pVertShader = &vert;
-		pipeline.info.pFragShader = &frag;
-		pipeline.info.vertexInputBindingDescriptions = Vertex::GetBindingDescriptionGeneral();
-		pipeline.info.vertexInputAttributeDescriptions = Vertex::GetAttributeDescriptionGeneral();
-		pipeline.info.width = renderTargets["albedo"]->width_f;
-		pipeline.info.height = renderTargets["albedo"]->height_f;
-		pipeline.info.cullMode = CullMode::Front;
-		pipeline.info.colorBlendAttachments =
+		PipelineCreateInfo info{};
+		info.pVertShader = &vert;
+		info.pFragShader = &frag;
+		info.vertexInputBindingDescriptions = Vertex::GetBindingDescriptionGeneral();
+		info.vertexInputAttributeDescriptions = Vertex::GetAttributeDescriptionGeneral();
+		info.width = renderTargets["albedo"]->width_f;
+		info.height = renderTargets["albedo"]->height_f;
+		info.cullMode = CullMode::Front;
+		info.colorBlendAttachments =
 		{
 			renderTargets["normal"]->blendAttachment,
 			renderTargets["albedo"]->blendAttachment,
@@ -307,15 +308,15 @@ namespace pe
 			renderTargets["velocity"]->blendAttachment,
 			renderTargets["emissive"]->blendAttachment,
 		};
-		pipeline.info.descriptorSetLayouts =
+		info.descriptorSetLayouts =
 		{
 			Pipeline::getDescriptorSetLayoutMesh(),
 			Pipeline::getDescriptorSetLayoutPrimitive(),
 			Pipeline::getDescriptorSetLayoutModel()
 		};
-		pipeline.info.renderPass = renderPass;
+		info.renderPass = renderPass;
 		
-		pipeline.createGraphicsPipeline();
+		pipeline = Pipeline::Create(info);
 	}
 	
 	void Deferred::createCompositionPipeline(std::map<std::string, Image*>& renderTargets)
@@ -331,23 +332,24 @@ namespace pe
 
 		Shader vert{ "Shaders/Common/quad.vert", ShaderType::Vertex, true };
 		Shader frag{ "Shaders/Deferred/composition.frag", ShaderType::Fragment, true, definesFrag };
-		
-		pipelineComposition.info.pVertShader = &vert;
-		pipelineComposition.info.pFragShader = &frag;
-		pipelineComposition.info.width = renderTargets["viewport"]->width_f;
-		pipelineComposition.info.height = renderTargets["viewport"]->height_f;
-		pipelineComposition.info.pushConstantStage = PushConstantStage::Fragment;
-		pipelineComposition.info.pushConstantSize = sizeof(mat4);
-		pipelineComposition.info.colorBlendAttachments = { renderTargets["viewport"]->blendAttachment };
-		pipelineComposition.info.descriptorSetLayouts =
+
+		PipelineCreateInfo info{};
+		info.pVertShader = &vert;
+		info.pFragShader = &frag;
+		info.width = renderTargets["viewport"]->width_f;
+		info.height = renderTargets["viewport"]->height_f;
+		info.pushConstantStage = PushConstantStage::Fragment;
+		info.pushConstantSize = sizeof(mat4);
+		info.colorBlendAttachments = { renderTargets["viewport"]->blendAttachment };
+		info.descriptorSetLayouts =
 		{
 			Pipeline::getDescriptorSetLayoutComposition(),
 			Pipeline::getDescriptorSetLayoutShadowsDeferred(),
 			Pipeline::getDescriptorSetLayoutSkybox()
 		};
-		pipelineComposition.info.renderPass = compositionRenderPass;
+		info.renderPass = compositionRenderPass;
 		
-		pipelineComposition.createGraphicsPipeline();
+		pipelineComposition = Pipeline::Create(info);
 	}
 	
 	void Deferred::destroy()
@@ -362,8 +364,8 @@ namespace pe
 		
 		Pipeline::getDescriptorSetLayoutComposition()->Destroy();
 		uniform->Destroy();
-		pipeline.destroy();
-		pipelineComposition.destroy();
+		pipeline->Destroy();
+		pipelineComposition->Destroy();
 	}
 }
 #endif

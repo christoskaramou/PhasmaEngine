@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Renderer/Buffer.h"
-#include "Renderer/Pipeline.h"
 #include "Systems/CameraSystem.h"
 #include "ECS/Component.h"
 
@@ -34,6 +33,7 @@ namespace pe
 	class FrameBuffer;
 	class Image;
 	class RenderPass;
+	class Pipeline;
 
 	class SSAO : public IComponent
 	{
@@ -45,8 +45,8 @@ namespace pe
 		RenderPass* renderPass;
 		RenderPass* blurRenderPass;
 		std::vector<FrameBuffer*> framebuffers {}, blurFramebuffers {};
-		Pipeline pipeline;
-		Pipeline pipelineBlur;
+		Pipeline* pipeline;
+		Pipeline* pipelineBlur;
 		Descriptor* DSet;
 		Descriptor* DSBlur;
 		

@@ -28,6 +28,8 @@ SOFTWARE.
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Image.h"
+#include "Renderer/Buffer.h"
+#include "Renderer/Pipeline.h"
 
 namespace pe
 {
@@ -39,6 +41,7 @@ namespace pe
 		semaphore = {};
 		DSCompute = {};
 		commandBuffer = {};
+		pipeline = nullptr;
 	}
 	
 	void Compute::updateInput(const void* srcData, size_t srcSize, size_t offset)
@@ -49,15 +52,18 @@ namespace pe
 		SBIn->Unmap();
 	}
 	
-	void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, uint32_t count, SemaphoreHandle* waitForHandles)
+	void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, uint32_t count, Semaphore** waitForHandles)
 	{
 		commandBuffer->Begin();
-		commandBuffer->BindComputePipeline(&pipeline);
-		commandBuffer->BindComputeDescriptors(&pipeline, 1, &DSCompute);
+		commandBuffer->BindComputePipeline(pipeline);
+		commandBuffer->BindComputeDescriptors(pipeline, 1, &DSCompute);
 		commandBuffer->Dispatch(sizeX, sizeY, sizeZ);
 		commandBuffer->End();
 		
-		std::vector<VkSemaphore> waitSemaphores = ApiHandleVectorCreate<VkSemaphore>(count, waitForHandles);
+		std::vector<VkSemaphore> waitSemaphores(count);
+		for (size_t i = 0; i < count; i++)
+			waitSemaphores[i] = waitForHandles[i]->Handle();
+
 		VkCommandBuffer cmdBuffer = commandBuffer->Handle();
 		VkSemaphore vksemaphore = semaphore->Handle();
 		VkSubmitInfo siCompute{};
@@ -119,21 +125,23 @@ namespace pe
 	
 	void Compute::createPipeline(const std::string& shaderName)
 	{
-		pipeline.destroy();
+		if (pipeline)
+			pipeline->Destroy();
 		
 		Shader shader {shaderName, ShaderType::Compute, true};
 		
-		pipeline.info.pCompShader = &shader;
-		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutCompute() };
+		PipelineCreateInfo info{};
+		info.pCompShader = &shader;
+		info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutCompute() };
 		
-		pipeline.createComputePipeline();
+		pipeline = Pipeline::Create(info);
 	}
 	
 	void Compute::destroy()
 	{
 		SBIn->Destroy();
 		SBOut->Destroy();
-		pipeline.destroy();
+		pipeline->Destroy();
 		semaphore->Destroy();
 		fence->Destroy();
 	}

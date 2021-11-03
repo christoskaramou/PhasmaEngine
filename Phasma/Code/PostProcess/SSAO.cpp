@@ -32,6 +32,7 @@ SOFTWARE.
 #include "Renderer/FrameBuffer.h"
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
+#include "Renderer/Pipeline.h"
 
 namespace pe
 {
@@ -142,8 +143,8 @@ namespace pe
 		// SSAO image
 		image->ChangeLayout(cmd, LayoutState::ColorWrite);
 		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-		cmd->BindPipeline(&pipeline);
-		cmd->BindDescriptors(&pipeline, 1, &DSet);
+		cmd->BindPipeline(pipeline);
+		cmd->BindDescriptors(pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 		
@@ -151,8 +152,8 @@ namespace pe
 
 		// new blurry SSAO image
 		cmd->BeginPass(blurRenderPass, blurFramebuffers[imageIndex]);
-		cmd->BindPipeline(&pipelineBlur);
-		cmd->BindDescriptors(&pipelineBlur, 1, &DSBlur);
+		cmd->BindPipeline(pipelineBlur);
+		cmd->BindDescriptors(pipelineBlur, 1, &DSBlur);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 		image->ChangeLayout(cmd, LayoutState::ColorRead);
@@ -172,8 +173,8 @@ namespace pe
 		for (auto frameBuffer : blurFramebuffers)
 			frameBuffer->Destroy();
 		
-		pipeline.destroy();
-		pipelineBlur.destroy();
+		pipeline->Destroy();
+		pipelineBlur->Destroy();
 		Pipeline::getDescriptorSetLayoutSSAO()->Destroy();
 		Pipeline::getDescriptorSetLayoutSSAOBlur()->Destroy();
 	}
@@ -241,32 +242,34 @@ namespace pe
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/SSAO/ssao.frag", ShaderType::Fragment, true};
 		
-		pipeline.info.pVertShader = &vert;
-		pipeline.info.pFragShader = &frag;
-		pipeline.info.width = renderTargets["ssao"]->width_f;
-		pipeline.info.height = renderTargets["ssao"]->height_f;
-		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = { renderTargets["ssao"]->blendAttachment };
-		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSAO() };
-		pipeline.info.renderPass = renderPass;
+		PipelineCreateInfo info{};
+		info.pVertShader = &vert;
+		info.pFragShader = &frag;
+		info.width = renderTargets["ssao"]->width_f;
+		info.height = renderTargets["ssao"]->height_f;
+		info.cullMode = CullMode::Back;
+		info.colorBlendAttachments = { renderTargets["ssao"]->blendAttachment };
+		info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSAO() };
+		info.renderPass = renderPass;
 		
-		pipeline.createGraphicsPipeline();
+		pipeline = Pipeline::Create(info);
 	}
 	
 	void SSAO::createBlurPipeline(std::map<std::string, Image*>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/SSAO/ssaoBlur.frag", ShaderType::Fragment, true};
+
+		PipelineCreateInfo info{};
+		info.pVertShader = &vert;
+		info.pFragShader = &frag;
+		info.width = renderTargets["ssaoBlur"]->width_f;
+		info.height = renderTargets["ssaoBlur"]->height_f;
+		info.cullMode = CullMode::Back;
+		info.colorBlendAttachments = { renderTargets["ssaoBlur"]->blendAttachment };
+		info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSAOBlur() };
+		info.renderPass = blurRenderPass;
 		
-		pipelineBlur.info.pVertShader = &vert;
-		pipelineBlur.info.pFragShader = &frag;
-		pipelineBlur.info.width = renderTargets["ssaoBlur"]->width_f;
-		pipelineBlur.info.height = renderTargets["ssaoBlur"]->height_f;
-		pipelineBlur.info.cullMode = CullMode::Back;
-		pipelineBlur.info.colorBlendAttachments = { renderTargets["ssaoBlur"]->blendAttachment };
-		pipelineBlur.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutSSAOBlur() };
-		pipelineBlur.info.renderPass = blurRenderPass;
-		
-		pipelineBlur.createGraphicsPipeline();
+		pipelineBlur = Pipeline::Create(info);
 	}
 }

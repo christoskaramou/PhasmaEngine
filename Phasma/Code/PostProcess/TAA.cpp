@@ -32,6 +32,7 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
+#include "Renderer/Pipeline.h"
 
 namespace pe
 {
@@ -158,8 +159,8 @@ namespace pe
 		
 		renderTargets["taa"]->ChangeLayout(cmd, LayoutState::ColorWrite);
 		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-		cmd->BindPipeline(&pipeline);
-		cmd->BindDescriptors(&pipeline, 1, &DSet);
+		cmd->BindPipeline(pipeline);
+		cmd->BindDescriptors(pipeline, 1, &DSet);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 		renderTargets["taa"]->ChangeLayout(cmd, LayoutState::ColorRead);
@@ -167,8 +168,8 @@ namespace pe
 		saveImage(cmd, renderTargets["taa"]);
 
 		cmd->BeginPass(renderPassSharpen, framebuffersSharpen[imageIndex]);
-		cmd->BindPipeline(&pipelineSharpen);
-		cmd->BindDescriptors(&pipelineSharpen, 1, &DSetSharpen);
+		cmd->BindPipeline(pipelineSharpen);
+		cmd->BindDescriptors(pipelineSharpen, 1, &DSetSharpen);
 		cmd->Draw(3, 1, 0, 0);
 		cmd->EndPass();
 	}
@@ -215,33 +216,35 @@ namespace pe
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/TAA/TAA.frag", ShaderType::Fragment, true};
 		
-		pipeline.info.pVertShader = &vert;
-		pipeline.info.pFragShader = &frag;
-		pipeline.info.width = renderTargets["taa"]->width_f;
-		pipeline.info.height = renderTargets["taa"]->height_f;
-		pipeline.info.cullMode = CullMode::Back;
-		pipeline.info.colorBlendAttachments = { renderTargets["taa"]->blendAttachment };
-		pipeline.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutTAA() };
-		pipeline.info.renderPass = renderPass;
+		PipelineCreateInfo info{};
+		info.pVertShader = &vert;
+		info.pFragShader = &frag;
+		info.width = renderTargets["taa"]->width_f;
+		info.height = renderTargets["taa"]->height_f;
+		info.cullMode = CullMode::Back;
+		info.colorBlendAttachments = { renderTargets["taa"]->blendAttachment };
+		info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutTAA() };
+		info.renderPass = renderPass;
 		
-		pipeline.createGraphicsPipeline();
+		pipeline = Pipeline::Create(info);
 	}
 	
 	void TAA::createPipelineSharpen(std::map<std::string, Image*>& renderTargets)
 	{
 		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
 		Shader frag {"Shaders/TAA/TAASharpen.frag", ShaderType::Fragment, true};
+
+		PipelineCreateInfo info{};
+		info.pVertShader = &vert;
+		info.pFragShader = &frag;
+		info.width = renderTargets["viewport"]->width_f;
+		info.height = renderTargets["viewport"]->height_f;
+		info.cullMode = CullMode::Back;
+		info.colorBlendAttachments = { renderTargets["viewport"]->blendAttachment };
+		info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutTAASharpen() };
+		info.renderPass = renderPassSharpen;
 		
-		pipelineSharpen.info.pVertShader = &vert;
-		pipelineSharpen.info.pFragShader = &frag;
-		pipelineSharpen.info.width = renderTargets["viewport"]->width_f;
-		pipelineSharpen.info.height = renderTargets["viewport"]->height_f;
-		pipelineSharpen.info.cullMode = CullMode::Back;
-		pipelineSharpen.info.colorBlendAttachments = { renderTargets["viewport"]->blendAttachment };
-		pipelineSharpen.info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutTAASharpen() };
-		pipelineSharpen.info.renderPass = renderPassSharpen;
-		
-		pipelineSharpen.createGraphicsPipeline();
+		pipelineSharpen = Pipeline::Create(info);
 	}
 	
 	void TAA::saveImage(CommandBuffer* cmd, Image* source)
@@ -321,7 +324,7 @@ namespace pe
 		
 		Pipeline::getDescriptorSetLayoutTAA()->Destroy();
 		Pipeline::getDescriptorSetLayoutTAASharpen()->Destroy();
-		pipeline.destroy();
-		pipelineSharpen.destroy();
+		pipeline->Destroy();
+		pipelineSharpen->Destroy();
 	}
 }
