@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Renderer/Surface.h"
-#include "Renderer/Swapchain.h"
 
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
@@ -40,6 +39,9 @@ namespace pe
 	class CommandBuffer;
 	class DescriptorPool;
 	class Fence;
+	class Semaphore;
+	class Swapchain;
+	class Image;
 
 	class RHI : public NoCopy, public NoMove
 	{
@@ -110,7 +112,7 @@ namespace pe
 
 		SDL_Window* window;
 		Surface surface;
-		Swapchain swapchain;
+		Swapchain* swapchain;
 		Image* depth;
 		int graphicsFamilyId, computeFamilyId, transferFamilyId;
 
@@ -131,7 +133,7 @@ namespace pe
 			uint32_t signalSemaphoresCount, Semaphore** signalSemaphores);
 
 		void Present(
-			uint32_t swapchainCount, Swapchain* swapchains,
+			uint32_t swapchainCount, Swapchain** swapchains,
 			uint32_t* imageIndices,
 			uint32_t semaphorescount, Semaphore** semaphores);
 

@@ -525,7 +525,7 @@ namespace pe
 		ssao.pipelineBlur.destroy();
 		
 		RHII.depth->Destroy();
-		RHII.swapchain.Destroy();
+		RHII.swapchain->Destroy();
 		//- Free resources end ------------------
 		
 		//- Recreate resources ------------------
@@ -604,7 +604,7 @@ namespace pe
 			
 	void Renderer::BlitToViewport(CommandBuffer* cmd, Image* renderedImage, uint32_t imageIndex)
 	{
-		Image* s_chain_Image = RHII.swapchain.images[imageIndex];
+		Image* s_chain_Image = RHII.swapchain->images[imageIndex];
 		
 		renderedImage->TransitionImageLayout(
 			cmd,

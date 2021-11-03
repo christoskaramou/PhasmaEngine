@@ -118,8 +118,8 @@ namespace pe
 	
 	void SSR::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
 	{
-		framebuffers.resize(RHII.swapchain.images.size());
-		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
+		framebuffers.resize(RHII.swapchain->images.size());
+		for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
 		{
 			uint32_t width = renderTargets["ssr"]->imageInfo.width;
 			uint32_t height = renderTargets["ssr"]->imageInfo.height;

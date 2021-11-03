@@ -31,17 +31,7 @@ SOFTWARE.
 
 namespace pe
 {
-	Swapchain::Swapchain()
-	{
-		handle = {};
-		images = {};
-	}
-	
-	Swapchain::~Swapchain()
-	{
-	}
-	
-	void Swapchain::Create(Surface* surface)
+	Swapchain::Swapchain(Surface* surface)
 	{
 		VkSurfaceCapabilitiesKHR capabilities;
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, surface->surface, &capabilities);
@@ -67,43 +57,41 @@ namespace pe
 		swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 		swapchainCreateInfo.presentMode = (VkPresentModeKHR)surface->presentMode;
 		swapchainCreateInfo.clipped = VK_TRUE;
-		if (handle)
-			swapchainCreateInfo.oldSwapchain = handle;
+		if (m_apiHandle)
+			swapchainCreateInfo.oldSwapchain = m_apiHandle;
 		
 		// new swapchain with old create info
 		VkSwapchainKHR schain;
 		vkCreateSwapchainKHR(RHII.device, &swapchainCreateInfo, nullptr, &schain);
-
-		Swapchain newSwapchain;
-		newSwapchain.handle = schain;
-		
-		if (handle)
-		{
-			vkDestroySwapchainKHR(RHII.device, handle, nullptr);
-			handle = {};
-		}
 		
 		// TODO: Maybe check the result in a loop?
 		uint32_t swapchainImageCount;
-		vkGetSwapchainImagesKHR(RHII.device, newSwapchain.handle, &swapchainImageCount, nullptr);
+		vkGetSwapchainImagesKHR(RHII.device, schain, &swapchainImageCount, nullptr);
 
-		std::vector<VkImage> images(swapchainImageCount);
-		vkGetSwapchainImagesKHR(RHII.device, newSwapchain.handle, &swapchainImageCount, images.data());
+		std::vector<VkImage> imagesVK(swapchainImageCount);
+		vkGetSwapchainImagesKHR(RHII.device, schain, &swapchainImageCount, imagesVK.data());
+
+		for (auto* image : images)
+		{
+			vkDestroyImageView(RHII.device, image->view, nullptr);
+			image->view = {};
+			delete image;
+		}
 		
-		newSwapchain.images.resize(images.size());
+		images.resize(imagesVK.size());
 		for (unsigned i = 0; i < images.size(); i++)
 		{
-			newSwapchain.images[i] = new Image();
-			newSwapchain.images[i]->Handle() = images[i];
-			newSwapchain.images[i]->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-			newSwapchain.images[i]->blendAttachment.blendEnable = VK_TRUE;
-			newSwapchain.images[i]->blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-			newSwapchain.images[i]->blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-			newSwapchain.images[i]->blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-			newSwapchain.images[i]->blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-			newSwapchain.images[i]->blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-			newSwapchain.images[i]->blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-			newSwapchain.images[i]->blendAttachment.colorWriteMask =
+			images[i] = new Image();
+			images[i]->Handle() = imagesVK[i];
+			images[i]->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+			images[i]->blendAttachment.blendEnable = VK_TRUE;
+			images[i]->blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+			images[i]->blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+			images[i]->blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+			images[i]->blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+			images[i]->blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+			images[i]->blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+			images[i]->blendAttachment.colorWriteMask =
 				VK_COLOR_COMPONENT_R_BIT |
 				VK_COLOR_COMPONENT_G_BIT |
 				VK_COLOR_COMPONENT_B_BIT |
@@ -111,7 +99,7 @@ namespace pe
 		}
 		
 		// create image views for each swapchain image
-		for (auto* image : newSwapchain.images)
+		for (auto* image : images)
 		{
 			VkImageViewCreateInfo imageViewCreateInfo{};
 			imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -125,26 +113,21 @@ namespace pe
 			image->view = imageView;
 		}
 		
-		*this = newSwapchain;
-	}
-	
-	uint32_t Swapchain::Aquire(SemaphoreHandle semaphore, FenceHandle fence)
-	{
-		uint32_t imageIndex = 0;
-		VkResult result = vkAcquireNextImageKHR(RHII.device, handle, UINT64_MAX, semaphore, fence, &imageIndex);
-
-		if (result != VK_SUCCESS)
-			throw std::runtime_error("Aquire Next Image error");
-		
-		return imageIndex;
-	}
-	
-	void Swapchain::Destroy()
-	{
-		if (handle)
+		if (m_apiHandle)
 		{
-			vkDestroySwapchainKHR(RHII.device, handle, nullptr);
-			handle = {};
+			vkDestroySwapchainKHR(RHII.device, m_apiHandle, nullptr);
+			m_apiHandle = {};
+		}
+
+		m_apiHandle = schain;
+	}
+
+	Swapchain::~Swapchain()
+	{
+		if (m_apiHandle)
+		{
+			vkDestroySwapchainKHR(RHII.device, m_apiHandle, nullptr);
+			m_apiHandle = {};
 		}
 
 		for (auto* image : images)
@@ -153,6 +136,21 @@ namespace pe
 			image->view = {};
 			delete image;
 		}
+	}
+	
+	uint32_t Swapchain::Aquire(Semaphore* semaphore, Fence* fence)
+	{
+		VkFence fenceVK = nullptr;
+		if (fence)
+			fenceVK = fence->Handle();
+
+		uint32_t imageIndex = 0;
+		VkResult result = vkAcquireNextImageKHR(RHII.device, m_apiHandle, UINT64_MAX, semaphore->Handle(), fenceVK, &imageIndex);
+
+		if (result != VK_SUCCESS)
+			throw std::runtime_error("Aquire Next Image error");
+		
+		return imageIndex;
 	}
 }
 #endif

@@ -645,8 +645,8 @@ namespace pe
 		info.PipelineCache = nullptr; // Will it help to use it?
 		info.DescriptorPool = RHII.descriptorPool->Handle();
 		info.Subpass = 0;
-		info.MinImageCount = static_cast<uint32_t>(RHII.swapchain.images.size());
-		info.ImageCount = (uint32_t)RHII.swapchain.images.size();
+		info.MinImageCount = static_cast<uint32_t>(RHII.swapchain->images.size());
+		info.ImageCount = (uint32_t)RHII.swapchain->images.size();
 		info.MSAASamples = VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT;
 		info.Allocator = nullptr;
 		info.CheckVkResultFn = nullptr;
@@ -711,12 +711,12 @@ namespace pe
 
 	void GUI::CreateFrameBuffers()
 	{
-		framebuffers.resize(RHII.swapchain.images.size());
-		for (uint32_t i = 0; i < RHII.swapchain.images.size(); ++i)
+		framebuffers.resize(RHII.swapchain->images.size());
+		for (uint32_t i = 0; i < RHII.swapchain->images.size(); ++i)
 		{
 			uint32_t width = WIDTH;
 			uint32_t height = HEIGHT;
-			ImageViewHandle view = RHII.swapchain.images[i]->view;
+			ImageViewHandle view = RHII.swapchain->images[i]->view;
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
 		}
 	}

@@ -29,6 +29,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Image.h"
+#include "Renderer/Swapchain.h"
 
 
 #if defined(_WIN32)
@@ -462,7 +463,7 @@ namespace pe
 	
 	void RHI::CreateSwapchain(Surface* surface)
 	{
-		swapchain.Create(surface);
+		swapchain = Swapchain::Create(surface);
 	}
 	
 	void RHI::CreateCommandPools()
@@ -578,10 +579,10 @@ namespace pe
 	{
 		WaitDeviceIdle();
 		
-		for (auto& fence : fences)
+		for (auto* fence : fences)
 			fence->Destroy();
 
-		for (auto& semaphore : semaphores)
+		for (auto* semaphore : semaphores)
 			semaphore->Destroy();
 		
 		depth->Destroy();
@@ -591,7 +592,7 @@ namespace pe
 		commandPool->Destroy();
 		commandPool2->Destroy();
 		
-		swapchain.Destroy();
+		swapchain->Destroy();
 		
 		if (device)
 		{
@@ -629,9 +630,9 @@ namespace pe
 		for (uint32_t i = 0; i < signalSemaphoresCount; i++)
 			signalSemaphoresVK[i] = signalSemaphores[i]->Handle();
 
-		VkFence fence = nullptr;
+		VkFence fenceVK = nullptr;
 		if (signalFence)
-			fence = signalFence->Handle();
+			fenceVK = signalFence->Handle();
 
 		VkSubmitInfo si{};
 		si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -643,7 +644,7 @@ namespace pe
 		si.signalSemaphoreCount = signalSemaphoresCount;
 		si.pSignalSemaphores = signalSemaphoresVK.data();
 
-		vkQueueSubmit(graphicsQueue, 1, &si, fence);
+		vkQueueSubmit(graphicsQueue, 1, &si, fenceVK);
 	}
 	
 	void RHI::WaitFence(Fence* fence)
@@ -675,13 +676,13 @@ namespace pe
 	}
 
 	void RHI::Present(
-		uint32_t swapchainCount, Swapchain* swapchains,
+		uint32_t swapchainCount, Swapchain** swapchains,
 		uint32_t* imageIndices,
 		uint32_t waitSemaphoreCount, Semaphore** waitSemaphores)
 	{
 		std::vector<VkSwapchainKHR> swapchainsVK(swapchainCount);
 		for (uint32_t i = 0; i < swapchainCount; i++)
-			swapchainsVK[i] = swapchains[i].handle;
+			swapchainsVK[i] = swapchains[i]->Handle();
 
 		std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoreCount);
 		for (uint32_t i = 0; i < waitSemaphoreCount; i++)

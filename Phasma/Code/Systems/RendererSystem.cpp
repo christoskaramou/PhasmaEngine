@@ -150,7 +150,7 @@ namespace pe
 
 		// acquire the image
 		auto aquireSignalSemaphore = RHII.semaphores[frameIndex];
-		uint32_t imageIndex = RHII.swapchain.Aquire(aquireSignalSemaphore->Handle(), {});
+		uint32_t imageIndex = RHII.swapchain->Aquire(aquireSignalSemaphore, nullptr);
 
 		static Timer timer;
 		timer.Start();

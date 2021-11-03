@@ -34,20 +34,15 @@ namespace pe
 	class Fence;
 	class Image;
 	
-	class Swapchain
+	class Swapchain : public IHandle<Swapchain, SwapchainHandle>
 	{
 	public:
-		Swapchain();
+		Swapchain(Surface* surface);
 		
 		~Swapchain();
 		
-		void Create(Surface* surface);
-		
-		uint32_t Aquire(SemaphoreHandle semaphore, FenceHandle fence);
-		
-		void Destroy();
-		
-		SwapchainHandle handle;
+		uint32_t Aquire(Semaphore* semaphore, Fence* fence);
+
 		std::vector<Image*> images;
 	};
 }

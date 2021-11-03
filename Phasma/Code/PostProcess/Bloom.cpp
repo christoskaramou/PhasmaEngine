@@ -80,8 +80,8 @@ namespace pe
 	
 	void Bloom::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
 	{
-		framebuffers.resize(RHII.swapchain.images.size() * 4);
-		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
+		framebuffers.resize(RHII.swapchain->images.size() * 4);
+		for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
 		{
 			uint32_t width = renderTargets["brightFilter"]->imageInfo.width;
 			uint32_t height = renderTargets["brightFilter"]->imageInfo.height;
@@ -89,7 +89,7 @@ namespace pe
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassBrightFilter);
 		}
 		
-		for (size_t i = RHII.swapchain.images.size(); i < RHII.swapchain.images.size() * 2; ++i)
+		for (size_t i = RHII.swapchain->images.size(); i < RHII.swapchain->images.size() * 2; ++i)
 		{
 			uint32_t width = renderTargets["gaussianBlurHorizontal"]->imageInfo.width;
 			uint32_t height = renderTargets["gaussianBlurHorizontal"]->imageInfo.height;
@@ -97,7 +97,7 @@ namespace pe
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassGaussianBlur);
 		}
 		
-		for (size_t i = RHII.swapchain.images.size() * 2; i < RHII.swapchain.images.size() * 3; ++i)
+		for (size_t i = RHII.swapchain->images.size() * 2; i < RHII.swapchain->images.size() * 3; ++i)
 		{
 			uint32_t width = renderTargets["gaussianBlurVertical"]->imageInfo.width;
 			uint32_t height = renderTargets["gaussianBlurVertical"]->imageInfo.height;
@@ -105,7 +105,7 @@ namespace pe
 			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassGaussianBlur);
 		}
 		
-		for (size_t i = RHII.swapchain.images.size() * 3; i < RHII.swapchain.images.size() * 4; ++i)
+		for (size_t i = RHII.swapchain->images.size() * 3; i < RHII.swapchain->images.size() * 4; ++i)
 		{
 			uint32_t width = renderTargets["viewport"]->imageInfo.width;
 			uint32_t height = renderTargets["viewport"]->imageInfo.height;
@@ -150,7 +150,7 @@ namespace pe
 	
 	void Bloom::draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image*>& renderTargets)
 	{
-		uint32_t totalImages = static_cast<uint32_t>(RHII.swapchain.images.size());
+		uint32_t totalImages = static_cast<uint32_t>(RHII.swapchain->images.size());
 		
 		std::vector<float> values
 		{

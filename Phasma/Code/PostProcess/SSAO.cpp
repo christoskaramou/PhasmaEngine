@@ -208,8 +208,8 @@ namespace pe
 	
 	void SSAO::createSSAOFrameBuffers(std::map<std::string, Image*>& renderTargets)
 	{
-		framebuffers.resize(RHII.swapchain.images.size());
-		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
+		framebuffers.resize(RHII.swapchain->images.size());
+		for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
 		{
 			uint32_t width = renderTargets["ssao"]->imageInfo.width;
 			uint32_t height = renderTargets["ssao"]->imageInfo.height;
@@ -220,8 +220,8 @@ namespace pe
 	
 	void SSAO::createSSAOBlurFrameBuffers(std::map<std::string, Image*>& renderTargets)
 	{
-		blurFramebuffers.resize(RHII.swapchain.images.size());
-		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
+		blurFramebuffers.resize(RHII.swapchain->images.size());
+		for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
 		{
 			uint32_t width = renderTargets["ssaoBlur"]->imageInfo.width;
 			uint32_t height = renderTargets["ssaoBlur"]->imageInfo.height;

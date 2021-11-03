@@ -114,7 +114,7 @@ namespace pe
 			texture->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 		}
 
-		framebuffers.resize(RHII.swapchain.images.size() * textures.size());
+		framebuffers.resize(RHII.swapchain->images.size() * textures.size());
 		for (uint32_t i = 0; i < framebuffers.size(); ++i)
 		{
 			uint32_t width = SHADOWMAP_SIZE;

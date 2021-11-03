@@ -252,8 +252,8 @@ namespace pe
 	
 	void Deferred::createGBufferFrameBuffers(std::map<std::string, Image*>& renderTargets)
 	{
-		framebuffers.resize(RHII.swapchain.images.size());
-		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
+		framebuffers.resize(RHII.swapchain->images.size());
+		for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
 		{
 			uint32_t width = renderTargets["albedo"]->imageInfo.width;
 			uint32_t height = renderTargets["albedo"]->imageInfo.height;
@@ -271,8 +271,8 @@ namespace pe
 	
 	void Deferred::createCompositionFrameBuffers(std::map<std::string, Image*>& renderTargets)
 	{
-		compositionFramebuffers.resize(RHII.swapchain.images.size());
-		for (size_t i = 0; i < RHII.swapchain.images.size(); ++i)
+		compositionFramebuffers.resize(RHII.swapchain->images.size());
+		for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
 		{
 			uint32_t width = renderTargets["viewport"]->imageInfo.width;
 			uint32_t height = renderTargets["viewport"]->imageInfo.height;
