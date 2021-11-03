@@ -30,6 +30,7 @@ SOFTWARE.
 #include "Renderer/Fence.h"
 #include "Renderer/Image.h"
 #include "Renderer/Swapchain.h"
+#include "Renderer/Surface.h"
 
 
 #if defined(_WIN32)
@@ -219,12 +220,12 @@ namespace pe
 	
 	void RHI::CreateSurface()
 	{
-		surface.Create(window);
+		surface = Surface::Create(window);
 	}
 	
 	void RHI::GetSurfaceProperties()
 	{
-		surface.FindProperties();
+		surface->FindProperties();
 	}
 	
 	void RHI::GetGpu()
@@ -303,7 +304,7 @@ namespace pe
 		{
 			//find graphics queue family index
 			VkBool32 suported;
-			vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface.surface, &suported);
+			vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface->Handle(), &suported);
 			if (properties[i].queueFlags & flags && suported)
 			{
 				graphicsFamilyId = i;
@@ -567,7 +568,7 @@ namespace pe
 		CreateAllocator();
 		GetQueues();
 		CreateCommandPools();
-		CreateSwapchain(&surface);
+		CreateSwapchain(surface);
 		CreateDescriptorPool(15000); // max number of all descriptor sets to allocate
 		CreateCmdBuffers(SWAPCHAIN_IMAGES);
 		CreateSemaphores(SWAPCHAIN_IMAGES * 3);
@@ -600,7 +601,7 @@ namespace pe
 			device = {};
 		}
 		
-		surface.Destroy();
+		surface->Destroy();
 
 #ifdef _DEBUG
 		DestroyDebugMessenger();

@@ -49,7 +49,7 @@ namespace pe
 		std::string title = "PhasmaEngine";
 		title += " - Device: " + RHII.gpuName;
 		title += " - API: Vulkan";
-		title += " - Present Mode: " + PresentModeToString(RHII.surface.presentMode);
+		title += " - Present Mode: " + PresentModeToString(RHII.surface->presentMode);
 #ifdef _DEBUG
 		title += " - Configuration: Debug";
 #else
@@ -58,19 +58,19 @@ namespace pe
 		CONTEXT->GetSystem<EventSystem>()->DispatchEvent(EventType::SetWindowTitle, title);
 
 		// INIT RENDERING
-		AddRenderTarget("viewport", RHII.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("viewport", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 		AddRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-		AddRenderTarget("albedo", RHII.surface.format);
-		AddRenderTarget("srm", RHII.surface.format); // Specular Roughness Metallic
+		AddRenderTarget("albedo", RHII.surface->format);
+		AddRenderTarget("srm", RHII.surface->format); // Specular Roughness Metallic
 		AddRenderTarget("ssao", VK_FORMAT_R16_UNORM);
 		AddRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-		AddRenderTarget("ssr", RHII.surface.format);
+		AddRenderTarget("ssr", RHII.surface->format);
 		AddRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-		AddRenderTarget("brightFilter", RHII.surface.format);
-		AddRenderTarget("gaussianBlurHorizontal", RHII.surface.format);
-		AddRenderTarget("gaussianBlurVertical", RHII.surface.format);
-		AddRenderTarget("emissive", RHII.surface.format);
-		AddRenderTarget("taa", RHII.surface.format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+		AddRenderTarget("brightFilter", RHII.surface->format);
+		AddRenderTarget("gaussianBlurHorizontal", RHII.surface->format);
+		AddRenderTarget("gaussianBlurVertical", RHII.surface->format);
+		AddRenderTarget("emissive", RHII.surface->format);
+		AddRenderTarget("taa", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
 		// render passes
 		shadows.createRenderPass();

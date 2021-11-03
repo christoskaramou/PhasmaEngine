@@ -29,14 +29,12 @@ namespace pe
 {
 	class Context;
 	
-	class Surface
+	class Surface : public IHandle<Surface, SurfaceHandle>
 	{
 	public:
-		Surface();
+		Surface(SDL_Window* window);
 		
 		~Surface();
-		
-		void Create(SDL_Window* window);
 		
 		void CheckTransfer();
 		
@@ -45,10 +43,7 @@ namespace pe
 		void FindPresentationMode();
 		
 		void FindProperties();
-
-		void Destroy();
 		
-		SurfaceHandle surface;
 		Rect2D actualExtent;
 		Format format;
 		ColorSpace colorSpace;

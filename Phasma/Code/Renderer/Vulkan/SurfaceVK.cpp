@@ -28,26 +28,13 @@ SOFTWARE.
 
 namespace pe
 {
-	Surface::Surface()
-	{
-		surface = {};
-		actualExtent = {};
-		format = {};
-		colorSpace = {};
-		presentMode = {};
-	}
-	
-	Surface::~Surface()
-	{
-	}
-	
-	void Surface::Create(SDL_Window* window)
+	Surface::Surface(SDL_Window* window)
 	{
 		VkSurfaceKHR surfaceVK;
 		if (!SDL_Vulkan_CreateSurface(window, RHII.instance, &surfaceVK))
 			throw std::runtime_error(SDL_GetError());
 
-		surface = surfaceVK;
+		m_apiHandle = surfaceVK;
 
 		int w, h;
 		SDL_GL_GetDrawableSize(window, &w, &h);
@@ -55,10 +42,19 @@ namespace pe
 		actualExtent = Rect2D{ 0, 0, w, h };
 	}
 	
+	Surface::~Surface()
+	{
+		if (m_apiHandle)
+		{
+			vkDestroySurfaceKHR(RHII.instance, m_apiHandle, nullptr);
+			m_apiHandle = {};
+		}
+	}
+	
 	void Surface::CheckTransfer()
 	{
 		VkSurfaceCapabilitiesKHR capabilities;
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, surface, &capabilities);
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, m_apiHandle, &capabilities);
 
 		// Ensure eTransferSrc bit for blit operations
 		if (!(capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
@@ -68,10 +64,10 @@ namespace pe
 	void Surface::FindFormat()
 	{
 		uint32_t formatsCount;
-		vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, surface, &formatsCount, nullptr);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, m_apiHandle, &formatsCount, nullptr);
 
 		std::vector<VkSurfaceFormatKHR> formats(formatsCount);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, surface, &formatsCount, formats.data());
+		vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, m_apiHandle, &formatsCount, formats.data());
 
 		format = formats[0].format;
 		colorSpace = formats[0].colorSpace;
@@ -96,10 +92,10 @@ namespace pe
 	void Surface::FindPresentationMode()
 	{
 		uint32_t presentModesCount;
-		vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, surface, &presentModesCount, nullptr);
+		vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, m_apiHandle, &presentModesCount, nullptr);
 
 		std::vector<VkPresentModeKHR> presentModes(presentModesCount);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, surface, &presentModesCount, presentModes.data());
+		vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, m_apiHandle, &presentModesCount, presentModes.data());
 		
 		for (const auto& i : presentModes)
 			if (i == VK_PRESENT_MODE_MAILBOX_KHR)
@@ -123,20 +119,11 @@ namespace pe
 	{
 		// Needs to be called?
 		VkBool32 supported = false;
-		vkGetPhysicalDeviceSurfaceSupportKHR(RHII.gpu, RHII.graphicsFamilyId, surface, &supported);
+		vkGetPhysicalDeviceSurfaceSupportKHR(RHII.gpu, RHII.graphicsFamilyId, m_apiHandle, &supported);
 
 		CheckTransfer();
 		FindFormat();
 		FindPresentationMode();
-	}
-
-	void Surface::Destroy()
-	{
-		if (surface)
-		{
-			vkDestroySurfaceKHR(RHII.instance, surface, nullptr);
-			surface = {};
-		}
 	}
 }
 #endif

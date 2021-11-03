@@ -22,14 +22,14 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Surface.h"
+#include "Core/Base.h"
 
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
 // RHI Instance
 #define RHII (*RHI::Get())
-#define WIDTH RHII.surface.actualExtent.width
-#define HEIGHT RHII.surface.actualExtent.height
+#define WIDTH RHII.surface->actualExtent.width
+#define HEIGHT RHII.surface->actualExtent.height
 #define WIDTH_f static_cast<float>(WIDTH)
 #define HEIGHT_f static_cast<float>(HEIGHT)
 
@@ -42,6 +42,7 @@ namespace pe
 	class Semaphore;
 	class Swapchain;
 	class Image;
+	class Surface;
 
 	class RHI : public NoCopy, public NoMove
 	{
@@ -111,7 +112,7 @@ namespace pe
 		VmaAllocator allocator = nullptr;
 
 		SDL_Window* window;
-		Surface surface;
+		Surface* surface;
 		Swapchain* swapchain;
 		Image* depth;
 		int graphicsFamilyId, computeFamilyId, transferFamilyId;

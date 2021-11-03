@@ -26,6 +26,7 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Fence.h"
+#include "Renderer/Surface.h"
 #include "Core/Math.h"
 #include "ECS/Context.h"
 
@@ -34,7 +35,7 @@ namespace pe
 	Swapchain::Swapchain(Surface* surface)
 	{
 		VkSurfaceCapabilitiesKHR capabilities;
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, surface->surface, &capabilities);
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, surface->Handle(), &capabilities);
 
 		VkExtent2D extent;
 		extent.width = surface->actualExtent.width;
@@ -42,7 +43,7 @@ namespace pe
 		
 		VkSwapchainCreateInfoKHR swapchainCreateInfo{};
 		swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-		swapchainCreateInfo.surface = surface->surface;
+		swapchainCreateInfo.surface = surface->Handle();
 		swapchainCreateInfo.minImageCount = clamp(
 			SWAPCHAIN_IMAGES,
 			capabilities.minImageCount,
@@ -101,7 +102,7 @@ namespace pe
 			imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 			imageViewCreateInfo.image = image->Handle();
 			imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			imageViewCreateInfo.format = (VkFormat)RHII.surface.format;
+			imageViewCreateInfo.format = (VkFormat)RHII.surface->format;
 			imageViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
 			VkImageView imageView;

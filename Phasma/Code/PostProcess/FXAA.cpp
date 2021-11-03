@@ -46,7 +46,7 @@ namespace pe
 	void FXAA::Init()
 	{
 		ImageCreateInfo info{};
-		info.format = RHII.surface.format;
+		info.format = RHII.surface->format;
 		info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
 		info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);

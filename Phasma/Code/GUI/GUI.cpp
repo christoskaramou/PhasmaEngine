@@ -697,7 +697,7 @@ namespace pe
 	void GUI::CreateRenderPass()
 	{
 		Attachment colorAttachment;
-		colorAttachment.format = RHII.surface.format;
+		colorAttachment.format = RHII.surface->format;
 		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
