@@ -206,10 +206,10 @@ namespace pe
 		vkCmdBindPipeline(m_apiHandle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->Handle());
 	}
 
-	void CommandBuffer::BindVertexBuffer(Buffer* buffer, size_t offset)
+	void CommandBuffer::BindVertexBuffer(Buffer* buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount)
 	{
 		VkBuffer buff = buffer->Handle();
-		vkCmdBindVertexBuffers(m_apiHandle, 0, 1, &buff, &offset);
+		vkCmdBindVertexBuffers(m_apiHandle, firstBinding, bindingCount, &buff, &offset);
 	}
 
 	void CommandBuffer::BindIndexBuffer(Buffer*buffer, size_t offset)

@@ -326,7 +326,7 @@ namespace pe
 			myPrimitive.min = vec3(&accessorPos->min[0]);
 			myPrimitive.max = vec3(&accessorPos->max[0]);
 			myPrimitive.calculateBoundingSphere();
-			myPrimitive.calculateBoundinhBox();
+			myPrimitive.calculateBoundingBox();
 			myPrimitive.hasBones = !bonesIDs.empty() && !weights.empty();
 			
 			for (size_t i = 0; i < accessorPos->count; i++)
@@ -804,7 +804,16 @@ namespace pe
 	
 	void Model::createVertexBuffer()
 	{
+		numberOfVertices = 0;
+		for (auto& node : linearNodes)
+		{
+			if (node->mesh)
+				numberOfVertices += static_cast<uint32_t>(node->mesh->vertices.size());
+		}
+
 		std::vector<Vertex> vertices {};
+		vertices.reserve(numberOfVertices);
+
 		for (auto& node : linearNodes)
 		{
 			if (node->mesh)
@@ -839,7 +848,16 @@ namespace pe
 	
 	void Model::createIndexBuffer()
 	{
-		std::vector<uint32_t> indices {};
+		numberOfIndices = 0;
+		for (auto& node : linearNodes)
+		{
+			if (node->mesh)
+				numberOfIndices += static_cast<uint32_t>(node->mesh->indices.size());
+		}
+
+		std::vector<uint32_t> indices{};
+		indices.reserve(numberOfIndices);
+
 		for (auto& node : linearNodes)
 		{
 			if (node->mesh)
@@ -851,7 +869,7 @@ namespace pe
 				}
 			}
 		}
-		numberOfIndices = static_cast<uint32_t>(indices.size());
+
 		auto size = sizeof(uint32_t) * numberOfIndices;
 		indexBuffer = Buffer::Create(
 			size,

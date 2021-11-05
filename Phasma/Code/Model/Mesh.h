@@ -66,7 +66,7 @@ namespace pe
 			boundingSphere = vec4(center, sphereRadius);
 		}
 
-		void calculateBoundinhBox()
+		void calculateBoundingBox()
 		{
 			boundingBox.min = min;
 			boundingBox.max = max;

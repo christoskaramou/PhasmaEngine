@@ -109,7 +109,7 @@ namespace pe
 
 		void BindComputePipeline(Pipeline* pipeline);
 
-		void BindVertexBuffer(Buffer* buffer, size_t offset);
+		void BindVertexBuffer(Buffer* buffer, size_t offset, uint32_t firstBinding = 0, uint32_t bindingCount = 1);
 
 		void BindIndexBuffer(Buffer* buffer, size_t offset);
 

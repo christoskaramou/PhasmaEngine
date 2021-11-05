@@ -49,6 +49,7 @@ SOFTWARE.
 #include <limits>
 #include <chrono>
 #include <random>
+#include "Core/Hash.h"
 
 #include "SDL/SDL.h"
 #include "SDL/SDL_syswm.h"

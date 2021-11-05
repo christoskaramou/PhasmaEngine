@@ -23,58 +23,46 @@ SOFTWARE.
 #pragma once
 
 namespace pe
-{
-	struct MemoryRange
-	{
-		MemoryRange() : data(nullptr), size(0), offset(0) {}
-		MemoryRange(void* data, size_t size, size_t offset) : data(data), size(size), offset(offset) {}
-
-		void* data; // source data
-		size_t size; // source data size in bytes
-		size_t offset; // offset to destination data in bytes
-	};
-	
-	class MemoryHash
+{	
+	class Hash
 	{
 	public:
 		using Type = size_t;
 		
-		bool operator==(MemoryHash memoryHash)
+		Hash(const void* data, size_t size)
 		{
-			return hash == memoryHash.hash;
-		}
-		
-		MemoryHash(const void* data, size_t size)
-		{
-			Type* array = reinterpret_cast<Type*>(const_cast<void*>(data));
+			const Type* array = reinterpret_cast<const Type*>(data);
 			size_t arraySize = size / sizeof(Type);
 			size_t bytesToFit = size % sizeof(Type);
 			
-			hash = 0;
+			m_hash = 0;
+
 			for (size_t i = 0; i < arraySize; i++)
-			{
-				hash ^= std::hash<Type>()(array[i]) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-			}
+				m_hash ^= std::hash<Type>()(array[i]) + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
+
 			if (bytesToFit)
 			{
 				Type lastBytes;
 				memset(&lastBytes, 0, sizeof(Type));
 				memcpy(&lastBytes, &array[arraySize], bytesToFit);
 				
-				hash ^= std::hash<Type>()(lastBytes) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+				m_hash ^= std::hash<Type>()(lastBytes) + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
 			}
 		}
-		
-		template<typename T>
-		MemoryHash(const T& object) : MemoryHash(&object, sizeof(T))
-		{}
-		
-		size_t getHash()
-		{
-			return hash;
-		}
+
+		bool operator==(const Hash& other) { return m_hash == other.m_hash; }
+
+		operator size_t() { return m_hash; }
 	
 	private:
-		size_t hash;
+		size_t m_hash;
+	};
+
+	class StringHash : public Hash
+	{
+	public:
+		StringHash(const std::string& string) : Hash(string.data(), string.size()) {}
+
+		StringHash(const char* string) : Hash(string, strlen(string)) {}
 	};
 }

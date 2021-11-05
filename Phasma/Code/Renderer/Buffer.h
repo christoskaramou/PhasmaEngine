@@ -23,11 +23,21 @@ SOFTWARE.
 #pragma once
 
 #include "Core/Base.h"
-#include "MemoryHash/MemoryHash.h"
 #include "Core/Queue.h"
 
 namespace pe
 {
+	class MemoryRange
+	{
+	public:
+		MemoryRange() : data(nullptr), size(0), offset(0) {}
+		MemoryRange(void* data, size_t size, size_t offset) : data(data), size(size), offset(offset) {}
+
+		void* data; // source data
+		size_t size; // source data size in bytes
+		size_t offset; // offset to destination data in bytes
+	};
+
 	class Buffer : public IHandle<Buffer, BufferHandle>
 	{
 	public:
