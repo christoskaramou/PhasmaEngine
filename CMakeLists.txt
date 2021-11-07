@@ -5,6 +5,9 @@ project(${PROJECT_NAME} CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_BINARY_DIR}/Debug")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_BINARY_DIR}/Release")
+
 if (MSVC)
     set(MSVC_COMPILE_FLAGS "/MP")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MSVC_COMPILE_FLAGS}" )
@@ -13,7 +16,8 @@ endif()
 
 message("CMAKE_SOURCE_DIR = ${CMAKE_SOURCE_DIR}")
 message("CMAKE_CURRENT_SOURCE_DIR = ${CMAKE_CURRENT_SOURCE_DIR}")
-message("CMAKE_BINARY_DIR = ${CMAKE_BINARY_DIR}")
+message("CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG = ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG}")
+message("CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE = ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE}")
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Code")
@@ -28,6 +32,7 @@ file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/*.cpp")
 
 add_executable(${PROJECT_NAME} ${SRC_FILES})
+
 target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/PhasmaPch.h")
 
 set(ADDITIONAL_COMPILE_DEFINITIONS
@@ -37,13 +42,6 @@ set(ADDITIONAL_COMPILE_DEFINITIONS
         ">"
         "$<$<CONFIG:Release>:"
             "NDEBUG"
-        ">"
-        "$<$<CONFIG:MinSizeRel>:"
-            "NDEBUG"
-        ">"
-        "$<$<CONFIG:RelWithDebInfo>:"
-            "WIN32;"
-            "_DEBUG"
         ">"
         "_CONSOLE;"
         "UNICODE;"
@@ -62,14 +60,6 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
         "spirv-cross-core;"
         "GLTFSDK"
     ">"
-    "$<$<CONFIG:MinSizeRel>:"
-        "spirv-cross-core;"
-        "GLTFSDK"
-    ">"
-    "$<$<CONFIG:RelWithDebInfo>:"
-        "spirv-cross-cored;"
-        "GLTFSDKd"
-    ">"
     "shaderc_shared;"
     "SDL2main;"
     "SDL2;"
@@ -77,10 +67,10 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")
 
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/D3D12.dll" DESTINATION ${CMAKE_BINARY_DIR})  
-#file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/imgui.ini" DESTINATION ${CMAKE_BINARY_DIR})
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/SDL2.dll" DESTINATION ${CMAKE_BINARY_DIR})
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/shaderc_shared.dll" DESTINATION ${CMAKE_BINARY_DIR})
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Assets" DESTINATION ${CMAKE_BINARY_DIR})
-
-file(WRITE "${CMAKE_BINARY_DIR}/AssetsRoot" "Assets root: Assets/")
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/D3D12.dll" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_}$<CONFIG>"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/SDL2.dll" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_}$<CONFIG>"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/shaderc_shared.dll" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_}$<CONFIG>"
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Assets" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_}$<CONFIG>/Assets"
+    COMMAND "${CMAKE_COMMAND}" -E echo "Assets root: Assets/" > "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_}$<CONFIG>/AssetsRoot"
+)
