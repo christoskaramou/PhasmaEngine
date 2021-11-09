@@ -38,41 +38,42 @@ add_executable(${PROJECT_NAME} ${SRC_FILES})
 target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/PhasmaPch.h")
 
 set(ADDITIONAL_COMPILE_DEFINITIONS
-        "$<$<CONFIG:Debug>:"
-            "WIN32;"
-            "_DEBUG"
-        ">"
-        "$<$<CONFIG:Release>:"
-            "NDEBUG"
-        ">"
-        "_CONSOLE;"
-        "UNICODE;"
-        "_UNICODE"
-        "PE_VULKAN=1"
-        "PE_DX12=0"
+        $<$<CONFIG:Debug>:
+            WIN32
+            _DEBUG
+            RUNTIME_DIRECTORY="${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG}/"
+        >
+        $<$<CONFIG:Release>:
+            NDEBUG
+            RUNTIME_DIRECTORY="${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE}/"
+        >
+        _CONSOLE
+        UNICODE
+        _UNICODE
+        PE_VULKAN=1
+        PE_DX12=0
 )
 target_compile_definitions(${PROJECT_NAME} PRIVATE "${ADDITIONAL_COMPILE_DEFINITIONS}")
 
 set(ADDITIONAL_LIBRARY_DEPENDENCIES
-    "$<$<CONFIG:Debug>:"
-        "spirv-cross-cored;"
-        "GLTFSDKd"
-    ">"
-    "$<$<CONFIG:Release>:"
-        "spirv-cross-core;"
-        "GLTFSDK"
-    ">"
-    "shaderc_shared;"
-    "SDL2main;"
-    "SDL2;"
-    "vulkan-1"
+    $<$<CONFIG:Debug>:
+        spirv-cross-cored
+        GLTFSDKd
+    >
+    $<$<CONFIG:Release>:
+        spirv-cross-core
+        GLTFSDK
+    >
+    shaderc_shared
+    SDL2main
+    SDL2
+    vulkan-1
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE "${ADDITIONAL_LIBRARY_DEPENDENCIES}")
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/D3D12.dll" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_}$<CONFIG>"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/SDL2.dll" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_}$<CONFIG>"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/shaderc_shared.dll" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_}$<CONFIG>"
-    COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Assets" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_}$<CONFIG>/Assets"
-    COMMAND "${CMAKE_COMMAND}" -E echo "Assets root: Assets/" > "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_}$<CONFIG>/AssetsRoot"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/D3D12.dll" "$<CONFIG>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/SDL2.dll" "$<CONFIG>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/DLLs/shaderc_shared.dll" "$<CONFIG>"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Assets" "$<CONFIG>/Assets"
 )
