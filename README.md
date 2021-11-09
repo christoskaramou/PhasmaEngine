@@ -37,6 +37,15 @@ And some other primitive implemented ideas in a certain degree like Compute shad
 
 **Building and Compiling**
 
-Clone the repo and get CMAKE (https://cmake.org/).
-To build use CMAKE. CMakeLists.txt is under PhasmaEngine root folder.
-Open the project in your IDE and select or set a build type (Debug/Release).
+Phasma is using CMake to configure and generate the project files.
+The CMakeLists.txt file is in the root folder.
+
+* CMake tools
+Different IDEs can provide CMake tools as a plugin or an extension, which can
+make the building proccess automated. For example with Visual Studio you can
+open a folder (instead of a .sln project). If this folder contains a CMakeLists.txt in it,
+it will auto detect it and it will start CMake configuration and generarion.
+
+* CMake
+Download [CMake](https://cmake.org/download/) and install it.
+See [CMake documentation](https://cmake.org/runningcmake/) for more information on how to use it.
