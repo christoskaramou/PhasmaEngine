@@ -39,12 +39,12 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/P
 
 set(ADDITIONAL_COMPILE_DEFINITIONS
         $<$<CONFIG:Debug>:
-            WIN32
             _DEBUG
         >
         $<$<CONFIG:Release>:
             NDEBUG
         >
+        WIN32
         _CONSOLE
         UNICODE
         _UNICODE
