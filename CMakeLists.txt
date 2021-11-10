@@ -41,11 +41,9 @@ set(ADDITIONAL_COMPILE_DEFINITIONS
         $<$<CONFIG:Debug>:
             WIN32
             _DEBUG
-            RUNTIME_DIRECTORY="${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG}/"
         >
         $<$<CONFIG:Release>:
             NDEBUG
-            RUNTIME_DIRECTORY="${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE}/"
         >
         _CONSOLE
         UNICODE

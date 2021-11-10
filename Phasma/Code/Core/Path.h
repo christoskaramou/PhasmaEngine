@@ -39,9 +39,13 @@ namespace pe
 		public:
 			Constructor()
 			{
-				if (std::filesystem::exists(RUNTIME_DIRECTORY))
-					Executable = RUNTIME_DIRECTORY;
-				else
+			#ifdef WIN32
+				char str[MAX_PATH];
+				GetModuleFileNameA(nullptr, str, MAX_PATH);
+				Executable = std::filesystem::path(str).remove_filename().string();
+			#endif
+
+				if (!std::filesystem::exists(Executable))
 					Executable = std::filesystem::current_path().string();
 
 				std::replace(Executable.begin(), Executable.end(), '\\', '/');
