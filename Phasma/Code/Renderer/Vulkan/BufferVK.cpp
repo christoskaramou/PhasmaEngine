@@ -44,15 +44,15 @@ namespace pe
 		VkBuffer bufferVK;
 		VmaAllocationInfo allocationInfo;
 		vmaCreateBuffer(RHII.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocation, &allocationInfo);
-		m_apiHandle = bufferVK;
+		m_handle = bufferVK;
 	}
 
 	Buffer::~Buffer()
 	{
-		if (m_apiHandle)
+		if (m_handle)
 		{
-			vmaDestroyBuffer(RHII.allocator, m_apiHandle, allocation);
-			m_apiHandle = {};
+			vmaDestroyBuffer(RHII.allocator, m_handle, allocation);
+			m_handle = {};
 		}
 	}
 

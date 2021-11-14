@@ -34,15 +34,15 @@ namespace pe
 
 		VkFence fence;
 		vkCreateFence(RHII.device, &fi, nullptr, &fence);
-		m_apiHandle = fence;
+		m_handle = fence;
 	}
 
 	Fence::~Fence()
 	{
-		if (m_apiHandle)
+		if (m_handle)
 		{
-			vkDestroyFence(RHII.device, m_apiHandle, nullptr);
-			m_apiHandle = {};
+			vkDestroyFence(RHII.device, m_handle, nullptr);
+			m_handle = {};
 		}
 	}
 

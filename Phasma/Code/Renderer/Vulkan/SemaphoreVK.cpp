@@ -33,15 +33,15 @@ namespace pe
 
 		VkSemaphore semaphore;
 		vkCreateSemaphore(RHII.device, &si, nullptr, &semaphore);
-		m_apiHandle = semaphore;
+		m_handle = semaphore;
 	}
 
 	Semaphore::~Semaphore()
 	{
-		if (m_apiHandle)
+		if (m_handle)
 		{
-			vkDestroySemaphore(RHII.device, m_apiHandle, nullptr);
-			m_apiHandle = {};
+			vkDestroySemaphore(RHII.device, m_handle, nullptr);
+			m_handle = {};
 		}
 	}
 }

@@ -52,15 +52,15 @@ namespace pe
 		
 		VkFramebuffer frameBuffer;
 		vkCreateFramebuffer(RHII.device, &fbci, nullptr, &frameBuffer);
-		m_apiHandle = frameBuffer;
+		m_handle = frameBuffer;
 	}
 
 	FrameBuffer::~FrameBuffer()
 	{
-		if (m_apiHandle)
+		if (m_handle)
 		{
-			vkDestroyFramebuffer(RHII.device, m_apiHandle, nullptr);
-			m_apiHandle = {};
+			vkDestroyFramebuffer(RHII.device, m_handle, nullptr);
+			m_handle = {};
 		}
 	}
 }

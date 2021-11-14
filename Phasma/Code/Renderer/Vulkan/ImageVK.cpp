@@ -145,7 +145,7 @@ namespace pe
 		VmaAllocationInfo allocationInfo;
 		VkImage vkImage;
 		vmaCreateImage(RHII.allocator, &imageInfoVK, &allocationCreateInfo, &vkImage, &allocation, &allocationInfo);
-		m_apiHandle = vkImage;
+		m_handle = vkImage;
 	}
 
 
@@ -157,10 +157,10 @@ namespace pe
 			view = {};
 		}
 
-		if (m_apiHandle)
+		if (m_handle)
 		{
-			vmaDestroyImage(RHII.allocator, m_apiHandle, allocation);
-			m_apiHandle = {};
+			vmaDestroyImage(RHII.allocator, m_handle, allocation);
+			m_handle = {};
 		}
 
 		if (VkSampler(sampler))
@@ -184,7 +184,7 @@ namespace pe
 		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		barrier.srcAccessMask = srcMask;
 		barrier.dstAccessMask = dstMask;
-		barrier.image = m_apiHandle;
+		barrier.image = m_handle;
 		barrier.oldLayout = (VkImageLayout)oldLayout;
 		barrier.newLayout = (VkImageLayout)newLayout;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -212,7 +212,7 @@ namespace pe
 		viewInfo = info;
 		VkImageViewCreateInfo viewInfoVK{};
 		viewInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		viewInfoVK.image = info.image->m_apiHandle;
+		viewInfoVK.image = info.image->m_handle;
 		viewInfoVK.viewType = (VkImageViewType)viewInfo.viewType;
 		viewInfoVK.format = (VkFormat)imageInfo.format;
 		viewInfoVK.subresourceRange = 
@@ -241,7 +241,7 @@ namespace pe
 		barrier.newLayout = (VkImageLayout)newLayout;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.image = m_apiHandle;
+		barrier.image = m_handle;
 
 		VkPipelineStageFlags srcStage;
 		VkPipelineStageFlags dstStage;
@@ -406,7 +406,7 @@ namespace pe
 		region.imageOffset = VkOffset3D{ 0, 0, 0 };
 		region.imageExtent = VkExtent3D{ imageInfo.width, imageInfo.height, imageInfo.depth };
 
-		vkCmdCopyBufferToImage(cmd[0]->Handle(), buffer->Handle(), m_apiHandle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+		vkCmdCopyBufferToImage(cmd[0]->Handle(), buffer->Handle(), m_handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 		cmd[0]->End();
 		RHII.SubmitAndWaitFence(1, cmd.data(), nullptr, 0, nullptr, 0, nullptr);
@@ -446,9 +446,9 @@ namespace pe
 
 		vkCmdCopyImage(
 			cmd->Handle(),
-			renderedImage->m_apiHandle,
+			renderedImage->m_handle,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-			m_apiHandle,
+			m_handle,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1, &region);
 
@@ -505,7 +505,7 @@ namespace pe
 
 		VkImageMemoryBarrier barrier{};
 		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier.image = m_apiHandle;
+		barrier.image = m_handle;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -549,8 +549,8 @@ namespace pe
 
 			vkCmdBlitImage(
 				commandBuffers[i]->Handle(),
-				m_apiHandle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				m_apiHandle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				m_handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				m_handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				1, &blit,
 				VK_FILTER_LINEAR);
 

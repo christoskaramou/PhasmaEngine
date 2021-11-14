@@ -53,15 +53,15 @@ namespace pe
 
 		VkDescriptorPool descriptorPoolVK;
 		vkCreateDescriptorPool(RHII.device, &createInfo, nullptr, &descriptorPoolVK);
-		m_apiHandle = descriptorPoolVK;
+		m_handle = descriptorPoolVK;
 	}
 
 	DescriptorPool::~DescriptorPool()
 	{
-		if (m_apiHandle)
+		if (m_handle)
 		{
-			vkDestroyDescriptorPool(RHII.device, m_apiHandle, nullptr);
-			m_apiHandle = {};
+			vkDestroyDescriptorPool(RHII.device, m_handle, nullptr);
+			m_handle = {};
 		}
 	}
 
@@ -91,15 +91,15 @@ namespace pe
 
 		VkDescriptorSetLayout layout;
 		vkCreateDescriptorSetLayout(RHII.device, &descriptorLayout, nullptr, &layout);
-		m_apiHandle = layout;
+		m_handle = layout;
 	}
 
 	DescriptorLayout::~DescriptorLayout()
 	{
-		if (m_apiHandle)
+		if (m_handle)
 		{
-			vkDestroyDescriptorSetLayout(RHII.device, m_apiHandle, nullptr);
-			m_apiHandle = {};
+			vkDestroyDescriptorSetLayout(RHII.device, m_handle, nullptr);
+			m_handle = {};
 		}
 	}
 
@@ -116,7 +116,7 @@ namespace pe
 
 		VkDescriptorSet dset;
 		vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-		m_apiHandle = dset;
+		m_handle = dset;
 	}
 
 	Descriptor::~Descriptor()
@@ -138,7 +138,7 @@ namespace pe
 
 			VkWriteDescriptorSet textureWriteSet{};
 			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			textureWriteSet.dstSet = m_apiHandle;
+			textureWriteSet.dstSet = m_handle;
 			textureWriteSet.dstBinding = dstBinding;
 			textureWriteSet.dstArrayElement = 0;
 			textureWriteSet.descriptorCount = 1;
@@ -156,7 +156,7 @@ namespace pe
 
 			VkWriteDescriptorSet textureWriteSet{};
 			textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			textureWriteSet.dstSet = m_apiHandle;
+			textureWriteSet.dstSet = m_handle;
 			textureWriteSet.dstBinding = dstBinding;
 			textureWriteSet.dstArrayElement = 0;
 			textureWriteSet.descriptorCount = 1;

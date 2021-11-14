@@ -99,7 +99,7 @@ namespace pe
 		
 		VkRenderPass renderPass;
 		vkCreateRenderPass(RHII.device, &renderPassInfo, nullptr, &renderPass);
-		m_apiHandle = renderPass;
+		m_handle = renderPass;
 	}
 	
 	RenderPass::RenderPass(const Attachment& attachment) : RenderPass(std::vector<Attachment>{ attachment })
@@ -108,10 +108,10 @@ namespace pe
 	
 	RenderPass::~RenderPass()
 	{
-		if (m_apiHandle)
+		if (m_handle)
 		{
-			vkDestroyRenderPass(RHII.device, m_apiHandle, nullptr);
-			m_apiHandle = {};
+			vkDestroyRenderPass(RHII.device, m_handle, nullptr);
+			m_handle = {};
 		}
 	}
 }

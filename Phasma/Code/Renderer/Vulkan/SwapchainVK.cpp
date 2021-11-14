@@ -58,8 +58,8 @@ namespace pe
 		swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 		swapchainCreateInfo.presentMode = (VkPresentModeKHR)surface->presentMode;
 		swapchainCreateInfo.clipped = VK_TRUE;
-		if (m_apiHandle)
-			swapchainCreateInfo.oldSwapchain = m_apiHandle;
+		if (m_handle)
+			swapchainCreateInfo.oldSwapchain = m_handle;
 		
 		// new swapchain with old create info
 		VkSwapchainKHR schain;
@@ -110,21 +110,21 @@ namespace pe
 			image->view = imageView;
 		}
 		
-		if (m_apiHandle)
+		if (m_handle)
 		{
-			vkDestroySwapchainKHR(RHII.device, m_apiHandle, nullptr);
-			m_apiHandle = {};
+			vkDestroySwapchainKHR(RHII.device, m_handle, nullptr);
+			m_handle = {};
 		}
 
-		m_apiHandle = schain;
+		m_handle = schain;
 	}
 
 	Swapchain::~Swapchain()
 	{
-		if (m_apiHandle)
+		if (m_handle)
 		{
-			vkDestroySwapchainKHR(RHII.device, m_apiHandle, nullptr);
-			m_apiHandle = {};
+			vkDestroySwapchainKHR(RHII.device, m_handle, nullptr);
+			m_handle = {};
 		}
 
 		for (auto* image : images)
@@ -138,7 +138,7 @@ namespace pe
 			fenceVK = fence->Handle();
 
 		uint32_t imageIndex = 0;
-		VkResult result = vkAcquireNextImageKHR(RHII.device, m_apiHandle, UINT64_MAX, semaphore->Handle(), fenceVK, &imageIndex);
+		VkResult result = vkAcquireNextImageKHR(RHII.device, m_handle, UINT64_MAX, semaphore->Handle(), fenceVK, &imageIndex);
 
 		if (result != VK_SUCCESS)
 			throw std::runtime_error("Aquire Next Image error");

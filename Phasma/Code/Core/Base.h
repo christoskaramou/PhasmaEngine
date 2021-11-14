@@ -179,16 +179,16 @@ namespace pe
 			}
 		};
 
-		HANDLE& Handle() { return m_apiHandle; }
-		const HANDLE& Handle() const { return m_apiHandle; }
+		HANDLE& Handle() { return m_handle; }
+		const HANDLE& Handle() const { return m_handle; }
 
 	private:
 		inline static std::unordered_map<size_t, IHandle*> sm_iHandles{};
 		size_t m_heapId;
 
 	protected:
-		IHandle() : m_apiHandle{}, m_heapId{ std::numeric_limits<size_t>::max() } {}
-		HANDLE m_apiHandle;
+		IHandle() : m_handle{}, m_heapId{ std::numeric_limits<size_t>::max() } {}
+		HANDLE m_handle;
 	};
 
 	template<class T, class VK_TYPE, class DX_TYPE>

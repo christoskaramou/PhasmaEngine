@@ -102,7 +102,7 @@ namespace pe
 
 			VkPipeline vkPipeline;
 			vkCreateComputePipelines(RHII.device, nullptr, 1, &compinfo, nullptr, &vkPipeline);
-			m_apiHandle = vkPipeline;
+			m_handle = vkPipeline;
 
 			vkDestroyShaderModule(RHII.device, module, nullptr);
 		}
@@ -278,7 +278,7 @@ namespace pe
 
 			VkPipeline pipeline;
 			vkCreateGraphicsPipelines(RHII.device, nullptr, 1, &pipeinfo, nullptr, &pipeline);
-			m_apiHandle = pipeline;
+			m_handle = pipeline;
 
 			vkDestroyShaderModule(RHII.device, vertModule, nullptr);
 			if (info.pFragShader && fragModule)
@@ -294,10 +294,10 @@ namespace pe
 			layout = {};
 		}
 
-		if (m_apiHandle)
+		if (m_handle)
 		{
-			vkDestroyPipeline(RHII.device, m_apiHandle, nullptr);
-			m_apiHandle = {};
+			vkDestroyPipeline(RHII.device, m_handle, nullptr);
+			m_handle = {};
 		}
 	}
 	
