@@ -39,33 +39,6 @@ namespace pe
 		return typeID;
 	}
 
-	template<class T>
-	using SPtr = std::shared_ptr<T>;
-
-	template<class T>
-	SPtr<T> make_sptr(T& obj)
-	{
-		return std::make_shared<T>(obj);
-	}
-
-	template<class T>
-	SPtr<T> make_sptr(const T& obj)
-	{
-		return std::make_shared<T>(obj);
-	}
-
-	template<class T>
-	SPtr<T> make_sptr(T&& obj)
-	{
-		return std::make_shared<T>(std::forward<T>(obj));
-	}
-
-	template<class T, class ... Params>
-	SPtr<T> make_sptr(Params&& ... params)
-	{
-		return std::make_shared<T>(std::forward<Params>(params)...);
-	}
-
 	class NoCopy
 	{
 	public:
@@ -190,39 +163,6 @@ namespace pe
 		IHandle() : m_handle{}, m_heapId{ std::numeric_limits<size_t>::max() } {}
 		HANDLE m_handle;
 	};
-
-	template<class T, class VK_TYPE, class DX_TYPE>
-	std::vector<T> ApiHandleVectorCreate(std::vector<ApiHandle<VK_TYPE, DX_TYPE>>& apiHandles)
-	{
-		static_assert(std::is_pointer_v<T>, "T type is not a pointer");
-		static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_same_v<T, VK_TYPE> || std::is_same_v<T, DX_TYPE>, "T does not match any of ApiHandle types");
-
-		std::vector<T> copyVec(apiHandles.size());
-
-		for (int i = 0; i < apiHandles.size(); i++)
-			copyVec[i] = apiHandles[i];
-
-		return copyVec;
-	}
-
-	template<class T, class VK_TYPE, class DX_TYPE>
-	std::vector<T> ApiHandleVectorCreate(uint32_t count, ApiHandle<VK_TYPE, DX_TYPE>* apiHandles)
-	{
-		static_assert(std::is_pointer_v<T>, "T type is not a pointer");
-		static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
-		static_assert(std::is_same_v<T, VK_TYPE> || std::is_same_v<T, DX_TYPE>, "T does not match any of ApiHandle types");
-		static_assert(sizeof(VK_TYPE) == sizeof(DX_TYPE));
-
-		std::vector<T> copyVec(count);
-
-		for (uint32_t i = 0; i < count; i++)
-			copyVec[i] = apiHandles[i];
-
-		return copyVec;
-	}
 
 	struct Placeholder {};
 

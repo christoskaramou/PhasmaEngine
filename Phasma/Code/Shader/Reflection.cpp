@@ -30,7 +30,6 @@ namespace pe
 	{
 		name = "";
 		location = -1;
-		//type = make_sptr(spirv_cross::SPIRType());
 	}
 
 	CombinedImageSamplerDesc::CombinedImageSamplerDesc()
@@ -45,7 +44,6 @@ namespace pe
 		name = "";
 		set = -1;
 		binding = -1;
-		//type = make_sptr(spirv_cross::SPIRType());
 		bufferSize = 0;
 	}
 
@@ -65,7 +63,7 @@ namespace pe
 			ShaderInOutDesc desc;
 			desc.name = resource.name;
 			desc.location = compiler.get_decoration(resource.id, spv::DecorationLocation);
-			desc.type = make_sptr(compiler.get_type(resource.base_type_id));
+			desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
 			
 			inputs.push_back(desc);
 		}
@@ -76,7 +74,7 @@ namespace pe
 			ShaderInOutDesc desc;
 			desc.name = resource.name;
 			desc.location = compiler.get_decoration(resource.id, spv::DecorationLocation);
-			desc.type = make_sptr(compiler.get_type(resource.base_type_id));
+			desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
 			
 			outputs.push_back(desc);
 		}
@@ -99,7 +97,7 @@ namespace pe
 			desc.name = resource.name;
 			desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
 			desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
-			desc.type = make_sptr(compiler.get_type(resource.base_type_id));
+			desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
 			desc.bufferSize = compiler.get_declared_struct_size(*desc.type);
 			
 			uniformBuffers.push_back(desc);
@@ -112,7 +110,7 @@ namespace pe
 			desc.name = resource.name;
 			desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
 			desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
-			desc.type = make_sptr(compiler.get_type(resource.base_type_id));
+			desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
 			desc.bufferSize = compiler.get_declared_struct_size(*desc.type);
 			
 			pushConstantBuffers.push_back(desc);

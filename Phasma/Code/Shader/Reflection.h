@@ -38,7 +38,7 @@ namespace pe
 
 		std::string name;
 		uint32_t location = 0;
-		SPtr<spirv_cross::SPIRType> type;
+		std::shared_ptr<spirv_cross::SPIRType> type;
 	};
 
 	class CombinedImageSamplerDesc
@@ -59,7 +59,7 @@ namespace pe
 		std::string name;
 		uint32_t set = 0;
 		uint32_t binding = 0;
-		SPtr<spirv_cross::SPIRType> type;
+		std::shared_ptr<spirv_cross::SPIRType> type;
 		size_t bufferSize = 0;
 	};
 
