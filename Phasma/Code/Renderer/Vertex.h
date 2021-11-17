@@ -27,47 +27,47 @@ SOFTWARE.
 
 namespace pe
 {
-	class VertexInputBindingDescription
-	{
-	public:
-		uint32_t binding;
-		uint32_t stride;
-		VertexInputRate inputRate;
-	};
+    class VertexInputBindingDescription
+    {
+    public:
+        uint32_t binding;
+        uint32_t stride;
+        VertexInputRate inputRate;
+    };
 
-	class VertexInputAttributeDescription
-	{
-	public:
-		uint32_t location;
-		uint32_t binding;
-		Format format;
-		uint32_t offset;
-	};
+    class VertexInputAttributeDescription
+    {
+    public:
+        uint32_t location;
+        uint32_t binding;
+        Format format;
+        uint32_t offset;
+    };
 
-	class Vertex
-	{
-	public:
-		Vertex();
-		
-		Vertex(vec3& pos, vec2& uv, vec3& norm, vec4& color, ivec4& bonesIDs, vec4& weights);
-		
-		static std::vector<VertexInputBindingDescription> GetBindingDescriptionGeneral();
-		
-		static std::vector<VertexInputBindingDescription> GetBindingDescriptionGUI();
-		
-		static std::vector<VertexInputBindingDescription> GetBindingDescriptionSkyBox();
-		
-		static std::vector<VertexInputAttributeDescription> GetAttributeDescriptionGeneral();
-		
-		static std::vector<VertexInputAttributeDescription> GetAttributeDescriptionGUI();
-		
-		static std::vector<VertexInputAttributeDescription> GetAttributeDescriptionSkyBox();
-		
-		vec3 position;
-		vec2 uv;
-		vec3 normals;
-		vec4 color;
-		ivec4 bonesIDs;
-		vec4 weights;
-	};
+    class Vertex
+    {
+    public:
+        Vertex();
+
+        Vertex(vec3 &pos, vec2 &uv, vec3 &norm, vec4 &color, ivec4 &bonesIDs, vec4 &weights);
+
+        static std::vector <VertexInputBindingDescription> GetBindingDescriptionGeneral();
+
+        static std::vector <VertexInputBindingDescription> GetBindingDescriptionGUI();
+
+        static std::vector <VertexInputBindingDescription> GetBindingDescriptionSkyBox();
+
+        static std::vector <VertexInputAttributeDescription> GetAttributeDescriptionGeneral();
+
+        static std::vector <VertexInputAttributeDescription> GetAttributeDescriptionGUI();
+
+        static std::vector <VertexInputAttributeDescription> GetAttributeDescriptionSkyBox();
+
+        vec3 position;
+        vec2 uv;
+        vec3 normals;
+        vec4 color;
+        ivec4 bonesIDs;
+        vec4 weights;
+    };
 }

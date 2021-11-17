@@ -29,22 +29,22 @@ SOFTWARE.
 
 float DGGX(float roughness, vec3 N, vec3 H)
 {
-#if 1
+    #if 1
     float NoH = clamp(dot(N, H), 0.0001, 1.0);
     float m = roughness * roughness;
     float m2 = m * m;
     float d = (NoH * m2 - NoH) * NoH + 1.0;
     return m2 / (PI * d * d);
-#else
-	float NoH = clamp(dot(N, H), 0.001, 1.0);
-	vec3 NxH = cross(N, H);
-	float oneMinusNoHSquared = min(dot(NxH, NxH), 1.0);
-	float linearRoughness = roughness * roughness;
-	float a = NoH * linearRoughness;
-	float k = linearRoughness / max(oneMinusNoHSquared + a * a, 0.0001);
-	float d = k * k * (1.0 / PI);
-	return d;
-#endif
+    #else
+    float NoH = clamp(dot(N, H), 0.001, 1.0);
+    vec3 NxH = cross(N, H);
+    float oneMinusNoHSquared = min(dot(NxH, NxH), 1.0);
+    float linearRoughness = roughness * roughness;
+    float a = NoH * linearRoughness;
+    float k = linearRoughness / max(oneMinusNoHSquared + a * a, 0.0001);
+    float d = k * k * (1.0 / PI);
+    return d;
+    #endif
 }
 
 float GSchlick(float roughness, float NoV, float NoL)
@@ -53,7 +53,7 @@ float GSchlick(float roughness, float NoV, float NoL)
     float k = r * r * (1.0 / 8.0);
     float V = NoV * (1.0 - k) + k;
     float L = NoL * (1.0 - k) + k;
-    return 0.25 / max(V * L, 0.001); // 1 / (4 * NoV * NoL) is folded in here.
+    return 0.25 / max(V * L, 0.001);// 1 / (4 * NoV * NoL) is folded in here.
 }
 
 vec3 CookTorranceSpecular(vec3 N, vec3 H, float NoL, float NoV, vec3 specular, float roughness)
@@ -65,17 +65,17 @@ vec3 CookTorranceSpecular(vec3 N, vec3 H, float NoL, float NoV, vec3 specular, f
 
 vec3 Fresnel(vec3 F0, float HoV)
 {
-	return mix(F0, vec3(1.0), pow((1.0 - HoV), 5.0));
+    return mix(F0, vec3(1.0), pow((1.0 - HoV), 5.0));
 }
 
 vec3 FresnelIBL(vec3 F0, float cosTheta, float roughness)
 {
-	return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
 vec3 ComputeF0(vec3 base_color, float metallic)
 {
-	return mix(vec3(0.04), base_color, metallic);
+    return mix(vec3(0.04), base_color, metallic);
 }
 
-#endif
+    #endif

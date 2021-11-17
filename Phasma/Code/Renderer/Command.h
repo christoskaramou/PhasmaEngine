@@ -27,107 +27,114 @@ SOFTWARE.
 
 namespace pe
 {
-	class RenderPass;
-	class FrameBuffer;
-	class Pipeline;
-	class Compute;
-	class Buffer;
-	class Image;
+    class RenderPass;
 
-	enum class BarrierType
-	{
-		Memory,
-		Buffer,
-		Image
-	};
+    class FrameBuffer;
 
-	struct BufferCopy
-	{
-		uint64_t srcOffset;
-		uint64_t dstOffset;
-		uint64_t size;
-	};
+    class Pipeline;
 
-	struct ImageSubresourceLayers
-	{
-		ImageAspectFlags aspectMask;
-		uint32_t mipLevel;
-		uint32_t baseArrayLayer;
-		uint32_t layerCount;
-	};
+    class Compute;
 
-	struct Offset3D
-	{
-		int32_t x;
-		int32_t y;
-		int32_t z;
-	};
+    class Buffer;
 
-	struct ImageBlit
-	{
-		ImageSubresourceLayers srcSubresource;
-		Offset3D srcOffsets[2];
-		ImageSubresourceLayers dstSubresource;
-		Offset3D dstOffsets[2];
-	};
+    class Image;
 
-	class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
-	{
-	public:
-		CommandPool(uint32_t graphicsFamilyId);
+    enum class BarrierType
+    {
+        Memory,
+        Buffer,
+        Image
+    };
 
-		~CommandPool();
-	};
+    struct BufferCopy
+    {
+        uint64_t srcOffset;
+        uint64_t dstOffset;
+        uint64_t size;
+    };
 
-	class CommandBuffer : public IHandle<CommandBuffer, CommandBufferHandle>
-	{
-	public:
-		CommandBuffer(CommandPool* commandPool);
+    struct ImageSubresourceLayers
+    {
+        ImageAspectFlags aspectMask;
+        uint32_t mipLevel;
+        uint32_t baseArrayLayer;
+        uint32_t layerCount;
+    };
 
-		~CommandBuffer();
+    struct Offset3D
+    {
+        int32_t x;
+        int32_t y;
+        int32_t z;
+    };
 
-		void CopyBuffer(Buffer* srcBuffer, Buffer* dstBuffer, uint32_t regionCount, BufferCopy* pRegions);
+    struct ImageBlit
+    {
+        ImageSubresourceLayers srcSubresource;
+        Offset3D srcOffsets[2];
+        ImageSubresourceLayers dstSubresource;
+        Offset3D dstOffsets[2];
+    };
 
-		void Begin();
+    class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
+    {
+    public:
+        CommandPool(uint32_t graphicsFamilyId);
 
-		void End();
+        ~CommandPool();
+    };
 
-		void PipelineBarrier();
+    class CommandBuffer : public IHandle<CommandBuffer, CommandBufferHandle>
+    {
+    public:
+        CommandBuffer(CommandPool *commandPool);
 
-		void SetDepthBias(float constantFactor, float clamp, float slopeFactor);
+        ~CommandBuffer();
 
-		void BlitImage(Image* srcImage, ImageLayout srcImageLayout,
-			Image* dstImage, ImageLayout dstImageLayout,
-			uint32_t regionCount, ImageBlit* pRegions,
-			Filter filter);
+        void CopyBuffer(Buffer *srcBuffer, Buffer *dstBuffer, uint32_t regionCount, BufferCopy *pRegions);
 
-		void BeginPass(RenderPass* pass, FrameBuffer* frameBuffer);
+        void Begin();
 
-		void EndPass();
+        void End();
 
-		void BindPipeline(Pipeline* pipeline);
+        void PipelineBarrier();
 
-		void BindComputePipeline(Pipeline* pipeline);
+        void SetDepthBias(float constantFactor, float clamp, float slopeFactor);
 
-		void BindVertexBuffer(Buffer* buffer, size_t offset, uint32_t firstBinding = 0, uint32_t bindingCount = 1);
+        void BlitImage(Image *srcImage, ImageLayout srcImageLayout,
+                       Image *dstImage, ImageLayout dstImageLayout,
+                       uint32_t regionCount, ImageBlit *pRegions,
+                       Filter filter);
 
-		void BindIndexBuffer(Buffer* buffer, size_t offset);
+        void BeginPass(RenderPass *pass, FrameBuffer *frameBuffer);
 
-		void BindDescriptors(Pipeline* pipeline, uint32_t count, Descriptor** descriptors);
+        void EndPass();
 
-		void BindComputeDescriptors(Pipeline* pipeline, uint32_t count, Descriptor** descriptors);
+        void BindPipeline(Pipeline *pipeline);
 
-		void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
+        void BindComputePipeline(Pipeline *pipeline);
 
-		void PushConstants(Pipeline* pipeline, ShaderStageFlags shaderStageFlags, uint32_t offset, uint32_t size, const void* pValues);
+        void BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding = 0, uint32_t bindingCount = 1);
 
-		void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
+        void BindIndexBuffer(Buffer *buffer, size_t offset);
 
-		void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
+        void BindDescriptors(Pipeline *pipeline, uint32_t count, Descriptor **descriptors);
 
-		void Submit();
+        void BindComputeDescriptors(Pipeline *pipeline, uint32_t count, Descriptor **descriptors);
 
-	private:
-		CommandPool* m_commandPool;
-	};
+        void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
+
+        void PushConstants(Pipeline *pipeline, ShaderStageFlags shaderStageFlags, uint32_t offset, uint32_t size,
+                           const void *pValues);
+
+        void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
+
+        void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset,
+                         uint32_t firstInstance);
+
+        void Submit();
+
+    private:
+        CommandPool *m_commandPool;
+    };
 }

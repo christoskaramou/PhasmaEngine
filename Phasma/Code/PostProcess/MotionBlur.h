@@ -27,44 +27,49 @@ SOFTWARE.
 
 namespace pe
 {
-	class Descriptor;
-	class FrameBuffer;
-	class Image;
-	class RenderPass;
-	class Buffer;
-	class Pipeline;
+    class Descriptor;
 
-	class MotionBlur : public IComponent
-	{
-	public:
-		MotionBlur();
-		
-		~MotionBlur();
-		
-		mat4 motionBlurInput[4];
-		Buffer* UBmotionBlur;
-		std::vector<FrameBuffer*> framebuffers {};
-		Pipeline* pipeline;
-		RenderPass* renderPass;
-		Descriptor* DSet;
-		Image* frameImage;
-		
-		void Init();
-		
-		void update(Camera& camera);
-		
-		void createRenderPass(std::map<std::string, Image*>& renderTargets);
-		
-		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void createMotionBlurUniforms(std::map<std::string, Image*>& renderTargets);
-		
-		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
-		
-		void draw(CommandBuffer* cmd, uint32_t imageIndex);
-		
-		void destroy();
-	};
+    class FrameBuffer;
+
+    class Image;
+
+    class RenderPass;
+
+    class Buffer;
+
+    class Pipeline;
+
+    class MotionBlur : public IComponent
+    {
+    public:
+        MotionBlur();
+
+        ~MotionBlur();
+
+        mat4 motionBlurInput[4];
+        Buffer *UBmotionBlur;
+        std::vector<FrameBuffer *> framebuffers{};
+        Pipeline *pipeline;
+        RenderPass *renderPass;
+        Descriptor *DSet;
+        Image *frameImage;
+
+        void Init();
+
+        void update(Camera &camera);
+
+        void createRenderPass(std::map<std::string, Image *> &renderTargets);
+
+        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void createMotionBlurUniforms(std::map<std::string, Image *> &renderTargets);
+
+        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+
+        void draw(CommandBuffer *cmd, uint32_t imageIndex);
+
+        void destroy();
+    };
 }

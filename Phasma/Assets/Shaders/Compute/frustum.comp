@@ -24,8 +24,8 @@ SOFTWARE.
 
 struct Plane
 {
-	vec3 normal;
-	float d;
+    vec3 normal;
+    float d;
 };
 
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
@@ -35,48 +35,48 @@ layout(std430, binding = 1) writeonly buffer DataOut { Plane frustum[6]; } dataO
 
 void main()
 {
-	// transpose just to make the calculations look simpler
-	mat4 pvm = transpose(dataIn.viewProjection);
+    // transpose just to make the calculations look simpler
+    mat4 pvm = transpose(dataIn.viewProjection);
 
-	/* Extract the numbers for the RIGHT plane */
-	vec4 temp = pvm[3] - pvm[0];
-	temp /= length(temp.xyz);
+    /* Extract the numbers for the RIGHT plane */
+    vec4 temp = pvm[3] - pvm[0];
+    temp /= length(temp.xyz);
 
-	dataOut.frustum[0].normal = temp.xyz;
-	dataOut.frustum[0].d = temp.w;
+    dataOut.frustum[0].normal = temp.xyz;
+    dataOut.frustum[0].d = temp.w;
 
-	/* Extract the numbers for the LEFT plane */
-	temp = pvm[3] + pvm[0];
-	temp /= length(temp.xyz);
+    /* Extract the numbers for the LEFT plane */
+    temp = pvm[3] + pvm[0];
+    temp /= length(temp.xyz);
 
-	dataOut.frustum[1].normal = temp.xyz;
-	dataOut.frustum[1].d = temp.w;
+    dataOut.frustum[1].normal = temp.xyz;
+    dataOut.frustum[1].d = temp.w;
 
-	/* Extract the BOTTOM plane */
-	temp = pvm[3] - pvm[1];
-	temp /= length(temp.xyz);
+    /* Extract the BOTTOM plane */
+    temp = pvm[3] - pvm[1];
+    temp /= length(temp.xyz);
 
-	dataOut.frustum[2].normal = temp.xyz;
-	dataOut.frustum[2].d = temp.w;
+    dataOut.frustum[2].normal = temp.xyz;
+    dataOut.frustum[2].d = temp.w;
 
-	/* Extract the TOP plane */
-	temp = pvm[3] + pvm[1];
-	temp /= length(temp.xyz);
+    /* Extract the TOP plane */
+    temp = pvm[3] + pvm[1];
+    temp /= length(temp.xyz);
 
-	dataOut.frustum[3].normal = temp.xyz;
-	dataOut.frustum[3].d = temp.w;
+    dataOut.frustum[3].normal = temp.xyz;
+    dataOut.frustum[3].d = temp.w;
 
-	/* Extract the FAR plane */
-	temp = pvm[3] - pvm[2];
-	temp /= length(temp.xyz);
+    /* Extract the FAR plane */
+    temp = pvm[3] - pvm[2];
+    temp /= length(temp.xyz);
 
-	dataOut.frustum[4].normal = temp.xyz;
-	dataOut.frustum[4].d = temp.w;
+    dataOut.frustum[4].normal = temp.xyz;
+    dataOut.frustum[4].d = temp.w;
 
-	/* Extract the NEAR plane */
-	temp = pvm[3] + pvm[2];
-	temp /= length(temp.xyz);
+    /* Extract the NEAR plane */
+    temp = pvm[3] + pvm[2];
+    temp /= length(temp.xyz);
 
-	dataOut.frustum[5].normal = temp.xyz;
-	dataOut.frustum[5].d = temp.w;
+    dataOut.frustum[5].normal = temp.xyz;
+    dataOut.frustum[5].d = temp.w;
 }

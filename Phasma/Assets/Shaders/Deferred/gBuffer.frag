@@ -25,11 +25,11 @@ SOFTWARE.
 
 #include "../Common/common.glsl"
 
-layout (set = 1, binding = 0) uniform sampler2D bcSampler; // BaseColor
-layout (set = 1, binding = 1) uniform sampler2D mrSampler; // MetallicRoughness
-layout (set = 1, binding = 2) uniform sampler2D nSampler;  // Normal
-layout (set = 1, binding = 3) uniform sampler2D oSampler;  // Occlusion
-layout (set = 1, binding = 4) uniform sampler2D eSampler;  // Emissive
+layout (set = 1, binding = 0) uniform sampler2D bcSampler;// BaseColor
+layout (set = 1, binding = 1) uniform sampler2D mrSampler;// MetallicRoughness
+layout (set = 1, binding = 2) uniform sampler2D nSampler;// Normal
+layout (set = 1, binding = 3) uniform sampler2D oSampler;// Occlusion
+layout (set = 1, binding = 4) uniform sampler2D eSampler;// Emissive
 
 layout (location = 0) in vec2 inUV;
 layout (location = 1) in vec3 inNormal;
@@ -48,15 +48,15 @@ layout (location = 3) out vec2 outVelocity;
 layout (location = 4) out vec4 outEmissive;
 
 void main() {
-	vec4 basicColor = texture(bcSampler, inUV) + inColor; 
-	if (basicColor.a < metRoughAlphacutOcl.z) discard; // needed because alpha blending is messed up when objects are not in order
-	vec3 metRough = texture(mrSampler, inUV).xyz;
-	vec3 emissive = texture(eSampler, inUV).xyz;
-	float ao = texture(oSampler, inUV).r;
+    vec4 basicColor = texture(bcSampler, inUV) + inColor;
+    if (basicColor.a < metRoughAlphacutOcl.z) discard;// needed because alpha blending is messed up when objects are not in order
+    vec3 metRough = texture(mrSampler, inUV).xyz;
+    vec3 emissive = texture(eSampler, inUV).xyz;
+    float ao = texture(oSampler, inUV).r;
 
-	outNormal = GetNormal(positionWS.xyz, nSampler, inNormal, inUV);
-	outAlbedo = vec4(basicColor.xyz * ao, basicColor.a) * baseColorFactor;
-	outMetRough = vec3(0.0, metRough.y, metRough.z);
-	outVelocity = (positionCS.xy / positionCS.w - previousPositionCS.xy / previousPositionCS.w) * vec2(0.5f, 0.5f); // ndc space
-	outEmissive = vec4(emissive * emissiveFactor, 0.0);
+    outNormal = GetNormal(positionWS.xyz, nSampler, inNormal, inUV);
+    outAlbedo = vec4(basicColor.xyz * ao, basicColor.a) * baseColorFactor;
+    outMetRough = vec3(0.0, metRough.y, metRough.z);
+    outVelocity = (positionCS.xy / positionCS.w - previousPositionCS.xy / previousPositionCS.w) * vec2(0.5f, 0.5f);// ndc space
+    outEmissive = vec4(emissive * emissiveFactor, 0.0);
 }

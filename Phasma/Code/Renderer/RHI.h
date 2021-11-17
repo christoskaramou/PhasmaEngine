@@ -35,136 +35,145 @@ SOFTWARE.
 
 namespace pe
 {
-	class CommandPool;
-	class CommandBuffer;
-	class DescriptorPool;
-	class Fence;
-	class Semaphore;
-	class Swapchain;
-	class Image;
-	class Surface;
+    class CommandPool;
 
-	class RHI : public NoCopy, public NoMove
-	{
-	private:
-		RHI();
+    class CommandBuffer;
 
-	public:
-		~RHI();
+    class DescriptorPool;
 
-		void CreateInstance(SDL_Window* window);
+    class Fence;
 
-		void CreateSurface();
+    class Semaphore;
 
-		void GetSurfaceProperties();
+    class Swapchain;
 
-		void GetGpu();
+    class Image;
 
-		void GetGraphicsFamilyId();
+    class Surface;
 
-		void GetTransferFamilyId();
+    class RHI : public NoCopy, public NoMove
+    {
+    private:
+        RHI();
 
-		void GetComputeFamilyId();
+    public:
+        ~RHI();
 
-		void CreateDevice();
+        void CreateInstance(SDL_Window *window);
 
-		void CreateAllocator();
+        void CreateSurface();
 
-		void GetGraphicsQueue();
+        void GetSurfaceProperties();
 
-		void GetTransferQueue();
+        void GetGpu();
 
-		void GetComputeQueue();
+        void GetGraphicsFamilyId();
 
-		void GetQueues();
+        void GetTransferFamilyId();
 
-		void CreateSwapchain(Surface* surface);
+        void GetComputeFamilyId();
 
-		void CreateCommandPools();
+        void CreateDevice();
 
-		void CreateDescriptorPool(uint32_t maxDescriptorSets);
+        void CreateAllocator();
 
-		void CreateCmdBuffers(uint32_t bufferCount = 1);
+        void GetGraphicsQueue();
 
-		void CreateFences(uint32_t fenceCount);
+        void GetTransferQueue();
 
-		void CreateSemaphores(uint32_t semaphoresCount);
+        void GetComputeQueue();
 
-		void CreateDepth();
+        void GetQueues();
 
-		void Init(SDL_Window* window);
+        void CreateSwapchain(Surface *surface);
 
-		void Destroy();
+        void CreateCommandPools();
 
-		InstanceHandle instance;
-		DebugMessengerHandle debugMessenger;
-		GpuHandle gpu;
-		std::string gpuName;
-		DeviceHandle device;
-		DeviceQueueHandle graphicsQueue, computeQueue, transferQueue;
-		CommandPool* commandPool;
-		CommandPool* commandPool2;
-		DescriptorPool* descriptorPool;
-		std::vector<CommandBuffer*> dynamicCmdBuffers;
-		std::vector<CommandBuffer*> shadowCmdBuffers;
-		std::vector<Fence*> fences;
-		std::vector<Semaphore*> semaphores;
-		VmaAllocator allocator = nullptr;
+        void CreateDescriptorPool(uint32_t maxDescriptorSets);
 
-		SDL_Window* window;
-		Surface* surface;
-		Swapchain* swapchain;
-		Image* depth;
-		int graphicsFamilyId, computeFamilyId, transferFamilyId;
+        void CreateCmdBuffers(uint32_t bufferCount = 1);
 
-		// Helpers
-		void Submit(
-			uint32_t commandBufferCount, CommandBuffer** commandBuffer,
-			PipelineStageFlags* waitStage,
-			uint32_t waitSemaphoreCount, Semaphore** waitSemaphore,
-			uint32_t signalSemaphoreCount, Semaphore** signalSemaphore,
-			Fence* signalFence);
+        void CreateFences(uint32_t fenceCount);
 
-		void WaitFence(Fence* fence);
+        void CreateSemaphores(uint32_t semaphoresCount);
 
-		void SubmitAndWaitFence(
-			uint32_t commandBuffersCount, CommandBuffer** commandBuffers,
-			PipelineStageFlags* waitStages,
-			uint32_t waitSemaphoresCount, Semaphore** waitSemaphores,
-			uint32_t signalSemaphoresCount, Semaphore** signalSemaphores);
+        void CreateDepth();
 
-		void Present(
-			uint32_t swapchainCount, Swapchain** swapchains,
-			uint32_t* imageIndices,
-			uint32_t semaphorescount, Semaphore** semaphores);
+        void Init(SDL_Window *window);
+
+        void Destroy();
+
+        InstanceHandle instance;
+        DebugMessengerHandle debugMessenger;
+        GpuHandle gpu;
+        std::string gpuName;
+        DeviceHandle device;
+        DeviceQueueHandle graphicsQueue, computeQueue, transferQueue;
+        CommandPool *commandPool;
+        CommandPool *commandPool2;
+        DescriptorPool *descriptorPool;
+        std::vector<CommandBuffer *> dynamicCmdBuffers;
+        std::vector<CommandBuffer *> shadowCmdBuffers;
+        std::vector<Fence *> fences;
+        std::vector<Semaphore *> semaphores;
+        VmaAllocator allocator = nullptr;
+
+        SDL_Window *window;
+        Surface *surface;
+        Swapchain *swapchain;
+        Image *depth;
+        int graphicsFamilyId, computeFamilyId, transferFamilyId;
+
+        // Helpers
+        void Submit(
+                uint32_t commandBufferCount, CommandBuffer **commandBuffer,
+                PipelineStageFlags *waitStage,
+                uint32_t waitSemaphoreCount, Semaphore **waitSemaphore,
+                uint32_t signalSemaphoreCount, Semaphore **signalSemaphore,
+                Fence *signalFence);
+
+        void WaitFence(Fence *fence);
+
+        void SubmitAndWaitFence(
+                uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
+                PipelineStageFlags *waitStages,
+                uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
+                uint32_t signalSemaphoresCount, Semaphore **signalSemaphores);
+
+        void Present(
+                uint32_t swapchainCount, Swapchain **swapchains,
+                uint32_t *imageIndices,
+                uint32_t semaphorescount, Semaphore **semaphores);
 
 #if _DEBUG
-		void CreateDebugMessenger();
+        void CreateDebugMessenger();
 
-		void DestroyDebugMessenger();
+        void DestroyDebugMessenger();
 #endif
-	private:
-		static inline std::mutex m_submit_mutex{};
-		bool m_HasDebugUtils = false;
-	public:
-		void WaitAndLockSubmits();
+    private:
+        static inline std::mutex m_submit_mutex{};
+        bool m_HasDebugUtils = false;
+    public:
+        void WaitAndLockSubmits();
 
-		void WaitDeviceIdle();
+        void WaitDeviceIdle();
 
-		void WaitGraphicsQueue();
+        void WaitGraphicsQueue();
 
-		void UnlockSubmits();
+        void UnlockSubmits();
 
-		static RHI* Get()
-		{
-			static auto rhi = new RHI();
-			return rhi;
-		}
+        static RHI *Get()
+        {
+            static auto rhi = new RHI();
+            return rhi;
+        }
 
-		static void Remove() noexcept
-		{
-			if (Get())
-				delete Get();
-		}
-	};
+        static void Remove()
+
+        noexcept
+        {
+            if (Get())
+                delete Get();
+        }
+    };
 }

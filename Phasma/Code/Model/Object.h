@@ -27,32 +27,33 @@ SOFTWARE.
 
 namespace pe
 {
-	class Image;
-	class Buffer;
+    class Image;
 
-	class Object
-	{
-	public:
-		Object();
-		
-		virtual ~Object() = default;
-		
-		bool render = true, cull = false;
-		DescriptorSetHandle descriptorSet;
-		Image* texture;
-		std::vector<float> vertices {};
-		Buffer* vertexBuffer;
-		Buffer* indexBuffer;
-		Buffer* uniformBuffer;
-		
-		virtual void createVertexBuffer();
-		
-		virtual void createUniformBuffer(size_t size);
-		
-		virtual void loadTexture(const std::string& path);
-		
-		virtual void createDescriptorSet(DescriptorSetLayoutHandle descriptorSetLayout);
-		
-		virtual void destroy();
-	};
+    class Buffer;
+
+    class Object
+    {
+    public:
+        Object();
+
+        virtual ~Object() = default;
+
+        bool render = true, cull = false;
+        DescriptorSetHandle descriptorSet;
+        Image *texture;
+        std::vector<float> vertices{};
+        Buffer *vertexBuffer;
+        Buffer *indexBuffer;
+        Buffer *uniformBuffer;
+
+        virtual void createVertexBuffer();
+
+        virtual void createUniformBuffer(size_t size);
+
+        virtual void loadTexture(const std::string &path);
+
+        virtual void createDescriptorSet(DescriptorSetLayoutHandle descriptorSetLayout);
+
+        virtual void destroy();
+    };
 }

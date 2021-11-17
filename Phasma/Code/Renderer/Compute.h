@@ -26,66 +26,74 @@ SOFTWARE.
 
 namespace pe
 {
-	constexpr uint32_t AUTO = UINT32_MAX;
-	
-	class Descriptor;
-	class CommandPool;
-	class CommandBuffer;
-	class Fence;
-	class Semaphore;
-	class Buffer;
-	class Pipeline;
+    constexpr uint32_t
+    AUTO = UINT32_MAX;
 
-	class Compute
-	{
-	public:
-		static Compute Create(const std::string& shaderName, size_t sizeIn, size_t sizeOut);
-		
-		static std::vector<Compute>
-		Create(const std::string& shaderName, size_t sizeIn, size_t sizeOut, uint32_t count);
-		
-		static void CreateResources();
-		
-		static void DestroyResources();
-		
-		Compute();
-		
-		~Compute() = default;
-		
-		void updateInput(const void* srcData, size_t srcSize = 0, size_t offset = 0);
-		
-		void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ, uint32_t count = 0, Semaphore** waitForHandles = nullptr);
-		
-		void waitFence();
-		
-		void destroy();
-		
-		template<class T>
-		void copyDataTo(T* ptr, size_t elements)
-		{
-			assert(elements * sizeof(T) <= SBOut->Size());
+    class Descriptor;
 
-			SBOut->Map();
-			memcpy(ptr, SBOut->Data(), elements * sizeof(T));
-			SBOut->Unmap();
-		}
-		
-		void createPipeline(const std::string& shaderName);
-	
-	private:
-		static CommandPool* s_commandPool;
-		Buffer* SBIn;
-		Buffer* SBOut;
-		Pipeline* pipeline;
-		Fence* fence;
-		Semaphore* semaphore;
-		Descriptor* DSCompute;
-		CommandBuffer* commandBuffer;
-		
-		void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
-		
-		void createDescriptorSet();
-		
-		void updateDescriptorSet();
-	};
+    class CommandPool;
+
+    class CommandBuffer;
+
+    class Fence;
+
+    class Semaphore;
+
+    class Buffer;
+
+    class Pipeline;
+
+    class Compute
+    {
+    public:
+        static Compute Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut);
+
+        static std::vector <Compute>
+        Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, uint32_t count);
+
+        static void CreateResources();
+
+        static void DestroyResources();
+
+        Compute();
+
+        ~Compute() = default;
+
+        void updateInput(const void *srcData, size_t srcSize = 0, size_t offset = 0);
+
+        void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ, uint32_t count = 0,
+                      Semaphore **waitForHandles = nullptr);
+
+        void waitFence();
+
+        void destroy();
+
+        template<class T>
+        void copyDataTo(T *ptr, size_t elements)
+        {
+            assert(elements * sizeof(T) <= SBOut->Size());
+
+            SBOut->Map();
+            memcpy(ptr, SBOut->Data(), elements * sizeof(T));
+            SBOut->Unmap();
+        }
+
+        void createPipeline(const std::string &shaderName);
+
+    private:
+        static CommandPool *s_commandPool;
+        Buffer *SBIn;
+        Buffer *SBOut;
+        Pipeline *pipeline;
+        Fence *fence;
+        Semaphore *semaphore;
+        Descriptor *DSCompute;
+        CommandBuffer *commandBuffer;
+
+        void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
+
+        void createDescriptorSet();
+
+        void updateDescriptorSet();
+    };
 }

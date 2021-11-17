@@ -26,26 +26,26 @@ SOFTWARE.
 
 namespace pe
 {
-	struct Light
-	{
-	};
+    struct Light
+    {
+    };
 
-	struct DirectionalLight : public Light
-	{
-		vec4 color; // .w = intensity
-		vec4 direction;
-	};
+    struct DirectionalLight : public Light
+    {
+        vec4 color; // .w = intensity
+        vec4 direction;
+    };
 
-	struct PointLight : public Light
-	{
-		vec4 color; // .w = intensity
-		vec4 position;
-	};
+    struct PointLight : public Light
+    {
+        vec4 color; // .w = intensity
+        vec4 position;
+    };
 
-	struct SpotLight : public Light
-	{
-		vec4 color; // .w = intensity
-		vec4 start; // .w = radius;
-		vec4 end;
-	};
+    struct SpotLight : public Light
+    {
+        vec4 color; // .w = intensity
+        vec4 start; // .w = radius;
+        vec4 end;
+    };
 }

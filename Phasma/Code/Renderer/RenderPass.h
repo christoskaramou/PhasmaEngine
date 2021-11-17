@@ -26,31 +26,31 @@ SOFTWARE.
 
 namespace pe
 {
-	class Attachment
-	{
-	public:
-		Attachment();
+    class Attachment
+    {
+    public:
+        Attachment();
 
-		AttachmentDescriptionFlags flags;
-		Format format;
-		SampleCountFlagBits samples;
-		AttachmentLoadOp loadOp;
-		AttachmentStoreOp storeOp;
-		AttachmentLoadOp stencilLoadOp;
-		AttachmentStoreOp stencilStoreOp;
-		ImageLayout initialLayout;
-		ImageLayout finalLayout;
-	};
+        AttachmentDescriptionFlags flags;
+        Format format;
+        SampleCountFlagBits samples;
+        AttachmentLoadOp loadOp;
+        AttachmentStoreOp storeOp;
+        AttachmentLoadOp stencilLoadOp;
+        AttachmentStoreOp stencilStoreOp;
+        ImageLayout initialLayout;
+        ImageLayout finalLayout;
+    };
 
-	class RenderPass : public IHandle<RenderPass, RenderPassHandle>
-	{
-	public:
-		RenderPass(const std::vector<Attachment>& attachments);
+    class RenderPass : public IHandle<RenderPass, RenderPassHandle>
+    {
+    public:
+        RenderPass(const std::vector <Attachment> &attachments);
 
-		RenderPass(const Attachment& attachment);
-		
-		~RenderPass();
+        RenderPass(const Attachment &attachment);
 
-		std::vector<Attachment> attachments;
-	};
+        ~RenderPass();
+
+        std::vector <Attachment> attachments;
+    };
 }

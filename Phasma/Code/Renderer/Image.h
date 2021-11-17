@@ -27,121 +27,125 @@ SOFTWARE.
 
 namespace pe
 {
-	class Context;
-	class CommandBuffer;
-	class Buffer;
-	class Image;
+    class Context;
 
-	enum class LayoutState
-	{
-		ColorRead,
-		ColorWrite,
-		DepthRead,
-		DepthWrite
-	};
+    class CommandBuffer;
 
-	class SamplerCreateInfo
-	{
-	public:
-		SamplerCreateInfo();
+    class Buffer;
 
-		Filter magFilter;
-		Filter minFilter;
-		SamplerMipmapMode mipmapMode;
-		SamplerAddressMode addressModeU;
-		SamplerAddressMode addressModeV;
-		SamplerAddressMode addressModeW;
-		float mipLodBias;
-		uint32_t anisotropyEnable;
-		float maxAnisotropy;
-		uint32_t compareEnable;
-		CompareOp compareOp;
-		float minLod;
-		float maxLod;
-		BorderColor borderColor;
-		uint32_t unnormalizedCoordinates;
-	};
+    class Image;
 
-	class ImageViewCreateInfo
-	{
-	public:
-		ImageViewCreateInfo();
+    enum class LayoutState
+    {
+        ColorRead,
+        ColorWrite,
+        DepthRead,
+        DepthWrite
+    };
 
-		Image* image;
-		ImageViewType viewType;
-		//VkComponentMapping         components;
-		//VkImageSubresourceRange    subresourceRange;
-		ImageAspectFlags aspectMask;
-	};
+    class SamplerCreateInfo
+    {
+    public:
+        SamplerCreateInfo();
 
-	class ImageCreateInfo
-	{
-	public:
-		ImageCreateInfo();
+        Filter magFilter;
+        Filter minFilter;
+        SamplerMipmapMode mipmapMode;
+        SamplerAddressMode addressModeU;
+        SamplerAddressMode addressModeV;
+        SamplerAddressMode addressModeW;
+        float mipLodBias;
+        uint32_t anisotropyEnable;
+        float maxAnisotropy;
+        uint32_t compareEnable;
+        CompareOp compareOp;
+        float minLod;
+        float maxLod;
+        BorderColor borderColor;
+        uint32_t unnormalizedCoordinates;
+    };
 
-		uint32_t width;
-		uint32_t height;
-		uint32_t depth;
-		ImageTiling tiling;
-		ImageUsageFlags usage;
-		MemoryPropertyFlags properties;
-		Format format;
-		ImageCreateFlags imageFlags;
-		VkImageType imageType;
-		uint32_t mipLevels;
-		uint32_t arrayLayers;
-		SampleCountFlagBits samples;
-		SharingMode sharingMode;
-		uint32_t queueFamilyIndexCount;
-		const uint32_t* pQueueFamilyIndices;
-		ImageLayout initialLayout;
-		LayoutState layoutState;
-	};
+    class ImageViewCreateInfo
+    {
+    public:
+        ImageViewCreateInfo();
 
-	class Image : public IHandle<Image, ImageHandle>
-	{
-	public:
-		Image() {}
+        Image *image;
+        ImageViewType viewType;
+        //VkComponentMapping         components;
+        //VkImageSubresourceRange    subresourceRange;
+        ImageAspectFlags aspectMask;
+    };
 
-		Image(const ImageCreateInfo& info);
-		
-		~Image();
+    class ImageCreateInfo
+    {
+    public:
+        ImageCreateInfo();
 
-		std::string name{};
+        uint32_t width;
+        uint32_t height;
+        uint32_t depth;
+        ImageTiling tiling;
+        ImageUsageFlags usage;
+        MemoryPropertyFlags properties;
+        Format format;
+        ImageCreateFlags imageFlags;
+        VkImageType imageType;
+        uint32_t mipLevels;
+        uint32_t arrayLayers;
+        SampleCountFlagBits samples;
+        SharingMode sharingMode;
+        uint32_t queueFamilyIndexCount;
+        const uint32_t *pQueueFamilyIndices;
+        ImageLayout initialLayout;
+        LayoutState layoutState;
+    };
 
-		ImageViewHandle view;
-		SamplerHandle sampler;
-		VmaAllocation allocation{};
-		ImageCreateInfo imageInfo;
-		ImageViewCreateInfo viewInfo;
-		SamplerCreateInfo samplerInfo;
+    class Image : public IHandle<Image, ImageHandle>
+    {
+    public:
+        Image()
+        {}
 
-		float width_f{};
-		float height_f{};
-		PipelineColorBlendAttachmentState blendAttachment;
-		
-		void TransitionImageLayout(
-			CommandBuffer* cmd,
-			ImageLayout oldLayout,
-			ImageLayout newLayout,
-			PipelineStageFlags oldStageMask,
-			PipelineStageFlags newStageMask,
-			AccessFlags srcMask,
-			AccessFlags dstMask
-		);
-		
-		void CreateImageView(const ImageViewCreateInfo& info);
-		
-		void TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout);
-		
-		void ChangeLayout(CommandBuffer* cmd, LayoutState state);
-		
-		void CopyBufferToImage(Buffer* buffer, uint32_t baseLayer = 0);
-		
-		void CopyColorAttachment(CommandBuffer* cmd, Image* renderedImage);
-		
-		void GenerateMipMaps();
-		
-		void CreateSampler(const SamplerCreateInfo& info);
-	};
+        Image(const ImageCreateInfo &info);
+
+        ~Image();
+
+        std::string name{};
+
+        ImageViewHandle view;
+        SamplerHandle sampler;
+        VmaAllocation allocation{};
+        ImageCreateInfo imageInfo;
+        ImageViewCreateInfo viewInfo;
+        SamplerCreateInfo samplerInfo;
+
+        float width_f{};
+        float height_f{};
+        PipelineColorBlendAttachmentState blendAttachment;
+
+        void TransitionImageLayout(
+                CommandBuffer *cmd,
+                ImageLayout oldLayout,
+                ImageLayout newLayout,
+                PipelineStageFlags oldStageMask,
+                PipelineStageFlags newStageMask,
+                AccessFlags srcMask,
+                AccessFlags dstMask
+        );
+
+        void CreateImageView(const ImageViewCreateInfo &info);
+
+        void TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout);
+
+        void ChangeLayout(CommandBuffer *cmd, LayoutState state);
+
+        void CopyBufferToImage(Buffer *buffer, uint32_t baseLayer = 0);
+
+        void CopyColorAttachment(CommandBuffer *cmd, Image *renderedImage);
+
+        void GenerateMipMaps();
+
+        void CreateSampler(const SamplerCreateInfo &info);
+    };
 }

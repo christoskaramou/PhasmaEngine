@@ -27,59 +27,63 @@ SOFTWARE.
 
 namespace pe
 {
-	class Descriptor;
-	class FrameBuffer;
-	class Image;
-	class RenderPass;
-	class Pipeline;
+    class Descriptor;
 
-	class Deferred
-	{
-	public:
-		Deferred();
-		
-		~Deferred();
-		
-		RenderPass* renderPass;
-		RenderPass* compositionRenderPass;
-		std::vector<FrameBuffer*> framebuffers {}, compositionFramebuffers {};
-		Descriptor* DSComposition;
-		Pipeline* pipeline;
-		Pipeline* pipelineComposition;
-		Image* ibl_brdf_lut;
-		
-		struct UBO
-		{
-			vec4 screenSpace[8];
-		} ubo;
-		Buffer* uniform;
-		
-		void batchStart(CommandBuffer* cmd, uint32_t imageIndex);
-		
-		static void batchEnd();
-		
-		void createDeferredUniforms(std::map<std::string, Image*>& renderTargets);
-		
-		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
-		
-		void update(mat4& invViewProj);
-		
-		void draw(CommandBuffer* cmd, uint32_t imageIndex, Shadows& shadows, SkyBox& skybox);
-		
-		void createRenderPasses(std::map<std::string, Image*>& renderTargets);
-		
-		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createGBufferFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createCompositionFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createPipelines(std::map<std::string, Image*>& renderTargets);
-		
-		void createGBufferPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void createCompositionPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void destroy();
-	};
+    class FrameBuffer;
+
+    class Image;
+
+    class RenderPass;
+
+    class Pipeline;
+
+    class Deferred
+    {
+    public:
+        Deferred();
+
+        ~Deferred();
+
+        RenderPass *renderPass;
+        RenderPass *compositionRenderPass;
+        std::vector<FrameBuffer *> framebuffers{}, compositionFramebuffers{};
+        Descriptor *DSComposition;
+        Pipeline *pipeline;
+        Pipeline *pipelineComposition;
+        Image *ibl_brdf_lut;
+
+        struct UBO
+        {
+            vec4 screenSpace[8];
+        } ubo;
+        Buffer *uniform;
+
+        void batchStart(CommandBuffer *cmd, uint32_t imageIndex);
+
+        static void batchEnd();
+
+        void createDeferredUniforms(std::map<std::string, Image *> &renderTargets);
+
+        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+
+        void update(mat4 &invViewProj);
+
+        void draw(CommandBuffer *cmd, uint32_t imageIndex, Shadows &shadows, SkyBox &skybox);
+
+        void createRenderPasses(std::map<std::string, Image *> &renderTargets);
+
+        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createGBufferFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createCompositionFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createPipelines(std::map<std::string, Image *> &renderTargets);
+
+        void createGBufferPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void createCompositionPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void destroy();
+    };
 }

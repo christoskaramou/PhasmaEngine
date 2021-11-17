@@ -26,40 +26,45 @@ SOFTWARE.
 
 namespace pe
 {
-	class Descriptor;
-	class FrameBuffer;
-	class Image;
-	class CommandBuffer;
-	class RenderPass;
-	class Pipeline;
+    class Descriptor;
 
-	class DOF : public IComponent
-	{
-	public:
-		DOF();
-		
-		~DOF();
-		
-		std::vector<FrameBuffer*> framebuffers {};
-		Pipeline* pipeline;
-		RenderPass* renderPass;
-		Descriptor* DSet;
-		Image* frameImage;
-		
-		void Init();
-		
-		void createRenderPass(std::map<std::string, Image*>& renderTargets);
-		
-		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void createUniforms(std::map<std::string, Image*>& renderTargets);
-		
-		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
-		
-		void draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image*>& renderTargets);
-		
-		void destroy();
-	};
+    class FrameBuffer;
+
+    class Image;
+
+    class CommandBuffer;
+
+    class RenderPass;
+
+    class Pipeline;
+
+    class DOF : public IComponent
+    {
+    public:
+        DOF();
+
+        ~DOF();
+
+        std::vector<FrameBuffer *> framebuffers{};
+        Pipeline *pipeline;
+        RenderPass *renderPass;
+        Descriptor *DSet;
+        Image *frameImage;
+
+        void Init();
+
+        void createRenderPass(std::map<std::string, Image *> &renderTargets);
+
+        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void createUniforms(std::map<std::string, Image *> &renderTargets);
+
+        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+
+        void draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets);
+
+        void destroy();
+    };
 }

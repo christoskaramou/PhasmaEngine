@@ -26,58 +26,58 @@ SOFTWARE.
 
 namespace spirv_cross
 {
-	struct SPIRType;
+    struct SPIRType;
 }
 
 namespace pe
 {
-	class ShaderInOutDesc
-	{
-	public:
-		ShaderInOutDesc();
+    class ShaderInOutDesc
+    {
+    public:
+        ShaderInOutDesc();
 
-		std::string name;
-		uint32_t location = 0;
-		std::shared_ptr<spirv_cross::SPIRType> type;
-	};
+        std::string name;
+        uint32_t location = 0;
+        std::shared_ptr <spirv_cross::SPIRType> type;
+    };
 
-	class CombinedImageSamplerDesc
-	{
-	public:
-		CombinedImageSamplerDesc();
+    class CombinedImageSamplerDesc
+    {
+    public:
+        CombinedImageSamplerDesc();
 
-		std::string name;
-		uint32_t set = 0;
-		uint32_t binding = 0;
-	};
+        std::string name;
+        uint32_t set = 0;
+        uint32_t binding = 0;
+    };
 
-	class BufferDesc
-	{
-	public:
-		BufferDesc();
+    class BufferDesc
+    {
+    public:
+        BufferDesc();
 
-		std::string name;
-		uint32_t set = 0;
-		uint32_t binding = 0;
-		std::shared_ptr<spirv_cross::SPIRType> type;
-		size_t bufferSize = 0;
-	};
+        std::string name;
+        uint32_t set = 0;
+        uint32_t binding = 0;
+        std::shared_ptr <spirv_cross::SPIRType> type;
+        size_t bufferSize = 0;
+    };
 
-	class Shader;
-	
-	class Reflection
-	{
-	public:
-		void Init(Shader* shader);
-		
-		std::vector<ShaderInOutDesc> inputs {};
-		std::vector<ShaderInOutDesc> outputs {};
-		std::vector<CombinedImageSamplerDesc> samplers {};
-		std::vector<BufferDesc> uniformBuffers {};
-		std::vector<BufferDesc> pushConstantBuffers {};
-	
-	private:
-		Shader* m_shader{};
-	};
-	
+    class Shader;
+
+    class Reflection
+    {
+    public:
+        void Init(Shader *shader);
+
+        std::vector <ShaderInOutDesc> inputs{};
+        std::vector <ShaderInOutDesc> outputs{};
+        std::vector <CombinedImageSamplerDesc> samplers{};
+        std::vector <BufferDesc> uniformBuffers{};
+        std::vector <BufferDesc> pushConstantBuffers{};
+
+    private:
+        Shader *m_shader{};
+    };
+
 }

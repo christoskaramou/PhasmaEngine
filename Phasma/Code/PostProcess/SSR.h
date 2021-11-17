@@ -27,41 +27,46 @@ SOFTWARE.
 
 namespace pe
 {
-	class Desscriptor;
-	class FrameBuffer;
-	class Image;
-	class RenderPass;
-	class Pipeline;
-	class Buffer;
+    class Desscriptor;
 
-	class SSR : public IComponent
-	{
-	public:
-		SSR();
-		
-		~SSR();
-		
-		mat4 reflectionInput[4];
-		Buffer* UBReflection;
-		std::vector<FrameBuffer*> framebuffers {};
-		Pipeline* pipeline;
-		RenderPass* renderPass;
-		Descriptor* DSet;
-		
-		void update(Camera& camera);
-		
-		void createSSRUniforms(std::map<std::string, Image*>& renderTargets);
-		
-		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
-		
-		void draw(CommandBuffer* cmd, uint32_t imageIndex);
-		
-		void createRenderPass(std::map<std::string, Image*>& renderTargets);
-		
-		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void destroy();
-	};
+    class FrameBuffer;
+
+    class Image;
+
+    class RenderPass;
+
+    class Pipeline;
+
+    class Buffer;
+
+    class SSR : public IComponent
+    {
+    public:
+        SSR();
+
+        ~SSR();
+
+        mat4 reflectionInput[4];
+        Buffer *UBReflection;
+        std::vector<FrameBuffer *> framebuffers{};
+        Pipeline *pipeline;
+        RenderPass *renderPass;
+        Descriptor *DSet;
+
+        void update(Camera &camera);
+
+        void createSSRUniforms(std::map<std::string, Image *> &renderTargets);
+
+        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+
+        void draw(CommandBuffer *cmd, uint32_t imageIndex);
+
+        void createRenderPass(std::map<std::string, Image *> &renderTargets);
+
+        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void destroy();
+    };
 }

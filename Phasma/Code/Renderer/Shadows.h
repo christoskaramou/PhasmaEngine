@@ -27,46 +27,53 @@ SOFTWARE.
 
 namespace pe
 {
-	constexpr uint32_t SHADOWMAP_CASCADES = 4;
-	constexpr uint32_t SHADOWMAP_SIZE = 2048;
+    constexpr uint32_t
+    SHADOWMAP_CASCADES = 4;
+    constexpr uint32_t
+    SHADOWMAP_SIZE = 2048;
 
-	class Descriptor;
-	class FrameBuffer;
-	class Image;
-	class RenderPass;
-	class Buffer;
-	class Pipeline;
+    class Descriptor;
 
-	class Shadows
-	{
-	public:
-		Shadows();
-		
-		~Shadows();
-		
-		mat4 cascades[SHADOWMAP_CASCADES];
-		vec4 viewZ;
-		RenderPass* renderPass;
-		std::vector<Image*> textures {};
-		Descriptor* descriptorSetDeferred;
-		std::vector<FrameBuffer*> framebuffers {};
-		Buffer* uniformBuffer;
-		Pipeline* pipeline;
-		
-		void update(Camera& camera);
-		
-		void createUniformBuffers();
-		
-		void createDescriptorSets();
-		
-		void createRenderPass();
-		
-		void createFrameBuffers();
-		
-		void createPipeline();
+    class FrameBuffer;
 
-		void CalculateCascades(Camera& camera);
-		
-		void destroy();
-	};
+    class Image;
+
+    class RenderPass;
+
+    class Buffer;
+
+    class Pipeline;
+
+    class Shadows
+    {
+    public:
+        Shadows();
+
+        ~Shadows();
+
+        mat4 cascades[SHADOWMAP_CASCADES];
+        vec4 viewZ;
+        RenderPass *renderPass;
+        std::vector<Image *> textures{};
+        Descriptor *descriptorSetDeferred;
+        std::vector<FrameBuffer *> framebuffers{};
+        Buffer *uniformBuffer;
+        Pipeline *pipeline;
+
+        void update(Camera &camera);
+
+        void createUniformBuffers();
+
+        void createDescriptorSets();
+
+        void createRenderPass();
+
+        void createFrameBuffers();
+
+        void createPipeline();
+
+        void CalculateCascades(Camera &camera);
+
+        void destroy();
+    };
 }

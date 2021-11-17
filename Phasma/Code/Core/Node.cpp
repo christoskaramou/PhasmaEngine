@@ -27,76 +27,78 @@ SOFTWARE.
 
 namespace pe
 {
-	mat4 Node::LocalMatrix() const
-	{
-		switch (transformationType)
-		{
-			case TRANSFORMATION_MATRIX:
-				return matrix;
-			case TRANSFORMATION_TRS:
-			{
-				return transform(rotation, scale, translation);
-			}
-			case TRANSFORMATION_IDENTITY:
-			default:
-				return mat4::identity();
-		}
-	}
-	
-	mat4 Node::GetMatrix() const
-	{
-		mat4 m = LocalMatrix();
-		Node* p = parent;
-		while (p)
-		{
-			m = p->LocalMatrix() * m;
-			p = p->parent;
-		}
-		return m;
-	}
-	
-	void CalculateJointMatrixAsync(Mesh* mesh, Skin* skin, const mat4& inverseTransform, const size_t index)
-	{
-		mesh->ubo.jointMatrix[index] = inverseTransform * skin->joints[index]->GetMatrix() * skin->inverseBindMatrices[index];
-	}
-	
-	void Node::Update()
-	{
-		if (mesh)
-		{
-			mesh->ubo.previousMatrix = mesh->ubo.matrix;
-			mesh->ubo.matrix = GetMatrix();
-			
-			if (skin)
-			{
-				// Update joint matrices
-				mat4 inverseTransform = inverse(mesh->ubo.matrix);
-				const size_t numJoints = std::min(static_cast<uint32_t>(skin->joints.size()), MAX_NUM_JOINTS);
-				
-				// async calls should be at least bigger than a number, else this will be slower
-				if (numJoints > 3)
-				{
-					std::vector<std::future<void>> futures(numJoints);
-					
-					for (size_t i = 0; i < numJoints; i++)
-						futures[i] = std::async(std::launch::async, CalculateJointMatrixAsync, mesh, skin, inverseTransform, i);
-					
-					for (auto& f : futures)
-						f.get();
-				}
-				else
-				{
-					for (size_t i = 0; i < numJoints; i++)
-						CalculateJointMatrixAsync(mesh, skin, inverseTransform, i);
-				}
-				
-				mesh->ubo.jointcount = static_cast<float>(numJoints);
-				mesh->uniformBuffer->CopyRequest<Launch::AsyncDeferred>({ &mesh->ubo, sizeof(mesh->ubo), 0 });
-			}
-			else
-			{
-				mesh->uniformBuffer->CopyRequest<Launch::AsyncDeferred>({ &mesh->ubo, 2 * sizeof(mat4), 0 });
-			}
-		}
-	}
+    mat4 Node::LocalMatrix() const
+    {
+        switch (transformationType)
+        {
+        case TRANSFORMATION_MATRIX:
+            return matrix;
+        case TRANSFORMATION_TRS:
+        {
+            return transform(rotation, scale, translation);
+        }
+        case TRANSFORMATION_IDENTITY:
+        default:
+            return mat4::identity();
+        }
+    }
+
+    mat4 Node::GetMatrix() const
+    {
+        mat4 m = LocalMatrix();
+        Node *p = parent;
+        while (p)
+        {
+            m = p->LocalMatrix() * m;
+            p = p->parent;
+        }
+        return m;
+    }
+
+    void CalculateJointMatrixAsync(Mesh *mesh, Skin *skin, const mat4 &inverseTransform, const size_t index)
+    {
+        mesh->ubo.jointMatrix[index] =
+                inverseTransform * skin->joints[index]->GetMatrix() * skin->inverseBindMatrices[index];
+    }
+
+    void Node::Update()
+    {
+        if (mesh)
+        {
+            mesh->ubo.previousMatrix = mesh->ubo.matrix;
+            mesh->ubo.matrix = GetMatrix();
+
+            if (skin)
+            {
+                // Update joint matrices
+                mat4 inverseTransform = inverse(mesh->ubo.matrix);
+                const size_t numJoints = std::min(static_cast<uint32_t>(skin->joints.size()), MAX_NUM_JOINTS);
+
+                // async calls should be at least bigger than a number, else this will be slower
+                if (numJoints > 3)
+                {
+                    std::vector <std::future<void>> futures(numJoints);
+
+                    for (size_t i = 0; i < numJoints; i++)
+                        futures[i] = std::async(std::launch::async, CalculateJointMatrixAsync, mesh, skin,
+                                                inverseTransform, i);
+
+                    for (auto &f : futures)
+                        f.get();
+                }
+                else
+                {
+                    for (size_t i = 0; i < numJoints; i++)
+                        CalculateJointMatrixAsync(mesh, skin, inverseTransform, i);
+                }
+
+                mesh->ubo.jointcount = static_cast<float>(numJoints);
+                mesh->uniformBuffer->CopyRequest<Launch::AsyncDeferred>({&mesh->ubo, sizeof(mesh->ubo), 0});
+            }
+            else
+            {
+                mesh->uniformBuffer->CopyRequest<Launch::AsyncDeferred>({&mesh->ubo, 2 * sizeof(mat4), 0});
+            }
+        }
+    }
 }

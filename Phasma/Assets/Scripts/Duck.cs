@@ -48,7 +48,7 @@ public class Duck
     }
 
     public void Update(float delta)
-	{
+    {
         d += delta;
         Vector3 v = new Vector3(
             rX * Convert.ToSingle(Math.Tan(Convert.ToDouble(d))),

@@ -28,115 +28,116 @@ SOFTWARE.
 
 namespace pe
 {
-	class RenderPass;
-	class DescriptorLayout;
+    class RenderPass;
 
-	enum class CullMode
-	{
-		None = 0,
-		Front = 1,
-		Back = 2
-	};
-	
-	enum class PushConstantStage
-	{
-		Vertex = 1,
-		Fragment = 16,
-		Compute = 32
-	};
+    class DescriptorLayout;
 
-	class PipelineColorBlendAttachmentState
-	{
-	public:
-		PipelineColorBlendAttachmentState();
+    enum class CullMode
+    {
+        None = 0,
+        Front = 1,
+        Back = 2
+    };
 
-		uint32_t blendEnable;
-		BlendFactor srcColorBlendFactor;
-		BlendFactor dstColorBlendFactor;
-		BlendOp colorBlendOp;
-		BlendFactor srcAlphaBlendFactor;
-		BlendFactor dstAlphaBlendFactor;
-		BlendOp alphaBlendOp;
-		ColorComponentFlags colorWriteMask;
-	};
+    enum class PushConstantStage
+    {
+        Vertex = 1,
+        Fragment = 16,
+        Compute = 32
+    };
 
-	class PipelineCreateInfo
-	{
-	public:
-		PipelineCreateInfo();
-		
-		~PipelineCreateInfo();
-		
-		bool blendEnable;
-		Shader* pVertShader;
-		Shader* pFragShader;
-		Shader* pCompShader;
-		std::vector<VertexInputBindingDescription> vertexInputBindingDescriptions;
-		std::vector<VertexInputAttributeDescription> vertexInputAttributeDescriptions;
-		float width;
-		float height;
-		CullMode cullMode;
-		std::vector<PipelineColorBlendAttachmentState> colorBlendAttachments;
-		std::vector<DynamicState> dynamicStates;
-		PushConstantStage pushConstantStage;
-		uint32_t pushConstantSize;
-		std::vector<DescriptorLayout*> descriptorSetLayouts;
-		RenderPass* renderPass;
-		PipelineCacheHandle pipelineCache;
-	};
-	
-	class Pipeline : public IHandle<Pipeline, PipelineHandle>
-	{
-	public:
-		Pipeline(const PipelineCreateInfo& info);
-		
-		~Pipeline();
-		
-		PipelineLayoutHandle layout;
-		
-		void createComputePipeline();
-		
-		static DescriptorLayout* getDescriptorSetLayoutComposition();
+    class PipelineColorBlendAttachmentState
+    {
+    public:
+        PipelineColorBlendAttachmentState();
 
-		static DescriptorLayout* getDescriptorSetLayoutBrightFilter();
+        uint32_t blendEnable;
+        BlendFactor srcColorBlendFactor;
+        BlendFactor dstColorBlendFactor;
+        BlendOp colorBlendOp;
+        BlendFactor srcAlphaBlendFactor;
+        BlendFactor dstAlphaBlendFactor;
+        BlendOp alphaBlendOp;
+        ColorComponentFlags colorWriteMask;
+    };
 
-		static DescriptorLayout* getDescriptorSetLayoutGaussianBlurH();
+    class PipelineCreateInfo
+    {
+    public:
+        PipelineCreateInfo();
 
-		static DescriptorLayout* getDescriptorSetLayoutGaussianBlurV();
+        ~PipelineCreateInfo();
 
-		static DescriptorLayout* getDescriptorSetLayoutCombine();
+        bool blendEnable;
+        Shader *pVertShader;
+        Shader *pFragShader;
+        Shader *pCompShader;
+        std::vector <VertexInputBindingDescription> vertexInputBindingDescriptions;
+        std::vector <VertexInputAttributeDescription> vertexInputAttributeDescriptions;
+        float width;
+        float height;
+        CullMode cullMode;
+        std::vector <PipelineColorBlendAttachmentState> colorBlendAttachments;
+        std::vector <DynamicState> dynamicStates;
+        PushConstantStage pushConstantStage;
+        uint32_t pushConstantSize;
+        std::vector<DescriptorLayout *> descriptorSetLayouts;
+        RenderPass *renderPass;
+        PipelineCacheHandle pipelineCache;
+    };
 
-		static DescriptorLayout* getDescriptorSetLayoutDOF();
+    class Pipeline : public IHandle<Pipeline, PipelineHandle>
+    {
+    public:
+        Pipeline(const PipelineCreateInfo &info);
 
-		static DescriptorLayout* getDescriptorSetLayoutFXAA();
+        ~Pipeline();
 
-		static DescriptorLayout* getDescriptorSetLayoutMotionBlur();
+        PipelineLayoutHandle layout;
 
-		static DescriptorLayout* getDescriptorSetLayoutSSAO();
+        void createComputePipeline();
 
-		static DescriptorLayout* getDescriptorSetLayoutSSAOBlur();
+        static DescriptorLayout *getDescriptorSetLayoutComposition();
 
-		static DescriptorLayout* getDescriptorSetLayoutSSR();
+        static DescriptorLayout *getDescriptorSetLayoutBrightFilter();
 
-		static DescriptorLayout* getDescriptorSetLayoutTAA();
+        static DescriptorLayout *getDescriptorSetLayoutGaussianBlurH();
 
-		static DescriptorLayout* getDescriptorSetLayoutTAASharpen();
+        static DescriptorLayout *getDescriptorSetLayoutGaussianBlurV();
 
-		static DescriptorLayout* getDescriptorSetLayoutShadows();
+        static DescriptorLayout *getDescriptorSetLayoutCombine();
 
-		static DescriptorLayout* getDescriptorSetLayoutShadowsDeferred();
+        static DescriptorLayout *getDescriptorSetLayoutDOF();
 
-		static DescriptorLayout* getDescriptorSetLayoutMesh();
+        static DescriptorLayout *getDescriptorSetLayoutFXAA();
 
-		static DescriptorLayout* getDescriptorSetLayoutPrimitive();
+        static DescriptorLayout *getDescriptorSetLayoutMotionBlur();
 
-		static DescriptorLayout* getDescriptorSetLayoutModel();
+        static DescriptorLayout *getDescriptorSetLayoutSSAO();
 
-		static DescriptorLayout* getDescriptorSetLayoutSkybox();
+        static DescriptorLayout *getDescriptorSetLayoutSSAOBlur();
 
-		static DescriptorLayout* getDescriptorSetLayoutCompute();
+        static DescriptorLayout *getDescriptorSetLayoutSSR();
 
-	private:
-		PipelineCreateInfo info;
-	};
+        static DescriptorLayout *getDescriptorSetLayoutTAA();
+
+        static DescriptorLayout *getDescriptorSetLayoutTAASharpen();
+
+        static DescriptorLayout *getDescriptorSetLayoutShadows();
+
+        static DescriptorLayout *getDescriptorSetLayoutShadowsDeferred();
+
+        static DescriptorLayout *getDescriptorSetLayoutMesh();
+
+        static DescriptorLayout *getDescriptorSetLayoutPrimitive();
+
+        static DescriptorLayout *getDescriptorSetLayoutModel();
+
+        static DescriptorLayout *getDescriptorSetLayoutSkybox();
+
+        static DescriptorLayout *getDescriptorSetLayoutCompute();
+
+    private:
+        PipelineCreateInfo info;
+    };
 }

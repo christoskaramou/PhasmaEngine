@@ -35,105 +35,105 @@ SOFTWARE.
 
 namespace pe
 {
-	FXAA::FXAA()
-	{
-		DSet = {};
-	}
-	
-	FXAA::~FXAA()
-	{
-	}
-	
-	void FXAA::Init()
-	{
-		ImageCreateInfo info{};
-		info.format = RHII.surface->format;
-		info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
-		info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
-		info.tiling = VK_IMAGE_TILING_OPTIMAL;
-		info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-		info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-		frameImage = Image::Create(info);
+    FXAA::FXAA()
+    {
+        DSet = {};
+    }
 
-		ImageViewCreateInfo viewInfo{};
-		viewInfo.image = frameImage;
-		frameImage->CreateImageView(viewInfo);
+    FXAA::~FXAA()
+    {
+    }
 
-		SamplerCreateInfo samplerInfo{};
-		frameImage->CreateSampler(samplerInfo);
+    void FXAA::Init()
+    {
+        ImageCreateInfo info{};
+        info.format = RHII.surface->format;
+        info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
+        info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+        info.tiling = VK_IMAGE_TILING_OPTIMAL;
+        info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        frameImage = Image::Create(info);
 
-		frameImage->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	}
-	
-	void FXAA::createUniforms(std::map<std::string, Image*>& renderTargets)
-	{
-		DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutFXAA());
-		updateDescriptorSets(renderTargets);
-	}
-	
-	void FXAA::updateDescriptorSets(std::map<std::string, Image*>& renderTargets)
-	{
-		DescriptorUpdateInfo info{};
-		info.binding = 0;
-		info.pImage = frameImage;
-		DSet->UpdateDescriptor(1, &info);
-	}
-	
-	void FXAA::draw(CommandBuffer* cmd, uint32_t imageIndex)
-	{
-		cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-		cmd->BindPipeline(pipeline);
-		cmd->BindDescriptors(pipeline, 1, &DSet);
-		cmd->Draw(3, 1, 0, 0);
-		cmd->EndPass();
-	}
-	
-	void FXAA::createRenderPass(std::map<std::string, Image*>& renderTargets)
-	{
-		Attachment attachment{};
-		attachment.format = renderTargets["viewport"]->imageInfo.format;
-		renderPass = RenderPass::Create(attachment);
-	}
-	
-	void FXAA::createFrameBuffers(std::map<std::string, Image*>& renderTargets)
-	{
-		framebuffers.resize(RHII.swapchain->images.size());
-		for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
-		{
-			uint32_t width = renderTargets["viewport"]->imageInfo.width;
-			uint32_t height = renderTargets["viewport"]->imageInfo.height;
-			ImageViewHandle view = renderTargets["viewport"]->view;
-			framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
-		}
-	}
-	
-	void FXAA::createPipeline(std::map<std::string, Image*>& renderTargets)
-	{
-		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex};
-		Shader frag {"Shaders/FXAA/FXAA.frag", ShaderType::Fragment};
-		
-		PipelineCreateInfo info{};
-		info.pVertShader = &vert;
-		info.pFragShader = &frag;
-		info.width = renderTargets["viewport"]->width_f;
-		info.height = renderTargets["viewport"]->height_f;
-		info.cullMode = CullMode::Back;
-		info.colorBlendAttachments = { renderTargets["viewport"]->blendAttachment };
-		info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutFXAA() };
-		info.renderPass = renderPass;
-		
-		pipeline = Pipeline::Create(info);
-	}
-	
-	void FXAA::destroy()
-	{
-		for (auto frameBuffer : framebuffers)
-			frameBuffer->Destroy();
+        ImageViewCreateInfo viewInfo{};
+        viewInfo.image = frameImage;
+        frameImage->CreateImageView(viewInfo);
 
-		Pipeline::getDescriptorSetLayoutFXAA()->Destroy();
-		renderPass->Destroy();
-		frameImage->Destroy();
-		pipeline->Destroy();
-	}
+        SamplerCreateInfo samplerInfo{};
+        frameImage->CreateSampler(samplerInfo);
+
+        frameImage->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+
+    void FXAA::createUniforms(std::map<std::string, Image *> &renderTargets)
+    {
+        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutFXAA());
+        updateDescriptorSets(renderTargets);
+    }
+
+    void FXAA::updateDescriptorSets(std::map<std::string, Image *> &renderTargets)
+    {
+        DescriptorUpdateInfo info{};
+        info.binding = 0;
+        info.pImage = frameImage;
+        DSet->UpdateDescriptor(1, &info);
+    }
+
+    void FXAA::draw(CommandBuffer *cmd, uint32_t imageIndex)
+    {
+        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+        cmd->BindPipeline(pipeline);
+        cmd->BindDescriptors(pipeline, 1, &DSet);
+        cmd->Draw(3, 1, 0, 0);
+        cmd->EndPass();
+    }
+
+    void FXAA::createRenderPass(std::map<std::string, Image *> &renderTargets)
+    {
+        Attachment attachment{};
+        attachment.format = renderTargets["viewport"]->imageInfo.format;
+        renderPass = RenderPass::Create(attachment);
+    }
+
+    void FXAA::createFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    {
+        framebuffers.resize(RHII.swapchain->images.size());
+        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        {
+            uint32_t width = renderTargets["viewport"]->imageInfo.width;
+            uint32_t height = renderTargets["viewport"]->imageInfo.height;
+            ImageViewHandle view = renderTargets["viewport"]->view;
+            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
+        }
+    }
+
+    void FXAA::createPipeline(std::map<std::string, Image *> &renderTargets)
+    {
+        Shader vert{"Shaders/Common/quad.vert", ShaderType::Vertex};
+        Shader frag{"Shaders/FXAA/FXAA.frag", ShaderType::Fragment};
+
+        PipelineCreateInfo info{};
+        info.pVertShader = &vert;
+        info.pFragShader = &frag;
+        info.width = renderTargets["viewport"]->width_f;
+        info.height = renderTargets["viewport"]->height_f;
+        info.cullMode = CullMode::Back;
+        info.colorBlendAttachments = {renderTargets["viewport"]->blendAttachment};
+        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutFXAA()};
+        info.renderPass = renderPass;
+
+        pipeline = Pipeline::Create(info);
+    }
+
+    void FXAA::destroy()
+    {
+        for (auto frameBuffer : framebuffers)
+            frameBuffer->Destroy();
+
+        Pipeline::getDescriptorSetLayoutFXAA()->Destroy();
+        renderPass->Destroy();
+        frameImage->Destroy();
+        pipeline->Destroy();
+    }
 }

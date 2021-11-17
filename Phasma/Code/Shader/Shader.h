@@ -28,76 +28,81 @@ SOFTWARE.
 
 namespace pe
 {
-	struct Define
-	{
-		std::string name {};
-		std::string value {};
-	};
-	
-	enum class ShaderType
-	{
-		Vertex,
-		Fragment,
-		Compute,
-		Geometry,
-		TessControl,
-		TessEvaluation
-	};
-	
-	class FileIncluder : public shaderc::CompileOptions::IncluderInterface
-	{
-	public:
-		shaderc_include_result*
-		GetInclude(const char* requested_source, shaderc_include_type, const char* requesting_source, size_t) override;
-		
-		void ReleaseInclude(shaderc_include_result* include_result) override;
-		
-		inline const std::unordered_set<std::string>& file_path_trace() const { return included_files_; }
-	
-	private:
-		struct FileInfo
-		{
-			const std::string full_path;
-			std::vector<char> contents;
-		};
-		std::unordered_set<std::string> included_files_;
-	};
+    struct Define
+    {
+        std::string name{};
+        std::string value{};
+    };
 
-	class Reflection;
-	
-	class Shader
-	{
-	public:
-		Shader(const std::string& sourcePath, ShaderType shaderType, const std::vector<Define>& defs = {});
-		
-		inline ShaderType GetShaderType() { return m_shaderType; }
-		
-        inline const uint32_t* GetSpriv() { return m_spirv.data(); }
+    enum class ShaderType
+    {
+        Vertex,
+        Fragment,
+        Compute,
+        Geometry,
+        TessControl,
+        TessEvaluation
+    };
 
-        inline size_t Size() { return m_spirv.size(); }
+    class FileIncluder : public shaderc::CompileOptions::IncluderInterface
+    {
+    public:
+        shaderc_include_result *
+        GetInclude(const char *requested_source, shaderc_include_type, const char *requesting_source, size_t) override;
 
-        inline size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
-	
-	private:		
-		std::string PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions& options);
-		
-		void CompileFileToAssembly(shaderc_shader_kind kind, shaderc::CompileOptions& options);
+        void ReleaseInclude(shaderc_include_result *include_result) override;
 
-		void CompileAssembly(shaderc_shader_kind kind, shaderc::CompileOptions& options);
-		
-		void CompileFile(shaderc_shader_kind kind, shaderc::CompileOptions& options);
-		
-		void AddDefine(Define& define, shaderc::CompileOptions& options);
-		
-		void AddDefines(const std::vector<Define>& defines, shaderc::CompileOptions& options);
+        inline const std::unordered_set <std::string> &file_path_trace() const
+        { return included_files_; }
 
-		ShaderCache m_cache;
-		Reflection m_reflection;
-		ShaderType m_shaderType;
-		shaderc::Compiler m_compiler;
-		std::vector<Define> defines{};
-		std::vector<uint32_t> m_spirv{};
+    private:
+        struct FileInfo
+        {
+            const std::string full_path;
+            std::vector<char> contents;
+        };
+        std::unordered_set <std::string> included_files_;
+    };
 
-		inline static std::vector<Define> globalDefines{};
-	};
+    class Reflection;
+
+    class Shader
+    {
+    public:
+        Shader(const std::string &sourcePath, ShaderType shaderType, const std::vector <Define> &defs = {});
+
+        inline ShaderType GetShaderType()
+        { return m_shaderType; }
+
+        inline const uint32_t *GetSpriv()
+        { return m_spirv.data(); }
+
+        inline size_t Size()
+        { return m_spirv.size(); }
+
+        inline size_t BytesCount()
+        { return m_spirv.size() * sizeof(uint32_t); }
+
+    private:
+        std::string PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions &options);
+
+        void CompileFileToAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options);
+
+        void CompileAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options);
+
+        void CompileFile(shaderc_shader_kind kind, shaderc::CompileOptions &options);
+
+        void AddDefine(Define &define, shaderc::CompileOptions &options);
+
+        void AddDefines(const std::vector <Define> &defines, shaderc::CompileOptions &options);
+
+        ShaderCache m_cache;
+        Reflection m_reflection;
+        ShaderType m_shaderType;
+        shaderc::Compiler m_compiler;
+        std::vector <Define> defines{};
+        std::vector <uint32_t> m_spirv{};
+
+        inline static std::vector <Define> globalDefines{};
+    };
 }

@@ -28,38 +28,42 @@ SOFTWARE.
 
 namespace pe
 {
-	constexpr uint32_t MAX_POINT_LIGHTS = 10;
-	constexpr uint32_t MAX_SPOT_LIGHTS = 10;
+    constexpr uint32_t
+    MAX_POINT_LIGHTS = 10;
+    constexpr uint32_t
+    MAX_SPOT_LIGHTS = 10;
 
-	struct LightsUBO
-	{
-		vec4 camPos;
-		DirectionalLight sun;
-		PointLight pointLights[MAX_POINT_LIGHTS];
-		SpotLight spotLights[MAX_SPOT_LIGHTS];
-	};
+    struct LightsUBO
+    {
+        vec4 camPos;
+        DirectionalLight sun;
+        PointLight pointLights[MAX_POINT_LIGHTS];
+        SpotLight spotLights[MAX_SPOT_LIGHTS];
+    };
 
-	class Descriptor;
-	class Buffer;
+    class Descriptor;
 
-	class LightSystem : public ISystem
-	{
-	public:
-		LightSystem();
+    class Buffer;
 
-		~LightSystem();
+    class LightSystem : public ISystem
+    {
+    public:
+        LightSystem();
 
-		void Init() override;
+        ~LightSystem();
 
-		void Update(double delta) override;
+        void Init() override;
 
-		void Destroy() override;
+        void Update(double delta) override;
 
-		Buffer& GetUniform() { return *uniform; }
+        void Destroy() override;
 
-	private:
-		LightsUBO lubo;
-		Buffer* uniform;
-		Descriptor* descriptorSet;
-	};
+        Buffer &GetUniform()
+        { return *uniform; }
+
+    private:
+        LightsUBO lubo;
+        Buffer *uniform;
+        Descriptor *descriptorSet;
+    };
 }

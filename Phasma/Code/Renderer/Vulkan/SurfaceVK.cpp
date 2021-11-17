@@ -28,102 +28,102 @@ SOFTWARE.
 
 namespace pe
 {
-	Surface::Surface(SDL_Window* window)
-	{
-		VkSurfaceKHR surfaceVK;
-		if (!SDL_Vulkan_CreateSurface(window, RHII.instance, &surfaceVK))
-			throw std::runtime_error(SDL_GetError());
+    Surface::Surface(SDL_Window* window)
+    {
+        VkSurfaceKHR surfaceVK;
+        if (!SDL_Vulkan_CreateSurface(window, RHII.instance, &surfaceVK))
+            throw std::runtime_error(SDL_GetError());
 
-		m_handle = surfaceVK;
+        m_handle = surfaceVK;
 
-		int w, h;
-		SDL_GL_GetDrawableSize(window, &w, &h);
+        int w, h;
+        SDL_GL_GetDrawableSize(window, &w, &h);
 
-		actualExtent = Rect2D{ 0, 0, w, h };
-	}
-	
-	Surface::~Surface()
-	{
-		if (m_handle)
-		{
-			vkDestroySurfaceKHR(RHII.instance, m_handle, nullptr);
-			m_handle = {};
-		}
-	}
-	
-	void Surface::CheckTransfer()
-	{
-		VkSurfaceCapabilitiesKHR capabilities;
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, m_handle, &capabilities);
+        actualExtent = Rect2D{ 0, 0, w, h };
+    }
 
-		// Ensure eTransferSrc bit for blit operations
-		if (!(capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
-			throw std::runtime_error("Surface doesnt support VK_IMAGE_USAGE_TRANSFER_SRC_BIT");
-	}
-	
-	void Surface::FindFormat()
-	{
-		uint32_t formatsCount;
-		vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, m_handle, &formatsCount, nullptr);
+    Surface::~Surface()
+    {
+        if (m_handle)
+        {
+            vkDestroySurfaceKHR(RHII.instance, m_handle, nullptr);
+            m_handle = {};
+        }
+    }
 
-		std::vector<VkSurfaceFormatKHR> formats(formatsCount);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, m_handle, &formatsCount, formats.data());
+    void Surface::CheckTransfer()
+    {
+        VkSurfaceCapabilitiesKHR capabilities;
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, m_handle, &capabilities);
 
-		format = formats[0].format;
-		colorSpace = formats[0].colorSpace;
-		for (const auto& f : formats)
-		{
-			if (f.format == VK_FORMAT_B8G8R8A8_UNORM && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-			{
-				format = f.format;
-				colorSpace = f.colorSpace;
-			}
-		}
-		
-		// Check for blit operation
-		VkFormatProperties fProps;
-		vkGetPhysicalDeviceFormatProperties(RHII.gpu, (VkFormat)format, &fProps);
-		if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT))
-			throw std::runtime_error("No blit source operation supported");
-		if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
-			throw std::runtime_error("No blit destination operation supported");
-	}
-	
-	void Surface::FindPresentationMode()
-	{
-		uint32_t presentModesCount;
-		vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, m_handle, &presentModesCount, nullptr);
+        // Ensure eTransferSrc bit for blit operations
+        if (!(capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
+            throw std::runtime_error("Surface doesnt support VK_IMAGE_USAGE_TRANSFER_SRC_BIT");
+    }
 
-		std::vector<VkPresentModeKHR> presentModes(presentModesCount);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, m_handle, &presentModesCount, presentModes.data());
-		
-		for (const auto& i : presentModes)
-			if (i == VK_PRESENT_MODE_MAILBOX_KHR)
-			{
-				presentMode = i;
-				return;
-			}
-		
-		for (const auto& i : presentModes)
-			if (i == VK_PRESENT_MODE_IMMEDIATE_KHR)
-			{
-				presentMode = i;
-				return;
-			}
-		
-		presentMode = VK_PRESENT_MODE_FIFO_KHR;
-	}
-	
-	
-	void Surface::FindProperties()
-	{
-		// Needs to be called?
-		VkBool32 supported = false;
-		vkGetPhysicalDeviceSurfaceSupportKHR(RHII.gpu, RHII.graphicsFamilyId, m_handle, &supported);
+    void Surface::FindFormat()
+    {
+        uint32_t formatsCount;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, m_handle, &formatsCount, nullptr);
 
-		CheckTransfer();
-		FindFormat();
-		FindPresentationMode();
-	}
+        std::vector<VkSurfaceFormatKHR> formats(formatsCount);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, m_handle, &formatsCount, formats.data());
+
+        format = formats[0].format;
+        colorSpace = formats[0].colorSpace;
+        for (const auto& f : formats)
+        {
+            if (f.format == VK_FORMAT_B8G8R8A8_UNORM && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            {
+                format = f.format;
+                colorSpace = f.colorSpace;
+            }
+        }
+
+        // Check for blit operation
+        VkFormatProperties fProps;
+        vkGetPhysicalDeviceFormatProperties(RHII.gpu, (VkFormat)format, &fProps);
+        if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT))
+            throw std::runtime_error("No blit source operation supported");
+        if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
+            throw std::runtime_error("No blit destination operation supported");
+    }
+
+    void Surface::FindPresentationMode()
+    {
+        uint32_t presentModesCount;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, m_handle, &presentModesCount, nullptr);
+
+        std::vector<VkPresentModeKHR> presentModes(presentModesCount);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, m_handle, &presentModesCount, presentModes.data());
+
+        for (const auto& i : presentModes)
+            if (i == VK_PRESENT_MODE_MAILBOX_KHR)
+            {
+                presentMode = i;
+                return;
+            }
+
+        for (const auto& i : presentModes)
+            if (i == VK_PRESENT_MODE_IMMEDIATE_KHR)
+            {
+                presentMode = i;
+                return;
+            }
+
+        presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+
+    void Surface::FindProperties()
+    {
+        // Needs to be called?
+        VkBool32 supported = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(RHII.gpu, RHII.graphicsFamilyId, m_handle, &supported);
+
+        CheckTransfer();
+        FindFormat();
+        FindPresentationMode();
+    }
 }
 #endif

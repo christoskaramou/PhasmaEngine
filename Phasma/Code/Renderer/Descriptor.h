@@ -26,61 +26,63 @@ SOFTWARE.
 
 namespace pe
 {
-	class DescriptorBinding
-	{
-	public:
-		DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags);
+    class DescriptorBinding
+    {
+    public:
+        DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags);
 
-		uint32_t binding;
-		DescriptorType descriptorType;
-		uint32_t descriptorCount;
-		ShaderStageFlags stageFlags;
-		SamplerHandle pImmutableSamplers;
-	};
+        uint32_t binding;
+        DescriptorType descriptorType;
+        uint32_t descriptorCount;
+        ShaderStageFlags stageFlags;
+        SamplerHandle pImmutableSamplers;
+    };
 
-	class DescriptorPool : public IHandle<DescriptorPool, DescriptorPoolHandle>
-	{
-	public:
-		DescriptorPool(uint32_t maxDescriptorSets);
+    class DescriptorPool : public IHandle<DescriptorPool, DescriptorPoolHandle>
+    {
+    public:
+        DescriptorPool(uint32_t maxDescriptorSets);
 
-		~DescriptorPool();
-	};
+        ~DescriptorPool();
+    };
 
-	class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>
-	{
-	public:
-		DescriptorLayout(const std::vector<DescriptorBinding>& bindings);
+    class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>
+    {
+    public:
+        DescriptorLayout(const std::vector <DescriptorBinding> &bindings);
 
-		~DescriptorLayout();
+        ~DescriptorLayout();
 
-		std::vector<DescriptorBinding> bindings;
-	};
+        std::vector <DescriptorBinding> bindings;
+    };
 
-	class Image;
-	class Buffer;
-	class DescriptorUpdateInfo
-	{
-	public:
-		DescriptorUpdateInfo();
+    class Image;
 
-		uint32_t binding;
-		Buffer* pBuffer;
-		BufferUsageFlags bufferUsage;
-		Image* pImage;
-		ImageLayout imageLayout;
-	};
+    class Buffer;
 
-	class Descriptor : public IHandle<Descriptor, DescriptorSetHandle>
-	{
-	public:
-		Descriptor(DescriptorLayout* layout);
+    class DescriptorUpdateInfo
+    {
+    public:
+        DescriptorUpdateInfo();
 
-		~Descriptor();
+        uint32_t binding;
+        Buffer *pBuffer;
+        BufferUsageFlags bufferUsage;
+        Image *pImage;
+        ImageLayout imageLayout;
+    };
 
-		void UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo* pInfo);
+    class Descriptor : public IHandle<Descriptor, DescriptorSetHandle>
+    {
+    public:
+        Descriptor(DescriptorLayout *layout);
 
-	private:
-		DescriptorLayout* layout;
-	};
+        ~Descriptor();
+
+        void UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo *pInfo);
+
+    private:
+        DescriptorLayout *layout;
+    };
 
 }

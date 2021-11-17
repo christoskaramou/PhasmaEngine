@@ -23,46 +23,50 @@ SOFTWARE.
 #pragma once
 
 namespace pe
-{	
-	class Hash
-	{
-	public:
-		using Type = size_t;
-		
-		Hash(const void* data, size_t size)
-		{
-			const Type* array = reinterpret_cast<const Type*>(data);
-			size_t arraySize = size / sizeof(Type);
-			size_t bytesToFit = size % sizeof(Type);
-			
-			m_hash = 0;
+{
+    class Hash
+    {
+    public:
+        using Type = size_t;
 
-			for (size_t i = 0; i < arraySize; i++)
-				m_hash ^= std::hash<Type>()(array[i]) + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
+        Hash(const void *data, size_t size)
+        {
+            const Type *array = reinterpret_cast<const Type *>(data);
+            size_t arraySize = size / sizeof(Type);
+            size_t bytesToFit = size % sizeof(Type);
 
-			if (bytesToFit)
-			{
-				Type lastBytes;
-				memset(&lastBytes, 0, sizeof(Type));
-				memcpy(&lastBytes, &array[arraySize], bytesToFit);
-				
-				m_hash ^= std::hash<Type>()(lastBytes) + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
-			}
-		}
+            m_hash = 0;
 
-		bool operator==(const Hash& other) { return m_hash == other.m_hash; }
+            for (size_t i = 0; i < arraySize; i++)
+                m_hash ^= std::hash<Type>()(array[i]) + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
 
-		operator size_t() { return m_hash; }
-	
-	private:
-		size_t m_hash;
-	};
+            if (bytesToFit)
+            {
+                Type lastBytes;
+                memset(&lastBytes, 0, sizeof(Type));
+                memcpy(&lastBytes, &array[arraySize], bytesToFit);
 
-	class StringHash : public Hash
-	{
-	public:
-		StringHash(const std::string& string) : Hash(string.data(), string.size()) {}
+                m_hash ^= std::hash<Type>()(lastBytes) + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
+            }
+        }
 
-		StringHash(const char* string) : Hash(string, strlen(string)) {}
-	};
+        bool operator==(const Hash &other)
+        { return m_hash == other.m_hash; }
+
+        operator size_t()
+        { return m_hash; }
+
+    private:
+        size_t m_hash;
+    };
+
+    class StringHash : public Hash
+    {
+    public:
+        StringHash(const std::string &string) : Hash(string.data(), string.size())
+        {}
+
+        StringHash(const char *string) : Hash(string, strlen(string))
+        {}
+    };
 }

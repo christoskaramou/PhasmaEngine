@@ -27,97 +27,97 @@ SOFTWARE.
 
 namespace pe
 {
-	Buffer::Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties) : size(size), data(nullptr)
-	{
-		VkBufferCreateInfo bufferInfo{};
-		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		bufferInfo.size = size;
-		bufferInfo.usage = usage;
-		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		VmaAllocationCreateInfo allocationCreateInfo = {};
-		allocationCreateInfo.usage =
-			usage & VK_BUFFER_USAGE_TRANSFER_SRC_BIT ?
-			VMA_MEMORY_USAGE_CPU_ONLY : properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT ?
-			VMA_MEMORY_USAGE_GPU_ONLY : VMA_MEMORY_USAGE_CPU_TO_GPU;
-		allocationCreateInfo.preferredFlags = properties;
+    Buffer::Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties) : size(size), data(nullptr)
+    {
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = size;
+        bufferInfo.usage = usage;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        VmaAllocationCreateInfo allocationCreateInfo = {};
+        allocationCreateInfo.usage =
+            usage & VK_BUFFER_USAGE_TRANSFER_SRC_BIT ?
+            VMA_MEMORY_USAGE_CPU_ONLY : properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT ?
+            VMA_MEMORY_USAGE_GPU_ONLY : VMA_MEMORY_USAGE_CPU_TO_GPU;
+        allocationCreateInfo.preferredFlags = properties;
 
-		VkBuffer bufferVK;
-		VmaAllocationInfo allocationInfo;
-		vmaCreateBuffer(RHII.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocation, &allocationInfo);
-		m_handle = bufferVK;
-	}
+        VkBuffer bufferVK;
+        VmaAllocationInfo allocationInfo;
+        vmaCreateBuffer(RHII.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocation, &allocationInfo);
+        m_handle = bufferVK;
+    }
 
-	Buffer::~Buffer()
-	{
-		if (m_handle)
-		{
-			vmaDestroyBuffer(RHII.allocator, m_handle, allocation);
-			m_handle = {};
-		}
-	}
+    Buffer::~Buffer()
+    {
+        if (m_handle)
+        {
+            vmaDestroyBuffer(RHII.allocator, m_handle, allocation);
+            m_handle = {};
+        }
+    }
 
-	void Buffer::Map()
-	{
-		if (data)
-			return;
-		vmaMapMemory(RHII.allocator, allocation, &data);
-	}
-	
-	void Buffer::Unmap()
-	{
-		if (!data)
-			return;
-		vmaUnmapMemory(RHII.allocator, allocation);
-		data = nullptr;
-	}
-	
-	void Buffer::Zero() const
-	{
-		if (!data)
-			return;
-		memset(data, 0, size);
-	}
-	
-	void Buffer::CopyData(const void* srcData, size_t srcSize, size_t offset)
-	{
-		if (!data)
-			return;
-		assert(srcSize + offset <= size);
-		memcpy((char*) data + offset, srcData, srcSize > 0 ? srcSize : size);
-	}
-	
-	void Buffer::CopyBuffer(Buffer* srcBuffer, const size_t srcSize)
-	{
-		assert(srcSize <= size);
+    void Buffer::Map()
+    {
+        if (data)
+            return;
+        vmaMapMemory(RHII.allocator, allocation, &data);
+    }
 
-		BufferCopy bufferCopy{};
-		bufferCopy.size = srcSize > 0 ? srcSize : size;
+    void Buffer::Unmap()
+    {
+        if (!data)
+            return;
+        vmaUnmapMemory(RHII.allocator, allocation);
+        data = nullptr;
+    }
 
-		std::array<CommandBuffer*, 1> copyCmd{};
-		copyCmd[0] = CommandBuffer::Create(RHII.commandPool2);
-		copyCmd[0]->Begin();
-		copyCmd[0]->CopyBuffer(srcBuffer, this, 1, &bufferCopy);
-		copyCmd[0]->End();
-		RHII.SubmitAndWaitFence(1, copyCmd.data(), nullptr, 0, nullptr, 0, nullptr);
-		copyCmd[0]->Destroy();
-	}
-	
-	void Buffer::Flush(size_t offset, size_t flushSize) const
-	{
-		if (!data)
-			return;
-		
-		vmaFlushAllocation(RHII.allocator, allocation, offset, flushSize);
-	}
+    void Buffer::Zero() const
+    {
+        if (!data)
+            return;
+        memset(data, 0, size);
+    }
 
-	size_t Buffer::Size()
-	{
-		return size;
-	}
+    void Buffer::CopyData(const void* srcData, size_t srcSize, size_t offset)
+    {
+        if (!data)
+            return;
+        assert(srcSize + offset <= size);
+        memcpy((char*) data + offset, srcData, srcSize > 0 ? srcSize : size);
+    }
 
-	void* Buffer::Data()
-	{
-		return data;
-	}
+    void Buffer::CopyBuffer(Buffer* srcBuffer, const size_t srcSize)
+    {
+        assert(srcSize <= size);
+
+        BufferCopy bufferCopy{};
+        bufferCopy.size = srcSize > 0 ? srcSize : size;
+
+        std::array<CommandBuffer*, 1> copyCmd{};
+        copyCmd[0] = CommandBuffer::Create(RHII.commandPool2);
+        copyCmd[0]->Begin();
+        copyCmd[0]->CopyBuffer(srcBuffer, this, 1, &bufferCopy);
+        copyCmd[0]->End();
+        RHII.SubmitAndWaitFence(1, copyCmd.data(), nullptr, 0, nullptr, 0, nullptr);
+        copyCmd[0]->Destroy();
+    }
+
+    void Buffer::Flush(size_t offset, size_t flushSize) const
+    {
+        if (!data)
+            return;
+
+        vmaFlushAllocation(RHII.allocator, allocation, offset, flushSize);
+    }
+
+    size_t Buffer::Size()
+    {
+        return size;
+    }
+
+    void* Buffer::Data()
+    {
+        return data;
+    }
 }
 #endif

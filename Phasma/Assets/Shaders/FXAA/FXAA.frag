@@ -31,8 +31,8 @@ layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out vec4 outColor;
 
-void main() 
+void main()
 {
-	outColor.xyz = FXAA(frameSampler, inUV);
-	outColor.w = texture(frameSampler, inUV).w;
+    outColor.xyz = FXAA(frameSampler, inUV);
+    outColor.w = texture(frameSampler, inUV).w;
 }

@@ -26,25 +26,26 @@ SOFTWARE.
 
 namespace pe
 {
-	class Descriptor;
-	class Image;
+    class Descriptor;
 
-	class SkyBox
-	{
-	public:
-		SkyBox();
-		
-		~SkyBox();
-		
-		Image* texture;
-		Descriptor* descriptorSet;
-		
-		void createDescriptorSet();
-		
-		void loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, bool show = true);
-		
-		void loadTextures(const std::array<std::string, 6>& paths, int imageSideSize);
-		
-		void destroy();
-	};
+    class Image;
+
+    class SkyBox
+    {
+    public:
+        SkyBox();
+
+        ~SkyBox();
+
+        Image *texture;
+        Descriptor *descriptorSet;
+
+        void createDescriptorSet();
+
+        void loadSkyBox(const std::array<std::string, 6> &textureNames, uint32_t imageSideSize, bool show = true);
+
+        void loadTextures(const std::array<std::string, 6> &paths, int imageSideSize);
+
+        void destroy();
+    };
 }

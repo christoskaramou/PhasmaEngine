@@ -26,40 +26,45 @@ SOFTWARE.
 
 namespace pe
 {
-	class Descriptor;
-	class FrameBuffer;
-	class Image;
-	class CommandBuffer;
-	class RenderPass;
-	class Pipeline;
+    class Descriptor;
 
-	class FXAA : public IComponent
-	{
-	public:
-		FXAA();
-		
-		~FXAA();
-		
-		std::vector<FrameBuffer*> framebuffers {};
-		Pipeline* pipeline;
-		RenderPass* renderPass;
-		Descriptor* DSet;
-		Image* frameImage;
-		
-		void Init();
-		
-		void createUniforms(std::map<std::string, Image*>& renderTargets);
-		
-		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
-		
-		void draw(CommandBuffer* cmd, uint32_t imageIndex);
-		
-		void createRenderPass(std::map<std::string, Image*>& renderTargets);
-		
-		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void destroy();
-	};
+    class FrameBuffer;
+
+    class Image;
+
+    class CommandBuffer;
+
+    class RenderPass;
+
+    class Pipeline;
+
+    class FXAA : public IComponent
+    {
+    public:
+        FXAA();
+
+        ~FXAA();
+
+        std::vector<FrameBuffer *> framebuffers{};
+        Pipeline *pipeline;
+        RenderPass *renderPass;
+        Descriptor *DSet;
+        Image *frameImage;
+
+        void Init();
+
+        void createUniforms(std::map<std::string, Image *> &renderTargets);
+
+        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+
+        void draw(CommandBuffer *cmd, uint32_t imageIndex);
+
+        void createRenderPass(std::map<std::string, Image *> &renderTargets);
+
+        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void destroy();
+    };
 }

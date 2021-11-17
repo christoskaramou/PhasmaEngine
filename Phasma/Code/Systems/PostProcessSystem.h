@@ -26,17 +26,18 @@ SOFTWARE.
 
 namespace pe
 {
-	class PostProcessSystem : public ISystem
-	{
-	public:
-		PostProcessSystem();
-		~PostProcessSystem();
+    class PostProcessSystem : public ISystem
+    {
+    public:
+        PostProcessSystem();
 
-		void Init() override;
+        ~PostProcessSystem();
 
-		void Update(double delta) override;
+        void Init() override;
 
-		void Destroy() override;
+        void Update(double delta) override;
 
-	};
+        void Destroy() override;
+
+    };
 }

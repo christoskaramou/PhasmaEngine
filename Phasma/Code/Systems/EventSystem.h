@@ -34,7 +34,7 @@ namespace pe
     //
     // Later somewhere else
     //      EventSystem::Get()->DispatchEvent(EventType::X, data or std::any(data));
-    
+
     enum class EventType
     {
         Quit,
@@ -43,7 +43,7 @@ namespace pe
         CompileShaders,
         ScaleRenderTargets
     };
-    
+
     class EventSystem : public ISystem
     {
     public:
@@ -56,26 +56,26 @@ namespace pe
         void Destroy() override;
 
         // Immediately dispatch a registered event
-        void DispatchEvent(EventType type, const std::any& data);
-        
+        void DispatchEvent(EventType type, const std::any &data);
+
         void RegisterEvent(EventType type);
-        
+
         void UnregisterEvent(EventType type);
-        
-        void RegisterEventAction(EventType type, Func&& func);
-        
-        void UnregisterEventAction(EventType type, Func&& func);
-        
+
+        void RegisterEventAction(EventType type, Func &&func);
+
+        void UnregisterEventAction(EventType type, Func &&func);
+
         void PushEvent(EventType type);
-        
+
         bool PollEvent(EventType type);
-        
+
         void ClearPushedEvents();
-        
+
         void ClearEvents();
-    
+
     private:
-        std::unordered_map<EventType, Delegate<std::any>> m_events;
-        std::unordered_set<EventType> m_pushedEventTypes;
+        std::unordered_map <EventType, Delegate<std::any>> m_events;
+        std::unordered_set <EventType> m_pushedEventTypes;
     };
 }

@@ -30,27 +30,27 @@ SOFTWARE.
 #include "Core/Settings.h"
 
 namespace pe
-{    
+{
     Camera::Camera()
     {
         worldOrientation = vec3(1.f, 1.f, 1.f);
-        
+
         // total pitch, yaw, roll
         euler = vec3(0.f, 0.0f, 0.f);
         orientation = quat(euler);
         position = vec3(0.f, 0.f, 0.f);
-        
+
         nearPlane = 0.005f;
         farPlane = 100.0f;
         FOV = radians(87.0f);
         speed = 0.35f;
         rotationSpeed = 0.05f;
-        
+
         frustum.resize(6);
-        
+
         frustumCompute = Compute::Create("Shaders/Compute/frustum.comp", 64, 96);
     }
-    
+
     void Camera::ReCreateComputePipelines()
     {
         frustumCompute.createPipeline("Shaders/Compute/frustum.comp");
@@ -60,10 +60,10 @@ namespace pe
     {
         frustumCompute.destroy();
     }
-    
+
     void Camera::Update()
     {
-        auto& renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
+        auto &renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
 
         front = orientation * WorldFront();
         right = orientation * WorldRight();
@@ -98,22 +98,22 @@ namespace pe
         viewProjection = projection * view;
         ExtractFrustum();
     }
-    
+
     void Camera::UpdatePerspective()
     {
-        auto& renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
+        auto &renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
         const float aspect = renderArea.viewport.width / renderArea.viewport.height;
         projection = perspective(FovxToFovy(FOV, aspect), aspect, nearPlane, farPlane, GlobalSettings::ReverseZ);
         projection[2][0] = projOffset.x;
         projection[2][1] = projOffset.y;
     }
-    
+
     void Camera::UpdateView()
-    {        
+    {
         //view = lookAt(position, position + front, WorldUp());
         view = lookAt(position, front, right, up);
     }
-    
+
     void Camera::Move(RelativeDirection direction, float velocity)
     {
         if (direction == RelativeDirection::FORWARD) position += front * velocity;
@@ -121,33 +121,33 @@ namespace pe
         if (direction == RelativeDirection::RIGHT) position -= right * velocity;
         if (direction == RelativeDirection::LEFT) position += right * velocity;
     }
-    
+
     void Camera::Rotate(float xoffset, float yoffset)
     {
         const float x = radians(yoffset * rotationSpeed);   // pitch
         const float y = radians(-xoffset * rotationSpeed);  // yaw
-        
+
         euler.x += x;
         euler.y += y;
-        
+
         orientation = quat(euler);
     }
-    
+
     vec3 Camera::WorldRight() const
     {
         return vec3(worldOrientation.x, 0.f, 0.f);
     }
-    
+
     vec3 Camera::WorldUp() const
     {
         return vec3(0.f, worldOrientation.y, 0.f);
     }
-    
+
     vec3 Camera::WorldFront() const
     {
         return vec3(0.f, 0.f, worldOrientation.z);
     }
-    
+
     void Camera::ExtractFrustum()
     {
         // Just testing computes, the specific one is not speeding up any process
@@ -201,26 +201,26 @@ namespace pe
 //		frustum[5].normal = vec3(temp);
 //		frustum[5].d = temp.w;
     }
-    
-    bool Camera::PointInFrustum(const vec3& point, float radius) const
+
+    bool Camera::PointInFrustum(const vec3 &point, float radius) const
     {
-        for (auto& plane : frustum)
+        for (auto &plane : frustum)
         {
             const float dist = dot(plane.normal, point) + plane.d;
-            
+
             if (dist < -radius)
                 return false;
-            
+
             if (fabs(dist) < radius)
                 return true;
         }
         return true;
     }
 
-    bool Camera::AABBInFrustum(const AABB& aabb) const
+    bool Camera::AABBInFrustum(const AABB &aabb) const
     {
-        const vec3& min = aabb.min;
-        const vec3& max = aabb.max;
+        const vec3 &min = aabb.min;
+        const vec3 &max = aabb.max;
 
         vec3 center = (max - min) * 0.5f;
         if (PointInFrustum(center, 0.0f))

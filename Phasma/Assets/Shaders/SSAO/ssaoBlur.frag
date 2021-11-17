@@ -28,17 +28,17 @@ layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out float outColor;
 
-void main() 
+void main()
 {
-	vec2 texelSize = 1.0 / vec2(textureSize(samplerSSAO, 0));
-	float result = 0.0;
-	for (int x = -2; x < 2; x++) 
-	{
-		for (int y = -2; y < 2; y++) 
-		{
-			vec2 offset = vec2(float(x), float(y)) * texelSize;
-			result += texture(samplerSSAO, inUV + offset).r;
-		}
-	}
-	outColor = result / 16.0;
+    vec2 texelSize = 1.0 / vec2(textureSize(samplerSSAO, 0));
+    float result = 0.0;
+    for (int x = -2; x < 2; x++)
+    {
+        for (int y = -2; y < 2; y++)
+        {
+            vec2 offset = vec2(float(x), float(y)) * texelSize;
+            result += texture(samplerSSAO, inUV + offset).r;
+        }
+    }
+    outColor = result / 16.0;
 }

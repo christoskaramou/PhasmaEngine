@@ -26,37 +26,37 @@ SOFTWARE.
 
 namespace pe
 {
-	Fence::Fence(bool signaled)
-	{
-		VkFenceCreateInfo fi{};
-		fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-		fi.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
+    Fence::Fence(bool signaled)
+    {
+        VkFenceCreateInfo fi{};
+        fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fi.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
 
-		VkFence fence;
-		vkCreateFence(RHII.device, &fi, nullptr, &fence);
-		m_handle = fence;
-	}
+        VkFence fence;
+        vkCreateFence(RHII.device, &fi, nullptr, &fence);
+        m_handle = fence;
+    }
 
-	Fence::~Fence()
-	{
-		if (m_handle)
-		{
-			vkDestroyFence(RHII.device, m_handle, nullptr);
-			m_handle = {};
-		}
-	}
+    Fence::~Fence()
+    {
+        if (m_handle)
+        {
+            vkDestroyFence(RHII.device, m_handle, nullptr);
+            m_handle = {};
+        }
+    }
 
-	void Fence::Wait()
-	{
-		VkFence fenceVK = Handle();
-		if (vkWaitForFences(RHII.device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
-			throw std::runtime_error("wait fences error!");
-	}
+    void Fence::Wait()
+    {
+        VkFence fenceVK = Handle();
+        if (vkWaitForFences(RHII.device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
+            throw std::runtime_error("wait fences error!");
+    }
 
-	void Fence::Reset()
-	{
-		VkFence fenceVK = Handle();
-		vkResetFences(RHII.device, 1, &fenceVK);
-	}
+    void Fence::Reset()
+    {
+        VkFence fenceVK = Handle();
+        vkResetFences(RHII.device, 1, &fenceVK);
+    }
 }
 #endif

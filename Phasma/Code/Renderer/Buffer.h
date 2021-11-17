@@ -27,70 +27,73 @@ SOFTWARE.
 
 namespace pe
 {
-	class MemoryRange
-	{
-	public:
-		MemoryRange() : data(nullptr), size(0), offset(0) {}
-		MemoryRange(void* data, size_t size, size_t offset) : data(data), size(size), offset(offset) {}
+    class MemoryRange
+    {
+    public:
+        MemoryRange() : data(nullptr), size(0), offset(0)
+        {}
 
-		void* data; // source data
-		size_t size; // source data size in bytes
-		size_t offset; // offset to destination data in bytes
-	};
+        MemoryRange(void *data, size_t size, size_t offset) : data(data), size(size), offset(offset)
+        {}
 
-	class Buffer : public IHandle<Buffer, BufferHandle>
-	{
-	public:
-		Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
+        void *data; // source data
+        size_t size; // source data size in bytes
+        size_t offset; // offset to destination data in bytes
+    };
 
-		~Buffer();
-		
-		void Map();
-		
-		void Unmap();
-		
-		void Zero() const;
-		
-		void CopyData(const void* srcData, size_t srcSize = 0, size_t offset = 0);
-		
-		void CopyBuffer(Buffer* srcBuffer, size_t srcSize = 0) ;
-		
-		void Flush(size_t offset = 0, size_t flushSize = 0) const;
-		
-		size_t Size();
-		
-		void* Data();
+    class Buffer : public IHandle<Buffer, BufferHandle>
+    {
+    public:
+        Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
 
-		template<Launch launch>
-		void CopyRequest(const MemoryRange& range)
-		{
-			auto lambda = [this, range]()
-			{
-				Map();
-				CopyData(range.data, range.size, range.offset);
-				Flush();
-				Unmap();
-			};
-			Queue<launch>::Request(lambda);
-		}
+        ~Buffer();
 
-		template<Launch launch>
-		void CopyRequest(const std::vector<MemoryRange>& ranges)
-		{
-			auto lambda = [this, ranges]()
-			{
-				Map();
-				for (auto& range : ranges)
-					CopyData(range.data, range.size, range.offset);
-				Flush();
-				Unmap();
-			};
-			Queue<launch>::Request(lambda);
-		}
+        void Map();
 
-	private:
-		size_t size;
-		void* data;
-		VmaAllocation allocation; // TODO: Move this from here
-	};
+        void Unmap();
+
+        void Zero() const;
+
+        void CopyData(const void *srcData, size_t srcSize = 0, size_t offset = 0);
+
+        void CopyBuffer(Buffer *srcBuffer, size_t srcSize = 0);
+
+        void Flush(size_t offset = 0, size_t flushSize = 0) const;
+
+        size_t Size();
+
+        void *Data();
+
+        template<Launch launch>
+        void CopyRequest(const MemoryRange &range)
+        {
+            auto lambda = [this, range]()
+            {
+                Map();
+                CopyData(range.data, range.size, range.offset);
+                Flush();
+                Unmap();
+            };
+            Queue<launch>::Request(lambda);
+        }
+
+        template<Launch launch>
+        void CopyRequest(const std::vector <MemoryRange> &ranges)
+        {
+            auto lambda = [this, ranges]()
+            {
+                Map();
+                for (auto &range : ranges)
+                    CopyData(range.data, range.size, range.offset);
+                Flush();
+                Unmap();
+            };
+            Queue<launch>::Request(lambda);
+        }
+
+    private:
+        size_t size;
+        void *data;
+        VmaAllocation allocation; // TODO: Move this from here
+    };
 }

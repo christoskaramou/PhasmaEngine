@@ -24,9 +24,9 @@ SOFTWARE.
 
 namespace pe
 {
-	struct GlobalSettings
-	{
-		inline static bool RightHanded = false;
-		inline static bool ReverseZ = true;
-	};
+    struct GlobalSettings
+    {
+        inline static bool RightHanded = false;
+        inline static bool ReverseZ = true;
+    };
 }

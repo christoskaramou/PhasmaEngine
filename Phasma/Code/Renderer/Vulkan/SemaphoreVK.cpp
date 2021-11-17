@@ -26,23 +26,23 @@ SOFTWARE.
 
 namespace pe
 {
-	Semaphore::Semaphore()
-	{
-		VkSemaphoreCreateInfo si{};
-		si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    Semaphore::Semaphore()
+    {
+        VkSemaphoreCreateInfo si{};
+        si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-		VkSemaphore semaphore;
-		vkCreateSemaphore(RHII.device, &si, nullptr, &semaphore);
-		m_handle = semaphore;
-	}
+        VkSemaphore semaphore;
+        vkCreateSemaphore(RHII.device, &si, nullptr, &semaphore);
+        m_handle = semaphore;
+    }
 
-	Semaphore::~Semaphore()
-	{
-		if (m_handle)
-		{
-			vkDestroySemaphore(RHII.device, m_handle, nullptr);
-			m_handle = {};
-		}
-	}
+    Semaphore::~Semaphore()
+    {
+        if (m_handle)
+        {
+            vkDestroySemaphore(RHII.device, m_handle, nullptr);
+            m_handle = {};
+        }
+    }
 }
 #endif

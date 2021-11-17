@@ -24,56 +24,56 @@ SOFTWARE.
 
 namespace pe
 {
-	class Path
-	{
-	public:
-		inline static std::string Assets;
-		inline static std::string Executable;
-	
-	private:
-		friend class Constructor;
-		
-		// Helper to initialize static variables
-		class Constructor
-		{
-		public:
-			Constructor()
-			{
-			#ifdef WIN32
-				char str[MAX_PATH];
-				GetModuleFileNameA(nullptr, str, MAX_PATH);
-				Executable = std::filesystem::path(str).remove_filename().string();
-			#endif
+    class Path
+    {
+    public:
+        inline static std::string Assets;
+        inline static std::string Executable;
 
-				if (!std::filesystem::exists(Executable))
-					Executable = std::filesystem::current_path().string();
+    private:
+        friend class Constructor;
 
-				std::replace(Executable.begin(), Executable.end(), '\\', '/');
-				
-				// Search for assets folder
-				std::filesystem::path path(Executable);
-				while (true)
-				{
-					std::filesystem::path parent = path.parent_path();
-					if (path == parent)
-						break;
+        // Helper to initialize static variables
+        class Constructor
+        {
+        public:
+            Constructor()
+            {
+#ifdef WIN32
+                char str[MAX_PATH];
+                GetModuleFileNameA(nullptr, str, MAX_PATH);
+                Executable = std::filesystem::path(str).remove_filename().string();
+#endif
 
-					path = parent;
-					if (std::filesystem::exists(path / "Phasma"))
-					{
-						if (std::filesystem::exists(path / "Phasma" / "Assets"))
-						{
-							Assets = path.string() + "/Phasma/Assets/";
-							break;
-						}
-					}
-				}
+                if (!std::filesystem::exists(Executable))
+                    Executable = std::filesystem::current_path().string();
 
-				if (Assets.empty())
-					Assets = Executable + "Assets/";
-			}
-		};
-		
-		inline static Constructor s_constructor;
-	};
+                std::replace(Executable.begin(), Executable.end(), '\\', '/');
+
+                // Search for assets folder
+                std::filesystem::path path(Executable);
+                while (true)
+                {
+                    std::filesystem::path parent = path.parent_path();
+                    if (path == parent)
+                        break;
+
+                    path = parent;
+                    if (std::filesystem::exists(path / "Phasma"))
+                    {
+                        if (std::filesystem::exists(path / "Phasma" / "Assets"))
+                        {
+                            Assets = path.string() + "/Phasma/Assets/";
+                            break;
+                        }
+                    }
+                }
+
+                if (Assets.empty())
+                    Assets = Executable + "Assets/";
+            }
+        };
+
+        inline static Constructor s_constructor;
+    };
 }

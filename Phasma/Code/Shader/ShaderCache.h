@@ -27,21 +27,25 @@ namespace pe
     class ShaderCache
     {
     public:
-        void Init(const std::string& sourcePath);
+        void Init(const std::string &sourcePath);
 
         bool ShaderNeedsCompile();
 
-        inline const std::string& GetShaderCode() { return m_code; }
+        inline const std::string &GetShaderCode()
+        { return m_code; }
 
-        inline const std::string& GetSourcePath() { return m_sourcePath; }
+        inline const std::string &GetSourcePath()
+        { return m_sourcePath; }
 
-        inline const std::string& GetAssembly() { return m_assembly; }
+        inline const std::string &GetAssembly()
+        { return m_assembly; }
 
-        inline void SetAssembly(const std::string& assembly) { m_assembly = assembly; }
+        inline void SetAssembly(const std::string &assembly)
+        { m_assembly = assembly; }
 
-        std::vector<uint32_t> ReadSpvFromFile();
+        std::vector <uint32_t> ReadSpvFromFile();
 
-        void WriteSpvToFile(const std::vector<uint32_t>& spirv);
+        void WriteSpvToFile(const std::vector <uint32_t> &spirv);
 
         void WriteToTempFile();
 
@@ -55,6 +59,6 @@ namespace pe
         size_t m_hash;
         std::string m_tempFilePath;
         std::string m_assembly;
-		std::string m_preprocessed;
+        std::string m_preprocessed;
     };
 }

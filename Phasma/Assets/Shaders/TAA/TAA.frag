@@ -39,14 +39,14 @@ layout (location = 0) out vec4 outTaa;
 
 float ComputeLuminance(vec3 color)
 {
-	// PAL and NTSC Y'=0.299R'+0.587G'+0.114B'
-	// HDTV Y'=0.2126R'+0.7152G'+0.0722B'
-	// HDR Y'=0.2627R'+0.6780G'+0.0593B'
-	vec3 cLuma = color * vec3(0.2627, 0.6780, 0.0593);
-	return cLuma.x + cLuma.y + cLuma.z;
+    // PAL and NTSC Y'=0.299R'+0.587G'+0.114B'
+    // HDTV Y'=0.2126R'+0.7152G'+0.0722B'
+    // HDR Y'=0.2627R'+0.6780G'+0.0593B'
+    vec3 cLuma = color * vec3(0.2627, 0.6780, 0.0593);
+    return cLuma.x + cLuma.y + cLuma.z;
 }
 
 void main()
 {
-	outTaa = ResolveTAA(inUV, previousFrame, currentFrame, velocity, depth, ubo.values.z, ubo.values.w, ubo.values.xy);
+    outTaa = ResolveTAA(inUV, previousFrame, currentFrame, velocity, depth, ubo.values.z, ubo.values.w, ubo.values.xy);
 }

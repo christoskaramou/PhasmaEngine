@@ -26,23 +26,28 @@ SOFTWARE.
 
 namespace pe
 {
-	constexpr uint32_t SWAPCHAIN_IMAGES = 3;
+    constexpr uint32_t
+    SWAPCHAIN_IMAGES = 3;
 
-	class Context;
-	class Surface;
-	class Semaphore;
-	class Fence;
-	class Image;
-	
-	class Swapchain : public IHandle<Swapchain, SwapchainHandle>
-	{
-	public:
-		Swapchain(Surface* surface);
-		
-		~Swapchain();
-		
-		uint32_t Aquire(Semaphore* semaphore, Fence* fence);
+    class Context;
 
-		std::vector<Image*> images;
-	};
+    class Surface;
+
+    class Semaphore;
+
+    class Fence;
+
+    class Image;
+
+    class Swapchain : public IHandle<Swapchain, SwapchainHandle>
+    {
+    public:
+        Swapchain(Surface *surface);
+
+        ~Swapchain();
+
+        uint32_t Aquire(Semaphore *semaphore, Fence *fence);
+
+        std::vector<Image *> images;
+    };
 }

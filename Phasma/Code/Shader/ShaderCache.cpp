@@ -24,176 +24,176 @@ SOFTWARE.
 
 namespace pe
 {
-    std::string ReadFileAsString(const std::string& filename)
-	{
-		std::ifstream file(filename, std::ios::ate);
+    std::string ReadFileAsString(const std::string &filename)
+    {
+        std::ifstream file(filename, std::ios::ate);
 
-		if (!file.is_open())
-			throw std::runtime_error("failed to open file!");
+        if (!file.is_open())
+            throw std::runtime_error("failed to open file!");
 
-		const size_t fileSize = static_cast<size_t>(file.tellg());
-		std::string buffer(fileSize, ' ');
-		file.seekg(0);
-		file.read(buffer.data(), fileSize);
-		file.close();
+        const size_t fileSize = static_cast<size_t>(file.tellg());
+        std::string buffer(fileSize, ' ');
+        file.seekg(0);
+        file.read(buffer.data(), fileSize);
+        file.close();
 
-		return buffer;
-	}
+        return buffer;
+    }
 
-	// Parse includes recursively and return the full code
-	std::string ParseFileAndIncludes(const std::string& sourcePath)
-	{
-		if (!std::filesystem::exists(sourcePath))
-			throw std::runtime_error("file does not exist!");
-		
-		std::filesystem::path path(sourcePath);
-		std::string code = ReadFileAsString(path.string());
-		std::stringstream stream(code);
-		std::string line;
-		while (std::getline(stream, line))
-		{
-			size_t pos = line.find("#include");
-			if (pos != std::string::npos)
-			{
-				std::string includeFile = line.substr(line.find("\"") + 1, line.rfind("\"") - line.find("\"") - 1);
-				std::string includeFileFull = path.remove_filename().string() + includeFile;
+    // Parse includes recursively and return the full code
+    std::string ParseFileAndIncludes(const std::string &sourcePath)
+    {
+        if (!std::filesystem::exists(sourcePath))
+            throw std::runtime_error("file does not exist!");
 
-				size_t posStart = code.find(line);
-				if  (posStart != std::string::npos)
-				{
-					size_t posEnd = code.find("\n", posStart);
-					code.erase(posStart, posEnd - posStart);
-					code.insert(posStart, ParseFileAndIncludes(includeFileFull));
-				}
-			}
-		}
+        std::filesystem::path path(sourcePath);
+        std::string code = ReadFileAsString(path.string());
+        std::stringstream stream(code);
+        std::string line;
+        while (std::getline(stream, line))
+        {
+            size_t pos = line.find("#include");
+            if (pos != std::string::npos)
+            {
+                std::string includeFile = line.substr(line.find("\"") + 1, line.rfind("\"") - line.find("\"") - 1);
+                std::string includeFileFull = path.remove_filename().string() + includeFile;
 
-		return code;
-	}
-	
-    void ShaderCache::Init(const std::string& sourcePath)
+                size_t posStart = code.find(line);
+                if (posStart != std::string::npos)
+                {
+                    size_t posEnd = code.find("\n", posStart);
+                    code.erase(posStart, posEnd - posStart);
+                    code.insert(posStart, ParseFileAndIncludes(includeFileFull));
+                }
+            }
+        }
+
+        return code;
+    }
+
+    void ShaderCache::Init(const std::string &sourcePath)
     {
         m_sourcePath = sourcePath;
-		m_code = ParseFileAndIncludes(m_sourcePath);
-		m_hash = StringHash(m_code);
-		m_tempFilePath = std::regex_replace(m_sourcePath, std::regex("Shaders"), "ShaderCache");
+        m_code = ParseFileAndIncludes(m_sourcePath);
+        m_hash = StringHash(m_code);
+        m_tempFilePath = std::regex_replace(m_sourcePath, std::regex("Shaders"), "ShaderCache");
     }
 
 
-	void ShaderCache::WriteToTempAsm()
+    void ShaderCache::WriteToTempAsm()
     {
-		std::filesystem::path path(m_tempFilePath);
-		if (!std::filesystem::exists(path.remove_filename()))
-			std::filesystem::create_directories(path.remove_filename());
+        std::filesystem::path path(m_tempFilePath);
+        if (!std::filesystem::exists(path.remove_filename()))
+            std::filesystem::create_directories(path.remove_filename());
 
-		std::string shaderTempFile = m_tempFilePath + ".asm";
-		std::ofstream fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
-		if (!fileTemp.is_open())
-			return;
-		
-		fileTemp.write(m_assembly.data(), m_assembly.size());
-		fileTemp.close();
+        std::string shaderTempFile = m_tempFilePath + ".asm";
+        std::ofstream fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
+        if (!fileTemp.is_open())
+            return;
+
+        fileTemp.write(m_assembly.data(), m_assembly.size());
+        fileTemp.close();
     }
 
     void ShaderCache::WriteToTempFile()
     {
-		std::filesystem::path path(m_tempFilePath);
-		if (!std::filesystem::exists(path.remove_filename()))
-			std::filesystem::create_directories(path.remove_filename());
+        std::filesystem::path path(m_tempFilePath);
+        if (!std::filesystem::exists(path.remove_filename()))
+            std::filesystem::create_directories(path.remove_filename());
 
-		std::string shaderTempFile = m_tempFilePath + ".temp";
-		std::ofstream fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
-		if (!fileTemp.is_open())
-			return;
+        std::string shaderTempFile = m_tempFilePath + ".temp";
+        std::ofstream fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
+        if (!fileTemp.is_open())
+            return;
 
-		// Remove licence spam
-		size_t licenceStart = m_code.find("/*");
-		while(licenceStart != std::string::npos)
-		{
-			size_t licenceEnd = m_code.find("*/", licenceStart);
-			if (licenceEnd != std::string::npos)
-				m_code.erase(licenceStart, licenceEnd - licenceStart + 2);
-			else
-				break;
+        // Remove licence spam
+        size_t licenceStart = m_code.find("/*");
+        while (licenceStart != std::string::npos)
+        {
+            size_t licenceEnd = m_code.find("*/", licenceStart);
+            if (licenceEnd != std::string::npos)
+                m_code.erase(licenceStart, licenceEnd - licenceStart + 2);
+            else
+                break;
 
-			licenceStart = m_code.find("/*");
-		}
-		
-		std::string hashStr = "// ShaderHash: " + std::to_string(m_hash) + "\n\n";
-		fileTemp.write(hashStr.data(), hashStr.size());
-		fileTemp.write(m_code.data(), m_code.size());
-		fileTemp.close();
+            licenceStart = m_code.find("/*");
+        }
+
+        std::string hashStr = "// ShaderHash: " + std::to_string(m_hash) + "\n\n";
+        fileTemp.write(hashStr.data(), hashStr.size());
+        fileTemp.write(m_code.data(), m_code.size());
+        fileTemp.close();
     }
 
-	size_t ShaderCache::ReadHash()
-	{
-		std::string shaderTempFile = m_tempFilePath + ".temp";
+    size_t ShaderCache::ReadHash()
+    {
+        std::string shaderTempFile = m_tempFilePath + ".temp";
 
-		std::ifstream file(shaderTempFile, std::ios::in | std::ios::ate);
-		if (!file.is_open())
-			return std::numeric_limits<size_t>::max();
-        
-		const size_t fileSize = static_cast<size_t>(file.tellg());
-		std::string buffer;
-		file.seekg(0);
+        std::ifstream file(shaderTempFile, std::ios::in | std::ios::ate);
+        if (!file.is_open())
+            return std::numeric_limits<size_t>::max();
+
+        const size_t fileSize = static_cast<size_t>(file.tellg());
+        std::string buffer;
+        file.seekg(0);
         std::getline(file, buffer);
-		file.close();
+        file.close();
 
-    	std::regex regex("\\s+");
-    	buffer = std::regex_replace(buffer, regex, "");
+        std::regex regex("\\s+");
+        buffer = std::regex_replace(buffer, regex, "");
 
-		static std::string shaderHashKey = "ShaderHash:";
+        static std::string shaderHashKey = "ShaderHash:";
         size_t pos = buffer.find(shaderHashKey);
         if (pos == std::string::npos)
             return std::numeric_limits<size_t>::max();
 
         std::string hashStr = buffer.substr(pos + shaderHashKey.size(), buffer.size() - pos - shaderHashKey.size());
 
-		// string to size_t
-		return std::stoull(hashStr);
-	}
-    
-    bool ShaderCache::ShaderNeedsCompile()
-	{
-		std::string shaderSpvFile = m_tempFilePath + ".spv";
-		if (!std::filesystem::exists(shaderSpvFile))
-			return true;
-		
-		return m_hash != ReadHash();
-	}
+        // string to size_t
+        return std::stoull(hashStr);
+    }
 
-	std::vector<uint32_t> ShaderCache::ReadSpvFromFile()
-	{
-		std::string shaderSpvFile = m_tempFilePath + ".spv";
-		std::ifstream file(shaderSpvFile, std::ios::in | std::ios::ate | std::ios::binary);
-		if (!file.is_open())
-			throw std::runtime_error("failed to open file!");
-		
-		size_t size = static_cast<size_t>(file.tellg());
-		std::string buffer(size, '\0');
-		file.seekg(0);
-		file.read(buffer.data(), size);
-		file.close();
-		
-        std::vector<uint32_t> spirv;
-		spirv.resize(size / sizeof(uint32_t));
-		memcpy(spirv.data(), buffer.data(), size);
+    bool ShaderCache::ShaderNeedsCompile()
+    {
+        std::string shaderSpvFile = m_tempFilePath + ".spv";
+        if (!std::filesystem::exists(shaderSpvFile))
+            return true;
+
+        return m_hash != ReadHash();
+    }
+
+    std::vector <uint32_t> ShaderCache::ReadSpvFromFile()
+    {
+        std::string shaderSpvFile = m_tempFilePath + ".spv";
+        std::ifstream file(shaderSpvFile, std::ios::in | std::ios::ate | std::ios::binary);
+        if (!file.is_open())
+            throw std::runtime_error("failed to open file!");
+
+        size_t size = static_cast<size_t>(file.tellg());
+        std::string buffer(size, '\0');
+        file.seekg(0);
+        file.read(buffer.data(), size);
+        file.close();
+
+        std::vector <uint32_t> spirv;
+        spirv.resize(size / sizeof(uint32_t));
+        memcpy(spirv.data(), buffer.data(), size);
 
         return spirv;
-	}
+    }
 
-	void ShaderCache::WriteSpvToFile(const std::vector<uint32_t>& spirv)
-	{
-		std::filesystem::path path(m_tempFilePath);
-		if (!std::filesystem::exists(path.remove_filename()))
-			std::filesystem::create_directories(path.remove_filename());
+    void ShaderCache::WriteSpvToFile(const std::vector <uint32_t> &spirv)
+    {
+        std::filesystem::path path(m_tempFilePath);
+        if (!std::filesystem::exists(path.remove_filename()))
+            std::filesystem::create_directories(path.remove_filename());
 
-		std::string shaderSpvFile = m_tempFilePath + ".spv";
-		std::ofstream file(shaderSpvFile, std::ios::out | std::ios::trunc | std::ios::binary);
-		if (!file.is_open())
-			return;
-		
-		file.write(reinterpret_cast<const char*>(spirv.data()), spirv.size() * sizeof(uint32_t));
-		file.close();
-	}
+        std::string shaderSpvFile = m_tempFilePath + ".spv";
+        std::ofstream file(shaderSpvFile, std::ios::out | std::ios::trunc | std::ios::binary);
+        if (!file.is_open())
+            return;
+
+        file.write(reinterpret_cast<const char *>(spirv.data()), spirv.size() * sizeof(uint32_t));
+        file.close();
+    }
 }

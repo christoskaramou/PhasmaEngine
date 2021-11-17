@@ -27,68 +27,70 @@ SOFTWARE.
 #include "Renderer/Compute.h"
 
 namespace pe
-{	
-	class Camera : public IComponent
-	{
-	public:
-		enum class RelativeDirection
-		{
-			FORWARD,
-			BACKWARD,
-			LEFT,
-			RIGHT
-		};
-		
-		struct Plane
-		{
-			vec3 normal;
-			float d;
-		};
-		
-		mat4 view, previousView;
-		mat4 projection, previousProjection;
-		mat4 viewProjection, previousViewProjection;
-		mat4 invView, invProjection, invViewProjection;
-		quat orientation;
-		vec3 position, euler, worldOrientation;
-		vec3 front, right, up;
-		float nearPlane, farPlane, FOV, speed, rotationSpeed;
-		vec2 projOffset, projOffsetPrevious;
-		std::vector<Plane> frustum {};
-		Compute frustumCompute;
-		
-		Camera();
-		
-		void Update();
-		
-		void UpdatePerspective();
+{
+    class Camera : public IComponent
+    {
+    public:
+        enum class RelativeDirection
+        {
+            FORWARD,
+            BACKWARD,
+            LEFT,
+            RIGHT
+        };
 
-		// In radians
-		inline float FovyToFovx(float fovy, float aspect) { return 2.0f * atan(tan(fovy * 0.5f) * aspect); }
+        struct Plane
+        {
+            vec3 normal;
+            float d;
+        };
 
-		// In radians
-		inline float FovxToFovy(float fovx, float aspect) { return 2.0f * atan(tan(fovx * 0.5f) / aspect); }
-		
-		void UpdateView();
-		
-		vec3 WorldFront() const;
-		
-		vec3 WorldRight() const;
-		
-		vec3 WorldUp() const;
-		
-		void Move(RelativeDirection direction, float velocity);
-		
-		void Rotate(float xoffset, float yoffset);
-		
-		void ExtractFrustum();
-		
-		bool PointInFrustum(const vec3& point, float radius) const;
+        mat4 view, previousView;
+        mat4 projection, previousProjection;
+        mat4 viewProjection, previousViewProjection;
+        mat4 invView, invProjection, invViewProjection;
+        quat orientation;
+        vec3 position, euler, worldOrientation;
+        vec3 front, right, up;
+        float nearPlane, farPlane, FOV, speed, rotationSpeed;
+        vec2 projOffset, projOffsetPrevious;
+        std::vector <Plane> frustum{};
+        Compute frustumCompute;
 
-		bool AABBInFrustum(const AABB& aabb) const;
-		
-		void ReCreateComputePipelines();
+        Camera();
 
-		void Destroy() override;
-	};
+        void Update();
+
+        void UpdatePerspective();
+
+        // In radians
+        inline float FovyToFovx(float fovy, float aspect)
+        { return 2.0f * atan(tan(fovy * 0.5f) * aspect); }
+
+        // In radians
+        inline float FovxToFovy(float fovx, float aspect)
+        { return 2.0f * atan(tan(fovx * 0.5f) / aspect); }
+
+        void UpdateView();
+
+        vec3 WorldFront() const;
+
+        vec3 WorldRight() const;
+
+        vec3 WorldUp() const;
+
+        void Move(RelativeDirection direction, float velocity);
+
+        void Rotate(float xoffset, float yoffset);
+
+        void ExtractFrustum();
+
+        bool PointInFrustum(const vec3 &point, float radius) const;
+
+        bool AABBInFrustum(const AABB &aabb) const;
+
+        void ReCreateComputePipelines();
+
+        void Destroy() override;
+    };
 }

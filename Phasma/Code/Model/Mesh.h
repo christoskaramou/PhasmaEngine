@@ -32,87 +32,89 @@ constexpr auto MAX_NUM_JOINTS = 128u;
 
 namespace pe
 {
-	class Descriptor;
-	class Image;
-	class Buffer;
+    class Descriptor;
 
-	class Primitive
-	{
-	public:
-		Primitive();
-		
-		~Primitive();
-		
-		std::string name;
-		
-		Descriptor* descriptorSet;
-		Buffer* uniformBuffer;
-		
-		bool render = true, cull = true;
-		uint32_t vertexOffset = 0, indexOffset = 0;
-		uint32_t verticesSize = 0, indicesSize = 0;
-		PBRMaterial pbrMaterial;
-		vec3 min;
-		vec3 max;
-		vec4 boundingSphere;
-		AABB boundingBox;
-		vec4 transformedBS;
-		bool hasBones = false;
-		
-		void calculateBoundingSphere()
-		{
-			const vec3 center = (max + min) * .5f;
-			const float sphereRadius = length(max - center);
-			boundingSphere = vec4(center, sphereRadius);
-		}
+    class Image;
 
-		void calculateBoundingBox()
-		{
-			boundingBox.min = min;
-			boundingBox.max = max;
-		}
-		
-		void loadTexture(
-				MaterialType type,
-				const std::string& folderPath,
-				const Microsoft::glTF::Image* image = nullptr,
-				const Microsoft::glTF::Document* document = nullptr,
-				const Microsoft::glTF::GLTFResourceReader* resourceReader = nullptr
-		);
-	};
-	
-	class Mesh
-	{
-	public:
-		Mesh();
-		
-		~Mesh();
-		
-		bool render = true, cull = false;
-		std::string name;
-		
-		struct UBOMesh
-		{
-			mat4 matrix;
-			mat4 previousMatrix;
-			mat4 jointMatrix[MAX_NUM_JOINTS];
-			float jointcount {0};
-			float dummy[3];
-		} ubo;
-		
-		static std::map<std::string, Image*> uniqueTextures;
-		std::vector<Primitive> primitives {};
-		
-		Descriptor* descriptorSet;
-		Buffer* uniformBuffer;
-		std::vector<Vertex> vertices {};
-		std::vector<uint32_t> indices {};
-		uint32_t vertexOffset = 0, indexOffset = 0;
-		//vec4 boundingSphere;
-		
-		void createUniformBuffers();
-		
-		//void calculateBoundingSphere();
-		void destroy();
-	};
+    class Buffer;
+
+    class Primitive
+    {
+    public:
+        Primitive();
+
+        ~Primitive();
+
+        std::string name;
+
+        Descriptor *descriptorSet;
+        Buffer *uniformBuffer;
+
+        bool render = true, cull = true;
+        uint32_t vertexOffset = 0, indexOffset = 0;
+        uint32_t verticesSize = 0, indicesSize = 0;
+        PBRMaterial pbrMaterial;
+        vec3 min;
+        vec3 max;
+        vec4 boundingSphere;
+        AABB boundingBox;
+        vec4 transformedBS;
+        bool hasBones = false;
+
+        void calculateBoundingSphere()
+        {
+            const vec3 center = (max + min) * .5f;
+            const float sphereRadius = length(max - center);
+            boundingSphere = vec4(center, sphereRadius);
+        }
+
+        void calculateBoundingBox()
+        {
+            boundingBox.min = min;
+            boundingBox.max = max;
+        }
+
+        void loadTexture(
+                MaterialType type,
+                const std::string &folderPath,
+                const Microsoft::glTF::Image *image = nullptr,
+                const Microsoft::glTF::Document *document = nullptr,
+                const Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr
+        );
+    };
+
+    class Mesh
+    {
+    public:
+        Mesh();
+
+        ~Mesh();
+
+        bool render = true, cull = false;
+        std::string name;
+
+        struct UBOMesh
+        {
+            mat4 matrix;
+            mat4 previousMatrix;
+            mat4 jointMatrix[MAX_NUM_JOINTS];
+            float jointcount{0};
+            float dummy[3];
+        } ubo;
+
+        static std::map<std::string, Image *> uniqueTextures;
+        std::vector <Primitive> primitives{};
+
+        Descriptor *descriptorSet;
+        Buffer *uniformBuffer;
+        std::vector <Vertex> vertices{};
+        std::vector <uint32_t> indices{};
+        uint32_t vertexOffset = 0, indexOffset = 0;
+        //vec4 boundingSphere;
+
+        void createUniformBuffers();
+
+        //void calculateBoundingSphere();
+        void destroy();
+    };
 }

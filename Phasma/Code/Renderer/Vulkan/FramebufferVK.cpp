@@ -27,41 +27,41 @@ SOFTWARE.
 
 namespace pe
 {
-	FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass* renderPass)
-		: FrameBuffer(width, height, std::vector<ImageViewHandle>{ view }, renderPass)
-	{
-	}
-	
-	FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, const std::vector<ImageViewHandle>& views, RenderPass* renderPass)
-	{
-		this->width = width;
-		this->height = height;
+    FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass* renderPass)
+        : FrameBuffer(width, height, std::vector<ImageViewHandle>{ view }, renderPass)
+    {
+    }
 
-		std::vector<VkImageView> _views(views.size());
-		for (int i = 0; i < views.size(); i++)
-			_views[i] = views[i];
+    FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, const std::vector<ImageViewHandle>& views, RenderPass* renderPass)
+    {
+        this->width = width;
+        this->height = height;
 
-		VkFramebufferCreateInfo fbci{};
-		fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-		fbci.renderPass = renderPass->Handle();
-		fbci.attachmentCount = static_cast<uint32_t>(_views.size());
-		fbci.pAttachments = _views.data();
-		fbci.width = width;
-		fbci.height = height;
-		fbci.layers = 1;
-		
-		VkFramebuffer frameBuffer;
-		vkCreateFramebuffer(RHII.device, &fbci, nullptr, &frameBuffer);
-		m_handle = frameBuffer;
-	}
+        std::vector<VkImageView> _views(views.size());
+        for (int i = 0; i < views.size(); i++)
+            _views[i] = views[i];
 
-	FrameBuffer::~FrameBuffer()
-	{
-		if (m_handle)
-		{
-			vkDestroyFramebuffer(RHII.device, m_handle, nullptr);
-			m_handle = {};
-		}
-	}
+        VkFramebufferCreateInfo fbci{};
+        fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        fbci.renderPass = renderPass->Handle();
+        fbci.attachmentCount = static_cast<uint32_t>(_views.size());
+        fbci.pAttachments = _views.data();
+        fbci.width = width;
+        fbci.height = height;
+        fbci.layers = 1;
+
+        VkFramebuffer frameBuffer;
+        vkCreateFramebuffer(RHII.device, &fbci, nullptr, &frameBuffer);
+        m_handle = frameBuffer;
+    }
+
+    FrameBuffer::~FrameBuffer()
+    {
+        if (m_handle)
+        {
+            vkDestroyFramebuffer(RHII.device, m_handle, nullptr);
+            m_handle = {};
+        }
+    }
 }
 #endif

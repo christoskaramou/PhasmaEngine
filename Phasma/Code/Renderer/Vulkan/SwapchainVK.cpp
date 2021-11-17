@@ -32,118 +32,118 @@ SOFTWARE.
 
 namespace pe
 {
-	Swapchain::Swapchain(Surface* surface)
-	{
-		VkSurfaceCapabilitiesKHR capabilities;
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, surface->Handle(), &capabilities);
+    Swapchain::Swapchain(Surface* surface)
+    {
+        VkSurfaceCapabilitiesKHR capabilities;
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, surface->Handle(), &capabilities);
 
-		VkExtent2D extent;
-		extent.width = surface->actualExtent.width;
-		extent.height = surface->actualExtent.height;
-		
-		VkSwapchainCreateInfoKHR swapchainCreateInfo{};
-		swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-		swapchainCreateInfo.surface = surface->Handle();
-		swapchainCreateInfo.minImageCount = clamp(
-			SWAPCHAIN_IMAGES,
-			capabilities.minImageCount,
-			capabilities.maxImageCount
-		);
-		swapchainCreateInfo.imageFormat = (VkFormat)surface->format;
-		swapchainCreateInfo.imageColorSpace = (VkColorSpaceKHR)surface->colorSpace;
-		swapchainCreateInfo.imageExtent = extent;
-		swapchainCreateInfo.imageArrayLayers = 1;
-		swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-		swapchainCreateInfo.preTransform = capabilities.currentTransform;
-		swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-		swapchainCreateInfo.presentMode = (VkPresentModeKHR)surface->presentMode;
-		swapchainCreateInfo.clipped = VK_TRUE;
-		if (m_handle)
-			swapchainCreateInfo.oldSwapchain = m_handle;
-		
-		// new swapchain with old create info
-		VkSwapchainKHR schain;
-		vkCreateSwapchainKHR(RHII.device, &swapchainCreateInfo, nullptr, &schain);
-		
-		// TODO: Maybe check the result in a loop?
-		uint32_t swapchainImageCount;
-		vkGetSwapchainImagesKHR(RHII.device, schain, &swapchainImageCount, nullptr);
+        VkExtent2D extent;
+        extent.width = surface->actualExtent.width;
+        extent.height = surface->actualExtent.height;
 
-		std::vector<VkImage> imagesVK(swapchainImageCount);
-		vkGetSwapchainImagesKHR(RHII.device, schain, &swapchainImageCount, imagesVK.data());
+        VkSwapchainCreateInfoKHR swapchainCreateInfo{};
+        swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        swapchainCreateInfo.surface = surface->Handle();
+        swapchainCreateInfo.minImageCount = clamp(
+            SWAPCHAIN_IMAGES,
+            capabilities.minImageCount,
+            capabilities.maxImageCount
+        );
+        swapchainCreateInfo.imageFormat = (VkFormat)surface->format;
+        swapchainCreateInfo.imageColorSpace = (VkColorSpaceKHR)surface->colorSpace;
+        swapchainCreateInfo.imageExtent = extent;
+        swapchainCreateInfo.imageArrayLayers = 1;
+        swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        swapchainCreateInfo.preTransform = capabilities.currentTransform;
+        swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        swapchainCreateInfo.presentMode = (VkPresentModeKHR)surface->presentMode;
+        swapchainCreateInfo.clipped = VK_TRUE;
+        if (m_handle)
+            swapchainCreateInfo.oldSwapchain = m_handle;
 
-		for (auto* image : images)
-			image->Destroy();
-		
-		images.resize(imagesVK.size());
-		for (unsigned i = 0; i < images.size(); i++)
-		{
-			images[i] = new Image();
-			images[i]->Handle() = imagesVK[i];
-			images[i]->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-			images[i]->blendAttachment.blendEnable = VK_TRUE;
-			images[i]->blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-			images[i]->blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-			images[i]->blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-			images[i]->blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-			images[i]->blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-			images[i]->blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-			images[i]->blendAttachment.colorWriteMask =
-				VK_COLOR_COMPONENT_R_BIT |
-				VK_COLOR_COMPONENT_G_BIT |
-				VK_COLOR_COMPONENT_B_BIT |
-				VK_COLOR_COMPONENT_A_BIT;
-		}
-		
-		// create image views for each swapchain image
-		for (auto* image : images)
-		{
-			VkImageViewCreateInfo imageViewCreateInfo{};
-			imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			imageViewCreateInfo.image = image->Handle();
-			imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			imageViewCreateInfo.format = (VkFormat)RHII.surface->format;
-			imageViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        // new swapchain with old create info
+        VkSwapchainKHR schain;
+        vkCreateSwapchainKHR(RHII.device, &swapchainCreateInfo, nullptr, &schain);
 
-			VkImageView imageView;
-			vkCreateImageView(RHII.device, &imageViewCreateInfo, nullptr, &imageView);
-			image->view = imageView;
-		}
-		
-		if (m_handle)
-		{
-			vkDestroySwapchainKHR(RHII.device, m_handle, nullptr);
-			m_handle = {};
-		}
+        // TODO: Maybe check the result in a loop?
+        uint32_t swapchainImageCount;
+        vkGetSwapchainImagesKHR(RHII.device, schain, &swapchainImageCount, nullptr);
 
-		m_handle = schain;
-	}
+        std::vector<VkImage> imagesVK(swapchainImageCount);
+        vkGetSwapchainImagesKHR(RHII.device, schain, &swapchainImageCount, imagesVK.data());
 
-	Swapchain::~Swapchain()
-	{
-		if (m_handle)
-		{
-			vkDestroySwapchainKHR(RHII.device, m_handle, nullptr);
-			m_handle = {};
-		}
+        for (auto* image : images)
+            image->Destroy();
 
-		for (auto* image : images)
-			delete image;
-	}
-	
-	uint32_t Swapchain::Aquire(Semaphore* semaphore, Fence* fence)
-	{
-		VkFence fenceVK = nullptr;
-		if (fence)
-			fenceVK = fence->Handle();
+        images.resize(imagesVK.size());
+        for (unsigned i = 0; i < images.size(); i++)
+        {
+            images[i] = new Image();
+            images[i]->Handle() = imagesVK[i];
+            images[i]->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+            images[i]->blendAttachment.blendEnable = VK_TRUE;
+            images[i]->blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            images[i]->blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            images[i]->blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+            images[i]->blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            images[i]->blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            images[i]->blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+            images[i]->blendAttachment.colorWriteMask =
+                VK_COLOR_COMPONENT_R_BIT |
+                VK_COLOR_COMPONENT_G_BIT |
+                VK_COLOR_COMPONENT_B_BIT |
+                VK_COLOR_COMPONENT_A_BIT;
+        }
 
-		uint32_t imageIndex = 0;
-		VkResult result = vkAcquireNextImageKHR(RHII.device, m_handle, UINT64_MAX, semaphore->Handle(), fenceVK, &imageIndex);
+        // create image views for each swapchain image
+        for (auto* image : images)
+        {
+            VkImageViewCreateInfo imageViewCreateInfo{};
+            imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            imageViewCreateInfo.image = image->Handle();
+            imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            imageViewCreateInfo.format = (VkFormat)RHII.surface->format;
+            imageViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
-		if (result != VK_SUCCESS)
-			throw std::runtime_error("Aquire Next Image error");
-		
-		return imageIndex;
-	}
+            VkImageView imageView;
+            vkCreateImageView(RHII.device, &imageViewCreateInfo, nullptr, &imageView);
+            image->view = imageView;
+        }
+
+        if (m_handle)
+        {
+            vkDestroySwapchainKHR(RHII.device, m_handle, nullptr);
+            m_handle = {};
+        }
+
+        m_handle = schain;
+    }
+
+    Swapchain::~Swapchain()
+    {
+        if (m_handle)
+        {
+            vkDestroySwapchainKHR(RHII.device, m_handle, nullptr);
+            m_handle = {};
+        }
+
+        for (auto* image : images)
+            delete image;
+    }
+
+    uint32_t Swapchain::Aquire(Semaphore* semaphore, Fence* fence)
+    {
+        VkFence fenceVK = nullptr;
+        if (fence)
+            fenceVK = fence->Handle();
+
+        uint32_t imageIndex = 0;
+        VkResult result = vkAcquireNextImageKHR(RHII.device, m_handle, UINT64_MAX, semaphore->Handle(), fenceVK, &imageIndex);
+
+        if (result != VK_SUCCESS)
+            throw std::runtime_error("Aquire Next Image error");
+
+        return imageIndex;
+    }
 }
 #endif

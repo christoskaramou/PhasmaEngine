@@ -33,12 +33,12 @@ layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out vec4 outColor;
 
-void main() 
+void main()
 {
-	vec4 sceneColor = texture(frameSampler, inUV);
-	vec4 bloom = vec4(texture(gaussianVerticalSampler, inUV).xyz, 0.0);
+    vec4 sceneColor = texture(frameSampler, inUV);
+    vec4 bloom = vec4(texture(gaussianVerticalSampler, inUV).xyz, 0.0);
 
-	outColor = sceneColor + bloom * values.intensity;
-	if (values.useTonemap > 0.5)
-		outColor.xyz = SRGBtoLINEAR(TonemapFilmic(outColor.xyz, values.exposure));
+    outColor = sceneColor + bloom * values.intensity;
+    if (values.useTonemap > 0.5)
+    outColor.xyz = SRGBtoLINEAR(TonemapFilmic(outColor.xyz, values.exposure));
 }

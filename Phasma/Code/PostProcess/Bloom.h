@@ -26,56 +26,61 @@ SOFTWARE.
 
 namespace pe
 {
-	class Descriptor;
-	class FrameBuffer;
-	class Image;
-	class CommandBuffer;
-	class RenderPass;
-	class Pipeline;
+    class Descriptor;
 
-	class Bloom : public IComponent
-	{
-	public:
-		Bloom();
-		
-		~Bloom();
-		
-		std::vector<FrameBuffer*> framebuffers {};
-		Pipeline* pipelineBrightFilter;
-		Pipeline* pipelineGaussianBlurHorizontal;
-		Pipeline* pipelineGaussianBlurVertical;
-		Pipeline* pipelineCombine;
-		RenderPass* renderPassBrightFilter;
-		RenderPass* renderPassGaussianBlur;
-		RenderPass* renderPassCombine;
-		Descriptor* DSBrightFilter;
-		Descriptor* DSGaussianBlurHorizontal;
-		Descriptor* DSGaussianBlurVertical;
-		Descriptor* DSCombine;
-		Image* frameImage;
-		
-		void Init();
-		
-		void createRenderPasses(std::map<std::string, Image*>& renderTargets);
-		
-		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createPipelines(std::map<std::string, Image*>& renderTargets);
-		
-		void createBrightFilterPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void createGaussianBlurHorizontaPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void createGaussianBlurVerticalPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void createCombinePipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void createUniforms(std::map<std::string, Image*>& renderTargets);
-		
-		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
-		
-		void draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image*>& renderTargets);
-		
-		void destroy();
-	};
+    class FrameBuffer;
+
+    class Image;
+
+    class CommandBuffer;
+
+    class RenderPass;
+
+    class Pipeline;
+
+    class Bloom : public IComponent
+    {
+    public:
+        Bloom();
+
+        ~Bloom();
+
+        std::vector<FrameBuffer *> framebuffers{};
+        Pipeline *pipelineBrightFilter;
+        Pipeline *pipelineGaussianBlurHorizontal;
+        Pipeline *pipelineGaussianBlurVertical;
+        Pipeline *pipelineCombine;
+        RenderPass *renderPassBrightFilter;
+        RenderPass *renderPassGaussianBlur;
+        RenderPass *renderPassCombine;
+        Descriptor *DSBrightFilter;
+        Descriptor *DSGaussianBlurHorizontal;
+        Descriptor *DSGaussianBlurVertical;
+        Descriptor *DSCombine;
+        Image *frameImage;
+
+        void Init();
+
+        void createRenderPasses(std::map<std::string, Image *> &renderTargets);
+
+        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createPipelines(std::map<std::string, Image *> &renderTargets);
+
+        void createBrightFilterPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void createGaussianBlurHorizontaPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void createGaussianBlurVerticalPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void createCombinePipeline(std::map<std::string, Image *> &renderTargets);
+
+        void createUniforms(std::map<std::string, Image *> &renderTargets);
+
+        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+
+        void draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets);
+
+        void destroy();
+    };
 }

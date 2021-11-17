@@ -37,74 +37,77 @@ SOFTWARE.
 
 namespace pe
 {
-	class CommandBuffer;
-	class Image;
+    class CommandBuffer;
 
-	class Viewport
-	{
-	public:
-		float x;
-		float y;
-		float width;
-		float height;
-		float minDepth;
-		float maxDepth;
-	};
+    class Image;
 
-	class RenderArea
-	{
-	public:
-		Viewport viewport;
-		Rect2D scissor;
+    class Viewport
+    {
+    public:
+        float x;
+        float y;
+        float width;
+        float height;
+        float minDepth;
+        float maxDepth;
+    };
 
-		void Update(float x, float y, float w, float h, float minDepth = 0.f, float maxDepth = 1.f);
-	};
+    class RenderArea
+    {
+    public:
+        Viewport viewport;
+        Rect2D scissor;
 
-	class Renderer
-	{
-	protected:
-		RenderArea renderArea;
-		Shadows shadows;
-		Deferred deferred;
-		SkyBox skyBoxDay;
-		SkyBox skyBoxNight;
-		GUI gui;
-		Compute animationsCompute;
-		Compute nodesCompute;
+        void Update(float x, float y, float w, float h, float minDepth = 0.f, float maxDepth = 1.f);
+    };
+
+    class Renderer
+    {
+    protected:
+        RenderArea renderArea;
+        Shadows shadows;
+        Deferred deferred;
+        SkyBox skyBoxDay;
+        SkyBox skyBoxNight;
+        GUI gui;
+        Compute animationsCompute;
+        Compute nodesCompute;
 
 #ifndef IGNORE_SCRIPTS
-		std::vector<Script*> scripts{};
+        std::vector<Script*> scripts{};
 #endif
-	public:
-		Renderer();
-		
-		~Renderer();
+    public:
+        Renderer();
 
-		RenderArea& GetRenderArea() { return renderArea; }
-		
-		void AddRenderTarget(const std::string& name, Format format, ImageUsageFlags additionalFlags = 0);
-		
-		void LoadResources();
-		
-		void CreateUniforms();
-		
-		void ResizeViewport(uint32_t width, uint32_t height);
+        ~Renderer();
 
-		void BlitToViewport(CommandBuffer* cmd, Image* renderedImage, uint32_t imageIndex);
-		
-		void RecreatePipelines();
+        RenderArea &GetRenderArea()
+        { return renderArea; }
 
-		std::map<std::string, Image*>& GetRenderTargets() { return renderTargets; }
+        void AddRenderTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags = 0);
 
-		std::map<std::string, Image*> renderTargets {};
-	
-	protected:		
-		static void CheckQueue();
-		
-		void ComputeAnimations();
-		
-		void RecordDeferredCmds(uint32_t imageIndex);
-		
-		void RecordShadowsCmds(uint32_t imageIndex);
-	};
+        void LoadResources();
+
+        void CreateUniforms();
+
+        void ResizeViewport(uint32_t width, uint32_t height);
+
+        void BlitToViewport(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
+
+        void RecreatePipelines();
+
+        std::map<std::string, Image *> &GetRenderTargets()
+        { return renderTargets; }
+
+        std::map<std::string, Image *> renderTargets{};
+
+    protected:
+        static void CheckQueue();
+
+        void ComputeAnimations();
+
+        void RecordDeferredCmds(uint32_t imageIndex);
+
+        void RecordShadowsCmds(uint32_t imageIndex);
+    };
 }

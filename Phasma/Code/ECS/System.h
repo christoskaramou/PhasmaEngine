@@ -26,94 +26,98 @@ SOFTWARE.
 
 namespace pe
 {
-	class Context;
-	
-	class IComponent;
-	
-	class ISystem
-	{
-	public:
-		ISystem() : m_enabled(false) { }
-		
-		virtual ~ISystem() {}
-		
-		virtual void Init() = 0;
-		
-		virtual void Update(double delta) = 0;
-		
-		virtual void Destroy() = 0;
-		
-		template<class T>
-		inline bool HasComponents()
-		{
-			ValidateBaseClass<IComponent, T>();
-			
-			if (m_components.find(GetTypeID<T>()) != m_components.end())
-				return true;
-			
-			return false;
-		}
-		
-		template<class T>
-		inline void AttachComponent(T* component)
-		{
-			size_t id = GetTypeID<T>();
-			if (!HasComponents<T>())
-				m_components[id] = std::vector<IComponent*>();
-			m_components[id].push_back(component);
-		}
-		
-		template<class T>
-		void RemoveComponent(IComponent* component)
-		{
-			if (HasComponents<T>())
-			{
-				size_t id = GetTypeID<T>();
-				auto it = std::find(m_components[id].begin(), m_components[id].end(), component);
-				if (it != m_components[id].end())
-					m_components[id].erase(it);
-			}
-		}
-		
-		template<class T>
-		void RemoveComponents()
-		{
-			if (HasComponents<T>())
-				m_components[GetTypeID<T>()].clear();
-		}
-		
-		template<class T>
-		void RemoveAllComponents()
-		{
-			m_components.clear();
-		}
-		
-		template<class T>
-		const std::vector<T*>& GetComponentsOfType()
-		{
-			if (HasComponents<T>())
-			{
-				size_t id = GetTypeID<T>();
-				return *reinterpret_cast<std::vector<T*>*>(&m_components[id]);
-			}
+    class Context;
 
-			static const std::vector<T*> empty{};
-			return empty;
-		}
-		
-		bool IsEnabled() { return m_enabled; }
-		
-		void SetEnabled(bool enabled) { m_enabled = enabled; }
-	
-	private:
-		std::unordered_map<size_t, std::vector<IComponent*>> m_components;
-		bool m_enabled;
-	};
+    class IComponent;
 
-	class IDrawSystem : public ISystem
-	{
-	public:
-		virtual void Draw() = 0;
-	};
+    class ISystem
+    {
+    public:
+        ISystem() : m_enabled(false)
+        {}
+
+        virtual ~ISystem()
+        {}
+
+        virtual void Init() = 0;
+
+        virtual void Update(double delta) = 0;
+
+        virtual void Destroy() = 0;
+
+        template<class T>
+        inline bool HasComponents()
+        {
+            ValidateBaseClass<IComponent, T>();
+
+            if (m_components.find(GetTypeID<T>()) != m_components.end())
+                return true;
+
+            return false;
+        }
+
+        template<class T>
+        inline void AttachComponent(T *component)
+        {
+            size_t id = GetTypeID<T>();
+            if (!HasComponents<T>())
+                m_components[id] = std::vector<IComponent *>();
+            m_components[id].push_back(component);
+        }
+
+        template<class T>
+        void RemoveComponent(IComponent *component)
+        {
+            if (HasComponents<T>())
+            {
+                size_t id = GetTypeID<T>();
+                auto it = std::find(m_components[id].begin(), m_components[id].end(), component);
+                if (it != m_components[id].end())
+                    m_components[id].erase(it);
+            }
+        }
+
+        template<class T>
+        void RemoveComponents()
+        {
+            if (HasComponents<T>())
+                m_components[GetTypeID<T>()].clear();
+        }
+
+        template<class T>
+        void RemoveAllComponents()
+        {
+            m_components.clear();
+        }
+
+        template<class T>
+        const std::vector<T *> &GetComponentsOfType()
+        {
+            if (HasComponents<T>())
+            {
+                size_t id = GetTypeID<T>();
+                return *reinterpret_cast<std::vector < T * > * > (&m_components[id]);
+            }
+
+            static const std::vector<T *> empty{};
+            return empty;
+        }
+
+        bool IsEnabled()
+        { return m_enabled; }
+
+        void SetEnabled(bool enabled)
+        { m_enabled = enabled; }
+
+    private:
+        std::unordered_map <size_t, std::vector<IComponent *>> m_components;
+        bool m_enabled;
+    };
+
+    class IDrawSystem : public ISystem
+    {
+    public:
+        virtual void Draw() = 0;
+    };
 }
 

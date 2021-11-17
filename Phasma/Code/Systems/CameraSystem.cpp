@@ -28,11 +28,11 @@ namespace pe
 {
     CameraSystem::CameraSystem()
     {
-        Camera* mainCamera = WORLD_ENTITY->CreateComponent<Camera>();
+        Camera *mainCamera = WORLD_ENTITY->CreateComponent<Camera>();
         AttachComponent(mainCamera);
     }
 
-    Camera* CameraSystem::GetCamera(size_t index)
+    Camera *CameraSystem::GetCamera(size_t index)
     {
         return GetComponentsOfType<Camera>().at(index);
     }
@@ -44,8 +44,8 @@ namespace pe
 
     void CameraSystem::Update(double delta)
     {
-        const std::vector<Camera*>& components = GetComponentsOfType<Camera>();
-        for (Camera* camera : components)
+        const std::vector<Camera *> &components = GetComponentsOfType<Camera>();
+        for (Camera *camera : components)
         {
             if (camera->IsEnabled())
                 camera->Update();
@@ -54,7 +54,7 @@ namespace pe
 
     void CameraSystem::Destroy()
     {
-       const std::vector<Camera*>& components = GetComponentsOfType<Camera>();
+        const std::vector<Camera *> &components = GetComponentsOfType<Camera>();
         for (auto camera : components)
             camera->Destroy();
     }

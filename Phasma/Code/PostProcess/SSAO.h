@@ -27,51 +27,57 @@ SOFTWARE.
 
 namespace pe
 {
-	class CommandBuffer;
-	class Descriptor;
-	class FrameBuffer;
-	class Image;
-	class RenderPass;
-	class Pipeline;
-	class Buffer;
+    class CommandBuffer;
 
-	class SSAO : public IComponent
-	{
-	public:
-		mat4 pvm[3];
-		Buffer* UB_Kernel;
-		Buffer* UB_PVM;
-		Image* noiseTex;
-		RenderPass* renderPass;
-		RenderPass* blurRenderPass;
-		std::vector<FrameBuffer*> framebuffers {}, blurFramebuffers {};
-		Pipeline* pipeline;
-		Pipeline* pipelineBlur;
-		Descriptor* DSet;
-		Descriptor* DSBlur;
-		
-		void update(Camera& camera);
-		
-		void createRenderPasses(std::map<std::string, Image*>& renderTargets);
-		
-		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createSSAOFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createSSAOBlurFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createPipelines(std::map<std::string, Image*>& renderTargets);
-		
-		void createPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void createBlurPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void createUniforms(std::map<std::string, Image*>& renderTargets);
-		
-		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
-		
-		void draw(CommandBuffer* cmd, uint32_t imageIndex, Image* image);
-		
-		void destroy();
-	};
+    class Descriptor;
+
+    class FrameBuffer;
+
+    class Image;
+
+    class RenderPass;
+
+    class Pipeline;
+
+    class Buffer;
+
+    class SSAO : public IComponent
+    {
+    public:
+        mat4 pvm[3];
+        Buffer *UB_Kernel;
+        Buffer *UB_PVM;
+        Image *noiseTex;
+        RenderPass *renderPass;
+        RenderPass *blurRenderPass;
+        std::vector<FrameBuffer *> framebuffers{}, blurFramebuffers{};
+        Pipeline *pipeline;
+        Pipeline *pipelineBlur;
+        Descriptor *DSet;
+        Descriptor *DSBlur;
+
+        void update(Camera &camera);
+
+        void createRenderPasses(std::map<std::string, Image *> &renderTargets);
+
+        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createSSAOFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createSSAOBlurFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createPipelines(std::map<std::string, Image *> &renderTargets);
+
+        void createPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void createBlurPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void createUniforms(std::map<std::string, Image *> &renderTargets);
+
+        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+
+        void draw(CommandBuffer *cmd, uint32_t imageIndex, Image *image);
+
+        void destroy();
+    };
 }

@@ -28,60 +28,65 @@ SOFTWARE.
 
 namespace pe
 {
-	class Descriptor;
-	class FrameBuffer;
-	class Image;
-	class RenderPass;
-	class Pipeline;
-	class Buffer;
+    class Descriptor;
 
-	class TAA : public IComponent
-	{
-	public:
-		TAA();
-		
-		~TAA();
-		
-		std::vector<FrameBuffer*> framebuffers {}, framebuffersSharpen {};
-		Pipeline* pipeline;
-		Pipeline* pipelineSharpen;
-		RenderPass* renderPass;
-		RenderPass* renderPassSharpen;
-		Descriptor* DSet;
-		Descriptor* DSetSharpen;
-		Image* previous;
-		Image* frameImage;
-		
-		struct UBO
-		{
-			vec4 values;
-			vec4 sharpenValues;
-			mat4 invProj;
-		} ubo;
-		Buffer* uniform;
-		
-		void Init();
-		
-		void update(const Camera& camera);
-		
-		void createUniforms(std::map<std::string, Image*>& renderTargets);
-		
-		void updateDescriptorSets(std::map<std::string, Image*>& renderTargets);
-		
-		void draw(CommandBuffer* cmd, uint32_t imageIndex, std::map<std::string, Image*>& renderTargets);
-		
-		void createRenderPasses(std::map<std::string, Image*>& renderTargets);
-		
-		void createFrameBuffers(std::map<std::string, Image*>& renderTargets);
-		
-		void createPipeline(std::map<std::string, Image*>& renderTargets);
-		
-		void createPipelineSharpen(std::map<std::string, Image*>& renderTargets);
-		
-		void createPipelines(std::map<std::string, Image*>& renderTargets);
-		
-		void saveImage(CommandBuffer* cmd, Image* source);
-		
-		void destroy();
-	};
+    class FrameBuffer;
+
+    class Image;
+
+    class RenderPass;
+
+    class Pipeline;
+
+    class Buffer;
+
+    class TAA : public IComponent
+    {
+    public:
+        TAA();
+
+        ~TAA();
+
+        std::vector<FrameBuffer *> framebuffers{}, framebuffersSharpen{};
+        Pipeline *pipeline;
+        Pipeline *pipelineSharpen;
+        RenderPass *renderPass;
+        RenderPass *renderPassSharpen;
+        Descriptor *DSet;
+        Descriptor *DSetSharpen;
+        Image *previous;
+        Image *frameImage;
+
+        struct UBO
+        {
+            vec4 values;
+            vec4 sharpenValues;
+            mat4 invProj;
+        } ubo;
+        Buffer *uniform;
+
+        void Init();
+
+        void update(const Camera &camera);
+
+        void createUniforms(std::map<std::string, Image *> &renderTargets);
+
+        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+
+        void draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets);
+
+        void createRenderPasses(std::map<std::string, Image *> &renderTargets);
+
+        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+
+        void createPipeline(std::map<std::string, Image *> &renderTargets);
+
+        void createPipelineSharpen(std::map<std::string, Image *> &renderTargets);
+
+        void createPipelines(std::map<std::string, Image *> &renderTargets);
+
+        void saveImage(CommandBuffer *cmd, Image *source);
+
+        void destroy();
+    };
 }

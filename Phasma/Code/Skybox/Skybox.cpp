@@ -31,91 +31,91 @@ SOFTWARE.
 
 namespace pe
 {
-	SkyBox::SkyBox()
-	{
-		descriptorSet = {};
-	}
-	
-	SkyBox::~SkyBox()
-	{
-	}
-	
-	void SkyBox::createDescriptorSet()
-	{
-		descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSkybox());
+    SkyBox::SkyBox()
+    {
+        descriptorSet = {};
+    }
 
-		DescriptorUpdateInfo info{};
-		info.binding = 0;
-		info.pImage = texture;
-		descriptorSet->UpdateDescriptor(1, &info);
-	}
-	
-	void SkyBox::loadSkyBox(const std::array<std::string, 6>& textureNames, uint32_t imageSideSize, bool show)
-	{
-		loadTextures(textureNames, imageSideSize);
-	}
-	
-	// images must be squared and the image size must be the real else the assertion will fail
-	void SkyBox::loadTextures(const std::array<std::string, 6>& paths, int imageSideSize)
-	{
-		assert(paths.size() == 6);
-		
-		ImageCreateInfo info{};
-		info.format = VK_FORMAT_R8G8B8A8_UNORM;
-		info.arrayLayers = 6;
-		info.imageFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-		info.width = imageSideSize;
-		info.height = imageSideSize;
-		info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-		info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-		texture = Image::Create(info);
+    SkyBox::~SkyBox()
+    {
+    }
 
-		ImageViewCreateInfo viewInfo{};
-		viewInfo.image = texture;
-		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-		texture->CreateImageView(viewInfo);
+    void SkyBox::createDescriptorSet()
+    {
+        descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSkybox());
 
-		SamplerCreateInfo samplerInfo{};
-		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		texture->CreateSampler(samplerInfo);
+        DescriptorUpdateInfo info{};
+        info.binding = 0;
+        info.pImage = texture;
+        descriptorSet->UpdateDescriptor(1, &info);
+    }
 
-		texture->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    void SkyBox::loadSkyBox(const std::array<std::string, 6> &textureNames, uint32_t imageSideSize, bool show)
+    {
+        loadTextures(textureNames, imageSideSize);
+    }
 
-		for (uint32_t i = 0; i < texture->imageInfo.arrayLayers; ++i)
-		{
-			// Texture Load
-			int texWidth, texHeight, texChannels;
-			//stbi_set_flip_vertically_on_load(true);
-			stbi_uc* pixels = stbi_load(paths[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-			assert(imageSideSize == texWidth && imageSideSize == texHeight);
-			
-			VkDeviceSize imageSize = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * 4;
-			if (!pixels)
-				throw std::runtime_error("No pixel data loaded");
-			
-			Buffer* staging = Buffer::Create(
-				imageSize,
-				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-			staging->Map();
-			staging->CopyData(pixels);
-			staging->Flush();
-			staging->Unmap();
-			
-			stbi_image_free(pixels);
-			
-			texture->CopyBufferToImage(staging, i);
-			staging->Destroy();
-		}
+    // images must be squared and the image size must be the real else the assertion will fail
+    void SkyBox::loadTextures(const std::array<std::string, 6> &paths, int imageSideSize)
+    {
+        assert(paths.size() == 6);
 
-		texture->TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	}
-	
-	void SkyBox::destroy()
-	{
-		texture->Destroy();
-		Pipeline::getDescriptorSetLayoutSkybox()->Destroy();
-	}
+        ImageCreateInfo info{};
+        info.format = VK_FORMAT_R8G8B8A8_UNORM;
+        info.arrayLayers = 6;
+        info.imageFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        info.width = imageSideSize;
+        info.height = imageSideSize;
+        info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        texture = Image::Create(info);
+
+        ImageViewCreateInfo viewInfo{};
+        viewInfo.image = texture;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+        texture->CreateImageView(viewInfo);
+
+        SamplerCreateInfo samplerInfo{};
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        texture->CreateSampler(samplerInfo);
+
+        texture->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        for (uint32_t i = 0; i < texture->imageInfo.arrayLayers; ++i)
+        {
+            // Texture Load
+            int texWidth, texHeight, texChannels;
+            //stbi_set_flip_vertically_on_load(true);
+            stbi_uc *pixels = stbi_load(paths[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+            assert(imageSideSize == texWidth && imageSideSize == texHeight);
+
+            VkDeviceSize imageSize = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * 4;
+            if (!pixels)
+                throw std::runtime_error("No pixel data loaded");
+
+            Buffer *staging = Buffer::Create(
+                    imageSize,
+                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            staging->Map();
+            staging->CopyData(pixels);
+            staging->Flush();
+            staging->Unmap();
+
+            stbi_image_free(pixels);
+
+            texture->CopyBufferToImage(staging, i);
+            staging->Destroy();
+        }
+
+        texture->TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+
+    void SkyBox::destroy()
+    {
+        texture->Destroy();
+        Pipeline::getDescriptorSetLayoutSkybox()->Destroy();
+    }
 }

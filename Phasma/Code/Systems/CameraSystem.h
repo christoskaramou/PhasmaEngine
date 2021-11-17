@@ -27,19 +27,19 @@ SOFTWARE.
 
 namespace pe
 {
-	class CameraSystem : public ISystem
-	{
-	public:
-		CameraSystem();
+    class CameraSystem : public ISystem
+    {
+    public:
+        CameraSystem();
 
-		~CameraSystem() override = default;
+        ~CameraSystem() override = default;
 
-		Camera* GetCamera(size_t index);
+        Camera *GetCamera(size_t index);
 
-		void Init() override;
+        void Init() override;
 
-		void Update(double delta) override;
+        void Update(double delta) override;
 
-		void Destroy() override;
-	};
+        void Destroy() override;
+    };
 }

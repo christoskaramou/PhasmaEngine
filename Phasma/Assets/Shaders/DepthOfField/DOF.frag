@@ -34,8 +34,8 @@ layout (location = 0) in vec2 in_UV;
 
 layout (location = 0) out vec4 outColor;
 
-void main() 
+void main()
 {
-	outColor.xyz = depthOfField(sampler_color, sampler_depth, in_UV, constants.values.x, constants.values.y);
-	outColor.w = texture(sampler_color, in_UV).w;
+    outColor.xyz = depthOfField(sampler_color, sampler_depth, in_UV, constants.values.x, constants.values.y);
+    outColor.w = texture(sampler_color, in_UV).w;
 }

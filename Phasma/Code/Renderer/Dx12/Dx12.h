@@ -24,11 +24,11 @@ SOFTWARE.
 
 namespace pe
 {
-	class Dx12Context
-	{
-	public:
-		Dx12Context();
-		
-		~Dx12Context();
-	};
+    class Dx12Context
+    {
+    public:
+        Dx12Context();
+
+        ~Dx12Context();
+    };
 }
