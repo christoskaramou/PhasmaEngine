@@ -27,7 +27,6 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
-#include "Core/Path.h"
 
 namespace pe
 {

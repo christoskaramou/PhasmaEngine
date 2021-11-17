@@ -110,8 +110,8 @@ namespace pe
 	
 	void FXAA::createPipeline(std::map<std::string, Image*>& renderTargets)
 	{
-		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"Shaders/FXAA/FXAA.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex};
+		Shader frag {"Shaders/FXAA/FXAA.frag", ShaderType::Fragment};
 		
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;

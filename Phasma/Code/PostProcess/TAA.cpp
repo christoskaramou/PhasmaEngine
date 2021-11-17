@@ -214,8 +214,8 @@ namespace pe
 	
 	void TAA::createPipeline(std::map<std::string, Image*>& renderTargets)
 	{
-		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"Shaders/TAA/TAA.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex};
+		Shader frag {"Shaders/TAA/TAA.frag", ShaderType::Fragment};
 		
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;
@@ -232,8 +232,8 @@ namespace pe
 	
 	void TAA::createPipelineSharpen(std::map<std::string, Image*>& renderTargets)
 	{
-		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"Shaders/TAA/TAASharpen.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex};
+		Shader frag {"Shaders/TAA/TAASharpen.frag", ShaderType::Fragment};
 
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;

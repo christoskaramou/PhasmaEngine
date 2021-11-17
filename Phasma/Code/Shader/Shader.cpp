@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "Shader.h"
-#include "Core/Path.h"
 
 namespace pe
 {
@@ -30,9 +29,9 @@ namespace pe
 		return new shaderc_include_result {"", 0, message, strlen(message)};
 	}
 
-	std::vector<char> ReadFile(const std::string& filename)
+	std::vector<char> ReadFile(const std::string& sourcePath)
 	{
-		std::ifstream file(filename, std::ios::ate | std::ios::binary);
+		std::ifstream file(sourcePath, std::ios::ate | std::ios::binary);
 
 		if (!file.is_open())
 			throw std::runtime_error("failed to open file!");
@@ -89,48 +88,36 @@ namespace pe
 		delete include_result;
 	}
 	
-	Shader::Shader(const std::string& filename, ShaderType shaderType, bool runtimeCompile, const std::vector<Define>& defs)
+	Shader::Shader(const std::string& sourcePath, ShaderType shaderType, const std::vector<Define>& defs)
 	{
-		std::string path = filename;
+		std::string path = sourcePath;
 		if (path.find(Path::Assets) == std::string::npos)
-		{
-			path = Path::Assets + filename;
-		}
+			path = Path::Assets + sourcePath;
 		
-		this->shaderType = shaderType;
-		if (runtimeCompile)
+		m_shaderType = shaderType;
+		m_cache.Init(path);
+
+		bool needsCompile = m_cache.ShaderNeedsCompile();
+		if (needsCompile)
 		{
-			InitSource(path);
-			
 			m_options.SetIncluder(std::make_unique<FileIncluder>());
-			m_options.SetOptimizationLevel(
-					shaderc_optimization_level_zero
-			); // Validation Layers reporting error in spirv with other flags
+			m_options.SetOptimizationLevel(shaderc_optimization_level_performance);
 			
 			AddDefines(globalDefines);
 			AddDefines(defs);
 			
 			CompileFile(static_cast<shaderc_shader_kind>(shaderType));
+			
+			m_cache.WriteToTempFile();
+			m_cache.WriteSpvToFile(m_spirv);
 		}
 		else
 		{
-			std::ifstream file(path, std::ios::ate | std::ios::binary);
-			if (!file.is_open())
-			{
-				throw std::runtime_error("failed to open file!");
-			}
-			const size_t fileSize = static_cast<size_t>(file.tellg());
-			std::vector<char> buffer(fileSize);
-			file.seekg(0);
-			file.read(buffer.data(), fileSize);
-			file.close();
-			
-			m_spirv.resize(buffer.size() / sizeof(uint32_t));
-			memcpy(m_spirv.data(), buffer.data(), buffer.size());
+			m_spirv = m_cache.ReadSpvFromFile();
 		}
 
 		if (m_spirv.size() > 0)
-			reflection.Init(this);
+			m_reflection.Init(this);
 	}
 	
 	void Shader::AddDefine(Define& def)
@@ -143,7 +130,6 @@ namespace pe
 			m_options.AddMacroDefinition(def.name, def.value);
 		
 		defines.push_back(def);
-		
 	}
 	
 	void Shader::AddDefines(const std::vector<Define>& defs)
@@ -151,35 +137,14 @@ namespace pe
 		for (auto def : defs)
 			AddDefine(def);
 	}
-	
-	void Shader::InitSource(const std::string& filename)
-	{
-		if (filename.empty())
-			throw std::runtime_error("file name was empty");
-		
-		m_source_name = filename;
-		
-		std::ifstream file(m_source_name, std::ios::ate | std::ios::binary);
-		if (!file.is_open())
-		{
-			throw std::runtime_error("failed to open file!");
-		}
-		const size_t fileSize = static_cast<size_t>(file.tellg());
-		m_source.clear();
-		m_source.shrink_to_fit();
-		m_source.resize(fileSize);
-		file.seekg(0);
-		file.read(m_source.data(), fileSize);
-		file.close();
-	}
-	
+
 	void Shader::PreprocessShader(shaderc_shader_kind kind)
 	{
-		if (m_source.empty() || m_source_name.empty())
+		if (m_cache.GetShaderCode().empty() || m_cache.GetSourcePath().empty())
 			throw std::runtime_error("source file was empty");
 		
 		shaderc::PreprocessedSourceCompilationResult result =
-				m_compiler.PreprocessGlsl(m_source, kind, m_source_name.c_str(), m_options);
+				m_compiler.PreprocessGlsl(m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), m_options);
 		
 		if (result.GetCompilationStatus() != shaderc_compilation_status_success)
 		{
@@ -193,11 +158,11 @@ namespace pe
 	
 	void Shader::CompileFileToAssembly(shaderc_shader_kind kind)
 	{
-		if (m_source.empty() || m_source_name.empty())
+		if (m_cache.GetShaderCode().empty() || m_cache.GetSourcePath().empty())
 			throw std::runtime_error("source file was empty");
 		
 		shaderc::AssemblyCompilationResult result = m_compiler.CompileGlslToSpvAssembly(
-				m_source, kind, m_source_name.c_str(), m_options
+				m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), m_options
 		);
 		
 		if (result.GetCompilationStatus() != shaderc_compilation_status_success)
@@ -212,11 +177,11 @@ namespace pe
 	
 	void Shader::CompileFile(shaderc_shader_kind kind)
 	{
-		if (m_source.empty() || m_source_name.empty())
+		if (m_cache.GetShaderCode().empty() || m_cache.GetSourcePath().empty())
 			throw std::runtime_error("source file was empty");
 		
 		shaderc::SpvCompilationResult module =
-				m_compiler.CompileGlslToSpv(m_source, kind, m_source_name.c_str(), m_options);
+				m_compiler.CompileGlslToSpv(m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), m_options);
 		
 		if (module.GetCompilationStatus() != shaderc_compilation_status_success)
 		{

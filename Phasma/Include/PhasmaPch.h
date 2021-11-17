@@ -49,7 +49,7 @@ SOFTWARE.
 #include <limits>
 #include <chrono>
 #include <random>
-#include "Core/Hash.h"
+#include <regex>
 
 #include "SDL/SDL.h"
 #include "SDL/SDL_syswm.h"
@@ -62,3 +62,6 @@ SOFTWARE.
         #include <DX12/d3d12sdklayers.h>
     #endif
 #endif
+
+#include "Core/Hash.h"
+#include "Core/Path.h"

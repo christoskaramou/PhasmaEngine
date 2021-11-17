@@ -24,6 +24,7 @@ SOFTWARE.
 
 #include "shaderc/shaderc.hpp"
 #include "Shader/Reflection.h"
+#include "Shader/ShaderCache.h"
 
 namespace pe
 {
@@ -67,19 +68,17 @@ namespace pe
 	class Shader
 	{
 	public:
-		Shader(const std::string& filename, ShaderType shaderType, bool runtimeCompile, const std::vector<Define>& defs = {});
+		Shader(const std::string& sourcePath, ShaderType shaderType, const std::vector<Define>& defs = {});
 		
-		inline const uint32_t* GetSpriv() { return m_spirv.data(); }
+		inline ShaderType GetShaderType() { return m_shaderType; }
 		
-		inline ShaderType GetShaderType() { return shaderType; }
-		
-		inline size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
-		
-		inline size_t Size() { return m_spirv.size(); }
+        inline const uint32_t* GetSpriv() { return m_spirv.data(); }
+
+        inline size_t Size() { return m_spirv.size(); }
+
+        inline size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
 	
-	private:
-		void InitSource(const std::string& filename);
-		
+	private:		
 		void PreprocessShader(shaderc_shader_kind kind);
 		
 		void CompileFileToAssembly(shaderc_shader_kind kind);
@@ -90,16 +89,15 @@ namespace pe
 		
 		void AddDefines(const std::vector<Define>& defines);
 
-		Reflection reflection;
-		ShaderType shaderType;
+		ShaderCache m_cache;
+		Reflection m_reflection;
+		ShaderType m_shaderType;
 		shaderc::Compiler m_compiler;
 		shaderc::CompileOptions m_options;
-		std::string m_source_name{};
-		std::string m_source{};
 		std::string m_preprocessed{};
 		std::string m_assembly{};
-		std::vector<uint32_t> m_spirv{};
 		std::vector<Define> defines{};
+		std::vector<uint32_t> m_spirv{};
 
 		inline static std::vector<Define> globalDefines{};
 	};

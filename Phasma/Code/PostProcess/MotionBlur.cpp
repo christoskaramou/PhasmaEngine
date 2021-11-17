@@ -159,8 +159,8 @@ namespace pe
 	void MotionBlur::createPipeline(std::map<std::string, Image*>& renderTargets)
 	{
 		// Shader stages
-		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"Shaders/MotionBlur/motionBlur.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex};
+		Shader frag {"Shaders/MotionBlur/motionBlur.frag", ShaderType::Fragment};
 		
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;

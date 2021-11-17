@@ -27,7 +27,6 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Systems/CameraSystem.h"
 #include "ECS/Context.h"
-#include "Core/Path.h"
 #include "Core/Settings.h"
 #include "Systems/EventSystem.h"
 #include "Systems/PostProcessSystem.h"

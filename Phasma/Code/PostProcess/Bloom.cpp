@@ -206,8 +206,8 @@ namespace pe
 	
 	void Bloom::createBrightFilterPipeline(std::map<std::string, Image*>& renderTargets)
 	{
-		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"Shaders/Bloom/brightFilter.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex};
+		Shader frag {"Shaders/Bloom/brightFilter.frag", ShaderType::Fragment};
 		
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;
@@ -226,8 +226,8 @@ namespace pe
 	
 	void Bloom::createGaussianBlurHorizontaPipeline(std::map<std::string, Image*>& renderTargets)
 	{
-		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"Shaders/Bloom/gaussianBlurHorizontal.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex};
+		Shader frag {"Shaders/Bloom/gaussianBlurHorizontal.frag", ShaderType::Fragment};
 
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;
@@ -246,8 +246,8 @@ namespace pe
 	
 	void Bloom::createGaussianBlurVerticalPipeline(std::map<std::string, Image*>& renderTargets)
 	{
-		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"Shaders/Bloom/gaussianBlurVertical.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex};
+		Shader frag {"Shaders/Bloom/gaussianBlurVertical.frag", ShaderType::Fragment};
 
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;
@@ -267,8 +267,8 @@ namespace pe
 	void Bloom::createCombinePipeline(std::map<std::string, Image*>& renderTargets)
 	{
 		// Shader stages
-		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"Shaders/Bloom/combine.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex};
+		Shader frag {"Shaders/Bloom/combine.frag", ShaderType::Fragment};
 
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;

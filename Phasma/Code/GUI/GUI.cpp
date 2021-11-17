@@ -27,7 +27,6 @@ SOFTWARE.
 #include "Renderer/Vertex.h"
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
-#include "Core/Path.h"
 #include "Systems/EventSystem.h"
 #include "ECS/Context.h"
 #include "Model/Model.h"

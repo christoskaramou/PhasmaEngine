@@ -33,7 +33,6 @@ SOFTWARE.
 #include "Shader/Reflection.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
-#include "Core/Path.h"
 #include "Core/Settings.h"
 #include "ECS/Context.h"
 #include "Systems/LightSystem.h"
@@ -291,8 +290,8 @@ namespace pe
 	
 	void Deferred::createGBufferPipeline(std::map<std::string, Image*>& renderTargets)
 	{
-		Shader vert{ "Shaders/Deferred/gBuffer.vert", ShaderType::Vertex, true };
-		Shader frag{ "Shaders/Deferred/gBuffer.frag", ShaderType::Fragment, true };
+		Shader vert{ "Shaders/Deferred/gBuffer.vert", ShaderType::Vertex };
+		Shader frag{ "Shaders/Deferred/gBuffer.frag", ShaderType::Fragment };
 		
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;
@@ -332,8 +331,8 @@ namespace pe
 			Define{ "MAX_SPOT_LIGHTS",			std::to_string(MAX_SPOT_LIGHTS) }
 		};
 
-		Shader vert{ "Shaders/Common/quad.vert", ShaderType::Vertex, true };
-		Shader frag{ "Shaders/Deferred/composition.frag", ShaderType::Fragment, true, definesFrag };
+		Shader vert{ "Shaders/Common/quad.vert", ShaderType::Vertex };
+		Shader frag{ "Shaders/Deferred/composition.frag", ShaderType::Fragment, definesFrag };
 
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;

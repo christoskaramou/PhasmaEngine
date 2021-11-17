@@ -128,7 +128,7 @@ namespace pe
 		if (pipeline)
 			pipeline->Destroy();
 		
-		Shader shader {shaderName, ShaderType::Compute, true};
+		Shader shader {shaderName, ShaderType::Compute};
 		
 		PipelineCreateInfo info{};
 		info.pCompShader = &shader;

@@ -132,8 +132,8 @@ namespace pe
 	
 	void SSR::createPipeline(std::map<std::string, Image*>& renderTargets)
 	{
-		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex, true};
-		Shader frag {"Shaders/SSR/ssr.frag", ShaderType::Fragment, true};
+		Shader vert {"Shaders/Common/quad.vert", ShaderType::Vertex};
+		Shader frag {"Shaders/SSR/ssr.frag", ShaderType::Fragment};
 		
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;

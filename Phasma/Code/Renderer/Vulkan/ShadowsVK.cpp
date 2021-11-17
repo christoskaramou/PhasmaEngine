@@ -129,7 +129,7 @@ namespace pe
 
 	void Shadows::createPipeline()
 	{
-		Shader vert{ "Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex, true };
+		Shader vert{ "Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex };
 
 		PipelineCreateInfo info{};
 		info.pVertShader = &vert;
