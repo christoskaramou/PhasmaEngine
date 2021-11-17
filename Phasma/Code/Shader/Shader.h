@@ -79,23 +79,22 @@ namespace pe
         inline size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
 	
 	private:		
-		void PreprocessShader(shaderc_shader_kind kind);
+		std::string PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions& options);
 		
-		void CompileFileToAssembly(shaderc_shader_kind kind);
+		void CompileFileToAssembly(shaderc_shader_kind kind, shaderc::CompileOptions& options);
+
+		void CompileAssembly(shaderc_shader_kind kind, shaderc::CompileOptions& options);
 		
-		void CompileFile(shaderc_shader_kind kind);
+		void CompileFile(shaderc_shader_kind kind, shaderc::CompileOptions& options);
 		
-		void AddDefine(Define& define);
+		void AddDefine(Define& define, shaderc::CompileOptions& options);
 		
-		void AddDefines(const std::vector<Define>& defines);
+		void AddDefines(const std::vector<Define>& defines, shaderc::CompileOptions& options);
 
 		ShaderCache m_cache;
 		Reflection m_reflection;
 		ShaderType m_shaderType;
 		shaderc::Compiler m_compiler;
-		shaderc::CompileOptions m_options;
-		std::string m_preprocessed{};
-		std::string m_assembly{};
 		std::vector<Define> defines{};
 		std::vector<uint32_t> m_spirv{};
 

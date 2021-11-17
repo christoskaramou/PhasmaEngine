@@ -273,3 +273,6 @@ __pycache__/
 # LOGS
 Phasma/errors.txt
 Phasma/log.txt
+
+# Shader cache
+Phasma/Assets/ShaderCache/

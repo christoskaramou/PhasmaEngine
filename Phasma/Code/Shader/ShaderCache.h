@@ -35,19 +35,26 @@ namespace pe
 
         inline const std::string& GetSourcePath() { return m_sourcePath; }
 
+        inline const std::string& GetAssembly() { return m_assembly; }
+
+        inline void SetAssembly(const std::string& assembly) { m_assembly = assembly; }
+
         std::vector<uint32_t> ReadSpvFromFile();
 
         void WriteSpvToFile(const std::vector<uint32_t>& spirv);
 
         void WriteToTempFile();
 
+        void WriteToTempAsm();
+
         size_t ReadHash();
 
     private:
-
         std::string m_sourcePath;
         std::string m_code;
         size_t m_hash;
         std::string m_tempFilePath;
+        std::string m_assembly;
+		std::string m_preprocessed;
     };
 }

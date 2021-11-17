@@ -50,8 +50,27 @@ namespace pe
 
 				std::replace(Executable.begin(), Executable.end(), '\\', '/');
 				
-				Assets = Executable;
-				Assets += "Assets/";
+				// Search for assets folder
+				std::filesystem::path path(Executable);
+				while (true)
+				{
+					std::filesystem::path parent = path.parent_path();
+					if (path == parent)
+						break;
+
+					path = parent;
+					if (std::filesystem::exists(path / "Phasma"))
+					{
+						if (std::filesystem::exists(path / "Phasma" / "Assets"))
+						{
+							Assets = path.string() + "/Phasma/Assets/";
+							break;
+						}
+					}
+				}
+
+				if (Assets.empty())
+					Assets = Executable + "Assets/";
 			}
 		};
 		

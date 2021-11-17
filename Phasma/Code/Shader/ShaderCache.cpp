@@ -70,6 +70,30 @@ namespace pe
 
 		return code;
 	}
+	
+    void ShaderCache::Init(const std::string& sourcePath)
+    {
+        m_sourcePath = sourcePath;
+		m_code = ParseFileAndIncludes(m_sourcePath);
+		m_hash = StringHash(m_code);
+		m_tempFilePath = std::regex_replace(m_sourcePath, std::regex("Shaders"), "ShaderCache");
+    }
+
+
+	void ShaderCache::WriteToTempAsm()
+    {
+		std::filesystem::path path(m_tempFilePath);
+		if (!std::filesystem::exists(path.remove_filename()))
+			std::filesystem::create_directories(path.remove_filename());
+
+		std::string shaderTempFile = m_tempFilePath + ".asm";
+		std::ofstream fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
+		if (!fileTemp.is_open())
+			return;
+		
+		fileTemp.write(m_assembly.data(), m_assembly.size());
+		fileTemp.close();
+    }
 
     void ShaderCache::WriteToTempFile()
     {
@@ -95,19 +119,10 @@ namespace pe
 			licenceStart = m_code.find("/*");
 		}
 		
-		std::stringstream sstream;
-		sstream << "// ShaderHash: " << m_hash << "\n\n";
-		fileTemp << sstream.str();
+		std::string hashStr = "// ShaderHash: " + std::to_string(m_hash) + "\n\n";
+		fileTemp.write(hashStr.data(), hashStr.size());
 		fileTemp.write(m_code.data(), m_code.size());
 		fileTemp.close();
-    }
-
-    void ShaderCache::Init(const std::string& sourcePath)
-    {
-        m_sourcePath = sourcePath;
-		m_code = ParseFileAndIncludes(m_sourcePath);
-		m_hash = StringHash(m_code);
-		m_tempFilePath = std::regex_replace(m_sourcePath, std::regex("Shaders"), "ShaderCache");
     }
 
 	size_t ShaderCache::ReadHash()
@@ -134,11 +149,8 @@ namespace pe
 
         std::string hashStr = buffer.substr(pos + shaderHashKey.size(), buffer.size() - pos - shaderHashKey.size());
 
-		std::stringstream sstream(hashStr);
-		size_t hash;
-		sstream >> hash;
-
-		return hash;
+		// string to size_t
+		return std::stoull(hashStr);
 	}
     
     bool ShaderCache::ShaderNeedsCompile()
