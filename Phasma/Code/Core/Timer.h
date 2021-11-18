@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Base.h"
-
 constexpr double MILLI(double seconds)
 { return seconds * 1000.0; }
 

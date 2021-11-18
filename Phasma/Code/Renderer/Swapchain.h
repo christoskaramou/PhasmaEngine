@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Base.h"
-
 namespace pe
 {
     constexpr uint32_t

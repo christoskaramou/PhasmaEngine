@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Base.h"
 #include "Shader/Shader.h"
 #include "Renderer/Vertex.h"
 

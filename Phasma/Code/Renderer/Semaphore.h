@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Base.h"
-
 namespace pe
 {
     class Semaphore : public IHandle<Semaphore, SemaphoreHandle>

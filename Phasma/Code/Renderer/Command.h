@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Base.h"
 #include "Renderer/Descriptor.h"
 
 namespace pe

@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Base.h"
-
 #define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
 
 // RHI Instance
