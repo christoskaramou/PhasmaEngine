@@ -26,7 +26,6 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/RHI.h"
-#include "Core/Settings.h"
 
 namespace pe
 {

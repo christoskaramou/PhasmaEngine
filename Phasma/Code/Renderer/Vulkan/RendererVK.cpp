@@ -22,12 +22,10 @@ SOFTWARE.
 
 #if PE_VULKAN
 #include "Renderer/Renderer.h"
-#include "Core/Queue.h"
 #include "Model/Mesh.h"
 #include "Renderer/RHI.h"
 #include "Systems/CameraSystem.h"
 #include "ECS/Context.h"
-#include "Core/Settings.h"
 #include "Systems/EventSystem.h"
 #include "Systems/PostProcessSystem.h"
 #include "Renderer/Command.h"

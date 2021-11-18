@@ -30,7 +30,6 @@ SOFTWARE.
 #include "Model/Model.h"
 #include "Renderer/Deferred.h"
 #include "Renderer/Compute.h"
-#include "Core/Timer.h"
 #include "Script/Script.h"
 
 #define IGNORE_SCRIPTS

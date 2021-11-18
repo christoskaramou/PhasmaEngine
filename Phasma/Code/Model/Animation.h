@@ -22,9 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Math.h"
-#include "Core/Node.h"
-
 #undef max
 #undef min
 

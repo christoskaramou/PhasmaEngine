@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "LightSystem.h"
-#include "Core/Queue.h"
 #include "GUI/GUI.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Descriptor.h"

@@ -20,14 +20,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Camera.h"
+#include "Camera/Camera.h"
 #include "GUI/GUI.h"
 #include "Renderer/Compute.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
-#include "Core/Settings.h"
 
 namespace pe
 {

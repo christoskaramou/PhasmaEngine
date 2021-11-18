@@ -22,7 +22,6 @@ SOFTWARE.
 
 #include "Model.h"
 #include "Mesh.h"
-#include "Core/Queue.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Command.h"
 #include "Renderer/Image.h"
@@ -30,7 +29,6 @@ SOFTWARE.
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
 #include "Renderer/RHI.h"
-#include "Core/Queue.h"
 
 #undef max
 

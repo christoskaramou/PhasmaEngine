@@ -29,7 +29,6 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Model/Mesh.h"
 #include "Systems/PostProcessSystem.h"
-#include "Core/Queue.h"
 
 namespace pe
 {

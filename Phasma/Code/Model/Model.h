@@ -22,11 +22,9 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Math.h"
 #include "Script/Script.h"
 #include "Systems/CameraSystem.h"
 #include "Model/Animation.h"
-#include "Core/Node.h"
 #include "GLTFSDK/GLTF.h"
 #include "GLTFSDK/GLTFResourceReader.h"
 #include "GLTFSDK/Document.h"

@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Delegate.h"
 #include "ECS/System.h"
 
 namespace pe

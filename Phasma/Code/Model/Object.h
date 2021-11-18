@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Math.h"
-
 namespace pe
 {
     class Image;

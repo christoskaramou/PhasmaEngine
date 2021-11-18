@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Delegate.h"
-
 namespace pe
 {
     enum class Launch

@@ -25,8 +25,6 @@ SOFTWARE.
 #include "Renderer/Swapchain.h"
 #include "GUI/GUI.h"
 #include "Shader/Shader.h"
-#include "Core/Queue.h"
-#include "Core/Timer.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"

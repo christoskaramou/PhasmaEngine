@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Math.h"
-
 namespace pe
 {
     class Mesh;

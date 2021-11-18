@@ -31,7 +31,6 @@ SOFTWARE.
 #include "PostProcess/SSAO.h"
 #include "PostProcess/SSR.h"
 #include "PostProcess/TAA.h"
-#include "Core/Queue.h"
 
 namespace pe
 {

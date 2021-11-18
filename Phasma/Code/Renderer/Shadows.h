@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Math.h"
 #include "Systems/CameraSystem.h"
 
 namespace pe

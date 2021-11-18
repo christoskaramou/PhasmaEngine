@@ -26,7 +26,6 @@ SOFTWARE.
 #include "Renderer/Swapchain.h"
 #include "Renderer/Vertex.h"
 #include "Shader/Shader.h"
-#include "Core/Queue.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
@@ -37,7 +36,6 @@ SOFTWARE.
 #include "Renderer/RenderPass.h"
 #include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
-#include "Core/Settings.h"
 
 namespace pe
 {

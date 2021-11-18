@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Settings.h"
-
 #if _DEBUG
     #define PE_PRINT_MSG(msg)               \
         {                                   \

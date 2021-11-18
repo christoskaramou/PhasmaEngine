@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "Core/Node.h"
-#include "Core/Queue.h"
 #include "Model/Mesh.h"
 #include "Renderer/Buffer.h"
 

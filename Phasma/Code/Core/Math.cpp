@@ -20,8 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Math.h"
-#include "Core/Settings.h"
+#include "Core/Math.h"
 
 namespace pe
 {

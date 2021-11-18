@@ -22,7 +22,6 @@ SOFTWARE.
 
 #include "GUI.h"
 #include "TinyFileDialogs/tinyfiledialogs.h"
-#include "Core/Queue.h"
 #include "Console/Console.h"
 #include "Renderer/Vertex.h"
 #include "Shader/Shader.h"
@@ -30,7 +29,6 @@ SOFTWARE.
 #include "Systems/EventSystem.h"
 #include "ECS/Context.h"
 #include "Model/Model.h"
-#include "Core/Timer.h"
 #include "Systems/CameraSystem.h"
 #include "Window/Window.h"
 #include "Renderer/Surface.h"

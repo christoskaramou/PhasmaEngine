@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "ECS/Component.h"
-#include "Core/Math.h"
 #include "Renderer/Compute.h"
 
 namespace pe

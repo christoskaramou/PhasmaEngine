@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "Console.h"
-#include "Core/Queue.h"
 
 namespace pe
 {

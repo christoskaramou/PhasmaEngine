@@ -29,8 +29,6 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Image.h"
-#include "Core/Math.h"
-#include "Core/Settings.h"
 
 namespace pe
 {

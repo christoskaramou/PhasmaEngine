@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Core/Queue.h"
-
 namespace pe
 {
     class MemoryRange

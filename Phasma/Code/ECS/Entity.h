@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Component.h"
-#include "Core/Node.h"
 
 namespace pe
 {
