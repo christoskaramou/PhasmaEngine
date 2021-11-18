@@ -24,6 +24,25 @@ SOFTWARE.
 
 #include "Core/Settings.h"
 
+#if _DEBUG
+    #define PE_PRINT_MSG(msg)               \
+        {                                   \
+            std::stringstream ss;           \
+            ss << "Error: " << msg;         \
+            ss << ", File: " << __FILE__;   \
+            ss << ", Line: " << __LINE__;   \
+            std::cout << ss.str();          \
+        }
+#else
+    #define PE_PRINT_MSG(msg)
+#endif
+
+#define PE_ERROR(msg)           \
+    {                           \
+        PE_PRINT_MSG(msg);      \
+        exit(-1);               \
+    }
+
 namespace pe
 {
     inline size_t NextID()

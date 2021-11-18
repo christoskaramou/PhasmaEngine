@@ -20,43 +20,56 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#if PE_VULKAN
-#include "Renderer/Fence.h"
-#include "Renderer/RHI.h"
+#pragma once
 
 namespace pe
 {
-    Fence::Fence(bool signaled)
+    class FileSystem
     {
-        VkFenceCreateInfo fi{};
-        fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fi.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
+    public:
+        FileSystem(const std::string& file, std::ios_base::openmode mode = std::ios_base::in | std::ios_base::ate);
 
-        VkFence fence;
-        vkCreateFence(RHII.device, &fi, nullptr, &fence);
-        m_handle = fence;
-    }
+        ~FileSystem();
 
-    Fence::~Fence()
+        inline size_t Size() { return m_size; }
+
+        inline bool IsOpen() { return m_fstream.is_open(); }
+
+        void SetIndexRead(size_t index) { m_fstream.seekg(index); }
+
+        void SetIndexWrite(size_t index) { m_fstream.seekp(index); }
+
+        std::string ReadAll();
+
+        std::string ReadLine();
+
+        void Write(const std::string& data);
+
+        void Write(const char* data, size_t size);
+
+        void Close();
+
+    private:
+        std::string m_file;
+        std::fstream m_fstream;
+        std::ios_base::openmode m_mode;
+        size_t m_size;
+    };
+
+    class FileWatcher
     {
-        if (m_handle)
-        {
-            vkDestroyFence(RHII.device, m_handle, nullptr);
-            m_handle = {};
-        }
-    }
+    public:
+        using Func = std::function<void()>;
 
-    void Fence::Wait()
-    {
-        VkFence fenceVK = Handle();
-        if (vkWaitForFences(RHII.device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
-            PE_ERROR("wait fences error!");
-    }
+        FileWatcher(const std::string& file, Func&& callback = nullptr);
 
-    void Fence::Reset()
-    {
-        VkFence fenceVK = Handle();
-        vkResetFences(RHII.device, 1, &fenceVK);
-    }
+    private:
+        std::time_t GetFileTime();
+        
+        bool FileModified();
+
+        std::string m_file;
+        std::time_t m_time;
+        Func m_callback;
+    };
 }
-#endif

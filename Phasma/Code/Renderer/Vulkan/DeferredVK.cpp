@@ -94,7 +94,7 @@ namespace pe
             unsigned char* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
             stbi_set_flip_vertically_on_load(false);
             if (!pixels)
-                throw std::runtime_error("No pixel data loaded");
+                PE_ERROR("No pixel data loaded");
             const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
             RHII.WaitGraphicsQueue();

@@ -73,10 +73,10 @@ namespace pe
         // === Extentions ==============================
         unsigned extCount;
         if (!SDL_Vulkan_GetInstanceExtensions(window, &extCount, nullptr))
-            throw std::runtime_error(SDL_GetError());
+            PE_ERROR(SDL_GetError());
         instanceExtensions.resize(extCount);
         if (!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()))
-            throw std::runtime_error(SDL_GetError());
+            PE_ERROR(SDL_GetError());
         // =============================================
 
 #ifdef _DEBUG
@@ -530,7 +530,7 @@ namespace pe
             }
         }
         if (info.format == VK_FORMAT_UNDEFINED)
-            throw std::runtime_error("Depth format is undefined");
+            PE_ERROR("Depth format is undefined");
 
         depth = Image::Create(info);
 
@@ -672,7 +672,7 @@ namespace pe
 
         VkFence fenceVK = fence->Handle();
         if (vkWaitForFences(device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
-            throw std::runtime_error("wait fences error!");
+            PE_ERROR("wait fences error!");
         fence->Destroy();
     }
 
@@ -698,7 +698,7 @@ namespace pe
         pi.pImageIndices = imageIndices;
 
         if (vkQueuePresentKHR(graphicsQueue, &pi) != VK_SUCCESS)
-            throw std::runtime_error("Present error!");
+            PE_ERROR("Present error!");
     }
 
     void RHI::WaitAndLockSubmits()

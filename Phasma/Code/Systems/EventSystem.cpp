@@ -69,7 +69,8 @@ namespace pe
 
     void EventSystem::PushEvent(EventType type)
     {
-        m_pushedEventTypes.insert(type);
+        if (m_pushedEventTypes.find(type) == m_pushedEventTypes.end())
+            m_pushedEventTypes.insert(type);
     }
 
     bool EventSystem::PollEvent(EventType type)

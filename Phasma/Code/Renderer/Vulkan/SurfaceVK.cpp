@@ -32,7 +32,7 @@ namespace pe
     {
         VkSurfaceKHR surfaceVK;
         if (!SDL_Vulkan_CreateSurface(window, RHII.instance, &surfaceVK))
-            throw std::runtime_error(SDL_GetError());
+            PE_ERROR(SDL_GetError());
 
         m_handle = surfaceVK;
 
@@ -58,7 +58,7 @@ namespace pe
 
         // Ensure eTransferSrc bit for blit operations
         if (!(capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
-            throw std::runtime_error("Surface doesnt support VK_IMAGE_USAGE_TRANSFER_SRC_BIT");
+            PE_ERROR("Surface doesnt support VK_IMAGE_USAGE_TRANSFER_SRC_BIT");
     }
 
     void Surface::FindFormat()
@@ -84,9 +84,9 @@ namespace pe
         VkFormatProperties fProps;
         vkGetPhysicalDeviceFormatProperties(RHII.gpu, (VkFormat)format, &fProps);
         if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT))
-            throw std::runtime_error("No blit source operation supported");
+            PE_ERROR("No blit source operation supported");
         if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
-            throw std::runtime_error("No blit destination operation supported");
+            PE_ERROR("No blit destination operation supported");
     }
 
     void Surface::FindPresentationMode()

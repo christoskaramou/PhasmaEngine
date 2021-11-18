@@ -63,5 +63,6 @@ SOFTWARE.
     #endif
 #endif
 
+#include "Core/FileSystem.h"
 #include "Core/Hash.h"
 #include "Core/Path.h"

@@ -39,7 +39,7 @@ namespace pe
     {
         std::ifstream file(filename, std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
-            throw std::runtime_error("failed to open file!");
+            PE_ERROR("failed to open file!");
         }
         const size_t fileSize = static_cast<size_t>(file.tellg());
         std::vector<char> buffer(fileSize);
@@ -77,7 +77,7 @@ namespace pe
             }
         }
         if (std::find(dlls.begin(), dlls.end(), name) == dlls.end())
-            throw std::runtime_error("error creating script dll");
+            PE_ERROR("error creating script dll");
 
         ctor = nullptr;
         dtor = nullptr;

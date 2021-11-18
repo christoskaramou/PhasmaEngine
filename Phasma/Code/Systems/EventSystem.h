@@ -41,7 +41,8 @@ namespace pe
         Custom,
         SetWindowTitle,
         CompileShaders,
-        ScaleRenderTargets
+        ScaleRenderTargets,
+        FileWrite
     };
 
     class EventSystem : public ISystem

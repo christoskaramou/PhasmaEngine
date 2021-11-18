@@ -51,8 +51,8 @@ namespace pe
 
         Model &operator=(const Model &other)
         {
-            throw std::runtime_error("");
-            //return Model();
+            PE_ERROR("");
+            return Model();
         }
 
         // Document holds all info about the gltf model

@@ -130,7 +130,7 @@ namespace pe
                 path = Path::Assets + "Objects/black.png";
             break;
         default:
-            throw std::runtime_error("Load texture invalid type");
+            PE_ERROR("Load texture invalid type");
         }
 
         // Check if it is already loaded
@@ -154,7 +154,7 @@ namespace pe
             }
 
             if (!pixels)
-                throw std::runtime_error("No pixel data loaded");
+                PE_ERROR("No pixel data loaded");
 
             const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 

@@ -34,7 +34,7 @@ namespace pe
         std::ifstream file(sourcePath, std::ios::ate | std::ios::binary);
 
         if (!file.is_open())
-            throw std::runtime_error("failed to open file!");
+            PE_ERROR("failed to open file!");
 
         const size_t fileSize = static_cast<size_t>(file.tellg());
         std::vector<char> buffer(fileSize);
@@ -148,7 +148,7 @@ namespace pe
     std::string Shader::PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions &options)
     {
         if (m_cache.GetShaderCode().empty() || m_cache.GetSourcePath().empty())
-            throw std::runtime_error("source file was empty");
+            PE_ERROR("source file was empty");
 
         shaderc::PreprocessedSourceCompilationResult result = m_compiler.PreprocessGlsl(
                 m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options);
@@ -165,7 +165,7 @@ namespace pe
     void Shader::CompileFileToAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options)
     {
         if (m_cache.GetShaderCode().empty() || m_cache.GetSourcePath().empty())
-            throw std::runtime_error("source file was empty");
+            PE_ERROR("source file was empty");
 
         shaderc::AssemblyCompilationResult result = m_compiler.CompileGlslToSpvAssembly(
                 m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options
@@ -184,7 +184,7 @@ namespace pe
     void Shader::CompileAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options)
     {
         if (m_cache.GetAssembly().empty())
-            throw std::runtime_error("assembly was empty");
+            PE_ERROR("assembly was empty");
 
         shaderc::SpvCompilationResult result = m_compiler.AssembleToSpv(m_cache.GetAssembly(), options);
 
@@ -201,7 +201,7 @@ namespace pe
     void Shader::CompileFile(shaderc_shader_kind kind, shaderc::CompileOptions &options)
     {
         if (m_cache.GetShaderCode().empty() || m_cache.GetSourcePath().empty())
-            throw std::runtime_error("source file was empty");
+            PE_ERROR("source file was empty");
 
         shaderc::SpvCompilationResult module = m_compiler.CompileGlslToSpv(
                 m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options);

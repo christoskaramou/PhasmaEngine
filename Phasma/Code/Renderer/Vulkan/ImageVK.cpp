@@ -97,16 +97,16 @@ namespace pe
         if (imageInfo.tiling == VK_IMAGE_TILING_OPTIMAL)
         {
             if (!fProps.optimalTilingFeatures)
-                throw std::runtime_error("createImage(): wrong format error, no optimal tiling features supported.");
+                PE_ERROR("createImage(): wrong format error, no optimal tiling features supported.");
         }
         else if (imageInfo.tiling == VK_IMAGE_TILING_LINEAR)
         {
             if (!fProps.linearTilingFeatures)
-                throw std::runtime_error("createImage(): wrong format error, no linear tiling features supported.");
+                PE_ERROR("createImage(): wrong format error, no linear tiling features supported.");
         }
         else
         {
-            throw std::runtime_error("createImage(): wrong format error.");
+            PE_ERROR("createImage(): wrong format error.");
         }
 
         VkImageFormatProperties ifProps;
@@ -117,7 +117,7 @@ namespace pe
             ifProps.maxExtent.height < imageInfo.height ||
             ifProps.maxMipLevels < imageInfo.mipLevels ||
             !(ifProps.sampleCounts & imageInfo.samples))
-            throw std::runtime_error("createImage(): image format properties error!");
+            PE_ERROR("createImage(): image format properties error!");
 
 
         imageInfo.width = imageInfo.width % 2 != 0 ? imageInfo.width - 1 : imageInfo.width;
@@ -316,7 +316,7 @@ namespace pe
         }
         else
         {
-            throw std::runtime_error("Transition image layout invalid combination of layouts");
+            PE_ERROR("Transition image layout invalid combination of layouts");
         }
 
         vkCmdPipelineBarrier(
@@ -480,16 +480,16 @@ namespace pe
         if (imageInfo.tiling == VK_IMAGE_TILING_OPTIMAL)
         {
             if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
-                throw std::runtime_error("generateMipMaps(): Image tiling error, linear filter is not supported.");
+                PE_ERROR("generateMipMaps(): Image tiling error, linear filter is not supported.");
         }
         else if (imageInfo.tiling == VK_IMAGE_TILING_LINEAR)
         {
             if (!(fProps.linearTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
-                throw std::runtime_error("generateMipMaps(): Image tiling error, linear filter is not supported.");
+                PE_ERROR("generateMipMaps(): Image tiling error, linear filter is not supported.");
         }
         else
         {
-            throw std::runtime_error("generateMipMaps(): Image tiling error.");
+            PE_ERROR("generateMipMaps(): Image tiling error.");
         }
 
         std::vector<CommandBuffer*> commandBuffers(imageInfo.mipLevels);

@@ -176,7 +176,7 @@ namespace pe
             else if (pInfo[i].pBuffer != nullptr)
                 textureWriteSets[i] = wSetBuffer(pInfo[i].binding, pInfo[i].pBuffer, pInfo[i].bufferUsage);
             else
-                throw std::runtime_error("Write set type mismatch");
+                PE_ERROR("Write set type mismatch");
         }
 
         vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);

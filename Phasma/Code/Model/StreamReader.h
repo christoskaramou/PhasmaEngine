@@ -51,7 +51,7 @@ namespace pe
             // Check if the stream has no errors and is ready for I/O operations
             if (!stream || !(*stream))
             {
-                throw std::runtime_error("Unable to create a valid input stream for uri: " + filename);
+                PE_ERROR("Unable to create a valid input stream for uri: " + filename);
             }
 
             return stream;

@@ -141,7 +141,7 @@ namespace pe
         VkResult result = vkAcquireNextImageKHR(RHII.device, m_handle, UINT64_MAX, semaphore->Handle(), fenceVK, &imageIndex);
 
         if (result != VK_SUCCESS)
-            throw std::runtime_error("Aquire Next Image error");
+            PE_ERROR("Aquire Next Image error");
 
         return imageIndex;
     }

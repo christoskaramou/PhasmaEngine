@@ -62,7 +62,7 @@ namespace pe
     void Model::readGltf(const std::filesystem::path &file)
     {
         if (file.extension() != ".gltf" && file.extension() != ".glb")
-            throw glTF::GLTFException("Model type not supported");
+            PE_ERROR("Model type not supported");
 
         std::string manifest;
 
@@ -103,7 +103,7 @@ namespace pe
             ss << "Microsoft::glTF::Deserialize failed: ";
             ss << ex.what();
 
-            throw std::runtime_error(ss.str());
+            PE_ERROR(ss.str());
         }
     }
 
@@ -192,7 +192,7 @@ namespace pe
                 break;
             }
             default:
-                throw glTF::GLTFException("Unsupported accessor ComponentType");
+                PE_ERROR("Unsupported accessor ComponentType");
             }
         }
     }
@@ -261,7 +261,7 @@ namespace pe
                 break;
             }
             default:
-                throw glTF::GLTFException("Unsupported accessor ComponentType");
+                PE_ERROR("Unsupported accessor ComponentType");
             }
         }
     }
@@ -624,7 +624,7 @@ namespace pe
         // Generate local node matrix
         if (!node.HasValidTransformType())
         {
-            throw glTF::InvalidGLTFException("Node " + node.name + " has Invalid TransformType");
+            PE_ERROR("Node " + node.name + " has Invalid TransformType");
             delete newNode;
         }
         newNode->transformationType = static_cast<TransformationType>(node.GetTransformationType());
@@ -687,7 +687,7 @@ namespace pe
                 {
                     const glTF::Accessor &accessor = document->accessors.Get(samp.inputAccessorId);
                     if (accessor.componentType != glTF::COMPONENT_FLOAT)
-                        throw std::runtime_error("Animation componentType is not equal to float");
+                        PE_ERROR("Animation componentType is not equal to float");
                     const auto data = resourceReader->ReadBinaryData<float>(*document, accessor);
                     sampler.inputs.insert(sampler.inputs.end(), data.begin(), data.end());
 
@@ -707,7 +707,7 @@ namespace pe
                 {
                     const glTF::Accessor &accessor = document->accessors.Get(samp.outputAccessorId);
                     if (accessor.componentType != glTF::COMPONENT_FLOAT)
-                        throw std::runtime_error("Animation componentType is not equal to float");
+                        PE_ERROR("Animation componentType is not equal to float");
                     const auto data = resourceReader->ReadBinaryData<float>(*document, accessor);
 
                     switch (accessor.type)
@@ -731,7 +731,7 @@ namespace pe
                     }
                     default:
                     {
-                        throw glTF::GLTFException("unknown accessor type for TRS");
+                        PE_ERROR("unknown accessor type for TRS");
                     }
                     }
                 }

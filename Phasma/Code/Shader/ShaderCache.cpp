@@ -20,37 +20,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#include "Core/Base.h"
 #include "Shader/ShaderCache.h"
 
 namespace pe
 {
     std::string ReadFileAsString(const std::string &filename)
     {
-        std::ifstream file(filename, std::ios::ate);
-
-        if (!file.is_open())
-            throw std::runtime_error("failed to open file!");
-
-        const size_t fileSize = static_cast<size_t>(file.tellg());
-        std::string buffer(fileSize, ' ');
-        file.seekg(0);
-        file.read(buffer.data(), fileSize);
-        file.close();
-
-        return buffer;
+        FileSystem file(filename, std::ios::in | std::ios::ate);
+        if (file.IsOpen())
+            return file.ReadAll();
+        
+        return "";
     }
 
     // Parse includes recursively and return the full code
     std::string ParseFileAndIncludes(const std::string &sourcePath)
     {
         if (!std::filesystem::exists(sourcePath))
-            throw std::runtime_error("file does not exist!");
+            PE_ERROR("file does not exist!");
 
         std::filesystem::path path(sourcePath);
-        std::string code = ReadFileAsString(path.string());
-        std::stringstream stream(code);
+        FileSystem file(path.string(), std::ios::in | std::ios::ate);
+        if (!file.IsOpen())
+            PE_ERROR("file could not be opened!");
+        
+        std::string code = file.ReadAll();
+        file.SetIndexRead(0);
         std::string line;
-        while (std::getline(stream, line))
+        while (line = file.ReadLine(), !line.empty())
         {
             size_t pos = line.find("#include");
             if (pos != std::string::npos)
@@ -87,12 +85,11 @@ namespace pe
             std::filesystem::create_directories(path.remove_filename());
 
         std::string shaderTempFile = m_tempFilePath + ".asm";
-        std::ofstream fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
-        if (!fileTemp.is_open())
-            return;
 
-        fileTemp.write(m_assembly.data(), m_assembly.size());
-        fileTemp.close();
+        FileSystem fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
+        if (!fileTemp.IsOpen())
+            PE_ERROR("file could not be opened!");
+        fileTemp.Write(m_assembly);
     }
 
     void ShaderCache::WriteToTempFile()
@@ -100,11 +97,6 @@ namespace pe
         std::filesystem::path path(m_tempFilePath);
         if (!std::filesystem::exists(path.remove_filename()))
             std::filesystem::create_directories(path.remove_filename());
-
-        std::string shaderTempFile = m_tempFilePath + ".temp";
-        std::ofstream fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
-        if (!fileTemp.is_open())
-            return;
 
         // Remove licence spam
         size_t licenceStart = m_code.find("/*");
@@ -120,24 +112,26 @@ namespace pe
         }
 
         std::string hashStr = "// ShaderHash: " + std::to_string(m_hash) + "\n\n";
-        fileTemp.write(hashStr.data(), hashStr.size());
-        fileTemp.write(m_code.data(), m_code.size());
-        fileTemp.close();
+
+        std::string shaderTempFile = m_tempFilePath + ".temp";
+
+        FileSystem fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
+        if (!fileTemp.IsOpen())
+            PE_ERROR("file could not be opened!");
+        
+        fileTemp.Write(hashStr);
+        fileTemp.Write(m_code);
     }
 
     size_t ShaderCache::ReadHash()
     {
         std::string shaderTempFile = m_tempFilePath + ".temp";
 
-        std::ifstream file(shaderTempFile, std::ios::in | std::ios::ate);
-        if (!file.is_open())
+        FileSystem file(shaderTempFile, std::ios::in | std::ios::ate);
+        if (!file.IsOpen())
             return std::numeric_limits<size_t>::max();
 
-        const size_t fileSize = static_cast<size_t>(file.tellg());
-        std::string buffer;
-        file.seekg(0);
-        std::getline(file, buffer);
-        file.close();
+        std::string buffer = file.ReadAll();
 
         std::regex regex("\\s+");
         buffer = std::regex_replace(buffer, regex, "");
@@ -165,19 +159,15 @@ namespace pe
     std::vector <uint32_t> ShaderCache::ReadSpvFromFile()
     {
         std::string shaderSpvFile = m_tempFilePath + ".spv";
-        std::ifstream file(shaderSpvFile, std::ios::in | std::ios::ate | std::ios::binary);
-        if (!file.is_open())
-            throw std::runtime_error("failed to open file!");
+        FileSystem file(shaderSpvFile, std::ios::in | std::ios::ate | std::ios::binary);
+        if (!file.IsOpen())
+            PE_ERROR("failed to open file!");
 
-        size_t size = static_cast<size_t>(file.tellg());
-        std::string buffer(size, '\0');
-        file.seekg(0);
-        file.read(buffer.data(), size);
-        file.close();
+        std::string buffer = file.ReadAll();
 
         std::vector <uint32_t> spirv;
-        spirv.resize(size / sizeof(uint32_t));
-        memcpy(spirv.data(), buffer.data(), size);
+        spirv.resize(file.Size() / sizeof(uint32_t));
+        memcpy(spirv.data(), buffer.data(), file.Size());
 
         return spirv;
     }
@@ -189,11 +179,10 @@ namespace pe
             std::filesystem::create_directories(path.remove_filename());
 
         std::string shaderSpvFile = m_tempFilePath + ".spv";
-        std::ofstream file(shaderSpvFile, std::ios::out | std::ios::trunc | std::ios::binary);
-        if (!file.is_open())
+        FileSystem file(shaderSpvFile, std::ios::out | std::ios::trunc | std::ios::binary);
+        if (!file.IsOpen())
             return;
 
-        file.write(reinterpret_cast<const char *>(spirv.data()), spirv.size() * sizeof(uint32_t));
-        file.close();
+        file.Write(reinterpret_cast<const char *>(spirv.data()), spirv.size() * sizeof(uint32_t));
     }
 }

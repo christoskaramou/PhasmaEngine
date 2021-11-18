@@ -92,7 +92,7 @@ GPUTimer::GPUTimer()
     vkGetPhysicalDeviceProperties(RHII.gpu, &gpuProps);
 
     if (!gpuProps.limits.timestampComputeAndGraphics)
-        throw std::runtime_error("Timestamps not supported");
+        PE_ERROR("Timestamps not supported");
 
     timestampPeriod = gpuProps.limits.timestampPeriod;
 

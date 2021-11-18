@@ -76,7 +76,7 @@ namespace pe
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
         if (!pixels)
-            throw std::runtime_error("No pixel data loaded");
+            PE_ERROR("No pixel data loaded");
 
         Buffer *staging = Buffer::Create(
                 imageSize,
