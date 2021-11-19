@@ -77,6 +77,7 @@ int main(int argc, char* argv[])
 		frameTimer.Tick();
 	}
 
+	FileWatcher::DestroyWatchers();
 	context.DestroySystems();
 	delete window;
 
