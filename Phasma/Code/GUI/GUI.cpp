@@ -415,7 +415,8 @@ namespace pe
                 if (ImGui::IsMouseDoubleClicked(0))
                 {
                     std::string s = Path::Assets + "Shaders\\" + shaderList[i];
-                    system(s.c_str());
+                    auto lambda = [s]() { system(s.c_str()); };
+                    Queue<Launch::AsyncNoWait>::Request(lambda);
                 }
             }
         }

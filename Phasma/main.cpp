@@ -70,6 +70,7 @@ int main(int argc, char* argv[])
 
 			context.DrawSystems();
 
+			// Add interval to reduce the cost of calling file operations
 			FileWatcher::FilesModified();
 		}
 		
