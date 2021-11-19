@@ -31,22 +31,6 @@ namespace pe
         return new shaderc_include_result{"", 0, message, strlen(message)};
     }
 
-    std::vector<char> ReadFile(const std::string &sourcePath)
-    {
-        std::ifstream file(sourcePath, std::ios::ate | std::ios::binary);
-
-        if (!file.is_open())
-            PE_ERROR("failed to open file!");
-
-        const size_t fileSize = static_cast<size_t>(file.tellg());
-        std::vector<char> buffer(fileSize);
-        file.seekg(0);
-        file.read(buffer.data(), fileSize);
-        file.close();
-
-        return buffer;
-    }
-
     shaderc_include_result *
     FileIncluder::GetInclude(const char *requested_source, shaderc_include_type, const char *requesting_source,
                              size_t)
@@ -68,12 +52,12 @@ namespace pe
             return MakeErrorIncludeResult("Cannot find or open include file.");
 
         FileInfo *file_info = new FileInfo
-                {
-                        full_path,
-                        ReadFile(full_path)
-                };
+        {
+            full_path,
+            FileSystem(full_path, std::ios_base::in | std::ios_base::ate | std::ios::binary).ReadAll()
+        };
 
-        included_files_.insert(full_path);
+        included_files.insert(full_path);
 
         shaderc_include_result *inlc_result = new shaderc_include_result();
         inlc_result->source_name = file_info->full_path.data();
@@ -87,7 +71,7 @@ namespace pe
 
     void FileIncluder::ReleaseInclude(shaderc_include_result *include_result)
     {
-        FileInfo *info = static_cast<FileInfo *>(include_result->user_data);
+        FileInfo *info = static_cast<FileInfo*>(include_result->user_data);
         delete info;
         delete include_result;
     }

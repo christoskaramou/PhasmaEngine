@@ -52,16 +52,17 @@ namespace pe
 
         void ReleaseInclude(shaderc_include_result *include_result) override;
 
-        inline const std::unordered_set <std::string> &file_path_trace() const
-        { return included_files_; }
+        inline const std::unordered_set<std::string> &file_path_trace() const
+        { return included_files; }
 
     private:
-        struct FileInfo
+        class FileInfo
         {
+        public:
             const std::string full_path;
-            std::vector<char> contents;
+            std::string contents;
         };
-        std::unordered_set <std::string> included_files_;
+        std::unordered_set <std::string> included_files;
     };
 
     class Reflection;
