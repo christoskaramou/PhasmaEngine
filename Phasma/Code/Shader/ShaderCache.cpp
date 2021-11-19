@@ -76,7 +76,6 @@ namespace pe
         m_tempFilePath = std::regex_replace(m_sourcePath, std::regex("Shaders"), "ShaderCache");
     }
 
-
     void ShaderCache::WriteToTempAsm()
     {
         std::filesystem::path path(m_tempFilePath);

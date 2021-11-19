@@ -69,6 +69,8 @@ int main(int argc, char* argv[])
 			frameTimer.timestamps[0] = static_cast<float>(frameTimer.Count());
 
 			context.DrawSystems();
+
+			FileWatcher::FilesModified();
 		}
 		
 		frameTimer.Delay(1.0 / static_cast<double>(GUI::fps) - frameTimer.Count());

@@ -20,7 +20,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Shader.h"
+#include "Shader/Shader.h"
+#include "ECS/Context.h"
+#include "Systems/EventSystem.h"
 
 namespace pe
 {
@@ -95,6 +97,10 @@ namespace pe
         std::string path = sourcePath;
         if (path.find(Path::Assets) == std::string::npos)
             path = Path::Assets + sourcePath;
+
+        // Watch the file for changes
+        auto modifyCallback = []() { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
+        FileWatcher::AddWatcher(path, modifyCallback);
 
         m_shaderType = shaderType;
 

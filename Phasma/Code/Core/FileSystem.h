@@ -61,9 +61,19 @@ namespace pe
     public:
         using Func = std::function<void()>;
 
-        FileWatcher(const std::string& file, Func&& callback = nullptr);
+        static void AddWatcher(const std::string& file, Func&& callback = nullptr);
+
+        static void RemoveWatcher(const std::string& file);
+
+        static void DestroyWatchers();
+
+        static std::vector<FileWatcher*> FilesModified();
 
     private:
+        FileWatcher() = default;
+
+        FileWatcher(const std::string& file, Func&& callback = nullptr);
+
         std::time_t GetFileTime();
         
         bool FileModified();
@@ -71,5 +81,7 @@ namespace pe
         std::string m_file;
         std::time_t m_time;
         Func m_callback;
+
+        inline static std::unordered_map<size_t, FileWatcher*> s_watchers{};
     };
 }
