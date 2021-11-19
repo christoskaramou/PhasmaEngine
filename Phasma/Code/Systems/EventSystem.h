@@ -26,13 +26,6 @@ SOFTWARE.
 
 namespace pe
 {
-    // An example of a class member function register called AClass::DoSomething(T t)
-    //      auto lambda = [this](const std::any& x) { DoSomething(std::any_cast<T>(x)); };
-    //      EventSystem::Get()->RegisterEventAction(EventType::X, lambda)
-    //
-    // Later somewhere else
-    //      EventSystem::Get()->DispatchEvent(EventType::X, data or std::any(data));
-
     enum class EventType
     {
         Quit,
@@ -55,15 +48,15 @@ namespace pe
         void Destroy() override;
 
         // Immediately dispatch a registered event
-        void DispatchEvent(EventType type, const std::any &data);
+        void DispatchEvent(EventType type, std::any&& data);
 
         void RegisterEvent(EventType type);
 
         void UnregisterEvent(EventType type);
 
-        void RegisterEventAction(EventType type, Func &&func);
+        void RegisterEventAction(EventType type, Func&& func);
 
-        void UnregisterEventAction(EventType type, Func &&func);
+        void UnregisterEventAction(EventType type, Func&& func);
 
         void PushEvent(EventType type);
 
@@ -74,7 +67,7 @@ namespace pe
         void ClearEvents();
 
     private:
-        std::unordered_map <EventType, Delegate<std::any>> m_events;
-        std::unordered_set <EventType> m_pushedEventTypes;
+        std::unordered_map<EventType, Delegate<std::any>> m_events;
+        std::unordered_set<EventType> m_pushedEventTypes;
     };
 }
