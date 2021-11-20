@@ -37,8 +37,6 @@ namespace pe
     class CommandBuffer;
     class Descriptor;
     class Buffer;
-    class Node;
-    class Skin;
 
     class Model : public NoCopy
     {
