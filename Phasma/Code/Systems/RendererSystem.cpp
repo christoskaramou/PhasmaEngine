@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "RendererSystem.h"
-#include "ECS/Context.h"
 #include "Systems/EventSystem.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Semaphore.h"

@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "Systems/CameraSystem.h"
-#include "ECS/Component.h"
 
 namespace pe
 {

@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "Window/Window.h"
-#include "ECS/Context.h"
 #include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/LightSystem.h"

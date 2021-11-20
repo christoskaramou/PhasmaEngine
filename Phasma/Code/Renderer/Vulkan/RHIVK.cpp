@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "Renderer/RHI.h"
-#include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
 #include "Renderer/Command.h"
 #include "Renderer/Fence.h"

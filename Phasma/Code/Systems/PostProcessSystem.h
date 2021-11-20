@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "ECS/System.h"
-
 namespace pe
 {
     class PostProcessSystem : public ISystem

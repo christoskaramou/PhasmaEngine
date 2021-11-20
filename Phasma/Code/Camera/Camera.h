@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "ECS/Component.h"
 #include "Renderer/Compute.h"
 
 namespace pe

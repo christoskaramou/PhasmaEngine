@@ -22,7 +22,6 @@ SOFTWARE.
 
 #if PE_VULKAN
 #include "Renderer/Surface.h"
-#include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
 #include "Renderer/RHI.h"
 

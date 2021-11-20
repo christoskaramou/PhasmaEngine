@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Component.h"
-
 namespace pe
 {
     class Context;

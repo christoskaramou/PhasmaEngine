@@ -22,9 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Entity.h"
-#include "System.h"
-
 #define CONTEXT Context::Get()
 #define WORLD_ENTITY CONTEXT->WorldEntity
 

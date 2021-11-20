@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "ECS/Component.h"
-
 namespace pe
 {
     class Descriptor;

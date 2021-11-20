@@ -23,7 +23,6 @@ SOFTWARE.
 #if PE_VULKAN
 #include "Renderer/Image.h"
 #include "Renderer/RHI.h"
-#include "ECS/Context.h"
 #include "Renderer/Command.h"
 #include "Renderer/Buffer.h"
 

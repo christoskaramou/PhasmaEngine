@@ -23,7 +23,6 @@ SOFTWARE.
 #include "Systems/PostProcessSystem.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
-#include "ECS/Context.h"
 #include "PostProcess/Bloom.h"
 #include "PostProcess/DOF.h"
 #include "PostProcess/FXAA.h"

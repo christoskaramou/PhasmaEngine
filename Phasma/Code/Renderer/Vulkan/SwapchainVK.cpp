@@ -27,7 +27,6 @@ SOFTWARE.
 #include "Renderer/Semaphore.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Surface.h"
-#include "ECS/Context.h"
 
 namespace pe
 {

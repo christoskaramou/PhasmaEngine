@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "Core/FileSystem.h"
-#include "ECS/Context.h"
 #include "Systems/EventSystem.h"
 
 namespace pe

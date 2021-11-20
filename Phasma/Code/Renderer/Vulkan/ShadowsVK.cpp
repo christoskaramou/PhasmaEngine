@@ -34,7 +34,6 @@ SOFTWARE.
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/RenderPass.h"
-#include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe

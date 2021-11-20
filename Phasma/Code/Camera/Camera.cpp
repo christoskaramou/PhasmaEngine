@@ -25,7 +25,6 @@ SOFTWARE.
 #include "Renderer/Compute.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
-#include "ECS/Context.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe

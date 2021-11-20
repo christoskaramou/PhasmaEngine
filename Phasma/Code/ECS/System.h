@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "ECSBase.h"
-
 namespace pe
 {
     class Context;

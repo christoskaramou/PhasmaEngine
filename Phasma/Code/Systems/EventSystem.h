@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "ECS/System.h"
-
 namespace pe
 {
     enum class EventType

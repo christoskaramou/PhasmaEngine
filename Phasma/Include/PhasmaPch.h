@@ -73,3 +73,9 @@ SOFTWARE.
 #include "Core/Queue.h"
 #include "Core/Timer.h"
 #include "Core/Node.h"
+
+#include "ECS/ECSBase.h"
+#include "ECS/Component.h"
+#include "ECS/System.h"
+#include "ECS/Entity.h"
+#include "ECS/Context.h"

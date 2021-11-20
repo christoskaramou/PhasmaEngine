@@ -27,7 +27,6 @@ SOFTWARE.
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
 #include "Systems/EventSystem.h"
-#include "ECS/Context.h"
 #include "Model/Model.h"
 #include "Systems/CameraSystem.h"
 #include "Window/Window.h"

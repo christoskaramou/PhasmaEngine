@@ -21,8 +21,6 @@ SOFTWARE.
 */
 
 #include "CameraSystem.h"
-#include "ECS/Entity.h"
-#include "ECS/Context.h"
 
 namespace pe
 {

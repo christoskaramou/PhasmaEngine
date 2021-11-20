@@ -23,7 +23,6 @@ SOFTWARE.
 #pragma once
 
 #include "GUI/GUI.h"
-#include "ECS/System.h"
 #include "Renderer/Light.h"
 
 namespace pe
