@@ -23,7 +23,7 @@ SOFTWARE.
 #pragma once
 
 #if _DEBUG
-    #define PE_PRINT_MSG(msg)               \
+    #define PE_PRINT_ERROR_MSG(msg)         \
         {                                   \
             std::stringstream ss;           \
             ss << "Error: " << msg;         \
@@ -32,13 +32,13 @@ SOFTWARE.
             std::cout << ss.str();          \
         }
 #else
-    #define PE_PRINT_MSG(msg)
+    #define PE_PRINT_ERROR_MSG(msg)
 #endif
 
-#define PE_ERROR(msg)           \
-    {                           \
-        PE_PRINT_MSG(msg);      \
-        exit(-1);               \
+#define PE_ERROR(msg)               \
+    {                               \
+        PE_PRINT_ERROR_MSG(msg);    \
+        exit(-1);                   \
     }
 
 namespace pe
