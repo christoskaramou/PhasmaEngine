@@ -82,8 +82,8 @@ namespace pe
             path = Path::Assets + sourcePath;
 
         // Watch the file for changes
-        auto modifyCallback = []() { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
-        FileWatcher::AddWatcher(path, modifyCallback);
+        auto modifiedCallback = []() { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
+        FileWatcher::AddWatcher(path, modifiedCallback);
 
         m_shaderType = shaderType;
 

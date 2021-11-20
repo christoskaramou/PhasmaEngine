@@ -27,118 +27,105 @@ SOFTWARE.
 namespace pe
 {
     Timer::Timer()
+    {
+        m_start = {};
+        m_system_delay = 0;
+    }
 
-    noexcept
-{
-    m_start = {};
-}
+    void Timer::Start()
+    {
+        m_start = std::chrono::high_resolution_clock::now();
+    }
 
-void Timer::Start()
+    double Timer::Count()
+    {
+        const std::chrono::duration<double> t_duration = std::chrono::high_resolution_clock::now() - m_start;
+        return t_duration.count();
+    }
 
-noexcept
-{
-m_start = std::chrono::high_resolution_clock::now();
-}
+    void Timer::ThreadSleep(double seconds)
+    {
+        if (seconds <= 0.0f)
+            return;
 
-double Timer::Count()
+        const std::chrono::nanoseconds delay{(static_cast<size_t>(NANO(seconds)) - m_system_delay)};
 
-noexcept
-{
-const std::chrono::duration<double> t_duration = std::chrono::high_resolution_clock::now() - m_start;
-return t_duration.
+        Timer timer;
+        timer.Start();
+        std::this_thread::sleep_for(delay);
+        m_system_delay = static_cast<size_t>(NANO(timer.Count())) - delay.count();
+    }
 
-count();
+    FrameTimer::FrameTimer() : Timer()
+    {
+        m_duration = {};
+        delta = 0.0f;
+        time = 0.0f;
+        timestamps.resize(22);
+    }
 
-}
+    void FrameTimer::Tick()
+    {
+        m_duration = std::chrono::high_resolution_clock::now() - m_start;
+        delta = m_duration.count();
+        time +=
+        delta;
+    }
 
-FrameTimer::FrameTimer() : Timer()
-{
-    system_delay = 0;
-    m_duration = {};
-    delta = 0.0f;
-    time = 0.0f;
-    timestamps.resize(22);
-}
+    GPUTimer::GPUTimer()
+    {
+        _cmd = nullptr;
 
-void FrameTimer::Delay(double seconds)
-{
-    if (seconds <= 0.0f)
-        return;
+        VkPhysicalDeviceProperties gpuProps;
+        vkGetPhysicalDeviceProperties(RHII.gpu, &gpuProps);
 
-    const std::chrono::nanoseconds delay{(static_cast<size_t>(NANO(seconds)) - system_delay)};
+        if (!gpuProps.limits.timestampComputeAndGraphics)
+            PE_ERROR("Timestamps not supported");
 
-    static Timer timer;
-    timer.Start();
-    std::this_thread::sleep_for(delay);
-    system_delay = static_cast<size_t>(NANO(timer.Count())) - delay.count();
-}
+        timestampPeriod = gpuProps.limits.timestampPeriod;
 
+        VkQueryPoolCreateInfo qpci{};
+        qpci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        qpci.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        qpci.queryCount = 2;
 
-void FrameTimer::Tick()
+        VkQueryPool pool;
+        vkCreateQueryPool(RHII.device, &qpci, nullptr, &pool);
+        queryPool = pool;
+    }
 
-noexcept
-{
-m_duration = std::chrono::high_resolution_clock::now() - m_start;
-delta = m_duration.count();
-time +=
-delta;
-}
+    void GPUTimer::Reset()
+    {
+        vkCmdResetQueryPool(_cmd->Handle(), queryPool, 0, 2);
+    }
 
-GPUTimer::GPUTimer()
-{
-    _cmd = nullptr;
+    void GPUTimer::Start(CommandBuffer *cmd)
+    {
+        _cmd = cmd;
+        Reset();
+        vkCmdWriteTimestamp(_cmd->Handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
+    }
 
-    VkPhysicalDeviceProperties gpuProps;
-    vkGetPhysicalDeviceProperties(RHII.gpu, &gpuProps);
+    float GPUTimer::End()
+    {
+        vkCmdWriteTimestamp(_cmd->Handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
+        return GetTime();
+    }
 
-    if (!gpuProps.limits.timestampComputeAndGraphics)
-        PE_ERROR("Timestamps not supported");
+    float GPUTimer::GetTime()
+    {
+        VkResult res = vkGetQueryPoolResults(RHII.device, queryPool, 0, 2, 2 * sizeof(uint64_t), &queries, sizeof(uint64_t),
+                                            VK_QUERY_RESULT_64_BIT);
 
-    timestampPeriod = gpuProps.limits.timestampPeriod;
+        if (res != VK_SUCCESS)
+            return 0.f;
 
-    VkQueryPoolCreateInfo qpci{};
-    qpci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-    qpci.queryType = VK_QUERY_TYPE_TIMESTAMP;
-    qpci.queryCount = 2;
+        return static_cast<float>(queries[1] - queries[0]) * timestampPeriod * 1e-6f;
+    }
 
-    VkQueryPool pool;
-    vkCreateQueryPool(RHII.device, &qpci, nullptr, &pool);
-    queryPool = pool;
-}
-
-void GPUTimer::Reset()
-{
-    vkCmdResetQueryPool(_cmd->Handle(), queryPool, 0, 2);
-}
-
-void GPUTimer::Start(CommandBuffer *cmd)
-{
-    _cmd = cmd;
-    Reset();
-    vkCmdWriteTimestamp(_cmd->Handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
-}
-
-float GPUTimer::End()
-{
-    vkCmdWriteTimestamp(_cmd->Handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
-    return GetTime();
-}
-
-float GPUTimer::GetTime()
-{
-    VkResult res = vkGetQueryPoolResults(RHII.device, queryPool, 0, 2, 2 * sizeof(uint64_t), &queries, sizeof(uint64_t),
-                                         VK_QUERY_RESULT_64_BIT);
-
-    if (res != VK_SUCCESS)
-        return 0.f;
-
-    return static_cast<float>(queries[1] - queries[0]) * timestampPeriod * 1e-6f;
-}
-
-void GPUTimer::Destroy()
-{
-    if (queryPool)
-        vkDestroyQueryPool(RHII.device, queryPool, nullptr);
-}
-
+    void GPUTimer::Destroy()
+    {
+        if (queryPool)
+            vkDestroyQueryPool(RHII.device, queryPool, nullptr);
+    }
 }

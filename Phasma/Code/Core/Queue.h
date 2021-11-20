@@ -31,6 +31,7 @@ namespace pe
         AsyncNoWait, // Does not block the main thread, useful for loading.
         Sync,
         SyncDeferred,
+        All // Used for convenience to call all the above in one go.
     };
 
     template<Launch launch>
@@ -84,7 +85,14 @@ namespace pe
 
         inline static void ExecuteRequests()
         {
-            if constexpr(launch == Launch::Async)
+            if constexpr(launch == Launch::All)
+            {
+                Queue<Launch::AsyncNoWait>::ExecuteRequests();
+			    Queue<Launch::Async>::ExecuteRequests();
+			    Queue<Launch::SyncDeferred>::ExecuteRequests();
+			    Queue<Launch::AsyncDeferred>::ExecuteRequests();
+            }
+            else if constexpr(launch == Launch::Async)
             {
                 GetFutures();
             }

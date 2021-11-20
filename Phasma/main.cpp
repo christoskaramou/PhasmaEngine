@@ -47,6 +47,8 @@ int main(int argc, char* argv[])
 	auto* pps = context.CreateSystem<PostProcessSystem>();
 
 	//context.InitSystems();
+	
+	FileWatcher::StartWatching();
 
 	FrameTimer& frameTimer = FrameTimer::Instance();
 
@@ -60,24 +62,16 @@ int main(int argc, char* argv[])
 		if (!window->isMinimized())
 		{
 			context.UpdateSystems(frameTimer.delta);
-
-			Queue<Launch::AsyncNoWait>::ExecuteRequests();
-			Queue<Launch::Async>::ExecuteRequests();
-			Queue<Launch::SyncDeferred>::ExecuteRequests();
-			Queue<Launch::AsyncDeferred>::ExecuteRequests();
+			Queue<Launch::All>::ExecuteRequests();
 			frameTimer.timestamps[0] = static_cast<float>(frameTimer.Count());
-
 			context.DrawSystems();
-
-			// Add interval to reduce the cost of calling file operations
-			FileWatcher::FilesModified();
 		}
 		
-		frameTimer.Delay(1.0 / static_cast<double>(GUI::fps) - frameTimer.Count());
+		frameTimer.ThreadSleep(1.0 / static_cast<double>(GUI::fps) - frameTimer.Count());
 		frameTimer.Tick();
 	}
 
-	FileWatcher::DestroyWatchers();
+	FileWatcher::RemoveWatchers();
 	context.DestroySystems();
 	delete window;
 

@@ -85,17 +85,40 @@ namespace pe
 
     void FileWatcher::AddWatcher(const std::string& file, Func&& callback)
     {
+        if (file.empty() || callback == nullptr)
+            PE_ERROR("FileWatcher: Invalid parameters");
+
+        if (!std::filesystem::exists(file))
+            PE_ERROR("FileWatcher: File does not exist");
+
         StringHash hash(file);
 
+        if (GetWatcher(hash) != nullptr)
+            return;
+        
+        std::lock_guard<std::mutex> guard(s_mutex);
+        s_watchers[hash] = new FileWatcher(file, std::forward<Func>(callback));
+    }
+
+    const FileWatcher* FileWatcher::GetWatcher(StringHash hash)
+    {
         auto it = s_watchers.find(hash);
         if (it != s_watchers.end())
-            delete it->second;
-        
-        s_watchers[hash] = new FileWatcher(file, std::forward<Func>(callback));
+            return it->second;
+
+        return nullptr;
+    }
+    
+    const FileWatcher* FileWatcher::GetWatcher(const std::string& file)
+    {
+        StringHash hash(file);
+        return GetWatcher(hash);
     }
 
     void FileWatcher::RemoveWatcher(const std::string& file)
     {
+        std::lock_guard<std::mutex> guard(s_mutex);
+
         StringHash hash(file);
         auto it = s_watchers.find(hash);
         if (it != s_watchers.end())
@@ -105,41 +128,55 @@ namespace pe
         }
     }
 
-    void FileWatcher::DestroyWatchers()
+    void FileWatcher::RemoveWatchers()
     {
+        std::lock_guard<std::mutex> guard(s_mutex);
+
+        StopWatching();
+        
         for (auto& it : s_watchers)
             delete it.second;
         s_watchers.clear();
     }
 
-    std::vector<FileWatcher*> FileWatcher::FilesModified()
+    void FileWatcher::Watch()
     {
-        std::vector<FileWatcher*> modified{};
+        std::lock_guard<std::mutex> guard(s_mutex);
 
         for (auto& watcher : s_watchers)
-        {
-            if (watcher.second->FileModified())
-                modified.push_back(watcher.second);
-        }
+            watcher.second->WatchFile();
+    }
 
-        return modified;
+    void FileWatcher::StartWatching(double interval)
+    {
+        if (s_watching)
+            return;
+
+        s_watching = true;
+        auto watchLambda = [interval]()
+        {
+            Timer timer;
+            while (s_watching)
+            {
+                timer.ThreadSleep(interval);
+                Watch();
+            }
+        };
+
+        Queue<Launch::AsyncNoWait>::Request(watchLambda);
     }
 
     FileWatcher::FileWatcher(const std::string& file, Func&& callback)
-     : m_file{file}, m_time{GetFileTime()}, m_callback{ callback } {}
+     : m_file{file}, m_time{GetFileTime()}, m_callback{callback} {}
 
-    bool FileWatcher::FileModified()
+    void FileWatcher::WatchFile()
     {
         std::time_t time = GetFileTime();
-        if (m_time == time)
-            return false;
-
-        m_time = time;
-        
-        if (m_callback)
+        if (m_time != time)
+        {
+            m_time = time;
             m_callback();
-
-        return true;
+        }
     }
 
     // returns the last time the file was modified

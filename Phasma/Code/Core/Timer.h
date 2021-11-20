@@ -36,36 +36,28 @@ namespace pe
     class Timer
     {
     public:
-        Timer()
+        Timer();
 
-        noexcept;
+        void Start();
 
-        void Start()
+        double Count();
 
-        noexcept;
-
-        double Count()
-
-        noexcept;
+        void ThreadSleep(double seconds);
 
     protected:
         std::chrono::high_resolution_clock::time_point m_start;
+        size_t m_system_delay;
     };
 
     class FrameTimer : public Timer
     {
     public:
-        void Tick()
-
-        noexcept;
-
-        void Delay(double seconds = 0.0f);
+        void Tick();
 
         double delta;
         double time;
         std::vector<double> timestamps{};
     private:
-        size_t system_delay;
         std::chrono::duration<double> m_duration{};
 
     public:

@@ -64,10 +64,10 @@ SOFTWARE.
 #endif
 
 #include "Core/Settings.h"
+#include "Core/Hash.h"
 #include "Core/Math.h"
 #include "Core/Base.h"
 #include "Core/FileSystem.h"
-#include "Core/Hash.h"
 #include "Core/Path.h"
 #include "Core/Delegate.h"
 #include "Core/Queue.h"

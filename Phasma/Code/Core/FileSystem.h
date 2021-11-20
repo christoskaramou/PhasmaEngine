@@ -61,27 +61,39 @@ namespace pe
     public:
         using Func = std::function<void()>;
 
-        static void AddWatcher(const std::string& file, Func&& callback = nullptr);
+        static void AddWatcher(const std::string& file, Func&& callback);
+
+        static const FileWatcher* GetWatcher(StringHash hash);
+
+        static const FileWatcher* GetWatcher(const std::string& file);
 
         static void RemoveWatcher(const std::string& file);
 
-        static void DestroyWatchers();
+        static void RemoveWatchers();
 
-        static std::vector<FileWatcher*> FilesModified();
+        static void Watch();
+
+        static void StartWatching(double interval = 0.25);
+
+        inline static void StopWatching() { s_watching = false; }
+
+        inline static bool Watching() { return s_watching; }
+
+        std::time_t GetFileTime();
+        
+        void WatchFile();
 
     private:
         FileWatcher() = default;
 
-        FileWatcher(const std::string& file, Func&& callback = nullptr);
-
-        std::time_t GetFileTime();
-        
-        bool FileModified();
+        FileWatcher(const std::string& file, Func&& callback);
 
         std::string m_file;
         std::time_t m_time;
         Func m_callback;
 
         inline static std::unordered_map<size_t, FileWatcher*> s_watchers{};
+        inline static std::atomic_bool s_watching{false};
+        inline static std::mutex s_mutex{};
     };
 }
