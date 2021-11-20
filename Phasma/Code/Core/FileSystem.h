@@ -61,27 +61,31 @@ namespace pe
     public:
         using Func = std::function<void()>;
 
-        static void AddWatcher(const std::string& file, Func&& callback);
+        static void Add(const std::string& file, Func&& callback);
 
-        static const FileWatcher* GetWatcher(StringHash hash);
+        static const FileWatcher* Get(StringHash hash);
 
-        static const FileWatcher* GetWatcher(const std::string& file);
+        static const FileWatcher* Get(const std::string& file);
 
-        static void RemoveWatcher(const std::string& file);
+        static void Erase(StringHash hash);
 
-        static void RemoveWatchers();
+        static void Erase(const std::string& file);
 
-        static void Watch();
+        static void Clear();
 
-        static void StartWatching(double interval = 0.25);
+        static void Start(double interval = 0.25);
 
-        inline static void StopWatching() { s_watching = false; }
+        inline static void Stop() { s_running = false; }
 
-        inline static bool Watching() { return s_watching; }
+        inline static bool IsRunning() { return s_running; }
+
+        void Watch();
 
         std::time_t GetFileTime();
         
-        void WatchFile();
+        inline std::string GetFile() { return m_file; };
+
+        inline Func GetCallback() { return m_callback; }
 
     private:
         FileWatcher() = default;
@@ -93,7 +97,7 @@ namespace pe
         Func m_callback;
 
         inline static std::unordered_map<size_t, FileWatcher*> s_watchers{};
-        inline static std::atomic_bool s_watching{false};
+        inline static std::atomic_bool s_running{false};
         inline static std::mutex s_mutex{};
     };
 }

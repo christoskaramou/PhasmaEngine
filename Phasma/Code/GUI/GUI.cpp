@@ -114,7 +114,7 @@ namespace pe
         Scripts();
     }
 
-    static bool s_modelLoading = false;
+    static std::atomic_bool s_modelLoading = false;
 
     void GUI::async_fileDialog_ImGuiMenuItem(const char *menuLabel, const char *dialogTitle,
                                              const std::vector<const char *> &filter)
@@ -123,27 +123,24 @@ namespace pe
         {
             auto lambda = [dialogTitle, filter]()
             {
-                const char *result = tinyfd_openFileDialog(dialogTitle, "", static_cast<int>(filter.size()),
-                                                           filter.data(), "", 0);
+                const char *result = tinyfd_openFileDialog(dialogTitle, "", static_cast<int>(filter.size()), filter.data(), "", 0);
                 if (result)
                 {
-                    const std::string path(result);
-                    std::string folderPath = path.substr(0, path.find_last_of('\\') + 1);
-                    std::string modelName = path.substr(path.find_last_of('\\') + 1);
-                    Model::models.emplace_back();
-                    Model &model = Model::models.back();
-                    auto update = []()
-                    { s_modelLoading = true; };
-                    auto signal = []()
-                    { s_modelLoading = false; };
-                    RHII.WaitDeviceIdle();
-                    auto loadAsync = [&model, folderPath, modelName]()
-                    { model.Load(folderPath, modelName); };
-                    Queue<Launch::AsyncNoWait>::Request(loadAsync, update, signal);
-                    GUI::modelList.push_back(modelName);
-                    GUI::model_scale.push_back({1.f, 1.f, 1.f});
-                    GUI::model_pos.push_back({0.f, 0.f, 0.f});
-                    GUI::model_rot.push_back({0.f, 0.f, 0.f});
+                    auto loadAsync = [result]()
+                    {
+                        s_modelLoading = true;
+                        
+                        std::filesystem::path path(result);
+                        Model::Load(path);
+
+                        GUI::modelList.push_back(path.filename().string());
+                        GUI::model_scale.push_back({1.f, 1.f, 1.f});
+                        GUI::model_pos.push_back({0.f, 0.f, 0.f});
+                        GUI::model_rot.push_back({0.f, 0.f, 0.f});
+
+                        s_modelLoading = false;
+                    };
+                    Queue<Launch::AsyncNoWait>::Request(loadAsync);
                 }
             };
 

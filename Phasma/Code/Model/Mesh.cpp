@@ -90,17 +90,17 @@ namespace pe
 
     void Primitive::loadTexture(
             MaterialType type,
-            const std::string &folderPath,
+            const std::filesystem::path &file,
             const Microsoft::glTF::Image *image,
             const Microsoft::glTF::Document *document,
             const Microsoft::glTF::GLTFResourceReader *resourceReader
     )
     {
-        std::string path = folderPath;
+        std::filesystem::path path = file.parent_path();
         if (image)
-            path = folderPath + image->uri;
+            path /= image->uri;
 
-        // get the right texture
+        // get the correct texture reference
         Image **tex;
         switch (type)
         {
@@ -134,9 +134,9 @@ namespace pe
         }
 
         // Check if it is already loaded
-        if (Mesh::uniqueTextures.find(path) != Mesh::uniqueTextures.end())
+        if (Mesh::uniqueTextures.find(path.string()) != Mesh::uniqueTextures.end())
         {
-            *tex = Mesh::uniqueTextures[path];
+            *tex = Mesh::uniqueTextures[path.string()];
         }
         else
         {
@@ -144,7 +144,7 @@ namespace pe
             unsigned char *pixels;
             //stbi_set_flip_vertically_on_load(true);
             if (!image || image->bufferViewId.empty())
-                pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+                pixels = stbi_load(path.string().c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
             else
             {
                 const auto data = resourceReader->ReadBinaryData(*document, *image);
@@ -175,8 +175,7 @@ namespace pe
 
             ImageCreateInfo info{};
             info.format = VK_FORMAT_R8G8B8A8_UNORM;
-            info.mipLevels =
-                    static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
+            info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
             info.width = texWidth;
             info.height = texHeight;
             info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -201,7 +200,7 @@ namespace pe
 
             RHII.UnlockSubmits();
 
-            Mesh::uniqueTextures[path] = *tex;
+            Mesh::uniqueTextures[path.string()] = *tex;
         }
     }
 

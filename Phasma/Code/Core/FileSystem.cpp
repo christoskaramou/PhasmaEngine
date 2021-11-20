@@ -83,7 +83,7 @@ namespace pe
         m_fstream.close();
     }
 
-    void FileWatcher::AddWatcher(const std::string& file, Func&& callback)
+    void FileWatcher::Add(const std::string& file, Func&& callback)
     {
         if (file.empty() || callback == nullptr)
             PE_ERROR("FileWatcher: Invalid parameters");
@@ -93,14 +93,14 @@ namespace pe
 
         StringHash hash(file);
 
-        if (GetWatcher(hash) != nullptr)
+        if (Get(hash) != nullptr)
             return;
         
         std::lock_guard<std::mutex> guard(s_mutex);
         s_watchers[hash] = new FileWatcher(file, std::forward<Func>(callback));
     }
 
-    const FileWatcher* FileWatcher::GetWatcher(StringHash hash)
+    const FileWatcher* FileWatcher::Get(StringHash hash)
     {
         auto it = s_watchers.find(hash);
         if (it != s_watchers.end())
@@ -109,17 +109,22 @@ namespace pe
         return nullptr;
     }
     
-    const FileWatcher* FileWatcher::GetWatcher(const std::string& file)
+    const FileWatcher* FileWatcher::Get(const std::string& file)
     {
         StringHash hash(file);
-        return GetWatcher(hash);
+        return Get(hash);
     }
 
-    void FileWatcher::RemoveWatcher(const std::string& file)
+    void FileWatcher::Erase(const std::string& file)
+    {
+        StringHash hash(file);
+        Erase(hash);
+    }
+
+    void FileWatcher::Erase(StringHash hash)
     {
         std::lock_guard<std::mutex> guard(s_mutex);
 
-        StringHash hash(file);
         auto it = s_watchers.find(hash);
         if (it != s_watchers.end())
         {
@@ -128,38 +133,31 @@ namespace pe
         }
     }
 
-    void FileWatcher::RemoveWatchers()
+    void FileWatcher::Clear()
     {
         std::lock_guard<std::mutex> guard(s_mutex);
-
-        StopWatching();
         
         for (auto& it : s_watchers)
             delete it.second;
         s_watchers.clear();
     }
 
-    void FileWatcher::Watch()
+    void FileWatcher::Start(double interval)
     {
-        std::lock_guard<std::mutex> guard(s_mutex);
-
-        for (auto& watcher : s_watchers)
-            watcher.second->WatchFile();
-    }
-
-    void FileWatcher::StartWatching(double interval)
-    {
-        if (s_watching)
+        if (s_running)
             return;
 
-        s_watching = true;
         auto watchLambda = [interval]()
         {
             Timer timer;
-            while (s_watching)
+            s_running = true;
+            while (s_running)
             {
                 timer.ThreadSleep(interval);
-                Watch();
+
+                std::lock_guard<std::mutex> guard(s_mutex);
+                for (auto& watcher : s_watchers)
+                    watcher.second->Watch();
             }
         };
 
@@ -169,7 +167,7 @@ namespace pe
     FileWatcher::FileWatcher(const std::string& file, Func&& callback)
      : m_file{file}, m_time{GetFileTime()}, m_callback{callback} {}
 
-    void FileWatcher::WatchFile()
+    void FileWatcher::Watch()
     {
         std::time_t time = GetFileTime();
         if (m_time != time)

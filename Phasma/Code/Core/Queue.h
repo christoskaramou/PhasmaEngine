@@ -40,44 +40,36 @@ namespace pe
     public:
         using Func = std::function<void()>;
 
-        inline static void Request(Func &&func, Func &&update = nullptr, Func &&signal = nullptr)
+        inline static void Request(Func &&func, Func &&signal = nullptr)
         {
+            if (func == nullptr)
+                PE_ERROR("Cannot add null function to queue.");
+
             std::lock_guard <std::mutex> guard(s_requestMutex);
 
             if constexpr(launch == Launch::Async)
             {
-                if (update)
-                    update();
                 s_futures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
                 s_signals.push_back(std::forward<Func>(signal));
             }
             else if constexpr(launch == Launch::AsyncDeferred)
             {
-                if (update)
-                    update();
                 s_futures.push_back(std::async(std::launch::deferred, std::forward<Func>(func)));
                 s_signals.push_back(std::forward<Func>(signal));
             }
             else if constexpr(launch == Launch::AsyncNoWait)
             {
-                if (update)
-                    update();
-                s_updatesNoWait.push_back(std::forward<Func>(update));
                 s_noWaitFutures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
                 s_signalsNoWait.push_back(std::forward<Func>(signal));
             }
             else if constexpr(launch == Launch::Sync)
             {
-                if (update)
-                    update();
-                std::forward<Func>(func)();
+                func();
                 if (signal)
                     signal();
             }
             else if constexpr(launch == Launch::SyncDeferred)
             {
-                if (update)
-                    update();
                 s_deferredSync.push_back(std::forward<Func>(func));
                 s_signals.push_back(std::forward<Func>(signal));
             }
@@ -127,14 +119,10 @@ namespace pe
                     if (s_signalsNoWait[i])
                         s_signalsNoWait[i]();
 
-                    s_updatesNoWait.erase(s_updatesNoWait.begin() + i);
                     s_signalsNoWait.erase(s_signalsNoWait.begin() + i);
                 }
                 else
                 {
-                    if (s_updatesNoWait[i])
-                        s_updatesNoWait[i]();
-
                     ++it;
                     ++i;
                 }
@@ -173,7 +161,6 @@ namespace pe
         inline static std::deque <std::future<void>> s_futures;
         inline static std::deque <Func> s_signals;
         inline static std::deque <std::future<void>> s_noWaitFutures;
-        inline static std::deque <Func> s_updatesNoWait;
         inline static std::deque <Func> s_signalsNoWait;
         inline static std::deque <Func> s_deferredSync;
         inline static std::mutex s_requestMutex;

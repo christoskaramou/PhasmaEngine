@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
 
 	//context.InitSystems();
 	
-	FileWatcher::StartWatching();
+	FileWatcher::Start();
 
 	FrameTimer& frameTimer = FrameTimer::Instance();
 
@@ -71,7 +71,8 @@ int main(int argc, char* argv[])
 		frameTimer.Tick();
 	}
 
-	FileWatcher::RemoveWatchers();
+	FileWatcher::Clear();
+	FileWatcher::Stop();
 	context.DestroySystems();
 	window->Destroy();
 

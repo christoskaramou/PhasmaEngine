@@ -91,6 +91,8 @@ namespace pe
         Buffer *vertexBuffer;
         Buffer *indexBuffer;
         uint32_t numberOfVertices = 0, numberOfIndices = 0;
+        
+        static void Load(const std::filesystem::path &file);
 
         void draw(uint16_t alphaMode);
 
@@ -100,7 +102,7 @@ namespace pe
 
         void calculateBoundingSphere();
 
-        void loadNode(pe::Node *parent, const Microsoft::glTF::Node &node, const std::string &folderPath);
+        void loadNode(pe::Node *parent, const Microsoft::glTF::Node &node, const std::filesystem::path &file);
 
         void loadAnimations();
 
@@ -108,9 +110,9 @@ namespace pe
 
         void readGltf(const std::filesystem::path &file);
 
-        void loadModelGltf(const std::string &folderPath, const std::string &modelName);
+        void loadModelGltf(const std::filesystem::path &file);
 
-        void getMesh(pe::Node *node, const std::string &meshID, const std::string &folderPath) const;
+        void getMesh(pe::Node *node, const std::string &meshID, const std::filesystem::path &file) const;
 
         template<typename T>
         void getVertexData(std::vector <T> &vec, const std::string &accessorName,
@@ -119,8 +121,6 @@ namespace pe
         void getIndexData(std::vector <uint32_t> &vec, const Microsoft::glTF::MeshPrimitive &primitive) const;
 
         Microsoft::glTF::Image *getImage(const std::string &textureID) const;
-
-        void Load(const std::string &folderPath, const std::string &modelName);
 
         void createVertexBuffer();
 

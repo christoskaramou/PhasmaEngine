@@ -264,7 +264,7 @@ namespace pe
         }
     }
 
-    void Model::getMesh(pe::Node *node, const std::string &meshID, const std::string &folderPath) const
+    void Model::getMesh(pe::Node *node, const std::string &meshID, const std::filesystem::path &file) const
     {
         if (!node || meshID.empty()) return;
         const auto &mesh = document->meshes.Get(meshID);
@@ -315,12 +315,11 @@ namespace pe
             const auto normalImage = getImage(material.normalTexture.textureId);
             const auto occlusionImage = getImage(material.occlusionTexture.textureId);
             const auto emissiveImage = getImage(material.emissiveTexture.textureId);
-            myPrimitive.loadTexture(MaterialType::BaseColor, folderPath, baseColorImage, document, resourceReader);
-            myPrimitive.loadTexture(MaterialType::MetallicRoughness, folderPath, metallicRoughnessImage, document,
-                                    resourceReader);
-            myPrimitive.loadTexture(MaterialType::Normal, folderPath, normalImage, document, resourceReader);
-            myPrimitive.loadTexture(MaterialType::Occlusion, folderPath, occlusionImage, document, resourceReader);
-            myPrimitive.loadTexture(MaterialType::Emissive, folderPath, emissiveImage, document, resourceReader);
+            myPrimitive.loadTexture(MaterialType::BaseColor, file, baseColorImage, document, resourceReader);
+            myPrimitive.loadTexture(MaterialType::MetallicRoughness, file, metallicRoughnessImage, document, resourceReader);
+            myPrimitive.loadTexture(MaterialType::Normal, file, normalImage, document, resourceReader);
+            myPrimitive.loadTexture(MaterialType::Occlusion, file, occlusionImage, document, resourceReader);
+            myPrimitive.loadTexture(MaterialType::Emissive, file, emissiveImage, document, resourceReader);
 
             if (baseColorImage)
                 myPrimitive.name = baseColorImage->name;
@@ -358,13 +357,13 @@ namespace pe
         }
     }
 
-    void Model::loadModelGltf(const std::string &folderPath, const std::string &modelName)
+    void Model::loadModelGltf(const std::filesystem::path &file)
     {
         // reads and gets the document and resourceReader objects
-        readGltf(std::filesystem::path(folderPath + modelName));
+        readGltf(file);
 
         for (auto &node : document->GetDefaultScene().nodes)
-            loadNode({}, document->nodes.Get(node), folderPath);
+            loadNode({}, document->nodes.Get(node), file);
         loadAnimations();
         loadSkins();
 
@@ -378,21 +377,26 @@ namespace pe
         }
     }
 
-    void Model::Load(const std::string &folderPath, const std::string &modelName)
+    void Model::Load(const std::filesystem::path &file)
     {
+        RHII.WaitDeviceIdle();
+        
+        Model::models.emplace_back();
+        Model &model = Model::models.back();
+
         // This works as a flag to when the loading is done
-        render = false;
+        model.render = false;
 
-        loadModelGltf(folderPath, modelName);
+        model.loadModelGltf(file);
         //calculateBoundingSphere();
-        name = modelName;
-        fullPathName = folderPath + modelName;
-        createVertexBuffer();
-        createIndexBuffer();
-        createUniformBuffers();
-        createDescriptorSets();
+        model.name = file.filename().string();
+        model.fullPathName = file.string();
+        model.createVertexBuffer();
+        model.createIndexBuffer();
+        model.createUniformBuffers();
+        model.createDescriptorSets();
 
-        render = true;
+        model.render = true;
     }
 
     void Model::updateAnimation(uint32_t index, float time)
@@ -611,7 +615,7 @@ namespace pe
         boundingSphere = vec4(center, sphereRadius);
     }
 
-    void Model::loadNode(pe::Node *parent, const glTF::Node &node, const std::string &folderPath)
+    void Model::loadNode(pe::Node *parent, const glTF::Node &node, const std::filesystem::path &file)
     {
         pe::Node *newNode = new pe::Node{};
         newNode->index = !node.id.empty() ? static_cast<uint32_t>(document->nodes.GetIndex(node.id)) : -1;
@@ -634,9 +638,9 @@ namespace pe
         // Node with children
         for (auto &child : node.children)
         {
-            loadNode(newNode, document->nodes.Get(child), folderPath);
+            loadNode(newNode, document->nodes.Get(child), file);
         }
-        getMesh(newNode, node.meshId, folderPath);
+        getMesh(newNode, node.meshId, file);
         if (parent)
             parent->children.push_back(newNode);
         //else

@@ -83,7 +83,7 @@ namespace pe
 
         // Watch the file for changes
         auto modifiedCallback = []() { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
-        FileWatcher::AddWatcher(path, modifiedCallback);
+        FileWatcher::Add(path, modifiedCallback);
 
         m_shaderType = shaderType;
 

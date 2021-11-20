@@ -76,7 +76,7 @@ namespace pe
 
         void loadTexture(
                 MaterialType type,
-                const std::string &folderPath,
+                const std::filesystem::path &file,
                 const Microsoft::glTF::Image *image = nullptr,
                 const Microsoft::glTF::Document *document = nullptr,
                 const Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr
