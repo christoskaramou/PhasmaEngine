@@ -26,14 +26,12 @@ namespace pe
 {
     class Context;
 
-    class Window
+    class Window : public IHandle<Window, SDL_Window*>
     {
     public:
-        static Window *Create(int x = 50, int y = 50, int w = 1280, int h = 720,
-                              uint32_t flags = /*SDL_WINDOW_MAXIMIZED |*/ SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN |
-                                                                          SDL_WINDOW_VULKAN);
+        Window(int x, int y, int w, int h, uint32_t flags);
 
-        void Destroy();
+        ~Window();
 
         bool ProcessEvents(double delta);
 
@@ -44,11 +42,5 @@ namespace pe
         bool isMinimized();
 
         void SetTitle(const std::string &title);
-
-        SDL_Window *Handle()
-        { return m_handle; }
-
-    private:
-        SDL_Window *m_handle = nullptr;
     };
 }

@@ -38,7 +38,7 @@ int main(int argc, char* argv[])
 	Context& context = *CONTEXT;
 	context.CreateSystem<EventSystem>();
 
-	Window* window = Window::Create();
+	Window* window = Window::Create(50, 50, 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
 	RHII.Init(window->Handle()); // TODO: Remove this from here (was in Renderer)
 
 	auto* cs = context.CreateSystem<CameraSystem>();
@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
 
 	FileWatcher::RemoveWatchers();
 	context.DestroySystems();
-	delete window;
+	window->Destroy();
 
 	return 0;
 }

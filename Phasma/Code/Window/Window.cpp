@@ -29,43 +29,39 @@ SOFTWARE.
 
 namespace pe
 {
-    Window *Window::Create(int x, int y, int w, int h, uint32_t flags)
+    Window::Window(int x, int y, int w, int h, uint32_t flags)
     {
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
         {
             std::cout << SDL_GetError();
-            return nullptr;
+            return;
         }
 
-        Window *window = new Window();
-
-        if (!((window->m_handle = SDL_CreateWindow("", x, y, w, h, flags))))
+        m_handle = SDL_CreateWindow("", x, y, w, h, flags);
+        if (!m_handle)
         {
             std::cout << SDL_GetError();
-            delete window;
-            return nullptr;
+            return;
         }
 
-        auto lambda = [window](const std::any &title)
+        auto setTitle = [this](const std::any &title)
         {
-            window->SetTitle(std::any_cast<std::string>(title));
+            SetTitle(std::any_cast<std::string>(title));
         };
 
         EventSystem *eventSystem = CONTEXT->GetSystem<EventSystem>();
-        eventSystem->RegisterEventAction(EventType::SetWindowTitle, lambda);
+        eventSystem->RegisterEventAction(EventType::SetWindowTitle, setTitle);
+    }
 
-        return window;
+    Window::~Window()
+    {
+        SDL_DestroyWindow(m_handle);
+        SDL_Quit();
     }
 
     void Window::SetTitle(const std::string &title)
     {
         SDL_SetWindowTitle(m_handle, title.c_str());
-    }
-
-    void Window::Destroy()
-    {
-        SDL_DestroyWindow(m_handle);
-        SDL_Quit();
     }
 
     bool Window::ProcessEvents(double delta)
