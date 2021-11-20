@@ -126,7 +126,11 @@ namespace pe
         }
 
         for (auto* image : images)
+        {
+            // Invalidate the image handle, swapchain destroys it
+            image->Handle() = {};
             delete image;
+        }
     }
 
     uint32_t Swapchain::Aquire(Semaphore* semaphore, Fence* fence)
