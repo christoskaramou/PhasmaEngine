@@ -72,7 +72,6 @@ SOFTWARE.
 #include "Core/Delegate.h"
 #include "Core/Queue.h"
 #include "Core/Timer.h"
-#include "Core/Node.h"
 
 #include "ECS/ECSBase.h"
 #include "ECS/Component.h"

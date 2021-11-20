@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Core/Node.h"
+#include "Model/Node.h"
 #include "Model/Mesh.h"
 #include "Renderer/Buffer.h"
 

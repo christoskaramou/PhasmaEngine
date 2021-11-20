@@ -20,8 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Model.h"
-#include "Mesh.h"
+#include "Model/Model.h"
+#include "Model/Mesh.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Command.h"
 #include "Renderer/Image.h"

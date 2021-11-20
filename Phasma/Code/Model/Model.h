@@ -25,6 +25,7 @@ SOFTWARE.
 #include "Script/Script.h"
 #include "Systems/CameraSystem.h"
 #include "Model/Animation.h"
+#include "Model/Node.h"
 #include "GLTFSDK/GLTF.h"
 #include "GLTFSDK/GLTFResourceReader.h"
 #include "GLTFSDK/Document.h"
@@ -33,12 +34,11 @@ SOFTWARE.
 namespace pe
 {
     class Pipeline;
-
     class CommandBuffer;
-
     class Descriptor;
-
     class Buffer;
+    class Node;
+    class Skin;
 
     class Model : public NoCopy
     {

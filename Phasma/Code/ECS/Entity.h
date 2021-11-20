@@ -26,7 +26,7 @@ namespace pe
 {
     class Context;
 
-    class Entity : public Node
+    class Entity
     {
     public:
         Entity() : m_context(nullptr), m_id(NextID()), m_enabled(false)

@@ -27,6 +27,8 @@ SOFTWARE.
 
 namespace pe
 {
+    class Node;
+    
     struct AnimationChannel
     {
         enum PathType
