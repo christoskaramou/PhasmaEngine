@@ -29,13 +29,15 @@ namespace pe
     public:
         using Type = size_t;
 
-        Hash(const void *data, size_t size)
+        Hash() : m_hash(0) {};
+
+        Hash(const void *data, size_t size) : m_hash(0) { Combine(data, size); }
+
+        void Combine(const void *data, size_t size)
         {
-            const Type *array = reinterpret_cast<const Type *>(data);
+            const Type *array = reinterpret_cast<const Type*>(data);
             size_t arraySize = size / sizeof(Type);
             size_t bytesToFit = size % sizeof(Type);
-
-            m_hash = 0;
 
             for (size_t i = 0; i < arraySize; i++)
                 m_hash ^= std::hash<Type>()(array[i]) + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
@@ -50,11 +52,9 @@ namespace pe
             }
         }
 
-        bool operator==(const Hash &other)
-        { return m_hash == other.m_hash; }
+        bool operator==(const Hash &other) { return m_hash == other.m_hash; }
 
-        operator size_t()
-        { return m_hash; }
+        operator size_t() { return m_hash; }
 
     private:
         size_t m_hash;
@@ -63,10 +63,14 @@ namespace pe
     class StringHash : public Hash
     {
     public:
-        StringHash(const std::string &string) : Hash(string.data(), string.size())
-        {}
+        StringHash() : Hash() {};
+        
+        StringHash(const std::string &string) : Hash(string.data(), string.size()) {}
 
-        StringHash(const char *string) : Hash(string, strlen(string))
-        {}
+        StringHash(const char *string) : Hash(string, strlen(string)) {}
+
+        void Combine(const std::string &string) { Hash::Combine(string.data(), string.size()); }
+
+        void Combine(const char *string) { Hash::Combine(string, strlen(string)); }
     };
 }
