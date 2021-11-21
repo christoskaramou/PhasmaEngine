@@ -400,7 +400,6 @@ namespace pe
         ImGui::Begin("Shaders Folder", &shaders_open);
         if (ImGui::Button("Compile Shaders"))
         {
-            RHII.WaitDeviceIdle();
             CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders);
         }
         for (uint32_t i = 0; i < shaderList.size(); i++)
