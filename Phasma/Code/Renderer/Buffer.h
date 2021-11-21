@@ -91,6 +91,6 @@ namespace pe
     private:
         size_t size;
         void *data;
-        VmaAllocation allocation; // TODO: Move this from here
+        AllocationHandle allocation;
     };
 }

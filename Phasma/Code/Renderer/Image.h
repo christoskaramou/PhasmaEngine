@@ -114,7 +114,7 @@ namespace pe
 
         ImageViewHandle view;
         SamplerHandle sampler;
-        VmaAllocation allocation{};
+        AllocationHandle allocation;
         ImageCreateInfo imageInfo;
         ImageViewCreateInfo viewInfo;
         SamplerCreateInfo samplerInfo;

@@ -261,4 +261,5 @@ namespace pe
     using DebugMessengerHandle = ApiHandle<VkDebugUtilsMessengerEXT, Placeholder *>;
     using DeviceQueueHandle = ApiHandle<VkQueue, Placeholder *>;
     using DescriptorPoolHandle = ApiHandle<VkDescriptorPool, Placeholder *>;
+    using AllocationHandle = ApiHandle<VmaAllocation, Placeholder *>;
 }

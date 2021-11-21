@@ -42,9 +42,11 @@ namespace pe
         allocationCreateInfo.preferredFlags = properties;
 
         VkBuffer bufferVK;
+        VmaAllocation allocationVK;
         VmaAllocationInfo allocationInfo;
-        vmaCreateBuffer(RHII.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocation, &allocationInfo);
+        vmaCreateBuffer(RHII.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocationVK, &allocationInfo);
         m_handle = bufferVK;
+        allocation = allocationVK;
     }
 
     Buffer::~Buffer()

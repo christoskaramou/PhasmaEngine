@@ -141,10 +141,12 @@ namespace pe
         VmaAllocationCreateInfo allocationCreateInfo = {};
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
+        VkImage imageVK;
+        VmaAllocation allocationVK;
         VmaAllocationInfo allocationInfo;
-        VkImage vkImage;
-        vmaCreateImage(RHII.allocator, &imageInfoVK, &allocationCreateInfo, &vkImage, &allocation, &allocationInfo);
-        m_handle = vkImage;
+        vmaCreateImage(RHII.allocator, &imageInfoVK, &allocationCreateInfo, &imageVK, &allocationVK, &allocationInfo);
+        m_handle = imageVK;
+        allocation = allocationVK;
     }
 
 
