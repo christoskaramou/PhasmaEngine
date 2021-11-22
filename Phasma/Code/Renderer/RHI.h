@@ -114,7 +114,7 @@ namespace pe
         std::vector<CommandBuffer *> shadowCmdBuffers;
         std::vector<Fence *> fences;
         std::vector<Semaphore *> semaphores;
-        VmaAllocator allocator = nullptr;
+        AllocatorHandle allocator;
 
         SDL_Window *window;
         Surface *surface;

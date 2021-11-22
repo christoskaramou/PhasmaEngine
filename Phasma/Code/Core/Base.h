@@ -262,4 +262,5 @@ namespace pe
     using DeviceQueueHandle = ApiHandle<VkQueue, Placeholder *>;
     using DescriptorPoolHandle = ApiHandle<VkDescriptorPool, Placeholder *>;
     using AllocationHandle = ApiHandle<VmaAllocation, Placeholder *>;
+    using AllocatorHandle = ApiHandle<VmaAllocator, Placeholder *>;
 }

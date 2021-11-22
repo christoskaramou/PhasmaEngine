@@ -430,7 +430,9 @@ namespace pe
         allocator_info.instance = instance;
         allocator_info.vulkanApiVersion = apiVersion;
 
-        vmaCreateAllocator(&allocator_info, &allocator);
+        VmaAllocator allocatorVK;
+        vmaCreateAllocator(&allocator_info, &allocatorVK);
+        allocator = allocatorVK;
     }
 
     void RHI::GetGraphicsQueue()
