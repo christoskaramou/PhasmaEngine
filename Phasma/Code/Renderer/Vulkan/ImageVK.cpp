@@ -96,28 +96,17 @@ namespace pe
         if (imageInfo.tiling == VK_IMAGE_TILING_OPTIMAL)
         {
             if (!fProps.optimalTilingFeatures)
-                PE_ERROR("createImage(): wrong format error, no optimal tiling features supported.");
+                PE_ERROR("Image(): no optimal tiling features supported.");
         }
         else if (imageInfo.tiling == VK_IMAGE_TILING_LINEAR)
         {
             if (!fProps.linearTilingFeatures)
-                PE_ERROR("createImage(): wrong format error, no linear tiling features supported.");
+                PE_ERROR("Image(): no linear tiling features supported.");
         }
         else
         {
-            PE_ERROR("createImage(): wrong format error.");
+            PE_ERROR("Image(): tiling not supported.");
         }
-
-        VkImageFormatProperties ifProps;
-        vkGetPhysicalDeviceImageFormatProperties(RHII.gpu, (VkFormat)imageInfo.format, imageInfo.imageType, (VkImageTiling)imageInfo.tiling, _usage, VkImageCreateFlags(), &ifProps);
-
-        if (ifProps.maxArrayLayers < imageInfo.arrayLayers ||
-            ifProps.maxExtent.width < imageInfo.width ||
-            ifProps.maxExtent.height < imageInfo.height ||
-            ifProps.maxMipLevels < imageInfo.mipLevels ||
-            !(ifProps.sampleCounts & imageInfo.samples))
-            PE_ERROR("createImage(): image format properties error!");
-
 
         imageInfo.width = imageInfo.width % 2 != 0 ? imageInfo.width - 1 : imageInfo.width;
         imageInfo.height = imageInfo.height % 2 != 0 ? imageInfo.height - 1 : imageInfo.height;
@@ -251,17 +240,18 @@ namespace pe
         if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         {
             barrier.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, imageInfo.mipLevels, 0, imageInfo.arrayLayers };
+
             if (imageInfo.format == VK_FORMAT_D32_SFLOAT_S8_UINT || imageInfo.format == VK_FORMAT_D24_UNORM_S8_UINT)
-            {
                 barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-            }
         }
-        else barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, imageInfo.mipLevels, 0, imageInfo.arrayLayers };
+        else
+        {
+            barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, imageInfo.mipLevels, 0, imageInfo.arrayLayers };
+        }
 
         // Src, Dst AccessMasks and Pipeline Stages for pipelineBarrier
         if (oldLayout == VK_IMAGE_LAYOUT_PREINITIALIZED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
         {
-            barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
             barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
             srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -269,7 +259,7 @@ namespace pe
         }
         else if (oldLayout == VK_IMAGE_LAYOUT_PREINITIALIZED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
         {
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
             srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -281,8 +271,7 @@ namespace pe
             srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         }
-        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-            newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
         {
             barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -297,8 +286,7 @@ namespace pe
             srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
         }
-        else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-            newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+        else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         {
             barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
@@ -307,17 +295,19 @@ namespace pe
         }
         else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
         {
+            barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
             srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         }
         else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
         {
             srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            dstStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
         }
         else
         {
-            PE_ERROR("Transition image layout invalid combination of layouts");
+            PE_ERROR("Unsupported layout transition!");
         }
 
         vkCmdPipelineBarrier(
