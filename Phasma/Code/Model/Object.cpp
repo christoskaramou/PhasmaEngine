@@ -37,15 +37,17 @@ namespace pe
     void Object::createVertexBuffer()
     {
         vertexBuffer = Buffer::Create(
-                sizeof(float) * vertices.size(),
-                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            sizeof(float) * vertices.size(),
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VMA_MEMORY_USAGE_GPU_ONLY
+        );
 
         // Staging buffer
         Buffer *staging = Buffer::Create(
-                sizeof(float) * vertices.size(),
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            sizeof(float) * vertices.size(),
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VMA_MEMORY_USAGE_CPU_ONLY
+        );
         staging->Map();
         staging->CopyData(vertices.data());
         staging->Flush();
@@ -58,9 +60,10 @@ namespace pe
     void Object::createUniformBuffer(size_t size)
     {
         uniformBuffer = Buffer::Create(
-                size,
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            size,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+        );
         uniformBuffer->Map();
         uniformBuffer->Zero();
         uniformBuffer->Flush();
@@ -79,9 +82,10 @@ namespace pe
             PE_ERROR("No pixel data loaded");
 
         Buffer *staging = Buffer::Create(
-                imageSize,
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            imageSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VMA_MEMORY_USAGE_CPU_ONLY
+        );
         staging->Map();
         staging->CopyData(pixels);
         staging->Flush();

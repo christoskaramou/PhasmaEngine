@@ -70,7 +70,8 @@ namespace pe
         uniform = Buffer::Create(
             sizeof(ubo),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+        );
         uniform->Map();
         uniform->Zero();
         uniform->Flush();
@@ -97,7 +98,11 @@ namespace pe
             RHII.WaitGraphicsQueue();
             RHII.WaitAndLockSubmits();
 
-            Buffer* staging = Buffer::Create(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            Buffer* staging = Buffer::Create(
+                imageSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VMA_MEMORY_USAGE_CPU_ONLY
+            );
             staging->Map();
             staging->CopyData(pixels);
             staging->Flush();

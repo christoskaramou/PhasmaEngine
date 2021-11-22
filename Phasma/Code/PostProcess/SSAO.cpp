@@ -49,8 +49,11 @@ namespace pe
             scale = lerp(.1f, 1.f, scale * scale);
             kernel.emplace_back(sample * scale, 0.f);
         }
-        UB_Kernel = Buffer::Create(sizeof(vec4) * 16, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        UB_Kernel = Buffer::Create(
+            sizeof(vec4) * 16,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+        );
         UB_Kernel->Map();
         UB_Kernel->CopyData(kernel.data());
         UB_Kernel->Flush();
@@ -62,8 +65,11 @@ namespace pe
             noise.emplace_back(rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f, 1.f);
 
         const uint64_t bufSize = sizeof(vec4) * 16;
-        Buffer *staging = Buffer::Create(bufSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        Buffer *staging = Buffer::Create(
+            bufSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VMA_MEMORY_USAGE_CPU_ONLY
+        );
         staging->Map();
         staging->CopyData(noise.data());
         staging->Flush();
@@ -96,8 +102,11 @@ namespace pe
 
         staging->Destroy();
         // pvm uniform
-        UB_PVM = Buffer::Create(3 * sizeof(mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        UB_PVM = Buffer::Create(
+            3 * sizeof(mat4),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+        );
         UB_PVM->Map();
         UB_PVM->Zero();
         UB_PVM->Flush();

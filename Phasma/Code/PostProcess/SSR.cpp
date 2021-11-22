@@ -48,9 +48,10 @@ namespace pe
     void SSR::createSSRUniforms(std::map<std::string, Image *> &renderTargets)
     {
         UBReflection = Buffer::Create(
-                4 * sizeof(mat4),
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            4 * sizeof(mat4),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+        );
         UBReflection->Map();
         UBReflection->Zero();
         UBReflection->Flush();

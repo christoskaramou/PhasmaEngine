@@ -107,9 +107,10 @@ namespace pe
     void TAA::createUniforms(std::map<std::string, Image *> &renderTargets)
     {
         uniform = Buffer::Create(
-                sizeof(UBO),
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            sizeof(UBO),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+        );
         uniform->Map();
         uniform->Zero();
         uniform->Flush();

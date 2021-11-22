@@ -54,9 +54,10 @@ namespace pe
     void LightSystem::Init()
     {
         uniform = Buffer::Create(
-                sizeof(LightsUBO),
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            sizeof(LightsUBO),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+        );
         uniform->Map();
         uniform->Zero();
         uniform->Flush();

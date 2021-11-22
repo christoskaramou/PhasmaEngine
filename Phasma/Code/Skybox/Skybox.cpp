@@ -96,9 +96,10 @@ namespace pe
                 PE_ERROR("No pixel data loaded");
 
             Buffer *staging = Buffer::Create(
-                    imageSize,
-                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+                imageSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VMA_MEMORY_USAGE_CPU_ONLY
+            );
             staging->Map();
             staging->CopyData(pixels);
             staging->Flush();

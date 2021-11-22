@@ -87,7 +87,8 @@ namespace pe
         SBIn = Buffer::Create(
             sizeIn,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+        );
         SBIn->Map();
         SBIn->Zero();
         SBIn->Flush();
@@ -96,7 +97,8 @@ namespace pe
         SBOut = Buffer::Create(
             sizeOut,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            VMA_MEMORY_USAGE_GPU_TO_CPU
+        );
         SBOut->Map();
         SBOut->Zero();
         SBOut->Flush();

@@ -70,7 +70,11 @@ namespace pe
     void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image *> &renderTargets)
     {
         auto size = 4 * sizeof(mat4);
-        UBmotionBlur = Buffer::Create(size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        UBmotionBlur = Buffer::Create(
+            size,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+        );
         UBmotionBlur->Map();
         UBmotionBlur->Zero();
         UBmotionBlur->Flush();

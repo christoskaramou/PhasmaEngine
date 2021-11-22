@@ -53,9 +53,9 @@ namespace pe
     void Mesh::createUniformBuffers()
     {
         uniformBuffer = Buffer::Create(
-                sizeof(ubo),
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+            sizeof(ubo),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_MEMORY_USAGE_CPU_TO_GPU
         );
         uniformBuffer->Map();
         uniformBuffer->Zero();
@@ -77,9 +77,9 @@ namespace pe
 
             const size_t size = sizeof(mat4);
             primitive.uniformBuffer = Buffer::Create(
-                    size,
-                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                size,
+                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VMA_MEMORY_USAGE_CPU_TO_GPU
             );
             primitive.uniformBuffer->Map();
             primitive.uniformBuffer->CopyData(&factors);
@@ -162,9 +162,9 @@ namespace pe
             RHII.WaitAndLockSubmits();
 
             Buffer *staging = Buffer::Create(
-                    imageSize,
-                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                imageSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VMA_MEMORY_USAGE_CPU_ONLY
             );
             staging->Map();
             staging->CopyData(pixels);
