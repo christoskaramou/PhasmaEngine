@@ -78,9 +78,6 @@ namespace pe
         ~Descriptor();
 
         void UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo *pInfo);
-
-    private:
-        DescriptorLayout *layout;
     };
 
 }

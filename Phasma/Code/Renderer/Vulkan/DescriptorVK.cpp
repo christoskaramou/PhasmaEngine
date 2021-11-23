@@ -105,8 +105,6 @@ namespace pe
 
     Descriptor::Descriptor(DescriptorLayout* layout)
     {
-        this->layout = layout;
-
         VkDescriptorSetLayout dsetLayout = layout->Handle();
         VkDescriptorSetAllocateInfo allocateInfo{};
         allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -176,7 +174,7 @@ namespace pe
             else if (pInfo[i].pBuffer != nullptr)
                 textureWriteSets[i] = wSetBuffer(pInfo[i].binding, pInfo[i].pBuffer, pInfo[i].bufferUsage);
             else
-                PE_ERROR("Write set type mismatch");
+                PE_ERROR("Descriptor::UpdateDescriptor: pImage and pBuffer are nullptr");
         }
 
         vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
