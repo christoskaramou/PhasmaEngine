@@ -75,6 +75,5 @@ vec3 depthOfField(sampler2D sampler_color, sampler2D sampler_depth, vec2 tex_coo
     }
     return color /= tot;
 }
-    // -------------------------------
 
-    #endif
+#endif

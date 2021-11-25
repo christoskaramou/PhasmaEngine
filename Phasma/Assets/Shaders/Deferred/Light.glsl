@@ -425,6 +425,5 @@ vec3 VolumetricLighting(DirectionalLight light, vec3 worldPos, vec2 uv, mat4 lig
 
     return volumetricFactor * light.color.xyz * light.color.a * fogFactor * 10.0;
 }
-    // ----------------------------------------------------
 
-    #endif
+#endif

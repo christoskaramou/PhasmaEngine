@@ -89,4 +89,4 @@ vec4 ResolveTAA(vec2 texCoord, sampler2D tex_history, sampler2D tex_current, sam
     return vec4(ReinhardInverse(resolved), 1.0f);
 }
 
-    #endif
+#endif

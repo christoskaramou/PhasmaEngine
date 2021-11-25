@@ -119,4 +119,5 @@ vec3 ACESFilm(vec3 x)
     float e = 0.14f;
     return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
 }
-    #endif
+
+#endif
