@@ -45,9 +45,9 @@ namespace pe
             PE_ERROR("file could not be opened!");
         
         std::string code = file.ReadAll();
-        file.SetIndexRead(0);
+        file.SetReadCursor(0);
         std::string line;
-        while (line = file.ReadLine(), !line.empty())
+        while (line = file.ReadLine(), !file.EndOfFile())
         {
             size_t pos = line.find("#include");
             if (pos != std::string::npos)

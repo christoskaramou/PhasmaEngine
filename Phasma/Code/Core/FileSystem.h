@@ -35,9 +35,15 @@ namespace pe
 
         inline bool IsOpen() { return m_fstream.is_open(); }
 
-        void SetIndexRead(size_t index) { m_fstream.seekg(index); }
+        inline void SetReadCursor(size_t index) { m_fstream.seekg(index); }
 
-        void SetIndexWrite(size_t index) { m_fstream.seekp(index); }
+        inline void SetWriteCursor(size_t index) { m_fstream.seekp(index); }
+
+        inline size_t GetReadCursor() { return m_fstream.tellg(); }
+
+        inline size_t GetWriteCursor() { return m_fstream.tellp(); }
+        
+        inline bool EndOfFile() { return m_fstream.eof(); }
 
         std::string ReadAll();
 

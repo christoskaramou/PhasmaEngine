@@ -55,7 +55,7 @@ namespace pe
 
     std::string FileSystem::ReadAll()
     {
-        SetIndexRead(0);
+        SetReadCursor(0);
         std::stringstream ss;
         ss << m_fstream.rdbuf();
         return ss.str();
