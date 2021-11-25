@@ -24,15 +24,6 @@ SOFTWARE.
 
 namespace pe
 {
-    std::string ReadFileAsString(const std::string &filename)
-    {
-        FileSystem file(filename, std::ios::in | std::ios::ate);
-        if (file.IsOpen())
-            return file.ReadAll();
-        
-        return "";
-    }
-
     // Parse includes recursively and return the full code
     std::string ParseFileAndIncludes(const std::string &sourcePath)
     {
