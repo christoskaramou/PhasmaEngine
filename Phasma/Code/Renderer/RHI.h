@@ -109,6 +109,7 @@ namespace pe
         DeviceQueueHandle graphicsQueue, computeQueue, transferQueue;
         CommandPool *commandPool;
         CommandPool *commandPool2;
+        CommandPool *commandPoolTransfer;
         DescriptorPool *descriptorPool;
         std::vector<CommandBuffer *> dynamicCmdBuffers;
         std::vector<CommandBuffer *> shadowCmdBuffers;
@@ -128,7 +129,8 @@ namespace pe
                 PipelineStageFlags *waitStage,
                 uint32_t waitSemaphoreCount, Semaphore **waitSemaphore,
                 uint32_t signalSemaphoreCount, Semaphore **signalSemaphore,
-                Fence *signalFence);
+                Fence *signalFence,
+                bool useGraphicsQueue = true);
 
         void WaitFence(Fence *fence);
 
@@ -136,7 +138,8 @@ namespace pe
                 uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
                 PipelineStageFlags *waitStages,
                 uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-                uint32_t signalSemaphoresCount, Semaphore **signalSemaphores);
+                uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
+                bool useGraphicsQueue = true);
 
         void Present(
                 uint32_t swapchainCount, Swapchain **swapchains,
@@ -157,6 +160,8 @@ namespace pe
         void WaitDeviceIdle();
 
         void WaitGraphicsQueue();
+
+        void WaitTransferQueue();
 
         void UnlockSubmits();
 

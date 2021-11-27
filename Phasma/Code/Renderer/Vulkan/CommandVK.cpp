@@ -32,11 +32,11 @@ SOFTWARE.
 
 namespace pe
 {
-    CommandPool::CommandPool(uint32_t graphicsFamilyId)
+    CommandPool::CommandPool(uint32_t familyId)
     {
         VkCommandPoolCreateInfo cpci{};
         cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        cpci.queueFamilyIndex = graphicsFamilyId;
+        cpci.queueFamilyIndex = familyId;
         cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
         VkCommandPool commandPool;

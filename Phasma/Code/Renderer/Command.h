@@ -78,7 +78,7 @@ namespace pe
     class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
     {
     public:
-        CommandPool(uint32_t graphicsFamilyId);
+        CommandPool(uint32_t familyId);
 
         ~CommandPool();
     };

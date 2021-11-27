@@ -472,6 +472,7 @@ namespace pe
     {
         commandPool = CommandPool::Create(graphicsFamilyId);
         commandPool2 = CommandPool::Create(graphicsFamilyId);
+        commandPoolTransfer = CommandPool::Create(transferFamilyId);
     }
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
@@ -617,7 +618,8 @@ namespace pe
             PipelineStageFlags *waitStages,
             uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
             uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
-            Fence *signalFence
+            Fence *signalFence,
+            bool useGraphicsQueue
     )
     {
         std::vector <VkCommandBuffer> commandBuffersVK(commandBuffersCount);
@@ -646,7 +648,10 @@ namespace pe
         si.signalSemaphoreCount = signalSemaphoresCount;
         si.pSignalSemaphores = signalSemaphoresVK.data();
 
-        vkQueueSubmit(graphicsQueue, 1, &si, fenceVK);
+        if (useGraphicsQueue)
+            vkQueueSubmit(graphicsQueue, 1, &si, fenceVK);
+        else
+            vkQueueSubmit(transferQueue, 1, &si, fenceVK);
     }
 
     void RHI::WaitFence(Fence *fence)
@@ -659,17 +664,14 @@ namespace pe
             uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
             PipelineStageFlags *waitStages,
             uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-            uint32_t signalSemaphoresCount, Semaphore **signalSemaphores
+            uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
+            bool useGraphicsQueue
     )
     {
         Fence *fence = Fence::Create(false);
 
-        Submit(
-                commandBuffersCount, commandBuffers,
-                waitStages,
-                waitSemaphoresCount, waitSemaphores,
-                signalSemaphoresCount, signalSemaphores,
-                fence);
+        Submit(commandBuffersCount, commandBuffers, waitStages, waitSemaphoresCount,
+            waitSemaphores, signalSemaphoresCount, signalSemaphores, fence, useGraphicsQueue);
 
         VkFence fenceVK = fence->Handle();
         if (vkWaitForFences(device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
@@ -720,5 +722,11 @@ namespace pe
     void RHI::WaitGraphicsQueue()
     {
         vkQueueWaitIdle(graphicsQueue);
+    }
+
+    
+    void RHI::WaitTransferQueue()
+    {
+        vkQueueWaitIdle(transferQueue);
     }
 }

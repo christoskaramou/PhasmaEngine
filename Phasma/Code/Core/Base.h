@@ -89,16 +89,14 @@ namespace pe
     class ApiHandle final
     {
         // Only work with pointers
-        static_assert(std::is_pointer_v<VK_TYPE>,
-        "ApiHandle type is not a pointer");
-        static_assert(std::is_pointer_v<DX_TYPE>,
-        "ApiHandle type is not a pointer");
+        static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
+        static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
     public:
         using BaseVK = VK_TYPE;
         using BaseDX = DX_TYPE;
 
         ApiHandle() : m_handle(nullptr)
-        {};
+        {}
 
         ApiHandle(const VK_TYPE &handle) : m_handle(handle)
         {}

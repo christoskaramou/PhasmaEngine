@@ -48,14 +48,14 @@ namespace pe
 
     void Fence::Wait()
     {
-        VkFence fenceVK = Handle();
+        VkFence fenceVK = m_handle;
         if (vkWaitForFences(RHII.device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
             PE_ERROR("wait fences error!");
     }
 
     void Fence::Reset()
     {
-        VkFence fenceVK = Handle();
+        VkFence fenceVK = m_handle;
         vkResetFences(RHII.device, 1, &fenceVK);
     }
 }

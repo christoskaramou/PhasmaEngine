@@ -656,11 +656,12 @@ namespace pe
         info.CheckVkResultFn = nullptr;
         ImGui_ImplVulkan_Init(&info, renderPass->Handle());
 
-        CommandBuffer *cmd = RHII.dynamicCmdBuffers[0];
+        CommandBuffer *cmd = CommandBuffer::Create(RHII.commandPool2);
         cmd->Begin();
         ImGui_ImplVulkan_CreateFontsTexture(cmd->Handle());
         cmd->End();
         RHII.SubmitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
+        cmd->Destroy();
     }
 
     void GUI::InitGUI(bool show)
