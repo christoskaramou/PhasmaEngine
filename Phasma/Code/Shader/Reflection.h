@@ -62,11 +62,17 @@ namespace pe
     };
 
     class Shader;
+    class VertexInputBindingDescription;
+    class VertexInputAttributeDescription;
 
     class Reflection
     {
     public:
         void Init(Shader *shader);
+
+        std::vector <VertexInputBindingDescription> GetVertexBindings();
+
+        std::vector <VertexInputAttributeDescription> GetVertexAttributes();
 
         std::vector <ShaderInOutDesc> inputs{};
         std::vector <ShaderInOutDesc> outputs{};

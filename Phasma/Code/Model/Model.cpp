@@ -563,8 +563,7 @@ namespace pe
                         if (!primitive.cull)
                         {
                             // Cache this vector
-                            std::vector < Descriptor * >
-                            dsetHandles{node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet};
+                            std::vector<Descriptor*> dsetHandles{node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet};
                             cmd.BindDescriptors(Model::pipeline, (uint32_t) dsetHandles.size(), dsetHandles.data());
                             cmd.DrawIndexed(
                                     primitive.indicesSize,

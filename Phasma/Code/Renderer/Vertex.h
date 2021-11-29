@@ -54,11 +54,15 @@ namespace pe
 
         static std::vector <VertexInputBindingDescription> GetBindingDescriptionSkyBox();
 
+        static std::vector <VertexInputBindingDescription> GetBindingDescriptionDebugDraw();
+
         static std::vector <VertexInputAttributeDescription> GetAttributeDescriptionGeneral();
 
         static std::vector <VertexInputAttributeDescription> GetAttributeDescriptionGUI();
 
         static std::vector <VertexInputAttributeDescription> GetAttributeDescriptionSkyBox();
+
+        static std::vector <VertexInputAttributeDescription> GetAttributeDescriptionDebugDraw();
 
         vec3 position;
         vec2 uv;

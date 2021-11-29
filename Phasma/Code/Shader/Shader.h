@@ -72,17 +72,15 @@ namespace pe
     public:
         Shader(const std::string &sourcePath, ShaderType shaderType, const std::vector <Define> &defs = {});
 
-        inline ShaderType GetShaderType()
-        { return m_shaderType; }
+        inline ShaderType GetShaderType() { return m_shaderType; }
 
-        inline const uint32_t *GetSpriv()
-        { return m_spirv.data(); }
+        inline const uint32_t *GetSpriv() { return m_spirv.data(); }
 
-        inline size_t Size()
-        { return m_spirv.size(); }
+        inline size_t Size() { return m_spirv.size(); }
 
-        inline size_t BytesCount()
-        { return m_spirv.size() * sizeof(uint32_t); }
+        inline size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
+
+        inline Reflection& GetReflection() { return m_reflection; }
 
     private:
         std::string PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions &options);

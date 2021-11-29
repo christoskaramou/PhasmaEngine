@@ -130,8 +130,8 @@ namespace pe
 
         PipelineCreateInfo info{};
         info.pVertShader = &vert;
-        info.vertexInputBindingDescriptions = Vertex::GetBindingDescriptionGeneral();
-        info.vertexInputAttributeDescriptions = Vertex::GetAttributeDescriptionGeneral();
+        info.vertexInputBindingDescriptions = vert.GetReflection().GetVertexBindings();
+        info.vertexInputAttributeDescriptions = vert.GetReflection().GetVertexAttributes();
         info.width = static_cast<float>(SHADOWMAP_SIZE);
         info.height = static_cast<float>(SHADOWMAP_SIZE);
         info.pushConstantStage = PushConstantStage::Vertex;

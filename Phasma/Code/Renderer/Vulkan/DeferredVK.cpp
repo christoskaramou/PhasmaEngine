@@ -298,8 +298,8 @@ namespace pe
         PipelineCreateInfo info{};
         info.pVertShader = &vert;
         info.pFragShader = &frag;
-        info.vertexInputBindingDescriptions = Vertex::GetBindingDescriptionGeneral();
-        info.vertexInputAttributeDescriptions = Vertex::GetAttributeDescriptionGeneral();
+        info.vertexInputBindingDescriptions = vert.GetReflection().GetVertexBindings();
+        info.vertexInputAttributeDescriptions = vert.GetReflection().GetVertexAttributes();
         info.width = renderTargets["albedo"]->width_f;
         info.height = renderTargets["albedo"]->height_f;
         info.cullMode = CullMode::Front;

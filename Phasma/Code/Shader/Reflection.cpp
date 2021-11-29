@@ -23,6 +23,7 @@ SOFTWARE.
 #include "Reflection.h"
 #include "Shader.h"
 #include "spirv_cross/spirv_cross.hpp"
+#include "Renderer/Vertex.h"
 
 namespace pe
 {
@@ -67,6 +68,7 @@ namespace pe
 
             inputs.push_back(desc);
         }
+        std::sort(inputs.begin(), inputs.end(), [](auto &a, auto &b) { return a.location < b.location; });
 
         // Shader outputs
         for (const spirv_cross::Resource &resource : resources.stage_outputs)
@@ -78,6 +80,7 @@ namespace pe
 
             outputs.push_back(desc);
         }
+        std::sort(outputs.begin(), outputs.end(), [](auto &a, auto &b) { return a.location < b.location; });
 
         // Combined image samplers
         for (const spirv_cross::Resource &resource : resources.sampled_images)
@@ -115,5 +118,109 @@ namespace pe
 
             pushConstantBuffers.push_back(desc);
         }
+    }
+
+    uint32_t GetTypeSize(const ShaderInOutDesc& inout)
+    {
+        switch(inout.type->basetype)
+        {
+        case spirv_cross::SPIRType::Unknown:
+		case spirv_cross::SPIRType::Void:
+		case spirv_cross::SPIRType::AtomicCounter:
+		case spirv_cross::SPIRType::Struct:
+		case spirv_cross::SPIRType::Image:
+		case spirv_cross::SPIRType::SampledImage:
+		case spirv_cross::SPIRType::Sampler:
+		case spirv_cross::SPIRType::AccelerationStructure:
+		case spirv_cross::SPIRType::RayQuery:
+		case spirv_cross::SPIRType::ControlPointArray:
+		case spirv_cross::SPIRType::Interpolant:
+		case spirv_cross::SPIRType::Char:
+            return 0;
+		case spirv_cross::SPIRType::Boolean:
+            return sizeof(bool);
+		case spirv_cross::SPIRType::SByte:
+            return sizeof(int8_t);
+		case spirv_cross::SPIRType::UByte:
+            return sizeof(uint8_t);
+		case spirv_cross::SPIRType::Short:
+            return sizeof(int16_t);
+		case spirv_cross::SPIRType::UShort:
+            return sizeof(uint16_t);
+		case spirv_cross::SPIRType::Int:
+            return sizeof(int32_t);
+		case spirv_cross::SPIRType::UInt:
+            return sizeof(uint32_t);
+		case spirv_cross::SPIRType::Int64:
+            return sizeof(int64_t);
+		case spirv_cross::SPIRType::UInt64:
+            return sizeof(uint64_t);
+		case spirv_cross::SPIRType::Half:
+            return sizeof(float_t) / 2;
+		case spirv_cross::SPIRType::Float:
+            return sizeof(float_t);
+		case spirv_cross::SPIRType::Double:
+            return sizeof(double_t);
+        default:
+            return 0;
+        }
+    }
+
+    uint32_t GetAttibuteType(uint32_t size)
+    {
+        switch(size)
+        {
+        case 1:
+            return VK_FORMAT_R8_UNORM;
+        case 2:
+            return VK_FORMAT_R16_SFLOAT;
+        case 4:
+            return VK_FORMAT_R32_SFLOAT;
+        case 6:
+            return VK_FORMAT_R16G16B16_SFLOAT;
+        case 8:
+            return VK_FORMAT_R32G32_SFLOAT;
+        case 12:
+            return VK_FORMAT_R32G32B32_SFLOAT;
+        case 16:
+            return VK_FORMAT_R32G32B32A32_SFLOAT;
+        default:
+            return VK_FORMAT_UNDEFINED;
+        }
+    }
+
+    std::vector <VertexInputBindingDescription> Reflection::GetVertexBindings()
+    {
+        uint32_t stride = 0;
+        for (const ShaderInOutDesc &input : inputs)
+            stride += GetTypeSize(input) * input.type->vecsize * input.type->columns;
+
+        VertexInputBindingDescription binding;
+        binding.binding = 0;
+        binding.stride = stride;
+        binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        return { binding };
+    }
+
+    std::vector <VertexInputAttributeDescription> Reflection::GetVertexAttributes()
+    {
+        std::vector <VertexInputAttributeDescription> attributes;
+
+        uint32_t offset = 0;
+        for (const ShaderInOutDesc &input : inputs)
+        {
+            uint32_t size = GetTypeSize(input) * input.type->vecsize * input.type->columns;
+            VertexInputAttributeDescription attribute;
+            attribute.location = input.location;
+            attribute.binding = 0;
+            attribute.format = GetAttibuteType(size);
+            attribute.offset = offset;
+            offset += size;
+
+            attributes.push_back(attribute);
+        }
+
+        return attributes;
     }
 }
