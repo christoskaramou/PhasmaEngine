@@ -404,15 +404,26 @@ namespace pe
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
-        VkPhysicalDeviceFeatures gpuFeaturesVK;
-        vkGetPhysicalDeviceFeatures(gpu, &gpuFeaturesVK);
+        // Indexing features
+        VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
+        indexingFeatures.sType =VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+
+        VkPhysicalDeviceFeatures2 deviceFeatures2{};
+        deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        deviceFeatures2.pNext = &indexingFeatures;
+        vkGetPhysicalDeviceFeatures2(gpu, &deviceFeatures2);
+
+        // Check for bindless descriptors
+        if (!indexingFeatures.descriptorBindingPartiallyBound || !indexingFeatures.runtimeDescriptorArray)
+            PE_ERROR("Device does not support bindless descriptors");
+
         VkDeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
         deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
         deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
-        deviceCreateInfo.pEnabledFeatures = &gpuFeaturesVK;
+        deviceCreateInfo.pNext = &deviceFeatures2;
 
         VkDevice deviceVK;
         vkCreateDevice(gpu, &deviceCreateInfo, nullptr, &deviceVK);

@@ -29,23 +29,26 @@ namespace pe
 {
     ShaderInOutDesc::ShaderInOutDesc()
     {
-        name = "";
         location = -1;
     }
 
     CombinedImageSamplerDesc::CombinedImageSamplerDesc()
     {
-        name = "";
         set = -1;
         binding = -1;
     }
 
     BufferDesc::BufferDesc()
     {
-        name = "";
         set = -1;
         binding = -1;
         bufferSize = 0;
+    }
+
+    PushConstantDesc::PushConstantDesc()
+    {
+        size = 0;
+        offset = 0;
     }
 
     void Reflection::Init(Shader *shader)
@@ -62,7 +65,6 @@ namespace pe
         for (const spirv_cross::Resource &resource : resources.stage_inputs)
         {
             ShaderInOutDesc desc;
-            desc.name = resource.name;
             desc.location = compiler.get_decoration(resource.id, spv::DecorationLocation);
             desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
 
@@ -74,7 +76,6 @@ namespace pe
         for (const spirv_cross::Resource &resource : resources.stage_outputs)
         {
             ShaderInOutDesc desc;
-            desc.name = resource.name;
             desc.location = compiler.get_decoration(resource.id, spv::DecorationLocation);
             desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
 
@@ -86,7 +87,6 @@ namespace pe
         for (const spirv_cross::Resource &resource : resources.sampled_images)
         {
             CombinedImageSamplerDesc desc;
-            desc.name = resource.name;
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
 
@@ -97,7 +97,6 @@ namespace pe
         for (const spirv_cross::Resource &resource : resources.uniform_buffers)
         {
             BufferDesc desc;
-            desc.name = resource.name;
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
             desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
@@ -109,13 +108,10 @@ namespace pe
         // Push constants
         for (const spirv_cross::Resource &resource : resources.push_constant_buffers)
         {
-            BufferDesc desc;
-            desc.name = resource.name;
-            desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
-            desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
+            PushConstantDesc desc;
+            desc.offset = compiler.get_decoration(resource.id, spv::DecorationOffset);
             desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
-            desc.bufferSize = compiler.get_declared_struct_size(*desc.type);
-
+            desc.size = compiler.get_declared_struct_size(*desc.type);
             pushConstantBuffers.push_back(desc);
         }
     }

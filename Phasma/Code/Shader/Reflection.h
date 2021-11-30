@@ -33,8 +33,7 @@ namespace pe
     {
     public:
         ShaderInOutDesc();
-
-        std::string name;
+        
         uint32_t location = 0;
         std::shared_ptr <spirv_cross::SPIRType> type;
     };
@@ -44,7 +43,6 @@ namespace pe
     public:
         CombinedImageSamplerDesc();
 
-        std::string name;
         uint32_t set = 0;
         uint32_t binding = 0;
     };
@@ -54,11 +52,20 @@ namespace pe
     public:
         BufferDesc();
 
-        std::string name;
         uint32_t set = 0;
         uint32_t binding = 0;
         std::shared_ptr <spirv_cross::SPIRType> type;
         size_t bufferSize = 0;
+    };
+
+    class PushConstantDesc
+    {
+    public:
+        PushConstantDesc();
+
+        size_t size = 0;
+        uint32_t offset = 0;
+        std::shared_ptr <spirv_cross::SPIRType> type;
     };
 
     class Shader;
@@ -78,7 +85,7 @@ namespace pe
         std::vector <ShaderInOutDesc> outputs{};
         std::vector <CombinedImageSamplerDesc> samplers{};
         std::vector <BufferDesc> uniformBuffers{};
-        std::vector <BufferDesc> pushConstantBuffers{};
+        std::vector <PushConstantDesc> pushConstantBuffers{};
 
     private:
         Shader *m_shader{};
