@@ -27,15 +27,10 @@ SOFTWARE.
 namespace pe
 {
     class Desscriptor;
-
     class FrameBuffer;
-
     class Image;
-
     class RenderPass;
-
     class Pipeline;
-
     class Buffer;
 
     class SSR : public IComponent
@@ -44,13 +39,6 @@ namespace pe
         SSR();
 
         ~SSR();
-
-        mat4 reflectionInput[4];
-        Buffer *UBReflection;
-        std::vector<FrameBuffer *> framebuffers{};
-        Pipeline *pipeline;
-        RenderPass *renderPass;
-        Descriptor *DSet;
 
         void update(Camera &camera);
 
@@ -67,5 +55,12 @@ namespace pe
         void createPipeline(std::map<std::string, Image *> &renderTargets);
 
         void destroy();
+
+        mat4 reflectionInput[4];
+        Buffer *UBReflection;
+        std::vector<FrameBuffer *> framebuffers{};
+        Pipeline *pipeline;
+        RenderPass *renderPass;
+        Descriptor *DSet;
     };
 }

@@ -27,15 +27,10 @@ SOFTWARE.
 namespace pe
 {
     class Descriptor;
-
     class FrameBuffer;
-
     class Image;
-
     class RenderPass;
-
     class Pipeline;
-
     class Buffer;
 
     class TAA : public IComponent
@@ -44,24 +39,6 @@ namespace pe
         TAA();
 
         ~TAA();
-
-        std::vector<FrameBuffer *> framebuffers{}, framebuffersSharpen{};
-        Pipeline *pipeline;
-        Pipeline *pipelineSharpen;
-        RenderPass *renderPass;
-        RenderPass *renderPassSharpen;
-        Descriptor *DSet;
-        Descriptor *DSetSharpen;
-        Image *previous;
-        Image *frameImage;
-
-        struct UBO
-        {
-            vec4 values;
-            vec4 sharpenValues;
-            mat4 invProj;
-        } ubo;
-        Buffer *uniform;
 
         void Init();
 
@@ -86,5 +63,23 @@ namespace pe
         void saveImage(CommandBuffer *cmd, Image *source);
 
         void destroy();
+
+        std::vector<FrameBuffer *> framebuffers{}, framebuffersSharpen{};
+        Pipeline *pipeline;
+        Pipeline *pipelineSharpen;
+        RenderPass *renderPass;
+        RenderPass *renderPassSharpen;
+        Descriptor *DSet;
+        Descriptor *DSetSharpen;
+        Image *previous;
+        Image *frameImage;
+        Buffer *uniform;
+
+        struct UBO
+        {
+            vec4 values;
+            vec4 sharpenValues;
+            mat4 invProj;
+        } ubo;
     };
 }

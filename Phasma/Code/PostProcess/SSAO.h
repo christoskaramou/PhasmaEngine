@@ -27,33 +27,16 @@ SOFTWARE.
 namespace pe
 {
     class CommandBuffer;
-
     class Descriptor;
-
     class FrameBuffer;
-
     class Image;
-
     class RenderPass;
-
     class Pipeline;
-
     class Buffer;
 
     class SSAO : public IComponent
     {
     public:
-        mat4 pvm[3];
-        Buffer *UB_Kernel;
-        Buffer *UB_PVM;
-        Image *noiseTex;
-        RenderPass *renderPass;
-        RenderPass *blurRenderPass;
-        std::vector<FrameBuffer *> framebuffers{}, blurFramebuffers{};
-        Pipeline *pipeline;
-        Pipeline *pipelineBlur;
-        Descriptor *DSet;
-        Descriptor *DSBlur;
 
         void update(Camera &camera);
 
@@ -78,5 +61,17 @@ namespace pe
         void draw(CommandBuffer *cmd, uint32_t imageIndex, Image *image);
 
         void destroy();
+
+        mat4 pvm[3];
+        Buffer *UB_Kernel;
+        Buffer *UB_PVM;
+        Image *noiseTex;
+        RenderPass *renderPass;
+        RenderPass *blurRenderPass;
+        std::vector<FrameBuffer *> framebuffers{}, blurFramebuffers{};
+        Pipeline *pipeline;
+        Pipeline *pipelineBlur;
+        Descriptor *DSet;
+        Descriptor *DSBlur;
     };
 }

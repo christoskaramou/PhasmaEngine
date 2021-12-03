@@ -25,15 +25,10 @@ SOFTWARE.
 namespace pe
 {
     class Descriptor;
-
     class FrameBuffer;
-
     class Image;
-
     class CommandBuffer;
-
     class RenderPass;
-
     class Pipeline;
 
     class DOF : public IComponent
@@ -42,12 +37,6 @@ namespace pe
         DOF();
 
         ~DOF();
-
-        std::vector<FrameBuffer *> framebuffers{};
-        Pipeline *pipeline;
-        RenderPass *renderPass;
-        Descriptor *DSet;
-        Image *frameImage;
 
         void Init();
 
@@ -64,5 +53,11 @@ namespace pe
         void draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets);
 
         void destroy();
+
+        std::vector<FrameBuffer *> framebuffers{};
+        Pipeline *pipeline;
+        RenderPass *renderPass;
+        Descriptor *DSet;
+        Image *frameImage;
     };
 }

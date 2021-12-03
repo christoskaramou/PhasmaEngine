@@ -27,15 +27,10 @@ SOFTWARE.
 namespace pe
 {
     class Descriptor;
-
     class FrameBuffer;
-
     class Image;
-
     class RenderPass;
-
     class Buffer;
-
     class Pipeline;
 
     class MotionBlur : public IComponent
@@ -44,14 +39,6 @@ namespace pe
         MotionBlur();
 
         ~MotionBlur();
-
-        mat4 motionBlurInput[4];
-        Buffer *UBmotionBlur;
-        std::vector<FrameBuffer *> framebuffers{};
-        Pipeline *pipeline;
-        RenderPass *renderPass;
-        Descriptor *DSet;
-        Image *frameImage;
 
         void Init();
 
@@ -70,5 +57,13 @@ namespace pe
         void draw(CommandBuffer *cmd, uint32_t imageIndex);
 
         void destroy();
+
+        mat4 motionBlurInput[4];
+        Buffer *UBmotionBlur;
+        std::vector<FrameBuffer *> framebuffers{};
+        Pipeline *pipeline;
+        RenderPass *renderPass;
+        Descriptor *DSet;
+        Image *frameImage;
     };
 }
