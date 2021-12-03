@@ -21,6 +21,7 @@ SOFTWARE.
 */
 
 #version 450
+#extension GL_EXT_nonuniform_qualifier : require
 
 layout (location = 0) out vec2 outUV;
 

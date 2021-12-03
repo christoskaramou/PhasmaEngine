@@ -21,6 +21,7 @@ SOFTWARE.
 */
 
 #version 450
+#extension GL_EXT_nonuniform_qualifier : require
 
 const int MAX_NUM_JOINTS = 128;
 

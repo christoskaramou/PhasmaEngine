@@ -414,7 +414,9 @@ namespace pe
         vkGetPhysicalDeviceFeatures2(gpu, &deviceFeatures2);
 
         // Check for bindless descriptors
-        if (!indexingFeatures.descriptorBindingPartiallyBound || !indexingFeatures.runtimeDescriptorArray)
+        if (!indexingFeatures.descriptorBindingPartiallyBound ||
+            !indexingFeatures.runtimeDescriptorArray ||
+            !indexingFeatures.shaderSampledImageArrayNonUniformIndexing)
             PE_ERROR("Device does not support bindless descriptors");
 
         VkDeviceCreateInfo deviceCreateInfo{};

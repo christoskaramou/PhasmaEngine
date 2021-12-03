@@ -21,6 +21,7 @@ SOFTWARE.
 */
 
 #version 450 core
+#extension GL_EXT_nonuniform_qualifier : require
 
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUV;

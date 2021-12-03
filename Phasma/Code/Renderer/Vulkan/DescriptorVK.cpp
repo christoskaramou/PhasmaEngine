@@ -47,6 +47,7 @@ namespace pe
 
         VkDescriptorPoolCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
         createInfo.poolSizeCount = static_cast<uint32_t>(descPoolsize.size());
         createInfo.pPoolSizes = descPoolsize.data();
         createInfo.maxSets = maxDescriptorSets;
