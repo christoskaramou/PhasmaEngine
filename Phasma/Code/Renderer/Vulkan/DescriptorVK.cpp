@@ -40,7 +40,7 @@ namespace pe
         descPoolsize[0].descriptorCount = maxDescriptorSets;
         descPoolsize[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         descPoolsize[1].descriptorCount = maxDescriptorSets;
-        descPoolsize[2].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        descPoolsize[2].type = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
         descPoolsize[2].descriptorCount = maxDescriptorSets;
         descPoolsize[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         descPoolsize[3].descriptorCount = maxDescriptorSets;
