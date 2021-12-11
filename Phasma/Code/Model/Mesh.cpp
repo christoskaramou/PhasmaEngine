@@ -55,8 +55,7 @@ namespace pe
         uniformBuffer = Buffer::Create(
             sizeof(ubo),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU
-        );
+            VMA_MEMORY_USAGE_CPU_TO_GPU);
         uniformBuffer->Map();
         uniformBuffer->Zero();
         uniformBuffer->Flush();
@@ -66,21 +65,18 @@ namespace pe
         {
 
             mat4 factors;
-            factors[0] = primitive.pbrMaterial.baseColorFactor != vec4(0.f) ? primitive.pbrMaterial.baseColorFactor :
-                         vec4(1.f);
+            factors[0] = primitive.pbrMaterial.baseColorFactor != vec4(0.f) ? primitive.pbrMaterial.baseColorFactor : vec4(1.f);
             factors[1] = vec4(primitive.pbrMaterial.emissiveFactor, 1.f);
             factors[2] = vec4(
-                    primitive.pbrMaterial.metallicFactor, primitive.pbrMaterial.roughnessFactor,
-                    primitive.pbrMaterial.alphaCutoff, 0.f
-            );
+                primitive.pbrMaterial.metallicFactor, primitive.pbrMaterial.roughnessFactor,
+                primitive.pbrMaterial.alphaCutoff, 0.f);
             factors[3][0] = static_cast<float>(primitive.hasBones);
 
             const size_t size = sizeof(mat4);
             primitive.uniformBuffer = Buffer::Create(
                 size,
                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VMA_MEMORY_USAGE_CPU_TO_GPU
-            );
+                VMA_MEMORY_USAGE_CPU_TO_GPU);
             primitive.uniformBuffer->Map();
             primitive.uniformBuffer->CopyData(&factors);
             primitive.uniformBuffer->Flush();
@@ -89,12 +85,11 @@ namespace pe
     }
 
     void Primitive::loadTexture(
-            MaterialType type,
-            const std::filesystem::path &file,
-            const Microsoft::glTF::Image *image,
-            const Microsoft::glTF::Document *document,
-            const Microsoft::glTF::GLTFResourceReader *resourceReader
-    )
+        MaterialType type,
+        const std::filesystem::path &file,
+        const Microsoft::glTF::Image *image,
+        const Microsoft::glTF::Document *document,
+        const Microsoft::glTF::GLTFResourceReader *resourceReader)
     {
         std::filesystem::path path = file.parent_path();
         if (image)
@@ -142,15 +137,14 @@ namespace pe
         {
             int texWidth, texHeight, texChannels;
             unsigned char *pixels;
-            //stbi_set_flip_vertically_on_load(true);
+            // stbi_set_flip_vertically_on_load(true);
             if (!image || image->bufferViewId.empty())
                 pixels = stbi_load(path.string().c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
             else
             {
                 const auto data = resourceReader->ReadBinaryData(*document, *image);
                 pixels = stbi_load_from_memory(
-                        data.data(), static_cast<int>(data.size()), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha
-                );
+                    data.data(), static_cast<int>(data.size()), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
             }
 
             if (!pixels)
@@ -164,8 +158,7 @@ namespace pe
             Buffer *staging = Buffer::Create(
                 imageSize,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VMA_MEMORY_USAGE_CPU_ONLY
-            );
+                VMA_MEMORY_USAGE_CPU_ONLY);
             staging->Map();
             staging->CopyData(pixels);
             staging->Flush();
@@ -195,7 +188,6 @@ namespace pe
             (*tex)->CopyBufferToImage(staging);
             (*tex)->GenerateMipMaps();
 
-
             staging->Destroy();
 
             RHII.UnlockSubmits();
@@ -204,7 +196,7 @@ namespace pe
         }
     }
 
-    //void Mesh::calculateBoundingSphere()
+    // void Mesh::calculateBoundingSphere()
     //{
     //	vec3 _max(-FLT_MAX);
     //	vec3 _min(FLT_MAX);
@@ -215,7 +207,7 @@ namespace pe
     //	vec3 center = (_max + _min) * .5f;
     //	float sphereRadius = length(_max - center);
     //	boundingSphere = vec4(center, sphereRadius);
-    //}
+    // }
 
     void Mesh::destroy()
     {

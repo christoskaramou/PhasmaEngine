@@ -33,7 +33,7 @@ SOFTWARE.
 
 namespace pe
 {
-    CommandPool* Compute::s_commandPool = nullptr;
+    CommandPool *Compute::s_commandPool = nullptr;
 
     Compute::Compute()
     {
@@ -44,7 +44,7 @@ namespace pe
         pipeline = nullptr;
     }
 
-    void Compute::updateInput(const void* srcData, size_t srcSize, size_t offset)
+    void Compute::updateInput(const void *srcData, size_t srcSize, size_t offset)
     {
         SBIn->Map();
         SBIn->CopyData(srcData, srcSize, offset);
@@ -52,7 +52,7 @@ namespace pe
         SBIn->Unmap();
     }
 
-    void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, uint32_t count, Semaphore** waitForHandles)
+    void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, uint32_t count, Semaphore **waitForHandles)
     {
         commandBuffer->Begin();
         commandBuffer->BindComputePipeline(pipeline);
@@ -87,8 +87,7 @@ namespace pe
         SBIn = Buffer::Create(
             sizeIn,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU
-        );
+            VMA_MEMORY_USAGE_CPU_TO_GPU);
         SBIn->Map();
         SBIn->Zero();
         SBIn->Flush();
@@ -97,8 +96,7 @@ namespace pe
         SBOut = Buffer::Create(
             sizeOut,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VMA_MEMORY_USAGE_GPU_TO_CPU
-        );
+            VMA_MEMORY_USAGE_GPU_TO_CPU);
         SBOut->Map();
         SBOut->Zero();
         SBOut->Flush();
@@ -125,16 +123,16 @@ namespace pe
         DSCompute->UpdateDescriptor(2, infos.data());
     }
 
-    void Compute::createPipeline(const std::string& shaderName)
+    void Compute::createPipeline(const std::string &shaderName)
     {
         if (pipeline)
             pipeline->Destroy();
 
-        Shader shader {shaderName, ShaderType::Compute};
+        Shader shader{shaderName, ShaderType::Compute};
 
         PipelineCreateInfo info{};
         info.pCompShader = &shader;
-        info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutCompute() };
+        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutCompute()};
 
         pipeline = Pipeline::Create(info);
     }
@@ -148,7 +146,7 @@ namespace pe
         fence->Destroy();
     }
 
-    Compute Compute::Create(const std::string& shaderName, size_t sizeIn, size_t sizeOut)
+    Compute Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut)
     {
         CreateResources();
 
@@ -164,14 +162,14 @@ namespace pe
         return compute;
     }
 
-    std::vector<Compute> Compute::Create(const std::string& shaderName, size_t sizeIn, size_t sizeOut, uint32_t count)
+    std::vector<Compute> Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, uint32_t count)
     {
         CreateResources();
 
-        std::vector<CommandBuffer*> commandBuffers(count);
+        std::vector<CommandBuffer *> commandBuffers(count);
         std::vector<Compute> computes(count);
 
-        for (auto& commandBuffer : commandBuffers)
+        for (auto &commandBuffer : commandBuffers)
         {
             Compute compute;
             compute.commandBuffer = CommandBuffer::Create(s_commandPool);

@@ -57,7 +57,7 @@ namespace pe
     void CalculateJointMatrixAsync(Mesh *mesh, Skin *skin, const mat4 &inverseTransform, const size_t index)
     {
         mesh->ubo.jointMatrix[index] =
-                inverseTransform * skin->joints[index]->GetMatrix() * skin->inverseBindMatrices[index];
+            inverseTransform * skin->joints[index]->GetMatrix() * skin->inverseBindMatrices[index];
     }
 
     void Node::Update()
@@ -76,7 +76,7 @@ namespace pe
                 // async calls should be at least bigger than a number, else this will be slower
                 if (numJoints > 3)
                 {
-                    std::vector <std::future<void>> futures(numJoints);
+                    std::vector<std::future<void>> futures(numJoints);
 
                     for (size_t i = 0; i < numJoints; i++)
                         futures[i] = std::async(std::launch::async, CalculateJointMatrixAsync, mesh, skin,

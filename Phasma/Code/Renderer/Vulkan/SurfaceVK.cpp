@@ -27,7 +27,7 @@ SOFTWARE.
 
 namespace pe
 {
-    Surface::Surface(SDL_Window* window)
+    Surface::Surface(SDL_Window *window)
     {
         VkSurfaceKHR surfaceVK;
         if (!SDL_Vulkan_CreateSurface(window, RHII.instance, &surfaceVK))
@@ -38,7 +38,7 @@ namespace pe
         int w, h;
         SDL_GL_GetDrawableSize(window, &w, &h);
 
-        actualExtent = Rect2D{ 0, 0, w, h };
+        actualExtent = Rect2D{0, 0, w, h};
     }
 
     Surface::~Surface()
@@ -70,7 +70,7 @@ namespace pe
 
         format = formats[0].format;
         colorSpace = formats[0].colorSpace;
-        for (const auto& f : formats)
+        for (const auto &f : formats)
         {
             if (f.format == VK_FORMAT_B8G8R8A8_UNORM && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
             {
@@ -96,14 +96,14 @@ namespace pe
         std::vector<VkPresentModeKHR> presentModes(presentModesCount);
         vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, m_handle, &presentModesCount, presentModes.data());
 
-        for (const auto& i : presentModes)
+        for (const auto &i : presentModes)
             if (i == VK_PRESENT_MODE_MAILBOX_KHR)
             {
                 presentMode = i;
                 return;
             }
 
-        for (const auto& i : presentModes)
+        for (const auto &i : presentModes)
             if (i == VK_PRESENT_MODE_IMMEDIATE_KHR)
             {
                 presentMode = i;
@@ -112,7 +112,6 @@ namespace pe
 
         presentMode = VK_PRESENT_MODE_FIFO_KHR;
     }
-
 
     void Surface::FindProperties()
     {

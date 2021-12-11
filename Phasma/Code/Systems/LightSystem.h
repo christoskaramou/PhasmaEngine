@@ -27,10 +27,8 @@ SOFTWARE.
 
 namespace pe
 {
-    constexpr uint32_t
-    MAX_POINT_LIGHTS = 10;
-    constexpr uint32_t
-    MAX_SPOT_LIGHTS = 10;
+    constexpr uint32_t MAX_POINT_LIGHTS = 10;
+    constexpr uint32_t MAX_SPOT_LIGHTS = 10;
 
     struct LightsUBO
     {
@@ -58,7 +56,9 @@ namespace pe
         void Destroy() override;
 
         Buffer &GetUniform()
-        { return *uniform; }
+        {
+            return *uniform;
+        }
 
     private:
         LightsUBO lubo;

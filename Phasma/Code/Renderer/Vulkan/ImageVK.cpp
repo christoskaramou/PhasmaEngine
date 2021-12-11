@@ -75,7 +75,7 @@ namespace pe
         layoutState = LayoutState::ColorRead;
     }
 
-    Image::Image(const ImageCreateInfo& info)
+    Image::Image(const ImageCreateInfo &info)
     {
         view = {};
         sampler = {};
@@ -118,7 +118,7 @@ namespace pe
         imageInfoVK.flags = imageInfo.imageFlags;
         imageInfoVK.imageType = imageInfo.imageType;
         imageInfoVK.format = (VkFormat)imageInfo.format;
-        imageInfoVK.extent = VkExtent3D{ imageInfo.width, imageInfo.height, imageInfo.depth };
+        imageInfoVK.extent = VkExtent3D{imageInfo.width, imageInfo.height, imageInfo.depth};
         imageInfoVK.mipLevels = imageInfo.mipLevels;
         imageInfoVK.arrayLayers = imageInfo.arrayLayers;
         imageInfoVK.samples = (VkSampleCountFlagBits)imageInfo.samples;
@@ -137,7 +137,6 @@ namespace pe
         m_handle = imageVK;
         allocation = allocationVK;
     }
-
 
     Image::~Image()
     {
@@ -161,14 +160,13 @@ namespace pe
     }
 
     void Image::TransitionImageLayout(
-        CommandBuffer* cmd,
+        CommandBuffer *cmd,
         ImageLayout oldLayout,
         ImageLayout newLayout,
         PipelineStageFlags oldStageMask,
         PipelineStageFlags newStageMask,
         AccessFlags srcMask,
-        AccessFlags dstMask
-    )
+        AccessFlags dstMask)
     {
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -197,7 +195,7 @@ namespace pe
             1, &barrier);
     }
 
-    void Image::CreateImageView(const ImageViewCreateInfo& info)
+    void Image::CreateImageView(const ImageViewCreateInfo &info)
     {
         viewInfo = info;
         VkImageViewCreateInfo viewInfoVK{};
@@ -206,13 +204,12 @@ namespace pe
         viewInfoVK.viewType = (VkImageViewType)viewInfo.viewType;
         viewInfoVK.format = (VkFormat)imageInfo.format;
         viewInfoVK.subresourceRange =
-        {
-            (VkImageAspectFlags)viewInfo.aspectMask,
-            0,
-            info.image->imageInfo.mipLevels,
-            0,
-            info.image->imageInfo.arrayLayers
-        };
+            {
+                (VkImageAspectFlags)viewInfo.aspectMask,
+                0,
+                info.image->imageInfo.mipLevels,
+                0,
+                info.image->imageInfo.arrayLayers};
 
         VkImageView vkView;
         vkCreateImageView(RHII.device, &viewInfoVK, nullptr, &vkView);
@@ -221,7 +218,7 @@ namespace pe
 
     void Image::TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout)
     {
-        std::array<CommandBuffer*, 1> cmd{};
+        std::array<CommandBuffer *, 1> cmd{};
         cmd[0] = CommandBuffer::Create(RHII.commandPool2);
         cmd[0]->Begin();
 
@@ -239,14 +236,14 @@ namespace pe
         // Subresource aspectMask
         if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         {
-            barrier.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, imageInfo.mipLevels, 0, imageInfo.arrayLayers };
+            barrier.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, imageInfo.mipLevels, 0, imageInfo.arrayLayers};
 
             if (imageInfo.format == VK_FORMAT_D32_SFLOAT_S8_UINT || imageInfo.format == VK_FORMAT_D24_UNORM_S8_UINT)
                 barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
         }
         else
         {
-            barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, imageInfo.mipLevels, 0, imageInfo.arrayLayers };
+            barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, imageInfo.mipLevels, 0, imageInfo.arrayLayers};
         }
 
         // Src, Dst AccessMasks and Pipeline Stages for pipelineBarrier
@@ -324,7 +321,7 @@ namespace pe
         cmd[0]->Destroy();
     }
 
-    void Image::ChangeLayout(CommandBuffer* cmd, LayoutState state)
+    void Image::ChangeLayout(CommandBuffer *cmd, LayoutState state)
     {
         if (state != imageInfo.layoutState)
         {
@@ -337,8 +334,7 @@ namespace pe
                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                    VK_ACCESS_SHADER_READ_BIT
-                );
+                    VK_ACCESS_SHADER_READ_BIT);
             }
             else if (state == LayoutState::ColorWrite)
             {
@@ -349,8 +345,7 @@ namespace pe
                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                     VK_ACCESS_SHADER_READ_BIT,
-                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-                );
+                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
             }
             else if (state == LayoutState::DepthRead)
             {
@@ -361,8 +356,7 @@ namespace pe
                     VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                     VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                    VK_ACCESS_SHADER_READ_BIT
-                );
+                    VK_ACCESS_SHADER_READ_BIT);
             }
             else if (state == LayoutState::DepthWrite)
             {
@@ -373,16 +367,15 @@ namespace pe
                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                     VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
                     VK_ACCESS_SHADER_READ_BIT,
-                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
-                );
+                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
             }
             imageInfo.layoutState = state;
         }
     }
 
-    void Image::CopyBufferToImage(Buffer* buffer, uint32_t baseLayer)
+    void Image::CopyBufferToImage(Buffer *buffer, uint32_t baseLayer)
     {
-        std::array<CommandBuffer*, 1> cmd{};
+        std::array<CommandBuffer *, 1> cmd{};
         cmd[0] = CommandBuffer::Create(RHII.commandPool2);
         cmd[0]->Begin();
 
@@ -394,8 +387,8 @@ namespace pe
         region.imageSubresource.mipLevel = 0;
         region.imageSubresource.baseArrayLayer = baseLayer;
         region.imageSubresource.layerCount = 1;
-        region.imageOffset = VkOffset3D{ 0, 0, 0 };
-        region.imageExtent = VkExtent3D{ imageInfo.width, imageInfo.height, imageInfo.depth };
+        region.imageOffset = VkOffset3D{0, 0, 0};
+        region.imageExtent = VkExtent3D{imageInfo.width, imageInfo.height, imageInfo.depth};
 
         vkCmdCopyBufferToImage(cmd[0]->Handle(), buffer->Handle(), m_handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
@@ -404,7 +397,7 @@ namespace pe
         cmd[0]->Destroy();
     }
 
-    void Image::CopyColorAttachment(CommandBuffer* cmd, Image* renderedImage)
+    void Image::CopyColorAttachment(CommandBuffer *cmd, Image *renderedImage)
     {
         TransitionImageLayout(
             cmd,
@@ -413,8 +406,7 @@ namespace pe
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_ACCESS_SHADER_READ_BIT,
-            VK_ACCESS_TRANSFER_WRITE_BIT
-        );
+            VK_ACCESS_TRANSFER_WRITE_BIT);
         renderedImage->TransitionImageLayout(
             cmd,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -422,8 +414,7 @@ namespace pe
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            VK_ACCESS_TRANSFER_READ_BIT
-        );
+            VK_ACCESS_TRANSFER_READ_BIT);
 
         // copy the image
         VkImageCopy region{};
@@ -450,8 +441,7 @@ namespace pe
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             VK_ACCESS_TRANSFER_WRITE_BIT,
-            VK_ACCESS_SHADER_READ_BIT
-        );
+            VK_ACCESS_SHADER_READ_BIT);
         renderedImage->TransitionImageLayout(
             cmd,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -459,8 +449,7 @@ namespace pe
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_ACCESS_TRANSFER_READ_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-        );
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
     }
 
     void Image::GenerateMipMaps()
@@ -483,7 +472,7 @@ namespace pe
             PE_ERROR("generateMipMaps(): Image tiling error.");
         }
 
-        std::vector<CommandBuffer*> commandBuffers(imageInfo.mipLevels);
+        std::vector<CommandBuffer *> commandBuffers(imageInfo.mipLevels);
         for (uint32_t i = 0; i < imageInfo.mipLevels; i++)
             commandBuffers[i] = CommandBuffer::Create(RHII.commandPool2);
 
@@ -505,11 +494,11 @@ namespace pe
         barrier.subresourceRange.levelCount = 1;
 
         VkImageBlit blit;
-        blit.srcOffsets[0] = VkOffset3D{ 0, 0, 0 };
+        blit.srcOffsets[0] = VkOffset3D{0, 0, 0};
         blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.srcSubresource.baseArrayLayer = 0;
         blit.srcSubresource.layerCount = 1;
-        blit.dstOffsets[0] = VkOffset3D{ 0, 0, 0 };
+        blit.dstOffsets[0] = VkOffset3D{0, 0, 0};
         blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.dstSubresource.baseArrayLayer = 0;
         blit.dstSubresource.layerCount = 1;
@@ -533,8 +522,8 @@ namespace pe
                 0, nullptr,
                 1, &barrier);
 
-            blit.srcOffsets[1] = VkOffset3D{ mipWidth, mipHeight, 1 };
-            blit.dstOffsets[1] = VkOffset3D{ mipWidth / 2, mipHeight / 2, 1 };
+            blit.srcOffsets[1] = VkOffset3D{mipWidth, mipHeight, 1};
+            blit.dstOffsets[1] = VkOffset3D{mipWidth / 2, mipHeight / 2, 1};
             blit.srcSubresource.mipLevel = i - 1;
             blit.dstSubresource.mipLevel = i;
 
@@ -559,8 +548,10 @@ namespace pe
                 0, nullptr,
                 1, &barrier);
 
-            if (mipWidth > 1) mipWidth /= 2;
-            if (mipHeight > 1) mipHeight /= 2;
+            if (mipWidth > 1)
+                mipWidth /= 2;
+            if (mipHeight > 1)
+                mipHeight /= 2;
 
             commandBuffers[i]->End();
             RHII.SubmitAndWaitFence(1, &commandBuffers[i], nullptr, 0, nullptr, 0, nullptr);
@@ -590,7 +581,7 @@ namespace pe
             commandBuffers[i]->Destroy();
     }
 
-    void Image::CreateSampler(const SamplerCreateInfo& info)
+    void Image::CreateSampler(const SamplerCreateInfo &info)
     {
         samplerInfo = info;
 

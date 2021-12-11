@@ -32,10 +32,12 @@ namespace pe
     {
     public:
         ISystem() : m_enabled(false)
-        {}
+        {
+        }
 
         virtual ~ISystem()
-        {}
+        {
+        }
 
         virtual void Init() = 0;
 
@@ -43,7 +45,7 @@ namespace pe
 
         virtual void Destroy() = 0;
 
-        template<class T>
+        template <class T>
         inline bool HasComponents()
         {
             ValidateBaseClass<IComponent, T>();
@@ -54,7 +56,7 @@ namespace pe
             return false;
         }
 
-        template<class T>
+        template <class T>
         inline void AttachComponent(T *component)
         {
             size_t id = GetTypeID<T>();
@@ -63,7 +65,7 @@ namespace pe
             m_components[id].push_back(component);
         }
 
-        template<class T>
+        template <class T>
         void RemoveComponent(IComponent *component)
         {
             if (HasComponents<T>())
@@ -75,26 +77,26 @@ namespace pe
             }
         }
 
-        template<class T>
+        template <class T>
         void RemoveComponents()
         {
             if (HasComponents<T>())
                 m_components[GetTypeID<T>()].clear();
         }
 
-        template<class T>
+        template <class T>
         void RemoveAllComponents()
         {
             m_components.clear();
         }
 
-        template<class T>
+        template <class T>
         const std::vector<T *> &GetComponentsOfType()
         {
             if (HasComponents<T>())
             {
                 size_t id = GetTypeID<T>();
-                return *reinterpret_cast<std::vector < T * > * > (&m_components[id]);
+                return *reinterpret_cast<std::vector<T *> *>(&m_components[id]);
             }
 
             static const std::vector<T *> empty{};
@@ -102,13 +104,17 @@ namespace pe
         }
 
         bool IsEnabled()
-        { return m_enabled; }
+        {
+            return m_enabled;
+        }
 
         void SetEnabled(bool enabled)
-        { m_enabled = enabled; }
+        {
+            m_enabled = enabled;
+        }
 
     private:
-        std::unordered_map <size_t, std::vector<IComponent *>> m_components;
+        std::unordered_map<size_t, std::vector<IComponent *>> m_components;
         bool m_enabled;
     };
 
@@ -118,4 +124,3 @@ namespace pe
         virtual void Draw() = 0;
     };
 }
-

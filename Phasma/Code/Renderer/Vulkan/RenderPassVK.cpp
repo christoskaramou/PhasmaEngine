@@ -43,11 +43,11 @@ namespace pe
     bool IsDepthFormat(Format format)
     {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
-            format == VK_FORMAT_D32_SFLOAT ||
-            format == VK_FORMAT_D24_UNORM_S8_UINT;
+               format == VK_FORMAT_D32_SFLOAT ||
+               format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
-    RenderPass::RenderPass(const std::vector<Attachment>& attachments)
+    RenderPass::RenderPass(const std::vector<Attachment> &attachments)
     {
         this->attachments = attachments;
         std::vector<VkAttachmentDescription> _attachments{};
@@ -57,7 +57,7 @@ namespace pe
         bool hasDepth = false;
         uint32_t size = static_cast<uint32_t>(attachments.size());
         uint32_t attachmentIndex = 0;
-        for (const Attachment& attachment : attachments)
+        for (const Attachment &attachment : attachments)
         {
             VkAttachmentDescription attachmentDescription{};
 
@@ -73,13 +73,13 @@ namespace pe
 
             if (!IsDepthFormat(attachment.format))
             {
-                VkAttachmentReference reference{ attachmentIndex++, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+                VkAttachmentReference reference{attachmentIndex++, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
                 colorReferences.push_back(reference);
             }
             else
             {
                 // Only one depth reference sould make it in here, else there will be an overwrite
-                depthReference = { attachmentIndex++, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+                depthReference = {attachmentIndex++, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
                 hasDepth = true;
             }
         }
@@ -102,7 +102,7 @@ namespace pe
         m_handle = renderPass;
     }
 
-    RenderPass::RenderPass(const Attachment& attachment) : RenderPass(std::vector<Attachment>{ attachment })
+    RenderPass::RenderPass(const Attachment &attachment) : RenderPass(std::vector<Attachment>{attachment})
     {
     }
 

@@ -84,7 +84,7 @@ namespace pe
     {
         textures.resize(SHADOWMAP_CASCADES);
         int textureIdx = 0;
-        for (auto*& texture : textures)
+        for (auto *&texture : textures)
         {
             ImageCreateInfo info{};
             info.format = RHII.depth->imageInfo.format;
@@ -126,7 +126,7 @@ namespace pe
 
     void Shadows::createPipeline()
     {
-        Shader vert{ "Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex };
+        Shader vert{"Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex};
 
         PipelineCreateInfo info{};
         info.pVertShader = &vert;
@@ -136,9 +136,9 @@ namespace pe
         info.height = static_cast<float>(SHADOWMAP_SIZE);
         info.pushConstantStage = PushConstantStage::Vertex;
         info.pushConstantSize = sizeof(mat4);
-        info.colorBlendAttachments = { textures[0]->blendAttachment };
-        info.dynamicStates = { VK_DYNAMIC_STATE_DEPTH_BIAS };
-        info.descriptorSetLayouts = { Pipeline::getDescriptorSetLayoutMesh(), Pipeline::getDescriptorSetLayoutModel() };
+        info.colorBlendAttachments = {textures[0]->blendAttachment};
+        info.dynamicStates = {VK_DYNAMIC_STATE_DEPTH_BIAS};
+        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutMesh(), Pipeline::getDescriptorSetLayoutModel()};
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
@@ -149,8 +149,7 @@ namespace pe
         uniformBuffer = Buffer::Create(
             SHADOWMAP_CASCADES * sizeof(mat4),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU
-        );
+            VMA_MEMORY_USAGE_CPU_TO_GPU);
         uniformBuffer->Map();
         uniformBuffer->Zero();
         uniformBuffer->Flush();
@@ -167,7 +166,7 @@ namespace pe
 
         Pipeline::getDescriptorSetLayoutShadows()->Destroy();
 
-        for (auto& texture : textures)
+        for (auto &texture : textures)
             texture->Destroy();
 
         for (auto fb : framebuffers)
@@ -177,17 +176,17 @@ namespace pe
         pipeline->Destroy();
     }
 
-    void Shadows::update(Camera& camera)
+    void Shadows::update(Camera &camera)
     {
         if (GUI::shadow_cast)
         {
             CalculateCascades(camera);
-            uniformBuffer->CopyRequest<Launch::AsyncDeferred>({ cascades, SHADOWMAP_CASCADES * sizeof(mat4), 0 });
+            uniformBuffer->CopyRequest<Launch::AsyncDeferred>({cascades, SHADOWMAP_CASCADES * sizeof(mat4), 0});
         }
     }
 
     constexpr float cascadeSplitLambda = 0.95f;
-    void Shadows::CalculateCascades(Camera& camera)
+    void Shadows::CalculateCascades(Camera &camera)
     {
         float cascadeSplits[SHADOWMAP_CASCADES];
 
@@ -203,20 +202,22 @@ namespace pe
 
         // Calculate split depths based on view camera frustum
         // Based on method presented in https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch10.html
-        for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++) {
+        for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
+        {
             float p = (i + 1) / static_cast<float>(SHADOWMAP_CASCADES);
             float log = minZ * std::pow(ratio, p);
             float uniform = minZ + range * p;
             float d = cascadeSplitLambda * (log - uniform) + uniform;
             cascadeSplits[i] = (d - nearClip) / clipRange;
 
-            //cascadeSplits[i] = ((i + 1) / (float)SHADOWMAP_CASCADES);
-            //cascadeSplits[i] = std::pow(cascadeSplits[i], 2.5f);
+            // cascadeSplits[i] = ((i + 1) / (float)SHADOWMAP_CASCADES);
+            // cascadeSplits[i] = std::pow(cascadeSplits[i], 2.5f);
         }
 
         // Calculate orthographic projection matrix for each cascade
         float lastSplitDist = 0.0;
-        for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++) {
+        for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
+        {
             float splitDist = cascadeSplits[i];
 
             vec3 frustumCorners[8] = {
@@ -231,17 +232,19 @@ namespace pe
             };
 
             // Project frustum corners into world space
-            auto& renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
+            auto &renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
             const float aspect = renderArea.viewport.width / renderArea.viewport.height;
             mat4 projection = perspective(camera.FovxToFovy(camera.FOV, aspect), aspect, nearClip, farClip, false);
             mat4 view = lookAt(camera.position, camera.position + camera.front, camera.WorldUp());
             mat4 invVP = inverse(projection * view);
-            for (uint32_t i = 0; i < 8; i++) {
+            for (uint32_t i = 0; i < 8; i++)
+            {
                 vec4 invCorner = invVP * vec4(frustumCorners[i], 1.0f);
                 frustumCorners[i] = invCorner / invCorner.w;
             }
 
-            for (uint32_t i = 0; i < 4; i++) {
+            for (uint32_t i = 0; i < 4; i++)
+            {
                 vec3 dist = frustumCorners[i + 4] - frustumCorners[i];
                 frustumCorners[i + 4] = frustumCorners[i] + (dist * splitDist);
                 frustumCorners[i] = frustumCorners[i] + (dist * lastSplitDist);
@@ -249,13 +252,15 @@ namespace pe
 
             // Get frustum center
             vec3 frustumCenter = vec3(0.0f);
-            for (uint32_t i = 0; i < 8; i++) {
+            for (uint32_t i = 0; i < 8; i++)
+            {
                 frustumCenter += frustumCorners[i];
             }
             frustumCenter /= 8.0f;
 
             float radius = 0.0f;
-            for (uint32_t i = 0; i < 8; i++) {
+            for (uint32_t i = 0; i < 8; i++)
+            {
                 float distance = length(frustumCorners[i] - frustumCenter);
                 radius = maximum(radius, distance);
             }
@@ -264,11 +269,11 @@ namespace pe
             vec3 maxExtents = vec3(radius);
             vec3 minExtents = -maxExtents;
 
-            vec3 lightDir = -normalize(vec3((float*)&GUI::sun_direction));
+            vec3 lightDir = -normalize(vec3((float *)&GUI::sun_direction));
             auto v0 = frustumCenter - (lightDir * radius);
             mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, camera.WorldUp());
             mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, -clipRange, maxExtents.z - minExtents.z, GlobalSettings::ReverseZ);
-            //mat4 lightOrthoMatrix = ortho(-20.f, 20.f, -20.f, 20.f, -700.f, 700.f, GlobalSettings::ReverseZ);
+            // mat4 lightOrthoMatrix = ortho(-20.f, 20.f, -20.f, 20.f, -700.f, 700.f, GlobalSettings::ReverseZ);
 
             // Store split distance and matrix in cascade
             cascades[i] = lightOrthoMatrix * lightViewMatrix;

@@ -55,7 +55,7 @@ namespace pe
         Microsoft::glTF::Document *document = nullptr;
         Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr;
 
-        static std::deque <Model> models;
+        static std::deque<Model> models;
         static Pipeline *pipeline;
         static CommandBuffer *commandBuffer;
         Descriptor *descriptorSet;
@@ -77,8 +77,8 @@ namespace pe
         std::string fullPathName;
         std::vector<pe::Node *> linearNodes{};
         std::vector<Skin *> skins{};
-        std::vector <Animation> animations{};
-        std::vector <std::string> extensions{};
+        std::vector<Animation> animations{};
+        std::vector<std::string> extensions{};
 
         int32_t animationIndex = 0;
         float animationTimer = 0.0f;
@@ -91,7 +91,7 @@ namespace pe
         Buffer *vertexBuffer;
         Buffer *indexBuffer;
         uint32_t numberOfVertices = 0, numberOfIndices = 0;
-        
+
         static void Load(const std::filesystem::path &file);
 
         void draw(uint16_t alphaMode);
@@ -114,11 +114,11 @@ namespace pe
 
         void getMesh(pe::Node *node, const std::string &meshID, const std::filesystem::path &file) const;
 
-        template<typename T>
-        void getVertexData(std::vector <T> &vec, const std::string &accessorName,
+        template <typename T>
+        void getVertexData(std::vector<T> &vec, const std::string &accessorName,
                            const Microsoft::glTF::MeshPrimitive &primitive) const;
 
-        void getIndexData(std::vector <uint32_t> &vec, const Microsoft::glTF::MeshPrimitive &primitive) const;
+        void getIndexData(std::vector<uint32_t> &vec, const Microsoft::glTF::MeshPrimitive &primitive) const;
 
         Microsoft::glTF::Image *getImage(const std::string &textureID) const;
 

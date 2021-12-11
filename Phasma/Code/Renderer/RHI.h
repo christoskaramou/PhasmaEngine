@@ -125,26 +125,26 @@ namespace pe
 
         // Helpers
         void Submit(
-                uint32_t commandBufferCount, CommandBuffer **commandBuffer,
-                PipelineStageFlags *waitStage,
-                uint32_t waitSemaphoreCount, Semaphore **waitSemaphore,
-                uint32_t signalSemaphoreCount, Semaphore **signalSemaphore,
-                Fence *signalFence,
-                bool useGraphicsQueue = true);
+            uint32_t commandBufferCount, CommandBuffer **commandBuffer,
+            PipelineStageFlags *waitStage,
+            uint32_t waitSemaphoreCount, Semaphore **waitSemaphore,
+            uint32_t signalSemaphoreCount, Semaphore **signalSemaphore,
+            Fence *signalFence,
+            bool useGraphicsQueue = true);
 
         void WaitFence(Fence *fence);
 
         void SubmitAndWaitFence(
-                uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
-                PipelineStageFlags *waitStages,
-                uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-                uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
-                bool useGraphicsQueue = true);
+            uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
+            PipelineStageFlags *waitStages,
+            uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
+            uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
+            bool useGraphicsQueue = true);
 
         void Present(
-                uint32_t swapchainCount, Swapchain **swapchains,
-                uint32_t *imageIndices,
-                uint32_t semaphorescount, Semaphore **semaphores);
+            uint32_t swapchainCount, Swapchain **swapchains,
+            uint32_t *imageIndices,
+            uint32_t semaphorescount, Semaphore **semaphores);
 
 #if _DEBUG
         void CreateDebugMessenger();
@@ -154,6 +154,7 @@ namespace pe
     private:
         static inline std::mutex m_submit_mutex{};
         bool m_HasDebugUtils = false;
+
     public:
         void WaitAndLockSubmits();
 
@@ -172,8 +173,6 @@ namespace pe
         }
 
         static void Remove()
-
-        noexcept
         {
             if (Get())
                 delete Get();

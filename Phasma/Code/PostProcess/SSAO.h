@@ -37,7 +37,6 @@ namespace pe
     class SSAO : public IComponent
     {
     public:
-
         void update(Camera &camera);
 
         void createRenderPasses(std::map<std::string, Image *> &renderTargets);

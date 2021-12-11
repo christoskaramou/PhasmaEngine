@@ -25,8 +25,8 @@ SOFTWARE.
 #include "imgui/imgui.h"
 #include <cctype>
 #include <cstdlib>
-#include <cstring>                     // for strlen
-#include "vcruntime_string.h"           // for memcpy
+#include <cstring>            // for strlen
+#include "vcruntime_string.h" // for memcpy
 
 namespace pe
 {
@@ -38,7 +38,7 @@ namespace pe
         ImVector<char *> Items;
         bool ScrollToBottom{};
         ImVector<char *> History;
-        int HistoryPos;    // -1: new line, 0..History.Size-1 browsing history.
+        int HistoryPos; // -1: new line, 0..History.Size-1 browsing history.
         ImVector<const char *> Commands;
         static bool close_app;
 
@@ -74,14 +74,16 @@ namespace pe
         {
             size_t len = strlen(str) + 1;
             void *buff = malloc(len);
-            if (!buff) return nullptr;
-            return (char *) memcpy(buff, (const void *) str, len);
+            if (!buff)
+                return nullptr;
+            return (char *)memcpy(buff, (const void *)str, len);
         }
 
         static void Strtrim(char *str)
         {
             char *str_end = str + strlen(str);
-            while (str_end > str && str_end[-1] == ' ') str_end--;
+            while (str_end > str && str_end[-1] == ' ')
+                str_end--;
             *str_end = 0;
         }
 
@@ -89,15 +91,14 @@ namespace pe
 
         void AddLog(const char *fmt, ...)
 
-        IM_FMTARGS(2);
+            IM_FMTARGS(2);
 
         void Draw(const char *title, bool *p_open);
 
         void ExecCommand(const char *command_line);
 
         static int TextEditCallbackStub(
-                ImGuiInputTextCallbackData *data
-        ); // In C++11 you are better off using lambdas for this sort of forwarding callbacks
+            ImGuiInputTextCallbackData *data); // In C++11 you are better off using lambdas for this sort of forwarding callbacks
         int TextEditCallback(ImGuiInputTextCallbackData *data);
     };
 }

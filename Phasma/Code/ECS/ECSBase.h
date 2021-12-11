@@ -24,7 +24,7 @@ SOFTWARE.
 
 namespace pe
 {
-    template<class T, class U>
+    template <class T, class U>
     constexpr void ValidateBaseClass()
     {
         static_assert(std::is_base_of<T, U>::value,
@@ -35,30 +35,39 @@ namespace pe
     {
     public:
         virtual ~BaseBehaviour()
-        {}
+        {
+        }
 
         virtual void Init()
-        {}
+        {
+        }
 
         virtual void Update(double delta)
-        {}
+        {
+        }
 
         virtual void Draw()
-        {}
+        {
+        }
 
         virtual void FixedUpdate()
-        {}
+        {
+        }
 
         virtual void OnGUI()
-        {}
+        {
+        }
 
         virtual void OnEnable()
-        {}
+        {
+        }
 
         virtual void OnDisable()
-        {}
+        {
+        }
 
         virtual void Destroy()
-        {}
+        {
+        }
     };
 }

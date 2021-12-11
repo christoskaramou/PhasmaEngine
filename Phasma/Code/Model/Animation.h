@@ -28,12 +28,14 @@ SOFTWARE.
 namespace pe
 {
     class Node;
-    
+
     struct AnimationChannel
     {
         enum PathType
         {
-            TRANSLATION, ROTATION, SCALE
+            TRANSLATION,
+            ROTATION,
+            SCALE
         };
         PathType path;
         Node *node;
@@ -44,18 +46,20 @@ namespace pe
     {
         enum InterpolationType
         {
-            LINEAR, STEP, CUBICSPLINE
+            LINEAR,
+            STEP,
+            CUBICSPLINE
         };
         InterpolationType interpolation;
         std::vector<float> inputs;
-        std::vector <vec4> outputsVec4;
+        std::vector<vec4> outputsVec4;
     };
 
     struct Animation
     {
         std::string name;
-        std::vector <AnimationSampler> samplers;
-        std::vector <AnimationChannel> channels;
+        std::vector<AnimationSampler> samplers;
+        std::vector<AnimationChannel> channels;
         float start = std::numeric_limits<float>::max();
         float end = std::numeric_limits<float>::min();
     };

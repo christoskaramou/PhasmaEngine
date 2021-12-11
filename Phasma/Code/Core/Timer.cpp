@@ -68,8 +68,7 @@ namespace pe
     {
         m_duration = std::chrono::high_resolution_clock::now() - m_start;
         delta = m_duration.count();
-        time +=
-        delta;
+        time += delta;
     }
 
     GPUTimer::GPUTimer()
@@ -115,7 +114,7 @@ namespace pe
     float GPUTimer::GetTime()
     {
         VkResult res = vkGetQueryPoolResults(RHII.device, queryPool, 0, 2, 2 * sizeof(uint64_t), &queries, sizeof(uint64_t),
-                                            VK_QUERY_RESULT_64_BIT);
+                                             VK_QUERY_RESULT_64_BIT);
 
         if (res != VK_SUCCESS)
             return 0.f;

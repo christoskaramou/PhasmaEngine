@@ -52,7 +52,7 @@ namespace pe
         vec3 front, right, up;
         float nearPlane, farPlane, FOV, speed, rotationSpeed;
         vec2 projOffset, projOffsetPrevious;
-        std::vector <Plane> frustum{};
+        std::vector<Plane> frustum{};
         Compute frustumCompute;
 
         Camera();
@@ -63,11 +63,15 @@ namespace pe
 
         // In radians
         inline float FovyToFovx(float fovy, float aspect)
-        { return 2.0f * atan(tan(fovy * 0.5f) * aspect); }
+        {
+            return 2.0f * atan(tan(fovy * 0.5f) * aspect);
+        }
 
         // In radians
         inline float FovxToFovy(float fovx, float aspect)
-        { return 2.0f * atan(tan(fovx * 0.5f) / aspect); }
+        {
+            return 2.0f * atan(tan(fovx * 0.5f) / aspect);
+        }
 
         void UpdateView();
 

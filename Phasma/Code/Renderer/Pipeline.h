@@ -71,13 +71,13 @@ namespace pe
         Shader *pVertShader;
         Shader *pFragShader;
         Shader *pCompShader;
-        std::vector <VertexInputBindingDescription> vertexInputBindingDescriptions;
-        std::vector <VertexInputAttributeDescription> vertexInputAttributeDescriptions;
+        std::vector<VertexInputBindingDescription> vertexInputBindingDescriptions;
+        std::vector<VertexInputAttributeDescription> vertexInputAttributeDescriptions;
         float width;
         float height;
         CullMode cullMode;
-        std::vector <PipelineColorBlendAttachmentState> colorBlendAttachments;
-        std::vector <DynamicState> dynamicStates;
+        std::vector<PipelineColorBlendAttachmentState> colorBlendAttachments;
+        std::vector<DynamicState> dynamicStates;
         PushConstantStage pushConstantStage;
         uint32_t pushConstantSize;
         std::vector<DescriptorLayout *> descriptorSetLayouts;

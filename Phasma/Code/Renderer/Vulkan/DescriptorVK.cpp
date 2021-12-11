@@ -28,8 +28,8 @@ SOFTWARE.
 
 namespace pe
 {
-    DescriptorBinding::DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags) :
-        binding(binding), descriptorType(descriptorType), descriptorCount(1), stageFlags(stageFlags), pImmutableSamplers()
+    DescriptorBinding::DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags)
+        : binding(binding), descriptorType(descriptorType), descriptorCount(1), stageFlags(stageFlags), pImmutableSamplers()
     {
     }
 
@@ -66,23 +66,20 @@ namespace pe
         }
     }
 
-    DescriptorLayout::DescriptorLayout(const std::vector<DescriptorBinding>& bindings)
+    DescriptorLayout::DescriptorLayout(const std::vector<DescriptorBinding> &bindings)
     {
         this->bindings = bindings;
 
         std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{};
-        for (const auto& layoutBinding : bindings)
+        for (const auto &layoutBinding : bindings)
         {
             setLayoutBindings.push_back(
-                VkDescriptorSetLayoutBinding
-                {
+                VkDescriptorSetLayoutBinding{
                     layoutBinding.binding,
                     (VkDescriptorType)layoutBinding.descriptorType,
                     1,
                     (VkShaderStageFlags)layoutBinding.stageFlags,
-                    nullptr
-                }
-            );
+                    nullptr});
         }
 
         VkDescriptorSetLayoutCreateInfo descriptorLayout{};
@@ -104,7 +101,7 @@ namespace pe
         }
     }
 
-    Descriptor::Descriptor(DescriptorLayout* layout)
+    Descriptor::Descriptor(DescriptorLayout *layout)
     {
         VkDescriptorSetLayout dsetLayout = layout->Handle();
         VkDescriptorSetAllocateInfo allocateInfo{};
@@ -122,17 +119,16 @@ namespace pe
     {
     }
 
-    DescriptorUpdateInfo::DescriptorUpdateInfo() :
-        binding(0), pBuffer(nullptr), bufferUsage(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), pImage(nullptr), imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+    DescriptorUpdateInfo::DescriptorUpdateInfo() : binding(0), pBuffer(nullptr), bufferUsage(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), pImage(nullptr), imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
     {
     }
 
-    void Descriptor::UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo* pInfo)
+    void Descriptor::UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo *pInfo)
     {
         std::deque<VkDescriptorImageInfo> dsii{};
-        auto const wSetImage = [this, &dsii](uint32_t dstBinding, Image* image, ImageLayout layout)
+        auto const wSetImage = [this, &dsii](uint32_t dstBinding, Image *image, ImageLayout layout)
         {
-            VkDescriptorImageInfo info{ image->sampler, image->view, (VkImageLayout)layout };
+            VkDescriptorImageInfo info{image->sampler, image->view, (VkImageLayout)layout};
             dsii.push_back(info);
 
             VkWriteDescriptorSet textureWriteSet{};
@@ -148,9 +144,9 @@ namespace pe
         };
 
         std::deque<VkDescriptorBufferInfo> dsbi{};
-        auto const wSetBuffer = [this, &dsbi](uint32_t dstBinding, Buffer* buffer, BufferUsageFlags bufferUsage)
+        auto const wSetBuffer = [this, &dsbi](uint32_t dstBinding, Buffer *buffer, BufferUsageFlags bufferUsage)
         {
-            VkDescriptorBufferInfo info{ buffer->Handle(), 0, buffer->Size() };
+            VkDescriptorBufferInfo info{buffer->Handle(), 0, buffer->Size()};
             dsbi.push_back(info);
 
             VkWriteDescriptorSet textureWriteSet{};
@@ -159,8 +155,7 @@ namespace pe
             textureWriteSet.dstBinding = dstBinding;
             textureWriteSet.dstArrayElement = 0;
             textureWriteSet.descriptorCount = 1;
-            textureWriteSet.descriptorType = bufferUsage == VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT ?
-                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            textureWriteSet.descriptorType = bufferUsage == VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             textureWriteSet.pBufferInfo = &dsbi.back();
 
             return textureWriteSet;
@@ -168,7 +163,7 @@ namespace pe
 
         std::vector<VkWriteDescriptorSet> textureWriteSets(infoCount);
 
-        for(uint32_t i = 0; i < infoCount; i++)
+        for (uint32_t i = 0; i < infoCount; i++)
         {
             if (pInfo[i].pImage != nullptr)
                 textureWriteSets[i] = wSetImage(pInfo[i].binding, pInfo[i].pImage, pInfo[i].imageLayout);

@@ -24,8 +24,7 @@ SOFTWARE.
 
 namespace pe
 {
-    constexpr uint32_t
-    AUTO = UINT32_MAX;
+    constexpr uint32_t AUTO = UINT32_MAX;
 
     class Descriptor;
 
@@ -46,8 +45,7 @@ namespace pe
     public:
         static Compute Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut);
 
-        static std::vector <Compute>
-        Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, uint32_t count);
+        static std::vector<Compute> Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, uint32_t count);
 
         static void CreateResources();
 
@@ -66,7 +64,7 @@ namespace pe
 
         void destroy();
 
-        template<class T>
+        template <class T>
         void copyDataTo(T *ptr, size_t elements)
         {
             assert(elements * sizeof(T) <= SBOut->Size());

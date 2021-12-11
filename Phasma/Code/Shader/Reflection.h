@@ -33,9 +33,9 @@ namespace pe
     {
     public:
         ShaderInOutDesc();
-        
+
         uint32_t location = 0;
-        std::shared_ptr <spirv_cross::SPIRType> type;
+        std::shared_ptr<spirv_cross::SPIRType> type;
     };
 
     class CombinedImageSamplerDesc
@@ -54,7 +54,7 @@ namespace pe
 
         uint32_t set = 0;
         uint32_t binding = 0;
-        std::shared_ptr <spirv_cross::SPIRType> type;
+        std::shared_ptr<spirv_cross::SPIRType> type;
         size_t bufferSize = 0;
     };
 
@@ -65,7 +65,7 @@ namespace pe
 
         size_t size = 0;
         uint32_t offset = 0;
-        std::shared_ptr <spirv_cross::SPIRType> type;
+        std::shared_ptr<spirv_cross::SPIRType> type;
     };
 
     class Shader;
@@ -77,15 +77,15 @@ namespace pe
     public:
         void Init(Shader *shader);
 
-        std::vector <VertexInputBindingDescription> GetVertexBindings();
+        std::vector<VertexInputBindingDescription> GetVertexBindings();
 
-        std::vector <VertexInputAttributeDescription> GetVertexAttributes();
+        std::vector<VertexInputAttributeDescription> GetVertexAttributes();
 
-        std::vector <ShaderInOutDesc> inputs{};
-        std::vector <ShaderInOutDesc> outputs{};
-        std::vector <CombinedImageSamplerDesc> samplers{};
-        std::vector <BufferDesc> uniformBuffers{};
-        std::vector <PushConstantDesc> pushConstantBuffers{};
+        std::vector<ShaderInOutDesc> inputs{};
+        std::vector<ShaderInOutDesc> outputs{};
+        std::vector<CombinedImageSamplerDesc> samplers{};
+        std::vector<BufferDesc> uniformBuffers{};
+        std::vector<PushConstantDesc> pushConstantBuffers{};
 
     private:
         Shader *m_shader{};

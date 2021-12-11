@@ -23,13 +23,19 @@ SOFTWARE.
 #pragma once
 
 constexpr double MILLI(double seconds)
-{ return seconds * 1000.0; }
+{
+    return seconds * 1000.0;
+}
 
 constexpr double MICRO(double seconds)
-{ return seconds * 1000000.0; }
+{
+    return seconds * 1000000.0;
+}
 
 constexpr double NANO(double seconds)
-{ return seconds * 1000000000.0; }
+{
+    return seconds * 1000000000.0;
+}
 
 namespace pe
 {
@@ -57,27 +63,28 @@ namespace pe
         double delta;
         double time;
         std::vector<double> timestamps{};
+
     private:
         std::chrono::duration<double> m_duration{};
 
     public:
         static auto &Instance()
 
-        noexcept
+            noexcept
         {
             static FrameTimer frame_timer;
             return frame_timer;
         }
 
-        FrameTimer(FrameTimer const &) = delete;                // copy constructor
+        FrameTimer(FrameTimer const &) = delete; // copy constructor
         FrameTimer(FrameTimer &&)
 
-        noexcept = delete;            // move constructor
-        FrameTimer &operator=(FrameTimer const &) = delete;    // copy assignment
-        FrameTimer &operator=(FrameTimer &&) = delete;        // move assignment
+            noexcept = delete;                              // move constructor
+        FrameTimer &operator=(FrameTimer const &) = delete; // copy assignment
+        FrameTimer &operator=(FrameTimer &&) = delete;      // move assignment
     private:
-        ~FrameTimer() = default;                            // destructor
-        FrameTimer();                                        // default constructor
+        ~FrameTimer() = default; // destructor
+        FrameTimer();            // default constructor
     };
 
     class CommandBuffer;

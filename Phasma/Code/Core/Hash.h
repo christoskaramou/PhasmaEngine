@@ -29,13 +29,13 @@ namespace pe
     public:
         using Type = size_t;
 
-        Hash() : m_hash(0) {};
+        Hash() : m_hash(0){};
 
         Hash(const void *data, size_t size) : m_hash(0) { Combine(data, size); }
 
         void Combine(const void *data, size_t size)
         {
-            const Type *array = reinterpret_cast<const Type*>(data);
+            const Type *array = reinterpret_cast<const Type *>(data);
             size_t arraySize = size / sizeof(Type);
             size_t bytesToFit = size % sizeof(Type);
 
@@ -63,8 +63,8 @@ namespace pe
     class StringHash : public Hash
     {
     public:
-        StringHash() : Hash() {};
-        
+        StringHash() : Hash(){};
+
         StringHash(const std::string &string) : Hash(string.data(), string.size()) {}
 
         StringHash(const char *string) : Hash(string, strlen(string)) {}

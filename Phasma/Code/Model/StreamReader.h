@@ -35,7 +35,7 @@ namespace pe
         }
 
         // Resolves the relative URIs of any external resources declared in the glTF manifest
-        std::shared_ptr <std::istream> GetInputStream(const std::string &filename) const override
+        std::shared_ptr<std::istream> GetInputStream(const std::string &filename) const override
         {
             // In order to construct a valid stream:
             // 1. The filename argument will be encoded as UTF-8 so use filesystem::u8path to

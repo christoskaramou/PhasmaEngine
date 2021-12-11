@@ -31,10 +31,9 @@ namespace pe
 {
     DescriptorLayout *GetDescriptorSetLayout()
     {
-        static std::vector <DescriptorBinding> bindings
-                {
-                        DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                };
+        static std::vector<DescriptorBinding> bindings{
+            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+        };
         static DescriptorLayout *descriptorSetLayout = DescriptorLayout::Create(bindings);
 
         return descriptorSetLayout;
@@ -56,8 +55,7 @@ namespace pe
         uniform = Buffer::Create(
             sizeof(LightsUBO),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU
-        );
+            VMA_MEMORY_USAGE_CPU_TO_GPU);
         uniform->Map();
         uniform->Zero();
         uniform->Flush();
@@ -89,7 +87,7 @@ namespace pe
 
     void LightSystem::Update(double delta)
     {
-        std::vector <MemoryRange> ranges{};
+        std::vector<MemoryRange> ranges{};
 
         Camera &camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
         lubo.camPos = {camera.position, 1.0f};

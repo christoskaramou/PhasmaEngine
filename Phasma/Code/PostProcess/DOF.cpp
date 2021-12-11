@@ -133,7 +133,6 @@ namespace pe
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
-
     }
 
     void DOF::destroy()

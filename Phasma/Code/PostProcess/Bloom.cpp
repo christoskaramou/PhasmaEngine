@@ -152,14 +152,12 @@ namespace pe
     {
         uint32_t totalImages = static_cast<uint32_t>(RHII.swapchain->images.size());
 
-        std::vector<float> values
-                {
-                        GUI::Bloom_Inv_brightness,
-                        GUI::Bloom_intensity,
-                        GUI::Bloom_range,
-                        GUI::Bloom_exposure,
-                        static_cast<float>(GUI::use_tonemap)
-                };
+        std::vector<float> values{
+            GUI::Bloom_Inv_brightness,
+            GUI::Bloom_intensity,
+            GUI::Bloom_range,
+            GUI::Bloom_exposure,
+            static_cast<float>(GUI::use_tonemap)};
 
         renderTargets["brightFilter"]->ChangeLayout(cmd, LayoutState::ColorWrite);
         cmd->BeginPass(renderPassBrightFilter, framebuffers[imageIndex]);

@@ -75,12 +75,11 @@ namespace pe
         }
 
         void loadTexture(
-                MaterialType type,
-                const std::filesystem::path &file,
-                const Microsoft::glTF::Image *image = nullptr,
-                const Microsoft::glTF::Document *document = nullptr,
-                const Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr
-        );
+            MaterialType type,
+            const std::filesystem::path &file,
+            const Microsoft::glTF::Image *image = nullptr,
+            const Microsoft::glTF::Document *document = nullptr,
+            const Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr);
     };
 
     class Mesh
@@ -103,18 +102,18 @@ namespace pe
         } ubo;
 
         static std::map<std::string, Image *> uniqueTextures;
-        std::vector <Primitive> primitives{};
+        std::vector<Primitive> primitives{};
 
         Descriptor *descriptorSet;
         Buffer *uniformBuffer;
-        std::vector <Vertex> vertices{};
-        std::vector <uint32_t> indices{};
+        std::vector<Vertex> vertices{};
+        std::vector<uint32_t> indices{};
         uint32_t vertexOffset = 0, indexOffset = 0;
-        //vec4 boundingSphere;
+        // vec4 boundingSphere;
 
         void createUniformBuffers();
 
-        //void calculateBoundingSphere();
+        // void calculateBoundingSphere();
         void destroy();
     };
 }

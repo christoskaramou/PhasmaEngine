@@ -69,22 +69,27 @@ namespace pe
     void Renderer::CheckQueue()
     {
 #ifndef IGNORE_SCRIPTS
-        for (auto it = Queue::addScript.begin(); it != Queue::addScript.end();) {
+        for (auto it = Queue::addScript.begin(); it != Queue::addScript.end();)
+        {
             delete Model::models[std::get<0>(*it)].script;
             Model::models[std::get<0>(*it)].script = new Script(std::get<1>(*it).c_str());
             it = Queue::addScript.erase(it);
         }
-        for (auto it = Queue::removeScript.begin(); it != Queue::removeScript.end();) {
-            if (Model::models[*it].script) {
+        for (auto it = Queue::removeScript.begin(); it != Queue::removeScript.end();)
+        {
+            if (Model::models[*it].script)
+            {
                 delete Model::models[*it].script;
                 Model::models[*it].script = nullptr;
             }
             it = Queue::removeScript.erase(it);
         }
 
-        for (auto it = Queue::compileScript.begin(); it != Queue::compileScript.end();) {
+        for (auto it = Queue::compileScript.begin(); it != Queue::compileScript.end();)
+        {
             std::string name;
-            if (Model::models[*it].script) {
+            if (Model::models[*it].script)
+            {
                 name = Model::models[*it].script->name;
                 delete Model::models[*it].script;
                 Model::models[*it].script = new Script(name.c_str());
@@ -95,10 +100,8 @@ namespace pe
 #endif
     }
 
-
     void Renderer::ComputeAnimations()
     {
-
     }
 
     enum class RenderQueue
@@ -112,28 +115,28 @@ namespace pe
     {
         static GPUTimer gpuTimer[12]{};
 
-        FrameTimer& frameTimer = FrameTimer::Instance();
+        FrameTimer &frameTimer = FrameTimer::Instance();
 
-        CommandBuffer* cmd = RHII.dynamicCmdBuffers[imageIndex];
+        CommandBuffer *cmd = RHII.dynamicCmdBuffers[imageIndex];
         cmd->Begin();
 
         gpuTimer[0].Start(cmd);
         // SKYBOX
-        SkyBox& skybox = GUI::shadow_cast ? skyBoxDay : skyBoxNight;
+        SkyBox &skybox = GUI::shadow_cast ? skyBoxDay : skyBoxNight;
 
         // MODELS
         {
             gpuTimer[1].Start(cmd);
             deferred.batchStart(cmd, imageIndex);
 
-            for (auto& model : Model::models)
-                model.draw((uint16_t) RenderQueue::Opaque);
+            for (auto &model : Model::models)
+                model.draw((uint16_t)RenderQueue::Opaque);
 
-            for (auto& model : Model::models)
-                model.draw((uint16_t) RenderQueue::AlphaCut);
+            for (auto &model : Model::models)
+                model.draw((uint16_t)RenderQueue::AlphaCut);
 
-            for (auto& model : Model::models)
-                model.draw((uint16_t) RenderQueue::AlphaBlend);
+            for (auto &model : Model::models)
+                model.draw((uint16_t)RenderQueue::AlphaBlend);
 
             deferred.batchEnd();
             frameTimer.timestamps[4] = gpuTimer[1].End();
@@ -147,16 +150,16 @@ namespace pe
         renderTargets["ssaoBlur"]->ChangeLayout(cmd, LayoutState::ColorRead);
         renderTargets["velocity"]->ChangeLayout(cmd, LayoutState::ColorRead);
         renderTargets["taa"]->ChangeLayout(cmd, LayoutState::ColorRead);
-        for (auto& image : shadows.textures)
+        for (auto &image : shadows.textures)
             image->ChangeLayout(cmd, LayoutState::DepthRead);
 
-        SSAO& ssao = *WORLD_ENTITY->GetComponent<SSAO>();
-        SSR& ssr = *WORLD_ENTITY->GetComponent<SSR>();
-        FXAA& fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
-        TAA& taa = *WORLD_ENTITY->GetComponent<TAA>();
-        Bloom& bloom = *WORLD_ENTITY->GetComponent<Bloom>();
-        DOF& dof = *WORLD_ENTITY->GetComponent<DOF>();
-        MotionBlur& motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
+        SSAO &ssao = *WORLD_ENTITY->GetComponent<SSAO>();
+        SSR &ssr = *WORLD_ENTITY->GetComponent<SSR>();
+        FXAA &fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
+        TAA &taa = *WORLD_ENTITY->GetComponent<TAA>();
+        Bloom &bloom = *WORLD_ENTITY->GetComponent<Bloom>();
+        DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
+        MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
         // SCREEN SPACE AMBIENT OCCLUSION
         if (GUI::show_ssao)
@@ -193,7 +196,7 @@ namespace pe
                 taa.draw(cmd, imageIndex, renderTargets);
                 frameTimer.timestamps[8] = gpuTimer[5].End();
             }
-                // FXAA
+            // FXAA
             else if (GUI::use_FXAA)
             {
                 gpuTimer[6].Start(cmd);
@@ -239,7 +242,7 @@ namespace pe
         renderTargets["ssaoBlur"]->ChangeLayout(cmd, LayoutState::ColorWrite);
         renderTargets["velocity"]->ChangeLayout(cmd, LayoutState::ColorWrite);
         renderTargets["taa"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-        for (auto& image : shadows.textures)
+        for (auto &image : shadows.textures)
             image->ChangeLayout(cmd, LayoutState::DepthWrite);
 
         BlitToViewport(cmd, GUI::s_currRenderImage ? GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
@@ -261,34 +264,34 @@ namespace pe
         for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
         {
             uint32_t index = SHADOWMAP_CASCADES * imageIndex + i;
-            CommandBuffer& cmd = *RHII.shadowCmdBuffers[index];
+            CommandBuffer &cmd = *RHII.shadowCmdBuffers[index];
             cmd.Begin();
 
-            FrameTimer& frameTimer = FrameTimer::Instance();
+            FrameTimer &frameTimer = FrameTimer::Instance();
             gpuTimer[i].Start(&cmd);
 
             cmd.SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
             cmd.BeginPass(shadows.renderPass, shadows.framebuffers[index]);
             cmd.BindPipeline(shadows.pipeline);
-            for (auto& model : Model::models)
+            for (auto &model : Model::models)
             {
                 if (model.render)
                 {
                     cmd.BindVertexBuffer(model.vertexBuffer, 0);
                     cmd.BindIndexBuffer(model.indexBuffer, 0);
 
-                    for (auto& node : model.linearNodes)
+                    for (auto &node : model.linearNodes)
                     {
                         if (node->mesh)
                         {
-                            std::array<Descriptor*, 2> descriptors{ node->mesh->descriptorSet, model.descriptorSet };
+                            std::array<Descriptor *, 2> descriptors{node->mesh->descriptorSet, model.descriptorSet};
                             cmd.PushConstants(shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), &shadows.cascades[i]);
                             cmd.BindDescriptors(shadows.pipeline, 2, descriptors.data());
-                            for (auto& primitive : node->mesh->primitives)
+                            for (auto &primitive : node->mesh->primitives)
                             {
-                                //if (primitive.render)
-                                    cmd.DrawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset,
-                                        node->mesh->vertexOffset + primitive.vertexOffset, 0);
+                                // if (primitive.render)
+                                cmd.DrawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset,
+                                                node->mesh->vertexOffset + primitive.vertexOffset, 0);
                             }
                         }
                     }
@@ -302,7 +305,7 @@ namespace pe
         }
     }
 
-    void Renderer::AddRenderTarget(const std::string& name, Format format, ImageUsageFlags additionalFlags)
+    void Renderer::AddRenderTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags)
     {
         if (renderTargets.find(name) != renderTargets.end())
             return;
@@ -326,7 +329,7 @@ namespace pe
         renderTargets[name]->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         renderTargets[name]->imageInfo.layoutState = LayoutState::ColorWrite;
 
-        //std::string str = to_string(format); str.find("A8") != std::string::npos
+        // std::string str = to_string(format); str.find("A8") != std::string::npos
         renderTargets[name]->blendAttachment.blendEnable = name == "albedo" ? VK_TRUE : VK_FALSE;
         renderTargets[name]->blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
         renderTargets[name]->blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
@@ -341,7 +344,7 @@ namespace pe
 
 #ifndef IGNORE_SCRIPTS
     // Callbacks for scripts -------------------
-    static void LoadModel(MonoString* folderPath, MonoString* modelName, uint32_t instances)
+    static void LoadModel(MonoString *folderPath, MonoString *modelName, uint32_t instances)
     {
         const std::string curPath = std::filesystem::current_path().string() + "\\";
         const std::string path(mono_string_to_utf8(folderPath));
@@ -386,34 +389,32 @@ namespace pe
     {
         // SKYBOXES LOAD
         std::array<std::string, 6> skyTextures = {
-                Path::Assets + "Objects/sky/right.png",
-                Path::Assets + "Objects/sky/left.png",
-                Path::Assets + "Objects/sky/top.png",
-                Path::Assets + "Objects/sky/bottom.png",
-                Path::Assets + "Objects/sky/back.png",
-                Path::Assets + "Objects/sky/front.png"
-        };
+            Path::Assets + "Objects/sky/right.png",
+            Path::Assets + "Objects/sky/left.png",
+            Path::Assets + "Objects/sky/top.png",
+            Path::Assets + "Objects/sky/bottom.png",
+            Path::Assets + "Objects/sky/back.png",
+            Path::Assets + "Objects/sky/front.png"};
         skyBoxDay.loadSkyBox(skyTextures, 1024);
         skyTextures = {
-                Path::Assets + "Objects/lmcity/lmcity_rt.png",
-                Path::Assets + "Objects/lmcity/lmcity_lf.png",
-                Path::Assets + "Objects/lmcity/lmcity_up.png",
-                Path::Assets + "Objects/lmcity/lmcity_dn.png",
-                Path::Assets + "Objects/lmcity/lmcity_bk.png",
-                Path::Assets + "Objects/lmcity/lmcity_ft.png"
-        };
+            Path::Assets + "Objects/lmcity/lmcity_rt.png",
+            Path::Assets + "Objects/lmcity/lmcity_lf.png",
+            Path::Assets + "Objects/lmcity/lmcity_up.png",
+            Path::Assets + "Objects/lmcity/lmcity_dn.png",
+            Path::Assets + "Objects/lmcity/lmcity_bk.png",
+            Path::Assets + "Objects/lmcity/lmcity_ft.png"};
         skyBoxNight.loadSkyBox(skyTextures, 512);
 
 #ifndef IGNORE_SCRIPTS
         // SCRIPTS
         Script::Init();
-        Script::addCallback("Global::LoadModel", reinterpret_cast<const void*>(LoadModel));
-        Script::addCallback("Global::KeyDown", reinterpret_cast<const void*>(KeyDown));
-        Script::addCallback("Global::SetTimeScale", reinterpret_cast<const void*>(SetTimeScale));
-        Script::addCallback("Global::MouseButtonDown", reinterpret_cast<const void*>(MouseButtonDown));
-        Script::addCallback("Global::GetMousePos", reinterpret_cast<const void*>(GetMousePos));
-        Script::addCallback("Global::SetMousePos", reinterpret_cast<const void*>(SetMousePos));
-        Script::addCallback("Global::GetMouseWheel", reinterpret_cast<const void*>(GetMouseWheel));
+        Script::addCallback("Global::LoadModel", reinterpret_cast<const void *>(LoadModel));
+        Script::addCallback("Global::KeyDown", reinterpret_cast<const void *>(KeyDown));
+        Script::addCallback("Global::SetTimeScale", reinterpret_cast<const void *>(SetTimeScale));
+        Script::addCallback("Global::MouseButtonDown", reinterpret_cast<const void *>(MouseButtonDown));
+        Script::addCallback("Global::GetMousePos", reinterpret_cast<const void *>(GetMousePos));
+        Script::addCallback("Global::SetMousePos", reinterpret_cast<const void *>(SetMousePos));
+        Script::addCallback("Global::GetMouseWheel", reinterpret_cast<const void *>(GetMouseWheel));
         scripts.push_back(new Script("Load"));
 #endif
     }
@@ -429,7 +430,7 @@ namespace pe
         // DESCRIPTOR SETS FOR COMPOSITION PIPELINE
         deferred.createDeferredUniforms(renderTargets);
         // DESCRIPTOR SET FOR COMPUTE PIPELINE
-        //compute.createComputeUniforms(sizeof(SBOIn));
+        // compute.createComputeUniforms(sizeof(SBOIn));
     }
 
     void Renderer::ResizeViewport(uint32_t width, uint32_t height)
@@ -438,17 +439,17 @@ namespace pe
 
         renderArea.Update(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
 
-        SSAO& ssao = *WORLD_ENTITY->GetComponent<SSAO>();
-        SSR& ssr = *WORLD_ENTITY->GetComponent<SSR>();
-        FXAA& fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
-        TAA& taa = *WORLD_ENTITY->GetComponent<TAA>();
-        Bloom& bloom = *WORLD_ENTITY->GetComponent<Bloom>();
-        DOF& dof = *WORLD_ENTITY->GetComponent<DOF>();
-        MotionBlur& motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
+        SSAO &ssao = *WORLD_ENTITY->GetComponent<SSAO>();
+        SSR &ssr = *WORLD_ENTITY->GetComponent<SSR>();
+        FXAA &fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
+        TAA &taa = *WORLD_ENTITY->GetComponent<TAA>();
+        Bloom &bloom = *WORLD_ENTITY->GetComponent<Bloom>();
+        DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
+        MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
         //- Free resources ----------------------
         // render targets
-        for (auto& RT : renderTargets)
+        for (auto &RT : renderTargets)
             RT.second->Destroy();
         renderTargets.clear();
         GUI::s_renderImages.clear();
@@ -459,9 +460,9 @@ namespace pe
         // deferred
         deferred.renderPass->Destroy();
         deferred.compositionRenderPass->Destroy();
-        for (auto* framebuffer : deferred.framebuffers)
+        for (auto *framebuffer : deferred.framebuffers)
             framebuffer->Destroy();
-        for (auto* framebuffer : deferred.compositionFramebuffers)
+        for (auto *framebuffer : deferred.compositionFramebuffers)
             framebuffer->Destroy();
         deferred.pipeline->Destroy();
         deferred.pipelineComposition->Destroy();
@@ -473,7 +474,7 @@ namespace pe
         ssr.pipeline->Destroy();
 
         // FXAA
-        for (auto& framebuffer : fxaa.framebuffers)
+        for (auto &framebuffer : fxaa.framebuffers)
             framebuffer->Destroy();
         fxaa.renderPass->Destroy();
         fxaa.pipeline->Destroy();
@@ -482,9 +483,9 @@ namespace pe
         // TAA
         taa.previous->Destroy();
         taa.frameImage->Destroy();
-        for (auto& framebuffer : taa.framebuffers)
+        for (auto &framebuffer : taa.framebuffers)
             framebuffer->Destroy();
-        for (auto& framebuffer : taa.framebuffersSharpen)
+        for (auto &framebuffer : taa.framebuffersSharpen)
             framebuffer->Destroy();
         taa.renderPass->Destroy();
         taa.renderPassSharpen->Destroy();
@@ -492,7 +493,7 @@ namespace pe
         taa.pipelineSharpen->Destroy();
 
         // Bloom
-        for (auto* frameBuffer : bloom.framebuffers)
+        for (auto *frameBuffer : bloom.framebuffers)
             frameBuffer->Destroy();
         bloom.renderPassBrightFilter->Destroy();
         bloom.renderPassGaussianBlur->Destroy();
@@ -504,14 +505,14 @@ namespace pe
         bloom.frameImage->Destroy();
 
         // Depth of Field
-        for (auto& framebuffer : dof.framebuffers)
+        for (auto &framebuffer : dof.framebuffers)
             framebuffer->Destroy();
         dof.renderPass->Destroy();
         dof.pipeline->Destroy();
         dof.frameImage->Destroy();
 
         // Motion blur
-        for (auto& framebuffer : motionBlur.framebuffers)
+        for (auto &framebuffer : motionBlur.framebuffers)
             framebuffer->Destroy();
         motionBlur.renderPass->Destroy();
         motionBlur.pipeline->Destroy();
@@ -520,9 +521,9 @@ namespace pe
         // SSAO
         ssao.renderPass->Destroy();
         ssao.blurRenderPass->Destroy();
-        for (auto& framebuffer : ssao.framebuffers)
+        for (auto &framebuffer : ssao.framebuffers)
             framebuffer->Destroy();
-        for (auto& framebuffer : ssao.blurFramebuffers)
+        for (auto &framebuffer : ssao.blurFramebuffers)
             framebuffer->Destroy();
         ssao.pipeline->Destroy();
         ssao.pipelineBlur->Destroy();
@@ -599,15 +600,15 @@ namespace pe
         gui.CreateRenderPass();
         gui.CreateFrameBuffers();
 
-        //compute.pipeline = createComputePipeline();
-        //compute.updateDescriptorSets();
+        // compute.pipeline = createComputePipeline();
+        // compute.updateDescriptorSets();
 
         //- Recreate resources end --------------
     }
 
-    void Renderer::BlitToViewport(CommandBuffer* cmd, Image* renderedImage, uint32_t imageIndex)
+    void Renderer::BlitToViewport(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex)
     {
-        Image* s_chain_Image = RHII.swapchain->images[imageIndex];
+        Image *s_chain_Image = RHII.swapchain->images[imageIndex];
 
         renderedImage->TransitionImageLayout(
             cmd,
@@ -616,8 +617,7 @@ namespace pe
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            VK_ACCESS_TRANSFER_READ_BIT
-        );
+            VK_ACCESS_TRANSFER_READ_BIT);
         s_chain_Image->TransitionImageLayout(
             cmd,
             VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
@@ -625,17 +625,16 @@ namespace pe
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
-            VK_ACCESS_TRANSFER_WRITE_BIT
-        );
+            VK_ACCESS_TRANSFER_WRITE_BIT);
 
         ImageBlit blit{};
-        blit.srcOffsets[0] = Offset3D{ static_cast<int32_t>(renderedImage->imageInfo.width), static_cast<int32_t>(renderedImage->imageInfo.height), 0 };
-        blit.srcOffsets[1] = Offset3D{ 0, 0, 1 };
+        blit.srcOffsets[0] = Offset3D{static_cast<int32_t>(renderedImage->imageInfo.width), static_cast<int32_t>(renderedImage->imageInfo.height), 0};
+        blit.srcOffsets[1] = Offset3D{0, 0, 1};
         blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.srcSubresource.layerCount = 1;
-        Viewport& vp = renderArea.viewport;
-        blit.dstOffsets[0] = Offset3D{ (int32_t)vp.x, (int32_t)vp.y, 0 };
-        blit.dstOffsets[1] = Offset3D{ (int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1 };
+        Viewport &vp = renderArea.viewport;
+        blit.dstOffsets[0] = Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
+        blit.dstOffsets[1] = Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
         blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.dstSubresource.layerCount = 1;
 
@@ -652,8 +651,7 @@ namespace pe
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_ACCESS_TRANSFER_READ_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-        );
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
         s_chain_Image->TransitionImageLayout(
             cmd,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -661,21 +659,20 @@ namespace pe
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_ACCESS_TRANSFER_WRITE_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
-        );
+            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT);
     }
 
     void Renderer::RecreatePipelines()
     {
         RHII.WaitGraphicsQueue();
 
-        SSAO& ssao = *WORLD_ENTITY->GetComponent<SSAO>();
-        SSR& ssr = *WORLD_ENTITY->GetComponent<SSR>();
-        FXAA& fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
-        TAA& taa = *WORLD_ENTITY->GetComponent<TAA>();
-        Bloom& bloom = *WORLD_ENTITY->GetComponent<Bloom>();
-        DOF& dof = *WORLD_ENTITY->GetComponent<DOF>();
-        MotionBlur& motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
+        SSAO &ssao = *WORLD_ENTITY->GetComponent<SSAO>();
+        SSR &ssr = *WORLD_ENTITY->GetComponent<SSR>();
+        FXAA &fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
+        TAA &taa = *WORLD_ENTITY->GetComponent<TAA>();
+        Bloom &bloom = *WORLD_ENTITY->GetComponent<Bloom>();
+        DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
+        MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
         shadows.pipeline->Destroy();
         ssao.pipeline->Destroy();
@@ -686,10 +683,10 @@ namespace pe
         fxaa.pipeline->Destroy();
         taa.pipeline->Destroy();
         taa.pipelineSharpen->Destroy();
-        //bloom.pipelineBrightFilter.destroy();
-        //bloom.pipelineCombine.destroy();
-        //bloom.pipelineGaussianBlurHorizontal.destroy();
-        //bloom.pipelineGaussianBlurVertical.destroy();
+        // bloom.pipelineBrightFilter.destroy();
+        // bloom.pipelineCombine.destroy();
+        // bloom.pipelineGaussianBlurHorizontal.destroy();
+        // bloom.pipelineGaussianBlurVertical.destroy();
         dof.pipeline->Destroy();
         motionBlur.pipeline->Destroy();
 

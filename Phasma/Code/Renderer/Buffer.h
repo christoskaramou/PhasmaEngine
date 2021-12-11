@@ -28,13 +28,15 @@ namespace pe
     {
     public:
         MemoryRange() : data(nullptr), size(0), offset(0)
-        {}
+        {
+        }
 
         MemoryRange(void *data, size_t size, size_t offset) : data(data), size(size), offset(offset)
-        {}
+        {
+        }
 
-        void *data; // source data
-        size_t size; // source data size in bytes
+        void *data;    // source data
+        size_t size;   // source data size in bytes
         size_t offset; // offset to destination data in bytes
     };
 
@@ -61,7 +63,7 @@ namespace pe
 
         void *Data();
 
-        template<Launch launch>
+        template <Launch launch>
         void CopyRequest(const MemoryRange &range)
         {
             auto lambda = [this, range]()
@@ -74,8 +76,8 @@ namespace pe
             Queue<launch>::Request(lambda);
         }
 
-        template<Launch launch>
-        void CopyRequest(const std::vector <MemoryRange> &ranges)
+        template <Launch launch>
+        void CopyRequest(const std::vector<MemoryRange> &ranges)
         {
             auto lambda = [this, ranges]()
             {

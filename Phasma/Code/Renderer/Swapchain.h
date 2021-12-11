@@ -24,8 +24,7 @@ SOFTWARE.
 
 namespace pe
 {
-    constexpr uint32_t
-    SWAPCHAIN_IMAGES = 3;
+    constexpr uint32_t SWAPCHAIN_IMAGES = 3;
 
     class Context;
 

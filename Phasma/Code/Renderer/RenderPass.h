@@ -43,12 +43,12 @@ namespace pe
     class RenderPass : public IHandle<RenderPass, RenderPassHandle>
     {
     public:
-        RenderPass(const std::vector <Attachment> &attachments);
+        RenderPass(const std::vector<Attachment> &attachments);
 
         RenderPass(const Attachment &attachment);
 
         ~RenderPass();
 
-        std::vector <Attachment> attachments;
+        std::vector<Attachment> attachments;
     };
 }

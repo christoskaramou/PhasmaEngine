@@ -38,7 +38,7 @@ namespace pe
     void Context::DestroySystems()
     {
         RHII.WaitDeviceIdle();
-        
+
         // Reverse destroy systems, some do have dependencies on previous
         for (auto &system : m_systems)
             system.second->Destroy();

@@ -27,12 +27,12 @@ SOFTWARE.
 
 namespace pe
 {
-    FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass* renderPass)
-        : FrameBuffer(width, height, std::vector<ImageViewHandle>{ view }, renderPass)
+    FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass *renderPass)
+        : FrameBuffer(width, height, std::vector<ImageViewHandle>{view}, renderPass)
     {
     }
 
-    FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, const std::vector<ImageViewHandle>& views, RenderPass* renderPass)
+    FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, const std::vector<ImageViewHandle> &views, RenderPass *renderPass)
     {
         this->width = width;
         this->height = height;

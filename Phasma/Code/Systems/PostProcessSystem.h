@@ -36,6 +36,5 @@ namespace pe
         void Update(double delta) override;
 
         void Destroy() override;
-
     };
 }

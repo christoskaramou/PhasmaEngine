@@ -32,7 +32,7 @@ namespace pe
     {
         std::string name;
         Node *skeletonRoot;
-        std::vector <mat4> inverseBindMatrices;
+        std::vector<mat4> inverseBindMatrices;
         std::vector<Node *> joints;
     };
 

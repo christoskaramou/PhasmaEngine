@@ -39,15 +39,13 @@ namespace pe
         vertexBuffer = Buffer::Create(
             sizeof(float) * vertices.size(),
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VMA_MEMORY_USAGE_GPU_ONLY
-        );
+            VMA_MEMORY_USAGE_GPU_ONLY);
 
         // Staging buffer
         Buffer *staging = Buffer::Create(
             sizeof(float) * vertices.size(),
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_MEMORY_USAGE_CPU_ONLY
-        );
+            VMA_MEMORY_USAGE_CPU_ONLY);
         staging->Map();
         staging->CopyData(vertices.data());
         staging->Flush();
@@ -62,8 +60,7 @@ namespace pe
         uniformBuffer = Buffer::Create(
             size,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU
-        );
+            VMA_MEMORY_USAGE_CPU_TO_GPU);
         uniformBuffer->Map();
         uniformBuffer->Zero();
         uniformBuffer->Flush();
@@ -74,7 +71,7 @@ namespace pe
     {
         // Texture Load
         int texWidth, texHeight, texChannels;
-        //stbi_set_flip_vertically_on_load(true);
+        // stbi_set_flip_vertically_on_load(true);
         stbi_uc *pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
@@ -84,8 +81,7 @@ namespace pe
         Buffer *staging = Buffer::Create(
             imageSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_MEMORY_USAGE_CPU_ONLY
-        );
+            VMA_MEMORY_USAGE_CPU_ONLY);
         staging->Map();
         staging->CopyData(pixels);
         staging->Flush();
@@ -128,7 +124,7 @@ namespace pe
         vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
         descriptorSet = dset;
 
-        std::vector <VkWriteDescriptorSet> textureWriteSets(2);
+        std::vector<VkWriteDescriptorSet> textureWriteSets(2);
         // MVP
         VkDescriptorBufferInfo dbi{};
         dbi.buffer = uniformBuffer->Handle();

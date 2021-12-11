@@ -34,7 +34,7 @@ namespace pe
         All // Used for convenience to call all the above in one go.
     };
 
-    template<Launch launch>
+    template <Launch launch>
     class Queue
     {
     public:
@@ -45,30 +45,30 @@ namespace pe
             if (func == nullptr)
                 PE_ERROR("Cannot add null function to queue.");
 
-            std::lock_guard <std::mutex> guard(s_requestMutex);
+            std::lock_guard<std::mutex> guard(s_requestMutex);
 
-            if constexpr(launch == Launch::Async)
+            if constexpr (launch == Launch::Async)
             {
                 s_futures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
                 s_signals.push_back(std::forward<Func>(signal));
             }
-            else if constexpr(launch == Launch::AsyncDeferred)
+            else if constexpr (launch == Launch::AsyncDeferred)
             {
                 s_futures.push_back(std::async(std::launch::deferred, std::forward<Func>(func)));
                 s_signals.push_back(std::forward<Func>(signal));
             }
-            else if constexpr(launch == Launch::AsyncNoWait)
+            else if constexpr (launch == Launch::AsyncNoWait)
             {
                 s_noWaitFutures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
                 s_signalsNoWait.push_back(std::forward<Func>(signal));
             }
-            else if constexpr(launch == Launch::Sync)
+            else if constexpr (launch == Launch::Sync)
             {
                 func();
                 if (signal)
                     signal();
             }
-            else if constexpr(launch == Launch::SyncDeferred)
+            else if constexpr (launch == Launch::SyncDeferred)
             {
                 s_deferredSync.push_back(std::forward<Func>(func));
                 s_signals.push_back(std::forward<Func>(signal));
@@ -77,29 +77,29 @@ namespace pe
 
         inline static void ExecuteRequests()
         {
-            if constexpr(launch == Launch::All)
+            if constexpr (launch == Launch::All)
             {
                 Queue<Launch::AsyncNoWait>::ExecuteRequests();
-			    Queue<Launch::Async>::ExecuteRequests();
-			    Queue<Launch::SyncDeferred>::ExecuteRequests();
-			    Queue<Launch::AsyncDeferred>::ExecuteRequests();
+                Queue<Launch::Async>::ExecuteRequests();
+                Queue<Launch::SyncDeferred>::ExecuteRequests();
+                Queue<Launch::AsyncDeferred>::ExecuteRequests();
             }
-            else if constexpr(launch == Launch::Async)
+            else if constexpr (launch == Launch::Async)
             {
                 GetFutures();
             }
-            else if constexpr(launch == Launch::AsyncDeferred)
+            else if constexpr (launch == Launch::AsyncDeferred)
             {
                 GetFutures();
             }
-            else if constexpr(launch == Launch::AsyncNoWait)
+            else if constexpr (launch == Launch::AsyncNoWait)
             {
                 CheckNoWaitFutures();
             }
-            else if constexpr(launch == Launch::Sync)
+            else if constexpr (launch == Launch::Sync)
             {
             }
-            else if constexpr(launch == Launch::SyncDeferred)
+            else if constexpr (launch == Launch::SyncDeferred)
             {
                 DeferredSync();
             }
@@ -158,11 +158,11 @@ namespace pe
         }
 
     private:
-        inline static std::deque <std::future<void>> s_futures;
-        inline static std::deque <Func> s_signals;
-        inline static std::deque <std::future<void>> s_noWaitFutures;
-        inline static std::deque <Func> s_signalsNoWait;
-        inline static std::deque <Func> s_deferredSync;
+        inline static std::deque<std::future<void>> s_futures;
+        inline static std::deque<Func> s_signals;
+        inline static std::deque<std::future<void>> s_noWaitFutures;
+        inline static std::deque<Func> s_signalsNoWait;
+        inline static std::deque<Func> s_deferredSync;
         inline static std::mutex s_requestMutex;
     };
 }

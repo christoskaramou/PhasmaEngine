@@ -39,9 +39,9 @@ namespace pe
         // TODO: Rework this to figure out proper memory type
         VmaAllocationCreateInfo allocationCreateInfo = {};
         allocationCreateInfo.usage = (VmaMemoryUsage)properties;
-            //usage & VK_BUFFER_USAGE_TRANSFER_SRC_BIT ? VMA_MEMORY_USAGE_CPU_ONLY :
-            //properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT ? VMA_MEMORY_USAGE_GPU_ONLY :
-            //VMA_MEMORY_USAGE_CPU_TO_GPU;
+        // usage & VK_BUFFER_USAGE_TRANSFER_SRC_BIT ? VMA_MEMORY_USAGE_CPU_ONLY :
+        // properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT ? VMA_MEMORY_USAGE_GPU_ONLY :
+        // VMA_MEMORY_USAGE_CPU_TO_GPU;
         allocationCreateInfo.preferredFlags = 0;
 
         VkBuffer bufferVK;
@@ -83,22 +83,22 @@ namespace pe
         memset(data, 0, size);
     }
 
-    void Buffer::CopyData(const void* srcData, size_t srcSize, size_t offset)
+    void Buffer::CopyData(const void *srcData, size_t srcSize, size_t offset)
     {
         if (!data)
             return;
         assert(srcSize + offset <= size);
-        memcpy((char*) data + offset, srcData, srcSize > 0 ? srcSize : size);
+        memcpy((char *)data + offset, srcData, srcSize > 0 ? srcSize : size);
     }
 
-    void Buffer::CopyBuffer(Buffer* srcBuffer, const size_t srcSize)
+    void Buffer::CopyBuffer(Buffer *srcBuffer, const size_t srcSize)
     {
         assert(srcSize <= size);
 
         BufferCopy bufferCopy{};
         bufferCopy.size = srcSize > 0 ? srcSize : size;
 
-        std::array<CommandBuffer*, 1> copyCmd{};
+        std::array<CommandBuffer *, 1> copyCmd{};
         copyCmd[0] = CommandBuffer::Create(RHII.commandPool2);
         copyCmd[0]->Begin();
         copyCmd[0]->CopyBuffer(srcBuffer, this, 1, &bufferCopy);
@@ -120,7 +120,7 @@ namespace pe
         return size;
     }
 
-    void* Buffer::Data()
+    void *Buffer::Data()
     {
         return data;
     }

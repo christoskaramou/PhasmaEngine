@@ -30,25 +30,36 @@ namespace pe
     {
     public:
         IComponent() : m_entity(nullptr), m_enabled(false)
-        {}
+        {
+        }
 
         virtual ~IComponent()
-        {}
+        {
+        }
 
         Entity *GetEntity()
-        { return m_entity; }
+        {
+            return m_entity;
+        }
 
         void SetEntity(Entity *entity)
-        { m_entity = entity; }
+        {
+            m_entity = entity;
+        }
 
         bool IsEnabled()
-        { return m_enabled; }
+        {
+            return m_enabled;
+        }
 
         void SetEnabled(bool enabled)
-        { m_enabled = enabled; }
+        {
+            m_enabled = enabled;
+        }
 
         virtual void Destroy()
-        {}
+        {
+        }
 
     private:
         Entity *m_entity;

@@ -40,9 +40,9 @@ namespace pe
         if (requesting_source_path.is_relative())
         {
             full_path =
-                    std::filesystem::current_path().string() + "\\" +
-                    requesting_source_path.parent_path().string() + "\\" +
-                    requested_source;
+                std::filesystem::current_path().string() + "\\" +
+                requesting_source_path.parent_path().string() + "\\" +
+                requested_source;
         }
         else
             full_path = requesting_source_path.parent_path().string() + "\\" + requested_source;
@@ -50,11 +50,9 @@ namespace pe
         if (full_path.empty())
             return MakeErrorIncludeResult("Cannot find or open include file.");
 
-        FileInfo *file_info = new FileInfo
-        {
+        FileInfo *file_info = new FileInfo{
             full_path,
-            FileSystem(full_path, std::ios_base::in | std::ios_base::ate | std::ios::binary).ReadAll()
-        };
+            FileSystem(full_path, std::ios_base::in | std::ios_base::ate | std::ios::binary).ReadAll()};
 
         included_files.insert(full_path);
 
@@ -70,19 +68,20 @@ namespace pe
 
     void FileIncluder::ReleaseInclude(shaderc_include_result *include_result)
     {
-        FileInfo *info = static_cast<FileInfo*>(include_result->user_data);
+        FileInfo *info = static_cast<FileInfo *>(include_result->user_data);
         delete info;
         delete include_result;
     }
 
-    Shader::Shader(const std::string &sourcePath, ShaderType shaderType, const std::vector <Define> &defs)
+    Shader::Shader(const std::string &sourcePath, ShaderType shaderType, const std::vector<Define> &defs)
     {
         std::string path = sourcePath;
         if (path.find(Path::Assets) == std::string::npos)
             path = Path::Assets + sourcePath;
 
         // Watch the file for changes
-        auto modifiedCallback = []() { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
+        auto modifiedCallback = []()
+        { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
         FileWatcher::Add(path, modifiedCallback);
 
         m_shaderType = shaderType;
@@ -95,7 +94,7 @@ namespace pe
             shaderc::CompileOptions options;
             options.SetIncluder(std::make_unique<FileIncluder>());
             options.SetOptimizationLevel(shaderc_optimization_level_performance);
-            //m_options.SetHlslFunctionality1(true);
+            // m_options.SetHlslFunctionality1(true);
 
             AddDefines(globalDefines, options);
             AddDefines(defs, options);
@@ -118,7 +117,8 @@ namespace pe
 
     void Shader::AddDefine(Define &def, shaderc::CompileOptions &options)
     {
-        if (def.name.empty()) return;
+        if (def.name.empty())
+            return;
 
         if (def.value.empty())
             options.AddMacroDefinition(def.name);
@@ -128,7 +128,7 @@ namespace pe
         defines.push_back(def);
     }
 
-    void Shader::AddDefines(const std::vector <Define> &defs, shaderc::CompileOptions &options)
+    void Shader::AddDefines(const std::vector<Define> &defs, shaderc::CompileOptions &options)
     {
         for (auto def : defs)
             AddDefine(def, options);
@@ -140,7 +140,7 @@ namespace pe
             PE_ERROR("source file was empty");
 
         shaderc::PreprocessedSourceCompilationResult result = m_compiler.PreprocessGlsl(
-                m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options);
+            m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options);
 
         if (result.GetCompilationStatus() != shaderc_compilation_status_success)
         {
@@ -157,8 +157,7 @@ namespace pe
             PE_ERROR("source file was empty");
 
         shaderc::AssemblyCompilationResult result = m_compiler.CompileGlslToSpvAssembly(
-                m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options
-        );
+            m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options);
 
         if (result.GetCompilationStatus() != shaderc_compilation_status_success)
         {
@@ -193,7 +192,7 @@ namespace pe
             PE_ERROR("source file was empty");
 
         shaderc::SpvCompilationResult module = m_compiler.CompileGlslToSpv(
-                m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options);
+            m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options);
 
         if (module.GetCompilationStatus() != shaderc_compilation_status_success)
         {

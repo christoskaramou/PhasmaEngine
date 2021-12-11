@@ -47,11 +47,11 @@ namespace pe
     class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>
     {
     public:
-        DescriptorLayout(const std::vector <DescriptorBinding> &bindings);
+        DescriptorLayout(const std::vector<DescriptorBinding> &bindings);
 
         ~DescriptorLayout();
 
-        std::vector <DescriptorBinding> bindings;
+        std::vector<DescriptorBinding> bindings;
     };
 
     class Image;

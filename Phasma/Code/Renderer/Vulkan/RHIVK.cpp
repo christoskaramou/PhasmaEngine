@@ -31,7 +31,6 @@ SOFTWARE.
 #include "Renderer/Swapchain.h"
 #include "Renderer/Surface.h"
 
-
 #if defined(_WIN32)
 // On Windows, Vulkan commands use the stdcall convention
 #define VKAPI_CALL __stdcall
@@ -58,14 +57,13 @@ namespace pe
 
     RHI::~RHI()
     {
-
     }
 
     void RHI::CreateInstance(SDL_Window *window)
     {
         std::vector<const char *> instanceExtensions;
         std::vector<const char *> instanceLayers;
-        std::vector <VkValidationFeatureEnableEXT> enabledFeatures;
+        std::vector<VkValidationFeatureEnableEXT> enabledFeatures;
         VkValidationFeaturesEXT validationFeatures{};
         validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
 
@@ -76,7 +74,7 @@ namespace pe
         instanceExtensions.resize(extCount);
         if (!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()))
             PE_ERROR(SDL_GetError());
-        // =============================================
+            // =============================================
 
 #ifdef _DEBUG
         // === Debug Extensions ========================
@@ -86,7 +84,7 @@ namespace pe
         std::vector<VkExtensionProperties> extensions(propertyCount);
         vkEnumerateInstanceExtensionProperties(nullptr, &propertyCount, extensions.data());
 
-        for (auto& extension : extensions)
+        for (auto &extension : extensions)
         {
             if (std::string(extension.extensionName) == "VK_EXT_debug_utils")
             {
@@ -107,7 +105,7 @@ namespace pe
         std::vector<VkLayerProperties> layers(layersCount);
         vkEnumerateInstanceLayerProperties(&layersCount, layers.data());
 
-        for (auto& layer : layers)
+        for (auto &layer : layers)
         {
             if (std::string(layer.layerName) == "VK_LAYER_KHRONOS_validation")
                 instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
@@ -117,8 +115,8 @@ namespace pe
         // === Validation Features =====================
         enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
         enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT);
-        //enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
-        //enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
+        // enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
+        // enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
         enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
 
         validationFeatures.enabledValidationFeatureCount = static_cast<uint32_t>(enabledFeatures.size());
@@ -149,13 +147,16 @@ namespace pe
     }
 
 #if _DEBUG
-    std::string GetDebugMessageString(VkDebugUtilsMessageTypeFlagsEXT value )
+    std::string GetDebugMessageString(VkDebugUtilsMessageTypeFlagsEXT value)
     {
         switch (value)
         {
-        case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT: return "General";
-        case VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT: return "Validation";
-        case VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT: return "Performance";
+        case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT:
+            return "General";
+        case VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT:
+            return "Validation";
+        case VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT:
+            return "Performance";
         }
 
         return "Unknown";
@@ -165,28 +166,31 @@ namespace pe
     {
         switch (value)
         {
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT: return "Verbose";
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT: return "Info";
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT: return "Warning";
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT: return "Error";
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+            return "Verbose";
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+            return "Info";
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+            return "Warning";
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+            return "Error";
         }
 
         return "Unknown";
     }
 
     uint32_t VKAPI_CALL MessageCallback(
-            VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-            uint32_t messageType,
-            const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-            void* pUserData
-    )
+        VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+        uint32_t messageType,
+        const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+        void *pUserData)
     {
         if (messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
             std::cerr
-                    << GetDebugMessageString(messageType) << " "
-                    << GetDebugSeverityString(messageSeverity) << " from \""
-                    << pCallbackData->pMessageIdName << "\": "
-                    << pCallbackData->pMessage << std::endl;
+                << GetDebugMessageString(messageType) << " "
+                << GetDebugSeverityString(messageSeverity) << " from \""
+                << pCallbackData->pMessageIdName << "\": "
+                << pCallbackData->pMessage << std::endl;
 
         return VK_FALSE;
     }
@@ -206,7 +210,7 @@ namespace pe
             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         dumci.pfnUserCallback = MessageCallback;
 
-        auto vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+        auto vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
         VkDebugUtilsMessengerEXT debugMessengerVK;
         vkCreateDebugUtilsMessengerEXT(instance, &dumci, nullptr, &debugMessengerVK);
         debugMessenger = debugMessengerVK;
@@ -235,10 +239,10 @@ namespace pe
         vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr);
         vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr);
 
-        std::vector <VkPhysicalDevice> gpuList(gpuCount);
+        std::vector<VkPhysicalDevice> gpuList(gpuCount);
         vkEnumeratePhysicalDevices(instance, &gpuCount, gpuList.data());
 
-        std::vector <VkPhysicalDevice> validGpuList{};
+        std::vector<VkPhysicalDevice> validGpuList{};
         VkPhysicalDevice discreteGpu;
 
         for (auto &GPU : gpuList)
@@ -246,7 +250,7 @@ namespace pe
             uint32_t queueFamPropCount;
             vkGetPhysicalDeviceQueueFamilyProperties(GPU, &queueFamPropCount, nullptr);
 
-            std::vector <VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
+            std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
             vkGetPhysicalDeviceQueueFamilyProperties(GPU, &queueFamPropCount, queueFamilyProperties.data());
 
             VkQueueFlags flags{};
@@ -297,13 +301,13 @@ namespace pe
         uint32_t queueFamPropCount;
         vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
 
-        std::vector <VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
+        std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
         vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
 
         auto &properties = queueFamilyProperties;
         for (uint32_t i = 0; i < properties.size(); i++)
         {
-            //find graphics queue family index
+            // find graphics queue family index
             VkBool32 suported;
             vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface->Handle(), &suported);
             if (properties[i].queueFlags & flags && suported)
@@ -323,7 +327,7 @@ namespace pe
         uint32_t queueFamPropCount;
         vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
 
-        std::vector <VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
+        std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
         vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
 
         VkQueueFlags flags = VK_QUEUE_TRANSFER_BIT;
@@ -331,7 +335,7 @@ namespace pe
         // prefer different families for different queue types, thus the reverse check
         for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i)
         {
-            //find transfer queue family index
+            // find transfer queue family index
             if (properties[i].queueFlags & flags)
             {
                 transferFamilyId = i;
@@ -347,7 +351,7 @@ namespace pe
         uint32_t queueFamPropCount;
         vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
 
-        std::vector <VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
+        std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
         vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
 
         VkQueueFlags flags = VK_QUEUE_TRANSFER_BIT;
@@ -355,7 +359,7 @@ namespace pe
         // prefer different families for different queue types, thus the reverse check
         for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i)
         {
-            //find compute queue family index
+            // find compute queue family index
             if (properties[i].queueFlags & flags)
             {
                 computeFamilyId = i;
@@ -365,13 +369,12 @@ namespace pe
         computeFamilyId = -1;
     }
 
-
     void RHI::CreateDevice()
     {
         uint32_t propsCount;
         vkEnumerateDeviceExtensionProperties(gpu, nullptr, &propsCount, nullptr);
 
-        std::vector <VkExtensionProperties> extensionProperties(propsCount);
+        std::vector<VkExtensionProperties> extensionProperties(propsCount);
         vkEnumerateDeviceExtensionProperties(gpu, nullptr, &propsCount, extensionProperties.data());
 
         std::vector<const char *> deviceExtensions{};
@@ -382,7 +385,7 @@ namespace pe
         }
         float priorities[]{1.0f}; // range : [0.0, 1.0]
 
-        std::vector <VkDeviceQueueCreateInfo> queueCreateInfos{};
+        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
 
         // graphics queue
         VkDeviceQueueCreateInfo queueCreateInfo{};
@@ -408,7 +411,7 @@ namespace pe
 
         // Indexing features
         VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
-        indexingFeatures.sType =VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+        indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
 
         VkPhysicalDeviceFeatures2 deviceFeatures2{};
         deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -528,12 +531,11 @@ namespace pe
         info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-        std::vector <VkFormat> candidates =
-                {
-                        VK_FORMAT_D32_SFLOAT_S8_UINT,
-                        VK_FORMAT_D32_SFLOAT,
-                        VK_FORMAT_D24_UNORM_S8_UINT
-                };
+        std::vector<VkFormat> candidates =
+            {
+                VK_FORMAT_D32_SFLOAT_S8_UINT,
+                VK_FORMAT_D32_SFLOAT,
+                VK_FORMAT_D24_UNORM_S8_UINT};
 
         for (auto &format : candidates)
         {
@@ -542,7 +544,7 @@ namespace pe
             if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) ==
                 VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
             {
-                info.format = (Format) format;
+                info.format = (Format)format;
                 break;
             }
         }
@@ -629,23 +631,22 @@ namespace pe
     }
 
     void RHI::Submit(
-            uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
-            PipelineStageFlags *waitStages,
-            uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-            uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
-            Fence *signalFence,
-            bool useGraphicsQueue
-    )
+        uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
+        PipelineStageFlags *waitStages,
+        uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
+        uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
+        Fence *signalFence,
+        bool useGraphicsQueue)
     {
-        std::vector <VkCommandBuffer> commandBuffersVK(commandBuffersCount);
+        std::vector<VkCommandBuffer> commandBuffersVK(commandBuffersCount);
         for (uint32_t i = 0; i < commandBuffersCount; i++)
             commandBuffersVK[i] = commandBuffers[i]->Handle();
 
-        std::vector <VkSemaphore> waitSemaphoresVK(waitSemaphoresCount);
+        std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoresCount);
         for (uint32_t i = 0; i < waitSemaphoresCount; i++)
             waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
 
-        std::vector <VkSemaphore> signalSemaphoresVK(signalSemaphoresCount);
+        std::vector<VkSemaphore> signalSemaphoresVK(signalSemaphoresCount);
         for (uint32_t i = 0; i < signalSemaphoresCount; i++)
             signalSemaphoresVK[i] = signalSemaphores[i]->Handle();
 
@@ -676,17 +677,16 @@ namespace pe
     }
 
     void RHI::SubmitAndWaitFence(
-            uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
-            PipelineStageFlags *waitStages,
-            uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-            uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
-            bool useGraphicsQueue
-    )
+        uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
+        PipelineStageFlags *waitStages,
+        uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
+        uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
+        bool useGraphicsQueue)
     {
         Fence *fence = Fence::Create(false);
 
         Submit(commandBuffersCount, commandBuffers, waitStages, waitSemaphoresCount,
-            waitSemaphores, signalSemaphoresCount, signalSemaphores, fence, useGraphicsQueue);
+               waitSemaphores, signalSemaphoresCount, signalSemaphores, fence, useGraphicsQueue);
 
         VkFence fenceVK = fence->Handle();
         if (vkWaitForFences(device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
@@ -695,15 +695,15 @@ namespace pe
     }
 
     void RHI::Present(
-            uint32_t swapchainCount, Swapchain **swapchains,
-            uint32_t *imageIndices,
-            uint32_t waitSemaphoreCount, Semaphore **waitSemaphores)
+        uint32_t swapchainCount, Swapchain **swapchains,
+        uint32_t *imageIndices,
+        uint32_t waitSemaphoreCount, Semaphore **waitSemaphores)
     {
-        std::vector <VkSwapchainKHR> swapchainsVK(swapchainCount);
+        std::vector<VkSwapchainKHR> swapchainsVK(swapchainCount);
         for (uint32_t i = 0; i < swapchainCount; i++)
             swapchainsVK[i] = swapchains[i]->Handle();
 
-        std::vector <VkSemaphore> waitSemaphoresVK(waitSemaphoreCount);
+        std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoreCount);
         for (uint32_t i = 0; i < waitSemaphoreCount; i++)
             waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
 
@@ -739,7 +739,6 @@ namespace pe
         vkQueueWaitIdle(graphicsQueue);
     }
 
-    
     void RHI::WaitTransferQueue()
     {
         vkQueueWaitIdle(transferQueue);

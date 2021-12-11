@@ -30,46 +30,58 @@ namespace pe
     {
     public:
         Entity() : m_context(nullptr), m_id(NextID()), m_enabled(false)
-        {}
+        {
+        }
 
         virtual ~Entity()
-        {}
+        {
+        }
 
         size_t GetID() const
-        { return m_id; }
+        {
+            return m_id;
+        }
 
         Context *GetContext()
-        { return m_context; }
+        {
+            return m_context;
+        }
 
         void SetContext(Context *context)
-        { m_context = context; }
+        {
+            m_context = context;
+        }
 
         bool IsEnabled()
-        { return m_enabled; }
+        {
+            return m_enabled;
+        }
 
         void SetEnabled(bool enabled)
-        { m_enabled = enabled; }
+        {
+            m_enabled = enabled;
+        }
 
-        template<class T>
+        template <class T>
         inline bool HasComponent();
 
-        template<class T>
+        template <class T>
         inline T *GetComponent();
 
-        template<class T, class... Params>
-        inline T *CreateComponent(Params &&... params);
+        template <class T, class... Params>
+        inline T *CreateComponent(Params &&...params);
 
-        template<class T>
+        template <class T>
         inline void RemoveComponent();
 
     private:
         size_t m_id;
         Context *m_context;
-        std::unordered_map <size_t, std::shared_ptr<IComponent>> m_components;
+        std::unordered_map<size_t, std::shared_ptr<IComponent>> m_components;
         bool m_enabled;
     };
 
-    template<class T>
+    template <class T>
     inline bool Entity::HasComponent()
     {
         ValidateBaseClass<IComponent, T>();
@@ -80,18 +92,17 @@ namespace pe
             return false;
     }
 
-    template<class T>
+    template <class T>
     inline T *Entity::GetComponent()
     {
         if (HasComponent<T>())
             return static_cast<T *>(m_components[GetTypeID<T>()].get());
         else
             return nullptr;
-
     }
 
-    template<class T, class... Params>
-    inline T *Entity::CreateComponent(Params &&... params)
+    template <class T, class... Params>
+    inline T *Entity::CreateComponent(Params &&...params)
     {
         if (!HasComponent<T>())
         {
@@ -108,7 +119,7 @@ namespace pe
         }
     }
 
-    template<class T>
+    template <class T>
     inline void Entity::RemoveComponent()
     {
         if (HasComponent<T>())

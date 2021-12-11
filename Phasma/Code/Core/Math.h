@@ -174,7 +174,8 @@ namespace pe
     {
     public:
         ivec4() : x(0), y(0), z(0), w(0)
-        {}
+        {
+        }
 
         ivec4(const int *v)
         {
@@ -274,11 +275,10 @@ namespace pe
         mat4(cquat &q);
 
         mat4(
-                cfloat &x0, cfloat &y0, cfloat &z0, cfloat &w0,
-                cfloat &x1, cfloat &y1, cfloat &z1, cfloat &w1,
-                cfloat &x2, cfloat &y2, cfloat &z2, cfloat &w2,
-                cfloat &x3, cfloat &y3, cfloat &z3, cfloat &w3
-        );
+            cfloat &x0, cfloat &y0, cfloat &z0, cfloat &w0,
+            cfloat &x1, cfloat &y1, cfloat &z1, cfloat &w1,
+            cfloat &x2, cfloat &y2, cfloat &z2, cfloat &w2,
+            cfloat &x3, cfloat &y3, cfloat &z3, cfloat &w3);
 
         static cmat4 identity();
 
@@ -538,21 +538,29 @@ namespace pe
 
     vec3 maximum(cvec3 &v1, cvec3 &v2);
 
-    template<typename T>
+    template <typename T>
     inline T minimum(const T &a, const T &b)
-    { return (b < a) ? b : a; };
+    {
+        return (b < a) ? b : a;
+    };
 
-    template<typename T>
+    template <typename T>
     inline T maximum(const T &a, const T &b)
-    { return (a < b) ? b : a; };
+    {
+        return (a < b) ? b : a;
+    };
 
-    template<typename T>
+    template <typename T>
     inline T clamp(const T &x, const T &minX, const T &maxX)
-    { return minimum(maximum(x, minX), maxX); };
+    {
+        return minimum(maximum(x, minX), maxX);
+    };
 
-    template<typename T>
+    template <typename T>
     inline void clamp(T *const x, const T &minX, const T &maxX)
-    { *x = clamp(*x, minX, maxX); };
+    {
+        *x = clamp(*x, minX, maxX);
+    };
 
     float saturate(float x);
 

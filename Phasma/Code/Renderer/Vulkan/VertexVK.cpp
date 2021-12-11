@@ -29,15 +29,16 @@ namespace pe
 #define VertexOffset(x) offsetof(Vertex, x)
 
     Vertex::Vertex()
-    {}
+    {
+    }
 
-    Vertex::Vertex(vec3& pos, vec2& uv, vec3& norm, vec4& color, ivec4& bonesIDs, vec4& weights) :
-            position(pos),
-            uv(uv),
-            normals(norm),
-            color(color),
-            bonesIDs(bonesIDs),
-            weights(weights)
-    {}
+    Vertex::Vertex(vec3 &pos, vec2 &uv, vec3 &norm, vec4 &color, ivec4 &bonesIDs, vec4 &weights) : position(pos),
+                                                                                                   uv(uv),
+                                                                                                   normals(norm),
+                                                                                                   color(color),
+                                                                                                   bonesIDs(bonesIDs),
+                                                                                                   weights(weights)
+    {
+    }
 }
 #endif

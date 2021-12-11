@@ -37,7 +37,7 @@ namespace pe
     using namespace Microsoft;
 
     CommandBuffer *Model::commandBuffer = nullptr;
-    std::deque <Model> Model::models = {};
+    std::deque<Model> Model::models = {};
     Pipeline *Model::pipeline = nullptr;
 
     Model::Model()
@@ -81,13 +81,12 @@ namespace pe
         {
             // GLBResourceReader derives from GLTFResourceReader
             glTF::GLBResourceReader *resourceReaderGLB = new glTF::GLBResourceReader(
-                    std::move(streamReader), std::move(gltfStream)
-            );
+                std::move(streamReader), std::move(gltfStream));
             manifest = resourceReaderGLB->GetJson();
             resourceReader = static_cast<glTF::GLTFResourceReader *>(resourceReaderGLB);
         }
 
-        //std::cout << manifest;
+        // std::cout << manifest;
 
         try
         {
@@ -107,12 +106,11 @@ namespace pe
 
     glTF::Image *Model::getImage(const std::string &textureID) const
     {
-        return textureID.empty() ? nullptr : const_cast<glTF::Image *>(&document->images.Get(
-                document->textures.Get(textureID).imageId));
+        return textureID.empty() ? nullptr : const_cast<glTF::Image *>(&document->images.Get(document->textures.Get(textureID).imageId));
     }
 
-    template<typename T>
-    void Model::getVertexData(std::vector <T> &vec, const std::string &accessorName,
+    template <typename T>
+    void Model::getVertexData(std::vector<T> &vec, const std::string &accessorName,
                               const glTF::MeshPrimitive &primitive) const
     {
         std::string accessorId;
@@ -128,10 +126,9 @@ namespace pe
                 const auto data = resourceReader->ReadBinaryData<float>(doc, accessor);
                 vec.resize(data.size());
                 std::transform(
-                        data.begin(), data.end(), vec.begin(),
-                        [](float value) -> T
-                        { return static_cast<T>(value); }
-                );
+                    data.begin(), data.end(), vec.begin(),
+                    [](float value) -> T
+                    { return static_cast<T>(value); });
                 break;
             }
             case glTF::COMPONENT_BYTE:
@@ -139,10 +136,9 @@ namespace pe
                 const auto data = resourceReader->ReadBinaryData<int8_t>(doc, accessor);
                 vec.resize(data.size());
                 std::transform(
-                        data.begin(), data.end(), vec.begin(),
-                        [](int8_t value) -> T
-                        { return static_cast<T>(value); }
-                );
+                    data.begin(), data.end(), vec.begin(),
+                    [](int8_t value) -> T
+                    { return static_cast<T>(value); });
                 break;
             }
             case glTF::COMPONENT_UNSIGNED_BYTE:
@@ -150,10 +146,9 @@ namespace pe
                 const auto data = resourceReader->ReadBinaryData<uint8_t>(doc, accessor);
                 vec.resize(data.size());
                 std::transform(
-                        data.begin(), data.end(), vec.begin(),
-                        [](uint8_t value) -> T
-                        { return static_cast<T>(value); }
-                );
+                    data.begin(), data.end(), vec.begin(),
+                    [](uint8_t value) -> T
+                    { return static_cast<T>(value); });
                 break;
             }
             case glTF::COMPONENT_SHORT:
@@ -161,10 +156,9 @@ namespace pe
                 const auto data = resourceReader->ReadBinaryData<int16_t>(doc, accessor);
                 vec.resize(data.size());
                 std::transform(
-                        data.begin(), data.end(), vec.begin(),
-                        [](int16_t value) -> T
-                        { return static_cast<T>(value); }
-                );
+                    data.begin(), data.end(), vec.begin(),
+                    [](int16_t value) -> T
+                    { return static_cast<T>(value); });
                 break;
             }
             case glTF::COMPONENT_UNSIGNED_SHORT:
@@ -172,10 +166,9 @@ namespace pe
                 const auto data = resourceReader->ReadBinaryData<uint16_t>(doc, accessor);
                 vec.resize(data.size());
                 std::transform(
-                        data.begin(), data.end(), vec.begin(),
-                        [](uint16_t value) -> T
-                        { return static_cast<T>(value); }
-                );
+                    data.begin(), data.end(), vec.begin(),
+                    [](uint16_t value) -> T
+                    { return static_cast<T>(value); });
                 break;
             }
             case glTF::COMPONENT_UNSIGNED_INT:
@@ -183,10 +176,9 @@ namespace pe
                 const auto data = resourceReader->ReadBinaryData<uint32_t>(doc, accessor);
                 vec.resize(data.size());
                 std::transform(
-                        data.begin(), data.end(), vec.begin(),
-                        [](uint32_t value) -> T
-                        { return static_cast<T>(value); }
-                );
+                    data.begin(), data.end(), vec.begin(),
+                    [](uint32_t value) -> T
+                    { return static_cast<T>(value); });
                 break;
             }
             default:
@@ -195,7 +187,7 @@ namespace pe
         }
     }
 
-    void Model::getIndexData(std::vector <uint32_t> &vec, const glTF::MeshPrimitive &primitive) const
+    void Model::getIndexData(std::vector<uint32_t> &vec, const glTF::MeshPrimitive &primitive) const
     {
         if (!primitive.indicesAccessorId.empty())
         {
@@ -209,10 +201,9 @@ namespace pe
                 const auto data = resourceReader->ReadBinaryData<int8_t>(doc, accessor);
                 vec.resize(data.size());
                 std::transform(
-                        data.begin(), data.end(), vec.begin(),
-                        [](int8_t value) -> uint32_t
-                        { return static_cast<uint32_t>(value); }
-                );
+                    data.begin(), data.end(), vec.begin(),
+                    [](int8_t value) -> uint32_t
+                    { return static_cast<uint32_t>(value); });
                 break;
             }
             case glTF::COMPONENT_UNSIGNED_BYTE:
@@ -220,10 +211,9 @@ namespace pe
                 const auto data = resourceReader->ReadBinaryData<uint8_t>(doc, accessor);
                 vec.resize(data.size());
                 std::transform(
-                        data.begin(), data.end(), vec.begin(),
-                        [](uint8_t value) -> uint32_t
-                        { return static_cast<uint32_t>(value); }
-                );
+                    data.begin(), data.end(), vec.begin(),
+                    [](uint8_t value) -> uint32_t
+                    { return static_cast<uint32_t>(value); });
                 break;
             }
             case glTF::COMPONENT_SHORT:
@@ -231,10 +221,9 @@ namespace pe
                 const auto data = resourceReader->ReadBinaryData<int16_t>(doc, accessor);
                 vec.resize(data.size());
                 std::transform(
-                        data.begin(), data.end(), vec.begin(),
-                        [](int16_t value) -> uint32_t
-                        { return static_cast<uint32_t>(value); }
-                );
+                    data.begin(), data.end(), vec.begin(),
+                    [](int16_t value) -> uint32_t
+                    { return static_cast<uint32_t>(value); });
                 break;
             }
             case glTF::COMPONENT_UNSIGNED_SHORT:
@@ -242,10 +231,9 @@ namespace pe
                 const auto data = resourceReader->ReadBinaryData<uint16_t>(doc, accessor);
                 vec.resize(data.size());
                 std::transform(
-                        data.begin(), data.end(), vec.begin(),
-                        [](uint16_t value) -> uint32_t
-                        { return static_cast<uint32_t>(value); }
-                );
+                    data.begin(), data.end(), vec.begin(),
+                    [](uint16_t value) -> uint32_t
+                    { return static_cast<uint32_t>(value); });
                 break;
             }
             case glTF::COMPONENT_UNSIGNED_INT:
@@ -253,9 +241,8 @@ namespace pe
                 const auto data = resourceReader->ReadBinaryData<uint32_t>(doc, accessor);
                 vec.resize(data.size());
                 std::transform(
-                        data.begin(), data.end(), vec.begin(), [](uint32_t value) -> uint32_t
-                        { return value; }
-                );
+                    data.begin(), data.end(), vec.begin(), [](uint32_t value) -> uint32_t
+                    { return value; });
                 break;
             }
             default:
@@ -266,7 +253,8 @@ namespace pe
 
     void Model::getMesh(pe::Node *node, const std::string &meshID, const std::filesystem::path &file) const
     {
-        if (!node || meshID.empty()) return;
+        if (!node || meshID.empty())
+            return;
         const auto &mesh = document->meshes.Get(meshID);
 
         node->mesh = new Mesh();
@@ -281,7 +269,7 @@ namespace pe
             std::vector<float> colors{};
             std::vector<int> bonesIDs{};
             std::vector<float> weights{};
-            std::vector <uint32_t> indices{};
+            std::vector<uint32_t> indices{};
 
             // ------------ Vertices ------------
             getVertexData(positions, glTF::ACCESSOR_POSITION, primitive);
@@ -380,7 +368,7 @@ namespace pe
     void Model::Load(const std::filesystem::path &file)
     {
         RHII.WaitDeviceIdle();
-        
+
         Model::models.emplace_back();
         Model &model = Model::models.back();
 
@@ -388,7 +376,7 @@ namespace pe
         model.render = false;
 
         model.loadModelGltf(file);
-        //calculateBoundingSphere();
+        // calculateBoundingSphere();
         model.name = file.filename().string();
         model.fullPathName = file.string();
         model.createVertexBuffer();
@@ -419,7 +407,7 @@ namespace pe
                 if ((time >= sampler.inputs[i]) && (time <= sampler.inputs[i + 1]))
                 {
                     const float u =
-                            std::max(0.0f, time - sampler.inputs[i]) / (sampler.inputs[i + 1] - sampler.inputs[i]);
+                        std::max(0.0f, time - sampler.inputs[i]) / (sampler.inputs[i + 1] - sampler.inputs[i]);
                     if (u <= 1.0f)
                     {
                         switch (channel.path)
@@ -459,10 +447,10 @@ namespace pe
         mesh->primitives[index].cull = !camera.PointInFrustum(point, range);
         mesh->primitives[index].transformedBS = vec4(point, range);
 
-        //AABB aabb;
-        //aabb.min = trans * vec4(mesh->primitives[index].boundingBox.min, 1.0f);
-        //aabb.max = trans * vec4(mesh->primitives[index].boundingBox.max, 1.0f);
-        //mesh->primitives[index].cull = !camera.AABBInFrustum(aabb);
+        // AABB aabb;
+        // aabb.min = trans * vec4(mesh->primitives[index].boundingBox.min, 1.0f);
+        // aabb.max = trans * vec4(mesh->primitives[index].boundingBox.max, 1.0f);
+        // mesh->primitives[index].cull = !camera.AABBInFrustum(aabb);
     }
 
     void UpdateNodeAsync(Model *model, Node *node, const Camera &camera)
@@ -474,7 +462,7 @@ namespace pe
             // async calls should be at least bigger than a number, else this will be slower
             if (node->mesh->primitives.size() > 3)
             {
-                std::vector <std::future<void>> futures(node->mesh->primitives.size());
+                std::vector<std::future<void>> futures(node->mesh->primitives.size());
 
                 for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
                     futures[i] = std::async(std::launch::async, CullPrimitiveAsync, model, node->mesh, camera, i);
@@ -523,7 +511,7 @@ namespace pe
         // async calls should be at least bigger than a number, else this will be slower
         if (linearNodes.size() > 3)
         {
-            std::vector <std::future<void>> futureNodes(linearNodes.size());
+            std::vector<std::future<void>> futureNodes(linearNodes.size());
 
             for (uint32_t i = 0; i < linearNodes.size(); i++)
                 futureNodes[i] = std::async(std::launch::async, UpdateNodeAsync, this, linearNodes[i], camera);
@@ -563,15 +551,14 @@ namespace pe
                         if (!primitive.cull)
                         {
                             // Cache this vector
-                            std::vector<Descriptor*> dsetHandles{node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet};
-                            cmd.BindDescriptors(Model::pipeline, (uint32_t) dsetHandles.size(), dsetHandles.data());
+                            std::vector<Descriptor *> dsetHandles{node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet};
+                            cmd.BindDescriptors(Model::pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
                             cmd.DrawIndexed(
-                                    primitive.indicesSize,
-                                    1,
-                                    node->mesh->indexOffset + primitive.indexOffset,
-                                    node->mesh->vertexOffset + primitive.vertexOffset,
-                                    0
-                            );
+                                primitive.indicesSize,
+                                1,
+                                node->mesh->indexOffset + primitive.indexOffset,
+                                node->mesh->vertexOffset + primitive.vertexOffset,
+                                0);
                         }
                         else
                         {
@@ -582,7 +569,7 @@ namespace pe
             }
         }
 
-        //std::cout << "RenderQueue: " << renderQueue << " Culled: " << culled << "/" << total << std::endl;
+        // std::cout << "RenderQueue: " << renderQueue << " Culled: " << culled << "/" << total << std::endl;
     }
 
     // position x, y, z and radius w
@@ -642,7 +629,7 @@ namespace pe
         getMesh(newNode, node.meshId, file);
         if (parent)
             parent->children.push_back(newNode);
-        //else
+        // else
         //	nodes.push_back(newNode);
         linearNodes.push_back(newNode);
     }
@@ -826,7 +813,7 @@ namespace pe
                 numberOfVertices += static_cast<uint32_t>(node->mesh->vertices.size());
         }
 
-        std::vector <Vertex> vertices{};
+        std::vector<Vertex> vertices{};
         vertices.reserve(numberOfVertices);
 
         for (auto &node : linearNodes)
@@ -845,8 +832,7 @@ namespace pe
         vertexBuffer = Buffer::Create(
             size,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VMA_MEMORY_USAGE_GPU_ONLY
-        );
+            VMA_MEMORY_USAGE_GPU_ONLY);
 
         // Staging buffer
         Buffer staging(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
@@ -869,7 +855,7 @@ namespace pe
                 numberOfIndices += static_cast<uint32_t>(node->mesh->indices.size());
         }
 
-        std::vector <uint32_t> indices{};
+        std::vector<uint32_t> indices{};
         indices.reserve(numberOfIndices);
 
         for (auto &node : linearNodes)
@@ -888,15 +874,13 @@ namespace pe
         indexBuffer = Buffer::Create(
             size,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            VMA_MEMORY_USAGE_GPU_ONLY
-        );
+            VMA_MEMORY_USAGE_GPU_ONLY);
 
         // Staging buffer
         Buffer *staging = Buffer::Create(
             size,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_MEMORY_USAGE_CPU_ONLY
-        );
+            VMA_MEMORY_USAGE_CPU_ONLY);
         staging->Map();
         staging->CopyData(indices.data());
         staging->Flush();
@@ -911,8 +895,7 @@ namespace pe
         uniformBuffer = Buffer::Create(
             sizeof(ubo),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU
-        );
+            VMA_MEMORY_USAGE_CPU_TO_GPU);
         uniformBuffer->Map();
         uniformBuffer->Zero();
         uniformBuffer->Flush();
@@ -933,7 +916,8 @@ namespace pe
 
         DescriptorUpdateInfo info{};
         info.binding = 0;
-        info.pBuffer = uniformBuffer;;
+        info.pBuffer = uniformBuffer;
+        ;
         descriptorSet->UpdateDescriptor(1, &info);
 
         // mesh dSets
@@ -1008,9 +992,9 @@ namespace pe
             delete skin;
             skin = {};
         }
-        //for (auto& texture : Mesh::uniqueTextures)
+        // for (auto& texture : Mesh::uniqueTextures)
         //	texture.second.destroy();
-        //Mesh::uniqueTextures.clear();
+        // Mesh::uniqueTextures.clear();
         vertexBuffer->Destroy();
         indexBuffer->Destroy();
     }

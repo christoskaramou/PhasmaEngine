@@ -34,7 +34,7 @@ namespace pe
         FileSystem file(path.string(), std::ios::in | std::ios::ate);
         if (!file.IsOpen())
             PE_ERROR("file could not be opened!");
-        
+
         std::string code = file.ReadAll();
         file.SetReadCursor(0);
         std::string line;
@@ -107,7 +107,7 @@ namespace pe
         FileSystem fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
         if (!fileTemp.IsOpen())
             PE_ERROR("file could not be opened!");
-        
+
         fileTemp.Write(hashStr);
         fileTemp.Write(m_code);
     }
@@ -145,7 +145,7 @@ namespace pe
         return m_hash != ReadHash();
     }
 
-    std::vector <uint32_t> ShaderCache::ReadSpvFromFile()
+    std::vector<uint32_t> ShaderCache::ReadSpvFromFile()
     {
         std::string shaderSpvFile = m_tempFilePath + ".spv";
         FileSystem file(shaderSpvFile, std::ios::in | std::ios::ate | std::ios::binary);
@@ -154,14 +154,14 @@ namespace pe
 
         std::string buffer = file.ReadAll();
 
-        std::vector <uint32_t> spirv;
+        std::vector<uint32_t> spirv;
         spirv.resize(file.Size() / sizeof(uint32_t));
         memcpy(spirv.data(), buffer.data(), file.Size());
 
         return spirv;
     }
 
-    void ShaderCache::WriteSpvToFile(const std::vector <uint32_t> &spirv)
+    void ShaderCache::WriteSpvToFile(const std::vector<uint32_t> &spirv)
     {
         std::filesystem::path path(m_tempFilePath);
         if (!std::filesystem::exists(path.remove_filename()))

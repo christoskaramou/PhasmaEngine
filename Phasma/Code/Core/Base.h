@@ -23,22 +23,22 @@ SOFTWARE.
 #pragma once
 
 #if _DEBUG
-    #define PE_PRINT_ERROR_MSG(msg)         \
-        {                                   \
-            std::stringstream ss;           \
-            ss << "Error: " << msg;         \
-            ss << ", File: " << __FILE__;   \
-            ss << ", Line: " << __LINE__;   \
-            std::cout << ss.str();          \
-        }
+#define PE_PRINT_ERROR_MSG(msg)       \
+    {                                 \
+        std::stringstream ss;         \
+        ss << "Error: " << msg;       \
+        ss << ", File: " << __FILE__; \
+        ss << ", Line: " << __LINE__; \
+        std::cout << ss.str();        \
+    }
 #else
-    #define PE_PRINT_ERROR_MSG(msg)
+#define PE_PRINT_ERROR_MSG(msg)
 #endif
 
-#define PE_ERROR(msg)               \
-    {                               \
-        PE_PRINT_ERROR_MSG(msg);    \
-        exit(-1);                   \
+#define PE_ERROR(msg)            \
+    {                            \
+        PE_PRINT_ERROR_MSG(msg); \
+        exit(-1);                \
     }
 
 namespace pe
@@ -49,7 +49,7 @@ namespace pe
         return ID++;
     }
 
-    template<class T>
+    template <class T>
     inline size_t GetTypeID()
     {
         static size_t typeID = NextID();
@@ -85,41 +85,55 @@ namespace pe
     };
 
     // Used to abstract rendering api handles
-    template<class VK_TYPE, class DX_TYPE>
+    template <class VK_TYPE, class DX_TYPE>
     class ApiHandle final
     {
         // Only work with pointers
         static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
         static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
+
     public:
         using BaseVK = VK_TYPE;
         using BaseDX = DX_TYPE;
 
         ApiHandle() : m_handle(nullptr)
-        {}
+        {
+        }
 
         ApiHandle(const VK_TYPE &handle) : m_handle(handle)
-        {}
+        {
+        }
 
         ApiHandle(const DX_TYPE &handle) : m_handle(handle)
-        {}
+        {
+        }
 
         // Operators for auto casting
         operator VK_TYPE()
-        { return static_cast<VK_TYPE>(m_handle); }
+        {
+            return static_cast<VK_TYPE>(m_handle);
+        }
 
         operator VK_TYPE() const
-        { return static_cast<VK_TYPE>(m_handle); }
+        {
+            return static_cast<VK_TYPE>(m_handle);
+        }
 
         operator DX_TYPE()
-        { return static_cast<DX_TYPE>(m_handle); }
+        {
+            return static_cast<DX_TYPE>(m_handle);
+        }
 
         operator DX_TYPE() const
-        { return static_cast<DX_TYPE>(m_handle); }
+        {
+            return static_cast<DX_TYPE>(m_handle);
+        }
 
         // Not used at the moment
         void *raw()
-        { return m_handle; }
+        {
+            return m_handle;
+        }
 
         operator bool()
         {
@@ -141,15 +155,15 @@ namespace pe
     //
     // Important: Every IHandle should provide a constructor and a destructor managing the
     // create and destroy of the HANDLE
-    template<class T, class HANDLE>
+    template <class T, class HANDLE>
     class IHandle : public NoCopy, public NoMove
     {
     public:
-        template<class ... Params>
-        inline static T *Create(Params &&... params)
+        template <class... Params>
+        inline static T *Create(Params &&...params)
         {
             // This means the T class is IHandle and already defined
-            static_assert(std::is_base_of_v < IHandle<T, HANDLE>, T > );
+            static_assert(std::is_base_of_v<IHandle<T, HANDLE>, T>);
 
             T *ptr = new T(std::forward<Params>(params)...);
 
@@ -163,7 +177,8 @@ namespace pe
         }
 
         virtual ~IHandle()
-        {}
+        {
+        }
 
         void Destroy()
         {
@@ -182,10 +197,14 @@ namespace pe
         };
 
         HANDLE &Handle()
-        { return m_handle; }
+        {
+            return m_handle;
+        }
 
         const HANDLE &Handle() const
-        { return m_handle; }
+        {
+            return m_handle;
+        }
 
     private:
         inline static std::unordered_map<size_t, IHandle *> sm_iHandles{};
@@ -193,7 +212,8 @@ namespace pe
 
     protected:
         IHandle() : m_handle{}, m_heapId{std::numeric_limits<size_t>::max()}
-        {}
+        {
+        }
 
         HANDLE m_handle;
     };

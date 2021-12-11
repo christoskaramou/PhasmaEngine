@@ -74,8 +74,8 @@ namespace pe
             // has the aspect ratio of the render area because the projection matrix has the same aspect ratio too,
             // doesn't matter if it renders in bigger image size,
             // it will be scaled down to render area size before GUI pass
-            //const int i = static_cast<int>(floor(rand(0.0f, 15.99f)));
-            //projOffset = vec2(&halton16[i * 2]);
+            // const int i = static_cast<int>(floor(rand(0.0f, 15.99f)));
+            // projOffset = vec2(&halton16[i * 2]);
             projOffset = halton_2_3_next(16);
             projOffset *= vec2(2.0f);
             projOffset -= vec2(1.0f);
@@ -108,22 +108,26 @@ namespace pe
 
     void Camera::UpdateView()
     {
-        //view = lookAt(position, position + front, WorldUp());
+        // view = lookAt(position, position + front, WorldUp());
         view = lookAt(position, front, right, up);
     }
 
     void Camera::Move(RelativeDirection direction, float velocity)
     {
-        if (direction == RelativeDirection::FORWARD) position += front * velocity;
-        if (direction == RelativeDirection::BACKWARD) position -= front * velocity;
-        if (direction == RelativeDirection::RIGHT) position -= right * velocity;
-        if (direction == RelativeDirection::LEFT) position += right * velocity;
+        if (direction == RelativeDirection::FORWARD)
+            position += front * velocity;
+        if (direction == RelativeDirection::BACKWARD)
+            position -= front * velocity;
+        if (direction == RelativeDirection::RIGHT)
+            position -= right * velocity;
+        if (direction == RelativeDirection::LEFT)
+            position += right * velocity;
     }
 
     void Camera::Rotate(float xoffset, float yoffset)
     {
-        const float x = radians(yoffset * rotationSpeed);   // pitch
-        const float y = radians(-xoffset * rotationSpeed);  // yaw
+        const float x = radians(yoffset * rotationSpeed);  // pitch
+        const float y = radians(-xoffset * rotationSpeed); // yaw
 
         euler.x += x;
         euler.y += y;
@@ -154,50 +158,50 @@ namespace pe
         frustumCompute.updateInput(&viewProjection, sizeof(mat4));
         frustumCompute.dispatch(1, 1, 1);
 
-//		// transpose just to make the calculations look simpler
-//		mat4 pvm = transpose(viewProjection);
-//
-//		/* Extract the numbers for the RIGHT plane */
-//		vec4 temp = pvm[3] - pvm[0];
-//		temp /= length(vec3(temp));
-//
-//		frustum[0].normal = vec3(temp);
-//		frustum[0].d = temp.w;
-//
-//		/* Extract the numbers for the LEFT plane */
-//		temp = pvm[3] + pvm[0];
-//		temp /= length(vec3(temp));
-//
-//		frustum[1].normal = vec3(temp);
-//		frustum[1].d = temp.w;
-//
-//		/* Extract the BOTTOM plane */
-//		temp = pvm[3] - pvm[1];
-//		temp /= length(vec3(temp));
-//
-//		frustum[2].normal = vec3(temp);
-//		frustum[2].d = temp.w;
-//
-//		/* Extract the TOP plane */
-//		temp = pvm[3] + pvm[1];
-//		temp /= length(vec3(temp));
-//
-//		frustum[3].normal = vec3(temp);
-//		frustum[3].d = temp.w;
-//
-//		/* Extract the FAR plane */
-//		temp = pvm[3] - pvm[2];
-//		temp /= length(vec3(temp));
-//
-//		frustum[4].normal = vec3(temp);
-//		frustum[4].d = temp.w;
-//
-//		/* Extract the NEAR plane */
-//		temp = pvm[3] + pvm[2];
-//		temp /= length(vec3(temp));
-//
-//		frustum[5].normal = vec3(temp);
-//		frustum[5].d = temp.w;
+        //		// transpose just to make the calculations look simpler
+        //		mat4 pvm = transpose(viewProjection);
+        //
+        //		/* Extract the numbers for the RIGHT plane */
+        //		vec4 temp = pvm[3] - pvm[0];
+        //		temp /= length(vec3(temp));
+        //
+        //		frustum[0].normal = vec3(temp);
+        //		frustum[0].d = temp.w;
+        //
+        //		/* Extract the numbers for the LEFT plane */
+        //		temp = pvm[3] + pvm[0];
+        //		temp /= length(vec3(temp));
+        //
+        //		frustum[1].normal = vec3(temp);
+        //		frustum[1].d = temp.w;
+        //
+        //		/* Extract the BOTTOM plane */
+        //		temp = pvm[3] - pvm[1];
+        //		temp /= length(vec3(temp));
+        //
+        //		frustum[2].normal = vec3(temp);
+        //		frustum[2].d = temp.w;
+        //
+        //		/* Extract the TOP plane */
+        //		temp = pvm[3] + pvm[1];
+        //		temp /= length(vec3(temp));
+        //
+        //		frustum[3].normal = vec3(temp);
+        //		frustum[3].d = temp.w;
+        //
+        //		/* Extract the FAR plane */
+        //		temp = pvm[3] - pvm[2];
+        //		temp /= length(vec3(temp));
+        //
+        //		frustum[4].normal = vec3(temp);
+        //		frustum[4].d = temp.w;
+        //
+        //		/* Extract the NEAR plane */
+        //		temp = pvm[3] + pvm[2];
+        //		temp /= length(vec3(temp));
+        //
+        //		frustum[5].normal = vec3(temp);
+        //		frustum[5].d = temp.w;
     }
 
     bool Camera::PointInFrustum(const vec3 &point, float radius) const
@@ -225,14 +229,14 @@ namespace pe
             return true;
 
         vec3 corners[8];
-        corners[0] = min;                           // blb
-        corners[1] = vec3(min.x, min.y, max.z);     // blf
-        corners[2] = vec3(min.x, max.y, min.z);     // tlb
-        corners[3] = vec3(min.x, max.y, max.z);     // tlf
-        corners[4] = vec3(max.x, min.y, min.z);     // brb
-        corners[5] = vec3(max.x, min.y, max.z);     // brf
-        corners[6] = vec3(max.x, max.y, min.z);     // trb
-        corners[7] = max;                           // trf
+        corners[0] = min;                       // blb
+        corners[1] = vec3(min.x, min.y, max.z); // blf
+        corners[2] = vec3(min.x, max.y, min.z); // tlb
+        corners[3] = vec3(min.x, max.y, max.z); // tlf
+        corners[4] = vec3(max.x, min.y, min.z); // brb
+        corners[5] = vec3(max.x, min.y, max.z); // brf
+        corners[6] = vec3(max.x, max.y, min.z); // trb
+        corners[7] = max;                       // trf
 
         for (int i = 0; i < 8; i++)
         {

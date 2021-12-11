@@ -71,8 +71,8 @@ namespace pe
 
         Image *image;
         ImageViewType viewType;
-        //VkComponentMapping         components;
-        //VkImageSubresourceRange    subresourceRange;
+        // VkComponentMapping         components;
+        // VkImageSubresourceRange    subresourceRange;
         ImageAspectFlags aspectMask;
     };
 
@@ -104,7 +104,8 @@ namespace pe
     {
     public:
         Image()
-        {}
+        {
+        }
 
         Image(const ImageCreateInfo &info);
 
@@ -124,14 +125,13 @@ namespace pe
         PipelineColorBlendAttachmentState blendAttachment;
 
         void TransitionImageLayout(
-                CommandBuffer *cmd,
-                ImageLayout oldLayout,
-                ImageLayout newLayout,
-                PipelineStageFlags oldStageMask,
-                PipelineStageFlags newStageMask,
-                AccessFlags srcMask,
-                AccessFlags dstMask
-        );
+            CommandBuffer *cmd,
+            ImageLayout oldLayout,
+            ImageLayout newLayout,
+            PipelineStageFlags oldStageMask,
+            PipelineStageFlags newStageMask,
+            AccessFlags srcMask,
+            AccessFlags dstMask);
 
         void CreateImageView(const ImageViewCreateInfo &info);
 

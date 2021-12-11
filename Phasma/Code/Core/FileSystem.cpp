@@ -25,7 +25,7 @@ SOFTWARE.
 
 namespace pe
 {
-    FileSystem::FileSystem(const std::string& file, std::ios_base::openmode mode)
+    FileSystem::FileSystem(const std::string &file, std::ios_base::openmode mode)
         : m_file(file), m_mode(mode)
     {
         // One of these modes must be set
@@ -68,12 +68,12 @@ namespace pe
         return line;
     }
 
-    void FileSystem::Write(const std::string& data)
+    void FileSystem::Write(const std::string &data)
     {
         m_fstream << data;
     }
 
-    void FileSystem::Write(const char* data, size_t size)
+    void FileSystem::Write(const char *data, size_t size)
     {
         m_fstream.write(data, size);
     }
@@ -83,7 +83,7 @@ namespace pe
         m_fstream.close();
     }
 
-    void FileWatcher::Add(const std::string& file, Func&& callback)
+    void FileWatcher::Add(const std::string &file, Func &&callback)
     {
         if (file.empty() || callback == nullptr)
             PE_ERROR("FileWatcher: Invalid parameters");
@@ -95,12 +95,12 @@ namespace pe
 
         if (Get(hash) != nullptr)
             return;
-        
+
         std::lock_guard<std::mutex> guard(s_mutex);
         s_watchers[hash] = new FileWatcher(file, std::forward<Func>(callback));
     }
 
-    const FileWatcher* FileWatcher::Get(StringHash hash)
+    const FileWatcher *FileWatcher::Get(StringHash hash)
     {
         auto it = s_watchers.find(hash);
         if (it != s_watchers.end())
@@ -108,14 +108,14 @@ namespace pe
 
         return nullptr;
     }
-    
-    const FileWatcher* FileWatcher::Get(const std::string& file)
+
+    const FileWatcher *FileWatcher::Get(const std::string &file)
     {
         StringHash hash(file);
         return Get(hash);
     }
 
-    void FileWatcher::Erase(const std::string& file)
+    void FileWatcher::Erase(const std::string &file)
     {
         StringHash hash(file);
         Erase(hash);
@@ -136,8 +136,8 @@ namespace pe
     void FileWatcher::Clear()
     {
         std::lock_guard<std::mutex> guard(s_mutex);
-        
-        for (auto& it : s_watchers)
+
+        for (auto &it : s_watchers)
             delete it.second;
         s_watchers.clear();
     }
@@ -156,7 +156,7 @@ namespace pe
                 timer.ThreadSleep(interval);
 
                 std::lock_guard<std::mutex> guard(s_mutex);
-                for (auto& watcher : s_watchers)
+                for (auto &watcher : s_watchers)
                     watcher.second->Watch();
             }
         };
@@ -164,8 +164,8 @@ namespace pe
         Queue<Launch::AsyncNoWait>::Request(watchLambda);
     }
 
-    FileWatcher::FileWatcher(const std::string& file, Func&& callback)
-     : m_file{file}, m_time{GetFileTime()}, m_callback{callback} {}
+    FileWatcher::FileWatcher(const std::string &file, Func &&callback)
+        : m_file{file}, m_time{GetFileTime()}, m_callback{callback} {}
 
     void FileWatcher::Watch()
     {
@@ -182,7 +182,7 @@ namespace pe
     {
         if (m_file.empty())
             return 0;
-        
+
         std::filesystem::file_time_type lastTime = std::filesystem::last_write_time(m_file);
         return std::filesystem::file_time_type::time_point(lastTime).time_since_epoch().count();
     }

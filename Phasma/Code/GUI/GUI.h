@@ -62,7 +62,7 @@ namespace pe
         ~GUI();
 
         // Data
-        static inline float renderTargetsScale = 1.0f;//0.71f;
+        static inline float renderTargetsScale = 1.0f; // 0.71f;
         static inline bool use_IBL = true;
         static inline bool use_Volumetric_lights = false;
         static inline int volumetric_steps = 32;
@@ -106,12 +106,12 @@ namespace pe
         static inline float cameraSpeed = 3.5f;
         static inline std::array<float, 3> depthBias{0.0f, 0.0f, -6.2f};
         static inline float timeScale = 1.f;
-        static inline std::vector <std::string> fileList{};
-        static inline std::vector <std::string> shaderList{};
-        static inline std::vector <std::string> modelList{};
-        static inline std::vector <std::array<float, 3>> model_scale{};
-        static inline std::vector <std::array<float, 3>> model_pos{};
-        static inline std::vector <std::array<float, 3>> model_rot{};
+        static inline std::vector<std::string> fileList{};
+        static inline std::vector<std::string> shaderList{};
+        static inline std::vector<std::string> modelList{};
+        static inline std::vector<std::array<float, 3>> model_scale{};
+        static inline std::vector<std::array<float, 3>> model_pos{};
+        static inline std::vector<std::array<float, 3>> model_rot{};
         static inline int modelItemSelected = -1;
         static inline Image *s_currRenderImage = nullptr;
         static inline std::vector<Image *> s_renderImages{};

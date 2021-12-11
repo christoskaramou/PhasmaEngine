@@ -53,7 +53,9 @@ namespace pe
         void ReleaseInclude(shaderc_include_result *include_result) override;
 
         inline const std::unordered_set<std::string> &file_path_trace() const
-        { return included_files; }
+        {
+            return included_files;
+        }
 
     private:
         class FileInfo
@@ -62,7 +64,7 @@ namespace pe
             const std::string full_path;
             std::string contents;
         };
-        std::unordered_set <std::string> included_files;
+        std::unordered_set<std::string> included_files;
     };
 
     class Reflection;
@@ -70,7 +72,7 @@ namespace pe
     class Shader
     {
     public:
-        Shader(const std::string &sourcePath, ShaderType shaderType, const std::vector <Define> &defs = {});
+        Shader(const std::string &sourcePath, ShaderType shaderType, const std::vector<Define> &defs = {});
 
         inline ShaderType GetShaderType() { return m_shaderType; }
 
@@ -80,7 +82,7 @@ namespace pe
 
         inline size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
 
-        inline Reflection& GetReflection() { return m_reflection; }
+        inline Reflection &GetReflection() { return m_reflection; }
 
     private:
         std::string PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions &options);
@@ -93,15 +95,15 @@ namespace pe
 
         void AddDefine(Define &define, shaderc::CompileOptions &options);
 
-        void AddDefines(const std::vector <Define> &defines, shaderc::CompileOptions &options);
+        void AddDefines(const std::vector<Define> &defines, shaderc::CompileOptions &options);
 
         ShaderCache m_cache;
         Reflection m_reflection;
         ShaderType m_shaderType;
         shaderc::Compiler m_compiler;
-        std::vector <Define> defines{};
-        std::vector <uint32_t> m_spirv{};
+        std::vector<Define> defines{};
+        std::vector<uint32_t> m_spirv{};
 
-        inline static std::vector <Define> globalDefines{};
+        inline static std::vector<Define> globalDefines{};
     };
 }

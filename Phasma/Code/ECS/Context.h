@@ -38,17 +38,15 @@ namespace pe
             return instance;
         }
 
-        Context(Context const &) = delete;                // copy constructor
+        Context(Context const &) = delete; // copy constructor
 
-        Context(Context &&)
+        Context(Context &&) noexcept = delete; // move constructor
 
-        noexcept = delete;            // move constructor
+        Context &operator=(Context const &) = delete; // copy assignment
 
-        Context &operator=(Context const &) = delete;    // copy assignment
+        Context &operator=(Context &&) = delete; // move assignment
 
-        Context &operator=(Context &&) = delete;            // move assignment
-
-        ~Context() = default;                            // destructor
+        ~Context() = default; // destructor
 
     private:
         Context() = default;
@@ -64,16 +62,16 @@ namespace pe
 
         void DrawSystems();
 
-        template<class T, class... Params>
-        inline T *CreateSystem(Params &&... params);
+        template <class T, class... Params>
+        inline T *CreateSystem(Params &&...params);
 
-        template<class T>
+        template <class T>
         inline T *GetSystem();
 
-        template<class T>
+        template <class T>
         inline bool HasSystem();
 
-        template<class T>
+        template <class T>
         inline void RemoveSystem();
 
         Entity *CreateEntity();
@@ -83,12 +81,12 @@ namespace pe
         void RemoveEntity(size_t id);
 
     private:
-        std::unordered_map <size_t, std::shared_ptr<ISystem>> m_systems;
+        std::unordered_map<size_t, std::shared_ptr<ISystem>> m_systems;
         std::unordered_map<size_t, IDrawSystem *> m_drawSystems; // Keep the pointers for draw systems. All are stored in m_systems
-        std::unordered_map <size_t, std::shared_ptr<Entity>> m_entities;
+        std::unordered_map<size_t, std::shared_ptr<Entity>> m_entities;
     };
 
-    template<class T>
+    template <class T>
     inline bool Context::HasSystem()
     {
         ValidateBaseClass<ISystem, T>();
@@ -99,8 +97,8 @@ namespace pe
             return false;
     }
 
-    template<class T, class... Params>
-    inline T *Context::CreateSystem(Params &&... params)
+    template <class T, class... Params>
+    inline T *Context::CreateSystem(Params &&...params)
     {
         if (!HasSystem<T>())
         {
@@ -120,7 +118,7 @@ namespace pe
         }
     }
 
-    template<class T>
+    template <class T>
     inline T *Context::GetSystem()
     {
         if (HasSystem<T>())
@@ -129,7 +127,7 @@ namespace pe
             return nullptr;
     }
 
-    template<class T>
+    template <class T>
     inline void Context::RemoveSystem()
     {
         if (HasSystem<T>())
