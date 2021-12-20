@@ -39,6 +39,8 @@ SOFTWARE.
 #include "PostProcess/SSR.h"
 #include "PostProcess/TAA.h"
 
+#include "PostProcess/Test.h"
+
 namespace pe
 {
     Renderer::Renderer()
@@ -161,6 +163,8 @@ namespace pe
         DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
+        Test &test = *WORLD_ENTITY->GetComponent<Test>();
+
         // SCREEN SPACE AMBIENT OCCLUSION
         if (GUI::show_ssao)
         {
@@ -231,6 +235,12 @@ namespace pe
             motionBlur.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
             motionBlur.draw(cmd, imageIndex);
             frameTimer.timestamps[11] = gpuTimer[9].End();
+        }
+
+        if (GUI::s_test)
+        {
+            test.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
+            test.draw(cmd, imageIndex, renderTargets);
         }
 
         renderTargets["albedo"]->ChangeLayout(cmd, LayoutState::ColorWrite);

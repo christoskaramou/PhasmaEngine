@@ -605,6 +605,12 @@ namespace pe
             ImGui::DragFloat3(p.c_str(), model_pos[modelItemSelected].data());
             ImGui::DragFloat3(r.c_str(), model_rot[modelItemSelected].data());
         }
+
+        ImGui::Checkbox("Test", &s_test);
+        if (s_test)
+        {
+        }
+        
         ImGui::End();
     }
 

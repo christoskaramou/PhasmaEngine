@@ -57,6 +57,7 @@ namespace pe
         pushConstantStage = PushConstantStage::Vertex;
         pushConstantSize = 0;
         descriptorSetLayouts = {};
+        bindlessDSetLayouts = {};
         renderPass = nullptr;
         pipelineCache = {};
     }
@@ -248,9 +249,24 @@ namespace pe
             pcr.size = info.pushConstantSize;
 
             // Pipeline Layout
-            std::vector<VkDescriptorSetLayout> layouts(info.descriptorSetLayouts.size());
-            for (uint32_t i = 0; i < info.descriptorSetLayouts.size(); i++)
-                layouts[i] = info.descriptorSetLayouts[i]->Handle();
+            std::vector<VkDescriptorSetLayout> layouts{};
+            if (info.descriptorSetLayouts.size() > 0)
+            {
+                layouts.resize(info.descriptorSetLayouts.size());
+                for (uint32_t i = 0; i < info.descriptorSetLayouts.size(); i++)
+                    layouts[i] = info.descriptorSetLayouts[i]->Handle();
+            }
+            else if (info.bindlessDSetLayouts.size())
+            {
+                layouts.resize(info.bindlessDSetLayouts.size());
+                for (uint32_t i = 0; i < info.bindlessDSetLayouts.size(); i++)
+                    layouts[i] = info.bindlessDSetLayouts[i]->Handle();
+            }
+            else
+            {
+                PE_ERROR("No descriptor set layouts specified for pipeline");
+            }
+
             VkPipelineLayoutCreateInfo plci{};
             plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             plci.setLayoutCount = static_cast<uint32_t>(layouts.size());

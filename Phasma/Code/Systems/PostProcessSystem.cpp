@@ -31,6 +31,11 @@ SOFTWARE.
 #include "PostProcess/SSR.h"
 #include "PostProcess/TAA.h"
 
+#define TESTING 1
+#if TESTING
+#include "PostProcess/Test.h"
+#endif
+
 namespace pe
 {
     PostProcessSystem::PostProcessSystem()
@@ -94,6 +99,15 @@ namespace pe
         bloom.createUniforms(renderTargets);
         dof.createUniforms(renderTargets);
         motionBlur.createMotionBlurUniforms(renderTargets);
+
+#if TESTING
+        Test &test = *WORLD_ENTITY->CreateComponent<Test>();
+        test.Init();
+        test.createRenderPass(renderTargets);
+        test.createFrameBuffers(renderTargets);
+        test.createPipeline(renderTargets);
+        test.createUniforms(renderTargets);
+#endif
     }
 
     void PostProcessSystem::Update(double delta)
@@ -129,5 +143,9 @@ namespace pe
         WORLD_ENTITY->GetComponent<SSAO>()->destroy();
         WORLD_ENTITY->GetComponent<SSR>()->destroy();
         WORLD_ENTITY->GetComponent<TAA>()->destroy();
+
+#if TESTING
+        WORLD_ENTITY->GetComponent<Test>()->destroy();
+#endif
     }
 }

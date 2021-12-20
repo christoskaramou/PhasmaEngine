@@ -38,6 +38,10 @@ namespace pe
     class CommandBuffer;
 
     class DescriptorPool;
+    
+    class DescriptorLayout;
+
+    class Descriptor;
 
     class Fence;
 
@@ -89,6 +93,8 @@ namespace pe
 
         void CreateDescriptorPool(uint32_t maxDescriptorSets);
 
+        void CreateGlobalDescriptors();
+
         void CreateCmdBuffers(uint32_t bufferCount = 1);
 
         void CreateFences(uint32_t fenceCount);
@@ -111,6 +117,12 @@ namespace pe
         CommandPool *commandPool2;
         CommandPool *commandPoolTransfer;
         DescriptorPool *descriptorPool;
+        DescriptorLayout *globalDescriptorLayout;
+        Descriptor *globalDescriptor;
+        // Descriptor *descriptorUniformBuffers;
+        // Descriptor *descriptorStorageBuffers;
+        // Descriptor *descriptorStorageTexelBuffers;
+        // Descriptor *descriptorCombinedImageSamplers;
         std::vector<CommandBuffer *> dynamicCmdBuffers;
         std::vector<CommandBuffer *> shadowCmdBuffers;
         std::vector<Fence *> fences;

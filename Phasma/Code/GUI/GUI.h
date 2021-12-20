@@ -116,6 +116,8 @@ namespace pe
         static inline Image *s_currRenderImage = nullptr;
         static inline std::vector<Image *> s_renderImages{};
 
+        static inline bool s_test = false;
+
         bool show_demo_window = false;
 
         void InitImGui();

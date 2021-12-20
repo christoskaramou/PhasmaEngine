@@ -51,7 +51,20 @@ namespace pe
 
         ~DescriptorLayout();
 
-        std::vector<DescriptorBinding> bindings;
+    private:
+        std::vector<DescriptorBinding> m_bindings;
+    };
+
+    class DescriptorLayoutBindless : public IHandle<DescriptorLayoutBindless, DescriptorSetLayoutHandle>
+    {
+    public:
+        DescriptorLayoutBindless(uint32_t count, uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags);
+
+        ~DescriptorLayoutBindless();
+
+    private:
+        friend class Descriptor;
+        uint32_t m_count;
     };
 
     class Image;
@@ -75,9 +88,14 @@ namespace pe
     public:
         Descriptor(DescriptorLayout *layout);
 
+        Descriptor(DescriptorLayoutBindless *layout);
+
         ~Descriptor();
 
         void UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo *pInfo);
+
+    private:
+        bool m_bindless;
     };
 
 }

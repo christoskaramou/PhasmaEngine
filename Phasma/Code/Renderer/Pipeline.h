@@ -30,6 +30,8 @@ namespace pe
     class RenderPass;
 
     class DescriptorLayout;
+    
+    class DescriptorLayoutBindless;
 
     enum class CullMode
     {
@@ -81,6 +83,7 @@ namespace pe
         PushConstantStage pushConstantStage;
         uint32_t pushConstantSize;
         std::vector<DescriptorLayout *> descriptorSetLayouts;
+        std::vector<DescriptorLayoutBindless *> bindlessDSetLayouts;
         RenderPass *renderPass;
         PipelineCacheHandle pipelineCache;
     };
