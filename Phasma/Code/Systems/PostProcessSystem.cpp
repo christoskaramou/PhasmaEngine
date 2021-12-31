@@ -31,8 +31,7 @@ SOFTWARE.
 #include "PostProcess/SSR.h"
 #include "PostProcess/TAA.h"
 
-#define TESTING 1
-#if TESTING
+#if BINDLESS_TESTING
 #include "PostProcess/Test.h"
 #endif
 
@@ -100,7 +99,7 @@ namespace pe
         dof.createUniforms(renderTargets);
         motionBlur.createMotionBlurUniforms(renderTargets);
 
-#if TESTING
+#if BINDLESS_TESTING
         Test &test = *WORLD_ENTITY->CreateComponent<Test>();
         test.Init();
         test.createRenderPass(renderTargets);
@@ -144,7 +143,7 @@ namespace pe
         WORLD_ENTITY->GetComponent<SSR>()->destroy();
         WORLD_ENTITY->GetComponent<TAA>()->destroy();
 
-#if TESTING
+#if BINDLESS_TESTING
         WORLD_ENTITY->GetComponent<Test>()->destroy();
 #endif
     }

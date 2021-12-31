@@ -20,6 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#if BINDLESS_TESTING
 #pragma once
 
 namespace pe
@@ -63,3 +64,4 @@ namespace pe
         Buffer *uniform, *storage;
     };
 }
+#endif

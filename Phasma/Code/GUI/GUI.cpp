@@ -80,7 +80,7 @@ namespace pe
         if (!ImGui::ItemAdd(bb, id))
             return;
 
-        const float t = (float) g.Time;
+        const float t = (float)g.Time;
         const auto degree_offset = 2.0f * IM_PI / circle_count;
         for (int i = 0; i < circle_count; ++i)
         {
@@ -129,7 +129,7 @@ namespace pe
                     auto loadAsync = [result]()
                     {
                         s_modelLoading = true;
-                        
+
                         std::filesystem::path path(result);
                         Model::Load(path);
 
@@ -241,18 +241,17 @@ namespace pe
         ImGui::Unindent(16.0f);
         ImGui::Separator();
         ImGui::Text(
-                "GPU Total: %.3f ms",
-                frameTimer.timestamps[2] +
+            "GPU Total: %.3f ms",
+            frameTimer.timestamps[2] +
                 (shadow_cast ? frameTimer.timestamps[13] + frameTimer.timestamps[14] + frameTimer.timestamps[15]
                              : 0.f) +
-                (use_compute ? frameTimer.timestamps[16] : 0.f)
-        );
+                (use_compute ? frameTimer.timestamps[16] : 0.f));
         ImGui::Separator();
         ImGui::Text("Render Passes:");
-        //if (use_compute) {
+        // if (use_compute) {
         //	ImGui::Text("   Compute: %.3f ms", stats[13]); totalPasses++;
-        //}
-        //ImGui::Text("   Skybox: %.3f ms", stats[1]); totalPasses++;
+        // }
+        // ImGui::Text("   Skybox: %.3f ms", stats[1]); totalPasses++;
         ImGui::Indent(16.0f);
         if (shadow_cast)
         {
@@ -261,55 +260,55 @@ namespace pe
                 int index = 13 + i;
                 ImGui::Text("ShadowPass%i: %.3f ms", i, frameTimer.timestamps[index]);
                 totalPasses++;
-                totalTime += (float) frameTimer.timestamps[index];
+                totalTime += (float)frameTimer.timestamps[index];
             }
         }
         ImGui::Text("GBuffer: %.3f ms", frameTimer.timestamps[4]);
         totalPasses++;
-        totalTime += (float) frameTimer.timestamps[4];
+        totalTime += (float)frameTimer.timestamps[4];
         if (show_ssao)
         {
             ImGui::Text("SSAO: %.3f ms", frameTimer.timestamps[5]);
             totalPasses++;
-            totalTime += (float) frameTimer.timestamps[5];
+            totalTime += (float)frameTimer.timestamps[5];
         }
         if (show_ssr)
         {
             ImGui::Text("SSR: %.3f ms", frameTimer.timestamps[6]);
             totalPasses++;
-            totalTime += (float) frameTimer.timestamps[6];
+            totalTime += (float)frameTimer.timestamps[6];
         }
         ImGui::Text("Lights: %.3f ms", frameTimer.timestamps[7]);
         totalPasses++;
-        totalTime += (float) frameTimer.timestamps[7];
+        totalTime += (float)frameTimer.timestamps[7];
         if ((use_FXAA || use_TAA) && use_AntiAliasing)
         {
             ImGui::Text("Anti aliasing: %.3f ms", frameTimer.timestamps[8]);
             totalPasses++;
-            totalTime += (float) frameTimer.timestamps[8];
+            totalTime += (float)frameTimer.timestamps[8];
         }
         if (show_Bloom)
         {
             ImGui::Text("Bloom: %.3f ms", frameTimer.timestamps[9]);
             totalPasses++;
-            totalTime += (float) frameTimer.timestamps[9];
+            totalTime += (float)frameTimer.timestamps[9];
         }
         if (use_DOF)
         {
             ImGui::Text("Depth of Field: %.3f ms", frameTimer.timestamps[10]);
             totalPasses++;
-            totalTime += (float) frameTimer.timestamps[10];
+            totalTime += (float)frameTimer.timestamps[10];
         }
         if (show_motionBlur)
         {
             ImGui::Text("Motion Blur: %.3f ms", frameTimer.timestamps[11]);
             totalPasses++;
-            totalTime += (float) frameTimer.timestamps[11];
+            totalTime += (float)frameTimer.timestamps[11];
         }
 
         ImGui::Text("GUI: %.3f ms", frameTimer.timestamps[12]);
         totalPasses++;
-        totalTime += (float) frameTimer.timestamps[12];
+        totalTime += (float)frameTimer.timestamps[12];
         ImGui::Unindent(16.0f);
         ImGui::Separator();
         ImGui::Separator();
@@ -354,13 +353,13 @@ namespace pe
 
     void GUI::Scripts() const
     {
-        //if (!scripts_open)
+        // if (!scripts_open)
         //	return;
 
-        //ImGui::Begin("Scripts Folder", &scripts_open);
+        // ImGui::Begin("Scripts Folder", &scripts_open);
         //
-        //const char* result = async_inputBox_ImGuiButton("Create New Script", "Script", "Give a name followed by the extension .cs");
-        //if (result)
+        // const char* result = async_inputBox_ImGuiButton("Create New Script", "Script", "Give a name followed by the extension .cs");
+        // if (result)
         //{
         //	std::string res = result;
         //	if (std::find(fileList.begin(), fileList.end(), res) == fileList.end())
@@ -375,9 +374,9 @@ namespace pe
         //				SDL_MESSAGEBOX_INFORMATION, "Script not created", "Script name already exists", g_Window
         //		);
         //	}
-        //}
+        // }
         //
-        //for (uint32_t i = 0; i < fileList.size(); i++)
+        // for (uint32_t i = 0; i < fileList.size(); i++)
         //{
         //	std::string name = fileList[i] + "##" + std::to_string(i);
         //	if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick))
@@ -388,8 +387,8 @@ namespace pe
         //			system(s.c_str());
         //		}
         //	}
-        //}
-        //ImGui::End();
+        // }
+        // ImGui::End();
     }
 
     void GUI::Shaders() const
@@ -410,7 +409,8 @@ namespace pe
                 if (ImGui::IsMouseDoubleClicked(0))
                 {
                     std::string s = Path::Assets + "Shaders\\" + shaderList[i];
-                    auto lambda = [s]() { system(s.c_str()); };
+                    auto lambda = [s]()
+                    { system(s.c_str()); };
                     Queue<Launch::AsyncNoWait>::Request(lambda);
                 }
             }
@@ -449,7 +449,7 @@ namespace pe
             RHII.WaitDeviceIdle();
             CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::ScaleRenderTargets);
         }
-        //ImGui::Checkbox("Lock Render Window", &lock_render_window);
+        // ImGui::Checkbox("Lock Render Window", &lock_render_window);
         ImGui::Checkbox("IBL", &use_IBL);
         ImGui::Checkbox("SSR", &show_ssr);
         ImGui::Checkbox("SSAO", &show_ssao);
@@ -473,7 +473,7 @@ namespace pe
             ImGui::Separator();
         }
         ImGui::Checkbox("Tone Mapping", &show_tonemapping);
-        //ImGui::Checkbox("Compute shaders", &use_compute);
+        // ImGui::Checkbox("Compute shaders", &use_compute);
         if (show_tonemapping)
         {
             ImGui::Indent(16.0f);
@@ -606,11 +606,13 @@ namespace pe
             ImGui::DragFloat3(r.c_str(), model_rot[modelItemSelected].data());
         }
 
-        ImGui::Checkbox("Test", &s_test);
-        if (s_test)
+#if BINDLESS_TESTING
+        ImGui::Checkbox("Test", &s_bindless_testing);
+        if (s_bindless_testing)
         {
         }
-        
+#endif
+
         ImGui::End();
     }
 
@@ -637,10 +639,10 @@ namespace pe
 
         ImGui::CreateContext();
         ImGuiIO &io = ImGui::GetIO();
-        (void) io;
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;            // Enable docking
-        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;            // Enable multiple viewports
-        io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;    // Backend Renderer supports multiple viewports.
+        (void)io;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;          // Enable docking
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;        // Enable multiple viewports
+        io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports; // Backend Renderer supports multiple viewports.
 
         SetWindowStyle();
 
@@ -656,7 +658,7 @@ namespace pe
         info.DescriptorPool = RHII.descriptorPool->Handle();
         info.Subpass = 0;
         info.MinImageCount = static_cast<uint32_t>(RHII.swapchain->images.size());
-        info.ImageCount = (uint32_t) RHII.swapchain->images.size();
+        info.ImageCount = (uint32_t)RHII.swapchain->images.size();
         info.MSAASamples = VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT;
         info.Allocator = nullptr;
         info.CheckVkResultFn = nullptr;

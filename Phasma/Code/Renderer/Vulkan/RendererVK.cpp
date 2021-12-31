@@ -163,8 +163,6 @@ namespace pe
         DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
-        Test &test = *WORLD_ENTITY->GetComponent<Test>();
-
         // SCREEN SPACE AMBIENT OCCLUSION
         if (GUI::show_ssao)
         {
@@ -237,11 +235,14 @@ namespace pe
             frameTimer.timestamps[11] = gpuTimer[9].End();
         }
 
-        if (GUI::s_test)
+#if BINDLESS_TESTING
+        Test &test = *WORLD_ENTITY->GetComponent<Test>();
+        if (GUI::s_bindless_testing)
         {
             test.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
             test.draw(cmd, imageIndex, renderTargets);
         }
+#endif
 
         renderTargets["albedo"]->ChangeLayout(cmd, LayoutState::ColorWrite);
         RHII.depth->ChangeLayout(cmd, LayoutState::DepthWrite);

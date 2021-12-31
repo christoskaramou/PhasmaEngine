@@ -20,6 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#if BINDLESS_TESTING
 #include "Test.h"
 #include "GUI/GUI.h"
 #include "Renderer/Swapchain.h"
@@ -212,3 +213,4 @@ namespace pe
         pipeline->Destroy();
     }
 }
+#endif

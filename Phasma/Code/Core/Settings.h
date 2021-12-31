@@ -31,3 +31,7 @@ namespace pe
         inline static bool BindlessDescriptors = true;
     };
 }
+
+// ------ Testing flags ------
+#define BINDLESS_TESTING 0
+// ------ Testing flags ------
