@@ -164,8 +164,6 @@ namespace pe
             renderPass->Handle() = {};
         }
 
-        Pipeline::getDescriptorSetLayoutShadows()->Destroy();
-
         for (auto &texture : textures)
             texture->Destroy();
 

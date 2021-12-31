@@ -917,7 +917,7 @@ namespace pe
         DescriptorUpdateInfo info{};
         info.binding = 0;
         info.pBuffer = uniformBuffer;
-        
+
         descriptorSet->UpdateDescriptor(1, &info);
 
         // mesh dSets
@@ -939,27 +939,38 @@ namespace pe
             // primitive dSets
             for (auto &primitive : mesh->primitives)
             {
-                primitive.descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutPrimitive());
+                primitive.descriptorSet = Descriptor::Create(
+                    Pipeline::getDescriptorSetLayoutPrimitive(),
+                    GlobalSettings::BindlessDescriptors ? 5 : 1);
 
                 std::array<DescriptorUpdateInfo, 6> infos{};
 
                 infos[0].binding = 0;
-                infos[0].pImage = primitive.pbrMaterial.baseColorTexture;
+                infos[0].pBuffer = primitive.uniformBuffer;
 
                 infos[1].binding = 1;
-                infos[1].pImage = primitive.pbrMaterial.metallicRoughnessTexture;
+                infos[1].pImage = primitive.pbrMaterial.baseColorTexture;
 
                 infos[2].binding = 2;
-                infos[2].pImage = primitive.pbrMaterial.normalTexture;
+                infos[2].pImage = primitive.pbrMaterial.metallicRoughnessTexture;
 
                 infos[3].binding = 3;
-                infos[3].pImage = primitive.pbrMaterial.occlusionTexture;
+                infos[3].pImage = primitive.pbrMaterial.normalTexture;
 
                 infos[4].binding = 4;
-                infos[4].pImage = primitive.pbrMaterial.emissiveTexture;
+                infos[4].pImage = primitive.pbrMaterial.occlusionTexture;
 
                 infos[5].binding = 5;
-                infos[5].pBuffer = primitive.uniformBuffer;
+                infos[5].pImage = primitive.pbrMaterial.emissiveTexture;
+
+                if (GlobalSettings::BindlessDescriptors)
+                {
+                    infos[1].binding = 1;
+                    infos[2].binding = 1;
+                    infos[3].binding = 1;
+                    infos[4].binding = 1;
+                    infos[5].binding = 1;
+                }
 
                 primitive.descriptorSet->UpdateDescriptor(6, infos.data());
             }

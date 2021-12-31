@@ -188,18 +188,18 @@ namespace pe
     void Descriptor::UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo *pInfo)
     {
         // store by binding
-        std::map<uint32_t, std::vector<DescriptorUpdateInfo>> infos{};
+        std::map<uint32_t, std::vector<DescriptorUpdateInfo>> infosMap{};
         for (uint32_t i = 0; i < infoCount; i++)
-            infos[pInfo[i].binding].push_back(pInfo[i]);
+            infosMap[pInfo[i].binding].push_back(pInfo[i]);
 
         std::vector<VkDescriptorImageInfo> imageInfos{};
         imageInfos.reserve(infoCount);
         std::vector<VkDescriptorBufferInfo> bufferInfos{};
         bufferInfos.reserve(infoCount);
         std::vector<VkWriteDescriptorSet> writeSets{};
-        writeSets.reserve(infos.size());
+        writeSets.reserve(infosMap.size());
 
-        for (auto const &[binding, infos] : infos)
+        for (auto const &[binding, infos] : infosMap)
         {
             for (auto const &info : infos)
             {

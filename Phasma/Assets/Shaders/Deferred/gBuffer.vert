@@ -33,7 +33,7 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
     float dummy[3];
 } uboMesh;
 
-layout(set = 1, binding = 5) uniform UniformBufferObject2 {
+layout(set = 1, binding = 0) uniform UniformBufferObject2 {
     vec4 baseColorFactor;
     vec4 emissiveFactor;
     float metallicFactor;

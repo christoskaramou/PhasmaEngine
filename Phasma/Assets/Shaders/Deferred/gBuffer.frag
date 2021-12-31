@@ -26,11 +26,23 @@ SOFTWARE.
 
 #include "../Common/common.glsl"
 
-layout (set = 1, binding = 0) uniform sampler2D bcSampler;// BaseColor
-layout (set = 1, binding = 1) uniform sampler2D mrSampler;// MetallicRoughness
-layout (set = 1, binding = 2) uniform sampler2D nSampler;// Normal
-layout (set = 1, binding = 3) uniform sampler2D oSampler;// Occlusion
-layout (set = 1, binding = 4) uniform sampler2D eSampler;// Emissive
+#if BINDLESS_DESCRIPTORS
+    layout (set = 1, binding = 1) uniform sampler2D samplers[];
+
+    #define sampler(index) samplers[nonuniformEXT(index)]
+    
+    #define bcSampler sampler(0)
+    #define mrSampler sampler(1)
+    #define nSampler sampler(2)
+    #define oSampler sampler(3)
+    #define eSampler sampler(4)
+#else
+    layout (set = 1, binding = 1) uniform sampler2D bcSampler;// BaseColor
+    layout (set = 1, binding = 2) uniform sampler2D mrSampler;// MetallicRoughness
+    layout (set = 1, binding = 3) uniform sampler2D nSampler;// Normal
+    layout (set = 1, binding = 4) uniform sampler2D oSampler;// Occlusion
+    layout (set = 1, binding = 5) uniform sampler2D eSampler;// Emissive
+#endif
 
 layout (location = 0) in vec2 inUV;
 layout (location = 1) in vec3 inNormal;
