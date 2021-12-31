@@ -31,15 +31,24 @@ namespace pe
         // One of these modes must be set
         if (m_mode & std::ios_base::in || m_mode & std::ios_base::out)
         {
-            m_mode |= std::ios_base::ate;
             m_fstream.open(m_file, m_mode);
 
             if (m_fstream.is_open())
             {
                 if (m_mode & std::ios_base::in)
+                {
+                    auto currentPos = m_fstream.tellg();
+                    m_fstream.seekg(0, std::ios_base::end);
                     m_size = static_cast<size_t>(m_fstream.tellg());
+                    m_fstream.seekg(currentPos);
+                }
                 else
+                {
+                    auto currentPos = m_fstream.tellp();
+                    m_fstream.seekp(0, std::ios_base::end);
                     m_size = static_cast<size_t>(m_fstream.tellp());
+                    m_fstream.seekp(currentPos);
+                }
             }
         }
         else

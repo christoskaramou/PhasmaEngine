@@ -84,6 +84,18 @@ namespace pe
 
         inline Reflection &GetReflection() { return m_reflection; }
 
+        inline static void AddGlobalDefine(const std::string &name, const std::string &value)
+        {
+            for (auto& def : m_globalDefines)
+            {
+                if (def.name == name)
+                    return;
+            }
+            
+            Define define{name, value};
+            m_globalDefines.push_back(define);
+        }
+
     private:
         std::string PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions &options);
 
@@ -104,6 +116,6 @@ namespace pe
         std::vector<Define> defines{};
         std::vector<uint32_t> m_spirv{};
 
-        inline static std::vector<Define> globalDefines{};
+        inline static std::vector<Define> m_globalDefines{};
     };
 }

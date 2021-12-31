@@ -53,7 +53,7 @@ namespace pe
         }
     }
 
-    CommandBuffer::CommandBuffer(CommandPool* commandPool) : m_commandPool(commandPool)
+    CommandBuffer::CommandBuffer(CommandPool *commandPool) : m_commandPool(commandPool)
     {
         VkCommandBufferAllocateInfo cbai{};
         cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -76,7 +76,7 @@ namespace pe
         }
     }
 
-    void CommandBuffer::CopyBuffer(Buffer* srcBuffer, Buffer* dstBuffer, uint32_t regionCount, BufferCopy* pRegions)
+    void CommandBuffer::CopyBuffer(Buffer *srcBuffer, Buffer *dstBuffer, uint32_t regionCount, BufferCopy *pRegions)
     {
         std::vector<VkBufferCopy> regions(regionCount);
         for (uint32_t i = 0; i < regionCount; i++)
@@ -113,9 +113,9 @@ namespace pe
     }
 
     void CommandBuffer::BlitImage(
-        Image* srcImage, ImageLayout srcImageLayout,
-        Image* dstImage, ImageLayout dstImageLayout,
-        uint32_t regionCount, ImageBlit* pRegions,
+        Image *srcImage, ImageLayout srcImageLayout,
+        Image *dstImage, ImageLayout dstImageLayout,
+        uint32_t regionCount, ImageBlit *pRegions,
         Filter filter)
     {
         std::vector<VkImageBlit> regions(regionCount);
@@ -144,46 +144,37 @@ namespace pe
         }
 
         vkCmdBlitImage(m_handle,
-            srcImage->Handle(), (VkImageLayout)srcImageLayout,
-            dstImage->Handle(), (VkImageLayout)dstImageLayout,
-            regionCount, regions.data(),
-            (VkFilter)filter);
+                       srcImage->Handle(), (VkImageLayout)srcImageLayout,
+                       dstImage->Handle(), (VkImageLayout)dstImageLayout,
+                       regionCount, regions.data(),
+                       (VkFilter)filter);
     }
 
-    bool DepthFormat(Format format)
+    bool IsDepth(Format format)
     {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
-            format == VK_FORMAT_D32_SFLOAT ||
-            format == VK_FORMAT_D24_UNORM_S8_UINT;
+               format == VK_FORMAT_D32_SFLOAT ||
+               format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
-    void CommandBuffer::BeginPass(RenderPass* pass, FrameBuffer* frameBuffer)
+    void CommandBuffer::BeginPass(RenderPass *pass, FrameBuffer *frameBuffer)
     {
-        const vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
-        VkClearValue clearColor;
-        memcpy(clearColor.color.float32, &color, sizeof(vec4));
-
-        VkClearDepthStencilValue depthStencil;
-        depthStencil.depth = GlobalSettings::ReverseZ ? 0.f : 1.f;
-        depthStencil.stencil = 0;
-
         std::vector<VkClearValue> clearValues(pass->attachments.size());
         for (int i = 0; i < pass->attachments.size(); i++)
         {
-            if (DepthFormat(pass->attachments[i].format))
-                clearValues[i].depthStencil = depthStencil;
+            if (IsDepth(pass->attachments[i].format))
+                clearValues[i].depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
             else
-                clearValues[i].color = clearColor.color;
-
+                clearValues[i].color = {1.0f, 0.0f, 0.0f, 1.0f};
         }
 
         VkRenderPassBeginInfo rpi{};
         rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         rpi.renderPass = pass->Handle();
         rpi.framebuffer = frameBuffer->Handle();
-        rpi.renderArea.offset = VkOffset2D{ 0, 0 };
-        rpi.renderArea.extent = VkExtent2D{ frameBuffer->width, frameBuffer->height };
-        rpi.clearValueCount = (uint32_t)clearValues.size();
+        rpi.renderArea.offset = VkOffset2D{0, 0};
+        rpi.renderArea.extent = VkExtent2D{frameBuffer->width, frameBuffer->height};
+        rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
         rpi.pClearValues = clearValues.data();
 
         vkCmdBeginRenderPass(m_handle, &rpi, VK_SUBPASS_CONTENTS_INLINE);
@@ -194,28 +185,28 @@ namespace pe
         vkCmdEndRenderPass(m_handle);
     }
 
-    void CommandBuffer::BindPipeline(Pipeline* pipeline)
+    void CommandBuffer::BindPipeline(Pipeline *pipeline)
     {
         vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->Handle());
     }
 
-    void CommandBuffer::BindComputePipeline(Pipeline* pipeline)
+    void CommandBuffer::BindComputePipeline(Pipeline *pipeline)
     {
         vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->Handle());
     }
 
-    void CommandBuffer::BindVertexBuffer(Buffer* buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount)
+    void CommandBuffer::BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount)
     {
         VkBuffer buff = buffer->Handle();
         vkCmdBindVertexBuffers(m_handle, firstBinding, bindingCount, &buff, &offset);
     }
 
-    void CommandBuffer::BindIndexBuffer(Buffer*buffer, size_t offset)
+    void CommandBuffer::BindIndexBuffer(Buffer *buffer, size_t offset)
     {
         vkCmdBindIndexBuffer(m_handle, buffer->Handle(), offset, VK_INDEX_TYPE_UINT32);
     }
 
-    void CommandBuffer::BindDescriptors(Pipeline* pipeline, uint32_t count, Descriptor** descriptors)
+    void CommandBuffer::BindDescriptors(Pipeline *pipeline, uint32_t count, Descriptor **descriptors)
     {
         std::vector<VkDescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
@@ -224,7 +215,7 @@ namespace pe
         vkCmdBindDescriptorSets(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout, 0, count, dsets.data(), 0, nullptr);
     }
 
-    void CommandBuffer::BindComputeDescriptors(Pipeline* pipeline, uint32_t count, Descriptor** descriptors)
+    void CommandBuffer::BindComputeDescriptors(Pipeline *pipeline, uint32_t count, Descriptor **descriptors)
     {
         std::vector<VkDescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
@@ -238,7 +229,7 @@ namespace pe
         vkCmdDispatch(m_handle, groupCountX, groupCountY, groupCountZ);
     }
 
-    void CommandBuffer::PushConstants(Pipeline* pipeline, ShaderStageFlags shaderStageFlags, uint32_t offset, uint32_t size, const void* pValues)
+    void CommandBuffer::PushConstants(Pipeline *pipeline, ShaderStageFlags shaderStageFlags, uint32_t offset, uint32_t size, const void *pValues)
     {
         vkCmdPushConstants(m_handle, pipeline->layout, shaderStageFlags, offset, size, pValues);
     }

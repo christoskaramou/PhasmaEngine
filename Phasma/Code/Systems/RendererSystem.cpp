@@ -170,7 +170,6 @@ namespace pe
 
         if (GUI::shadow_cast)
         {
-
             // record the shadow command buffers
             RecordShadowsCmds(imageIndex);
 

@@ -96,7 +96,7 @@ namespace pe
             options.SetOptimizationLevel(shaderc_optimization_level_performance);
             // m_options.SetHlslFunctionality1(true);
 
-            AddDefines(globalDefines, options);
+            AddDefines(m_globalDefines, options);
             AddDefines(defs, options);
 
             CompileFileToAssembly(static_cast<shaderc_shader_kind>(shaderType), options);

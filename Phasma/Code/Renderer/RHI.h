@@ -34,23 +34,14 @@ SOFTWARE.
 namespace pe
 {
     class CommandPool;
-
     class CommandBuffer;
-
     class DescriptorPool;
-    
     class DescriptorLayout;
-
     class Descriptor;
-
     class Fence;
-
     class Semaphore;
-
     class Swapchain;
-
     class Image;
-
     class Surface;
 
     class RHI : public NoCopy, public NoMove

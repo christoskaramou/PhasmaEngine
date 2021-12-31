@@ -68,9 +68,7 @@ namespace pe
         std::chrono::duration<double> m_duration{};
 
     public:
-        static auto &Instance()
-
-            noexcept
+        static FrameTimer &Instance()
         {
             static FrameTimer frame_timer;
             return frame_timer;

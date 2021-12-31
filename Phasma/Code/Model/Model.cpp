@@ -917,7 +917,7 @@ namespace pe
         DescriptorUpdateInfo info{};
         info.binding = 0;
         info.pBuffer = uniformBuffer;
-        ;
+        
         descriptorSet->UpdateDescriptor(1, &info);
 
         // mesh dSets
@@ -933,6 +933,7 @@ namespace pe
             DescriptorUpdateInfo info{};
             info.binding = 0;
             info.pBuffer = mesh->uniformBuffer;
+
             mesh->descriptorSet->UpdateDescriptor(1, &info);
 
             // primitive dSets

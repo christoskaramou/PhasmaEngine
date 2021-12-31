@@ -116,11 +116,11 @@ namespace pe
     {
         std::string shaderTempFile = m_tempFilePath + ".temp";
 
-        FileSystem file(shaderTempFile, std::ios::in | std::ios::ate);
+        FileSystem file(shaderTempFile, std::ios::in);
         if (!file.IsOpen())
             return std::numeric_limits<size_t>::max();
 
-        std::string buffer = file.ReadAll();
+        std::string buffer = file.ReadLine();
 
         std::regex regex("\\s+");
         buffer = std::regex_replace(buffer, regex, "");

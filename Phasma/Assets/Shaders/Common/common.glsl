@@ -213,7 +213,7 @@ float MipMapLevel(vec2 texture_coordinate)// in texel units
     vec2  dyVtc        = dFdy(texture_coordinate);
     float delta_max_sqr = max(dot(dxVtc, dxVtc), dot(dyVtc, dyVtc));
     float mml = 0.5 * log2(delta_max_sqr);
-    return max(0, mml);
+    return max(0.f, mml);
 }
 
 #endif

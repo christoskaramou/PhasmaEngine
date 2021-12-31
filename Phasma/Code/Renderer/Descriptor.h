@@ -27,13 +27,15 @@ namespace pe
     class DescriptorBinding
     {
     public:
-        DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags);
+        DescriptorBinding();
+
+        DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags, uint32_t descriptorCount = 1, SamplerHandle *pImmutableSamplers = nullptr);
 
         uint32_t binding;
         DescriptorType descriptorType;
         uint32_t descriptorCount;
         ShaderStageFlags stageFlags;
-        SamplerHandle pImmutableSamplers;
+        SamplerHandle *pImmutableSamplers;
     };
 
     class DescriptorPool : public IHandle<DescriptorPool, DescriptorPoolHandle>
@@ -50,21 +52,6 @@ namespace pe
         DescriptorLayout(const std::vector<DescriptorBinding> &bindings);
 
         ~DescriptorLayout();
-
-    private:
-        std::vector<DescriptorBinding> m_bindings;
-    };
-
-    class DescriptorLayoutBindless : public IHandle<DescriptorLayoutBindless, DescriptorSetLayoutHandle>
-    {
-    public:
-        DescriptorLayoutBindless(uint32_t count, uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags);
-
-        ~DescriptorLayoutBindless();
-
-    private:
-        friend class Descriptor;
-        uint32_t m_count;
     };
 
     class Image;
@@ -86,16 +73,11 @@ namespace pe
     class Descriptor : public IHandle<Descriptor, DescriptorSetHandle>
     {
     public:
-        Descriptor(DescriptorLayout *layout);
-
-        Descriptor(DescriptorLayoutBindless *layout);
+        Descriptor(DescriptorLayout *layout, uint32_t variableCount = 1);
 
         ~Descriptor();
 
         void UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo *pInfo);
-
-    private:
-        bool m_bindless;
     };
 
 }

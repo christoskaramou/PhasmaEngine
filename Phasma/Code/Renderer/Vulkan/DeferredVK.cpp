@@ -157,9 +157,8 @@ namespace pe
         infos[3].binding = 3;
         infos[3].pImage = renderTargets["srm"];
 
-        Buffer *lightsUniform = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
         infos[4].binding = 4;
-        infos[4].pBuffer = lightsUniform;
+        infos[4].pBuffer = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
 
         infos[5].binding = 5;
         infos[5].pImage = renderTargets["ssaoBlur"];

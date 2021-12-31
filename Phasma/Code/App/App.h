@@ -24,42 +24,20 @@ SOFTWARE.
 
 namespace pe
 {
-    class Descriptor;
-    class FrameBuffer;
-    class Image;
-    class CommandBuffer;
-    class RenderPass;
-    class Pipeline;
-    class Buffer;
+    class Context;
+    class Window;
+    class FrameTimer;
 
-    class Test : public IComponent
+    class App
     {
     public:
-        Test();
-
-        ~Test();
-
         void Init();
+        void Run();
+        void Shutdown();
 
-        void createRenderPass(std::map<std::string, Image *> &renderTargets);
-
-        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
-
-        void createPipeline(std::map<std::string, Image *> &renderTargets);
-
-        void createUniforms(std::map<std::string, Image *> &renderTargets);
-
-        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
-
-        void draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets);
-
-        void destroy();
-
-        std::vector<FrameBuffer *> framebuffers{};
-        Pipeline *pipeline;
-        RenderPass *renderPass;
-        Descriptor *DSet0, *DSet1, *DSet2, *DSet3;
-        Image *frameImage;
-        Buffer *uniform, *storage;
+    private:
+        Context *context = nullptr;
+        Window *window = nullptr;
+        FrameTimer *frameTimer = nullptr;
     };
 }

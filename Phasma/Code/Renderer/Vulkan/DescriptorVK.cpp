@@ -28,8 +28,26 @@ SOFTWARE.
 
 namespace pe
 {
-    DescriptorBinding::DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags)
-        : binding(binding), descriptorType(descriptorType), descriptorCount(1), stageFlags(stageFlags), pImmutableSamplers()
+    DescriptorBinding::DescriptorBinding()
+    {
+        binding = 0;
+        descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorCount = 1;
+        stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        pImmutableSamplers = nullptr;
+    }
+
+    DescriptorBinding::DescriptorBinding(
+        uint32_t binding,
+        DescriptorType descriptorType,
+        ShaderStageFlags stageFlags,
+        uint32_t descriptorCount,
+        SamplerHandle *pImmutableSamplers)
+        : binding(binding),
+          descriptorType(descriptorType),
+          descriptorCount(descriptorCount),
+          stageFlags(stageFlags),
+          pImmutableSamplers(pImmutableSamplers)
     {
     }
 
@@ -71,24 +89,49 @@ namespace pe
         if (bindings.empty())
             PE_ERROR("DescriptorLayout: No bindings provided");
 
-        m_bindings = bindings;
-
+        // Bindings
         std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{};
-        for (const auto &layoutBinding : m_bindings)
+        for (const auto &layoutBinding : bindings)
         {
             setLayoutBindings.push_back(
                 VkDescriptorSetLayoutBinding{
                     layoutBinding.binding,
                     (VkDescriptorType)layoutBinding.descriptorType,
-                    1,
+                    layoutBinding.descriptorCount,
                     (VkShaderStageFlags)layoutBinding.stageFlags,
                     nullptr});
         }
 
+        // Bindings flags
+        std::vector<VkDescriptorBindingFlags> descriptorBindingFlags(setLayoutBindings.size());
+        for (int i = 0; i < setLayoutBindings.size(); i++)
+        {
+            if (setLayoutBindings[i].descriptorCount > 1)
+            {
+                // Note: As for now, there can be only one unbound array in a descriptor set and it must be the last binding
+                // I think this is a Vulkan limitation
+                if (i != setLayoutBindings.size() - 1)
+                    PE_ERROR("DescriptorLayout: An unbound array must be the last binding");
+                descriptorBindingFlags[i] = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+            }
+            else
+            {
+                descriptorBindingFlags[i] = 0;
+            }
+        }
+
+        // Set flags to bindings
+        VkDescriptorSetLayoutBindingFlagsCreateInfo setLayoutBindingFlags{};
+        setLayoutBindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+        setLayoutBindingFlags.bindingCount = static_cast<uint32_t>(descriptorBindingFlags.size());
+        setLayoutBindingFlags.pBindingFlags = descriptorBindingFlags.data();
+
+        // Layout create info
         VkDescriptorSetLayoutCreateInfo descriptorLayout{};
         descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
         descriptorLayout.pBindings = setLayoutBindings.data();
+        descriptorLayout.pNext = &setLayoutBindingFlags;
 
         VkDescriptorSetLayout layout;
         vkCreateDescriptorSetLayout(RHII.device, &descriptorLayout, nullptr, &layout);
@@ -104,76 +147,15 @@ namespace pe
         }
     }
 
-    DescriptorLayoutBindless::DescriptorLayoutBindless(uint32_t count, uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags)
-        : m_count(count)
-    {
-        std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{};
-        setLayoutBindings.push_back(
-            VkDescriptorSetLayoutBinding{
-                binding,
-                (VkDescriptorType)descriptorType,
-                count,
-                (VkShaderStageFlags)stageFlags,
-                nullptr});
-
-        VkDescriptorSetLayoutCreateInfo descriptorLayout{};
-        descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-        descriptorLayout.pBindings = setLayoutBindings.data();
-
-        std::vector<VkDescriptorBindingFlagsEXT> descriptorBindingFlags{};
-        VkDescriptorSetLayoutBindingFlagsCreateInfoEXT setLayoutBindingFlags{};
-
-        for (const auto &layoutBinding : setLayoutBindings)
-            descriptorBindingFlags.push_back(VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT);
-
-        setLayoutBindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
-        setLayoutBindingFlags.bindingCount = static_cast<uint32_t>(descriptorBindingFlags.size());
-        setLayoutBindingFlags.pBindingFlags = descriptorBindingFlags.data();
-
-        descriptorLayout.pNext = &setLayoutBindingFlags;
-
-        VkDescriptorSetLayout layout;
-        vkCreateDescriptorSetLayout(RHII.device, &descriptorLayout, nullptr, &layout);
-        m_handle = layout;
-    }
-
-    DescriptorLayoutBindless::~DescriptorLayoutBindless()
-    {
-        if (m_handle)
-        {
-            vkDestroyDescriptorSetLayout(RHII.device, m_handle, nullptr);
-            m_handle = {};
-        }
-    }
-
-    Descriptor::Descriptor(DescriptorLayout *layout)
+    Descriptor::Descriptor(DescriptorLayout *layout, uint32_t variableCount)
     {
         if (!layout)
             PE_ERROR("DescriptorLayout is nullptr");
 
-        VkDescriptorSetLayout dsetLayout = layout->Handle();
-        VkDescriptorSetAllocateInfo allocateInfo{};
-        allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocateInfo.descriptorPool = RHII.descriptorPool->Handle();
-        allocateInfo.descriptorSetCount = 1;
-        allocateInfo.pSetLayouts = &dsetLayout;
+        uint32_t variableDescCounts[] = {variableCount};
 
-        VkDescriptorSet dset;
-        vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
-        m_handle = dset;
-
-        m_bindless = false;
-    }
-
-    Descriptor::Descriptor(DescriptorLayoutBindless *layout)
-    {
-        if (!layout)
-            PE_ERROR("DescriptorLayout is nullptr");
-
-        VkDescriptorSetVariableDescriptorCountAllocateInfoEXT variableDescriptorCountAllocInfo = {};
-        uint32_t variableDescCounts[] = {layout->m_count};
-        variableDescriptorCountAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT;
+        VkDescriptorSetVariableDescriptorCountAllocateInfo variableDescriptorCountAllocInfo = {};
+        variableDescriptorCountAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
         variableDescriptorCountAllocInfo.descriptorSetCount = 1;
         variableDescriptorCountAllocInfo.pDescriptorCounts = variableDescCounts;
 
@@ -188,79 +170,76 @@ namespace pe
         VkDescriptorSet dset;
         vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
         m_handle = dset;
-
-        m_bindless = true;
     }
 
     Descriptor::~Descriptor()
     {
     }
 
-    DescriptorUpdateInfo::DescriptorUpdateInfo() : binding(0), pBuffer(nullptr), bufferUsage(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), pImage(nullptr), imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+    DescriptorUpdateInfo::DescriptorUpdateInfo()
+        : binding(0),
+          pBuffer(nullptr),
+          bufferUsage(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
+          pImage(nullptr),
+          imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
     {
     }
 
     void Descriptor::UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo *pInfo)
     {
-        std::vector<VkDescriptorImageInfo> dsii{};
-        dsii.reserve(infoCount);
-        auto const wSetImage = [this, &dsii](uint32_t dstBinding, Image *image, ImageLayout layout)
-        {
-            VkDescriptorImageInfo info{image->sampler, image->view, (VkImageLayout)layout};
-            dsii.push_back(info);
-
-            VkWriteDescriptorSet textureWriteSet{};
-            textureWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            textureWriteSet.dstSet = m_handle;
-            textureWriteSet.dstBinding = dstBinding;
-            textureWriteSet.dstArrayElement = 0;
-            textureWriteSet.descriptorCount = 1;
-            textureWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            textureWriteSet.pImageInfo = &dsii.back();
-
-            return textureWriteSet;
-        };
-
-        std::vector<VkDescriptorBufferInfo> dsbi{};
-        dsbi.reserve(infoCount);
-        auto const wSetBuffer = [this, &dsbi](uint32_t dstBinding, Buffer *buffer, BufferUsageFlags bufferUsage)
-        {
-            VkDescriptorBufferInfo info{buffer->Handle(), 0, buffer->Size()};
-            dsbi.push_back(info);
-
-            VkWriteDescriptorSet bufferWriteSet{};
-            bufferWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            bufferWriteSet.dstSet = m_handle;
-            bufferWriteSet.dstBinding = dstBinding;
-            bufferWriteSet.dstArrayElement = 0;
-            bufferWriteSet.descriptorCount = 1;
-            bufferWriteSet.descriptorType = bufferUsage == VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            bufferWriteSet.pBufferInfo = &dsbi.back();
-
-            return bufferWriteSet;
-        };
-
-        std::vector<VkWriteDescriptorSet> textureWriteSets{};
-        textureWriteSets.resize(infoCount);
+        // store by binding
+        std::map<uint32_t, std::vector<DescriptorUpdateInfo>> infos{};
         for (uint32_t i = 0; i < infoCount; i++)
+            infos[pInfo[i].binding].push_back(pInfo[i]);
+
+        std::vector<VkDescriptorImageInfo> imageInfos{};
+        imageInfos.reserve(infoCount);
+        std::vector<VkDescriptorBufferInfo> bufferInfos{};
+        bufferInfos.reserve(infoCount);
+        std::vector<VkWriteDescriptorSet> writeSets{};
+        writeSets.reserve(infos.size());
+
+        for (auto const &[binding, infos] : infos)
         {
-            if (pInfo[i].pImage != nullptr)
-                textureWriteSets[i] = wSetImage(pInfo[i].binding, pInfo[i].pImage, pInfo[i].imageLayout);
-            else if (pInfo[i].pBuffer != nullptr)
-                textureWriteSets[i] = wSetBuffer(pInfo[i].binding, pInfo[i].pBuffer, pInfo[i].bufferUsage);
-            else
-                PE_ERROR("Descriptor::UpdateDescriptor: pImage and pBuffer are nullptr");
+            for (auto const &info : infos)
+            {
+                if (info.pImage != nullptr)
+                    imageInfos.push_back(VkDescriptorImageInfo{info.pImage->sampler, info.pImage->view, (VkImageLayout)info.imageLayout});
+                else if (info.pBuffer != nullptr)
+                    bufferInfos.push_back(VkDescriptorBufferInfo{info.pBuffer->Handle(), 0, info.pBuffer->Size()});
+                else
+                    PE_ERROR("Descriptor::UpdateDescriptor: pImage and pBuffer are both nullptr");
+            }
+
+            VkWriteDescriptorSet writeSet{};
+            writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writeSet.dstSet = m_handle;
+            writeSet.dstBinding = binding;
+            writeSet.dstArrayElement = 0;
+            writeSet.descriptorCount = static_cast<uint32_t>(infos.size());
+
+            if (infos[0].pImage != nullptr)
+            {
+                size_t index = imageInfos.size() - infos.size();
+                writeSet.pImageInfo = &imageInfos[index];
+                writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            }
+            else //(infos[0].pBuffer != nullptr)
+            {
+                size_t index = bufferInfos.size() - infos.size();
+                writeSet.pBufferInfo = &bufferInfos[index];
+                if (infos[0].bufferUsage == VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
+                    writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                else if (infos[0].bufferUsage == VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+                    writeSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                else
+                    PE_ERROR("Descriptor::UpdateDescriptor: bufferUsage is not supported");
+            }
+
+            writeSets.push_back(writeSet);
         }
 
-        if (m_bindless)
-        {
-            textureWriteSets.resize(1);
-            textureWriteSets[0].dstBinding = 0;
-            textureWriteSets[0].descriptorCount = static_cast<uint32_t>(dsii.size());
-            textureWriteSets[0].pImageInfo = dsii.data();
-        }
-
-        vkUpdateDescriptorSets(RHII.device, (uint32_t)textureWriteSets.size(), textureWriteSets.data(), 0, nullptr);
+        vkUpdateDescriptorSets(RHII.device, static_cast<uint32_t>(writeSets.size()), writeSets.data(), 0, nullptr);
     }
 }
 #endif

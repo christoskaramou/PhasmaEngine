@@ -20,61 +20,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "Window/Window.h"
-#include "Systems/CameraSystem.h"
-#include "Systems/RendererSystem.h"
-#include "Systems/LightSystem.h"
-#include "Systems/EventSystem.h"
-#include "Systems/PostProcessSystem.h"
-#include "Renderer/RHI.h"
-
-using namespace pe;
+#include "Code/App/App.h"
 
 int main(int argc, char* argv[])
 {
-	//freopen("log.txt", "w", stdout);
-	//freopen("errors.txt", "w", stderr);
-
-	Context& context = *CONTEXT;
-	context.CreateSystem<EventSystem>();
-
-	Window* window = Window::Create(50, 50, 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
-	RHII.Init(window->Handle()); // TODO: Remove this from here (was in Renderer)
-
-	auto* cs = context.CreateSystem<CameraSystem>();
-	auto* ls = context.CreateSystem<LightSystem>();
-	auto* rs = context.CreateSystem<RendererSystem>();
-	auto* pps = context.CreateSystem<PostProcessSystem>();
-
-	//context.InitSystems();
+	pe::App app;
 	
-	FileWatcher::Start();
-
-	FrameTimer& frameTimer = FrameTimer::Instance();
-
-	while (true)
-	{
-		frameTimer.Start();
-		
-		if (!window->ProcessEvents(frameTimer.delta))
-			break;
-		
-		if (!window->isMinimized())
-		{
-			context.UpdateSystems(frameTimer.delta);
-			Queue<Launch::All>::ExecuteRequests();
-			frameTimer.timestamps[0] = static_cast<float>(frameTimer.Count());
-			context.DrawSystems();
-		}
-		
-		frameTimer.ThreadSleep(1.0 / static_cast<double>(GUI::fps) - frameTimer.Count());
-		frameTimer.Tick();
-	}
-
-	FileWatcher::Clear();
-	FileWatcher::Stop();
-	context.DestroySystems();
-	window->Destroy();
+	app.Init();
+	app.Run();
+	app.Shutdown();
 
 	return 0;
 }

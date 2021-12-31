@@ -411,7 +411,7 @@ namespace pe
 
         // Indexing features
         VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
-        indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+        indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
 
         VkPhysicalDeviceFeatures2 deviceFeatures2{};
         deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -421,8 +421,13 @@ namespace pe
         // Check for bindless descriptors
         if (!indexingFeatures.descriptorBindingPartiallyBound ||
             !indexingFeatures.runtimeDescriptorArray ||
-            !indexingFeatures.shaderSampledImageArrayNonUniformIndexing)
-            PE_ERROR("Device does not support bindless descriptors");
+            !indexingFeatures.shaderSampledImageArrayNonUniformIndexing ||
+            !indexingFeatures.descriptorBindingVariableDescriptorCount)
+            GlobalSettings::BindlessDescriptors = false;
+        else
+            GlobalSettings::BindlessDescriptors = true;
+
+        Shader::AddGlobalDefine("BINDLESS_DESCRIPTORS", GlobalSettings::BindlessDescriptors ? "1" : "0");
 
         VkDeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -430,7 +435,7 @@ namespace pe
         deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
         deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
         deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
-        deviceCreateInfo.pNext = &deviceFeatures2;
+        deviceCreateInfo.pNext = GlobalSettings::BindlessDescriptors ? &deviceFeatures2 : nullptr;
 
         VkDevice deviceVK;
         vkCreateDevice(gpu, &deviceCreateInfo, nullptr, &deviceVK);

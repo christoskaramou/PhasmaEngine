@@ -28,5 +28,6 @@ namespace pe
     {
         inline static bool RightHanded = false;
         inline static bool ReverseZ = true;
+        inline static bool BindlessDescriptors = true;
     };
 }
