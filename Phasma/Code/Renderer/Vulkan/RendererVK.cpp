@@ -38,6 +38,7 @@ SOFTWARE.
 #include "PostProcess/SSAO.h"
 #include "PostProcess/SSR.h"
 #include "PostProcess/TAA.h"
+#include "PostProcess/SSGI.h"
 
 #include "PostProcess/Test.h"
 
@@ -162,6 +163,7 @@ namespace pe
         Bloom &bloom = *WORLD_ENTITY->GetComponent<Bloom>();
         DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
+        SSGI &ssgi = *WORLD_ENTITY->GetComponent<SSGI>();
 
         // SCREEN SPACE AMBIENT OCCLUSION
         if (GUI::show_ssao)
@@ -187,6 +189,14 @@ namespace pe
         gpuTimer[4].Start(cmd);
         deferred.draw(cmd, imageIndex, shadows, skybox);
         frameTimer.timestamps[7] = gpuTimer[4].End();
+
+        if (GUI::use_SSGI)
+        {
+            //gpuTimer[8].Start(cmd);
+            ssgi.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
+            ssgi.draw(cmd, imageIndex, renderTargets);
+            //frameTimer.timestamps[10] = gpuTimer[8].End();
+        }
 
         if (GUI::use_AntiAliasing)
         {

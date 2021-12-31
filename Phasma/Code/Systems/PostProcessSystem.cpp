@@ -30,6 +30,7 @@ SOFTWARE.
 #include "PostProcess/SSAO.h"
 #include "PostProcess/SSR.h"
 #include "PostProcess/TAA.h"
+#include "PostProcess/SSGI.h"
 
 #if BINDLESS_TESTING
 #include "PostProcess/Test.h"
@@ -54,12 +55,14 @@ namespace pe
         SSAO &ssao = *WORLD_ENTITY->CreateComponent<SSAO>();
         SSR &ssr = *WORLD_ENTITY->CreateComponent<SSR>();
         TAA &taa = *WORLD_ENTITY->CreateComponent<TAA>();
+        SSGI &ssgi = *WORLD_ENTITY->CreateComponent<SSGI>();
 
         bloom.Init();
         dof.Init();
         fxaa.Init();
         motionBlur.Init();
         taa.Init();
+        ssgi.Init();
 
         auto &renderTargets = CONTEXT->GetSystem<RendererSystem>()->GetRenderTargets();
 
@@ -71,6 +74,7 @@ namespace pe
         bloom.createRenderPasses(renderTargets);
         dof.createRenderPass(renderTargets);
         motionBlur.createRenderPass(renderTargets);
+        ssgi.createRenderPass(renderTargets);
 
         // Frame buffers
         ssao.createFrameBuffers(renderTargets);
@@ -80,6 +84,7 @@ namespace pe
         bloom.createFrameBuffers(renderTargets);
         dof.createFrameBuffers(renderTargets);
         motionBlur.createFrameBuffers(renderTargets);
+        ssgi.createFrameBuffers(renderTargets);
 
         // Pipelines
         ssao.createPipelines(renderTargets);
@@ -89,6 +94,7 @@ namespace pe
         bloom.createPipelines(renderTargets);
         dof.createPipeline(renderTargets);
         motionBlur.createPipeline(renderTargets);
+        ssgi.createPipeline(renderTargets);
 
         // Descriptor Sets
         ssao.createUniforms(renderTargets);
@@ -98,6 +104,7 @@ namespace pe
         bloom.createUniforms(renderTargets);
         dof.createUniforms(renderTargets);
         motionBlur.createMotionBlurUniforms(renderTargets);
+        ssgi.createUniforms(renderTargets);
 
 #if BINDLESS_TESTING
         Test &test = *WORLD_ENTITY->CreateComponent<Test>();
@@ -142,6 +149,7 @@ namespace pe
         WORLD_ENTITY->GetComponent<SSAO>()->destroy();
         WORLD_ENTITY->GetComponent<SSR>()->destroy();
         WORLD_ENTITY->GetComponent<TAA>()->destroy();
+        WORLD_ENTITY->GetComponent<SSGI>()->destroy();
 
 #if BINDLESS_TESTING
         WORLD_ENTITY->GetComponent<Test>()->destroy();

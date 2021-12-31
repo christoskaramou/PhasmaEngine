@@ -369,6 +369,16 @@ namespace pe
         return DSLayout;
     }
 
+    DescriptorLayout *Pipeline::getDescriptorSetLayoutSSGI()
+    {
+        static std::vector<DescriptorBinding> bindings{
+            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+
+        return DSLayout;
+    }
+
     DescriptorLayout *Pipeline::getDescriptorSetLayoutFXAA()
     {
         static std::vector<DescriptorBinding> bindings{

@@ -93,19 +93,19 @@ void main()
     float ambientLight = skyLight * occlusion;
     vec3 fragColor = vec3(0.0);// 0.1 * material.albedo.xyz;
 
+    // screenSpace.effects3.z -> shadow cast
+    if (screenSpace.effects3.z > 0.5)
+    {
+        float shadow = CalculateShadows(wolrdPos, length(wolrdPos - ubo.camPos.xyz), dot(normal, ubo.sun.direction.xyz));
+        fragColor += DirectLight(material, wolrdPos, ubo.camPos.xyz, normal, occlusion, shadow);
+    }
+
     // IBL
     IBL ibl;
     ibl.reflectivity = vec3(0.5);
     if (screenSpace.effects1.x > 0.5) {
         ibl = ImageBasedLighting(material, normal, normalize(wolrdPos - ubo.camPos.xyz), sampler_cube_map, sampler_lut_IBL);
         fragColor += ibl.final_color * ambientLight;
-    }
-
-    // screenSpace.effects3.z -> shadow cast
-    if (screenSpace.effects3.z > 0.5)
-    {
-        float shadow = CalculateShadows(wolrdPos, length(wolrdPos - ubo.camPos.xyz), dot(normal, ubo.sun.direction.xyz));
-        fragColor += DirectLight(material, wolrdPos, ubo.camPos.xyz, normal, occlusion, shadow);
     }
 
     for (int i = 0; i < MAX_POINT_LIGHTS; ++i)

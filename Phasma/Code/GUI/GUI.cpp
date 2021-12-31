@@ -299,6 +299,12 @@ namespace pe
             totalPasses++;
             totalTime += (float)frameTimer.timestamps[10];
         }
+        if (use_SSGI)
+        {
+            ImGui::Text("SSGI: %.3f ms", frameTimer.timestamps[10]);
+            totalPasses++;
+            totalTime += (float)frameTimer.timestamps[10];
+        }
         if (show_motionBlur)
         {
             ImGui::Text("Motion Blur: %.3f ms", frameTimer.timestamps[11]);
@@ -459,6 +465,15 @@ namespace pe
             ImGui::Indent(16.0f);
             ImGui::DragFloat("Scale##DOF", &DOF_focus_scale, 0.05f, 0.5f);
             ImGui::DragFloat("Range##DOF", &DOF_blur_range, 0.05f, 0.5f);
+            ImGui::Unindent(16.0f);
+            ImGui::Separator();
+            ImGui::Separator();
+        }
+        ImGui::Checkbox("SSGI", &use_SSGI);
+        if (use_SSGI)
+        {
+            ImGui::Indent(16.0f);
+            
             ImGui::Unindent(16.0f);
             ImGui::Separator();
             ImGui::Separator();

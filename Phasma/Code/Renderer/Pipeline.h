@@ -108,6 +108,8 @@ namespace pe
 
         static DescriptorLayout *getDescriptorSetLayoutDOF();
 
+        static DescriptorLayout *getDescriptorSetLayoutSSGI();
+
         static DescriptorLayout *getDescriptorSetLayoutFXAA();
 
         static DescriptorLayout *getDescriptorSetLayoutMotionBlur();
