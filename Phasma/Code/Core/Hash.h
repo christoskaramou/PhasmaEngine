@@ -29,7 +29,11 @@ namespace pe
     public:
         using Type = size_t;
 
-        Hash() : m_hash(0){};
+        Hash() : m_hash(0) {}
+
+        Hash(size_t hash) : m_hash(hash) {}
+
+        Hash(const Hash& other) : m_hash(other.m_hash) {}
 
         Hash(const void *data, size_t size) : m_hash(0) { Combine(data, size); }
 
@@ -63,7 +67,7 @@ namespace pe
     class StringHash : public Hash
     {
     public:
-        StringHash() : Hash(){};
+        StringHash() : Hash() {}
 
         StringHash(const std::string &string) : Hash(string.data(), string.size()) {}
 
@@ -72,5 +76,26 @@ namespace pe
         void Combine(const std::string &string) { Hash::Combine(string.data(), string.size()); }
 
         void Combine(const char *string) { Hash::Combine(string, strlen(string)); }
+    };
+
+    class HashableBase
+    {
+    public:
+        HashableBase() : m_hash{} {}
+
+        Hash GetHash() const { return m_hash; }
+
+        void SetHash(Hash hash) { m_hash = hash; }
+
+    protected:
+        Hash m_hash;
+    };
+
+    template <class... Params>
+    class Hashable : public HashableBase
+    {
+    public:
+        // Implement in each class that inherits from Hashable
+        virtual void CreateHash(Params &&...params);
     };
 }

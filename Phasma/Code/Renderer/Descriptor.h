@@ -46,7 +46,8 @@ namespace pe
         ~DescriptorPool();
     };
 
-    class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>
+    class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>,
+                             public Hashable<const std::vector<DescriptorBinding> &>
     {
     public:
         DescriptorLayout(const std::vector<DescriptorBinding> &bindings);

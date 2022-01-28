@@ -40,7 +40,8 @@ namespace pe
         ImageLayout finalLayout;
     };
 
-    class RenderPass : public IHandle<RenderPass, RenderPassHandle>
+    class RenderPass : public IHandle<RenderPass, RenderPassHandle>,
+                       public Hashable<const std::vector<Attachment> &>
     {
     public:
         RenderPass(const std::vector<Attachment> &attachments);

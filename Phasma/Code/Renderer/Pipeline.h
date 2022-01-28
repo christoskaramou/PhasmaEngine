@@ -85,7 +85,8 @@ namespace pe
         PipelineCacheHandle pipelineCache;
     };
 
-    class Pipeline : public IHandle<Pipeline, PipelineHandle>
+    class Pipeline : public IHandle<Pipeline, PipelineHandle>,
+                     public Hashable<const PipelineCreateInfo &>
     {
     public:
         Pipeline(const PipelineCreateInfo &info);
@@ -140,5 +141,6 @@ namespace pe
 
     private:
         PipelineCreateInfo info;
+        inline static std::map<size_t, Pipeline *> sm_pipelines{};
     };
 }

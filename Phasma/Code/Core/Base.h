@@ -165,15 +165,40 @@ namespace pe
             // This means the T class is IHandle and already defined
             static_assert(std::is_base_of_v<IHandle<T, HANDLE>, T>);
 
-            T *ptr = new T(std::forward<Params>(params)...);
+            if constexpr (std::is_base_of_v<HashableBase, T>)
+            {
+                Hashable<Params...> hashable;
+                hashable.CreateHash(std::forward<Params>(params)...);
+                Hash hash = hashable.GetHash();
 
-            // m_heapId is used to check on Destroy if the object was created via Create
-            // Thus it is a heap allocated object and must be deleted
-            ptr->m_heapId = NextID();
+                auto it = sm_iHandlesHashable.find(hash);
+                if (it != sm_iHandlesHashable.end())
+                    return static_cast<T *>(it->second);
 
-            sm_iHandles[ptr->m_heapId] = ptr;
+                T *ptr = new T(std::forward<Params>(params)...);
 
-            return ptr;
+                ptr->SetHash(hash);
+
+                // m_heapId is used to check on Destroy if the object was created via Create
+                // Thus it is a heap allocated object and must be deleted
+                ptr->m_heapId = hash;
+
+                sm_iHandlesHashable[hash] = ptr;
+
+                return ptr;
+            }
+            else
+            {
+                T *ptr = new T(std::forward<Params>(params)...);
+
+                // m_heapId is used to check on Destroy if the object was created via Create
+                // Thus it is a heap allocated object and must be deleted
+                ptr->m_heapId = NextID();
+
+                sm_iHandles[ptr->m_heapId] = ptr;
+
+                return ptr;
+            }
         }
 
         virtual ~IHandle()
@@ -185,14 +210,28 @@ namespace pe
             // If the object is not created via Create function, return and let the actual class to manage
             if (m_heapId == std::numeric_limits<size_t>::max())
                 return;
-
-            auto it = sm_iHandles.find(m_heapId);
-            if (it != sm_iHandles.end())
+                
+            if constexpr (std::is_base_of_v<HashableBase, T>)
             {
-                sm_iHandles.erase(it);
+                auto it = sm_iHandlesHashable.find(m_heapId);
+                if (it != sm_iHandlesHashable.end())
+                {
+                    sm_iHandlesHashable.erase(it);
 
-                // This will call the derived object's destructor too, because the destructor of IHandle is virtual
-                delete this;
+                    // This will call the derived object's destructor too, because the destructor of IHandle is virtual
+                    delete this;
+                }
+            }
+            else
+            {
+                auto it = sm_iHandles.find(m_heapId);
+                if (it != sm_iHandles.end())
+                {
+                    sm_iHandles.erase(it);
+
+                    // This will call the derived object's destructor too, because the destructor of IHandle is virtual
+                    delete this;
+                }
             }
         };
 
@@ -208,6 +247,7 @@ namespace pe
 
     private:
         inline static std::unordered_map<size_t, IHandle *> sm_iHandles{};
+        inline static std::unordered_map<size_t, IHandle *> sm_iHandlesHashable{};
         size_t m_heapId;
 
     protected:
