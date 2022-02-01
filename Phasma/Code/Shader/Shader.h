@@ -96,6 +96,8 @@ namespace pe
             m_globalDefines.push_back(define);
         }
 
+        inline ShaderCache &GetCache() { return m_cache; }
+
     private:
         std::string PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions &options);
 

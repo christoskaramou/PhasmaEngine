@@ -128,7 +128,7 @@ namespace pe
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {renderTargets["viewport"]->blendAttachment};
         info.pushConstantStage = PushConstantStage::Fragment;
-        info.pushConstantSize = 5 * sizeof(vec4);
+        info.pushConstantSize = static_cast<uint32_t>(sizeof(vec4));
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutDOF()};
         info.renderPass = renderPass;
 

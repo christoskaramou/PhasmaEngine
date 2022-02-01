@@ -59,12 +59,16 @@ namespace pe
 
         void WriteToTempAsm();
 
-        size_t ReadHash();
+        Hash ReadHash();
+
+        void CombineHash(const Hash &hash) { m_hash.Combine(hash); }
+
+        Hash GetHash() { return m_hash; }
 
     private:
         std::string m_sourcePath;
         std::string m_code;
-        size_t m_hash;
+        Hash m_hash;
         std::string m_tempFilePath;
         std::string m_assembly;
         std::string m_preprocessed;

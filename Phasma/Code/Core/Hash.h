@@ -29,29 +29,24 @@ namespace pe
     public:
         Hash() : m_hash(0) {}
 
-        Hash(size_t hash) : m_hash(hash) {}
+        Hash(const size_t &hash) : m_hash(hash) {}
 
-        Hash(const Hash& other) : m_hash(other.m_hash) {}
+        Hash(const Hash &hash) : m_hash(hash.m_hash) {}
 
-        Hash(const void *data, size_t size) : m_hash(0) { Combine(data, size); }
-
-        void Combine(const void *data, size_t size)
+        void Combine(const size_t &hash)
         {
-            const size_t *array = reinterpret_cast<const size_t *>(data);
-            size_t arraySize = size / sizeof(size_t);
-            size_t bytesToFit = size % sizeof(size_t);
+            m_hash ^= hash + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
+        }
 
-            for (size_t i = 0; i < arraySize; i++)
-                m_hash ^= std::hash<size_t>()(array[i]) + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
+        void Combine(const Hash &hash)
+        {
+            m_hash ^= hash.m_hash + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
+        }
 
-            if (bytesToFit)
-            {
-                // Shift the remaining bytes of the array to a size_t (8 bytes) variable to avoid scrap
-                // bits from the array raw memory access. It push the bytes to the right and it will 
-                // replace the unused left bits with zeros
-                size_t lastBytes = array[arraySize] >> ((sizeof(size_t) - bytesToFit) * 8);
-                m_hash ^= std::hash<size_t>()(lastBytes) + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
-            }
+        template <class T>
+        void Combine(const T &value)
+        {
+            Combine(std::hash<T>()(value));
         }
 
         bool operator==(const Hash &other) { return m_hash == other.m_hash; }
@@ -67,13 +62,7 @@ namespace pe
     public:
         StringHash() : Hash() {}
 
-        StringHash(const std::string &string) : Hash(string.data(), string.size()) {}
-
-        StringHash(const char *string) : Hash(string, strlen(string)) {}
-
-        void Combine(const std::string &string) { Hash::Combine(string.data(), string.size()); }
-
-        void Combine(const char *string) { Hash::Combine(string, strlen(string)); }
+        StringHash(const std::string &string) { Combine(string); }
     };
 
     class HashableBase

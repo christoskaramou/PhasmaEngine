@@ -87,6 +87,16 @@ namespace pe
         m_shaderType = shaderType;
 
         m_cache.Init(path);
+        for (const Define &def : m_globalDefines)
+        {
+            m_cache.CombineHash(StringHash(def.name));
+            m_cache.CombineHash(StringHash(def.value));
+        }
+        for (const Define &def : defs)
+        {
+            m_cache.CombineHash(StringHash(def.name));
+            m_cache.CombineHash(StringHash(def.value));
+        }
 
         bool needsCompile = m_cache.ShaderNeedsCompile();
         if (needsCompile)

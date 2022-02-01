@@ -41,12 +41,12 @@ namespace pe
         m_hash = {};
         for (const auto &binding : bindings)
         {
-            m_hash.Combine(&binding.binding, sizeof(binding.binding));
-            m_hash.Combine(&binding.descriptorType, sizeof(binding.descriptorType));
-            m_hash.Combine(&binding.descriptorCount, sizeof(binding.descriptorCount));
-            m_hash.Combine(&binding.stageFlags, sizeof(binding.stageFlags));
+            m_hash.Combine(binding.binding);
+            m_hash.Combine(binding.descriptorType);
+            m_hash.Combine(binding.descriptorCount);
+            m_hash.Combine(binding.stageFlags);
             if (binding.pImmutableSamplers)
-                m_hash.Combine(binding.pImmutableSamplers, sizeof(binding.pImmutableSamplers));
+                m_hash.Combine(binding.pImmutableSamplers);
         }
     }
 
@@ -80,15 +80,15 @@ namespace pe
         m_hash = {};
         for (const Attachment &attachment : attachments)
         {
-            m_hash.Combine(&attachment.flags, sizeof(attachment.flags));
-            m_hash.Combine(&attachment.format, sizeof(attachment.format));
-            m_hash.Combine(&attachment.samples, sizeof(attachment.samples));
-            m_hash.Combine(&attachment.loadOp, sizeof(attachment.loadOp));
-            m_hash.Combine(&attachment.storeOp, sizeof(attachment.storeOp));
-            m_hash.Combine(&attachment.stencilLoadOp, sizeof(attachment.stencilLoadOp));
-            m_hash.Combine(&attachment.stencilStoreOp, sizeof(attachment.stencilStoreOp));
-            m_hash.Combine(&attachment.initialLayout, sizeof(attachment.initialLayout));
-            m_hash.Combine(&attachment.finalLayout, sizeof(attachment.finalLayout));
+            m_hash.Combine(attachment.flags);
+            m_hash.Combine(attachment.format);
+            m_hash.Combine(attachment.samples);
+            m_hash.Combine(attachment.loadOp);
+            m_hash.Combine(attachment.storeOp);
+            m_hash.Combine(attachment.stencilLoadOp);
+            m_hash.Combine(attachment.stencilStoreOp);
+            m_hash.Combine(attachment.initialLayout);
+            m_hash.Combine(attachment.finalLayout);
         }
     }
 
@@ -104,41 +104,59 @@ namespace pe
     void Hashable<const PipelineCreateInfo &>::CreateHash(const PipelineCreateInfo &pipelineInfo)
     {
         if (pipelineInfo.pVertShader)
-            m_hash.Combine(&pipelineInfo.pVertShader, sizeof(pipelineInfo.pVertShader));
+            m_hash.Combine(pipelineInfo.pVertShader->GetCache().GetHash());
 
         if (pipelineInfo.pFragShader)
-            m_hash.Combine(&pipelineInfo.pFragShader, sizeof(pipelineInfo.pFragShader));
+            m_hash.Combine(pipelineInfo.pFragShader->GetCache().GetHash());
 
         if (pipelineInfo.pCompShader)
-            m_hash.Combine(&pipelineInfo.pCompShader, sizeof(pipelineInfo.pCompShader));
+            m_hash.Combine(pipelineInfo.pCompShader->GetCache().GetHash());
 
         for (auto &binding : pipelineInfo.vertexInputBindingDescriptions)
-            m_hash.Combine(&binding, sizeof(binding));
+        {
+            m_hash.Combine(binding.binding);
+            m_hash.Combine(binding.stride);
+            m_hash.Combine(binding.inputRate);
+        }
 
         for (auto &attribute : pipelineInfo.vertexInputAttributeDescriptions)
-            m_hash.Combine(&attribute, sizeof(attribute));
+        {
+            m_hash.Combine(attribute.location);
+            m_hash.Combine(attribute.binding);
+            m_hash.Combine(attribute.format);
+            m_hash.Combine(attribute.offset);
+        }
 
-        m_hash.Combine(&pipelineInfo.width, sizeof(pipelineInfo.width));
-        m_hash.Combine(&pipelineInfo.height, sizeof(pipelineInfo.height));
-        m_hash.Combine(&pipelineInfo.cullMode, sizeof(pipelineInfo.cullMode));
+        m_hash.Combine(pipelineInfo.width);
+        m_hash.Combine(pipelineInfo.height);
+        m_hash.Combine(pipelineInfo.cullMode);
 
         for (auto &attachment : pipelineInfo.colorBlendAttachments)
-            m_hash.Combine(&attachment, sizeof(attachment));
+        {
+            m_hash.Combine(attachment.blendEnable);
+            m_hash.Combine(attachment.srcColorBlendFactor);
+            m_hash.Combine(attachment.dstColorBlendFactor);
+            m_hash.Combine(attachment.colorBlendOp);
+            m_hash.Combine(attachment.srcAlphaBlendFactor);
+            m_hash.Combine(attachment.dstAlphaBlendFactor);
+            m_hash.Combine(attachment.alphaBlendOp);
+            m_hash.Combine(attachment.colorWriteMask);
+        }
 
         for (auto &dynamic : pipelineInfo.dynamicStates)
-            m_hash.Combine(&dynamic, sizeof(dynamic));
+            m_hash.Combine(dynamic);
 
-        m_hash.Combine(&pipelineInfo.pushConstantStage, sizeof(pipelineInfo.pushConstantStage));
-        m_hash.Combine(&pipelineInfo.pushConstantSize, sizeof(pipelineInfo.pushConstantSize));
+        m_hash.Combine(pipelineInfo.pushConstantStage);
+        m_hash.Combine(pipelineInfo.pushConstantSize);
 
         for (auto &layout : pipelineInfo.descriptorSetLayouts)
-            m_hash.Combine(&layout, sizeof(layout));
+            m_hash.Combine(layout);
 
         if (pipelineInfo.renderPass)
-            m_hash.Combine(&pipelineInfo.renderPass, sizeof(pipelineInfo.renderPass));
+            m_hash.Combine(pipelineInfo.renderPass);
 
         VkPipelineCache pipelineCache = pipelineInfo.pipelineCache;
         if (pipelineCache)
-            m_hash.Combine(&pipelineCache, sizeof(pipelineCache));
+            m_hash.Combine(pipelineCache);
     }
 }

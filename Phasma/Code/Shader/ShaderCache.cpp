@@ -112,7 +112,7 @@ namespace pe
         fileTemp.Write(m_code);
     }
 
-    size_t ShaderCache::ReadHash()
+    Hash ShaderCache::ReadHash()
     {
         std::string shaderTempFile = m_tempFilePath + ".temp";
 
