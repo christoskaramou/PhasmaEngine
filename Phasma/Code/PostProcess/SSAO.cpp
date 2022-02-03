@@ -251,12 +251,9 @@ namespace pe
 
     void SSAO::createPipeline(std::map<std::string, Image *> &renderTargets)
     {
-        Shader vert{"Shaders/Common/quad.vert", ShaderType::Vertex};
-        Shader frag{"Shaders/SSAO/ssao.frag", ShaderType::Fragment};
-
         PipelineCreateInfo info{};
-        info.pVertShader = &vert;
-        info.pFragShader = &frag;
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSAO/ssao.frag", ShaderType::Fragment});
         info.width = renderTargets["ssao"]->width_f;
         info.height = renderTargets["ssao"]->height_f;
         info.cullMode = CullMode::Back;
@@ -265,16 +262,16 @@ namespace pe
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
+        
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
     }
 
     void SSAO::createBlurPipeline(std::map<std::string, Image *> &renderTargets)
     {
-        Shader vert{"Shaders/Common/quad.vert", ShaderType::Vertex};
-        Shader frag{"Shaders/SSAO/ssaoBlur.frag", ShaderType::Fragment};
-
         PipelineCreateInfo info{};
-        info.pVertShader = &vert;
-        info.pFragShader = &frag;
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSAO/ssaoBlur.frag", ShaderType::Fragment});
         info.width = renderTargets["ssaoBlur"]->width_f;
         info.height = renderTargets["ssaoBlur"]->height_f;
         info.cullMode = CullMode::Back;
@@ -283,5 +280,8 @@ namespace pe
         info.renderPass = blurRenderPass;
 
         pipelineBlur = Pipeline::Create(info);
+        
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
     }
 }

@@ -27,7 +27,7 @@ namespace pe
     class ShaderCache
     {
     public:
-        void Init(const std::string &sourcePath);
+        void Init(const std::string &sourcePath, const Hash& definesHash = {});
 
         bool ShaderNeedsCompile();
 
@@ -60,8 +60,6 @@ namespace pe
         void WriteToTempAsm();
 
         Hash ReadHash();
-
-        void CombineHash(const Hash &hash) { m_hash.Combine(hash); }
 
         Hash GetHash() { return m_hash; }
 

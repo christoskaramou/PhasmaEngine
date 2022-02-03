@@ -95,9 +95,8 @@ namespace pe
         {
             ubo.values = {camera.projOffset.x, camera.projOffset.y, GUI::TAA_feedback_min, GUI::TAA_feedback_max};
             ubo.sharpenValues = {
-                    GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias,
-                    sin(static_cast<float>(ImGui::GetTime()) * 0.125f)
-            };
+                GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias,
+                sin(static_cast<float>(ImGui::GetTime()) * 0.125f)};
             ubo.invProj = camera.invProjection;
 
             uniform->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(ubo), 0});
@@ -109,8 +108,7 @@ namespace pe
         uniform = Buffer::Create(
             sizeof(UBO),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU
-        );
+            VMA_MEMORY_USAGE_CPU_TO_GPU);
         uniform->Map();
         uniform->Zero();
         uniform->Flush();
@@ -214,12 +212,9 @@ namespace pe
 
     void TAA::createPipeline(std::map<std::string, Image *> &renderTargets)
     {
-        Shader vert{"Shaders/Common/quad.vert", ShaderType::Vertex};
-        Shader frag{"Shaders/TAA/TAA.frag", ShaderType::Fragment};
-
         PipelineCreateInfo info{};
-        info.pVertShader = &vert;
-        info.pFragShader = &frag;
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/TAA/TAA.frag", ShaderType::Fragment});
         info.width = renderTargets["taa"]->width_f;
         info.height = renderTargets["taa"]->height_f;
         info.cullMode = CullMode::Back;
@@ -228,16 +223,16 @@ namespace pe
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
+        
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
     }
 
     void TAA::createPipelineSharpen(std::map<std::string, Image *> &renderTargets)
     {
-        Shader vert{"Shaders/Common/quad.vert", ShaderType::Vertex};
-        Shader frag{"Shaders/TAA/TAASharpen.frag", ShaderType::Fragment};
-
         PipelineCreateInfo info{};
-        info.pVertShader = &vert;
-        info.pFragShader = &frag;
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/TAA/TAASharpen.frag", ShaderType::Fragment});
         info.width = renderTargets["viewport"]->width_f;
         info.height = renderTargets["viewport"]->height_f;
         info.cullMode = CullMode::Back;
@@ -246,31 +241,32 @@ namespace pe
         info.renderPass = renderPassSharpen;
 
         pipelineSharpen = Pipeline::Create(info);
+        
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
     }
 
     void TAA::saveImage(CommandBuffer *cmd, Image *source)
     {
         previous->TransitionImageLayout(
-                cmd,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_ACCESS_SHADER_READ_BIT,
-                VK_ACCESS_TRANSFER_WRITE_BIT
-        );
+            cmd,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_ACCESS_SHADER_READ_BIT,
+            VK_ACCESS_TRANSFER_WRITE_BIT);
         source->TransitionImageLayout(
-                cmd,
-                source->imageInfo.layoutState == LayoutState::ColorRead ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                                                        : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                source->imageInfo.layoutState == LayoutState::ColorRead ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-                                                                        : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                source->imageInfo.layoutState == LayoutState::ColorRead ? VK_ACCESS_SHADER_READ_BIT
-                                                                        : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_ACCESS_TRANSFER_READ_BIT
-        );
+            cmd,
+            source->imageInfo.layoutState == LayoutState::ColorRead ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                                                    : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            source->imageInfo.layoutState == LayoutState::ColorRead ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+                                                                    : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            source->imageInfo.layoutState == LayoutState::ColorRead ? VK_ACCESS_SHADER_READ_BIT
+                                                                    : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_ACCESS_TRANSFER_READ_BIT);
 
         // copy the image
         VkImageCopy region{};
@@ -283,32 +279,29 @@ namespace pe
         region.extent.depth = 1;
 
         vkCmdCopyImage(
-                cmd->Handle(),
-                source->Handle(),
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                previous->Handle(),
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1, &region
-        );
+            cmd->Handle(),
+            source->Handle(),
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            previous->Handle(),
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &region);
 
         previous->TransitionImageLayout(
-                cmd,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_TRANSFER_WRITE_BIT,
-                VK_ACCESS_SHADER_READ_BIT
-        );
+            cmd,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_ACCESS_SHADER_READ_BIT);
         source->TransitionImageLayout(
-                cmd,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_TRANSFER_READ_BIT,
-                VK_ACCESS_SHADER_READ_BIT
-        );
+            cmd,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            VK_ACCESS_TRANSFER_READ_BIT,
+            VK_ACCESS_SHADER_READ_BIT);
         source->imageInfo.layoutState = LayoutState::ColorRead;
     }
 

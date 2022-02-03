@@ -285,33 +285,31 @@ namespace pe
 
     void Deferred::createGBufferPipeline(std::map<std::string, Image *> &renderTargets)
     {
-        Shader vert{"Shaders/Deferred/gBuffer.vert", ShaderType::Vertex};
-        Shader frag{"Shaders/Deferred/gBuffer.frag", ShaderType::Fragment};
-
         PipelineCreateInfo info{};
-        info.pVertShader = &vert;
-        info.pFragShader = &frag;
-        info.vertexInputBindingDescriptions = vert.GetReflection().GetVertexBindings();
-        info.vertexInputAttributeDescriptions = vert.GetReflection().GetVertexAttributes();
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.frag", ShaderType::Fragment});
+        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
+        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
         info.width = renderTargets["albedo"]->width_f;
         info.height = renderTargets["albedo"]->height_f;
         info.cullMode = CullMode::Front;
-        info.colorBlendAttachments =
-            {
-                renderTargets["normal"]->blendAttachment,
-                renderTargets["albedo"]->blendAttachment,
-                renderTargets["srm"]->blendAttachment,
-                renderTargets["velocity"]->blendAttachment,
-                renderTargets["emissive"]->blendAttachment,
-            };
-        info.descriptorSetLayouts =
-            {
-                Pipeline::getDescriptorSetLayoutMesh(),
-                Pipeline::getDescriptorSetLayoutPrimitive(),
-                Pipeline::getDescriptorSetLayoutModel()};
+        info.colorBlendAttachments = {
+            renderTargets["normal"]->blendAttachment,
+            renderTargets["albedo"]->blendAttachment,
+            renderTargets["srm"]->blendAttachment,
+            renderTargets["velocity"]->blendAttachment,
+            renderTargets["emissive"]->blendAttachment,
+        };
+        info.descriptorSetLayouts = {
+            Pipeline::getDescriptorSetLayoutMesh(),
+            Pipeline::getDescriptorSetLayoutPrimitive(),
+            Pipeline::getDescriptorSetLayoutModel()};
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
+
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
     }
 
     void Deferred::createCompositionPipeline(std::map<std::string, Image *> &renderTargets)
@@ -323,25 +321,24 @@ namespace pe
             Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
             Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
 
-        Shader vert{"Shaders/Common/quad.vert", ShaderType::Vertex};
-        Shader frag{"Shaders/Deferred/composition.frag", ShaderType::Fragment, definesFrag};
-
         PipelineCreateInfo info{};
-        info.pVertShader = &vert;
-        info.pFragShader = &frag;
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/composition.frag", ShaderType::Fragment, definesFrag});
         info.width = renderTargets["viewport"]->width_f;
         info.height = renderTargets["viewport"]->height_f;
         info.pushConstantStage = PushConstantStage::Fragment;
         info.pushConstantSize = sizeof(mat4);
         info.colorBlendAttachments = {renderTargets["viewport"]->blendAttachment};
-        info.descriptorSetLayouts =
-            {
-                Pipeline::getDescriptorSetLayoutComposition(),
-                Pipeline::getDescriptorSetLayoutShadowsDeferred(),
-                Pipeline::getDescriptorSetLayoutSkybox()};
+        info.descriptorSetLayouts = {
+            Pipeline::getDescriptorSetLayoutComposition(),
+            Pipeline::getDescriptorSetLayoutShadowsDeferred(),
+            Pipeline::getDescriptorSetLayoutSkybox()};
         info.renderPass = compositionRenderPass;
 
         pipelineComposition = Pipeline::Create(info);
+        
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
     }
 
     void Deferred::destroy()

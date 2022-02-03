@@ -184,12 +184,9 @@ namespace pe
         bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         s_bindlessLayout2 = DescriptorLayout::Create(bindings);
 
-        Shader vert{"Shaders/Common/quad.vert", ShaderType::Vertex};
-        Shader frag{"Shaders/Test/Test.frag", ShaderType::Fragment};
-
         PipelineCreateInfo info{};
-        info.pVertShader = &vert;
-        info.pFragShader = &frag;
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Test/Test.frag", ShaderType::Fragment});
         info.width = renderTargets["viewport"]->width_f;
         info.height = renderTargets["viewport"]->height_f;
         info.cullMode = CullMode::Back;
@@ -200,6 +197,9 @@ namespace pe
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
+        
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
     }
 
     void Test::destroy()

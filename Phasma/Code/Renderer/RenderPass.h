@@ -41,7 +41,7 @@ namespace pe
     };
 
     class RenderPass : public IHandle<RenderPass, RenderPassHandle>,
-                       public Hashable<const std::vector<Attachment> &>
+                       public Hashable<std::vector<Attachment>>
     {
     public:
         RenderPass(const std::vector<Attachment> &attachments);

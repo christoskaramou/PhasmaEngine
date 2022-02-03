@@ -126,12 +126,10 @@ namespace pe
 
     void Shadows::createPipeline()
     {
-        Shader vert{"Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex};
-
         PipelineCreateInfo info{};
-        info.pVertShader = &vert;
-        info.vertexInputBindingDescriptions = vert.GetReflection().GetVertexBindings();
-        info.vertexInputAttributeDescriptions = vert.GetReflection().GetVertexAttributes();
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex});
+        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
+        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
         info.width = static_cast<float>(SHADOWMAP_SIZE);
         info.height = static_cast<float>(SHADOWMAP_SIZE);
         info.pushConstantStage = PushConstantStage::Vertex;
@@ -142,6 +140,8 @@ namespace pe
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
+        
+        info.pVertShader->Destroy();
     }
 
     void Shadows::createUniformBuffers()

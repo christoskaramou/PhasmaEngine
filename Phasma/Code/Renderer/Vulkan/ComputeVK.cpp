@@ -128,13 +128,13 @@ namespace pe
         if (pipeline)
             pipeline->Destroy();
 
-        Shader shader{shaderName, ShaderType::Compute};
-
         PipelineCreateInfo info{};
-        info.pCompShader = &shader;
+        info.pCompShader = Shader::Create(ShaderInfo{shaderName, ShaderType::Compute});
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutCompute()};
 
         pipeline = Pipeline::Create(info);
+        
+        info.pCompShader->Destroy();
     }
 
     void Compute::destroy()

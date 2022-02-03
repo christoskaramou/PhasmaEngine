@@ -73,33 +73,28 @@ namespace pe
         delete include_result;
     }
 
-    Shader::Shader(const std::string &sourcePath, ShaderType shaderType, const std::vector<Define> &defs)
+    Shader::Shader(const ShaderInfo& info)
     {
-        std::string path = sourcePath;
+        std::string path = info.sourcePath;
         if (path.find(Path::Assets) == std::string::npos)
-            path = Path::Assets + sourcePath;
+            path = Path::Assets + info.sourcePath;
 
-        // Watch the file for changes
-        auto modifiedCallback = []()
-        { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
-        FileWatcher::Add(path, modifiedCallback);
+        m_shaderType = info.shaderType;
 
-        m_shaderType = shaderType;
-
-        m_cache.Init(path);
+        Hash definesHash;
         for (const Define &def : m_globalDefines)
         {
-            m_cache.CombineHash(StringHash(def.name));
-            m_cache.CombineHash(StringHash(def.value));
+            definesHash.Combine(def.name);
+            definesHash.Combine(def.value);
         }
-        for (const Define &def : defs)
+        for (const Define &def : info.defines)
         {
-            m_cache.CombineHash(StringHash(def.name));
-            m_cache.CombineHash(StringHash(def.value));
+            definesHash.Combine(def.name);
+            definesHash.Combine(def.value);
         }
 
-        bool needsCompile = m_cache.ShaderNeedsCompile();
-        if (needsCompile)
+        m_cache.Init(path, definesHash);
+        if (m_cache.ShaderNeedsCompile())
         {
             shaderc::CompileOptions options;
             options.SetIncluder(std::make_unique<FileIncluder>());
@@ -107,13 +102,11 @@ namespace pe
             // m_options.SetHlslFunctionality1(true);
 
             AddDefines(m_globalDefines, options);
-            AddDefines(defs, options);
+            AddDefines(info.defines, options);
 
-            CompileFileToAssembly(static_cast<shaderc_shader_kind>(shaderType), options);
-            CompileAssembly(static_cast<shaderc_shader_kind>(shaderType), options);
-
-            m_cache.WriteToTempAsm();
-            m_cache.WriteToTempFile();
+            CompileFileToAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options);
+            CompileAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options);
+            
             m_cache.WriteSpvToFile(m_spirv);
         }
         else
@@ -123,6 +116,18 @@ namespace pe
 
         if (m_spirv.size() > 0)
             m_reflection.Init(this);
+
+        // Watch the file for changes
+        if (FileWatcher::Get(info.sourcePath) == nullptr)
+        {
+            auto modifiedCallback = []()
+            { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
+            FileWatcher::Add(path, modifiedCallback);
+        }
+    }
+
+    Shader::~Shader()
+    {
     }
 
     void Shader::AddDefine(Define &def, shaderc::CompileOptions &options)

@@ -59,96 +59,28 @@ namespace pe
         return code;
     }
 
-    void ShaderCache::Init(const std::string &sourcePath)
+    void ShaderCache::Init(const std::string &sourcePath, const Hash& definesHash)
     {
         m_sourcePath = sourcePath;
         m_code = ParseFileAndIncludes(m_sourcePath);
+
         m_hash = StringHash(m_code);
-        m_tempFilePath = std::regex_replace(m_sourcePath, std::regex("Shaders"), "ShaderCache");
-    }
+        m_hash.Combine(definesHash);
 
-    void ShaderCache::WriteToTempAsm()
-    {
-        std::filesystem::path path(m_tempFilePath);
-        if (!std::filesystem::exists(path.remove_filename()))
-            std::filesystem::create_directories(path.remove_filename());
-
-        std::string shaderTempFile = m_tempFilePath + ".asm";
-
-        FileSystem fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
-        if (!fileTemp.IsOpen())
-            PE_ERROR("file could not be opened!");
-        fileTemp.Write(m_assembly);
-    }
-
-    void ShaderCache::WriteToTempFile()
-    {
-        std::filesystem::path path(m_tempFilePath);
-        if (!std::filesystem::exists(path.remove_filename()))
-            std::filesystem::create_directories(path.remove_filename());
-
-        // Remove licence spam
-        size_t licenceStart = m_code.find("/*");
-        while (licenceStart != std::string::npos)
-        {
-            size_t licenceEnd = m_code.find("*/", licenceStart);
-            if (licenceEnd != std::string::npos)
-                m_code.erase(licenceStart, licenceEnd - licenceStart + 2);
-            else
-                break;
-
-            licenceStart = m_code.find("/*");
-        }
-
-        std::string hashStr = "// ShaderHash: " + std::to_string(m_hash) + "\n\n";
-
-        std::string shaderTempFile = m_tempFilePath + ".temp";
-
-        FileSystem fileTemp(shaderTempFile, std::ios::in | std::ios::out | std::ios::trunc);
-        if (!fileTemp.IsOpen())
-            PE_ERROR("file could not be opened!");
-
-        fileTemp.Write(hashStr);
-        fileTemp.Write(m_code);
-    }
-
-    Hash ShaderCache::ReadHash()
-    {
-        std::string shaderTempFile = m_tempFilePath + ".temp";
-
-        FileSystem file(shaderTempFile, std::ios::in);
-        if (!file.IsOpen())
-            return std::numeric_limits<size_t>::max();
-
-        std::string buffer = file.ReadLine();
-
-        std::regex regex("\\s+");
-        buffer = std::regex_replace(buffer, regex, "");
-
-        static std::string shaderHashKey = "ShaderHash:";
-        size_t pos = buffer.find(shaderHashKey);
-        if (pos == std::string::npos)
-            return std::numeric_limits<size_t>::max();
-
-        std::string hashStr = buffer.substr(pos + shaderHashKey.size(), buffer.size() - pos - shaderHashKey.size());
-
-        // string to size_t
-        return std::stoull(hashStr);
+        m_tempFilePath = std::regex_replace(
+            std::filesystem::path(m_sourcePath).parent_path().string(),
+            std::regex("Shaders"), "ShaderCache");
+        m_tempFilePath += "/" + std::to_string(m_hash);
     }
 
     bool ShaderCache::ShaderNeedsCompile()
     {
-        std::string shaderSpvFile = m_tempFilePath + ".spv";
-        if (!std::filesystem::exists(shaderSpvFile))
-            return true;
-
-        return m_hash != ReadHash();
+        return !std::filesystem::exists(m_tempFilePath);
     }
 
     std::vector<uint32_t> ShaderCache::ReadSpvFromFile()
     {
-        std::string shaderSpvFile = m_tempFilePath + ".spv";
-        FileSystem file(shaderSpvFile, std::ios::in | std::ios::ate | std::ios::binary);
+        FileSystem file(m_tempFilePath, std::ios::in | std::ios::ate | std::ios::binary);
         if (!file.IsOpen())
             PE_ERROR("failed to open file!");
 
@@ -164,11 +96,10 @@ namespace pe
     void ShaderCache::WriteSpvToFile(const std::vector<uint32_t> &spirv)
     {
         std::filesystem::path path(m_tempFilePath);
-        if (!std::filesystem::exists(path.remove_filename()))
-            std::filesystem::create_directories(path.remove_filename());
+        if (!std::filesystem::exists(path.parent_path()))
+            std::filesystem::create_directories(path.parent_path());
 
-        std::string shaderSpvFile = m_tempFilePath + ".spv";
-        FileSystem file(shaderSpvFile, std::ios::out | std::ios::trunc | std::ios::binary);
+        FileSystem file(m_tempFilePath, std::ios::out | std::ios::trunc | std::ios::binary);
         if (!file.IsOpen())
             return;
 

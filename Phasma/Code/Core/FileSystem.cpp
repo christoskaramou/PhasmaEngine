@@ -120,14 +120,12 @@ namespace pe
 
     const FileWatcher *FileWatcher::Get(const std::string &file)
     {
-        StringHash hash(file);
-        return Get(hash);
+        return Get(StringHash(file));
     }
 
     void FileWatcher::Erase(const std::string &file)
     {
-        StringHash hash(file);
-        Erase(hash);
+        Erase(StringHash(file));
     }
 
     void FileWatcher::Erase(StringHash hash)

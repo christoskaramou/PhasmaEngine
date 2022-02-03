@@ -117,12 +117,9 @@ namespace pe
 
     void DOF::createPipeline(std::map<std::string, Image *> &renderTargets)
     {
-        Shader vert{"Shaders/Common/quad.vert", ShaderType::Vertex};
-        Shader frag{"Shaders/DepthOfField/DOF.frag", ShaderType::Fragment};
-
         PipelineCreateInfo info{};
-        info.pVertShader = &vert;
-        info.pFragShader = &frag;
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/DepthOfField/DOF.frag", ShaderType::Fragment});
         info.width = renderTargets["viewport"]->width_f;
         info.height = renderTargets["viewport"]->height_f;
         info.cullMode = CullMode::Back;
@@ -133,6 +130,9 @@ namespace pe
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
+        
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
     }
 
     void DOF::destroy()

@@ -86,7 +86,7 @@ namespace pe
     };
 
     class Pipeline : public IHandle<Pipeline, PipelineHandle>,
-                     public Hashable<const PipelineCreateInfo &>
+                     public Hashable<PipelineCreateInfo>
     {
     public:
         Pipeline(const PipelineCreateInfo &info);

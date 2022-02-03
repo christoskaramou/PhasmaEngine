@@ -47,8 +47,7 @@ namespace pe
     class FileIncluder : public shaderc::CompileOptions::IncluderInterface
     {
     public:
-        shaderc_include_result *
-        GetInclude(const char *requested_source, shaderc_include_type, const char *requesting_source, size_t) override;
+        shaderc_include_result *GetInclude(const char *requested_source, shaderc_include_type, const char *requesting_source, size_t) override;
 
         void ReleaseInclude(shaderc_include_result *include_result) override;
 
@@ -67,12 +66,22 @@ namespace pe
         std::unordered_set<std::string> included_files;
     };
 
-    class Reflection;
-
-    class Shader
+    class ShaderInfo
     {
     public:
-        Shader(const std::string &sourcePath, ShaderType shaderType, const std::vector<Define> &defs = {});
+        std::string sourcePath;
+        ShaderType shaderType;
+        std::vector<Define> defines{};
+    };
+
+    class Reflection;
+
+    class Shader : public IHandle<Shader, Placeholder>
+    {
+    public:
+        Shader(const ShaderInfo &info);
+
+        ~Shader();
 
         inline ShaderType GetShaderType() { return m_shaderType; }
 
@@ -86,12 +95,12 @@ namespace pe
 
         inline static void AddGlobalDefine(const std::string &name, const std::string &value)
         {
-            for (auto& def : m_globalDefines)
+            for (auto &def : m_globalDefines)
             {
                 if (def.name == name)
                     return;
             }
-            
+
             Define define{name, value};
             m_globalDefines.push_back(define);
         }

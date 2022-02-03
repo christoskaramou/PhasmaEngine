@@ -27,136 +27,175 @@ SOFTWARE.
 
 namespace pe
 {
-    void Hashable<std::vector<DescriptorBinding> &>::CreateHash(std::vector<DescriptorBinding> &bindings)
+    Hash DescriptorBindingsHash(const std::vector<DescriptorBinding> &bindings)
     {
-        const std::vector<DescriptorBinding> &cbindings = bindings;
-        Hashable<const std::vector<DescriptorBinding> &> hashable;
-        hashable.CreateHash(cbindings);
-        m_hash = hashable.GetHash();
-    }
+        Hash hash;
 
-    template <>
-    void Hashable<const std::vector<DescriptorBinding> &>::CreateHash(const std::vector<DescriptorBinding> &bindings)
-    {
-        m_hash = {};
         for (const auto &binding : bindings)
         {
-            m_hash.Combine(binding.binding);
-            m_hash.Combine(binding.descriptorType);
-            m_hash.Combine(binding.descriptorCount);
-            m_hash.Combine(binding.stageFlags);
+            hash.Combine(binding.binding);
+            hash.Combine(binding.descriptorType);
+            hash.Combine(binding.descriptorCount);
+            hash.Combine(binding.stageFlags);
             if (binding.pImmutableSamplers)
-                m_hash.Combine(binding.pImmutableSamplers);
+                hash.Combine(binding.pImmutableSamplers);
         }
+
+        return hash;
     }
 
+    template <>
+    void Hashable<std::vector<DescriptorBinding>>::CreateHash(std::vector<DescriptorBinding> &&bindings)
+    {
+        m_hash = DescriptorBindingsHash(bindings);
+    }
+
+    template <>
+    void Hashable<std::vector<DescriptorBinding> &&>::CreateHash(std::vector<DescriptorBinding> &&bindings)
+    {
+        m_hash = DescriptorBindingsHash(bindings);
+    }
+
+    template <>
+    void Hashable<std::vector<DescriptorBinding> &>::CreateHash(std::vector<DescriptorBinding> &bindings)
+    {
+        m_hash = DescriptorBindingsHash(bindings);
+    }
+
+    Hash AttachmentsHash(const std::vector<Attachment> &attachments)
+    {
+        Hash hash = {};
+        for (const auto &attachment : attachments)
+        {
+            hash.Combine(attachment.format);
+            hash.Combine(attachment.samples);
+            hash.Combine(attachment.loadOp);
+            hash.Combine(attachment.storeOp);
+            hash.Combine(attachment.stencilLoadOp);
+            hash.Combine(attachment.stencilStoreOp);
+            hash.Combine(attachment.initialLayout);
+            hash.Combine(attachment.finalLayout);
+        }
+
+        return hash;
+    }
+
+    template <>
     void Hashable<Attachment &>::CreateHash(Attachment &attachment)
     {
-        const std::vector<Attachment> cattachments = {attachment};
-        Hashable<const std::vector<Attachment> &> hashable;
-        hashable.CreateHash(cattachments);
-        m_hash = hashable.GetHash();
+        m_hash = AttachmentsHash({attachment});
     }
 
-    void Hashable<const Attachment &>::CreateHash(const Attachment &attachment)
+    template <>
+    void Hashable<Attachment>::CreateHash(Attachment &&attachment)
     {
-        const std::vector<Attachment> cattachments = {attachment};
-        Hashable<const std::vector<Attachment> &> hashable;
-        hashable.CreateHash(cattachments);
-        m_hash = hashable.GetHash();
+        m_hash = AttachmentsHash({attachment});
     }
 
+    template <>
+    void Hashable<Attachment &&>::CreateHash(Attachment &&attachment)
+    {
+        m_hash = AttachmentsHash({attachment});
+    }
+
+    template <>
     void Hashable<std::vector<Attachment> &>::CreateHash(std::vector<Attachment> &attachments)
     {
-        const std::vector<Attachment> &cattachments = attachments;
-        Hashable<const std::vector<Attachment> &> hashable;
-        hashable.CreateHash(cattachments);
-        m_hash = hashable.GetHash();
+
+        m_hash = AttachmentsHash(attachments);
     }
 
     template <>
-    void Hashable<const std::vector<Attachment> &>::CreateHash(const std::vector<Attachment> &attachments)
+    void Hashable<std::vector<Attachment>>::CreateHash(std::vector<Attachment> &&attachments)
     {
-        m_hash = {};
-        for (const Attachment &attachment : attachments)
-        {
-            m_hash.Combine(attachment.flags);
-            m_hash.Combine(attachment.format);
-            m_hash.Combine(attachment.samples);
-            m_hash.Combine(attachment.loadOp);
-            m_hash.Combine(attachment.storeOp);
-            m_hash.Combine(attachment.stencilLoadOp);
-            m_hash.Combine(attachment.stencilStoreOp);
-            m_hash.Combine(attachment.initialLayout);
-            m_hash.Combine(attachment.finalLayout);
-        }
-    }
 
-    void Hashable<PipelineCreateInfo &>::CreateHash(PipelineCreateInfo &pipelineInfo)
-    {
-        const PipelineCreateInfo &info = pipelineInfo;
-        Hashable<const PipelineCreateInfo &> hashable;
-        hashable.CreateHash(info);
-        m_hash = hashable.GetHash();
+        m_hash = AttachmentsHash(attachments);
     }
 
     template <>
-    void Hashable<const PipelineCreateInfo &>::CreateHash(const PipelineCreateInfo &pipelineInfo)
+    void Hashable<std::vector<Attachment> &&>::CreateHash(std::vector<Attachment> &&attachments)
     {
+        m_hash = AttachmentsHash(attachments);
+    }
+
+    Hash PipelineCreateInfoHash(const PipelineCreateInfo &pipelineInfo)
+    {
+        Hash hash;
+
         if (pipelineInfo.pVertShader)
-            m_hash.Combine(pipelineInfo.pVertShader->GetCache().GetHash());
+            hash.Combine(pipelineInfo.pVertShader->GetCache().GetHash());
 
         if (pipelineInfo.pFragShader)
-            m_hash.Combine(pipelineInfo.pFragShader->GetCache().GetHash());
+            hash.Combine(pipelineInfo.pFragShader->GetCache().GetHash());
 
         if (pipelineInfo.pCompShader)
-            m_hash.Combine(pipelineInfo.pCompShader->GetCache().GetHash());
+            hash.Combine(pipelineInfo.pCompShader->GetCache().GetHash());
 
         for (auto &binding : pipelineInfo.vertexInputBindingDescriptions)
         {
-            m_hash.Combine(binding.binding);
-            m_hash.Combine(binding.stride);
-            m_hash.Combine(binding.inputRate);
+            hash.Combine(binding.binding);
+            hash.Combine(binding.stride);
+            hash.Combine(binding.inputRate);
         }
 
         for (auto &attribute : pipelineInfo.vertexInputAttributeDescriptions)
         {
-            m_hash.Combine(attribute.location);
-            m_hash.Combine(attribute.binding);
-            m_hash.Combine(attribute.format);
-            m_hash.Combine(attribute.offset);
+            hash.Combine(attribute.location);
+            hash.Combine(attribute.binding);
+            hash.Combine(attribute.format);
+            hash.Combine(attribute.offset);
         }
 
-        m_hash.Combine(pipelineInfo.width);
-        m_hash.Combine(pipelineInfo.height);
-        m_hash.Combine(pipelineInfo.cullMode);
+        hash.Combine(pipelineInfo.width);
+        hash.Combine(pipelineInfo.height);
+        hash.Combine(pipelineInfo.cullMode);
 
         for (auto &attachment : pipelineInfo.colorBlendAttachments)
         {
-            m_hash.Combine(attachment.blendEnable);
-            m_hash.Combine(attachment.srcColorBlendFactor);
-            m_hash.Combine(attachment.dstColorBlendFactor);
-            m_hash.Combine(attachment.colorBlendOp);
-            m_hash.Combine(attachment.srcAlphaBlendFactor);
-            m_hash.Combine(attachment.dstAlphaBlendFactor);
-            m_hash.Combine(attachment.alphaBlendOp);
-            m_hash.Combine(attachment.colorWriteMask);
+            hash.Combine(attachment.blendEnable);
+            hash.Combine(attachment.srcColorBlendFactor);
+            hash.Combine(attachment.dstColorBlendFactor);
+            hash.Combine(attachment.colorBlendOp);
+            hash.Combine(attachment.srcAlphaBlendFactor);
+            hash.Combine(attachment.dstAlphaBlendFactor);
+            hash.Combine(attachment.alphaBlendOp);
+            hash.Combine(attachment.colorWriteMask);
         }
 
         for (auto &dynamic : pipelineInfo.dynamicStates)
-            m_hash.Combine(dynamic);
+            hash.Combine(dynamic);
 
-        m_hash.Combine(pipelineInfo.pushConstantStage);
-        m_hash.Combine(pipelineInfo.pushConstantSize);
+        hash.Combine(pipelineInfo.pushConstantStage);
+        hash.Combine(pipelineInfo.pushConstantSize);
 
         for (auto &layout : pipelineInfo.descriptorSetLayouts)
-            m_hash.Combine(layout);
+            hash.Combine(layout);
 
         if (pipelineInfo.renderPass)
-            m_hash.Combine(pipelineInfo.renderPass);
+            hash.Combine(pipelineInfo.renderPass);
 
         VkPipelineCache pipelineCache = pipelineInfo.pipelineCache;
         if (pipelineCache)
-            m_hash.Combine(pipelineCache);
+            hash.Combine(pipelineCache);
+
+        return hash;
+    }
+
+    template <>
+    void Hashable<PipelineCreateInfo &>::CreateHash(PipelineCreateInfo &pipelineInfo)
+    {
+        m_hash = PipelineCreateInfoHash(pipelineInfo);
+    }
+
+    template <>
+    void Hashable<PipelineCreateInfo>::CreateHash(PipelineCreateInfo &&pipelineInfo)
+    {
+        m_hash = PipelineCreateInfoHash(pipelineInfo);
+    }
+
+    template <>
+    void Hashable<PipelineCreateInfo &&>::CreateHash(PipelineCreateInfo &&pipelineInfo)
+    {
+        m_hash = PipelineCreateInfoHash(pipelineInfo);
     }
 }
