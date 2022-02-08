@@ -118,7 +118,7 @@ namespace pe
             m_reflection.Init(this);
 
         // Watch the file for changes
-        if (FileWatcher::Get(info.sourcePath) == nullptr)
+        if (FileWatcher::Get(path) == nullptr)
         {
             auto modifiedCallback = []()
             { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
