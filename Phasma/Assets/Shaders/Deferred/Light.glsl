@@ -118,7 +118,7 @@ float FilterPoisson(vec4 sc, sampler2DShadow shadowSampler)
     float shadowFactor = 0.0;
 
     for (int i = 0; i < POISSON_SAMPLES; i++)
-    shadowFactor += textureProjLinear(shadowSampler, vec4(sc.xy + poissonDisk[i] * offsetScaled, sc.z, sc.w), offsetScaled);
+        shadowFactor += textureProjLinear(shadowSampler, vec4(sc.xy + poissonDisk[i] * offsetScaled, sc.z, sc.w), offsetScaled);
 
     return shadowFactor / float(POISSON_SAMPLES);
 }

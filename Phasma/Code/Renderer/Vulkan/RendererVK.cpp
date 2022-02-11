@@ -299,7 +299,6 @@ namespace pe
                 if (model.render)
                 {
                     ShadowPushConstData data{};
-                    data.cascade = shadows.cascades[i];
                     data.modelIndex = static_cast<uint32_t>(model.uniformBufferOffset / sizeof(mat4));
                     data.primitiveIndex = 0;
 
@@ -313,6 +312,7 @@ namespace pe
                     {
                         if (node->mesh)
                         {
+                            data.cascade = shadows.cascades[i] * model.ubo.matrix * node->mesh->ubo.matrix;
                             data.meshIndex = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
 
                             cmd.PushConstants(shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowPushConstData), &data);

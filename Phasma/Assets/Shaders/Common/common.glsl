@@ -118,7 +118,7 @@ vec3 DilateDepth3X3(sampler2D samplerVelocity, sampler2D samplerDepth, vec2 texC
             float depth = texture(samplerDepth, texCoord + offset).r;
             if (depth > closestDepth)// using ">" because depth is reversed
             {
-                closestTexCoord    = texCoord + offset;
+                closestTexCoord = texCoord + offset;
             }
         }
     }

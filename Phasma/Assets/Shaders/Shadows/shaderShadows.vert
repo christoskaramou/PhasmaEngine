@@ -44,9 +44,6 @@ layout(set = 0, binding = 0) uniform UBO {
     mat4 data[MAX_DATA_SIZE];
 } ubo;
 
-
-#define modelMatrix ubo.data[constants.modelIndex]
-#define meshMatrix ubo.data[constants.meshIndex]
 #define meshJointMatrix(x) ubo.data[constants.meshIndex + 2 + x]
 // TEMP: joint matrices removed
 #define meshJointCount 0 // ubo.data[constants.meshIndex + 3 + MAX_NUM_JOINTS][0][0];
@@ -61,5 +58,5 @@ void main() {
         inWeights[3] * meshJointMatrix(inJoint[3]);
     }
 
-    gl_Position = constants.viewProjection * modelMatrix * meshMatrix * boneTransform * vec4(inPosition, 1.0);
+    gl_Position = constants.viewProjection * boneTransform * vec4(inPosition, 1.0);
 }

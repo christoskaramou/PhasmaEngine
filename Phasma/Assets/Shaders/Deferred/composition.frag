@@ -109,7 +109,7 @@ void main()
     }
 
     for (int i = 0; i < MAX_POINT_LIGHTS; ++i)
-    fragColor += ComputePointLight(i, material, wolrdPos, ubo.camPos.xyz, normal, occlusion);
+        fragColor += ComputePointLight(i, material, wolrdPos, ubo.camPos.xyz, normal, occlusion);
 
     outColor = vec4(fragColor, albedo.a) + texture(sampler_emission, in_UV);
 
