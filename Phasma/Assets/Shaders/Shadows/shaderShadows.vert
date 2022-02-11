@@ -46,11 +46,7 @@ layout(set = 0, binding = 0) uniform UBO {
 
 
 #define modelMatrix ubo.data[constants.modelIndex]
-#define modelMvp ubo.data[constants.modelIndex + 1]
-#define modelPreviousMvp ubo.data[constants.modelIndex + 2]
-
 #define meshMatrix ubo.data[constants.meshIndex]
-#define meshPreviousMatrix ubo.data[constants.meshIndex + 1]
 #define meshJointMatrix(x) ubo.data[constants.meshIndex + 2 + x]
 // TEMP: joint matrices removed
 #define meshJointCount 0 // ubo.data[constants.meshIndex + 3 + MAX_NUM_JOINTS][0][0];

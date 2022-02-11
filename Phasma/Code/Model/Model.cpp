@@ -24,6 +24,7 @@ SOFTWARE.
 #include "Model/Mesh.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Command.h"
+#include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
 #include <GLTFSDK/GLBResourceReader.h>

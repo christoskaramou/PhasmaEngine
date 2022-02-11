@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Descriptor.h"
-
 namespace pe
 {
     class RenderPass;
@@ -37,6 +35,8 @@ namespace pe
     class Buffer;
 
     class Image;
+
+    class Descriptor;
 
     enum class BarrierType
     {

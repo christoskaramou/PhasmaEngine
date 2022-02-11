@@ -25,6 +25,7 @@ SOFTWARE.
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
+#include "Renderer/Descriptor.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Image.h"

@@ -32,6 +32,7 @@ SOFTWARE.
 #include "Shader/Reflection.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
+#include "Renderer/Descriptor.h"
 #include "Systems/LightSystem.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"

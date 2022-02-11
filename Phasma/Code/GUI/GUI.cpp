@@ -35,6 +35,7 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Command.h"
+#include "Renderer/Descriptor.h"
 #include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Framebuffer.h"

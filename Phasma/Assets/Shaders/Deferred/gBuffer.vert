@@ -38,33 +38,12 @@ layout(set = 0, binding = 0) uniform UBO {
     mat4 data[MAX_DATA_SIZE];
 } ubo;
 
-/*
-layout(set = 0, binding = 0) uniform UniformBufferObject {
-    mat4 matrix;
-    mat4 previousMatrix;
-    mat4 jointMatrix[MAX_NUM_JOINTS];
-    float jointCount;
-    float dummy[3];
-} uboMesh;
-*/
 #define meshMatrix ubo.data[constants.meshIndex]
 #define meshPreviousMatrix ubo.data[constants.meshIndex + 1]
 #define meshJointMatrix(x) ubo.data[constants.meshIndex + 2 + x]
 // TEMP: joint matrices removed
 #define meshJointCount 0 // ubo.data[constants.meshIndex + 3 + MAX_NUM_JOINTS][0][0];
 
-/*
-layout(set = 1, binding = 0) uniform UniformBufferObject2 {
-    vec4 baseColorFactor;
-    vec4 emissiveFactor;
-    float metallicFactor;
-    float roughnessFactor;
-    float alphaCutoff;
-    float occlusionlMetalRoughness;
-    float hasBones;
-    float dummy[3];
-} uboPrimitive;
-*/
 #define primitiveBaseColorFactor ubo.data[constants.primitiveIndex][0]
 #define primitiveEmissiveFactor ubo.data[constants.primitiveIndex][1]
 #define primitiveMetallicFactor ubo.data[constants.primitiveIndex][2][0]
@@ -73,13 +52,6 @@ layout(set = 1, binding = 0) uniform UniformBufferObject2 {
 #define primitiveOcclusionlMetalRoughness ubo.data[constants.primitiveIndex][2][3]
 #define primitiveHasBones ubo.data[constants.primitiveIndex][3][0]
 
-/*
-layout(set = 2, binding = 0) uniform UniformBufferObject3 {
-    mat4 matrix;
-    mat4 mvp;
-    mat4 previousMvp;
-} uboModel;
-*/
 #define modelMatrix ubo.data[constants.modelIndex]
 #define modelMvp ubo.data[constants.modelIndex + 1]
 #define modelPreviousMvp ubo.data[constants.modelIndex + 2]
