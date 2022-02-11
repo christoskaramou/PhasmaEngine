@@ -277,7 +277,7 @@ namespace pe
 
             // Store split distance and matrix in cascade
             cascades[i] = lightOrthoMatrix * lightViewMatrix;
-            viewZ[i] = (camera.nearPlane + splitDist * clipRange) * cascadeSplitLambda;
+            viewZ[i] = (camera.nearPlane + splitDist * clipRange) * 1.5f;
 
             lastSplitDist = cascadeSplits[i];
         }

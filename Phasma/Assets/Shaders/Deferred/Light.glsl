@@ -144,11 +144,26 @@ float FilterPCF(vec4 sc, sampler2DShadow shadowSampler)
 }
 
 const mat4 biasMat = mat4(
-0.5, 0.0, 0.0, 0.0,
-0.0, 0.5, 0.0, 0.0,
-0.0, 0.0, 1.0, 0.0,
-0.5, 0.5, 0.0, 1.0
+    0.5, 0.0, 0.0, 0.0,
+    0.0, 0.5, 0.0, 0.0,
+    0.0, 0.0, 1.0, 0.0,
+    0.5, 0.5, 0.0, 1.0
 );
+
+float SampleShadowMap(int i, float zBias, vec3 worldPos)
+{
+    vec4 coords = biasMat * sun.cascades[i] * vec4(worldPos, 1.0);
+    coords.z += zBias;
+
+    if (i == 0)
+        return FilterPCF(coords, sampler_shadow_map0);
+    else if (i == 1)
+        return FilterPCF(coords, sampler_shadow_map1);
+    else if (i == 2)
+        return FilterPCF(coords, sampler_shadow_map2);
+    else
+        return FilterPCF(coords, sampler_shadow_map3);
+}
 
 float CalculateShadows(vec3 worldPos, float depth, float NdL)
 {
@@ -156,34 +171,30 @@ float CalculateShadows(vec3 worldPos, float depth, float NdL)
 
     if (pushConst.cast_shadows > 0.5)
     {
-        float bias = SHADOWMAP_TEXEL_SIZE * tan(acos(NdL));// cosTheta is dot( n,l ), clamped between 0 and 1
-        bias = clamp(bias, 0, SHADOWMAP_TEXEL_SIZE * 2.0f);
+        float zBias = SHADOWMAP_TEXEL_SIZE * tan(acos(NdL));// cosTheta is dot( n,l ), clamped between 0 and 1
+        zBias = clamp(zBias, 0, SHADOWMAP_TEXEL_SIZE * 2.0f);
 
-        shadow = 0.0;
+        float d[4] = float[](
+            pushConst.max_cascade_dist0,
+            pushConst.max_cascade_dist1,
+            pushConst.max_cascade_dist2,
+            pushConst.max_cascade_dist3);
 
-        if (depth < pushConst.max_cascade_dist0)
+        for (int i = 0; i < 4; i++)
         {
-            vec4 s_coords0 = biasMat * sun.cascades[0] * vec4(worldPos, 1.0);
-            s_coords0.z += bias;
-            shadow = FilterPCF(s_coords0, sampler_shadow_map0);
-        }
-        else if (depth < pushConst.max_cascade_dist1)
-        {
-            vec4 s_coords1 = biasMat * sun.cascades[1] * vec4(worldPos, 1.0);
-            s_coords1.z += bias;
-            shadow = FilterPCF(s_coords1, sampler_shadow_map1);
-        }
-        else if (depth < pushConst.max_cascade_dist2)
-        {
-            vec4 s_coords2 = biasMat * sun.cascades[2] * vec4(worldPos, 1.0);
-            s_coords2.z += bias * 2.0f;
-            shadow = FilterPCF(s_coords2, sampler_shadow_map2);
-        }
-        else if (depth < pushConst.max_cascade_dist3)
-        {
-            vec4 s_coords3 = biasMat * sun.cascades[3] * vec4(worldPos, 1.0);
-            s_coords3.z += bias * 2.0f;
-            shadow = FilterPCF(s_coords3, sampler_shadow_map3);
+            if (depth < d[i])
+            {
+                shadow = SampleShadowMap(i, zBias, worldPos);
+
+                // Blend between cascades
+                float dist = d[i] - depth;
+				float blendDist = 1.0;
+                
+                if (i < 3 && dist < blendDist)
+                    shadow = mix(shadow, SampleShadowMap(i + 1, zBias, worldPos), 1.0 - dist / blendDist);
+
+                break;
+            }
         }
     }
 

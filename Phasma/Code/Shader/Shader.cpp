@@ -107,6 +107,8 @@ namespace pe
             for (auto def : info.defines)
                 AddDefine(def, options);
 
+            //options.SetGenerateDebugInfo();
+
             CompileFileToAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options);
             CompileAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options);
             
