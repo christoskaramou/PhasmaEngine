@@ -51,7 +51,7 @@ namespace pe
             m_assembly = assembly;
         }
 
-        std::vector<uint32_t> ReadSpvFromFile();
+        std::vector<uint32_t> ReadSpvFile();
 
         void WriteSpvToFile(const std::vector<uint32_t> &spirv);
 

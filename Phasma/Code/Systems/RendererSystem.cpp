@@ -225,9 +225,7 @@ namespace pe
 
         if (Model::models.empty())
         {
-            Pipeline::getDescriptorSetLayoutModel()->Destroy();
-            Pipeline::getDescriptorSetLayoutMesh()->Destroy();
-            Pipeline::getDescriptorSetLayoutPrimitive()->Destroy();
+            //Pipeline::getLayoutGBufferVertex()->Destroy();
         }
 
 #ifndef IGNORE_SCRIPTS

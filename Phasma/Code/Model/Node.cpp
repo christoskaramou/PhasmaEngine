@@ -23,6 +23,7 @@ SOFTWARE.
 #include "Model/Node.h"
 #include "Model/Mesh.h"
 #include "Renderer/Buffer.h"
+#include "Renderer/RHI.h"
 
 namespace pe
 {
@@ -92,11 +93,14 @@ namespace pe
                 }
 
                 mesh->ubo.jointcount = static_cast<float>(numJoints);
-                mesh->uniformBuffer->CopyRequest<Launch::AsyncDeferred>({&mesh->ubo, sizeof(mesh->ubo), 0});
+                
+                auto &uniformBuffer = RHII.uniformBuffers[mesh->uniformBufferIndex];
+                uniformBuffer.buffer->CopyRequest<Launch::AsyncDeferred>({&mesh->ubo, sizeof(mesh->ubo), mesh->uniformBufferOffset}, true);
             }
             else
             {
-                mesh->uniformBuffer->CopyRequest<Launch::AsyncDeferred>({&mesh->ubo, 2 * sizeof(mat4), 0});
+                auto &uniformBuffer = RHII.uniformBuffers[mesh->uniformBufferIndex];
+                uniformBuffer.buffer->CopyRequest<Launch::AsyncDeferred>({&mesh->ubo, 2 * sizeof(mat4), mesh->uniformBufferOffset}, true);
             }
         }
     }

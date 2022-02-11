@@ -42,6 +42,7 @@ namespace pe
     {
         Vertex = 1,
         Fragment = 16,
+        VertexAndFragment = Vertex | Fragment,
         Compute = 32
     };
 
@@ -93,8 +94,6 @@ namespace pe
 
         ~Pipeline();
 
-        PipelineLayoutHandle layout;
-
         void createComputePipeline();
 
         static DescriptorLayout *getDescriptorSetLayoutComposition();
@@ -129,18 +128,19 @@ namespace pe
 
         static DescriptorLayout *getDescriptorSetLayoutShadowsDeferred();
 
-        static DescriptorLayout *getDescriptorSetLayoutMesh();
-
-        static DescriptorLayout *getDescriptorSetLayoutPrimitive();
-
-        static DescriptorLayout *getDescriptorSetLayoutModel();
-
         static DescriptorLayout *getDescriptorSetLayoutSkybox();
 
         static DescriptorLayout *getDescriptorSetLayoutCompute();
 
-    private:
+        static DescriptorLayout *getDescriptorSetLayoutGbufferVert();
+
+        static DescriptorLayout *getDescriptorSetLayoutGbufferFrag();
+ 
         PipelineCreateInfo info;
+
+        PipelineLayoutHandle layout;
+
+    private:
         inline static std::map<size_t, Pipeline *> sm_pipelines{};
     };
 }

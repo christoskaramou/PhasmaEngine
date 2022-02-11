@@ -97,7 +97,7 @@ namespace pe
             reflectionInput[2] = camera.view;
             reflectionInput[3] = camera.invProjection;
 
-            UBReflection->CopyRequest<Launch::AsyncDeferred>({&reflectionInput, sizeof(reflectionInput), 0});
+            UBReflection->CopyRequest<Launch::AsyncDeferred>({&reflectionInput, sizeof(reflectionInput), 0}, false);
         }
     }
 

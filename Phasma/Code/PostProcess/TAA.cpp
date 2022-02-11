@@ -99,7 +99,7 @@ namespace pe
                 sin(static_cast<float>(ImGui::GetTime()) * 0.125f)};
             ubo.invProj = camera.invProjection;
 
-            uniform->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(ubo), 0});
+            uniform->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(ubo), 0}, false);
         }
     }
 

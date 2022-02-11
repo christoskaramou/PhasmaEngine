@@ -47,8 +47,9 @@ namespace pe
 
         std::string name;
 
-        Descriptor *descriptorSet;
-        Buffer *uniformBuffer;
+        size_t uniformImagesIndex;
+        size_t uniformBufferIndex;
+        size_t uniformBufferOffset;
 
         bool render = true, cull = true;
         uint32_t vertexOffset = 0, indexOffset = 0;
@@ -104,14 +105,16 @@ namespace pe
         static std::map<std::string, Image *> uniqueTextures;
         std::vector<Primitive> primitives{};
 
-        Descriptor *descriptorSet;
-        Buffer *uniformBuffer;
+        //Descriptor *descriptorSet;
+        //Buffer *uniformBuffer;
+        size_t uniformBufferIndex;
+        size_t uniformBufferOffset;
         std::vector<Vertex> vertices{};
         std::vector<uint32_t> indices{};
         uint32_t vertexOffset = 0, indexOffset = 0;
         // vec4 boundingSphere;
 
-        void createUniformBuffers();
+        void SetUniformOffsets(size_t uniformBufferIndex);
 
         // void calculateBoundingSphere();
         void destroy();

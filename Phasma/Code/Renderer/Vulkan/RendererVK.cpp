@@ -130,7 +130,7 @@ namespace pe
         // MODELS
         {
             gpuTimer[1].Start(cmd);
-            deferred.batchStart(cmd, imageIndex);
+            deferred.BeginPass(cmd, imageIndex);
 
             for (auto &model : Model::models)
                 model.draw((uint16_t)RenderQueue::Opaque);
@@ -141,7 +141,7 @@ namespace pe
             for (auto &model : Model::models)
                 model.draw((uint16_t)RenderQueue::AlphaBlend);
 
-            deferred.batchEnd();
+            deferred.EndPass();
             frameTimer.timestamps[4] = gpuTimer[1].End();
         }
         renderTargets["albedo"]->ChangeLayout(cmd, LayoutState::ColorRead);
@@ -192,10 +192,10 @@ namespace pe
 
         if (GUI::use_SSGI)
         {
-            //gpuTimer[8].Start(cmd);
+            // gpuTimer[8].Start(cmd);
             ssgi.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
             ssgi.draw(cmd, imageIndex, renderTargets);
-            //frameTimer.timestamps[10] = gpuTimer[8].End();
+            // frameTimer.timestamps[10] = gpuTimer[8].End();
         }
 
         if (GUI::use_AntiAliasing)
@@ -277,7 +277,7 @@ namespace pe
 
         cmd->End();
     }
-
+    
     void Renderer::RecordShadowsCmds(uint32_t imageIndex)
     {
         static GPUTimer gpuTimer[SHADOWMAP_CASCADES]{};
@@ -298,16 +298,24 @@ namespace pe
             {
                 if (model.render)
                 {
+                    ShadowPushConstData data{};
+                    data.cascade = shadows.cascades[i];
+                    data.modelIndex = static_cast<uint32_t>(model.uniformBufferOffset / sizeof(mat4));
+                    data.primitiveIndex = 0;
+
                     cmd.BindVertexBuffer(model.vertexBuffer, 0);
                     cmd.BindIndexBuffer(model.indexBuffer, 0);
+
+                    std::vector<Descriptor *> dsetHandles{RHII.uniformBuffers[model.uniformBufferIndex].descriptor};
+                    cmd.BindDescriptors(shadows.pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
 
                     for (auto &node : model.linearNodes)
                     {
                         if (node->mesh)
                         {
-                            std::array<Descriptor *, 2> descriptors{node->mesh->descriptorSet, model.descriptorSet};
-                            cmd.PushConstants(shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), &shadows.cascades[i]);
-                            cmd.BindDescriptors(shadows.pipeline, 2, descriptors.data());
+                            data.meshIndex = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
+
+                            cmd.PushConstants(shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowPushConstData), &data);
                             for (auto &primitive : node->mesh->primitives)
                             {
                                 // if (primitive.render)

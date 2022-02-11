@@ -25,7 +25,6 @@ SOFTWARE.
 int main(int argc, char* argv[])
 {
 	pe::App app;
-	
 	app.Init();
 	app.Run();
 	app.Shutdown();

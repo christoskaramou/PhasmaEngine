@@ -199,7 +199,7 @@ namespace pe
             pvm[1] = camera.view;
             pvm[2] = camera.invProjection;
 
-            UB_PVM->CopyRequest<Launch::AsyncDeferred>({&pvm, sizeof(pvm), 0});
+            UB_PVM->CopyRequest<Launch::AsyncDeferred>({&pvm, sizeof(pvm), 0}, false);
         }
     }
 

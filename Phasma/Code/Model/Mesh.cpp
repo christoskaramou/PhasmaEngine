@@ -34,7 +34,8 @@ namespace pe
 
     Primitive::Primitive() : pbrMaterial({})
     {
-        descriptorSet = {};
+        uniformBufferIndex = std::numeric_limits<size_t>::max();
+        uniformBufferOffset = 0;
     }
 
     Primitive::~Primitive()
@@ -43,44 +44,27 @@ namespace pe
 
     Mesh::Mesh()
     {
-        descriptorSet = {};
+        uniformBufferIndex = std::numeric_limits<size_t>::max();
+        uniformBufferOffset = 0;
     }
 
     Mesh::~Mesh()
     {
     }
 
-    void Mesh::createUniformBuffers()
+    void Mesh::SetUniformOffsets(size_t uniformBufferIndex)
     {
-        uniformBuffer = Buffer::Create(
-            sizeof(ubo),
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU);
-        uniformBuffer->Map();
-        uniformBuffer->Zero();
-        uniformBuffer->Flush();
-        uniformBuffer->Unmap();
+        this->uniformBufferIndex = uniformBufferIndex;
+        auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
+        uniformBufferOffset = uniformBuffer.size;
+        // TEMP: joint matrices removed
+        uniformBuffer.size += sizeof(mat4) * 2; // sizeof(UBOMesh);
 
         for (auto &primitive : primitives)
         {
-
-            mat4 factors;
-            factors[0] = primitive.pbrMaterial.baseColorFactor != vec4(0.f) ? primitive.pbrMaterial.baseColorFactor : vec4(1.f);
-            factors[1] = vec4(primitive.pbrMaterial.emissiveFactor, 1.f);
-            factors[2] = vec4(
-                primitive.pbrMaterial.metallicFactor, primitive.pbrMaterial.roughnessFactor,
-                primitive.pbrMaterial.alphaCutoff, 0.f);
-            factors[3][0] = static_cast<float>(primitive.hasBones);
-
-            const size_t size = sizeof(mat4);
-            primitive.uniformBuffer = Buffer::Create(
-                size,
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VMA_MEMORY_USAGE_CPU_TO_GPU);
-            primitive.uniformBuffer->Map();
-            primitive.uniformBuffer->CopyData(&factors);
-            primitive.uniformBuffer->Flush();
-            primitive.uniformBuffer->Unmap();
+            primitive.uniformBufferIndex = uniformBufferIndex;
+            primitive.uniformBufferOffset = uniformBuffer.size;
+            uniformBuffer.size += sizeof(mat4);
         }
     }
 
@@ -211,16 +195,9 @@ namespace pe
 
     void Mesh::destroy()
     {
-        uniformBuffer->Destroy();
-        Pipeline::getDescriptorSetLayoutMesh()->Destroy();
-        for (auto &primitive : primitives)
-        {
-            primitive.uniformBuffer->Destroy();
-        }
         vertices.clear();
         vertices.shrink_to_fit();
         indices.clear();
         indices.shrink_to_fit();
-        Pipeline::getDescriptorSetLayoutPrimitive()->Destroy();
     }
 }

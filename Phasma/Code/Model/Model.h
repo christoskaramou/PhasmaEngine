@@ -51,47 +51,6 @@ namespace pe
             return Model();
         }
 
-        // Document holds all info about the gltf model
-        Microsoft::glTF::Document *document = nullptr;
-        Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr;
-
-        static std::deque<Model> models;
-        static Pipeline *pipeline;
-        static CommandBuffer *commandBuffer;
-        Descriptor *descriptorSet;
-        Buffer *uniformBuffer;
-        struct UBOModel
-        {
-            mat4 matrix = mat4::identity();
-            mat4 mvp = mat4::identity();
-            mat4 previousMvp = mat4::identity();
-        } ubo;
-        vec3 scale = vec3(1.0f);
-        vec3 pos = vec3(0.0f);
-        vec3 rot = vec3(0.0f); // euler angles
-        mat4 transform = mat4::identity();
-        vec4 boundingSphere;
-        bool render = true;
-
-        std::string name;
-        std::string fullPathName;
-        std::vector<pe::Node *> linearNodes{};
-        std::vector<Skin *> skins{};
-        std::vector<Animation> animations{};
-        std::vector<std::string> extensions{};
-
-        int32_t animationIndex = 0;
-        float animationTimer = 0.0f;
-#if 0
-        Script* script = nullptr;
-#else
-        void *script = nullptr;
-#endif
-
-        Buffer *vertexBuffer;
-        Buffer *indexBuffer;
-        uint32_t numberOfVertices = 0, numberOfIndices = 0;
-
         static void Load(const std::filesystem::path &file);
 
         void draw(uint16_t alphaMode);
@@ -126,10 +85,55 @@ namespace pe
 
         void createIndexBuffer();
 
-        void createUniformBuffers();
+        void createUniforms();
 
         void createDescriptorSets();
 
         void destroy();
+
+        // Document holds all info about the gltf model
+        Microsoft::glTF::Document *document = nullptr;
+        Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr;
+
+        static std::deque<Model> models;
+        static Pipeline *pipeline;
+        static CommandBuffer *commandBuffer;
+        //Descriptor *descriptorSet;
+        //Buffer *uniformBuffer;
+        size_t uniformBufferIndex;
+        size_t uniformImagesIndex;
+        size_t uniformBufferOffset;
+
+        struct UBOModel
+        {
+            mat4 matrix = mat4::identity();
+            mat4 mvp = mat4::identity();
+            mat4 previousMvp = mat4::identity();
+        } ubo;
+        vec3 scale = vec3(1.0f);
+        vec3 pos = vec3(0.0f);
+        vec3 rot = vec3(0.0f); // euler angles
+        mat4 transform = mat4::identity();
+        vec4 boundingSphere;
+        bool render = true;
+
+        std::string name;
+        std::string fullPathName;
+        std::vector<pe::Node *> linearNodes{};
+        std::vector<Skin *> skins{};
+        std::vector<Animation> animations{};
+        std::vector<std::string> extensions{};
+
+        int32_t animationIndex = 0;
+        float animationTimer = 0.0f;
+#if 0
+        Script* script = nullptr;
+#else
+        void *script = nullptr;
+#endif
+
+        Buffer *vertexBuffer;
+        Buffer *indexBuffer;
+        uint32_t numberOfVertices = 0, numberOfIndices = 0;
     };
 }

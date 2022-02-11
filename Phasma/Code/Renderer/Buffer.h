@@ -64,28 +64,42 @@ namespace pe
         void *Data();
 
         template <Launch launch>
-        void CopyRequest(const MemoryRange &range)
+        void CopyRequest(const MemoryRange &range, bool isPersistent)
         {
-            auto lambda = [this, range]()
+            auto lambda = [this, range, isPersistent]()
             {
+                // Map or check if the buffer is already mapped
                 Map();
+
                 CopyData(range.data, range.size, range.offset);
-                Flush();
-                Unmap();
+
+                // Keep the buffer mapped if it is persistent
+                if (!isPersistent)
+                {
+                    Flush(range.offset, range.size);
+                    Unmap();
+                }
             };
             Queue<launch>::Request(lambda);
         }
 
         template <Launch launch>
-        void CopyRequest(const std::vector<MemoryRange> &ranges)
+        void CopyRequest(const std::vector<MemoryRange> &ranges, bool isPersistent)
         {
-            auto lambda = [this, ranges]()
+            auto lambda = [this, ranges, isPersistent]()
             {
+                // Map or check if the buffer is already mapped
                 Map();
+
                 for (auto &range : ranges)
+                {
                     CopyData(range.data, range.size, range.offset);
-                Flush();
-                Unmap();
+                    Flush(range.offset, range.size);
+                }
+
+                // Keep the buffer mapped if it is persistent
+                if (!isPersistent)
+                    Unmap();
             };
             Queue<launch>::Request(lambda);
         }

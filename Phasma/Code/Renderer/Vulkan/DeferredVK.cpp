@@ -50,7 +50,7 @@ namespace pe
     {
     }
 
-    void Deferred::batchStart(CommandBuffer *cmd, uint32_t imageIndex)
+    void Deferred::BeginPass(CommandBuffer *cmd, uint32_t imageIndex)
     {
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
 
@@ -58,7 +58,7 @@ namespace pe
         Model::pipeline = pipeline;
     }
 
-    void Deferred::batchEnd()
+    void Deferred::EndPass()
     {
         Model::commandBuffer->EndPass();
         Model::commandBuffer = nullptr;
@@ -194,7 +194,7 @@ namespace pe
         ubo.screenSpace[7] = {
             GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f};
 
-        uniform->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(ubo), 0});
+        uniform->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(ubo), 0}, false);
     }
 
     void Deferred::draw(CommandBuffer *cmd, uint32_t imageIndex, Shadows &shadows, SkyBox &skybox)
@@ -292,6 +292,8 @@ namespace pe
         info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
         info.width = renderTargets["albedo"]->width_f;
         info.height = renderTargets["albedo"]->height_f;
+        info.pushConstantStage = PushConstantStage::VertexAndFragment;
+        info.pushConstantSize = 4 * sizeof(uint32_t);
         info.cullMode = CullMode::Front;
         info.colorBlendAttachments = {
             renderTargets["normal"]->blendAttachment,
@@ -300,10 +302,10 @@ namespace pe
             renderTargets["velocity"]->blendAttachment,
             renderTargets["emissive"]->blendAttachment,
         };
+
         info.descriptorSetLayouts = {
-            Pipeline::getDescriptorSetLayoutMesh(),
-            Pipeline::getDescriptorSetLayoutPrimitive(),
-            Pipeline::getDescriptorSetLayoutModel()};
+            Pipeline::getDescriptorSetLayoutGbufferVert(),
+            Pipeline::getDescriptorSetLayoutGbufferFrag()};
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
@@ -336,7 +338,7 @@ namespace pe
         info.renderPass = compositionRenderPass;
 
         pipelineComposition = Pipeline::Create(info);
-        
+
         info.pVertShader->Destroy();
         info.pFragShader->Destroy();
     }

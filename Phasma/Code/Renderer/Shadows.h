@@ -29,6 +29,14 @@ namespace pe
     constexpr uint32_t SHADOWMAP_CASCADES = 4;
     constexpr uint32_t SHADOWMAP_SIZE = 2048;
 
+    struct ShadowPushConstData
+    {
+        mat4 cascade;
+        uint32_t modelIndex;
+        uint32_t meshIndex;
+        uint32_t primitiveIndex;
+    };
+
     class Descriptor;
 
     class FrameBuffer;

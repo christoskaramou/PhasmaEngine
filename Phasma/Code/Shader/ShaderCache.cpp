@@ -78,7 +78,7 @@ namespace pe
         return !std::filesystem::exists(m_tempFilePath);
     }
 
-    std::vector<uint32_t> ShaderCache::ReadSpvFromFile()
+    std::vector<uint32_t> ShaderCache::ReadSpvFile()
     {
         FileSystem file(m_tempFilePath, std::ios::in | std::ios::ate | std::ios::binary);
         if (!file.IsOpen())

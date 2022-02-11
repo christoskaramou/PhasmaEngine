@@ -118,8 +118,6 @@ namespace pe
 
         void AddDefine(Define &define, shaderc::CompileOptions &options);
 
-        void AddDefines(const std::vector<Define> &defines, shaderc::CompileOptions &options);
-
         ShaderCache m_cache;
         Reflection m_reflection;
         ShaderType m_shaderType;

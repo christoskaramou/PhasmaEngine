@@ -43,6 +43,7 @@ namespace pe
     class Swapchain;
     class Image;
     class Surface;
+    class Buffer;
 
     class RHI : public NoCopy, public NoMove
     {
@@ -125,6 +126,25 @@ namespace pe
         Swapchain *swapchain;
         Image *depth;
         int graphicsFamilyId, computeFamilyId, transferFamilyId;
+
+        class UniformBuffer
+        {
+        public:
+            Buffer *buffer = nullptr;
+            size_t size = 0;
+            Descriptor *descriptor = nullptr;
+            DescriptorLayout *layout = nullptr;
+        };
+        std::deque<UniformBuffer> uniformBuffers;
+
+        class UniformImages
+        {
+        public:
+            uint32_t count = 0;
+            Descriptor *descriptor = nullptr;
+            DescriptorLayout *layout = nullptr;
+        };
+        std::deque<UniformImages> uniformImages;
 
         // Helpers
         void Submit(

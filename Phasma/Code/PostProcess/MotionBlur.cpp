@@ -135,7 +135,7 @@ namespace pe
 
             previousView = camera.view;
 
-            UBmotionBlur->CopyRequest<Launch::AsyncDeferred>({&motionBlurInput, sizeof(motionBlurInput), 0});
+            UBmotionBlur->CopyRequest<Launch::AsyncDeferred>({&motionBlurInput, sizeof(motionBlurInput), 0}, false);
         }
     }
 

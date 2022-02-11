@@ -133,10 +133,12 @@ namespace pe
         info.width = static_cast<float>(SHADOWMAP_SIZE);
         info.height = static_cast<float>(SHADOWMAP_SIZE);
         info.pushConstantStage = PushConstantStage::Vertex;
-        info.pushConstantSize = sizeof(mat4);
+        info.pushConstantSize = sizeof(ShadowPushConstData);
         info.colorBlendAttachments = {textures[0]->blendAttachment};
         info.dynamicStates = {VK_DYNAMIC_STATE_DEPTH_BIAS};
-        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutMesh(), Pipeline::getDescriptorSetLayoutModel()};
+        info.descriptorSetLayouts = {
+            Pipeline::getDescriptorSetLayoutGbufferVert(),
+            Pipeline::getDescriptorSetLayoutGbufferFrag()};
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
@@ -179,7 +181,7 @@ namespace pe
         if (GUI::shadow_cast)
         {
             CalculateCascades(camera);
-            uniformBuffer->CopyRequest<Launch::AsyncDeferred>({cascades, SHADOWMAP_CASCADES * sizeof(mat4), 0});
+            uniformBuffer->CopyRequest<Launch::AsyncDeferred>({cascades, SHADOWMAP_CASCADES * sizeof(mat4), 0}, false);
         }
     }
 

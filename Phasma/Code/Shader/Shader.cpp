@@ -97,12 +97,15 @@ namespace pe
         if (m_cache.ShaderNeedsCompile())
         {
             shaderc::CompileOptions options;
+            
             options.SetIncluder(std::make_unique<FileIncluder>());
             options.SetOptimizationLevel(shaderc_optimization_level_performance);
-            // m_options.SetHlslFunctionality1(true);
 
-            AddDefines(m_globalDefines, options);
-            AddDefines(info.defines, options);
+            for (auto def : m_globalDefines)
+                AddDefine(def, options);
+                
+            for (auto def : info.defines)
+                AddDefine(def, options);
 
             CompileFileToAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options);
             CompileAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options);
@@ -111,7 +114,7 @@ namespace pe
         }
         else
         {
-            m_spirv = m_cache.ReadSpvFromFile();
+            m_spirv = m_cache.ReadSpvFile();
         }
 
         if (m_spirv.size() > 0)
@@ -141,12 +144,6 @@ namespace pe
             options.AddMacroDefinition(def.name, def.value);
 
         defines.push_back(def);
-    }
-
-    void Shader::AddDefines(const std::vector<Define> &defs, shaderc::CompileOptions &options)
-    {
-        for (auto def : defs)
-            AddDefine(def, options);
     }
 
     std::string Shader::PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions &options)

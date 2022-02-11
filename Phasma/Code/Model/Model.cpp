@@ -42,7 +42,10 @@ namespace pe
 
     Model::Model()
     {
-        descriptorSet = {};
+        // descriptorSet = {};
+        uniformBufferIndex = std::numeric_limits<size_t>::max();
+        uniformBufferOffset = std::numeric_limits<size_t>::max();
+        uniformImagesIndex = std::numeric_limits<size_t>::max();
     }
 
     Model::~Model()
@@ -381,195 +384,10 @@ namespace pe
         model.fullPathName = file.string();
         model.createVertexBuffer();
         model.createIndexBuffer();
-        model.createUniformBuffers();
+        model.createUniforms();
         model.createDescriptorSets();
 
         model.render = true;
-    }
-
-    void Model::updateAnimation(uint32_t index, float time)
-    {
-        if (index > static_cast<uint32_t>(animations.size()) - 1)
-        {
-            std::cout << "No animation with index " << index << std::endl;
-            return;
-        }
-        Animation &animation = animations[index];
-
-        for (auto &channel : animation.channels)
-        {
-            pe::AnimationSampler &sampler = animation.samplers[channel.samplerIndex];
-            if (sampler.inputs.size() > sampler.outputsVec4.size())
-                continue;
-
-            for (size_t i = 0; i < sampler.inputs.size() - 1; i++)
-            {
-                if ((time >= sampler.inputs[i]) && (time <= sampler.inputs[i + 1]))
-                {
-                    const float u =
-                        std::max(0.0f, time - sampler.inputs[i]) / (sampler.inputs[i + 1] - sampler.inputs[i]);
-                    if (u <= 1.0f)
-                    {
-                        switch (channel.path)
-                        {
-                        case pe::AnimationChannel::PathType::TRANSLATION:
-                        {
-                            cvec4 t = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
-                            channel.node->translation = vec3(t);
-                            break;
-                        }
-                        case pe::AnimationChannel::PathType::SCALE:
-                        {
-                            cvec4 s = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
-                            channel.node->scale = vec3(s);
-                            break;
-                        }
-                        case pe::AnimationChannel::PathType::ROTATION:
-                        {
-                            cquat q1(&sampler.outputsVec4[i].x);
-                            cquat q2(&sampler.outputsVec4[i + 1].x);
-                            channel.node->rotation = normalize(slerp(q1, q2, u));
-                            break;
-                        }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    void CullPrimitiveAsync(Model *model, Mesh *mesh, const Camera &camera, uint32_t index)
-    {
-        mat4 trans = model->transform * mesh->ubo.matrix;
-
-        vec3 point = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
-        float range = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale
-        mesh->primitives[index].cull = !camera.PointInFrustum(point, range);
-        mesh->primitives[index].transformedBS = vec4(point, range);
-
-        // AABB aabb;
-        // aabb.min = trans * vec4(mesh->primitives[index].boundingBox.min, 1.0f);
-        // aabb.max = trans * vec4(mesh->primitives[index].boundingBox.max, 1.0f);
-        // mesh->primitives[index].cull = !camera.AABBInFrustum(aabb);
-    }
-
-    void UpdateNodeAsync(Model *model, Node *node, const Camera &camera)
-    {
-        if (node->mesh)
-        {
-            node->Update();
-
-            // async calls should be at least bigger than a number, else this will be slower
-            if (node->mesh->primitives.size() > 3)
-            {
-                std::vector<std::future<void>> futures(node->mesh->primitives.size());
-
-                for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
-                    futures[i] = std::async(std::launch::async, CullPrimitiveAsync, model, node->mesh, camera, i);
-
-                for (auto &f : futures)
-                    f.get();
-            }
-            else
-            {
-                for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
-                    CullPrimitiveAsync(model, node->mesh, camera, i);
-            }
-        }
-    }
-
-    void Model::update(pe::Camera &camera, double delta)
-    {
-        if (!render)
-            return;
-
-        if (script)
-        {
-#if 0
-            script->update(static_cast<float>(delta));
-            transform = script->getValue<Transform>("transform").matrix * transform;
-#endif
-        }
-
-        transform = pe::transform(quat(radians(rot)), scale, pos);
-        ubo.matrix = transform;
-        ubo.previousMvp = ubo.mvp;
-        ubo.mvp = camera.viewProjection * transform;
-
-        uniformBuffer->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(ubo), 0});
-
-        if (!animations.empty())
-        {
-            animationTimer += static_cast<float>(delta);
-
-            if (animationTimer > animations[animationIndex].end)
-                animationTimer -= animations[animationIndex].end;
-
-            updateAnimation(animationIndex, animationTimer);
-        }
-
-        // async calls should be at least bigger than a number, else this will be slower
-        if (linearNodes.size() > 3)
-        {
-            std::vector<std::future<void>> futureNodes(linearNodes.size());
-
-            for (uint32_t i = 0; i < linearNodes.size(); i++)
-                futureNodes[i] = std::async(std::launch::async, UpdateNodeAsync, this, linearNodes[i], camera);
-
-            for (auto &f : futureNodes)
-                f.get();
-        }
-        else
-        {
-            for (auto &linearNode : linearNodes)
-                UpdateNodeAsync(this, linearNode, camera);
-        }
-    }
-
-    void Model::draw(uint16_t alphaMode)
-    {
-        if (!render || !Model::pipeline)
-            return;
-
-        auto &cmd = *Model::commandBuffer;
-
-        cmd.BindPipeline(Model::pipeline);
-        cmd.BindVertexBuffer(vertexBuffer, 0);
-        cmd.BindIndexBuffer(indexBuffer, 0);
-
-        int culled = 0;
-        int total = 0;
-        for (auto &node : linearNodes)
-        {
-            if (node->mesh)
-            {
-                for (auto &primitive : node->mesh->primitives)
-                {
-                    if (primitive.pbrMaterial.alphaMode == alphaMode && primitive.render)
-                    {
-                        total++;
-                        if (!primitive.cull)
-                        {
-                            // Cache this vector
-                            std::vector<Descriptor *> dsetHandles{node->mesh->descriptorSet, primitive.descriptorSet, descriptorSet};
-                            cmd.BindDescriptors(Model::pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
-                            cmd.DrawIndexed(
-                                primitive.indicesSize,
-                                1,
-                                node->mesh->indexOffset + primitive.indexOffset,
-                                node->mesh->vertexOffset + primitive.vertexOffset,
-                                0);
-                        }
-                        else
-                        {
-                            culled++;
-                        }
-                    }
-                }
-            }
-        }
-
-        // std::cout << "RenderQueue: " << renderQueue << " Culled: " << culled << "/" << total << std::endl;
     }
 
     // position x, y, z and radius w
@@ -890,35 +708,48 @@ namespace pe
         staging->Destroy();
     }
 
-    void Model::createUniformBuffers()
+    // Will calculate the buffer size needed for all meshes and their primitives
+    void Model::createUniforms()
     {
-        uniformBuffer = Buffer::Create(
-            sizeof(ubo),
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU);
-        uniformBuffer->Map();
-        uniformBuffer->Zero();
-        uniformBuffer->Flush();
-        uniformBuffer->Unmap();
+        uniformImagesIndex = RHII.uniformImages.size();
+        RHII.uniformImages.emplace_back();
+
+        uniformBufferIndex = RHII.uniformBuffers.size();
+        auto &uniformBuffer = RHII.uniformBuffers.emplace_back();
+
+        uniformBufferOffset = uniformBuffer.size;
+        uniformBuffer.size += sizeof(UBOModel);
+
         for (auto &node : linearNodes)
         {
             if (node->mesh)
-            {
-                node->mesh->createUniformBuffers();
-            }
+                node->mesh->SetUniformOffsets(uniformBufferIndex);
         }
+
+        uniformBuffer.buffer = Buffer::Create(
+            uniformBuffer.size,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_MEMORY_USAGE_CPU_TO_GPU);
     }
 
     void Model::createDescriptorSets()
     {
-        // model dSet
-        descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutModel());
+        auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
+        auto &uniformImages = RHII.uniformImages[uniformImagesIndex];
+
+        uniformBuffer.layout = Pipeline::getDescriptorSetLayoutGbufferVert();
+        uniformBuffer.descriptor = Descriptor::Create(uniformBuffer.layout);
 
         DescriptorUpdateInfo info{};
         info.binding = 0;
-        info.pBuffer = uniformBuffer;
+        info.pBuffer = uniformBuffer.buffer;
 
-        descriptorSet->UpdateDescriptor(1, &info);
+        uniformBuffer.descriptor->UpdateDescriptor(1, &info);
+
+        std::vector<DescriptorUpdateInfo> infos{};
+
+        // Map to copy factors in uniform buffer
+        uniformBuffer.buffer->Map();
 
         // mesh dSets
         for (auto &node : linearNodes)
@@ -926,55 +757,252 @@ namespace pe
             if (!node->mesh)
                 continue;
 
-            auto &mesh = node->mesh;
-
-            mesh->descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutMesh());
-
-            DescriptorUpdateInfo info{};
-            info.binding = 0;
-            info.pBuffer = mesh->uniformBuffer;
-
-            mesh->descriptorSet->UpdateDescriptor(1, &info);
-
-            // primitive dSets
-            for (auto &primitive : mesh->primitives)
+            for (auto &primitive : node->mesh->primitives)
             {
-                primitive.descriptorSet = Descriptor::Create(
-                    Pipeline::getDescriptorSetLayoutPrimitive(),
-                    GlobalSettings::BindlessDescriptors ? 5 : 1);
+                // this primitive starting index of images in the uniform array of all images
+                primitive.uniformImagesIndex = infos.size();
 
-                std::array<DescriptorUpdateInfo, 6> infos{};
+                mat4 factors;
+                factors[0] = primitive.pbrMaterial.baseColorFactor != vec4(0.f) ? primitive.pbrMaterial.baseColorFactor : vec4(1.f);
+                factors[1] = vec4(primitive.pbrMaterial.emissiveFactor, 1.f);
+                factors[2] = vec4(
+                    primitive.pbrMaterial.metallicFactor, primitive.pbrMaterial.roughnessFactor,
+                    primitive.pbrMaterial.alphaCutoff, 0.f);
+                factors[3][0] = static_cast<float>(primitive.hasBones);
 
-                infos[0].binding = 0;
-                infos[0].pBuffer = primitive.uniformBuffer;
+                uniformBuffer.buffer->CopyData(&factors, sizeof(mat4), primitive.uniformBufferOffset);
 
-                infos[1].binding = 1;
-                infos[1].pImage = primitive.pbrMaterial.baseColorTexture;
+                infos.emplace_back();
+                infos.back().pImage = primitive.pbrMaterial.baseColorTexture;
 
-                infos[2].binding = 2;
-                infos[2].pImage = primitive.pbrMaterial.metallicRoughnessTexture;
+                infos.emplace_back();
+                infos.back().pImage = primitive.pbrMaterial.metallicRoughnessTexture;
 
-                infos[3].binding = 3;
-                infos[3].pImage = primitive.pbrMaterial.normalTexture;
+                infos.emplace_back();
+                infos.back().pImage = primitive.pbrMaterial.normalTexture;
 
-                infos[4].binding = 4;
-                infos[4].pImage = primitive.pbrMaterial.occlusionTexture;
+                infos.emplace_back();
+                infos.back().pImage = primitive.pbrMaterial.occlusionTexture;
 
-                infos[5].binding = 5;
-                infos[5].pImage = primitive.pbrMaterial.emissiveTexture;
-
-                if (GlobalSettings::BindlessDescriptors)
-                {
-                    infos[1].binding = 1;
-                    infos[2].binding = 1;
-                    infos[3].binding = 1;
-                    infos[4].binding = 1;
-                    infos[5].binding = 1;
-                }
-
-                primitive.descriptorSet->UpdateDescriptor(6, infos.data());
+                infos.emplace_back();
+                infos.back().pImage = primitive.pbrMaterial.emissiveTexture;
             }
         }
+
+        // Unmap uniform buffer, we are done copying factors
+        uniformBuffer.buffer->Flush();
+        uniformBuffer.buffer->Unmap();
+
+        uint32_t infosCount = static_cast<uint32_t>(infos.size());
+        uniformImages.layout = Pipeline::getDescriptorSetLayoutGbufferFrag();
+        uniformImages.descriptor = Descriptor::Create(uniformImages.layout, infosCount);
+        uniformImages.descriptor->UpdateDescriptor(infosCount, infos.data());
+    }
+
+    void CullPrimitiveAsync(Model *model, Mesh *mesh, const Camera &camera, uint32_t index)
+    {
+        mat4 trans = model->transform * mesh->ubo.matrix;
+
+        vec3 point = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
+        float range = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale
+        mesh->primitives[index].cull = !camera.PointInFrustum(point, range);
+        mesh->primitives[index].transformedBS = vec4(point, range);
+
+        // AABB aabb;
+        // aabb.min = trans * vec4(mesh->primitives[index].boundingBox.min, 1.0f);
+        // aabb.max = trans * vec4(mesh->primitives[index].boundingBox.max, 1.0f);
+        // mesh->primitives[index].cull = !camera.AABBInFrustum(aabb);
+    }
+
+    void Model::updateAnimation(uint32_t index, float time)
+    {
+        if (index > static_cast<uint32_t>(animations.size()) - 1)
+        {
+            std::cout << "No animation with index " << index << std::endl;
+            return;
+        }
+        Animation &animation = animations[index];
+
+        for (auto &channel : animation.channels)
+        {
+            pe::AnimationSampler &sampler = animation.samplers[channel.samplerIndex];
+            if (sampler.inputs.size() > sampler.outputsVec4.size())
+                continue;
+
+            for (size_t i = 0; i < sampler.inputs.size() - 1; i++)
+            {
+                if ((time >= sampler.inputs[i]) && (time <= sampler.inputs[i + 1]))
+                {
+                    const float u =
+                        std::max(0.0f, time - sampler.inputs[i]) / (sampler.inputs[i + 1] - sampler.inputs[i]);
+                    if (u <= 1.0f)
+                    {
+                        switch (channel.path)
+                        {
+                        case pe::AnimationChannel::PathType::TRANSLATION:
+                        {
+                            cvec4 t = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
+                            channel.node->translation = vec3(t);
+                            break;
+                        }
+                        case pe::AnimationChannel::PathType::SCALE:
+                        {
+                            cvec4 s = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
+                            channel.node->scale = vec3(s);
+                            break;
+                        }
+                        case pe::AnimationChannel::PathType::ROTATION:
+                        {
+                            cquat q1(&sampler.outputsVec4[i].x);
+                            cquat q2(&sampler.outputsVec4[i + 1].x);
+                            channel.node->rotation = normalize(slerp(q1, q2, u));
+                            break;
+                        }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void UpdateNodeAsync(Model *model, Node *node, const Camera &camera)
+    {
+        if (node->mesh)
+        {
+            node->Update();
+
+            // async calls should be at least bigger than a number, else this will be slower
+            if (node->mesh->primitives.size() > 3)
+            {
+                std::vector<std::future<void>> futures(node->mesh->primitives.size());
+
+                for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
+                    futures[i] = std::async(std::launch::async, CullPrimitiveAsync, model, node->mesh, camera, i);
+
+                for (auto &f : futures)
+                    f.get();
+            }
+            else
+            {
+                for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
+                    CullPrimitiveAsync(model, node->mesh, camera, i);
+            }
+        }
+    }
+
+    void Model::update(pe::Camera &camera, double delta)
+    {
+        if (!render)
+            return;
+
+        if (script)
+        {
+#if 0
+            script->update(static_cast<float>(delta));
+            transform = script->getValue<Transform>("transform").matrix * transform;
+#endif
+        }
+
+        auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
+        transform = pe::transform(quat(radians(rot)), scale, pos);
+        ubo.matrix = transform;
+        ubo.previousMvp = ubo.mvp;
+        ubo.mvp = camera.viewProjection * transform;
+
+        uniformBuffer.buffer->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(UBOModel), uniformBufferOffset}, true);
+
+        if (!animations.empty())
+        {
+            animationTimer += static_cast<float>(delta);
+
+            if (animationTimer > animations[animationIndex].end)
+                animationTimer -= animations[animationIndex].end;
+
+            updateAnimation(animationIndex, animationTimer);
+        }
+
+        // async calls should be at least bigger than a number, else this will be slower
+        if (linearNodes.size() > 3)
+        {
+            std::vector<std::future<void>> futureNodes(linearNodes.size());
+
+            for (uint32_t i = 0; i < linearNodes.size(); i++)
+                futureNodes[i] = std::async(std::launch::async, UpdateNodeAsync, this, linearNodes[i], camera);
+
+            for (auto &f : futureNodes)
+                f.get();
+        }
+        else
+        {
+            for (auto &linearNode : linearNodes)
+                UpdateNodeAsync(this, linearNode, camera);
+        }
+    }
+
+    void Model::draw(uint16_t alphaMode)
+    {
+        if (!render || !Model::pipeline)
+            return;
+
+        auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
+        auto &uniformImages = RHII.uniformImages[uniformImagesIndex];
+
+        auto &cmd = *Model::commandBuffer;
+
+        cmd.BindPipeline(Model::pipeline);
+        cmd.BindVertexBuffer(vertexBuffer, 0);
+        cmd.BindIndexBuffer(indexBuffer, 0);
+
+        // TODO: Move higher
+        std::vector<Descriptor *> dsetHandles{
+            uniformBuffer.descriptor,
+            uniformImages.descriptor};
+        cmd.BindDescriptors(Model::pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
+
+        std::array<uint32_t, 4> data{};
+        data[0] = static_cast<uint32_t>(uniformBufferOffset / sizeof(mat4));
+
+        int culled = 0;
+        int total = 0;
+        for (auto &node : linearNodes)
+        {
+            if (node->mesh)
+            {
+                data[1] = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
+                for (auto &primitive : node->mesh->primitives)
+                {
+                    if (primitive.pbrMaterial.alphaMode == alphaMode && primitive.render)
+                    {
+                        total++;
+                        if (!primitive.cull)
+                        {
+                            data[2] = static_cast<uint32_t>(primitive.uniformBufferOffset / sizeof(mat4));
+                            data[3] = static_cast<uint32_t>(primitive.uniformImagesIndex);
+
+                            cmd.PushConstants(
+                                Model::pipeline,
+                                static_cast<uint32_t>(Model::pipeline->info.pushConstantStage),
+                                0,
+                                sizeof(data),
+                                data.data());
+
+                            cmd.DrawIndexed(
+                                primitive.indicesSize,
+                                1,
+                                node->mesh->indexOffset + primitive.indexOffset,
+                                node->mesh->vertexOffset + primitive.vertexOffset,
+                                0);
+                        }
+                        else
+                        {
+                            culled++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // std::cout << "RenderQueue: " << renderQueue << " Culled: " << culled << "/" << total << std::endl;
     }
 
     void Model::destroy()
@@ -984,10 +1012,17 @@ namespace pe
             delete script;
             script = nullptr;
         }
-        uniformBuffer->Destroy();
+
+        auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
+        uniformBuffer.buffer->Destroy();
+        uniformBuffer.layout->Destroy();
+
+        auto &uniformImages = RHII.uniformImages[uniformImagesIndex];
+        uniformImages.layout->Destroy();
+
         delete document;
         delete resourceReader;
-        Pipeline::getDescriptorSetLayoutModel()->Destroy();
+        // Pipeline::getLayoutGBufferVertex()->Destroy();
         for (auto &node : linearNodes)
         {
             if (node->mesh)
@@ -1004,9 +1039,6 @@ namespace pe
             delete skin;
             skin = {};
         }
-        // for (auto& texture : Mesh::uniqueTextures)
-        //	texture.second.destroy();
-        // Mesh::uniqueTextures.clear();
         vertexBuffer->Destroy();
         indexBuffer->Destroy();
     }

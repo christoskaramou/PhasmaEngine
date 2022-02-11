@@ -54,6 +54,9 @@ namespace pe
 
     Buffer::~Buffer()
     {
+        if (data)
+            Unmap();
+            
         if (m_handle)
         {
             vmaDestroyBuffer(RHII.allocator, m_handle, allocation);

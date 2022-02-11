@@ -53,6 +53,9 @@ namespace pe
         graphicsFamilyId = 0;
         computeFamilyId = 0;
         transferFamilyId = 0;
+
+        uniformBuffers = {};
+        uniformImages = {};
     }
 
     RHI::~RHI()

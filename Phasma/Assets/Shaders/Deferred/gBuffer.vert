@@ -23,8 +23,22 @@ SOFTWARE.
 #version 450
 #extension GL_EXT_nonuniform_qualifier : require
 
+const int MAX_DATA_SIZE = 4096; // TODO: calculate on init
 const int MAX_NUM_JOINTS = 128;
 
+// mat4 indexing
+layout(push_constant) uniform Constants {
+    uint modelIndex;
+    uint meshIndex;
+    uint primitiveIndex;
+    uint primitiveImageIndex;
+} constants;
+
+layout(set = 0, binding = 0) uniform UBO {
+    mat4 data[MAX_DATA_SIZE];
+} ubo;
+
+/*
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 matrix;
     mat4 previousMatrix;
@@ -32,7 +46,14 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
     float jointCount;
     float dummy[3];
 } uboMesh;
+*/
+#define meshMatrix ubo.data[constants.meshIndex]
+#define meshPreviousMatrix ubo.data[constants.meshIndex + 1]
+#define meshJointMatrix(x) ubo.data[constants.meshIndex + 2 + x]
+// TEMP: joint matrices removed
+#define meshJointCount 0 // ubo.data[constants.meshIndex + 3 + MAX_NUM_JOINTS][0][0];
 
+/*
 layout(set = 1, binding = 0) uniform UniformBufferObject2 {
     vec4 baseColorFactor;
     vec4 emissiveFactor;
@@ -43,12 +64,25 @@ layout(set = 1, binding = 0) uniform UniformBufferObject2 {
     float hasBones;
     float dummy[3];
 } uboPrimitive;
+*/
+#define primitiveBaseColorFactor ubo.data[constants.primitiveIndex][0]
+#define primitiveEmissiveFactor ubo.data[constants.primitiveIndex][1]
+#define primitiveMetallicFactor ubo.data[constants.primitiveIndex][2][0]
+#define primitiveRoughnessFactor ubo.data[constants.primitiveIndex][2][1]
+#define primitiveAlphaCutoff ubo.data[constants.primitiveIndex][2][2]
+#define primitiveOcclusionlMetalRoughness ubo.data[constants.primitiveIndex][2][3]
+#define primitiveHasBones ubo.data[constants.primitiveIndex][3][0]
 
+/*
 layout(set = 2, binding = 0) uniform UniformBufferObject3 {
     mat4 matrix;
     mat4 mvp;
     mat4 previousMvp;
 } uboModel;
+*/
+#define modelMatrix ubo.data[constants.modelIndex]
+#define modelMvp ubo.data[constants.modelIndex + 1]
+#define modelPreviousMvp ubo.data[constants.modelIndex + 2]
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec2 inTexCoords;
@@ -70,17 +104,17 @@ layout (location = 8) out vec4 positionWS;
 void main()
 {
     mat4 boneTransform = mat4(1.0);
-    if (uboMesh.jointCount > 0.0){
+    if (meshJointCount > 0.0){
         boneTransform  =
-        inWeights[0] * uboMesh.jointMatrix[inJoint[0]] +
-        inWeights[1] * uboMesh.jointMatrix[inJoint[1]] +
-        inWeights[2] * uboMesh.jointMatrix[inJoint[2]] +
-        inWeights[3] * uboMesh.jointMatrix[inJoint[3]];
+        inWeights[0] * meshJointMatrix(inJoint[0]) +
+        inWeights[1] * meshJointMatrix(inJoint[1]) +
+        inWeights[2] * meshJointMatrix(inJoint[2]) +
+        inWeights[3] * meshJointMatrix(inJoint[3]);
     }
 
     vec4 inPos = vec4(inPosition, 1.0f);
 
-    mat3 mNormal = transpose(inverse(mat3(uboModel.matrix * uboMesh.matrix * boneTransform)));
+    mat3 mNormal = transpose(inverse(mat3(modelMatrix * meshMatrix * boneTransform)));
 
     // UV
     outUV = inTexCoords;
@@ -92,15 +126,15 @@ void main()
     outColor = inColor;
 
     // Factors
-    baseColorFactor = uboPrimitive.baseColorFactor;
-    emissiveFactor = uboPrimitive.emissiveFactor.xyz;
-    metRoughAlphacutOcl = vec4(uboPrimitive.metallicFactor, uboPrimitive.roughnessFactor, uboPrimitive.alphaCutoff, uboPrimitive.occlusionlMetalRoughness);
+    baseColorFactor = primitiveBaseColorFactor;
+    emissiveFactor = primitiveEmissiveFactor.xyz;
+    metRoughAlphacutOcl = vec4(primitiveMetallicFactor, primitiveRoughnessFactor, primitiveAlphaCutoff, primitiveOcclusionlMetalRoughness);
 
-    positionWS = uboModel.matrix * uboMesh.matrix * boneTransform * inPos;
+    positionWS = modelMatrix * meshMatrix * boneTransform * inPos;
 
     // Velocity
-    positionCS = uboModel.mvp * uboMesh.matrix * boneTransform * inPos;// clip space
-    previousPositionCS = uboModel.previousMvp * uboMesh.previousMatrix * boneTransform * inPos;// clip space
+    positionCS = modelMvp * meshMatrix * boneTransform * inPos;// clip space
+    previousPositionCS = modelPreviousMvp * meshPreviousMatrix * boneTransform * inPos;// clip space
 
     gl_Position = positionCS;
 }

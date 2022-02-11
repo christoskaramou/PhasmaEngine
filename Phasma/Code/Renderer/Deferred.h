@@ -58,9 +58,9 @@ namespace pe
         } ubo;
         Buffer *uniform;
 
-        void batchStart(CommandBuffer *cmd, uint32_t imageIndex);
+        void BeginPass(CommandBuffer *cmd, uint32_t imageIndex);
 
-        static void batchEnd();
+        void EndPass();
 
         void createDeferredUniforms(std::map<std::string, Image *> &renderTargets);
 

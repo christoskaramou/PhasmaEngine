@@ -82,7 +82,7 @@ namespace pe
             spot.start = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
             spot.end = spot.start + normalize(vec4(rand(-1.f, 1.f), rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f));
         }
-        uniform->CopyRequest<Launch::Sync>({&lubo, sizeof(LightsUBO), 0});
+        uniform->CopyRequest<Launch::Sync>({&lubo, sizeof(LightsUBO), 0}, false);
     }
 
     void LightSystem::Update(double delta)
@@ -110,7 +110,7 @@ namespace pe
                                 offsetof(LightsUBO, pointLights));
         }
 
-        uniform->CopyRequest<Launch::AsyncDeferred>(ranges);
+        uniform->CopyRequest<Launch::AsyncDeferred>(ranges, false);
     }
 
     void LightSystem::Destroy()
