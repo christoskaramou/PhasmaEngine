@@ -25,7 +25,7 @@ SOFTWARE.
 namespace pe
 {
     // Parse includes recursively and return the full code
-    std::string ParseFileAndIncludes(const std::string &sourcePath)
+    std::string ShaderCache::ParseFileAndIncludes(const std::string &sourcePath)
     {
         if (!std::filesystem::exists(sourcePath))
             PE_ERROR("file does not exist!");
@@ -46,6 +46,9 @@ namespace pe
                 std::string includeFile = line.substr(line.find("\"") + 1, line.rfind("\"") - line.find("\"") - 1);
                 std::string includeFileFull = path.remove_filename().string() + includeFile;
 
+                if (std::find(m_includes.begin(), m_includes.end(), includeFileFull) == m_includes.end())
+                    m_includes.push_back(includeFileFull);
+
                 size_t posStart = code.find(line);
                 if (posStart != std::string::npos)
                 {
@@ -61,6 +64,8 @@ namespace pe
 
     void ShaderCache::Init(const std::string &sourcePath, const Hash& definesHash)
     {
+        m_includes = {};
+        
         m_sourcePath = sourcePath;
         m_code = ParseFileAndIncludes(m_sourcePath);
 

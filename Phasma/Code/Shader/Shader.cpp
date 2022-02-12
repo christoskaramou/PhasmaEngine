@@ -73,7 +73,7 @@ namespace pe
         delete include_result;
     }
 
-    Shader::Shader(const ShaderInfo& info)
+    Shader::Shader(const ShaderInfo &info)
     {
         std::string path = info.sourcePath;
         if (path.find(Path::Assets) == std::string::npos)
@@ -97,22 +97,24 @@ namespace pe
         if (m_cache.ShaderNeedsCompile())
         {
             shaderc::CompileOptions options;
-            
+
             options.SetIncluder(std::make_unique<FileIncluder>());
             options.SetOptimizationLevel(shaderc_optimization_level_performance);
 
             for (auto def : m_globalDefines)
                 AddDefine(def, options);
-                
+
             for (auto def : info.defines)
                 AddDefine(def, options);
 
-            //options.SetGenerateDebugInfo();
+            // Useful for debugging shaders
+            // options.SetGenerateDebugInfo();
 
-            CompileFileToAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options);
-            CompileAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options);
-            
-            m_cache.WriteSpvToFile(m_spirv);
+            if (CompileFileToAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options))
+            {
+                CompileAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options);
+                m_cache.WriteSpvToFile(m_spirv);
+            }
         }
         else
         {
@@ -122,13 +124,15 @@ namespace pe
         if (m_spirv.size() > 0)
             m_reflection.Init(this);
 
+        auto modifiedCallback = []()
+        { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
+
         // Watch the file for changes
-        if (FileWatcher::Get(path) == nullptr)
-        {
-            auto modifiedCallback = []()
-            { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
-            FileWatcher::Add(path, modifiedCallback);
-        }
+        FileWatcher::Add(m_cache.GetSourcePath(), modifiedCallback);
+
+        // Watch included files also
+        for (const std::string &included_file : m_cache.GetIncludes())
+            FileWatcher::Add(included_file, modifiedCallback);
     }
 
     Shader::~Shader()
@@ -165,7 +169,7 @@ namespace pe
         return {result.cbegin(), result.cend()};
     }
 
-    void Shader::CompileFileToAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options)
+    bool Shader::CompileFileToAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options)
     {
         if (m_cache.GetShaderCode().empty() || m_cache.GetSourcePath().empty())
             PE_ERROR("source file was empty");
@@ -176,14 +180,15 @@ namespace pe
         if (result.GetCompilationStatus() != shaderc_compilation_status_success)
         {
             std::cerr << result.GetErrorMessage();
-            m_cache.SetAssembly("");
-            return;
+            return false;
         }
 
         m_cache.SetAssembly({result.cbegin(), result.cend()});
+
+        return true;
     }
 
-    void Shader::CompileAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options)
+    bool Shader::CompileAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options)
     {
         if (m_cache.GetAssembly().empty())
             PE_ERROR("assembly was empty");
@@ -193,14 +198,15 @@ namespace pe
         if (result.GetCompilationStatus() != shaderc_compilation_status_success)
         {
             std::cerr << result.GetErrorMessage();
-            m_spirv = {};
-            return;
+            return false;
         }
 
         m_spirv = {result.cbegin(), result.cend()};
+
+        return true;
     }
 
-    void Shader::CompileFile(shaderc_shader_kind kind, shaderc::CompileOptions &options)
+    bool Shader::CompileFile(shaderc_shader_kind kind, shaderc::CompileOptions &options)
     {
         if (m_cache.GetShaderCode().empty() || m_cache.GetSourcePath().empty())
             PE_ERROR("source file was empty");
@@ -211,9 +217,11 @@ namespace pe
         if (module.GetCompilationStatus() != shaderc_compilation_status_success)
         {
             std::cerr << module.GetErrorMessage();
-            m_spirv = {};
+            return false;
         }
 
         m_spirv = {module.cbegin(), module.cend()};
+
+        return true;
     }
 }

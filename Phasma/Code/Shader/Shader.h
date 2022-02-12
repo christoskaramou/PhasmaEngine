@@ -110,11 +110,11 @@ namespace pe
     private:
         std::string PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions &options);
 
-        void CompileFileToAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options);
+        bool CompileFileToAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options);
 
-        void CompileAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options);
+        bool CompileAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options);
 
-        void CompileFile(shaderc_shader_kind kind, shaderc::CompileOptions &options);
+        bool CompileFile(shaderc_shader_kind kind, shaderc::CompileOptions &options);
 
         void AddDefine(Define &define, shaderc::CompileOptions &options);
 
