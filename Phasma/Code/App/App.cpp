@@ -32,7 +32,7 @@ SOFTWARE.
 
 namespace pe
 {
-    void App::Init()
+    App::App()
     {
         // freopen("log.txt", "w", stdout);
         // freopen("errors.txt", "w", stderr);
@@ -55,6 +55,14 @@ namespace pe
         frameTimer = &FrameTimer::Instance();
     }
 
+    App::~App()
+    {
+        FileWatcher::Clear();
+        FileWatcher::Stop();
+        context->DestroySystems();
+        window->Destroy();
+    }
+
     void App::Run()
     {
         while (true)
@@ -75,13 +83,5 @@ namespace pe
             frameTimer->ThreadSleep(1.0 / static_cast<double>(GUI::fps) - frameTimer->Count());
             frameTimer->Tick();
         }
-    }
-
-    void App::Shutdown()
-    {
-        FileWatcher::Clear();
-        FileWatcher::Stop();
-        context->DestroySystems();
-        window->Destroy();
     }
 }

@@ -31,9 +31,11 @@ namespace pe
     class App
     {
     public:
-        void Init();
+        App();
+
+        ~App();
+        
         void Run();
-        void Shutdown();
 
     private:
         Context *context = nullptr;
