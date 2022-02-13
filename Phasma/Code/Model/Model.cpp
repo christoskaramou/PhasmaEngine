@@ -365,6 +365,7 @@ namespace pe
             if (node->skinIndex > -1)
             {
                 node->skin = skins[node->skinIndex];
+                node->mesh->meshData.jointMatrices.resize(node->skin->joints.size());
             }
         }
     }
@@ -597,18 +598,14 @@ namespace pe
 
             // Find skeleton root node
             if (!source.skeletonId.empty())
-            {
                 newSkin->skeletonRoot = getNode(linearNodes, document->nodes.GetIndex(source.skeletonId));
-            }
 
             // Find joint nodes
             for (auto &jointID : source.jointIds)
             {
                 Node *node = !jointID.empty() ? getNode(linearNodes, document->nodes.GetIndex(jointID)) : nullptr;
                 if (node)
-                {
                     newSkin->joints.push_back(node);
-                }
             }
 
             // Get inverse bind matrices
@@ -802,7 +799,7 @@ namespace pe
 
     void CullPrimitiveAsync(Model *model, Mesh *mesh, const Camera &camera, uint32_t index)
     {
-        mat4 trans = model->transform * mesh->ubo.matrix;
+        mat4 trans = model->transform * mesh->meshData.matrix;
 
         vec3 point = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
         float range = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale
@@ -960,7 +957,7 @@ namespace pe
             uniformImages.descriptor};
         cmd.BindDescriptors(Model::pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
 
-        std::array<uint32_t, 4> data{};
+        std::array<uint32_t, 5> data{};
         data[0] = static_cast<uint32_t>(uniformBufferOffset / sizeof(mat4));
 
         int culled = 0;
@@ -970,6 +967,8 @@ namespace pe
             if (node->mesh)
             {
                 data[1] = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
+                data[2] = static_cast<uint32_t>(node->mesh->meshData.jointMatrices.size());
+
                 for (auto &primitive : node->mesh->primitives)
                 {
                     if (primitive.pbrMaterial.alphaMode == alphaMode && primitive.render)
@@ -977,8 +976,8 @@ namespace pe
                         total++;
                         if (!primitive.cull)
                         {
-                            data[2] = static_cast<uint32_t>(primitive.uniformBufferOffset / sizeof(mat4));
-                            data[3] = static_cast<uint32_t>(primitive.uniformImagesIndex);
+                            data[3] = static_cast<uint32_t>(primitive.uniformBufferOffset / sizeof(mat4));
+                            data[4] = static_cast<uint32_t>(primitive.uniformImagesIndex);
 
                             cmd.PushConstants(
                                 Model::pipeline,

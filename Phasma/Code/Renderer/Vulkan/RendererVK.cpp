@@ -312,8 +312,9 @@ namespace pe
                     {
                         if (node->mesh)
                         {
-                            data.cascade = shadows.cascades[i] * model.ubo.matrix * node->mesh->ubo.matrix;
+                            data.cascade = shadows.cascades[i] * model.ubo.matrix * node->mesh->meshData.matrix;
                             data.meshIndex = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
+                            data.meshJointCount = static_cast<uint32_t>(node->mesh->meshData.jointMatrices.size());
 
                             cmd.PushConstants(shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowPushConstData), &data);
                             for (auto &primitive : node->mesh->primitives)

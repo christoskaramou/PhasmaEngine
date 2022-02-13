@@ -34,6 +34,7 @@ namespace pe
         mat4 cascade;
         uint32_t modelIndex;
         uint32_t meshIndex;
+        uint32_t meshJointCount;
         uint32_t primitiveIndex;
     };
 

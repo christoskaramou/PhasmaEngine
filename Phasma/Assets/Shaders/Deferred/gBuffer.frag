@@ -29,6 +29,7 @@ SOFTWARE.
 layout(push_constant) uniform Constants {
     uint modelIndex;
     uint meshIndex;
+    uint meshJointCount;
     uint primitiveIndex;
     uint primitiveImageIndex;
 } constants;

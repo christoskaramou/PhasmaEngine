@@ -93,14 +93,12 @@ namespace pe
         bool render = true, cull = false;
         std::string name;
 
-        struct UBOMesh
+        struct MeshData
         {
             mat4 matrix;
             mat4 previousMatrix;
-            mat4 jointMatrix[MAX_NUM_JOINTS];
-            float jointcount{0};
-            float dummy[3];
-        } ubo;
+            std::vector<mat4> jointMatrices{};
+        } meshData;
 
         static std::map<std::string, Image *> uniqueTextures;
         std::vector<Primitive> primitives{};

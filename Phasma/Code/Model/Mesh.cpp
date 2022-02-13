@@ -57,8 +57,7 @@ namespace pe
         this->uniformBufferIndex = uniformBufferIndex;
         auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
         uniformBufferOffset = uniformBuffer.size;
-        // TEMP: joint matrices removed
-        uniformBuffer.size += sizeof(mat4) * 2; // sizeof(UBOMesh);
+        uniformBuffer.size += sizeof(mat4) * (2 + meshData.jointMatrices.size());
 
         for (auto &primitive : primitives)
         {

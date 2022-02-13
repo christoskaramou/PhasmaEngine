@@ -37,6 +37,7 @@ layout(push_constant) uniform Constants {
     mat4 viewProjection;
     uint modelIndex;
     uint meshIndex;
+    uint meshJointCount;
     uint primitiveIndex;
 } constants;
 
@@ -45,12 +46,10 @@ layout(set = 0, binding = 0) uniform UBO {
 } ubo;
 
 #define meshJointMatrix(x) ubo.data[constants.meshIndex + 2 + x]
-// TEMP: joint matrices removed
-#define meshJointCount 0 // ubo.data[constants.meshIndex + 3 + MAX_NUM_JOINTS][0][0];
 
 void main() {
     mat4 boneTransform = mat4(1.0);
-    if (meshJointCount > 0.0){
+    if (constants.meshJointCount > 0.0){
         boneTransform  =
         inWeights[0] * meshJointMatrix(inJoint[0]) +
         inWeights[1] * meshJointMatrix(inJoint[1]) +

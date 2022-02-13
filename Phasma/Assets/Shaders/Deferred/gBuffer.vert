@@ -30,6 +30,7 @@ const int MAX_NUM_JOINTS = 128;
 layout(push_constant) uniform Constants {
     uint modelIndex;
     uint meshIndex;
+    uint meshJointCount;
     uint primitiveIndex;
     uint primitiveImageIndex;
 } constants;
@@ -41,8 +42,6 @@ layout(set = 0, binding = 0) uniform UBO {
 #define meshMatrix ubo.data[constants.meshIndex]
 #define meshPreviousMatrix ubo.data[constants.meshIndex + 1]
 #define meshJointMatrix(x) ubo.data[constants.meshIndex + 2 + x]
-// TEMP: joint matrices removed
-#define meshJointCount 0 // ubo.data[constants.meshIndex + 3 + MAX_NUM_JOINTS][0][0];
 
 #define primitiveBaseColorFactor ubo.data[constants.primitiveIndex][0]
 #define primitiveEmissiveFactor ubo.data[constants.primitiveIndex][1]
@@ -76,7 +75,7 @@ layout (location = 8) out vec4 positionWS;
 void main()
 {
     mat4 boneTransform = mat4(1.0);
-    if (meshJointCount > 0.0){
+    if (constants.meshJointCount > 0.0){
         boneTransform  =
         inWeights[0] * meshJointMatrix(inJoint[0]) +
         inWeights[1] * meshJointMatrix(inJoint[1]) +

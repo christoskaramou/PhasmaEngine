@@ -294,7 +294,7 @@ namespace pe
         info.width = renderTargets["albedo"]->width_f;
         info.height = renderTargets["albedo"]->height_f;
         info.pushConstantStage = PushConstantStage::VertexAndFragment;
-        info.pushConstantSize = 4 * sizeof(uint32_t);
+        info.pushConstantSize = 5 * sizeof(uint32_t);
         info.cullMode = CullMode::Front;
         info.colorBlendAttachments = {
             renderTargets["normal"]->blendAttachment,

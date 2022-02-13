@@ -57,7 +57,7 @@ namespace pe
 
     void CalculateJointMatrixAsync(Mesh *mesh, Skin *skin, const mat4 &inverseTransform, const size_t index)
     {
-        mesh->ubo.jointMatrix[index] =
+        mesh->meshData.jointMatrices[index] =
             inverseTransform * skin->joints[index]->GetMatrix() * skin->inverseBindMatrices[index];
     }
 
@@ -65,13 +65,15 @@ namespace pe
     {
         if (mesh)
         {
-            mesh->ubo.previousMatrix = mesh->ubo.matrix;
-            mesh->ubo.matrix = GetMatrix();
+            auto &uniformBuffer = RHII.uniformBuffers[mesh->uniformBufferIndex];
+
+            mesh->meshData.previousMatrix = mesh->meshData.matrix;
+            mesh->meshData.matrix = GetMatrix();
 
             if (skin)
             {
                 // Update joint matrices
-                mat4 inverseTransform = inverse(mesh->ubo.matrix);
+                mat4 inverseTransform = inverse(mesh->meshData.matrix);
                 const size_t numJoints = std::min(static_cast<uint32_t>(skin->joints.size()), MAX_NUM_JOINTS);
 
                 // async calls should be at least bigger than a number, else this will be slower
@@ -92,16 +94,16 @@ namespace pe
                         CalculateJointMatrixAsync(mesh, skin, inverseTransform, i);
                 }
 
-                mesh->ubo.jointcount = static_cast<float>(numJoints);
-                
-                auto &uniformBuffer = RHII.uniformBuffers[mesh->uniformBufferIndex];
-                uniformBuffer.buffer->CopyRequest<Launch::AsyncDeferred>({&mesh->ubo, sizeof(mesh->ubo), mesh->uniformBufferOffset}, true);
+                uniformBuffer.buffer->CopyRequest<Launch::AsyncDeferred>({mesh->meshData.jointMatrices.data(),
+                                                                          mesh->meshData.jointMatrices.size() * sizeof(mat4),
+                                                                          mesh->uniformBufferOffset + 2 * sizeof(mat4)},
+                                                                         true);
             }
-            else
-            {
-                auto &uniformBuffer = RHII.uniformBuffers[mesh->uniformBufferIndex];
-                uniformBuffer.buffer->CopyRequest<Launch::AsyncDeferred>({&mesh->ubo, 2 * sizeof(mat4), mesh->uniformBufferOffset}, true);
-            }
+
+            uniformBuffer.buffer->CopyRequest<Launch::AsyncDeferred>({&mesh->meshData,
+                                                                      2 * sizeof(mat4),
+                                                                      mesh->uniformBufferOffset},
+                                                                     true);
         }
     }
 }
