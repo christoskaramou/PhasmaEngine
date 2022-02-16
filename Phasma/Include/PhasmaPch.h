@@ -78,3 +78,5 @@ SOFTWARE.
 #include "ECS/System.h"
 #include "ECS/Entity.h"
 #include "ECS/Context.h"
+
+#define STBI_MSC_SECURE_CRT
