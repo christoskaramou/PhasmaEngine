@@ -27,7 +27,7 @@ SOFTWARE.
 
 namespace pe
 {
-    Buffer::Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties)
+    Buffer::Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags properties)
         : size(size), data(nullptr)
     {
         VkBufferCreateInfo bufferInfo{};
@@ -36,12 +36,9 @@ namespace pe
         bufferInfo.usage = usage;
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        // TODO: Rework this to figure out proper memory type
         VmaAllocationCreateInfo allocationCreateInfo = {};
-        allocationCreateInfo.usage = (VmaMemoryUsage)properties;
-        // usage & VK_BUFFER_USAGE_TRANSFER_SRC_BIT ? VMA_MEMORY_USAGE_CPU_ONLY :
-        // properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT ? VMA_MEMORY_USAGE_GPU_ONLY :
-        // VMA_MEMORY_USAGE_CPU_TO_GPU;
+        allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocationCreateInfo.flags = (VmaAllocationCreateFlags)properties;
         allocationCreateInfo.preferredFlags = 0;
 
         VkBuffer bufferVK;

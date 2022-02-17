@@ -54,7 +54,7 @@ namespace pe
         buffer = Buffer::Create(
             sizeof(vec4),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
         buffer->Map();
         buffer->CopyData(&color, sizeof(vec4));
         buffer->Flush();
@@ -109,7 +109,7 @@ namespace pe
         uniform = Buffer::Create(
             sizeof(vec4),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
         uniform->Map();
         uniform->CopyData(&color);
         uniform->Flush();
@@ -118,7 +118,7 @@ namespace pe
         storage = Buffer::Create(
             sizeof(vec4),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
         storage->Map();
         storage->CopyData(&color);
         storage->Flush();

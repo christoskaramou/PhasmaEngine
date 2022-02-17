@@ -151,7 +151,7 @@ namespace pe
         uniformBuffer = Buffer::Create(
             SHADOWMAP_CASCADES * sizeof(mat4),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
         uniformBuffer->Map();
         uniformBuffer->Zero();
         uniformBuffer->Flush();

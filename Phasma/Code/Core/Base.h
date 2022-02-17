@@ -277,6 +277,7 @@ namespace pe
     using PipelineStageFlags = uint32_t;
     using AccessFlags = uint32_t;
     using MemoryPropertyFlags = uint32_t;
+    using AllocationCreateFlags = uint32_t;
     using BufferUsageFlags = uint32_t;
     using ImageCreateFlags = uint32_t;
     using ImageAspectFlags = uint32_t;

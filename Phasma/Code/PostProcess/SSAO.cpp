@@ -52,8 +52,7 @@ namespace pe
         UB_Kernel = Buffer::Create(
             sizeof(vec4) * 16,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU
-        );
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
         UB_Kernel->Map();
         UB_Kernel->CopyData(kernel.data());
         UB_Kernel->Flush();
@@ -68,8 +67,7 @@ namespace pe
         Buffer *staging = Buffer::Create(
             bufSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_MEMORY_USAGE_CPU_ONLY
-        );
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
         staging->Map();
         staging->CopyData(noise.data());
         staging->Flush();
@@ -105,8 +103,7 @@ namespace pe
         UB_PVM = Buffer::Create(
             3 * sizeof(mat4),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU
-        );
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
         UB_PVM->Map();
         UB_PVM->Zero();
         UB_PVM->Flush();

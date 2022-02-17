@@ -71,7 +71,7 @@ namespace pe
         uniform = Buffer::Create(
             sizeof(ubo),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
         uniform->Map();
         uniform->Zero();
         uniform->Flush();
@@ -101,7 +101,7 @@ namespace pe
             Buffer *staging = Buffer::Create(
                 imageSize,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VMA_MEMORY_USAGE_CPU_ONLY);
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
             staging->Map();
             staging->CopyData(pixels);
             staging->Flush();

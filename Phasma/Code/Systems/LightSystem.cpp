@@ -55,7 +55,7 @@ namespace pe
         uniform = Buffer::Create(
             sizeof(LightsUBO),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
         uniform->Map();
         uniform->Zero();
         uniform->Flush();

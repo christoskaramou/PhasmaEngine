@@ -50,8 +50,7 @@ namespace pe
         UBReflection = Buffer::Create(
             4 * sizeof(mat4),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU
-        );
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
         UBReflection->Map();
         UBReflection->Zero();
         UBReflection->Flush();

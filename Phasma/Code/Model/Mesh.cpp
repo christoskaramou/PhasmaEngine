@@ -141,7 +141,7 @@ namespace pe
             Buffer *staging = Buffer::Create(
                 imageSize,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VMA_MEMORY_USAGE_CPU_ONLY);
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
             staging->Map();
             staging->CopyData(pixels);
             staging->Flush();

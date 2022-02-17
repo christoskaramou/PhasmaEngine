@@ -43,7 +43,7 @@ namespace pe
     class Buffer : public IHandle<Buffer, BufferHandle>
     {
     public:
-        Buffer(size_t size, BufferUsageFlags usage, MemoryPropertyFlags properties);
+        Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags properties = 0);
 
         ~Buffer();
 

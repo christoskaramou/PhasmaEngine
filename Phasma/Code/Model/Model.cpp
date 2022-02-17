@@ -647,19 +647,21 @@ namespace pe
         auto size = sizeof(Vertex) * numberOfVertices;
         vertexBuffer = Buffer::Create(
             size,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VMA_MEMORY_USAGE_GPU_ONLY);
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
         // Staging buffer
-        Buffer staging(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        Buffer *staging = Buffer::Create(
+            size,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
-        staging.Map();
-        staging.CopyData(vertices.data());
-        staging.Flush();
-        staging.Unmap();
+        staging->Map();
+        staging->CopyData(vertices.data());
+        staging->Flush();
+        staging->Unmap();
 
-        vertexBuffer->CopyBuffer(&staging, staging.Size());
-        staging.Destroy();
+        vertexBuffer->CopyBuffer(staging, staging->Size());
+        staging->Destroy();
     }
 
     void Model::createIndexBuffer()
@@ -689,14 +691,13 @@ namespace pe
         auto size = sizeof(uint32_t) * numberOfIndices;
         indexBuffer = Buffer::Create(
             size,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            VMA_MEMORY_USAGE_GPU_ONLY);
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
         // Staging buffer
         Buffer *staging = Buffer::Create(
             size,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_MEMORY_USAGE_CPU_ONLY);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
         staging->Map();
         staging->CopyData(indices.data());
         staging->Flush();
@@ -727,7 +728,7 @@ namespace pe
         uniformBuffer.buffer = Buffer::Create(
             uniformBuffer.size,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
     }
 
     void Model::createDescriptorSets()

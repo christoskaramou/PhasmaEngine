@@ -38,14 +38,13 @@ namespace pe
     {
         vertexBuffer = Buffer::Create(
             sizeof(float) * vertices.size(),
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VMA_MEMORY_USAGE_GPU_ONLY);
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
         // Staging buffer
         Buffer *staging = Buffer::Create(
             sizeof(float) * vertices.size(),
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_MEMORY_USAGE_CPU_ONLY);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
         staging->Map();
         staging->CopyData(vertices.data());
         staging->Flush();
@@ -60,7 +59,7 @@ namespace pe
         uniformBuffer = Buffer::Create(
             size,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_MEMORY_USAGE_CPU_TO_GPU);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
         uniformBuffer->Map();
         uniformBuffer->Zero();
         uniformBuffer->Flush();
@@ -81,7 +80,7 @@ namespace pe
         Buffer *staging = Buffer::Create(
             imageSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_MEMORY_USAGE_CPU_ONLY);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
         staging->Map();
         staging->CopyData(pixels);
         staging->Flush();
