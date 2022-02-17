@@ -128,7 +128,7 @@ namespace pe
         imageInfoVK.initialLayout = (VkImageLayout)imageInfo.initialLayout;
 
         VmaAllocationCreateInfo allocationCreateInfo = {};
-        allocationCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
         VkImage imageVK;
         VmaAllocation allocationVK;
