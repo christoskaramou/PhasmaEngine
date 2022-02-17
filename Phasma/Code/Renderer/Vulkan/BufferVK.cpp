@@ -27,7 +27,7 @@ SOFTWARE.
 
 namespace pe
 {
-    Buffer::Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags properties)
+    Buffer::Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags createFlags)
         : size(size), data(nullptr)
     {
         VkBufferCreateInfo bufferInfo{};
@@ -36,10 +36,9 @@ namespace pe
         bufferInfo.usage = usage;
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        VmaAllocationCreateInfo allocationCreateInfo = {};
+        VmaAllocationCreateInfo allocationCreateInfo{};
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-        allocationCreateInfo.flags = (VmaAllocationCreateFlags)properties;
-        allocationCreateInfo.preferredFlags = 0;
+        allocationCreateInfo.flags = (VmaAllocationCreateFlags)createFlags;
 
         VkBuffer bufferVK;
         VmaAllocation allocationVK;
