@@ -92,14 +92,16 @@ namespace pe
                 Map();
 
                 for (auto &range : ranges)
-                {
                     CopyData(range.data, range.size, range.offset);
-                    Flush(range.offset, range.size);
-                }
 
                 // Keep the buffer mapped if it is persistent
                 if (!isPersistent)
+                {
+                    for (auto &range : ranges)
+                        Flush(range.offset, range.size);
+                        
                     Unmap();
+                }
             };
             Queue<launch>::Request(lambda);
         }

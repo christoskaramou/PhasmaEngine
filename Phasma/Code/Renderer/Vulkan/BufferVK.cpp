@@ -111,7 +111,7 @@ namespace pe
         if (!data)
             return;
 
-        vmaFlushAllocation(RHII.allocator, allocation, offset, flushSize);
+        vmaFlushAllocation(RHII.allocator, allocation, offset, flushSize > 0 ? flushSize : size);
     }
 
     size_t Buffer::Size()
