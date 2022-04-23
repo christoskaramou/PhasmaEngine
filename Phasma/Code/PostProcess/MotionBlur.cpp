@@ -105,13 +105,11 @@ namespace pe
 
     void MotionBlur::draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        const vec4 values
-                {
-                        1.f / static_cast<float>(FrameTimer::Instance().delta),
-                        sin(static_cast<float>(FrameTimer::Instance().time) * 0.125f),
-                        GUI::motionBlur_strength,
-                        0.f
-                };
+        const vec4 values{
+            1.f / static_cast<float>(FrameTimer::Instance().GetDelta()),
+            0.f, // sin(static_cast<float>(FrameTimer::Instance().Count()) * 0.125f),
+            GUI::motionBlur_strength,
+            0.f};
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->PushConstants(pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(vec4), &values);
@@ -172,7 +170,7 @@ namespace pe
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
-        
+
         info.pVertShader->Destroy();
         info.pFragShader->Destroy();
     }

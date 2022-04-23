@@ -234,8 +234,8 @@ namespace pe
         ImGui::Separator();
         ImGui::Separator();
 
-        const FrameTimer &frameTimer = FrameTimer::Instance();
-        ImGui::Text("CPU Total: %.3f ms", static_cast<float>(frameTimer.delta * 1000.0));
+        FrameTimer &frameTimer = FrameTimer::Instance();
+        ImGui::Text("CPU Total: %.3f ms", static_cast<float>(frameTimer.GetDelta() * 1000.0));
         ImGui::Indent(16.0f);
         ImGui::Text("Draw wait %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[1])));
         ImGui::Text("Updates Total: %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[0])));

@@ -58,17 +58,18 @@ namespace pe
 
     FrameTimer::FrameTimer() : Timer()
     {
-        m_duration = {};
-        delta = 0.0f;
-        time = 0.0f;
+        m_delta = {};
         timestamps.resize(22);
     }
 
     void FrameTimer::Tick()
     {
-        m_duration = std::chrono::high_resolution_clock::now() - m_start;
-        delta = m_duration.count();
-        time += delta;
+        m_delta = std::chrono::high_resolution_clock::now() - m_start;
+    }
+
+    double FrameTimer::GetDelta()
+    {
+        return m_delta.count();
     }
 
     GPUTimer::GPUTimer()

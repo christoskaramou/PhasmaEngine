@@ -72,12 +72,12 @@ namespace pe
         {
             frameTimer->Start();
 
-            if (!window->ProcessEvents(frameTimer->delta))
+            if (!window->ProcessEvents(frameTimer->GetDelta()))
                 break;
 
             if (!window->isMinimized())
             {
-                context->UpdateSystems(frameTimer->delta);
+                context->UpdateSystems(frameTimer->GetDelta());
                 Queue<Launch::All>::ExecuteRequests();
                 frameTimer->timestamps[0] = static_cast<float>(frameTimer->Count());
                 context->DrawSystems();

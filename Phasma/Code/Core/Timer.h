@@ -60,12 +60,12 @@ namespace pe
     public:
         void Tick();
 
-        double delta;
-        double time;
+        double GetDelta();
+
         std::vector<double> timestamps{};
 
     private:
-        std::chrono::duration<double> m_duration{};
+        std::chrono::duration<double> m_delta{};
 
     public:
         static FrameTimer &Instance()
