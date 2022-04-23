@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "Code/App/App.h"
-
 #include "Window/Window.h"
 #include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"
@@ -40,7 +39,7 @@ namespace pe
         context = CONTEXT;
         context->CreateSystem<EventSystem>();
 
-        window = Window::Create(50, 50, 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+        window = Window::Create(50, 50, 1280, 720, SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
         RHII.Init(window->Handle()); // TODO: Remove this from here (was in Renderer)
 
         context->CreateSystem<CameraSystem>();

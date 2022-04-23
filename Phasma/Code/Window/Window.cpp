@@ -66,14 +66,13 @@ namespace pe
 
     bool Window::ProcessEvents(double delta)
     {
-        if (Console::close_app) return false;
+        if (Console::close_app)
+            return false;
 
         EventSystem *eventSystem = CONTEXT->GetSystem<EventSystem>();
         RendererSystem *renderer = CONTEXT->GetSystem<RendererSystem>();
         CameraSystem *cameraSystem = CONTEXT->GetSystem<CameraSystem>();
         Camera *camera_main = cameraSystem->GetCamera(0);
-
-        bool combineDirections = false;
 
         ImGuiIO &io = ImGui::GetIO();
 
@@ -87,10 +86,14 @@ namespace pe
 
             if (event.type == SDL_MOUSEWHEEL)
             {
-                if (event.wheel.x > 0) io.MouseWheelH += 1;
-                if (event.wheel.x < 0) io.MouseWheelH -= 1;
-                if (event.wheel.y > 0) io.MouseWheel += 1;
-                if (event.wheel.y < 0) io.MouseWheel -= 1;
+                if (event.wheel.x > 0)
+                    io.MouseWheelH += 1;
+                if (event.wheel.x < 0)
+                    io.MouseWheelH -= 1;
+                if (event.wheel.y > 0)
+                    io.MouseWheel += 1;
+                if (event.wheel.y < 0)
+                    io.MouseWheel -= 1;
             }
 
             if (event.type == SDL_KEYDOWN)
@@ -143,33 +146,32 @@ namespace pe
         if (io.KeysDown[SDL_SCANCODE_ESCAPE])
         {
             const SDL_MessageBoxButtonData buttons[] = {
-                    {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "cancel"},
-                    {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes"}
-            };
+                {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "cancel"},
+                {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes"}};
             const SDL_MessageBoxColorScheme colorScheme = {
-                    {{255, 0, 0}, {0, 255, 0}, {255, 255, 0}, {0, 0, 255}, {255, 0, 255}}
-            };
+                {{255, 0, 0}, {0, 255, 0}, {255, 255, 0}, {0, 0, 255}, {255, 0, 255}}};
             const SDL_MessageBoxData messageboxdata = {
-                    SDL_MESSAGEBOX_INFORMATION, nullptr, "Exit", "Are you sure you want to exit?",
-                    SDL_arraysize(buttons), buttons, &colorScheme
-            };
+                SDL_MESSAGEBOX_INFORMATION, nullptr, "Exit", "Are you sure you want to exit?",
+                SDL_arraysize(buttons), buttons, &colorScheme};
             int buttonid;
             SDL_ShowMessageBox(&messageboxdata, &buttonid);
             if (buttonid == 1)
                 return false;
         }
 
+        float velocity = GUI::cameraSpeed * static_cast<float>(delta);
         if ((io.KeysDown[SDL_SCANCODE_W] || io.KeysDown[SDL_SCANCODE_S]) &&
             (io.KeysDown[SDL_SCANCODE_A] || io.KeysDown[SDL_SCANCODE_D]))
-        {
-            combineDirections = true;
-        }
-        const float velocity = combineDirections ? GUI::cameraSpeed * static_cast<float>(delta) * 0.707f :
-                               GUI::cameraSpeed * static_cast<float>(delta);
-        if (io.KeysDown[SDL_SCANCODE_W]) camera_main->Move(Camera::RelativeDirection::FORWARD, velocity);
-        if (io.KeysDown[SDL_SCANCODE_S]) camera_main->Move(Camera::RelativeDirection::BACKWARD, velocity);
-        if (io.KeysDown[SDL_SCANCODE_A]) camera_main->Move(Camera::RelativeDirection::LEFT, velocity);
-        if (io.KeysDown[SDL_SCANCODE_D]) camera_main->Move(Camera::RelativeDirection::RIGHT, velocity);
+            velocity *= 0.707f;
+
+        if (io.KeysDown[SDL_SCANCODE_W])
+            camera_main->Move(Camera::RelativeDirection::FORWARD, velocity);
+        if (io.KeysDown[SDL_SCANCODE_S])
+            camera_main->Move(Camera::RelativeDirection::BACKWARD, velocity);
+        if (io.KeysDown[SDL_SCANCODE_A])
+            camera_main->Move(Camera::RelativeDirection::LEFT, velocity);
+        if (io.KeysDown[SDL_SCANCODE_D])
+            camera_main->Move(Camera::RelativeDirection::RIGHT, velocity);
 
         if (eventSystem->PollEvent(EventType::CompileShaders))
         {
@@ -181,7 +183,7 @@ namespace pe
             if (!isMinimized())
             {
                 int w, h;
-                SDL_GL_GetDrawableSize(m_handle, &w, &h);
+                SDL_Vulkan_GetDrawableSize(m_handle, &w, &h);
                 renderer->ResizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
             }
         }

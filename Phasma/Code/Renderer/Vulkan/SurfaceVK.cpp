@@ -36,7 +36,7 @@ namespace pe
         m_handle = surfaceVK;
 
         int w, h;
-        SDL_GL_GetDrawableSize(window, &w, &h);
+        SDL_Vulkan_GetDrawableSize(window, &w, &h);
 
         actualExtent = Rect2D{0, 0, w, h};
     }

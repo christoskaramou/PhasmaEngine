@@ -42,7 +42,7 @@ namespace pe
         farPlane = 100.0f;
         FOV = radians(87.0f);
         speed = 0.35f;
-        rotationSpeed = 0.05f;
+        rotationSpeed = radians(2.864f);
 
         frustum.resize(6);
 

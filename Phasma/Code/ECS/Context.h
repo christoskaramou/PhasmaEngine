@@ -100,21 +100,24 @@ namespace pe
     template <class T, class... Params>
     inline T *Context::CreateSystem(Params &&...params)
     {
-        if (!HasSystem<T>())
+        size_t id = GetTypeID<T>();
+
+        if (HasSystem<T>())
         {
-            size_t id = GetTypeID<T>();
-            m_systems[id] = std::make_shared<T>(std::forward<Params>(params)...);
-            m_systems[id]->SetEnabled(true);
-            m_systems[id]->Init();
-
-            if (std::is_base_of<IDrawSystem, T>::value)
-                m_drawSystems[id] = static_cast<IDrawSystem *>(m_systems[id].get());
-
             return static_cast<T *>(m_systems[id].get());
         }
         else
         {
-            return nullptr;
+            m_systems[id] = std::make_shared<T>(std::forward<Params>(params)...);
+
+            ISystem *system = m_systems[id].get();
+            system->SetEnabled(true);
+            system->Init();
+
+            if (std::is_base_of<IDrawSystem, T>::value)
+                m_drawSystems[id] = static_cast<IDrawSystem *>(system);
+
+            return static_cast<T *>(system);
         }
     }
 
@@ -131,6 +134,10 @@ namespace pe
     inline void Context::RemoveSystem()
     {
         if (HasSystem<T>())
-            m_systems.erase(GetTypeID<T>());
+        {
+            size_t id = GetTypeID<T>();
+            m_systems[id]->Destroy();
+            m_systems.erase(id);
+        }
     }
 }

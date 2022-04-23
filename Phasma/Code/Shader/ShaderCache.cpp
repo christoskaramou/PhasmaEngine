@@ -106,7 +106,7 @@ namespace pe
 
         FileSystem file(m_tempFilePath, std::ios::out | std::ios::trunc | std::ios::binary);
         if (!file.IsOpen())
-            return;
+            PE_ERROR("failed to open file!");
 
         file.Write(reinterpret_cast<const char *>(spirv.data()), spirv.size() * sizeof(uint32_t));
     }

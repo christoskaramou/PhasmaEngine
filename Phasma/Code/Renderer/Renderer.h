@@ -80,8 +80,7 @@ namespace pe
 
         ~Renderer();
 
-        RenderArea &GetRenderArea()
-        { return renderArea; }
+        RenderArea &GetRenderArea() { return renderArea; }
 
         void AddRenderTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags = 0);
 
