@@ -39,7 +39,11 @@ namespace pe
         context = CONTEXT;
         context->CreateSystem<EventSystem>();
 
-        window = Window::Create(50, 50, 1280, 720, SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+        int flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
+    #if PE_VULKAN
+        flags |= SDL_WINDOW_VULKAN;
+    #endif
+        window = Window::Create(50, 50, 1280, 720, flags);
         RHII.Init(window->Handle()); // TODO: Remove this from here (was in Renderer)
 
         context->CreateSystem<CameraSystem>();
