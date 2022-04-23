@@ -39,7 +39,7 @@ namespace pe
         context = CONTEXT;
         context->CreateSystem<EventSystem>();
 
-        int flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
+        uint32_t flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
     #if PE_VULKAN
         flags |= SDL_WINDOW_VULKAN;
     #endif
