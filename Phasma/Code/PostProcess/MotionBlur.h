@@ -58,8 +58,6 @@ namespace pe
 
         void destroy();
 
-        mat4 motionBlurInput[4];
-        Buffer *UBmotionBlur;
         std::vector<FrameBuffer *> framebuffers{};
         Pipeline *pipeline;
         RenderPass *renderPass;

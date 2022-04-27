@@ -69,23 +69,13 @@ namespace pe
 
     void MotionBlur::createMotionBlurUniforms(std::map<std::string, Image *> &renderTargets)
     {
-        auto size = 4 * sizeof(mat4);
-        UBmotionBlur = Buffer::Create(
-            size,
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
-        UBmotionBlur->Map();
-        UBmotionBlur->Zero();
-        UBmotionBlur->Flush();
-        UBmotionBlur->Unmap();
-
         DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutMotionBlur());
         updateDescriptorSets(renderTargets);
     }
 
     void MotionBlur::updateDescriptorSets(std::map<std::string, Image *> &renderTargets)
     {
-        std::array<DescriptorUpdateInfo, 4> infos{};
+        std::array<DescriptorUpdateInfo, 3> infos{};
 
         infos[0].binding = 0;
         infos[0].pImage = frameImage;
@@ -97,10 +87,7 @@ namespace pe
         infos[2].binding = 2;
         infos[2].pImage = renderTargets["velocity"];
 
-        infos[3].binding = 3;
-        infos[3].pBuffer = UBmotionBlur;
-
-        DSet->UpdateDescriptor(4, infos.data());
+        DSet->UpdateDescriptor(infos.size(), infos.data());
     }
 
     void MotionBlur::draw(CommandBuffer *cmd, uint32_t imageIndex)
@@ -123,16 +110,6 @@ namespace pe
     {
         if (GUI::show_motionBlur)
         {
-            static mat4 previousView = camera.view;
-
-            motionBlurInput[0] = camera.projection;
-            motionBlurInput[1] = camera.view;
-            motionBlurInput[2] = previousView;
-            motionBlurInput[3] = camera.invViewProjection;
-
-            previousView = camera.view;
-
-            UBmotionBlur->CopyRequest<Launch::AsyncDeferred>({&motionBlurInput, sizeof(motionBlurInput), 0}, false);
         }
     }
 
@@ -184,7 +161,6 @@ namespace pe
 
         Pipeline::getDescriptorSetLayoutMotionBlur()->Destroy();
         frameImage->Destroy();
-        UBmotionBlur->Destroy();
         pipeline->Destroy();
     }
 }

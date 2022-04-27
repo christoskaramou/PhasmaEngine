@@ -27,7 +27,7 @@ SOFTWARE.
 #define FLT_EPS 0.00000001
 #define length2(x) dot(x, x)
 
-// some hlsl to glsl mapping
+// hlsl to glsl mapping
 #define saturate(x) clamp(x, 0.0, 1.0)
 #define lerp(x, y, a) mix(x, y, a)
 #define frac(x) fract(x)
@@ -87,51 +87,39 @@ vec3 GetNormal(vec3 positionWS, sampler2D normalMap, vec3 inNormal, vec2 inUV)
     return normalize(TBN * tangentNormal);
 }
 
-// Return average velocity
-vec3 DilateAverage(sampler2D samplerVelocity, vec2 texCoord)
+// Returns the closest depth in a 3X3 pixel grid
+float DilateDepth3X3_UV(sampler2D tDepth, vec2 uv, out vec2 outUv)
 {
-    ivec2 texDim = textureSize(samplerVelocity, 0);
-    float dx = 2.0f * float(texDim.x);
-    float dy = 2.0f * float(texDim.y);
+    float outDepth = 0.0; // TODO: have a flag to check if depth is reversed
+    outUv = uv;
 
-    vec3 tl = texture(samplerVelocity, texCoord + vec2(-dx, -dy)).xyz;
-    vec3 tr = texture(samplerVelocity, texCoord + vec2(+dx, -dy)).xyz;
-    vec3 bl = texture(samplerVelocity, texCoord + vec2(-dx, +dy)).xyz;
-    vec3 br = texture(samplerVelocity, texCoord + vec2(+dx, +dy)).xyz;
-    vec3 ce = texture(samplerVelocity, texCoord).xyz;
-
-    return (tl + tr + bl + br + ce) * 0.2;
-}
-
-// Returns velocity with closest depth
-vec3 DilateDepth3X3(sampler2D samplerVelocity, sampler2D samplerDepth, vec2 texCoord)
-{
-    ivec2 texDim = textureSize(samplerDepth, 0);
+    ivec2 texDim = textureSize(tDepth, 0);
     vec2 texelSize = 1.0 / vec2(float(texDim.x), float(texDim.y));
-    float closestDepth = 0.0;
-    vec2 closestTexCoord = texCoord;
+
     for (int y = -1; y <= 1; ++y)
     {
         for (int x = -1; x <= 1; ++x)
         {
             vec2 offset = vec2(x, y) * texelSize;
-            float depth = texture(samplerDepth, texCoord + offset).r;
-            if (depth > closestDepth)// using ">" because depth is reversed
+            float depth = texture(tDepth, uv + offset).r;
+            if (depth > outDepth)
             {
-                closestTexCoord = texCoord + offset;
+                outDepth = depth;
+                outUv = uv + offset;
             }
         }
     }
-    return texture(samplerVelocity, closestTexCoord).xyz;
+
+    return outDepth;
 }
 
 float Luminance(vec3 color)
 {
-    //vec3 PALandNTSC = vec3(0.299, 0.587, 0.114);
-    //vec3 HDTV = vec3(0.2126, 0.7152, 0.0722);
-    vec3 HDR = vec3(0.2627, 0.6780, 0.0593);
+    //vec3 avg = vec3(0.299, 0.587, 0.114); // PALandNTSC
+    //vec3 avg = vec3(0.2126, 0.7152, 0.0722); // HDTV
+    vec3 avg = vec3(0.2627, 0.6780, 0.0593); // HDR
 
-    return dot(color, HDR);
+    return dot(color, avg);
 }
 
 vec3 SharpenSimple(sampler2D tex, vec2 UV)

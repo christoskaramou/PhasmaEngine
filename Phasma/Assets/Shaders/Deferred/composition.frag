@@ -49,7 +49,6 @@ void main()
         // screenSpace.effects3.x -> fog ground thickness
         if (screenSpace.effects3.y > 0.5)
         {
-
             float fogNear = 0.5;
             float fogFar = 1000.0;
             float depth = length(wolrdPos - ubo.camPos.xyz);

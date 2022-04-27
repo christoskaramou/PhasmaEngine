@@ -62,7 +62,7 @@ layout (location = 4) out vec4 outEmissive;
 
 void main() {
     vec4 basicColor = texture(bcSampler, inUV) + inColor;
-    if (basicColor.a < metRoughAlphacutOcl.z) discard;// needed because alpha blending is messed up when objects are not in order
+    if (basicColor.a < metRoughAlphacutOcl.z) discard; // needed because alpha blending is messed up when objects are not in order
     vec3 metRough = texture(mrSampler, inUV).xyz;
     vec3 emissive = texture(eSampler, inUV).xyz;
     float ao = texture(oSampler, inUV).r;
@@ -70,6 +70,6 @@ void main() {
     outNormal = GetNormal(positionWS.xyz, nSampler, inNormal, inUV);
     outAlbedo = vec4(basicColor.xyz * ao, basicColor.a) * baseColorFactor;
     outMetRough = vec3(0.0, metRough.y, metRough.z);
-    outVelocity = (positionCS.xy / positionCS.w - previousPositionCS.xy / previousPositionCS.w) * vec2(0.5f, 0.5f);// ndc space
+    outVelocity = (positionCS.xy / positionCS.w - previousPositionCS.xy / previousPositionCS.w) * vec2(0.5f, 0.5f); // ndc space
     outEmissive = vec4(emissive * emissiveFactor, 0.0);
 }

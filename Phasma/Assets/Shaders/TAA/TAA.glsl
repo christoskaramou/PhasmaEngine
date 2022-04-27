@@ -47,7 +47,7 @@ vec3 clip_aabb(vec3 aabb_min, vec3 aabb_max, vec3 p, vec3 q)
 vec4 ResolveTAA(vec2 texCoord, sampler2D tex_history, sampler2D tex_current, sampler2D tex_velocity, sampler2D tex_depth, float g_blendMin, float g_blendMax, vec2 jitter)
 {
     // Reproject
-    vec2 velocity = DilateDepth3X3(tex_velocity, tex_depth, texCoord).xy;
+    vec2 velocity = texture(tex_velocity, texCoord).xy;
     vec2 texCoord_history = texCoord - velocity;
 
     // Get current and history colors
