@@ -461,7 +461,7 @@ namespace pe
     {
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, SHADOWMAP_CASCADES)};
+            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, SHADOWMAP_CASCADES + 1)};
         static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
 
         return DSLayout;

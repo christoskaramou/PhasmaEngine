@@ -93,12 +93,15 @@ namespace pe
 
         inline Reflection &GetReflection() { return m_reflection; }
 
-        inline static void AddGlobalDefine(const std::string &name, const std::string &value)
+        inline static void SetGlobalDefine(const std::string &name, const std::string &value)
         {
             for (auto &def : m_globalDefines)
             {
                 if (def.name == name)
+                {
+                    def.value = value;
                     return;
+                }
             }
 
             Define define{name, value};
