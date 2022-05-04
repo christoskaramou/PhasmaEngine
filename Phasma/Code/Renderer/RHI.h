@@ -67,6 +67,8 @@ namespace pe
 
         void GetComputeFamilyId();
 
+        bool IsExtensionValid(const char *name);
+
         void CreateDevice();
 
         void CreateAllocator();
@@ -116,7 +118,7 @@ namespace pe
         // Descriptor *descriptorStorageTexelBuffers;
         // Descriptor *descriptorCombinedImageSamplers;
         std::vector<CommandBuffer *> dynamicCmdBuffers;
-        std::vector<CommandBuffer *> shadowCmdBuffers;
+        std::vector<std::array<CommandBuffer *, SHADOWMAP_CASCADES>> shadowCmdBuffers;
         std::vector<Fence *> fences;
         std::vector<Semaphore *> semaphores;
         AllocatorHandle allocator;

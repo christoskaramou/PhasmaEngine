@@ -457,24 +457,11 @@ namespace pe
         return DSLayout;
     }
 
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutShadows()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            // DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
-        };
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
-
-        return DSLayout;
-    }
-
     DescriptorLayout *Pipeline::getDescriptorSetLayoutShadowsDeferred()
     {
         static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)};
+            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, SHADOWMAP_CASCADES)};
         static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
 
         return DSLayout;
@@ -498,7 +485,7 @@ namespace pe
 
         return DSLayout;
     }
-    
+
     DescriptorLayout *Pipeline::getDescriptorSetLayoutGbufferVert()
     {
         static std::vector<DescriptorBinding> bindings{
@@ -507,7 +494,7 @@ namespace pe
 
         return DSLayout;
     }
-        
+
     DescriptorLayout *Pipeline::getDescriptorSetLayoutGbufferFrag()
     {
         static std::vector<DescriptorBinding> bindings{

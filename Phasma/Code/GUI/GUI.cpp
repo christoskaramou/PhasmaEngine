@@ -235,18 +235,17 @@ namespace pe
         ImGui::Separator();
 
         FrameTimer &frameTimer = FrameTimer::Instance();
-        ImGui::Text("CPU Total: %.3f ms", static_cast<float>(frameTimer.GetDelta() * 1000.0));
+        ImGui::Text("CPU Total: %.3f ms", static_cast<float>(MILLI(frameTimer.GetDelta())));
         ImGui::Indent(16.0f);
-        ImGui::Text("Draw wait %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[1])));
-        ImGui::Text("Updates Total: %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[0])));
-        ImGui::Unindent(16.0f);
-        ImGui::Separator();
+        ImGui::Text("CPU: %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[0])));
         ImGui::Text(
-            "GPU Total: %.3f ms",
+            "GPU: %.3f ms",
             frameTimer.timestamps[2] +
                 (shadow_cast ? frameTimer.timestamps[13] + frameTimer.timestamps[14] + frameTimer.timestamps[15]
                              : 0.f) +
                 (use_compute ? frameTimer.timestamps[16] : 0.f));
+        ImGui::Text("Fence %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[1])));
+        ImGui::Unindent(16.0f);
         ImGui::Separator();
         ImGui::Text("Render Passes:");
         // if (use_compute) {
@@ -279,7 +278,7 @@ namespace pe
             totalPasses++;
             totalTime += (float)frameTimer.timestamps[6];
         }
-        ImGui::Text("Lights: %.3f ms", frameTimer.timestamps[7]);
+        ImGui::Text("Color Pass: %.3f ms", frameTimer.timestamps[7]);
         totalPasses++;
         totalTime += (float)frameTimer.timestamps[7];
         if ((use_FXAA || use_TAA) && use_AntiAliasing)

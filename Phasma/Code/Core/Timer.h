@@ -74,10 +74,8 @@ namespace pe
             return frame_timer;
         }
 
-        FrameTimer(FrameTimer const &) = delete; // copy constructor
-        FrameTimer(FrameTimer &&)
-
-            noexcept = delete;                              // move constructor
+        FrameTimer(FrameTimer const &) = delete;            // copy constructor
+        FrameTimer(FrameTimer &&) noexcept = delete;        // move constructor
         FrameTimer &operator=(FrameTimer const &) = delete; // copy assignment
         FrameTimer &operator=(FrameTimer &&) = delete;      // move assignment
     private:

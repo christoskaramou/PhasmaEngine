@@ -62,7 +62,7 @@ namespace pe
         ~GUI();
 
         // Data
-        static inline float renderTargetsScale = 1.0f; // 0.71f;
+        static inline float renderTargetsScale = 1.0f;
         static inline bool use_IBL = true;
         static inline bool use_Volumetric_lights = false;
         static inline int volumetric_steps = 32;

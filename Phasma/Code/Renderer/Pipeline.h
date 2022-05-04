@@ -124,8 +124,6 @@ namespace pe
 
         static DescriptorLayout *getDescriptorSetLayoutTAASharpen();
 
-        static DescriptorLayout *getDescriptorSetLayoutShadows();
-
         static DescriptorLayout *getDescriptorSetLayoutShadowsDeferred();
 
         static DescriptorLayout *getDescriptorSetLayoutSkybox();
@@ -135,7 +133,7 @@ namespace pe
         static DescriptorLayout *getDescriptorSetLayoutGbufferVert();
 
         static DescriptorLayout *getDescriptorSetLayoutGbufferFrag();
- 
+
         PipelineCreateInfo info;
 
         PipelineLayoutHandle layout;

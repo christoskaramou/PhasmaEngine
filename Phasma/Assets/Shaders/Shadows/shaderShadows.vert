@@ -23,7 +23,7 @@ SOFTWARE.
 #version 450
 #extension GL_EXT_nonuniform_qualifier : require
 
-const int MAX_DATA_SIZE = 4096; // TODO: calculate on init
+const int MAX_DATA_SIZE = 2048; // TODO: calculate on init
 const int MAX_NUM_JOINTS = 128;
 
 layout(location = 0) in vec3 inPosition;
@@ -34,7 +34,7 @@ layout(location = 4) in ivec4 inJoint;
 layout(location = 5) in vec4 inWeights;
 
 layout(push_constant) uniform Constants {
-    mat4 viewProjection;
+    mat4 mvp;
     uint modelIndex;
     uint meshIndex;
     uint meshJointCount;
@@ -45,6 +45,8 @@ layout(set = 0, binding = 0) uniform UBO {
     mat4 data[MAX_DATA_SIZE];
 } ubo;
 
+#define modelMatrix ubo.data[constants.modelIndex]
+#define meshMatrix ubo.data[constants.meshIndex]
 #define meshJointMatrix(x) ubo.data[constants.meshIndex + 2 + x]
 
 void main() {
@@ -57,5 +59,5 @@ void main() {
         inWeights[3] * meshJointMatrix(inJoint[3]);
     }
 
-    gl_Position = constants.viewProjection * boneTransform * vec4(inPosition, 1.0);
+    gl_Position = constants.mvp * boneTransform * vec4(inPosition, 1.0);
 }

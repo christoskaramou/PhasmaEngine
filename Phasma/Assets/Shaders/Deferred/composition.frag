@@ -68,7 +68,7 @@ void main()
 
             // Volumetric light
             if (screenSpace.effects1.y > 0.5)
-            outColor.xyz += VolumetricLighting(ubo.sun, wolrdPos, in_UV, sun.cascades[1], fogFactor);
+                outColor.xyz += VolumetricLighting(ubo.sun, wolrdPos, in_UV, sun.cascades[0], fogFactor);
         }
 
         return;
@@ -120,7 +120,7 @@ void main()
 
     // Tone Mapping
     if (screenSpace.effects0.z > 0.5)
-    outColor.xyz = Reinhard(outColor.xyz);
+        outColor.xyz = Reinhard(outColor.xyz);
 
     // Fog
     if (screenSpace.effects3.y > 0.5) {
@@ -148,6 +148,6 @@ void main()
 
         // Volumetric light
         if (screenSpace.effects1.y > 0.5)
-        outColor.xyz += VolumetricLighting(ubo.sun, wolrdPos, in_UV, sun.cascades[1], fogFactor);
+            outColor.xyz += VolumetricLighting(ubo.sun, wolrdPos, in_UV, sun.cascades[0], fogFactor);
     }
 }

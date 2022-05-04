@@ -26,20 +26,15 @@ SOFTWARE.
 
 layout(push_constant) uniform Constants { vec4 values; } constants;
 
-#if BINDLESS_DESCRIPTORS
-    layout (set = 0, binding = 0) uniform sampler2D samplers[];
-    layout (set = 1, binding = 0) uniform Uniforms {vec4 data;} uniforms[];
-    layout (set = 2, binding = 0) buffer Storages {vec4 data;} storages[];
+layout (set = 0, binding = 0) uniform sampler2D samplers[];
+layout (set = 1, binding = 0) uniform Uniforms {vec4 data;} uniforms[];
+layout (set = 2, binding = 0) buffer Storages {vec4 data;} storages[];
 
-    #define sampler(index) samplers[nonuniformEXT(index)]
-    #define uniform(index) uniforms[nonuniformEXT(index)].data
-    #define storage(index) storages[nonuniformEXT(index)].data
+#define sampler(index) samplers[nonuniformEXT(index)]
+#define uniform(index) uniforms[nonuniformEXT(index)].data
+#define storage(index) storages[nonuniformEXT(index)].data
 
-    #define sampler_color sampler(0)
-#else
-    layout (set = 0, binding = 0) uniform sampler2D sampler_color;
-    layout (set = 0, binding = 1) uniform sampler2D sampler_depth;
-#endif
+#define sampler_color sampler(0)
 
 layout (location = 0) in vec2 in_UV;
 layout (location = 0) out vec4 outColor;

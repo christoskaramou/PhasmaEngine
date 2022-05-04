@@ -49,21 +49,24 @@ namespace pe
 
     void Shadows::createDescriptorSets()
     {
-        descriptorSetDeferred = Descriptor::Create(Pipeline::getDescriptorSetLayoutShadowsDeferred());
+        std::vector<DescriptorUpdateInfo> infos{};
+        
+        infos.emplace_back();
+        infos.back().pBuffer = uniformBuffer;
 
         for (int i = 0; i < SHADOWMAP_CASCADES; i++)
         {
-            DescriptorUpdateInfo info{};
-            info.binding = i;
-            info.pImage = textures[i];
-            info.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-            descriptorSetDeferred->UpdateDescriptor(1, &info);
+            infos.emplace_back();
+            infos.back().binding = 1;
+            infos.back().pImage = textures[i];
+            infos.back().imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
         }
 
-        DescriptorUpdateInfo info{};
-        info.binding = SHADOWMAP_CASCADES;
-        info.pBuffer = uniformBuffer;
-        descriptorSetDeferred->UpdateDescriptor(1, &info);
+        uint32_t infosCount = static_cast<uint32_t>(infos.size());
+        DescriptorLayout *layout = Pipeline::getDescriptorSetLayoutShadowsDeferred();
+
+        descriptorSetDeferred = Descriptor::Create(layout, SHADOWMAP_CASCADES);
+        descriptorSetDeferred->UpdateDescriptor(infosCount, infos.data());
     }
 
     void Shadows::createRenderPass()
@@ -114,19 +117,22 @@ namespace pe
             texture->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
         }
 
-        framebuffers.resize(RHII.swapchain->images.size() * textures.size());
+        framebuffers.resize(RHII.swapchain->images.size());
         for (uint32_t i = 0; i < framebuffers.size(); ++i)
         {
-            uint32_t width = SHADOWMAP_SIZE;
-            uint32_t height = SHADOWMAP_SIZE;
-            ImageViewHandle view = textures[i % textures.size()]->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
+            framebuffers[i] = std::array<FrameBuffer *, SHADOWMAP_CASCADES>{};
+            for (int j = 0; j < SHADOWMAP_CASCADES; j++)
+            {
+                ImageViewHandle view = textures[j]->view;
+                framebuffers[i][j] = FrameBuffer::Create(SHADOWMAP_SIZE, SHADOWMAP_SIZE, view, renderPass);
+            }
         }
     }
 
     void Shadows::createPipeline()
     {
         PipelineCreateInfo info{};
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex});
         info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
         info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
@@ -136,13 +142,11 @@ namespace pe
         info.pushConstantSize = sizeof(ShadowPushConstData);
         info.colorBlendAttachments = {textures[0]->blendAttachment};
         info.dynamicStates = {VK_DYNAMIC_STATE_DEPTH_BIAS};
-        info.descriptorSetLayouts = {
-            Pipeline::getDescriptorSetLayoutGbufferVert(),
-            Pipeline::getDescriptorSetLayoutGbufferFrag()};
+        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutGbufferVert()};
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
-        
+
         info.pVertShader->Destroy();
     }
 
@@ -169,8 +173,9 @@ namespace pe
         for (auto &texture : textures)
             texture->Destroy();
 
-        for (auto fb : framebuffers)
-            fb->Destroy();
+        for (auto fba : framebuffers)
+            for (auto fb : fba)
+                fb->Destroy();
 
         uniformBuffer->Destroy();
         pipeline->Destroy();
@@ -209,9 +214,6 @@ namespace pe
             float uniform = minZ + range * p;
             float d = cascadeSplitLambda * (log - uniform) + uniform;
             cascadeSplits[i] = (d - nearClip) / clipRange;
-
-            // cascadeSplits[i] = ((i + 1) / (float)SHADOWMAP_CASCADES);
-            // cascadeSplits[i] = std::pow(cascadeSplits[i], 2.5f);
         }
 
         // Calculate orthographic projection matrix for each cascade
@@ -273,7 +275,6 @@ namespace pe
             auto v0 = frustumCenter - (lightDir * radius);
             mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, camera.WorldUp());
             mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, -clipRange, maxExtents.z - minExtents.z, GlobalSettings::ReverseZ);
-            // mat4 lightOrthoMatrix = ortho(-20.f, 20.f, -20.f, 20.f, -700.f, 700.f, GlobalSettings::ReverseZ);
 
             // Store split distance and matrix in cascade
             cascades[i] = lightOrthoMatrix * lightViewMatrix;

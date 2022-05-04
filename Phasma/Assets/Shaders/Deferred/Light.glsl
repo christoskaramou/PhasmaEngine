@@ -48,10 +48,7 @@ struct SpotLight
 };
 
 layout(push_constant) uniform Constants {
-    float max_cascade_dist0;
-    float max_cascade_dist1;
-    float max_cascade_dist2;
-    float max_cascade_dist3;
+    float max_cascade_dist[SHADOWMAP_CASCADES];
     float cast_shadows;
     float dummy[11];
 } pushConst;
@@ -72,11 +69,8 @@ layout(set = 0, binding = 6) uniform sampler2D sampler_ssr;
 layout(set = 0, binding = 7) uniform sampler2D sampler_emission;
 layout(set = 0, binding = 8) uniform sampler2D sampler_lut_IBL;
 layout(set = 0, binding = 9) uniform SS { mat4 invViewProj; vec4 effects0; vec4 effects1; vec4 effects2; vec4 effects3; } screenSpace;
-layout(set = 1, binding = 0) uniform sampler2DShadow sampler_shadow_map0;
-layout(set = 1, binding = 1) uniform sampler2DShadow sampler_shadow_map1;
-layout(set = 1, binding = 2) uniform sampler2DShadow sampler_shadow_map2;
-layout(set = 1, binding = 3) uniform sampler2DShadow sampler_shadow_map3;
-layout(set = 1, binding = 4) uniform shadow_buffer0 { mat4 cascades[SHADOWMAP_CASCADES]; } sun;
+layout(set = 1, binding = 0) uniform shadow_buffer { mat4 cascades[SHADOWMAP_CASCADES]; } sun;
+layout(set = 1, binding = 1) uniform sampler2DShadow sampler_shadow_map[SHADOWMAP_CASCADES];
 layout(set = 2, binding = 0) uniform samplerCube sampler_cube_map;
 
 vec2 poissonDisk[8] = vec2[](
@@ -155,14 +149,7 @@ float SampleShadowMap(int i, float zBias, vec3 worldPos)
     vec4 coords = biasMat * sun.cascades[i] * vec4(worldPos, 1.0);
     coords.z += zBias;
 
-    if (i == 0)
-        return FilterPCF(coords, sampler_shadow_map0);
-    else if (i == 1)
-        return FilterPCF(coords, sampler_shadow_map1);
-    else if (i == 2)
-        return FilterPCF(coords, sampler_shadow_map2);
-    else
-        return FilterPCF(coords, sampler_shadow_map3);
+    return FilterPCF(coords, sampler_shadow_map[i]);
 }
 
 float CalculateShadows(vec3 worldPos, float depth, float NdL)
@@ -174,23 +161,17 @@ float CalculateShadows(vec3 worldPos, float depth, float NdL)
         float zBias = SHADOWMAP_TEXEL_SIZE * tan(acos(NdL));// cosTheta is dot( n,l ), clamped between 0 and 1
         zBias = clamp(zBias, 0, SHADOWMAP_TEXEL_SIZE * 2.0f);
 
-        float d[4] = float[](
-            pushConst.max_cascade_dist0,
-            pushConst.max_cascade_dist1,
-            pushConst.max_cascade_dist2,
-            pushConst.max_cascade_dist3);
-
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < SHADOWMAP_CASCADES; i++)
         {
-            if (depth < d[i])
+            if (depth < pushConst.max_cascade_dist[i])
             {
                 shadow = SampleShadowMap(i, zBias, worldPos);
 
                 // Blend between cascades
-                float dist = d[i] - depth;
+                float dist = pushConst.max_cascade_dist[i] - depth;
 				float blendDist = 1.0;
                 
-                if (i < 3 && dist < blendDist)
+                if (i < SHADOWMAP_CASCADES - 1 && dist < blendDist)
                     shadow = mix(shadow, SampleShadowMap(i + 1, zBias, worldPos), 1.0 - dist / blendDist);
 
                 break;
@@ -425,7 +406,7 @@ vec3 VolumetricLighting(DirectionalLight light, vec3 worldPos, vec2 uv, mat4 lig
         vec2 rayUV = posLight.xy * vec2(0.5f, 0.5f) + 0.5f;
 
         // Check to see if the light can "see" the pixel		
-        float depthDelta = texture(sampler_shadow_map1, vec3(rayUV, posLight.z));
+        float depthDelta = texture(sampler_shadow_map[SHADOWMAP_CASCADES-1], vec3(rayUV, posLight.z));
         if (depthDelta > 0.0f)
         {
             volumetricFactor += ComputeScattering(dot(rayDir, light.direction.xyz));

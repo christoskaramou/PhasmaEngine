@@ -94,6 +94,10 @@ namespace pe
                 instanceExtensions.push_back("VK_EXT_debug_utils");
                 m_HasDebugUtils = true;
             }
+            if (std::string(extension.extensionName) == "VK_KHR_get_physical_device_properties2")
+            {
+                instanceExtensions.push_back("VK_KHR_get_physical_device_properties2");
+            }
         }
         // =============================================
 
@@ -131,8 +135,8 @@ namespace pe
 
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName = "VulkanMonkey3D";
-        appInfo.pEngineName = "VulkanMonkey3D";
+        appInfo.pApplicationName = "PhasmaEngine";
+        appInfo.pEngineName = "PhasmaEngine";
         appInfo.apiVersion = apiVersion;
 
         VkInstanceCreateInfo instInfo{};
@@ -372,20 +376,31 @@ namespace pe
         computeFamilyId = -1;
     }
 
-    void RHI::CreateDevice()
+    bool RHI::IsExtensionValid(const char *name)
     {
         uint32_t propsCount;
         vkEnumerateDeviceExtensionProperties(gpu, nullptr, &propsCount, nullptr);
 
-        std::vector<VkExtensionProperties> extensionProperties(propsCount);
-        vkEnumerateDeviceExtensionProperties(gpu, nullptr, &propsCount, extensionProperties.data());
+        std::vector<VkExtensionProperties> extProps(propsCount);
+        vkEnumerateDeviceExtensionProperties(gpu, nullptr, &propsCount, extProps.data());
 
+        for (auto &extProp : extProps)
+            if (std::string(extProp.extensionName) == name)
+                return true;
+
+        return false;
+    }
+
+    void RHI::CreateDevice()
+    {
         std::vector<const char *> deviceExtensions{};
-        for (auto &extProps : extensionProperties)
-        {
-            if (std::string(extProps.extensionName) == VK_KHR_SWAPCHAIN_EXTENSION_NAME)
-                deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        }
+
+        if (IsExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME))
+            deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+        // if (IsExtensionValid(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME))
+        //     deviceExtensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+
         float priorities[]{1.0f}; // range : [0.0, 1.0]
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
@@ -416,21 +431,28 @@ namespace pe
         VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
         indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
 
+        // Vulkan 1.2 features
+        VkPhysicalDeviceVulkan12Features deviceFeatures12{};
+        deviceFeatures12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+
+        // Vulkan 1.3 features
+        VkPhysicalDeviceVulkan13Features deviceFeatures13{};
+        deviceFeatures13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+        deviceFeatures13.pNext = &deviceFeatures12;
+
         VkPhysicalDeviceFeatures2 deviceFeatures2{};
         deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        deviceFeatures2.pNext = &indexingFeatures;
+        deviceFeatures2.pNext = &deviceFeatures13;
+
+        // Queue for supported features
         vkGetPhysicalDeviceFeatures2(gpu, &deviceFeatures2);
 
         // Check for bindless descriptors
-        if (!indexingFeatures.descriptorBindingPartiallyBound ||
-            !indexingFeatures.runtimeDescriptorArray ||
-            !indexingFeatures.shaderSampledImageArrayNonUniformIndexing ||
-            !indexingFeatures.descriptorBindingVariableDescriptorCount)
-            GlobalSettings::BindlessDescriptors = false;
-        else
-            GlobalSettings::BindlessDescriptors = true;
-
-        Shader::AddGlobalDefine("BINDLESS_DESCRIPTORS", GlobalSettings::BindlessDescriptors ? "1" : "0");
+        if (!(deviceFeatures12.descriptorBindingPartiallyBound &&
+              deviceFeatures12.runtimeDescriptorArray &&
+              deviceFeatures12.shaderSampledImageArrayNonUniformIndexing &&
+              deviceFeatures12.descriptorBindingVariableDescriptorCount))
+            PE_ERROR("Bindless descriptors are not supported on this device!");
 
         VkDeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -438,7 +460,7 @@ namespace pe
         deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
         deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
         deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
-        deviceCreateInfo.pNext = GlobalSettings::BindlessDescriptors ? &deviceFeatures2 : nullptr;
+        deviceCreateInfo.pNext = &deviceFeatures2;
 
         VkDevice deviceVK;
         vkCreateDevice(gpu, &deviceCreateInfo, nullptr, &deviceVK);
@@ -512,9 +534,15 @@ namespace pe
         for (uint32_t i = 0; i < bufferCount; i++)
             dynamicCmdBuffers[i] = CommandBuffer::Create(commandPool);
 
-        shadowCmdBuffers.resize(bufferCount * SHADOWMAP_CASCADES);
-        for (uint32_t i = 0; i < bufferCount * SHADOWMAP_CASCADES; i++)
-            shadowCmdBuffers[i] = CommandBuffer::Create(commandPool);
+        shadowCmdBuffers.resize(bufferCount);
+        for (uint32_t i = 0; i < bufferCount; i++)
+        {
+            shadowCmdBuffers[i] = std::array<CommandBuffer *, SHADOWMAP_CASCADES>{};
+            for (int j = 0; j < SHADOWMAP_CASCADES; j++)
+            {
+                shadowCmdBuffers[i][j] = CommandBuffer::Create(commandPool);
+            }
+        }
     }
 
     void RHI::CreateFences(uint32_t fenceCount)

@@ -87,9 +87,9 @@ namespace pe
         shadows.createPipeline();
         deferred.createPipelines(renderTargets);
 
-        //transformsCompute = Compute::Create("Shaders/Compute/shader.comp", 64, 64);
+        // transformsCompute = Compute::Create("Shaders/Compute/shader.comp", 64, 64);
 
-        //LOAD RESOURCES
+        // LOAD RESOURCES
         LoadResources();
         // CREATE UNIFORMS AND DESCRIPTOR SETS
         CreateUniforms();
@@ -149,11 +149,9 @@ namespace pe
     {
         static int frameIndex = 0;
 
-        static VkPipelineStageFlags waitStages[] =
-                {
-                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-                };
+        static VkPipelineStageFlags waitStages[] = {
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT};
 
         // acquire the image
         auto aquireSignalSemaphore = RHII.semaphores[frameIndex];
@@ -162,7 +160,7 @@ namespace pe
         static Timer timer;
         timer.Start();
         RHII.WaitFence(RHII.fences[imageIndex]);
-        FrameTimer::Instance().timestamps[0] = timer.Count();
+        FrameTimer::Instance().timestamps[1] = timer.Count();
 
         auto &cmd = RHII.dynamicCmdBuffers[imageIndex];
 
@@ -177,15 +175,13 @@ namespace pe
             auto &shadowWaitSemaphore = aquireSignalSemaphore;
             auto &shadowSignalSemaphore = RHII.semaphores[imageIndex * 3 + 1];
             auto &scb = RHII.shadowCmdBuffers;
-            auto size = shadows.textures.size();
-            auto i = size * imageIndex;
-            std::vector < CommandBuffer * > activeShadowCmdBuffers(scb.begin() + i, scb.begin() + i + size);
+
             RHII.Submit(
-                    static_cast<uint32_t>(activeShadowCmdBuffers.size()), activeShadowCmdBuffers.data(),
-                    &waitStages[0],
-                    1, &shadowWaitSemaphore,
-                    1, &shadowSignalSemaphore,
-                    nullptr);
+                static_cast<uint32_t>(scb[imageIndex].size()), scb[imageIndex].data(),
+                &waitStages[0],
+                1, &shadowWaitSemaphore,
+                1, &shadowSignalSemaphore,
+                nullptr);
 
             aquireSignalSemaphore = shadowSignalSemaphore;
         }
@@ -199,11 +195,11 @@ namespace pe
         auto deferredSignalSemaphore = RHII.semaphores[imageIndex * 3 + 2];
         auto deferredSignalFence = RHII.fences[imageIndex];
         RHII.Submit(
-                1, &cmd,
-                &deferredWaitStage,
-                1, &deferredWaitSemaphore,
-                1, &deferredSignalSemaphore,
-                deferredSignalFence);
+            1, &cmd,
+            &deferredWaitStage,
+            1, &deferredWaitSemaphore,
+            1, &deferredSignalSemaphore,
+            deferredSignalFence);
 
         // Presentation
         auto presentWaitSemaphore = deferredSignalSemaphore;
@@ -225,7 +221,7 @@ namespace pe
 
         if (Model::models.empty())
         {
-            //Pipeline::getLayoutGBufferVertex()->Destroy();
+            // Pipeline::getLayoutGBufferVertex()->Destroy();
         }
 
 #ifndef IGNORE_SCRIPTS

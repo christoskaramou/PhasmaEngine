@@ -87,7 +87,7 @@ namespace pe
         infos[2].binding = 2;
         infos[2].pImage = renderTargets["velocity"];
 
-        DSet->UpdateDescriptor(infos.size(), infos.data());
+        DSet->UpdateDescriptor(static_cast<uint32_t>(infos.size()), infos.data());
     }
 
     void MotionBlur::draw(CommandBuffer *cmd, uint32_t imageIndex)

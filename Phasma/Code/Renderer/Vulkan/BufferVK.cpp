@@ -97,13 +97,12 @@ namespace pe
         BufferCopy bufferCopy{};
         bufferCopy.size = srcSize > 0 ? srcSize : size;
 
-        std::array<CommandBuffer *, 1> copyCmd{};
-        copyCmd[0] = CommandBuffer::Create(RHII.commandPool2);
-        copyCmd[0]->Begin();
-        copyCmd[0]->CopyBuffer(srcBuffer, this, 1, &bufferCopy);
-        copyCmd[0]->End();
-        RHII.SubmitAndWaitFence(1, copyCmd.data(), nullptr, 0, nullptr, 0, nullptr);
-        copyCmd[0]->Destroy();
+        CommandBuffer *copyCmd = CommandBuffer::Create(RHII.commandPool2);
+        copyCmd->Begin();
+        copyCmd->CopyBuffer(srcBuffer, this, 1, &bufferCopy);
+        copyCmd->End();
+        RHII.SubmitAndWaitFence(1, &copyCmd, nullptr, 0, nullptr, 0, nullptr);
+        copyCmd->Destroy();
     }
 
     void Buffer::Flush(size_t offset, size_t flushSize) const

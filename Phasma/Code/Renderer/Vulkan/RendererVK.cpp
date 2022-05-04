@@ -277,22 +277,23 @@ namespace pe
 
         cmd->End();
     }
-    
+
     void Renderer::RecordShadowsCmds(uint32_t imageIndex)
     {
         static GPUTimer gpuTimer[SHADOWMAP_CASCADES]{};
 
         for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
         {
-            uint32_t index = SHADOWMAP_CASCADES * imageIndex + i;
-            CommandBuffer &cmd = *RHII.shadowCmdBuffers[index];
+            CommandBuffer &cmd = *RHII.shadowCmdBuffers[imageIndex][i];
+            FrameBuffer *frameBuffer = shadows.framebuffers[imageIndex][i];
+
             cmd.Begin();
 
             FrameTimer &frameTimer = FrameTimer::Instance();
             gpuTimer[i].Start(&cmd);
 
+            cmd.BeginPass(shadows.renderPass, frameBuffer);
             cmd.SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
-            cmd.BeginPass(shadows.renderPass, shadows.framebuffers[index]);
             cmd.BindPipeline(shadows.pipeline);
             for (auto &model : Model::models)
             {
@@ -320,17 +321,20 @@ namespace pe
                             for (auto &primitive : node->mesh->primitives)
                             {
                                 // if (primitive.render)
-                                cmd.DrawIndexed(primitive.indicesSize, 1, node->mesh->indexOffset + primitive.indexOffset,
-                                                node->mesh->vertexOffset + primitive.vertexOffset, 0);
+                                cmd.DrawIndexed(
+                                    primitive.indicesSize,
+                                    1,
+                                    node->mesh->indexOffset + primitive.indexOffset,
+                                    node->mesh->vertexOffset + primitive.vertexOffset,
+                                    0);
                             }
                         }
                     }
                 }
             }
+
             cmd.EndPass();
-
             frameTimer.timestamps[13 + static_cast<size_t>(i)] = gpuTimer[i].End();
-
             cmd.End();
         }
     }

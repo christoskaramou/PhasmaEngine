@@ -26,9 +26,6 @@ SOFTWARE.
 
 namespace pe
 {
-    constexpr uint32_t SHADOWMAP_CASCADES = 4;
-    constexpr uint32_t SHADOWMAP_SIZE = 2048;
-
     struct ShadowPushConstData
     {
         mat4 cascade;
@@ -62,7 +59,7 @@ namespace pe
         RenderPass *renderPass;
         std::vector<Image *> textures{};
         Descriptor *descriptorSetDeferred;
-        std::vector<FrameBuffer *> framebuffers{};
+        std::vector<std::array<FrameBuffer *, SHADOWMAP_CASCADES>> framebuffers{};
         Buffer *uniformBuffer;
         Pipeline *pipeline;
 

@@ -108,8 +108,6 @@ namespace pe
             PE_ERROR("Image(): tiling not supported.");
         }
 
-        imageInfo.width = imageInfo.width % 2 != 0 ? imageInfo.width - 1 : imageInfo.width;
-        imageInfo.height = imageInfo.height % 2 != 0 ? imageInfo.height - 1 : imageInfo.height;
         width_f = static_cast<float>(imageInfo.width);
         height_f = static_cast<float>(imageInfo.height);
 

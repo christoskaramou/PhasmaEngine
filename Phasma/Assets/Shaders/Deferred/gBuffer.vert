@@ -23,7 +23,7 @@ SOFTWARE.
 #version 450
 #extension GL_EXT_nonuniform_qualifier : require
 
-const int MAX_DATA_SIZE = 4096; // TODO: calculate on init
+const int MAX_DATA_SIZE = 2048; // TODO: calculate on init
 const int MAX_NUM_JOINTS = 128;
 
 // mat4 indexing
