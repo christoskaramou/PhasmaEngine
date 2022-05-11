@@ -119,29 +119,7 @@ namespace pe
         Filter filter)
     {
         std::vector<VkImageBlit> regions(regionCount);
-        for (uint32_t i = 0; i < regionCount; i++)
-        {
-            regions[i].srcOffsets[0].x = pRegions[i].srcOffsets[0].x;
-            regions[i].srcOffsets[0].y = pRegions[i].srcOffsets[0].y;
-            regions[i].srcOffsets[0].z = pRegions[i].srcOffsets[0].z;
-            regions[i].srcOffsets[1].x = pRegions[i].srcOffsets[1].x;
-            regions[i].srcOffsets[1].y = pRegions[i].srcOffsets[1].y;
-            regions[i].srcOffsets[1].z = pRegions[i].srcOffsets[1].z;
-            regions[i].srcSubresource.aspectMask = pRegions[i].srcSubresource.aspectMask;
-            regions[i].srcSubresource.mipLevel = pRegions[i].srcSubresource.mipLevel;
-            regions[i].srcSubresource.baseArrayLayer = pRegions[i].srcSubresource.baseArrayLayer;
-            regions[i].srcSubresource.layerCount = pRegions[i].srcSubresource.layerCount;
-            regions[i].dstOffsets[0].x = pRegions[i].dstOffsets[0].x;
-            regions[i].dstOffsets[0].y = pRegions[i].dstOffsets[0].y;
-            regions[i].dstOffsets[0].z = pRegions[i].dstOffsets[0].z;
-            regions[i].dstOffsets[1].x = pRegions[i].dstOffsets[1].x;
-            regions[i].dstOffsets[1].y = pRegions[i].dstOffsets[1].y;
-            regions[i].dstOffsets[1].z = pRegions[i].dstOffsets[1].z;
-            regions[i].dstSubresource.aspectMask = pRegions[i].dstSubresource.aspectMask;
-            regions[i].dstSubresource.mipLevel = pRegions[i].dstSubresource.mipLevel;
-            regions[i].dstSubresource.baseArrayLayer = pRegions[i].dstSubresource.baseArrayLayer;
-            regions[i].dstSubresource.layerCount = pRegions[i].dstSubresource.layerCount;
-        }
+        memcpy(regions.data(), pRegions, regionCount * sizeof(VkImageBlit));
 
         vkCmdBlitImage(m_handle,
                        srcImage->Handle(), (VkImageLayout)srcImageLayout,
