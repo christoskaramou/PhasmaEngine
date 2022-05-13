@@ -300,10 +300,8 @@ namespace pe
                 if (model.render)
                 {
                     ShadowPushConstData data{};
-                    data.modelIndex = static_cast<uint32_t>(model.uniformBufferOffset / sizeof(mat4));
-                    data.primitiveIndex = 0;
 
-                    cmd.BindVertexBuffer(model.vertexBuffer, 0);
+                    cmd.BindVertexBuffer(model.shadowsVertexBuffer, 0);
                     cmd.BindIndexBuffer(model.indexBuffer, 0);
 
                     std::vector<Descriptor *> dsetHandles{RHII.uniformBuffers[model.uniformBufferIndex].descriptor};

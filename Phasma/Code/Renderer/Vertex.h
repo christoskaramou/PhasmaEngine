@@ -44,7 +44,7 @@ namespace pe
     class Vertex
     {
     public:
-        Vertex();
+        Vertex() {}
 
         Vertex(vec3 &pos, vec2 &uv, vec3 &norm, vec4 &color, ivec4 &bonesIDs, vec4 &weights);
 
@@ -52,6 +52,18 @@ namespace pe
         vec2 uv;
         vec3 normals;
         vec4 color;
+        ivec4 bonesIDs;
+        vec4 weights;
+    };
+
+    class ShadowVertex
+    {
+    public:
+        ShadowVertex() {}
+
+        ShadowVertex(vec3 &pos, ivec4 &bonesIDs, vec4 &weights);
+
+        vec3 position;
         ivec4 bonesIDs;
         vec4 weights;
     };

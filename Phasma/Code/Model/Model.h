@@ -133,6 +133,7 @@ namespace pe
 #endif
 
         Buffer *vertexBuffer;
+        Buffer *shadowsVertexBuffer;
         Buffer *indexBuffer;
         uint32_t numberOfVertices = 0, numberOfIndices = 0;
     };

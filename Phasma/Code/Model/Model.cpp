@@ -643,11 +643,8 @@ namespace pe
                 }
             }
         }
-        numberOfVertices = static_cast<uint32_t>(vertices.size());
+
         auto size = sizeof(Vertex) * numberOfVertices;
-        vertexBuffer = Buffer::Create(
-            size,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
         // Staging buffer
         Buffer *staging = Buffer::Create(
@@ -660,7 +657,33 @@ namespace pe
         staging->Flush();
         staging->Unmap();
 
+        vertexBuffer = Buffer::Create(
+            size,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
         vertexBuffer->CopyBuffer(staging, staging->Size());
+        staging->Destroy();
+
+        // SHADOW VERTEX BUFFER
+        std::vector<ShadowVertex> shadowsVertices{};
+        shadowsVertices.reserve(numberOfVertices);
+        for (auto &vert : vertices)
+            shadowsVertices.emplace_back(vert.position, vert.bonesIDs, vert.weights);
+
+        size = sizeof(ShadowVertex) * numberOfVertices;
+        staging = Buffer::Create(
+            size,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+
+        staging->Map();
+        staging->CopyData(shadowsVertices.data());
+        staging->Flush();
+        staging->Unmap();
+
+        shadowsVertexBuffer = Buffer::Create(
+            size,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+        shadowsVertexBuffer->CopyBuffer(staging, staging->Size());
         staging->Destroy();
     }
 
@@ -1041,6 +1064,7 @@ namespace pe
             skin = {};
         }
         vertexBuffer->Destroy();
+        shadowsVertexBuffer->Destroy();
         indexBuffer->Destroy();
     }
 }

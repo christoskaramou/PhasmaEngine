@@ -27,26 +27,19 @@ const int MAX_DATA_SIZE = 2048; // TODO: calculate on init
 const int MAX_NUM_JOINTS = 128;
 
 layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec2 inTexCoords;
-layout(location = 2) in vec3 inNormal;
-layout(location = 3) in vec4 inColor;
-layout(location = 4) in ivec4 inJoint;
-layout(location = 5) in vec4 inWeights;
+layout(location = 1) in ivec4 inJoint;
+layout(location = 2) in vec4 inWeights;
 
 layout(push_constant) uniform Constants {
     mat4 mvp;
-    uint modelIndex;
     uint meshIndex;
     uint meshJointCount;
-    uint primitiveIndex;
 } constants;
 
 layout(set = 0, binding = 0) uniform UBO {
     mat4 data[MAX_DATA_SIZE];
 } ubo;
 
-#define modelMatrix ubo.data[constants.modelIndex]
-#define meshMatrix ubo.data[constants.meshIndex]
 #define meshJointMatrix(x) ubo.data[constants.meshIndex + 2 + x]
 
 void main() {
