@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Systems/CameraSystem.h"
-
 namespace pe
 {
     class Descriptor;
@@ -32,38 +30,41 @@ namespace pe
     class RenderPass;
     class Pipeline;
     class Buffer;
+    class Camera;
 
-    class TAA : public IComponent
+    class TAA : public IEffectComponent
     {
     public:
         TAA();
 
         ~TAA();
 
-        void Init();
+        void Init() override;
 
-        void update(const Camera &camera);
+        void CreateRenderPass(std::map<std::string, Image *> &renderTargets) override;
 
-        void createUniforms(std::map<std::string, Image *> &renderTargets);
+        void CreateFrameBuffers(std::map<std::string, Image *> &renderTargets) override;
 
-        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+        void CreatePipeline(std::map<std::string, Image *> &renderTargets) override;
 
-        void draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets);
+        void CreateUniforms(std::map<std::string, Image *> &renderTargets) override;
 
-        void createRenderPasses(std::map<std::string, Image *> &renderTargets);
+        void UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets) override;
 
-        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+        void Update(Camera *camera) override;
 
-        void createPipeline(std::map<std::string, Image *> &renderTargets);
+        void Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets) override;
 
-        void createPipelineSharpen(std::map<std::string, Image *> &renderTargets);
+        void Destroy() override;
 
-        void createPipelines(std::map<std::string, Image *> &renderTargets);
+    private:
+        void CreateTAAPipeline(std::map<std::string, Image *> &renderTargets);
 
-        void saveImage(CommandBuffer *cmd, Image *source);
+        void CreatePipelineSharpen(std::map<std::string, Image *> &renderTargets);
 
-        void destroy();
+        void SaveImage(CommandBuffer *cmd, Image *source);
 
+    public:
         std::vector<FrameBuffer *> framebuffers{}, framebuffersSharpen{};
         Pipeline *pipeline;
         Pipeline *pipelineSharpen;

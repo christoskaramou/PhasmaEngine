@@ -30,38 +30,43 @@ namespace pe
     class CommandBuffer;
     class RenderPass;
     class Pipeline;
+    class Camera;
 
-    class Bloom : public IComponent
+    class Bloom : public IEffectComponent
     {
     public:
         Bloom();
 
         ~Bloom();
 
-        void Init();
+        void Init() override;
 
-        void createRenderPasses(std::map<std::string, Image *> &renderTargets);
+        void CreateRenderPass(std::map<std::string, Image *> &renderTargets) override;
 
-        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+        void CreateFrameBuffers(std::map<std::string, Image *> &renderTargets) override;
 
-        void createPipelines(std::map<std::string, Image *> &renderTargets);
+        void CreatePipeline(std::map<std::string, Image *> &renderTargets) override;
 
-        void createBrightFilterPipeline(std::map<std::string, Image *> &renderTargets);
+        void CreateUniforms(std::map<std::string, Image *> &renderTargets) override;
 
-        void createGaussianBlurHorizontaPipeline(std::map<std::string, Image *> &renderTargets);
+        void UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets) override;
 
-        void createGaussianBlurVerticalPipeline(std::map<std::string, Image *> &renderTargets);
+        void Update(Camera *camera) override;
 
-        void createCombinePipeline(std::map<std::string, Image *> &renderTargets);
+        void Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets) override;
 
-        void createUniforms(std::map<std::string, Image *> &renderTargets);
+        void Destroy() override;
 
-        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+    private:
+        void CreateBrightFilterPipeline(std::map<std::string, Image *> &renderTargets);
 
-        void draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets);
+        void CreateGaussianBlurHorizontaPipeline(std::map<std::string, Image *> &renderTargets);
 
-        void destroy();
+        void CreateGaussianBlurVerticalPipeline(std::map<std::string, Image *> &renderTargets);
 
+        void CreateCombinePipeline(std::map<std::string, Image *> &renderTargets);
+
+    public:
         std::vector<FrameBuffer *> framebuffers{};
         Pipeline *pipelineBrightFilter;
         Pipeline *pipelineGaussianBlurHorizontal;

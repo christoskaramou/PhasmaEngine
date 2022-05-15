@@ -32,10 +32,6 @@ SOFTWARE.
 #include "PostProcess/TAA.h"
 #include "PostProcess/SSGI.h"
 
-#if BINDLESS_TESTING
-#include "PostProcess/Test.h"
-#endif
-
 namespace pe
 {
     PostProcessSystem::PostProcessSystem()
@@ -48,111 +44,37 @@ namespace pe
 
     void PostProcessSystem::Init()
     {
-        Bloom &bloom = *WORLD_ENTITY->CreateComponent<Bloom>();
-        DOF &dof = *WORLD_ENTITY->CreateComponent<DOF>();
-        FXAA &fxaa = *WORLD_ENTITY->CreateComponent<FXAA>();
-        MotionBlur &motionBlur = *WORLD_ENTITY->CreateComponent<MotionBlur>();
-        SSAO &ssao = *WORLD_ENTITY->CreateComponent<SSAO>();
-        SSR &ssr = *WORLD_ENTITY->CreateComponent<SSR>();
-        TAA &taa = *WORLD_ENTITY->CreateComponent<TAA>();
-        SSGI &ssgi = *WORLD_ENTITY->CreateComponent<SSGI>();
-
-        bloom.Init();
-        dof.Init();
-        fxaa.Init();
-        motionBlur.Init();
-        taa.Init();
-        ssgi.Init();
+        m_effects[GetTypeID<Bloom>()] = WORLD_ENTITY->CreateComponent<Bloom>();
+        m_effects[GetTypeID<DOF>()] = WORLD_ENTITY->CreateComponent<DOF>();
+        m_effects[GetTypeID<FXAA>()] = WORLD_ENTITY->CreateComponent<FXAA>();
+        m_effects[GetTypeID<MotionBlur>()] = WORLD_ENTITY->CreateComponent<MotionBlur>();
+        m_effects[GetTypeID<SSAO>()] = WORLD_ENTITY->CreateComponent<SSAO>();
+        m_effects[GetTypeID<SSR>()] = WORLD_ENTITY->CreateComponent<SSR>();
+        m_effects[GetTypeID<TAA>()] = WORLD_ENTITY->CreateComponent<TAA>();
+        m_effects[GetTypeID<SSGI>()] = WORLD_ENTITY->CreateComponent<SSGI>();
 
         auto &renderTargets = CONTEXT->GetSystem<RendererSystem>()->GetRenderTargets();
-
-        // Render passes
-        ssao.createRenderPasses(renderTargets);
-        ssr.createRenderPass(renderTargets);
-        fxaa.createRenderPass(renderTargets);
-        taa.createRenderPasses(renderTargets);
-        bloom.createRenderPasses(renderTargets);
-        dof.createRenderPass(renderTargets);
-        motionBlur.createRenderPass(renderTargets);
-        ssgi.createRenderPass(renderTargets);
-
-        // Frame buffers
-        ssao.createFrameBuffers(renderTargets);
-        ssr.createFrameBuffers(renderTargets);
-        fxaa.createFrameBuffers(renderTargets);
-        taa.createFrameBuffers(renderTargets);
-        bloom.createFrameBuffers(renderTargets);
-        dof.createFrameBuffers(renderTargets);
-        motionBlur.createFrameBuffers(renderTargets);
-        ssgi.createFrameBuffers(renderTargets);
-
-        // Pipelines
-        ssao.createPipelines(renderTargets);
-        ssr.createPipeline(renderTargets);
-        fxaa.createPipeline(renderTargets);
-        taa.createPipelines(renderTargets);
-        bloom.createPipelines(renderTargets);
-        dof.createPipeline(renderTargets);
-        motionBlur.createPipeline(renderTargets);
-        ssgi.createPipeline(renderTargets);
-
-        // Descriptor Sets
-        ssao.createUniforms(renderTargets);
-        ssr.createSSRUniforms(renderTargets);
-        fxaa.createUniforms(renderTargets);
-        taa.createUniforms(renderTargets);
-        bloom.createUniforms(renderTargets);
-        dof.createUniforms(renderTargets);
-        motionBlur.createMotionBlurUniforms(renderTargets);
-        ssgi.createUniforms(renderTargets);
-
-#if BINDLESS_TESTING
-        Test &test = *WORLD_ENTITY->CreateComponent<Test>();
-        test.Init();
-        test.createRenderPass(renderTargets);
-        test.createFrameBuffers(renderTargets);
-        test.createPipeline(renderTargets);
-        test.createUniforms(renderTargets);
-#endif
+        for (auto &effect : m_effects)
+        {
+            effect.second->Init();
+            effect.second->CreateRenderPass(renderTargets);
+            effect.second->CreateFrameBuffers(renderTargets);
+            effect.second->CreatePipeline(renderTargets);
+            effect.second->CreateUniforms(renderTargets);
+        }
     }
 
     void PostProcessSystem::Update(double delta)
     {
-        SSAO *ssao = WORLD_ENTITY->GetComponent<SSAO>();
-        SSR *ssr = WORLD_ENTITY->GetComponent<SSR>();
-        TAA *taa = WORLD_ENTITY->GetComponent<TAA>();
-        MotionBlur *motionBlur = WORLD_ENTITY->GetComponent<MotionBlur>();
-
         Camera *camera_main = CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
 
-        auto updateSSAO = [camera_main, ssao]()
-        { ssao->update(*camera_main); };
-        auto updateSSR = [camera_main, ssr]()
-        { ssr->update(*camera_main); };
-        auto updateTAA = [camera_main, taa]()
-        { taa->update(*camera_main); };
-        auto updateMotionBlur = [camera_main, motionBlur]()
-        { motionBlur->update(*camera_main); };
-
-        Queue<Launch::Async>::Request(updateSSAO);
-        Queue<Launch::Async>::Request(updateSSR);
-        Queue<Launch::Async>::Request(updateTAA);
-        Queue<Launch::Async>::Request(updateMotionBlur);
+        for (auto& effect : m_effects)
+            Queue<Launch::Async>::Request([camera_main, effect]() { effect.second->Update(camera_main); });
     }
 
     void PostProcessSystem::Destroy()
     {
-        WORLD_ENTITY->GetComponent<Bloom>()->destroy();
-        WORLD_ENTITY->GetComponent<DOF>()->destroy();
-        WORLD_ENTITY->GetComponent<FXAA>()->destroy();
-        WORLD_ENTITY->GetComponent<MotionBlur>()->destroy();
-        WORLD_ENTITY->GetComponent<SSAO>()->destroy();
-        WORLD_ENTITY->GetComponent<SSR>()->destroy();
-        WORLD_ENTITY->GetComponent<TAA>()->destroy();
-        WORLD_ENTITY->GetComponent<SSGI>()->destroy();
-
-#if BINDLESS_TESTING
-        WORLD_ENTITY->GetComponent<Test>()->destroy();
-#endif
+        for (auto& effect : m_effects)
+            effect.second->Destroy();
     }
 }

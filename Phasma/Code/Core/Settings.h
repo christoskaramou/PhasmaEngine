@@ -34,7 +34,3 @@ namespace pe
     constexpr uint32_t SHADOWMAP_SIZE = 2048;
     
 }
-
-// ------ Testing flags ------
-#define BINDLESS_TESTING 0
-// ------ Testing flags ------

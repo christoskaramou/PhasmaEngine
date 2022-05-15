@@ -620,14 +620,6 @@ namespace pe
             ImGui::DragFloat3(p.c_str(), model_pos[modelItemSelected].data());
             ImGui::DragFloat3(r.c_str(), model_rot[modelItemSelected].data());
         }
-
-#if BINDLESS_TESTING
-        ImGui::Checkbox("Test", &s_bindless_testing);
-        if (s_bindless_testing)
-        {
-        }
-#endif
-
         ImGui::End();
     }
 

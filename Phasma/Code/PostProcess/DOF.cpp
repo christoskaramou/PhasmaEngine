@@ -32,6 +32,7 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
+#include "Systems/CameraSystem.h"
 
 namespace pe
 {
@@ -66,14 +67,14 @@ namespace pe
         frameImage->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
-    void DOF::createRenderPass(std::map<std::string, Image *> &renderTargets)
+    void DOF::CreateRenderPass(std::map<std::string, Image *> &renderTargets)
     {
         Attachment attachment{};
         attachment.format = renderTargets["viewport"]->imageInfo.format;
         renderPass = RenderPass::Create(attachment);
     }
 
-    void DOF::createFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    void DOF::CreateFrameBuffers(std::map<std::string, Image *> &renderTargets)
     {
         framebuffers.resize(RHII.swapchain->images.size());
         for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
@@ -85,37 +86,7 @@ namespace pe
         }
     }
 
-    void DOF::createUniforms(std::map<std::string, Image *> &renderTargets)
-    {
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutDOF());
-        updateDescriptorSets(renderTargets);
-    }
-
-    void DOF::updateDescriptorSets(std::map<std::string, Image *> &renderTargets)
-    {
-        std::array<DescriptorUpdateInfo, 2> infos{};
-        infos[0].binding = 0;
-        infos[0].pImage = frameImage;
-        infos[1].binding = 1;
-        infos[1].pImage = RHII.depth;
-        infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-        DSet->UpdateDescriptor(2, infos.data());
-    }
-
-    void DOF::draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets)
-    {
-        std::vector<float> values{GUI::DOF_focus_scale, GUI::DOF_blur_range, 0.0f, 0.0f};
-
-        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-        cmd->PushConstants(pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()),
-                           values.data());
-        cmd->BindPipeline(pipeline);
-        cmd->BindDescriptors(pipeline, 1, &DSet);
-        cmd->Draw(3, 1, 0, 0);
-        cmd->EndPass();
-    }
-
-    void DOF::createPipeline(std::map<std::string, Image *> &renderTargets)
+    void DOF::CreatePipeline(std::map<std::string, Image *> &renderTargets)
     {
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
@@ -134,8 +105,43 @@ namespace pe
         info.pVertShader->Destroy();
         info.pFragShader->Destroy();
     }
+    
+    void DOF::CreateUniforms(std::map<std::string, Image *> &renderTargets)
+    {
+        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutDOF());
+        UpdateDescriptorSets(renderTargets);
+    }
 
-    void DOF::destroy()
+    void DOF::UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets)
+    {
+        std::array<DescriptorUpdateInfo, 2> infos{};
+        infos[0].binding = 0;
+        infos[0].pImage = frameImage;
+        infos[1].binding = 1;
+        infos[1].pImage = RHII.depth;
+        infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        DSet->UpdateDescriptor(2, infos.data());
+    }
+
+    void DOF::Update(Camera *camera)
+    {
+    }
+    
+    void DOF::Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets)
+    {
+        std::vector<float> values{GUI::DOF_focus_scale, GUI::DOF_blur_range, 0.0f, 0.0f};
+
+        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+        cmd->PushConstants(pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(float) * values.size()),
+                           values.data());
+        cmd->BindPipeline(pipeline);
+        cmd->BindDescriptors(pipeline, 1, &DSet);
+        cmd->Draw(3, 1, 0, 0);
+        cmd->EndPass();
+    }
+
+
+    void DOF::Destroy()
     {
         for (auto framebuffer : framebuffers)
             framebuffer->Destroy();

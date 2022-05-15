@@ -66,37 +66,14 @@ namespace pe
         frameImage->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
-    void FXAA::createUniforms(std::map<std::string, Image *> &renderTargets)
-    {
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutFXAA());
-        updateDescriptorSets(renderTargets);
-    }
-
-    void FXAA::updateDescriptorSets(std::map<std::string, Image *> &renderTargets)
-    {
-        DescriptorUpdateInfo info{};
-        info.binding = 0;
-        info.pImage = frameImage;
-        DSet->UpdateDescriptor(1, &info);
-    }
-
-    void FXAA::draw(CommandBuffer *cmd, uint32_t imageIndex)
-    {
-        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-        cmd->BindPipeline(pipeline);
-        cmd->BindDescriptors(pipeline, 1, &DSet);
-        cmd->Draw(3, 1, 0, 0);
-        cmd->EndPass();
-    }
-
-    void FXAA::createRenderPass(std::map<std::string, Image *> &renderTargets)
+    void FXAA::CreateRenderPass(std::map<std::string, Image *> &renderTargets)
     {
         Attachment attachment{};
         attachment.format = renderTargets["viewport"]->imageInfo.format;
         renderPass = RenderPass::Create(attachment);
     }
 
-    void FXAA::createFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    void FXAA::CreateFrameBuffers(std::map<std::string, Image *> &renderTargets)
     {
         framebuffers.resize(RHII.swapchain->images.size());
         for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
@@ -108,7 +85,7 @@ namespace pe
         }
     }
 
-    void FXAA::createPipeline(std::map<std::string, Image *> &renderTargets)
+    void FXAA::CreatePipeline(std::map<std::string, Image *> &renderTargets)
     {
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
@@ -126,7 +103,34 @@ namespace pe
         info.pFragShader->Destroy();
     }
 
-    void FXAA::destroy()
+    void FXAA::CreateUniforms(std::map<std::string, Image *> &renderTargets)
+    {
+        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutFXAA());
+        UpdateDescriptorSets(renderTargets);
+    }
+
+    void FXAA::UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets)
+    {
+        DescriptorUpdateInfo info{};
+        info.binding = 0;
+        info.pImage = frameImage;
+        DSet->UpdateDescriptor(1, &info);
+    }
+
+    void FXAA::Update(Camera *camera)
+    {
+    }
+
+    void FXAA::Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets)
+    {
+        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+        cmd->BindPipeline(pipeline);
+        cmd->BindDescriptors(pipeline, 1, &DSet);
+        cmd->Draw(3, 1, 0, 0);
+        cmd->EndPass();
+    }
+
+    void FXAA::Destroy()
     {
         for (auto frameBuffer : framebuffers)
             frameBuffer->Destroy();

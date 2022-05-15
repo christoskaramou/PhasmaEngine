@@ -32,31 +32,32 @@ namespace pe
     class RenderPass;
     class Buffer;
     class Pipeline;
+    class Camera;
 
-    class MotionBlur : public IComponent
+    class MotionBlur : public IEffectComponent
     {
     public:
         MotionBlur();
 
         ~MotionBlur();
 
-        void Init();
+        void Init() override;
 
-        void update(Camera &camera);
+        void CreateRenderPass(std::map<std::string, Image *> &renderTargets) override;
 
-        void createRenderPass(std::map<std::string, Image *> &renderTargets);
+        void CreateFrameBuffers(std::map<std::string, Image *> &renderTargets) override;
 
-        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+        void CreatePipeline(std::map<std::string, Image *> &renderTargets) override;
 
-        void createPipeline(std::map<std::string, Image *> &renderTargets);
+        void CreateUniforms(std::map<std::string, Image *> &renderTargets) override;
 
-        void createMotionBlurUniforms(std::map<std::string, Image *> &renderTargets);
+        void UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets) override;
 
-        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+        void Update(Camera *camera) override;
 
-        void draw(CommandBuffer *cmd, uint32_t imageIndex);
+        void Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets) override;
 
-        void destroy();
+        void Destroy() override;
 
         std::vector<FrameBuffer *> framebuffers{};
         Pipeline *pipeline;

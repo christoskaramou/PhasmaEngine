@@ -33,6 +33,7 @@ SOFTWARE.
 #include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
+#include "Systems/CameraSystem.h"
 
 namespace pe
 {
@@ -89,91 +90,7 @@ namespace pe
         frameImage->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
-    void TAA::update(const Camera &camera)
-    {
-        if (GUI::use_TAA)
-        {
-            ubo.values = {camera.projOffset.x, camera.projOffset.y, GUI::TAA_feedback_min, GUI::TAA_feedback_max};
-            ubo.sharpenValues = {
-                GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias,
-                sin(static_cast<float>(ImGui::GetTime()) * 0.125f)};
-            ubo.invProj = camera.invProjection;
-
-            uniform->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(ubo), 0}, false);
-        }
-    }
-
-    void TAA::createUniforms(std::map<std::string, Image *> &renderTargets)
-    {
-        uniform = Buffer::Create(
-            sizeof(UBO),
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
-        uniform->Map();
-        uniform->Zero();
-        uniform->Flush();
-        uniform->Unmap();
-
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAA());
-        DSetSharpen = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAASharpen());
-
-        updateDescriptorSets(renderTargets);
-    }
-
-    void TAA::updateDescriptorSets(std::map<std::string, Image *> &renderTargets)
-    {
-        std::array<DescriptorUpdateInfo, 5> infos{};
-
-        infos[0].binding = 0;
-        infos[0].pImage = previous;
-
-        infos[1].binding = 1;
-        infos[1].pImage = frameImage;
-
-        infos[2].binding = 2;
-        infos[2].pImage = RHII.depth;
-        infos[2].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-
-        infos[3].binding = 3;
-        infos[3].pImage = renderTargets["velocity"];
-
-        infos[4].binding = 4;
-        infos[4].pBuffer = uniform;
-
-        DSet->UpdateDescriptor(5, infos.data());
-
-        std::array<DescriptorUpdateInfo, 2> infos2{};
-
-        infos2[0].binding = 0;
-        infos2[0].pImage = renderTargets["taa"];
-
-        infos2[1].binding = 1;
-        infos2[1].pBuffer = uniform;
-
-        DSetSharpen->UpdateDescriptor(2, infos2.data());
-    }
-
-    void TAA::draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets)
-    {
-
-        renderTargets["taa"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-        cmd->BindPipeline(pipeline);
-        cmd->BindDescriptors(pipeline, 1, &DSet);
-        cmd->Draw(3, 1, 0, 0);
-        cmd->EndPass();
-        renderTargets["taa"]->ChangeLayout(cmd, LayoutState::ColorRead);
-
-        saveImage(cmd, renderTargets["taa"]);
-
-        cmd->BeginPass(renderPassSharpen, framebuffersSharpen[imageIndex]);
-        cmd->BindPipeline(pipelineSharpen);
-        cmd->BindDescriptors(pipelineSharpen, 1, &DSetSharpen);
-        cmd->Draw(3, 1, 0, 0);
-        cmd->EndPass();
-    }
-
-    void TAA::createRenderPasses(std::map<std::string, Image *> &renderTargets)
+    void TAA::CreateRenderPass(std::map<std::string, Image *> &renderTargets)
     {
         Attachment attachment{};
         attachment.format = renderTargets["taa"]->imageInfo.format;
@@ -183,7 +100,7 @@ namespace pe
         renderPassSharpen = RenderPass::Create(attachment);
     }
 
-    void TAA::createFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    void TAA::CreateFrameBuffers(std::map<std::string, Image *> &renderTargets)
     {
         framebuffers.resize(RHII.swapchain->images.size());
         for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
@@ -204,13 +121,13 @@ namespace pe
         }
     }
 
-    void TAA::createPipelines(std::map<std::string, Image *> &renderTargets)
+    void TAA::CreatePipeline(std::map<std::string, Image *> &renderTargets)
     {
-        createPipeline(renderTargets);
-        createPipelineSharpen(renderTargets);
+        CreateTAAPipeline(renderTargets);
+        CreatePipelineSharpen(renderTargets);
     }
 
-    void TAA::createPipeline(std::map<std::string, Image *> &renderTargets)
+    void TAA::CreateTAAPipeline(std::map<std::string, Image *> &renderTargets)
     {
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
@@ -223,12 +140,12 @@ namespace pe
         info.renderPass = renderPass;
 
         pipeline = Pipeline::Create(info);
-        
+
         info.pVertShader->Destroy();
         info.pFragShader->Destroy();
     }
 
-    void TAA::createPipelineSharpen(std::map<std::string, Image *> &renderTargets)
+    void TAA::CreatePipelineSharpen(std::map<std::string, Image *> &renderTargets)
     {
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
@@ -241,12 +158,12 @@ namespace pe
         info.renderPass = renderPassSharpen;
 
         pipelineSharpen = Pipeline::Create(info);
-        
+
         info.pVertShader->Destroy();
         info.pFragShader->Destroy();
     }
 
-    void TAA::saveImage(CommandBuffer *cmd, Image *source)
+    void TAA::SaveImage(CommandBuffer *cmd, Image *source)
     {
         previous->TransitionImageLayout(
             cmd,
@@ -305,7 +222,91 @@ namespace pe
         source->imageInfo.layoutState = LayoutState::ColorRead;
     }
 
-    void TAA::destroy()
+    void TAA::CreateUniforms(std::map<std::string, Image *> &renderTargets)
+    {
+        uniform = Buffer::Create(
+            sizeof(UBO),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
+        uniform->Map();
+        uniform->Zero();
+        uniform->Flush();
+        uniform->Unmap();
+
+        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAA());
+        DSetSharpen = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAASharpen());
+
+        UpdateDescriptorSets(renderTargets);
+    }
+
+    void TAA::UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets)
+    {
+        std::array<DescriptorUpdateInfo, 5> infos{};
+
+        infos[0].binding = 0;
+        infos[0].pImage = previous;
+
+        infos[1].binding = 1;
+        infos[1].pImage = frameImage;
+
+        infos[2].binding = 2;
+        infos[2].pImage = RHII.depth;
+        infos[2].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+        infos[3].binding = 3;
+        infos[3].pImage = renderTargets["velocity"];
+
+        infos[4].binding = 4;
+        infos[4].pBuffer = uniform;
+
+        DSet->UpdateDescriptor(5, infos.data());
+
+        std::array<DescriptorUpdateInfo, 2> infos2{};
+
+        infos2[0].binding = 0;
+        infos2[0].pImage = renderTargets["taa"];
+
+        infos2[1].binding = 1;
+        infos2[1].pBuffer = uniform;
+
+        DSetSharpen->UpdateDescriptor(2, infos2.data());
+    }
+
+    void TAA::Update(Camera *camera)
+    {
+        if (GUI::use_TAA)
+        {
+            ubo.values = {camera->projOffset.x, camera->projOffset.y, GUI::TAA_feedback_min, GUI::TAA_feedback_max};
+            ubo.sharpenValues = {
+                GUI::TAA_sharp_strength, GUI::TAA_sharp_clamp, GUI::TAA_sharp_offset_bias,
+                sin(static_cast<float>(ImGui::GetTime()) * 0.125f)};
+            ubo.invProj = camera->invProjection;
+
+            uniform->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(ubo), 0}, false);
+        }
+    }
+
+    void TAA::Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets)
+    {
+
+        renderTargets["taa"]->ChangeLayout(cmd, LayoutState::ColorWrite);
+        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+        cmd->BindPipeline(pipeline);
+        cmd->BindDescriptors(pipeline, 1, &DSet);
+        cmd->Draw(3, 1, 0, 0);
+        cmd->EndPass();
+        renderTargets["taa"]->ChangeLayout(cmd, LayoutState::ColorRead);
+
+        SaveImage(cmd, renderTargets["taa"]);
+
+        cmd->BeginPass(renderPassSharpen, framebuffersSharpen[imageIndex]);
+        cmd->BindPipeline(pipelineSharpen);
+        cmd->BindDescriptors(pipelineSharpen, 1, &DSetSharpen);
+        cmd->Draw(3, 1, 0, 0);
+        cmd->EndPass();
+    }
+
+    void TAA::Destroy()
     {
         uniform->Destroy();
         previous->Destroy();

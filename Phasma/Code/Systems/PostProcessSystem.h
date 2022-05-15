@@ -36,5 +36,8 @@ namespace pe
         void Update(double delta) override;
 
         void Destroy() override;
+
+    private:
+        std::unordered_map<size_t, IEffectComponent *> m_effects;
     };
 }

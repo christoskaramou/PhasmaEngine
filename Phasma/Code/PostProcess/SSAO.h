@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Systems/CameraSystem.h"
-
 namespace pe
 {
     class CommandBuffer;
@@ -33,34 +31,39 @@ namespace pe
     class RenderPass;
     class Pipeline;
     class Buffer;
+    class Camera;
 
-    class SSAO : public IComponent
+    class SSAO : public IEffectComponent
     {
     public:
-        void update(Camera &camera);
+        void Init() override;
 
-        void createRenderPasses(std::map<std::string, Image *> &renderTargets);
+        void CreateRenderPass(std::map<std::string, Image *> &renderTargets) override;
 
-        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+        void CreateFrameBuffers(std::map<std::string, Image *> &renderTargets) override;
 
-        void createSSAOFrameBuffers(std::map<std::string, Image *> &renderTargets);
+        void CreatePipeline(std::map<std::string, Image *> &renderTargets) override;
 
-        void createSSAOBlurFrameBuffers(std::map<std::string, Image *> &renderTargets);
+        void CreateUniforms(std::map<std::string, Image *> &renderTargets) override;
 
-        void createPipelines(std::map<std::string, Image *> &renderTargets);
+        void UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets) override;
 
-        void createPipeline(std::map<std::string, Image *> &renderTargets);
+        void Update(Camera *camera) override;
 
-        void createBlurPipeline(std::map<std::string, Image *> &renderTargets);
+        void Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets) override;
 
-        void createUniforms(std::map<std::string, Image *> &renderTargets);
+        void Destroy() override;
 
-        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+    private:
+        void CreateSSAOFrameBuffers(std::map<std::string, Image *> &renderTargets);
 
-        void draw(CommandBuffer *cmd, uint32_t imageIndex, Image *image);
+        void CreateSSAOBlurFrameBuffers(std::map<std::string, Image *> &renderTargets);
 
-        void destroy();
+        void CreateSSAOPipeline(std::map<std::string, Image *> &renderTargets);
 
+        void CreateBlurPipeline(std::map<std::string, Image *> &renderTargets);
+
+    public:
         mat4 pvm[3];
         Buffer *UB_Kernel;
         Buffer *UB_PVM;

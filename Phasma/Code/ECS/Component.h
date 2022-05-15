@@ -65,4 +65,30 @@ namespace pe
         Entity *m_entity;
         bool m_enabled;
     };
+
+    class Image;
+    class CommandBuffer;
+    class Camera;
+
+    class IEffectComponent : public IComponent
+    {  
+    public:
+        virtual void Init() = 0;
+
+        virtual void CreateRenderPass(std::map<std::string, Image *> &renderTargets) = 0;
+
+        virtual void CreateFrameBuffers(std::map<std::string, Image *> &renderTargets) = 0;
+
+        virtual void CreatePipeline(std::map<std::string, Image *> &renderTargets) = 0;
+
+        virtual void CreateUniforms(std::map<std::string, Image *> &renderTargets) = 0;
+
+        virtual void UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets) = 0;
+
+        virtual void Update(Camera *camera) = 0;
+
+        virtual void Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets) = 0;
+
+        virtual void Destroy() = 0;
+    };
 }

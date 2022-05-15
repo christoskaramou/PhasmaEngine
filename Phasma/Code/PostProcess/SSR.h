@@ -22,39 +22,40 @@ SOFTWARE.
 
 #pragma once
 
-#include "Systems/CameraSystem.h"
-
 namespace pe
 {
-    class Desscriptor;
+    class Descriptor;
     class FrameBuffer;
     class Image;
     class RenderPass;
     class Pipeline;
     class Buffer;
+    class Camera;
 
-    class SSR : public IComponent
+    class SSR : public IEffectComponent
     {
     public:
         SSR();
 
         ~SSR();
 
-        void update(Camera &camera);
+        void Init() override;
 
-        void createSSRUniforms(std::map<std::string, Image *> &renderTargets);
+        void CreateRenderPass(std::map<std::string, Image *> &renderTargets) override;
 
-        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
+        void CreateFrameBuffers(std::map<std::string, Image *> &renderTargets) override;
 
-        void draw(CommandBuffer *cmd, uint32_t imageIndex);
+        void CreatePipeline(std::map<std::string, Image *> &renderTargets) override;
 
-        void createRenderPass(std::map<std::string, Image *> &renderTargets);
+        void CreateUniforms(std::map<std::string, Image *> &renderTargets) override;
 
-        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
+        void UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets) override;
 
-        void createPipeline(std::map<std::string, Image *> &renderTargets);
+        void Update(Camera *camera) override;
 
-        void destroy();
+        void Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets) override;
+
+        void Destroy() override;
 
         mat4 reflectionInput[4];
         Buffer *UBReflection;

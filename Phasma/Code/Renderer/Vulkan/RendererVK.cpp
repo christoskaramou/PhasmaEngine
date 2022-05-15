@@ -40,8 +40,6 @@ SOFTWARE.
 #include "PostProcess/TAA.h"
 #include "PostProcess/SSGI.h"
 
-#include "PostProcess/Test.h"
-
 namespace pe
 {
     Renderer::Renderer()
@@ -170,7 +168,7 @@ namespace pe
         {
             gpuTimer[2].Start(cmd);
             renderTargets["ssaoBlur"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-            ssao.draw(cmd, imageIndex, renderTargets["ssao"]);
+            ssao.Draw(cmd, imageIndex, renderTargets);
             renderTargets["ssaoBlur"]->ChangeLayout(cmd, LayoutState::ColorRead);
             frameTimer.timestamps[5] = gpuTimer[2].End();
         }
@@ -180,7 +178,7 @@ namespace pe
         {
             gpuTimer[3].Start(cmd);
             renderTargets["ssr"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-            ssr.draw(cmd, imageIndex);
+            ssr.Draw(cmd, imageIndex, renderTargets);
             renderTargets["ssr"]->ChangeLayout(cmd, LayoutState::ColorRead);
             frameTimer.timestamps[6] = gpuTimer[3].End();
         }
@@ -194,7 +192,7 @@ namespace pe
         {
             // gpuTimer[8].Start(cmd);
             ssgi.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-            ssgi.draw(cmd, imageIndex, renderTargets);
+            ssgi.Draw(cmd, imageIndex, renderTargets);
             // frameTimer.timestamps[10] = gpuTimer[8].End();
         }
 
@@ -205,7 +203,7 @@ namespace pe
             {
                 gpuTimer[5].Start(cmd);
                 taa.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-                taa.draw(cmd, imageIndex, renderTargets);
+                taa.Draw(cmd, imageIndex, renderTargets);
                 frameTimer.timestamps[8] = gpuTimer[5].End();
             }
             // FXAA
@@ -213,7 +211,7 @@ namespace pe
             {
                 gpuTimer[6].Start(cmd);
                 fxaa.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-                fxaa.draw(cmd, imageIndex);
+                fxaa.Draw(cmd, imageIndex, renderTargets);
                 frameTimer.timestamps[8] = gpuTimer[6].End();
             }
         }
@@ -223,7 +221,7 @@ namespace pe
         {
             gpuTimer[7].Start(cmd);
             bloom.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-            bloom.draw(cmd, imageIndex, renderTargets);
+            bloom.Draw(cmd, imageIndex, renderTargets);
             frameTimer.timestamps[9] = gpuTimer[7].End();
         }
 
@@ -232,7 +230,7 @@ namespace pe
         {
             gpuTimer[8].Start(cmd);
             dof.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-            dof.draw(cmd, imageIndex, renderTargets);
+            dof.Draw(cmd, imageIndex, renderTargets);
             frameTimer.timestamps[10] = gpuTimer[8].End();
         }
 
@@ -241,18 +239,9 @@ namespace pe
         {
             gpuTimer[9].Start(cmd);
             motionBlur.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-            motionBlur.draw(cmd, imageIndex);
+            motionBlur.Draw(cmd, imageIndex, renderTargets);
             frameTimer.timestamps[11] = gpuTimer[9].End();
         }
-
-#if BINDLESS_TESTING
-        Test &test = *WORLD_ENTITY->GetComponent<Test>();
-        if (GUI::s_bindless_testing)
-        {
-            test.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-            test.draw(cmd, imageIndex, renderTargets);
-        }
-#endif
 
         renderTargets["albedo"]->ChangeLayout(cmd, LayoutState::ColorWrite);
         RHII.depth->ChangeLayout(cmd, LayoutState::DepthWrite);
@@ -589,51 +578,10 @@ namespace pe
         deferred.createPipelines(renderTargets);
         deferred.updateDescriptorSets(renderTargets);
 
-        ssr.createRenderPass(renderTargets);
-        ssr.createFrameBuffers(renderTargets);
-        ssr.createPipeline(renderTargets);
-        ssr.updateDescriptorSets(renderTargets);
-
-        fxaa.Init();
-        fxaa.createRenderPass(renderTargets);
-        fxaa.createFrameBuffers(renderTargets);
-        fxaa.createPipeline(renderTargets);
-        fxaa.updateDescriptorSets(renderTargets);
-
-        taa.Init();
-        taa.createRenderPasses(renderTargets);
-        taa.createFrameBuffers(renderTargets);
-        taa.createPipelines(renderTargets);
-        taa.updateDescriptorSets(renderTargets);
-
-        bloom.Init();
-        bloom.createRenderPasses(renderTargets);
-        bloom.createFrameBuffers(renderTargets);
-        bloom.createPipelines(renderTargets);
-        bloom.updateDescriptorSets(renderTargets);
-
-        dof.Init();
-        dof.createRenderPass(renderTargets);
-        dof.createFrameBuffers(renderTargets);
-        dof.createPipeline(renderTargets);
-        dof.updateDescriptorSets(renderTargets);
-
-        motionBlur.Init();
-        motionBlur.createRenderPass(renderTargets);
-        motionBlur.createFrameBuffers(renderTargets);
-        motionBlur.createPipeline(renderTargets);
-        motionBlur.updateDescriptorSets(renderTargets);
-
-        ssao.createRenderPasses(renderTargets);
-        ssao.createFrameBuffers(renderTargets);
-        ssao.createPipelines(renderTargets);
-        ssao.updateDescriptorSets(renderTargets);
-
         gui.CreateRenderPass();
         gui.CreateFrameBuffers();
 
-        // compute.pipeline = createComputePipeline();
-        // compute.updateDescriptorSets();
+        CONTEXT->GetSystem<PostProcessSystem>()->Init();
 
         //- Recreate resources end --------------
     }
@@ -722,15 +670,16 @@ namespace pe
         dof.pipeline->Destroy();
         motionBlur.pipeline->Destroy();
 
-        shadows.createPipeline();
-        ssao.createPipelines(renderTargets);
-        ssr.createPipeline(renderTargets);
         deferred.createPipelines(renderTargets);
-        fxaa.createPipeline(renderTargets);
-        taa.createPipelines(renderTargets);
-        bloom.createPipelines(renderTargets);
-        dof.createPipeline(renderTargets);
-        motionBlur.createPipeline(renderTargets);
+
+        shadows.createPipeline();
+        ssao.CreatePipeline(renderTargets);
+        ssr.CreatePipeline(renderTargets);
+        fxaa.CreatePipeline(renderTargets);
+        taa.CreatePipeline(renderTargets);
+        bloom.CreatePipeline(renderTargets);
+        dof.CreatePipeline(renderTargets);
+        motionBlur.CreatePipeline(renderTargets);
 
         CONTEXT->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
     }

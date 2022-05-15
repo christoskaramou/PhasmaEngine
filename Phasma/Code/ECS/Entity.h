@@ -104,19 +104,16 @@ namespace pe
     template <class T, class... Params>
     inline T *Entity::CreateComponent(Params &&...params)
     {
+        size_t id = GetTypeID<T>();
+
         if (!HasComponent<T>())
         {
-            size_t id = GetTypeID<T>();
             m_components[id] = std::make_shared<T>(std::forward<Params>(params)...);
             m_components[id]->SetEntity(this);
             m_components[id]->SetEnabled(true);
+        }
 
-            return static_cast<T *>(m_components[id].get());
-        }
-        else
-        {
-            return nullptr;
-        }
+        return static_cast<T *>(m_components[id].get());
     }
 
     template <class T>

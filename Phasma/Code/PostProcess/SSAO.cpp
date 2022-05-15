@@ -33,19 +33,106 @@ SOFTWARE.
 #include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
+#include "Systems/CameraSystem.h"
 
 namespace pe
 {
-    void SSAO::createUniforms(std::map<std::string, Image *> &renderTargets)
+    void SSAO::Init()
+    {
+    }
+
+    void SSAO::CreateRenderPass(std::map<std::string, Image *> &renderTargets)
+    {
+        Attachment attachment{};
+        attachment.format = renderTargets["ssao"]->imageInfo.format;
+        renderPass = RenderPass::Create(attachment);
+
+        attachment.format = renderTargets["ssaoBlur"]->imageInfo.format;
+        blurRenderPass = RenderPass::Create(attachment);
+    }
+
+    void SSAO::CreateFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    {
+        CreateSSAOFrameBuffers(renderTargets);
+        CreateSSAOBlurFrameBuffers(renderTargets);
+    }
+
+    void SSAO::CreateSSAOFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    {
+        framebuffers.resize(RHII.swapchain->images.size());
+        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        {
+            uint32_t width = renderTargets["ssao"]->imageInfo.width;
+            uint32_t height = renderTargets["ssao"]->imageInfo.height;
+            ImageViewHandle view = renderTargets["ssao"]->view;
+            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
+        }
+    }
+
+    void SSAO::CreateSSAOBlurFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    {
+        blurFramebuffers.resize(RHII.swapchain->images.size());
+        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        {
+            uint32_t width = renderTargets["ssaoBlur"]->imageInfo.width;
+            uint32_t height = renderTargets["ssaoBlur"]->imageInfo.height;
+            ImageViewHandle view = renderTargets["ssaoBlur"]->view;
+            blurFramebuffers[i] = FrameBuffer::Create(width, height, view, blurRenderPass);
+        }
+    }
+
+    void SSAO::CreatePipeline(std::map<std::string, Image *> &renderTargets)
+    {
+        CreateSSAOPipeline(renderTargets);
+        CreateBlurPipeline(renderTargets);
+    }
+
+    void SSAO::CreateSSAOPipeline(std::map<std::string, Image *> &renderTargets)
+    {
+        PipelineCreateInfo info{};
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSAO/ssao.frag", ShaderType::Fragment});
+        info.width = renderTargets["ssao"]->width_f;
+        info.height = renderTargets["ssao"]->height_f;
+        info.cullMode = CullMode::Back;
+        info.colorBlendAttachments = {renderTargets["ssao"]->blendAttachment};
+        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutSSAO()};
+        info.renderPass = renderPass;
+
+        pipeline = Pipeline::Create(info);
+
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
+    }
+
+    void SSAO::CreateBlurPipeline(std::map<std::string, Image *> &renderTargets)
+    {
+        PipelineCreateInfo info{};
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSAO/ssaoBlur.frag", ShaderType::Fragment});
+        info.width = renderTargets["ssaoBlur"]->width_f;
+        info.height = renderTargets["ssaoBlur"]->height_f;
+        info.cullMode = CullMode::Back;
+        info.colorBlendAttachments = {renderTargets["ssaoBlur"]->blendAttachment};
+        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutSSAOBlur()};
+        info.renderPass = blurRenderPass;
+
+        pipelineBlur = Pipeline::Create(info);
+
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
+    }
+    
+    void SSAO::CreateUniforms(std::map<std::string, Image *> &renderTargets)
     {
         // kernel buffer
-        std::vector <vec4> kernel{};
+        std::vector<vec4> kernel{};
         for (unsigned i = 0; i < 16; i++)
         {
             vec3 sample(rand(-1.f, 1.f), rand(-1.f, 1.f), rand(0.f, 1.f));
             sample = normalize(sample);
             sample *= rand(0.f, 1.f);
-            float scale = (float) i / 16.f;
+            float scale = (float)i / 16.f;
             scale = lerp(.1f, 1.f, scale * scale);
             kernel.emplace_back(sample * scale, 0.f);
         }
@@ -59,7 +146,7 @@ namespace pe
         UB_Kernel->Unmap();
 
         // noise image
-        std::vector <vec4> noise{};
+        std::vector<vec4> noise{};
         for (unsigned int i = 0; i < 16; i++)
             noise.emplace_back(rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f, 1.f);
 
@@ -115,10 +202,10 @@ namespace pe
         // DESCRIPTOR SET FOR SSAO BLUR
         DSBlur = Descriptor::Create(Pipeline::getDescriptorSetLayoutSSAOBlur());
 
-        updateDescriptorSets(renderTargets);
+        UpdateDescriptorSets(renderTargets);
     }
 
-    void SSAO::updateDescriptorSets(std::map<std::string, Image *> &renderTargets)
+    void SSAO::UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets)
     {
         std::array<DescriptorUpdateInfo, 5> infos{};
 
@@ -147,9 +234,22 @@ namespace pe
         DSBlur->UpdateDescriptor(1, &info);
     }
 
-    void SSAO::draw(CommandBuffer *cmd, uint32_t imageIndex, Image *image)
+    void SSAO::Update(Camera *camera)
+    {
+        if (GUI::show_ssao)
+        {
+            pvm[0] = camera->projection;
+            pvm[1] = camera->view;
+            pvm[2] = camera->invProjection;
+
+            UB_PVM->CopyRequest<Launch::AsyncDeferred>({&pvm, sizeof(pvm), 0}, false);
+        }
+    }
+
+    void SSAO::Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets)
     {
         // SSAO image
+        Image *image = renderTargets["ssao"];
         image->ChangeLayout(cmd, LayoutState::ColorWrite);
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->BindPipeline(pipeline);
@@ -159,7 +259,7 @@ namespace pe
 
         image->ChangeLayout(cmd, LayoutState::ColorRead);
 
-        // new blurry SSAO image
+        // SSAO blur image
         cmd->BeginPass(blurRenderPass, blurFramebuffers[imageIndex]);
         cmd->BindPipeline(pipelineBlur);
         cmd->BindDescriptors(pipelineBlur, 1, &DSBlur);
@@ -168,7 +268,7 @@ namespace pe
         image->ChangeLayout(cmd, LayoutState::ColorRead);
     }
 
-    void SSAO::destroy()
+    void SSAO::Destroy()
     {
         UB_Kernel->Destroy();
         UB_PVM->Destroy();
@@ -186,99 +286,5 @@ namespace pe
         pipelineBlur->Destroy();
         Pipeline::getDescriptorSetLayoutSSAO()->Destroy();
         Pipeline::getDescriptorSetLayoutSSAOBlur()->Destroy();
-    }
-
-    void SSAO::update(Camera &camera)
-    {
-        if (GUI::show_ssao)
-        {
-            pvm[0] = camera.projection;
-            pvm[1] = camera.view;
-            pvm[2] = camera.invProjection;
-
-            UB_PVM->CopyRequest<Launch::AsyncDeferred>({&pvm, sizeof(pvm), 0}, false);
-        }
-    }
-
-    void SSAO::createRenderPasses(std::map<std::string, Image *> &renderTargets)
-    {
-        Attachment attachment{};
-        attachment.format = renderTargets["ssao"]->imageInfo.format;
-        renderPass = RenderPass::Create(attachment);
-
-        attachment.format = renderTargets["ssaoBlur"]->imageInfo.format;
-        blurRenderPass = RenderPass::Create(attachment);
-    }
-
-    void SSAO::createFrameBuffers(std::map<std::string, Image *> &renderTargets)
-    {
-        createSSAOFrameBuffers(renderTargets);
-        createSSAOBlurFrameBuffers(renderTargets);
-    }
-
-    void SSAO::createSSAOFrameBuffers(std::map<std::string, Image *> &renderTargets)
-    {
-        framebuffers.resize(RHII.swapchain->images.size());
-        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
-        {
-            uint32_t width = renderTargets["ssao"]->imageInfo.width;
-            uint32_t height = renderTargets["ssao"]->imageInfo.height;
-            ImageViewHandle view = renderTargets["ssao"]->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
-        }
-    }
-
-    void SSAO::createSSAOBlurFrameBuffers(std::map<std::string, Image *> &renderTargets)
-    {
-        blurFramebuffers.resize(RHII.swapchain->images.size());
-        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
-        {
-            uint32_t width = renderTargets["ssaoBlur"]->imageInfo.width;
-            uint32_t height = renderTargets["ssaoBlur"]->imageInfo.height;
-            ImageViewHandle view = renderTargets["ssaoBlur"]->view;
-            blurFramebuffers[i] = FrameBuffer::Create(width, height, view, blurRenderPass);
-        }
-    }
-
-    void SSAO::createPipelines(std::map<std::string, Image *> &renderTargets)
-    {
-        createPipeline(renderTargets);
-        createBlurPipeline(renderTargets);
-    }
-
-    void SSAO::createPipeline(std::map<std::string, Image *> &renderTargets)
-    {
-        PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSAO/ssao.frag", ShaderType::Fragment});
-        info.width = renderTargets["ssao"]->width_f;
-        info.height = renderTargets["ssao"]->height_f;
-        info.cullMode = CullMode::Back;
-        info.colorBlendAttachments = {renderTargets["ssao"]->blendAttachment};
-        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutSSAO()};
-        info.renderPass = renderPass;
-
-        pipeline = Pipeline::Create(info);
-        
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
-    }
-
-    void SSAO::createBlurPipeline(std::map<std::string, Image *> &renderTargets)
-    {
-        PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSAO/ssaoBlur.frag", ShaderType::Fragment});
-        info.width = renderTargets["ssaoBlur"]->width_f;
-        info.height = renderTargets["ssaoBlur"]->height_f;
-        info.cullMode = CullMode::Back;
-        info.colorBlendAttachments = {renderTargets["ssaoBlur"]->blendAttachment};
-        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutSSAOBlur()};
-        info.renderPass = blurRenderPass;
-
-        pipelineBlur = Pipeline::Create(info);
-        
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
     }
 }
