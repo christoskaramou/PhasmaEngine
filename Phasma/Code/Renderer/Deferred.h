@@ -37,13 +37,49 @@ namespace pe
 
     class Pipeline;
 
-    class Deferred
+    class Deferred : public IRenderComponent
     {
     public:
         Deferred();
 
         ~Deferred();
 
+        void Init() override;
+
+        void CreateRenderPass() override;
+
+        void CreateFrameBuffers() override;
+
+        void CreatePipeline() override;
+
+        void CreateUniforms() override;
+
+        void UpdateDescriptorSets() override;
+
+        void Update(Camera *camera) override;
+
+        void Draw(CommandBuffer *cmd, uint32_t imageIndex) override;
+
+        void Resize(uint32_t width, uint32_t height) override;
+
+        void Destroy() override;
+
+        void BeginPass(CommandBuffer *cmd, uint32_t imageIndex);
+
+        void EndPass(CommandBuffer *cmd);
+
+private:
+        void CreateGBufferFrameBuffers();
+
+        void CreateCompositionFrameBuffers();
+
+        void CreateGBufferPipeline();
+
+        void CreateCompositionPipeline();
+
+public:
+        struct UBO { vec4 screenSpace[8]; } ubo;
+        Buffer *uniform;
         RenderPass *renderPass;
         RenderPass *compositionRenderPass;
         std::vector<FrameBuffer *> framebuffers{}, compositionFramebuffers{};
@@ -51,39 +87,14 @@ namespace pe
         Pipeline *pipeline;
         Pipeline *pipelineComposition;
         Image *ibl_brdf_lut;
-
-        struct UBO
-        {
-            vec4 screenSpace[8];
-        } ubo;
-        Buffer *uniform;
-
-        void BeginPass(CommandBuffer *cmd, uint32_t imageIndex);
-
-        void EndPass();
-
-        void createDeferredUniforms(std::map<std::string, Image *> &renderTargets);
-
-        void updateDescriptorSets(std::map<std::string, Image *> &renderTargets);
-
-        void update(mat4 &invViewProj);
-
-        void draw(CommandBuffer *cmd, uint32_t imageIndex, Shadows &shadows, SkyBox &skybox);
-
-        void createRenderPasses(std::map<std::string, Image *> &renderTargets);
-
-        void createFrameBuffers(std::map<std::string, Image *> &renderTargets);
-
-        void createGBufferFrameBuffers(std::map<std::string, Image *> &renderTargets);
-
-        void createCompositionFrameBuffers(std::map<std::string, Image *> &renderTargets);
-
-        void createPipelines(std::map<std::string, Image *> &renderTargets);
-
-        void createGBufferPipeline(std::map<std::string, Image *> &renderTargets);
-
-        void createCompositionPipeline(std::map<std::string, Image *> &renderTargets);
-
-        void destroy();
+        Image *normalRT;
+        Image *albedoRT;
+        Image *srmRT;
+        Image *velocityRT;
+        Image *emissiveRT;
+        Image *viewportRT;
+        Image *depth;
+        Image *ssaoBlurRT;
+        Image *ssrRT;
     };
 }

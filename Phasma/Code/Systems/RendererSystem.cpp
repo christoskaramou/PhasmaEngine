@@ -58,36 +58,35 @@ namespace pe
 #else
         title += " - Configuration: Release";
 #endif // _DEBUG
+
         CONTEXT->GetSystem<EventSystem>()->DispatchEvent(EventType::SetWindowTitle, title);
 
-        // INIT RENDERING
-        AddRenderTarget("viewport", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-        AddRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-        AddRenderTarget("albedo", RHII.surface->format);
-        AddRenderTarget("srm", RHII.surface->format); // Specular Roughness Metallic
-        AddRenderTarget("ssao", VK_FORMAT_R16_UNORM);
-        AddRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-        AddRenderTarget("ssr", RHII.surface->format);
-        AddRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-        AddRenderTarget("brightFilter", RHII.surface->format);
-        AddRenderTarget("gaussianBlurHorizontal", RHII.surface->format);
-        AddRenderTarget("gaussianBlurVertical", RHII.surface->format);
-        AddRenderTarget("emissive", RHII.surface->format);
-        AddRenderTarget("taa", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        m_viewportRT = CreateRenderTarget("viewport", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+        CreateRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
+        CreateRenderTarget("albedo", RHII.surface->format);
+        CreateRenderTarget("srm", RHII.surface->format); // Specular Roughness Metallic
+        CreateRenderTarget("ssao", VK_FORMAT_R16_UNORM);
+        CreateRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
+        CreateRenderTarget("ssr", RHII.surface->format);
+        CreateRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
+        CreateRenderTarget("brightFilter", RHII.surface->format);
+        CreateRenderTarget("gaussianBlurHorizontal", RHII.surface->format);
+        CreateRenderTarget("gaussianBlurVertical", RHII.surface->format);
+        CreateRenderTarget("emissive", RHII.surface->format);
+        CreateRenderTarget("taa", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
-        // render passes
-        shadows.createRenderPass();
-        deferred.createRenderPasses(renderTargets);
-
-        // frame buffers
-        shadows.createFrameBuffers();
-        deferred.createFrameBuffers(renderTargets);
-
-        // pipelines
-        shadows.createPipeline();
-        deferred.createPipelines(renderTargets);
-
-        // transformsCompute = Compute::Create("Shaders/Compute/shader.comp", 64, 64);
+        // INIT render components
+        m_renderComponents[GetTypeID<Deferred>()] = WORLD_ENTITY->CreateComponent<Deferred>();
+        m_renderComponents[GetTypeID<Shadows>()] = WORLD_ENTITY->CreateComponent<Shadows>();
+        for (auto &renderComponent : m_renderComponents)
+        {
+            renderComponent.second->Init();
+            renderComponent.second->CreateRenderPass();
+            renderComponent.second->CreateFrameBuffers();
+            renderComponent.second->CreatePipeline();
+            renderComponent.second->CreateUniforms();
+        }
 
         // LOAD RESOURCES
         LoadResources();
@@ -113,8 +112,6 @@ namespace pe
         CameraSystem *cameraSystem = CONTEXT->GetSystem<CameraSystem>();
         Camera *camera_main = cameraSystem->GetCamera(0);
 
-        // Model updates + 8(the rest updates)
-
         // MODELS
         if (GUI::modelItemSelected > -1)
         {
@@ -122,27 +119,18 @@ namespace pe
             Model::models[GUI::modelItemSelected].pos = vec3(GUI::model_pos[GUI::modelItemSelected].data());
             Model::models[GUI::modelItemSelected].rot = vec3(GUI::model_rot[GUI::modelItemSelected].data());
         }
-        for (auto &model : Model::models)
-        {
-            auto updateModel = [&model, camera_main, delta]()
-            { model.update(*camera_main, delta); };
-            Queue<Launch::Async>::Request(updateModel);
-        }
+        for (auto &m : Model::models)
+            Queue<Launch::Async>::Request([&m, camera_main, delta]()
+                                          { m.update(*camera_main, delta); });
+
+        // RENDER COMPONENTS
+        for (auto &rc : m_renderComponents)
+            Queue<Launch::Async>::Request([camera_main, rc]()
+                                          { rc.second->Update(camera_main); });
 
         // GUI
-        auto updateGUI = [this]()
-        { gui.Update(); };
-        Queue<Launch::Async>::Request(updateGUI);
-
-        // SHADOWS
-        auto updateShadows = [this, camera_main]()
-        { shadows.update(*camera_main); };
-        Queue<Launch::Async>::Request(updateShadows);
-
-        // COMPOSITION UNIFORMS
-        auto updateDeferred = [this, camera_main]()
-        { deferred.update(camera_main->invViewProjection); };
-        Queue<Launch::Async>::Request(updateDeferred);
+        Queue<Launch::Async>::Request([this]()
+                                      { gui.Update(); });
     }
 
     void RendererSystem::Draw()
@@ -216,13 +204,8 @@ namespace pe
     {
         RHII.WaitDeviceIdle();
 
-        for (auto &rt : renderTargets)
-            rt.second->Destroy();
-
-        if (Model::models.empty())
-        {
-            // Pipeline::getLayoutGBufferVertex()->Destroy();
-        }
+        for (auto &rc : m_renderComponents)
+            rc.second->Destroy();
 
 #ifndef IGNORE_SCRIPTS
         for (auto &script : scripts)
@@ -235,8 +218,6 @@ namespace pe
         Mesh::uniqueTextures.clear();
 
         Compute::DestroyResources();
-        shadows.destroy();
-        deferred.destroy();
         skyBoxDay.destroy();
         skyBoxNight.destroy();
         gui.Destroy();

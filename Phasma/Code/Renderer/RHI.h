@@ -67,7 +67,11 @@ namespace pe
 
         void GetComputeFamilyId();
 
-        bool IsExtensionValid(const char *name);
+        bool IsInstanceExtensionValid(const char *name);
+
+        bool IsInstanceLayerValid(const char *name);
+
+        bool IsDeviceExtensionValid(const char *name);
 
         void CreateDevice();
 
@@ -95,18 +99,17 @@ namespace pe
 
         void CreateSemaphores(uint32_t semaphoresCount);
 
-        void CreateDepth();
+        Format GetDepthFormat();
 
         void Init(SDL_Window *window);
 
         void Destroy();
 
         InstanceHandle instance;
-        DebugMessengerHandle debugMessenger;
         GpuHandle gpu;
         std::string gpuName;
         DeviceHandle device;
-        DeviceQueueHandle graphicsQueue, computeQueue, transferQueue;
+        QueueHandle graphicsQueue, computeQueue, transferQueue;
         CommandPool *commandPool;
         CommandPool *commandPool2;
         CommandPool *commandPoolTransfer;
@@ -126,7 +129,6 @@ namespace pe
         SDL_Window *window;
         Surface *surface;
         Swapchain *swapchain;
-        Image *depth;
         int graphicsFamilyId, computeFamilyId, transferFamilyId;
 
         class UniformBuffer
@@ -171,14 +173,8 @@ namespace pe
             uint32_t *imageIndices,
             uint32_t semaphorescount, Semaphore **semaphores);
 
-#if _DEBUG
-        void CreateDebugMessenger();
-
-        void DestroyDebugMessenger();
-#endif
     private:
         static inline std::mutex m_submit_mutex{};
-        bool m_HasDebugUtils = false;
 
     public:
         void WaitAndLockSubmits();

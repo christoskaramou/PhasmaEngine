@@ -85,4 +85,9 @@ namespace pe
         if (m_entities.find(id) != m_entities.end())
             m_entities.erase(id);
     }
+
+    std::unordered_map<size_t, std::shared_ptr<ISystem>> Context::GetSystems()
+    {
+        return m_systems;
+    }
 }

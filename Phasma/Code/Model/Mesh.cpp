@@ -156,7 +156,7 @@ namespace pe
             info.height = texHeight;
             info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
             info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-            info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+            info.initialState = LayoutState::Preinitialized;
             *tex = Image::Create(info);
 
             ImageViewCreateInfo viewInfo{};
@@ -166,9 +166,7 @@ namespace pe
             SamplerCreateInfo samplerInfo{};
             samplerInfo.maxLod = static_cast<float>(info.mipLevels);
             (*tex)->CreateSampler(samplerInfo);
-
-            (*tex)->TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            (*tex)->CopyBufferToImage(staging);
+            (*tex)->CopyBufferToImage(nullptr, staging);
             (*tex)->GenerateMipMaps();
 
             staging->Destroy();

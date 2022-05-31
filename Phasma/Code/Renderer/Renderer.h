@@ -62,19 +62,6 @@ namespace pe
 
     class Renderer
     {
-    protected:
-        RenderArea renderArea;
-        Shadows shadows;
-        Deferred deferred;
-        SkyBox skyBoxDay;
-        SkyBox skyBoxNight;
-        GUI gui;
-        Compute animationsCompute;
-        Compute nodesCompute;
-
-#ifndef IGNORE_SCRIPTS
-        std::vector<Script*> scripts{};
-#endif
     public:
         Renderer();
 
@@ -82,7 +69,19 @@ namespace pe
 
         RenderArea &GetRenderArea() { return renderArea; }
 
-        void AddRenderTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags = 0);
+        Image *CreateRenderTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags = 0, bool blendEnable = false);
+
+        Image *GetRenderTarget(const std::string &name);
+
+        Image *GetRenderTarget(size_t hash);
+
+        Image *CreateDepthTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags = 0);
+
+        Image *GetDepthTarget(const std::string &name);
+
+        Image *GetDepthTarget(size_t hash);
+
+        Image *CreateFSSampledImage();
 
         void LoadResources();
 
@@ -94,11 +93,6 @@ namespace pe
 
         void RecreatePipelines();
 
-        std::map<std::string, Image *> &GetRenderTargets()
-        { return renderTargets; }
-
-        std::map<std::string, Image *> renderTargets{};
-
     protected:
         static void CheckQueue();
 
@@ -107,5 +101,23 @@ namespace pe
         void RecordDeferredCmds(uint32_t imageIndex);
 
         void RecordShadowsCmds(uint32_t imageIndex);
+
+        Image *m_viewportRT;
+        Image *m_depth;
+        std::unordered_map<size_t, IRenderComponent *> m_renderComponents{};
+        std::map<size_t, Image *> m_renderTargets{};
+        std::map<size_t, Image *> m_depthTargets{};
+
+    public:
+        RenderArea renderArea;
+        SkyBox skyBoxDay;
+        SkyBox skyBoxNight;
+        GUI gui;
+        Compute animationsCompute;
+        Compute nodesCompute;
+
+#ifndef IGNORE_SCRIPTS
+        std::vector<Script *> scripts{};
+#endif
     };
 }

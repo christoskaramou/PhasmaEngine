@@ -80,6 +80,8 @@ namespace pe
 
         void RemoveEntity(size_t id);
 
+        std::unordered_map<size_t, std::shared_ptr<ISystem>> GetSystems();
+
     private:
         std::unordered_map<size_t, std::shared_ptr<ISystem>> m_systems;
         std::unordered_map<size_t, IDrawSystem *> m_drawSystems; // Keep the pointers for draw systems. All are stored in m_systems
@@ -112,7 +114,7 @@ namespace pe
 
             ISystem *system = m_systems[id].get();
             system->SetEnabled(true);
-            system->Init();
+            //system->Init();
 
             if (std::is_base_of<IDrawSystem, T>::value)
                 m_drawSystems[id] = static_cast<IDrawSystem *>(system);

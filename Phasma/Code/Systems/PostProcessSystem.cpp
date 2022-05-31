@@ -53,14 +53,13 @@ namespace pe
         m_effects[GetTypeID<TAA>()] = WORLD_ENTITY->CreateComponent<TAA>();
         m_effects[GetTypeID<SSGI>()] = WORLD_ENTITY->CreateComponent<SSGI>();
 
-        auto &renderTargets = CONTEXT->GetSystem<RendererSystem>()->GetRenderTargets();
         for (auto &effect : m_effects)
         {
             effect.second->Init();
-            effect.second->CreateRenderPass(renderTargets);
-            effect.second->CreateFrameBuffers(renderTargets);
-            effect.second->CreatePipeline(renderTargets);
-            effect.second->CreateUniforms(renderTargets);
+            effect.second->CreateRenderPass();
+            effect.second->CreateFrameBuffers();
+            effect.second->CreatePipeline();
+            effect.second->CreateUniforms();
         }
     }
 
@@ -76,5 +75,11 @@ namespace pe
     {
         for (auto& effect : m_effects)
             effect.second->Destroy();
+    }
+
+    void PostProcessSystem::Resize(uint32_t width, uint32_t height)
+    {
+        for (auto &effect : m_effects)
+            effect.second->Resize(width, height);
     }
 }

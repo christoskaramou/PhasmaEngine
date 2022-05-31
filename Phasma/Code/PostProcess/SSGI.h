@@ -32,7 +32,7 @@ namespace pe
     class Pipeline;
     class Camera;
 
-    class SSGI : public IEffectComponent
+    class SSGI : public IRenderComponent
     {
     public:
         SSGI();
@@ -41,19 +41,21 @@ namespace pe
 
         void Init() override;
 
-        void CreateRenderPass(std::map<std::string, Image *> &renderTargets) override;
+        void CreateRenderPass() override;
 
-        void CreateFrameBuffers(std::map<std::string, Image *> &renderTargets) override;
+        void CreateFrameBuffers() override;
 
-        void CreatePipeline(std::map<std::string, Image *> &renderTargets) override;
+        void CreatePipeline() override;
 
-        void CreateUniforms(std::map<std::string, Image *> &renderTargets) override;
+        void CreateUniforms() override;
 
-        void UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets) override;
+        void UpdateDescriptorSets() override;
 
         void Update(Camera *camera) override;
 
-        void Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets) override;
+        void Draw(CommandBuffer *cmd, uint32_t imageIndex) override;
+
+        void Resize(uint32_t width, uint32_t height) override;
 
         void Destroy() override;
 
@@ -62,5 +64,7 @@ namespace pe
         RenderPass *renderPass;
         Descriptor *DSet;
         Image *frameImage;
+        Image *viewportRT;
+        Image *depth;
     };
 }

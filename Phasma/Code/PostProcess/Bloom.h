@@ -32,7 +32,7 @@ namespace pe
     class Pipeline;
     class Camera;
 
-    class Bloom : public IEffectComponent
+    class Bloom : public IRenderComponent
     {
     public:
         Bloom();
@@ -41,30 +41,32 @@ namespace pe
 
         void Init() override;
 
-        void CreateRenderPass(std::map<std::string, Image *> &renderTargets) override;
+        void CreateRenderPass() override;
 
-        void CreateFrameBuffers(std::map<std::string, Image *> &renderTargets) override;
+        void CreateFrameBuffers() override;
 
-        void CreatePipeline(std::map<std::string, Image *> &renderTargets) override;
+        void CreatePipeline() override;
 
-        void CreateUniforms(std::map<std::string, Image *> &renderTargets) override;
+        void CreateUniforms() override;
 
-        void UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets) override;
+        void UpdateDescriptorSets() override;
 
         void Update(Camera *camera) override;
 
-        void Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets) override;
+        void Draw(CommandBuffer *cmd, uint32_t imageIndex) override;
+
+        void Resize(uint32_t width, uint32_t height) override;
 
         void Destroy() override;
 
     private:
-        void CreateBrightFilterPipeline(std::map<std::string, Image *> &renderTargets);
+        void CreateBrightFilterPipeline();
 
-        void CreateGaussianBlurHorizontaPipeline(std::map<std::string, Image *> &renderTargets);
+        void CreateGaussianBlurHorizontaPipeline();
 
-        void CreateGaussianBlurVerticalPipeline(std::map<std::string, Image *> &renderTargets);
+        void CreateGaussianBlurVerticalPipeline();
 
-        void CreateCombinePipeline(std::map<std::string, Image *> &renderTargets);
+        void CreateCombinePipeline();
 
     public:
         std::vector<FrameBuffer *> framebuffers{};
@@ -80,5 +82,9 @@ namespace pe
         Descriptor *DSGaussianBlurVertical;
         Descriptor *DSCombine;
         Image *frameImage;
+        Image *brightFilterRT;
+        Image *gaussianBlurHorizontalRT;
+        Image *gaussianBlurVerticalRT;
+        Image *viewportRT;
     };
 }

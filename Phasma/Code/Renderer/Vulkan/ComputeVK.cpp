@@ -31,6 +31,7 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
+#include "Renderer/Debug.h"
 
 namespace pe
 {
@@ -147,12 +148,12 @@ namespace pe
         fence->Destroy();
     }
 
-    Compute Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut)
+    Compute Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, const std::string &name)
     {
         CreateResources();
 
         Compute compute;
-        compute.commandBuffer = CommandBuffer::Create(s_commandPool);
+        compute.commandBuffer = CommandBuffer::Create(s_commandPool, name);
         compute.createPipeline(shaderName);
         compute.createDescriptorSet();
         compute.createComputeStorageBuffers(sizeIn, sizeOut);
@@ -163,17 +164,17 @@ namespace pe
         return compute;
     }
 
-    std::vector<Compute> Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, uint32_t count)
+    std::vector<Compute> Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, uint32_t count, const std::string &name)
     {
         CreateResources();
 
         std::vector<CommandBuffer *> commandBuffers(count);
         std::vector<Compute> computes(count);
 
-        for (auto &commandBuffer : commandBuffers)
+        for (uint32_t i = 0; i < count; i++)
         {
             Compute compute;
-            compute.commandBuffer = CommandBuffer::Create(s_commandPool);
+            compute.commandBuffer = CommandBuffer::Create(s_commandPool, name + std::to_string(i));
             compute.createPipeline(shaderName);
             compute.createDescriptorSet();
             compute.createComputeStorageBuffers(sizeIn, sizeOut);

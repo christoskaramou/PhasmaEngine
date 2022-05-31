@@ -39,6 +39,9 @@ SOFTWARE.
 #include "Renderer/RenderPass.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
+#include "Systems/RendererSystem.h"
+#include "PostProcess/SSAO.h"
+#include "PostProcess/SSR.h"
 
 namespace pe
 {
@@ -51,22 +54,153 @@ namespace pe
     {
     }
 
-    void Deferred::BeginPass(CommandBuffer *cmd, uint32_t imageIndex)
+    void Deferred::Init()
     {
-        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
 
-        Model::commandBuffer = cmd;
-        Model::pipeline = pipeline;
+        normalRT = rs->GetRenderTarget("normal");
+        albedoRT = rs->GetRenderTarget("albedo");
+        srmRT = rs->GetRenderTarget("srm"); // Specular Roughness Metallic
+        velocityRT = rs->GetRenderTarget("velocity");
+        emissiveRT = rs->GetRenderTarget("emissive");
+        viewportRT = rs->GetRenderTarget("viewport");
+        depth = rs->GetDepthTarget("depth");
+        ssaoBlurRT = rs->GetRenderTarget("ssaoBlur");
+        ssrRT = rs->GetRenderTarget("ssr");
     }
 
-    void Deferred::EndPass()
+    void Deferred::CreateRenderPass()
     {
-        Model::commandBuffer->EndPass();
-        Model::commandBuffer = nullptr;
-        Model::pipeline = nullptr;
+        std::vector<Attachment> attachments(6);
+
+        // Target attachments are initialized to match render targets by default
+        attachments[0].format = normalRT->imageInfo.format;
+        attachments[1].format = albedoRT->imageInfo.format;
+        attachments[2].format = srmRT->imageInfo.format;
+        attachments[3].format = velocityRT->imageInfo.format;
+        attachments[4].format = emissiveRT->imageInfo.format;
+
+        // Depth
+        attachments[5].flags = {};
+        attachments[5].format = depth->imageInfo.format;
+        attachments[5].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[5].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachments[5].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[5].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachments[5].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[5].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[5].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        renderPass = RenderPass::Create(attachments);
+
+        Attachment attachment{};
+        attachment.format = viewportRT->imageInfo.format;
+        compositionRenderPass = RenderPass::Create(attachment);
     }
 
-    void Deferred::createDeferredUniforms(std::map<std::string, Image *> &renderTargets)
+    void Deferred::CreateFrameBuffers()
+    {
+        CreateGBufferFrameBuffers();
+        CreateCompositionFrameBuffers();
+    }
+
+    void Deferred::CreateGBufferFrameBuffers()
+    {
+        framebuffers.resize(RHII.swapchain->images.size());
+        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        {
+            uint32_t width = albedoRT->imageInfo.width;
+            uint32_t height = albedoRT->imageInfo.height;
+            std::vector<ImageViewHandle> views{
+                normalRT->view,
+                albedoRT->view,
+                srmRT->view,
+                velocityRT->view,
+                emissiveRT->view,
+                depth->view};
+            framebuffers[i] = FrameBuffer::Create(width, height, views, renderPass);
+        }
+    }
+
+    void Deferred::CreateCompositionFrameBuffers()
+    {
+        compositionFramebuffers.resize(RHII.swapchain->images.size());
+        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        {
+            uint32_t width = viewportRT->imageInfo.width;
+            uint32_t height = viewportRT->imageInfo.height;
+            ImageViewHandle view = viewportRT->view;
+            compositionFramebuffers[i] = FrameBuffer::Create(width, height, view, compositionRenderPass);
+        }
+    }
+
+    void Deferred::CreatePipeline()
+    {
+        CreateGBufferPipeline();
+        CreateCompositionPipeline();
+    }
+
+    void Deferred::CreateGBufferPipeline()
+    {
+        PipelineCreateInfo info{};
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.frag", ShaderType::Fragment});
+        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
+        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
+        info.width = albedoRT->width_f;
+        info.height = albedoRT->height_f;
+        info.pushConstantStage = PushConstantStage::VertexAndFragment;
+        info.pushConstantSize = 5 * sizeof(uint32_t);
+        info.cullMode = CullMode::Front;
+        info.colorBlendAttachments = {
+            normalRT->blendAttachment,
+            albedoRT->blendAttachment,
+            srmRT->blendAttachment,
+            velocityRT->blendAttachment,
+            emissiveRT->blendAttachment,
+        };
+
+        info.descriptorSetLayouts = {
+            Pipeline::getDescriptorSetLayoutGbufferVert(),
+            Pipeline::getDescriptorSetLayoutGbufferFrag()};
+        info.renderPass = renderPass;
+
+        pipeline = Pipeline::Create(info);
+
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
+    }
+
+    void Deferred::CreateCompositionPipeline()
+    {
+        const std::vector<Define> definesFrag{
+            Define{"SHADOWMAP_CASCADES", std::to_string(SHADOWMAP_CASCADES)},
+            Define{"SHADOWMAP_SIZE", std::to_string((float)SHADOWMAP_SIZE)},
+            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)SHADOWMAP_SIZE)},
+            Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
+            Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
+
+        PipelineCreateInfo info{};
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/composition.frag", ShaderType::Fragment, definesFrag});
+        info.width = viewportRT->width_f;
+        info.height = viewportRT->height_f;
+        info.pushConstantStage = PushConstantStage::Fragment;
+        info.pushConstantSize = sizeof(mat4);
+        info.colorBlendAttachments = {viewportRT->blendAttachment};
+        info.descriptorSetLayouts = {
+            Pipeline::getDescriptorSetLayoutComposition(),
+            Pipeline::getDescriptorSetLayoutShadowsDeferred(),
+            Pipeline::getDescriptorSetLayoutSkybox()};
+        info.renderPass = compositionRenderPass;
+
+        pipelineComposition = Pipeline::Create(info);
+
+        info.pVertShader->Destroy();
+        info.pFragShader->Destroy();
+    }
+
+    void Deferred::CreateUniforms()
     {
         uniform = Buffer::Create(
             sizeof(ubo),
@@ -116,7 +250,7 @@ namespace pe
             info.height = texHeight;
             info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
             info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-            info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+            info.initialState = LayoutState::Preinitialized;
             ibl_brdf_lut = Image::Create(info);
 
             ImageViewCreateInfo viewInfo{};
@@ -127,8 +261,7 @@ namespace pe
             samplerInfo.maxLod = static_cast<float>(info.mipLevels);
             ibl_brdf_lut->CreateSampler(samplerInfo);
 
-            ibl_brdf_lut->TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            ibl_brdf_lut->CopyBufferToImage(staging);
+            ibl_brdf_lut->CopyBufferToImage(nullptr, staging);
             ibl_brdf_lut->GenerateMipMaps();
 
             staging->Destroy();
@@ -138,37 +271,37 @@ namespace pe
             Mesh::uniqueTextures[path] = ibl_brdf_lut;
         }
 
-        updateDescriptorSets(renderTargets);
+        UpdateDescriptorSets();
     }
 
-    void Deferred::updateDescriptorSets(std::map<std::string, Image *> &renderTargets)
+    void Deferred::UpdateDescriptorSets()
     {
         std::array<DescriptorUpdateInfo, 10> infos{};
 
         infos[0].binding = 0;
-        infos[0].pImage = RHII.depth;
+        infos[0].pImage = depth;
         infos[0].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
         infos[1].binding = 1;
-        infos[1].pImage = renderTargets["normal"];
+        infos[1].pImage = normalRT;
 
         infos[2].binding = 2;
-        infos[2].pImage = renderTargets["albedo"];
+        infos[2].pImage = albedoRT;
 
         infos[3].binding = 3;
-        infos[3].pImage = renderTargets["srm"];
+        infos[3].pImage = srmRT;
 
         infos[4].binding = 4;
         infos[4].pBuffer = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
 
         infos[5].binding = 5;
-        infos[5].pImage = renderTargets["ssaoBlur"];
+        infos[5].pImage = ssaoBlurRT;
 
         infos[6].binding = 6;
-        infos[6].pImage = renderTargets["ssr"];
+        infos[6].pImage = ssrRT;
 
         infos[7].binding = 7;
-        infos[7].pImage = renderTargets["emissive"];
+        infos[7].pImage = emissiveRT;
 
         infos[8].binding = 8;
         infos[8].pImage = ibl_brdf_lut;
@@ -179,12 +312,12 @@ namespace pe
         DSComposition->UpdateDescriptor(10, infos.data());
     }
 
-    void Deferred::update(mat4 &invViewProj)
+    void Deferred::Update(Camera *camera)
     {
-        ubo.screenSpace[0] = {invViewProj[0]};
-        ubo.screenSpace[1] = {invViewProj[1]};
-        ubo.screenSpace[2] = {invViewProj[2]};
-        ubo.screenSpace[3] = {invViewProj[3]};
+        ubo.screenSpace[0] = {camera->invViewProjection[0]};
+        ubo.screenSpace[1] = {camera->invViewProjection[1]};
+        ubo.screenSpace[2] = {camera->invViewProjection[2]};
+        ubo.screenSpace[3] = {camera->invViewProjection[3]};
         ubo.screenSpace[4] = {
             static_cast<float>(GUI::show_ssao), static_cast<float>(GUI::show_ssr),
             static_cast<float>(GUI::show_tonemapping), static_cast<float>(GUI::use_AntiAliasing)};
@@ -198,12 +331,35 @@ namespace pe
         uniform->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(ubo), 0}, false);
     }
 
-    void Deferred::draw(CommandBuffer *cmd, uint32_t imageIndex, Shadows &shadows, SkyBox &skybox)
+    void Deferred::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
+        Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
+        RendererSystem &rs = *CONTEXT->GetSystem<RendererSystem>();
+
+        // SKYBOX
+        SkyBox &skybox = GUI::shadow_cast ? rs.skyBoxDay : rs.skyBoxNight;
+
         mat4 values{};
         values[0] = shadows.viewZ;
         values[1] = vec4(GUI::shadow_cast);
         std::vector<Descriptor *> handles{DSComposition, shadows.descriptorSetDeferred, skybox.descriptorSet};
+
+        // COMBINE
+        // Input
+        normalRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        albedoRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        srmRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        velocityRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        emissiveRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        ssaoBlurRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        ssrRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        ibl_brdf_lut->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        skybox.texture->ChangeLayout(cmd, LayoutState::ShaderReadOnly, 0, skybox.texture->imageInfo.arrayLayers);
+        depth->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+        for (auto &shadowMap : shadows.textures)
+            shadowMap->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+        // Output
+        viewportRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
 
         cmd->BeginPass(compositionRenderPass, compositionFramebuffers[imageIndex]);
         cmd->PushConstants(pipelineComposition, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(mat4), &values);
@@ -213,138 +369,57 @@ namespace pe
         cmd->EndPass();
     }
 
-    void Deferred::createRenderPasses(std::map<std::string, Image *> &renderTargets)
+    void Deferred::Resize(uint32_t width, uint32_t height)
     {
-        std::vector<Attachment> attachments(6);
+        for (auto *framebuffer : framebuffers)
+            framebuffer->Destroy();
+        for (auto *framebuffer : compositionFramebuffers)
+            framebuffer->Destroy();
 
-        // Target attachments are initialized to match render targets by default
-        attachments[0].format = renderTargets["normal"]->imageInfo.format;
-        attachments[1].format = renderTargets["albedo"]->imageInfo.format;
-        attachments[2].format = renderTargets["srm"]->imageInfo.format;
-        attachments[3].format = renderTargets["velocity"]->imageInfo.format;
-        attachments[4].format = renderTargets["emissive"]->imageInfo.format;
+        renderPass->Destroy();
+        compositionRenderPass->Destroy();
 
-        // Depth
-        attachments[5].flags = {};
-        attachments[5].format = RHII.depth->imageInfo.format;
-        attachments[5].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[5].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachments[5].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[5].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[5].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[5].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[5].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        pipeline->Destroy();
+        pipelineComposition->Destroy();
 
-        renderPass = RenderPass::Create(attachments);
-
-        Attachment attachment{};
-        attachment.format = renderTargets["viewport"]->imageInfo.format;
-        compositionRenderPass = RenderPass::Create(attachment);
+        Init();
+        CreateRenderPass();
+        CreateFrameBuffers();
+        CreatePipeline();
+        UpdateDescriptorSets();
     }
 
-    void Deferred::createFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    void Deferred::BeginPass(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        createGBufferFrameBuffers(renderTargets);
-        createCompositionFrameBuffers(renderTargets);
+        albedoRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        normalRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        velocityRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        emissiveRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        srmRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        depth->ChangeLayout(cmd, LayoutState::DepthStencilAttachment);
+
+        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+
+        Model::commandBuffer = cmd;
+        Model::pipeline = pipeline;
     }
 
-    void Deferred::createGBufferFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    void Deferred::EndPass(CommandBuffer *cmd)
     {
-        framebuffers.resize(RHII.swapchain->images.size());
-        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
-        {
-            uint32_t width = renderTargets["albedo"]->imageInfo.width;
-            uint32_t height = renderTargets["albedo"]->imageInfo.height;
-            std::vector<ImageViewHandle> views{
-                renderTargets["normal"]->view,
-                renderTargets["albedo"]->view,
-                renderTargets["srm"]->view,
-                renderTargets["velocity"]->view,
-                renderTargets["emissive"]->view,
-                RHII.depth->view};
-            framebuffers[i] = FrameBuffer::Create(width, height, views, renderPass);
-        }
+        Model::commandBuffer->EndPass();
+
+        albedoRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        normalRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        velocityRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        emissiveRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        srmRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        depth->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+
+        Model::commandBuffer = nullptr;
+        Model::pipeline = nullptr;
     }
 
-    void Deferred::createCompositionFrameBuffers(std::map<std::string, Image *> &renderTargets)
-    {
-        compositionFramebuffers.resize(RHII.swapchain->images.size());
-        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
-        {
-            uint32_t width = renderTargets["viewport"]->imageInfo.width;
-            uint32_t height = renderTargets["viewport"]->imageInfo.height;
-            ImageViewHandle view = renderTargets["viewport"]->view;
-            compositionFramebuffers[i] = FrameBuffer::Create(width, height, view, compositionRenderPass);
-        }
-    }
-
-    void Deferred::createPipelines(std::map<std::string, Image *> &renderTargets)
-    {
-        createGBufferPipeline(renderTargets);
-        createCompositionPipeline(renderTargets);
-    }
-
-    void Deferred::createGBufferPipeline(std::map<std::string, Image *> &renderTargets)
-    {
-        PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.frag", ShaderType::Fragment});
-        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
-        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
-        info.width = renderTargets["albedo"]->width_f;
-        info.height = renderTargets["albedo"]->height_f;
-        info.pushConstantStage = PushConstantStage::VertexAndFragment;
-        info.pushConstantSize = 5 * sizeof(uint32_t);
-        info.cullMode = CullMode::Front;
-        info.colorBlendAttachments = {
-            renderTargets["normal"]->blendAttachment,
-            renderTargets["albedo"]->blendAttachment,
-            renderTargets["srm"]->blendAttachment,
-            renderTargets["velocity"]->blendAttachment,
-            renderTargets["emissive"]->blendAttachment,
-        };
-
-        info.descriptorSetLayouts = {
-            Pipeline::getDescriptorSetLayoutGbufferVert(),
-            Pipeline::getDescriptorSetLayoutGbufferFrag()};
-        info.renderPass = renderPass;
-
-        pipeline = Pipeline::Create(info);
-
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
-    }
-
-    void Deferred::createCompositionPipeline(std::map<std::string, Image *> &renderTargets)
-    {
-        const std::vector<Define> definesFrag{
-            Define{"SHADOWMAP_CASCADES", std::to_string(SHADOWMAP_CASCADES)},
-            Define{"SHADOWMAP_SIZE", std::to_string((float)SHADOWMAP_SIZE)},
-            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)SHADOWMAP_SIZE)},
-            Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
-            Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
-
-        PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/composition.frag", ShaderType::Fragment, definesFrag});
-        info.width = renderTargets["viewport"]->width_f;
-        info.height = renderTargets["viewport"]->height_f;
-        info.pushConstantStage = PushConstantStage::Fragment;
-        info.pushConstantSize = sizeof(mat4);
-        info.colorBlendAttachments = {renderTargets["viewport"]->blendAttachment};
-        info.descriptorSetLayouts = {
-            Pipeline::getDescriptorSetLayoutComposition(),
-            Pipeline::getDescriptorSetLayoutShadowsDeferred(),
-            Pipeline::getDescriptorSetLayoutSkybox()};
-        info.renderPass = compositionRenderPass;
-
-        pipelineComposition = Pipeline::Create(info);
-
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
-    }
-
-    void Deferred::destroy()
+    void Deferred::Destroy()
     {
         renderPass->Destroy();
         compositionRenderPass->Destroy();

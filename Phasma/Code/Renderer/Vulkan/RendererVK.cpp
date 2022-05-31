@@ -48,6 +48,10 @@ namespace pe
 
     Renderer::~Renderer()
     {
+        for (auto &rt : m_renderTargets)
+            rt.second->Destroy();
+        for (auto &dt : m_depthTargets)
+            dt.second->Destroy();
         RHII.Destroy();
         RHII.Remove();
     }
@@ -114,46 +118,8 @@ namespace pe
 
     void Renderer::RecordDeferredCmds(uint32_t imageIndex)
     {
-        static GPUTimer gpuTimer[12]{};
-
-        FrameTimer &frameTimer = FrameTimer::Instance();
-
-        CommandBuffer *cmd = RHII.dynamicCmdBuffers[imageIndex];
-        cmd->Begin();
-
-        gpuTimer[0].Start(cmd);
-        // SKYBOX
-        SkyBox &skybox = GUI::shadow_cast ? skyBoxDay : skyBoxNight;
-
-        // MODELS
-        {
-            gpuTimer[1].Start(cmd);
-            deferred.BeginPass(cmd, imageIndex);
-
-            for (auto &model : Model::models)
-                model.draw((uint16_t)RenderQueue::Opaque);
-
-            for (auto &model : Model::models)
-                model.draw((uint16_t)RenderQueue::AlphaCut);
-
-            for (auto &model : Model::models)
-                model.draw((uint16_t)RenderQueue::AlphaBlend);
-
-            deferred.EndPass();
-            frameTimer.timestamps[4] = gpuTimer[1].End();
-        }
-        renderTargets["albedo"]->ChangeLayout(cmd, LayoutState::ColorRead);
-        RHII.depth->ChangeLayout(cmd, LayoutState::DepthRead);
-        renderTargets["normal"]->ChangeLayout(cmd, LayoutState::ColorRead);
-        renderTargets["srm"]->ChangeLayout(cmd, LayoutState::ColorRead);
-        renderTargets["emissive"]->ChangeLayout(cmd, LayoutState::ColorRead);
-        renderTargets["ssr"]->ChangeLayout(cmd, LayoutState::ColorRead);
-        renderTargets["ssaoBlur"]->ChangeLayout(cmd, LayoutState::ColorRead);
-        renderTargets["velocity"]->ChangeLayout(cmd, LayoutState::ColorRead);
-        renderTargets["taa"]->ChangeLayout(cmd, LayoutState::ColorRead);
-        for (auto &image : shadows.textures)
-            image->ChangeLayout(cmd, LayoutState::DepthRead);
-
+        Deferred &deferred = *WORLD_ENTITY->GetComponent<Deferred>();
+        Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
         SSAO &ssao = *WORLD_ENTITY->GetComponent<SSAO>();
         SSR &ssr = *WORLD_ENTITY->GetComponent<SSR>();
         FXAA &fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
@@ -163,13 +129,32 @@ namespace pe
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
         SSGI &ssgi = *WORLD_ENTITY->GetComponent<SSGI>();
 
+        static GPUTimer gpuTimer[12]{};
+
+        FrameTimer &frameTimer = FrameTimer::Instance();
+
+        CommandBuffer *cmd = RHII.dynamicCmdBuffers[imageIndex];
+        cmd->Begin();
+
+        gpuTimer[0].Start(cmd);
+
+        // MODELS
+        gpuTimer[1].Start(cmd);
+        deferred.BeginPass(cmd, imageIndex);
+        for (auto &model : Model::models)
+            model.draw((uint16_t)RenderQueue::Opaque);
+        for (auto &model : Model::models)
+            model.draw((uint16_t)RenderQueue::AlphaCut);
+        for (auto &model : Model::models)
+            model.draw((uint16_t)RenderQueue::AlphaBlend);
+        deferred.EndPass(cmd);
+        frameTimer.timestamps[4] = gpuTimer[1].End();
+
         // SCREEN SPACE AMBIENT OCCLUSION
         if (GUI::show_ssao)
         {
             gpuTimer[2].Start(cmd);
-            renderTargets["ssaoBlur"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-            ssao.Draw(cmd, imageIndex, renderTargets);
-            renderTargets["ssaoBlur"]->ChangeLayout(cmd, LayoutState::ColorRead);
+            ssao.Draw(cmd, imageIndex);
             frameTimer.timestamps[5] = gpuTimer[2].End();
         }
 
@@ -177,22 +162,19 @@ namespace pe
         if (GUI::show_ssr)
         {
             gpuTimer[3].Start(cmd);
-            renderTargets["ssr"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-            ssr.Draw(cmd, imageIndex, renderTargets);
-            renderTargets["ssr"]->ChangeLayout(cmd, LayoutState::ColorRead);
+            ssr.Draw(cmd, imageIndex);
             frameTimer.timestamps[6] = gpuTimer[3].End();
         }
 
         // COMPOSITION
         gpuTimer[4].Start(cmd);
-        deferred.draw(cmd, imageIndex, shadows, skybox);
+        deferred.Draw(cmd, imageIndex);
         frameTimer.timestamps[7] = gpuTimer[4].End();
 
         if (GUI::use_SSGI)
         {
             // gpuTimer[8].Start(cmd);
-            ssgi.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-            ssgi.Draw(cmd, imageIndex, renderTargets);
+            ssgi.Draw(cmd, imageIndex);
             // frameTimer.timestamps[10] = gpuTimer[8].End();
         }
 
@@ -202,16 +184,14 @@ namespace pe
             if (GUI::use_TAA)
             {
                 gpuTimer[5].Start(cmd);
-                taa.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-                taa.Draw(cmd, imageIndex, renderTargets);
+                taa.Draw(cmd, imageIndex);
                 frameTimer.timestamps[8] = gpuTimer[5].End();
             }
             // FXAA
             else if (GUI::use_FXAA)
             {
                 gpuTimer[6].Start(cmd);
-                fxaa.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-                fxaa.Draw(cmd, imageIndex, renderTargets);
+                fxaa.Draw(cmd, imageIndex);
                 frameTimer.timestamps[8] = gpuTimer[6].End();
             }
         }
@@ -220,8 +200,7 @@ namespace pe
         if (GUI::show_Bloom)
         {
             gpuTimer[7].Start(cmd);
-            bloom.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-            bloom.Draw(cmd, imageIndex, renderTargets);
+            bloom.Draw(cmd, imageIndex);
             frameTimer.timestamps[9] = gpuTimer[7].End();
         }
 
@@ -229,8 +208,7 @@ namespace pe
         if (GUI::use_DOF)
         {
             gpuTimer[8].Start(cmd);
-            dof.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-            dof.Draw(cmd, imageIndex, renderTargets);
+            dof.Draw(cmd, imageIndex);
             frameTimer.timestamps[10] = gpuTimer[8].End();
         }
 
@@ -238,24 +216,11 @@ namespace pe
         if (GUI::show_motionBlur)
         {
             gpuTimer[9].Start(cmd);
-            motionBlur.frameImage->CopyColorAttachment(cmd, renderTargets["viewport"]);
-            motionBlur.Draw(cmd, imageIndex, renderTargets);
+            motionBlur.Draw(cmd, imageIndex);
             frameTimer.timestamps[11] = gpuTimer[9].End();
         }
 
-        renderTargets["albedo"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-        RHII.depth->ChangeLayout(cmd, LayoutState::DepthWrite);
-        renderTargets["normal"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-        renderTargets["srm"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-        renderTargets["emissive"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-        renderTargets["ssr"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-        renderTargets["ssaoBlur"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-        renderTargets["velocity"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-        renderTargets["taa"]->ChangeLayout(cmd, LayoutState::ColorWrite);
-        for (auto &image : shadows.textures)
-            image->ChangeLayout(cmd, LayoutState::DepthWrite);
-
-        BlitToViewport(cmd, GUI::s_currRenderImage ? GUI::s_currRenderImage : renderTargets["viewport"], imageIndex);
+        BlitToViewport(cmd, GUI::s_currRenderImage ? GUI::s_currRenderImage : m_viewportRT, imageIndex);
 
         // GUI
         gpuTimer[10].Start(cmd);
@@ -269,6 +234,8 @@ namespace pe
 
     void Renderer::RecordShadowsCmds(uint32_t imageIndex)
     {
+        Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
+
         static GPUTimer gpuTimer[SHADOWMAP_CASCADES]{};
 
         for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
@@ -277,6 +244,8 @@ namespace pe
             FrameBuffer *frameBuffer = shadows.framebuffers[imageIndex][i];
 
             cmd.Begin();
+
+            shadows.textures[i]->ChangeLayout(&cmd, LayoutState::DepthStencilAttachment);
 
             FrameTimer &frameTimer = FrameTimer::Instance();
             gpuTimer[i].Start(&cmd);
@@ -326,41 +295,118 @@ namespace pe
         }
     }
 
-    void Renderer::AddRenderTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags)
+    Image *Renderer::CreateRenderTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags, bool blendEnable)
     {
-        if (renderTargets.find(name) != renderTargets.end())
-            return;
-
         ImageCreateInfo info{};
         info.format = format;
         info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
         info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
         info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | additionalFlags;
         info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        renderTargets[name] = Image::Create(info);
-        renderTargets[name]->name = name;
+        info.name = name;
+
+        Image *rt = Image::Create(info);
 
         ImageViewCreateInfo viewInfo{};
-        viewInfo.image = renderTargets[name];
-        renderTargets[name]->CreateImageView(viewInfo);
+        viewInfo.image = rt;
+        rt->CreateImageView(viewInfo);
 
         SamplerCreateInfo samplerInfo{};
-        renderTargets[name]->CreateSampler(samplerInfo);
+        rt->CreateSampler(samplerInfo);
 
-        renderTargets[name]->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        renderTargets[name]->imageInfo.layoutState = LayoutState::ColorWrite;
+        rt->ChangeLayout(nullptr, LayoutState::ColorAttachment);
 
-        // std::string str = to_string(format); str.find("A8") != std::string::npos
-        renderTargets[name]->blendAttachment.blendEnable = name == "albedo" ? VK_TRUE : VK_FALSE;
-        renderTargets[name]->blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        renderTargets[name]->blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        renderTargets[name]->blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-        renderTargets[name]->blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        renderTargets[name]->blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        renderTargets[name]->blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-        renderTargets[name]->blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        rt->blendAttachment.blendEnable = blendEnable ? VK_TRUE : VK_FALSE;
+        rt->blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        rt->blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        rt->blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        rt->blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        rt->blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        rt->blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+        rt->blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
-        GUI::s_renderImages.push_back(renderTargets[name]);
+        GUI::s_renderImages.push_back(rt);
+        m_renderTargets[StringHash(name)] = rt;
+
+        return rt;
+    }
+
+    Image *Renderer::CreateDepthTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags)
+    {
+        ImageCreateInfo info{};
+        info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
+        info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+        info.usage = additionalFlags;
+        info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        info.format = (Format)format;
+        info.name = name;
+
+        Image *depth = Image::Create(info);
+
+        ImageViewCreateInfo viewInfo{};
+        viewInfo.image = depth;
+        viewInfo.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT; // | VK_IMAGE_ASPECT_STENCIL_BIT;
+        depth->CreateImageView(viewInfo);
+
+        SamplerCreateInfo samplerInfo{};
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        samplerInfo.compareEnable = VK_TRUE;
+        depth->CreateSampler(samplerInfo);
+
+        depth->ChangeLayout(nullptr, LayoutState::DepthStencilAttachment);
+
+        GUI::s_renderImages.push_back(depth);
+        m_depthTargets[StringHash(name)] = depth;
+
+        return depth;
+    }
+
+    Image *Renderer::GetRenderTarget(const std::string &name)
+    {
+        return m_renderTargets[StringHash(name)];
+    }
+
+    Image *Renderer::GetRenderTarget(size_t hash)
+    {
+        return m_renderTargets[hash];
+    }
+
+    Image *Renderer::GetDepthTarget(const std::string &name)
+    {
+        return m_depthTargets[StringHash(name)];
+    }
+
+    Image *Renderer::GetDepthTarget(size_t hash)
+    {
+        return m_depthTargets[hash];
+    }
+
+    Image *Renderer::CreateFSSampledImage()
+    {
+        ImageCreateInfo info{};
+        info.format = RHII.surface->format;
+        info.initialState = LayoutState::Undefined;
+        info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
+        info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+        info.tiling = VK_IMAGE_TILING_OPTIMAL;
+        info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        Image *sampledImage = Image::Create(info);
+
+        ImageViewCreateInfo viewInfo{};
+        viewInfo.image = sampledImage;
+        sampledImage->CreateImageView(viewInfo);
+
+        SamplerCreateInfo samplerInfo{};
+        sampledImage->CreateSampler(samplerInfo);
+
+        sampledImage->ChangeLayout(nullptr, LayoutState::ShaderReadOnly);
+
+        return sampledImage;
     }
 
 #ifndef IGNORE_SCRIPTS
@@ -442,16 +488,8 @@ namespace pe
 
     void Renderer::CreateUniforms()
     {
-        // DESCRIPTOR SETS FOR SKYBOX
         skyBoxDay.createDescriptorSet();
         skyBoxNight.createDescriptorSet();
-        // DESCRIPTOR SETS FOR SHADOWS
-        shadows.createUniformBuffers();
-        shadows.createDescriptorSets();
-        // DESCRIPTOR SETS FOR COMPOSITION PIPELINE
-        deferred.createDeferredUniforms(renderTargets);
-        // DESCRIPTOR SET FOR COMPUTE PIPELINE
-        // compute.createComputeUniforms(sizeof(SBOIn));
     }
 
     void Renderer::ResizeViewport(uint32_t width, uint32_t height)
@@ -460,162 +498,58 @@ namespace pe
 
         renderArea.Update(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
 
-        SSAO &ssao = *WORLD_ENTITY->GetComponent<SSAO>();
-        SSR &ssr = *WORLD_ENTITY->GetComponent<SSR>();
-        FXAA &fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
-        TAA &taa = *WORLD_ENTITY->GetComponent<TAA>();
-        Bloom &bloom = *WORLD_ENTITY->GetComponent<Bloom>();
-        DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
-        MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
-
-        //- Free resources ----------------------
-        // render targets
-        for (auto &RT : renderTargets)
-            RT.second->Destroy();
-        renderTargets.clear();
-        GUI::s_renderImages.clear();
-
-        // GUI
-        gui.renderPass->Destroy();
-
-        // deferred
-        deferred.renderPass->Destroy();
-        deferred.compositionRenderPass->Destroy();
-        for (auto *framebuffer : deferred.framebuffers)
-            framebuffer->Destroy();
-        for (auto *framebuffer : deferred.compositionFramebuffers)
-            framebuffer->Destroy();
-        deferred.pipeline->Destroy();
-        deferred.pipelineComposition->Destroy();
-
-        // SSR
-        for (auto framebuffer : ssr.framebuffers)
-            framebuffer->Destroy();
-        ssr.renderPass->Destroy();
-        ssr.pipeline->Destroy();
-
-        // FXAA
-        for (auto &framebuffer : fxaa.framebuffers)
-            framebuffer->Destroy();
-        fxaa.renderPass->Destroy();
-        fxaa.pipeline->Destroy();
-        fxaa.frameImage->Destroy();
-
-        // TAA
-        taa.previous->Destroy();
-        taa.frameImage->Destroy();
-        for (auto &framebuffer : taa.framebuffers)
-            framebuffer->Destroy();
-        for (auto &framebuffer : taa.framebuffersSharpen)
-            framebuffer->Destroy();
-        taa.renderPass->Destroy();
-        taa.renderPassSharpen->Destroy();
-        taa.pipeline->Destroy();
-        taa.pipelineSharpen->Destroy();
-
-        // Bloom
-        for (auto *frameBuffer : bloom.framebuffers)
-            frameBuffer->Destroy();
-        bloom.renderPassBrightFilter->Destroy();
-        bloom.renderPassGaussianBlur->Destroy();
-        bloom.renderPassCombine->Destroy();
-        bloom.pipelineBrightFilter->Destroy();
-        bloom.pipelineGaussianBlurHorizontal->Destroy();
-        bloom.pipelineGaussianBlurVertical->Destroy();
-        bloom.pipelineCombine->Destroy();
-        bloom.frameImage->Destroy();
-
-        // Depth of Field
-        for (auto &framebuffer : dof.framebuffers)
-            framebuffer->Destroy();
-        dof.renderPass->Destroy();
-        dof.pipeline->Destroy();
-        dof.frameImage->Destroy();
-
-        // Motion blur
-        for (auto &framebuffer : motionBlur.framebuffers)
-            framebuffer->Destroy();
-        motionBlur.renderPass->Destroy();
-        motionBlur.pipeline->Destroy();
-        motionBlur.frameImage->Destroy();
-
-        // SSAO
-        ssao.renderPass->Destroy();
-        ssao.blurRenderPass->Destroy();
-        for (auto &framebuffer : ssao.framebuffers)
-            framebuffer->Destroy();
-        for (auto &framebuffer : ssao.blurFramebuffers)
-            framebuffer->Destroy();
-        ssao.pipeline->Destroy();
-        ssao.pipelineBlur->Destroy();
-
-        RHII.depth->Destroy();
-        RHII.swapchain->Destroy();
-        //- Free resources end ------------------
-
-        //- Recreate resources ------------------
         WIDTH = width;
         HEIGHT = height;
+
+        for (auto &rt : m_renderTargets)
+            rt.second->Destroy();
+        m_depth->Destroy();
+        GUI::s_renderImages.clear();
+
+        RHII.swapchain->Destroy();
         RHII.CreateSwapchain(RHII.surface);
-        RHII.CreateDepth();
 
-        AddRenderTarget("viewport", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-        AddRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-        AddRenderTarget("albedo", RHII.surface->format);
-        AddRenderTarget("srm", RHII.surface->format); // Specular Roughness Metallic
-        AddRenderTarget("ssao", VK_FORMAT_R16_UNORM);
-        AddRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-        AddRenderTarget("ssr", RHII.surface->format);
-        AddRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-        AddRenderTarget("brightFilter", RHII.surface->format);
-        AddRenderTarget("gaussianBlurHorizontal", RHII.surface->format);
-        AddRenderTarget("gaussianBlurVertical", RHII.surface->format);
-        AddRenderTarget("emissive", RHII.surface->format);
-        AddRenderTarget("taa", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        m_viewportRT = CreateRenderTarget("viewport", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+        CreateRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
+        CreateRenderTarget("albedo", RHII.surface->format);
+        CreateRenderTarget("srm", RHII.surface->format); // Specular Roughness Metallic
+        CreateRenderTarget("ssao", VK_FORMAT_R16_UNORM);
+        CreateRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
+        CreateRenderTarget("ssr", RHII.surface->format);
+        CreateRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
+        CreateRenderTarget("brightFilter", RHII.surface->format);
+        CreateRenderTarget("gaussianBlurHorizontal", RHII.surface->format);
+        CreateRenderTarget("gaussianBlurVertical", RHII.surface->format);
+        CreateRenderTarget("emissive", RHII.surface->format);
+        CreateRenderTarget("taa", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
-        deferred.createRenderPasses(renderTargets);
-        deferred.createFrameBuffers(renderTargets);
-        deferred.createPipelines(renderTargets);
-        deferred.updateDescriptorSets(renderTargets);
+        for (auto &rc : m_renderComponents)
+            rc.second->Resize(width, height);
 
+        CONTEXT->GetSystem<PostProcessSystem>()->Resize(width, height);
+
+        gui.Destroy();
         gui.CreateRenderPass();
         gui.CreateFrameBuffers();
-
-        CONTEXT->GetSystem<PostProcessSystem>()->Init();
-
-        //- Recreate resources end --------------
     }
 
     void Renderer::BlitToViewport(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex)
     {
         Image *s_chain_Image = RHII.swapchain->images[imageIndex];
 
-        renderedImage->TransitionImageLayout(
-            cmd,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            VK_ACCESS_TRANSFER_READ_BIT);
-        s_chain_Image->TransitionImageLayout(
-            cmd,
-            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
-            VK_ACCESS_TRANSFER_WRITE_BIT);
+        renderedImage->ChangeLayout(cmd, LayoutState::TransferSrc);
+        s_chain_Image->ChangeLayout(cmd, LayoutState::TransferDst);
 
         ImageBlit blit{};
         blit.srcOffsets[0] = Offset3D{static_cast<int32_t>(renderedImage->imageInfo.width), static_cast<int32_t>(renderedImage->imageInfo.height), 0};
         blit.srcOffsets[1] = Offset3D{0, 0, 1};
-        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.aspectMask = renderedImage->viewInfo.aspectMask;
         blit.srcSubresource.layerCount = 1;
         Viewport &vp = renderArea.viewport;
         blit.dstOffsets[0] = Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
         blit.dstOffsets[1] = Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
-        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.aspectMask = s_chain_Image->viewInfo.aspectMask;
         blit.dstSubresource.layerCount = 1;
 
         cmd->BlitImage(
@@ -624,28 +558,16 @@ namespace pe
             1, &blit,
             VK_FILTER_LINEAR);
 
-        renderedImage->TransitionImageLayout(
-            cmd,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_ACCESS_TRANSFER_READ_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-        s_chain_Image->TransitionImageLayout(
-            cmd,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
-            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT);
+        renderedImage->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        s_chain_Image->ChangeLayout(cmd, LayoutState::PresentSrc);
     }
 
     void Renderer::RecreatePipelines()
     {
         RHII.WaitGraphicsQueue();
 
+        Deferred &deferred = *WORLD_ENTITY->GetComponent<Deferred>();
+        Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
         SSAO &ssao = *WORLD_ENTITY->GetComponent<SSAO>();
         SSR &ssr = *WORLD_ENTITY->GetComponent<SSR>();
         FXAA &fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
@@ -663,23 +585,18 @@ namespace pe
         fxaa.pipeline->Destroy();
         taa.pipeline->Destroy();
         taa.pipelineSharpen->Destroy();
-        // bloom.pipelineBrightFilter.destroy();
-        // bloom.pipelineCombine.destroy();
-        // bloom.pipelineGaussianBlurHorizontal.destroy();
-        // bloom.pipelineGaussianBlurVertical.destroy();
         dof.pipeline->Destroy();
         motionBlur.pipeline->Destroy();
 
-        deferred.createPipelines(renderTargets);
-
-        shadows.createPipeline();
-        ssao.CreatePipeline(renderTargets);
-        ssr.CreatePipeline(renderTargets);
-        fxaa.CreatePipeline(renderTargets);
-        taa.CreatePipeline(renderTargets);
-        bloom.CreatePipeline(renderTargets);
-        dof.CreatePipeline(renderTargets);
-        motionBlur.CreatePipeline(renderTargets);
+        deferred.CreatePipeline();
+        shadows.CreatePipeline();
+        ssao.CreatePipeline();
+        ssr.CreatePipeline();
+        fxaa.CreatePipeline();
+        taa.CreatePipeline();
+        bloom.CreatePipeline();
+        dof.CreatePipeline();
+        motionBlur.CreatePipeline();
 
         CONTEXT->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
     }

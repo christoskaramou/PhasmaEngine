@@ -34,6 +34,7 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
 #include "Systems/CameraSystem.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
@@ -48,36 +49,44 @@ namespace pe
 
     void SSR::Init()
     {
+        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        Deferred *deferred = WORLD_ENTITY->GetComponent<Deferred>();
+
+        ssrRT = rs->GetRenderTarget("ssr");
+        albedoRT = rs->GetRenderTarget("albedo");
+        normalRT = rs->GetRenderTarget("normal");
+        srmRT = rs->GetRenderTarget("srm");
+        depth = rs->GetDepthTarget("depth");
     }
 
-    void SSR::CreateRenderPass(std::map<std::string, Image *> &renderTargets)
+    void SSR::CreateRenderPass()
     {
         Attachment attachment{};
-        attachment.format = renderTargets["ssr"]->imageInfo.format;
+        attachment.format = ssrRT->imageInfo.format;
         renderPass = RenderPass::Create(attachment);
     }
 
-    void SSR::CreateFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    void SSR::CreateFrameBuffers()
     {
         framebuffers.resize(RHII.swapchain->images.size());
         for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
         {
-            uint32_t width = renderTargets["ssr"]->imageInfo.width;
-            uint32_t height = renderTargets["ssr"]->imageInfo.height;
-            ImageViewHandle view = renderTargets["ssr"]->view;
+            uint32_t width = ssrRT->imageInfo.width;
+            uint32_t height = ssrRT->imageInfo.height;
+            ImageViewHandle view = ssrRT->view;
             framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
         }
     }
 
-    void SSR::CreatePipeline(std::map<std::string, Image *> &renderTargets)
+    void SSR::CreatePipeline()
     {
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSR/ssr.frag", ShaderType::Fragment});
-        info.width = renderTargets["ssr"]->width_f;
-        info.height = renderTargets["ssr"]->height_f;
+        info.width = ssrRT->width_f;
+        info.height = ssrRT->height_f;
         info.cullMode = CullMode::Back;
-        info.colorBlendAttachments = {renderTargets["ssr"]->blendAttachment};
+        info.colorBlendAttachments = {ssrRT->blendAttachment};
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutSSR()};
         info.renderPass = renderPass;
 
@@ -87,7 +96,7 @@ namespace pe
         info.pFragShader->Destroy();
     }
 
-    void SSR::CreateUniforms(std::map<std::string, Image *> &renderTargets)
+    void SSR::CreateUniforms()
     {
         UBReflection = Buffer::Create(
             4 * sizeof(mat4),
@@ -100,25 +109,25 @@ namespace pe
 
         DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSSR());
 
-        UpdateDescriptorSets(renderTargets);
+        UpdateDescriptorSets();
     }
 
-    void SSR::UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets)
+    void SSR::UpdateDescriptorSets()
     {
         std::array<DescriptorUpdateInfo, 5> infos{};
 
         infos[0].binding = 0;
-        infos[0].pImage = renderTargets["albedo"];
+        infos[0].pImage = albedoRT;
 
         infos[1].binding = 1;
-        infos[1].pImage = RHII.depth;
+        infos[1].pImage = depth;
         infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
         infos[2].binding = 2;
-        infos[2].pImage = renderTargets["normal"];
+        infos[2].pImage = normalRT;
 
         infos[3].binding = 3;
-        infos[3].pImage = renderTargets["srm"];
+        infos[3].pImage = srmRT;
 
         infos[4].binding = 4;
         infos[4].pBuffer = UBReflection;
@@ -142,24 +151,49 @@ namespace pe
         }
     }
 
-    void SSR::Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets)
+    void SSR::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
+        // SCREEN SPACE REFLECTION
+        // Input
+        albedoRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        normalRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        srmRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        depth->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+        // Output
+        ssrRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+
+        ssrRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+    }
+
+    void SSR::Resize(uint32_t width, uint32_t height)
+    {
+        for (auto *frameBuffer : framebuffers)
+            frameBuffer->Destroy();
+        renderPass->Destroy();
+        pipeline->Destroy();
+
+        Init();
+        CreateRenderPass();
+        CreateFrameBuffers();
+        CreatePipeline();
+        UpdateDescriptorSets();
     }
 
     void SSR::Destroy()
     {
+        Pipeline::getDescriptorSetLayoutSSR()->Destroy();
+
         for (auto framebuffer : framebuffers)
             framebuffer->Destroy();
 
         renderPass->Destroy();
-
-        Pipeline::getDescriptorSetLayoutSSR()->Destroy();
-        UBReflection->Destroy();
         pipeline->Destroy();
+        UBReflection->Destroy();
     }
 }

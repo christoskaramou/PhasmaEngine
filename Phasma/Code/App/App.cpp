@@ -36,26 +36,24 @@ namespace pe
         // freopen("log.txt", "w", stdout);
         // freopen("errors.txt", "w", stderr);
 
-        context = CONTEXT;
-        context->CreateSystem<EventSystem>();
 
         uint32_t flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
-    #if PE_VULKAN
+#if PE_VULKAN
         flags |= SDL_WINDOW_VULKAN;
-    #endif
+#endif
+        CONTEXT->CreateSystem<EventSystem>()->Init();
+
         window = Window::Create(50, 50, 1280, 720, flags);
-        RHII.Init(window->Handle()); // TODO: Remove this from here (was in Renderer)
+        RHII.Init(window->Handle());
 
-        context->CreateSystem<CameraSystem>();
-        context->CreateSystem<LightSystem>();
-        context->CreateSystem<RendererSystem>();
-        context->CreateSystem<PostProcessSystem>();
-
-        // context.InitSystems();
+        CONTEXT->CreateSystem<CameraSystem>()->Init();
+        CONTEXT->CreateSystem<LightSystem>()->Init();
+        CONTEXT->CreateSystem<RendererSystem>()->Init();
+        CONTEXT->CreateSystem<PostProcessSystem>()->Init();
 
         FileWatcher::Start();
-
         frameTimer = &FrameTimer::Instance();
+        context = CONTEXT;
     }
 
     App::~App()

@@ -28,6 +28,7 @@ namespace pe
 {
     class RendererSystem : public Renderer, public IDrawSystem
     {
+    public:
         void Init() override;
 
         void Update(double delta) override;

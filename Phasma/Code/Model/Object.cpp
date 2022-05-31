@@ -93,7 +93,7 @@ namespace pe
         info.width = texWidth;
         info.height = texHeight;
         info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+        info.initialState = LayoutState::Preinitialized;
         texture = Image::Create(info);
 
         ImageViewCreateInfo viewInfo{};
@@ -103,9 +103,9 @@ namespace pe
         SamplerCreateInfo samplerInfo{};
         texture->CreateSampler(samplerInfo);
 
-        texture->TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        texture->CopyBufferToImage(staging);
-        texture->TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        texture->ChangeLayout(nullptr, LayoutState::TransferDst);
+        texture->CopyBufferToImage(nullptr, staging);
+        texture->ChangeLayout(nullptr, LayoutState::ShaderReadOnly);
 
         staging->Destroy();
     }

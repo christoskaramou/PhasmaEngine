@@ -81,8 +81,6 @@ namespace pe
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         texture->CreateSampler(samplerInfo);
 
-        texture->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
         for (uint32_t i = 0; i < texture->imageInfo.arrayLayers; ++i)
         {
             // Texture Load
@@ -107,11 +105,9 @@ namespace pe
 
             stbi_image_free(pixels);
 
-            texture->CopyBufferToImage(staging, i);
+            texture->CopyBufferToImage(nullptr, staging, i);
             staging->Destroy();
         }
-
-        texture->TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
     void SkyBox::destroy()

@@ -29,7 +29,8 @@ SOFTWARE.
 #include "Renderer/Fence.h"
 #include "Renderer/Image.h"
 #include "Renderer/Swapchain.h"
-#include "Renderer/Surface.h"
+#include "Renderer/Swapchain.h"
+#include "Renderer/Debug.h"
 
 #if defined(_WIN32)
 // On Windows, Vulkan commands use the stdcall convention
@@ -77,10 +78,8 @@ namespace pe
         instanceExtensions.resize(extCount);
         if (!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()))
             PE_ERROR(SDL_GetError());
-            // =============================================
-
-#ifdef _DEBUG
-        // === Debug Extensions ========================
+        // =============================================
+            
         uint32_t propertyCount;
         vkEnumerateInstanceExtensionProperties(nullptr, &propertyCount, nullptr);
 
@@ -89,35 +88,14 @@ namespace pe
 
         for (auto &extension : extensions)
         {
-            if (std::string(extension.extensionName) == "VK_EXT_debug_utils")
-            {
-                instanceExtensions.push_back("VK_EXT_debug_utils");
-                m_HasDebugUtils = true;
-            }
             if (std::string(extension.extensionName) == "VK_KHR_get_physical_device_properties2")
             {
                 instanceExtensions.push_back("VK_KHR_get_physical_device_properties2");
             }
         }
-        // =============================================
 
-        // === Debug Layers ============================
-        // To use these debug layers, here is assumed VulkanSDK is installed
-        // Also VK_LAYER_PATH environmental variable has to be created and target the bin
-        // e.g VK_LAYER_PATH = C:\VulkanSDK\1.2.189.1\Bin
-
-        uint32_t layersCount;
-        vkEnumerateInstanceLayerProperties(&layersCount, nullptr);
-
-        std::vector<VkLayerProperties> layers(layersCount);
-        vkEnumerateInstanceLayerProperties(&layersCount, layers.data());
-
-        for (auto &layer : layers)
-        {
-            if (std::string(layer.layerName) == "VK_LAYER_KHRONOS_validation")
-                instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
-        }
-        // =============================================
+#ifdef _DEBUG
+        Debug::GetInstanceUtils(instanceExtensions, instanceLayers);
 
         // === Validation Features =====================
         enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
@@ -130,6 +108,7 @@ namespace pe
         validationFeatures.pEnabledValidationFeatures = enabledFeatures.data();
         // =============================================
 #endif
+
         uint32_t apiVersion;
         vkEnumerateInstanceVersion(&apiVersion);
 
@@ -151,84 +130,12 @@ namespace pe
         VkInstance instanceVK;
         vkCreateInstance(&instInfo, nullptr, &instanceVK);
         instance = instanceVK;
-    }
 
-#if _DEBUG
-    std::string GetDebugMessageString(VkDebugUtilsMessageTypeFlagsEXT value)
-    {
-        switch (value)
-        {
-        case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT:
-            return "General";
-        case VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT:
-            return "Validation";
-        case VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT:
-            return "Performance";
-        }
-
-        return "Unknown";
-    }
-
-    std::string GetDebugSeverityString(VkDebugUtilsMessageSeverityFlagBitsEXT value)
-    {
-        switch (value)
-        {
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-            return "Verbose";
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-            return "Info";
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-            return "Warning";
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-            return "Error";
-        }
-
-        return "Unknown";
-    }
-
-    uint32_t VKAPI_CALL MessageCallback(
-        VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-        uint32_t messageType,
-        const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
-        void *pUserData)
-    {
-        if (messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
-            std::cerr
-                << GetDebugMessageString(messageType) << " "
-                << GetDebugSeverityString(messageSeverity) << " from \""
-                << pCallbackData->pMessageIdName << "\": "
-                << pCallbackData->pMessage << std::endl;
-
-        return VK_FALSE;
-    }
-
-    void RHI::CreateDebugMessenger()
-    {
-        VkDebugUtilsMessengerCreateInfoEXT dumci{};
-        dumci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        dumci.messageSeverity =
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-        dumci.messageType =
-            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-        dumci.pfnUserCallback = MessageCallback;
-
-        auto vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-        VkDebugUtilsMessengerEXT debugMessengerVK;
-        vkCreateDebugUtilsMessengerEXT(instance, &dumci, nullptr, &debugMessengerVK);
-        debugMessenger = debugMessengerVK;
-    }
-
-    void RHI::DestroyDebugMessenger()
-    {
-        auto vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-        vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
-    }
+#ifdef _DEBUG
+        Debug::Init(instance);
+        Debug::CreateDebugMessenger();
 #endif
+    }
 
     void RHI::CreateSurface()
     {
@@ -376,16 +283,54 @@ namespace pe
         computeFamilyId = -1;
     }
 
-    bool RHI::IsExtensionValid(const char *name)
+    bool RHI::IsInstanceExtensionValid(const char *name)
     {
-        uint32_t propsCount;
-        vkEnumerateDeviceExtensionProperties(gpu, nullptr, &propsCount, nullptr);
+        uint32_t count;
+        vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
 
-        std::vector<VkExtensionProperties> extProps(propsCount);
-        vkEnumerateDeviceExtensionProperties(gpu, nullptr, &propsCount, extProps.data());
+        std::vector<VkExtensionProperties> extensions(count);
+        vkEnumerateInstanceExtensionProperties(nullptr, &count, extensions.data());
 
-        for (auto &extProp : extProps)
-            if (std::string(extProp.extensionName) == name)
+        // === Debug Extensions ========================
+        for (auto &extension : extensions)
+        {
+            if (std::string(extension.extensionName) == name)
+                return true;
+        }
+
+        return false;
+    }
+
+    bool RHI::IsInstanceLayerValid(const char *name)
+    {
+        uint32_t count;
+        vkEnumerateInstanceLayerProperties(&count, nullptr);
+
+        std::vector<VkLayerProperties> layers(count);
+        vkEnumerateInstanceLayerProperties(&count, layers.data());
+
+        for (auto &layer : layers)
+        {
+            if (std::string(layer.layerName) == name)
+                return true;
+        }
+
+        return false;
+    }
+
+    bool RHI::IsDeviceExtensionValid(const char *name)
+    {
+        if (!gpu)
+            PE_ERROR("No GPU found!");
+        
+        uint32_t count;
+        vkEnumerateDeviceExtensionProperties(gpu, nullptr, &count, nullptr);
+
+        std::vector<VkExtensionProperties> extensions(count);
+        vkEnumerateDeviceExtensionProperties(gpu, nullptr, &count, extensions.data());
+
+        for (auto &extension : extensions)
+            if (std::string(extension.extensionName) == name)
                 return true;
 
         return false;
@@ -395,12 +340,9 @@ namespace pe
     {
         std::vector<const char *> deviceExtensions{};
 
-        if (IsExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME))
+        if (IsDeviceExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME))
             deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-
-        // if (IsExtensionValid(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME))
-        //     deviceExtensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-
+        
         float priorities[]{1.0f}; // range : [0.0, 1.0]
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
@@ -532,7 +474,7 @@ namespace pe
     {
         dynamicCmdBuffers.resize(bufferCount);
         for (uint32_t i = 0; i < bufferCount; i++)
-            dynamicCmdBuffers[i] = CommandBuffer::Create(commandPool);
+            dynamicCmdBuffers[i] = CommandBuffer::Create(commandPool, "dynamicCmdBuffer" + std::to_string(i));
 
         shadowCmdBuffers.resize(bufferCount);
         for (uint32_t i = 0; i < bufferCount; i++)
@@ -540,7 +482,7 @@ namespace pe
             shadowCmdBuffers[i] = std::array<CommandBuffer *, SHADOWMAP_CASCADES>{};
             for (int j = 0; j < SHADOWMAP_CASCADES; j++)
             {
-                shadowCmdBuffers[i][j] = CommandBuffer::Create(commandPool);
+                shadowCmdBuffers[i][j] = CommandBuffer::Create(commandPool, "shadowCmdBuffer" + std::to_string(i) + "_" + std::to_string(j));
             }
         }
     }
@@ -559,53 +501,34 @@ namespace pe
             semaphores[i] = Semaphore::Create();
     }
 
-    void RHI::CreateDepth()
+    Format RHI::GetDepthFormat()
     {
-        ImageCreateInfo info{};
-        info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
-        info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
-        info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        static VkFormat depthFormat = VK_FORMAT_UNDEFINED;
 
-        std::vector<VkFormat> candidates =
-            {
+        if (depthFormat == VK_FORMAT_UNDEFINED)
+        {
+            std::vector<VkFormat> candidates = {
                 VK_FORMAT_D32_SFLOAT_S8_UINT,
                 VK_FORMAT_D32_SFLOAT,
                 VK_FORMAT_D24_UNORM_S8_UINT};
 
-        for (auto &format : candidates)
-        {
-            VkFormatProperties props;
-            vkGetPhysicalDeviceFormatProperties(gpu, format, &props);
-            if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) ==
-                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+            for (auto &df : candidates)
             {
-                info.format = (Format)format;
-                break;
+                VkFormatProperties props;
+                vkGetPhysicalDeviceFormatProperties(gpu, df, &props);
+                if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) ==
+                    VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+                {
+                    depthFormat = df;
+                    break;
+                }
             }
+
+            if (depthFormat == VK_FORMAT_UNDEFINED)
+                PE_ERROR("Depth format is undefined");
         }
-        if (info.format == VK_FORMAT_UNDEFINED)
-            PE_ERROR("Depth format is undefined");
 
-        depth = Image::Create(info);
-
-        ImageViewCreateInfo viewInfo{};
-        viewInfo.image = depth;
-        viewInfo.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        depth->CreateImageView(viewInfo);
-
-        SamplerCreateInfo samplerInfo{};
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-        samplerInfo.compareEnable = VK_TRUE;
-        depth->CreateSampler(samplerInfo);
-
-        depth->name = "DepthImage";
-
-        depth->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        return (Format)depthFormat;
     }
 
     void RHI::Init(SDL_Window *window)
@@ -613,9 +536,6 @@ namespace pe
         this->window = window;
 
         CreateInstance(window);
-#ifdef _DEBUG
-        CreateDebugMessenger();
-#endif
         CreateSurface();
         GetGpu();
         GetSurfaceProperties();
@@ -628,7 +548,6 @@ namespace pe
         CreateCmdBuffers(SWAPCHAIN_IMAGES);
         CreateSemaphores(SWAPCHAIN_IMAGES * 3);
         CreateFences(SWAPCHAIN_IMAGES);
-        CreateDepth();
     }
 
     void RHI::Destroy()
@@ -640,8 +559,6 @@ namespace pe
 
         for (auto *semaphore : semaphores)
             semaphore->Destroy();
-
-        depth->Destroy();
 
         descriptorPool->Destroy();
 
@@ -659,7 +576,7 @@ namespace pe
         surface->Destroy();
 
 #ifdef _DEBUG
-        DestroyDebugMessenger();
+        Debug::DestroyDebugMessenger();
 #endif
 
         if (instance)

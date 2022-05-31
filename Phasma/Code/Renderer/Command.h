@@ -86,7 +86,7 @@ namespace pe
     class CommandBuffer : public IHandle<CommandBuffer, CommandBufferHandle>
     {
     public:
-        CommandBuffer(CommandPool *commandPool);
+        CommandBuffer(CommandPool *commandPool, const std::string &name = {});
 
         ~CommandBuffer();
 

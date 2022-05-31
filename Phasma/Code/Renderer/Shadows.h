@@ -45,12 +45,37 @@ namespace pe
 
     class Pipeline;
 
-    class Shadows
+    class Shadows : public IRenderComponent
     {
     public:
         Shadows();
 
         ~Shadows();
+
+        void Init() override;
+
+        void CreateRenderPass() override;
+
+        void CreateFrameBuffers() override;
+
+        void CreatePipeline() override;
+
+        void CreateUniforms() override;
+
+        void UpdateDescriptorSets() override;
+
+        void Update(Camera *camera) override;
+
+        void Draw(CommandBuffer *cmd, uint32_t imageIndex) override;
+
+        void Resize(uint32_t width, uint32_t height) override;
+
+        void Destroy() override;
+
+private:
+        void CalculateCascades(Camera *camera);
+
+public:
 
         mat4 cascades[SHADOWMAP_CASCADES];
         vec4 viewZ;
@@ -60,21 +85,6 @@ namespace pe
         std::vector<std::array<FrameBuffer *, SHADOWMAP_CASCADES>> framebuffers{};
         Buffer *uniformBuffer;
         Pipeline *pipeline;
-
-        void update(Camera &camera);
-
-        void createUniformBuffers();
-
-        void createDescriptorSets();
-
-        void createRenderPass();
-
-        void createFrameBuffers();
-
-        void createPipeline();
-
-        void CalculateCascades(Camera &camera);
-
-        void destroy();
+        Format depthFormat;
     };
 }

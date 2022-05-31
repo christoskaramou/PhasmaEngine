@@ -30,7 +30,7 @@ SOFTWARE.
 
 namespace pe
 {
-    Swapchain::Swapchain(Surface* surface)
+    Swapchain::Swapchain(Surface *surface)
     {
         VkSurfaceCapabilitiesKHR capabilities;
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, surface->Handle(), &capabilities);
@@ -45,8 +45,7 @@ namespace pe
         swapchainCreateInfo.minImageCount = clamp(
             SWAPCHAIN_IMAGES,
             capabilities.minImageCount,
-            capabilities.maxImageCount
-        );
+            capabilities.maxImageCount);
         swapchainCreateInfo.imageFormat = (VkFormat)surface->format;
         swapchainCreateInfo.imageColorSpace = (VkColorSpaceKHR)surface->colorSpace;
         swapchainCreateInfo.imageExtent = extent;
@@ -70,7 +69,7 @@ namespace pe
         std::vector<VkImage> imagesVK(swapchainImageCount);
         vkGetSwapchainImagesKHR(RHII.device, schain, &swapchainImageCount, imagesVK.data());
 
-        for (auto* image : images)
+        for (auto *image : images)
             image->Destroy();
 
         images.resize(imagesVK.size());
@@ -78,7 +77,8 @@ namespace pe
         {
             images[i] = new Image();
             images[i]->Handle() = imagesVK[i];
-            images[i]->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+            images[i]->layoutStates = {{LayoutState::Undefined}};
+            images[i]->ChangeLayout(nullptr, LayoutState::PresentSrc);
             images[i]->blendAttachment.blendEnable = VK_TRUE;
             images[i]->blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
             images[i]->blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
@@ -94,14 +94,14 @@ namespace pe
         }
 
         // create image views for each swapchain image
-        for (auto* image : images)
+        for (auto *image : images)
         {
             VkImageViewCreateInfo imageViewCreateInfo{};
             imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             imageViewCreateInfo.image = image->Handle();
             imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
             imageViewCreateInfo.format = (VkFormat)RHII.surface->format;
-            imageViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+            imageViewCreateInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
             VkImageView imageView;
             vkCreateImageView(RHII.device, &imageViewCreateInfo, nullptr, &imageView);
@@ -125,7 +125,7 @@ namespace pe
             m_handle = {};
         }
 
-        for (auto* image : images)
+        for (auto *image : images)
         {
             // Invalidate the image handle, swapchain destroys it
             image->Handle() = {};
@@ -133,7 +133,7 @@ namespace pe
         }
     }
 
-    uint32_t Swapchain::Aquire(Semaphore* semaphore, Fence* fence)
+    uint32_t Swapchain::Aquire(Semaphore *semaphore, Fence *fence)
     {
         VkFence fenceVK = nullptr;
         if (fence)

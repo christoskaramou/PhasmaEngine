@@ -24,51 +24,33 @@ SOFTWARE.
 
 namespace pe
 {
-    class Descriptor;
-    class FrameBuffer;
-    class Image;
-    class RenderPass;
-    class Pipeline;
-    class Buffer;
-    class Camera;
-
-    class SSR : public IRenderComponent
+    class Debug
     {
     public:
-        SSR();
+        static void Init(InstanceHandle instance);
 
-        ~SSR();
+        static void GetInstanceUtils(std::vector<const char *> &instanceExtensions, std::vector<const char *> &instanceLayers);
 
-        void Init() override;
+        static void CreateDebugMessenger();
 
-        void CreateRenderPass() override;
+        static void DestroyDebugMessenger();
 
-        void CreateFrameBuffers() override;
+        static void SetObjectName(uint64_t object, ObjectType type, const std::string &name);
 
-        void CreatePipeline() override;
+        static void BeginQueueRegion(QueueHandle queue, const std::string &name, vec4 color);
 
-        void CreateUniforms() override;
+        static void InsertQueueLabel(QueueHandle queue, const std::string &name, vec4 color);
 
-        void UpdateDescriptorSets() override;
+        static void EndQueueRegion(QueueHandle queue);
+        
+        static void BeginCmdRegion(CommandBufferHandle cmd, const std::string &name, vec4 color);
+        
+        static void InsertCmdLabel(CommandBufferHandle cmd, const std::string &name, vec4 color);
 
-        void Update(Camera *camera) override;
+        static void EndCmdRegion(CommandBufferHandle cmd);
 
-        void Draw(CommandBuffer *cmd, uint32_t imageIndex) override;
-
-        void Resize(uint32_t width, uint32_t height) override;
-
-        void Destroy() override;
-
-        mat4 reflectionInput[4];
-        Buffer *UBReflection;
-        std::vector<FrameBuffer *> framebuffers{};
-        Pipeline *pipeline;
-        RenderPass *renderPass;
-        Descriptor *DSet;
-        Image *ssrRT;
-        Image *albedoRT;
-        Image *normalRT;
-        Image *srmRT;
-        Image *depth;
+    private:
+        inline static InstanceHandle s_instance;
+        inline static DebugMessengerHandle s_debugMessenger;
     };
-}
+};

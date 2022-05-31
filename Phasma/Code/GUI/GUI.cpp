@@ -41,6 +41,7 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
+#include "Renderer/Renderer.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl.h"
@@ -210,7 +211,10 @@ namespace pe
 
         if (s_modelLoading)
         {
-            ImGui::SetNextWindowPos(ImVec2(WIDTH_f / 2, HEIGHT_f / 2));
+            int x, y;
+            const float topBarHeight = 16.f;
+            SDL_GetWindowPosition(RHII.window, &x, &y);
+            ImGui::SetNextWindowPos(ImVec2(x + WIDTH_f / 2, y + topBarHeight + HEIGHT_f / 2));
             ImGui::Begin("Loading", &metrics_open, flags);
             LoadingIndicatorCircle("Loading", radius, color, bdcolor, 10, 4.5f);
             ImGui::End();
@@ -327,7 +331,7 @@ namespace pe
         static const char *current_item = "viewport";
         std::vector<const char *> items(s_renderImages.size());
         for (int i = 0; i < items.size(); i++)
-            items[i] = s_renderImages[i]->name.c_str();
+            items[i] = s_renderImages[i]->imageInfo.name.c_str();
 
         if (ImGui::BeginCombo("##combo", current_item))
         {
@@ -671,7 +675,7 @@ namespace pe
         info.CheckVkResultFn = nullptr;
         ImGui_ImplVulkan_Init(&info, renderPass->Handle());
 
-        CommandBuffer *cmd = CommandBuffer::Create(RHII.commandPool2);
+        CommandBuffer *cmd = CommandBuffer::Create(RHII.commandPool2, "GUI_Temp_Cmd");
         cmd->Begin();
         ImGui_ImplVulkan_CreateFontsTexture(cmd->Handle());
         cmd->End();

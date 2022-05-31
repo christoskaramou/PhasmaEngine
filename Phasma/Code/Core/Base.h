@@ -29,7 +29,7 @@ SOFTWARE.
         ss << "Error: " << msg;       \
         ss << ", File: " << __FILE__; \
         ss << ", Line: " << __LINE__; \
-        std::cout << ss.str();        \
+        std::cerr << ss.str();        \
     }
 #else
 #define PE_PRINT_ERROR_MSG(msg)
@@ -129,6 +129,11 @@ namespace pe
             return static_cast<DX_TYPE>(m_handle);
         }
 
+        operator uint64_t()
+        {
+            return (uint64_t)m_handle;
+        }
+
         // Not used at the moment
         void *raw()
         {
@@ -210,7 +215,7 @@ namespace pe
             // If the object is not created via Create function, return and let the actual class to manage
             if (m_heapId == std::numeric_limits<size_t>::max())
                 return;
-                
+
             if constexpr (std::is_base_of_v<HashableBase, T>)
             {
                 auto it = sm_iHandlesHashable.find(m_heapId);
@@ -295,6 +300,7 @@ namespace pe
     using BlendOp = uint32_t;
     using ColorComponentFlags = uint32_t;
     using PresentMode = uint32_t;
+    using ObjectType = uint32_t;
 
     using CommandBufferHandle = ApiHandle<VkCommandBuffer, Placeholder *>;
     using DescriptorSetLayoutHandle = ApiHandle<VkDescriptorSetLayout, Placeholder *>;
@@ -318,7 +324,7 @@ namespace pe
     using InstanceHandle = ApiHandle<VkInstance, Placeholder *>;
     using GpuHandle = ApiHandle<VkPhysicalDevice, Placeholder *>;
     using DebugMessengerHandle = ApiHandle<VkDebugUtilsMessengerEXT, Placeholder *>;
-    using DeviceQueueHandle = ApiHandle<VkQueue, Placeholder *>;
+    using QueueHandle = ApiHandle<VkQueue, Placeholder *>;
     using DescriptorPoolHandle = ApiHandle<VkDescriptorPool, Placeholder *>;
     using AllocationHandle = ApiHandle<VmaAllocation, Placeholder *>;
     using AllocatorHandle = ApiHandle<VmaAllocator, Placeholder *>;

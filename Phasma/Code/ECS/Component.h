@@ -70,24 +70,26 @@ namespace pe
     class CommandBuffer;
     class Camera;
 
-    class IEffectComponent : public IComponent
+    class IRenderComponent : public IComponent
     {  
     public:
         virtual void Init() = 0;
 
-        virtual void CreateRenderPass(std::map<std::string, Image *> &renderTargets) = 0;
+        virtual void CreateRenderPass() = 0;
 
-        virtual void CreateFrameBuffers(std::map<std::string, Image *> &renderTargets) = 0;
+        virtual void CreateFrameBuffers() = 0;
 
-        virtual void CreatePipeline(std::map<std::string, Image *> &renderTargets) = 0;
+        virtual void CreatePipeline() = 0;
 
-        virtual void CreateUniforms(std::map<std::string, Image *> &renderTargets) = 0;
+        virtual void CreateUniforms() = 0;
 
-        virtual void UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets) = 0;
+        virtual void UpdateDescriptorSets() = 0;
 
         virtual void Update(Camera *camera) = 0;
 
-        virtual void Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets) = 0;
+        virtual void Draw(CommandBuffer *cmd, uint32_t imageIndex) = 0;
+
+        virtual void Resize(uint32_t width, uint32_t height) = 0;
 
         virtual void Destroy() = 0;
     };

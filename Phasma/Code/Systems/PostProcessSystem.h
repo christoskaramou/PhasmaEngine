@@ -37,7 +37,9 @@ namespace pe
 
         void Destroy() override;
 
+        void Resize(uint32_t width, uint32_t height);
+
     private:
-        std::unordered_map<size_t, IEffectComponent *> m_effects;
+        std::unordered_map<size_t, IRenderComponent *> m_effects;
     };
 }

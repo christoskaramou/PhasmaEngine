@@ -34,68 +34,75 @@ SOFTWARE.
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
 #include "Systems/CameraSystem.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
     void SSAO::Init()
     {
+        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+
+        ssaoRT = rs->GetRenderTarget("ssao");
+        ssaoBlurRT = rs->GetRenderTarget("ssaoBlur");
+        normalRT = rs->GetRenderTarget("normal");
+        depth = rs->GetDepthTarget("depth");
     }
 
-    void SSAO::CreateRenderPass(std::map<std::string, Image *> &renderTargets)
+    void SSAO::CreateRenderPass()
     {
         Attachment attachment{};
-        attachment.format = renderTargets["ssao"]->imageInfo.format;
+        attachment.format = ssaoRT->imageInfo.format;
         renderPass = RenderPass::Create(attachment);
 
-        attachment.format = renderTargets["ssaoBlur"]->imageInfo.format;
+        attachment.format = ssaoBlurRT->imageInfo.format;
         blurRenderPass = RenderPass::Create(attachment);
     }
 
-    void SSAO::CreateFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    void SSAO::CreateFrameBuffers()
     {
-        CreateSSAOFrameBuffers(renderTargets);
-        CreateSSAOBlurFrameBuffers(renderTargets);
+        CreateSSAOFrameBuffers();
+        CreateSSAOBlurFrameBuffers();
     }
 
-    void SSAO::CreateSSAOFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    void SSAO::CreateSSAOFrameBuffers()
     {
         framebuffers.resize(RHII.swapchain->images.size());
         for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
         {
-            uint32_t width = renderTargets["ssao"]->imageInfo.width;
-            uint32_t height = renderTargets["ssao"]->imageInfo.height;
-            ImageViewHandle view = renderTargets["ssao"]->view;
+            uint32_t width = ssaoRT->imageInfo.width;
+            uint32_t height = ssaoRT->imageInfo.height;
+            ImageViewHandle view = ssaoRT->view;
             framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
         }
     }
 
-    void SSAO::CreateSSAOBlurFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    void SSAO::CreateSSAOBlurFrameBuffers()
     {
         blurFramebuffers.resize(RHII.swapchain->images.size());
         for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
         {
-            uint32_t width = renderTargets["ssaoBlur"]->imageInfo.width;
-            uint32_t height = renderTargets["ssaoBlur"]->imageInfo.height;
-            ImageViewHandle view = renderTargets["ssaoBlur"]->view;
+            uint32_t width = ssaoBlurRT->imageInfo.width;
+            uint32_t height = ssaoBlurRT->imageInfo.height;
+            ImageViewHandle view = ssaoBlurRT->view;
             blurFramebuffers[i] = FrameBuffer::Create(width, height, view, blurRenderPass);
         }
     }
 
-    void SSAO::CreatePipeline(std::map<std::string, Image *> &renderTargets)
+    void SSAO::CreatePipeline()
     {
-        CreateSSAOPipeline(renderTargets);
-        CreateBlurPipeline(renderTargets);
+        CreateSSAOPipeline();
+        CreateBlurPipeline();
     }
 
-    void SSAO::CreateSSAOPipeline(std::map<std::string, Image *> &renderTargets)
+    void SSAO::CreateSSAOPipeline()
     {
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSAO/ssao.frag", ShaderType::Fragment});
-        info.width = renderTargets["ssao"]->width_f;
-        info.height = renderTargets["ssao"]->height_f;
+        info.width = ssaoRT->width_f;
+        info.height = ssaoRT->height_f;
         info.cullMode = CullMode::Back;
-        info.colorBlendAttachments = {renderTargets["ssao"]->blendAttachment};
+        info.colorBlendAttachments = {ssaoRT->blendAttachment};
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutSSAO()};
         info.renderPass = renderPass;
 
@@ -105,15 +112,15 @@ namespace pe
         info.pFragShader->Destroy();
     }
 
-    void SSAO::CreateBlurPipeline(std::map<std::string, Image *> &renderTargets)
+    void SSAO::CreateBlurPipeline()
     {
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSAO/ssaoBlur.frag", ShaderType::Fragment});
-        info.width = renderTargets["ssaoBlur"]->width_f;
-        info.height = renderTargets["ssaoBlur"]->height_f;
+        info.width = ssaoBlurRT->width_f;
+        info.height = ssaoBlurRT->height_f;
         info.cullMode = CullMode::Back;
-        info.colorBlendAttachments = {renderTargets["ssaoBlur"]->blendAttachment};
+        info.colorBlendAttachments = {ssaoBlurRT->blendAttachment};
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutSSAOBlur()};
         info.renderPass = blurRenderPass;
 
@@ -122,8 +129,8 @@ namespace pe
         info.pVertShader->Destroy();
         info.pFragShader->Destroy();
     }
-    
-    void SSAO::CreateUniforms(std::map<std::string, Image *> &renderTargets)
+
+    void SSAO::CreateUniforms()
     {
         // kernel buffer
         std::vector<vec4> kernel{};
@@ -166,7 +173,7 @@ namespace pe
         info.height = 4;
         info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+        info.initialState = LayoutState::Preinitialized;
         noiseTex = Image::Create(info);
 
         ImageViewCreateInfo viewInfo{};
@@ -180,11 +187,8 @@ namespace pe
         samplerInfo.maxLod = 0.0f;
         samplerInfo.maxAnisotropy = 1.0f;
         noiseTex->CreateSampler(samplerInfo);
-
-        noiseTex->TransitionImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        noiseTex->CopyBufferToImage(staging);
-        noiseTex->TransitionImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
+        noiseTex->CopyBufferToImage(nullptr, staging);
+        noiseTex->ChangeLayout(nullptr, LayoutState::ShaderReadOnly);
         staging->Destroy();
         // pvm uniform
         UB_PVM = Buffer::Create(
@@ -202,19 +206,19 @@ namespace pe
         // DESCRIPTOR SET FOR SSAO BLUR
         DSBlur = Descriptor::Create(Pipeline::getDescriptorSetLayoutSSAOBlur());
 
-        UpdateDescriptorSets(renderTargets);
+        UpdateDescriptorSets();
     }
 
-    void SSAO::UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets)
+    void SSAO::UpdateDescriptorSets()
     {
         std::array<DescriptorUpdateInfo, 5> infos{};
 
         infos[0].binding = 0;
-        infos[0].pImage = RHII.depth;
+        infos[0].pImage = depth;
         infos[0].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
         infos[1].binding = 1;
-        infos[1].pImage = renderTargets["normal"];
+        infos[1].pImage = normalRT;
 
         infos[2].binding = 2;
         infos[2].pImage = noiseTex;
@@ -229,7 +233,7 @@ namespace pe
 
         DescriptorUpdateInfo info{};
         info.binding = 0;
-        info.pImage = renderTargets["ssao"];
+        info.pImage = ssaoRT;
 
         DSBlur->UpdateDescriptor(1, &info);
     }
@@ -246,45 +250,73 @@ namespace pe
         }
     }
 
-    void SSAO::Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets)
+    void SSAO::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        // SSAO image
-        Image *image = renderTargets["ssao"];
-        image->ChangeLayout(cmd, LayoutState::ColorWrite);
+        // SSAO
+        // Input
+        normalRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        noiseTex->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        depth->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+        // Output
+        ssaoRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
 
-        image->ChangeLayout(cmd, LayoutState::ColorRead);
+        // SSAO BLUR
+        // Input
+        ssaoRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        // Output
+        ssaoBlurRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
 
-        // SSAO blur image
         cmd->BeginPass(blurRenderPass, blurFramebuffers[imageIndex]);
         cmd->BindPipeline(pipelineBlur);
         cmd->BindDescriptors(pipelineBlur, 1, &DSBlur);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
-        image->ChangeLayout(cmd, LayoutState::ColorRead);
+    }
+
+    void SSAO::Resize(uint32_t width, uint32_t height)
+    {
+        renderPass->Destroy();
+        blurRenderPass->Destroy();
+
+        for (auto &framebuffer : framebuffers)
+            framebuffer->Destroy();
+        for (auto &framebuffer : blurFramebuffers)
+            framebuffer->Destroy();
+
+        pipeline->Destroy();
+        pipelineBlur->Destroy();
+
+        Init();
+        CreateRenderPass();
+        CreateFrameBuffers();
+        CreatePipeline();
+        UpdateDescriptorSets();
     }
 
     void SSAO::Destroy()
     {
-        UB_Kernel->Destroy();
-        UB_PVM->Destroy();
-        noiseTex->Destroy();
-
-        renderPass->Destroy();
-        blurRenderPass->Destroy();
+        Pipeline::getDescriptorSetLayoutSSAO()->Destroy();
+        Pipeline::getDescriptorSetLayoutSSAOBlur()->Destroy();
 
         for (auto frameBuffer : framebuffers)
             frameBuffer->Destroy();
         for (auto frameBuffer : blurFramebuffers)
             frameBuffer->Destroy();
 
+        renderPass->Destroy();
+        blurRenderPass->Destroy();
+
         pipeline->Destroy();
         pipelineBlur->Destroy();
-        Pipeline::getDescriptorSetLayoutSSAO()->Destroy();
-        Pipeline::getDescriptorSetLayoutSSAOBlur()->Destroy();
+
+        UB_Kernel->Destroy();
+        UB_PVM->Destroy();
+        noiseTex->Destroy();
     }
 }

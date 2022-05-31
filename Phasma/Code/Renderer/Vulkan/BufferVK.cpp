@@ -97,7 +97,7 @@ namespace pe
         BufferCopy bufferCopy{};
         bufferCopy.size = srcSize > 0 ? srcSize : size;
 
-        CommandBuffer *copyCmd = CommandBuffer::Create(RHII.commandPool2);
+        CommandBuffer *copyCmd = CommandBuffer::Create(RHII.commandPool2, "copyCmd");
         copyCmd->Begin();
         copyCmd->CopyBuffer(srcBuffer, this, 1, &bufferCopy);
         copyCmd->End();

@@ -36,10 +36,16 @@ namespace pe
 
     enum class LayoutState
     {
-        ColorRead,
-        ColorWrite,
-        DepthRead,
-        DepthWrite
+        Undefined,
+        General,
+        ColorAttachment,
+        DepthStencilAttachment,
+        DepthStencilReadOnly,
+        ShaderReadOnly,
+        TransferSrc,
+        TransferDst,
+        Preinitialized,
+        PresentSrc
     };
 
     class SamplerCreateInfo
@@ -96,8 +102,8 @@ namespace pe
         SharingMode sharingMode;
         uint32_t queueFamilyIndexCount;
         const uint32_t *pQueueFamilyIndices;
-        ImageLayout initialLayout;
-        LayoutState layoutState;
+        LayoutState initialState;
+        std::string name;
     };
 
     class Image : public IHandle<Image, ImageHandle>
@@ -111,8 +117,6 @@ namespace pe
 
         ~Image();
 
-        std::string name{};
-
         ImageViewHandle view;
         SamplerHandle sampler;
         AllocationHandle allocation;
@@ -124,27 +128,44 @@ namespace pe
         float height_f{};
         PipelineColorBlendAttachmentState blendAttachment;
 
-        void TransitionImageLayout(
-            CommandBuffer *cmd,
-            ImageLayout oldLayout,
-            ImageLayout newLayout,
-            PipelineStageFlags oldStageMask,
-            PipelineStageFlags newStageMask,
-            AccessFlags srcMask,
-            AccessFlags dstMask);
-
         void CreateImageView(const ImageViewCreateInfo &info);
 
-        void TransitionImageLayout(ImageLayout oldLayout, ImageLayout newLayout);
+        // For arrayLayers and/or mipLevels bigger than size 1, all of their layouts must be the same
+        // TODO: Manage transitions for different layouts in arrayLayers and/or mipLevels
+        void ChangeLayout(CommandBuffer *cmd,
+                          LayoutState newState,
+                          uint32_t baseArrayLayer = 0,
+                          uint32_t arrayLayers = 1,
+                          uint32_t baseMipLevel = 0,
+                          uint32_t mipLevels = 1);
 
-        void ChangeLayout(CommandBuffer *cmd, LayoutState state);
-
-        void CopyBufferToImage(Buffer *buffer, uint32_t baseLayer = 0);
+        void CopyBufferToImage(CommandBuffer *cmd,
+                               Buffer *buffer,
+                               uint32_t baseArrayLayer = 0,
+                               uint32_t layerCount = 1,
+                               uint32_t mipLevel = 0);
 
         void CopyColorAttachment(CommandBuffer *cmd, Image *renderedImage);
 
         void GenerateMipMaps();
 
         void CreateSampler(const SamplerCreateInfo &info);
+
+    private:
+        void TransitionImageLayout(
+            CommandBuffer *cmd,
+            LayoutState oldLayout,
+            LayoutState newLayout,
+            PipelineStageFlags oldStageMask,
+            PipelineStageFlags newStageMask,
+            AccessFlags srcMask,
+            AccessFlags dstMask,
+            uint32_t baseArrayLayer,
+            uint32_t arrayLayers,
+            uint32_t baseMipLevel,
+            uint32_t mipLevels);
+
+        friend class Swapchain;
+        std::vector<std::vector<LayoutState>> layoutStates{};
     };
 }

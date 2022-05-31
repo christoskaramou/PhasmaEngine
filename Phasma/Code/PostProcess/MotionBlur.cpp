@@ -33,6 +33,7 @@ SOFTWARE.
 #include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
+#include "Systems/RendererSystem.h"
 
 namespace pe
 {
@@ -47,54 +48,42 @@ namespace pe
 
     void MotionBlur::Init()
     {
-        ImageCreateInfo info{};
-        info.format = RHII.surface->format;
-        info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
-        info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
-        info.tiling = VK_IMAGE_TILING_OPTIMAL;
-        info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        frameImage = Image::Create(info);
+        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
 
-        ImageViewCreateInfo viewInfo{};
-        viewInfo.image = frameImage;
-        frameImage->CreateImageView(viewInfo);
-
-        SamplerCreateInfo samplerInfo{};
-        frameImage->CreateSampler(samplerInfo);
-
-        frameImage->TransitionImageLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        viewportRT = rs->GetRenderTarget("viewport");
+        velocityRT = rs->GetRenderTarget("velocity");
+        frameImage = rs->CreateFSSampledImage();
+        depth = rs->GetDepthTarget("depth");
     }
 
-    void MotionBlur::CreateRenderPass(std::map<std::string, Image *> &renderTargets)
+    void MotionBlur::CreateRenderPass()
     {
         Attachment attachment{};
-        attachment.format = renderTargets["viewport"]->imageInfo.format;
+        attachment.format = viewportRT->imageInfo.format;
         renderPass = RenderPass::Create(attachment);
     }
 
-    void MotionBlur::CreateFrameBuffers(std::map<std::string, Image *> &renderTargets)
+    void MotionBlur::CreateFrameBuffers()
     {
         framebuffers.resize(RHII.swapchain->images.size());
         for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
         {
-            uint32_t width = renderTargets["viewport"]->imageInfo.width;
-            uint32_t height = renderTargets["viewport"]->imageInfo.height;
-            ImageViewHandle view = renderTargets["viewport"]->view;
+            uint32_t width = viewportRT->imageInfo.width;
+            uint32_t height = viewportRT->imageInfo.height;
+            ImageViewHandle view = viewportRT->view;
             framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
         }
     }
 
-    void MotionBlur::CreatePipeline(std::map<std::string, Image *> &renderTargets)
+    void MotionBlur::CreatePipeline()
     {
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/MotionBlur/motionBlur.frag", ShaderType::Fragment});
-        info.width = renderTargets["viewport"]->width_f;
-        info.height = renderTargets["viewport"]->height_f;
+        info.width = viewportRT->width_f;
+        info.height = viewportRT->height_f;
         info.cullMode = CullMode::Back;
-        info.colorBlendAttachments = {renderTargets["viewport"]->blendAttachment};
+        info.colorBlendAttachments = {viewportRT->blendAttachment};
         info.pushConstantStage = PushConstantStage::Fragment;
         info.pushConstantSize = sizeof(vec4);
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutMotionBlur()};
@@ -106,13 +95,13 @@ namespace pe
         info.pFragShader->Destroy();
     }
 
-    void MotionBlur::CreateUniforms(std::map<std::string, Image *> &renderTargets)
+    void MotionBlur::CreateUniforms()
     {
         DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutMotionBlur());
-        UpdateDescriptorSets(renderTargets);
+        UpdateDescriptorSets();
     }
 
-    void MotionBlur::UpdateDescriptorSets(std::map<std::string, Image *> &renderTargets)
+    void MotionBlur::UpdateDescriptorSets()
     {
         std::array<DescriptorUpdateInfo, 3> infos{};
 
@@ -120,11 +109,11 @@ namespace pe
         infos[0].pImage = frameImage;
 
         infos[1].binding = 1;
-        infos[1].pImage = RHII.depth;
+        infos[1].pImage = depth;
         infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
         infos[2].binding = 2;
-        infos[2].pImage = renderTargets["velocity"];
+        infos[2].pImage = velocityRT;
 
         DSet->UpdateDescriptor(static_cast<uint32_t>(infos.size()), infos.data());
     }
@@ -136,13 +125,24 @@ namespace pe
         }
     }
 
-    void MotionBlur::Draw(CommandBuffer *cmd, uint32_t imageIndex, std::map<std::string, Image *> &renderTargets)
+    void MotionBlur::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
         const vec4 values{
             1.f / static_cast<float>(FrameTimer::Instance().GetDelta()),
             0.f, // sin(static_cast<float>(FrameTimer::Instance().Count()) * 0.125f),
             GUI::motionBlur_strength,
             0.f};
+
+        // Copy viewport image
+        frameImage->CopyColorAttachment(cmd, viewportRT);
+
+        // MOTION BLUR
+        // Input
+        frameImage->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        velocityRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        depth->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+        // Output
+        viewportRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->PushConstants(pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(vec4), &values);
@@ -152,15 +152,30 @@ namespace pe
         cmd->EndPass();
     }
 
+    void MotionBlur::Resize(uint32_t width, uint32_t height)
+    {
+        for (auto *frameBuffer : framebuffers)
+            frameBuffer->Destroy();
+        renderPass->Destroy();
+        pipeline->Destroy();
+        frameImage->Destroy();
+
+        Init();
+        CreateRenderPass();
+        CreateFrameBuffers();
+        CreatePipeline();
+        UpdateDescriptorSets();
+    }
+
     void MotionBlur::Destroy()
     {
+        Pipeline::getDescriptorSetLayoutMotionBlur()->Destroy();
+
         for (auto frameBuffer : framebuffers)
             frameBuffer->Destroy();
 
         renderPass->Destroy();
-
-        Pipeline::getDescriptorSetLayoutMotionBlur()->Destroy();
-        frameImage->Destroy();
         pipeline->Destroy();
+        frameImage->Destroy();
     }
 }

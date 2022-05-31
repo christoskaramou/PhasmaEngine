@@ -29,6 +29,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Image.h"
+#include "Renderer/Debug.h"
 
 namespace pe
 {
@@ -53,7 +54,7 @@ namespace pe
         }
     }
 
-    CommandBuffer::CommandBuffer(CommandPool *commandPool) : m_commandPool(commandPool)
+    CommandBuffer::CommandBuffer(CommandPool *commandPool, const std::string &name) : m_commandPool(commandPool)
     {
         VkCommandBufferAllocateInfo cbai{};
         cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -64,6 +65,8 @@ namespace pe
         VkCommandBuffer commandBuffer;
         vkAllocateCommandBuffers(RHII.device, &cbai, &commandBuffer);
         m_handle = commandBuffer;
+
+        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_COMMAND_BUFFER, name);
     }
 
     CommandBuffer::~CommandBuffer()
