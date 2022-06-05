@@ -164,7 +164,7 @@ namespace pe
             }
         };
 
-        Queue<Launch::AsyncNoWait>::Request(watchLambda);
+        SyncQueue<Launch::AsyncNoWait>::Request(watchLambda);
     }
 
     FileWatcher::FileWatcher(const std::string &file, Func &&callback)

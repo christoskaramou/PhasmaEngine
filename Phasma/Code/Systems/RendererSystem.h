@@ -26,6 +26,8 @@ SOFTWARE.
 
 namespace pe
 {
+    class Fence;
+
     class RendererSystem : public Renderer, public IDrawSystem
     {
     public:
@@ -36,5 +38,8 @@ namespace pe
         void Destroy() override;
 
         void Draw() override;
+
+    private:
+        Fence *previousFences[SWAPCHAIN_IMAGES];
     };
 }

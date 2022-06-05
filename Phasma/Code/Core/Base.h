@@ -22,27 +22,46 @@ SOFTWARE.
 
 #pragma once
 
-#if _DEBUG
-#define PE_PRINT_ERROR_MSG(msg)       \
-    {                                 \
-        std::stringstream ss;         \
-        ss << "Error: " << msg;       \
-        ss << ", File: " << __FILE__; \
-        ss << ", Line: " << __LINE__; \
-        std::cerr << ss.str();        \
-    }
-#else
-#define PE_PRINT_ERROR_MSG(msg)
-#endif
-
-#define PE_ERROR(msg)            \
-    {                            \
-        PE_PRINT_ERROR_MSG(msg); \
-        exit(-1);                \
-    }
-
 namespace pe
 {
+    inline void PE_ERROR_MSG(const std::string &msg,
+                             const std::string &func,
+                             const std::string &file,
+                             int line)
+    {
+        std::string error = "Error: " + msg + ", \nFunc: " + func + ", \nFile: " + file + ", \nLine: " + std::to_string(line) + "\n\n";
+        std::cout << error << std::endl;
+        exit(-1);
+    }
+    
+    inline void PE_CHECK_RESULT(uint32_t res,
+                                const std::string &func,
+                                const std::string &file,
+                                int line)
+    {
+        if (res != 0)
+            PE_ERROR_MSG("Result error", func, file, line);
+    }
+
+    inline void PE_CHECK_RESULT(uint32_t res)
+    {
+        if (res != 0)
+            exit(-1);
+    }
+
+#if _DEBUG
+#define PE_CHECK(res) PE_CHECK_RESULT(res, __func__, __FILE__, __LINE__)
+#define PE_ERROR(msg) PE_ERROR_MSG(msg, __func__, __FILE__, __LINE__)
+#else
+#define PE_CHECK(res) PE_CHECK_RESULT(res)
+#define PE_ERROR(msg) exit(-1)
+#endif
+
+    constexpr uint32_t BitSet(uint8_t bit)
+    {
+        return 1 << bit;
+    }
+
     inline size_t NextID()
     {
         static size_t ID = 0;
@@ -60,13 +79,9 @@ namespace pe
     {
     public:
         NoCopy() = default;
-
         NoCopy(const NoCopy &) = delete;
-
         NoCopy &operator=(const NoCopy &) = delete;
-
         NoCopy(NoCopy &&) = default;
-
         NoCopy &operator=(NoCopy &&) = default;
     };
 
@@ -74,13 +89,9 @@ namespace pe
     {
     public:
         NoMove() = default;
-
         NoMove(const NoMove &) = default;
-
         NoMove &operator=(const NoMove &) = default;
-
         NoMove(NoMove &&) = delete;
-
         NoMove &operator=(NoMove &&) = delete;
     };
 
@@ -96,59 +107,18 @@ namespace pe
         using BaseVK = VK_TYPE;
         using BaseDX = DX_TYPE;
 
-        ApiHandle() : m_handle(nullptr)
-        {
-        }
-
-        ApiHandle(const VK_TYPE &handle) : m_handle(handle)
-        {
-        }
-
-        ApiHandle(const DX_TYPE &handle) : m_handle(handle)
-        {
-        }
+        ApiHandle() : m_handle(nullptr) {}
+        ApiHandle(const VK_TYPE &handle) : m_handle(handle) {}
+        ApiHandle(const DX_TYPE &handle) : m_handle(handle) {}
 
         // Operators for auto casting
-        operator VK_TYPE()
-        {
-            return static_cast<VK_TYPE>(m_handle);
-        }
-
-        operator VK_TYPE() const
-        {
-            return static_cast<VK_TYPE>(m_handle);
-        }
-
-        operator DX_TYPE()
-        {
-            return static_cast<DX_TYPE>(m_handle);
-        }
-
-        operator DX_TYPE() const
-        {
-            return static_cast<DX_TYPE>(m_handle);
-        }
-
-        operator uint64_t()
-        {
-            return (uint64_t)m_handle;
-        }
-
-        // Not used at the moment
-        void *raw()
-        {
-            return m_handle;
-        }
-
-        operator bool()
-        {
-            return m_handle != nullptr;
-        }
-
-        bool operator!()
-        {
-            return m_handle == nullptr;
-        }
+        operator VK_TYPE() { return static_cast<VK_TYPE>(m_handle); }
+        operator VK_TYPE() const { return static_cast<VK_TYPE>(m_handle); }
+        operator DX_TYPE() { return static_cast<DX_TYPE>(m_handle); }
+        operator DX_TYPE() const { return static_cast<DX_TYPE>(m_handle); }
+        operator uintptr_t() { return reinterpret_cast<uintptr_t>(m_handle); }
+        operator bool() { return m_handle != nullptr; }
+        bool operator!() { return m_handle == nullptr; }
 
     private:
         void *m_handle;
@@ -167,100 +137,35 @@ namespace pe
         template <class... Params>
         inline static T *Create(Params &&...params)
         {
-            // This means the T class is IHandle and already defined
             static_assert(std::is_base_of_v<IHandle<T, HANDLE>, T>);
 
-            if constexpr (std::is_base_of_v<HashableBase, T>)
+            T *ptr = new T(std::forward<Params>(params)...);
+            ptr->p = ptr;
+
+            return ptr;
+        }
+
+        inline static void Destroy(T *ptr)
+        {
+            static_assert(std::is_base_of_v<IHandle<T, HANDLE>, T>);
+
+            if (ptr && ptr->p)
             {
-                Hashable<Params...> hashable;
-                hashable.CreateHash(std::forward<Params>(params)...);
-                Hash hash = hashable.GetHash();
-
-                auto it = sm_iHandlesHashable.find(hash);
-                if (it != sm_iHandlesHashable.end())
-                    return static_cast<T *>(it->second);
-
-                T *ptr = new T(std::forward<Params>(params)...);
-
-                ptr->SetHash(hash);
-
-                // m_heapId is used to check on Destroy if the object was created via Create
-                // Thus it is a heap allocated object and must be deleted
-                ptr->m_heapId = hash;
-
-                sm_iHandlesHashable[hash] = ptr;
-
-                return ptr;
-            }
-            else
-            {
-                T *ptr = new T(std::forward<Params>(params)...);
-
-                // m_heapId is used to check on Destroy if the object was created via Create
-                // Thus it is a heap allocated object and must be deleted
-                ptr->m_heapId = NextID();
-
-                sm_iHandles[ptr->m_heapId] = ptr;
-
-                return ptr;
+                delete ptr->p;
+                ptr->p = nullptr;
             }
         }
 
-        virtual ~IHandle()
-        {
-        }
-
-        void Destroy()
-        {
-            // If the object is not created via Create function, return and let the actual class to manage
-            if (m_heapId == std::numeric_limits<size_t>::max())
-                return;
-
-            if constexpr (std::is_base_of_v<HashableBase, T>)
-            {
-                auto it = sm_iHandlesHashable.find(m_heapId);
-                if (it != sm_iHandlesHashable.end())
-                {
-                    sm_iHandlesHashable.erase(it);
-
-                    // This will call the derived object's destructor too, because the destructor of IHandle is virtual
-                    delete this;
-                }
-            }
-            else
-            {
-                auto it = sm_iHandles.find(m_heapId);
-                if (it != sm_iHandles.end())
-                {
-                    sm_iHandles.erase(it);
-
-                    // This will call the derived object's destructor too, because the destructor of IHandle is virtual
-                    delete this;
-                }
-            }
-        };
-
-        HANDLE &Handle()
-        {
-            return m_handle;
-        }
-
-        const HANDLE &Handle() const
-        {
-            return m_handle;
-        }
-
-    private:
-        inline static std::unordered_map<size_t, IHandle *> sm_iHandles{};
-        inline static std::unordered_map<size_t, IHandle *> sm_iHandlesHashable{};
-        size_t m_heapId;
+        virtual ~IHandle() {}
+        HANDLE &Handle() { return m_handle; }
+        const HANDLE &Handle() const { return m_handle; }
 
     protected:
-        IHandle() : m_handle{}, m_heapId{std::numeric_limits<size_t>::max()}
-        {
-        }
-
+        IHandle() : m_handle{} {}
         HANDLE m_handle;
+
+    private:
+        T *p;
     };
 
     struct Placeholder

@@ -24,15 +24,46 @@ SOFTWARE.
 
 namespace pe
 {
+    enum class FenceStatus
+    {
+        Signaled,
+        Unsignaled,
+        Error
+    };
+
     class Fence : public IHandle<Fence, FenceHandle>
     {
     public:
-        Fence(bool signaled);
+        Fence(bool signaled, const std::string &name = {});
 
         ~Fence();
 
         void Wait();
 
         void Reset();
+
+        FenceStatus GetStatus();
+
+        static void Init();
+
+        static void Clear();
+
+        static Fence *GetNext();
+
+        static void Return(Fence *fence);
+
+        std::string name;
+
+    private:
+        static void CheckReturns();
+
+        inline static std::unordered_map<Fence *,Fence *> s_availableFences{};
+        inline static std::unordered_map<Fence *,Fence *> s_returnFences{};
+        inline static std::map<Fence *, Fence *> s_allFences{};
+
+        friend class Queue;
+        friend class CommandBuffer;
+        std::atomic_bool m_canReturnToPool = false;
+        std::atomic_bool m_submitted = false;
     };
 }

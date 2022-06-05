@@ -42,6 +42,7 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/Queue.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl.h"
@@ -142,11 +143,11 @@ namespace pe
 
                         s_modelLoading = false;
                     };
-                    Queue<Launch::AsyncNoWait>::Request(loadAsync);
+                    SyncQueue<Launch::AsyncNoWait>::Request(loadAsync);
                 }
             };
 
-            Queue<Launch::AsyncNoWait>::Request(lambda);
+            SyncQueue<Launch::AsyncNoWait>::Request(lambda);
         }
     }
 
@@ -163,7 +164,7 @@ namespace pe
                     eventSystem->PushEvent(EventType::Quit);
                 }
             };
-            Queue<Launch::AsyncNoWait>::Request(lambda);
+            SyncQueue<Launch::AsyncNoWait>::Request(lambda);
         }
     }
 
@@ -421,7 +422,7 @@ namespace pe
                     std::string s = Path::Assets + "Shaders\\" + shaderList[i];
                     auto lambda = [s]()
                     { system(s.c_str()); };
-                    Queue<Launch::AsyncNoWait>::Request(lambda);
+                    SyncQueue<Launch::AsyncNoWait>::Request(lambda);
                 }
             }
         }
@@ -477,7 +478,7 @@ namespace pe
         if (use_SSGI)
         {
             ImGui::Indent(16.0f);
-            
+
             ImGui::Unindent(16.0f);
             ImGui::Separator();
             ImGui::Separator();
@@ -659,12 +660,13 @@ namespace pe
 
         ImGui_ImplSDL2_InitForVulkan(RHII.window);
 
+        Queue *queue = Queue::GetNext(QueueType::GraphicsBit, 1);
         ImGui_ImplVulkan_InitInfo info;
         info.Instance = RHII.instance;
         info.PhysicalDevice = RHII.gpu;
         info.Device = RHII.device;
-        info.QueueFamily = RHII.graphicsFamilyId;
-        info.Queue = RHII.graphicsQueue;
+        info.QueueFamily = queue->GetFamilyId();
+        info.Queue = queue->Handle();
         info.PipelineCache = nullptr; // Will it help to use it?
         info.DescriptorPool = RHII.descriptorPool->Handle();
         info.Subpass = 0;
@@ -675,12 +677,14 @@ namespace pe
         info.CheckVkResultFn = nullptr;
         ImGui_ImplVulkan_Init(&info, renderPass->Handle());
 
-        CommandBuffer *cmd = CommandBuffer::Create(RHII.commandPool2, "GUI_Temp_Cmd");
+        Queue *temp_queue = Queue::GetNext(QueueType::GraphicsBit, 1);
+        CommandBuffer *cmd = CommandBuffer::GetNext(temp_queue->GetFamilyId());
         cmd->Begin();
         ImGui_ImplVulkan_CreateFontsTexture(cmd->Handle());
         cmd->End();
-        RHII.SubmitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
-        cmd->Destroy();
+        temp_queue->SubmitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
+        CommandBuffer::Return(cmd);
+        Queue::Return(temp_queue);
     }
 
     void GUI::InitGUI(bool show)
@@ -703,13 +707,14 @@ namespace pe
     {
         if (!render)
             return;
-
+        Debug::BeginCmdRegion(cmd->Handle(), "GUI");
         if (render && ImGui::GetDrawData()->TotalVtxCount > 0)
         {
             cmd->BeginPass(renderPass, framebuffers[imageIndex]);
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
             cmd->EndPass();
         }
+        Debug::EndCmdRegion(cmd->Handle());
     }
 
     void GUI::SetWindowStyle(ImGuiStyle *dst)
@@ -730,7 +735,7 @@ namespace pe
         colorAttachment.initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-        renderPass = RenderPass::Create(colorAttachment);
+        renderPass = RenderPass::Create(&colorAttachment, 1, "GUI_renderPass");
     }
 
     void GUI::CreateFrameBuffers()
@@ -741,15 +746,15 @@ namespace pe
             uint32_t width = WIDTH;
             uint32_t height = HEIGHT;
             ImageViewHandle view = RHII.swapchain->images[i]->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
+            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "GUI_frameBuffer_" + std::to_string(i));
         }
     }
 
     void GUI::Destroy()
     {
-        renderPass->Destroy();
+        RenderPass::Destroy(renderPass);
         for (auto &framebuffer : framebuffers)
-            framebuffer->Destroy();
+            FrameBuffer::Destroy(framebuffer);
     }
 
     void GUI::Update()

@@ -59,13 +59,13 @@ namespace pe
     {
         Attachment attachment{};
         attachment.format = brightFilterRT->imageInfo.format;
-        renderPassBrightFilter = RenderPass::Create(attachment);
+        renderPassBrightFilter = RenderPass::Create(&attachment, 1, "brightFilter_renderpass");
 
         attachment.format = gaussianBlurHorizontalRT->imageInfo.format;
-        renderPassGaussianBlur = RenderPass::Create(attachment);
+        renderPassGaussianBlur = RenderPass::Create(&attachment, 1, "gaussianBlur_renderpass");
 
         attachment.format = viewportRT->imageInfo.format;
-        renderPassCombine = RenderPass::Create(attachment);
+        renderPassCombine = RenderPass::Create(&attachment, 1, "bloomCombine_renderpass");
     }
 
     void Bloom::CreateFrameBuffers()
@@ -76,7 +76,7 @@ namespace pe
             uint32_t width = brightFilterRT->imageInfo.width;
             uint32_t height = brightFilterRT->imageInfo.height;
             ImageViewHandle view = brightFilterRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassBrightFilter);
+            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPassBrightFilter, "brightFilter_frameBuffer_" + std::to_string(i));
         }
 
         for (size_t i = RHII.swapchain->images.size(); i < RHII.swapchain->images.size() * 2; ++i)
@@ -84,7 +84,7 @@ namespace pe
             uint32_t width = gaussianBlurHorizontalRT->imageInfo.width;
             uint32_t height = gaussianBlurHorizontalRT->imageInfo.height;
             ImageViewHandle view = gaussianBlurHorizontalRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassGaussianBlur);
+            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPassGaussianBlur, "gaussianBlurHorizontal_frameBuffer_" + std::to_string(i));
         }
 
         for (size_t i = RHII.swapchain->images.size() * 2; i < RHII.swapchain->images.size() * 3; ++i)
@@ -92,7 +92,7 @@ namespace pe
             uint32_t width = gaussianBlurVerticalRT->imageInfo.width;
             uint32_t height = gaussianBlurVerticalRT->imageInfo.height;
             ImageViewHandle view = gaussianBlurVerticalRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassGaussianBlur);
+            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPassGaussianBlur, "gaussianBlurVertical_frameBuffer_" + std::to_string(i));
         }
 
         for (size_t i = RHII.swapchain->images.size() * 3; i < RHII.swapchain->images.size() * 4; ++i)
@@ -100,7 +100,7 @@ namespace pe
             uint32_t width = viewportRT->imageInfo.width;
             uint32_t height = viewportRT->imageInfo.height;
             ImageViewHandle view = viewportRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPassCombine);
+            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPassCombine, "bloomCombine_frameBuffer_" + std::to_string(i));
         }
     }
 
@@ -125,11 +125,12 @@ namespace pe
         info.pushConstantSize = 5 * sizeof(float);
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutBrightFilter()};
         info.renderPass = renderPassBrightFilter;
+        info.name = "BrightFilter_pipeline";
 
         pipelineBrightFilter = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateGaussianBlurHorizontaPipeline()
@@ -145,11 +146,12 @@ namespace pe
         info.pushConstantSize = 5 * sizeof(float);
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutGaussianBlurH()};
         info.renderPass = renderPassGaussianBlur;
+        info.name = "GaussianBlurHorizontal_pipeline";
 
         pipelineGaussianBlurHorizontal = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateGaussianBlurVerticalPipeline()
@@ -165,11 +167,12 @@ namespace pe
         info.pushConstantSize = 5 * sizeof(float);
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutGaussianBlurV()};
         info.renderPass = renderPassGaussianBlur;
+        info.name = "GaussianBlurVertical_pipeline";
 
         pipelineGaussianBlurVertical = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateCombinePipeline()
@@ -185,19 +188,20 @@ namespace pe
         info.pushConstantSize = 5 * sizeof(float);
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutCombine()};
         info.renderPass = renderPassCombine;
+        info.name = "BloomCombine_pipeline";
 
         pipelineCombine = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateUniforms()
     {
-        DSBrightFilter = Descriptor::Create(Pipeline::getDescriptorSetLayoutBrightFilter());
-        DSGaussianBlurHorizontal = Descriptor::Create(Pipeline::getDescriptorSetLayoutGaussianBlurH());
-        DSGaussianBlurVertical = Descriptor::Create(Pipeline::getDescriptorSetLayoutGaussianBlurV());
-        DSCombine = Descriptor::Create(Pipeline::getDescriptorSetLayoutCombine());
+        DSBrightFilter = Descriptor::Create(Pipeline::getDescriptorSetLayoutBrightFilter(), 1, "Bloom_BrightFilter_descriptor");
+        DSGaussianBlurHorizontal = Descriptor::Create(Pipeline::getDescriptorSetLayoutGaussianBlurH(), 1, "Bloom_GaussianBlurHorizontal_descriptor");
+        DSGaussianBlurVertical = Descriptor::Create(Pipeline::getDescriptorSetLayoutGaussianBlurV(), 1, "Bloom_GaussianBlurVertical_descriptor");
+        DSCombine = Descriptor::Create(Pipeline::getDescriptorSetLayoutCombine(), 1, "Bloom_Combine_descriptor");
 
         UpdateDescriptorSets();
     }
@@ -241,6 +245,9 @@ namespace pe
             GUI::Bloom_exposure,
             static_cast<float>(GUI::use_tonemap)};
 
+        Debug::BeginCmdRegion(cmd->Handle(), "Bloom");
+
+        Debug::BeginCmdRegion(cmd->Handle(), "BrightFilter");
         // Copy viewport image
         frameImage->CopyColorAttachment(cmd, viewportRT);
 
@@ -257,7 +264,9 @@ namespace pe
         cmd->BindDescriptors(pipelineBrightFilter, 1, &DSBrightFilter);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+        Debug::EndCmdRegion(cmd->Handle());
 
+        Debug::BeginCmdRegion(cmd->Handle(), "GaussianBlurHorizontal");
         // GUASSIAN BLUR HORIZONTAL
         // Input
         brightFilterRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
@@ -272,7 +281,9 @@ namespace pe
         cmd->BindDescriptors(pipelineGaussianBlurHorizontal, 1, &DSGaussianBlurHorizontal);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+        Debug::EndCmdRegion(cmd->Handle());
 
+        Debug::BeginCmdRegion(cmd->Handle(), "GaussianBlurVertical");
         // GAUSSIAN BLUR VERTICAL
         // Input
         gaussianBlurHorizontalRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
@@ -287,7 +298,9 @@ namespace pe
         cmd->BindDescriptors(pipelineGaussianBlurVertical, 1, &DSGaussianBlurVertical);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
-        
+        Debug::EndCmdRegion(cmd->Handle());
+
+        Debug::BeginCmdRegion(cmd->Handle(), "Bloom Combine");
         // COMBINE
         // Input
         frameImage->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
@@ -303,23 +316,26 @@ namespace pe
         cmd->BindDescriptors(pipelineCombine, 1, &DSCombine);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+        Debug::EndCmdRegion(cmd->Handle());
+
+        Debug::EndCmdRegion(cmd->Handle());
     }
 
     void Bloom::Resize(uint32_t width, uint32_t height)
     {
         for (auto *frameBuffer : framebuffers)
-            frameBuffer->Destroy();
+            FrameBuffer::Destroy(frameBuffer);
 
-        renderPassBrightFilter->Destroy();
-        renderPassGaussianBlur->Destroy();
-        renderPassCombine->Destroy();
+        RenderPass::Destroy(renderPassBrightFilter);
+        RenderPass::Destroy(renderPassGaussianBlur);
+        RenderPass::Destroy(renderPassCombine);
 
-        pipelineBrightFilter->Destroy();
-        pipelineGaussianBlurHorizontal->Destroy();
-        pipelineGaussianBlurVertical->Destroy();
-        pipelineCombine->Destroy();
+        Pipeline::Destroy(pipelineBrightFilter);
+        Pipeline::Destroy(pipelineGaussianBlurHorizontal);
+        Pipeline::Destroy(pipelineGaussianBlurVertical);
+        Pipeline::Destroy(pipelineCombine);
 
-        frameImage->Destroy();
+        Image::Destroy(frameImage);
 
         Init();
         CreateRenderPass();
@@ -330,22 +346,23 @@ namespace pe
 
     void Bloom::Destroy()
     {
-        Pipeline::getDescriptorSetLayoutBrightFilter()->Destroy();
-        Pipeline::getDescriptorSetLayoutGaussianBlurH()->Destroy();
-        Pipeline::getDescriptorSetLayoutGaussianBlurV()->Destroy();
-        Pipeline::getDescriptorSetLayoutCombine()->Destroy();
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutBrightFilter());
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutGaussianBlurH());
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutGaussianBlurV());
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutCombine());
 
         for (auto frameBuffer : framebuffers)
-            frameBuffer->Destroy();
+            FrameBuffer::Destroy(frameBuffer);
 
-        renderPassBrightFilter->Destroy();
-        renderPassGaussianBlur->Destroy();
-        renderPassCombine->Destroy();
+        RenderPass::Destroy(renderPassBrightFilter);
+        RenderPass::Destroy(renderPassGaussianBlur);
+        RenderPass::Destroy(renderPassCombine);
 
-        pipelineBrightFilter->Destroy();
-        pipelineGaussianBlurHorizontal->Destroy();
-        pipelineGaussianBlurVertical->Destroy();
-        pipelineCombine->Destroy();
-        frameImage->Destroy();
+        Pipeline::Destroy(pipelineBrightFilter);
+        Pipeline::Destroy(pipelineGaussianBlurHorizontal);
+        Pipeline::Destroy(pipelineGaussianBlurVertical);
+        Pipeline::Destroy(pipelineCombine);
+
+        Image::Destroy(frameImage);
     }
 }

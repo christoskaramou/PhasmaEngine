@@ -70,7 +70,8 @@ namespace pe
 
             inputs.push_back(desc);
         }
-        std::sort(inputs.begin(), inputs.end(), [](auto &a, auto &b) { return a.location < b.location; });
+        std::sort(inputs.begin(), inputs.end(), [](auto &a, auto &b)
+                  { return a.location < b.location; });
 
         // Shader outputs
         for (const spirv_cross::Resource &resource : resources.stage_outputs)
@@ -81,7 +82,8 @@ namespace pe
 
             outputs.push_back(desc);
         }
-        std::sort(outputs.begin(), outputs.end(), [](auto &a, auto &b) { return a.location < b.location; });
+        std::sort(outputs.begin(), outputs.end(), [](auto &a, auto &b)
+                  { return a.location < b.location; });
 
         // Combined image samplers
         for (const spirv_cross::Resource &resource : resources.sampled_images)
@@ -116,46 +118,46 @@ namespace pe
         }
     }
 
-    uint32_t GetTypeSize(const ShaderInOutDesc& inout)
+    uint32_t GetTypeSize(const ShaderInOutDesc &inout)
     {
-        switch(inout.type->basetype)
+        switch (inout.type->basetype)
         {
         case spirv_cross::SPIRType::Unknown:
-		case spirv_cross::SPIRType::Void:
-		case spirv_cross::SPIRType::AtomicCounter:
-		case spirv_cross::SPIRType::Struct:
-		case spirv_cross::SPIRType::Image:
-		case spirv_cross::SPIRType::SampledImage:
-		case spirv_cross::SPIRType::Sampler:
-		case spirv_cross::SPIRType::AccelerationStructure:
-		case spirv_cross::SPIRType::RayQuery:
-		case spirv_cross::SPIRType::ControlPointArray:
-		case spirv_cross::SPIRType::Interpolant:
-		case spirv_cross::SPIRType::Char:
+        case spirv_cross::SPIRType::Void:
+        case spirv_cross::SPIRType::AtomicCounter:
+        case spirv_cross::SPIRType::Struct:
+        case spirv_cross::SPIRType::Image:
+        case spirv_cross::SPIRType::SampledImage:
+        case spirv_cross::SPIRType::Sampler:
+        case spirv_cross::SPIRType::AccelerationStructure:
+        case spirv_cross::SPIRType::RayQuery:
+        case spirv_cross::SPIRType::ControlPointArray:
+        case spirv_cross::SPIRType::Interpolant:
+        case spirv_cross::SPIRType::Char:
             return 0;
-		case spirv_cross::SPIRType::Boolean:
+        case spirv_cross::SPIRType::Boolean:
             return sizeof(bool);
-		case spirv_cross::SPIRType::SByte:
+        case spirv_cross::SPIRType::SByte:
             return sizeof(int8_t);
-		case spirv_cross::SPIRType::UByte:
+        case spirv_cross::SPIRType::UByte:
             return sizeof(uint8_t);
-		case spirv_cross::SPIRType::Short:
+        case spirv_cross::SPIRType::Short:
             return sizeof(int16_t);
-		case spirv_cross::SPIRType::UShort:
+        case spirv_cross::SPIRType::UShort:
             return sizeof(uint16_t);
-		case spirv_cross::SPIRType::Int:
+        case spirv_cross::SPIRType::Int:
             return sizeof(int32_t);
-		case spirv_cross::SPIRType::UInt:
+        case spirv_cross::SPIRType::UInt:
             return sizeof(uint32_t);
-		case spirv_cross::SPIRType::Int64:
+        case spirv_cross::SPIRType::Int64:
             return sizeof(int64_t);
-		case spirv_cross::SPIRType::UInt64:
+        case spirv_cross::SPIRType::UInt64:
             return sizeof(uint64_t);
-		case spirv_cross::SPIRType::Half:
+        case spirv_cross::SPIRType::Half:
             return sizeof(float_t) / 2;
-		case spirv_cross::SPIRType::Float:
+        case spirv_cross::SPIRType::Float:
             return sizeof(float_t);
-		case spirv_cross::SPIRType::Double:
+        case spirv_cross::SPIRType::Double:
             return sizeof(double_t);
         default:
             return 0;
@@ -170,37 +172,37 @@ namespace pe
         SFloat
     };
 
-    VariableType GetVariableType(const ShaderInOutDesc& inout)
+    VariableType GetVariableType(const ShaderInOutDesc &inout)
     {
-        switch(inout.type->basetype)
+        switch (inout.type->basetype)
         {
         case spirv_cross::SPIRType::Unknown:
-		case spirv_cross::SPIRType::Void:
-		case spirv_cross::SPIRType::AtomicCounter:
-		case spirv_cross::SPIRType::Struct:
-		case spirv_cross::SPIRType::Image:
-		case spirv_cross::SPIRType::SampledImage:
-		case spirv_cross::SPIRType::Sampler:
-		case spirv_cross::SPIRType::AccelerationStructure:
-		case spirv_cross::SPIRType::RayQuery:
-		case spirv_cross::SPIRType::ControlPointArray:
-		case spirv_cross::SPIRType::Interpolant:
-		case spirv_cross::SPIRType::Char:
+        case spirv_cross::SPIRType::Void:
+        case spirv_cross::SPIRType::AtomicCounter:
+        case spirv_cross::SPIRType::Struct:
+        case spirv_cross::SPIRType::Image:
+        case spirv_cross::SPIRType::SampledImage:
+        case spirv_cross::SPIRType::Sampler:
+        case spirv_cross::SPIRType::AccelerationStructure:
+        case spirv_cross::SPIRType::RayQuery:
+        case spirv_cross::SPIRType::ControlPointArray:
+        case spirv_cross::SPIRType::Interpolant:
+        case spirv_cross::SPIRType::Char:
             return VariableType::None;
-		case spirv_cross::SPIRType::Boolean:
-		case spirv_cross::SPIRType::UByte:
-		case spirv_cross::SPIRType::UShort:
-		case spirv_cross::SPIRType::UInt:
-		case spirv_cross::SPIRType::UInt64:
+        case spirv_cross::SPIRType::Boolean:
+        case spirv_cross::SPIRType::UByte:
+        case spirv_cross::SPIRType::UShort:
+        case spirv_cross::SPIRType::UInt:
+        case spirv_cross::SPIRType::UInt64:
             return VariableType::UInt;
-		case spirv_cross::SPIRType::SByte:
-		case spirv_cross::SPIRType::Short:
-		case spirv_cross::SPIRType::Int:
-		case spirv_cross::SPIRType::Int64:
+        case spirv_cross::SPIRType::SByte:
+        case spirv_cross::SPIRType::Short:
+        case spirv_cross::SPIRType::Int:
+        case spirv_cross::SPIRType::Int64:
             return VariableType::SInt;
-		case spirv_cross::SPIRType::Half:
-		case spirv_cross::SPIRType::Float:
-		case spirv_cross::SPIRType::Double:
+        case spirv_cross::SPIRType::Half:
+        case spirv_cross::SPIRType::Float:
+        case spirv_cross::SPIRType::Double:
             return VariableType::SFloat;
         default:
             return VariableType::None;
@@ -211,68 +213,68 @@ namespace pe
     {
         uint32_t size = GetTypeSize(input) * input.type->vecsize * input.type->columns;
         VariableType type = GetVariableType(input);
-        switch(size)
+        switch (size)
         {
         case 1:
-        if(type == VariableType::SInt)
-            return VK_FORMAT_R8_SINT;
-        else if(type == VariableType::UInt)
-            return VK_FORMAT_R8_UINT;
+            if (type == VariableType::SInt)
+                return VK_FORMAT_R8_SINT;
+            else if (type == VariableType::UInt)
+                return VK_FORMAT_R8_UINT;
 
         case 2:
-        if(type == VariableType::SInt)
-            return VK_FORMAT_R16_SINT;
-        else if(type == VariableType::UInt)
-            return VK_FORMAT_R16_UINT;
-        else if (type == VariableType::SFloat)
-            return VK_FORMAT_R16_SFLOAT;
+            if (type == VariableType::SInt)
+                return VK_FORMAT_R16_SINT;
+            else if (type == VariableType::UInt)
+                return VK_FORMAT_R16_UINT;
+            else if (type == VariableType::SFloat)
+                return VK_FORMAT_R16_SFLOAT;
 
         case 4:
-        if(type == VariableType::SInt)
-            return VK_FORMAT_R32_SINT;
-        else if(type == VariableType::UInt)
-            return VK_FORMAT_R32_UINT;
-        else if (type == VariableType::SFloat)
-            return VK_FORMAT_R32_SFLOAT;
+            if (type == VariableType::SInt)
+                return VK_FORMAT_R32_SINT;
+            else if (type == VariableType::UInt)
+                return VK_FORMAT_R32_UINT;
+            else if (type == VariableType::SFloat)
+                return VK_FORMAT_R32_SFLOAT;
 
         case 6:
-        if(type == VariableType::SInt)
-            VK_FORMAT_R16G16B16_SINT;
-        else if(type == VariableType::UInt)
-            VK_FORMAT_R16G16B16_UINT;
-        else if (type == VariableType::SFloat)
-            return VK_FORMAT_R16G16B16_SFLOAT;
+            if (type == VariableType::SInt)
+                VK_FORMAT_R16G16B16_SINT;
+            else if (type == VariableType::UInt)
+                VK_FORMAT_R16G16B16_UINT;
+            else if (type == VariableType::SFloat)
+                return VK_FORMAT_R16G16B16_SFLOAT;
 
         case 8:
-        if(type == VariableType::SInt)
-            return VK_FORMAT_R32G32_SINT;
-        else if(type == VariableType::UInt)
-            return VK_FORMAT_R32G32_UINT;
-        else if (type == VariableType::SFloat)
-            return VK_FORMAT_R32G32_SFLOAT;
+            if (type == VariableType::SInt)
+                return VK_FORMAT_R32G32_SINT;
+            else if (type == VariableType::UInt)
+                return VK_FORMAT_R32G32_UINT;
+            else if (type == VariableType::SFloat)
+                return VK_FORMAT_R32G32_SFLOAT;
 
         case 12:
-        if(type == VariableType::SInt)
-            return VK_FORMAT_R32G32B32_SINT;
-        else if(type == VariableType::UInt)
-            return VK_FORMAT_R32G32B32_UINT;
-        else if (type == VariableType::SFloat)
-            return VK_FORMAT_R32G32B32_SFLOAT;
+            if (type == VariableType::SInt)
+                return VK_FORMAT_R32G32B32_SINT;
+            else if (type == VariableType::UInt)
+                return VK_FORMAT_R32G32B32_UINT;
+            else if (type == VariableType::SFloat)
+                return VK_FORMAT_R32G32B32_SFLOAT;
 
         case 16:
-        if(type == VariableType::SInt)
-            return VK_FORMAT_R32G32B32A32_SINT;
-        else if(type == VariableType::UInt)
-            return VK_FORMAT_R32G32B32A32_UINT;
-        else if (type == VariableType::SFloat)
-            return VK_FORMAT_R32G32B32A32_SFLOAT;
+            if (type == VariableType::SInt)
+                return VK_FORMAT_R32G32B32A32_SINT;
+            else if (type == VariableType::UInt)
+                return VK_FORMAT_R32G32B32A32_UINT;
+            else if (type == VariableType::SFloat)
+                return VK_FORMAT_R32G32B32A32_SFLOAT;
 
         default:
             return VK_FORMAT_UNDEFINED;
         }
     }
 
-    std::vector <VertexInputBindingDescription> Reflection::GetVertexBindings()
+    std::vector<VertexInputBindingDescription> Reflection::GetVertexBindings()
     {
         uint32_t stride = 0;
         for (const ShaderInOutDesc &input : inputs)
@@ -283,12 +285,12 @@ namespace pe
         binding.stride = stride;
         binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-        return { binding };
+        return {binding};
     }
 
-    std::vector <VertexInputAttributeDescription> Reflection::GetVertexAttributes()
+    std::vector<VertexInputAttributeDescription> Reflection::GetVertexAttributes()
     {
-        std::vector <VertexInputAttributeDescription> attributes;
+        std::vector<VertexInputAttributeDescription> attributes;
 
         uint32_t offset = 0;
         for (const ShaderInOutDesc &input : inputs)

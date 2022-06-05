@@ -24,17 +24,8 @@ SOFTWARE.
 
 namespace pe
 {
-    class MemoryRange
+    struct MemoryRange
     {
-    public:
-        MemoryRange() : data(nullptr), size(0), offset(0)
-        {
-        }
-
-        MemoryRange(void *data, size_t size, size_t offset) : data(data), size(size), offset(offset)
-        {
-        }
-
         void *data;    // source data
         size_t size;   // source data size in bytes
         size_t offset; // offset to destination data in bytes
@@ -43,7 +34,7 @@ namespace pe
     class Buffer : public IHandle<Buffer, BufferHandle>
     {
     public:
-        Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags createFlags = 0);
+        Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags createFlags = 0, const std::string &name = {});
 
         ~Buffer();
 
@@ -57,58 +48,18 @@ namespace pe
 
         void CopyBuffer(Buffer *srcBuffer, size_t srcSize = 0);
 
+        void Copy(MemoryRange *ranges, uint32_t count, bool isPersistent);
+
         void Flush(size_t offset = 0, size_t flushSize = 0) const;
 
         size_t Size();
 
         void *Data();
 
-        template <Launch launch>
-        void CopyRequest(const MemoryRange &range, bool isPersistent)
-        {
-            auto lambda = [this, range, isPersistent]()
-            {
-                // Map or check if the buffer is already mapped
-                Map();
-
-                CopyData(range.data, range.size, range.offset);
-
-                // Keep the buffer mapped if it is persistent
-                if (!isPersistent)
-                {
-                    Flush(range.offset, range.size);
-                    Unmap();
-                }
-            };
-            Queue<launch>::Request(lambda);
-        }
-
-        template <Launch launch>
-        void CopyRequest(const std::vector<MemoryRange> &ranges, bool isPersistent)
-        {
-            auto lambda = [this, ranges, isPersistent]()
-            {
-                // Map or check if the buffer is already mapped
-                Map();
-
-                for (auto &range : ranges)
-                    CopyData(range.data, range.size, range.offset);
-
-                // Keep the buffer mapped if it is persistent
-                if (!isPersistent)
-                {
-                    for (auto &range : ranges)
-                        Flush(range.offset, range.size);
-                        
-                    Unmap();
-                }
-            };
-            Queue<launch>::Request(lambda);
-        }
-
     private:
         size_t size;
         void *data;
         AllocationHandle allocation;
+        std::string name;
     };
 }

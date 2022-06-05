@@ -36,7 +36,6 @@ namespace pe
         // freopen("log.txt", "w", stdout);
         // freopen("errors.txt", "w", stderr);
 
-
         uint32_t flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
 #if PE_VULKAN
         flags |= SDL_WINDOW_VULKAN;
@@ -61,7 +60,7 @@ namespace pe
         FileWatcher::Clear();
         FileWatcher::Stop();
         context->DestroySystems();
-        window->Destroy();
+        Window::Destroy(window);
     }
 
     void App::Run()
@@ -76,7 +75,7 @@ namespace pe
             if (!window->isMinimized())
             {
                 context->UpdateSystems(frameTimer->GetDelta());
-                Queue<Launch::All>::ExecuteRequests();
+                SyncQueue<Launch::All>::ExecuteRequests();
                 frameTimer->timestamps[0] = static_cast<float>(frameTimer->Count());
                 context->DrawSystems();
             }

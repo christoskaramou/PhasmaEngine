@@ -59,7 +59,7 @@ namespace pe
     {
         Attachment attachment{};
         attachment.format = viewportRT->imageInfo.format;
-        renderPass = RenderPass::Create(attachment);
+        renderPass = RenderPass::Create(&attachment, 1, "ssgi_renderpass");
     }
 
     void SSGI::CreateFrameBuffers()
@@ -70,7 +70,7 @@ namespace pe
             uint32_t width = viewportRT->imageInfo.width;
             uint32_t height = viewportRT->imageInfo.height;
             ImageViewHandle view = viewportRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
+            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "ssgi_frameBuffer_" + std::to_string(i));
         }
     }
 
@@ -87,16 +87,17 @@ namespace pe
         info.pushConstantSize = 5 * sizeof(vec4);
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutSSGI()};
         info.renderPass = renderPass;
+        info.name = "ssgi_pipeline";
 
         pipeline = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void SSGI::CreateUniforms()
     {
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSSGI());
+        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSSGI(), 1, "SSGI_descriptor");
         UpdateDescriptorSets();
     }
 
@@ -117,6 +118,8 @@ namespace pe
 
     void SSGI::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
+        Debug::BeginCmdRegion(cmd->Handle(), "SSGI");
+
         Camera &camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
 
         // Copy viewport image
@@ -135,15 +138,17 @@ namespace pe
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+
+        Debug::EndCmdRegion(cmd->Handle());
     }
 
     void SSGI::Resize(uint32_t width, uint32_t height)
     {
         for (auto *frameBuffer : framebuffers)
-            frameBuffer->Destroy();
-        renderPass->Destroy();
-        pipeline->Destroy();
-        frameImage->Destroy();
+            FrameBuffer::Destroy(frameBuffer);
+        RenderPass::Destroy(renderPass);
+        Pipeline::Destroy(pipeline);
+        Image::Destroy(frameImage);
 
         Init();
         CreateRenderPass();
@@ -154,13 +159,13 @@ namespace pe
 
     void SSGI::Destroy()
     {
-        Pipeline::getDescriptorSetLayoutSSGI()->Destroy();
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutSSGI());
 
         for (auto framebuffer : framebuffers)
-            framebuffer->Destroy();
+            FrameBuffer::Destroy(framebuffer);
 
-        renderPass->Destroy();
-        pipeline->Destroy();
-        frameImage->Destroy();
+        RenderPass::Destroy(renderPass);
+        Pipeline::Destroy(pipeline);
+        Image::Destroy(frameImage);
     }
 }

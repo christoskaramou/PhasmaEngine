@@ -84,17 +84,15 @@ namespace pe
         std::vector<DescriptorLayout *> descriptorSetLayouts;
         RenderPass *renderPass;
         PipelineCacheHandle pipelineCache;
+        std::string name;
     };
 
-    class Pipeline : public IHandle<Pipeline, PipelineHandle>,
-                     public Hashable<PipelineCreateInfo>
+    class Pipeline : public IHandle<Pipeline, PipelineHandle>
     {
     public:
         Pipeline(const PipelineCreateInfo &info);
 
         ~Pipeline();
-
-        void createComputePipeline();
 
         static DescriptorLayout *getDescriptorSetLayoutComposition();
 

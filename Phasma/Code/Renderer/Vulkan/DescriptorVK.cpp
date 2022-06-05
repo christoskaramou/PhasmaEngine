@@ -51,7 +51,7 @@ namespace pe
     {
     }
 
-    DescriptorPool::DescriptorPool(uint32_t maxDescriptorSets)
+    DescriptorPool::DescriptorPool(uint32_t maxDescriptorSets, const std::string &name)
     {
         std::vector<VkDescriptorPoolSize> descPoolsize(4);
         descPoolsize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -71,8 +71,10 @@ namespace pe
         createInfo.maxSets = maxDescriptorSets;
 
         VkDescriptorPool descriptorPoolVK;
-        vkCreateDescriptorPool(RHII.device, &createInfo, nullptr, &descriptorPoolVK);
+        PE_CHECK(vkCreateDescriptorPool(RHII.device, &createInfo, nullptr, &descriptorPoolVK));
         m_handle = descriptorPoolVK;
+
+        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_DESCRIPTOR_POOL, name);
     }
 
     DescriptorPool::~DescriptorPool()
@@ -84,7 +86,7 @@ namespace pe
         }
     }
 
-    DescriptorLayout::DescriptorLayout(const std::vector<DescriptorBinding> &bindings)
+    DescriptorLayout::DescriptorLayout(const std::vector<DescriptorBinding> &bindings, const std::string &name)
     {
         if (bindings.empty())
             PE_ERROR("DescriptorLayout: No bindings provided");
@@ -134,8 +136,10 @@ namespace pe
         descriptorLayout.pNext = &setLayoutBindingFlags;
 
         VkDescriptorSetLayout layout;
-        vkCreateDescriptorSetLayout(RHII.device, &descriptorLayout, nullptr, &layout);
+        PE_CHECK(vkCreateDescriptorSetLayout(RHII.device, &descriptorLayout, nullptr, &layout));
         m_handle = layout;
+
+        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, name);
     }
 
     DescriptorLayout::~DescriptorLayout()
@@ -147,7 +151,7 @@ namespace pe
         }
     }
 
-    Descriptor::Descriptor(DescriptorLayout *layout, uint32_t variableCount)
+    Descriptor::Descriptor(DescriptorLayout *layout, uint32_t variableCount, const std::string &name)
     {
         if (!layout)
             PE_ERROR("DescriptorLayout is nullptr");
@@ -168,8 +172,10 @@ namespace pe
         allocateInfo.pNext = &variableDescriptorCountAllocInfo;
 
         VkDescriptorSet dset;
-        vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
+        PE_CHECK(vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset));
         m_handle = dset;
+
+        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_DESCRIPTOR_SET, name);
     }
 
     Descriptor::~Descriptor()

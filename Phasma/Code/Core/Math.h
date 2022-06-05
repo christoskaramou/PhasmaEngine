@@ -104,6 +104,28 @@ namespace pe
         float x, y;
     };
 
+    class ivec3
+    {
+    public:
+        ivec3() : x(0), y(0), z(0)
+        {
+        }
+
+        ivec3(const int *v)
+        {
+            x = v[0];
+            y = v[1];
+            z = v[2];
+        }
+
+        int &operator[](unsigned i)
+        {
+            return (&x)[i];
+        }
+
+        int x, y, z;
+    };
+
     class vec3
     {
     public:

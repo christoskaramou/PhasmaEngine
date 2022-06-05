@@ -24,28 +24,32 @@ SOFTWARE.
 
 namespace pe
 {
+    class Queue;
+    
+#if PE_DEBUG_MODE
     class Debug
     {
     public:
         static void Init(InstanceHandle instance);
 
-        static void GetInstanceUtils(std::vector<const char *> &instanceExtensions, std::vector<const char *> &instanceLayers);
+        static void GetInstanceUtils(std::vector<const char *> &instanceExtensions,
+                                     std::vector<const char *> &instanceLayers);
 
         static void CreateDebugMessenger();
 
         static void DestroyDebugMessenger();
 
-        static void SetObjectName(uint64_t object, ObjectType type, const std::string &name);
+        static void SetObjectName(uintptr_t object, ObjectType type, const std::string &name);
 
-        static void BeginQueueRegion(QueueHandle queue, const std::string &name, vec4 color);
+        static void BeginQueueRegion(Queue *queue, const std::string &name);
 
-        static void InsertQueueLabel(QueueHandle queue, const std::string &name, vec4 color);
+        static void InsertQueueLabel(Queue *queue, const std::string &NAMED_PIPE_EVENT_GUID);
 
-        static void EndQueueRegion(QueueHandle queue);
-        
-        static void BeginCmdRegion(CommandBufferHandle cmd, const std::string &name, vec4 color);
-        
-        static void InsertCmdLabel(CommandBufferHandle cmd, const std::string &name, vec4 color);
+        static void EndQueueRegion(Queue *queue);
+
+        static void BeginCmdRegion(CommandBufferHandle cmd, const std::string &name);
+
+        static void InsertCmdLabel(CommandBufferHandle cmd, const std::string &name);
 
         static void EndCmdRegion(CommandBufferHandle cmd);
 
@@ -53,4 +57,32 @@ namespace pe
         inline static InstanceHandle s_instance;
         inline static DebugMessengerHandle s_debugMessenger;
     };
+#else
+    class Debug
+    {
+    public:
+        static void Init(InstanceHandle instance) {}
+
+        static void GetInstanceUtils(std::vector<const char *> &instanceExtensions,
+                                     std::vector<const char *> &instanceLayers) {}
+
+        static void CreateDebugMessenger() {}
+
+        static void DestroyDebugMessenger() {}
+
+        static void SetObjectName(uint64_t object, ObjectType type, const std::string &name) {}
+
+        static void BeginQueueRegion(Queue *queue, const std::string &name) {}
+
+        static void InsertQueueLabel(Queue *queue, const std::string &name) {}
+
+        static void EndQueueRegion(Queue *queue) {}
+
+        static void BeginCmdRegion(CommandBufferHandle cmd, const std::string &name) {}
+
+        static void InsertCmdLabel(CommandBufferHandle cmd, const std::string &name) {}
+
+        static void EndCmdRegion(CommandBufferHandle cmd) {}
+    };
+#endif
 };

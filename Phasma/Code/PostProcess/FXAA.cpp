@@ -44,7 +44,7 @@ namespace pe
     FXAA::~FXAA()
     {
     }
-    
+
     void FXAA::Init()
     {
         RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
@@ -57,7 +57,7 @@ namespace pe
     {
         Attachment attachment{};
         attachment.format = viewportRT->imageInfo.format;
-        renderPass = RenderPass::Create(attachment);
+        renderPass = RenderPass::Create(&attachment, 1, "fxaa_renderpass");
     }
 
     void FXAA::CreateFrameBuffers()
@@ -68,7 +68,7 @@ namespace pe
             uint32_t width = viewportRT->imageInfo.width;
             uint32_t height = viewportRT->imageInfo.height;
             ImageViewHandle view = viewportRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
+            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "fxaa_frameBuffer_" + std::to_string(i));
         }
     }
 
@@ -83,16 +83,17 @@ namespace pe
         info.colorBlendAttachments = {viewportRT->blendAttachment};
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutFXAA()};
         info.renderPass = renderPass;
+        info.name = "fxaa_pipeline";
 
         pipeline = Pipeline::Create(info);
-        
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void FXAA::CreateUniforms()
     {
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutFXAA());
+        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutFXAA(), 1, "FXAA_descriptor");
         UpdateDescriptorSets();
     }
 
@@ -110,6 +111,7 @@ namespace pe
 
     void FXAA::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
+        Debug::BeginCmdRegion(cmd->Handle(), "FXAA");
         // Copy viewport image
         frameImage->CopyColorAttachment(cmd, viewportRT);
 
@@ -124,15 +126,16 @@ namespace pe
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+        Debug::EndCmdRegion(cmd->Handle());
     }
 
     void FXAA::Resize(uint32_t width, uint32_t height)
     {
         for (auto *frameBuffer : framebuffers)
-            frameBuffer->Destroy();
-        renderPass->Destroy();
-        pipeline->Destroy();
-        frameImage->Destroy();
+            FrameBuffer::Destroy(frameBuffer);
+        RenderPass::Destroy(renderPass);
+        Pipeline::Destroy(pipeline);
+        Image::Destroy(frameImage);
 
         Init();
         CreateRenderPass();
@@ -143,13 +146,13 @@ namespace pe
 
     void FXAA::Destroy()
     {
-        Pipeline::getDescriptorSetLayoutFXAA()->Destroy();
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutFXAA());
 
         for (auto frameBuffer : framebuffers)
-            frameBuffer->Destroy();
+            FrameBuffer::Destroy(frameBuffer);
 
-        renderPass->Destroy();
-        pipeline->Destroy();
-        frameImage->Destroy();
+        RenderPass::Destroy(renderPass);
+        Pipeline::Destroy(pipeline);
+        Image::Destroy(frameImage);
     }
 }

@@ -68,7 +68,7 @@ namespace pe
 
         void EndPass(CommandBuffer *cmd);
 
-private:
+    private:
         void CreateGBufferFrameBuffers();
 
         void CreateCompositionFrameBuffers();
@@ -77,8 +77,11 @@ private:
 
         void CreateCompositionPipeline();
 
-public:
-        struct UBO { vec4 screenSpace[8]; } ubo;
+    public:
+        struct UBO
+        {
+            vec4 screenSpace[8];
+        } ubo;
         Buffer *uniform;
         RenderPass *renderPass;
         RenderPass *compositionRenderPass;

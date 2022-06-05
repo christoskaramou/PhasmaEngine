@@ -39,6 +39,7 @@ SOFTWARE.
 #include "Renderer/RenderPass.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
+#include "Renderer/Queue.h"
 #include "Systems/RendererSystem.h"
 #include "PostProcess/SSAO.h"
 #include "PostProcess/SSR.h"
@@ -71,7 +72,7 @@ namespace pe
 
     void Deferred::CreateRenderPass()
     {
-        std::vector<Attachment> attachments(6);
+        Attachment attachments[6];
 
         // Target attachments are initialized to match render targets by default
         attachments[0].format = normalRT->imageInfo.format;
@@ -91,11 +92,11 @@ namespace pe
         attachments[5].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attachments[5].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-        renderPass = RenderPass::Create(attachments);
+        renderPass = RenderPass::Create(attachments, 6, "gbuffer_renderpass");
 
         Attachment attachment{};
         attachment.format = viewportRT->imageInfo.format;
-        compositionRenderPass = RenderPass::Create(attachment);
+        compositionRenderPass = RenderPass::Create(&attachment, 1, "composition_renderpass");
     }
 
     void Deferred::CreateFrameBuffers()
@@ -111,14 +112,14 @@ namespace pe
         {
             uint32_t width = albedoRT->imageInfo.width;
             uint32_t height = albedoRT->imageInfo.height;
-            std::vector<ImageViewHandle> views{
+            std::array<ImageViewHandle, 6> views{
                 normalRT->view,
                 albedoRT->view,
                 srmRT->view,
                 velocityRT->view,
                 emissiveRT->view,
                 depth->view};
-            framebuffers[i] = FrameBuffer::Create(width, height, views, renderPass);
+            framebuffers[i] = FrameBuffer::Create(width, height, views.data(), 6, renderPass, "gbuffer_frameBuffer_" + std::to_string(i));
         }
     }
 
@@ -130,7 +131,7 @@ namespace pe
             uint32_t width = viewportRT->imageInfo.width;
             uint32_t height = viewportRT->imageInfo.height;
             ImageViewHandle view = viewportRT->view;
-            compositionFramebuffers[i] = FrameBuffer::Create(width, height, view, compositionRenderPass);
+            compositionFramebuffers[i] = FrameBuffer::Create(width, height, &view, 1, compositionRenderPass, "composition_frameBuffer_" + std::to_string(i));
         }
     }
 
@@ -164,11 +165,12 @@ namespace pe
             Pipeline::getDescriptorSetLayoutGbufferVert(),
             Pipeline::getDescriptorSetLayoutGbufferFrag()};
         info.renderPass = renderPass;
+        info.name = "gbuffer_pipeline";
 
         pipeline = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void Deferred::CreateCompositionPipeline()
@@ -193,11 +195,12 @@ namespace pe
             Pipeline::getDescriptorSetLayoutShadowsDeferred(),
             Pipeline::getDescriptorSetLayoutSkybox()};
         info.renderPass = compositionRenderPass;
+        info.name = "composition_pipeline";
 
         pipelineComposition = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void Deferred::CreateUniforms()
@@ -205,13 +208,14 @@ namespace pe
         uniform = Buffer::Create(
             sizeof(ubo),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "Deferred_uniform_buffer");
         uniform->Map();
         uniform->Zero();
         uniform->Flush();
         uniform->Unmap();
 
-        DSComposition = Descriptor::Create(Pipeline::getDescriptorSetLayoutComposition());
+        DSComposition = Descriptor::Create(Pipeline::getDescriptorSetLayoutComposition(), 1, "Deferred_Composition_descriptor");
 
         // Check if ibl_brdf_lut is already loaded
         const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
@@ -229,13 +233,11 @@ namespace pe
                 PE_ERROR("No pixel data loaded");
             const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
-            RHII.WaitGraphicsQueue();
-            RHII.WaitAndLockSubmits();
-
             Buffer *staging = Buffer::Create(
                 imageSize,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+                "Deferred_ibl_brdf_lut_staging_buffer");
             staging->Map();
             staging->CopyData(pixels);
             staging->Flush();
@@ -251,6 +253,7 @@ namespace pe
             info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
             info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             info.initialState = LayoutState::Preinitialized;
+            info.name = "Deferred_ibl_brdf_lut_image";
             ibl_brdf_lut = Image::Create(info);
 
             ImageViewCreateInfo viewInfo{};
@@ -264,9 +267,7 @@ namespace pe
             ibl_brdf_lut->CopyBufferToImage(nullptr, staging);
             ibl_brdf_lut->GenerateMipMaps();
 
-            staging->Destroy();
-
-            RHII.UnlockSubmits();
+            Buffer::Destroy(staging);
 
             Mesh::uniqueTextures[path] = ibl_brdf_lut;
         }
@@ -328,11 +329,17 @@ namespace pe
         ubo.screenSpace[7] = {
             GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f};
 
-        uniform->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(ubo), 0}, false);
+        MemoryRange range{};
+        range.data = &ubo;
+        range.size = sizeof(ubo);
+        range.offset = 0;
+        uniform->Copy(&range, 1, false);
     }
 
     void Deferred::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
+        Debug::BeginCmdRegion(cmd->Handle(), "Composition");
+
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
         RendererSystem &rs = *CONTEXT->GetSystem<RendererSystem>();
 
@@ -367,20 +374,22 @@ namespace pe
         cmd->BindDescriptors(pipelineComposition, (uint32_t)handles.size(), handles.data());
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+
+        Debug::EndCmdRegion(cmd->Handle());
     }
 
     void Deferred::Resize(uint32_t width, uint32_t height)
     {
         for (auto *framebuffer : framebuffers)
-            framebuffer->Destroy();
+            FrameBuffer::Destroy(framebuffer);
         for (auto *framebuffer : compositionFramebuffers)
-            framebuffer->Destroy();
+            FrameBuffer::Destroy(framebuffer);
 
-        renderPass->Destroy();
-        compositionRenderPass->Destroy();
+        RenderPass::Destroy(renderPass);
+        RenderPass::Destroy(compositionRenderPass);
 
-        pipeline->Destroy();
-        pipelineComposition->Destroy();
+        Pipeline::Destroy(pipeline);
+        Pipeline::Destroy(pipelineComposition);
 
         Init();
         CreateRenderPass();
@@ -395,7 +404,7 @@ namespace pe
         normalRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
         velocityRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
         emissiveRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
-        srmRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        srmRT->ChangeLayout(cmd, LayoutState::ColorAttachment); // TODO: Check why it throws
         depth->ChangeLayout(cmd, LayoutState::DepthStencilAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
@@ -421,18 +430,18 @@ namespace pe
 
     void Deferred::Destroy()
     {
-        renderPass->Destroy();
-        compositionRenderPass->Destroy();
+        RenderPass::Destroy(renderPass);
+        RenderPass::Destroy(compositionRenderPass);
 
         for (auto &framebuffer : framebuffers)
-            framebuffer->Destroy();
+            FrameBuffer::Destroy(framebuffer);
         for (auto &framebuffer : compositionFramebuffers)
-            framebuffer->Destroy();
+            FrameBuffer::Destroy(framebuffer);
 
-        Pipeline::getDescriptorSetLayoutComposition()->Destroy();
-        uniform->Destroy();
-        pipeline->Destroy();
-        pipelineComposition->Destroy();
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutComposition());
+        Buffer::Destroy(uniform);
+        Pipeline::Destroy(pipeline);
+        Pipeline::Destroy(pipelineComposition);
     }
 }
 #endif

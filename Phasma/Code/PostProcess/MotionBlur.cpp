@@ -60,7 +60,7 @@ namespace pe
     {
         Attachment attachment{};
         attachment.format = viewportRT->imageInfo.format;
-        renderPass = RenderPass::Create(attachment);
+        renderPass = RenderPass::Create(&attachment, 1, "motionBlur_renderPass");
     }
 
     void MotionBlur::CreateFrameBuffers()
@@ -71,7 +71,7 @@ namespace pe
             uint32_t width = viewportRT->imageInfo.width;
             uint32_t height = viewportRT->imageInfo.height;
             ImageViewHandle view = viewportRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
+            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "motionBlur_frameBuffer_" + std::to_string(i));
         }
     }
 
@@ -88,16 +88,17 @@ namespace pe
         info.pushConstantSize = sizeof(vec4);
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutMotionBlur()};
         info.renderPass = renderPass;
+        info.name = "motionBlur_pipeline";
 
         pipeline = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void MotionBlur::CreateUniforms()
     {
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutMotionBlur());
+        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutMotionBlur(), 1, "MotionBlur_descriptor");
         UpdateDescriptorSets();
     }
 
@@ -133,6 +134,7 @@ namespace pe
             GUI::motionBlur_strength,
             0.f};
 
+        Debug::BeginCmdRegion(cmd->Handle(), "MotionBlur");
         // Copy viewport image
         frameImage->CopyColorAttachment(cmd, viewportRT);
 
@@ -150,15 +152,16 @@ namespace pe
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+        Debug::EndCmdRegion(cmd->Handle());
     }
 
     void MotionBlur::Resize(uint32_t width, uint32_t height)
     {
         for (auto *frameBuffer : framebuffers)
-            frameBuffer->Destroy();
-        renderPass->Destroy();
-        pipeline->Destroy();
-        frameImage->Destroy();
+            FrameBuffer::Destroy(frameBuffer);
+        RenderPass::Destroy(renderPass);
+        Pipeline::Destroy(pipeline);
+        Image::Destroy(frameImage);
 
         Init();
         CreateRenderPass();
@@ -169,13 +172,13 @@ namespace pe
 
     void MotionBlur::Destroy()
     {
-        Pipeline::getDescriptorSetLayoutMotionBlur()->Destroy();
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutMotionBlur());
 
         for (auto frameBuffer : framebuffers)
-            frameBuffer->Destroy();
+            FrameBuffer::Destroy(frameBuffer);
 
-        renderPass->Destroy();
-        pipeline->Destroy();
-        frameImage->Destroy();
+        RenderPass::Destroy(renderPass);
+        Pipeline::Destroy(pipeline);
+        Image::Destroy(frameImage);
     }
 }

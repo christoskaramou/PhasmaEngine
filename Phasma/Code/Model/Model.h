@@ -48,7 +48,8 @@ namespace pe
         Model &operator=(const Model &other)
         {
             PE_ERROR("");
-            return Model();
+            static Model model;
+            return model;
         }
 
         static void Load(const std::filesystem::path &file);
@@ -98,8 +99,8 @@ namespace pe
         static std::deque<Model> models;
         static Pipeline *pipeline;
         static CommandBuffer *commandBuffer;
-        //Descriptor *descriptorSet;
-        //Buffer *uniformBuffer;
+        // Descriptor *descriptorSet;
+        // Buffer *uniformBuffer;
         size_t uniformBufferIndex;
         size_t uniformImagesIndex;
         size_t uniformBufferOffset;

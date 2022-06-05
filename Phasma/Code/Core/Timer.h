@@ -62,6 +62,8 @@ namespace pe
 
         double GetDelta();
 
+        double CountTotal();
+
         std::vector<double> timestamps{};
 
     private:
@@ -79,8 +81,10 @@ namespace pe
         FrameTimer &operator=(FrameTimer const &) = delete; // copy assignment
         FrameTimer &operator=(FrameTimer &&) = delete;      // move assignment
     private:
-        ~FrameTimer() = default; // destructor
         FrameTimer();            // default constructor
+        ~FrameTimer() = default; // destructor
+
+        std::chrono::high_resolution_clock::time_point m_total;
     };
 
     class CommandBuffer;

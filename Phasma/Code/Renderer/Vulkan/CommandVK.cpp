@@ -29,20 +29,26 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Image.h"
-#include "Renderer/Debug.h"
+#include "Renderer/Queue.h"
+#include "Renderer/Semaphore.h"
+#include "Renderer/Fence.h"
 
 namespace pe
 {
-    CommandPool::CommandPool(uint32_t familyId)
+    CommandPool::CommandPool(uint32_t familyId, const std::string &name)
     {
+        m_familyId = familyId;
+
         VkCommandPoolCreateInfo cpci{};
         cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         cpci.queueFamilyIndex = familyId;
         cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
         VkCommandPool commandPool;
-        vkCreateCommandPool(RHII.device, &cpci, nullptr, &commandPool);
+        PE_CHECK(vkCreateCommandPool(RHII.device, &cpci, nullptr, &commandPool));
         m_handle = commandPool;
+
+        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_COMMAND_POOL, name);
     }
 
     CommandPool::~CommandPool()
@@ -54,19 +60,73 @@ namespace pe
         }
     }
 
-    CommandBuffer::CommandBuffer(CommandPool *commandPool, const std::string &name) : m_commandPool(commandPool)
+    void CommandPool::Init(GpuHandle gpu)
     {
+        uint32_t queueFamPropCount;
+        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
+
+        // CommandPools are creating CommandBuffers from a specific family id, this will have to
+        // match with the Queue created from a falily id that this CommandBuffer will be submited to.
+        s_availableCps = std::vector<std::unordered_set<CommandPool *>>(queueFamPropCount);
+        for (uint32_t i = 0; i < queueFamPropCount; i++)
+            s_availableCps[i] = std::unordered_set<CommandPool *>{};
+    }
+
+    void CommandPool::Clear()
+    {
+        for (auto &cp : s_allCps)
+            CommandPool::Destroy(cp);
+
+        s_allCps.clear();
+        s_availableCps.clear();
+    }
+
+    CommandPool *CommandPool::GetNext(uint32_t familyId)
+    {
+        std::lock_guard<std::mutex> lock(s_availableMutex);
+
+        auto &cps = s_availableCps[familyId];
+        if (cps.empty())
+        {
+            CommandPool *cp = CommandPool::Create(familyId, "CommandPool");
+            cps.insert(cp);
+            s_allCps.insert(cp);
+        }
+
+        CommandPool *cp = *--cps.end();
+        cps.erase(cp);
+        return cp;
+    }
+
+    void CommandPool::Return(CommandPool *commandPool)
+    {
+        std::lock_guard<std::mutex> lock(s_availableMutex);
+
+        uint32_t familyId = commandPool->GetFamilyId();
+        auto &cps = s_availableCps[familyId];
+        if (cps.find(commandPool) == cps.end())
+            cps.insert(commandPool);
+    }
+
+    CommandBuffer::CommandBuffer(uint32_t familyId, const std::string &name)
+    {
+        m_familyId = familyId;
+        m_commandPool = CommandPool::GetNext(familyId);
+        m_fence = nullptr;
+
         VkCommandBufferAllocateInfo cbai{};
         cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        cbai.commandPool = commandPool->Handle();
+        cbai.commandPool = m_commandPool->Handle();
         cbai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         cbai.commandBufferCount = 1;
 
         VkCommandBuffer commandBuffer;
-        vkAllocateCommandBuffers(RHII.device, &cbai, &commandBuffer);
+        PE_CHECK(vkAllocateCommandBuffers(RHII.device, &cbai, &commandBuffer));
         m_handle = commandBuffer;
 
         Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_COMMAND_BUFFER, name);
+
+        this->name = name;
     }
 
     CommandBuffer::~CommandBuffer()
@@ -76,6 +136,12 @@ namespace pe
             VkCommandBuffer cmd = m_handle;
             vkFreeCommandBuffers(RHII.device, m_commandPool->Handle(), 1, &cmd);
             m_handle = {};
+        }
+
+        if (m_commandPool)
+        {
+            CommandPool::Return(m_commandPool);
+            m_commandPool = nullptr;
         }
     }
 
@@ -97,13 +163,14 @@ namespace pe
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        beginInfo.pInheritanceInfo = nullptr;
 
-        vkBeginCommandBuffer(m_handle, &beginInfo);
+        PE_CHECK(vkBeginCommandBuffer(m_handle, &beginInfo));
     }
 
     void CommandBuffer::End()
     {
-        vkEndCommandBuffer(m_handle);
+        PE_CHECK(vkEndCommandBuffer(m_handle));
     }
 
     void CommandBuffer::PipelineBarrier()
@@ -225,8 +292,123 @@ namespace pe
         vkCmdDrawIndexed(m_handle, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
-    void CommandBuffer::Submit()
+    void CommandBuffer::Submit(Queue *queue,
+                               PipelineStageFlags *waitStages,
+                               uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
+                               uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
+                               Fence *fence)
     {
+        m_fence = fence;
+        CommandBuffer *cmd = this;
+        queue->Submit(1, &cmd,
+                      waitStages,
+                      waitSemaphoresCount, waitSemaphores,
+                      signalSemaphoresCount, signalSemaphores,
+                      fence);
+    }
+
+    void CommandBuffer::Init(GpuHandle gpu, uint32_t countPerFamily)
+    {
+        uint32_t queueFamPropCount;
+        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
+
+        // CommandPools are creating CommandBuffers from a specific family id, this will have to
+        // match with the Queue created from a falily id that this CommandBuffer will be submited to.
+        s_allCmds = std::vector<std::map<CommandBuffer *, CommandBuffer *>>(queueFamPropCount);
+        s_availableCmds = std::vector<std::unordered_map<CommandBuffer *, CommandBuffer *>>(queueFamPropCount);
+        for (uint32_t i = 0; i < queueFamPropCount; i++)
+        {
+            s_allCmds[i] = std::map<CommandBuffer *, CommandBuffer *>();
+            s_availableCmds[i] = std::unordered_map<CommandBuffer *, CommandBuffer *>();
+            for (uint32_t j = 0; j < countPerFamily; j++)
+            {
+                CommandBuffer *cmd = CommandBuffer::Create(i, "CommandBuffer_" + std::to_string(i) + "_" + std::to_string(j));
+                s_allCmds[i][cmd] = cmd;
+                s_availableCmds[i][cmd] = cmd;
+            }
+        }
+    }
+
+    void CommandBuffer::Clear()
+    {
+        auto &allCmds = s_allCmds;
+        for (auto &cmds : allCmds)
+        {
+            for (auto cmd : cmds)
+                CommandBuffer::Destroy(cmd.second);
+        }
+
+        allCmds.clear();
+        s_availableCmds.clear();
+    }
+
+    void CommandBuffer::CheckFutures()
+    {
+        // join finished futures
+        auto &queueWaits = s_queueWaits;
+        for (auto it = queueWaits.begin(); it != queueWaits.end();)
+        {
+            if (it->second.wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
+            {
+                CommandBuffer *cmd = it->second.get();
+                cmd->m_fence = nullptr;
+                s_availableCmds[cmd->GetFamilyId()][cmd] = cmd;
+
+                it = queueWaits.erase(it);
+            }
+            else
+                ++it;
+        }
+    }
+
+    CommandBuffer *CommandBuffer::GetNext(uint32_t familyId)
+    {
+        s_availableCmdsReady = false;
+
+        CheckFutures();
+
+        if (s_availableCmds[familyId].empty())
+        {
+            CommandBuffer *cmd = CommandBuffer::Create(familyId, "CommandBuffer_" + std::to_string(familyId) + "_" + std::to_string(s_allCmds[familyId].size()));
+            s_availableCmds[familyId][cmd] = cmd;
+            s_allCmds[familyId][cmd] = cmd;
+        }
+
+        CommandBuffer *commandBuffer = s_availableCmds[familyId].begin()->second;
+        s_availableCmds[familyId].erase(commandBuffer);
+
+        s_availableCmdsReady = true;
+
+        return commandBuffer;
+    }
+
+    void CommandBuffer::Return(CommandBuffer *cmd)
+    {
+        if (!cmd || !cmd->Handle())
+            return;
+
+        if (s_queueWaits.find(cmd) != s_queueWaits.end())
+            return;
+
+        auto func = [cmd]()
+        {
+            if (cmd->m_fence && cmd->m_fence->Handle())
+            {
+                while (!cmd->m_fence->m_canReturnToPool)
+                    std::this_thread::yield();
+            }
+
+            while (!s_availableCmdsReady)
+                std::this_thread::yield();
+
+            return cmd;
+        };
+
+        // start a new thread to return the cmd after checked
+        auto future = std::async(std::launch::async, func);
+
+        // add it to the deque
+        s_queueWaits[cmd] = std::move(future);
     }
 }
 #endif

@@ -26,6 +26,9 @@ SOFTWARE.
 #include "Renderer/Semaphore.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
+#include "Renderer/Queue.h"
+#include "Renderer/Fence.h"
+#include "Renderer/Command.h"
 #include "Model/Mesh.h"
 #include "Systems/PostProcessSystem.h"
 
@@ -120,21 +123,30 @@ namespace pe
             Model::models[GUI::modelItemSelected].rot = vec3(GUI::model_rot[GUI::modelItemSelected].data());
         }
         for (auto &m : Model::models)
-            Queue<Launch::Async>::Request([&m, camera_main, delta]()
-                                          { m.update(*camera_main, delta); });
+            m.update(*camera_main, delta);
+        // SyncQueue<Launch::Async>::Request([&m, camera_main, delta]()
+        //                               { m.update(*camera_main, delta); });
 
         // RENDER COMPONENTS
         for (auto &rc : m_renderComponents)
-            Queue<Launch::Async>::Request([camera_main, rc]()
-                                          { rc.second->Update(camera_main); });
+            rc.second->Update(camera_main);
+        // SyncQueue<Launch::Async>::Request([camera_main, rc]()
+        //                               { rc.second->Update(camera_main); });
 
         // GUI
-        Queue<Launch::Async>::Request([this]()
-                                      { gui.Update(); });
+        gui.Update();
+        // SyncQueue<Launch::Async>::Request([this]()
+        //                               { gui.Update(); });
     }
 
     void RendererSystem::Draw()
     {
+        Queue *queue = Queue::GetNext(QueueType::GraphicsBit, 1);
+        s_currentQueue = queue;
+        CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
+
+        Debug::BeginQueueRegion(queue, "RendererSystem::Draw");
+
         static int frameIndex = 0;
 
         static VkPipelineStageFlags waitStages[] = {
@@ -147,57 +159,76 @@ namespace pe
 
         static Timer timer;
         timer.Start();
-        RHII.WaitFence(RHII.fences[imageIndex]);
+
+        if (previousFences[imageIndex])
+        {
+            previousFences[imageIndex]->Wait();
+            previousFences[imageIndex]->Reset();
+            Fence::Return(previousFences[imageIndex]);
+        }
+        
         FrameTimer::Instance().timestamps[1] = timer.Count();
-
-        auto &cmd = RHII.dynamicCmdBuffers[imageIndex];
-
-        RHII.WaitAndLockSubmits();
 
         if (GUI::shadow_cast)
         {
+            CommandBuffer *shadowCmds[SHADOWMAP_CASCADES];
+            for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
+                shadowCmds[i] = CommandBuffer::GetNext(queue->GetFamilyId());
+            
             // record the shadow command buffers
-            RecordShadowsCmds(imageIndex);
+            Debug::BeginQueueRegion(queue, "RecordDeferredCmds");
+            RecordShadowsCmds(shadowCmds, SHADOWMAP_CASCADES, imageIndex);
+            Debug::EndQueueRegion(queue);
 
             // submit the shadow command buffers
             auto &shadowWaitSemaphore = aquireSignalSemaphore;
             auto &shadowSignalSemaphore = RHII.semaphores[imageIndex * 3 + 1];
-            auto &scb = RHII.shadowCmdBuffers;
-
-            RHII.Submit(
-                static_cast<uint32_t>(scb[imageIndex].size()), scb[imageIndex].data(),
+            
+            queue->Submit(
+                SHADOWMAP_CASCADES, shadowCmds,
                 &waitStages[0],
                 1, &shadowWaitSemaphore,
                 1, &shadowSignalSemaphore,
                 nullptr);
+                
+            for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
+                CommandBuffer::Return(shadowCmds[i]);
 
             aquireSignalSemaphore = shadowSignalSemaphore;
         }
 
         // record the command buffers
-        RecordDeferredCmds(imageIndex);
+        RecordDeferredCmds(cmd, imageIndex);
 
         // submit the command buffers
-        auto deferredWaitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
-        auto deferredWaitSemaphore = aquireSignalSemaphore;
-        auto deferredSignalSemaphore = RHII.semaphores[imageIndex * 3 + 2];
-        auto deferredSignalFence = RHII.fences[imageIndex];
-        RHII.Submit(
+        auto waitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
+        auto waitSemaphore = aquireSignalSemaphore;
+        auto signalSemaphore = RHII.semaphores[imageIndex * 3 + 2];
+
+        Fence *fence = Fence::GetNext();
+        previousFences[imageIndex] = fence;
+
+        queue->Submit(
             1, &cmd,
-            &deferredWaitStage,
-            1, &deferredWaitSemaphore,
-            1, &deferredSignalSemaphore,
-            deferredSignalFence);
+            &waitStage,
+            1, &waitSemaphore,
+            1, &signalSemaphore,
+            fence);
 
         // Presentation
-        auto presentWaitSemaphore = deferredSignalSemaphore;
-        RHII.Present(1, &RHII.swapchain, &imageIndex, 1, &presentWaitSemaphore);
-
-        RHII.UnlockSubmits();
+        auto presentWaitSemaphore = signalSemaphore;
+        Queue *presentQueue = Queue::GetNext(QueueType::PresentBit, 1);
+        presentQueue->Present(1, &RHII.swapchain, &imageIndex, 1, &presentWaitSemaphore);
+        Queue::Return(presentQueue);
 
         gui.RenderViewPorts();
 
         frameIndex = (frameIndex + 1) % SWAPCHAIN_IMAGES;
+
+        Debug::EndQueueRegion(queue);
+
+        CommandBuffer::Return(cmd);
+        Queue::Return(queue);
     }
 
     void RendererSystem::Destroy()
@@ -214,7 +245,7 @@ namespace pe
         for (auto &model : Model::models)
             model.destroy();
         for (auto &texture : Mesh::uniqueTextures)
-            texture.second->Destroy();
+            Image::Destroy(texture.second);
         Mesh::uniqueTextures.clear();
 
         Compute::DestroyResources();

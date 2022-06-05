@@ -24,6 +24,19 @@ SOFTWARE.
 
 namespace pe
 {
+    template <typename T, typename = std::void_t<>>
+    struct is_hashable : std::false_type
+    {
+    };
+
+    template <typename T>
+    struct is_hashable<T, std::void_t<decltype(std::declval<std::hash<T>>()(std::declval<T>()))>> : std::true_type
+    {
+    };
+
+    template <typename T>
+    constexpr bool is_hashable_v = is_hashable<T>::value;
+
     class Hash
     {
     public:
@@ -46,6 +59,9 @@ namespace pe
         template <class T>
         void Combine(const T &value)
         {
+            static_assert(is_hashable_v<T>, "hash type must be hashable");
+            static_assert(!std::is_pointer_v<T>, "hash type must not be a pointer");
+
             Combine(std::hash<T>()(value));
         }
 

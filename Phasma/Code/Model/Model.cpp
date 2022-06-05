@@ -650,7 +650,8 @@ namespace pe
         Buffer *staging = Buffer::Create(
             size,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "model_staging_buffer");
 
         staging->Map();
         staging->CopyData(vertices.data());
@@ -659,9 +660,11 @@ namespace pe
 
         vertexBuffer = Buffer::Create(
             size,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            0,
+            "model_vertex_buffer");
         vertexBuffer->CopyBuffer(staging, staging->Size());
-        staging->Destroy();
+        Buffer::Destroy(staging);
 
         // SHADOW VERTEX BUFFER
         std::vector<ShadowVertex> shadowsVertices{};
@@ -673,7 +676,8 @@ namespace pe
         staging = Buffer::Create(
             size,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "model_staging_buffer");
 
         staging->Map();
         staging->CopyData(shadowsVertices.data());
@@ -682,9 +686,11 @@ namespace pe
 
         shadowsVertexBuffer = Buffer::Create(
             size,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            0,
+            "model_shadows_vertex_buffer");
         shadowsVertexBuffer->CopyBuffer(staging, staging->Size());
-        staging->Destroy();
+        Buffer::Destroy(staging);
     }
 
     void Model::createIndexBuffer()
@@ -714,20 +720,23 @@ namespace pe
         auto size = sizeof(uint32_t) * numberOfIndices;
         indexBuffer = Buffer::Create(
             size,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            0,
+            "model_index_buffer");
 
         // Staging buffer
         Buffer *staging = Buffer::Create(
             size,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "model_staging_buffer");
         staging->Map();
         staging->CopyData(indices.data());
         staging->Flush();
         staging->Unmap();
 
         indexBuffer->CopyBuffer(staging, staging->Size());
-        staging->Destroy();
+        Buffer::Destroy(staging);
     }
 
     // Will calculate the buffer size needed for all meshes and their primitives
@@ -751,7 +760,8 @@ namespace pe
         uniformBuffer.buffer = Buffer::Create(
             uniformBuffer.size,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "model_uniform_buffer");
     }
 
     void Model::createDescriptorSets()
@@ -760,7 +770,7 @@ namespace pe
         auto &uniformImages = RHII.uniformImages[uniformImagesIndex];
 
         uniformBuffer.layout = Pipeline::getDescriptorSetLayoutGbufferVert();
-        uniformBuffer.descriptor = Descriptor::Create(uniformBuffer.layout);
+        uniformBuffer.descriptor = Descriptor::Create(uniformBuffer.layout, 1, "model_uniform_buffer_descriptor");
 
         DescriptorUpdateInfo info{};
         info.binding = 0;
@@ -817,7 +827,7 @@ namespace pe
 
         uint32_t infosCount = static_cast<uint32_t>(infos.size());
         uniformImages.layout = Pipeline::getDescriptorSetLayoutGbufferFrag();
-        uniformImages.descriptor = Descriptor::Create(uniformImages.layout, infosCount);
+        uniformImages.descriptor = Descriptor::Create(uniformImages.layout, infosCount, "model_images_descriptor");
         uniformImages.descriptor->UpdateDescriptor(infosCount, infos.data());
     }
 
@@ -931,7 +941,11 @@ namespace pe
         ubo.previousMvp = ubo.mvp;
         ubo.mvp = camera.viewProjection * transform;
 
-        uniformBuffer.buffer->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(UBOModel), uniformBufferOffset}, true);
+        MemoryRange range{};
+        range.data = &ubo;
+        range.size = sizeof(ubo);
+        range.offset = uniformBufferOffset;
+        uniformBuffer.buffer->Copy(&range, 1, true);
 
         if (!animations.empty())
         {
@@ -966,10 +980,14 @@ namespace pe
         if (!render || !Model::pipeline)
             return;
 
+        auto &cmd = *Model::commandBuffer;
+
+        Debug::BeginCmdRegion(cmd.Handle(),
+                              alphaMode == 1 ? "Opaque" : alphaMode == 2 ? "AlphaCut"
+                                                                         : "AlphaBlend");
+
         auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
         auto &uniformImages = RHII.uniformImages[uniformImagesIndex];
-
-        auto &cmd = *Model::commandBuffer;
 
         cmd.BindPipeline(Model::pipeline);
         cmd.BindVertexBuffer(vertexBuffer, 0);
@@ -1026,7 +1044,7 @@ namespace pe
             }
         }
 
-        // std::cout << "RenderQueue: " << renderQueue << " Culled: " << culled << "/" << total << std::endl;
+        Debug::EndCmdRegion(cmd.Handle());
     }
 
     void Model::destroy()
@@ -1038,15 +1056,15 @@ namespace pe
         }
 
         auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
-        uniformBuffer.buffer->Destroy();
-        uniformBuffer.layout->Destroy();
+        Buffer::Destroy(uniformBuffer.buffer);
+        DescriptorLayout::Destroy(uniformBuffer.layout);
 
         auto &uniformImages = RHII.uniformImages[uniformImagesIndex];
-        uniformImages.layout->Destroy();
+        DescriptorLayout::Destroy(uniformImages.layout);
 
         delete document;
         delete resourceReader;
-        // Pipeline::getLayoutGBufferVertex()->Destroy();
+
         for (auto &node : linearNodes)
         {
             if (node->mesh)
@@ -1058,13 +1076,15 @@ namespace pe
             delete node;
             node = {};
         }
+
         for (auto &skin : skins)
         {
             delete skin;
             skin = {};
         }
-        vertexBuffer->Destroy();
-        shadowsVertexBuffer->Destroy();
-        indexBuffer->Destroy();
+
+        Buffer::Destroy(vertexBuffer);
+        Buffer::Destroy(shadowsVertexBuffer);
+        Buffer::Destroy(indexBuffer);
     }
 }

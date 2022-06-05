@@ -38,7 +38,7 @@ namespace pe
             hash.Combine(binding.descriptorCount);
             hash.Combine(binding.stageFlags);
             if (binding.pImmutableSamplers)
-                hash.Combine(binding.pImmutableSamplers);
+                hash.Combine(reinterpret_cast<uintptr_t>(binding.pImmutableSamplers));
         }
 
         return hash;
@@ -169,14 +169,14 @@ namespace pe
         hash.Combine(pipelineInfo.pushConstantSize);
 
         for (auto &layout : pipelineInfo.descriptorSetLayouts)
-            hash.Combine(layout);
+            hash.Combine(reinterpret_cast<uintptr_t>(layout));
 
         if (pipelineInfo.renderPass)
-            hash.Combine(pipelineInfo.renderPass);
+            hash.Combine(reinterpret_cast<uintptr_t>(pipelineInfo.renderPass));
 
         VkPipelineCache pipelineCache = pipelineInfo.pipelineCache;
         if (pipelineCache)
-            hash.Combine(pipelineCache);
+            hash.Combine(reinterpret_cast<uintptr_t>(pipelineCache));
 
         return hash;
     }

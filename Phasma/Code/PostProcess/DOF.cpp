@@ -59,7 +59,7 @@ namespace pe
     {
         Attachment attachment{};
         attachment.format = viewportRT->imageInfo.format;
-        renderPass = RenderPass::Create(attachment);
+        renderPass = RenderPass::Create(&attachment, 1, "dof_renderpass");
     }
 
     void DOF::CreateFrameBuffers()
@@ -70,7 +70,7 @@ namespace pe
             uint32_t width = viewportRT->imageInfo.width;
             uint32_t height = viewportRT->imageInfo.height;
             ImageViewHandle view = viewportRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
+            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "dof_frameBuffer_" + std::to_string(i));
         }
     }
 
@@ -87,16 +87,17 @@ namespace pe
         info.pushConstantSize = static_cast<uint32_t>(sizeof(vec4));
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutDOF()};
         info.renderPass = renderPass;
+        info.name = "dof_pipeline";
 
         pipeline = Pipeline::Create(info);
-        
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
-    
+
     void DOF::CreateUniforms()
     {
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutDOF());
+        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutDOF(), 1, "DOF_descriptor");
         UpdateDescriptorSets();
     }
 
@@ -114,11 +115,12 @@ namespace pe
     void DOF::Update(Camera *camera)
     {
     }
-    
+
     void DOF::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
         std::vector<float> values{GUI::DOF_focus_scale, GUI::DOF_blur_range, 0.0f, 0.0f};
 
+        Debug::BeginCmdRegion(cmd->Handle(), "DOF");
         // Copy viewport image
         frameImage->CopyColorAttachment(cmd, viewportRT);
 
@@ -136,15 +138,16 @@ namespace pe
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+        Debug::EndCmdRegion(cmd->Handle());
     }
 
     void DOF::Resize(uint32_t width, uint32_t height)
     {
         for (auto *frameBuffer : framebuffers)
-            frameBuffer->Destroy();
-        renderPass->Destroy();
-        pipeline->Destroy();
-        frameImage->Destroy();
+            FrameBuffer::Destroy(frameBuffer);
+        RenderPass::Destroy(renderPass);
+        Pipeline::Destroy(pipeline);
+        Image::Destroy(frameImage);
 
         Init();
         CreateRenderPass();
@@ -155,13 +158,13 @@ namespace pe
 
     void DOF::Destroy()
     {
-        Pipeline::getDescriptorSetLayoutDOF()->Destroy();
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutDOF());
 
         for (auto framebuffer : framebuffers)
-            framebuffer->Destroy();
-        
-        renderPass->Destroy();
-        pipeline->Destroy();
-        frameImage->Destroy();
+            FrameBuffer::Destroy(framebuffer);
+
+        RenderPass::Destroy(renderPass);
+        Pipeline::Destroy(pipeline);
+        Image::Destroy(frameImage);
     }
 }

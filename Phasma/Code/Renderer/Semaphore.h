@@ -27,7 +27,7 @@ namespace pe
     class Semaphore : public IHandle<Semaphore, SemaphoreHandle>
     {
     public:
-        Semaphore();
+        Semaphore(const std::string &name = {});
 
         ~Semaphore();
     };

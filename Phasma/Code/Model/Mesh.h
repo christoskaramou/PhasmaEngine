@@ -103,8 +103,8 @@ namespace pe
         static std::map<std::string, Image *> uniqueTextures;
         std::vector<Primitive> primitives{};
 
-        //Descriptor *descriptorSet;
-        //Buffer *uniformBuffer;
+        // Descriptor *descriptorSet;
+        // Buffer *uniformBuffer;
         size_t uniformBufferIndex;
         size_t uniformBufferOffset;
         std::vector<Vertex> vertices{};

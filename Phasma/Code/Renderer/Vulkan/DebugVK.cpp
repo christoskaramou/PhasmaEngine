@@ -23,9 +23,11 @@ SOFTWARE.m_device
 #if PE_VULKAN
 #include "Renderer/Debug.h"
 #include "Renderer/RHI.h"
+#include "Renderer/Queue.h"
 
 namespace pe
 {
+#if PE_DEBUG_MODE
     PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT = VK_NULL_HANDLE;
     PFN_vkDestroyDebugUtilsMessengerEXT vkDestroyDebugUtilsMessengerEXT = VK_NULL_HANDLE;
     PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = VK_NULL_HANDLE;
@@ -35,6 +37,11 @@ namespace pe
     PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT = VK_NULL_HANDLE;
     PFN_vkCmdEndDebugUtilsLabelEXT vkCmdEndDebugUtilsLabelEXT = VK_NULL_HANDLE;
     PFN_vkCmdInsertDebugUtilsLabelEXT vkCmdInsertDebugUtilsLabelEXT = VK_NULL_HANDLE;
+
+    PFN_vkSetDebugUtilsObjectTagEXT vkSetDebugUtilsObjectTagEXT = VK_NULL_HANDLE;
+    PFN_vkSubmitDebugUtilsMessageEXT vkSubmitDebugUtilsMessageEXT = VK_NULL_HANDLE;
+
+    uint32_t s_labelDepth = 1;
 
     // Get function pointers for the debug report extensions from the device
     void Debug::Init(InstanceHandle instance)
@@ -79,17 +86,20 @@ namespace pe
         }
     }
 
-    void Debug::GetInstanceUtils(std::vector<const char *> &instanceExtensions, std::vector<const char *> &instanceLayers)
+    void Debug::GetInstanceUtils(std::vector<const char *> &instanceExtensions,
+                                 std::vector<const char *> &instanceLayers)
     {
         if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
             instanceExtensions.push_back("VK_EXT_debug_utils");
 
+#ifdef _DEBUG
         // === Debug Layers ============================
         // To use these debug layers, here is assumed VulkanSDK is installed
         // Also VK_LAYER_PATH environmental variable has to be created and target the bin
         // e.g VK_LAYER_PATH = C:\VulkanSDK\1.2.189.1\Bin
         if (RHII.IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
             instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
+#endif
     }
 
     std::string GetDebugMessageString(VkDebugUtilsMessageTypeFlagsEXT value)
@@ -142,12 +152,13 @@ namespace pe
 
     void Debug::CreateDebugMessenger()
     {
+#ifdef _DEBUG
         if (!s_instance)
             PE_ERROR("Invalid instance handle");
-            
+
         if (!vkCreateDebugUtilsMessengerEXT)
             return;
-        
+
         VkDebugUtilsMessengerCreateInfoEXT dumci{};
         dumci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         dumci.messageSeverity =
@@ -164,20 +175,20 @@ namespace pe
         VkDebugUtilsMessengerEXT debugMessengerVK;
         vkCreateDebugUtilsMessengerEXT(s_instance, &dumci, nullptr, &debugMessengerVK);
         s_debugMessenger = debugMessengerVK;
+#endif
     }
 
     void Debug::DestroyDebugMessenger()
     {
+#ifdef _DEBUG
         if (s_debugMessenger)
         {
-            if (!vkDestroyDebugUtilsMessengerEXT)
-                vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(s_instance, "vkDestroyDebugUtilsMessengerEXT");
-
             vkDestroyDebugUtilsMessengerEXT(s_instance, s_debugMessenger, nullptr);
         }
+#endif
     }
 
-    void Debug::SetObjectName(uint64_t object, ObjectType type, const std::string &name)
+    void Debug::SetObjectName(uintptr_t object, ObjectType type, const std::string &name)
     {
         if (!vkSetDebugUtilsObjectNameEXT)
             return;
@@ -192,78 +203,87 @@ namespace pe
         vkSetDebugUtilsObjectNameEXT(RHII.device, &objectInfo);
     }
 
-    void Debug::BeginQueueRegion(QueueHandle queue, const std::string &name, vec4 color)
+    void Debug::BeginQueueRegion(Queue *queue, const std::string &name)
     {
         if (!vkQueueBeginDebugUtilsLabelEXT)
             return;
 
+        const float color = 1.f - 1.f / ++s_labelDepth;
+
         VkDebugUtilsLabelEXT label{};
         label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
         label.pNext = VK_NULL_HANDLE;
         label.pLabelName = name.c_str();
-        label.color[0] = color.x;
-        label.color[1] = color.y;
-        label.color[2] = color.z;
-        label.color[3] = color.w;
+        label.color[0] = color;
+        label.color[1] = color;
+        label.color[2] = color;
+        label.color[3] = 1.f;
 
-        vkQueueBeginDebugUtilsLabelEXT(queue, &label);
+        vkQueueBeginDebugUtilsLabelEXT(queue->Handle(), &label);
     }
 
-    void Debug::InsertQueueLabel(QueueHandle queue, const std::string &name, vec4 color)
+    void Debug::InsertQueueLabel(Queue *queue, const std::string &name)
     {
         if (!vkQueueInsertDebugUtilsLabelEXT)
             return;
 
+        const float color = 1.f / s_labelDepth;
+
         VkDebugUtilsLabelEXT label{};
         label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
         label.pNext = VK_NULL_HANDLE;
         label.pLabelName = name.c_str();
-        label.color[0] = color.x;
-        label.color[1] = color.y;
-        label.color[2] = color.z;
-        label.color[3] = color.w;
+        label.color[0] = color;
+        label.color[1] = color;
+        label.color[2] = color;
+        label.color[3] = 1.f;
 
-        vkQueueInsertDebugUtilsLabelEXT(queue, &label);
+        vkQueueInsertDebugUtilsLabelEXT(queue->Handle(), &label);
     }
 
-    void Debug::EndQueueRegion(QueueHandle queue)
+    void Debug::EndQueueRegion(Queue *queue)
     {
         if (!vkQueueEndDebugUtilsLabelEXT)
             return;
 
-        vkQueueEndDebugUtilsLabelEXT(queue);
+        vkQueueEndDebugUtilsLabelEXT(queue->Handle());
+        s_labelDepth--;
     }
 
-    void Debug::BeginCmdRegion(CommandBufferHandle cmd, const std::string &name, vec4 color)
+    void Debug::BeginCmdRegion(CommandBufferHandle cmd, const std::string &name)
     {
         if (!vkCmdBeginDebugUtilsLabelEXT)
             return;
 
+        const float color = 1.f - 1.f / ++s_labelDepth;
+
         VkDebugUtilsLabelEXT label{};
         label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
         label.pNext = VK_NULL_HANDLE;
         label.pLabelName = name.c_str();
-        label.color[0] = color.x;
-        label.color[1] = color.y;
-        label.color[2] = color.z;
-        label.color[3] = color.w;
+        label.color[0] = color;
+        label.color[1] = color;
+        label.color[2] = color;
+        label.color[3] = 1.f;
 
         vkCmdBeginDebugUtilsLabelEXT(cmd, &label);
     }
 
-    void Debug::InsertCmdLabel(CommandBufferHandle cmd, const std::string &name, vec4 color)
+    void Debug::InsertCmdLabel(CommandBufferHandle cmd, const std::string &name)
     {
         if (!vkCmdInsertDebugUtilsLabelEXT)
             return;
+
+        const float color = 1.f / s_labelDepth;
 
         VkDebugUtilsLabelEXT label{};
         label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
         label.pNext = VK_NULL_HANDLE;
         label.pLabelName = name.c_str();
-        label.color[0] = color.x;
-        label.color[1] = color.y;
-        label.color[2] = color.z;
-        label.color[3] = color.w;
+        label.color[0] = color;
+        label.color[1] = color;
+        label.color[2] = color;
+        label.color[3] = 1.f;
 
         vkCmdInsertDebugUtilsLabelEXT(cmd, &label);
     }
@@ -274,6 +294,8 @@ namespace pe
             return;
 
         vkCmdEndDebugUtilsLabelEXT(cmd);
+        s_labelDepth--;
     }
+#endif
 };
 #endif

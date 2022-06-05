@@ -63,7 +63,7 @@ namespace pe
         attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
         attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        renderPass = RenderPass::Create(attachment);
+        renderPass = RenderPass::Create(&attachment, 1, "shadows_renderPass");
     }
 
     void Shadows::CreateFrameBuffers()
@@ -108,11 +108,11 @@ namespace pe
             for (int j = 0; j < SHADOWMAP_CASCADES; j++)
             {
                 ImageViewHandle view = textures[j]->view;
-                framebuffers[i][j] = FrameBuffer::Create(SHADOWMAP_SIZE, SHADOWMAP_SIZE, view, renderPass);
+                framebuffers[i][j] = FrameBuffer::Create(SHADOWMAP_SIZE, SHADOWMAP_SIZE, &view, 1, renderPass, "shadows_frameBuffer_" + std::to_string(i));
             }
         }
     }
-   
+
     void Shadows::CreatePipeline()
     {
         PipelineCreateInfo info{};
@@ -128,10 +128,11 @@ namespace pe
         info.dynamicStates = {VK_DYNAMIC_STATE_DEPTH_BIAS};
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutGbufferVert()};
         info.renderPass = renderPass;
+        info.name = "shadows_pipeline";
 
         pipeline = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
+        Shader::Destroy(info.pVertShader);
     }
 
     void Shadows::CreateUniforms()
@@ -139,19 +140,20 @@ namespace pe
         uniformBuffer = Buffer::Create(
             SHADOWMAP_CASCADES * sizeof(mat4),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "Shadows_uniform_buffer");
         uniformBuffer->Map();
         uniformBuffer->Zero();
         uniformBuffer->Flush();
         uniformBuffer->Unmap();
-        
+
         UpdateDescriptorSets();
     }
 
     void Shadows::UpdateDescriptorSets()
     {
         std::vector<DescriptorUpdateInfo> infos{};
-        
+
         infos.emplace_back();
         infos.back().pBuffer = uniformBuffer;
 
@@ -166,7 +168,7 @@ namespace pe
         uint32_t infosCount = static_cast<uint32_t>(infos.size());
         DescriptorLayout *layout = Pipeline::getDescriptorSetLayoutShadowsDeferred();
 
-        descriptorSetDeferred = Descriptor::Create(layout, SHADOWMAP_CASCADES);
+        descriptorSetDeferred = Descriptor::Create(layout, SHADOWMAP_CASCADES, "Shadows_deferred_descriptor");
         descriptorSetDeferred->UpdateDescriptor(infosCount, infos.data());
     }
 
@@ -175,7 +177,12 @@ namespace pe
         if (GUI::shadow_cast)
         {
             CalculateCascades(camera);
-            uniformBuffer->CopyRequest<Launch::AsyncDeferred>({cascades, SHADOWMAP_CASCADES * sizeof(mat4), 0}, false);
+
+            MemoryRange range{};
+            range.data = &cascades;
+            range.size = SHADOWMAP_CASCADES * sizeof(mat4);
+            range.offset = 0;
+            uniformBuffer->Copy(&range, 1, false);
         }
     }
 
@@ -275,12 +282,10 @@ namespace pe
 
     void Shadows::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        
     }
-    
+
     void Shadows::Resize(uint32_t width, uint32_t height)
     {
-        
     }
 
     void Shadows::Destroy()
@@ -292,14 +297,14 @@ namespace pe
         }
 
         for (auto &texture : textures)
-            texture->Destroy();
+            Image::Destroy(texture);
 
         for (auto fba : framebuffers)
             for (auto fb : fba)
-                fb->Destroy();
+                FrameBuffer::Destroy(fb);
 
-        uniformBuffer->Destroy();
-        pipeline->Destroy();
+        Buffer::Destroy(uniformBuffer);
+        Pipeline::Destroy(pipeline);
     }
 }
 #endif

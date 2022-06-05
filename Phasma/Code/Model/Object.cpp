@@ -26,6 +26,9 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
+#include "Renderer/RHI.h"
+#include "Renderer/Command.h"
+#include "Renderer/Queue.h"
 
 namespace pe
 {
@@ -38,20 +41,23 @@ namespace pe
     {
         vertexBuffer = Buffer::Create(
             sizeof(float) * vertices.size(),
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            0,
+            "object_vertex_buffer");
 
         // Staging buffer
         Buffer *staging = Buffer::Create(
             sizeof(float) * vertices.size(),
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "object_staging_buffer");
         staging->Map();
         staging->CopyData(vertices.data());
         staging->Flush();
         staging->Unmap();
 
         vertexBuffer->CopyBuffer(staging, staging->Size());
-        staging->Destroy();
+        Buffer::Destroy(staging);
     }
 
     void Object::createUniformBuffer(size_t size)
@@ -59,7 +65,8 @@ namespace pe
         uniformBuffer = Buffer::Create(
             size,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "object_uniform_buffer");
         uniformBuffer->Map();
         uniformBuffer->Zero();
         uniformBuffer->Flush();
@@ -80,7 +87,8 @@ namespace pe
         Buffer *staging = Buffer::Create(
             imageSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "object_texture_staging_buffer");
         staging->Map();
         staging->CopyData(pixels);
         staging->Flush();
@@ -94,6 +102,7 @@ namespace pe
         info.height = texHeight;
         info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         info.initialState = LayoutState::Preinitialized;
+        info.name = path;
         texture = Image::Create(info);
 
         ImageViewCreateInfo viewInfo{};
@@ -103,11 +112,14 @@ namespace pe
         SamplerCreateInfo samplerInfo{};
         texture->CreateSampler(samplerInfo);
 
-        texture->ChangeLayout(nullptr, LayoutState::TransferDst);
-        texture->CopyBufferToImage(nullptr, staging);
-        texture->ChangeLayout(nullptr, LayoutState::ShaderReadOnly);
+        RHII.generalCmd->Begin();
+        texture->ChangeLayout(RHII.generalCmd, LayoutState::TransferDst);
+        texture->CopyBufferToImage(RHII.generalCmd, staging);
+        texture->ChangeLayout(RHII.generalCmd, LayoutState::ShaderReadOnly);
+        RHII.generalCmd->End();
+        RHII.generalQueue->SubmitAndWaitFence(1, &RHII.generalCmd, nullptr, 0, nullptr, 0, nullptr);
 
-        staging->Destroy();
+        Buffer::Destroy(staging);
     }
 
     void Object::createDescriptorSet(DescriptorSetLayoutHandle descriptorSetLayout)
@@ -158,10 +170,10 @@ namespace pe
 
     void Object::destroy()
     {
-        texture->Destroy();
-        vertexBuffer->Destroy();
-        indexBuffer->Destroy();
-        uniformBuffer->Destroy();
+        Image::Destroy(texture);
+        Buffer::Destroy(vertexBuffer);
+        Buffer::Destroy(indexBuffer);
+        Buffer::Destroy(uniformBuffer);
         vertices.clear();
         vertices.shrink_to_fit();
     }

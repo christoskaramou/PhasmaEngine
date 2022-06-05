@@ -25,6 +25,7 @@ SOFTWARE.
 #include "Renderer/Compute.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
+#include "Renderer/RHI.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -46,7 +47,7 @@ namespace pe
 
         frustum.resize(6);
 
-        frustumCompute = Compute::Create("Shaders/Compute/frustum.comp", 64, 96);
+        frustumCompute = Compute::Create("Shaders/Compute/frustum.comp", 64, 96, "camera_frustum_compute");
     }
 
     void Camera::ReCreateComputePipelines()

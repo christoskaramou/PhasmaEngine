@@ -37,7 +37,6 @@ namespace pe
 
     void CameraSystem::Init()
     {
-
     }
 
     void CameraSystem::Update(double delta)

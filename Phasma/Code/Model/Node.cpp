@@ -94,16 +94,18 @@ namespace pe
                         CalculateJointMatrixAsync(mesh, skin, inverseTransform, i);
                 }
 
-                uniformBuffer.buffer->CopyRequest<Launch::AsyncDeferred>({mesh->meshData.jointMatrices.data(),
-                                                                          mesh->meshData.jointMatrices.size() * sizeof(mat4),
-                                                                          mesh->uniformBufferOffset + 2 * sizeof(mat4)},
-                                                                         true);
+                MemoryRange range{};
+                range.data = mesh->meshData.jointMatrices.data();
+                range.size = mesh->meshData.jointMatrices.size() * sizeof(mat4);
+                range.offset = mesh->uniformBufferOffset + 2 * sizeof(mat4);
+                uniformBuffer.buffer->Copy(&range, 1, true);
             }
 
-            uniformBuffer.buffer->CopyRequest<Launch::AsyncDeferred>({&mesh->meshData,
-                                                                      2 * sizeof(mat4),
-                                                                      mesh->uniformBufferOffset},
-                                                                     true);
+            MemoryRange range{};
+            range.data = &mesh->meshData;
+            range.size = 2 * sizeof(mat4);
+            range.offset = mesh->uniformBufferOffset;
+            uniformBuffer.buffer->Copy(&range, 1, true);
         }
     }
 }

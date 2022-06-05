@@ -85,7 +85,7 @@ namespace pe
             plci.pSetLayouts = layouts.data();
 
             VkShaderModule module;
-            vkCreateShaderModule(RHII.device, &csmci, nullptr, &module);
+            PE_CHECK(vkCreateShaderModule(RHII.device, &csmci, nullptr, &module));
 
             VkComputePipelineCreateInfo compinfo{};
             compinfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -95,12 +95,12 @@ namespace pe
             compinfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
 
             VkPipelineLayout vklayout;
-            vkCreatePipelineLayout(RHII.device, &plci, nullptr, &vklayout);
+            PE_CHECK(vkCreatePipelineLayout(RHII.device, &plci, nullptr, &vklayout));
             layout = vklayout;
             compinfo.layout = layout;
 
             VkPipeline vkPipeline;
-            vkCreateComputePipelines(RHII.device, nullptr, 1, &compinfo, nullptr, &vkPipeline);
+            PE_CHECK(vkCreateComputePipelines(RHII.device, nullptr, 1, &compinfo, nullptr, &vkPipeline));
             m_handle = vkPipeline;
 
             vkDestroyShaderModule(RHII.device, module, nullptr);
@@ -116,7 +116,7 @@ namespace pe
             vsmci.pCode = info.pVertShader->GetSpriv();
 
             VkShaderModule vertModule;
-            vkCreateShaderModule(RHII.device, &vsmci, nullptr, &vertModule);
+            PE_CHECK(vkCreateShaderModule(RHII.device, &vsmci, nullptr, &vertModule));
 
             VkPipelineShaderStageCreateInfo pssci1{};
             pssci1.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -132,7 +132,7 @@ namespace pe
                 fsmci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
                 fsmci.codeSize = info.pFragShader->BytesCount();
                 fsmci.pCode = info.pFragShader->GetSpriv();
-                vkCreateShaderModule(RHII.device, &fsmci, nullptr, &fragModule);
+                PE_CHECK(vkCreateShaderModule(RHII.device, &fsmci, nullptr, &fragModule));
 
                 pssci2.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
                 pssci2.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -263,7 +263,7 @@ namespace pe
             plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
 
             VkPipelineLayout pipelineLayout;
-            vkCreatePipelineLayout(RHII.device, &plci, nullptr, &pipelineLayout);
+            PE_CHECK(vkCreatePipelineLayout(RHII.device, &plci, nullptr, &pipelineLayout));
             layout = pipelineLayout;
             pipeinfo.layout = layout;
 
@@ -280,12 +280,14 @@ namespace pe
             pipeinfo.basePipelineIndex = -1;
 
             VkPipeline pipeline;
-            vkCreateGraphicsPipelines(RHII.device, nullptr, 1, &pipeinfo, nullptr, &pipeline);
+            PE_CHECK(vkCreateGraphicsPipelines(RHII.device, nullptr, 1, &pipeinfo, nullptr, &pipeline));
             m_handle = pipeline;
 
             vkDestroyShaderModule(RHII.device, vertModule, nullptr);
             if (info.pFragShader && fragModule)
                 vkDestroyShaderModule(RHII.device, fragModule, nullptr);
+
+            Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_PIPELINE, info.name);
         }
     }
 
@@ -317,7 +319,7 @@ namespace pe
             DescriptorBinding(7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(9, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "Composition_DSLayout");
 
         return DSLayout;
     }
@@ -326,7 +328,7 @@ namespace pe
     {
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "BrightFilter_DSLayout");
 
         return DSLayout;
     }
@@ -335,7 +337,7 @@ namespace pe
     {
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "GaussianBlurH_DSLayout");
 
         return DSLayout;
     }
@@ -344,7 +346,7 @@ namespace pe
     {
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "GaussianBlurV_DSLayout");
 
         return DSLayout;
     }
@@ -354,7 +356,7 @@ namespace pe
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "Combine_DSLayout");
 
         return DSLayout;
     }
@@ -364,7 +366,7 @@ namespace pe
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "DOF_DSLayout");
 
         return DSLayout;
     }
@@ -374,7 +376,7 @@ namespace pe
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "SSGI_DSLayout");
 
         return DSLayout;
     }
@@ -383,7 +385,7 @@ namespace pe
     {
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "FXAA_DSLayout");
 
         return DSLayout;
     }
@@ -394,7 +396,7 @@ namespace pe
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "MotionBlur_DSLayout");
 
         return DSLayout;
     }
@@ -407,7 +409,7 @@ namespace pe
             DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "ssao_DSLayout");
 
         return DSLayout;
     }
@@ -416,7 +418,7 @@ namespace pe
     {
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "ssaoBlur_DSLayout");
 
         return DSLayout;
     }
@@ -429,7 +431,7 @@ namespace pe
             DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "SSR_DSLayout");
 
         return DSLayout;
     }
@@ -442,7 +444,7 @@ namespace pe
             DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "TAA_DSLayout");
 
         return DSLayout;
     }
@@ -452,7 +454,7 @@ namespace pe
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "TAASharpen_DSLayout");
 
         return DSLayout;
     }
@@ -462,7 +464,7 @@ namespace pe
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
             DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, SHADOWMAP_CASCADES + 1)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "ShadowsDeferred_DSLayout");
 
         return DSLayout;
     }
@@ -471,7 +473,7 @@ namespace pe
     {
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "Skybox_DSLayout");
 
         return DSLayout;
     }
@@ -481,7 +483,7 @@ namespace pe
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT),
             DescriptorBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "Compute_DSLayout");
 
         return DSLayout;
     }
@@ -490,7 +492,7 @@ namespace pe
     {
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "GbufferVert_DSLayout");
 
         return DSLayout;
     }
@@ -499,7 +501,7 @@ namespace pe
     {
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1000)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "GbufferFrag_DSLayout");
 
         return DSLayout;
     }

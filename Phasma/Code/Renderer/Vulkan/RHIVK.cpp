@@ -30,7 +30,7 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/Swapchain.h"
-#include "Renderer/Debug.h"
+#include "Renderer/Queue.h"
 
 #if defined(_WIN32)
 // On Windows, Vulkan commands use the stdcall convention
@@ -45,15 +45,9 @@ namespace pe
     RHI::RHI()
     {
         device = {};
-        dynamicCmdBuffers = {};
-        shadowCmdBuffers = {};
-        fences = {};
         semaphores = {};
 
         window = nullptr;
-        graphicsFamilyId = 0;
-        computeFamilyId = 0;
-        transferFamilyId = 0;
 
         uniformBuffers = {};
         uniformImages = {};
@@ -63,13 +57,47 @@ namespace pe
     {
     }
 
+    void RHI::Init(SDL_Window *window)
+    {
+        this->window = window;
+
+        CreateInstance(window);
+        CreateSurface();
+        GetGpu();
+        GetSurfaceProperties();
+        CreateDevice();
+        CreateAllocator();
+        GetQueues();
+        CreateCommandPools();
+        CreateCmdBuffers(SWAPCHAIN_IMAGES);
+        CreateSwapchain(surface);
+        CreateDescriptorPool(15000); // max number of all descriptor sets to allocate
+        CreateSemaphores(SWAPCHAIN_IMAGES * 3);
+    }
+
+    void RHI::Destroy()
+    {
+        WaitDeviceIdle();
+        Queue::Clear();
+        CommandBuffer::Clear();
+        CommandPool::Clear();
+        Fence::Clear();
+        for (auto *semaphore : semaphores)
+            Semaphore::Destroy(semaphore);
+        DescriptorPool::Destroy(descriptorPool);
+        Swapchain::Destroy(swapchain);
+        if (device)
+            vkDestroyDevice(device, nullptr);
+        Surface::Destroy(surface);
+        Debug::DestroyDebugMessenger();
+        if (instance)
+            vkDestroyInstance(instance, nullptr);
+    }
+
     void RHI::CreateInstance(SDL_Window *window)
     {
-        std::vector<const char *> instanceExtensions;
-        std::vector<const char *> instanceLayers;
-        std::vector<VkValidationFeatureEnableEXT> enabledFeatures;
-        VkValidationFeaturesEXT validationFeatures{};
-        validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+        std::vector<const char *> instanceExtensions{};
+        std::vector<const char *> instanceLayers{};
 
         // === Extentions ==============================
         unsigned extCount;
@@ -78,36 +106,28 @@ namespace pe
         instanceExtensions.resize(extCount);
         if (!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()))
             PE_ERROR(SDL_GetError());
+
+        if (IsInstanceExtensionValid("VK_KHR_get_physical_device_properties2"))
+            instanceExtensions.push_back("VK_KHR_get_physical_device_properties2");
         // =============================================
-            
-        uint32_t propertyCount;
-        vkEnumerateInstanceExtensionProperties(nullptr, &propertyCount, nullptr);
 
-        std::vector<VkExtensionProperties> extensions(propertyCount);
-        vkEnumerateInstanceExtensionProperties(nullptr, &propertyCount, extensions.data());
-
-        for (auto &extension : extensions)
-        {
-            if (std::string(extension.extensionName) == "VK_KHR_get_physical_device_properties2")
-            {
-                instanceExtensions.push_back("VK_KHR_get_physical_device_properties2");
-            }
-        }
-
-#ifdef _DEBUG
+        // === Debugging ===============================
         Debug::GetInstanceUtils(instanceExtensions, instanceLayers);
+        std::vector<VkValidationFeatureEnableEXT> enabledFeatures{};
+        VkValidationFeaturesEXT validationFeatures{};
+        if (IsInstanceLayerValid("VK_LAYER_KHRONOS_validation"))
+        {
+            enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
+            enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT);
+            // enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
+            // enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
+            enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
 
-        // === Validation Features =====================
-        enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
-        enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT);
-        // enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
-        // enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
-        enabledFeatures.push_back(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
-
-        validationFeatures.enabledValidationFeatureCount = static_cast<uint32_t>(enabledFeatures.size());
-        validationFeatures.pEnabledValidationFeatures = enabledFeatures.data();
+            validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+            validationFeatures.enabledValidationFeatureCount = static_cast<uint32_t>(enabledFeatures.size());
+            validationFeatures.pEnabledValidationFeatures = enabledFeatures.data();
+        }
         // =============================================
-#endif
 
         uint32_t apiVersion;
         vkEnumerateInstanceVersion(&apiVersion);
@@ -128,13 +148,11 @@ namespace pe
         instInfo.ppEnabledExtensionNames = instanceExtensions.data();
 
         VkInstance instanceVK;
-        vkCreateInstance(&instInfo, nullptr, &instanceVK);
+        PE_CHECK(vkCreateInstance(&instInfo, nullptr, &instanceVK));
         instance = instanceVK;
 
-#ifdef _DEBUG
         Debug::Init(instance);
         Debug::CreateDebugMessenger();
-#endif
     }
 
     void RHI::CreateSurface()
@@ -196,91 +214,10 @@ namespace pe
         }
 
         gpu = discreteGpu ? discreteGpu : validGpuList[0];
-        GetGraphicsFamilyId();
-        GetComputeFamilyId();
-        GetTransferFamilyId();
 
         VkPhysicalDeviceProperties gpuPropertiesVK;
         vkGetPhysicalDeviceProperties(gpu, &gpuPropertiesVK);
         gpuName = gpuPropertiesVK.deviceName;
-    }
-
-    void RHI::GetGraphicsFamilyId()
-    {
-#ifdef UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
-        VkQueueFlags flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT;
-#else
-        VkQueueFlags flags = VK_QUEUE_GRAPHICS_BIT;
-#endif
-        uint32_t queueFamPropCount;
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
-
-        std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
-
-        auto &properties = queueFamilyProperties;
-        for (uint32_t i = 0; i < properties.size(); i++)
-        {
-            // find graphics queue family index
-            VkBool32 suported;
-            vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface->Handle(), &suported);
-            if (properties[i].queueFlags & flags && suported)
-            {
-                graphicsFamilyId = i;
-                return;
-            }
-        }
-        graphicsFamilyId = -1;
-    }
-
-    void RHI::GetTransferFamilyId()
-    {
-#ifdef UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE1
-        transferFamilyId = graphicsFamilyId;
-#else
-        uint32_t queueFamPropCount;
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
-
-        std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
-
-        VkQueueFlags flags = VK_QUEUE_TRANSFER_BIT;
-        auto &properties = queueFamilyProperties;
-        // prefer different families for different queue types, thus the reverse check
-        for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i)
-        {
-            // find transfer queue family index
-            if (properties[i].queueFlags & flags)
-            {
-                transferFamilyId = i;
-                return;
-            }
-        }
-        transferFamilyId = -1;
-#endif
-    }
-
-    void RHI::GetComputeFamilyId()
-    {
-        uint32_t queueFamPropCount;
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
-
-        std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
-
-        VkQueueFlags flags = VK_QUEUE_TRANSFER_BIT;
-        auto &properties = queueFamilyProperties;
-        // prefer different families for different queue types, thus the reverse check
-        for (int i = static_cast<int>(properties.size()) - 1; i >= 0; --i)
-        {
-            // find compute queue family index
-            if (properties[i].queueFlags & flags)
-            {
-                computeFamilyId = i;
-                return;
-            }
-        }
-        computeFamilyId = -1;
     }
 
     bool RHI::IsInstanceExtensionValid(const char *name)
@@ -322,7 +259,7 @@ namespace pe
     {
         if (!gpu)
             PE_ERROR("No GPU found!");
-        
+
         uint32_t count;
         vkEnumerateDeviceExtensionProperties(gpu, nullptr, &count, nullptr);
 
@@ -342,30 +279,25 @@ namespace pe
 
         if (IsDeviceExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME))
             deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        
-        float priorities[]{1.0f}; // range : [0.0, 1.0]
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
 
-        // graphics queue
-        VkDeviceQueueCreateInfo queueCreateInfo{};
-        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfo.queueFamilyIndex = graphicsFamilyId;
-        queueCreateInfo.queueCount = 1;
-        queueCreateInfo.pQueuePriorities = priorities;
-        queueCreateInfos.push_back(queueCreateInfo);
+        uint32_t queueFamPropCount;
+        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
 
-        // compute queue
-        if (computeFamilyId != graphicsFamilyId)
-        {
-            queueCreateInfo.queueFamilyIndex = computeFamilyId;
-            queueCreateInfos.push_back(queueCreateInfo);
-        }
+        std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
 
-        // transfer queue
-        if (transferFamilyId != graphicsFamilyId && transferFamilyId != computeFamilyId)
+        std::vector<std::vector<float>> priorities(queueFamPropCount);
+        for (uint32_t i = 0; i < queueFamPropCount; i++)
         {
-            queueCreateInfo.queueFamilyIndex = transferFamilyId;
+            priorities[i] = std::vector<float>(queueFamilyProperties[i].queueCount, 1.f);
+
+            VkDeviceQueueCreateInfo queueCreateInfo{};
+            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueCreateInfo.queueFamilyIndex = i;
+            queueCreateInfo.queueCount = queueFamilyProperties[i].queueCount;
+            queueCreateInfo.pQueuePriorities = priorities[i].data();
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
@@ -405,8 +337,13 @@ namespace pe
         deviceCreateInfo.pNext = &deviceFeatures2;
 
         VkDevice deviceVK;
-        vkCreateDevice(gpu, &deviceCreateInfo, nullptr, &deviceVK);
+        PE_CHECK(vkCreateDevice(gpu, &deviceCreateInfo, nullptr, &deviceVK));
         device = deviceVK;
+
+        // Debug::SetObjectName(instance, VK_OBJECT_TYPE_INSTANCE, "RHI_instance");
+        Debug::SetObjectName(surface->Handle(), VK_OBJECT_TYPE_SURFACE_KHR, "RHI_surface");
+        Debug::SetObjectName(gpu, VK_OBJECT_TYPE_PHYSICAL_DEVICE, "RHI_gpu");
+        Debug::SetObjectName(device, VK_OBJECT_TYPE_DEVICE, "RHI_device");
     }
 
     void RHI::CreateAllocator()
@@ -421,84 +358,42 @@ namespace pe
         allocator_info.vulkanApiVersion = apiVersion;
 
         VmaAllocator allocatorVK;
-        vmaCreateAllocator(&allocator_info, &allocatorVK);
+        PE_CHECK(vmaCreateAllocator(&allocator_info, &allocatorVK));
         allocator = allocatorVK;
-    }
-
-    void RHI::GetGraphicsQueue()
-    {
-        VkQueue queue;
-        vkGetDeviceQueue(device, graphicsFamilyId, 0, &queue);
-        graphicsQueue = queue;
-    }
-
-    void RHI::GetTransferQueue()
-    {
-        VkQueue queue;
-        vkGetDeviceQueue(device, transferFamilyId, 0, &queue);
-        transferQueue = queue;
-    }
-
-    void RHI::GetComputeQueue()
-    {
-        VkQueue queue;
-        vkGetDeviceQueue(device, computeFamilyId, 0, &queue);
-        computeQueue = queue;
     }
 
     void RHI::GetQueues()
     {
-        GetGraphicsQueue();
-        GetTransferQueue();
-        GetComputeQueue();
+        Queue::Init(gpu, device, surface->Handle());
+        generalQueue = Queue::GetNext(QueueType::GraphicsBit, 1);
     }
 
     void RHI::CreateSwapchain(Surface *surface)
     {
-        swapchain = Swapchain::Create(surface);
+        swapchain = Swapchain::Create(surface, "RHI_swapchain");
     }
 
     void RHI::CreateCommandPools()
     {
-        commandPool = CommandPool::Create(graphicsFamilyId);
-        commandPool2 = CommandPool::Create(graphicsFamilyId);
-        commandPoolTransfer = CommandPool::Create(transferFamilyId);
+        CommandPool::Init(gpu);
     }
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
     {
-        descriptorPool = DescriptorPool::Create(maxDescriptorSets);
+        descriptorPool = DescriptorPool::Create(maxDescriptorSets, "RHI_descriptor_pool");
     }
 
     void RHI::CreateCmdBuffers(uint32_t bufferCount)
     {
-        dynamicCmdBuffers.resize(bufferCount);
-        for (uint32_t i = 0; i < bufferCount; i++)
-            dynamicCmdBuffers[i] = CommandBuffer::Create(commandPool, "dynamicCmdBuffer" + std::to_string(i));
-
-        shadowCmdBuffers.resize(bufferCount);
-        for (uint32_t i = 0; i < bufferCount; i++)
-        {
-            shadowCmdBuffers[i] = std::array<CommandBuffer *, SHADOWMAP_CASCADES>{};
-            for (int j = 0; j < SHADOWMAP_CASCADES; j++)
-            {
-                shadowCmdBuffers[i][j] = CommandBuffer::Create(commandPool, "shadowCmdBuffer" + std::to_string(i) + "_" + std::to_string(j));
-            }
-        }
-    }
-
-    void RHI::CreateFences(uint32_t fenceCount)
-    {
-        fences.resize(fenceCount);
-        for (uint32_t i = 0; i < fenceCount; i++)
-            fences[i] = Fence::Create(true);
+        CommandBuffer::Init(gpu, bufferCount);
+        generalCmd = CommandBuffer::GetNext(generalQueue->GetFamilyId());
     }
 
     void RHI::CreateSemaphores(uint32_t semaphoresCount)
     {
         semaphores.resize(semaphoresCount);
         for (uint32_t i = 0; i < semaphoresCount; i++)
-            semaphores[i] = Semaphore::Create();
+            semaphores[i] = Semaphore::Create("RHI_semaphore_" + std::to_string(i));
     }
 
     Format RHI::GetDepthFormat()
@@ -531,169 +426,8 @@ namespace pe
         return (Format)depthFormat;
     }
 
-    void RHI::Init(SDL_Window *window)
-    {
-        this->window = window;
-
-        CreateInstance(window);
-        CreateSurface();
-        GetGpu();
-        GetSurfaceProperties();
-        CreateDevice();
-        CreateAllocator();
-        GetQueues();
-        CreateCommandPools();
-        CreateSwapchain(surface);
-        CreateDescriptorPool(15000); // max number of all descriptor sets to allocate
-        CreateCmdBuffers(SWAPCHAIN_IMAGES);
-        CreateSemaphores(SWAPCHAIN_IMAGES * 3);
-        CreateFences(SWAPCHAIN_IMAGES);
-    }
-
-    void RHI::Destroy()
-    {
-        WaitDeviceIdle();
-
-        for (auto *fence : fences)
-            fence->Destroy();
-
-        for (auto *semaphore : semaphores)
-            semaphore->Destroy();
-
-        descriptorPool->Destroy();
-
-        commandPool->Destroy();
-        commandPool2->Destroy();
-
-        swapchain->Destroy();
-
-        if (device)
-        {
-            vkDestroyDevice(device, nullptr);
-            device = {};
-        }
-
-        surface->Destroy();
-
-#ifdef _DEBUG
-        Debug::DestroyDebugMessenger();
-#endif
-
-        if (instance)
-            vkDestroyInstance(instance, nullptr);
-    }
-
-    void RHI::Submit(
-        uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
-        PipelineStageFlags *waitStages,
-        uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-        uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
-        Fence *signalFence,
-        bool useGraphicsQueue)
-    {
-        std::vector<VkCommandBuffer> commandBuffersVK(commandBuffersCount);
-        for (uint32_t i = 0; i < commandBuffersCount; i++)
-            commandBuffersVK[i] = commandBuffers[i]->Handle();
-
-        std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoresCount);
-        for (uint32_t i = 0; i < waitSemaphoresCount; i++)
-            waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
-
-        std::vector<VkSemaphore> signalSemaphoresVK(signalSemaphoresCount);
-        for (uint32_t i = 0; i < signalSemaphoresCount; i++)
-            signalSemaphoresVK[i] = signalSemaphores[i]->Handle();
-
-        VkFence fenceVK = nullptr;
-        if (signalFence)
-            fenceVK = signalFence->Handle();
-
-        VkSubmitInfo si{};
-        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        si.waitSemaphoreCount = waitSemaphoresCount;
-        si.pWaitSemaphores = waitSemaphoresVK.data();
-        si.pWaitDstStageMask = waitStages;
-        si.commandBufferCount = commandBuffersCount;
-        si.pCommandBuffers = commandBuffersVK.data();
-        si.signalSemaphoreCount = signalSemaphoresCount;
-        si.pSignalSemaphores = signalSemaphoresVK.data();
-
-        if (useGraphicsQueue)
-            vkQueueSubmit(graphicsQueue, 1, &si, fenceVK);
-        else
-            vkQueueSubmit(transferQueue, 1, &si, fenceVK);
-    }
-
-    void RHI::WaitFence(Fence *fence)
-    {
-        fence->Wait();
-        fence->Reset();
-    }
-
-    void RHI::SubmitAndWaitFence(
-        uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
-        PipelineStageFlags *waitStages,
-        uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-        uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
-        bool useGraphicsQueue)
-    {
-        Fence *fence = Fence::Create(false);
-
-        Submit(commandBuffersCount, commandBuffers, waitStages, waitSemaphoresCount,
-               waitSemaphores, signalSemaphoresCount, signalSemaphores, fence, useGraphicsQueue);
-
-        VkFence fenceVK = fence->Handle();
-        if (vkWaitForFences(device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
-            PE_ERROR("wait fences error!");
-        fence->Destroy();
-    }
-
-    void RHI::Present(
-        uint32_t swapchainCount, Swapchain **swapchains,
-        uint32_t *imageIndices,
-        uint32_t waitSemaphoreCount, Semaphore **waitSemaphores)
-    {
-        std::vector<VkSwapchainKHR> swapchainsVK(swapchainCount);
-        for (uint32_t i = 0; i < swapchainCount; i++)
-            swapchainsVK[i] = swapchains[i]->Handle();
-
-        std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoreCount);
-        for (uint32_t i = 0; i < waitSemaphoreCount; i++)
-            waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
-
-        VkPresentInfoKHR pi{};
-        pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        pi.waitSemaphoreCount = waitSemaphoreCount;
-        pi.pWaitSemaphores = waitSemaphoresVK.data();
-        pi.swapchainCount = swapchainCount;
-        pi.pSwapchains = swapchainsVK.data();
-        pi.pImageIndices = imageIndices;
-
-        if (vkQueuePresentKHR(graphicsQueue, &pi) != VK_SUCCESS)
-            PE_ERROR("Present error!");
-    }
-
-    void RHI::WaitAndLockSubmits()
-    {
-        m_submit_mutex.lock();
-    }
-
-    void RHI::UnlockSubmits()
-    {
-        m_submit_mutex.unlock();
-    }
-
     void RHI::WaitDeviceIdle()
     {
         vkDeviceWaitIdle(device);
-    }
-
-    void RHI::WaitGraphicsQueue()
-    {
-        vkQueueWaitIdle(graphicsQueue);
-    }
-
-    void RHI::WaitTransferQueue()
-    {
-        vkQueueWaitIdle(transferQueue);
     }
 }

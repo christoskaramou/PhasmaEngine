@@ -72,11 +72,10 @@ namespace pe
 
         void Destroy() override;
 
-private:
+    private:
         void CalculateCascades(Camera *camera);
 
-public:
-
+    public:
         mat4 cascades[SHADOWMAP_CASCADES];
         vec4 viewZ;
         RenderPass *renderPass;

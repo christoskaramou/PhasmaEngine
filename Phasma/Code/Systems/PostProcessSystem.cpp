@@ -67,13 +67,14 @@ namespace pe
     {
         Camera *camera_main = CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
 
-        for (auto& effect : m_effects)
-            Queue<Launch::Async>::Request([camera_main, effect]() { effect.second->Update(camera_main); });
+        for (auto &effect : m_effects)
+            effect.second->Update(camera_main);
+        // SyncQueue<Launch::Async>::Request([camera_main, effect]() { effect.second->Update(camera_main); });
     }
 
     void PostProcessSystem::Destroy()
     {
-        for (auto& effect : m_effects)
+        for (auto &effect : m_effects)
             effect.second->Destroy();
     }
 

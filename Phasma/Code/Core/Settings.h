@@ -22,6 +22,8 @@ SOFTWARE.
 
 #pragma once
 
+#define PE_DEBUG_MODE 1
+
 namespace pe
 {
     struct GlobalSettings
@@ -32,5 +34,4 @@ namespace pe
 
     constexpr uint32_t SHADOWMAP_CASCADES = 4;
     constexpr uint32_t SHADOWMAP_SIZE = 2048;
-    
 }

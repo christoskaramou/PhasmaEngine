@@ -42,7 +42,7 @@ namespace pe
 
     void SkyBox::createDescriptorSet()
     {
-        descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSkybox());
+        descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSkybox(), 1, "Skybox_descriptor");
 
         DescriptorUpdateInfo info{};
         info.binding = 0;
@@ -68,6 +68,7 @@ namespace pe
         info.height = imageSideSize;
         info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        info.name = "skybox_image";
         texture = Image::Create(info);
 
         ImageViewCreateInfo viewInfo{};
@@ -85,7 +86,7 @@ namespace pe
         {
             // Texture Load
             int texWidth, texHeight, texChannels;
-            //stbi_set_flip_vertically_on_load(true);
+            // stbi_set_flip_vertically_on_load(true);
             stbi_uc *pixels = stbi_load(paths[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
             assert(imageSideSize == texWidth && imageSideSize == texHeight);
 
@@ -96,8 +97,8 @@ namespace pe
             Buffer *staging = Buffer::Create(
                 imageSize,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-            );
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+                "Skybox_staging_buffer");
             staging->Map();
             staging->CopyData(pixels);
             staging->Flush();
@@ -106,13 +107,13 @@ namespace pe
             stbi_image_free(pixels);
 
             texture->CopyBufferToImage(nullptr, staging, i);
-            staging->Destroy();
+            Buffer::Destroy(staging);
         }
     }
 
     void SkyBox::destroy()
     {
-        texture->Destroy();
-        Pipeline::getDescriptorSetLayoutSkybox()->Destroy();
+        Image::Destroy(texture);
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutSkybox());
     }
 }

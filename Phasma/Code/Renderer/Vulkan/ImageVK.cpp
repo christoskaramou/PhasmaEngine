@@ -25,7 +25,7 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
 #include "Renderer/Buffer.h"
-#include "Renderer/Debug.h"
+#include "Renderer/Queue.h"
 
 namespace pe
 {
@@ -103,9 +103,10 @@ namespace pe
             return LayoutState::Preinitialized;
         case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
             return LayoutState::PresentSrc;
-        default:
-            PE_ERROR("Unknown layout");
         }
+
+        PE_ERROR("Unknown layout");
+        return LayoutState::Undefined;
     }
 
     VkImageLayout GetLayoutFromState(LayoutState state)
@@ -132,9 +133,10 @@ namespace pe
             return VK_IMAGE_LAYOUT_PREINITIALIZED;
         case LayoutState::PresentSrc:
             return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        default:
-            PE_ERROR("Unknown layout state");
         }
+
+        PE_ERROR("Unknown layout state");
+        return VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
     SamplerCreateInfo::SamplerCreateInfo()
@@ -243,7 +245,7 @@ namespace pe
         VkImage imageVK;
         VmaAllocation allocationVK;
         VmaAllocationInfo allocationInfo;
-        vmaCreateImage(RHII.allocator, &imageInfoVK, &allocationCreateInfo, &imageVK, &allocationVK, &allocationInfo);
+        PE_CHECK(vmaCreateImage(RHII.allocator, &imageInfoVK, &allocationCreateInfo, &imageVK, &allocationVK, &allocationInfo));
         m_handle = imageVK;
         allocation = allocationVK;
 
@@ -284,17 +286,9 @@ namespace pe
         uint32_t baseMipLevel,
         uint32_t mipLevels)
     {
-        CommandBuffer *commandBuffer;
-        // If no cmd exists, start a new one
+        // If no cmd exists, start the general cmd
         if (!cmd)
-        {
-            commandBuffer = CommandBuffer::Create(RHII.commandPool2, "TransitionImageLayout_cmd");
-            commandBuffer->Begin();
-        }
-        else
-        {
-            commandBuffer = cmd;
-        }
+            RHII.generalCmd->Begin();
 
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -314,7 +308,7 @@ namespace pe
             barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 
         vkCmdPipelineBarrier(
-            commandBuffer->Handle(),
+            cmd ? cmd->Handle() : RHII.generalCmd->Handle(),
             oldStageMask,
             newStageMask,
             VK_DEPENDENCY_BY_REGION_BIT,
@@ -329,9 +323,8 @@ namespace pe
         // If a new cmd was created, wait and submit it
         if (!cmd)
         {
-            commandBuffer->End();
-            RHII.SubmitAndWaitFence(1, &commandBuffer, nullptr, 0, nullptr, 0, nullptr);
-            commandBuffer->Destroy();
+            RHII.generalCmd->End();
+            RHII.generalQueue->SubmitAndWaitFence(1, &RHII.generalCmd, nullptr, 0, nullptr, 0, nullptr);;
         }
     }
 
@@ -352,7 +345,7 @@ namespace pe
                 info.image->imageInfo.arrayLayers};
 
         VkImageView vkView;
-        vkCreateImageView(RHII.device, &viewInfoVK, nullptr, &vkView);
+        PE_CHECK(vkCreateImageView(RHII.device, &viewInfoVK, nullptr, &vkView));
         view = vkView;
 
         Debug::SetObjectName(view, VK_OBJECT_TYPE_IMAGE_VIEW, imageInfo.name);
@@ -396,16 +389,14 @@ namespace pe
                                   uint32_t layerCount,
                                   uint32_t mipLevel)
     {
-        CommandBuffer *commandBuffer;
+        Queue *queue;
+        CommandBuffer *commandBuffer = cmd;
         // If cmd is nullptr, start a new one
         if (!cmd)
         {
-            commandBuffer = CommandBuffer::Create(RHII.commandPool2, "CopyBufferToImage_cmd");
+            queue = Queue::GetNext(QueueType::TransferBit, 1);
+            commandBuffer = CommandBuffer::GetNext(queue->GetFamilyId());
             commandBuffer->Begin();
-        }
-        else
-        {
-            commandBuffer = cmd;
         }
 
         VkBufferImageCopy region;
@@ -426,13 +417,16 @@ namespace pe
         if (!cmd)
         {
             commandBuffer->End();
-            RHII.SubmitAndWaitFence(1, &commandBuffer, nullptr, 0, nullptr, 0, nullptr);
-            commandBuffer->Destroy();
+            queue->SubmitAndWaitFence(1, &commandBuffer, nullptr, 0, nullptr, 0, nullptr);
+            Queue::Return(queue);
+            CommandBuffer::Return(commandBuffer);
         }
     }
 
     void Image::CopyColorAttachment(CommandBuffer *cmd, Image *colorAttachement)
     {
+        Debug::InsertCmdLabel(cmd->Handle(), "CopyColorAttachment: " + colorAttachement->imageInfo.name);
+
         LayoutState previousState = layoutStates[0][0];
         LayoutState caPreviousState = colorAttachement->layoutStates[0][0];
 
@@ -478,14 +472,12 @@ namespace pe
             PE_ERROR("generateMipMaps(): Image tiling error.");
         }
 
+        Queue *queue = Queue::GetNext(QueueType::GraphicsBit, 1);
         std::vector<std::vector<CommandBuffer *>> commandBuffers(imageInfo.arrayLayers);
         for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
         {
             for (uint32_t j = 0; j < imageInfo.mipLevels; j++)
-            {
-                commandBuffers[i].push_back(
-                    CommandBuffer::Create(RHII.commandPool2, "GenerateMipMaps_cmd_" + std::to_string(i) + "_" + std::to_string(j)));
-            }
+                commandBuffers[i].push_back(CommandBuffer::GetNext(queue->GetFamilyId()));
         }
 
         auto mipWidth = static_cast<int32_t>(imageInfo.width);
@@ -532,7 +524,7 @@ namespace pe
                     mipHeight /= 2;
 
                 commandBuffers[i][j]->End();
-                RHII.SubmitAndWaitFence(1, &commandBuffers[i][j], nullptr, 0, nullptr, 0, nullptr);
+                queue->SubmitAndWaitFence(1, &commandBuffers[i][j], nullptr, 0, nullptr, 0, nullptr);
             }
         }
 
@@ -540,10 +532,15 @@ namespace pe
         {
             for (uint32_t j = 0; j < imageInfo.mipLevels; j++)
             {
-                ChangeLayout(nullptr, LayoutState::ShaderReadOnly, i, 1, j, 1);
-                commandBuffers[i][j]->Destroy();
+                commandBuffers[i][j]->Begin();
+                ChangeLayout(commandBuffers[i][j], LayoutState::ShaderReadOnly, i, 1, j, 1);
+                commandBuffers[i][j]->End();
+                queue->SubmitAndWaitFence(1, &commandBuffers[i][j], nullptr, 0, nullptr, 0, nullptr);
+                CommandBuffer::Return(commandBuffers[i][j]);
             }
         }
+
+        Queue::Return(queue);
     }
 
     void Image::CreateSampler(const SamplerCreateInfo &info)
@@ -571,7 +568,7 @@ namespace pe
         samplerInfoVK.unnormalizedCoordinates = samplerInfo.unnormalizedCoordinates;
 
         VkSampler vkSampler;
-        vkCreateSampler(RHII.device, &samplerInfoVK, nullptr, &vkSampler);
+        PE_CHECK(vkCreateSampler(RHII.device, &samplerInfoVK, nullptr, &vkSampler));
         sampler = vkSampler;
 
         Debug::SetObjectName(sampler, VK_OBJECT_TYPE_SAMPLER, imageInfo.name);

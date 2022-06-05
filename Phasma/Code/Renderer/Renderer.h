@@ -94,13 +94,13 @@ namespace pe
         void RecreatePipelines();
 
     protected:
-        static void CheckQueue();
+        static void CheckModelsQueue();
 
         void ComputeAnimations();
 
-        void RecordDeferredCmds(uint32_t imageIndex);
+        void RecordDeferredCmds(CommandBuffer *cmd, uint32_t imageIndex);
 
-        void RecordShadowsCmds(uint32_t imageIndex);
+        void RecordShadowsCmds(CommandBuffer **cmds, uint32_t cmdCount, uint32_t imageIndex);
 
         Image *m_viewportRT;
         Image *m_depth;
@@ -109,6 +109,7 @@ namespace pe
         std::map<size_t, Image *> m_depthTargets{};
 
     public:
+        inline static Queue *s_currentQueue = nullptr;
         RenderArea renderArea;
         SkyBox skyBoxDay;
         SkyBox skyBoxNight;

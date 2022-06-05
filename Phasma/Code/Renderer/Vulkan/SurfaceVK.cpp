@@ -115,10 +115,6 @@ namespace pe
 
     void Surface::FindProperties()
     {
-        // Needs to be called?
-        VkBool32 supported = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(RHII.gpu, RHII.graphicsFamilyId, m_handle, &supported);
-
         CheckTransfer();
         FindFormat();
         FindPresentationMode();

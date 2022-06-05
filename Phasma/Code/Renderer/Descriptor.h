@@ -29,7 +29,11 @@ namespace pe
     public:
         DescriptorBinding();
 
-        DescriptorBinding(uint32_t binding, DescriptorType descriptorType, ShaderStageFlags stageFlags, uint32_t descriptorCount = 1, SamplerHandle *pImmutableSamplers = nullptr);
+        DescriptorBinding(uint32_t binding,
+                          DescriptorType descriptorType,
+                          ShaderStageFlags stageFlags,
+                          uint32_t descriptorCount = 1,
+                          SamplerHandle *pImmutableSamplers = nullptr);
 
         uint32_t binding;
         DescriptorType descriptorType;
@@ -41,16 +45,15 @@ namespace pe
     class DescriptorPool : public IHandle<DescriptorPool, DescriptorPoolHandle>
     {
     public:
-        DescriptorPool(uint32_t maxDescriptorSets);
+        DescriptorPool(uint32_t maxDescriptorSets, const std::string &name = {});
 
         ~DescriptorPool();
     };
 
-    class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>,
-                             public Hashable<std::vector<DescriptorBinding>>
+    class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>
     {
     public:
-        DescriptorLayout(const std::vector<DescriptorBinding> &bindings);
+        DescriptorLayout(const std::vector<DescriptorBinding> &bindings, const std::string &name = {});
 
         ~DescriptorLayout();
     };
@@ -74,7 +77,7 @@ namespace pe
     class Descriptor : public IHandle<Descriptor, DescriptorSetHandle>
     {
     public:
-        Descriptor(DescriptorLayout *layout, uint32_t variableCount = 1);
+        Descriptor(DescriptorLayout *layout, uint32_t variableCount = 1, const std::string &name = {});
 
         ~Descriptor();
 

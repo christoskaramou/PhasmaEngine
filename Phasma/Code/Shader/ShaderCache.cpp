@@ -62,10 +62,10 @@ namespace pe
         return code;
     }
 
-    void ShaderCache::Init(const std::string &sourcePath, const Hash& definesHash)
+    void ShaderCache::Init(const std::string &sourcePath, const Hash &definesHash)
     {
         m_includes = {};
-        
+
         m_sourcePath = sourcePath;
         m_code = ParseFileAndIncludes(m_sourcePath);
 

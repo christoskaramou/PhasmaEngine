@@ -35,6 +35,7 @@ SOFTWARE.
 #include <any>
 #include <mutex>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <array>
 #include <functional>
@@ -50,6 +51,7 @@ SOFTWARE.
 #include <chrono>
 #include <random>
 #include <regex>
+#include <atomic>
 
 #include "SDL/SDL.h"
 #include "SDL/SDL_syswm.h"
@@ -70,7 +72,7 @@ SOFTWARE.
 #include "Core/FileSystem.h"
 #include "Core/Path.h"
 #include "Core/Delegate.h"
-#include "Core/Queue.h"
+#include "Core/SyncQueue.h"
 #include "Core/Timer.h"
 
 #include "ECS/ECSBase.h"
@@ -78,5 +80,7 @@ SOFTWARE.
 #include "ECS/System.h"
 #include "ECS/Entity.h"
 #include "ECS/Context.h"
+
+#include "Renderer/Debug.h"
 
 #define STBI_MSC_SECURE_CRT

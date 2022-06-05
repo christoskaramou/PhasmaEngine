@@ -71,7 +71,7 @@ namespace pe
     class Camera;
 
     class IRenderComponent : public IComponent
-    {  
+    {
     public:
         virtual void Init() = 0;
 

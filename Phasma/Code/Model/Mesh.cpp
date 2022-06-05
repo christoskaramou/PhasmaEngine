@@ -27,6 +27,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
+#include "Renderer/Queue.h"
 
 namespace pe
 {
@@ -135,13 +136,11 @@ namespace pe
 
             const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
 
-            RHII.WaitGraphicsQueue();
-            RHII.WaitAndLockSubmits();
-
             Buffer *staging = Buffer::Create(
                 imageSize,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+                "mesh_staging_buffer");
             staging->Map();
             staging->CopyData(pixels);
             staging->Flush();
@@ -157,6 +156,7 @@ namespace pe
             info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
             info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             info.initialState = LayoutState::Preinitialized;
+            info.name = image ? image->uri : path.filename().string();
             *tex = Image::Create(info);
 
             ImageViewCreateInfo viewInfo{};
@@ -169,9 +169,7 @@ namespace pe
             (*tex)->CopyBufferToImage(nullptr, staging);
             (*tex)->GenerateMipMaps();
 
-            staging->Destroy();
-
-            RHII.UnlockSubmits();
+            Buffer::Destroy(staging);
 
             Mesh::uniqueTextures[path.string()] = *tex;
         }

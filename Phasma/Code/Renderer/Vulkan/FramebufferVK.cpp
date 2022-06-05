@@ -27,18 +27,18 @@ SOFTWARE.
 
 namespace pe
 {
-    FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, ImageViewHandle view, RenderPass *renderPass)
-        : FrameBuffer(width, height, std::vector<ImageViewHandle>{view}, renderPass)
-    {
-    }
-
-    FrameBuffer::FrameBuffer(uint32_t width, uint32_t height, const std::vector<ImageViewHandle> &views, RenderPass *renderPass)
+    FrameBuffer::FrameBuffer(uint32_t width,
+                             uint32_t height,
+                             ImageViewHandle *views,
+                             uint32_t viewsCount,
+                             RenderPass *renderPass,
+                             const std::string &name)
     {
         this->width = width;
         this->height = height;
 
-        std::vector<VkImageView> _views(views.size());
-        for (int i = 0; i < views.size(); i++)
+        std::vector<VkImageView> _views(viewsCount);
+        for (uint32_t i = 0; i < viewsCount; i++)
             _views[i] = views[i];
 
         VkFramebufferCreateInfo fbci{};
@@ -51,8 +51,10 @@ namespace pe
         fbci.layers = 1;
 
         VkFramebuffer frameBuffer;
-        vkCreateFramebuffer(RHII.device, &fbci, nullptr, &frameBuffer);
+        PE_CHECK(vkCreateFramebuffer(RHII.device, &fbci, nullptr, &frameBuffer));
         m_handle = frameBuffer;
+
+        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_FRAMEBUFFER, name);
     }
 
     FrameBuffer::~FrameBuffer()

@@ -58,6 +58,7 @@ namespace pe
 
     FrameTimer::FrameTimer() : Timer()
     {
+        m_total = std::chrono::high_resolution_clock::now();
         m_delta = {};
         timestamps.resize(22);
     }
@@ -70,6 +71,13 @@ namespace pe
     double FrameTimer::GetDelta()
     {
         return m_delta.count();
+    }
+
+    
+    double FrameTimer::CountTotal()
+    {
+        const std::chrono::duration<double> t_duration = std::chrono::high_resolution_clock::now() - m_total;
+        return t_duration.count();
     }
 
     GPUTimer::GPUTimer()
@@ -90,8 +98,10 @@ namespace pe
         qpci.queryCount = 2;
 
         VkQueryPool pool;
-        vkCreateQueryPool(RHII.device, &qpci, nullptr, &pool);
+        PE_CHECK(vkCreateQueryPool(RHII.device, &qpci, nullptr, &pool));
         queryPool = pool;
+
+        Debug::SetObjectName(queryPool, VK_OBJECT_TYPE_QUERY_POOL, "GPUTimer_queryPool");
     }
 
     void GPUTimer::Reset()
@@ -114,9 +124,14 @@ namespace pe
 
     float GPUTimer::GetTime()
     {
-        VkResult res = vkGetQueryPoolResults(RHII.device, queryPool, 0, 2, 2 * sizeof(uint64_t), &queries, sizeof(uint64_t),
+        VkResult res = vkGetQueryPoolResults(RHII.device,
+                                             queryPool,
+                                             0,
+                                             2,
+                                             2 * sizeof(uint64_t),
+                                             &queries,
+                                             sizeof(uint64_t),
                                              VK_QUERY_RESULT_64_BIT);
-
         if (res != VK_SUCCESS)
             return 0.f;
 

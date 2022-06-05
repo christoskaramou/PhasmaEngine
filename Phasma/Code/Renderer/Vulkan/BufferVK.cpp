@@ -24,10 +24,11 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Command.h"
+#include "Renderer/Queue.h"
 
 namespace pe
 {
-    Buffer::Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags createFlags)
+    Buffer::Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags createFlags, const std::string &name)
         : size(size), data(nullptr)
     {
         VkBufferCreateInfo bufferInfo{};
@@ -43,16 +44,20 @@ namespace pe
         VkBuffer bufferVK;
         VmaAllocation allocationVK;
         VmaAllocationInfo allocationInfo;
-        vmaCreateBuffer(RHII.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocationVK, &allocationInfo);
+        PE_CHECK(vmaCreateBuffer(RHII.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocationVK, &allocationInfo));
         m_handle = bufferVK;
         allocation = allocationVK;
+
+        this->name = name;
+
+        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_BUFFER, name);
     }
 
     Buffer::~Buffer()
     {
         if (data)
             Unmap();
-            
+
         if (m_handle)
         {
             vmaDestroyBuffer(RHII.allocator, m_handle, allocation);
@@ -64,7 +69,7 @@ namespace pe
     {
         if (data)
             return;
-        vmaMapMemory(RHII.allocator, allocation, &data);
+        PE_CHECK(vmaMapMemory(RHII.allocator, allocation, &data));
     }
 
     void Buffer::Unmap()
@@ -97,12 +102,32 @@ namespace pe
         BufferCopy bufferCopy{};
         bufferCopy.size = srcSize > 0 ? srcSize : size;
 
-        CommandBuffer *copyCmd = CommandBuffer::Create(RHII.commandPool2, "copyCmd");
+        Queue* queue = Queue::GetNext(QueueType::TransferBit, 1);
+        CommandBuffer *copyCmd = CommandBuffer::GetNext(queue->GetFamilyId());
         copyCmd->Begin();
         copyCmd->CopyBuffer(srcBuffer, this, 1, &bufferCopy);
         copyCmd->End();
-        RHII.SubmitAndWaitFence(1, &copyCmd, nullptr, 0, nullptr, 0, nullptr);
-        copyCmd->Destroy();
+        queue->SubmitAndWaitFence(1, &copyCmd, nullptr, 0, nullptr, 0, nullptr);
+        CommandBuffer::Return(copyCmd);
+        Queue::Return(queue);
+    }
+
+    void Buffer::Copy(MemoryRange *ranges, uint32_t count, bool isPersistent)
+    {
+        // Map or check if the buffer is already mapped
+        Map();
+
+        for (uint32_t i = 0; i < count; i++)
+            CopyData(ranges[i].data, ranges[i].size, ranges[i].offset);
+
+        // Keep the buffer mapped if it is persistent
+        if (!isPersistent)
+        {
+            for (uint32_t i = 0; i < count; i++)
+                Flush(ranges[i].offset, ranges[i].size);
+
+            Unmap();
+        }
     }
 
     void Buffer::Flush(size_t offset, size_t flushSize) const
@@ -110,7 +135,7 @@ namespace pe
         if (!data)
             return;
 
-        vmaFlushAllocation(RHII.allocator, allocation, offset, flushSize > 0 ? flushSize : size);
+        PE_CHECK(vmaFlushAllocation(RHII.allocator, allocation, offset, flushSize > 0 ? flushSize : size));
     }
 
     size_t Buffer::Size()

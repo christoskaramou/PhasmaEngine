@@ -31,6 +31,7 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Renderer/RenderPass.h"
 #include "Renderer/FrameBuffer.h"
+#include "Renderer/Queue.h"
 #include "PostProcess/Bloom.h"
 #include "PostProcess/DOF.h"
 #include "PostProcess/FXAA.h"
@@ -49,9 +50,9 @@ namespace pe
     Renderer::~Renderer()
     {
         for (auto &rt : m_renderTargets)
-            rt.second->Destroy();
+            Image::Destroy(rt.second);
         for (auto &dt : m_depthTargets)
-            dt.second->Destroy();
+            Image::Destroy(dt.second);
         RHII.Destroy();
         RHII.Remove();
     }
@@ -71,7 +72,7 @@ namespace pe
         scissor.height = static_cast<int>(h);
     }
 
-    void Renderer::CheckQueue()
+    void Renderer::CheckModelsQueue()
     {
 #ifndef IGNORE_SCRIPTS
         for (auto it = Queue::addScript.begin(); it != Queue::addScript.end();)
@@ -116,7 +117,9 @@ namespace pe
         AlphaBlend = 3
     };
 
-    void Renderer::RecordDeferredCmds(uint32_t imageIndex)
+    std::vector<GPUTimer> gpuTimers{};
+    
+    void Renderer::RecordDeferredCmds(CommandBuffer *cmd, uint32_t imageIndex)
     {
         Deferred &deferred = *WORLD_ENTITY->GetComponent<Deferred>();
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
@@ -129,17 +132,23 @@ namespace pe
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
         SSGI &ssgi = *WORLD_ENTITY->GetComponent<SSGI>();
 
-        static GPUTimer gpuTimer[12]{};
+        if (gpuTimers.size() < 12)
+        {
+            size_t count = 12 - gpuTimers.size();
+            for (size_t i = 0; i < count; i++)
+                gpuTimers.push_back(GPUTimer());
+        }
 
         FrameTimer &frameTimer = FrameTimer::Instance();
 
-        CommandBuffer *cmd = RHII.dynamicCmdBuffers[imageIndex];
         cmd->Begin();
+        Debug::BeginCmdRegion(cmd->Handle(), "RecordDeferredCmds");
 
-        gpuTimer[0].Start(cmd);
+        gpuTimers[0].Start(cmd);
 
         // MODELS
-        gpuTimer[1].Start(cmd);
+        Debug::BeginCmdRegion(cmd->Handle(), "Geometry");
+        gpuTimers[1].Start(cmd);
         deferred.BeginPass(cmd, imageIndex);
         for (auto &model : Model::models)
             model.draw((uint16_t)RenderQueue::Opaque);
@@ -148,34 +157,35 @@ namespace pe
         for (auto &model : Model::models)
             model.draw((uint16_t)RenderQueue::AlphaBlend);
         deferred.EndPass(cmd);
-        frameTimer.timestamps[4] = gpuTimer[1].End();
+        frameTimer.timestamps[4] = gpuTimers[1].End();
+        Debug::EndCmdRegion(cmd->Handle());
 
         // SCREEN SPACE AMBIENT OCCLUSION
         if (GUI::show_ssao)
         {
-            gpuTimer[2].Start(cmd);
+            gpuTimers[2].Start(cmd);
             ssao.Draw(cmd, imageIndex);
-            frameTimer.timestamps[5] = gpuTimer[2].End();
+            frameTimer.timestamps[5] = gpuTimers[2].End();
         }
 
         // SCREEN SPACE REFLECTIONS
         if (GUI::show_ssr)
         {
-            gpuTimer[3].Start(cmd);
+            gpuTimers[3].Start(cmd);
             ssr.Draw(cmd, imageIndex);
-            frameTimer.timestamps[6] = gpuTimer[3].End();
+            frameTimer.timestamps[6] = gpuTimers[3].End();
         }
 
         // COMPOSITION
-        gpuTimer[4].Start(cmd);
+        gpuTimers[4].Start(cmd);
         deferred.Draw(cmd, imageIndex);
-        frameTimer.timestamps[7] = gpuTimer[4].End();
+        frameTimer.timestamps[7] = gpuTimers[4].End();
 
         if (GUI::use_SSGI)
         {
-            // gpuTimer[8].Start(cmd);
+            // gpuTimers[8].Start(cmd);
             ssgi.Draw(cmd, imageIndex);
-            // frameTimer.timestamps[10] = gpuTimer[8].End();
+            // frameTimer.timestamps[10] = gpuTimers[8].End();
         }
 
         if (GUI::use_AntiAliasing)
@@ -183,87 +193,94 @@ namespace pe
             // TAA
             if (GUI::use_TAA)
             {
-                gpuTimer[5].Start(cmd);
+                gpuTimers[5].Start(cmd);
                 taa.Draw(cmd, imageIndex);
-                frameTimer.timestamps[8] = gpuTimer[5].End();
+                frameTimer.timestamps[8] = gpuTimers[5].End();
             }
             // FXAA
             else if (GUI::use_FXAA)
             {
-                gpuTimer[6].Start(cmd);
+                gpuTimers[6].Start(cmd);
                 fxaa.Draw(cmd, imageIndex);
-                frameTimer.timestamps[8] = gpuTimer[6].End();
+                frameTimer.timestamps[8] = gpuTimers[6].End();
             }
         }
 
         // BLOOM
         if (GUI::show_Bloom)
         {
-            gpuTimer[7].Start(cmd);
+            gpuTimers[7].Start(cmd);
             bloom.Draw(cmd, imageIndex);
-            frameTimer.timestamps[9] = gpuTimer[7].End();
+            frameTimer.timestamps[9] = gpuTimers[7].End();
         }
 
         // Depth of Field
         if (GUI::use_DOF)
         {
-            gpuTimer[8].Start(cmd);
+            gpuTimers[8].Start(cmd);
             dof.Draw(cmd, imageIndex);
-            frameTimer.timestamps[10] = gpuTimer[8].End();
+            frameTimer.timestamps[10] = gpuTimers[8].End();
         }
 
         // MOTION BLUR
         if (GUI::show_motionBlur)
         {
-            gpuTimer[9].Start(cmd);
+            gpuTimers[9].Start(cmd);
             motionBlur.Draw(cmd, imageIndex);
-            frameTimer.timestamps[11] = gpuTimer[9].End();
+            frameTimer.timestamps[11] = gpuTimers[9].End();
         }
 
         BlitToViewport(cmd, GUI::s_currRenderImage ? GUI::s_currRenderImage : m_viewportRT, imageIndex);
 
         // GUI
-        gpuTimer[10].Start(cmd);
+        gpuTimers[10].Start(cmd);
         gui.Draw(cmd, imageIndex);
-        frameTimer.timestamps[12] = gpuTimer[10].End();
+        frameTimer.timestamps[12] = gpuTimers[10].End();
 
-        frameTimer.timestamps[2] = gpuTimer[0].End();
+        frameTimer.timestamps[2] = gpuTimers[0].End();
 
+        Debug::EndCmdRegion(cmd->Handle());
         cmd->End();
     }
 
-    void Renderer::RecordShadowsCmds(uint32_t imageIndex)
+    void Renderer::RecordShadowsCmds(CommandBuffer **cmds, uint32_t cmdCount, uint32_t imageIndex)
     {
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
 
-        static GPUTimer gpuTimer[SHADOWMAP_CASCADES]{};
-
-        for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
+        if (gpuTimers.size() < cmdCount)
         {
-            CommandBuffer &cmd = *RHII.shadowCmdBuffers[imageIndex][i];
+            size_t count = cmdCount - gpuTimers.size();
+            for (size_t i = 0; i < count; i++)
+                gpuTimers.push_back(GPUTimer());
+        }
+
+        for (uint32_t i = 0; i < cmdCount; i++)
+        {
+            CommandBuffer *cmd = cmds[i];
             FrameBuffer *frameBuffer = shadows.framebuffers[imageIndex][i];
 
-            cmd.Begin();
+            cmd->Begin();
+            Debug::BeginCmdRegion(cmd->Handle(), "Shadow_Cascade_" + std::to_string(i));
 
-            shadows.textures[i]->ChangeLayout(&cmd, LayoutState::DepthStencilAttachment);
+            shadows.textures[i]->ChangeLayout(cmd, LayoutState::DepthStencilAttachment);
 
             FrameTimer &frameTimer = FrameTimer::Instance();
-            gpuTimer[i].Start(&cmd);
+            gpuTimers[i].Start(cmd);
 
-            cmd.BeginPass(shadows.renderPass, frameBuffer);
-            cmd.SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
-            cmd.BindPipeline(shadows.pipeline);
+            cmd->BeginPass(shadows.renderPass, frameBuffer);
+            cmd->SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
+            cmd->BindPipeline(shadows.pipeline);
             for (auto &model : Model::models)
             {
                 if (model.render)
                 {
                     ShadowPushConstData data{};
 
-                    cmd.BindVertexBuffer(model.shadowsVertexBuffer, 0);
-                    cmd.BindIndexBuffer(model.indexBuffer, 0);
+                    cmd->BindVertexBuffer(model.shadowsVertexBuffer, 0);
+                    cmd->BindIndexBuffer(model.indexBuffer, 0);
 
                     std::vector<Descriptor *> dsetHandles{RHII.uniformBuffers[model.uniformBufferIndex].descriptor};
-                    cmd.BindDescriptors(shadows.pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
+                    cmd->BindDescriptors(shadows.pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
 
                     for (auto &node : model.linearNodes)
                     {
@@ -273,11 +290,11 @@ namespace pe
                             data.meshIndex = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
                             data.meshJointCount = static_cast<uint32_t>(node->mesh->meshData.jointMatrices.size());
 
-                            cmd.PushConstants(shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowPushConstData), &data);
+                            cmd->PushConstants(shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowPushConstData), &data);
                             for (auto &primitive : node->mesh->primitives)
                             {
                                 // if (primitive.render)
-                                cmd.DrawIndexed(
+                                cmd->DrawIndexed(
                                     primitive.indicesSize,
                                     1,
                                     node->mesh->indexOffset + primitive.indexOffset,
@@ -289,9 +306,10 @@ namespace pe
                 }
             }
 
-            cmd.EndPass();
-            frameTimer.timestamps[13 + static_cast<size_t>(i)] = gpuTimer[i].End();
-            cmd.End();
+            cmd->EndPass();
+            frameTimer.timestamps[13 + static_cast<size_t>(i)] = gpuTimers[i].End();
+            Debug::EndCmdRegion(cmd->Handle());
+            cmd->End();
         }
     }
 
@@ -304,7 +322,6 @@ namespace pe
         info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | additionalFlags;
         info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         info.name = name;
-
         Image *rt = Image::Create(info);
 
         ImageViewCreateInfo viewInfo{};
@@ -340,7 +357,6 @@ namespace pe
         info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         info.format = (Format)format;
         info.name = name;
-
         Image *depth = Image::Create(info);
 
         ImageViewCreateInfo viewInfo{};
@@ -395,6 +411,7 @@ namespace pe
         info.tiling = VK_IMAGE_TILING_OPTIMAL;
         info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        info.name = "FSSampledImage";
         Image *sampledImage = Image::Create(info);
 
         ImageViewCreateInfo viewInfo{};
@@ -494,7 +511,8 @@ namespace pe
 
     void Renderer::ResizeViewport(uint32_t width, uint32_t height)
     {
-        RHII.WaitGraphicsQueue();
+        if (s_currentQueue)
+            s_currentQueue->WaitIdle();
 
         renderArea.Update(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
 
@@ -502,11 +520,11 @@ namespace pe
         HEIGHT = height;
 
         for (auto &rt : m_renderTargets)
-            rt.second->Destroy();
-        m_depth->Destroy();
+            Image::Destroy(rt.second);
+        Image::Destroy(m_depth);
         GUI::s_renderImages.clear();
 
-        RHII.swapchain->Destroy();
+        Swapchain::Destroy(RHII.swapchain);
         RHII.CreateSwapchain(RHII.surface);
 
         m_viewportRT = CreateRenderTarget("viewport", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
@@ -536,6 +554,8 @@ namespace pe
 
     void Renderer::BlitToViewport(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex)
     {
+        Debug::BeginCmdRegion(cmd->Handle(), "BlitToViewport");
+
         Image *s_chain_Image = RHII.swapchain->images[imageIndex];
 
         renderedImage->ChangeLayout(cmd, LayoutState::TransferSrc);
@@ -560,11 +580,13 @@ namespace pe
 
         renderedImage->ChangeLayout(cmd, LayoutState::ColorAttachment);
         s_chain_Image->ChangeLayout(cmd, LayoutState::PresentSrc);
+
+        Debug::EndCmdRegion(cmd->Handle());
     }
 
     void Renderer::RecreatePipelines()
     {
-        RHII.WaitGraphicsQueue();
+        s_currentQueue->WaitIdle();
 
         Deferred &deferred = *WORLD_ENTITY->GetComponent<Deferred>();
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
@@ -576,17 +598,17 @@ namespace pe
         DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
-        shadows.pipeline->Destroy();
-        ssao.pipeline->Destroy();
-        ssao.pipelineBlur->Destroy();
-        ssr.pipeline->Destroy();
-        deferred.pipeline->Destroy();
-        deferred.pipelineComposition->Destroy();
-        fxaa.pipeline->Destroy();
-        taa.pipeline->Destroy();
-        taa.pipelineSharpen->Destroy();
-        dof.pipeline->Destroy();
-        motionBlur.pipeline->Destroy();
+        Pipeline::Destroy(shadows.pipeline);
+        Pipeline::Destroy(ssao.pipeline);
+        Pipeline::Destroy(ssao.pipelineBlur);
+        Pipeline::Destroy(ssr.pipeline);
+        Pipeline::Destroy(deferred.pipeline);
+        Pipeline::Destroy(deferred.pipelineComposition);
+        Pipeline::Destroy(fxaa.pipeline);
+        Pipeline::Destroy(taa.pipeline);
+        Pipeline::Destroy(taa.pipelineSharpen);
+        Pipeline::Destroy(dof.pipeline);
+        Pipeline::Destroy(motionBlur.pipeline);
 
         deferred.CreatePipeline();
         shadows.CreatePipeline();

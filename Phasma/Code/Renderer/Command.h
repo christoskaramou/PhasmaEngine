@@ -25,18 +25,14 @@ SOFTWARE.
 namespace pe
 {
     class RenderPass;
-
     class FrameBuffer;
-
     class Pipeline;
-
     class Compute;
-
     class Buffer;
-
     class Image;
-
     class Descriptor;
+    class Semaphore;
+    class Fence;
 
     enum class BarrierType
     {
@@ -78,15 +74,33 @@ namespace pe
     class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
     {
     public:
-        CommandPool(uint32_t familyId);
+        CommandPool(uint32_t familyId, const std::string &name = {});
 
         ~CommandPool();
+
+        static void Init(GpuHandle gpu);
+
+        static void Clear();
+
+        static CommandPool *GetNext(uint32_t familyId);
+
+        static void Return(CommandPool *commandPool);
+
+        uint32_t GetFamilyId() const { return m_familyId; }
+
+    private:
+        inline static std::mutex s_availableMutex;
+        inline static std::vector<std::unordered_set<CommandPool *>> s_availableCps{};
+        inline static std::unordered_set<CommandPool *> s_allCps{};
+
+    private:
+        uint32_t m_familyId;
     };
 
     class CommandBuffer : public IHandle<CommandBuffer, CommandBufferHandle>
     {
     public:
-        CommandBuffer(CommandPool *commandPool, const std::string &name = {});
+        CommandBuffer(uint32_t familyId, const std::string &name = {});
 
         ~CommandBuffer();
 
@@ -131,9 +145,38 @@ namespace pe
         void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset,
                          uint32_t firstInstance);
 
-        void Submit();
+        void Submit(Queue *queue,
+                    PipelineStageFlags *waitStages,
+                    uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
+                    uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
+                    Fence *fence);
+
+        static void Init(GpuHandle gpu, uint32_t countPerFamily = 0);
+
+        static void Clear();
+
+        static CommandBuffer *GetNext(uint32_t familyId);
+
+        static void Return(CommandBuffer *cmd);
+
+        uint32_t GetFamilyId() const { return m_familyId; }
+
+        Fence *GetFence() const { return m_fence; }
+
+        std::string name;
 
     private:
+        static void CheckFutures();
+
+        inline static std::vector<std::unordered_map<CommandBuffer *, CommandBuffer *>> s_availableCmds{};
+        inline static std::vector<std::map<CommandBuffer *, CommandBuffer *>> s_allCmds{};
+        inline static std::unordered_map<CommandBuffer *, std::future<CommandBuffer *>> s_queueWaits;
+        inline static std::atomic_bool s_availableCmdsReady{false};
+
+        friend class Queue;
+
         CommandPool *m_commandPool;
+        uint32_t m_familyId;
+        Fence *m_fence;
     };
 }

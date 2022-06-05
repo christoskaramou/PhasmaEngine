@@ -26,14 +26,16 @@ SOFTWARE.
 
 namespace pe
 {
-    Semaphore::Semaphore()
+    Semaphore::Semaphore(const std::string &name)
     {
         VkSemaphoreCreateInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
         VkSemaphore semaphore;
-        vkCreateSemaphore(RHII.device, &si, nullptr, &semaphore);
+        PE_CHECK(vkCreateSemaphore(RHII.device, &si, nullptr, &semaphore));
         m_handle = semaphore;
+
+        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_SEMAPHORE, name);
     }
 
     Semaphore::~Semaphore()

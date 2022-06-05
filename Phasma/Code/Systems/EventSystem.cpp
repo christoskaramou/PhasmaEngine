@@ -37,7 +37,7 @@ namespace pe
         ClearEvents();
     }
 
-    void EventSystem::DispatchEvent(EventType type, std::any&& data)
+    void EventSystem::DispatchEvent(EventType type, std::any &&data)
     {
         if (m_events.find(type) != m_events.end())
             m_events[type].Invoke(std::forward<std::any>(data));

@@ -34,7 +34,7 @@ namespace pe
         static std::vector<DescriptorBinding> bindings{
             DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
         };
-        static DescriptorLayout *descriptorSetLayout = DescriptorLayout::Create(bindings);
+        static DescriptorLayout *descriptorSetLayout = DescriptorLayout::Create(bindings, "Light_DSLayout");
 
         return descriptorSetLayout;
     }
@@ -55,13 +55,14 @@ namespace pe
         uniform = Buffer::Create(
             sizeof(LightsUBO),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "lights_uniform_buffer");
         uniform->Map();
         uniform->Zero();
         uniform->Flush();
         uniform->Unmap();
 
-        descriptorSet = Descriptor::Create(GetDescriptorSetLayout());
+        descriptorSet = Descriptor::Create(GetDescriptorSetLayout(), 1, "Lights_descriptor");
 
         DescriptorUpdateInfo info{};
         info.binding = 0;
@@ -82,40 +83,49 @@ namespace pe
             spot.start = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
             spot.end = spot.start + normalize(vec4(rand(-1.f, 1.f), rand(-1.f, 1.f), rand(-1.f, 1.f), 0.f));
         }
-        uniform->CopyRequest<Launch::Sync>({&lubo, sizeof(LightsUBO), 0}, false);
+
+        MemoryRange range{};
+        range.data = &lubo;
+        range.size = sizeof(LightsUBO);
+        range.offset = 0;
+        uniform->Copy(&range, 1, false);
     }
 
     void LightSystem::Update(double delta)
     {
-        std::vector<MemoryRange> ranges{};
+        MemoryRange ranges[2]{};
+        uint32_t count = 1;
 
         Camera &camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
         lubo.camPos = {camera.position, 1.0f};
         lubo.sun.color = {.9765f, .8431f, .9098f, GUI::sun_intensity};
         lubo.sun.direction = {GUI::sun_direction[0], GUI::sun_direction[1], GUI::sun_direction[2], 1.f};
 
-        ranges.emplace_back(&lubo, 3 * sizeof(vec4), 0);
+        ranges[0].data = &lubo;
+        ranges[0].size = 3 * sizeof(vec4);
+        ranges[0].offset = 0;
 
         if (GUI::randomize_lights)
         {
             for (int i = 0; i < MAX_POINT_LIGHTS; i++)
             {
-                PointLight &point = lubo.pointLights[i];
-                point.color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f);
-                point.position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
+                lubo.pointLights[i].color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f);
+                lubo.pointLights[i].position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
             }
             GUI::randomize_lights = false;
 
-            ranges.emplace_back(lubo.pointLights, sizeof(PointLight) * MAX_POINT_LIGHTS,
-                                offsetof(LightsUBO, pointLights));
+            ranges[1].data = lubo.pointLights;
+            ranges[1].size = sizeof(PointLight) * MAX_POINT_LIGHTS;
+            ranges[1].offset = offsetof(LightsUBO, pointLights);
+            count++;
         }
 
-        uniform->CopyRequest<Launch::AsyncDeferred>(ranges, false);
+        uniform->Copy(ranges, count, false);
     }
 
     void LightSystem::Destroy()
     {
-        uniform->Destroy();
-        GetDescriptorSetLayout()->Destroy();
+        Buffer::Destroy(uniform);
+        DescriptorLayout::Destroy(GetDescriptorSetLayout());
     }
 }

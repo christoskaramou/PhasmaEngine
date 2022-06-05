@@ -27,17 +27,11 @@ namespace pe
     constexpr uint32_t AUTO = UINT32_MAX;
 
     class Descriptor;
-
     class CommandPool;
-
     class CommandBuffer;
-
     class Fence;
-
     class Semaphore;
-
     class Buffer;
-
     class Pipeline;
 
     class Compute
@@ -57,8 +51,7 @@ namespace pe
 
         void updateInput(const void *srcData, size_t srcSize = 0, size_t offset = 0);
 
-        void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ, uint32_t count = 0,
-                      Semaphore **waitForHandles = nullptr);
+        void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ, uint32_t waitSemaphoresCount = 0, Semaphore **waitSemaphores = nullptr);
 
         void waitFence();
 
@@ -77,7 +70,7 @@ namespace pe
         void createPipeline(const std::string &shaderName);
 
     private:
-        static CommandPool *s_commandPool;
+        inline static Queue *s_queue = nullptr;
         Buffer *SBIn;
         Buffer *SBOut;
         Pipeline *pipeline;

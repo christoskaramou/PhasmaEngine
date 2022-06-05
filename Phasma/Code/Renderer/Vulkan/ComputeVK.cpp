@@ -30,13 +30,10 @@ SOFTWARE.
 #include "Renderer/Semaphore.h"
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
-#include "Renderer/Pipeline.h"
-#include "Renderer/Debug.h"
+#include "Renderer/Queue.h"
 
 namespace pe
 {
-    CommandPool *Compute::s_commandPool = nullptr;
-
     Compute::Compute()
     {
         fence = {};
@@ -54,34 +51,31 @@ namespace pe
         SBIn->Unmap();
     }
 
-    void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, uint32_t count, Semaphore **waitForHandles)
+    void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, uint32_t waitSemaphoresCount, Semaphore **waitSemaphores)
     {
+        Debug::BeginQueueRegion(s_queue, "Compute::dispatch queue");
         commandBuffer->Begin();
+        Debug::BeginCmdRegion(commandBuffer->Handle(), "Compute::dispatch command");
         commandBuffer->BindComputePipeline(pipeline);
         commandBuffer->BindComputeDescriptors(pipeline, 1, &DSCompute);
         commandBuffer->Dispatch(sizeX, sizeY, sizeZ);
+        Debug::EndCmdRegion(commandBuffer->Handle());
         commandBuffer->End();
 
-        std::vector<VkSemaphore> waitSemaphores(count);
-        for (size_t i = 0; i < count; i++)
-            waitSemaphores[i] = waitForHandles[i]->Handle();
+        static PipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT};
+        s_queue->Submit(1, &commandBuffer,
+                                  waitStages,
+                                  waitSemaphoresCount, waitSemaphores,
+                                  0, nullptr,
+                                  fence);
 
-        VkCommandBuffer cmdBuffer = commandBuffer->Handle();
-        VkSemaphore vksemaphore = semaphore->Handle();
-        VkSubmitInfo siCompute{};
-        siCompute.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        siCompute.commandBufferCount = 1;
-        siCompute.pCommandBuffers = &cmdBuffer;
-        siCompute.waitSemaphoreCount = (uint32_t)waitSemaphores.size();
-        siCompute.pWaitSemaphores = waitSemaphores.data();
-        siCompute.pSignalSemaphores = &vksemaphore;
-
-        vkQueueSubmit(RHII.computeQueue, 1, &siCompute, fence->Handle());
+        Debug::EndQueueRegion(s_queue);
     }
 
     void Compute::waitFence()
     {
-        RHII.WaitFence(fence);
+        fence->Wait();
+        fence->Reset();
     }
 
     void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
@@ -89,7 +83,8 @@ namespace pe
         SBIn = Buffer::Create(
             sizeIn,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "Compute_Input_storage_buffer");
         SBIn->Map();
         SBIn->Zero();
         SBIn->Flush();
@@ -98,7 +93,8 @@ namespace pe
         SBOut = Buffer::Create(
             sizeOut,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "Compute_Output_storage_buffer");
         SBOut->Map();
         SBOut->Zero();
         SBOut->Flush();
@@ -107,7 +103,7 @@ namespace pe
 
     void Compute::createDescriptorSet()
     {
-        DSCompute = Descriptor::Create(Pipeline::getDescriptorSetLayoutCompute());
+        DSCompute = Descriptor::Create(Pipeline::getDescriptorSetLayoutCompute(), 1, "Compute_descriptor");
     }
 
     void Compute::updateDescriptorSet()
@@ -128,24 +124,28 @@ namespace pe
     void Compute::createPipeline(const std::string &shaderName)
     {
         if (pipeline)
-            pipeline->Destroy();
+            Pipeline::Destroy(pipeline);
 
         PipelineCreateInfo info{};
         info.pCompShader = Shader::Create(ShaderInfo{shaderName, ShaderType::Compute});
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutCompute()};
+        info.name = "Compute_pipeline";
 
         pipeline = Pipeline::Create(info);
-        
-        info.pCompShader->Destroy();
+
+        Shader::Destroy(info.pCompShader);
     }
 
     void Compute::destroy()
     {
-        SBIn->Destroy();
-        SBOut->Destroy();
-        pipeline->Destroy();
-        semaphore->Destroy();
-        fence->Destroy();
+        CommandBuffer::Return(commandBuffer);
+
+        Buffer::Destroy(SBIn);
+        Buffer::Destroy(SBOut);
+
+        Pipeline::Destroy(pipeline);
+        Semaphore::Destroy(semaphore);
+        Fence::Destroy(fence);
     }
 
     Compute Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, const std::string &name)
@@ -153,13 +153,13 @@ namespace pe
         CreateResources();
 
         Compute compute;
-        compute.commandBuffer = CommandBuffer::Create(s_commandPool, name);
+        compute.commandBuffer = CommandBuffer::GetNext(s_queue->GetFamilyId());
         compute.createPipeline(shaderName);
         compute.createDescriptorSet();
         compute.createComputeStorageBuffers(sizeIn, sizeOut);
         compute.updateDescriptorSet();
-        compute.fence = Fence::Create(true);
-        compute.semaphore = Semaphore::Create();
+        compute.fence = Fence::GetNext();
+        compute.semaphore = Semaphore::Create(name + "_semaphore");
 
         return compute;
     }
@@ -174,13 +174,13 @@ namespace pe
         for (uint32_t i = 0; i < count; i++)
         {
             Compute compute;
-            compute.commandBuffer = CommandBuffer::Create(s_commandPool, name + std::to_string(i));
+            compute.commandBuffer = CommandBuffer::GetNext(s_queue->GetFamilyId());
             compute.createPipeline(shaderName);
             compute.createDescriptorSet();
             compute.createComputeStorageBuffers(sizeIn, sizeOut);
             compute.updateDescriptorSet();
-            compute.fence = Fence::Create(true);
-            compute.semaphore = Semaphore::Create();
+            compute.fence = Fence::GetNext();
+            compute.semaphore = Semaphore::Create(name + "_semaphore_" + std::to_string(i));
 
             computes.push_back(compute);
         }
@@ -190,14 +190,13 @@ namespace pe
 
     void Compute::CreateResources()
     {
-        if (!s_commandPool)
-            s_commandPool = CommandPool::Create(RHII.computeFamilyId);
+        if (!s_queue)
+            s_queue = Queue::GetNext(QueueType::ComputeBit, 1);
     }
 
     void Compute::DestroyResources()
     {
-        s_commandPool->Destroy();
-        Pipeline::getDescriptorSetLayoutCompute()->Destroy();
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutCompute());
     }
 }
 #endif

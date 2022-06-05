@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#define UNIFIED_GRAPHICS_AND_TRANSFER_QUEUE
-
 // RHI Instance
 #define RHII (*RHI::Get())
 #define WIDTH RHII.surface->actualExtent.width
@@ -44,6 +42,7 @@ namespace pe
     class Image;
     class Surface;
     class Buffer;
+    class Queue;
 
     class RHI : public NoCopy, public NoMove
     {
@@ -52,6 +51,8 @@ namespace pe
 
     public:
         ~RHI();
+
+        void Init(SDL_Window *window);
 
         void CreateInstance(SDL_Window *window);
 
@@ -77,12 +78,6 @@ namespace pe
 
         void CreateAllocator();
 
-        void GetGraphicsQueue();
-
-        void GetTransferQueue();
-
-        void GetComputeQueue();
-
         void GetQueues();
 
         void CreateSwapchain(Surface *surface);
@@ -93,15 +88,11 @@ namespace pe
 
         void CreateGlobalDescriptors();
 
-        void CreateCmdBuffers(uint32_t bufferCount = 1);
-
-        void CreateFences(uint32_t fenceCount);
+        void CreateCmdBuffers(uint32_t bufferCount = 0);
 
         void CreateSemaphores(uint32_t semaphoresCount);
 
         Format GetDepthFormat();
-
-        void Init(SDL_Window *window);
 
         void Destroy();
 
@@ -109,27 +100,18 @@ namespace pe
         GpuHandle gpu;
         std::string gpuName;
         DeviceHandle device;
-        QueueHandle graphicsQueue, computeQueue, transferQueue;
-        CommandPool *commandPool;
-        CommandPool *commandPool2;
-        CommandPool *commandPoolTransfer;
         DescriptorPool *descriptorPool;
         DescriptorLayout *globalDescriptorLayout;
         Descriptor *globalDescriptor;
-        // Descriptor *descriptorUniformBuffers;
-        // Descriptor *descriptorStorageBuffers;
-        // Descriptor *descriptorStorageTexelBuffers;
-        // Descriptor *descriptorCombinedImageSamplers;
-        std::vector<CommandBuffer *> dynamicCmdBuffers;
-        std::vector<std::array<CommandBuffer *, SHADOWMAP_CASCADES>> shadowCmdBuffers;
-        std::vector<Fence *> fences;
         std::vector<Semaphore *> semaphores;
         AllocatorHandle allocator;
+
+        Queue *generalQueue;
+        CommandBuffer *generalCmd;
 
         SDL_Window *window;
         Surface *surface;
         Swapchain *swapchain;
-        int graphicsFamilyId, computeFamilyId, transferFamilyId;
 
         class UniformBuffer
         {
@@ -150,42 +132,8 @@ namespace pe
         };
         std::deque<UniformImages> uniformImages;
 
-        // Helpers
-        void Submit(
-            uint32_t commandBufferCount, CommandBuffer **commandBuffer,
-            PipelineStageFlags *waitStage,
-            uint32_t waitSemaphoreCount, Semaphore **waitSemaphore,
-            uint32_t signalSemaphoreCount, Semaphore **signalSemaphore,
-            Fence *signalFence,
-            bool useGraphicsQueue = true);
-
-        void WaitFence(Fence *fence);
-
-        void SubmitAndWaitFence(
-            uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
-            PipelineStageFlags *waitStages,
-            uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-            uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
-            bool useGraphicsQueue = true);
-
-        void Present(
-            uint32_t swapchainCount, Swapchain **swapchains,
-            uint32_t *imageIndices,
-            uint32_t semaphorescount, Semaphore **semaphores);
-
-    private:
-        static inline std::mutex m_submit_mutex{};
-
     public:
-        void WaitAndLockSubmits();
-
         void WaitDeviceIdle();
-
-        void WaitGraphicsQueue();
-
-        void WaitTransferQueue();
-
-        void UnlockSubmits();
 
         static RHI *Get()
         {

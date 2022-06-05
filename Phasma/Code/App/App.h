@@ -34,7 +34,7 @@ namespace pe
         App();
 
         ~App();
-        
+
         void Run();
 
     private:

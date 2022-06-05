@@ -35,7 +35,7 @@ namespace pe
     };
 
     template <Launch launch>
-    class Queue
+    class SyncQueue
     {
     public:
         using Func = std::function<void()>;
@@ -79,10 +79,10 @@ namespace pe
         {
             if constexpr (launch == Launch::All)
             {
-                Queue<Launch::AsyncNoWait>::ExecuteRequests();
-                Queue<Launch::Async>::ExecuteRequests();
-                Queue<Launch::SyncDeferred>::ExecuteRequests();
-                Queue<Launch::AsyncDeferred>::ExecuteRequests();
+                SyncQueue<Launch::AsyncNoWait>::ExecuteRequests();
+                SyncQueue<Launch::Async>::ExecuteRequests();
+                SyncQueue<Launch::SyncDeferred>::ExecuteRequests();
+                SyncQueue<Launch::AsyncDeferred>::ExecuteRequests();
             }
             else if constexpr (launch == Launch::Async)
             {
@@ -123,7 +123,7 @@ namespace pe
         inline static void AsyncDeferred()
         {
             std::vector<std::future<void>> futures(s_funcs.size());
-            for(int i = 0; i < static_cast<int>(s_funcs.size()); i++)
+            for (int i = 0; i < static_cast<int>(s_funcs.size()); i++)
                 futures[i] = std::async(std::launch::async, s_funcs[i]);
 
             for (int i = static_cast<int>(futures.size()) - 1; i >= 0; i--)

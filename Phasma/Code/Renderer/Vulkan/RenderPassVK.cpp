@@ -47,18 +47,20 @@ namespace pe
                format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
-    RenderPass::RenderPass(const std::vector<Attachment> &attachments)
+    RenderPass::RenderPass(Attachment *attachments, uint32_t count, const std::string &name)
     {
-        this->attachments = attachments;
+        this->attachments = std::vector<Attachment>(count);
+
         std::vector<VkAttachmentDescription> _attachments{};
         std::vector<VkAttachmentReference> colorReferences{};
         VkAttachmentReference depthReference{};
 
         bool hasDepth = false;
-        uint32_t size = static_cast<uint32_t>(attachments.size());
         uint32_t attachmentIndex = 0;
-        for (const Attachment &attachment : attachments)
+        for (uint32_t i = 0; i < count; i++)
         {
+            this->attachments[i] = attachments[i];
+            Attachment &attachment = attachments[i];
             VkAttachmentDescription attachmentDescription{};
 
             attachmentDescription.format = (VkFormat)attachment.format;
@@ -98,12 +100,10 @@ namespace pe
         renderPassInfo.pSubpasses = &subpassDescription;
 
         VkRenderPass renderPass;
-        vkCreateRenderPass(RHII.device, &renderPassInfo, nullptr, &renderPass);
+        PE_CHECK(vkCreateRenderPass(RHII.device, &renderPassInfo, nullptr, &renderPass));
         m_handle = renderPass;
-    }
 
-    RenderPass::RenderPass(const Attachment &attachment) : RenderPass(std::vector<Attachment>{attachment})
-    {
+        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_RENDER_PASS, name);
     }
 
     RenderPass::~RenderPass()

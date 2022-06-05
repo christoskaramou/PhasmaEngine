@@ -64,10 +64,10 @@ namespace pe
     {
         Attachment attachment{};
         attachment.format = taaRT->imageInfo.format;
-        renderPass = RenderPass::Create(attachment);
+        renderPass = RenderPass::Create(&attachment, 1, "taa_renderPass");
 
         attachment.format = viewportRT->imageInfo.format;
-        renderPassSharpen = RenderPass::Create(attachment);
+        renderPassSharpen = RenderPass::Create(&attachment, 1, "taa_sharpen_renderPass");
     }
 
     void TAA::CreateFrameBuffers()
@@ -78,7 +78,7 @@ namespace pe
             uint32_t width = taaRT->imageInfo.width;
             uint32_t height = taaRT->imageInfo.height;
             ImageViewHandle view = taaRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
+            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "taa_frameBuffer_" + std::to_string(i));
         }
 
         framebuffersSharpen.resize(RHII.swapchain->images.size());
@@ -87,7 +87,7 @@ namespace pe
             uint32_t width = viewportRT->imageInfo.width;
             uint32_t height = viewportRT->imageInfo.height;
             ImageViewHandle view = viewportRT->view;
-            framebuffersSharpen[i] = FrameBuffer::Create(width, height, view, renderPassSharpen);
+            framebuffersSharpen[i] = FrameBuffer::Create(width, height, &view, 1, renderPassSharpen, "taaSharpen_frameBuffer_" + std::to_string(i));
         }
     }
 
@@ -108,11 +108,12 @@ namespace pe
         info.colorBlendAttachments = {taaRT->blendAttachment};
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutTAA()};
         info.renderPass = renderPass;
+        info.name = "taa_pipeline";
 
         pipeline = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void TAA::CreatePipelineSharpen()
@@ -126,11 +127,12 @@ namespace pe
         info.colorBlendAttachments = {viewportRT->blendAttachment};
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutTAASharpen()};
         info.renderPass = renderPassSharpen;
+        info.name = "taaSharpen_pipeline";
 
         pipelineSharpen = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void TAA::SaveImage(CommandBuffer *cmd, Image *source)
@@ -139,7 +141,7 @@ namespace pe
         source->ChangeLayout(cmd, LayoutState::TransferSrc);
 
         // Copy the image
-        
+
         VkImageCopy region{};
         region.srcSubresource.aspectMask = source->viewInfo.aspectMask;
         region.srcSubresource.layerCount = 1;
@@ -156,7 +158,7 @@ namespace pe
             previous->Handle(),
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &region);
-        
+
         previous->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
         source->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
     }
@@ -166,14 +168,15 @@ namespace pe
         uniform = Buffer::Create(
             sizeof(UBO),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "TAA_uniform_buffer");
         uniform->Map();
         uniform->Zero();
         uniform->Flush();
         uniform->Unmap();
 
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAA());
-        DSetSharpen = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAASharpen());
+        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAA(), 1, "TAA_descriptor");
+        DSetSharpen = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAASharpen(), 1, "TAA_sharpen_descriptor");
 
         UpdateDescriptorSets();
     }
@@ -221,12 +224,17 @@ namespace pe
                 sin(static_cast<float>(ImGui::GetTime()) * 0.125f)};
             ubo.invProj = camera->invProjection;
 
-            uniform->CopyRequest<Launch::AsyncDeferred>({&ubo, sizeof(ubo), 0}, false);
+            MemoryRange range{};
+            range.data = &ubo;
+            range.size = sizeof(ubo);
+            range.offset = 0;
+            uniform->Copy(&range, 1, false);
         }
     }
 
     void TAA::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
+        Debug::BeginCmdRegion(cmd->Handle(), "TAA");
         // Copy viewport image
         frameImage->CopyColorAttachment(cmd, viewportRT);
 
@@ -244,7 +252,9 @@ namespace pe
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+        Debug::EndCmdRegion(cmd->Handle());
 
+        Debug::BeginCmdRegion(cmd->Handle(), "TAA Sharpen");
         // Copy viewport image to store for the next pass
         previous->CopyColorAttachment(cmd, taaRT);
 
@@ -259,24 +269,24 @@ namespace pe
         cmd->BindDescriptors(pipelineSharpen, 1, &DSetSharpen);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
+        Debug::EndCmdRegion(cmd->Handle());
     }
 
     void TAA::Resize(uint32_t width, uint32_t height)
     {
         for (auto &framebuffer : framebuffers)
-            framebuffer->Destroy();
+            FrameBuffer::Destroy(framebuffer);
         for (auto &framebuffer : framebuffersSharpen)
-            framebuffer->Destroy();
+            FrameBuffer::Destroy(framebuffer);
 
-        renderPass->Destroy();
-        renderPassSharpen->Destroy();
-        
-        pipeline->Destroy();
-        pipelineSharpen->Destroy();
+        RenderPass::Destroy(renderPass);
+        RenderPass::Destroy(renderPassSharpen);
 
-        previous->Destroy();
-        frameImage->Destroy();
-        taaRT->Destroy();
+        Pipeline::Destroy(pipeline);
+        Pipeline::Destroy(pipelineSharpen);
+
+        Image::Destroy(previous);
+        Image::Destroy(frameImage);
 
         Init();
         CreateRenderPass();
@@ -287,22 +297,23 @@ namespace pe
 
     void TAA::Destroy()
     {
-        Pipeline::getDescriptorSetLayoutTAA()->Destroy();
-        Pipeline::getDescriptorSetLayoutTAASharpen()->Destroy();
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutTAA());
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutTAASharpen());
 
         for (auto framebuffer : framebuffers)
-            framebuffer->Destroy();
+            FrameBuffer::Destroy(framebuffer);
         for (auto framebuffer : framebuffersSharpen)
-            framebuffer->Destroy();
+            FrameBuffer::Destroy(framebuffer);
 
-        renderPass->Destroy();
-        renderPassSharpen->Destroy();
+        RenderPass::Destroy(renderPass);
+        RenderPass::Destroy(renderPassSharpen);
 
-        pipeline->Destroy();
-        pipelineSharpen->Destroy();
-  
-        uniform->Destroy();
-        previous->Destroy();
-        frameImage->Destroy();
+        Pipeline::Destroy(pipeline);
+        Pipeline::Destroy(pipelineSharpen);
+
+        Buffer::Destroy(uniform);
+
+        Image::Destroy(previous);
+        Image::Destroy(frameImage);
     }
 }

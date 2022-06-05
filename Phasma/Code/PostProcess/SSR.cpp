@@ -63,7 +63,7 @@ namespace pe
     {
         Attachment attachment{};
         attachment.format = ssrRT->imageInfo.format;
-        renderPass = RenderPass::Create(attachment);
+        renderPass = RenderPass::Create(&attachment, 1, "ssr_renderpass");
     }
 
     void SSR::CreateFrameBuffers()
@@ -74,7 +74,7 @@ namespace pe
             uint32_t width = ssrRT->imageInfo.width;
             uint32_t height = ssrRT->imageInfo.height;
             ImageViewHandle view = ssrRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, view, renderPass);
+            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "ssr_frameBuffer_" + std::to_string(i));
         }
     }
 
@@ -89,11 +89,12 @@ namespace pe
         info.colorBlendAttachments = {ssrRT->blendAttachment};
         info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutSSR()};
         info.renderPass = renderPass;
+        info.name = "ssr_pipeline";
 
         pipeline = Pipeline::Create(info);
 
-        info.pVertShader->Destroy();
-        info.pFragShader->Destroy();
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
     }
 
     void SSR::CreateUniforms()
@@ -101,13 +102,14 @@ namespace pe
         UBReflection = Buffer::Create(
             4 * sizeof(mat4),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            "SSR_UB_Reflection_buffer");
         UBReflection->Map();
         UBReflection->Zero();
         UBReflection->Flush();
         UBReflection->Unmap();
 
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSSR());
+        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSSR(), 1, "SSR_descriptor");
 
         UpdateDescriptorSets();
     }
@@ -134,7 +136,7 @@ namespace pe
 
         DSet->UpdateDescriptor(5, infos.data());
     }
-    
+
     void SSR::Update(Camera *camera)
     {
         if (GUI::show_ssr)
@@ -147,12 +149,18 @@ namespace pe
             reflectionInput[2] = camera->view;
             reflectionInput[3] = camera->invProjection;
 
-            UBReflection->CopyRequest<Launch::AsyncDeferred>({&reflectionInput, sizeof(reflectionInput), 0}, false);
+            MemoryRange range{};
+            range.data = &reflectionInput;
+            range.size = sizeof(reflectionInput);
+            range.offset = 0;
+            UBReflection->Copy(&range, 1, false);
         }
     }
 
     void SSR::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
+        Debug::BeginCmdRegion(cmd->Handle(), "SSR");
+
         // SCREEN SPACE REFLECTION
         // Input
         albedoRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
@@ -169,14 +177,16 @@ namespace pe
         cmd->EndPass();
 
         ssrRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+
+        Debug::EndCmdRegion(cmd->Handle());
     }
 
     void SSR::Resize(uint32_t width, uint32_t height)
     {
         for (auto *frameBuffer : framebuffers)
-            frameBuffer->Destroy();
-        renderPass->Destroy();
-        pipeline->Destroy();
+            FrameBuffer::Destroy(frameBuffer);
+        RenderPass::Destroy(renderPass);
+        Pipeline::Destroy(pipeline);
 
         Init();
         CreateRenderPass();
@@ -187,13 +197,13 @@ namespace pe
 
     void SSR::Destroy()
     {
-        Pipeline::getDescriptorSetLayoutSSR()->Destroy();
+        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutSSR());
 
         for (auto framebuffer : framebuffers)
-            framebuffer->Destroy();
+            FrameBuffer::Destroy(framebuffer);
 
-        renderPass->Destroy();
-        pipeline->Destroy();
-        UBReflection->Destroy();
+        RenderPass::Destroy(renderPass);
+        Pipeline::Destroy(pipeline);
+        Buffer::Destroy(UBReflection);
     }
 }
