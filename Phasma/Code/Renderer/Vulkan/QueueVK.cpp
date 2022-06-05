@@ -205,7 +205,7 @@ namespace pe
     Queue *Queue::GetNext(uint32_t queueTypeFlags, int minImageGranularity)
     {
         s_availableQueuesReady = false;
-        
+
         CheckFutures();
 
         for (auto &queuePair : s_availableQueues)
@@ -239,8 +239,6 @@ namespace pe
 
         auto func = [queue]()
         {
-            Timer timer;
-            timer.Start();
             queue->WaitIdle();
 
             while (!s_availableQueuesReady)
