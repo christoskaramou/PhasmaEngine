@@ -166,7 +166,7 @@ namespace pe
             previousFences[imageIndex]->Reset();
             Fence::Return(previousFences[imageIndex]);
         }
-        
+
         FrameTimer::Instance().timestamps[1] = timer.Count();
 
         if (GUI::shadow_cast)
@@ -174,7 +174,7 @@ namespace pe
             CommandBuffer *shadowCmds[SHADOWMAP_CASCADES];
             for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
                 shadowCmds[i] = CommandBuffer::GetNext(queue->GetFamilyId());
-            
+
             // record the shadow command buffers
             Debug::BeginQueueRegion(queue, "RecordDeferredCmds");
             RecordShadowsCmds(shadowCmds, SHADOWMAP_CASCADES, imageIndex);
@@ -183,14 +183,14 @@ namespace pe
             // submit the shadow command buffers
             auto &shadowWaitSemaphore = aquireSignalSemaphore;
             auto &shadowSignalSemaphore = RHII.semaphores[imageIndex * 3 + 1];
-            
+
             queue->Submit(
                 SHADOWMAP_CASCADES, shadowCmds,
                 &waitStages[0],
                 1, &shadowWaitSemaphore,
                 1, &shadowSignalSemaphore,
                 nullptr);
-                
+
             for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
                 CommandBuffer::Return(shadowCmds[i]);
 
@@ -252,5 +252,10 @@ namespace pe
         skyBoxDay.destroy();
         skyBoxNight.destroy();
         gui.Destroy();
+
+        for (auto &rt : m_renderTargets)
+            Image::Destroy(rt.second);
+        for (auto &dt : m_depthTargets)
+            Image::Destroy(dt.second);
     }
 }

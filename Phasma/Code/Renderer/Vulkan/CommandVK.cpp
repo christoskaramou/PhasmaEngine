@@ -67,15 +67,19 @@ namespace pe
 
         // CommandPools are creating CommandBuffers from a specific family id, this will have to
         // match with the Queue created from a falily id that this CommandBuffer will be submited to.
-        s_availableCps = std::vector<std::unordered_set<CommandPool *>>(queueFamPropCount);
+        s_allCps = std::vector<std::unordered_map<CommandPool *, CommandPool *>>(queueFamPropCount);
+        s_availableCps = std::vector<std::unordered_map<CommandPool *, CommandPool *>>(queueFamPropCount);
         for (uint32_t i = 0; i < queueFamPropCount; i++)
-            s_availableCps[i] = std::unordered_set<CommandPool *>{};
+            s_availableCps[i] = std::unordered_map<CommandPool *, CommandPool *>{};
     }
 
     void CommandPool::Clear()
     {
-        for (auto &cp : s_allCps)
-            CommandPool::Destroy(cp);
+        for (auto &cps : s_allCps)
+        {
+            for (auto &cp : cps)
+                CommandPool::Destroy(cp.second);
+        }
 
         s_allCps.clear();
         s_availableCps.clear();
@@ -83,29 +87,24 @@ namespace pe
 
     CommandPool *CommandPool::GetNext(uint32_t familyId)
     {
-        std::lock_guard<std::mutex> lock(s_availableMutex);
-
-        auto &cps = s_availableCps[familyId];
-        if (cps.empty())
+        if (s_availableCps[familyId].empty())
         {
-            CommandPool *cp = CommandPool::Create(familyId, "CommandPool");
-            cps.insert(cp);
-            s_allCps.insert(cp);
+            CommandPool *cp = CommandPool::Create(familyId, "CommandPool_" + std::to_string(familyId) + "_" + std::to_string(s_allCps[familyId].size()));
+            s_availableCps[familyId][cp] = cp;
+            s_allCps[familyId][cp] = cp;
         }
 
-        CommandPool *cp = *--cps.end();
-        cps.erase(cp);
+        CommandPool *cp = s_availableCps[familyId].begin()->second;
+        s_availableCps[familyId].erase(cp);
         return cp;
     }
 
     void CommandPool::Return(CommandPool *commandPool)
     {
-        std::lock_guard<std::mutex> lock(s_availableMutex);
-
         uint32_t familyId = commandPool->GetFamilyId();
-        auto &cps = s_availableCps[familyId];
-        if (cps.find(commandPool) == cps.end())
-            cps.insert(commandPool);
+
+        if (s_availableCps[familyId].find(commandPool) == s_availableCps[familyId].end())
+            s_availableCps[familyId][commandPool] = commandPool;
     }
 
     CommandBuffer::CommandBuffer(uint32_t familyId, const std::string &name)
@@ -331,12 +330,21 @@ namespace pe
 
     void CommandBuffer::Clear()
     {
+        killThreads = true;
+
         auto &allCmds = s_allCmds;
         for (auto &cmds : allCmds)
         {
             for (auto cmd : cmds)
+            {
+                cmd.second->m_fence = nullptr;
                 CommandBuffer::Destroy(cmd.second);
+            }
         }
+
+        for (auto &cmdWait : s_cmdWaits)
+            cmdWait.second.get();
+        s_cmdWaits.clear();
 
         allCmds.clear();
         s_availableCmds.clear();
@@ -345,8 +353,8 @@ namespace pe
     void CommandBuffer::CheckFutures()
     {
         // join finished futures
-        auto &queueWaits = s_queueWaits;
-        for (auto it = queueWaits.begin(); it != queueWaits.end();)
+        auto &cmdWaits = s_cmdWaits;
+        for (auto it = cmdWaits.begin(); it != cmdWaits.end();)
         {
             if (it->second.wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
             {
@@ -354,7 +362,7 @@ namespace pe
                 cmd->m_fence = nullptr;
                 s_availableCmds[cmd->GetFamilyId()][cmd] = cmd;
 
-                it = queueWaits.erase(it);
+                it = cmdWaits.erase(it);
             }
             else
                 ++it;
@@ -387,18 +395,15 @@ namespace pe
         if (!cmd || !cmd->Handle())
             return;
 
-        if (s_queueWaits.find(cmd) != s_queueWaits.end())
+        if (s_cmdWaits.find(cmd) != s_cmdWaits.end())
             return;
 
         auto func = [cmd]()
         {
-            if (cmd->m_fence && cmd->m_fence->Handle())
-            {
-                while (!cmd->m_fence->m_canReturnToPool)
-                    std::this_thread::yield();
-            }
+            while (!killThreads && cmd->m_fence && !cmd->m_fence->m_canReturnToPool)
+                std::this_thread::yield();
 
-            while (!s_availableCmdsReady)
+            while (!killThreads && !s_availableCmdsReady)
                 std::this_thread::yield();
 
             return cmd;
@@ -408,7 +413,7 @@ namespace pe
         auto future = std::async(std::launch::async, func);
 
         // add it to the deque
-        s_queueWaits[cmd] = std::move(future);
+        s_cmdWaits[cmd] = std::move(future);
     }
 }
 #endif

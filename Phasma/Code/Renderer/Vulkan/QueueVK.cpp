@@ -176,7 +176,11 @@ namespace pe
 
     void Queue::Clear()
     {
-        CheckFutures();
+        killThreads = true;
+        
+        for (auto &queueWait : s_queueWaits)
+            queueWait.second.get();
+        s_queueWaits.clear();
 
         for (auto &queue : s_allQueues)
             Queue::Destroy(queue.second);
@@ -234,6 +238,9 @@ namespace pe
         if (!queue || !queue->Handle())
             return;
 
+        if (s_allQueues.find(queue) == s_allQueues.end())
+            PE_ERROR("Queue::Return() Queue not found!");
+
         if (s_queueWaits.find(queue) != s_queueWaits.end())
             return;
 
@@ -241,7 +248,7 @@ namespace pe
         {
             queue->WaitIdle();
 
-            while (!s_availableQueuesReady)
+            while (!killThreads && !s_availableQueuesReady)
                 std::this_thread::yield();
 
             return queue;

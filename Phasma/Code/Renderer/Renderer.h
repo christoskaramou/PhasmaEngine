@@ -65,7 +65,7 @@ namespace pe
     public:
         Renderer();
 
-        ~Renderer();
+        virtual ~Renderer();
 
         RenderArea &GetRenderArea() { return renderArea; }
 

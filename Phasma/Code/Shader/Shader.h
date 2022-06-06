@@ -76,7 +76,7 @@ namespace pe
 
     class Reflection;
 
-    class Shader : public IHandle<Shader, Placeholder>
+    class Shader : public IHandle<Shader, Placeholder *>
     {
     public:
         Shader(const ShaderInfo &info);

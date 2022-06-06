@@ -86,6 +86,7 @@ namespace pe
             Semaphore::Destroy(semaphore);
         DescriptorPool::Destroy(descriptorPool);
         Swapchain::Destroy(swapchain);
+
         if (device)
             vkDestroyDevice(device, nullptr);
         Surface::Destroy(surface);

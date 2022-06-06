@@ -33,7 +33,7 @@ namespace pe
         std::cout << error << std::endl;
         exit(-1);
     }
-    
+
     inline void PE_CHECK_RESULT(uint32_t res,
                                 const std::string &func,
                                 const std::string &file,

@@ -28,7 +28,10 @@ SOFTWARE.
 
 namespace pe
 {
-    Buffer::Buffer(size_t size, BufferUsageFlags usage, AllocationCreateFlags createFlags, const std::string &name)
+    Buffer::Buffer(size_t size,
+                   BufferUsageFlags usage,
+                   AllocationCreateFlags createFlags,
+                   const std::string &name)
         : size(size), data(nullptr)
     {
         VkBufferCreateInfo bufferInfo{};
@@ -55,8 +58,7 @@ namespace pe
 
     Buffer::~Buffer()
     {
-        if (data)
-            Unmap();
+        Unmap();
 
         if (m_handle)
         {
@@ -102,7 +104,7 @@ namespace pe
         BufferCopy bufferCopy{};
         bufferCopy.size = srcSize > 0 ? srcSize : size;
 
-        Queue* queue = Queue::GetNext(QueueType::TransferBit, 1);
+        Queue *queue = Queue::GetNext(QueueType::TransferBit, 1);
         CommandBuffer *copyCmd = CommandBuffer::GetNext(queue->GetFamilyId());
         copyCmd->Begin();
         copyCmd->CopyBuffer(srcBuffer, this, 1, &bufferCopy);

@@ -89,9 +89,8 @@ namespace pe
         uint32_t GetFamilyId() const { return m_familyId; }
 
     private:
-        inline static std::mutex s_availableMutex;
-        inline static std::vector<std::unordered_set<CommandPool *>> s_availableCps{};
-        inline static std::unordered_set<CommandPool *> s_allCps{};
+        inline static std::vector<std::unordered_map<CommandPool *, CommandPool *>> s_availableCps{};
+        inline static std::vector<std::unordered_map<CommandPool *, CommandPool *>> s_allCps{};
 
     private:
         uint32_t m_familyId;
@@ -163,6 +162,8 @@ namespace pe
 
         Fence *GetFence() const { return m_fence; }
 
+        CommandPool *GetCommandPool() const { return m_commandPool; }
+
         std::string name;
 
     private:
@@ -170,8 +171,9 @@ namespace pe
 
         inline static std::vector<std::unordered_map<CommandBuffer *, CommandBuffer *>> s_availableCmds{};
         inline static std::vector<std::map<CommandBuffer *, CommandBuffer *>> s_allCmds{};
-        inline static std::unordered_map<CommandBuffer *, std::future<CommandBuffer *>> s_queueWaits;
+        inline static std::unordered_map<CommandBuffer *, std::future<CommandBuffer *>> s_cmdWaits;
         inline static std::atomic_bool s_availableCmdsReady{false};
+        inline static bool killThreads{false};
 
         friend class Queue;
 

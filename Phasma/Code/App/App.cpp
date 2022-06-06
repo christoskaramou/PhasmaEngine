@@ -60,6 +60,8 @@ namespace pe
         FileWatcher::Clear();
         FileWatcher::Stop();
         context->DestroySystems();
+        RHII.Destroy();
+        RHII.Remove();
         Window::Destroy(window);
     }
 

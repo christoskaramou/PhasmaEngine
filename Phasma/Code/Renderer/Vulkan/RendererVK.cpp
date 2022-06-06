@@ -49,12 +49,6 @@ namespace pe
 
     Renderer::~Renderer()
     {
-        for (auto &rt : m_renderTargets)
-            Image::Destroy(rt.second);
-        for (auto &dt : m_depthTargets)
-            Image::Destroy(dt.second);
-        RHII.Destroy();
-        RHII.Remove();
     }
 
     void RenderArea::Update(float x, float y, float w, float h, float minDepth, float maxDepth)

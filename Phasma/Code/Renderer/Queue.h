@@ -93,6 +93,7 @@ namespace pe
         inline static std::map<Queue *, Queue *> s_allQueues{};
         inline static std::unordered_map<Queue *, std::future<Queue *>> s_queueWaits;
         inline static std::atomic_bool s_availableQueuesReady{false};
+        inline static bool killThreads{false};
 
         uint32_t m_familyId;
         uint32_t m_queueTypeFlags;

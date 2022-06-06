@@ -28,6 +28,8 @@ SOFTWARE.
 #include <vector>
 #include <memory>
 #include <type_traits>
+#include <typeinfo>
+#include <typeindex>
 #include <future>
 #include <cassert>
 #include <tuple>
@@ -52,6 +54,7 @@ SOFTWARE.
 #include <random>
 #include <regex>
 #include <atomic>
+#include <variant>
 
 #include "SDL/SDL.h"
 #include "SDL/SDL_syswm.h"
