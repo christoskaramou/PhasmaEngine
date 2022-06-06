@@ -63,7 +63,7 @@ namespace pe
 
         friend class Queue;
         friend class CommandBuffer;
-        std::atomic_bool m_canReturnToPool = false;
-        std::atomic_bool m_submitted = false;
+        std::atomic_bool m_reset = false; // if Reset() has been called
+        std::atomic_bool m_submitted = false; // set to true when submitted to a queue by the queue
     };
 }

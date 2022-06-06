@@ -400,7 +400,7 @@ namespace pe
 
         auto func = [cmd]()
         {
-            while (!killThreads && cmd->m_fence && !cmd->m_fence->m_canReturnToPool)
+            while (!killThreads && cmd->m_fence && !cmd->m_fence->m_reset)
                 std::this_thread::yield();
 
             while (!killThreads && !s_availableCmdsReady)

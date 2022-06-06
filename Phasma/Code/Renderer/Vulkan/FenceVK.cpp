@@ -36,7 +36,7 @@ namespace pe
         PE_CHECK(vkCreateFence(RHII.device, &fi, nullptr, &fence));
         m_handle = fence;
 
-        m_canReturnToPool = false;
+        m_reset = false;
 
         Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_FENCE, name);
 
@@ -66,7 +66,7 @@ namespace pe
     {
         VkFence fenceVK = m_handle;
         PE_CHECK(vkResetFences(RHII.device, 1, &fenceVK));
-        m_canReturnToPool = true;
+        m_reset = true;
         m_submitted = false;
     }
 
@@ -103,7 +103,7 @@ namespace pe
     {
         for (auto it = s_returnFences.begin(); it != s_returnFences.end();)
         {
-            if (it->second->m_canReturnToPool)
+            if (it->second->m_reset)
             {
                 s_availableFences.insert(*it);
                 it = s_returnFences.erase(it);
@@ -125,7 +125,7 @@ namespace pe
         }
 
         Fence *fence = s_availableFences.begin()->second;
-        fence->m_canReturnToPool = false;
+        fence->m_reset = false;
         s_availableFences.erase(fence);
         return fence;
     }
@@ -135,7 +135,7 @@ namespace pe
         if (!fence || !fence->Handle())
             return;
 
-        if (!fence->m_canReturnToPool)
+        if (!fence->m_reset)
             s_returnFences[fence] = fence;
         else
             s_availableFences[fence] = fence;
