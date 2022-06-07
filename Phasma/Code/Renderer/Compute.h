@@ -49,16 +49,16 @@ namespace pe
 
         ~Compute() = default;
 
-        void updateInput(const void *srcData, size_t srcSize = 0, size_t offset = 0);
+        void UpdateInput(const void *srcData, size_t srcSize = 0, size_t offset = 0);
 
-        void dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ, uint32_t waitSemaphoresCount = 0, Semaphore **waitSemaphores = nullptr);
+        void Dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ);
 
-        void waitFence();
+        void WaitFence();
 
-        void destroy();
+        void Destroy();
 
         template <class T>
-        void copyDataTo(T *ptr, size_t elements)
+        void CopyDataTo(T *ptr, size_t elements)
         {
             assert(elements * sizeof(T) <= SBOut->Size());
 
@@ -67,7 +67,7 @@ namespace pe
             SBOut->Unmap();
         }
 
-        void createPipeline(const std::string &shaderName);
+        void CreatePipeline(const std::string &shaderName);
 
     private:
         inline static Queue *s_queue = nullptr;
@@ -79,10 +79,10 @@ namespace pe
         Descriptor *DSCompute;
         CommandBuffer *commandBuffer;
 
-        void createComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
+        void CreateComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
 
-        void createDescriptorSet();
+        void CreateDescriptorSet();
 
-        void updateDescriptorSet();
+        void UpdateDescriptorSet();
     };
 }

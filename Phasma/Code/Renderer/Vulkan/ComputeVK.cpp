@@ -43,7 +43,7 @@ namespace pe
         pipeline = nullptr;
     }
 
-    void Compute::updateInput(const void *srcData, size_t srcSize, size_t offset)
+    void Compute::UpdateInput(const void *srcData, size_t srcSize, size_t offset)
     {
         SBIn->Map();
         SBIn->CopyData(srcData, srcSize, offset);
@@ -51,11 +51,11 @@ namespace pe
         SBIn->Unmap();
     }
 
-    void Compute::dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ, uint32_t waitSemaphoresCount, Semaphore **waitSemaphores)
+    void Compute::Dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
     {
-        Debug::BeginQueueRegion(s_queue, "Compute::dispatch queue");
+        Debug::BeginQueueRegion(s_queue, "Compute::Dispatch queue");
         commandBuffer->Begin();
-        Debug::BeginCmdRegion(commandBuffer->Handle(), "Compute::dispatch command");
+        Debug::BeginCmdRegion(commandBuffer->Handle(), "Compute::Dispatch command");
         commandBuffer->BindComputePipeline(pipeline);
         commandBuffer->BindComputeDescriptors(pipeline, 1, &DSCompute);
         commandBuffer->Dispatch(sizeX, sizeY, sizeZ);
@@ -64,21 +64,21 @@ namespace pe
 
         static PipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT};
         s_queue->Submit(1, &commandBuffer,
-                                  waitStages,
-                                  waitSemaphoresCount, waitSemaphores,
-                                  0, nullptr,
-                                  fence);
+                        waitStages,
+                        0, nullptr,
+                        0, nullptr,
+                        fence);
 
         Debug::EndQueueRegion(s_queue);
     }
 
-    void Compute::waitFence()
+    void Compute::WaitFence()
     {
         fence->Wait();
         fence->Reset();
     }
 
-    void Compute::createComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
+    void Compute::CreateComputeStorageBuffers(size_t sizeIn, size_t sizeOut)
     {
         SBIn = Buffer::Create(
             sizeIn,
@@ -101,12 +101,12 @@ namespace pe
         SBOut->Unmap();
     }
 
-    void Compute::createDescriptorSet()
+    void Compute::CreateDescriptorSet()
     {
         DSCompute = Descriptor::Create(Pipeline::getDescriptorSetLayoutCompute(), 1, "Compute_descriptor");
     }
 
-    void Compute::updateDescriptorSet()
+    void Compute::UpdateDescriptorSet()
     {
         std::array<DescriptorUpdateInfo, 2> infos{};
 
@@ -121,7 +121,7 @@ namespace pe
         DSCompute->UpdateDescriptor(2, infos.data());
     }
 
-    void Compute::createPipeline(const std::string &shaderName)
+    void Compute::CreatePipeline(const std::string &shaderName)
     {
         if (pipeline)
             Pipeline::Destroy(pipeline);
@@ -136,7 +136,7 @@ namespace pe
         Shader::Destroy(info.pCompShader);
     }
 
-    void Compute::destroy()
+    void Compute::Destroy()
     {
         CommandBuffer::Return(commandBuffer);
 
@@ -154,12 +154,12 @@ namespace pe
 
         Compute compute;
         compute.commandBuffer = CommandBuffer::GetNext(s_queue->GetFamilyId());
-        compute.createPipeline(shaderName);
-        compute.createDescriptorSet();
-        compute.createComputeStorageBuffers(sizeIn, sizeOut);
-        compute.updateDescriptorSet();
+        compute.CreatePipeline(shaderName);
+        compute.CreateDescriptorSet();
+        compute.CreateComputeStorageBuffers(sizeIn, sizeOut);
+        compute.UpdateDescriptorSet();
         compute.fence = Fence::GetNext();
-        compute.semaphore = Semaphore::Create(name + "_semaphore");
+        compute.semaphore = Semaphore::Create(false, name + "_semaphore");
 
         return compute;
     }
@@ -175,12 +175,12 @@ namespace pe
         {
             Compute compute;
             compute.commandBuffer = CommandBuffer::GetNext(s_queue->GetFamilyId());
-            compute.createPipeline(shaderName);
-            compute.createDescriptorSet();
-            compute.createComputeStorageBuffers(sizeIn, sizeOut);
-            compute.updateDescriptorSet();
+            compute.CreatePipeline(shaderName);
+            compute.CreateDescriptorSet();
+            compute.CreateComputeStorageBuffers(sizeIn, sizeOut);
+            compute.UpdateDescriptorSet();
             compute.fence = Fence::GetNext();
-            compute.semaphore = Semaphore::Create(name + "_semaphore_" + std::to_string(i));
+            compute.semaphore = Semaphore::Create(false, name + "_semaphore_" + std::to_string(i));
 
             computes.push_back(compute);
         }

@@ -27,8 +27,15 @@ namespace pe
     class Semaphore : public IHandle<Semaphore, SemaphoreHandle>
     {
     public:
-        Semaphore(const std::string &name = {});
+        Semaphore(bool timeline, const std::string &name = {});
 
         ~Semaphore();
+
+        void Wait(uint64_t value);
+
+        void Signal(uint64_t value);
+
+    private:
+        bool m_timeline;
     };
 }

@@ -394,7 +394,7 @@ namespace pe
     {
         semaphores.resize(semaphoresCount);
         for (uint32_t i = 0; i < semaphoresCount; i++)
-            semaphores[i] = Semaphore::Create("RHI_semaphore_" + std::to_string(i));
+            semaphores[i] = Semaphore::Create(false, "RHI_semaphore_" + std::to_string(i));
     }
 
     Format RHI::GetDepthFormat()

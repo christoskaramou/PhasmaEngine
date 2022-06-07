@@ -177,7 +177,7 @@ namespace pe
     void Queue::Clear()
     {
         killThreads = true;
-        
+
         for (auto &queueWait : s_queueWaits)
             queueWait.second.get();
         s_queueWaits.clear();

@@ -52,12 +52,12 @@ namespace pe
 
     void Camera::ReCreateComputePipelines()
     {
-        frustumCompute.createPipeline("Shaders/Compute/frustum.comp");
+        frustumCompute.CreatePipeline("Shaders/Compute/frustum.comp");
     }
 
     void Camera::Destroy()
     {
-        frustumCompute.destroy();
+        frustumCompute.Destroy();
     }
 
     void Camera::Update()
@@ -154,10 +154,10 @@ namespace pe
     void Camera::ExtractFrustum()
     {
         // Just testing computes, the specific one is not speeding up any process
-        frustumCompute.waitFence();
-        frustumCompute.copyDataTo(frustum.data(), frustum.size()); // Update frustum planes
-        frustumCompute.updateInput(&viewProjection, sizeof(mat4));
-        frustumCompute.dispatch(1, 1, 1);
+        frustumCompute.WaitFence();
+        frustumCompute.CopyDataTo(frustum.data(), frustum.size()); // Update frustum planes
+        frustumCompute.UpdateInput(&viewProjection, sizeof(mat4));
+        frustumCompute.Dispatch(1, 1, 1);
 
         //		// transpose just to make the calculations look simpler
         //		mat4 pvm = transpose(viewProjection);
