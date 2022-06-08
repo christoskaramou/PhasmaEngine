@@ -742,11 +742,11 @@ namespace pe
     // Will calculate the buffer size needed for all meshes and their primitives
     void Model::createUniforms()
     {
-        uniformImagesIndex = RHII.uniformImages.size();
-        RHII.uniformImages.emplace_back();
+        uniformImagesIndex = RHII.GetUniformImages().size();
+        RHII.GetUniformImages().emplace_back();
 
-        uniformBufferIndex = RHII.uniformBuffers.size();
-        auto &uniformBuffer = RHII.uniformBuffers.emplace_back();
+        uniformBufferIndex = RHII.GetUniformBuffers().size();
+        auto &uniformBuffer = RHII.GetUniformBuffers().emplace_back();
 
         uniformBufferOffset = uniformBuffer.size;
         uniformBuffer.size += sizeof(UBOModel);
@@ -766,8 +766,8 @@ namespace pe
 
     void Model::createDescriptorSets()
     {
-        auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
-        auto &uniformImages = RHII.uniformImages[uniformImagesIndex];
+        auto &uniformBuffer = RHII.GetUniformBuffers()[uniformBufferIndex];
+        auto &uniformImages = RHII.GetUniformImages()[uniformImagesIndex];
 
         uniformBuffer.layout = Pipeline::getDescriptorSetLayoutGbufferVert();
         uniformBuffer.descriptor = Descriptor::Create(uniformBuffer.layout, 1, "model_uniform_buffer_descriptor");
@@ -935,7 +935,7 @@ namespace pe
 #endif
         }
 
-        auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
+        auto &uniformBuffer = RHII.GetUniformBuffers()[uniformBufferIndex];
         transform = pe::transform(quat(radians(rot)), scale, pos);
         ubo.matrix = transform;
         ubo.previousMvp = ubo.mvp;
@@ -986,8 +986,8 @@ namespace pe
                               alphaMode == 1 ? "Opaque" : alphaMode == 2 ? "AlphaCut"
                                                                          : "AlphaBlend");
 
-        auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
-        auto &uniformImages = RHII.uniformImages[uniformImagesIndex];
+        auto &uniformBuffer = RHII.GetUniformBuffers()[uniformBufferIndex];
+        auto &uniformImages = RHII.GetUniformImages()[uniformImagesIndex];
 
         cmd.BindPipeline(Model::pipeline);
         cmd.BindVertexBuffer(vertexBuffer, 0);
@@ -1055,11 +1055,11 @@ namespace pe
             script = nullptr;
         }
 
-        auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
+        auto &uniformBuffer = RHII.GetUniformBuffers()[uniformBufferIndex];
         Buffer::Destroy(uniformBuffer.buffer);
         DescriptorLayout::Destroy(uniformBuffer.layout);
 
-        auto &uniformImages = RHII.uniformImages[uniformImagesIndex];
+        auto &uniformImages = RHII.GetUniformImages()[uniformImagesIndex];
         DescriptorLayout::Destroy(uniformImages.layout);
 
         delete document;

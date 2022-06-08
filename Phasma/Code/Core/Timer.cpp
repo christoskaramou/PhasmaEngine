@@ -85,7 +85,7 @@ namespace pe
         _cmd = nullptr;
 
         VkPhysicalDeviceProperties gpuProps;
-        vkGetPhysicalDeviceProperties(RHII.gpu, &gpuProps);
+        vkGetPhysicalDeviceProperties(RHII.GetGpu(), &gpuProps);
 
         if (!gpuProps.limits.timestampComputeAndGraphics)
             PE_ERROR("Timestamps not supported");
@@ -98,7 +98,7 @@ namespace pe
         qpci.queryCount = 2;
 
         VkQueryPool pool;
-        PE_CHECK(vkCreateQueryPool(RHII.device, &qpci, nullptr, &pool));
+        PE_CHECK(vkCreateQueryPool(RHII.GetDevice(), &qpci, nullptr, &pool));
         queryPool = pool;
 
         Debug::SetObjectName(queryPool, VK_OBJECT_TYPE_QUERY_POOL, "GPUTimer_queryPool");
@@ -124,7 +124,7 @@ namespace pe
 
     float GPUTimer::GetTime()
     {
-        VkResult res = vkGetQueryPoolResults(RHII.device,
+        VkResult res = vkGetQueryPoolResults(RHII.GetDevice(),
                                              queryPool,
                                              0,
                                              2,
@@ -141,6 +141,6 @@ namespace pe
     void GPUTimer::Destroy()
     {
         if (queryPool)
-            vkDestroyQueryPool(RHII.device, queryPool, nullptr);
+            vkDestroyQueryPool(RHII.GetDevice(), queryPool, nullptr);
     }
 }

@@ -72,8 +72,8 @@ namespace pe
 
     void TAA::CreateFrameBuffers()
     {
-        framebuffers.resize(RHII.swapchain->images.size());
-        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        framebuffers.resize(SWAPCHAIN_IMAGES);
+        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
         {
             uint32_t width = taaRT->imageInfo.width;
             uint32_t height = taaRT->imageInfo.height;
@@ -81,8 +81,8 @@ namespace pe
             framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "taa_frameBuffer_" + std::to_string(i));
         }
 
-        framebuffersSharpen.resize(RHII.swapchain->images.size());
-        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        framebuffersSharpen.resize(SWAPCHAIN_IMAGES);
+        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
         {
             uint32_t width = viewportRT->imageInfo.width;
             uint32_t height = viewportRT->imageInfo.height;

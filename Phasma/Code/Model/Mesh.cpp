@@ -56,7 +56,7 @@ namespace pe
     void Mesh::SetUniformOffsets(size_t uniformBufferIndex)
     {
         this->uniformBufferIndex = uniformBufferIndex;
-        auto &uniformBuffer = RHII.uniformBuffers[uniformBufferIndex];
+        auto &uniformBuffer = RHII.GetUniformBuffers()[uniformBufferIndex];
         uniformBufferOffset = uniformBuffer.size;
         uniformBuffer.size += sizeof(mat4) * (2 + meshData.jointMatrices.size());
 

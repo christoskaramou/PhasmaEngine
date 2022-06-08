@@ -45,7 +45,7 @@ namespace pe
         cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
         VkCommandPool commandPool;
-        PE_CHECK(vkCreateCommandPool(RHII.device, &cpci, nullptr, &commandPool));
+        PE_CHECK(vkCreateCommandPool(RHII.GetDevice(), &cpci, nullptr, &commandPool));
         m_handle = commandPool;
 
         Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_COMMAND_POOL, name);
@@ -55,7 +55,7 @@ namespace pe
     {
         if (m_handle)
         {
-            vkDestroyCommandPool(RHII.device, m_handle, nullptr);
+            vkDestroyCommandPool(RHII.GetDevice(), m_handle, nullptr);
             m_handle = {};
         }
     }
@@ -120,7 +120,7 @@ namespace pe
         cbai.commandBufferCount = 1;
 
         VkCommandBuffer commandBuffer;
-        PE_CHECK(vkAllocateCommandBuffers(RHII.device, &cbai, &commandBuffer));
+        PE_CHECK(vkAllocateCommandBuffers(RHII.GetDevice(), &cbai, &commandBuffer));
         m_handle = commandBuffer;
 
         Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_COMMAND_BUFFER, name);
@@ -133,7 +133,7 @@ namespace pe
         if (m_handle)
         {
             VkCommandBuffer cmd = m_handle;
-            vkFreeCommandBuffers(RHII.device, m_commandPool->Handle(), 1, &cmd);
+            vkFreeCommandBuffers(RHII.GetDevice(), m_commandPool->Handle(), 1, &cmd);
             m_handle = {};
         }
 

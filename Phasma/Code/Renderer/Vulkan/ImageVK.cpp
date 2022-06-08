@@ -205,7 +205,7 @@ namespace pe
         }
 
         VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.gpu, (VkFormat)imageInfo.format, &fProps);
+        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), (VkFormat)imageInfo.format, &fProps);
 
         if (imageInfo.tiling == VK_IMAGE_TILING_OPTIMAL)
         {
@@ -245,7 +245,7 @@ namespace pe
         VkImage imageVK;
         VmaAllocation allocationVK;
         VmaAllocationInfo allocationInfo;
-        PE_CHECK(vmaCreateImage(RHII.allocator, &imageInfoVK, &allocationCreateInfo, &imageVK, &allocationVK, &allocationInfo));
+        PE_CHECK(vmaCreateImage(RHII.GetAllocator(), &imageInfoVK, &allocationCreateInfo, &imageVK, &allocationVK, &allocationInfo));
         m_handle = imageVK;
         allocation = allocationVK;
 
@@ -256,19 +256,19 @@ namespace pe
     {
         if (view)
         {
-            vkDestroyImageView(RHII.device, view, nullptr);
+            vkDestroyImageView(RHII.GetDevice(), view, nullptr);
             view = {};
         }
 
         if (m_handle)
         {
-            vmaDestroyImage(RHII.allocator, m_handle, allocation);
+            vmaDestroyImage(RHII.GetAllocator(), m_handle, allocation);
             m_handle = {};
         }
 
         if (VkSampler(sampler))
         {
-            vkDestroySampler(RHII.device, sampler, nullptr);
+            vkDestroySampler(RHII.GetDevice(), sampler, nullptr);
             sampler = {};
         }
     }
@@ -288,7 +288,7 @@ namespace pe
     {
         // If no cmd exists, start the general cmd
         if (!cmd)
-            RHII.generalCmd->Begin();
+            RHII.GetGeneralCmd()->Begin();
 
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -308,7 +308,7 @@ namespace pe
             barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 
         vkCmdPipelineBarrier(
-            cmd ? cmd->Handle() : RHII.generalCmd->Handle(),
+            cmd ? cmd->Handle() : RHII.GetGeneralCmd()->Handle(),
             oldStageMask,
             newStageMask,
             VK_DEPENDENCY_BY_REGION_BIT,
@@ -323,8 +323,9 @@ namespace pe
         // If a new cmd was created, wait and submit it
         if (!cmd)
         {
-            RHII.generalCmd->End();
-            RHII.generalQueue->SubmitAndWaitFence(1, &RHII.generalCmd, nullptr, 0, nullptr, 0, nullptr);;
+            CommandBuffer *cmdBuffer = RHII.GetGeneralCmd();
+            cmdBuffer->End();
+            RHII.GetGeneralQueue()->SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);;
         }
     }
 
@@ -345,7 +346,7 @@ namespace pe
                 info.image->imageInfo.arrayLayers};
 
         VkImageView vkView;
-        PE_CHECK(vkCreateImageView(RHII.device, &viewInfoVK, nullptr, &vkView));
+        PE_CHECK(vkCreateImageView(RHII.GetDevice(), &viewInfoVK, nullptr, &vkView));
         view = vkView;
 
         Debug::SetObjectName(view, VK_OBJECT_TYPE_IMAGE_VIEW, imageInfo.name);
@@ -455,7 +456,7 @@ namespace pe
     void Image::GenerateMipMaps()
     {
         VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.gpu, (VkFormat)imageInfo.format, &fProps);
+        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), (VkFormat)imageInfo.format, &fProps);
 
         if (imageInfo.tiling == VK_IMAGE_TILING_OPTIMAL)
         {
@@ -568,7 +569,7 @@ namespace pe
         samplerInfoVK.unnormalizedCoordinates = samplerInfo.unnormalizedCoordinates;
 
         VkSampler vkSampler;
-        PE_CHECK(vkCreateSampler(RHII.device, &samplerInfoVK, nullptr, &vkSampler));
+        PE_CHECK(vkCreateSampler(RHII.GetDevice(), &samplerInfoVK, nullptr, &vkSampler));
         sampler = vkSampler;
 
         Debug::SetObjectName(sampler, VK_OBJECT_TYPE_SAMPLER, imageInfo.name);

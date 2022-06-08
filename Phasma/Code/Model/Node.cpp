@@ -65,7 +65,7 @@ namespace pe
     {
         if (mesh)
         {
-            auto &uniformBuffer = RHII.uniformBuffers[mesh->uniformBufferIndex];
+            auto &uniformBuffer = RHII.GetUniformBuffers()[mesh->uniformBufferIndex];
 
             mesh->meshData.previousMatrix = mesh->meshData.matrix;
             mesh->meshData.matrix = GetMatrix();

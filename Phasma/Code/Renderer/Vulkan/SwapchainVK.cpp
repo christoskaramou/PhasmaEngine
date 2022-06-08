@@ -33,7 +33,7 @@ namespace pe
     Swapchain::Swapchain(Surface *surface, const std::string &name)
     {
         VkSurfaceCapabilitiesKHR capabilities;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, surface->Handle(), &capabilities);
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.GetGpu(), surface->Handle(), &capabilities);
 
         VkExtent2D extent;
         extent.width = surface->actualExtent.width;
@@ -46,6 +46,8 @@ namespace pe
             SWAPCHAIN_IMAGES,
             capabilities.minImageCount,
             capabilities.maxImageCount);
+        if (SWAPCHAIN_IMAGES != swapchainCreateInfo.minImageCount)
+            PE_ERROR("Swapchain image count error");
         swapchainCreateInfo.imageFormat = (VkFormat)surface->format;
         swapchainCreateInfo.imageColorSpace = (VkColorSpaceKHR)surface->colorSpace;
         swapchainCreateInfo.imageExtent = extent;
@@ -60,14 +62,14 @@ namespace pe
 
         // new swapchain with old create info
         VkSwapchainKHR schain;
-        PE_CHECK(vkCreateSwapchainKHR(RHII.device, &swapchainCreateInfo, nullptr, &schain));
+        PE_CHECK(vkCreateSwapchainKHR(RHII.GetDevice(), &swapchainCreateInfo, nullptr, &schain));
 
         // TODO: Maybe check the result in a loop?
         uint32_t swapchainImageCount;
-        PE_CHECK(vkGetSwapchainImagesKHR(RHII.device, schain, &swapchainImageCount, nullptr));
+        PE_CHECK(vkGetSwapchainImagesKHR(RHII.GetDevice(), schain, &swapchainImageCount, nullptr));
 
         std::vector<VkImage> imagesVK(swapchainImageCount);
-        PE_CHECK(vkGetSwapchainImagesKHR(RHII.device, schain, &swapchainImageCount, imagesVK.data()));
+        PE_CHECK(vkGetSwapchainImagesKHR(RHII.GetDevice(), schain, &swapchainImageCount, imagesVK.data()));
 
         for (auto *image : images)
             Image::Destroy(image);
@@ -100,11 +102,11 @@ namespace pe
             imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             imageViewCreateInfo.image = images[i]->Handle();
             imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            imageViewCreateInfo.format = (VkFormat)RHII.surface->format;
+            imageViewCreateInfo.format = (VkFormat)RHII.GetSurface()->format;
             imageViewCreateInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
             VkImageView imageView;
-            PE_CHECK(vkCreateImageView(RHII.device, &imageViewCreateInfo, nullptr, &imageView));
+            PE_CHECK(vkCreateImageView(RHII.GetDevice(), &imageViewCreateInfo, nullptr, &imageView));
             images[i]->view = imageView;
 
             Debug::SetObjectName(images[i]->Handle(), VK_OBJECT_TYPE_IMAGE, "Swapchain_image" + std::to_string(i));
@@ -113,7 +115,7 @@ namespace pe
 
         if (m_handle)
         {
-            vkDestroySwapchainKHR(RHII.device, m_handle, nullptr);
+            vkDestroySwapchainKHR(RHII.GetDevice(), m_handle, nullptr);
             m_handle = {};
         }
 
@@ -126,7 +128,7 @@ namespace pe
     {
         if (m_handle)
         {
-            vkDestroySwapchainKHR(RHII.device, m_handle, nullptr);
+            vkDestroySwapchainKHR(RHII.GetDevice(), m_handle, nullptr);
             m_handle = {};
         }
 
@@ -145,7 +147,7 @@ namespace pe
             fenceVK = fence->Handle();
 
         uint32_t imageIndex = 0;
-        PE_CHECK(vkAcquireNextImageKHR(RHII.device, m_handle, UINT64_MAX, semaphore->Handle(), fenceVK, &imageIndex));
+        PE_CHECK(vkAcquireNextImageKHR(RHII.GetDevice(), m_handle, UINT64_MAX, semaphore->Handle(), fenceVK, &imageIndex));
 
         return imageIndex;
     }

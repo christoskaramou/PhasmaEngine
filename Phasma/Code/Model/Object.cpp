@@ -112,12 +112,13 @@ namespace pe
         SamplerCreateInfo samplerInfo{};
         texture->CreateSampler(samplerInfo);
 
-        RHII.generalCmd->Begin();
-        texture->ChangeLayout(RHII.generalCmd, LayoutState::TransferDst);
-        texture->CopyBufferToImage(RHII.generalCmd, staging);
-        texture->ChangeLayout(RHII.generalCmd, LayoutState::ShaderReadOnly);
-        RHII.generalCmd->End();
-        RHII.generalQueue->SubmitAndWaitFence(1, &RHII.generalCmd, nullptr, 0, nullptr, 0, nullptr);
+        CommandBuffer *cmd = RHII.GetGeneralCmd();
+        cmd->Begin();
+        texture->ChangeLayout(cmd, LayoutState::TransferDst);
+        texture->CopyBufferToImage(cmd, staging);
+        texture->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        cmd->End();
+        RHII.GetGeneralQueue()->SubmitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
 
         Buffer::Destroy(staging);
     }
@@ -127,12 +128,12 @@ namespace pe
         VkDescriptorSetLayout layout = descriptorSetLayout;
         VkDescriptorSetAllocateInfo allocateInfo{};
         allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocateInfo.descriptorPool = RHII.descriptorPool->Handle();
+        allocateInfo.descriptorPool = RHII.GetDescriptorPool()->Handle();
         allocateInfo.descriptorSetCount = 1;
         allocateInfo.pSetLayouts = &layout;
 
         VkDescriptorSet dset;
-        vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset);
+        vkAllocateDescriptorSets(RHII.GetDevice(), &allocateInfo, &dset);
         descriptorSet = dset;
 
         std::vector<VkWriteDescriptorSet> textureWriteSets(2);
@@ -164,7 +165,7 @@ namespace pe
         textureWriteSets[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         textureWriteSets[1].pImageInfo = &dii;
 
-        vkUpdateDescriptorSets(RHII.device, static_cast<uint32_t>(textureWriteSets.size()), textureWriteSets.data(), 0,
+        vkUpdateDescriptorSets(RHII.GetDevice(), static_cast<uint32_t>(textureWriteSets.size()), textureWriteSets.data(), 0,
                                nullptr);
     }
 

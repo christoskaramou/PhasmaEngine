@@ -24,8 +24,8 @@ SOFTWARE.
 
 // RHI Instance
 #define RHII (*RHI::Get())
-#define WIDTH RHII.surface->actualExtent.width
-#define HEIGHT RHII.surface->actualExtent.height
+#define WIDTH RHII.GetSurface()->actualExtent.width
+#define HEIGHT RHII.GetSurface()->actualExtent.height
 #define WIDTH_f static_cast<float>(WIDTH)
 #define HEIGHT_f static_cast<float>(HEIGHT)
 
@@ -46,95 +46,7 @@ namespace pe
 
     class RHI : public NoCopy, public NoMove
     {
-    private:
-        RHI();
-
     public:
-        ~RHI();
-
-        void Init(SDL_Window *window);
-
-        void CreateInstance(SDL_Window *window);
-
-        void CreateSurface();
-
-        void GetSurfaceProperties();
-
-        void GetGpu();
-
-        void GetGraphicsFamilyId();
-
-        void GetTransferFamilyId();
-
-        void GetComputeFamilyId();
-
-        bool IsInstanceExtensionValid(const char *name);
-
-        bool IsInstanceLayerValid(const char *name);
-
-        bool IsDeviceExtensionValid(const char *name);
-
-        void CreateDevice();
-
-        void CreateAllocator();
-
-        void GetQueues();
-
-        void CreateSwapchain(Surface *surface);
-
-        void CreateCommandPools();
-
-        void CreateDescriptorPool(uint32_t maxDescriptorSets);
-
-        void CreateGlobalDescriptors();
-
-        void CreateCmdBuffers(uint32_t bufferCount = 0);
-
-        void CreateSemaphores(uint32_t semaphoresCount);
-
-        Format GetDepthFormat();
-
-        void Destroy();
-
-        InstanceHandle instance;
-        GpuHandle gpu;
-        std::string gpuName;
-        DeviceHandle device;
-        DescriptorPool *descriptorPool;
-        DescriptorLayout *globalDescriptorLayout;
-        Descriptor *globalDescriptor;
-        std::vector<Semaphore *> semaphores;
-        AllocatorHandle allocator;
-
-        Queue *generalQueue;
-        CommandBuffer *generalCmd;
-
-        SDL_Window *window;
-        Surface *surface;
-        Swapchain *swapchain;
-
-        class UniformBuffer
-        {
-        public:
-            Buffer *buffer = nullptr;
-            size_t size = 0;
-            Descriptor *descriptor = nullptr;
-            DescriptorLayout *layout = nullptr;
-        };
-        std::deque<UniformBuffer> uniformBuffers;
-
-        class UniformImages
-        {
-        public:
-            uint32_t count = 0;
-            Descriptor *descriptor = nullptr;
-            DescriptorLayout *layout = nullptr;
-        };
-        std::deque<UniformImages> uniformImages;
-
-    public:
-        void WaitDeviceIdle();
-
         static RHI *Get()
         {
             static auto rhi = new RHI();
@@ -146,5 +58,93 @@ namespace pe
             if (Get())
                 delete Get();
         }
+
+        ~RHI();
+
+        void Init(SDL_Window *window);
+        void CreateInstance(SDL_Window *window);
+        void CreateSurface();
+        void GetSurfaceProperties();
+        void FindGpu();
+        void GetGraphicsFamilyId();
+        void GetTransferFamilyId();
+        void GetComputeFamilyId();
+        bool IsInstanceExtensionValid(const char *name);
+        bool IsInstanceLayerValid(const char *name);
+        bool IsDeviceExtensionValid(const char *name);
+        void CreateDevice();
+        void CreateAllocator();
+        void GetQueues();
+        void CreateSwapchain(Surface *surface);
+        void CreateCommandPools();
+        void CreateDescriptorPool(uint32_t maxDescriptorSets);
+        void CreateGlobalDescriptors();
+        void CreateCmdBuffers(uint32_t bufferCount = 0);
+        void CreateSemaphores(uint32_t semaphoresCount);
+        void Destroy();
+
+        Format GetDepthFormat();
+
+        void WaitDeviceIdle();
+
+        class UniformBuffer
+        {
+        public:
+            Buffer *buffer = nullptr;
+            size_t size = 0;
+            Descriptor *descriptor = nullptr;
+            DescriptorLayout *layout = nullptr;
+        };
+
+        class UniformImages
+        {
+        public:
+            uint32_t count = 0;
+            Descriptor *descriptor = nullptr;
+            DescriptorLayout *layout = nullptr;
+        };
+
+        uint32_t GetFrameIndex() { return m_frameCounter % SWAPCHAIN_IMAGES; }
+        size_t GetFrameCounter() { return m_frameCounter; }
+        void NextFrame() { m_frameCounter++; }
+
+        const InstanceHandle &GetInstance() { return m_instance; }
+        const GpuHandle &GetGpu() { return m_gpu; }
+        const std::string &GetGpuName() { return m_gpuName; }
+        const DeviceHandle &GetDevice() { return m_device; }
+        DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
+        std::vector<Semaphore *> &GetSemaphores() { return m_semaphores; }
+        const AllocatorHandle &GetAllocator() { return m_allocator; }
+        Queue *GetGeneralQueue() { return m_generalQueue; }
+        CommandBuffer *GetGeneralCmd() { return m_generalCmd; }
+        SDL_Window *GetWindow() { return m_window; }
+        Surface *GetSurface() { return m_surface; }
+        Swapchain *GetSwapchain() { return m_swapchain; }
+
+        std::deque<UniformBuffer> &GetUniformBuffers() { return m_uniformBuffers; }
+        std::deque<UniformImages> &GetUniformImages() { return m_uniformImages; }
+
+    private:
+        RHI();
+
+        InstanceHandle m_instance;
+        GpuHandle m_gpu;
+        std::string m_gpuName;
+        DeviceHandle m_device;
+        DescriptorPool *m_descriptorPool;
+        std::vector<Semaphore *> m_semaphores;
+        AllocatorHandle m_allocator;
+
+        Queue *m_generalQueue;
+        CommandBuffer *m_generalCmd;
+
+        SDL_Window *m_window;
+        Surface *m_surface;
+        Swapchain *m_swapchain;
+
+        size_t m_frameCounter;
+
+        std::deque<UniformBuffer> m_uniformBuffers;
+        std::deque<UniformImages> m_uniformImages;
     };
 }

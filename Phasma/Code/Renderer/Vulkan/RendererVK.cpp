@@ -273,7 +273,7 @@ namespace pe
                     cmd->BindVertexBuffer(model.shadowsVertexBuffer, 0);
                     cmd->BindIndexBuffer(model.indexBuffer, 0);
 
-                    std::vector<Descriptor *> dsetHandles{RHII.uniformBuffers[model.uniformBufferIndex].descriptor};
+                    std::vector<Descriptor *> dsetHandles{RHII.GetUniformBuffers()[model.uniformBufferIndex].descriptor};
                     cmd->BindDescriptors(shadows.pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
 
                     for (auto &node : model.linearNodes)
@@ -398,7 +398,7 @@ namespace pe
     Image *Renderer::CreateFSSampledImage()
     {
         ImageCreateInfo info{};
-        info.format = RHII.surface->format;
+        info.format = RHII.GetSurface()->format;
         info.initialState = LayoutState::Undefined;
         info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
         info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
@@ -518,23 +518,25 @@ namespace pe
         Image::Destroy(m_depth);
         GUI::s_renderImages.clear();
 
-        Swapchain::Destroy(RHII.swapchain);
-        RHII.CreateSwapchain(RHII.surface);
+        Surface *surface = RHII.GetSurface();
+        Format format = surface->format;
+        Swapchain::Destroy(RHII.GetSwapchain());
+        RHII.CreateSwapchain(surface);
 
-        m_viewportRT = CreateRenderTarget("viewport", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        m_viewportRT = CreateRenderTarget("viewport", format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
         CreateRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-        CreateRenderTarget("albedo", RHII.surface->format);
-        CreateRenderTarget("srm", RHII.surface->format); // Specular Roughness Metallic
+        CreateRenderTarget("albedo", format);
+        CreateRenderTarget("srm", format); // Specular Roughness Metallic
         CreateRenderTarget("ssao", VK_FORMAT_R16_UNORM);
         CreateRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-        CreateRenderTarget("ssr", RHII.surface->format);
+        CreateRenderTarget("ssr", format);
         CreateRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-        CreateRenderTarget("brightFilter", RHII.surface->format);
-        CreateRenderTarget("gaussianBlurHorizontal", RHII.surface->format);
-        CreateRenderTarget("gaussianBlurVertical", RHII.surface->format);
-        CreateRenderTarget("emissive", RHII.surface->format);
-        CreateRenderTarget("taa", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        CreateRenderTarget("brightFilter", format);
+        CreateRenderTarget("gaussianBlurHorizontal", format);
+        CreateRenderTarget("gaussianBlurVertical", format);
+        CreateRenderTarget("emissive", format);
+        CreateRenderTarget("taa", format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
         for (auto &rc : m_renderComponents)
             rc.second->Resize(width, height);
@@ -550,7 +552,7 @@ namespace pe
     {
         Debug::BeginCmdRegion(cmd->Handle(), "BlitToViewport");
 
-        Image *s_chain_Image = RHII.swapchain->images[imageIndex];
+        Image *s_chain_Image = RHII.GetSwapchain()->images[imageIndex];
 
         renderedImage->ChangeLayout(cmd, LayoutState::TransferSrc);
         s_chain_Image->ChangeLayout(cmd, LayoutState::TransferDst);

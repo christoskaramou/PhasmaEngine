@@ -30,7 +30,7 @@ namespace pe
     Surface::Surface(SDL_Window *window)
     {
         VkSurfaceKHR surfaceVK;
-        if (!SDL_Vulkan_CreateSurface(window, RHII.instance, &surfaceVK))
+        if (!SDL_Vulkan_CreateSurface(window, RHII.GetInstance(), &surfaceVK))
             PE_ERROR(SDL_GetError());
 
         m_handle = surfaceVK;
@@ -45,7 +45,7 @@ namespace pe
     {
         if (m_handle)
         {
-            vkDestroySurfaceKHR(RHII.instance, m_handle, nullptr);
+            vkDestroySurfaceKHR(RHII.GetInstance(), m_handle, nullptr);
             m_handle = {};
         }
     }
@@ -53,7 +53,7 @@ namespace pe
     void Surface::CheckTransfer()
     {
         VkSurfaceCapabilitiesKHR capabilities;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.gpu, m_handle, &capabilities);
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(RHII.GetGpu(), m_handle, &capabilities);
 
         // Ensure eTransferSrc bit for blit operations
         if (!(capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
@@ -63,10 +63,10 @@ namespace pe
     void Surface::FindFormat()
     {
         uint32_t formatsCount;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, m_handle, &formatsCount, nullptr);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.GetGpu(), m_handle, &formatsCount, nullptr);
 
         std::vector<VkSurfaceFormatKHR> formats(formatsCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.gpu, m_handle, &formatsCount, formats.data());
+        vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.GetGpu(), m_handle, &formatsCount, formats.data());
 
         format = formats[0].format;
         colorSpace = formats[0].colorSpace;
@@ -81,7 +81,7 @@ namespace pe
 
         // Check for blit operation
         VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.gpu, (VkFormat)format, &fProps);
+        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), (VkFormat)format, &fProps);
         if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT))
             PE_ERROR("No blit source operation supported");
         if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
@@ -91,10 +91,10 @@ namespace pe
     void Surface::FindPresentationMode()
     {
         uint32_t presentModesCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, m_handle, &presentModesCount, nullptr);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), m_handle, &presentModesCount, nullptr);
 
         std::vector<VkPresentModeKHR> presentModes(presentModesCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.gpu, m_handle, &presentModesCount, presentModes.data());
+        vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), m_handle, &presentModesCount, presentModes.data());
 
         for (const auto &i : presentModes)
             if (i == VK_PRESENT_MODE_MAILBOX_KHR)

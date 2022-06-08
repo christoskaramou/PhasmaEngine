@@ -84,6 +84,8 @@ namespace pe
 
             frameTimer->ThreadSleep(1.0 / static_cast<double>(GUI::fps) - frameTimer->Count());
             frameTimer->Tick();
+
+            RHII.NextFrame();
         }
     }
 }

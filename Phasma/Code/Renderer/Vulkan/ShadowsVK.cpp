@@ -101,7 +101,7 @@ namespace pe
             texture->ChangeLayout(nullptr, LayoutState::DepthStencilAttachment);
         }
 
-        framebuffers.resize(RHII.swapchain->images.size());
+        framebuffers.resize(SWAPCHAIN_IMAGES);
         for (uint32_t i = 0; i < framebuffers.size(); ++i)
         {
             framebuffers[i] = std::array<FrameBuffer *, SHADOWMAP_CASCADES>{};
@@ -292,7 +292,7 @@ namespace pe
     {
         if (VkRenderPass(renderPass->Handle()))
         {
-            vkDestroyRenderPass(RHII.device, renderPass->Handle(), nullptr);
+            vkDestroyRenderPass(RHII.GetDevice(), renderPass->Handle(), nullptr);
             renderPass->Handle() = {};
         }
 

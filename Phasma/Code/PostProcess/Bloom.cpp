@@ -70,8 +70,8 @@ namespace pe
 
     void Bloom::CreateFrameBuffers()
     {
-        framebuffers.resize(RHII.swapchain->images.size() * 4);
-        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        framebuffers.resize(SWAPCHAIN_IMAGES * 4);
+        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
         {
             uint32_t width = brightFilterRT->imageInfo.width;
             uint32_t height = brightFilterRT->imageInfo.height;
@@ -79,7 +79,7 @@ namespace pe
             framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPassBrightFilter, "brightFilter_frameBuffer_" + std::to_string(i));
         }
 
-        for (size_t i = RHII.swapchain->images.size(); i < RHII.swapchain->images.size() * 2; ++i)
+        for (size_t i = SWAPCHAIN_IMAGES; i < SWAPCHAIN_IMAGES * 2; ++i)
         {
             uint32_t width = gaussianBlurHorizontalRT->imageInfo.width;
             uint32_t height = gaussianBlurHorizontalRT->imageInfo.height;
@@ -87,7 +87,7 @@ namespace pe
             framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPassGaussianBlur, "gaussianBlurHorizontal_frameBuffer_" + std::to_string(i));
         }
 
-        for (size_t i = RHII.swapchain->images.size() * 2; i < RHII.swapchain->images.size() * 3; ++i)
+        for (size_t i = SWAPCHAIN_IMAGES * 2; i < SWAPCHAIN_IMAGES * 3; ++i)
         {
             uint32_t width = gaussianBlurVerticalRT->imageInfo.width;
             uint32_t height = gaussianBlurVerticalRT->imageInfo.height;
@@ -95,7 +95,7 @@ namespace pe
             framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPassGaussianBlur, "gaussianBlurVertical_frameBuffer_" + std::to_string(i));
         }
 
-        for (size_t i = RHII.swapchain->images.size() * 3; i < RHII.swapchain->images.size() * 4; ++i)
+        for (size_t i = SWAPCHAIN_IMAGES * 3; i < SWAPCHAIN_IMAGES * 4; ++i)
         {
             uint32_t width = viewportRT->imageInfo.width;
             uint32_t height = viewportRT->imageInfo.height;
@@ -236,7 +236,7 @@ namespace pe
 
     void Bloom::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        uint32_t totalImages = static_cast<uint32_t>(RHII.swapchain->images.size());
+        uint32_t totalImages = static_cast<uint32_t>(SWAPCHAIN_IMAGES);
 
         std::vector<float> values{
             GUI::Bloom_Inv_brightness,

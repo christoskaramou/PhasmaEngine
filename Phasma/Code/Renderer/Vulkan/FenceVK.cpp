@@ -33,7 +33,7 @@ namespace pe
         fi.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
 
         VkFence fence;
-        PE_CHECK(vkCreateFence(RHII.device, &fi, nullptr, &fence));
+        PE_CHECK(vkCreateFence(RHII.GetDevice(), &fi, nullptr, &fence));
         m_handle = fence;
 
         m_reset = false;
@@ -47,7 +47,7 @@ namespace pe
     {
         if (m_handle)
         {
-            vkDestroyFence(RHII.device, m_handle, nullptr);
+            vkDestroyFence(RHII.GetDevice(), m_handle, nullptr);
             m_handle = {};
         }
     }
@@ -57,7 +57,7 @@ namespace pe
         if (m_submitted && GetStatus() == FenceStatus::Unsignaled)
         {
             VkFence fenceVK = m_handle;
-            if (vkWaitForFences(RHII.device, 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
+            if (vkWaitForFences(RHII.GetDevice(), 1, &fenceVK, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
                 PE_ERROR("wait fences error!");
         }
     }
@@ -65,14 +65,14 @@ namespace pe
     void Fence::Reset()
     {
         VkFence fenceVK = m_handle;
-        PE_CHECK(vkResetFences(RHII.device, 1, &fenceVK));
+        PE_CHECK(vkResetFences(RHII.GetDevice(), 1, &fenceVK));
         m_reset = true;
         m_submitted = false;
     }
 
     FenceStatus Fence::GetStatus()
     {
-        auto res = vkGetFenceStatus(RHII.device, m_handle);
+        auto res = vkGetFenceStatus(RHII.GetDevice(), m_handle);
         switch (res)
         {
         case VK_SUCCESS:

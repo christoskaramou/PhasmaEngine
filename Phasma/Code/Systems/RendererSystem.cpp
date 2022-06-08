@@ -51,11 +51,14 @@ namespace pe
 
     void RendererSystem::Init()
     {
+        Surface *surface = RHII.GetSurface();
+        Format format = surface->format;
+
         // SET WINDOW TITLE
         std::string title = "PhasmaEngine";
-        title += " - Device: " + RHII.gpuName;
+        title += " - Device: " + RHII.GetGpuName();
         title += " - API: Vulkan";
-        title += " - Present Mode: " + PresentModeToString(RHII.surface->presentMode);
+        title += " - Present Mode: " + PresentModeToString(surface->presentMode);
 #ifdef _DEBUG
         title += " - Configuration: Debug";
 #else
@@ -64,20 +67,20 @@ namespace pe
 
         CONTEXT->GetSystem<EventSystem>()->DispatchEvent(EventType::SetWindowTitle, title);
 
-        m_viewportRT = CreateRenderTarget("viewport", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        m_viewportRT = CreateRenderTarget("viewport", format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
         CreateRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-        CreateRenderTarget("albedo", RHII.surface->format);
-        CreateRenderTarget("srm", RHII.surface->format); // Specular Roughness Metallic
+        CreateRenderTarget("albedo", format);
+        CreateRenderTarget("srm", format); // Specular Roughness Metallic
         CreateRenderTarget("ssao", VK_FORMAT_R16_UNORM);
         CreateRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-        CreateRenderTarget("ssr", RHII.surface->format);
+        CreateRenderTarget("ssr", format);
         CreateRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-        CreateRenderTarget("brightFilter", RHII.surface->format);
-        CreateRenderTarget("gaussianBlurHorizontal", RHII.surface->format);
-        CreateRenderTarget("gaussianBlurVertical", RHII.surface->format);
-        CreateRenderTarget("emissive", RHII.surface->format);
-        CreateRenderTarget("taa", RHII.surface->format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        CreateRenderTarget("brightFilter", format);
+        CreateRenderTarget("gaussianBlurHorizontal", format);
+        CreateRenderTarget("gaussianBlurVertical", format);
+        CreateRenderTarget("emissive", format);
+        CreateRenderTarget("taa", format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
         // INIT render components
         m_renderComponents[GetTypeID<Deferred>()] = WORLD_ENTITY->CreateComponent<Deferred>();
@@ -147,15 +150,15 @@ namespace pe
 
         Debug::BeginQueueRegion(queue, "RendererSystem::Draw");
 
-        static int frameIndex = 0;
+        uint32_t frameIndex = RHII.GetFrameIndex();
 
         static VkPipelineStageFlags waitStages[] = {
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT};
 
         // acquire the image
-        auto aquireSignalSemaphore = RHII.semaphores[frameIndex];
-        uint32_t imageIndex = RHII.swapchain->Aquire(aquireSignalSemaphore, nullptr);
+        auto aquireSignalSemaphore = RHII.GetSemaphores()[frameIndex];
+        uint32_t imageIndex = RHII.GetSwapchain()->Aquire(aquireSignalSemaphore, nullptr);
 
         static Timer timer;
         timer.Start();
@@ -182,7 +185,7 @@ namespace pe
 
             // submit the shadow command buffers
             auto &shadowWaitSemaphore = aquireSignalSemaphore;
-            auto &shadowSignalSemaphore = RHII.semaphores[imageIndex * 3 + 1];
+            auto &shadowSignalSemaphore = RHII.GetSemaphores()[imageIndex * 3 + 1];
 
             queue->Submit(
                 SHADOWMAP_CASCADES, shadowCmds,
@@ -203,7 +206,7 @@ namespace pe
         // submit the command buffers
         auto waitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
         auto waitSemaphore = aquireSignalSemaphore;
-        auto signalSemaphore = RHII.semaphores[imageIndex * 3 + 2];
+        auto signalSemaphore = RHII.GetSemaphores()[imageIndex * 3 + 2];
 
         Fence *fence = Fence::GetNext();
         previousFences[imageIndex] = fence;
@@ -218,7 +221,8 @@ namespace pe
         // Presentation
         auto presentWaitSemaphore = signalSemaphore;
         Queue *presentQueue = Queue::GetNext(QueueType::PresentBit, 1);
-        presentQueue->Present(1, &RHII.swapchain, &imageIndex, 1, &presentWaitSemaphore);
+        Swapchain *swapchain = RHII.GetSwapchain();
+        presentQueue->Present(1, &swapchain, &imageIndex, 1, &presentWaitSemaphore);
         Queue::Return(presentQueue);
 
         gui.RenderViewPorts();

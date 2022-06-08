@@ -85,7 +85,7 @@ namespace pe
             plci.pSetLayouts = layouts.data();
 
             VkShaderModule module;
-            PE_CHECK(vkCreateShaderModule(RHII.device, &csmci, nullptr, &module));
+            PE_CHECK(vkCreateShaderModule(RHII.GetDevice(), &csmci, nullptr, &module));
 
             VkComputePipelineCreateInfo compinfo{};
             compinfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -95,15 +95,15 @@ namespace pe
             compinfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
 
             VkPipelineLayout vklayout;
-            PE_CHECK(vkCreatePipelineLayout(RHII.device, &plci, nullptr, &vklayout));
+            PE_CHECK(vkCreatePipelineLayout(RHII.GetDevice(), &plci, nullptr, &vklayout));
             layout = vklayout;
             compinfo.layout = layout;
 
             VkPipeline vkPipeline;
-            PE_CHECK(vkCreateComputePipelines(RHII.device, nullptr, 1, &compinfo, nullptr, &vkPipeline));
+            PE_CHECK(vkCreateComputePipelines(RHII.GetDevice(), nullptr, 1, &compinfo, nullptr, &vkPipeline));
             m_handle = vkPipeline;
 
-            vkDestroyShaderModule(RHII.device, module, nullptr);
+            vkDestroyShaderModule(RHII.GetDevice(), module, nullptr);
         }
         else
         {
@@ -116,7 +116,7 @@ namespace pe
             vsmci.pCode = info.pVertShader->GetSpriv();
 
             VkShaderModule vertModule;
-            PE_CHECK(vkCreateShaderModule(RHII.device, &vsmci, nullptr, &vertModule));
+            PE_CHECK(vkCreateShaderModule(RHII.GetDevice(), &vsmci, nullptr, &vertModule));
 
             VkPipelineShaderStageCreateInfo pssci1{};
             pssci1.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -132,7 +132,7 @@ namespace pe
                 fsmci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
                 fsmci.codeSize = info.pFragShader->BytesCount();
                 fsmci.pCode = info.pFragShader->GetSpriv();
-                PE_CHECK(vkCreateShaderModule(RHII.device, &fsmci, nullptr, &fragModule));
+                PE_CHECK(vkCreateShaderModule(RHII.GetDevice(), &fsmci, nullptr, &fragModule));
 
                 pssci2.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
                 pssci2.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -263,7 +263,7 @@ namespace pe
             plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
 
             VkPipelineLayout pipelineLayout;
-            PE_CHECK(vkCreatePipelineLayout(RHII.device, &plci, nullptr, &pipelineLayout));
+            PE_CHECK(vkCreatePipelineLayout(RHII.GetDevice(), &plci, nullptr, &pipelineLayout));
             layout = pipelineLayout;
             pipeinfo.layout = layout;
 
@@ -280,12 +280,12 @@ namespace pe
             pipeinfo.basePipelineIndex = -1;
 
             VkPipeline pipeline;
-            PE_CHECK(vkCreateGraphicsPipelines(RHII.device, nullptr, 1, &pipeinfo, nullptr, &pipeline));
+            PE_CHECK(vkCreateGraphicsPipelines(RHII.GetDevice(), nullptr, 1, &pipeinfo, nullptr, &pipeline));
             m_handle = pipeline;
 
-            vkDestroyShaderModule(RHII.device, vertModule, nullptr);
+            vkDestroyShaderModule(RHII.GetDevice(), vertModule, nullptr);
             if (info.pFragShader && fragModule)
-                vkDestroyShaderModule(RHII.device, fragModule, nullptr);
+                vkDestroyShaderModule(RHII.GetDevice(), fragModule, nullptr);
 
             Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_PIPELINE, info.name);
         }
@@ -295,13 +295,13 @@ namespace pe
     {
         if (layout)
         {
-            vkDestroyPipelineLayout(RHII.device, layout, nullptr);
+            vkDestroyPipelineLayout(RHII.GetDevice(), layout, nullptr);
             layout = {};
         }
 
         if (m_handle)
         {
-            vkDestroyPipeline(RHII.device, m_handle, nullptr);
+            vkDestroyPipeline(RHII.GetDevice(), m_handle, nullptr);
             m_handle = {};
         }
     }

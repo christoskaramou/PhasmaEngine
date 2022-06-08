@@ -214,7 +214,7 @@ namespace pe
         {
             int x, y;
             const float topBarHeight = 16.f;
-            SDL_GetWindowPosition(RHII.window, &x, &y);
+            SDL_GetWindowPosition(RHII.GetWindow(), &x, &y);
             ImGui::SetNextWindowPos(ImVec2(x + WIDTH_f / 2, y + topBarHeight + HEIGHT_f / 2));
             ImGui::Begin("Loading", &metrics_open, flags);
             LoadingIndicatorCircle("Loading", radius, color, bdcolor, 10, 4.5f);
@@ -658,20 +658,20 @@ namespace pe
 
         SetWindowStyle();
 
-        ImGui_ImplSDL2_InitForVulkan(RHII.window);
+        ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
 
         Queue *queue = Queue::GetNext(QueueType::GraphicsBit, 1);
         ImGui_ImplVulkan_InitInfo info;
-        info.Instance = RHII.instance;
-        info.PhysicalDevice = RHII.gpu;
-        info.Device = RHII.device;
+        info.Instance = RHII.GetInstance();
+        info.PhysicalDevice = RHII.GetGpu();
+        info.Device = RHII.GetDevice();
         info.QueueFamily = queue->GetFamilyId();
         info.Queue = queue->Handle();
         info.PipelineCache = nullptr; // Will it help to use it?
-        info.DescriptorPool = RHII.descriptorPool->Handle();
+        info.DescriptorPool = RHII.GetDescriptorPool()->Handle();
         info.Subpass = 0;
-        info.MinImageCount = static_cast<uint32_t>(RHII.swapchain->images.size());
-        info.ImageCount = (uint32_t)RHII.swapchain->images.size();
+        info.MinImageCount = static_cast<uint32_t>(RHII.GetSwapchain()->images.size());
+        info.ImageCount = (uint32_t)RHII.GetSwapchain()->images.size();
         info.MSAASamples = VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT;
         info.Allocator = nullptr;
         info.CheckVkResultFn = nullptr;
@@ -726,7 +726,7 @@ namespace pe
     void GUI::CreateRenderPass()
     {
         Attachment colorAttachment;
-        colorAttachment.format = RHII.surface->format;
+        colorAttachment.format = RHII.GetSurface()->format;
         colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -740,12 +740,12 @@ namespace pe
 
     void GUI::CreateFrameBuffers()
     {
-        framebuffers.resize(RHII.swapchain->images.size());
-        for (uint32_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        framebuffers.resize(SWAPCHAIN_IMAGES);
+        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
         {
             uint32_t width = WIDTH;
             uint32_t height = HEIGHT;
-            ImageViewHandle view = RHII.swapchain->images[i]->view;
+            ImageViewHandle view = RHII.GetSwapchain()->images[i]->view;
             framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "GUI_frameBuffer_" + std::to_string(i));
         }
     }

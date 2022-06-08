@@ -71,7 +71,7 @@ namespace pe
         createInfo.maxSets = maxDescriptorSets;
 
         VkDescriptorPool descriptorPoolVK;
-        PE_CHECK(vkCreateDescriptorPool(RHII.device, &createInfo, nullptr, &descriptorPoolVK));
+        PE_CHECK(vkCreateDescriptorPool(RHII.GetDevice(), &createInfo, nullptr, &descriptorPoolVK));
         m_handle = descriptorPoolVK;
 
         Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_DESCRIPTOR_POOL, name);
@@ -81,7 +81,7 @@ namespace pe
     {
         if (m_handle)
         {
-            vkDestroyDescriptorPool(RHII.device, m_handle, nullptr);
+            vkDestroyDescriptorPool(RHII.GetDevice(), m_handle, nullptr);
             m_handle = {};
         }
     }
@@ -136,7 +136,7 @@ namespace pe
         descriptorLayout.pNext = &setLayoutBindingFlags;
 
         VkDescriptorSetLayout layout;
-        PE_CHECK(vkCreateDescriptorSetLayout(RHII.device, &descriptorLayout, nullptr, &layout));
+        PE_CHECK(vkCreateDescriptorSetLayout(RHII.GetDevice(), &descriptorLayout, nullptr, &layout));
         m_handle = layout;
 
         Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, name);
@@ -146,7 +146,7 @@ namespace pe
     {
         if (m_handle)
         {
-            vkDestroyDescriptorSetLayout(RHII.device, m_handle, nullptr);
+            vkDestroyDescriptorSetLayout(RHII.GetDevice(), m_handle, nullptr);
             m_handle = {};
         }
     }
@@ -166,13 +166,13 @@ namespace pe
         VkDescriptorSetLayout dsetLayout = layout->Handle();
         VkDescriptorSetAllocateInfo allocateInfo{};
         allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocateInfo.descriptorPool = RHII.descriptorPool->Handle();
+        allocateInfo.descriptorPool = RHII.GetDescriptorPool()->Handle();
         allocateInfo.descriptorSetCount = 1;
         allocateInfo.pSetLayouts = &dsetLayout;
         allocateInfo.pNext = &variableDescriptorCountAllocInfo;
 
         VkDescriptorSet dset;
-        PE_CHECK(vkAllocateDescriptorSets(RHII.device, &allocateInfo, &dset));
+        PE_CHECK(vkAllocateDescriptorSets(RHII.GetDevice(), &allocateInfo, &dset));
         m_handle = dset;
 
         Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_DESCRIPTOR_SET, name);
@@ -245,7 +245,7 @@ namespace pe
             writeSets.push_back(writeSet);
         }
 
-        vkUpdateDescriptorSets(RHII.device, static_cast<uint32_t>(writeSets.size()), writeSets.data(), 0, nullptr);
+        vkUpdateDescriptorSets(RHII.GetDevice(), static_cast<uint32_t>(writeSets.size()), writeSets.data(), 0, nullptr);
     }
 }
 #endif

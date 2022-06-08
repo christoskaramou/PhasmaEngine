@@ -23,17 +23,10 @@ SOFTWARE.
 #pragma once
 
 namespace pe
-{
-    constexpr uint32_t SWAPCHAIN_IMAGES = 3;
-
-    class Context;
-
+{    
     class Surface;
-
     class Semaphore;
-
     class Fence;
-
     class Image;
 
     class Swapchain : public IHandle<Swapchain, SwapchainHandle>

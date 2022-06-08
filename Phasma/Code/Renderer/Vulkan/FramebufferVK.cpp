@@ -51,7 +51,7 @@ namespace pe
         fbci.layers = 1;
 
         VkFramebuffer frameBuffer;
-        PE_CHECK(vkCreateFramebuffer(RHII.device, &fbci, nullptr, &frameBuffer));
+        PE_CHECK(vkCreateFramebuffer(RHII.GetDevice(), &fbci, nullptr, &frameBuffer));
         m_handle = frameBuffer;
 
         Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_FRAMEBUFFER, name);
@@ -61,7 +61,7 @@ namespace pe
     {
         if (m_handle)
         {
-            vkDestroyFramebuffer(RHII.device, m_handle, nullptr);
+            vkDestroyFramebuffer(RHII.GetDevice(), m_handle, nullptr);
             m_handle = {};
         }
     }

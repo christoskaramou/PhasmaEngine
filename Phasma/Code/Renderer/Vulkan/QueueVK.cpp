@@ -160,7 +160,7 @@ namespace pe
 
                     uint32_t flags = properties[i].queueFlags & QueueType::AllExceptPresentBits;
                     VkBool32 present = VK_FALSE;
-                    vkGetPhysicalDeviceSurfaceSupportKHR(RHII.gpu, i, RHII.surface->Handle(), &present);
+                    vkGetPhysicalDeviceSurfaceSupportKHR(RHII.GetGpu(), i, RHII.GetSurface()->Handle(), &present);
                     if (present)
                         flags |= QueueType::PresentBit;
 

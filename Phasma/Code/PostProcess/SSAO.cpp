@@ -67,8 +67,8 @@ namespace pe
 
     void SSAO::CreateSSAOFrameBuffers()
     {
-        framebuffers.resize(RHII.swapchain->images.size());
-        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        framebuffers.resize(SWAPCHAIN_IMAGES);
+        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
         {
             uint32_t width = ssaoRT->imageInfo.width;
             uint32_t height = ssaoRT->imageInfo.height;
@@ -79,8 +79,8 @@ namespace pe
 
     void SSAO::CreateSSAOBlurFrameBuffers()
     {
-        blurFramebuffers.resize(RHII.swapchain->images.size());
-        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        blurFramebuffers.resize(SWAPCHAIN_IMAGES);
+        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
         {
             uint32_t width = ssaoBlurRT->imageInfo.width;
             uint32_t height = ssaoBlurRT->imageInfo.height;
@@ -194,11 +194,12 @@ namespace pe
         samplerInfo.maxAnisotropy = 1.0f;
         noiseTex->CreateSampler(samplerInfo);
 
-        RHII.generalCmd->Begin();
-        noiseTex->CopyBufferToImage(RHII.generalCmd, staging);
-        noiseTex->ChangeLayout(RHII.generalCmd, LayoutState::ShaderReadOnly);
-        RHII.generalCmd->End();
-        RHII.generalQueue->SubmitAndWaitFence(1, &RHII.generalCmd, nullptr, 0, nullptr, 0, nullptr);
+        CommandBuffer *cmd = RHII.GetGeneralCmd();
+        cmd->Begin();
+        noiseTex->CopyBufferToImage(cmd, staging);
+        noiseTex->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        cmd->End();
+        RHII.GetGeneralQueue()->SubmitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
         
         Buffer::Destroy(staging);
         // pvm uniform

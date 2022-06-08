@@ -44,13 +44,13 @@ namespace pe
 {
     RHI::RHI()
     {
-        device = {};
-        semaphores = {};
+        m_device = {};
+        m_semaphores = {};
 
-        window = nullptr;
+        m_window = nullptr;
 
-        uniformBuffers = {};
-        uniformImages = {};
+        m_uniformBuffers = {};
+        m_uniformImages = {};
     }
 
     RHI::~RHI()
@@ -59,18 +59,19 @@ namespace pe
 
     void RHI::Init(SDL_Window *window)
     {
-        this->window = window;
+        m_window = window;
+        m_frameCounter = 0;
 
         CreateInstance(window);
         CreateSurface();
-        GetGpu();
+        FindGpu();
         GetSurfaceProperties();
         CreateDevice();
         CreateAllocator();
         GetQueues();
         CreateCommandPools();
         CreateCmdBuffers(SWAPCHAIN_IMAGES);
-        CreateSwapchain(surface);
+        CreateSwapchain(m_surface);
         CreateDescriptorPool(15000); // max number of all descriptor sets to allocate
         CreateSemaphores(SWAPCHAIN_IMAGES * 3);
     }
@@ -82,17 +83,17 @@ namespace pe
         CommandBuffer::Clear();
         CommandPool::Clear();
         Fence::Clear();
-        for (auto *semaphore : semaphores)
+        for (auto *semaphore : m_semaphores)
             Semaphore::Destroy(semaphore);
-        DescriptorPool::Destroy(descriptorPool);
-        Swapchain::Destroy(swapchain);
+        DescriptorPool::Destroy(m_descriptorPool);
+        Swapchain::Destroy(m_swapchain);
 
-        if (device)
-            vkDestroyDevice(device, nullptr);
-        Surface::Destroy(surface);
+        if (m_device)
+            vkDestroyDevice(m_device, nullptr);
+        Surface::Destroy(m_surface);
         Debug::DestroyDebugMessenger();
-        if (instance)
-            vkDestroyInstance(instance, nullptr);
+        if (m_instance)
+            vkDestroyInstance(m_instance, nullptr);
     }
 
     void RHI::CreateInstance(SDL_Window *window)
@@ -150,30 +151,30 @@ namespace pe
 
         VkInstance instanceVK;
         PE_CHECK(vkCreateInstance(&instInfo, nullptr, &instanceVK));
-        instance = instanceVK;
+        m_instance = instanceVK;
 
-        Debug::Init(instance);
+        Debug::Init(m_instance);
         Debug::CreateDebugMessenger();
     }
 
     void RHI::CreateSurface()
     {
-        surface = Surface::Create(window);
+        m_surface = Surface::Create(m_window);
     }
 
     void RHI::GetSurfaceProperties()
     {
-        surface->FindProperties();
+        m_surface->FindProperties();
     }
 
-    void RHI::GetGpu()
+    void RHI::FindGpu()
     {
         uint32_t gpuCount;
-        vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr);
-        vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr);
+        vkEnumeratePhysicalDevices(m_instance, &gpuCount, nullptr);
+        vkEnumeratePhysicalDevices(m_instance, &gpuCount, nullptr);
 
         std::vector<VkPhysicalDevice> gpuList(gpuCount);
-        vkEnumeratePhysicalDevices(instance, &gpuCount, gpuList.data());
+        vkEnumeratePhysicalDevices(m_instance, &gpuCount, gpuList.data());
 
         std::vector<VkPhysicalDevice> validGpuList{};
         VkPhysicalDevice discreteGpu;
@@ -214,11 +215,11 @@ namespace pe
             }
         }
 
-        gpu = discreteGpu ? discreteGpu : validGpuList[0];
+        m_gpu = discreteGpu ? discreteGpu : validGpuList[0];
 
         VkPhysicalDeviceProperties gpuPropertiesVK;
-        vkGetPhysicalDeviceProperties(gpu, &gpuPropertiesVK);
-        gpuName = gpuPropertiesVK.deviceName;
+        vkGetPhysicalDeviceProperties(m_gpu, &gpuPropertiesVK);
+        m_gpuName = gpuPropertiesVK.deviceName;
     }
 
     bool RHI::IsInstanceExtensionValid(const char *name)
@@ -258,14 +259,14 @@ namespace pe
 
     bool RHI::IsDeviceExtensionValid(const char *name)
     {
-        if (!gpu)
+        if (!m_gpu)
             PE_ERROR("No GPU found!");
 
         uint32_t count;
-        vkEnumerateDeviceExtensionProperties(gpu, nullptr, &count, nullptr);
+        vkEnumerateDeviceExtensionProperties(m_gpu, nullptr, &count, nullptr);
 
         std::vector<VkExtensionProperties> extensions(count);
-        vkEnumerateDeviceExtensionProperties(gpu, nullptr, &count, extensions.data());
+        vkEnumerateDeviceExtensionProperties(m_gpu, nullptr, &count, extensions.data());
 
         for (auto &extension : extensions)
             if (std::string(extension.extensionName) == name)
@@ -284,10 +285,10 @@ namespace pe
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
 
         uint32_t queueFamPropCount;
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, nullptr);
+        vkGetPhysicalDeviceQueueFamilyProperties(m_gpu, &queueFamPropCount, nullptr);
 
         std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamPropCount, queueFamilyProperties.data());
+        vkGetPhysicalDeviceQueueFamilyProperties(m_gpu, &queueFamPropCount, queueFamilyProperties.data());
 
         std::vector<std::vector<float>> priorities(queueFamPropCount);
         for (uint32_t i = 0; i < queueFamPropCount; i++)
@@ -320,7 +321,7 @@ namespace pe
         deviceFeatures2.pNext = &deviceFeatures13;
 
         // Queue for supported features
-        vkGetPhysicalDeviceFeatures2(gpu, &deviceFeatures2);
+        vkGetPhysicalDeviceFeatures2(m_gpu, &deviceFeatures2);
 
         // Check for bindless descriptors
         if (!(deviceFeatures12.descriptorBindingPartiallyBound &&
@@ -338,13 +339,13 @@ namespace pe
         deviceCreateInfo.pNext = &deviceFeatures2;
 
         VkDevice deviceVK;
-        PE_CHECK(vkCreateDevice(gpu, &deviceCreateInfo, nullptr, &deviceVK));
-        device = deviceVK;
+        PE_CHECK(vkCreateDevice(m_gpu, &deviceCreateInfo, nullptr, &deviceVK));
+        m_device = deviceVK;
 
         // Debug::SetObjectName(instance, VK_OBJECT_TYPE_INSTANCE, "RHI_instance");
-        Debug::SetObjectName(surface->Handle(), VK_OBJECT_TYPE_SURFACE_KHR, "RHI_surface");
-        Debug::SetObjectName(gpu, VK_OBJECT_TYPE_PHYSICAL_DEVICE, "RHI_gpu");
-        Debug::SetObjectName(device, VK_OBJECT_TYPE_DEVICE, "RHI_device");
+        Debug::SetObjectName(m_surface->Handle(), VK_OBJECT_TYPE_SURFACE_KHR, "RHI_surface");
+        Debug::SetObjectName(m_gpu, VK_OBJECT_TYPE_PHYSICAL_DEVICE, "RHI_gpu");
+        Debug::SetObjectName(m_device, VK_OBJECT_TYPE_DEVICE, "RHI_device");
     }
 
     void RHI::CreateAllocator()
@@ -353,48 +354,48 @@ namespace pe
         vkEnumerateInstanceVersion(&apiVersion);
 
         VmaAllocatorCreateInfo allocator_info = {};
-        allocator_info.physicalDevice = gpu;
-        allocator_info.device = device;
-        allocator_info.instance = instance;
+        allocator_info.physicalDevice = m_gpu;
+        allocator_info.device = m_device;
+        allocator_info.instance = m_instance;
         allocator_info.vulkanApiVersion = apiVersion;
 
         VmaAllocator allocatorVK;
         PE_CHECK(vmaCreateAllocator(&allocator_info, &allocatorVK));
-        allocator = allocatorVK;
+        m_allocator = allocatorVK;
     }
 
     void RHI::GetQueues()
     {
-        Queue::Init(gpu, device, surface->Handle());
-        generalQueue = Queue::GetNext(QueueType::GraphicsBit, 1);
+        Queue::Init(m_gpu, m_device, m_surface->Handle());
+        m_generalQueue = Queue::GetNext(QueueType::GraphicsBit, 1);
     }
 
     void RHI::CreateSwapchain(Surface *surface)
     {
-        swapchain = Swapchain::Create(surface, "RHI_swapchain");
+        m_swapchain = Swapchain::Create(surface, "RHI_swapchain");
     }
 
     void RHI::CreateCommandPools()
     {
-        CommandPool::Init(gpu);
+        CommandPool::Init(m_gpu);
     }
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
     {
-        descriptorPool = DescriptorPool::Create(maxDescriptorSets, "RHI_descriptor_pool");
+        m_descriptorPool = DescriptorPool::Create(maxDescriptorSets, "RHI_descriptor_pool");
     }
 
     void RHI::CreateCmdBuffers(uint32_t bufferCount)
     {
-        CommandBuffer::Init(gpu, bufferCount);
-        generalCmd = CommandBuffer::GetNext(generalQueue->GetFamilyId());
+        CommandBuffer::Init(m_gpu, bufferCount);
+        m_generalCmd = CommandBuffer::GetNext(m_generalQueue->GetFamilyId());
     }
 
     void RHI::CreateSemaphores(uint32_t semaphoresCount)
     {
-        semaphores.resize(semaphoresCount);
+        m_semaphores.resize(semaphoresCount);
         for (uint32_t i = 0; i < semaphoresCount; i++)
-            semaphores[i] = Semaphore::Create(false, "RHI_semaphore_" + std::to_string(i));
+            m_semaphores[i] = Semaphore::Create(false, "RHI_semaphore_" + std::to_string(i));
     }
 
     Format RHI::GetDepthFormat()
@@ -411,7 +412,7 @@ namespace pe
             for (auto &df : candidates)
             {
                 VkFormatProperties props;
-                vkGetPhysicalDeviceFormatProperties(gpu, df, &props);
+                vkGetPhysicalDeviceFormatProperties(m_gpu, df, &props);
                 if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) ==
                     VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
                 {
@@ -429,6 +430,6 @@ namespace pe
 
     void RHI::WaitDeviceIdle()
     {
-        vkDeviceWaitIdle(device);
+        vkDeviceWaitIdle(m_device);
     }
 }

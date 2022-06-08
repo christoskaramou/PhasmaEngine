@@ -64,8 +64,8 @@ namespace pe
 
     void SSGI::CreateFrameBuffers()
     {
-        framebuffers.resize(RHII.swapchain->images.size());
-        for (size_t i = 0; i < RHII.swapchain->images.size(); ++i)
+        framebuffers.resize(SWAPCHAIN_IMAGES);
+        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
         {
             uint32_t width = viewportRT->imageInfo.width;
             uint32_t height = viewportRT->imageInfo.height;

@@ -200,7 +200,7 @@ namespace pe
         objectInfo.objectHandle = object;
         objectInfo.pObjectName = name.c_str();
 
-        vkSetDebugUtilsObjectNameEXT(RHII.device, &objectInfo);
+        vkSetDebugUtilsObjectNameEXT(RHII.GetDevice(), &objectInfo);
     }
 
     void Debug::BeginQueueRegion(Queue *queue, const std::string &name)

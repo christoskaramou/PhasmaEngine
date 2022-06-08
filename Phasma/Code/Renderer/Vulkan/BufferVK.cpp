@@ -47,7 +47,7 @@ namespace pe
         VkBuffer bufferVK;
         VmaAllocation allocationVK;
         VmaAllocationInfo allocationInfo;
-        PE_CHECK(vmaCreateBuffer(RHII.allocator, &bufferInfo, &allocationCreateInfo, &bufferVK, &allocationVK, &allocationInfo));
+        PE_CHECK(vmaCreateBuffer(RHII.GetAllocator(), &bufferInfo, &allocationCreateInfo, &bufferVK, &allocationVK, &allocationInfo));
         m_handle = bufferVK;
         allocation = allocationVK;
 
@@ -62,7 +62,7 @@ namespace pe
 
         if (m_handle)
         {
-            vmaDestroyBuffer(RHII.allocator, m_handle, allocation);
+            vmaDestroyBuffer(RHII.GetAllocator(), m_handle, allocation);
             m_handle = {};
         }
     }
@@ -71,14 +71,14 @@ namespace pe
     {
         if (data)
             return;
-        PE_CHECK(vmaMapMemory(RHII.allocator, allocation, &data));
+        PE_CHECK(vmaMapMemory(RHII.GetAllocator(), allocation, &data));
     }
 
     void Buffer::Unmap()
     {
         if (!data)
             return;
-        vmaUnmapMemory(RHII.allocator, allocation);
+        vmaUnmapMemory(RHII.GetAllocator(), allocation);
         data = nullptr;
     }
 
@@ -137,7 +137,7 @@ namespace pe
         if (!data)
             return;
 
-        PE_CHECK(vmaFlushAllocation(RHII.allocator, allocation, offset, flushSize > 0 ? flushSize : size));
+        PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), allocation, offset, flushSize > 0 ? flushSize : size));
     }
 
     size_t Buffer::Size()

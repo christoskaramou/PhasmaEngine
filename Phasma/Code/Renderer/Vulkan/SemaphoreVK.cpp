@@ -42,7 +42,7 @@ namespace pe
         }
 
         VkSemaphore semaphore;
-        PE_CHECK(vkCreateSemaphore(RHII.device, &si, nullptr, &semaphore));
+        PE_CHECK(vkCreateSemaphore(RHII.GetDevice(), &si, nullptr, &semaphore));
         m_handle = semaphore;
 
         Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_SEMAPHORE, name);
@@ -52,7 +52,7 @@ namespace pe
     {
         if (m_handle)
         {
-            vkDestroySemaphore(RHII.device, m_handle, nullptr);
+            vkDestroySemaphore(RHII.GetDevice(), m_handle, nullptr);
             m_handle = {};
         }
     }
@@ -70,7 +70,7 @@ namespace pe
         swi.pSemaphores = &semaphore;
         swi.pValues = &value;
 
-        PE_CHECK(vkWaitSemaphores(RHII.device, &swi, UINT64_MAX));
+        PE_CHECK(vkWaitSemaphores(RHII.GetDevice(), &swi, UINT64_MAX));
     }
 
     void Semaphore::Signal(uint64_t value)
@@ -84,7 +84,7 @@ namespace pe
         ssi.semaphore = m_handle;
         ssi.value = value;
 
-        PE_CHECK(vkSignalSemaphore(RHII.device, &ssi));
+        PE_CHECK(vkSignalSemaphore(RHII.GetDevice(), &ssi));
     }
 }
 #endif

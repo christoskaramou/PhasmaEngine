@@ -100,7 +100,7 @@ namespace pe
         renderPassInfo.pSubpasses = &subpassDescription;
 
         VkRenderPass renderPass;
-        PE_CHECK(vkCreateRenderPass(RHII.device, &renderPassInfo, nullptr, &renderPass));
+        PE_CHECK(vkCreateRenderPass(RHII.GetDevice(), &renderPassInfo, nullptr, &renderPass));
         m_handle = renderPass;
 
         Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_RENDER_PASS, name);
@@ -110,7 +110,7 @@ namespace pe
     {
         if (m_handle)
         {
-            vkDestroyRenderPass(RHII.device, m_handle, nullptr);
+            vkDestroyRenderPass(RHII.GetDevice(), m_handle, nullptr);
             m_handle = {};
         }
     }
