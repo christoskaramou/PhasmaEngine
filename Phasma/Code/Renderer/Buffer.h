@@ -36,8 +36,8 @@ namespace pe
     public:
         Buffer(size_t size,
                BufferUsageFlags usage,
-               AllocationCreateFlags createFlags = AllocationCreate::None,
-               const std::string &name = {});
+               AllocationCreateFlags createFlags,
+               const std::string &name);
 
         ~Buffer();
 

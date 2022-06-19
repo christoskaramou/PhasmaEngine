@@ -31,7 +31,7 @@ namespace pe
     class Swapchain : public IHandle<Swapchain, SwapchainHandle>
     {
     public:
-        Swapchain(Surface *surface, const std::string &name = {});
+        Swapchain(Surface *surface, const std::string &name);
 
         ~Swapchain();
 

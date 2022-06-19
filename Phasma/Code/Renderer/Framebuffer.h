@@ -34,7 +34,7 @@ namespace pe
                     ImageViewHandle *views,
                     uint32_t viewsCount,
                     RenderPass *renderPass,
-                    const std::string &name = {});
+                    const std::string &name);
 
         ~FrameBuffer();
 

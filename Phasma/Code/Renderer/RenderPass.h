@@ -43,7 +43,7 @@ namespace pe
     class RenderPass : public IHandle<RenderPass, RenderPassHandle>
     {
     public:
-        RenderPass(Attachment *attachments, uint32_t count, const std::string &name = {});
+        RenderPass(Attachment *attachments, uint32_t count, const std::string &name);
 
         ~RenderPass();
 

@@ -52,7 +52,7 @@ namespace pe
     class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
     {
     public:
-        CommandPool(uint32_t familyId, const std::string &name = {});
+        CommandPool(uint32_t familyId, const std::string &name);
 
         ~CommandPool();
 
@@ -79,7 +79,7 @@ namespace pe
     class CommandBuffer : public IHandle<CommandBuffer, CommandBufferHandle>
     {
     public:
-        CommandBuffer(uint32_t familyId, const std::string &name = {});
+        CommandBuffer(uint32_t familyId, const std::string &name);
 
         ~CommandBuffer();
 

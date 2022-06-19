@@ -34,9 +34,9 @@ namespace pe
     class Compute
     {
     public:
-        static Compute Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, const std::string &name = {});
+        static Compute Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, const std::string &name);
 
-        static std::vector<Compute> Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, uint32_t count, const std::string &name = {});
+        static std::vector<Compute> Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, uint32_t count, const std::string &name);
 
         static void DestroyResources();
 

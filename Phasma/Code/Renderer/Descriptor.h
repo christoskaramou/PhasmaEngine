@@ -27,7 +27,7 @@ namespace pe
     class DescriptorPool : public IHandle<DescriptorPool, DescriptorPoolHandle>
     {
     public:
-        DescriptorPool(uint32_t maxDescriptorSets, const std::string &name = {});
+        DescriptorPool(uint32_t maxDescriptorSets, const std::string &name);
 
         ~DescriptorPool();
     };
@@ -54,7 +54,7 @@ namespace pe
     class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>
     {
     public:
-        DescriptorLayout(DescriptorInfo *info, const std::string &name = {});
+        DescriptorLayout(DescriptorInfo *info, const std::string &name);
 
         ~DescriptorLayout();
 
@@ -67,7 +67,7 @@ namespace pe
     class Descriptor : public IHandle<Descriptor, DescriptorSetHandle>
     {
     public:
-        Descriptor(DescriptorInfo *info, const std::string &name = {});
+        Descriptor(DescriptorInfo *info, const std::string &name);
 
         ~Descriptor();
 
