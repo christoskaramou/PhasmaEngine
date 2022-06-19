@@ -104,16 +104,7 @@ namespace pe
     {
     }
 
-    enum class RenderQueue
-    {
-        Opaque = 1,
-        AlphaCut = 2,
-        AlphaBlend = 3
-    };
-
-    std::vector<GPUTimer> gpuTimers{};
-    
-    void Renderer::RecordDeferredCmds(CommandBuffer *cmd, uint32_t imageIndex)
+    void Renderer::RecordPasses(CommandBuffer *cmd, uint32_t imageIndex)
     {
         Deferred &deferred = *WORLD_ENTITY->GetComponent<Deferred>();
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
@@ -135,24 +126,23 @@ namespace pe
 
         FrameTimer &frameTimer = FrameTimer::Instance();
 
-        cmd->Begin();
-        Debug::BeginCmdRegion(cmd->Handle(), "RecordDeferredCmds");
+        cmd->BeginDebugRegion("RecordPasses");
 
         gpuTimers[0].Start(cmd);
 
         // MODELS
-        Debug::BeginCmdRegion(cmd->Handle(), "Geometry");
+        cmd->BeginDebugRegion("Geometry");
         gpuTimers[1].Start(cmd);
         deferred.BeginPass(cmd, imageIndex);
         for (auto &model : Model::models)
-            model.draw((uint16_t)RenderQueue::Opaque);
+            model.Draw(cmd, RenderQueue::Opaque);
         for (auto &model : Model::models)
-            model.draw((uint16_t)RenderQueue::AlphaCut);
+            model.Draw(cmd, RenderQueue::AlphaCut);
         for (auto &model : Model::models)
-            model.draw((uint16_t)RenderQueue::AlphaBlend);
+            model.Draw(cmd, RenderQueue::AlphaBlend);
         deferred.EndPass(cmd);
         frameTimer.timestamps[4] = gpuTimers[1].End();
-        Debug::EndCmdRegion(cmd->Handle());
+        cmd->EndDebugRegion();
 
         // SCREEN SPACE AMBIENT OCCLUSION
         if (GUI::show_ssao)
@@ -224,7 +214,7 @@ namespace pe
             frameTimer.timestamps[11] = gpuTimers[9].End();
         }
 
-        BlitToViewport(cmd, GUI::s_currRenderImage ? GUI::s_currRenderImage : m_viewportRT, imageIndex);
+        BlitToSwapchain(cmd, GUI::s_currRenderImage ? GUI::s_currRenderImage : m_viewportRT, imageIndex);
 
         // GUI
         gpuTimers[10].Start(cmd);
@@ -233,88 +223,51 @@ namespace pe
 
         frameTimer.timestamps[2] = gpuTimers[0].End();
 
-        Debug::EndCmdRegion(cmd->Handle());
-        cmd->End();
+        cmd->EndDebugRegion();
     }
 
-    void Renderer::RecordShadowsCmds(CommandBuffer **cmds, uint32_t cmdCount, uint32_t imageIndex)
+    void Renderer::RecordShadowsCmds(uint32_t count, CommandBuffer **cmds, uint32_t imageIndex)
     {
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
+        FrameTimer &frameTimer = FrameTimer::Instance();
 
-        if (gpuTimers.size() < cmdCount)
+        if (gpuTimers.size() < count)
         {
-            size_t count = cmdCount - gpuTimers.size();
-            for (size_t i = 0; i < count; i++)
+            size_t addCount = count - gpuTimers.size();
+            for (size_t i = 0; i < addCount; i++)
                 gpuTimers.push_back(GPUTimer());
         }
 
-        for (uint32_t i = 0; i < cmdCount; i++)
+        for (uint32_t i = 0; i < count; i++)
         {
             CommandBuffer *cmd = cmds[i];
-            FrameBuffer *frameBuffer = shadows.framebuffers[imageIndex][i];
-
             cmd->Begin();
-            Debug::BeginCmdRegion(cmd->Handle(), "Shadow_Cascade_" + std::to_string(i));
 
-            shadows.textures[i]->ChangeLayout(cmd, LayoutState::DepthStencilAttachment);
+            cmd->BeginDebugRegion("Shadow_Cascade_" + std::to_string(i));
 
-            FrameTimer &frameTimer = FrameTimer::Instance();
             gpuTimers[i].Start(cmd);
 
-            cmd->BeginPass(shadows.renderPass, frameBuffer);
-            cmd->SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
-            cmd->BindPipeline(shadows.pipeline);
+            // MODELS
+            shadows.BeginPass(cmd, imageIndex, i);
             for (auto &model : Model::models)
-            {
-                if (model.render)
-                {
-                    ShadowPushConstData data{};
+                model.DrawShadow(cmd, i);
+            shadows.EndPass(cmd, i);
 
-                    cmd->BindVertexBuffer(model.shadowsVertexBuffer, 0);
-                    cmd->BindIndexBuffer(model.indexBuffer, 0);
-
-                    std::vector<Descriptor *> dsetHandles{RHII.GetUniformBuffers()[model.uniformBufferIndex].descriptor};
-                    cmd->BindDescriptors(shadows.pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
-
-                    for (auto &node : model.linearNodes)
-                    {
-                        if (node->mesh)
-                        {
-                            data.cascade = shadows.cascades[i] * model.ubo.matrix * node->mesh->meshData.matrix;
-                            data.meshIndex = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
-                            data.meshJointCount = static_cast<uint32_t>(node->mesh->meshData.jointMatrices.size());
-
-                            cmd->PushConstants(shadows.pipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowPushConstData), &data);
-                            for (auto &primitive : node->mesh->primitives)
-                            {
-                                // if (primitive.render)
-                                cmd->DrawIndexed(
-                                    primitive.indicesSize,
-                                    1,
-                                    node->mesh->indexOffset + primitive.indexOffset,
-                                    node->mesh->vertexOffset + primitive.vertexOffset,
-                                    0);
-                            }
-                        }
-                    }
-                }
-            }
-
-            cmd->EndPass();
             frameTimer.timestamps[13 + static_cast<size_t>(i)] = gpuTimers[i].End();
-            Debug::EndCmdRegion(cmd->Handle());
+            cmd->EndDebugRegion();
+
             cmd->End();
         }
     }
 
-    Image *Renderer::CreateRenderTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags, bool blendEnable)
+    Image *Renderer::CreateRenderTarget(const std::string &name, Format format, bool blendEnable, ImageUsageFlags additionalFlags)
     {
         ImageCreateInfo info{};
         info.format = format;
         info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
         info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
-        info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | additionalFlags;
-        info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        info.usage = additionalFlags | ImageUsage::ColorAttachmentBit | ImageUsage::SampledBit;
+        info.properties = MemoryProperty::DeviceLocalBit;
         info.name = name;
         Image *rt = Image::Create(info);
 
@@ -323,18 +276,17 @@ namespace pe
         rt->CreateImageView(viewInfo);
 
         SamplerCreateInfo samplerInfo{};
+        samplerInfo.anisotropyEnable = 0;
         rt->CreateSampler(samplerInfo);
 
-        rt->ChangeLayout(nullptr, LayoutState::ColorAttachment);
-
-        rt->blendAttachment.blendEnable = blendEnable ? VK_TRUE : VK_FALSE;
-        rt->blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        rt->blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        rt->blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-        rt->blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        rt->blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        rt->blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-        rt->blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        rt->blendAttachment.blendEnable = blendEnable ? 1 : 0;
+        rt->blendAttachment.srcColorBlendFactor = BlendFactor::SrcAlpha;
+        rt->blendAttachment.dstColorBlendFactor = BlendFactor::OneMinusSrcAlpha;
+        rt->blendAttachment.colorBlendOp = BlendOp::Add;
+        rt->blendAttachment.srcAlphaBlendFactor = BlendFactor::One;
+        rt->blendAttachment.dstAlphaBlendFactor = BlendFactor::Zero;
+        rt->blendAttachment.alphaBlendOp = BlendOp::Add;
+        rt->blendAttachment.colorWriteMask = ColorComponent::RGBABit;
 
         GUI::s_renderImages.push_back(rt);
         m_renderTargets[StringHash(name)] = rt;
@@ -348,26 +300,24 @@ namespace pe
         info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
         info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
         info.usage = additionalFlags;
-        info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        info.format = (Format)format;
+        info.properties = MemoryProperty::DeviceLocalBit;
+        info.format = format;
         info.name = name;
         Image *depth = Image::Create(info);
 
         ImageViewCreateInfo viewInfo{};
         viewInfo.image = depth;
-        viewInfo.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT; // | VK_IMAGE_ASPECT_STENCIL_BIT;
+        viewInfo.aspectMask = ImageAspect::DepthBit;
         depth->CreateImageView(viewInfo);
 
         SamplerCreateInfo samplerInfo{};
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-        samplerInfo.compareEnable = VK_TRUE;
+        samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
+        samplerInfo.addressModeV = SamplerAddressMode::ClampToEdge;
+        samplerInfo.addressModeW = SamplerAddressMode::ClampToEdge;
+        samplerInfo.anisotropyEnable = 0;
+        samplerInfo.borderColor = BorderColor::FloatOpaqueWhite;
+        samplerInfo.compareEnable = 1;
         depth->CreateSampler(samplerInfo);
-
-        depth->ChangeLayout(nullptr, LayoutState::DepthStencilAttachment);
 
         GUI::s_renderImages.push_back(depth);
         m_depthTargets[StringHash(name)] = depth;
@@ -399,12 +349,12 @@ namespace pe
     {
         ImageCreateInfo info{};
         info.format = RHII.GetSurface()->format;
-        info.initialState = LayoutState::Undefined;
+        info.initialLayout = ImageLayout::Undefined;
         info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
         info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
-        info.tiling = VK_IMAGE_TILING_OPTIMAL;
-        info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        info.tiling = ImageTiling::Optimal;
+        info.usage = ImageUsage::TransferDstBit | ImageUsage::SampledBit;
+        info.properties = MemoryProperty::DeviceLocalBit;
         info.name = "FSSampledImage";
         Image *sampledImage = Image::Create(info);
 
@@ -414,8 +364,6 @@ namespace pe
 
         SamplerCreateInfo samplerInfo{};
         sampledImage->CreateSampler(samplerInfo);
-
-        sampledImage->ChangeLayout(nullptr, LayoutState::ShaderReadOnly);
 
         return sampledImage;
     }
@@ -463,7 +411,7 @@ namespace pe
     // ----------------------------------------
 #endif
 
-    void Renderer::LoadResources()
+    void Renderer::LoadResources(CommandBuffer *cmd)
     {
         // SKYBOXES LOAD
         std::array<std::string, 6> skyTextures = {
@@ -473,7 +421,7 @@ namespace pe
             Path::Assets + "Objects/sky/bottom.png",
             Path::Assets + "Objects/sky/back.png",
             Path::Assets + "Objects/sky/front.png"};
-        skyBoxDay.loadSkyBox(skyTextures, 1024);
+        skyBoxDay.loadSkyBox(cmd, skyTextures, 1024);
         skyTextures = {
             Path::Assets + "Objects/lmcity/lmcity_rt.png",
             Path::Assets + "Objects/lmcity/lmcity_lf.png",
@@ -481,7 +429,7 @@ namespace pe
             Path::Assets + "Objects/lmcity/lmcity_dn.png",
             Path::Assets + "Objects/lmcity/lmcity_bk.png",
             Path::Assets + "Objects/lmcity/lmcity_ft.png"};
-        skyBoxNight.loadSkyBox(skyTextures, 512);
+        skyBoxNight.loadSkyBox(cmd, skyTextures, 512);
 
 #ifndef IGNORE_SCRIPTS
         // SCRIPTS
@@ -503,10 +451,10 @@ namespace pe
         skyBoxNight.createDescriptorSet();
     }
 
-    void Renderer::ResizeViewport(uint32_t width, uint32_t height)
+    void Renderer::Resize(uint32_t width, uint32_t height)
     {
-        if (s_currentQueue)
-            s_currentQueue->WaitIdle();
+        // Wait idle, we dont want to destroy objects in use
+        RHII.WaitDeviceIdle();
 
         renderArea.Update(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height));
 
@@ -523,20 +471,20 @@ namespace pe
         Swapchain::Destroy(RHII.GetSwapchain());
         RHII.CreateSwapchain(surface);
 
-        m_viewportRT = CreateRenderTarget("viewport", format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-        m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-        CreateRenderTarget("normal", VK_FORMAT_R32G32B32A32_SFLOAT);
-        CreateRenderTarget("albedo", format);
-        CreateRenderTarget("srm", format); // Specular Roughness Metallic
-        CreateRenderTarget("ssao", VK_FORMAT_R16_UNORM);
-        CreateRenderTarget("ssaoBlur", VK_FORMAT_R8_UNORM);
-        CreateRenderTarget("ssr", format);
-        CreateRenderTarget("velocity", VK_FORMAT_R16G16_SFLOAT);
-        CreateRenderTarget("brightFilter", format);
-        CreateRenderTarget("gaussianBlurHorizontal", format);
-        CreateRenderTarget("gaussianBlurVertical", format);
-        CreateRenderTarget("emissive", format);
-        CreateRenderTarget("taa", format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit);
+        m_viewportRT = CreateRenderTarget("viewport", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit);
+        CreateRenderTarget("normal", Format::RGBA32SFloat, false);
+        CreateRenderTarget("albedo", format, true);
+        CreateRenderTarget("srm", format, false); // Specular Roughness Metallic
+        CreateRenderTarget("ssao", Format::R16Unorm, false);
+        CreateRenderTarget("ssaoBlur", Format::R8Unorm, false);
+        CreateRenderTarget("ssr", format, false);
+        CreateRenderTarget("velocity", Format::RG16SFloat, false);
+        CreateRenderTarget("brightFilter", format, false);
+        CreateRenderTarget("gaussianBlurHorizontal", format, false);
+        CreateRenderTarget("gaussianBlurVertical", format, false);
+        CreateRenderTarget("emissive", format, false);
+        CreateRenderTarget("taa", format, false, ImageUsage::TransferSrcBit);
 
         for (auto &rc : m_renderComponents)
             rc.second->Resize(width, height);
@@ -548,36 +496,32 @@ namespace pe
         gui.CreateFrameBuffers();
     }
 
-    void Renderer::BlitToViewport(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex)
+    void Renderer::BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)
     {
-        Debug::BeginCmdRegion(cmd->Handle(), "BlitToViewport");
+        cmd->BeginDebugRegion("BlitToViewport");
 
-        Image *s_chain_Image = RHII.GetSwapchain()->images[imageIndex];
-
-        renderedImage->ChangeLayout(cmd, LayoutState::TransferSrc);
-        s_chain_Image->ChangeLayout(cmd, LayoutState::TransferDst);
-
-        ImageBlit blit{};
-        blit.srcOffsets[0] = Offset3D{static_cast<int32_t>(renderedImage->imageInfo.width), static_cast<int32_t>(renderedImage->imageInfo.height), 0};
-        blit.srcOffsets[1] = Offset3D{0, 0, 1};
-        blit.srcSubresource.aspectMask = renderedImage->viewInfo.aspectMask;
-        blit.srcSubresource.layerCount = 1;
+        Image *swapchainImage = RHII.GetSwapchain()->images[imageIndex];
         Viewport &vp = renderArea.viewport;
-        blit.dstOffsets[0] = Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
-        blit.dstOffsets[1] = Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
-        blit.dstSubresource.aspectMask = s_chain_Image->viewInfo.aspectMask;
-        blit.dstSubresource.layerCount = 1;
 
-        cmd->BlitImage(
-            renderedImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            s_chain_Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &blit,
-            VK_FILTER_LINEAR);
+        ImageBlit region{};
+        region.srcOffsets[0] = Offset3D{static_cast<int32_t>(src->imageInfo.width), static_cast<int32_t>(src->imageInfo.height), 0};
+        region.srcOffsets[1] = Offset3D{0, 0, 1};
+        region.srcSubresource.aspectMask = src->viewInfo.aspectMask;
+        region.srcSubresource.layerCount = 1;
+        region.dstOffsets[0] = Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
+        region.dstOffsets[1] = Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
+        region.dstSubresource.aspectMask = swapchainImage->viewInfo.aspectMask;
+        region.dstSubresource.layerCount = 1;
 
-        renderedImage->ChangeLayout(cmd, LayoutState::ColorAttachment);
-        s_chain_Image->ChangeLayout(cmd, LayoutState::PresentSrc);
+        cmd->ChangeLayout(src, ImageLayout::TransferSrc);
+        cmd->ChangeLayout(swapchainImage, ImageLayout::TransferDst);
 
-        Debug::EndCmdRegion(cmd->Handle());
+        cmd->BlitImage(src, swapchainImage, &region, Filter::Linear);
+
+        cmd->ChangeLayout(src, ImageLayout::ColorAttachment);
+        cmd->ChangeLayout(swapchainImage, ImageLayout::PresentSrc);
+
+        cmd->EndDebugRegion();
     }
 
     void Renderer::RecreatePipelines()
@@ -594,11 +538,9 @@ namespace pe
         DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
-        Pipeline::Destroy(shadows.pipeline);
         Pipeline::Destroy(ssao.pipeline);
         Pipeline::Destroy(ssao.pipelineBlur);
         Pipeline::Destroy(ssr.pipeline);
-        Pipeline::Destroy(deferred.pipeline);
         Pipeline::Destroy(deferred.pipelineComposition);
         Pipeline::Destroy(fxaa.pipeline);
         Pipeline::Destroy(taa.pipeline);

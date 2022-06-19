@@ -101,7 +101,7 @@ namespace pe
         PE_CHECK(vkCreateQueryPool(RHII.GetDevice(), &qpci, nullptr, &pool));
         queryPool = pool;
 
-        Debug::SetObjectName(queryPool, VK_OBJECT_TYPE_QUERY_POOL, "GPUTimer_queryPool");
+        Debug::SetObjectName(queryPool, ObjectType::QueryPool, "GPUTimer_queryPool");
     }
 
     void GPUTimer::Reset()

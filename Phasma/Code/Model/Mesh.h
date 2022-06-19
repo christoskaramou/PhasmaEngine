@@ -22,7 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#include "Renderer/Vertex.h"
 #include "Material.h"
 #include "GLTFSDK/GLTF.h"
 #include "GLTFSDK/Document.h"
@@ -33,10 +32,10 @@ constexpr auto MAX_NUM_JOINTS = 128u;
 namespace pe
 {
     class Descriptor;
-
     class Image;
-
     class Buffer;
+    class Vertex;
+    class CommandBuffer;
 
     class Primitive
     {
@@ -62,7 +61,7 @@ namespace pe
         vec4 transformedBS;
         bool hasBones = false;
 
-        void calculateBoundingSphere()
+        void CalculateBoundingSphere()
         {
             const vec3 center = (max + min) * .5f;
             const float sphereRadius = length(max - center);
@@ -75,12 +74,12 @@ namespace pe
             boundingBox.max = max;
         }
 
-        void loadTexture(
-            MaterialType type,
-            const std::filesystem::path &file,
-            const Microsoft::glTF::Image *image = nullptr,
-            const Microsoft::glTF::Document *document = nullptr,
-            const Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr);
+        void loadTexture(CommandBuffer *cmd,
+                         MaterialType type,
+                         const std::filesystem::path &file,
+                         const Microsoft::glTF::Image *image = nullptr,
+                         const Microsoft::glTF::Document *document = nullptr,
+                         const Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr);
     };
 
     class Mesh
@@ -103,18 +102,14 @@ namespace pe
         static std::map<std::string, Image *> uniqueTextures;
         std::vector<Primitive> primitives{};
 
-        // Descriptor *descriptorSet;
-        // Buffer *uniformBuffer;
         size_t uniformBufferIndex;
         size_t uniformBufferOffset;
         std::vector<Vertex> vertices{};
         std::vector<uint32_t> indices{};
         uint32_t vertexOffset = 0, indexOffset = 0;
-        // vec4 boundingSphere;
 
         void SetUniformOffsets(size_t uniformBufferIndex);
 
-        // void calculateBoundingSphere();
         void destroy();
     };
 }

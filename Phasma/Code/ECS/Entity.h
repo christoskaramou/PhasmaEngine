@@ -95,8 +95,11 @@ namespace pe
     template <class T>
     inline T *Entity::GetComponent()
     {
-        if (HasComponent<T>())
-            return static_cast<T *>(m_components[GetTypeID<T>()].get());
+        ValidateBaseClass<IComponent, T>();
+        
+        auto it = m_components.find(GetTypeID<T>());
+        if (it != m_components.end())
+            return static_cast<T *>(it->second.get());
         else
             return nullptr;
     }

@@ -27,10 +27,7 @@ namespace pe
     constexpr uint32_t AUTO = UINT32_MAX;
 
     class Descriptor;
-    class CommandPool;
     class CommandBuffer;
-    class Fence;
-    class Semaphore;
     class Buffer;
     class Pipeline;
 
@@ -41,19 +38,17 @@ namespace pe
 
         static std::vector<Compute> Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, uint32_t count, const std::string &name = {});
 
-        static void CreateResources();
-
         static void DestroyResources();
 
         Compute();
 
         ~Compute() = default;
 
-        void UpdateInput(const void *srcData, size_t srcSize = 0, size_t offset = 0);
+        void UpdateInput(void *data, size_t size, size_t offset = 0);
 
         void Dispatch(uint32_t sizeX, uint32_t sizeY, uint32_t sizeZ);
 
-        void WaitFence();
+        void Wait();
 
         void Destroy();
 
@@ -67,6 +62,10 @@ namespace pe
             SBOut->Unmap();
         }
 
+        void CreateUniforms(size_t sizeIn, size_t sizeOut);
+
+        void UpdateDescriptorSet();
+
         void CreatePipeline(const std::string &shaderName);
 
     private:
@@ -74,15 +73,7 @@ namespace pe
         Buffer *SBIn;
         Buffer *SBOut;
         Pipeline *pipeline;
-        Fence *fence;
-        Semaphore *semaphore;
         Descriptor *DSCompute;
         CommandBuffer *commandBuffer;
-
-        void CreateComputeStorageBuffers(size_t sizeIn, size_t sizeOut);
-
-        void CreateDescriptorSet();
-
-        void UpdateDescriptorSet();
     };
 }

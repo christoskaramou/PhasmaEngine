@@ -23,36 +23,17 @@ SOFTWARE.
 #pragma once
 
 #include "imgui/imgui.h"
-#include "Model/Object.h"
 #include "SDL/SDL.h"
 
 namespace pe
 {
     constexpr float TITLEBAR_HEIGHT = 19.f;
 
-    class Context;
-
     class Window;
-
-    class Surface;
-
-    class Swapchain;
-
     class FrameBuffer;
-
     class RenderPass;
-
-    class CommandPool;
-
     class CommandBuffer;
-
-    class Fence;
-
-    class Semaphore;
-
     class Image;
-
-    class RenderPass;
 
     class GUI
     {
@@ -117,20 +98,13 @@ namespace pe
         static inline Image *s_currRenderImage = nullptr;
         static inline std::vector<Image *> s_renderImages{};
 
-        bool show_demo_window = false;
-
-        void InitImGui();
-
-        bool render = true;
-        std::string name;
-        RenderPass *renderPass;
-        std::vector<FrameBuffer *> framebuffers;
+        void InitGUI(bool show = true);
 
         void Update();
 
         void RenderViewPorts();
 
-        void InitGUI(bool show = true);
+        void InitImGui();
 
         void Draw(CommandBuffer *cmd, uint32_t imageIndex);
 
@@ -165,5 +139,12 @@ namespace pe
         void CreateFrameBuffers();
 
         void Destroy();
+
+    public:
+        bool show_demo_window = false;
+        bool render = true;
+        std::string name;
+        RenderPass *renderPass;
+        std::vector<FrameBuffer *> framebuffers;
     };
 }

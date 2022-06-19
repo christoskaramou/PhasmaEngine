@@ -39,7 +39,6 @@ namespace pe
     };
 
     class Descriptor;
-
     class Buffer;
 
     class LightSystem : public ISystem
@@ -49,7 +48,7 @@ namespace pe
 
         ~LightSystem();
 
-        void Init() override;
+        void Init(CommandBuffer *cmd) override;
 
         void Update(double delta) override;
 

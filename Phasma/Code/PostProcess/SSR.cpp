@@ -81,13 +81,13 @@ namespace pe
     void SSR::CreatePipeline()
     {
         PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSR/ssr.frag", ShaderType::Fragment});
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSR/ssr.frag", ShaderStage::FragmentBit});
         info.width = ssrRT->width_f;
         info.height = ssrRT->height_f;
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {ssrRT->blendAttachment};
-        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutSSR()};
+        info.descriptorSetLayouts = {DSet->GetLayout()};
         info.renderPass = renderPass;
         info.name = "ssr_pipeline";
 
@@ -97,44 +97,86 @@ namespace pe
         Shader::Destroy(info.pFragShader);
     }
 
-    void SSR::CreateUniforms()
+    void SSR::CreateUniforms(CommandBuffer *cmd)
     {
         UBReflection = Buffer::Create(
             4 * sizeof(mat4),
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            BufferUsage::UniformBufferBit,
+            AllocationCreate::HostAccessSequentialWriteBit,
             "SSR_UB_Reflection_buffer");
         UBReflection->Map();
         UBReflection->Zero();
         UBReflection->Flush();
         UBReflection->Unmap();
 
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSSR(), 1, "SSR_descriptor");
+        DescriptorBindingInfo bindingInfos[5]{};
 
-        UpdateDescriptorSets();
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[0].pImage = albedoRT;
+
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[1].pImage = depth;
+
+        bindingInfos[2].binding = 2;
+        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[2].pImage = normalRT;
+
+        bindingInfos[3].binding = 3;
+        bindingInfos[3].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[3].pImage = srmRT;
+
+        bindingInfos[4].binding = 4;
+        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].pBuffer = UBReflection;
+
+        DescriptorInfo info{};
+        info.count = 5;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
+
+        DSet = Descriptor::Create(&info, "SSR_descriptor");
     }
 
     void SSR::UpdateDescriptorSets()
     {
-        std::array<DescriptorUpdateInfo, 5> infos{};
+        DescriptorBindingInfo bindingInfos[5]{};
 
-        infos[0].binding = 0;
-        infos[0].pImage = albedoRT;
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[0].pImage = albedoRT;
 
-        infos[1].binding = 1;
-        infos[1].pImage = depth;
-        infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[1].pImage = depth;
 
-        infos[2].binding = 2;
-        infos[2].pImage = normalRT;
+        bindingInfos[2].binding = 2;
+        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[2].pImage = normalRT;
 
-        infos[3].binding = 3;
-        infos[3].pImage = srmRT;
+        bindingInfos[3].binding = 3;
+        bindingInfos[3].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[3].pImage = srmRT;
 
-        infos[4].binding = 4;
-        infos[4].pBuffer = UBReflection;
+        bindingInfos[4].binding = 4;
+        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].pBuffer = UBReflection;
 
-        DSet->UpdateDescriptor(5, infos.data());
+        DescriptorInfo info{};
+        info.count = 5;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
+
+        DSet->UpdateDescriptor(&info);
     }
 
     void SSR::Update(Camera *camera)
@@ -149,26 +191,26 @@ namespace pe
             reflectionInput[2] = camera->view;
             reflectionInput[3] = camera->invProjection;
 
-            MemoryRange range{};
-            range.data = &reflectionInput;
-            range.size = sizeof(reflectionInput);
-            range.offset = 0;
-            UBReflection->Copy(&range, 1, false);
+            MemoryRange mr{};
+            mr.data = &reflectionInput;
+            mr.size = sizeof(reflectionInput);
+            mr.offset = 0;
+            UBReflection->Copy(1 ,&mr, false);
         }
     }
 
     void SSR::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        Debug::BeginCmdRegion(cmd->Handle(), "SSR");
+        cmd->BeginDebugRegion("SSR");
 
         // SCREEN SPACE REFLECTION
         // Input
-        albedoRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        normalRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        srmRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        depth->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+        cmd->ChangeLayout(albedoRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(normalRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(srmRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
         // Output
-        ssrRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        cmd->ChangeLayout(ssrRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->BindPipeline(pipeline);
@@ -176,9 +218,9 @@ namespace pe
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
 
-        ssrRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        cmd->ChangeLayout(ssrRT, ImageLayout::ShaderReadOnly);
 
-        Debug::EndCmdRegion(cmd->Handle());
+        cmd->EndDebugRegion();
     }
 
     void SSR::Resize(uint32_t width, uint32_t height)
@@ -191,13 +233,13 @@ namespace pe
         Init();
         CreateRenderPass();
         CreateFrameBuffers();
-        CreatePipeline();
         UpdateDescriptorSets();
+        CreatePipeline();
     }
 
     void SSR::Destroy()
     {
-        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutSSR());
+        Descriptor::Destroy(DSet);
 
         for (auto framebuffer : framebuffers)
             FrameBuffer::Destroy(framebuffer);

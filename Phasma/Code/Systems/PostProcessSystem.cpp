@@ -42,7 +42,7 @@ namespace pe
     {
     }
 
-    void PostProcessSystem::Init()
+    void PostProcessSystem::Init(CommandBuffer *cmd)
     {
         m_effects[GetTypeID<Bloom>()] = WORLD_ENTITY->CreateComponent<Bloom>();
         m_effects[GetTypeID<DOF>()] = WORLD_ENTITY->CreateComponent<DOF>();
@@ -58,8 +58,8 @@ namespace pe
             effect.second->Init();
             effect.second->CreateRenderPass();
             effect.second->CreateFrameBuffers();
+            effect.second->CreateUniforms(cmd);
             effect.second->CreatePipeline();
-            effect.second->CreateUniforms();
         }
     }
 

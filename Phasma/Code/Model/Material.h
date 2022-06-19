@@ -26,15 +26,6 @@ namespace pe
 {
     class Image;
 
-    enum class MaterialType
-    {
-        BaseColor,
-        MetallicRoughness,
-        Normal,
-        Occlusion,
-        Emissive
-    };
-
     struct PBRMaterial
     {
         vec4 baseColorFactor;
@@ -43,7 +34,7 @@ namespace pe
         vec3 emissiveFactor;
         float alphaCutoff{};
         bool doubleSided{};
-        uint16_t alphaMode{};
+        RenderQueue renderQueue{};
 
         Image *baseColorTexture;
         Image *metallicRoughnessTexture;

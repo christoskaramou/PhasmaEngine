@@ -77,15 +77,15 @@ namespace pe
     void SSGI::CreatePipeline()
     {
         PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSGI/SSGI.frag", ShaderType::Fragment});
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSGI/SSGI.frag", ShaderStage::FragmentBit});
         info.width = viewportRT->width_f;
         info.height = viewportRT->height_f;
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {viewportRT->blendAttachment};
-        info.pushConstantStage = PushConstantStage::Fragment;
+        info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = 5 * sizeof(vec4);
-        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutSSGI()};
+        info.descriptorSetLayouts = {DSet->GetLayout()};
         info.renderPass = renderPass;
         info.name = "ssgi_pipeline";
 
@@ -95,21 +95,50 @@ namespace pe
         Shader::Destroy(info.pFragShader);
     }
 
-    void SSGI::CreateUniforms()
+    void SSGI::CreateUniforms(CommandBuffer *cmd)
     {
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSSGI(), 1, "SSGI_descriptor");
-        UpdateDescriptorSets();
+        DescriptorBindingInfo bindingInfos[2]{};
+
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[0].pImage = frameImage;
+
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[1].pImage = depth;
+
+
+        DescriptorInfo info{};
+        info.count = 2;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
+
+        DSet = Descriptor::Create(&info, "SSGI_descriptor");
     }
 
     void SSGI::UpdateDescriptorSets()
     {
-        std::array<DescriptorUpdateInfo, 2> infos{};
-        infos[0].binding = 0;
-        infos[0].pImage = frameImage;
-        infos[1].binding = 1;
-        infos[1].pImage = depth;
-        infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-        DSet->UpdateDescriptor(2, infos.data());
+        DescriptorBindingInfo bindingInfos[2]{};
+
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[0].pImage = frameImage;
+
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[1].pImage = depth;
+
+
+        DescriptorInfo info{};
+        info.count = 2;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
+
+        DSet->UpdateDescriptor(&info);
     }
 
     void SSGI::Update(Camera *camera)
@@ -118,28 +147,28 @@ namespace pe
 
     void SSGI::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        Debug::BeginCmdRegion(cmd->Handle(), "SSGI");
+        cmd->BeginDebugRegion("SSGI");
 
         Camera &camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
 
         // Copy viewport image
-        frameImage->CopyColorAttachment(cmd, viewportRT);
+        cmd->CopyImage(viewportRT, frameImage);
 
         // SCREEN SPACE GLOBAL ILLUMINATION
         // Input
-        frameImage->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        depth->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+        cmd->ChangeLayout(frameImage, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
         // Output
-        viewportRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        cmd->ChangeLayout(viewportRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-        cmd->PushConstants(pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, uint32_t(sizeof(mat4)), &camera.invViewProjection);
+        cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, uint32_t(sizeof(mat4)), &camera.invViewProjection);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
 
-        Debug::EndCmdRegion(cmd->Handle());
+        cmd->EndDebugRegion();
     }
 
     void SSGI::Resize(uint32_t width, uint32_t height)
@@ -153,13 +182,13 @@ namespace pe
         Init();
         CreateRenderPass();
         CreateFrameBuffers();
-        CreatePipeline();
         UpdateDescriptorSets();
+        CreatePipeline();
     }
 
     void SSGI::Destroy()
     {
-        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutSSGI());
+        Descriptor::Destroy(DSet);
 
         for (auto framebuffer : framebuffers)
             FrameBuffer::Destroy(framebuffer);

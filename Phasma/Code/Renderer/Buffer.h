@@ -36,7 +36,7 @@ namespace pe
     public:
         Buffer(size_t size,
                BufferUsageFlags usage,
-               AllocationCreateFlags createFlags = 0,
+               AllocationCreateFlags createFlags = AllocationCreate::None,
                const std::string &name = {});
 
         ~Buffer();
@@ -45,21 +45,25 @@ namespace pe
 
         void Unmap();
 
+        void Flush(size_t offset = 0, size_t flushSize = 0) const;
+
         void Zero() const;
 
-        void CopyData(const void *srcData, size_t srcSize = 0, size_t offset = 0);
-
-        void CopyBuffer(Buffer *srcBuffer, size_t srcSize = 0);
-
-        void Copy(MemoryRange *ranges, uint32_t count, bool isPersistent);
-
-        void Flush(size_t offset = 0, size_t flushSize = 0) const;
+        void Copy(uint32_t count, MemoryRange *ranges, bool persistent);
 
         size_t Size();
 
         void *Data();
 
     private:
+        friend class CommandBuffer;
+
+        void CopyBuffer(CommandBuffer* cmd, Buffer *src, size_t size);
+
+        void CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t offset = 0);
+        
+        void CopyDataRaw(const void *data, size_t size, size_t offset = 0);
+
         size_t size;
         void *data;
         AllocationHandle allocation;

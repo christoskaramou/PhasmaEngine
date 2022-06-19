@@ -79,7 +79,7 @@ namespace pe
 
         static void Clear();
 
-        static void Start(double interval = 0.25);
+        static void Start(double interval);
 
         inline static void Stop() { s_running = false; }
 

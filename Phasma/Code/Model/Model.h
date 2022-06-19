@@ -54,53 +54,61 @@ namespace pe
 
         static void Load(const std::filesystem::path &file);
 
-        void draw(uint16_t alphaMode);
+        void Draw(CommandBuffer *cmd, RenderQueue renderQueue);
 
-        void update(Camera &camera, double delta);
+        void DrawShadow(CommandBuffer *cmd, uint32_t cascade);
 
-        void updateAnimation(uint32_t index, float time);
+        void Update(Camera &camera, double delta);
 
-        void calculateBoundingSphere();
+        void UpdateAnimation(uint32_t index, float time);
 
-        void loadNode(pe::Node *parent, const Microsoft::glTF::Node &node, const std::filesystem::path &file);
+        void CalculateBoundingSphere();
 
-        void loadAnimations();
+        void LoadNode(CommandBuffer *cmd,
+                      pe::Node *parent,
+                      const Microsoft::glTF::Node &node,
+                      const std::filesystem::path &file);
 
-        void loadSkins();
+        void LoadAnimations();
 
-        void readGltf(const std::filesystem::path &file);
+        void LoadSkins();
 
-        void loadModelGltf(const std::filesystem::path &file);
+        void ReadGltf(const std::filesystem::path &file);
 
-        void getMesh(pe::Node *node, const std::string &meshID, const std::filesystem::path &file) const;
+        void LoadModelGltf(CommandBuffer *cmd, const std::filesystem::path &file);
+
+        void GetMesh(CommandBuffer *cmd,
+                     pe::Node *node,
+                     const std::string &meshID,
+                     const std::filesystem::path &file) const;
 
         template <typename T>
-        void getVertexData(std::vector<T> &vec, const std::string &accessorName,
+        void GetVertexData(std::vector<T> &vec, const std::string &accessorName,
                            const Microsoft::glTF::MeshPrimitive &primitive) const;
 
-        void getIndexData(std::vector<uint32_t> &vec, const Microsoft::glTF::MeshPrimitive &primitive) const;
+        void GetIndexData(std::vector<uint32_t> &vec, const Microsoft::glTF::MeshPrimitive &primitive) const;
 
-        Microsoft::glTF::Image *getImage(const std::string &textureID) const;
+        Microsoft::glTF::Image *GetImage(const std::string &textureID) const;
 
-        void createVertexBuffer();
+        void CreateVertexBuffer(CommandBuffer *cmd);
 
-        void createIndexBuffer();
+        void CreateIndexBuffer(CommandBuffer *cmd);
 
-        void createUniforms();
+        void CreateUniforms();
 
-        void createDescriptorSets();
+        void CreatePipeline();
 
-        void destroy();
+        void CreatePipelineGBuffer();
+
+        void CreatePipelineShadows();
+
+        void Destroy();
 
         // Document holds all info about the gltf model
         Microsoft::glTF::Document *document = nullptr;
         Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr;
 
         static std::deque<Model> models;
-        static Pipeline *pipeline;
-        static CommandBuffer *commandBuffer;
-        // Descriptor *descriptorSet;
-        // Buffer *uniformBuffer;
         size_t uniformBufferIndex;
         size_t uniformImagesIndex;
         size_t uniformBufferOffset;
@@ -137,5 +145,14 @@ namespace pe
         Buffer *shadowsVertexBuffer;
         Buffer *indexBuffer;
         uint32_t numberOfVertices = 0, numberOfIndices = 0;
+
+    private:
+        Image *m_normalRT;
+        Image *m_albedoRT;
+        Image *m_srmRT;
+        Image *m_velocityRT;
+        Image *m_emissiveRT;
+        Pipeline *m_pipelineGBuffer;
+        Pipeline *m_pipelineShadows;
     };
 }

@@ -31,7 +31,6 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Renderer/Queue.h"
 #include "Renderer/Semaphore.h"
-#include "Renderer/Fence.h"
 
 namespace pe
 {
@@ -48,7 +47,7 @@ namespace pe
         PE_CHECK(vkCreateCommandPool(RHII.GetDevice(), &cpci, nullptr, &commandPool));
         m_handle = commandPool;
 
-        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_COMMAND_POOL, name);
+        Debug::SetObjectName(m_handle, ObjectType::CommandPool, name);
     }
 
     CommandPool::~CommandPool()
@@ -87,11 +86,13 @@ namespace pe
 
     CommandPool *CommandPool::GetNext(uint32_t familyId)
     {
+        std::lock_guard<std::mutex> lock(s_getNextMutex);
+
         if (s_availableCps[familyId].empty())
         {
             CommandPool *cp = CommandPool::Create(familyId, "CommandPool_" + std::to_string(familyId) + "_" + std::to_string(s_allCps[familyId].size()));
-            s_availableCps[familyId][cp] = cp;
             s_allCps[familyId][cp] = cp;
+            return cp;
         }
 
         CommandPool *cp = s_availableCps[familyId].begin()->second;
@@ -101,6 +102,8 @@ namespace pe
 
     void CommandPool::Return(CommandPool *commandPool)
     {
+        std::lock_guard<std::mutex> lock(s_returnMutex);
+
         uint32_t familyId = commandPool->GetFamilyId();
 
         if (s_availableCps[familyId].find(commandPool) == s_availableCps[familyId].end())
@@ -111,7 +114,8 @@ namespace pe
     {
         m_familyId = familyId;
         m_commandPool = CommandPool::GetNext(familyId);
-        m_fence = nullptr;
+        m_semaphore = Semaphore::Create(true, name + "_semaphore");
+        m_submitions = 0;
 
         VkCommandBufferAllocateInfo cbai{};
         cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -123,13 +127,16 @@ namespace pe
         PE_CHECK(vkAllocateCommandBuffers(RHII.GetDevice(), &cbai, &commandBuffer));
         m_handle = commandBuffer;
 
-        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_COMMAND_BUFFER, name);
-
         this->name = name;
+        nameHash = StringHash(name);
+
+        Debug::SetObjectName(m_handle, ObjectType::CommandBuffer, name);
     }
 
     CommandBuffer::~CommandBuffer()
     {
+        Semaphore::Destroy(m_semaphore);
+        
         if (m_handle)
         {
             VkCommandBuffer cmd = m_handle;
@@ -144,32 +151,27 @@ namespace pe
         }
     }
 
-    void CommandBuffer::CopyBuffer(Buffer *srcBuffer, Buffer *dstBuffer, uint32_t regionCount, BufferCopy *pRegions)
-    {
-        std::vector<VkBufferCopy> regions(regionCount);
-        for (uint32_t i = 0; i < regionCount; i++)
-        {
-            regions[i].srcOffset = pRegions[i].srcOffset;
-            regions[i].dstOffset = pRegions[i].dstOffset;
-            regions[i].size = pRegions[i].size;
-        }
-
-        vkCmdCopyBuffer(m_handle, srcBuffer->Handle(), dstBuffer->Handle(), regionCount, regions.data());
-    }
-
     void CommandBuffer::Begin()
     {
+        if (m_recording)
+            PE_ERROR("CommandBuffer::Begin: CommandBuffer is already recording!");
+
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         beginInfo.pInheritanceInfo = nullptr;
 
         PE_CHECK(vkBeginCommandBuffer(m_handle, &beginInfo));
+        m_recording = true;
     }
 
     void CommandBuffer::End()
     {
+        if (!m_recording)
+            PE_ERROR("CommandBuffer::End: CommandBuffer is not in recording state!");
+
         PE_CHECK(vkEndCommandBuffer(m_handle));
+        m_recording = false;
     }
 
     void CommandBuffer::PipelineBarrier()
@@ -181,27 +183,9 @@ namespace pe
         vkCmdSetDepthBias(m_handle, constantFactor, clamp, slopeFactor);
     }
 
-    void CommandBuffer::BlitImage(
-        Image *srcImage, ImageLayout srcImageLayout,
-        Image *dstImage, ImageLayout dstImageLayout,
-        uint32_t regionCount, ImageBlit *pRegions,
-        Filter filter)
+    void CommandBuffer::BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter)
     {
-        std::vector<VkImageBlit> regions(regionCount);
-        memcpy(regions.data(), pRegions, regionCount * sizeof(VkImageBlit));
-
-        vkCmdBlitImage(m_handle,
-                       srcImage->Handle(), (VkImageLayout)srcImageLayout,
-                       dstImage->Handle(), (VkImageLayout)dstImageLayout,
-                       regionCount, regions.data(),
-                       (VkFilter)filter);
-    }
-
-    bool IsDepth(Format format)
-    {
-        return format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
-               format == VK_FORMAT_D32_SFLOAT ||
-               format == VK_FORMAT_D24_UNORM_S8_UINT;
+        dst->BlitImage(this, src, region, filter);
     }
 
     void CommandBuffer::BeginPass(RenderPass *pass, FrameBuffer *frameBuffer)
@@ -209,7 +193,7 @@ namespace pe
         std::vector<VkClearValue> clearValues(pass->attachments.size());
         for (int i = 0; i < pass->attachments.size(); i++)
         {
-            if (IsDepth(pass->attachments[i].format))
+            if (IsDepthFormat(pass->attachments[i].format))
                 clearValues[i].depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
             else
                 clearValues[i].color = {1.0f, 0.0f, 0.0f, 1.0f};
@@ -276,9 +260,10 @@ namespace pe
         vkCmdDispatch(m_handle, groupCountX, groupCountY, groupCountZ);
     }
 
-    void CommandBuffer::PushConstants(Pipeline *pipeline, ShaderStageFlags shaderStageFlags, uint32_t offset, uint32_t size, const void *pValues)
+    void CommandBuffer::PushConstants(Pipeline *pipeline, ShaderStageFlags stage, uint32_t offset, uint32_t size, const void *pValues)
     {
-        vkCmdPushConstants(m_handle, pipeline->layout, shaderStageFlags, offset, size, pValues);
+        uint32_t flags = GetShaderStageVK(stage);
+        vkCmdPushConstants(m_handle, pipeline->layout, flags, offset, size, pValues);
     }
 
     void CommandBuffer::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
@@ -294,16 +279,68 @@ namespace pe
     void CommandBuffer::Submit(Queue *queue,
                                PipelineStageFlags *waitStages,
                                uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-                               uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
-                               Fence *fence)
+                               uint32_t signalSemaphoresCount, Semaphore **signalSemaphores)
     {
-        m_fence = fence;
         CommandBuffer *cmd = this;
         queue->Submit(1, &cmd,
                       waitStages,
                       waitSemaphoresCount, waitSemaphores,
-                      signalSemaphoresCount, signalSemaphores,
-                      fence);
+                      signalSemaphoresCount, signalSemaphores);
+    }
+
+    void CommandBuffer::ChangeLayout(Image *image,
+                                     ImageLayout newLayout,
+                                     uint32_t baseArrayLayer,
+                                     uint32_t arrayLayers,
+                                     uint32_t baseMipLevel,
+                                     uint32_t mipLevels)
+    {
+        image->ChangeLayout(this, newLayout, baseArrayLayer, arrayLayers, baseMipLevel, mipLevels);
+    }
+
+    void CommandBuffer::CopyBuffer(Buffer *src, Buffer *dst, const size_t size)
+    {
+        dst->CopyBuffer(this, src, size);
+    }
+
+    void CommandBuffer::CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t offset)
+    {
+        buffer->CopyBufferStaged(this, data, size, offset);
+    }
+
+    void CommandBuffer::CopyDataToImageStaged(Image *image,
+                                              void *data,
+                                              size_t size,
+                                              uint32_t baseArrayLayer,
+                                              uint32_t layerCount,
+                                              uint32_t mipLevel)
+    {
+        image->CopyDataToImageStaged(this, data, size, baseArrayLayer, layerCount, mipLevel);
+    }
+
+    void CommandBuffer::CopyImage(Image *src, Image *dst)
+    {
+        dst->CopyImage(this, src);
+    }
+
+    void CommandBuffer::GenerateMipMaps(Image *image)
+    {
+        image->GenerateMipMaps(this);
+    }
+
+    void CommandBuffer::BeginDebugRegion(const std::string &name)
+    {
+        Debug::BeginCmdRegion(this, name);
+    }
+
+    void CommandBuffer::InsertDebugLabel(const std::string &name)
+    {
+        Debug::InsertCmdLabel(this, name);
+    }
+
+    void CommandBuffer::EndDebugRegion()
+    {
+        Debug::EndCmdRegion(this);
     }
 
     void CommandBuffer::Init(GpuHandle gpu, uint32_t countPerFamily)
@@ -313,107 +350,92 @@ namespace pe
 
         // CommandPools are creating CommandBuffers from a specific family id, this will have to
         // match with the Queue created from a falily id that this CommandBuffer will be submited to.
-        s_allCmds = std::vector<std::map<CommandBuffer *, CommandBuffer *>>(queueFamPropCount);
-        s_availableCmds = std::vector<std::unordered_map<CommandBuffer *, CommandBuffer *>>(queueFamPropCount);
+        s_allCmds = std::vector<std::map<size_t, CommandBuffer *>>(queueFamPropCount);
+        s_availableCmds = std::vector<std::unordered_map<size_t, CommandBuffer *>>(queueFamPropCount);
         for (uint32_t i = 0; i < queueFamPropCount; i++)
         {
-            s_allCmds[i] = std::map<CommandBuffer *, CommandBuffer *>();
-            s_availableCmds[i] = std::unordered_map<CommandBuffer *, CommandBuffer *>();
+            s_allCmds[i] = std::map<size_t, CommandBuffer *>();
+            s_availableCmds[i] = std::unordered_map<size_t, CommandBuffer *>();
             for (uint32_t j = 0; j < countPerFamily; j++)
             {
-                CommandBuffer *cmd = CommandBuffer::Create(i, "CommandBuffer_" + std::to_string(i) + "_" + std::to_string(j));
-                s_allCmds[i][cmd] = cmd;
-                s_availableCmds[i][cmd] = cmd;
+                std::string name = "CommandBuffer_" + std::to_string(i) + "_" + std::to_string(j);
+                CommandBuffer *cmd = CommandBuffer::Create(i, name);
+                s_allCmds[i][cmd->nameHash] = cmd;
+                s_availableCmds[i][cmd->nameHash] = cmd;
             }
         }
     }
 
     void CommandBuffer::Clear()
     {
-        killThreads = true;
-
-        auto &allCmds = s_allCmds;
-        for (auto &cmds : allCmds)
+        for (auto &cmds : s_allCmds)
         {
             for (auto cmd : cmds)
-            {
-                cmd.second->m_fence = nullptr;
                 CommandBuffer::Destroy(cmd.second);
-            }
         }
 
-        for (auto &cmdWait : s_cmdWaits)
-            cmdWait.second.get();
-        s_cmdWaits.clear();
-
-        allCmds.clear();
         s_availableCmds.clear();
-    }
-
-    void CommandBuffer::CheckFutures()
-    {
-        // join finished futures
-        auto &cmdWaits = s_cmdWaits;
-        for (auto it = cmdWaits.begin(); it != cmdWaits.end();)
-        {
-            if (it->second.wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
-            {
-                CommandBuffer *cmd = it->second.get();
-                cmd->m_fence = nullptr;
-                s_availableCmds[cmd->GetFamilyId()][cmd] = cmd;
-
-                it = cmdWaits.erase(it);
-            }
-            else
-                ++it;
-        }
     }
 
     CommandBuffer *CommandBuffer::GetNext(uint32_t familyId)
     {
-        s_availableCmdsReady = false;
-
-        CheckFutures();
+        std::lock_guard<std::mutex> lock(s_getNextMutex);
 
         if (s_availableCmds[familyId].empty())
         {
-            CommandBuffer *cmd = CommandBuffer::Create(familyId, "CommandBuffer_" + std::to_string(familyId) + "_" + std::to_string(s_allCmds[familyId].size()));
-            s_availableCmds[familyId][cmd] = cmd;
-            s_allCmds[familyId][cmd] = cmd;
+            std::string name = "CommandBuffer_" + std::to_string(familyId) + "_" + std::to_string(s_allCmds[familyId].size());
+            CommandBuffer *cmd = CommandBuffer::Create(familyId, name);
+            s_allCmds[familyId][cmd->nameHash] = cmd;
+            return cmd;
         }
 
-        CommandBuffer *commandBuffer = s_availableCmds[familyId].begin()->second;
-        s_availableCmds[familyId].erase(commandBuffer);
+        CommandBuffer *cmd = s_availableCmds[familyId].begin()->second;
+        s_availableCmds[familyId].erase(cmd->nameHash);
 
-        s_availableCmdsReady = true;
-
-        return commandBuffer;
+        return cmd;
     }
 
     void CommandBuffer::Return(CommandBuffer *cmd)
     {
+        std::lock_guard<std::mutex> lock(s_returnMutex);
+
+        // CHECKS
+        // -------------------------------------------------------------
         if (!cmd || !cmd->Handle())
-            return;
+            PE_ERROR("CommandBuffer::Return: CommandBuffer is null or invalid");
 
-        if (s_cmdWaits.find(cmd) != s_cmdWaits.end())
-            return;
+        if (s_allCmds[cmd->GetFamilyId()].find(cmd->nameHash) == s_allCmds[cmd->GetFamilyId()].end())
+            PE_ERROR("CommandBuffer::Return: CommandBuffer does not belong to pool");
 
-        auto func = [cmd]()
+        if (cmd->m_recording)
+            PE_ERROR("CommandBuffer::Return: " + cmd->name + " is still recording!");
+
+        if (cmd->m_semaphore->GetValue() != cmd->m_submitions)
+            PE_ERROR("CommandBuffer::Return: " + cmd->name + " is not finished!");
+        //--------------------------------------------------------------
+
+        s_availableCmds[cmd->GetFamilyId()][cmd->nameHash] = cmd;
+    }
+
+    void CommandBuffer::Wait()
+    {
+        std::lock_guard<std::mutex> lock(s_WaitMutex);
+
+        if (m_recording)
+            PE_ERROR("CommandBuffer::Wait: " + name + " is still recording!");
+
+        m_semaphore->Wait(m_submitions);
+
+        if (!m_onFinish.IsEmpty())
         {
-            while (!killThreads && cmd->m_fence && !cmd->m_fence->m_reset)
-                std::this_thread::yield();
+            m_onFinish.ReverseInvoke();
+            m_onFinish.Clear();
+        }
+    }
 
-            while (!killThreads && !s_availableCmdsReady)
-                std::this_thread::yield();
-
-            return cmd;
-        };
-
-        // start a new thread to return the cmd after checked
-        auto future = std::async(std::launch::async, func);
-
-        // add it to the deque
-        s_cmdWaits[cmd] = std::move(future);
+    void CommandBuffer::AddOnFinishCallback(Delegate<>::Func_type &&func)
+    {
+        m_onFinish += std::forward<Delegate<>::Func_type>(func);
     }
 }
 #endif

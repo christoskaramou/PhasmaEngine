@@ -24,24 +24,6 @@ SOFTWARE.
 
 namespace pe
 {
-    class DescriptorBinding
-    {
-    public:
-        DescriptorBinding();
-
-        DescriptorBinding(uint32_t binding,
-                          DescriptorType descriptorType,
-                          ShaderStageFlags stageFlags,
-                          uint32_t descriptorCount = 1,
-                          SamplerHandle *pImmutableSamplers = nullptr);
-
-        uint32_t binding;
-        DescriptorType descriptorType;
-        uint32_t descriptorCount;
-        ShaderStageFlags stageFlags;
-        SamplerHandle *pImmutableSamplers;
-    };
-
     class DescriptorPool : public IHandle<DescriptorPool, DescriptorPoolHandle>
     {
     public:
@@ -50,38 +32,51 @@ namespace pe
         ~DescriptorPool();
     };
 
+    class Image;
+    class Buffer;
+
+    struct DescriptorBindingInfo
+    {
+        uint32_t binding = 0;
+        Buffer *pBuffer = nullptr;
+        Image *pImage = nullptr;
+        ImageLayout imageLayout = ImageLayout::Undefined;
+        DescriptorType type = DescriptorType::CombinedImageSampler;
+    };
+
+    struct DescriptorInfo
+    {
+        uint32_t count = 0;
+        DescriptorBindingInfo *bindingInfos = nullptr;
+        ShaderStage stage = ShaderStage::VertexBit;
+    };
+
     class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>
     {
     public:
-        DescriptorLayout(const std::vector<DescriptorBinding> &bindings, const std::string &name = {});
+        DescriptorLayout(DescriptorInfo *info, const std::string &name = {});
 
         ~DescriptorLayout();
-    };
 
-    class Image;
+        uint32_t GetVariableCount() { return m_variableCount; }
 
-    class Buffer;
-
-    class DescriptorUpdateInfo
-    {
-    public:
-        DescriptorUpdateInfo();
-
-        uint32_t binding;
-        Buffer *pBuffer;
-        BufferUsageFlags bufferUsage;
-        Image *pImage;
-        ImageLayout imageLayout;
+    private:
+        uint32_t m_variableCount;
     };
 
     class Descriptor : public IHandle<Descriptor, DescriptorSetHandle>
     {
     public:
-        Descriptor(DescriptorLayout *layout, uint32_t variableCount = 1, const std::string &name = {});
+        Descriptor(DescriptorInfo *info, const std::string &name = {});
 
         ~Descriptor();
 
-        void UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo *pInfo);
+        void UpdateDescriptor(DescriptorInfo *info);
+
+        DescriptorLayout *GetLayout() const { return m_layout; }
+
+    private:
+        DescriptorLayout *m_layout;
     };
 
 }

@@ -24,6 +24,7 @@ SOFTWARE.m_device
 #include "Renderer/Debug.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Queue.h"
+#include "Renderer/Command.h"
 
 namespace pe
 {
@@ -196,7 +197,7 @@ namespace pe
         VkDebugUtilsObjectNameInfoEXT objectInfo{};
         objectInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
         objectInfo.pNext = VK_NULL_HANDLE;
-        objectInfo.objectType = (VkObjectType)type;
+        objectInfo.objectType = GetObjectTypeVK(type);
         objectInfo.objectHandle = object;
         objectInfo.pObjectName = name.c_str();
 
@@ -250,7 +251,7 @@ namespace pe
         s_labelDepth--;
     }
 
-    void Debug::BeginCmdRegion(CommandBufferHandle cmd, const std::string &name)
+    void Debug::BeginCmdRegion(CommandBuffer *cmd, const std::string &name)
     {
         if (!vkCmdBeginDebugUtilsLabelEXT)
             return;
@@ -266,10 +267,10 @@ namespace pe
         label.color[2] = color;
         label.color[3] = 1.f;
 
-        vkCmdBeginDebugUtilsLabelEXT(cmd, &label);
+        vkCmdBeginDebugUtilsLabelEXT(cmd->Handle(), &label);
     }
 
-    void Debug::InsertCmdLabel(CommandBufferHandle cmd, const std::string &name)
+    void Debug::InsertCmdLabel(CommandBuffer *cmd, const std::string &name)
     {
         if (!vkCmdInsertDebugUtilsLabelEXT)
             return;
@@ -285,15 +286,15 @@ namespace pe
         label.color[2] = color;
         label.color[3] = 1.f;
 
-        vkCmdInsertDebugUtilsLabelEXT(cmd, &label);
+        vkCmdInsertDebugUtilsLabelEXT(cmd->Handle(), &label);
     }
 
-    void Debug::EndCmdRegion(CommandBufferHandle cmd)
+    void Debug::EndCmdRegion(CommandBuffer *cmd)
     {
         if (!vkCmdEndDebugUtilsLabelEXT)
             return;
 
-        vkCmdEndDebugUtilsLabelEXT(cmd);
+        vkCmdEndDebugUtilsLabelEXT(cmd->Handle());
         s_labelDepth--;
     }
 #endif

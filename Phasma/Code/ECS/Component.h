@@ -81,7 +81,7 @@ namespace pe
 
         virtual void CreatePipeline() = 0;
 
-        virtual void CreateUniforms() = 0;
+        virtual void CreateUniforms(CommandBuffer *cmd) = 0;
 
         virtual void UpdateDescriptorSets() = 0;
 

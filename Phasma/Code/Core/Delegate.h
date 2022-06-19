@@ -64,12 +64,17 @@ namespace pe
                 m_functions[i](std::forward<T>(args)...);
         }
 
+        inline bool IsEmpty()
+        {
+            return m_functions.size() == 0;
+        }
+
         inline void Clear()
         {
             m_functions.clear();
         }
 
     private:
-        std::deque<Func_type> m_functions;
+        std::deque<Func_type> m_functions{};
     };
 }

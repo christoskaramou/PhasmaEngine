@@ -26,12 +26,12 @@ SOFTWARE.
 
 namespace pe
 {
-    class Fence;
+    class CommandBuffer;
 
     class RendererSystem : public Renderer, public IDrawSystem
     {
     public:
-        void Init() override;
+        void Init(CommandBuffer *cmd) override;
 
         void Update(double delta) override;
 
@@ -40,6 +40,7 @@ namespace pe
         void Draw() override;
 
     private:
-        Fence *previousFences[SWAPCHAIN_IMAGES];
+        CommandBuffer *m_previousCmds[SWAPCHAIN_IMAGES];
+        CommandBuffer *m_previousShadowCmds[SWAPCHAIN_IMAGES][SHADOWMAP_CASCADES];
     };
 }

@@ -44,7 +44,7 @@ namespace pe
 
         void CreatePipeline() override;
 
-        void CreateUniforms() override;
+        void CreateUniforms(CommandBuffer *cmd) override;
 
         void UpdateDescriptorSets() override;
 

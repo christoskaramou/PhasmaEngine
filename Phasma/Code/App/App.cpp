@@ -28,6 +28,8 @@ SOFTWARE.
 #include "Systems/EventSystem.h"
 #include "Systems/PostProcessSystem.h"
 #include "Renderer/RHI.h"
+#include "Renderer/Queue.h"
+#include "Renderer/Command.h"
 
 namespace pe
 {
@@ -40,17 +42,31 @@ namespace pe
 #if PE_VULKAN
         flags |= SDL_WINDOW_VULKAN;
 #endif
-        CONTEXT->CreateSystem<EventSystem>()->Init();
+        CONTEXT->CreateSystem<EventSystem>()->Init(nullptr);
 
         window = Window::Create(50, 50, 1280, 720, flags);
         RHII.Init(window->Handle());
 
-        CONTEXT->CreateSystem<CameraSystem>()->Init();
-        CONTEXT->CreateSystem<LightSystem>()->Init();
-        CONTEXT->CreateSystem<RendererSystem>()->Init();
-        CONTEXT->CreateSystem<PostProcessSystem>()->Init();
+        Queue * queue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit, 1);
+        CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
+        
+        cmd->Begin();
+        CONTEXT->CreateSystem<CameraSystem>()->Init(cmd);
+        CONTEXT->CreateSystem<LightSystem>()->Init(cmd);
+        CONTEXT->CreateSystem<RendererSystem>()->Init(cmd);
+        CONTEXT->CreateSystem<PostProcessSystem>()->Init(cmd);
+        cmd->End();
 
-        FileWatcher::Start();
+        PipelineStageFlags stages[1]{PipelineStage::AllCommandsBit};
+        queue->Submit(1, &cmd, stages, 0, nullptr, 0, nullptr);
+
+        cmd->Wait();
+        CommandBuffer::Return(cmd);
+
+        queue->WaitIdle();
+        Queue::Return(queue);
+
+        FileWatcher::Start(0.25);
         frameTimer = &FrameTimer::Instance();
         context = CONTEXT;
     }

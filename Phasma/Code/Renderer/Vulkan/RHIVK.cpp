@@ -23,14 +23,13 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Systems/RendererSystem.h"
 #include "Renderer/Command.h"
-#include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Descriptor.h"
-#include "Renderer/Fence.h"
 #include "Renderer/Image.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/Queue.h"
+#include "Renderer/Buffer.h"
 
 #if defined(_WIN32)
 // On Windows, Vulkan commands use the stdcall convention
@@ -68,9 +67,9 @@ namespace pe
         GetSurfaceProperties();
         CreateDevice();
         CreateAllocator();
-        GetQueues();
-        CreateCommandPools();
-        CreateCmdBuffers(SWAPCHAIN_IMAGES);
+        InitQueues();
+        InitCommandPools();
+        InitCmdBuffers(SWAPCHAIN_IMAGES);
         CreateSwapchain(m_surface);
         CreateDescriptorPool(15000); // max number of all descriptor sets to allocate
         CreateSemaphores(SWAPCHAIN_IMAGES * 3);
@@ -79,14 +78,26 @@ namespace pe
     void RHI::Destroy()
     {
         WaitDeviceIdle();
+
+        for (auto it = m_uniformBuffers.begin(); it != m_uniformBuffers.end(); ++it)
+        {
+            Buffer::Destroy(it->second.buffer);
+            Descriptor::Destroy(it->second.descriptor);
+        }
+
+        for (auto it = m_uniformImages.begin(); it != m_uniformImages.end(); ++it)
+            Descriptor::Destroy(it->second.descriptor);
+
         Queue::Clear();
         CommandBuffer::Clear();
         CommandPool::Clear();
-        Fence::Clear();
         for (auto *semaphore : m_semaphores)
             Semaphore::Destroy(semaphore);
         DescriptorPool::Destroy(m_descriptorPool);
         Swapchain::Destroy(m_swapchain);
+        vmaDestroyAllocator(m_allocator);
+
+        IHandleBase::DestroyAllIHandles();
 
         if (m_device)
             vkDestroyDevice(m_device, nullptr);
@@ -342,10 +353,9 @@ namespace pe
         PE_CHECK(vkCreateDevice(m_gpu, &deviceCreateInfo, nullptr, &deviceVK));
         m_device = deviceVK;
 
-        // Debug::SetObjectName(instance, VK_OBJECT_TYPE_INSTANCE, "RHI_instance");
-        Debug::SetObjectName(m_surface->Handle(), VK_OBJECT_TYPE_SURFACE_KHR, "RHI_surface");
-        Debug::SetObjectName(m_gpu, VK_OBJECT_TYPE_PHYSICAL_DEVICE, "RHI_gpu");
-        Debug::SetObjectName(m_device, VK_OBJECT_TYPE_DEVICE, "RHI_device");
+        Debug::SetObjectName(m_surface->Handle(), ObjectType::Surface, "RHI_surface");
+        Debug::SetObjectName(m_gpu, ObjectType::PhysicalDevice, "RHI_gpu");
+        Debug::SetObjectName(m_device, ObjectType::Device, "RHI_device");
     }
 
     void RHI::CreateAllocator()
@@ -364,10 +374,15 @@ namespace pe
         m_allocator = allocatorVK;
     }
 
-    void RHI::GetQueues()
+    void RHI::InitQueues()
     {
         Queue::Init(m_gpu, m_device, m_surface->Handle());
-        m_generalQueue = Queue::GetNext(QueueType::GraphicsBit, 1);
+
+        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        {
+            m_renderQueue[i] = Queue::GetNext(QueueType::GraphicsBit, 1);
+            m_presentQueue[i] = Queue::GetNext(QueueType::PresentBit, 1);
+        }
     }
 
     void RHI::CreateSwapchain(Surface *surface)
@@ -375,7 +390,7 @@ namespace pe
         m_swapchain = Swapchain::Create(surface, "RHI_swapchain");
     }
 
-    void RHI::CreateCommandPools()
+    void RHI::InitCommandPools()
     {
         CommandPool::Init(m_gpu);
     }
@@ -385,10 +400,9 @@ namespace pe
         m_descriptorPool = DescriptorPool::Create(maxDescriptorSets, "RHI_descriptor_pool");
     }
 
-    void RHI::CreateCmdBuffers(uint32_t bufferCount)
+    void RHI::InitCmdBuffers(uint32_t bufferCount)
     {
         CommandBuffer::Init(m_gpu, bufferCount);
-        m_generalCmd = CommandBuffer::GetNext(m_generalQueue->GetFamilyId());
     }
 
     void RHI::CreateSemaphores(uint32_t semaphoresCount)
@@ -400,9 +414,9 @@ namespace pe
 
     Format RHI::GetDepthFormat()
     {
-        static VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+        static Format depthFormat = Format::Undefined;
 
-        if (depthFormat == VK_FORMAT_UNDEFINED)
+        if (depthFormat == Format::Undefined)
         {
             std::vector<VkFormat> candidates = {
                 VK_FORMAT_D32_SFLOAT_S8_UINT,
@@ -416,20 +430,46 @@ namespace pe
                 if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) ==
                     VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
                 {
-                    depthFormat = df;
+                    depthFormat = GetFormatFromVK(df);
                     break;
                 }
             }
 
-            if (depthFormat == VK_FORMAT_UNDEFINED)
+            if (depthFormat == Format::Undefined)
                 PE_ERROR("Depth format is undefined");
         }
 
-        return (Format)depthFormat;
+        return depthFormat;
     }
 
     void RHI::WaitDeviceIdle()
     {
-        vkDeviceWaitIdle(m_device);
+        PE_CHECK(vkDeviceWaitIdle(m_device));
+    }
+
+    size_t RHI::CreateUniformBufferInfo()
+    {
+        size_t key = NextID();
+        m_uniformBuffers[key] = UniformBufferInfo{};
+        return key;
+    }
+
+    void RHI::RemoveUniformBufferInfo(size_t key)
+    {
+        if (m_uniformBuffers.find(key) != m_uniformBuffers.end())
+            m_uniformBuffers.erase(key);
+    }
+
+    size_t RHI::CreateUniformImageInfo()
+    {
+        size_t key = NextID();
+        m_uniformImages[key] = UniformImageInfo{};
+        return key;
+    }
+
+    void RHI::RemoveUniformImageInfo(size_t key)
+    {
+        if (m_uniformImages.find(key) != m_uniformImages.end())
+            m_uniformImages.erase(key);
     }
 }

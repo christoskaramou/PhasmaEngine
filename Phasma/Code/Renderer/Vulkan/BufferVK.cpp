@@ -37,12 +37,12 @@ namespace pe
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = size;
-        bufferInfo.usage = usage;
+        bufferInfo.usage = GetBufferUsageFlagsVK(usage);
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
         VmaAllocationCreateInfo allocationCreateInfo{};
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-        allocationCreateInfo.flags = (VmaAllocationCreateFlags)createFlags;
+        allocationCreateInfo.flags = GetAllocationCreateFlagsVMA(createFlags);
 
         VkBuffer bufferVK;
         VmaAllocation allocationVK;
@@ -53,7 +53,7 @@ namespace pe
 
         this->name = name;
 
-        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_BUFFER, name);
+        Debug::SetObjectName(m_handle, ObjectType::Buffer, name);
     }
 
     Buffer::~Buffer()
@@ -85,51 +85,60 @@ namespace pe
     void Buffer::Zero() const
     {
         if (!data)
-            return;
+            PE_ERROR("Buffer::Zero: Buffer is not mapped");
         memset(data, 0, size);
     }
 
-    void Buffer::CopyData(const void *srcData, size_t srcSize, size_t offset)
+    void Buffer::CopyDataRaw(const void *data, size_t size, size_t offset)
     {
-        if (!data)
-            return;
-        assert(srcSize + offset <= size);
-        memcpy((char *)data + offset, srcData, srcSize > 0 ? srcSize : size);
+        if (!this->data)
+            PE_ERROR("Buffer::CopyDataRaw: Buffer is not mapped");
+        if (offset + size > this->size)
+            PE_ERROR("Buffer::CopyDataRaw: Source data size is too large");
+
+        memcpy((char *)this->data + offset, data, size);
     }
 
-    void Buffer::CopyBuffer(Buffer *srcBuffer, const size_t srcSize)
-    {
-        assert(srcSize <= size);
-
-        BufferCopy bufferCopy{};
-        bufferCopy.size = srcSize > 0 ? srcSize : size;
-
-        Queue *queue = Queue::GetNext(QueueType::TransferBit, 1);
-        CommandBuffer *copyCmd = CommandBuffer::GetNext(queue->GetFamilyId());
-        copyCmd->Begin();
-        copyCmd->CopyBuffer(srcBuffer, this, 1, &bufferCopy);
-        copyCmd->End();
-        queue->SubmitAndWaitFence(1, &copyCmd, nullptr, 0, nullptr, 0, nullptr);
-        CommandBuffer::Return(copyCmd);
-        Queue::Return(queue);
-    }
-
-    void Buffer::Copy(MemoryRange *ranges, uint32_t count, bool isPersistent)
+    void Buffer::Copy(uint32_t count, MemoryRange *ranges, bool persistent)
     {
         // Map or check if the buffer is already mapped
         Map();
 
         for (uint32_t i = 0; i < count; i++)
-            CopyData(ranges[i].data, ranges[i].size, ranges[i].offset);
+            CopyDataRaw(ranges[i].data, ranges[i].size, ranges[i].offset);
 
         // Keep the buffer mapped if it is persistent
-        if (!isPersistent)
+        if (!persistent)
         {
             for (uint32_t i = 0; i < count; i++)
                 Flush(ranges[i].offset, ranges[i].size);
 
             Unmap();
         }
+    }
+
+    void Buffer::CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t offset)
+    {
+        if (offset + size > this->size)
+            PE_ERROR("Buffer::StagedCopy: Data size is too large");
+
+        // Staging buffer
+        Buffer *staging = Buffer::Create(
+            size,
+            BufferUsage::TransferSrcBit,
+            AllocationCreate::HostAccessSequentialWriteBit,
+            "staging_buffer");
+
+        // Copy data to staging buffer
+        MemoryRange mr{};
+        mr.data = data;
+        mr.size = size;
+        staging->Copy(1, &mr, false);
+
+        // Copy staging buffer to this buffer
+        cmd->CopyBuffer(staging, this, size);
+        cmd->AddOnFinishCallback([staging]()
+                                 { Buffer::Destroy(staging); });
     }
 
     void Buffer::Flush(size_t offset, size_t flushSize) const
@@ -148,6 +157,19 @@ namespace pe
     void *Buffer::Data()
     {
         return data;
+    }
+
+    void Buffer::CopyBuffer(CommandBuffer *cmd, Buffer *src, const size_t size)
+    {
+        if (size > this->size)
+            PE_ERROR("Buffer::CopyBuffer: Source data size is too large");
+
+        VkBufferCopy region{};
+        region.srcOffset = 0;
+        region.dstOffset = 0;
+        region.size = size;
+
+        vkCmdCopyBuffer(cmd->Handle(), src->Handle(), Handle(), 1, &region);
     }
 }
 #endif

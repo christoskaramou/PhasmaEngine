@@ -45,7 +45,7 @@ namespace pe
         PE_CHECK(vkCreateSemaphore(RHII.GetDevice(), &si, nullptr, &semaphore));
         m_handle = semaphore;
 
-        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_SEMAPHORE, name);
+        Debug::SetObjectName(m_handle, ObjectType::Semaphore, name);
     }
 
     Semaphore::~Semaphore()
@@ -63,7 +63,6 @@ namespace pe
             PE_ERROR("Semaphore::Wait() called on non-timeline semaphore!");
 
         VkSemaphore semaphore = m_handle;
-
         VkSemaphoreWaitInfo swi{};
         swi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO_KHR;
         swi.semaphoreCount = 1;
@@ -85,6 +84,16 @@ namespace pe
         ssi.value = value;
 
         PE_CHECK(vkSignalSemaphore(RHII.GetDevice(), &ssi));
+    }
+
+    uint64_t Semaphore::GetValue()
+    {
+        if (!m_timeline)
+            PE_ERROR("Semaphore::Wait() called on non-timeline semaphore!");
+
+        uint64_t value;
+        vkGetSemaphoreCounterValue(RHII.GetDevice(), m_handle, &value);
+        return value;
     }
 }
 #endif

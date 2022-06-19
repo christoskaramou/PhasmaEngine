@@ -26,7 +26,6 @@ namespace pe
 {    
     class Surface;
     class Semaphore;
-    class Fence;
     class Image;
 
     class Swapchain : public IHandle<Swapchain, SwapchainHandle>
@@ -36,7 +35,7 @@ namespace pe
 
         ~Swapchain();
 
-        uint32_t Aquire(Semaphore *semaphore, Fence *fence);
+        uint32_t Aquire(Semaphore *semaphore);
 
         std::vector<Image *> images;
     };

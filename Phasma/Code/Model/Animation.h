@@ -31,26 +31,14 @@ namespace pe
 
     struct AnimationChannel
     {
-        enum PathType
-        {
-            TRANSLATION,
-            ROTATION,
-            SCALE
-        };
-        PathType path;
+        AnimationPathType path;
         Node *node;
         int32_t samplerIndex;
     };
 
     struct AnimationSampler
     {
-        enum InterpolationType
-        {
-            LINEAR,
-            STEP,
-            CUBICSPLINE
-        };
-        InterpolationType interpolation;
+        AnimationInterpolationType interpolation;
         std::vector<float> inputs;
         std::vector<vec4> outputsVec4;
     };

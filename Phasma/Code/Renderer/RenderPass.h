@@ -31,7 +31,7 @@ namespace pe
 
         AttachmentDescriptionFlags flags;
         Format format;
-        SampleCountFlagBits samples;
+        SampleCount samples;
         AttachmentLoadOp loadOp;
         AttachmentStoreOp storeOp;
         AttachmentLoadOp stencilLoadOp;

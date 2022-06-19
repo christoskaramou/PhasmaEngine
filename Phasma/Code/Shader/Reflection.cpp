@@ -164,15 +164,7 @@ namespace pe
         }
     }
 
-    enum class VariableType
-    {
-        None,
-        SInt,
-        UInt,
-        SFloat
-    };
-
-    VariableType GetVariableType(const ShaderInOutDesc &inout)
+    ReflectionVariableType GetReflectionVariableType(const ShaderInOutDesc &inout)
     {
         switch (inout.type->basetype)
         {
@@ -188,90 +180,90 @@ namespace pe
         case spirv_cross::SPIRType::ControlPointArray:
         case spirv_cross::SPIRType::Interpolant:
         case spirv_cross::SPIRType::Char:
-            return VariableType::None;
+            return ReflectionVariableType::None;
         case spirv_cross::SPIRType::Boolean:
         case spirv_cross::SPIRType::UByte:
         case spirv_cross::SPIRType::UShort:
         case spirv_cross::SPIRType::UInt:
         case spirv_cross::SPIRType::UInt64:
-            return VariableType::UInt;
+            return ReflectionVariableType::UInt;
         case spirv_cross::SPIRType::SByte:
         case spirv_cross::SPIRType::Short:
         case spirv_cross::SPIRType::Int:
         case spirv_cross::SPIRType::Int64:
-            return VariableType::SInt;
+            return ReflectionVariableType::SInt;
         case spirv_cross::SPIRType::Half:
         case spirv_cross::SPIRType::Float:
         case spirv_cross::SPIRType::Double:
-            return VariableType::SFloat;
+            return ReflectionVariableType::SFloat;
         default:
-            return VariableType::None;
+            return ReflectionVariableType::None;
         }
     }
 
-    uint32_t GetAttibuteType(const ShaderInOutDesc &input)
+    Format GetAttibuteType(const ShaderInOutDesc &input)
     {
         uint32_t size = GetTypeSize(input) * input.type->vecsize * input.type->columns;
-        VariableType type = GetVariableType(input);
+        ReflectionVariableType type = GetReflectionVariableType(input);
         switch (size)
         {
         case 1:
-            if (type == VariableType::SInt)
-                return VK_FORMAT_R8_SINT;
-            else if (type == VariableType::UInt)
-                return VK_FORMAT_R8_UINT;
+            if (type == ReflectionVariableType::SInt)
+                return Format::R8SInt;
+            else if (type == ReflectionVariableType::UInt)
+                return Format::R8UInt;
 
         case 2:
-            if (type == VariableType::SInt)
-                return VK_FORMAT_R16_SINT;
-            else if (type == VariableType::UInt)
-                return VK_FORMAT_R16_UINT;
-            else if (type == VariableType::SFloat)
-                return VK_FORMAT_R16_SFLOAT;
+            if (type == ReflectionVariableType::SInt)
+                return Format::R16SInt;
+            else if (type == ReflectionVariableType::UInt)
+                return Format::R16UInt;
+            else if (type == ReflectionVariableType::SFloat)
+                return Format::R16SFloat;
 
         case 4:
-            if (type == VariableType::SInt)
-                return VK_FORMAT_R32_SINT;
-            else if (type == VariableType::UInt)
-                return VK_FORMAT_R32_UINT;
-            else if (type == VariableType::SFloat)
-                return VK_FORMAT_R32_SFLOAT;
+            if (type == ReflectionVariableType::SInt)
+                return Format::R32SInt;
+            else if (type == ReflectionVariableType::UInt)
+                return Format::R32UInt;
+            else if (type == ReflectionVariableType::SFloat)
+                return Format::R32SFloat;
 
         case 6:
-            if (type == VariableType::SInt)
-                VK_FORMAT_R16G16B16_SINT;
-            else if (type == VariableType::UInt)
-                VK_FORMAT_R16G16B16_UINT;
-            else if (type == VariableType::SFloat)
-                return VK_FORMAT_R16G16B16_SFLOAT;
+            if (type == ReflectionVariableType::SInt)
+                return Format::RGB16SInt;
+            else if (type == ReflectionVariableType::UInt)
+                return Format::RGB16UInt;
+            else if (type == ReflectionVariableType::SFloat)
+                return Format::RGB16SFloat;
 
         case 8:
-            if (type == VariableType::SInt)
-                return VK_FORMAT_R32G32_SINT;
-            else if (type == VariableType::UInt)
-                return VK_FORMAT_R32G32_UINT;
-            else if (type == VariableType::SFloat)
-                return VK_FORMAT_R32G32_SFLOAT;
+            if (type == ReflectionVariableType::SInt)
+                return Format::RG32SInt;
+            else if (type == ReflectionVariableType::UInt)
+                return Format::RG32UInt;
+            else if (type == ReflectionVariableType::SFloat)
+                return Format::RG32SFloat;
 
         case 12:
-            if (type == VariableType::SInt)
-                return VK_FORMAT_R32G32B32_SINT;
-            else if (type == VariableType::UInt)
-                return VK_FORMAT_R32G32B32_UINT;
-            else if (type == VariableType::SFloat)
-                return VK_FORMAT_R32G32B32_SFLOAT;
+            if (type == ReflectionVariableType::SInt)
+                return Format::RGB32SInt;
+            else if (type == ReflectionVariableType::UInt)
+                return Format::RGB32UInt;
+            else if (type == ReflectionVariableType::SFloat)
+                return Format::RGB32SFloat;
 
         case 16:
-            if (type == VariableType::SInt)
-                return VK_FORMAT_R32G32B32A32_SINT;
-            else if (type == VariableType::UInt)
-                return VK_FORMAT_R32G32B32A32_UINT;
-            else if (type == VariableType::SFloat)
-                return VK_FORMAT_R32G32B32A32_SFLOAT;
-
-        default:
-            return VK_FORMAT_UNDEFINED;
+            if (type == ReflectionVariableType::SInt)
+                return Format::RGBA32SInt;
+            else if (type == ReflectionVariableType::UInt)
+                return Format::RGBA32UInt;
+            else if (type == ReflectionVariableType::SFloat)
+                return Format::RGBA32SFloat;
         }
+
+        PE_ERROR("Unsupported attribute type");
+        return Format::Undefined;
     }
 
     std::vector<VertexInputBindingDescription> Reflection::GetVertexBindings()
@@ -283,7 +275,7 @@ namespace pe
         VertexInputBindingDescription binding;
         binding.binding = 0;
         binding.stride = stride;
-        binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        binding.inputRate = VertexInputRate::Vertex;
 
         return {binding};
     }

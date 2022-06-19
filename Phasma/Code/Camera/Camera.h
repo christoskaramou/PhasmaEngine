@@ -29,14 +29,6 @@ namespace pe
     class Camera : public IComponent
     {
     public:
-        enum class RelativeDirection
-        {
-            FORWARD,
-            BACKWARD,
-            LEFT,
-            RIGHT
-        };
-
         struct Plane
         {
             vec3 normal;
@@ -81,7 +73,7 @@ namespace pe
 
         vec3 WorldUp() const;
 
-        void Move(RelativeDirection direction, float velocity);
+        void Move(CameraDirection direction, float velocity);
 
         void Rotate(float xoffset, float yoffset);
 

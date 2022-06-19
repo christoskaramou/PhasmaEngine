@@ -35,7 +35,7 @@ namespace pe
 
         Camera *GetCamera(size_t index);
 
-        void Init() override;
+        void Init(CommandBuffer *cmd) override;
 
         void Update(double delta) override;
 

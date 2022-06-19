@@ -24,16 +24,6 @@ SOFTWARE.
 
 namespace pe
 {
-    enum class Launch
-    {
-        Async,
-        AsyncDeferred,
-        AsyncNoWait, // Does not block the main thread, useful for loading.
-        Sync,
-        SyncDeferred,
-        All // Used for convenience to call all the above in one go.
-    };
-
     template <Launch launch>
     class SyncQueue
     {
@@ -143,7 +133,8 @@ namespace pe
             int i = 0;
             for (auto it = s_futures.begin(); it != s_futures.end();)
             {
-                if (it->wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
+                auto status = it->wait_for(std::chrono::seconds(0));
+                if (status != std::future_status::timeout)
                 {
                     it->get();
                     it = s_futures.erase(it);

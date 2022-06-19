@@ -75,13 +75,13 @@ namespace pe
     void FXAA::CreatePipeline()
     {
         PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/FXAA/FXAA.frag", ShaderType::Fragment});
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/FXAA/FXAA.frag", ShaderStage::FragmentBit});
         info.width = viewportRT->width_f;
         info.height = viewportRT->height_f;
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {viewportRT->blendAttachment};
-        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutFXAA()};
+        info.descriptorSetLayouts = {DSet->GetLayout()};
         info.renderPass = renderPass;
         info.name = "fxaa_pipeline";
 
@@ -91,18 +91,36 @@ namespace pe
         Shader::Destroy(info.pFragShader);
     }
 
-    void FXAA::CreateUniforms()
+    void FXAA::CreateUniforms(CommandBuffer *cmd)
     {
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutFXAA(), 1, "FXAA_descriptor");
-        UpdateDescriptorSets();
+        DescriptorBindingInfo bindingInfo{};
+        bindingInfo.binding = 0;
+        bindingInfo.type = DescriptorType::CombinedImageSampler;
+        bindingInfo.imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfo.pImage = frameImage;
+
+        DescriptorInfo info{};
+        info.count = 1;
+        info.bindingInfos = &bindingInfo;
+        info.stage = ShaderStage::FragmentBit;
+
+        DSet = Descriptor::Create(&info, "FXAA_descriptor");
     }
 
     void FXAA::UpdateDescriptorSets()
     {
-        DescriptorUpdateInfo info{};
-        info.binding = 0;
-        info.pImage = frameImage;
-        DSet->UpdateDescriptor(1, &info);
+        DescriptorBindingInfo bindingInfo{};
+        bindingInfo.binding = 0;
+        bindingInfo.type = DescriptorType::CombinedImageSampler;
+        bindingInfo.imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfo.pImage = frameImage;
+
+        DescriptorInfo info{};
+        info.count = 1;
+        info.bindingInfos = &bindingInfo;
+        info.stage = ShaderStage::FragmentBit;
+
+        DSet->UpdateDescriptor(&info);
     }
 
     void FXAA::Update(Camera *camera)
@@ -111,22 +129,22 @@ namespace pe
 
     void FXAA::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        Debug::BeginCmdRegion(cmd->Handle(), "FXAA");
+        cmd->BeginDebugRegion("FXAA");
         // Copy viewport image
-        frameImage->CopyColorAttachment(cmd, viewportRT);
+        cmd->CopyImage(viewportRT, frameImage);
 
         // FAST APPROXIMATE ANTI-ALIASING
         // Input
-        frameImage->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        cmd->ChangeLayout(frameImage, ImageLayout::ShaderReadOnly);
         // Output
-        viewportRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        cmd->ChangeLayout(viewportRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
-        Debug::EndCmdRegion(cmd->Handle());
+        cmd->EndDebugRegion();
     }
 
     void FXAA::Resize(uint32_t width, uint32_t height)
@@ -140,13 +158,13 @@ namespace pe
         Init();
         CreateRenderPass();
         CreateFrameBuffers();
-        CreatePipeline();
         UpdateDescriptorSets();
+        CreatePipeline();
     }
 
     void FXAA::Destroy()
     {
-        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutFXAA());
+        Descriptor::Destroy(DSet);
 
         for (auto frameBuffer : framebuffers)
             FrameBuffer::Destroy(frameBuffer);

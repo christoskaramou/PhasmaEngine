@@ -36,7 +36,6 @@ SOFTWARE.
 #include "Renderer/RenderPass.h"
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
-#include "Renderer/Fence.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
@@ -56,6 +55,7 @@ namespace pe
 
     GUI::~GUI()
     {
+        ImGui_ImplVulkan_Shutdown();
     }
 
     bool endsWithExt(const std::string &mainStr, const std::string &toMatch)
@@ -249,7 +249,7 @@ namespace pe
                 (shadow_cast ? frameTimer.timestamps[13] + frameTimer.timestamps[14] + frameTimer.timestamps[15]
                              : 0.f) +
                 (use_compute ? frameTimer.timestamps[16] : 0.f));
-        ImGui::Text("Fence %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[1])));
+        // ImGui::Text("Fence %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[1])));
         ImGui::Unindent(16.0f);
         ImGui::Separator();
         ImGui::Text("Render Passes:");
@@ -605,10 +605,18 @@ namespace pe
             ImGui::TextColored(ImVec4(.6f, 1.f, .5f, 1.f), "%s", fmt.c_str());
 
             ImGui::Separator();
+            const std::string s = "Scale##" + toStr;
+            const std::string p = "Position##" + toStr;
+            const std::string r = "Rotation##" + toStr;
+            ImGui::DragFloat3(s.c_str(), model_scale[modelItemSelected].data());
+            ImGui::DragFloat3(p.c_str(), model_pos[modelItemSelected].data());
+            ImGui::DragFloat3(r.c_str(), model_rot[modelItemSelected].data());
+
+            ImGui::Separator();
             if (ImGui::Button("Unload Model"))
             {
                 RHII.WaitDeviceIdle();
-                Model::models[modelItemSelected].destroy();
+                Model::models[modelItemSelected].Destroy();
                 Model::models.erase(Model::models.begin() + modelItemSelected);
                 GUI::modelList.erase(GUI::modelList.begin() + modelItemSelected);
                 GUI::model_scale.erase(GUI::model_scale.begin() + modelItemSelected);
@@ -616,14 +624,6 @@ namespace pe
                 GUI::model_rot.erase(GUI::model_rot.begin() + modelItemSelected);
                 GUI::modelItemSelected = -1;
             }
-
-            ImGui::Separator();
-            const std::string s = "Scale##" + toStr;
-            const std::string p = "Position##" + toStr;
-            const std::string r = "Rotation##" + toStr;
-            ImGui::DragFloat3(s.c_str(), model_scale[modelItemSelected].data());
-            ImGui::DragFloat3(p.c_str(), model_pos[modelItemSelected].data());
-            ImGui::DragFloat3(r.c_str(), model_rot[modelItemSelected].data());
         }
         ImGui::End();
     }
@@ -660,7 +660,7 @@ namespace pe
 
         ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
 
-        Queue *queue = Queue::GetNext(QueueType::GraphicsBit, 1);
+        Queue *queue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit, 1);
         ImGui_ImplVulkan_InitInfo info;
         info.Instance = RHII.GetInstance();
         info.PhysicalDevice = RHII.GetGpu();
@@ -671,20 +671,22 @@ namespace pe
         info.DescriptorPool = RHII.GetDescriptorPool()->Handle();
         info.Subpass = 0;
         info.MinImageCount = static_cast<uint32_t>(RHII.GetSwapchain()->images.size());
-        info.ImageCount = (uint32_t)RHII.GetSwapchain()->images.size();
-        info.MSAASamples = VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT;
+        info.ImageCount = static_cast<uint32_t>(RHII.GetSwapchain()->images.size());
+        info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         info.Allocator = nullptr;
         info.CheckVkResultFn = nullptr;
         ImGui_ImplVulkan_Init(&info, renderPass->Handle());
 
-        Queue *temp_queue = Queue::GetNext(QueueType::GraphicsBit, 1);
-        CommandBuffer *cmd = CommandBuffer::GetNext(temp_queue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
         cmd->Begin();
         ImGui_ImplVulkan_CreateFontsTexture(cmd->Handle());
         cmd->End();
-        temp_queue->SubmitAndWaitFence(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
+        queue->Submit(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
+
+        cmd->Wait();
         CommandBuffer::Return(cmd);
-        Queue::Return(temp_queue);
+
+        queue->WaitIdle();
     }
 
     void GUI::InitGUI(bool show)
@@ -707,14 +709,14 @@ namespace pe
     {
         if (!render)
             return;
-        Debug::BeginCmdRegion(cmd->Handle(), "GUI");
+        cmd->BeginDebugRegion("GUI");
         if (render && ImGui::GetDrawData()->TotalVtxCount > 0)
         {
             cmd->BeginPass(renderPass, framebuffers[imageIndex]);
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
             cmd->EndPass();
         }
-        Debug::EndCmdRegion(cmd->Handle());
+        cmd->EndDebugRegion();
     }
 
     void GUI::SetWindowStyle(ImGuiStyle *dst)
@@ -727,13 +729,13 @@ namespace pe
     {
         Attachment colorAttachment;
         colorAttachment.format = RHII.GetSurface()->format;
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        colorAttachment.samples = SampleCount::Count1;
+        colorAttachment.loadOp = AttachmentLoadOp::Load;
+        colorAttachment.storeOp = AttachmentStoreOp::Store;
+        colorAttachment.stencilLoadOp = AttachmentLoadOp::DontCare;
+        colorAttachment.stencilStoreOp = AttachmentStoreOp::DontCare;
+        colorAttachment.initialLayout = ImageLayout::PresentSrc;
+        colorAttachment.finalLayout = ImageLayout::PresentSrc;
 
         renderPass = RenderPass::Create(&colorAttachment, 1, "GUI_renderPass");
     }
@@ -753,6 +755,7 @@ namespace pe
     void GUI::Destroy()
     {
         RenderPass::Destroy(renderPass);
+
         for (auto &framebuffer : framebuffers)
             FrameBuffer::Destroy(framebuffer);
     }

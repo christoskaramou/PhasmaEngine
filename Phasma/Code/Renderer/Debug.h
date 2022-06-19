@@ -25,7 +25,8 @@ SOFTWARE.
 namespace pe
 {
     class Queue;
-    
+    class CommandBuffer;
+
 #if PE_DEBUG_MODE
     class Debug
     {
@@ -41,19 +42,22 @@ namespace pe
 
         static void SetObjectName(uintptr_t object, ObjectType type, const std::string &name);
 
+    private:
+        friend class CommandBuffer;
+        friend class Queue;
+
         static void BeginQueueRegion(Queue *queue, const std::string &name);
 
-        static void InsertQueueLabel(Queue *queue, const std::string &NAMED_PIPE_EVENT_GUID);
+        static void InsertQueueLabel(Queue *queue, const std::string &name);
 
         static void EndQueueRegion(Queue *queue);
 
-        static void BeginCmdRegion(CommandBufferHandle cmd, const std::string &name);
+        static void BeginCmdRegion(CommandBuffer *cmd, const std::string &name);
 
-        static void InsertCmdLabel(CommandBufferHandle cmd, const std::string &name);
+        static void InsertCmdLabel(CommandBuffer *cmd, const std::string &name);
 
-        static void EndCmdRegion(CommandBufferHandle cmd);
+        static void EndCmdRegion(CommandBuffer *cmd);
 
-    private:
         inline static InstanceHandle s_instance;
         inline static DebugMessengerHandle s_debugMessenger;
     };
@@ -71,18 +75,21 @@ namespace pe
         static void DestroyDebugMessenger() {}
 
         static void SetObjectName(uint64_t object, ObjectType type, const std::string &name) {}
-
+    private:
+        friend class CommandBuffer;
+        friend class Queue;
+        
         static void BeginQueueRegion(Queue *queue, const std::string &name) {}
 
         static void InsertQueueLabel(Queue *queue, const std::string &name) {}
 
         static void EndQueueRegion(Queue *queue) {}
 
-        static void BeginCmdRegion(CommandBufferHandle cmd, const std::string &name) {}
+        static void BeginCmdRegion(CommandBuffer *cmd, const std::string &name) {}
 
-        static void InsertCmdLabel(CommandBufferHandle cmd, const std::string &name) {}
+        static void InsertCmdLabel(CommandBuffer *cmd, const std::string &name) {}
 
-        static void EndCmdRegion(CommandBufferHandle cmd) {}
+        static void EndCmdRegion(CommandBuffer *cmd) {}
     };
 #endif
 };

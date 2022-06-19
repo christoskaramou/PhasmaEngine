@@ -37,7 +37,6 @@ SOFTWARE.
 namespace pe
 {
     class CommandBuffer;
-
     class Image;
 
     class Viewport
@@ -69,13 +68,13 @@ namespace pe
 
         RenderArea &GetRenderArea() { return renderArea; }
 
-        Image *CreateRenderTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags = 0, bool blendEnable = false);
+        Image *CreateRenderTarget(const std::string &name, Format format, bool blendEnable, ImageUsageFlags additionalFlags = {});
 
         Image *GetRenderTarget(const std::string &name);
 
         Image *GetRenderTarget(size_t hash);
 
-        Image *CreateDepthTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags = 0);
+        Image *CreateDepthTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags = {});
 
         Image *GetDepthTarget(const std::string &name);
 
@@ -83,13 +82,13 @@ namespace pe
 
         Image *CreateFSSampledImage();
 
-        void LoadResources();
+        void LoadResources(CommandBuffer *cmd);
 
         void CreateUniforms();
 
-        void ResizeViewport(uint32_t width, uint32_t height);
+        void Resize(uint32_t width, uint32_t height);
 
-        void BlitToViewport(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
+        void BlitToSwapchain(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
 
         void RecreatePipelines();
 
@@ -98,9 +97,9 @@ namespace pe
 
         void ComputeAnimations();
 
-        void RecordDeferredCmds(CommandBuffer *cmd, uint32_t imageIndex);
+        void RecordPasses(CommandBuffer *cmd, uint32_t imageIndex);
 
-        void RecordShadowsCmds(CommandBuffer **cmds, uint32_t cmdCount, uint32_t imageIndex);
+        void RecordShadowsCmds(uint32_t count, CommandBuffer **cmds, uint32_t imageIndex);
 
         Image *m_viewportRT;
         Image *m_depth;
@@ -110,12 +109,11 @@ namespace pe
 
     public:
         inline static Queue *s_currentQueue = nullptr;
+        std::vector<GPUTimer> gpuTimers{};
         RenderArea renderArea;
         SkyBox skyBoxDay;
         SkyBox skyBoxNight;
         GUI gui;
-        Compute animationsCompute;
-        Compute nodesCompute;
 
 #ifndef IGNORE_SCRIPTS
         std::vector<Script *> scripts{};

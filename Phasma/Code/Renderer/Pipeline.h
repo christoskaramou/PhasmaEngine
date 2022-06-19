@@ -28,23 +28,7 @@ SOFTWARE.
 namespace pe
 {
     class RenderPass;
-
     class DescriptorLayout;
-
-    enum class CullMode
-    {
-        None = 0,
-        Front = 1,
-        Back = 2
-    };
-
-    enum class PushConstantStage
-    {
-        Vertex = 1,
-        Fragment = 16,
-        VertexAndFragment = Vertex | Fragment,
-        Compute = 32
-    };
 
     class PipelineColorBlendAttachmentState
     {
@@ -79,7 +63,7 @@ namespace pe
         CullMode cullMode;
         std::vector<PipelineColorBlendAttachmentState> colorBlendAttachments;
         std::vector<DynamicState> dynamicStates;
-        PushConstantStage pushConstantStage;
+        ShaderStageFlags pushConstantStage;
         uint32_t pushConstantSize;
         std::vector<DescriptorLayout *> descriptorSetLayouts;
         RenderPass *renderPass;
@@ -94,49 +78,8 @@ namespace pe
 
         ~Pipeline();
 
-        static DescriptorLayout *getDescriptorSetLayoutComposition();
-
-        static DescriptorLayout *getDescriptorSetLayoutBrightFilter();
-
-        static DescriptorLayout *getDescriptorSetLayoutGaussianBlurH();
-
-        static DescriptorLayout *getDescriptorSetLayoutGaussianBlurV();
-
-        static DescriptorLayout *getDescriptorSetLayoutCombine();
-
-        static DescriptorLayout *getDescriptorSetLayoutDOF();
-
-        static DescriptorLayout *getDescriptorSetLayoutSSGI();
-
-        static DescriptorLayout *getDescriptorSetLayoutFXAA();
-
-        static DescriptorLayout *getDescriptorSetLayoutMotionBlur();
-
-        static DescriptorLayout *getDescriptorSetLayoutSSAO();
-
-        static DescriptorLayout *getDescriptorSetLayoutSSAOBlur();
-
-        static DescriptorLayout *getDescriptorSetLayoutSSR();
-
-        static DescriptorLayout *getDescriptorSetLayoutTAA();
-
-        static DescriptorLayout *getDescriptorSetLayoutTAASharpen();
-
-        static DescriptorLayout *getDescriptorSetLayoutShadowsDeferred();
-
-        static DescriptorLayout *getDescriptorSetLayoutSkybox();
-
-        static DescriptorLayout *getDescriptorSetLayoutCompute();
-
-        static DescriptorLayout *getDescriptorSetLayoutGbufferVert();
-
-        static DescriptorLayout *getDescriptorSetLayoutGbufferFrag();
-
         PipelineCreateInfo info;
 
         PipelineLayoutHandle layout;
-
-    private:
-        inline static std::map<size_t, Pipeline *> sm_pipelines{};
     };
 }

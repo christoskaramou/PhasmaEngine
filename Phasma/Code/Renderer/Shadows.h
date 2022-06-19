@@ -34,15 +34,10 @@ namespace pe
     };
 
     class Descriptor;
-
     class FrameBuffer;
-
     class Image;
-
     class RenderPass;
-
     class Buffer;
-
     class Pipeline;
 
     class Shadows : public IRenderComponent
@@ -60,7 +55,7 @@ namespace pe
 
         void CreatePipeline() override;
 
-        void CreateUniforms() override;
+        void CreateUniforms(CommandBuffer *cmd) override;
 
         void UpdateDescriptorSets() override;
 
@@ -71,6 +66,10 @@ namespace pe
         void Resize(uint32_t width, uint32_t height) override;
 
         void Destroy() override;
+
+        void BeginPass(CommandBuffer *cmd, uint32_t imageIndex, uint32_t cascade);
+
+        void EndPass(CommandBuffer *cmd, uint32_t cascade);
 
     private:
         void CalculateCascades(Camera *camera);
@@ -83,7 +82,6 @@ namespace pe
         Descriptor *descriptorSetDeferred;
         std::vector<std::array<FrameBuffer *, SHADOWMAP_CASCADES>> framebuffers{};
         Buffer *uniformBuffer;
-        Pipeline *pipeline;
         Format depthFormat;
     };
 }

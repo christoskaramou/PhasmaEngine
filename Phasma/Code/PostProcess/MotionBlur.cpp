@@ -78,15 +78,15 @@ namespace pe
     void MotionBlur::CreatePipeline()
     {
         PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/MotionBlur/motionBlur.frag", ShaderType::Fragment});
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/MotionBlur/motionBlur.frag", ShaderStage::FragmentBit});
         info.width = viewportRT->width_f;
         info.height = viewportRT->height_f;
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {viewportRT->blendAttachment};
-        info.pushConstantStage = PushConstantStage::Fragment;
+        info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = sizeof(vec4);
-        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutMotionBlur()};
+        info.descriptorSetLayouts = {DSet->GetLayout()};
         info.renderPass = renderPass;
         info.name = "motionBlur_pipeline";
 
@@ -96,27 +96,59 @@ namespace pe
         Shader::Destroy(info.pFragShader);
     }
 
-    void MotionBlur::CreateUniforms()
+    void MotionBlur::CreateUniforms(CommandBuffer *cmd)
     {
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutMotionBlur(), 1, "MotionBlur_descriptor");
+        DescriptorBindingInfo bindingInfos[3]{};
+
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[0].pImage = frameImage;
+
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[1].pImage = depth;
+
+        bindingInfos[2].binding = 2;
+        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[2].pImage = velocityRT;
+
+        DescriptorInfo info{};
+        info.count = 3;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
+
+        DSet = Descriptor::Create(&info, "MotionBlur_descriptor");
         UpdateDescriptorSets();
     }
 
     void MotionBlur::UpdateDescriptorSets()
     {
-        std::array<DescriptorUpdateInfo, 3> infos{};
+        DescriptorBindingInfo bindingInfos[3]{};
 
-        infos[0].binding = 0;
-        infos[0].pImage = frameImage;
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[0].pImage = frameImage;
 
-        infos[1].binding = 1;
-        infos[1].pImage = depth;
-        infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[1].pImage = depth;
 
-        infos[2].binding = 2;
-        infos[2].pImage = velocityRT;
+        bindingInfos[2].binding = 2;
+        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[2].pImage = velocityRT;
 
-        DSet->UpdateDescriptor(static_cast<uint32_t>(infos.size()), infos.data());
+        DescriptorInfo info{};
+        info.count = 3;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
+
+        DSet->UpdateDescriptor(&info);
     }
 
     void MotionBlur::Update(Camera *camera)
@@ -134,25 +166,25 @@ namespace pe
             GUI::motionBlur_strength,
             0.f};
 
-        Debug::BeginCmdRegion(cmd->Handle(), "MotionBlur");
+        cmd->BeginDebugRegion("MotionBlur");
         // Copy viewport image
-        frameImage->CopyColorAttachment(cmd, viewportRT);
+        cmd->CopyImage(viewportRT, frameImage);
 
         // MOTION BLUR
         // Input
-        frameImage->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        velocityRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        depth->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+        cmd->ChangeLayout(frameImage, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(velocityRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
         // Output
-        viewportRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        cmd->ChangeLayout(viewportRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-        cmd->PushConstants(pipeline, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(vec4), &values);
+        cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, sizeof(vec4), &values);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
-        Debug::EndCmdRegion(cmd->Handle());
+        cmd->EndDebugRegion();
     }
 
     void MotionBlur::Resize(uint32_t width, uint32_t height)
@@ -166,13 +198,13 @@ namespace pe
         Init();
         CreateRenderPass();
         CreateFrameBuffers();
-        CreatePipeline();
         UpdateDescriptorSets();
+        CreatePipeline();
     }
 
     void MotionBlur::Destroy()
     {
-        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutMotionBlur());
+        Descriptor::Destroy(DSet);
 
         for (auto frameBuffer : framebuffers)
             FrameBuffer::Destroy(frameBuffer);

@@ -36,7 +36,6 @@ namespace pe
     class DescriptorPool;
     class DescriptorLayout;
     class Descriptor;
-    class Fence;
     class Semaphore;
     class Swapchain;
     class Image;
@@ -49,7 +48,7 @@ namespace pe
     public:
         static RHI *Get()
         {
-            static auto rhi = new RHI();
+            static RHI *rhi = new RHI();
             return rhi;
         }
 
@@ -62,6 +61,7 @@ namespace pe
         ~RHI();
 
         void Init(SDL_Window *window);
+        void Destroy();
         void CreateInstance(SDL_Window *window);
         void CreateSurface();
         void GetSurfaceProperties();
@@ -74,35 +74,17 @@ namespace pe
         bool IsDeviceExtensionValid(const char *name);
         void CreateDevice();
         void CreateAllocator();
-        void GetQueues();
+        void InitQueues();
         void CreateSwapchain(Surface *surface);
-        void CreateCommandPools();
+        void InitCommandPools();
         void CreateDescriptorPool(uint32_t maxDescriptorSets);
         void CreateGlobalDescriptors();
-        void CreateCmdBuffers(uint32_t bufferCount = 0);
+        void InitCmdBuffers(uint32_t bufferCount = 0);
         void CreateSemaphores(uint32_t semaphoresCount);
-        void Destroy();
 
         Format GetDepthFormat();
 
         void WaitDeviceIdle();
-
-        class UniformBuffer
-        {
-        public:
-            Buffer *buffer = nullptr;
-            size_t size = 0;
-            Descriptor *descriptor = nullptr;
-            DescriptorLayout *layout = nullptr;
-        };
-
-        class UniformImages
-        {
-        public:
-            uint32_t count = 0;
-            Descriptor *descriptor = nullptr;
-            DescriptorLayout *layout = nullptr;
-        };
 
         uint32_t GetFrameIndex() { return m_frameCounter % SWAPCHAIN_IMAGES; }
         size_t GetFrameCounter() { return m_frameCounter; }
@@ -115,14 +97,32 @@ namespace pe
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
         std::vector<Semaphore *> &GetSemaphores() { return m_semaphores; }
         const AllocatorHandle &GetAllocator() { return m_allocator; }
-        Queue *GetGeneralQueue() { return m_generalQueue; }
-        CommandBuffer *GetGeneralCmd() { return m_generalCmd; }
+        Queue *GetRenderQueue(uint32_t index) { return m_renderQueue[index]; }
+        Queue *GetPresentQueue(uint32_t index) { return m_presentQueue[index]; }
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
+        
+        struct UniformBufferInfo
+        {
+            Buffer *buffer = nullptr;
+            size_t size = 0;
+            Descriptor *descriptor = nullptr;
+        };
 
-        std::deque<UniformBuffer> &GetUniformBuffers() { return m_uniformBuffers; }
-        std::deque<UniformImages> &GetUniformImages() { return m_uniformImages; }
+        size_t CreateUniformBufferInfo();
+        void RemoveUniformBufferInfo(size_t index);
+        UniformBufferInfo &GetUniformBufferInfo(size_t key) { return m_uniformBuffers[key]; }
+
+        struct UniformImageInfo
+        {
+            uint32_t count = 0;
+            Descriptor *descriptor = nullptr;
+        };
+        
+        size_t CreateUniformImageInfo();
+        void RemoveUniformImageInfo(size_t index);
+        UniformImageInfo &GetUniformImageInfo(size_t key) { return m_uniformImages[key]; }
 
     private:
         RHI();
@@ -135,8 +135,8 @@ namespace pe
         std::vector<Semaphore *> m_semaphores;
         AllocatorHandle m_allocator;
 
-        Queue *m_generalQueue;
-        CommandBuffer *m_generalCmd;
+        Queue *m_renderQueue[SWAPCHAIN_IMAGES];
+        Queue *m_presentQueue[SWAPCHAIN_IMAGES];
 
         SDL_Window *m_window;
         Surface *m_surface;
@@ -144,7 +144,7 @@ namespace pe
 
         size_t m_frameCounter;
 
-        std::deque<UniformBuffer> m_uniformBuffers;
-        std::deque<UniformImages> m_uniformImages;
+        std::unordered_map<size_t, UniformBufferInfo> m_uniformBuffers;
+        std::unordered_map<size_t, UniformImageInfo> m_uniformImages;
     };
 }

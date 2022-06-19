@@ -24,7 +24,7 @@ SOFTWARE.
 
 namespace pe
 {
-    void EventSystem::Init()
+    void EventSystem::Init(CommandBuffer *cmd)
     {
     }
 

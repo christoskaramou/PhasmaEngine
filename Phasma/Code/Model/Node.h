@@ -25,7 +25,6 @@ SOFTWARE.
 namespace pe
 {
     class Mesh;
-
     class Node;
 
     struct Skin
@@ -34,15 +33,6 @@ namespace pe
         Node *skeletonRoot;
         std::vector<mat4> inverseBindMatrices;
         std::vector<Node *> joints;
-    };
-
-    // It is invalid to have both 'matrix' and any of 'translation'/'rotation'/'scale'
-    //   spec: "A node can have either a 'matrix' or any combination of 'translation'/'rotation'/'scale' (TRS) properties"
-    enum TransformationType
-    {
-        TRANSFORMATION_IDENTITY = 0,
-        TRANSFORMATION_MATRIX,
-        TRANSFORMATION_TRS
     };
 
     class Node

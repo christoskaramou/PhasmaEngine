@@ -165,13 +165,13 @@ namespace pe
             velocity *= 0.707f;
 
         if (io.KeysDown[SDL_SCANCODE_W])
-            camera_main->Move(Camera::RelativeDirection::FORWARD, velocity);
+            camera_main->Move(CameraDirection::FORWARD, velocity);
         if (io.KeysDown[SDL_SCANCODE_S])
-            camera_main->Move(Camera::RelativeDirection::BACKWARD, velocity);
+            camera_main->Move(CameraDirection::BACKWARD, velocity);
         if (io.KeysDown[SDL_SCANCODE_A])
-            camera_main->Move(Camera::RelativeDirection::LEFT, velocity);
+            camera_main->Move(CameraDirection::LEFT, velocity);
         if (io.KeysDown[SDL_SCANCODE_D])
-            camera_main->Move(Camera::RelativeDirection::RIGHT, velocity);
+            camera_main->Move(CameraDirection::RIGHT, velocity);
 
         if (eventSystem->PollEvent(EventType::CompileShaders))
         {
@@ -184,7 +184,7 @@ namespace pe
             {
                 int w, h;
                 SDL_Vulkan_GetDrawableSize(m_handle, &w, &h);
-                renderer->ResizeViewport(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+                renderer->Resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
             }
         }
 

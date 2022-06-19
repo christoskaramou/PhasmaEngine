@@ -28,6 +28,7 @@ SOFTWARE.
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Queue.h"
+#include "Renderer/Command.h"
 
 namespace pe
 {
@@ -56,7 +57,7 @@ namespace pe
     void Mesh::SetUniformOffsets(size_t uniformBufferIndex)
     {
         this->uniformBufferIndex = uniformBufferIndex;
-        auto &uniformBuffer = RHII.GetUniformBuffers()[uniformBufferIndex];
+        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
         uniformBufferOffset = uniformBuffer.size;
         uniformBuffer.size += sizeof(mat4) * (2 + meshData.jointMatrices.size());
 
@@ -68,12 +69,12 @@ namespace pe
         }
     }
 
-    void Primitive::loadTexture(
-        MaterialType type,
-        const std::filesystem::path &file,
-        const Microsoft::glTF::Image *image,
-        const Microsoft::glTF::Document *document,
-        const Microsoft::glTF::GLTFResourceReader *resourceReader)
+    void Primitive::loadTexture(CommandBuffer *cmd,
+                                MaterialType type,
+                                const std::filesystem::path &file,
+                                const Microsoft::glTF::Image *image,
+                                const Microsoft::glTF::Document *document,
+                                const Microsoft::glTF::GLTFResourceReader *resourceReader)
     {
         std::filesystem::path path = file.parent_path();
         if (image)
@@ -134,28 +135,14 @@ namespace pe
             if (!pixels)
                 PE_ERROR("No pixel data loaded");
 
-            const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
-
-            Buffer *staging = Buffer::Create(
-                imageSize,
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "mesh_staging_buffer");
-            staging->Map();
-            staging->CopyData(pixels);
-            staging->Flush();
-            staging->Unmap();
-
-            stbi_image_free(pixels);
-
             ImageCreateInfo info{};
-            info.format = VK_FORMAT_R8G8B8A8_UNORM;
+            info.format = Format::RGBA8Unorm;
             info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
             info.width = texWidth;
             info.height = texHeight;
-            info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-            info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-            info.initialState = LayoutState::Preinitialized;
+            info.usage = ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::SampledBit;
+            info.properties = MemoryProperty::DeviceLocalBit;
+            info.initialLayout = ImageLayout::Preinitialized;
             info.name = image ? image->uri : path.filename().string();
             *tex = Image::Create(info);
 
@@ -166,27 +153,16 @@ namespace pe
             SamplerCreateInfo samplerInfo{};
             samplerInfo.maxLod = static_cast<float>(info.mipLevels);
             (*tex)->CreateSampler(samplerInfo);
-            (*tex)->CopyBufferToImage(nullptr, staging);
-            (*tex)->GenerateMipMaps();
 
-            Buffer::Destroy(staging);
+            cmd->CopyDataToImageStaged(*tex, pixels, texWidth * texHeight * STBI_rgb_alpha);
+
+            cmd->GenerateMipMaps(*tex);
 
             Mesh::uniqueTextures[path.string()] = *tex;
+            cmd->AddOnFinishCallback([pixels]()
+                                     { stbi_image_free(pixels); });
         }
     }
-
-    // void Mesh::calculateBoundingSphere()
-    //{
-    //	vec3 _max(-FLT_MAX);
-    //	vec3 _min(FLT_MAX);
-    //	for (auto& vertex : vertices) {
-    //		_max = maximum(_max, vertex.position);
-    //		_min = minimum(_min, vertex.position);
-    //	}
-    //	vec3 center = (_max + _min) * .5f;
-    //	float sphereRadius = length(_max - center);
-    //	boundingSphere = vec4(center, sphereRadius);
-    // }
 
     void Mesh::destroy()
     {

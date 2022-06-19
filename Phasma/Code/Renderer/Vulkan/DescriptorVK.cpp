@@ -28,32 +28,9 @@ SOFTWARE.
 
 namespace pe
 {
-    DescriptorBinding::DescriptorBinding()
-    {
-        binding = 0;
-        descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorCount = 1;
-        stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-        pImmutableSamplers = nullptr;
-    }
-
-    DescriptorBinding::DescriptorBinding(
-        uint32_t binding,
-        DescriptorType descriptorType,
-        ShaderStageFlags stageFlags,
-        uint32_t descriptorCount,
-        SamplerHandle *pImmutableSamplers)
-        : binding(binding),
-          descriptorType(descriptorType),
-          descriptorCount(descriptorCount),
-          stageFlags(stageFlags),
-          pImmutableSamplers(pImmutableSamplers)
-    {
-    }
-
     DescriptorPool::DescriptorPool(uint32_t maxDescriptorSets, const std::string &name)
     {
-        std::vector<VkDescriptorPoolSize> descPoolsize(4);
+        std::vector<VkDescriptorPoolSize> descPoolsize(5);
         descPoolsize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descPoolsize[0].descriptorCount = maxDescriptorSets;
         descPoolsize[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -62,6 +39,8 @@ namespace pe
         descPoolsize[2].descriptorCount = maxDescriptorSets;
         descPoolsize[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         descPoolsize[3].descriptorCount = maxDescriptorSets;
+        descPoolsize[4].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        descPoolsize[4].descriptorCount = maxDescriptorSets;
 
         VkDescriptorPoolCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -74,7 +53,7 @@ namespace pe
         PE_CHECK(vkCreateDescriptorPool(RHII.GetDevice(), &createInfo, nullptr, &descriptorPoolVK));
         m_handle = descriptorPoolVK;
 
-        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_DESCRIPTOR_POOL, name);
+        Debug::SetObjectName(m_handle, ObjectType::DescriptorPool, name);
     }
 
     DescriptorPool::~DescriptorPool()
@@ -86,60 +65,71 @@ namespace pe
         }
     }
 
-    DescriptorLayout::DescriptorLayout(const std::vector<DescriptorBinding> &bindings, const std::string &name)
+    DescriptorLayout::DescriptorLayout(DescriptorInfo *info, const std::string &name)
     {
-        if (bindings.empty())
-            PE_ERROR("DescriptorLayout: No bindings provided");
-
-        // Bindings
-        std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{};
-        for (const auto &layoutBinding : bindings)
+        // store by binding
+        std::map<uint32_t, std::vector<DescriptorBindingInfo>> infosMap{};
+        for (uint32_t i = 0; i < info->count; i++)
         {
-            setLayoutBindings.push_back(
-                VkDescriptorSetLayoutBinding{
-                    layoutBinding.binding,
-                    (VkDescriptorType)layoutBinding.descriptorType,
-                    layoutBinding.descriptorCount,
-                    (VkShaderStageFlags)layoutBinding.stageFlags,
-                    nullptr});
+            if (infosMap.find(info->bindingInfos[i].binding) == infosMap.end())
+                infosMap[info->bindingInfos[i].binding] = std::vector<DescriptorBindingInfo>{};
+
+            infosMap[info->bindingInfos[i].binding].push_back(info->bindingInfos[i]);
         }
 
-        // Bindings flags
-        std::vector<VkDescriptorBindingFlags> descriptorBindingFlags(setLayoutBindings.size());
-        for (int i = 0; i < setLayoutBindings.size(); i++)
+        // Bindings
+        std::vector<VkDescriptorSetLayoutBinding> bindings{};
+        for (auto const &[binding, bindingInfos] : infosMap)
         {
-            if (setLayoutBindings[i].descriptorCount > 1)
+            VkDescriptorSetLayoutBinding layoutBinding{};
+            layoutBinding.binding = binding;
+            layoutBinding.descriptorType = GetDescriptorTypeVK(bindingInfos[0].type);
+            layoutBinding.descriptorCount = static_cast<uint32_t>(bindingInfos.size());
+            layoutBinding.stageFlags = GetShaderStageVK(info->stage);
+            layoutBinding.pImmutableSamplers = nullptr;
+
+            bindings.push_back(layoutBinding);
+        }
+
+        m_variableCount = 1;
+
+        // Bindings flags
+        std::vector<VkDescriptorBindingFlags> bindingFlags(bindings.size());
+        for (int i = 0; i < bindings.size(); i++)
+        {
+            if (bindings[i].descriptorCount > 1)
             {
                 // Note: As for now, there can be only one unbound array in a descriptor set and it must be the last binding
                 // I think this is a Vulkan limitation
-                if (i != setLayoutBindings.size() - 1)
+                if (i != bindings.size() - 1)
                     PE_ERROR("DescriptorLayout: An unbound array must be the last binding");
-                descriptorBindingFlags[i] = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+                bindingFlags[i] = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+                m_variableCount = bindings[i].descriptorCount;
             }
             else
             {
-                descriptorBindingFlags[i] = 0;
+                bindingFlags[i] = 0;
             }
         }
 
         // Set flags to bindings
-        VkDescriptorSetLayoutBindingFlagsCreateInfo setLayoutBindingFlags{};
-        setLayoutBindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
-        setLayoutBindingFlags.bindingCount = static_cast<uint32_t>(descriptorBindingFlags.size());
-        setLayoutBindingFlags.pBindingFlags = descriptorBindingFlags.data();
+        VkDescriptorSetLayoutBindingFlagsCreateInfo layoutBindingFlags{};
+        layoutBindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+        layoutBindingFlags.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+        layoutBindingFlags.pBindingFlags = bindingFlags.data();
 
         // Layout create info
-        VkDescriptorSetLayoutCreateInfo descriptorLayout{};
-        descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descriptorLayout.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-        descriptorLayout.pBindings = setLayoutBindings.data();
-        descriptorLayout.pNext = &setLayoutBindingFlags;
+        VkDescriptorSetLayoutCreateInfo dslci{};
+        dslci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        dslci.bindingCount = static_cast<uint32_t>(bindings.size());
+        dslci.pBindings = bindings.data();
+        dslci.pNext = &layoutBindingFlags;
 
         VkDescriptorSetLayout layout;
-        PE_CHECK(vkCreateDescriptorSetLayout(RHII.GetDevice(), &descriptorLayout, nullptr, &layout));
+        PE_CHECK(vkCreateDescriptorSetLayout(RHII.GetDevice(), &dslci, nullptr, &layout));
         m_handle = layout;
 
-        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, name);
+        Debug::SetObjectName(m_handle, ObjectType::DescriptorSetLayout, name);
     }
 
     DescriptorLayout::~DescriptorLayout()
@@ -151,19 +141,18 @@ namespace pe
         }
     }
 
-    Descriptor::Descriptor(DescriptorLayout *layout, uint32_t variableCount, const std::string &name)
+    Descriptor::Descriptor(DescriptorInfo *info, const std::string &name)
     {
-        if (!layout)
-            PE_ERROR("DescriptorLayout is nullptr");
+        m_layout = DescriptorLayout::Create(info, name + "_layout");
 
-        uint32_t variableDescCounts[] = {variableCount};
+        uint32_t variableDescCounts[] = {m_layout->GetVariableCount()};
 
         VkDescriptorSetVariableDescriptorCountAllocateInfo variableDescriptorCountAllocInfo = {};
         variableDescriptorCountAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
         variableDescriptorCountAllocInfo.descriptorSetCount = 1;
         variableDescriptorCountAllocInfo.pDescriptorCounts = variableDescCounts;
 
-        VkDescriptorSetLayout dsetLayout = layout->Handle();
+        VkDescriptorSetLayout dsetLayout = m_layout->Handle();
         VkDescriptorSetAllocateInfo allocateInfo{};
         allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocateInfo.descriptorPool = RHII.GetDescriptorPool()->Handle();
@@ -175,44 +164,42 @@ namespace pe
         PE_CHECK(vkAllocateDescriptorSets(RHII.GetDevice(), &allocateInfo, &dset));
         m_handle = dset;
 
-        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_DESCRIPTOR_SET, name);
+        UpdateDescriptor(info);
+
+        Debug::SetObjectName(m_handle, ObjectType::DescriptorSet, name);
     }
 
     Descriptor::~Descriptor()
     {
+        DescriptorLayout::Destroy(m_layout);
     }
 
-    DescriptorUpdateInfo::DescriptorUpdateInfo()
-        : binding(0),
-          pBuffer(nullptr),
-          bufferUsage(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
-          pImage(nullptr),
-          imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+    void Descriptor::UpdateDescriptor(DescriptorInfo *info)
     {
-    }
-
-    void Descriptor::UpdateDescriptor(uint32_t infoCount, DescriptorUpdateInfo *pInfo)
-    {
-        // store by binding
-        std::map<uint32_t, std::vector<DescriptorUpdateInfo>> infosMap{};
-        for (uint32_t i = 0; i < infoCount; i++)
-            infosMap[pInfo[i].binding].push_back(pInfo[i]);
-
         std::vector<VkDescriptorImageInfo> imageInfos{};
-        imageInfos.reserve(infoCount);
+        imageInfos.reserve(info->count);
         std::vector<VkDescriptorBufferInfo> bufferInfos{};
-        bufferInfos.reserve(infoCount);
+        bufferInfos.reserve(info->count);
+        
+        // store by binding
+        std::map<uint32_t, std::vector<DescriptorBindingInfo>> infosMap{};
+        for (uint32_t i = 0; i < info->count; i++)
+            infosMap[info->bindingInfos[i].binding].push_back(info->bindingInfos[i]);
+
         std::vector<VkWriteDescriptorSet> writeSets{};
         writeSets.reserve(infosMap.size());
 
-        for (auto const &[binding, infos] : infosMap)
+        for (auto const &[binding, bindingInfos] : infosMap)
         {
-            for (auto const &info : infos)
+            for (auto const &bindingInfo : bindingInfos)
             {
-                if (info.pImage != nullptr)
-                    imageInfos.push_back(VkDescriptorImageInfo{info.pImage->sampler, info.pImage->view, (VkImageLayout)info.imageLayout});
-                else if (info.pBuffer != nullptr)
-                    bufferInfos.push_back(VkDescriptorBufferInfo{info.pBuffer->Handle(), 0, info.pBuffer->Size()});
+                if (bindingInfo.pImage != nullptr)
+                {
+                    VkImageLayout imageLayout = GetImageLayoutVK(bindingInfo.imageLayout);
+                    imageInfos.push_back(VkDescriptorImageInfo{bindingInfo.pImage->sampler, bindingInfo.pImage->view, imageLayout});
+                }
+                else if (bindingInfo.pBuffer != nullptr)
+                    bufferInfos.push_back(VkDescriptorBufferInfo{bindingInfo.pBuffer->Handle(), 0, bindingInfo.pBuffer->Size()});
                 else
                     PE_ERROR("Descriptor::UpdateDescriptor: pImage and pBuffer are both nullptr");
             }
@@ -222,25 +209,26 @@ namespace pe
             writeSet.dstSet = m_handle;
             writeSet.dstBinding = binding;
             writeSet.dstArrayElement = 0;
-            writeSet.descriptorCount = static_cast<uint32_t>(infos.size());
+            writeSet.descriptorCount = static_cast<uint32_t>(bindingInfos.size());
+            writeSet.descriptorType = GetDescriptorTypeVK(bindingInfos[0].type);
 
-            if (infos[0].pImage != nullptr)
+            if (bindingInfos[0].type == DescriptorType::CombinedImageSampler)
             {
-                size_t index = imageInfos.size() - infos.size();
+                size_t index = imageInfos.size() - bindingInfos.size();
                 writeSet.pImageInfo = &imageInfos[index];
-                writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             }
-            else //(infos[0].pBuffer != nullptr)
+            else if (bindingInfos[0].type == DescriptorType::UniformBuffer)
             {
-                size_t index = bufferInfos.size() - infos.size();
+                size_t index = bufferInfos.size() - bindingInfos.size();
                 writeSet.pBufferInfo = &bufferInfos[index];
-                if (infos[0].bufferUsage == VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
-                    writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                else if (infos[0].bufferUsage == VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
-                    writeSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                else
-                    PE_ERROR("Descriptor::UpdateDescriptor: bufferUsage is not supported");
             }
+            else if (bindingInfos[0].type == DescriptorType::StorageBuffer)
+            {
+                size_t index = bufferInfos.size() - bindingInfos.size();
+                writeSet.pBufferInfo = &bufferInfos[index];
+            }
+            else
+                PE_ERROR("Descriptor::UpdateDescriptor: DescriptorType::Invalid");
 
             writeSets.push_back(writeSet);
         }

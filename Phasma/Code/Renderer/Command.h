@@ -32,21 +32,6 @@ namespace pe
     class Image;
     class Descriptor;
     class Semaphore;
-    class Fence;
-
-    enum class BarrierType
-    {
-        Memory,
-        Buffer,
-        Image
-    };
-
-    struct BufferCopy
-    {
-        uint64_t srcOffset;
-        uint64_t dstOffset;
-        uint64_t size;
-    };
 
     struct ImageSubresourceLayers
     {
@@ -54,13 +39,6 @@ namespace pe
         uint32_t mipLevel;
         uint32_t baseArrayLayer;
         uint32_t layerCount;
-    };
-
-    struct Offset3D
-    {
-        int32_t x;
-        int32_t y;
-        int32_t z;
     };
 
     struct ImageBlit
@@ -91,6 +69,8 @@ namespace pe
     private:
         inline static std::vector<std::unordered_map<CommandPool *, CommandPool *>> s_availableCps{};
         inline static std::vector<std::unordered_map<CommandPool *, CommandPool *>> s_allCps{};
+        inline static std::mutex s_getNextMutex{};
+        inline static std::mutex s_returnMutex{};
 
     private:
         uint32_t m_familyId;
@@ -103,8 +83,6 @@ namespace pe
 
         ~CommandBuffer();
 
-        void CopyBuffer(Buffer *srcBuffer, Buffer *dstBuffer, uint32_t regionCount, BufferCopy *pRegions);
-
         void Begin();
 
         void End();
@@ -113,10 +91,7 @@ namespace pe
 
         void SetDepthBias(float constantFactor, float clamp, float slopeFactor);
 
-        void BlitImage(Image *srcImage, ImageLayout srcImageLayout,
-                       Image *dstImage, ImageLayout dstImageLayout,
-                       uint32_t regionCount, ImageBlit *pRegions,
-                       Filter filter);
+        void BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter);
 
         void BeginPass(RenderPass *pass, FrameBuffer *frameBuffer);
 
@@ -136,19 +111,65 @@ namespace pe
 
         void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
 
-        void PushConstants(Pipeline *pipeline, ShaderStageFlags shaderStageFlags, uint32_t offset, uint32_t size,
+        void PushConstants(Pipeline *pipeline, ShaderStageFlags stage, uint32_t offset, uint32_t size,
                            const void *pValues);
 
         void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
 
-        void DrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset,
+        void DrawIndexed(uint32_t indexCount,
+                         uint32_t instanceCount,
+                         uint32_t firstIndex,
+                         int32_t vertexOffset,
                          uint32_t firstInstance);
 
         void Submit(Queue *queue,
                     PipelineStageFlags *waitStages,
                     uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-                    uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
-                    Fence *fence);
+                    uint32_t signalSemaphoresCount, Semaphore **signalSemaphores);
+
+        void ChangeLayout(Image *image,
+                          ImageLayout newLayout,
+                          uint32_t baseArrayLayer = 0,
+                          uint32_t arrayLayers = 1,
+                          uint32_t baseMipLevel = 0,
+                          uint32_t mipLevels = 1);
+
+        void CopyBuffer(Buffer *src, Buffer *dst, const size_t size);
+
+        void CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t offset = 0);
+
+        void CopyDataToImageStaged(Image *image,
+                                   void *data,
+                                   size_t size,
+                                   uint32_t baseArrayLayer = 0,
+                                   uint32_t layerCount = 1,
+                                   uint32_t mipLevel = 0);
+
+        void CopyImage(Image *src, Image *dst);
+
+        void GenerateMipMaps(Image *image);
+
+        bool IsRecording() const { return m_recording; }
+
+        void BeginDebugRegion(const std::string &name);
+
+        void InsertDebugLabel(const std::string &name);
+
+        void EndDebugRegion();
+
+        uint32_t GetFamilyId() const { return m_familyId; }
+
+        Semaphore *GetSemaphore() const { return m_semaphore; }
+
+        uint64_t GetSumbitionCount() const { return m_submitions; }
+
+        void IncreaceSubmitionCount() { m_submitions++; }
+
+        void Wait();
+
+        CommandPool *GetCommandPool() const { return m_commandPool; }
+
+        void AddOnFinishCallback(Delegate<>::Func_type &&func);
 
         static void Init(GpuHandle gpu, uint32_t countPerFamily = 0);
 
@@ -158,27 +179,22 @@ namespace pe
 
         static void Return(CommandBuffer *cmd);
 
-        uint32_t GetFamilyId() const { return m_familyId; }
-
-        Fence *GetFence() const { return m_fence; }
-
-        CommandPool *GetCommandPool() const { return m_commandPool; }
-
-        std::string name;
-
     private:
-        static void CheckFutures();
-
-        inline static std::vector<std::unordered_map<CommandBuffer *, CommandBuffer *>> s_availableCmds{};
-        inline static std::vector<std::map<CommandBuffer *, CommandBuffer *>> s_allCmds{};
-        inline static std::unordered_map<CommandBuffer *, std::future<CommandBuffer *>> s_cmdWaits;
-        inline static std::atomic_bool s_availableCmdsReady{false};
-        inline static bool killThreads{false};
-
         friend class Queue;
+        
+        inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
+        inline static std::vector<std::map<size_t, CommandBuffer *>> s_allCmds{};
+        inline static std::mutex s_getNextMutex{};
+        inline static std::mutex s_returnMutex{};
+        inline static std::mutex s_WaitMutex{};
 
         CommandPool *m_commandPool;
         uint32_t m_familyId;
-        Fence *m_fence;
+        Semaphore *m_semaphore;
+        std::atomic_uint64_t m_submitions;
+        bool m_recording = false;
+        std::string name;
+        StringHash nameHash;
+        Delegate<> m_onFinish;
     };
 }

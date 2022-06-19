@@ -33,6 +33,7 @@ SOFTWARE.
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
+#include "Renderer/Command.h"
 #include "Renderer/RenderPass.h"
 #include "Systems/RendererSystem.h"
 
@@ -56,13 +57,13 @@ namespace pe
     {
         Attachment attachment{};
         attachment.format = depthFormat;
-        attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        attachment.samples = SampleCount::Count1;
+        attachment.loadOp = AttachmentLoadOp::Clear;
+        attachment.storeOp = AttachmentStoreOp::Store;
+        attachment.stencilLoadOp = AttachmentLoadOp::DontCare;
+        attachment.stencilStoreOp = AttachmentStoreOp::DontCare;
+        attachment.initialLayout = ImageLayout::Undefined;
+        attachment.finalLayout = ImageLayout::DepthStencilAttachment;
         renderPass = RenderPass::Create(&attachment, 1, "shadows_renderPass");
     }
 
@@ -74,31 +75,29 @@ namespace pe
         {
             ImageCreateInfo info{};
             info.format = depthFormat;
-            info.initialState = LayoutState::Undefined;
+            info.initialLayout = ImageLayout::Undefined;
             info.width = SHADOWMAP_SIZE;
             info.height = SHADOWMAP_SIZE;
-            info.tiling = VK_IMAGE_TILING_OPTIMAL;
-            info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-            info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            info.tiling = ImageTiling::Optimal;
+            info.usage = ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit;
+            info.properties = MemoryProperty::DeviceLocalBit;
             info.name = "ShadowMap_" + std::to_string(i++);
             texture = Image::Create(info);
 
             ImageViewCreateInfo viewInfo{};
             viewInfo.image = texture;
-            viewInfo.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT; // | VK_IMAGE_ASPECT_STENCIL_BIT;
+            viewInfo.aspectMask = ImageAspect::DepthBit; // | ImageAspect::StencilBit;
             texture->CreateImageView(viewInfo);
 
             SamplerCreateInfo samplerInfo{};
-            samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-            samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-            samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
+            samplerInfo.addressModeV = SamplerAddressMode::ClampToEdge;
+            samplerInfo.addressModeW = SamplerAddressMode::ClampToEdge;
             samplerInfo.maxAnisotropy = 1.f;
-            samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+            samplerInfo.borderColor = BorderColor::FloatOpaqueWhite;
             samplerInfo.compareEnable = VK_TRUE;
-            samplerInfo.compareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
+            samplerInfo.compareOp = CompareOp::GreaterOrEqual;
             texture->CreateSampler(samplerInfo);
-
-            texture->ChangeLayout(nullptr, LayoutState::DepthStencilAttachment);
         }
 
         framebuffers.resize(SWAPCHAIN_IMAGES);
@@ -115,61 +114,63 @@ namespace pe
 
     void Shadows::CreatePipeline()
     {
-        PipelineCreateInfo info{};
-
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Shadows/shaderShadows.vert", ShaderType::Vertex});
-        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
-        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
-        info.width = static_cast<float>(SHADOWMAP_SIZE);
-        info.height = static_cast<float>(SHADOWMAP_SIZE);
-        info.pushConstantStage = PushConstantStage::Vertex;
-        info.pushConstantSize = sizeof(ShadowPushConstData);
-        info.colorBlendAttachments = {textures[0]->blendAttachment};
-        info.dynamicStates = {VK_DYNAMIC_STATE_DEPTH_BIAS};
-        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutGbufferVert()};
-        info.renderPass = renderPass;
-        info.name = "shadows_pipeline";
-
-        pipeline = Pipeline::Create(info);
-
-        Shader::Destroy(info.pVertShader);
     }
 
-    void Shadows::CreateUniforms()
+    void Shadows::CreateUniforms(CommandBuffer *cmd)
     {
         uniformBuffer = Buffer::Create(
             SHADOWMAP_CASCADES * sizeof(mat4),
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            BufferUsage::UniformBufferBit,
+            AllocationCreate::HostAccessSequentialWriteBit,
             "Shadows_uniform_buffer");
         uniformBuffer->Map();
         uniformBuffer->Zero();
         uniformBuffer->Flush();
-        uniformBuffer->Unmap();
 
-        UpdateDescriptorSets();
+        DescriptorBindingInfo bindingInfos[SHADOWMAP_CASCADES + 1]{};
+
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::UniformBuffer;
+        bindingInfos[0].pBuffer = uniformBuffer;
+
+        for (int i = 0; i < SHADOWMAP_CASCADES; i++)
+        {
+            bindingInfos[i + 1].binding = 1;
+            bindingInfos[i + 1].type = DescriptorType::CombinedImageSampler;
+            bindingInfos[i + 1].imageLayout = ImageLayout::DepthStencilReadOnly;
+            bindingInfos[i + 1].pImage = textures[i];
+        }
+
+        DescriptorInfo info{};
+        info.count = SHADOWMAP_CASCADES + 1;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
+
+        descriptorSetDeferred = Descriptor::Create(&info, "Shadows_deferred_descriptor");
     }
 
     void Shadows::UpdateDescriptorSets()
     {
-        std::vector<DescriptorUpdateInfo> infos{};
+        DescriptorBindingInfo bindingInfos[SHADOWMAP_CASCADES + 1]{};
 
-        infos.emplace_back();
-        infos.back().pBuffer = uniformBuffer;
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::UniformBuffer;
+        bindingInfos[0].pBuffer = uniformBuffer;
 
         for (int i = 0; i < SHADOWMAP_CASCADES; i++)
         {
-            infos.emplace_back();
-            infos.back().binding = 1;
-            infos.back().pImage = textures[i];
-            infos.back().imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            bindingInfos[i + 1].binding = 1;
+            bindingInfos[i + 1].type = DescriptorType::CombinedImageSampler;
+            bindingInfos[i + 1].imageLayout = ImageLayout::DepthStencilReadOnly;
+            bindingInfos[i + 1].pImage = textures[i];
         }
 
-        uint32_t infosCount = static_cast<uint32_t>(infos.size());
-        DescriptorLayout *layout = Pipeline::getDescriptorSetLayoutShadowsDeferred();
+        DescriptorInfo info{};
+        info.count = SHADOWMAP_CASCADES + 1;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
 
-        descriptorSetDeferred = Descriptor::Create(layout, SHADOWMAP_CASCADES, "Shadows_deferred_descriptor");
-        descriptorSetDeferred->UpdateDescriptor(infosCount, infos.data());
+        descriptorSetDeferred->UpdateDescriptor(&info);
     }
 
     void Shadows::Update(Camera *camera)
@@ -178,11 +179,10 @@ namespace pe
         {
             CalculateCascades(camera);
 
-            MemoryRange range{};
-            range.data = &cascades;
-            range.size = SHADOWMAP_CASCADES * sizeof(mat4);
-            range.offset = 0;
-            uniformBuffer->Copy(&range, 1, false);
+            MemoryRange mr{};
+            mr.data = &cascades;
+            mr.size = SHADOWMAP_CASCADES * sizeof(mat4);
+            uniformBuffer->Copy(1, &mr, false);
         }
     }
 
@@ -282,19 +282,31 @@ namespace pe
 
     void Shadows::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
+        // PE_ERROR("Not implemented");
     }
 
     void Shadows::Resize(uint32_t width, uint32_t height)
     {
+        // PE_ERROR("Not implemented");
+    }
+
+    void Shadows::BeginPass(CommandBuffer *cmd, uint32_t imageIndex, uint32_t cascade)
+    {
+        cmd->ChangeLayout(textures[cascade], ImageLayout::DepthStencilAttachment);
+        FrameBuffer *frameBuffer = framebuffers[imageIndex][cascade];
+        cmd->BeginPass(renderPass, frameBuffer);
+        cmd->SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
+    }
+
+    void Shadows::EndPass(CommandBuffer *cmd, uint32_t cascade)
+    {
+        cmd->EndPass();
+        cmd->ChangeLayout(textures[cascade], ImageLayout::DepthStencilReadOnly);
     }
 
     void Shadows::Destroy()
     {
-        if (VkRenderPass(renderPass->Handle()))
-        {
-            vkDestroyRenderPass(RHII.GetDevice(), renderPass->Handle(), nullptr);
-            renderPass->Handle() = {};
-        }
+        RenderPass::Destroy(renderPass);
 
         for (auto &texture : textures)
             Image::Destroy(texture);
@@ -304,7 +316,7 @@ namespace pe
                 FrameBuffer::Destroy(fb);
 
         Buffer::Destroy(uniformBuffer);
-        Pipeline::Destroy(pipeline);
+        Descriptor::Destroy(descriptorSetDeferred);
     }
 }
 #endif

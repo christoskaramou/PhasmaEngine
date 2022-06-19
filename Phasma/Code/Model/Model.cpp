@@ -23,6 +23,7 @@ SOFTWARE.
 #include "Model/Model.h"
 #include "Model/Mesh.h"
 #include "Renderer/Pipeline.h"
+#include "Renderer/Queue.h"
 #include "Renderer/Command.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
@@ -30,6 +31,8 @@ SOFTWARE.
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
 #include "Renderer/RHI.h"
+#include "Renderer/Vertex.h"
+#include "Systems/RendererSystem.h"
 
 #undef max
 
@@ -37,13 +40,10 @@ namespace pe
 {
     using namespace Microsoft;
 
-    CommandBuffer *Model::commandBuffer = nullptr;
     std::deque<Model> Model::models = {};
-    Pipeline *Model::pipeline = nullptr;
 
     Model::Model()
     {
-        // descriptorSet = {};
         uniformBufferIndex = std::numeric_limits<size_t>::max();
         uniformBufferOffset = std::numeric_limits<size_t>::max();
         uniformImagesIndex = std::numeric_limits<size_t>::max();
@@ -61,7 +61,7 @@ namespace pe
         return false;
     }
 
-    void Model::readGltf(const std::filesystem::path &file)
+    void Model::ReadGltf(const std::filesystem::path &file)
     {
         if (file.extension() != ".gltf" && file.extension() != ".glb")
             PE_ERROR("Model type not supported");
@@ -108,13 +108,13 @@ namespace pe
         }
     }
 
-    glTF::Image *Model::getImage(const std::string &textureID) const
+    glTF::Image *Model::GetImage(const std::string &textureID) const
     {
         return textureID.empty() ? nullptr : const_cast<glTF::Image *>(&document->images.Get(document->textures.Get(textureID).imageId));
     }
 
     template <typename T>
-    void Model::getVertexData(std::vector<T> &vec, const std::string &accessorName,
+    void Model::GetVertexData(std::vector<T> &vec, const std::string &accessorName,
                               const glTF::MeshPrimitive &primitive) const
     {
         std::string accessorId;
@@ -191,7 +191,7 @@ namespace pe
         }
     }
 
-    void Model::getIndexData(std::vector<uint32_t> &vec, const glTF::MeshPrimitive &primitive) const
+    void Model::GetIndexData(std::vector<uint32_t> &vec, const glTF::MeshPrimitive &primitive) const
     {
         if (!primitive.indicesAccessorId.empty())
         {
@@ -255,7 +255,10 @@ namespace pe
         }
     }
 
-    void Model::getMesh(pe::Node *node, const std::string &meshID, const std::filesystem::path &file) const
+    void Model::GetMesh(CommandBuffer *cmd,
+                        pe::Node *node,
+                        const std::string &meshID,
+                        const std::filesystem::path &file) const
     {
         if (!node || meshID.empty())
             return;
@@ -276,15 +279,15 @@ namespace pe
             std::vector<uint32_t> indices{};
 
             // ------------ Vertices ------------
-            getVertexData(positions, glTF::ACCESSOR_POSITION, primitive);
-            getVertexData(uvs, glTF::ACCESSOR_TEXCOORD_0, primitive);
-            getVertexData(normals, glTF::ACCESSOR_NORMAL, primitive);
-            getVertexData(colors, glTF::ACCESSOR_COLOR_0, primitive);
-            getVertexData(bonesIDs, glTF::ACCESSOR_JOINTS_0, primitive);
-            getVertexData(weights, glTF::ACCESSOR_WEIGHTS_0, primitive);
+            GetVertexData(positions, glTF::ACCESSOR_POSITION, primitive);
+            GetVertexData(uvs, glTF::ACCESSOR_TEXCOORD_0, primitive);
+            GetVertexData(normals, glTF::ACCESSOR_NORMAL, primitive);
+            GetVertexData(colors, glTF::ACCESSOR_COLOR_0, primitive);
+            GetVertexData(bonesIDs, glTF::ACCESSOR_JOINTS_0, primitive);
+            GetVertexData(weights, glTF::ACCESSOR_WEIGHTS_0, primitive);
 
             // ------------ Indices ------------
-            getIndexData(indices, primitive);
+            GetIndexData(indices, primitive);
 
             // ------------ Materials ------------
             const auto &material = document->materials.Get(primitive.materialId);
@@ -294,7 +297,7 @@ namespace pe
 
             // factors
             myPrimitive.pbrMaterial.alphaCutoff = material.alphaCutoff;
-            myPrimitive.pbrMaterial.alphaMode = material.alphaMode;
+            myPrimitive.pbrMaterial.renderQueue = (RenderQueue)material.alphaMode;
             myPrimitive.pbrMaterial.baseColorFactor = vec4(&material.metallicRoughness.baseColorFactor.r);
             myPrimitive.pbrMaterial.doubleSided = material.doubleSided;
             myPrimitive.pbrMaterial.emissiveFactor = vec3(&material.emissiveFactor.r);
@@ -302,16 +305,16 @@ namespace pe
             myPrimitive.pbrMaterial.roughnessFactor = material.metallicRoughness.roughnessFactor;
 
             // textures
-            const auto baseColorImage = getImage(material.metallicRoughness.baseColorTexture.textureId);
-            const auto metallicRoughnessImage = getImage(material.metallicRoughness.metallicRoughnessTexture.textureId);
-            const auto normalImage = getImage(material.normalTexture.textureId);
-            const auto occlusionImage = getImage(material.occlusionTexture.textureId);
-            const auto emissiveImage = getImage(material.emissiveTexture.textureId);
-            myPrimitive.loadTexture(MaterialType::BaseColor, file, baseColorImage, document, resourceReader);
-            myPrimitive.loadTexture(MaterialType::MetallicRoughness, file, metallicRoughnessImage, document, resourceReader);
-            myPrimitive.loadTexture(MaterialType::Normal, file, normalImage, document, resourceReader);
-            myPrimitive.loadTexture(MaterialType::Occlusion, file, occlusionImage, document, resourceReader);
-            myPrimitive.loadTexture(MaterialType::Emissive, file, emissiveImage, document, resourceReader);
+            const auto baseColorImage = GetImage(material.metallicRoughness.baseColorTexture.textureId);
+            const auto metallicRoughnessImage = GetImage(material.metallicRoughness.metallicRoughnessTexture.textureId);
+            const auto normalImage = GetImage(material.normalTexture.textureId);
+            const auto occlusionImage = GetImage(material.occlusionTexture.textureId);
+            const auto emissiveImage = GetImage(material.emissiveTexture.textureId);
+            myPrimitive.loadTexture(cmd, MaterialType::BaseColor, file, baseColorImage, document, resourceReader);
+            myPrimitive.loadTexture(cmd, MaterialType::MetallicRoughness, file, metallicRoughnessImage, document, resourceReader);
+            myPrimitive.loadTexture(cmd, MaterialType::Normal, file, normalImage, document, resourceReader);
+            myPrimitive.loadTexture(cmd, MaterialType::Occlusion, file, occlusionImage, document, resourceReader);
+            myPrimitive.loadTexture(cmd, MaterialType::Emissive, file, emissiveImage, document, resourceReader);
 
             if (baseColorImage)
                 myPrimitive.name = baseColorImage->name;
@@ -327,7 +330,7 @@ namespace pe
             myPrimitive.indicesSize = static_cast<uint32_t>(indices.size());
             myPrimitive.min = vec3(&accessorPos->min[0]);
             myPrimitive.max = vec3(&accessorPos->max[0]);
-            myPrimitive.calculateBoundingSphere();
+            myPrimitive.CalculateBoundingSphere();
             myPrimitive.calculateBoundingBox();
             myPrimitive.hasBones = !bonesIDs.empty() && !weights.empty();
 
@@ -349,15 +352,15 @@ namespace pe
         }
     }
 
-    void Model::loadModelGltf(const std::filesystem::path &file)
+    void Model::LoadModelGltf(CommandBuffer *cmd, const std::filesystem::path &file)
     {
         // reads and gets the document and resourceReader objects
-        readGltf(file);
+        ReadGltf(file);
 
         for (auto &node : document->GetDefaultScene().nodes)
-            loadNode({}, document->nodes.Get(node), file);
-        loadAnimations();
-        loadSkins();
+            LoadNode(cmd, nullptr, document->nodes.Get(node), file);
+        LoadAnimations();
+        LoadSkins();
 
         for (auto node : linearNodes)
         {
@@ -372,7 +375,9 @@ namespace pe
 
     void Model::Load(const std::filesystem::path &file)
     {
-        RHII.WaitDeviceIdle();
+        Queue *queue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit, 1);
+        CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
+        cmd->Begin();
 
         Model::models.emplace_back();
         Model &model = Model::models.back();
@@ -380,20 +385,28 @@ namespace pe
         // This works as a flag to when the loading is done
         model.render = false;
 
-        model.loadModelGltf(file);
-        // calculateBoundingSphere();
+        model.LoadModelGltf(cmd, file);
         model.name = file.filename().string();
         model.fullPathName = file.string();
-        model.createVertexBuffer();
-        model.createIndexBuffer();
-        model.createUniforms();
-        model.createDescriptorSets();
+        model.CreateVertexBuffer(cmd);
+        model.CreateIndexBuffer(cmd);
+        model.CreateUniforms();
+        model.CreatePipeline();
 
         model.render = true;
+
+        cmd->End();
+        queue->Submit(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
+        
+        cmd->Wait();
+        CommandBuffer::Return(cmd);
+
+        queue->WaitIdle();
+        Queue::Return(queue);
     }
 
     // position x, y, z and radius w
-    void Model::calculateBoundingSphere()
+    void Model::CalculateBoundingSphere()
     {
         vec4 centerMax(0.f);
         vec4 centerMin(FLT_MAX);
@@ -421,7 +434,10 @@ namespace pe
         boundingSphere = vec4(center, sphereRadius);
     }
 
-    void Model::loadNode(pe::Node *parent, const glTF::Node &node, const std::filesystem::path &file)
+    void Model::LoadNode(CommandBuffer *cmd,
+                         pe::Node *parent,
+                         const glTF::Node &node,
+                         const std::filesystem::path &file)
     {
         pe::Node *newNode = new pe::Node{};
         newNode->index = !node.id.empty() ? static_cast<uint32_t>(document->nodes.GetIndex(node.id)) : -1;
@@ -435,7 +451,22 @@ namespace pe
             PE_ERROR("Node " + node.name + " has Invalid TransformType");
             delete newNode;
         }
-        newNode->transformationType = static_cast<TransformationType>(node.GetTransformationType());
+
+        switch (node.GetTransformationType())
+        {
+        case glTF::TransformationType::TRANSFORMATION_IDENTITY:
+            newNode->transformationType = TransformationType::Identity;
+            break;
+        case glTF::TransformationType::TRANSFORMATION_MATRIX:
+            newNode->transformationType = TransformationType::Matrix;
+            break;
+        case glTF::TransformationType::TRANSFORMATION_TRS:
+            newNode->transformationType = TransformationType::TRS;
+            break;
+        default:
+            PE_ERROR("Node " + node.name + " has Invalid TransformationType");
+        }
+
         newNode->translation = vec3(&node.translation.x);
         newNode->scale = vec3(&node.scale.x);
         newNode->rotation = quat(&node.rotation.x);
@@ -443,10 +474,9 @@ namespace pe
 
         // Node with children
         for (auto &child : node.children)
-        {
-            loadNode(newNode, document->nodes.Get(child), file);
-        }
-        getMesh(newNode, node.meshId, file);
+            LoadNode(cmd, newNode, document->nodes.Get(child), file);
+
+        GetMesh(cmd, newNode, node.meshId, file);
         if (parent)
             parent->children.push_back(newNode);
         // else
@@ -454,7 +484,7 @@ namespace pe
         linearNodes.push_back(newNode);
     }
 
-    void Model::loadAnimations()
+    void Model::LoadAnimations()
     {
         const auto getNode = [](std::vector<Node *> &linearNodes, size_t index) -> Node *
         {
@@ -481,15 +511,15 @@ namespace pe
                 pe::AnimationSampler sampler{};
                 if (samp.interpolation == glTF::INTERPOLATION_LINEAR)
                 {
-                    sampler.interpolation = AnimationSampler::InterpolationType::LINEAR;
+                    sampler.interpolation = AnimationInterpolationType::LINEAR;
                 }
                 if (samp.interpolation == glTF::INTERPOLATION_STEP)
                 {
-                    sampler.interpolation = AnimationSampler::InterpolationType::STEP;
+                    sampler.interpolation = AnimationInterpolationType::STEP;
                 }
                 if (samp.interpolation == glTF::INTERPOLATION_CUBICSPLINE)
                 {
-                    sampler.interpolation = AnimationSampler::InterpolationType::CUBICSPLINE;
+                    sampler.interpolation = AnimationInterpolationType::CUBICSPLINE;
                 }
                 // Read sampler input time values
                 {
@@ -553,15 +583,15 @@ namespace pe
 
                 if (source.target.path == glTF::TARGET_ROTATION)
                 {
-                    channel.path = AnimationChannel::PathType::ROTATION;
+                    channel.path = AnimationPathType::ROTATION;
                 }
                 if (source.target.path == glTF::TARGET_TRANSLATION)
                 {
-                    channel.path = AnimationChannel::PathType::TRANSLATION;
+                    channel.path = AnimationPathType::TRANSLATION;
                 }
                 if (source.target.path == glTF::TARGET_SCALE)
                 {
-                    channel.path = AnimationChannel::PathType::SCALE;
+                    channel.path = AnimationPathType::SCALE;
                 }
                 if (source.target.path == glTF::TARGET_WEIGHTS)
                 {
@@ -580,7 +610,7 @@ namespace pe
         }
     }
 
-    void Model::loadSkins()
+    void Model::LoadSkins()
     {
         const auto getNode = [](std::vector<Node *> &linearNodes, size_t index) -> Node *
         {
@@ -620,7 +650,7 @@ namespace pe
         }
     }
 
-    void Model::createVertexBuffer()
+    void Model::CreateVertexBuffer(CommandBuffer *cmd)
     {
         numberOfVertices = 0;
         for (auto &node : linearNodes)
@@ -645,26 +675,12 @@ namespace pe
         }
 
         auto size = sizeof(Vertex) * numberOfVertices;
-
-        // Staging buffer
-        Buffer *staging = Buffer::Create(
-            size,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "model_staging_buffer");
-
-        staging->Map();
-        staging->CopyData(vertices.data());
-        staging->Flush();
-        staging->Unmap();
-
         vertexBuffer = Buffer::Create(
             size,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            0,
+            BufferUsage::TransferDstBit | BufferUsage::VertexBufferBit,
+            AllocationCreate::None,
             "model_vertex_buffer");
-        vertexBuffer->CopyBuffer(staging, staging->Size());
-        Buffer::Destroy(staging);
+        cmd->CopyBufferStaged(vertexBuffer, vertices.data(), size);
 
         // SHADOW VERTEX BUFFER
         std::vector<ShadowVertex> shadowsVertices{};
@@ -673,27 +689,15 @@ namespace pe
             shadowsVertices.emplace_back(vert.position, vert.bonesIDs, vert.weights);
 
         size = sizeof(ShadowVertex) * numberOfVertices;
-        staging = Buffer::Create(
-            size,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "model_staging_buffer");
-
-        staging->Map();
-        staging->CopyData(shadowsVertices.data());
-        staging->Flush();
-        staging->Unmap();
-
         shadowsVertexBuffer = Buffer::Create(
             size,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            0,
+            BufferUsage::TransferDstBit | BufferUsage::VertexBufferBit,
+            AllocationCreate::None,
             "model_shadows_vertex_buffer");
-        shadowsVertexBuffer->CopyBuffer(staging, staging->Size());
-        Buffer::Destroy(staging);
+        cmd->CopyBufferStaged(shadowsVertexBuffer, shadowsVertices.data(), size);
     }
 
-    void Model::createIndexBuffer()
+    void Model::CreateIndexBuffer(CommandBuffer *cmd)
     {
         numberOfIndices = 0;
         for (auto &node : linearNodes)
@@ -720,33 +724,20 @@ namespace pe
         auto size = sizeof(uint32_t) * numberOfIndices;
         indexBuffer = Buffer::Create(
             size,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            0,
+            BufferUsage::TransferDstBit | BufferUsage::IndexBufferBit,
+            AllocationCreate::None,
             "model_index_buffer");
-
-        // Staging buffer
-        Buffer *staging = Buffer::Create(
-            size,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "model_staging_buffer");
-        staging->Map();
-        staging->CopyData(indices.data());
-        staging->Flush();
-        staging->Unmap();
-
-        indexBuffer->CopyBuffer(staging, staging->Size());
-        Buffer::Destroy(staging);
+        cmd->CopyBufferStaged(indexBuffer, indices.data(), size);
     }
 
     // Will calculate the buffer size needed for all meshes and their primitives
-    void Model::createUniforms()
+    void Model::CreateUniforms()
     {
-        uniformImagesIndex = RHII.GetUniformImages().size();
-        RHII.GetUniformImages().emplace_back();
-
-        uniformBufferIndex = RHII.GetUniformBuffers().size();
-        auto &uniformBuffer = RHII.GetUniformBuffers().emplace_back();
+        uniformBufferIndex = RHII.CreateUniformBufferInfo();
+        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
+        
+        uniformImagesIndex = RHII.CreateUniformImageInfo();
+        auto &uniformImages = RHII.GetUniformImageInfo(uniformImagesIndex);
 
         uniformBufferOffset = uniformBuffer.size;
         uniformBuffer.size += sizeof(UBOModel);
@@ -759,30 +750,28 @@ namespace pe
 
         uniformBuffer.buffer = Buffer::Create(
             uniformBuffer.size,
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            BufferUsage::UniformBufferBit,
+            AllocationCreate::HostAccessSequentialWriteBit,
             "model_uniform_buffer");
-    }
 
-    void Model::createDescriptorSets()
-    {
-        auto &uniformBuffer = RHII.GetUniformBuffers()[uniformBufferIndex];
-        auto &uniformImages = RHII.GetUniformImages()[uniformImagesIndex];
 
-        uniformBuffer.layout = Pipeline::getDescriptorSetLayoutGbufferVert();
-        uniformBuffer.descriptor = Descriptor::Create(uniformBuffer.layout, 1, "model_uniform_buffer_descriptor");
+        DescriptorBindingInfo bindingInfo{};
+        bindingInfo.binding = 0;
+        bindingInfo.pBuffer = uniformBuffer.buffer;
+        bindingInfo.type = DescriptorType::UniformBuffer;
 
-        DescriptorUpdateInfo info{};
-        info.binding = 0;
-        info.pBuffer = uniformBuffer.buffer;
+        DescriptorInfo info{};
+        info.count = 1;
+        info.bindingInfos = &bindingInfo;
+        info.stage = ShaderStage::VertexBit;
 
-        uniformBuffer.descriptor->UpdateDescriptor(1, &info);
-
-        std::vector<DescriptorUpdateInfo> infos{};
+        uniformBuffer.descriptor = Descriptor::Create(&info, "model_uniform_buffer_descriptor");
 
         // Map to copy factors in uniform buffer
+        MemoryRange mr{};
         uniformBuffer.buffer->Map();
 
+        std::vector<DescriptorBindingInfo> bindingInfos{};
         // mesh dSets
         for (auto &node : linearNodes)
         {
@@ -791,8 +780,8 @@ namespace pe
 
             for (auto &primitive : node->mesh->primitives)
             {
-                // this primitive starting index of images in the uniform array of all images
-                primitive.uniformImagesIndex = infos.size();
+                // this primitive's starting index of images in the uniform array of all images
+                primitive.uniformImagesIndex = bindingInfos.size();
 
                 mat4 factors;
                 factors[0] = primitive.pbrMaterial.baseColorFactor != vec4(0.f) ? primitive.pbrMaterial.baseColorFactor : vec4(1.f);
@@ -802,22 +791,30 @@ namespace pe
                     primitive.pbrMaterial.alphaCutoff, 0.f);
                 factors[3][0] = static_cast<float>(primitive.hasBones);
 
-                uniformBuffer.buffer->CopyData(&factors, sizeof(mat4), primitive.uniformBufferOffset);
+                mr.data = &factors;
+                mr.size = sizeof(factors);
+                mr.offset = primitive.uniformBufferOffset;
+                uniformBuffer.buffer->Copy(1, &mr, true);
 
-                infos.emplace_back();
-                infos.back().pImage = primitive.pbrMaterial.baseColorTexture;
+                DescriptorBindingInfo bindingImageInfo{};
+                bindingImageInfo.binding = 0;
+                bindingImageInfo.type = DescriptorType::CombinedImageSampler;
+                bindingImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-                infos.emplace_back();
-                infos.back().pImage = primitive.pbrMaterial.metallicRoughnessTexture;
+                bindingImageInfo.pImage = primitive.pbrMaterial.baseColorTexture;
+                bindingInfos.push_back(bindingImageInfo);
 
-                infos.emplace_back();
-                infos.back().pImage = primitive.pbrMaterial.normalTexture;
+                bindingImageInfo.pImage = primitive.pbrMaterial.metallicRoughnessTexture;
+                bindingInfos.push_back(bindingImageInfo);
 
-                infos.emplace_back();
-                infos.back().pImage = primitive.pbrMaterial.occlusionTexture;
+                bindingImageInfo.pImage = primitive.pbrMaterial.normalTexture;
+                bindingInfos.push_back(bindingImageInfo);
 
-                infos.emplace_back();
-                infos.back().pImage = primitive.pbrMaterial.emissiveTexture;
+                bindingImageInfo.pImage = primitive.pbrMaterial.occlusionTexture;
+                bindingInfos.push_back(bindingImageInfo);
+
+                bindingImageInfo.pImage = primitive.pbrMaterial.emissiveTexture;
+                bindingInfos.push_back(bindingImageInfo);
             }
         }
 
@@ -825,10 +822,85 @@ namespace pe
         uniformBuffer.buffer->Flush();
         uniformBuffer.buffer->Unmap();
 
-        uint32_t infosCount = static_cast<uint32_t>(infos.size());
-        uniformImages.layout = Pipeline::getDescriptorSetLayoutGbufferFrag();
-        uniformImages.descriptor = Descriptor::Create(uniformImages.layout, infosCount, "model_images_descriptor");
-        uniformImages.descriptor->UpdateDescriptor(infosCount, infos.data());
+        info.count = static_cast<uint32_t>(bindingInfos.size());
+        info.bindingInfos = bindingInfos.data();
+        info.stage = ShaderStage::FragmentBit;
+
+        uniformImages.descriptor = Descriptor::Create(&info, "model_images_descriptor");
+    }
+
+    void Model::CreatePipeline()
+    {
+        CreatePipelineGBuffer();
+        CreatePipelineShadows();
+    }
+
+    void Model::CreatePipelineGBuffer()
+    {
+        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        m_normalRT = rs->GetRenderTarget("normal");
+        m_albedoRT = rs->GetRenderTarget("albedo");
+        m_srmRT = rs->GetRenderTarget("srm");
+        m_velocityRT = rs->GetRenderTarget("velocity");
+        m_emissiveRT = rs->GetRenderTarget("emissive");
+
+        PipelineCreateInfo info{};
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.vert", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.frag", ShaderStage::FragmentBit});
+        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
+        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
+        info.width = m_albedoRT->width_f;
+        info.height = m_albedoRT->height_f;
+        info.pushConstantStage = ShaderStage::VertexBit | ShaderStage::FragmentBit;
+        info.pushConstantSize = 5 * sizeof(uint32_t);
+        info.cullMode = CullMode::Front;
+        info.colorBlendAttachments = {
+            m_normalRT->blendAttachment,
+            m_albedoRT->blendAttachment,
+            m_srmRT->blendAttachment,
+            m_velocityRT->blendAttachment,
+            m_emissiveRT->blendAttachment,
+        };
+        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
+        auto &uniformImages = RHII.GetUniformImageInfo(uniformImagesIndex);
+        info.descriptorSetLayouts = {
+            uniformBuffer.descriptor->GetLayout(),
+            uniformImages.descriptor->GetLayout()};
+        info.renderPass = WORLD_ENTITY->GetComponent<Deferred>()->renderPass;
+        info.name = "gbuffer_pipeline";
+
+        m_pipelineGBuffer = Pipeline::Create(info);
+
+        Shader::Destroy(info.pVertShader);
+        Shader::Destroy(info.pFragShader);
+    }
+
+    void Model::CreatePipelineShadows()
+    {
+        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
+
+        PipelineCreateInfo info{};
+
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Shadows/shaderShadows.vert", ShaderStage::VertexBit});
+        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
+        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
+        info.width = static_cast<float>(SHADOWMAP_SIZE);
+        info.height = static_cast<float>(SHADOWMAP_SIZE);
+        info.pushConstantStage = ShaderStage::VertexBit;
+        info.pushConstantSize = sizeof(ShadowPushConstData);
+        info.colorBlendAttachments = {WORLD_ENTITY->GetComponent<Shadows>()->textures[0]->blendAttachment};
+        info.dynamicStates = {DynamicState::DepthBias};
+        info.descriptorSetLayouts = {uniformBuffer.descriptor->GetLayout()};
+        info.renderPass = WORLD_ENTITY->GetComponent<Shadows>()->renderPass;
+        info.name = "shadows_pipeline";
+
+        m_pipelineShadows = Pipeline::Create(info);
+
+        Shader::Destroy(info.pVertShader);
+
+        // TODO: Follow the same pattern as the deferred pass
+        // Begin pass etc.
+        // This pipeline should belong to model
     }
 
     void CullPrimitiveAsync(Model *model, Mesh *mesh, const Camera &camera, uint32_t index)
@@ -846,7 +918,7 @@ namespace pe
         // mesh->primitives[index].cull = !camera.AABBInFrustum(aabb);
     }
 
-    void Model::updateAnimation(uint32_t index, float time)
+    void Model::UpdateAnimation(uint32_t index, float time)
     {
         if (index > static_cast<uint32_t>(animations.size()) - 1)
         {
@@ -871,19 +943,19 @@ namespace pe
                     {
                         switch (channel.path)
                         {
-                        case pe::AnimationChannel::PathType::TRANSLATION:
+                        case AnimationPathType::TRANSLATION:
                         {
                             cvec4 t = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
                             channel.node->translation = vec3(t);
                             break;
                         }
-                        case pe::AnimationChannel::PathType::SCALE:
+                        case AnimationPathType::SCALE:
                         {
                             cvec4 s = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
                             channel.node->scale = vec3(s);
                             break;
                         }
-                        case pe::AnimationChannel::PathType::ROTATION:
+                        case AnimationPathType::ROTATION:
                         {
                             cquat q1(&sampler.outputsVec4[i].x);
                             cquat q2(&sampler.outputsVec4[i + 1].x);
@@ -922,7 +994,7 @@ namespace pe
         }
     }
 
-    void Model::update(pe::Camera &camera, double delta)
+    void Model::Update(pe::Camera &camera, double delta)
     {
         if (!render)
             return;
@@ -935,17 +1007,17 @@ namespace pe
 #endif
         }
 
-        auto &uniformBuffer = RHII.GetUniformBuffers()[uniformBufferIndex];
+        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
         transform = pe::transform(quat(radians(rot)), scale, pos);
         ubo.matrix = transform;
         ubo.previousMvp = ubo.mvp;
         ubo.mvp = camera.viewProjection * transform;
 
-        MemoryRange range{};
-        range.data = &ubo;
-        range.size = sizeof(ubo);
-        range.offset = uniformBufferOffset;
-        uniformBuffer.buffer->Copy(&range, 1, true);
+        MemoryRange mr{};
+        mr.data = &ubo;
+        mr.size = sizeof(ubo);
+        mr.offset = uniformBufferOffset;
+        uniformBuffer.buffer->Copy(1, &mr, true);
 
         if (!animations.empty())
         {
@@ -954,7 +1026,7 @@ namespace pe
             if (animationTimer > animations[animationIndex].end)
                 animationTimer -= animations[animationIndex].end;
 
-            updateAnimation(animationIndex, animationTimer);
+            UpdateAnimation(animationIndex, animationTimer);
         }
 
         // async calls should be at least bigger than a number, else this will be slower
@@ -975,31 +1047,29 @@ namespace pe
         }
     }
 
-    void Model::draw(uint16_t alphaMode)
+    void Model::Draw(CommandBuffer *cmd, RenderQueue renderQueue)
     {
-        if (!render || !Model::pipeline)
+        if (!render)
             return;
 
-        auto &cmd = *Model::commandBuffer;
+        cmd->BeginDebugRegion(
+            renderQueue == RenderQueue::Opaque     ? "Opaque"
+            : renderQueue == RenderQueue::AlphaCut ? "AlphaCut"
+                                                   : "AlphaBlend");
 
-        Debug::BeginCmdRegion(cmd.Handle(),
-                              alphaMode == 1 ? "Opaque" : alphaMode == 2 ? "AlphaCut"
-                                                                         : "AlphaBlend");
+        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
+        auto &uniformImages = RHII.GetUniformImageInfo(uniformImagesIndex);
 
-        auto &uniformBuffer = RHII.GetUniformBuffers()[uniformBufferIndex];
-        auto &uniformImages = RHII.GetUniformImages()[uniformImagesIndex];
+        cmd->BindPipeline(m_pipelineGBuffer);
+        cmd->BindVertexBuffer(vertexBuffer, 0);
+        cmd->BindIndexBuffer(indexBuffer, 0);
 
-        cmd.BindPipeline(Model::pipeline);
-        cmd.BindVertexBuffer(vertexBuffer, 0);
-        cmd.BindIndexBuffer(indexBuffer, 0);
-
-        // TODO: Move higher
-        std::vector<Descriptor *> dsetHandles{
+        Descriptor *dsetHandles[]{
             uniformBuffer.descriptor,
             uniformImages.descriptor};
-        cmd.BindDescriptors(Model::pipeline, (uint32_t)dsetHandles.size(), dsetHandles.data());
+        cmd->BindDescriptors(m_pipelineGBuffer, 2, dsetHandles);
 
-        std::array<uint32_t, 5> data{};
+        uint32_t data[5];
         data[0] = static_cast<uint32_t>(uniformBufferOffset / sizeof(mat4));
 
         int culled = 0;
@@ -1013,7 +1083,7 @@ namespace pe
 
                 for (auto &primitive : node->mesh->primitives)
                 {
-                    if (primitive.pbrMaterial.alphaMode == alphaMode && primitive.render)
+                    if (primitive.pbrMaterial.renderQueue == renderQueue && primitive.render)
                     {
                         total++;
                         if (!primitive.cull)
@@ -1021,14 +1091,14 @@ namespace pe
                             data[3] = static_cast<uint32_t>(primitive.uniformBufferOffset / sizeof(mat4));
                             data[4] = static_cast<uint32_t>(primitive.uniformImagesIndex);
 
-                            cmd.PushConstants(
-                                Model::pipeline,
-                                static_cast<uint32_t>(Model::pipeline->info.pushConstantStage),
+                            cmd->PushConstants(
+                                m_pipelineGBuffer,
+                                m_pipelineGBuffer->info.pushConstantStage,
                                 0,
                                 sizeof(data),
-                                data.data());
+                                data);
 
-                            cmd.DrawIndexed(
+                            cmd->DrawIndexed(
                                 primitive.indicesSize,
                                 1,
                                 node->mesh->indexOffset + primitive.indexOffset,
@@ -1044,10 +1114,48 @@ namespace pe
             }
         }
 
-        Debug::EndCmdRegion(cmd.Handle());
+        cmd->EndDebugRegion();
     }
 
-    void Model::destroy()
+    void Model::DrawShadow(CommandBuffer *cmd, uint32_t cascade)
+    {
+        if (!render)
+            return;
+
+        Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
+        ShadowPushConstData data;
+
+        cmd->BindPipeline(m_pipelineShadows);
+        cmd->BindVertexBuffer(shadowsVertexBuffer, 0);
+        cmd->BindIndexBuffer(indexBuffer, 0);
+
+        std::vector<Descriptor *> dsetHandles{RHII.GetUniformBufferInfo(uniformBufferIndex).descriptor};
+        cmd->BindDescriptors(m_pipelineShadows, (uint32_t)dsetHandles.size(), dsetHandles.data());
+
+        for (auto &node : linearNodes)
+        {
+            if (node->mesh)
+            {
+                data.cascade = shadows.cascades[cascade] * ubo.matrix * node->mesh->meshData.matrix;
+                data.meshIndex = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
+                data.meshJointCount = static_cast<uint32_t>(node->mesh->meshData.jointMatrices.size());
+
+                cmd->PushConstants(m_pipelineShadows, ShaderStage::VertexBit, 0, sizeof(ShadowPushConstData), &data);
+                for (auto &primitive : node->mesh->primitives)
+                {
+                    // if (primitive.render)
+                    cmd->DrawIndexed(
+                        primitive.indicesSize,
+                        1,
+                        node->mesh->indexOffset + primitive.indexOffset,
+                        node->mesh->vertexOffset + primitive.vertexOffset,
+                        0);
+                }
+            }
+        }
+    }
+
+    void Model::Destroy()
     {
         if (script)
         {
@@ -1055,12 +1163,17 @@ namespace pe
             script = nullptr;
         }
 
-        auto &uniformBuffer = RHII.GetUniformBuffers()[uniformBufferIndex];
-        Buffer::Destroy(uniformBuffer.buffer);
-        DescriptorLayout::Destroy(uniformBuffer.layout);
+        Pipeline::Destroy(m_pipelineGBuffer);
+        Pipeline::Destroy(m_pipelineShadows);
 
-        auto &uniformImages = RHII.GetUniformImages()[uniformImagesIndex];
-        DescriptorLayout::Destroy(uniformImages.layout);
+        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
+        Buffer::Destroy(uniformBuffer.buffer);
+        Descriptor::Destroy(uniformBuffer.descriptor);
+        RHII.RemoveUniformBufferInfo(uniformBufferIndex);
+
+        auto &uniformImages = RHII.GetUniformImageInfo(uniformImagesIndex);
+        Descriptor::Destroy(uniformImages.descriptor);
+        RHII.RemoveUniformImageInfo(uniformImagesIndex);
 
         delete document;
         delete resourceReader;

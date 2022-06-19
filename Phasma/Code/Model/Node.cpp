@@ -31,13 +31,11 @@ namespace pe
     {
         switch (transformationType)
         {
-        case TRANSFORMATION_MATRIX:
+        case TransformationType::Matrix:
             return matrix;
-        case TRANSFORMATION_TRS:
-        {
+        case TransformationType::TRS:
             return transform(rotation, scale, translation);
-        }
-        case TRANSFORMATION_IDENTITY:
+        case TransformationType::Identity:
         default:
             return mat4::identity();
         }
@@ -65,7 +63,7 @@ namespace pe
     {
         if (mesh)
         {
-            auto &uniformBuffer = RHII.GetUniformBuffers()[mesh->uniformBufferIndex];
+            auto &uniformBuffer = RHII.GetUniformBufferInfo(mesh->uniformBufferIndex);
 
             mesh->meshData.previousMatrix = mesh->meshData.matrix;
             mesh->meshData.matrix = GetMatrix();
@@ -94,18 +92,18 @@ namespace pe
                         CalculateJointMatrixAsync(mesh, skin, inverseTransform, i);
                 }
 
-                MemoryRange range{};
-                range.data = mesh->meshData.jointMatrices.data();
-                range.size = mesh->meshData.jointMatrices.size() * sizeof(mat4);
-                range.offset = mesh->uniformBufferOffset + 2 * sizeof(mat4);
-                uniformBuffer.buffer->Copy(&range, 1, true);
+                MemoryRange mr{};
+                mr.data = mesh->meshData.jointMatrices.data();
+                mr.size = mesh->meshData.jointMatrices.size() * sizeof(mat4);
+                mr.offset = mesh->uniformBufferOffset + 2 * sizeof(mat4);
+                uniformBuffer.buffer->Copy(1, &mr, true);
             }
 
-            MemoryRange range{};
-            range.data = &mesh->meshData;
-            range.size = 2 * sizeof(mat4);
-            range.offset = mesh->uniformBufferOffset;
-            uniformBuffer.buffer->Copy(&range, 1, true);
+            MemoryRange mr{};
+            mr.data = &mesh->meshData;
+            mr.size = 2 * sizeof(mat4);
+            mr.offset = mesh->uniformBufferOffset;
+            uniformBuffer.buffer->Copy(1, &mr, true);
         }
     }
 }

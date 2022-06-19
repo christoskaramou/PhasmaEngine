@@ -28,6 +28,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
+#include "Renderer/Command.h"
 
 namespace pe
 {
@@ -42,44 +43,50 @@ namespace pe
 
     void SkyBox::createDescriptorSet()
     {
-        descriptorSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutSkybox(), 1, "Skybox_descriptor");
+        DescriptorBindingInfo bindingInfo{};
+        bindingInfo.binding = 0;
+        bindingInfo.type = DescriptorType::CombinedImageSampler;
+        bindingInfo.imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfo.pImage = texture;
 
-        DescriptorUpdateInfo info{};
-        info.binding = 0;
-        info.pImage = texture;
-        descriptorSet->UpdateDescriptor(1, &info);
+        DescriptorInfo info{};
+        info.count = 1;
+        info.bindingInfos = &bindingInfo;
+        info.stage = ShaderStage::FragmentBit;
+
+        descriptorSet = Descriptor::Create(&info, "Skybox_descriptor");
     }
 
-    void SkyBox::loadSkyBox(const std::array<std::string, 6> &textureNames, uint32_t imageSideSize, bool show)
+    void SkyBox::loadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames, uint32_t imageSideSize, bool show)
     {
-        loadTextures(textureNames, imageSideSize);
+        loadTextures(cmd, textureNames, imageSideSize);
     }
 
     // images must be squared and the image size must be the real else the assertion will fail
-    void SkyBox::loadTextures(const std::array<std::string, 6> &paths, int imageSideSize)
+    void SkyBox::loadTextures(CommandBuffer *cmd, const std::array<std::string, 6> &paths, int imageSideSize)
     {
         assert(paths.size() == 6);
 
         ImageCreateInfo info{};
-        info.format = VK_FORMAT_R8G8B8A8_UNORM;
+        info.format = Format::RGBA8Unorm;
         info.arrayLayers = 6;
-        info.imageFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        info.imageFlags = ImageCreate::CubeCompatibleBit;
         info.width = imageSideSize;
         info.height = imageSideSize;
-        info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        info.usage = ImageUsage::SampledBit | ImageUsage::TransferDstBit;
+        info.properties = MemoryProperty::DeviceLocalBit;
         info.name = "skybox_image";
         texture = Image::Create(info);
 
         ImageViewCreateInfo viewInfo{};
         viewInfo.image = texture;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+        viewInfo.viewType = ImageViewType::TypeCube;
         texture->CreateImageView(viewInfo);
 
         SamplerCreateInfo samplerInfo{};
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
+        samplerInfo.addressModeV = SamplerAddressMode::ClampToEdge;
+        samplerInfo.addressModeW = SamplerAddressMode::ClampToEdge;
         texture->CreateSampler(samplerInfo);
 
         for (uint32_t i = 0; i < texture->imageInfo.arrayLayers; ++i)
@@ -90,30 +97,19 @@ namespace pe
             stbi_uc *pixels = stbi_load(paths[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
             assert(imageSideSize == texWidth && imageSideSize == texHeight);
 
-            VkDeviceSize imageSize = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * 4;
             if (!pixels)
                 PE_ERROR("No pixel data loaded");
 
-            Buffer *staging = Buffer::Create(
-                imageSize,
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "Skybox_staging_buffer");
-            staging->Map();
-            staging->CopyData(pixels);
-            staging->Flush();
-            staging->Unmap();
-
-            stbi_image_free(pixels);
-
-            texture->CopyBufferToImage(nullptr, staging, i);
-            Buffer::Destroy(staging);
+            size_t size = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * 4;
+            cmd->CopyDataToImageStaged(texture, pixels, size, i);
+            cmd->AddOnFinishCallback([pixels]()
+                                     { stbi_image_free(pixels); });
         }
     }
 
     void SkyBox::destroy()
     {
         Image::Destroy(texture);
-        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutSkybox());
+        Descriptor::Destroy(descriptorSet);
     }
 }

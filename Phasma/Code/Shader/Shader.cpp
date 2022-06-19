@@ -79,7 +79,7 @@ namespace pe
         if (path.find(Path::Assets) == std::string::npos)
             path = Path::Assets + info.sourcePath;
 
-        m_shaderType = info.shaderType;
+        m_shaderStage = info.shaderStage;
 
         Hash definesHash;
         for (const Define &def : m_globalDefines)
@@ -107,12 +107,24 @@ namespace pe
             for (auto def : info.defines)
                 AddDefine(def, options);
 
+#if PE_DEBUG_MODE
             // Useful for debugging shaders
-            // options.SetGenerateDebugInfo();
+            options.SetGenerateDebugInfo();
+#endif
 
-            if (CompileFileToAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options))
+            uint32_t shaderFlags = 0;
+            if (m_shaderStage == ShaderStage::VertexBit)
+                shaderFlags |= shaderc_shader_kind::shaderc_vertex_shader;
+            else if (m_shaderStage == ShaderStage::FragmentBit)
+                shaderFlags |= shaderc_shader_kind::shaderc_fragment_shader;
+            else if (m_shaderStage == ShaderStage::ComputeBit)
+                shaderFlags |= shaderc_shader_kind::shaderc_compute_shader;
+            else
+                PE_ERROR("Invalid shader stage!");
+
+            if (CompileFileToAssembly(static_cast<shaderc_shader_kind>(shaderFlags), options))
             {
-                CompileAssembly(static_cast<shaderc_shader_kind>(info.shaderType), options);
+                CompileAssembly(static_cast<shaderc_shader_kind>(shaderFlags), options);
                 m_cache.WriteSpvToFile(m_spirv);
             }
         }

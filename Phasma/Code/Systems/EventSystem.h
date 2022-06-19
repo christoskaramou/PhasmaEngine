@@ -24,22 +24,12 @@ SOFTWARE.
 
 namespace pe
 {
-    enum class EventType
-    {
-        Quit,
-        Custom,
-        SetWindowTitle,
-        CompileShaders,
-        ScaleRenderTargets,
-        FileWrite
-    };
-
     class EventSystem : public ISystem
     {
     public:
         using Func = Delegate<std::any>::Func_type;
 
-        void Init() override;
+        void Init(CommandBuffer *cmd) override;
 
         void Update(double delta) override;
 

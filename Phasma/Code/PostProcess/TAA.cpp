@@ -100,13 +100,13 @@ namespace pe
     void TAA::CreateTAAPipeline()
     {
         PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/TAA/TAA.frag", ShaderType::Fragment});
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/TAA/TAA.frag", ShaderStage::FragmentBit});
         info.width = taaRT->width_f;
         info.height = taaRT->height_f;
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {taaRT->blendAttachment};
-        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutTAA()};
+        info.descriptorSetLayouts = {DSet->GetLayout()};
         info.renderPass = renderPass;
         info.name = "taa_pipeline";
 
@@ -119,13 +119,13 @@ namespace pe
     void TAA::CreatePipelineSharpen()
     {
         PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/TAA/TAASharpen.frag", ShaderType::Fragment});
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/TAA/TAASharpen.frag", ShaderStage::FragmentBit});
         info.width = viewportRT->width_f;
         info.height = viewportRT->height_f;
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {viewportRT->blendAttachment};
-        info.descriptorSetLayouts = {Pipeline::getDescriptorSetLayoutTAASharpen()};
+        info.descriptorSetLayouts = {DSetSharpen->GetLayout()};
         info.renderPass = renderPassSharpen;
         info.name = "taaSharpen_pipeline";
 
@@ -135,83 +135,106 @@ namespace pe
         Shader::Destroy(info.pFragShader);
     }
 
-    void TAA::SaveImage(CommandBuffer *cmd, Image *source)
-    {
-        previous->ChangeLayout(cmd, LayoutState::TransferDst);
-        source->ChangeLayout(cmd, LayoutState::TransferSrc);
-
-        // Copy the image
-
-        VkImageCopy region{};
-        region.srcSubresource.aspectMask = source->viewInfo.aspectMask;
-        region.srcSubresource.layerCount = 1;
-        region.dstSubresource.aspectMask = previous->viewInfo.aspectMask;
-        region.dstSubresource.layerCount = 1;
-        region.extent.width = source->imageInfo.width;
-        region.extent.height = source->imageInfo.height;
-        region.extent.depth = 1;
-
-        vkCmdCopyImage(
-            cmd->Handle(),
-            source->Handle(),
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            previous->Handle(),
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &region);
-
-        previous->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        source->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-    }
-
-    void TAA::CreateUniforms()
+    void TAA::CreateUniforms(CommandBuffer *cmd)
     {
         uniform = Buffer::Create(
             sizeof(UBO),
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            BufferUsage::UniformBufferBit,
+            AllocationCreate::HostAccessSequentialWriteBit,
             "TAA_uniform_buffer");
         uniform->Map();
         uniform->Zero();
         uniform->Flush();
         uniform->Unmap();
 
-        DSet = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAA(), 1, "TAA_descriptor");
-        DSetSharpen = Descriptor::Create(Pipeline::getDescriptorSetLayoutTAASharpen(), 1, "TAA_sharpen_descriptor");
+        DescriptorBindingInfo bindingInfos[5]{};
 
-        UpdateDescriptorSets();
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[0].pImage = previous;
+
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[1].pImage = frameImage;
+
+        bindingInfos[2].binding = 2;
+        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[2].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[2].pImage = depth;
+
+        bindingInfos[3].binding = 3;
+        bindingInfos[3].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[3].pImage = velocityRT;
+
+        bindingInfos[4].binding = 4;
+        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].pBuffer = uniform;
+
+        DescriptorInfo info{};
+        info.count = 5;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
+
+        DSet = Descriptor::Create(&info, "TAA_descriptor");
+
+        bindingInfos[0].pImage = taaRT;
+
+        bindingInfos[1].type = DescriptorType::UniformBuffer;
+        bindingInfos[1].pBuffer = uniform;
+        bindingInfos[1].pImage = nullptr;
+
+        info.count = 2;
+
+        DSetSharpen = Descriptor::Create(&info, "TAA_sharpen_descriptor");
     }
 
     void TAA::UpdateDescriptorSets()
     {
-        std::array<DescriptorUpdateInfo, 5> infos{};
+        DescriptorBindingInfo bindingInfos[5]{};
 
-        infos[0].binding = 0;
-        infos[0].pImage = previous;
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[0].pImage = previous;
 
-        infos[1].binding = 1;
-        infos[1].pImage = frameImage;
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[1].pImage = frameImage;
 
-        infos[2].binding = 2;
-        infos[2].pImage = depth;
-        infos[2].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        bindingInfos[2].binding = 2;
+        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[2].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[2].pImage = depth;
 
-        infos[3].binding = 3;
-        infos[3].pImage = velocityRT;
+        bindingInfos[3].binding = 3;
+        bindingInfos[3].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[3].pImage = velocityRT;
 
-        infos[4].binding = 4;
-        infos[4].pBuffer = uniform;
+        bindingInfos[4].binding = 4;
+        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].pBuffer = uniform;
 
-        DSet->UpdateDescriptor(5, infos.data());
+        DescriptorInfo info{};
+        info.count = 5;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
 
-        std::array<DescriptorUpdateInfo, 2> infos2{};
+        DSet->UpdateDescriptor(&info);
 
-        infos2[0].binding = 0;
-        infos2[0].pImage = taaRT;
+        bindingInfos[0].pImage = taaRT;
 
-        infos2[1].binding = 1;
-        infos2[1].pBuffer = uniform;
+        bindingInfos[1].type = DescriptorType::UniformBuffer;
+        bindingInfos[1].pBuffer = uniform;
+        bindingInfos[1].pImage = nullptr;
 
-        DSetSharpen->UpdateDescriptor(2, infos2.data());
+        info.count = 2;
+
+        DSetSharpen->UpdateDescriptor(&info);
     }
 
     void TAA::Update(Camera *camera)
@@ -224,52 +247,52 @@ namespace pe
                 sin(static_cast<float>(ImGui::GetTime()) * 0.125f)};
             ubo.invProj = camera->invProjection;
 
-            MemoryRange range{};
-            range.data = &ubo;
-            range.size = sizeof(ubo);
-            range.offset = 0;
-            uniform->Copy(&range, 1, false);
+            MemoryRange mr{};
+            mr.data = &ubo;
+            mr.size = sizeof(ubo);
+            mr.offset = 0;
+            uniform->Copy(1, &mr, false);
         }
     }
 
     void TAA::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        Debug::BeginCmdRegion(cmd->Handle(), "TAA");
+        cmd->BeginDebugRegion("TAA");
         // Copy viewport image
-        frameImage->CopyColorAttachment(cmd, viewportRT);
+        cmd->CopyImage(viewportRT, frameImage);
 
         // TEMPORAL ANTI-ALIASING
         // Input
-        previous->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        frameImage->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        velocityRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        depth->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+        cmd->ChangeLayout(previous, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(frameImage, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(velocityRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
         // Output
-        taaRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        cmd->ChangeLayout(taaRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
-        Debug::EndCmdRegion(cmd->Handle());
+        cmd->EndDebugRegion();
 
-        Debug::BeginCmdRegion(cmd->Handle(), "TAA Sharpen");
+        cmd->BeginDebugRegion("TAA Sharpen");
         // Copy viewport image to store for the next pass
-        previous->CopyColorAttachment(cmd, taaRT);
+        cmd->CopyImage(taaRT, previous);
 
         // TEMPORAL ANTI-ALIASING SHARPEN
         // Input
-        taaRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
+        cmd->ChangeLayout(taaRT, ImageLayout::ShaderReadOnly);
         // Output
-        viewportRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        cmd->ChangeLayout(viewportRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPassSharpen, framebuffersSharpen[imageIndex]);
         cmd->BindPipeline(pipelineSharpen);
         cmd->BindDescriptors(pipelineSharpen, 1, &DSetSharpen);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
-        Debug::EndCmdRegion(cmd->Handle());
+        cmd->EndDebugRegion();
     }
 
     void TAA::Resize(uint32_t width, uint32_t height)
@@ -291,14 +314,14 @@ namespace pe
         Init();
         CreateRenderPass();
         CreateFrameBuffers();
-        CreatePipeline();
         UpdateDescriptorSets();
+        CreatePipeline();
     }
 
     void TAA::Destroy()
     {
-        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutTAA());
-        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutTAASharpen());
+        Descriptor::Destroy(DSet);
+        Descriptor::Destroy(DSetSharpen);
 
         for (auto framebuffer : framebuffers)
             FrameBuffer::Destroy(framebuffer);

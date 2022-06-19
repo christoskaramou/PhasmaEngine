@@ -21,6 +21,8 @@ SOFTWARE.
 */
 
 #include "Renderer/RHI.h"
+#include "Renderer/Queue.h"
+#include "Renderer/Command.h"
 
 namespace pe
 {
@@ -28,18 +30,28 @@ namespace pe
 
     void Context::InitSystems()
     {
+        Queue *queue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit, 1);
+        CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
+        cmd->Begin();
+
         for (auto &system : m_systems)
         {
             if (system.second->IsEnabled())
-                system.second->Init();
+                system.second->Init(cmd);
         }
+
+        cmd->End();
+        cmd->Submit(queue, nullptr, 0, nullptr, 0, nullptr);
+        cmd->Wait();
+        
+        CommandBuffer::Return(cmd);
+        Queue::Return(queue);
     }
 
     void Context::DestroySystems()
     {
         RHII.WaitDeviceIdle();
 
-        // Reverse destroy systems, some do have dependencies on previous
         for (auto &system : m_systems)
             system.second->Destroy();
     }

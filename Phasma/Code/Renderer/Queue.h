@@ -25,28 +25,15 @@ SOFTWARE.
 namespace pe
 {
     class Semaphore;
-    class Fence;
     class CommandBuffer;
     class Swapchain;
-
-    enum QueueType
-    {
-        GraphicsBit = 1 << 0,
-        ComputeBit = 1 << 1,
-        TransferBit = 1 << 2,
-        SparseBindingBit = 1 << 3,
-        ProtectedBit = 1 << 4,
-        PresentBit = 1 << 5,
-        AllBits = GraphicsBit | ComputeBit | TransferBit | SparseBindingBit | ProtectedBit | PresentBit,
-        AllExceptPresentBits = AllBits & ~PresentBit
-    };
 
     class Queue : public IHandle<Queue, QueueHandle>
     {
     public:
         Queue(QueueHandle handle,
               uint32_t familyId,
-              uint32_t m_queueTypeFlags,
+              QueueTypeFlags m_queueTypeFlags,
               ivec3 m_imageGranularity,
               const std::string &name);
 
@@ -56,21 +43,14 @@ namespace pe
 
         static void Clear();
 
-        static Queue *GetNext(uint32_t queueTypeFlags, int minImageGranularity);
+        static Queue *GetNext(QueueTypeFlags queueType, int minImageGranularity);
 
         static void Return(Queue *queue);
 
         void Submit(uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
                     PipelineStageFlags *waitStages,
                     uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-                    uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
-                    Fence *signalFence);
-
-        void SubmitAndWaitFence(
-            uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
-            PipelineStageFlags *waitStages,
-            uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-            uint32_t signalSemaphoresCount, Semaphore **signalSemaphores);
+                    uint32_t signalSemaphoresCount, Semaphore **signalSemaphores);
 
         void Present(uint32_t swapchainCount, Swapchain **swapchains,
                      uint32_t *imageIndices,
@@ -78,25 +58,28 @@ namespace pe
 
         void WaitIdle();
 
+        void BeginDebugRegion(const std::string &name);
+
+        void InsertDebugLabel(const std::string &name);
+
+        void EndDebugRegion();
+
         uint32_t GetFamilyId() const { return m_familyId; }
 
-        uint32_t GetQueueTypeFlags() const { return m_queueTypeFlags; }
+        QueueTypeFlags GetQueueTypeFlags() const { return m_queueTypeFlags; }
 
         ivec3 GetImageGranularity() const { return m_imageGranularity; }
 
-        std::string name;
-
     private:
-        static void CheckFutures();
-
-        inline static std::unordered_map<Queue *, Queue *> s_availableQueues{};
-        inline static std::map<Queue *, Queue *> s_allQueues{};
-        inline static std::unordered_map<Queue *, std::future<Queue *>> s_queueWaits;
-        inline static std::atomic_bool s_availableQueuesReady{false};
-        inline static bool killThreads{false};
+        inline static std::unordered_map<size_t, Queue *> s_availableQueues{};
+        inline static std::map<size_t, Queue *> s_allQueues{};
+        inline static std::mutex s_getNextMutex{};
+        inline static std::mutex s_returnMutex{};
 
         uint32_t m_familyId;
-        uint32_t m_queueTypeFlags;
+        QueueTypeFlags m_queueTypeFlags;
         ivec3 m_imageGranularity;
+        std::string name;
+        StringHash nameHash;
     };
 }

@@ -84,13 +84,13 @@ namespace pe
         // Depth
         attachments[5].flags = {};
         attachments[5].format = depth->imageInfo.format;
-        attachments[5].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[5].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachments[5].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[5].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[5].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[5].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[5].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        attachments[5].samples = SampleCount::Count1;
+        attachments[5].loadOp = AttachmentLoadOp::Clear;
+        attachments[5].storeOp = AttachmentStoreOp::Store;
+        attachments[5].stencilLoadOp = AttachmentLoadOp::DontCare;
+        attachments[5].stencilStoreOp = AttachmentStoreOp::Store;
+        attachments[5].initialLayout = ImageLayout::Undefined;
+        attachments[5].finalLayout = ImageLayout::DepthStencilAttachment;
 
         renderPass = RenderPass::Create(attachments, 6, "gbuffer_renderpass");
 
@@ -137,44 +137,9 @@ namespace pe
 
     void Deferred::CreatePipeline()
     {
-        CreateGBufferPipeline();
-        CreateCompositionPipeline();
-    }
+        Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
+        SkyBox &skybox = CONTEXT->GetSystem<RendererSystem>()->skyBoxDay;
 
-    void Deferred::CreateGBufferPipeline()
-    {
-        PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.frag", ShaderType::Fragment});
-        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
-        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
-        info.width = albedoRT->width_f;
-        info.height = albedoRT->height_f;
-        info.pushConstantStage = PushConstantStage::VertexAndFragment;
-        info.pushConstantSize = 5 * sizeof(uint32_t);
-        info.cullMode = CullMode::Front;
-        info.colorBlendAttachments = {
-            normalRT->blendAttachment,
-            albedoRT->blendAttachment,
-            srmRT->blendAttachment,
-            velocityRT->blendAttachment,
-            emissiveRT->blendAttachment,
-        };
-
-        info.descriptorSetLayouts = {
-            Pipeline::getDescriptorSetLayoutGbufferVert(),
-            Pipeline::getDescriptorSetLayoutGbufferFrag()};
-        info.renderPass = renderPass;
-        info.name = "gbuffer_pipeline";
-
-        pipeline = Pipeline::Create(info);
-
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
-    }
-
-    void Deferred::CreateCompositionPipeline()
-    {
         const std::vector<Define> definesFrag{
             Define{"SHADOWMAP_CASCADES", std::to_string(SHADOWMAP_CASCADES)},
             Define{"SHADOWMAP_SIZE", std::to_string((float)SHADOWMAP_SIZE)},
@@ -183,17 +148,17 @@ namespace pe
             Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
 
         PipelineCreateInfo info{};
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderType::Vertex});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/composition.frag", ShaderType::Fragment, definesFrag});
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/composition.frag", ShaderStage::FragmentBit, definesFrag});
         info.width = viewportRT->width_f;
         info.height = viewportRT->height_f;
-        info.pushConstantStage = PushConstantStage::Fragment;
+        info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = sizeof(mat4);
         info.colorBlendAttachments = {viewportRT->blendAttachment};
         info.descriptorSetLayouts = {
-            Pipeline::getDescriptorSetLayoutComposition(),
-            Pipeline::getDescriptorSetLayoutShadowsDeferred(),
-            Pipeline::getDescriptorSetLayoutSkybox()};
+            DSComposition->GetLayout(),
+            shadows.descriptorSetDeferred->GetLayout(),
+            skybox.descriptorSet->GetLayout()};
         info.renderPass = compositionRenderPass;
         info.name = "composition_pipeline";
 
@@ -203,21 +168,8 @@ namespace pe
         Shader::Destroy(info.pFragShader);
     }
 
-    void Deferred::CreateUniforms()
+    void Deferred::CreateUniforms(CommandBuffer *cmd)
     {
-        uniform = Buffer::Create(
-            sizeof(ubo),
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            "Deferred_uniform_buffer");
-        uniform->Map();
-        uniform->Zero();
-        uniform->Flush();
-        uniform->Unmap();
-
-        DSComposition = Descriptor::Create(Pipeline::getDescriptorSetLayoutComposition(), 1, "Deferred_Composition_descriptor");
-
-        // Check if ibl_brdf_lut is already loaded
         const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
         if (Mesh::uniqueTextures.find(path) != Mesh::uniqueTextures.end())
         {
@@ -229,30 +181,18 @@ namespace pe
             stbi_set_flip_vertically_on_load(true);
             unsigned char *pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
             stbi_set_flip_vertically_on_load(false);
+
             if (!pixels)
                 PE_ERROR("No pixel data loaded");
-            const VkDeviceSize imageSize = texWidth * texHeight * STBI_rgb_alpha;
-
-            Buffer *staging = Buffer::Create(
-                imageSize,
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                "Deferred_ibl_brdf_lut_staging_buffer");
-            staging->Map();
-            staging->CopyData(pixels);
-            staging->Flush();
-            staging->Unmap();
-
-            stbi_image_free(pixels);
 
             ImageCreateInfo info{};
-            info.format = (Format)VK_FORMAT_R8G8B8A8_UNORM;
+            info.format = Format::RGBA8Unorm;
             info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
             info.width = texWidth;
             info.height = texHeight;
-            info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-            info.properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-            info.initialState = LayoutState::Preinitialized;
+            info.usage = ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::SampledBit;
+            info.properties = MemoryProperty::DeviceLocalBit;
+            info.initialLayout = ImageLayout::Preinitialized;
             info.name = "Deferred_ibl_brdf_lut_image";
             ibl_brdf_lut = Image::Create(info);
 
@@ -264,53 +204,140 @@ namespace pe
             samplerInfo.maxLod = static_cast<float>(info.mipLevels);
             ibl_brdf_lut->CreateSampler(samplerInfo);
 
-            ibl_brdf_lut->CopyBufferToImage(nullptr, staging);
-            ibl_brdf_lut->GenerateMipMaps();
-
-            Buffer::Destroy(staging);
+            cmd->CopyDataToImageStaged(ibl_brdf_lut, pixels, texWidth * texHeight * STBI_rgb_alpha);
+            cmd->GenerateMipMaps(ibl_brdf_lut);
 
             Mesh::uniqueTextures[path] = ibl_brdf_lut;
+            cmd->AddOnFinishCallback([pixels]()
+                                     { stbi_image_free(pixels); });
         }
 
-        UpdateDescriptorSets();
+        uniform = Buffer::Create(
+            sizeof(ubo),
+            BufferUsage::UniformBufferBit,
+            AllocationCreate::HostAccessSequentialWriteBit,
+            "Deferred_uniform_buffer");
+        uniform->Map();
+        uniform->Zero();
+        uniform->Flush();
+        uniform->Unmap();
+
+        DescriptorBindingInfo bindingInfos[10]{};
+
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[0].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[0].pImage = depth;
+
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[1].pImage = normalRT;
+
+        bindingInfos[2].binding = 2;
+        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[2].pImage = albedoRT;
+
+        bindingInfos[3].binding = 3;
+        bindingInfos[3].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[3].pImage = srmRT;
+
+        bindingInfos[4].binding = 4;
+        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].pBuffer = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
+
+        bindingInfos[5].binding = 5;
+        bindingInfos[5].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[5].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[5].pImage = ssaoBlurRT;
+
+        bindingInfos[6].binding = 6;
+        bindingInfos[6].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[6].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[6].pImage = ssrRT;
+
+        bindingInfos[7].binding = 7;
+        bindingInfos[7].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[7].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[7].pImage = emissiveRT;
+
+        bindingInfos[8].binding = 8;
+        bindingInfos[8].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[8].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[8].pImage = ibl_brdf_lut;
+
+        bindingInfos[9].binding = 9;
+        bindingInfos[9].type = DescriptorType::UniformBuffer;
+        bindingInfos[9].pBuffer = uniform;
+
+        DescriptorInfo info{};
+        info.count = 10;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
+
+        DSComposition = Descriptor::Create(&info, "Deferred_Composition_descriptor");
     }
 
     void Deferred::UpdateDescriptorSets()
     {
-        std::array<DescriptorUpdateInfo, 10> infos{};
+        DescriptorBindingInfo bindingInfos[10]{};
 
-        infos[0].binding = 0;
-        infos[0].pImage = depth;
-        infos[0].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[0].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[0].pImage = depth;
 
-        infos[1].binding = 1;
-        infos[1].pImage = normalRT;
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[1].pImage = normalRT;
 
-        infos[2].binding = 2;
-        infos[2].pImage = albedoRT;
+        bindingInfos[2].binding = 2;
+        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[2].pImage = albedoRT;
 
-        infos[3].binding = 3;
-        infos[3].pImage = srmRT;
+        bindingInfos[3].binding = 3;
+        bindingInfos[3].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[3].pImage = srmRT;
 
-        infos[4].binding = 4;
-        infos[4].pBuffer = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
+        bindingInfos[4].binding = 4;
+        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].pBuffer = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
 
-        infos[5].binding = 5;
-        infos[5].pImage = ssaoBlurRT;
+        bindingInfos[5].binding = 5;
+        bindingInfos[5].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[5].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[5].pImage = ssaoBlurRT;
 
-        infos[6].binding = 6;
-        infos[6].pImage = ssrRT;
+        bindingInfos[6].binding = 6;
+        bindingInfos[6].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[6].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[6].pImage = ssrRT;
 
-        infos[7].binding = 7;
-        infos[7].pImage = emissiveRT;
+        bindingInfos[7].binding = 7;
+        bindingInfos[7].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[7].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[7].pImage = emissiveRT;
 
-        infos[8].binding = 8;
-        infos[8].pImage = ibl_brdf_lut;
+        bindingInfos[8].binding = 8;
+        bindingInfos[8].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[8].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[8].pImage = ibl_brdf_lut;
 
-        infos[9].binding = 9;
-        infos[9].pBuffer = uniform;
+        bindingInfos[9].binding = 9;
+        bindingInfos[9].type = DescriptorType::UniformBuffer;
+        bindingInfos[9].pBuffer = uniform;
 
-        DSComposition->UpdateDescriptor(10, infos.data());
+        DescriptorInfo info{};
+        info.count = 10;
+        info.bindingInfos = bindingInfos;
+        info.stage = ShaderStage::FragmentBit;
+
+        DSComposition->UpdateDescriptor(&info);
     }
 
     void Deferred::Update(Camera *camera)
@@ -329,16 +356,15 @@ namespace pe
         ubo.screenSpace[7] = {
             GUI::fog_ground_thickness, static_cast<float>(GUI::use_fog), static_cast<float>(GUI::shadow_cast), 0.0f};
 
-        MemoryRange range{};
-        range.data = &ubo;
-        range.size = sizeof(ubo);
-        range.offset = 0;
-        uniform->Copy(&range, 1, false);
+        MemoryRange mr{};
+        mr.data = &ubo;
+        mr.size = sizeof(ubo);
+        uniform->Copy(1, &mr, false);
     }
 
     void Deferred::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        Debug::BeginCmdRegion(cmd->Handle(), "Composition");
+        cmd->BeginDebugRegion("Composition");
 
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
         RendererSystem &rs = *CONTEXT->GetSystem<RendererSystem>();
@@ -353,29 +379,29 @@ namespace pe
 
         // COMBINE
         // Input
-        normalRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        albedoRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        srmRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        velocityRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        emissiveRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        ssaoBlurRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        ssrRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        ibl_brdf_lut->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        skybox.texture->ChangeLayout(cmd, LayoutState::ShaderReadOnly, 0, skybox.texture->imageInfo.arrayLayers);
-        depth->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+        cmd->ChangeLayout(normalRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(albedoRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(srmRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(velocityRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(emissiveRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(ssaoBlurRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(ssrRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(ibl_brdf_lut, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(skybox.texture, ImageLayout::ShaderReadOnly, 0, skybox.texture->imageInfo.arrayLayers);
+        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
         for (auto &shadowMap : shadows.textures)
-            shadowMap->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
+            cmd->ChangeLayout(shadowMap, ImageLayout::DepthStencilReadOnly);
         // Output
-        viewportRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
+        cmd->ChangeLayout(viewportRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(compositionRenderPass, compositionFramebuffers[imageIndex]);
-        cmd->PushConstants(pipelineComposition, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(mat4), &values);
+        cmd->PushConstants(pipelineComposition, ShaderStage::FragmentBit, 0, sizeof(mat4), &values);
         cmd->BindPipeline(pipelineComposition);
         cmd->BindDescriptors(pipelineComposition, (uint32_t)handles.size(), handles.data());
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
 
-        Debug::EndCmdRegion(cmd->Handle());
+        cmd->EndDebugRegion();
     }
 
     void Deferred::Resize(uint32_t width, uint32_t height)
@@ -388,44 +414,37 @@ namespace pe
         RenderPass::Destroy(renderPass);
         RenderPass::Destroy(compositionRenderPass);
 
-        Pipeline::Destroy(pipeline);
         Pipeline::Destroy(pipelineComposition);
 
         Init();
         CreateRenderPass();
         CreateFrameBuffers();
-        CreatePipeline();
         UpdateDescriptorSets();
+        CreatePipeline();
     }
 
     void Deferred::BeginPass(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        albedoRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
-        normalRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
-        velocityRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
-        emissiveRT->ChangeLayout(cmd, LayoutState::ColorAttachment);
-        srmRT->ChangeLayout(cmd, LayoutState::ColorAttachment); // TODO: Check why it throws
-        depth->ChangeLayout(cmd, LayoutState::DepthStencilAttachment);
+        cmd->ChangeLayout(albedoRT, ImageLayout::ColorAttachment);
+        cmd->ChangeLayout(normalRT, ImageLayout::ColorAttachment);
+        cmd->ChangeLayout(velocityRT, ImageLayout::ColorAttachment);
+        cmd->ChangeLayout(emissiveRT, ImageLayout::ColorAttachment);
+        cmd->ChangeLayout(srmRT, ImageLayout::ColorAttachment); // TODO: Check why it throws
+        cmd->ChangeLayout(depth, ImageLayout::DepthStencilAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
-
-        Model::commandBuffer = cmd;
-        Model::pipeline = pipeline;
     }
 
     void Deferred::EndPass(CommandBuffer *cmd)
     {
-        Model::commandBuffer->EndPass();
+        cmd->EndPass();
 
-        albedoRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        normalRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        velocityRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        emissiveRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        srmRT->ChangeLayout(cmd, LayoutState::ShaderReadOnly);
-        depth->ChangeLayout(cmd, LayoutState::DepthStencilReadOnly);
-
-        Model::commandBuffer = nullptr;
-        Model::pipeline = nullptr;
+        cmd->ChangeLayout(albedoRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(normalRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(velocityRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(emissiveRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(srmRT, ImageLayout::ShaderReadOnly);
+        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
     }
 
     void Deferred::Destroy()
@@ -438,9 +457,8 @@ namespace pe
         for (auto &framebuffer : compositionFramebuffers)
             FrameBuffer::Destroy(framebuffer);
 
-        DescriptorLayout::Destroy(Pipeline::getDescriptorSetLayoutComposition());
+        Descriptor::Destroy(DSComposition);
         Buffer::Destroy(uniform);
-        Pipeline::Destroy(pipeline);
         Pipeline::Destroy(pipelineComposition);
     }
 }

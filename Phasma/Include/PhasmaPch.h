@@ -68,6 +68,7 @@ SOFTWARE.
     #endif
 #endif
 
+#include "Core/Enums.h"
 #include "Core/Settings.h"
 #include "Core/Hash.h"
 #include "Core/Math.h"
@@ -77,6 +78,7 @@ SOFTWARE.
 #include "Core/Delegate.h"
 #include "Core/SyncQueue.h"
 #include "Core/Timer.h"
+#include "Core/Externs.h"
 
 #include "ECS/ECSBase.h"
 #include "ECS/Component.h"

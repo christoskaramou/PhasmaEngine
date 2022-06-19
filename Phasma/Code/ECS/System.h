@@ -25,8 +25,8 @@ SOFTWARE.
 namespace pe
 {
     class Context;
-
     class IComponent;
+    class CommandBuffer;
 
     class ISystem
     {
@@ -39,7 +39,7 @@ namespace pe
         {
         }
 
-        virtual void Init() = 0;
+        virtual void Init(CommandBuffer *cmd) = 0;
 
         virtual void Update(double delta) = 0;
 

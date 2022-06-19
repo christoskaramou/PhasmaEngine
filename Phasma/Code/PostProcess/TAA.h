@@ -47,7 +47,7 @@ namespace pe
 
         void CreatePipeline() override;
 
-        void CreateUniforms() override;
+        void CreateUniforms(CommandBuffer *cmd) override;
 
         void UpdateDescriptorSets() override;
 
@@ -63,8 +63,6 @@ namespace pe
         void CreateTAAPipeline();
 
         void CreatePipelineSharpen();
-
-        void SaveImage(CommandBuffer *cmd, Image *source);
 
     public:
         std::vector<FrameBuffer *> framebuffers{}, framebuffersSharpen{};

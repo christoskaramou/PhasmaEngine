@@ -31,13 +31,13 @@ namespace pe
 {
     PipelineColorBlendAttachmentState::PipelineColorBlendAttachmentState()
     {
-        blendEnable = {};
-        srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-        dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-        colorBlendOp = VK_BLEND_OP_ADD;
-        srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        alphaBlendOp = VK_BLEND_OP_ADD;
+        blendEnable = 0;
+        srcColorBlendFactor = BlendFactor::Zero;
+        dstColorBlendFactor = BlendFactor::Zero;
+        colorBlendOp = BlendOp::Add;
+        srcAlphaBlendFactor = BlendFactor::Zero;
+        dstAlphaBlendFactor = BlendFactor::Zero;
+        alphaBlendOp = BlendOp::Add;
         colorWriteMask = {};
     }
 
@@ -54,7 +54,7 @@ namespace pe
         cullMode = CullMode::Back;
         colorBlendAttachments = {};
         dynamicStates = {};
-        pushConstantStage = PushConstantStage::Vertex;
+        pushConstantStage = ShaderStage::VertexBit;
         pushConstantSize = 0;
         descriptorSetLayouts = {};
         renderPass = nullptr;
@@ -76,6 +76,11 @@ namespace pe
             csmci.codeSize = info.pCompShader->BytesCount();
             csmci.pCode = info.pCompShader->GetSpriv();
 
+            VkPushConstantRange pcr{};
+            pcr.stageFlags = GetShaderStageVK(info.pushConstantStage);
+            pcr.offset = 0;
+            pcr.size = info.pushConstantSize;
+
             std::vector<VkDescriptorSetLayout> layouts(info.descriptorSetLayouts.size());
             for (uint32_t i = 0; i < info.descriptorSetLayouts.size(); i++)
                 layouts[i] = info.descriptorSetLayouts[i]->Handle();
@@ -83,6 +88,8 @@ namespace pe
             plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             plci.setLayoutCount = static_cast<uint32_t>(layouts.size());
             plci.pSetLayouts = layouts.data();
+            plci.pushConstantRangeCount = info.pushConstantSize ? 1 : 0;
+            plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
 
             VkShaderModule module;
             PE_CHECK(vkCreateShaderModule(RHII.GetDevice(), &csmci, nullptr, &module));
@@ -147,13 +154,31 @@ namespace pe
             pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
             pipeinfo.pStages = stages.data();
 
+
             // Vertex Input state
+            std::vector<VkVertexInputBindingDescription> vibd(info.vertexInputBindingDescriptions.size());
+            for (uint32_t i = 0; i < info.vertexInputBindingDescriptions.size(); i++)
+            {
+                vibd[i].binding = info.vertexInputBindingDescriptions[i].binding;
+                vibd[i].stride = info.vertexInputBindingDescriptions[i].stride;
+                vibd[i].inputRate = GetVertexInputRateVK(info.vertexInputBindingDescriptions[i].inputRate);
+            }
+
+            std::vector<VkVertexInputAttributeDescription> vida(info.vertexInputAttributeDescriptions.size());
+            for (uint32_t i = 0; i < info.vertexInputAttributeDescriptions.size(); i++)
+            {
+                vida[i].location = info.vertexInputAttributeDescriptions[i].location;
+                vida[i].binding = info.vertexInputAttributeDescriptions[i].binding;
+                vida[i].format = GetFormatVK(info.vertexInputAttributeDescriptions[i].format);
+                vida[i].offset = info.vertexInputAttributeDescriptions[i].offset;
+            }
+
             VkPipelineVertexInputStateCreateInfo pvisci{};
             pvisci.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-            pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(info.vertexInputBindingDescriptions.size());
-            pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(info.vertexInputAttributeDescriptions.size());
-            pvisci.pVertexBindingDescriptions = (VkVertexInputBindingDescription *)info.vertexInputBindingDescriptions.data();
-            pvisci.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription *)info.vertexInputAttributeDescriptions.data();
+            pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(vibd.size());
+            pvisci.pVertexBindingDescriptions = vibd.data();
+            pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(vida.size());
+            pvisci.pVertexAttributeDescriptions = vida.data();
             pipeinfo.pVertexInputState = &pvisci;
 
             // Input Assembly stage
@@ -189,7 +214,7 @@ namespace pe
             prsci.depthClampEnable = VK_FALSE;
             prsci.rasterizerDiscardEnable = VK_FALSE;
             prsci.polygonMode = VK_POLYGON_MODE_FILL;
-            prsci.cullMode = static_cast<VkCullModeFlagBits>(info.cullMode);
+            prsci.cullMode = GetCullModeVK(info.cullMode);
             prsci.frontFace = VK_FRONT_FACE_CLOCKWISE;
             prsci.depthBiasEnable = VK_FALSE;
             prsci.depthBiasConstantFactor = 0.0f;
@@ -214,7 +239,7 @@ namespace pe
             pdssci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
             pdssci.depthTestEnable = VK_TRUE;
             pdssci.depthWriteEnable = VK_TRUE;
-            pdssci.depthCompareOp = GlobalSettings::ReverseZ ? VK_COMPARE_OP_GREATER : VK_COMPARE_OP_LESS_OR_EQUAL;
+            pdssci.depthCompareOp = GlobalSettings::ReverseZ ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
             pdssci.depthBoundsTestEnable = VK_FALSE;
             pdssci.stencilTestEnable = VK_FALSE;
             pdssci.front.compareOp = VK_COMPARE_OP_ALWAYS;
@@ -224,28 +249,47 @@ namespace pe
             pipeinfo.pDepthStencilState = &pdssci;
 
             // Color Blending state
+            std::vector<VkPipelineColorBlendAttachmentState> pcbast(info.colorBlendAttachments.size());
+            for (uint32_t i = 0; i < info.colorBlendAttachments.size(); i++)
+            {
+                pcbast[i].blendEnable = info.colorBlendAttachments[i].blendEnable;
+                pcbast[i].srcColorBlendFactor = GetBlendFactorVK(info.colorBlendAttachments[i].srcColorBlendFactor);
+                pcbast[i].dstColorBlendFactor = GetBlendFactorVK(info.colorBlendAttachments[i].dstColorBlendFactor);
+                pcbast[i].colorBlendOp = GetBlendOpVK(info.colorBlendAttachments[i].colorBlendOp);
+                pcbast[i].srcAlphaBlendFactor = GetBlendFactorVK(info.colorBlendAttachments[i].srcAlphaBlendFactor);
+                pcbast[i].dstAlphaBlendFactor = GetBlendFactorVK(info.colorBlendAttachments[i].dstAlphaBlendFactor);
+                pcbast[i].alphaBlendOp = GetBlendOpVK(info.colorBlendAttachments[i].alphaBlendOp);
+                pcbast[i].colorWriteMask = GetColorComponentFlagsVK(info.colorBlendAttachments[i].colorWriteMask);
+            }
+
             VkPipelineColorBlendStateCreateInfo pcbsci{};
             pcbsci.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
             pcbsci.logicOpEnable = VK_FALSE;
             pcbsci.logicOp = VK_LOGIC_OP_AND;
-            pcbsci.attachmentCount = static_cast<uint32_t>(info.colorBlendAttachments.size());
-            pcbsci.pAttachments = (VkPipelineColorBlendAttachmentState *)info.colorBlendAttachments.data();
-            float blendConstants[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-            memcpy(pcbsci.blendConstants, blendConstants, 4 * sizeof(float));
+            pcbsci.attachmentCount = static_cast<uint32_t>(pcbast.size());
+            pcbsci.pAttachments = pcbast.data();
+            pcbsci.blendConstants[0] = 0.0f;
+            pcbsci.blendConstants[1] = 0.0f;
+            pcbsci.blendConstants[2] = 0.0f;
+            pcbsci.blendConstants[3] = 0.0f;
             pipeinfo.pColorBlendState = &pcbsci;
 
-            // Dynamic state
+            // Dynamic states
+            std::vector<VkDynamicState> ds(info.dynamicStates.size());
+            for (uint32_t i = 0; i < info.dynamicStates.size(); i++)
+                ds[i] = GetDynamicStateVK(info.dynamicStates[i]);
+
             VkPipelineDynamicStateCreateInfo dsi{};
             dsi.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-            dsi.dynamicStateCount = static_cast<uint32_t>(info.dynamicStates.size());
-            dsi.pDynamicStates = (VkDynamicState *)info.dynamicStates.data();
+            dsi.dynamicStateCount = static_cast<uint32_t>(ds.size());
+            dsi.pDynamicStates = ds.data();
             pipeinfo.pDynamicState = &dsi;
 
             // Push Constant Range
             VkPushConstantRange pcr{};
-            pcr.stageFlags = static_cast<VkShaderStageFlags>(info.pushConstantStage);
-            pcr.offset = 0;
             pcr.size = info.pushConstantSize;
+            pcr.offset = 0;
+            pcr.stageFlags = GetShaderStageVK(info.pushConstantStage);
 
             // Pipeline Layout
             std::vector<VkDescriptorSetLayout> layouts{};
@@ -287,7 +331,7 @@ namespace pe
             if (info.pFragShader && fragModule)
                 vkDestroyShaderModule(RHII.GetDevice(), fragModule, nullptr);
 
-            Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_PIPELINE, info.name);
+            Debug::SetObjectName(m_handle, ObjectType::Pipeline, info.name);
         }
     }
 
@@ -304,206 +348,6 @@ namespace pe
             vkDestroyPipeline(RHII.GetDevice(), m_handle, nullptr);
             m_handle = {};
         }
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutComposition()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(9, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "Composition_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutBrightFilter()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "BrightFilter_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutGaussianBlurH()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "GaussianBlurH_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutGaussianBlurV()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "GaussianBlurV_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutCombine()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "Combine_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutDOF()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "DOF_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutSSGI()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "SSGI_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutFXAA()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "FXAA_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutMotionBlur()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "MotionBlur_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutSSAO()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "ssao_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutSSAOBlur()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "ssaoBlur_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutSSR()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "SSR_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutTAA()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "TAA_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutTAASharpen()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "TAASharpen_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutShadowsDeferred()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, SHADOWMAP_CASCADES + 1)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "ShadowsDeferred_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutSkybox()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "Skybox_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutCompute()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT),
-            DescriptorBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "Compute_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutGbufferVert()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "GbufferVert_DSLayout");
-
-        return DSLayout;
-    }
-
-    DescriptorLayout *Pipeline::getDescriptorSetLayoutGbufferFrag()
-    {
-        static std::vector<DescriptorBinding> bindings{
-            DescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1000)};
-        static DescriptorLayout *DSLayout = DescriptorLayout::Create(bindings, "GbufferFrag_DSLayout");
-
-        return DSLayout;
     }
 }
 #endif

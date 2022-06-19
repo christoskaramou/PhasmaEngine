@@ -68,20 +68,20 @@ namespace pe
         std::vector<VkSurfaceFormatKHR> formats(formatsCount);
         vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.GetGpu(), m_handle, &formatsCount, formats.data());
 
-        format = formats[0].format;
-        colorSpace = formats[0].colorSpace;
+        format = GetFormatFromVK(formats[0].format);
+        colorSpace = GetColorSpaceFromVK(formats[0].colorSpace);
         for (const auto &f : formats)
         {
             if (f.format == VK_FORMAT_B8G8R8A8_UNORM && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
             {
-                format = f.format;
-                colorSpace = f.colorSpace;
+                format = GetFormatFromVK(f.format);
+                colorSpace = GetColorSpaceFromVK(f.colorSpace);
             }
         }
 
         // Check for blit operation
         VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), (VkFormat)format, &fProps);
+        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), GetFormatVK(format), &fProps);
         if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT))
             PE_ERROR("No blit source operation supported");
         if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
@@ -99,18 +99,18 @@ namespace pe
         for (const auto &i : presentModes)
             if (i == VK_PRESENT_MODE_MAILBOX_KHR)
             {
-                presentMode = i;
+                presentMode = GetPresentModeFromVK(i);
                 return;
             }
 
         for (const auto &i : presentModes)
             if (i == VK_PRESENT_MODE_IMMEDIATE_KHR)
             {
-                presentMode = i;
+                presentMode = GetPresentModeFromVK(i);
                 return;
             }
 
-        presentMode = VK_PRESENT_MODE_FIFO_KHR;
+        presentMode = GetPresentModeFromVK(VK_PRESENT_MODE_FIFO_KHR);
     }
 
     void Surface::FindProperties()

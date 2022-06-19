@@ -35,7 +35,7 @@ namespace pe
         return GetComponentsOfType<Camera>().at(index);
     }
 
-    void CameraSystem::Init()
+    void CameraSystem::Init(CommandBuffer *cmd)
     {
     }
 

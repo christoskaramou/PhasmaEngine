@@ -22,7 +22,6 @@ SOFTWARE.
 
 #include "Renderer/Queue.h"
 #include "Renderer/Semaphore.h"
-#include "Renderer/Fence.h"
 #include "Renderer/Command.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Swapchain.h"
@@ -33,7 +32,7 @@ namespace pe
 {
     Queue::Queue(QueueHandle handle,
                  uint32_t familyId,
-                 uint32_t queueTypeFlags,
+                 QueueTypeFlags queueTypeFlags,
                  ivec3 imageGranularity,
                  const std::string &name)
     {
@@ -43,6 +42,7 @@ namespace pe
         m_imageGranularity = imageGranularity;
 
         this->name = name;
+        nameHash = StringHash(name);
     }
 
     Queue::~Queue()
@@ -53,57 +53,70 @@ namespace pe
         uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
         PipelineStageFlags *waitStages,
         uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-        uint32_t signalSemaphoresCount, Semaphore **signalSemaphores,
-        Fence *signalFence)
+        uint32_t signalSemaphoresCount, Semaphore **signalSemaphores)
     {
+        // Translates from IHandles<T, ApiHandle> to VK handles are auto converted
+        // via ApiHandle operator T() casts
+
+        // CommandBuffers
         std::vector<VkCommandBuffer> commandBuffersVK(commandBuffersCount);
         for (uint32_t i = 0; i < commandBuffersCount; i++)
-        {
-            commandBuffers[i]->m_fence = signalFence;
             commandBuffersVK[i] = commandBuffers[i]->Handle();
-        }
 
+        // WaitSemaphores
         std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoresCount);
         for (uint32_t i = 0; i < waitSemaphoresCount; i++)
             waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
 
-        std::vector<VkSemaphore> signalSemaphoresVK(signalSemaphoresCount);
-        for (uint32_t i = 0; i < signalSemaphoresCount; i++)
-            signalSemaphoresVK[i] = signalSemaphores[i]->Handle();
+        // SignalSemaphores
+        uint32_t signalsCount = signalSemaphoresCount + commandBuffersCount;
+        std::vector<VkSemaphore> signalSemaphoresVK(signalsCount);
+        std::vector<uint64_t> semaphoreValues(signalsCount);
+
+        for (uint32_t i = 0; i < signalsCount; i++)
+        {
+            if (i < signalSemaphoresCount)
+            {
+                signalSemaphoresVK[i] = signalSemaphores[i]->Handle();
+                semaphoreValues[i] = 0;
+            }
+            else
+            {
+                uint32_t index = i - signalSemaphoresCount;
+                // Increase the submit count of the current command buffer
+                commandBuffers[index]->IncreaceSubmitionCount();
+                // Add command buffer timeline semaphores as signal semaphores
+                signalSemaphoresVK[i] = commandBuffers[index]->GetSemaphore()->Handle();
+                // Set the signal values from the current command buffer submition counter
+                semaphoreValues[i] = commandBuffers[index]->GetSumbitionCount();
+            }
+        }
+
+        // Pipeline stages
+        std::vector<VkPipelineStageFlags> waitStagesVK(waitSemaphoresCount);
+        for (uint32_t i = 0; i < waitSemaphoresCount; i++)
+            waitStagesVK[i] = GetPipelineStageFlagsVK(waitStages[i]);
+
+        VkTimelineSemaphoreSubmitInfo timelineInfo{};
+        timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+        timelineInfo.pNext = NULL;
+        timelineInfo.waitSemaphoreValueCount = 0;
+        timelineInfo.pWaitSemaphoreValues = nullptr;
+        timelineInfo.signalSemaphoreValueCount = signalsCount;
+        timelineInfo.pSignalSemaphoreValues = semaphoreValues.data();
 
         VkSubmitInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        si.pNext = &timelineInfo;
         si.waitSemaphoreCount = waitSemaphoresCount;
         si.pWaitSemaphores = waitSemaphoresVK.data();
-        si.pWaitDstStageMask = waitStages;
+        si.pWaitDstStageMask = waitStagesVK.data();
         si.commandBufferCount = commandBuffersCount;
         si.pCommandBuffers = commandBuffersVK.data();
-        si.signalSemaphoreCount = signalSemaphoresCount;
+        si.signalSemaphoreCount = signalsCount;
         si.pSignalSemaphores = signalSemaphoresVK.data();
 
-        VkFence fence = VK_NULL_HANDLE;
-        if (signalFence)
-        {
-            signalFence->m_submitted = true;
-            fence = signalFence->Handle();
-        }
-        PE_CHECK(vkQueueSubmit(m_handle, 1, &si, fence));
-    }
-
-    void Queue::SubmitAndWaitFence(
-        uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
-        PipelineStageFlags *waitStages,
-        uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-        uint32_t signalSemaphoresCount, Semaphore **signalSemaphores)
-    {
-        Fence *fence = Fence::GetNext();
-
-        Submit(commandBuffersCount, commandBuffers, waitStages, waitSemaphoresCount,
-               waitSemaphores, signalSemaphoresCount, signalSemaphores, fence);
-
-        fence->Wait();
-        fence->Reset();
-        Fence::Return(fence);
+        PE_CHECK(vkQueueSubmit(m_handle, 1, &si, nullptr));
     }
 
     void Queue::Present(
@@ -127,13 +140,27 @@ namespace pe
         pi.pSwapchains = swapchainsVK.data();
         pi.pImageIndices = imageIndices;
 
-        if (vkQueuePresentKHR(m_handle, &pi) != VK_SUCCESS)
-            PE_ERROR("Present error!");
+        PE_CHECK(vkQueuePresentKHR(m_handle, &pi));
     }
 
     void Queue::WaitIdle()
     {
         PE_CHECK(vkQueueWaitIdle(m_handle));
+    }
+
+    void Queue::BeginDebugRegion(const std::string &name)
+    {
+        Debug::BeginQueueRegion(this, name);
+    }
+
+    void Queue::InsertDebugLabel(const std::string &name)
+    {
+        Debug::InsertQueueLabel(this, name);
+    }
+
+    void Queue::EndDebugRegion()
+    {
+        Debug::EndQueueRegion(this);
     }
 
     void Queue::Init(GpuHandle gpu, DeviceHandle device, SurfaceHandle surface)
@@ -158,17 +185,28 @@ namespace pe
                     mitg.y = properties[i].minImageTransferGranularity.height;
                     mitg.z = properties[i].minImageTransferGranularity.depth;
 
-                    uint32_t flags = properties[i].queueFlags & QueueType::AllExceptPresentBits;
+                    QueueTypeFlags queueFlags{};
+                    if (properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+                        queueFlags |= QueueType::GraphicsBit;
+                    if (properties[i].queueFlags & VK_QUEUE_COMPUTE_BIT)
+                        queueFlags |= QueueType::ComputeBit;
+                    if (properties[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
+                        queueFlags |= QueueType::TransferBit;
+                    if (properties[i].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT)
+                        queueFlags |= QueueType::SparseBindingBit;
+                    if (properties[i].queueFlags & VK_QUEUE_PROTECTED_BIT)
+                        queueFlags |= QueueType::ProtectedBit;
+
                     VkBool32 present = VK_FALSE;
                     vkGetPhysicalDeviceSurfaceSupportKHR(RHII.GetGpu(), i, RHII.GetSurface()->Handle(), &present);
                     if (present)
-                        flags |= QueueType::PresentBit;
+                        queueFlags |= QueueType::PresentBit;
 
-                    Queue *queue = Queue::Create(queueVK, i, flags, mitg, "Queue_Queue_" + std::to_string(i) + "_" + std::to_string(j));
-                    Debug::SetObjectName(queue->Handle(), VK_OBJECT_TYPE_QUEUE, queue->name);
+                    Queue *queue = Queue::Create(queueVK, i, queueFlags, mitg, "Queue_Queue_" + std::to_string(i) + "_" + std::to_string(j));
+                    Debug::SetObjectName(queue->Handle(), ObjectType::Queue, queue->name);
 
-                    s_availableQueues[queue] = queue;
-                    s_allQueues[queue] = queue;
+                    s_availableQueues[queue->nameHash] = queue;
+                    s_allQueues[queue->nameHash] = queue;
                 }
             }
         }
@@ -176,12 +214,6 @@ namespace pe
 
     void Queue::Clear()
     {
-        killThreads = true;
-
-        for (auto &queueWait : s_queueWaits)
-            queueWait.second.get();
-        s_queueWaits.clear();
-
         for (auto &queue : s_allQueues)
             Queue::Destroy(queue.second);
 
@@ -189,75 +221,43 @@ namespace pe
         s_availableQueues.clear();
     }
 
-    void Queue::CheckFutures()
+    Queue *Queue::GetNext(QueueTypeFlags queueType, int minImageGranularity)
     {
-        // join finished futures
-        for (auto it = s_queueWaits.begin(); it != s_queueWaits.end();)
-        {
-            if (it->second.wait_for(std::chrono::seconds(0)) != std::future_status::timeout)
-            {
-                Queue *queue = it->second.get();
-                s_availableQueues[queue] = queue;
-
-                it = s_queueWaits.erase(it);
-            }
-            else
-                ++it;
-        }
-    }
-
-    Queue *Queue::GetNext(uint32_t queueTypeFlags, int minImageGranularity)
-    {
-        s_availableQueuesReady = false;
-
-        CheckFutures();
+        std::lock_guard<std::mutex> lock(s_getNextMutex);
 
         for (auto &queuePair : s_availableQueues)
         {
             Queue *queue = queuePair.second;
-            if ((queue->GetQueueTypeFlags() & queueTypeFlags) == queueTypeFlags &&
+            if ((queue->GetQueueTypeFlags() & queueType) == queueType &&
                 queue->GetImageGranularity().x <= minImageGranularity &&
                 queue->GetImageGranularity().y <= minImageGranularity &&
                 queue->GetImageGranularity().z <= minImageGranularity)
             {
-                s_availableQueues.erase(queue);
-                s_availableQueuesReady = true;
+                s_availableQueues.erase(queue->nameHash);
                 return queue;
             }
         }
 
-        PE_ERROR("Queue::GetNext() No queue available!");
-
-        s_availableQueuesReady = true;
-
+        PE_ERROR("Queue::GetNext() A queue of this family type is not available!");
         return nullptr;
     }
 
     void Queue::Return(Queue *queue)
     {
-        if (!queue || !queue->Handle())
-            return;
+        std::lock_guard<std::mutex> lock(s_returnMutex);
 
-        if (s_allQueues.find(queue) == s_allQueues.end())
+        // CHECKS
+        // -------------------------------------------------
+        if (!queue || !queue->Handle())
+            PE_ERROR("Queue::Return() Invalid queue!");
+
+        if (s_allQueues.find(queue->nameHash) == s_allQueues.end())
             PE_ERROR("Queue::Return() Queue not found!");
 
-        if (s_queueWaits.find(queue) != s_queueWaits.end())
-            return;
+        if (s_availableQueues.find(queue->nameHash) != s_availableQueues.end())
+            PE_ERROR("Queue::Return() Queue is already returned!");
+        // -------------------------------------------------
 
-        auto func = [queue]()
-        {
-            queue->WaitIdle();
-
-            while (!killThreads && !s_availableQueuesReady)
-                std::this_thread::yield();
-
-            return queue;
-        };
-
-        // start a new thread to return the queue
-        auto future = std::async(std::launch::async, func);
-
-        // add it to the deque
-        s_queueWaits[queue] = std::move(future);
+        s_availableQueues[queue->nameHash] = queue;
     }
 }

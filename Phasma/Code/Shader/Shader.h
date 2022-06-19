@@ -34,16 +34,6 @@ namespace pe
         std::string value{};
     };
 
-    enum class ShaderType
-    {
-        Vertex,
-        Fragment,
-        Compute,
-        Geometry,
-        TessControl,
-        TessEvaluation
-    };
-
     class FileIncluder : public shaderc::CompileOptions::IncluderInterface
     {
     public:
@@ -70,7 +60,7 @@ namespace pe
     {
     public:
         std::string sourcePath;
-        ShaderType shaderType;
+        ShaderStage shaderStage;
         std::vector<Define> defines{};
     };
 
@@ -83,7 +73,7 @@ namespace pe
 
         ~Shader();
 
-        inline ShaderType GetShaderType() { return m_shaderType; }
+        inline ShaderStage GetShaderStage() { return m_shaderStage; }
 
         inline const uint32_t *GetSpriv() { return m_spirv.data(); }
 
@@ -123,7 +113,7 @@ namespace pe
 
         ShaderCache m_cache;
         Reflection m_reflection;
-        ShaderType m_shaderType;
+        ShaderStage m_shaderStage;
         shaderc::Compiler m_compiler;
         std::vector<Define> defines{};
         std::vector<uint32_t> m_spirv{};

@@ -28,13 +28,9 @@ SOFTWARE.
 namespace pe
 {
     class Descriptor;
-
     class FrameBuffer;
-
     class Image;
-
     class RenderPass;
-
     class Pipeline;
 
     class Deferred : public IRenderComponent
@@ -52,7 +48,7 @@ namespace pe
 
         void CreatePipeline() override;
 
-        void CreateUniforms() override;
+        void CreateUniforms(CommandBuffer *cmd) override;
 
         void UpdateDescriptorSets() override;
 
@@ -87,7 +83,6 @@ namespace pe
         RenderPass *compositionRenderPass;
         std::vector<FrameBuffer *> framebuffers{}, compositionFramebuffers{};
         Descriptor *DSComposition;
-        Pipeline *pipeline;
         Pipeline *pipelineComposition;
         Image *ibl_brdf_lut;
         Image *normalRT;

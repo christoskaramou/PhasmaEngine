@@ -25,13 +25,9 @@ SOFTWARE.
 namespace pe
 {
     class vec2;
-
     class vec3;
-
     class vec4;
-
     class mat4;
-
     class quat;
 
     using cfloat = const float;
@@ -446,6 +442,13 @@ namespace pe
     public:
         vec3 min;
         vec3 max;
+    };
+
+    struct Offset3D
+    {
+        int32_t x;
+        int32_t y;
+        int32_t z;
     };
 
     vec2 operator*(cfloat scalar, cvec2 &v);

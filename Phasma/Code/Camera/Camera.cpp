@@ -113,15 +113,15 @@ namespace pe
         view = lookAt(position, front, right, up);
     }
 
-    void Camera::Move(RelativeDirection direction, float velocity)
+    void Camera::Move(CameraDirection direction, float velocity)
     {
-        if (direction == RelativeDirection::FORWARD)
+        if (direction == CameraDirection::FORWARD)
             position += front * velocity;
-        if (direction == RelativeDirection::BACKWARD)
+        if (direction == CameraDirection::BACKWARD)
             position -= front * velocity;
-        if (direction == RelativeDirection::RIGHT)
+        if (direction == CameraDirection::RIGHT)
             position -= right * velocity;
-        if (direction == RelativeDirection::LEFT)
+        if (direction == CameraDirection::LEFT)
             position += right * velocity;
     }
 
@@ -154,7 +154,7 @@ namespace pe
     void Camera::ExtractFrustum()
     {
         // Just testing computes, the specific one is not speeding up any process
-        frustumCompute.WaitFence();
+        frustumCompute.Wait();
         frustumCompute.CopyDataTo(frustum.data(), frustum.size()); // Update frustum planes
         frustumCompute.UpdateInput(&viewProjection, sizeof(mat4));
         frustumCompute.Dispatch(1, 1, 1);

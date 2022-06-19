@@ -29,140 +29,30 @@ SOFTWARE.
 
 namespace pe
 {
-    void GetVkInfoFromState(
-        LayoutState state,
-        VkPipelineStageFlags &stageFlags,
-        VkAccessFlags &accessMask)
-    {
-        switch (state)
-        {
-        case LayoutState::Undefined:
-            stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            accessMask = 0;
-            break;
-        case LayoutState::General:
-            stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            accessMask = 0;
-            break;
-        case LayoutState::ColorAttachment:
-            stageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            accessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            break;
-        case LayoutState::DepthStencilAttachment:
-            stageFlags = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-            accessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            break;
-        case LayoutState::DepthStencilReadOnly:
-            stageFlags = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-            accessMask = VK_ACCESS_SHADER_READ_BIT;
-            break;
-        case LayoutState::ShaderReadOnly:
-            stageFlags = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-            accessMask = VK_ACCESS_SHADER_READ_BIT;
-            break;
-        case LayoutState::TransferSrc:
-            stageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            accessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            break;
-        case LayoutState::TransferDst:
-            stageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            accessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            break;
-        case LayoutState::Preinitialized:
-            stageFlags = VK_PIPELINE_STAGE_HOST_BIT;
-            accessMask = VK_ACCESS_HOST_WRITE_BIT;
-            break;
-        case LayoutState::PresentSrc:
-            stageFlags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-            accessMask = 0;
-            break;
-        }
-    }
-
-    LayoutState GetStateFromVkLayout(uint32_t layout)
-    {
-        switch (layout)
-        {
-        case VK_IMAGE_LAYOUT_UNDEFINED:
-            return LayoutState::Undefined;
-        case VK_IMAGE_LAYOUT_GENERAL:
-            return LayoutState::General;
-        case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-            return LayoutState::ColorAttachment;
-        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-            return LayoutState::DepthStencilAttachment;
-        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
-            return LayoutState::DepthStencilReadOnly;
-        case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-            return LayoutState::ShaderReadOnly;
-        case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-            return LayoutState::TransferSrc;
-        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-            return LayoutState::TransferDst;
-        case VK_IMAGE_LAYOUT_PREINITIALIZED:
-            return LayoutState::Preinitialized;
-        case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
-            return LayoutState::PresentSrc;
-        }
-
-        PE_ERROR("Unknown layout");
-        return LayoutState::Undefined;
-    }
-
-    VkImageLayout GetLayoutFromState(LayoutState state)
-    {
-        switch (state)
-        {
-        case LayoutState::Undefined:
-            return VK_IMAGE_LAYOUT_UNDEFINED;
-        case LayoutState::General:
-            return VK_IMAGE_LAYOUT_GENERAL;
-        case LayoutState::ColorAttachment:
-            return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        case LayoutState::DepthStencilAttachment:
-            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        case LayoutState::DepthStencilReadOnly:
-            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-        case LayoutState::ShaderReadOnly:
-            return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        case LayoutState::TransferSrc:
-            return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        case LayoutState::TransferDst:
-            return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        case LayoutState::Preinitialized:
-            return VK_IMAGE_LAYOUT_PREINITIALIZED;
-        case LayoutState::PresentSrc:
-            return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        }
-
-        PE_ERROR("Unknown layout state");
-        return VK_IMAGE_LAYOUT_UNDEFINED;
-    }
-
     SamplerCreateInfo::SamplerCreateInfo()
     {
-        magFilter = VK_FILTER_LINEAR;
-        minFilter = VK_FILTER_LINEAR;
-        mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        magFilter = Filter::Linear;
+        minFilter = Filter::Linear;
+        mipmapMode = SamplerMipmapMode::Linear;
+        addressModeU = SamplerAddressMode::Repeat;
+        addressModeV = SamplerAddressMode::Repeat;
+        addressModeW = SamplerAddressMode::Repeat;
         mipLodBias = 0.f;
-        anisotropyEnable = VK_TRUE;
+        anisotropyEnable = 1;
         maxAnisotropy = 16.0f;
-        compareEnable = VK_FALSE;
-        compareOp = VK_COMPARE_OP_LESS;
+        compareEnable = 0;
+        compareOp = CompareOp::Less;
         minLod = 0.f;
         maxLod = 1.f;
-        borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-        unnormalizedCoordinates = VK_FALSE;
+        borderColor = BorderColor::FloatOpaqueBlack;
+        unnormalizedCoordinates = 0;
     }
 
     ImageViewCreateInfo::ImageViewCreateInfo()
     {
         image = nullptr;
-        viewType = VK_IMAGE_VIEW_TYPE_2D;
-        aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewType = ImageViewType::Type2D;
+        aspectMask = ImageAspect::ColorBit;
     }
 
     ImageCreateInfo::ImageCreateInfo()
@@ -170,19 +60,19 @@ namespace pe
         width = 0;
         height = 0;
         depth = 1;
-        tiling = VK_IMAGE_TILING_OPTIMAL;
-        usage = 0;
-        properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        format = VK_FORMAT_UNDEFINED;
-        imageFlags = 0;
-        imageType = VK_IMAGE_TYPE_2D;
+        tiling = ImageTiling::Optimal;
+        usage = ImageUsage::None;
+        properties = MemoryProperty::DeviceLocalBit;
+        format = Format::Undefined;
+        imageFlags = ImageCreate::None;
+        imageType = ImageType::Type2D;
         mipLevels = 1;
         arrayLayers = 1;
-        samples = 1;
-        sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        samples = SampleCount::Count1;
+        sharingMode = SharingMode::Exclusive;
         queueFamilyIndexCount = 0;
         pQueueFamilyIndices = nullptr;
-        initialState = LayoutState::Undefined;
+        initialLayout = ImageLayout::Undefined;
     }
 
     Image::Image(const ImageCreateInfo &info)
@@ -196,26 +86,26 @@ namespace pe
 
         imageInfo = info;
 
-        layoutStates.resize(imageInfo.arrayLayers);
+        layouts.resize(imageInfo.arrayLayers);
         for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
         {
-            layoutStates[i] = std::vector<LayoutState>(imageInfo.mipLevels);
+            layouts[i] = std::vector<ImageLayout>(imageInfo.mipLevels);
             for (uint32_t j = 0; j < imageInfo.mipLevels; j++)
-                layoutStates[i][j] = info.initialState;
+                layouts[i][j] = info.initialLayout;
         }
 
         VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), (VkFormat)imageInfo.format, &fProps);
+        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), GetFormatVK(imageInfo.format), &fProps);
 
-        if (imageInfo.tiling == VK_IMAGE_TILING_OPTIMAL)
+        if (imageInfo.tiling == ImageTiling::Optimal)
         {
             if (!fProps.optimalTilingFeatures)
-                PE_ERROR("Image(): no optimal tiling features supported.");
+                PE_ERROR("Image(): no optimal tiling features supported");
         }
-        else if (imageInfo.tiling == VK_IMAGE_TILING_LINEAR)
+        else if (imageInfo.tiling == ImageTiling::Linear)
         {
             if (!fProps.linearTilingFeatures)
-                PE_ERROR("Image(): no linear tiling features supported.");
+                PE_ERROR("Image(): no linear tiling features supported");
         }
         else
         {
@@ -227,17 +117,17 @@ namespace pe
 
         VkImageCreateInfo imageInfoVK{};
         imageInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfoVK.flags = imageInfo.imageFlags;
-        imageInfoVK.imageType = imageInfo.imageType;
-        imageInfoVK.format = (VkFormat)imageInfo.format;
+        imageInfoVK.flags = GetImageCreateFlagsVK(imageInfo.imageFlags);
+        imageInfoVK.imageType = GetImageTypeVK(imageInfo.imageType);
+        imageInfoVK.format = GetFormatVK(imageInfo.format);
         imageInfoVK.extent = VkExtent3D{imageInfo.width, imageInfo.height, imageInfo.depth};
         imageInfoVK.mipLevels = imageInfo.mipLevels;
         imageInfoVK.arrayLayers = imageInfo.arrayLayers;
-        imageInfoVK.samples = (VkSampleCountFlagBits)imageInfo.samples;
-        imageInfoVK.tiling = (VkImageTiling)imageInfo.tiling;
-        imageInfoVK.usage = imageInfo.usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT; // All images can be copied
-        imageInfoVK.sharingMode = (VkSharingMode)imageInfo.sharingMode;
-        imageInfoVK.initialLayout = GetLayoutFromState(imageInfo.initialState);
+        imageInfoVK.samples = GetSampleCountVK(imageInfo.samples);
+        imageInfoVK.tiling = GetImageTilingVK(imageInfo.tiling);
+        imageInfoVK.usage = GetImageUsageVK(imageInfo.usage | ImageUsage::TransferSrcBit); // All images can be copied
+        imageInfoVK.sharingMode = GetSharingModeVK(imageInfo.sharingMode);
+        imageInfoVK.initialLayout = GetImageLayoutVK(imageInfo.initialLayout);
 
         VmaAllocationCreateInfo allocationCreateInfo = {};
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
@@ -249,7 +139,7 @@ namespace pe
         m_handle = imageVK;
         allocation = allocationVK;
 
-        Debug::SetObjectName(m_handle, VK_OBJECT_TYPE_IMAGE, info.name);
+        Debug::SetObjectName(m_handle, ObjectType::Image, info.name);
     }
 
     Image::~Image()
@@ -273,44 +163,43 @@ namespace pe
         }
     }
 
-    void Image::TransitionImageLayout(
-        CommandBuffer *cmd,
-        LayoutState oldLayout,
-        LayoutState newLayout,
-        PipelineStageFlags oldStageMask,
-        PipelineStageFlags newStageMask,
-        AccessFlags srcMask,
-        AccessFlags dstMask,
-        uint32_t baseArrayLayer,
-        uint32_t arrayLayers,
-        uint32_t baseMipLevel,
-        uint32_t mipLevels)
+    void Image::TransitionImageLayout(CommandBuffer *cmd,
+                                      ImageLayout oldLayout,
+                                      ImageLayout newLayout,
+                                      PipelineStageFlags oldStageMask,
+                                      PipelineStageFlags newStageMask,
+                                      AccessFlags srcMask,
+                                      AccessFlags dstMask,
+                                      uint32_t baseArrayLayer,
+                                      uint32_t arrayLayers,
+                                      uint32_t baseMipLevel,
+                                      uint32_t mipLevels)
     {
         // If no cmd exists, start the general cmd
         if (!cmd)
-            RHII.GetGeneralCmd()->Begin();
+            PE_ERROR("Image::TransitionImageLayout(): no command buffer specified.");
 
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.srcAccessMask = srcMask;
-        barrier.dstAccessMask = dstMask;
+        barrier.srcAccessMask = GetAccessFlagsVK(srcMask);
+        barrier.dstAccessMask = GetAccessFlagsVK(dstMask);
         barrier.image = m_handle;
-        barrier.oldLayout = GetLayoutFromState(oldLayout);
-        barrier.newLayout = GetLayoutFromState(newLayout);
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.subresourceRange.aspectMask = viewInfo.aspectMask;
+        barrier.oldLayout = GetImageLayoutVK(oldLayout);
+        barrier.newLayout = GetImageLayoutVK(newLayout);
+        barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
+        barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
+        barrier.subresourceRange.aspectMask = GetImageAspectVK(viewInfo.aspectMask);
         barrier.subresourceRange.baseMipLevel = baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
         barrier.subresourceRange.layerCount = arrayLayers;
-        if (imageInfo.format == VK_FORMAT_D32_SFLOAT_S8_UINT || imageInfo.format == VK_FORMAT_D24_UNORM_S8_UINT)
+        if (HasStencil(imageInfo.format))
             barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 
         vkCmdPipelineBarrier(
-            cmd ? cmd->Handle() : RHII.GetGeneralCmd()->Handle(),
-            oldStageMask,
-            newStageMask,
+            cmd->Handle(),
+            GetPipelineStageFlagsVK(oldStageMask),
+            GetPipelineStageFlagsVK(newStageMask),
             VK_DEPENDENCY_BY_REGION_BIT,
             0, nullptr,
             0, nullptr,
@@ -318,15 +207,7 @@ namespace pe
 
         for (uint32_t i = 0; i < arrayLayers; i++)
             for (uint32_t j = 0; j < mipLevels; j++)
-                layoutStates[baseArrayLayer + i][baseMipLevel + j] = newLayout;
-
-        // If a new cmd was created, wait and submit it
-        if (!cmd)
-        {
-            CommandBuffer *cmdBuffer = RHII.GetGeneralCmd();
-            cmdBuffer->End();
-            RHII.GetGeneralQueue()->SubmitAndWaitFence(1, &cmdBuffer, nullptr, 0, nullptr, 0, nullptr);;
-        }
+                layouts[baseArrayLayer + i][baseMipLevel + j] = newLayout;
     }
 
     void Image::CreateImageView(const ImageViewCreateInfo &info)
@@ -335,44 +216,42 @@ namespace pe
         VkImageViewCreateInfo viewInfoVK{};
         viewInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfoVK.image = info.image->m_handle;
-        viewInfoVK.viewType = (VkImageViewType)viewInfo.viewType;
-        viewInfoVK.format = (VkFormat)imageInfo.format;
-        viewInfoVK.subresourceRange =
-            {
-                (VkImageAspectFlags)viewInfo.aspectMask,
-                0,
-                info.image->imageInfo.mipLevels,
-                0,
-                info.image->imageInfo.arrayLayers};
+        viewInfoVK.viewType = GetImageViewTypeVK(viewInfo.viewType);
+        viewInfoVK.format = GetFormatVK(imageInfo.format);
+        viewInfoVK.subresourceRange.aspectMask = GetImageAspectVK(viewInfo.aspectMask);
+        viewInfoVK.subresourceRange.baseMipLevel = 0;
+        viewInfoVK.subresourceRange.levelCount = imageInfo.mipLevels;
+        viewInfoVK.subresourceRange.baseArrayLayer = 0;
+        viewInfoVK.subresourceRange.layerCount = imageInfo.arrayLayers;
 
         VkImageView vkView;
         PE_CHECK(vkCreateImageView(RHII.GetDevice(), &viewInfoVK, nullptr, &vkView));
         view = vkView;
 
-        Debug::SetObjectName(view, VK_OBJECT_TYPE_IMAGE_VIEW, imageInfo.name);
+        Debug::SetObjectName(view, ObjectType::ImageView, imageInfo.name);
     }
 
     void Image::ChangeLayout(CommandBuffer *cmd,
-                             LayoutState newState,
+                             ImageLayout newLayout,
                              uint32_t baseArrayLayer,
                              uint32_t arrayLayers,
                              uint32_t baseMipLevel,
                              uint32_t mipLevels)
     {
-        LayoutState oldState = layoutStates[baseArrayLayer][baseMipLevel];
-        if (newState != oldState)
+        ImageLayout oldLayout = layouts[baseArrayLayer][baseMipLevel];
+        if (newLayout != oldLayout)
         {
-            VkPipelineStageFlags oldPipelineStage;
-            VkAccessFlags oldAccess;
-            GetVkInfoFromState(layoutStates[baseArrayLayer][baseMipLevel], oldPipelineStage, oldAccess);
+            PipelineStageFlags oldPipelineStage;
+            AccessFlags oldAccess;
+            GetInfoFromLayout(layouts[baseArrayLayer][baseMipLevel], oldPipelineStage, oldAccess);
 
-            VkPipelineStageFlags newPipelineStage;
-            VkAccessFlags newAccess;
-            GetVkInfoFromState(newState, newPipelineStage, newAccess);
+            PipelineStageFlags newPipelineStage;
+            AccessFlags newAccess;
+            GetInfoFromLayout(newLayout, newPipelineStage, newAccess);
 
             TransitionImageLayout(cmd,
-                                  oldState,
-                                  newState,
+                                  oldLayout,
+                                  newLayout,
                                   oldPipelineStage,
                                   newPipelineStage,
                                   oldAccess,
@@ -384,86 +263,97 @@ namespace pe
         }
     }
 
-    void Image::CopyBufferToImage(CommandBuffer *cmd,
-                                  Buffer *buffer,
-                                  uint32_t baseArrayLayer,
-                                  uint32_t layerCount,
-                                  uint32_t mipLevel)
+    void Image::CopyDataToImageStaged(CommandBuffer *cmd,
+                                      void *data,
+                                      size_t size,
+                                      uint32_t baseArrayLayer,
+                                      uint32_t layerCount,
+                                      uint32_t mipLevel)
     {
-        Queue *queue;
-        CommandBuffer *commandBuffer = cmd;
-        // If cmd is nullptr, start a new one
         if (!cmd)
-        {
-            queue = Queue::GetNext(QueueType::TransferBit, 1);
-            commandBuffer = CommandBuffer::GetNext(queue->GetFamilyId());
-            commandBuffer->Begin();
-        }
+            PE_ERROR("Image::CopyDataToImageStaged(): no command buffer specified.");
+
+        // Staging buffer
+        Buffer *staging = Buffer::Create(
+            size,
+            BufferUsage::TransferSrcBit,
+            AllocationCreate::HostAccessSequentialWriteBit,
+            "staging_buffer");
+
+        // Copy data to staging buffer
+        MemoryRange mr{};
+        mr.data = data;
+        mr.size = size;
+        staging->Copy(1, &mr, false);
 
         VkBufferImageCopy region;
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = viewInfo.aspectMask;
+        region.imageSubresource.aspectMask = GetImageAspectVK(viewInfo.aspectMask);
         region.imageSubresource.mipLevel = mipLevel;
         region.imageSubresource.baseArrayLayer = baseArrayLayer;
         region.imageSubresource.layerCount = layerCount;
         region.imageOffset = VkOffset3D{0, 0, 0};
         region.imageExtent = VkExtent3D{imageInfo.width, imageInfo.height, imageInfo.depth};
 
-        ChangeLayout(commandBuffer, LayoutState::TransferDst, baseArrayLayer, layerCount, mipLevel, imageInfo.mipLevels - mipLevel);
-        vkCmdCopyBufferToImage(commandBuffer->Handle(), buffer->Handle(), m_handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-        // If a new cmd was created, wait and submit it
-        if (!cmd)
-        {
-            commandBuffer->End();
-            queue->SubmitAndWaitFence(1, &commandBuffer, nullptr, 0, nullptr, 0, nullptr);
-            Queue::Return(queue);
-            CommandBuffer::Return(commandBuffer);
-        }
+        ChangeLayout(cmd, ImageLayout::TransferDst, baseArrayLayer, layerCount, mipLevel, imageInfo.mipLevels - mipLevel);
+        vkCmdCopyBufferToImage(cmd->Handle(),
+                               staging->Handle(),
+                               m_handle,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               1, &region);
+        cmd->AddOnFinishCallback([staging]()
+                                 { Buffer::Destroy(staging); });
     }
 
-    void Image::CopyColorAttachment(CommandBuffer *cmd, Image *colorAttachement)
+    void Image::CopyImage(CommandBuffer *cmd, Image *src)
     {
-        Debug::InsertCmdLabel(cmd->Handle(), "CopyColorAttachment: " + colorAttachement->imageInfo.name);
+        cmd->InsertDebugLabel("CopyImage: " + src->imageInfo.name);
 
-        LayoutState previousState = layoutStates[0][0];
-        LayoutState caPreviousState = colorAttachement->layoutStates[0][0];
-
-        ChangeLayout(cmd, LayoutState::TransferDst);
-        colorAttachement->ChangeLayout(cmd, LayoutState::TransferSrc);
-
-        // copy the image
         VkImageCopy region{};
-        region.srcSubresource.aspectMask = viewInfo.aspectMask;
+        // Source
+        region.srcSubresource.aspectMask = GetImageAspectVK(viewInfo.aspectMask);
+        region.srcSubresource.mipLevel = 0;
+        region.srcSubresource.baseArrayLayer = 0;
         region.srcSubresource.layerCount = imageInfo.arrayLayers;
-        region.dstSubresource.aspectMask = colorAttachement->viewInfo.aspectMask;
-        region.dstSubresource.layerCount = colorAttachement->imageInfo.arrayLayers;
-        region.extent.width = colorAttachement->imageInfo.width;
-        region.extent.height = colorAttachement->imageInfo.height;
-        region.extent.depth = colorAttachement->imageInfo.depth;
+        region.srcOffset = VkOffset3D{0, 0, 0};
+        // Destination
+        region.dstSubresource.aspectMask = GetImageAspectVK(src->viewInfo.aspectMask);
+        region.dstSubresource.mipLevel = 0;
+        region.dstSubresource.baseArrayLayer = 0;
+        region.dstSubresource.layerCount = src->imageInfo.arrayLayers;
+        region.dstOffset = VkOffset3D{0, 0, 0};
 
+        region.extent = VkExtent3D{src->imageInfo.width,
+                                   src->imageInfo.height,
+                                   src->imageInfo.depth};
+
+        cmd->ChangeLayout(this, ImageLayout::TransferDst);
+        cmd->ChangeLayout(src, ImageLayout::TransferSrc);
         vkCmdCopyImage(
             cmd->Handle(),
-            colorAttachement->m_handle,
+            src->m_handle,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             m_handle,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &region);
     }
 
-    void Image::GenerateMipMaps()
+    void Image::GenerateMipMaps(CommandBuffer *cmd)
     {
-        VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), (VkFormat)imageInfo.format, &fProps);
+        if (!cmd)
+            PE_ERROR("Image::GenerateMipMaps(): no command buffer specified.");
 
-        if (imageInfo.tiling == VK_IMAGE_TILING_OPTIMAL)
+        VkFormatProperties fProps;
+        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), GetFormatVK(imageInfo.format), &fProps);
+
+        if (imageInfo.tiling == ImageTiling::Optimal)
         {
             if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
                 PE_ERROR("generateMipMaps(): Image tiling error, linear filter is not supported.");
         }
-        else if (imageInfo.tiling == VK_IMAGE_TILING_LINEAR)
+        else if (imageInfo.tiling == ImageTiling::Linear)
         {
             if (!(fProps.linearTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
                 PE_ERROR("generateMipMaps(): Image tiling error, linear filter is not supported.");
@@ -473,75 +363,42 @@ namespace pe
             PE_ERROR("generateMipMaps(): Image tiling error.");
         }
 
-        Queue *queue = Queue::GetNext(QueueType::GraphicsBit, 1);
-        std::vector<std::vector<CommandBuffer *>> commandBuffers(imageInfo.arrayLayers);
-        for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
-        {
-            for (uint32_t j = 0; j < imageInfo.mipLevels; j++)
-                commandBuffers[i].push_back(CommandBuffer::GetNext(queue->GetFamilyId()));
-        }
-
         auto mipWidth = static_cast<int32_t>(imageInfo.width);
         auto mipHeight = static_cast<int32_t>(imageInfo.height);
 
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        ImageBlit region;
+        region.srcOffsets[0] = Offset3D{0, 0, 0};
+        region.srcOffsets[1] = Offset3D{mipWidth, mipHeight, 1};
+        region.srcSubresource.aspectMask = viewInfo.aspectMask;
+        region.srcSubresource.layerCount = 1;
+        region.srcSubresource.mipLevel = 0;
 
-        VkImageBlit blit;
-        blit.srcOffsets[0] = VkOffset3D{0, 0, 0};
-        blit.srcSubresource.aspectMask = viewInfo.aspectMask;
-        blit.srcSubresource.layerCount = 1;
-        blit.dstOffsets[0] = VkOffset3D{0, 0, 0};
-        blit.dstSubresource.aspectMask = viewInfo.aspectMask;
-        blit.dstSubresource.layerCount = 1;
+        region.dstOffsets[0] = Offset3D{0, 0, 0};
+        region.dstSubresource.aspectMask = viewInfo.aspectMask;
+        region.dstSubresource.layerCount = 1;
 
         for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
         {
-            blit.srcSubresource.baseArrayLayer = i;
-            blit.dstSubresource.baseArrayLayer = i;
+            cmd->ChangeLayout(this, ImageLayout::TransferSrc, i, 1, 0, 1);
+            region.srcSubresource.baseArrayLayer = i;
+            region.dstSubresource.baseArrayLayer = i;
             for (uint32_t j = 1; j < imageInfo.mipLevels; j++)
             {
-                commandBuffers[i][j]->Begin();
+                mipWidth = std::max(1, mipWidth / 2);
+                mipHeight = std::max(1, mipHeight / 2);
+                region.dstOffsets[1] = Offset3D{mipWidth, mipHeight, 1};
+                region.dstSubresource.mipLevel = j;
 
-                ChangeLayout(commandBuffers[i][j], LayoutState::TransferSrc, i, 1, j - 1);
-                blit.srcOffsets[1] = VkOffset3D{mipWidth, mipHeight, 1};
-                blit.srcSubresource.mipLevel = j - 1;
-
-                ChangeLayout(commandBuffers[i][j], LayoutState::TransferDst, i, 1, j);
-                blit.dstOffsets[1] = VkOffset3D{mipWidth / 2, mipHeight / 2, 1};
-                blit.dstSubresource.mipLevel = j;
-
-                vkCmdBlitImage(
-                    commandBuffers[i][j]->Handle(),
-                    m_handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    m_handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    1, &blit,
-                    VK_FILTER_LINEAR);
-
-                if (mipWidth > 1)
-                    mipWidth /= 2;
-                if (mipHeight > 1)
-                    mipHeight /= 2;
-
-                commandBuffers[i][j]->End();
-                queue->SubmitAndWaitFence(1, &commandBuffers[i][j], nullptr, 0, nullptr, 0, nullptr);
+                cmd->ChangeLayout(this, ImageLayout::TransferDst, i, 1, j, 1);
+                cmd->BlitImage(this, this, &region, Filter::Linear);
             }
         }
 
         for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
         {
             for (uint32_t j = 0; j < imageInfo.mipLevels; j++)
-            {
-                commandBuffers[i][j]->Begin();
-                ChangeLayout(commandBuffers[i][j], LayoutState::ShaderReadOnly, i, 1, j, 1);
-                commandBuffers[i][j]->End();
-                queue->SubmitAndWaitFence(1, &commandBuffers[i][j], nullptr, 0, nullptr, 0, nullptr);
-                CommandBuffer::Return(commandBuffers[i][j]);
-            }
+                cmd->ChangeLayout(this, ImageLayout::ShaderReadOnly, i, 1, j, 1);
         }
-
-        Queue::Return(queue);
     }
 
     void Image::CreateSampler(const SamplerCreateInfo &info)
@@ -552,27 +409,57 @@ namespace pe
         samplerInfoVK.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfoVK.pNext = nullptr;
         samplerInfoVK.flags = 0;
-        samplerInfoVK.magFilter = (VkFilter)samplerInfo.magFilter;
-        samplerInfoVK.minFilter = (VkFilter)samplerInfo.minFilter;
-        samplerInfoVK.mipmapMode = (VkSamplerMipmapMode)samplerInfo.mipmapMode;
-        samplerInfoVK.addressModeU = (VkSamplerAddressMode)samplerInfo.addressModeU;
-        samplerInfoVK.addressModeV = (VkSamplerAddressMode)samplerInfo.addressModeV;
-        samplerInfoVK.addressModeW = (VkSamplerAddressMode)samplerInfo.addressModeW;
+        samplerInfoVK.magFilter = GetFilterVK(samplerInfo.magFilter);
+        samplerInfoVK.minFilter = GetFilterVK(samplerInfo.minFilter);
+        samplerInfoVK.mipmapMode = GetSamplerMipmapModeVK(samplerInfo.mipmapMode);
+        samplerInfoVK.addressModeU = GetSamplerAddressMode(samplerInfo.addressModeU);
+        samplerInfoVK.addressModeV = GetSamplerAddressMode(samplerInfo.addressModeV);
+        samplerInfoVK.addressModeW = GetSamplerAddressMode(samplerInfo.addressModeW);
         samplerInfoVK.mipLodBias = 0.f;
         samplerInfoVK.anisotropyEnable = samplerInfo.anisotropyEnable;
         samplerInfoVK.maxAnisotropy = samplerInfo.maxAnisotropy;
         samplerInfoVK.compareEnable = samplerInfo.compareEnable;
-        samplerInfoVK.compareOp = (VkCompareOp)samplerInfo.compareOp;
+        samplerInfoVK.compareOp = GetCompareOpVK(samplerInfo.compareOp);
         samplerInfoVK.minLod = samplerInfo.minLod;
         samplerInfoVK.maxLod = samplerInfo.maxLod;
-        samplerInfoVK.borderColor = (VkBorderColor)samplerInfo.borderColor;
+        samplerInfoVK.borderColor = GetBorderColorVK(samplerInfo.borderColor);
         samplerInfoVK.unnormalizedCoordinates = samplerInfo.unnormalizedCoordinates;
 
         VkSampler vkSampler;
         PE_CHECK(vkCreateSampler(RHII.GetDevice(), &samplerInfoVK, nullptr, &vkSampler));
         sampler = vkSampler;
 
-        Debug::SetObjectName(sampler, VK_OBJECT_TYPE_SAMPLER, imageInfo.name);
+        Debug::SetObjectName(sampler, ObjectType::Sampler, imageInfo.name);
+    }
+
+    void Image::BlitImage(CommandBuffer *cmd, Image *src, ImageBlit *region, Filter filter)
+    {
+        if (!cmd)
+            PE_ERROR("BlitImage(): Command buffer is null.");
+
+        VkImageBlit regionVK{};
+        regionVK.srcSubresource.aspectMask = region->srcSubresource.aspectMask;
+        regionVK.srcSubresource.baseArrayLayer = region->srcSubresource.baseArrayLayer;
+        regionVK.srcSubresource.layerCount = region->srcSubresource.layerCount;
+        regionVK.srcSubresource.mipLevel = region->srcSubresource.mipLevel;
+        regionVK.srcOffsets[0] = GetOffset3DVK(region->srcOffsets[0]);
+        regionVK.srcOffsets[1] = GetOffset3DVK(region->srcOffsets[1]);
+
+        regionVK.dstSubresource.aspectMask = region->dstSubresource.aspectMask;
+        regionVK.dstSubresource.baseArrayLayer = region->dstSubresource.baseArrayLayer;
+        regionVK.dstSubresource.layerCount = region->dstSubresource.layerCount;
+        regionVK.dstSubresource.mipLevel = region->dstSubresource.mipLevel;
+        regionVK.dstOffsets[0] = GetOffset3DVK(region->dstOffsets[0]);
+        regionVK.dstOffsets[1] = GetOffset3DVK(region->dstOffsets[1]);
+
+        ImageLayout srcLayout = src->layouts[region->srcSubresource.baseArrayLayer][region->srcSubresource.mipLevel];
+        ImageLayout dstLayout = layouts[region->dstSubresource.baseArrayLayer][region->dstSubresource.mipLevel];
+
+        vkCmdBlitImage(cmd->Handle(),
+                       src->Handle(), GetImageLayoutVK(srcLayout),
+                       Handle(), GetImageLayoutVK(dstLayout),
+                       1, &regionVK,
+                       GetFilterVK(filter));
     }
 }
 #endif

@@ -31,7 +31,7 @@ namespace pe
 
         ~PostProcessSystem();
 
-        void Init() override;
+        void Init(CommandBuffer *cmd) override;
 
         void Update(double delta) override;
 

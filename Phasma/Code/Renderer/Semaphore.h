@@ -35,6 +35,8 @@ namespace pe
 
         void Signal(uint64_t value);
 
+        uint64_t GetValue();
+
     private:
         bool m_timeline;
     };
