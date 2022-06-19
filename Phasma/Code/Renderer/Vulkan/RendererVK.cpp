@@ -513,13 +513,13 @@ namespace pe
         region.dstSubresource.aspectMask = swapchainImage->viewInfo.aspectMask;
         region.dstSubresource.layerCount = 1;
 
-        cmd->ChangeLayout(src, ImageLayout::TransferSrc);
-        cmd->ChangeLayout(swapchainImage, ImageLayout::TransferDst);
+        cmd->ImageBarrier(src, ImageLayout::TransferSrc);
+        cmd->ImageBarrier(swapchainImage, ImageLayout::TransferDst);
 
         cmd->BlitImage(src, swapchainImage, &region, Filter::Linear);
 
-        cmd->ChangeLayout(src, ImageLayout::ColorAttachment);
-        cmd->ChangeLayout(swapchainImage, ImageLayout::PresentSrc);
+        cmd->ImageBarrier(src, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(swapchainImage, ImageLayout::PresentSrc);
 
         cmd->EndDebugRegion();
     }

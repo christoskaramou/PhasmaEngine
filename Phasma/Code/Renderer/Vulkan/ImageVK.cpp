@@ -231,12 +231,12 @@ namespace pe
         Debug::SetObjectName(view, ObjectType::ImageView, imageInfo.name);
     }
 
-    void Image::ChangeLayout(CommandBuffer *cmd,
-                             ImageLayout newLayout,
-                             uint32_t baseArrayLayer,
-                             uint32_t arrayLayers,
-                             uint32_t baseMipLevel,
-                             uint32_t mipLevels)
+    void Image::Barrier(CommandBuffer *cmd,
+                        ImageLayout newLayout,
+                        uint32_t baseArrayLayer,
+                        uint32_t arrayLayers,
+                        uint32_t baseMipLevel,
+                        uint32_t mipLevels)
     {
         ImageLayout oldLayout = layouts[baseArrayLayer][baseMipLevel];
         if (newLayout != oldLayout)
@@ -297,13 +297,14 @@ namespace pe
         region.imageOffset = VkOffset3D{0, 0, 0};
         region.imageExtent = VkExtent3D{imageInfo.width, imageInfo.height, imageInfo.depth};
 
-        ChangeLayout(cmd, ImageLayout::TransferDst, baseArrayLayer, layerCount, mipLevel, imageInfo.mipLevels - mipLevel);
+        Barrier(cmd, ImageLayout::TransferDst, baseArrayLayer, layerCount, mipLevel, imageInfo.mipLevels - mipLevel);
+
         vkCmdCopyBufferToImage(cmd->Handle(),
                                staging->Handle(),
                                m_handle,
                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                1, &region);
-        cmd->AddOnFinishCallback([staging]()
+        cmd->AfterWaitCallback([staging]()
                                  { Buffer::Destroy(staging); });
     }
 
@@ -329,8 +330,8 @@ namespace pe
                                    src->imageInfo.height,
                                    src->imageInfo.depth};
 
-        cmd->ChangeLayout(this, ImageLayout::TransferDst);
-        cmd->ChangeLayout(src, ImageLayout::TransferSrc);
+        cmd->ImageBarrier(this, ImageLayout::TransferDst);
+        cmd->ImageBarrier(src, ImageLayout::TransferSrc);
         vkCmdCopyImage(
             cmd->Handle(),
             src->m_handle,
@@ -379,7 +380,7 @@ namespace pe
 
         for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
         {
-            cmd->ChangeLayout(this, ImageLayout::TransferSrc, i, 1, 0, 1);
+            cmd->ImageBarrier(this, ImageLayout::TransferSrc, i, 1, 0, 1);
             region.srcSubresource.baseArrayLayer = i;
             region.dstSubresource.baseArrayLayer = i;
             for (uint32_t j = 1; j < imageInfo.mipLevels; j++)
@@ -389,7 +390,7 @@ namespace pe
                 region.dstOffsets[1] = Offset3D{mipWidth, mipHeight, 1};
                 region.dstSubresource.mipLevel = j;
 
-                cmd->ChangeLayout(this, ImageLayout::TransferDst, i, 1, j, 1);
+                cmd->ImageBarrier(this, ImageLayout::TransferDst, i, 1, j, 1);
                 cmd->BlitImage(this, this, &region, Filter::Linear);
             }
         }
@@ -397,7 +398,7 @@ namespace pe
         for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
         {
             for (uint32_t j = 0; j < imageInfo.mipLevels; j++)
-                cmd->ChangeLayout(this, ImageLayout::ShaderReadOnly, i, 1, j, 1);
+                cmd->ImageBarrier(this, ImageLayout::ShaderReadOnly, i, 1, j, 1);
         }
     }
 

@@ -288,14 +288,14 @@ namespace pe
                       signalSemaphoresCount, signalSemaphores);
     }
 
-    void CommandBuffer::ChangeLayout(Image *image,
+    void CommandBuffer::ImageBarrier(Image *image,
                                      ImageLayout newLayout,
                                      uint32_t baseArrayLayer,
                                      uint32_t arrayLayers,
                                      uint32_t baseMipLevel,
                                      uint32_t mipLevels)
     {
-        image->ChangeLayout(this, newLayout, baseArrayLayer, arrayLayers, baseMipLevel, mipLevels);
+        image->Barrier(this, newLayout, baseArrayLayer, arrayLayers, baseMipLevel, mipLevels);
     }
 
     void CommandBuffer::CopyBuffer(Buffer *src, Buffer *dst, const size_t size)
@@ -426,16 +426,16 @@ namespace pe
 
         m_semaphore->Wait(m_submitions);
 
-        if (!m_onFinish.IsEmpty())
+        if (!m_afterWaitCallbacks.IsEmpty())
         {
-            m_onFinish.ReverseInvoke();
-            m_onFinish.Clear();
+            m_afterWaitCallbacks.ReverseInvoke();
+            m_afterWaitCallbacks.Clear();
         }
     }
 
-    void CommandBuffer::AddOnFinishCallback(Delegate<>::Func_type &&func)
+    void CommandBuffer::AfterWaitCallback(Delegate<>::Func_type &&func)
     {
-        m_onFinish += std::forward<Delegate<>::Func_type>(func);
+        m_afterWaitCallbacks += std::forward<Delegate<>::Func_type>(func);
     }
 }
 #endif

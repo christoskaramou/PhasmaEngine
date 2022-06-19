@@ -292,7 +292,7 @@ namespace pe
 
     void Shadows::BeginPass(CommandBuffer *cmd, uint32_t imageIndex, uint32_t cascade)
     {
-        cmd->ChangeLayout(textures[cascade], ImageLayout::DepthStencilAttachment);
+        cmd->ImageBarrier(textures[cascade], ImageLayout::DepthStencilAttachment);
         FrameBuffer *frameBuffer = framebuffers[imageIndex][cascade];
         cmd->BeginPass(renderPass, frameBuffer);
         cmd->SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
@@ -301,7 +301,7 @@ namespace pe
     void Shadows::EndPass(CommandBuffer *cmd, uint32_t cascade)
     {
         cmd->EndPass();
-        cmd->ChangeLayout(textures[cascade], ImageLayout::DepthStencilReadOnly);
+        cmd->ImageBarrier(textures[cascade], ImageLayout::DepthStencilReadOnly);
     }
 
     void Shadows::Destroy()

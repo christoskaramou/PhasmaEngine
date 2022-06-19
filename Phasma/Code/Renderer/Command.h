@@ -127,7 +127,7 @@ namespace pe
                     uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
                     uint32_t signalSemaphoresCount, Semaphore **signalSemaphores);
 
-        void ChangeLayout(Image *image,
+        void ImageBarrier(Image *image,
                           ImageLayout newLayout,
                           uint32_t baseArrayLayer = 0,
                           uint32_t arrayLayers = 1,
@@ -169,7 +169,7 @@ namespace pe
 
         CommandPool *GetCommandPool() const { return m_commandPool; }
 
-        void AddOnFinishCallback(Delegate<>::Func_type &&func);
+        void AfterWaitCallback(Delegate<>::Func_type &&func);
 
         static void Init(GpuHandle gpu, uint32_t countPerFamily = 0);
 
@@ -195,6 +195,6 @@ namespace pe
         bool m_recording = false;
         std::string name;
         StringHash nameHash;
-        Delegate<> m_onFinish;
+        Delegate<> m_afterWaitCallbacks;
     };
 }

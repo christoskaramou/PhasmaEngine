@@ -279,9 +279,9 @@ namespace pe
 
         // BRIGHT FILTER
         // Input
-        cmd->ChangeLayout(frameImage, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
         // Output
-        cmd->ChangeLayout(brightFilterRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(brightFilterRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPassBrightFilter, framebuffers[imageIndex]);
         cmd->PushConstants(pipelineBrightFilter, ShaderStage::FragmentBit, 0,
@@ -295,9 +295,9 @@ namespace pe
         cmd->BeginDebugRegion("GaussianBlurHorizontal");
         // GUASSIAN BLUR HORIZONTAL
         // Input
-        cmd->ChangeLayout(brightFilterRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(brightFilterRT, ImageLayout::ShaderReadOnly);
         // Output
-        cmd->ChangeLayout(gaussianBlurHorizontalRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(gaussianBlurHorizontalRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPassGaussianBlur,
                        framebuffers[static_cast<size_t>(totalImages) + static_cast<size_t>(imageIndex)]);
@@ -312,9 +312,9 @@ namespace pe
         cmd->BeginDebugRegion("GaussianBlurVertical");
         // GAUSSIAN BLUR VERTICAL
         // Input
-        cmd->ChangeLayout(gaussianBlurHorizontalRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(gaussianBlurHorizontalRT, ImageLayout::ShaderReadOnly);
         // Output
-        cmd->ChangeLayout(gaussianBlurVerticalRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(gaussianBlurVerticalRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPassGaussianBlur,
                        framebuffers[static_cast<size_t>(totalImages) * 2 + static_cast<size_t>(imageIndex)]);
@@ -329,10 +329,10 @@ namespace pe
         cmd->BeginDebugRegion("Bloom Combine");
         // COMBINE
         // Input
-        cmd->ChangeLayout(frameImage, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(gaussianBlurVerticalRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(gaussianBlurVerticalRT, ImageLayout::ShaderReadOnly);
         // Output
-        cmd->ChangeLayout(viewportRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPassCombine,
                        framebuffers[static_cast<size_t>(totalImages) * 3 + static_cast<size_t>(imageIndex)]);

@@ -309,11 +309,11 @@ namespace pe
         cmd->BeginDebugRegion("SSAO");
         // SSAO
         // Input
-        cmd->ChangeLayout(normalRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(noiseTex, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
+        cmd->ImageBarrier(normalRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(noiseTex, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         // Output
-        cmd->ChangeLayout(ssaoRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(ssaoRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->BindPipeline(pipeline);
@@ -325,9 +325,9 @@ namespace pe
         cmd->BeginDebugRegion("SSAO Blur");
         // SSAO BLUR
         // Input
-        cmd->ChangeLayout(ssaoRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(ssaoRT, ImageLayout::ShaderReadOnly);
         // Output
-        cmd->ChangeLayout(ssaoBlurRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(ssaoBlurRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(blurRenderPass, blurFramebuffers[imageIndex]);
         cmd->BindPipeline(pipelineBlur);

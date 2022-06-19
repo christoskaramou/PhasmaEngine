@@ -159,7 +159,7 @@ namespace pe
             cmd->GenerateMipMaps(*tex);
 
             Mesh::uniqueTextures[path.string()] = *tex;
-            cmd->AddOnFinishCallback([pixels]()
+            cmd->AfterWaitCallback([pixels]()
                                      { stbi_image_free(pixels); });
         }
     }

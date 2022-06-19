@@ -110,12 +110,12 @@ namespace pe
 
         // For arrayLayers and/or mipLevels bigger than size 1, all of their layouts must be the same
         // TODO: Manage transitions for different layouts in arrayLayers and/or mipLevels
-        void ChangeLayout(CommandBuffer *cmd,
-                          ImageLayout newLayout,
-                          uint32_t baseArrayLayer = 0,
-                          uint32_t arrayLayers = 1,
-                          uint32_t baseMipLevel = 0,
-                          uint32_t mipLevels = 1);
+        void Barrier(CommandBuffer *cmd,
+                     ImageLayout newLayout,
+                     uint32_t baseArrayLayer = 0,
+                     uint32_t arrayLayers = 1,
+                     uint32_t baseMipLevel = 0,
+                     uint32_t mipLevels = 1);
 
         void CopyDataToImageStaged(CommandBuffer *cmd,
                                    void *data,

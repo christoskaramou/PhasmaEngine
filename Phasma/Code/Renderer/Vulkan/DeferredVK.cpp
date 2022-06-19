@@ -208,7 +208,7 @@ namespace pe
             cmd->GenerateMipMaps(ibl_brdf_lut);
 
             Mesh::uniqueTextures[path] = ibl_brdf_lut;
-            cmd->AddOnFinishCallback([pixels]()
+            cmd->AfterWaitCallback([pixels]()
                                      { stbi_image_free(pixels); });
         }
 
@@ -379,20 +379,20 @@ namespace pe
 
         // COMBINE
         // Input
-        cmd->ChangeLayout(normalRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(albedoRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(srmRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(velocityRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(emissiveRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(ssaoBlurRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(ssrRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(ibl_brdf_lut, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(skybox.texture, ImageLayout::ShaderReadOnly, 0, skybox.texture->imageInfo.arrayLayers);
-        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
+        cmd->ImageBarrier(normalRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(albedoRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(srmRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(velocityRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(emissiveRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(ssaoBlurRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(ssrRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(ibl_brdf_lut, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(skybox.texture, ImageLayout::ShaderReadOnly, 0, skybox.texture->imageInfo.arrayLayers);
+        cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         for (auto &shadowMap : shadows.textures)
-            cmd->ChangeLayout(shadowMap, ImageLayout::DepthStencilReadOnly);
+            cmd->ImageBarrier(shadowMap, ImageLayout::DepthStencilReadOnly);
         // Output
-        cmd->ChangeLayout(viewportRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(compositionRenderPass, compositionFramebuffers[imageIndex]);
         cmd->PushConstants(pipelineComposition, ShaderStage::FragmentBit, 0, sizeof(mat4), &values);
@@ -425,12 +425,12 @@ namespace pe
 
     void Deferred::BeginPass(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        cmd->ChangeLayout(albedoRT, ImageLayout::ColorAttachment);
-        cmd->ChangeLayout(normalRT, ImageLayout::ColorAttachment);
-        cmd->ChangeLayout(velocityRT, ImageLayout::ColorAttachment);
-        cmd->ChangeLayout(emissiveRT, ImageLayout::ColorAttachment);
-        cmd->ChangeLayout(srmRT, ImageLayout::ColorAttachment); // TODO: Check why it throws
-        cmd->ChangeLayout(depth, ImageLayout::DepthStencilAttachment);
+        cmd->ImageBarrier(albedoRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(normalRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(velocityRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(emissiveRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(srmRT, ImageLayout::ColorAttachment); // TODO: Check why it throws
+        cmd->ImageBarrier(depth, ImageLayout::DepthStencilAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
     }
@@ -439,12 +439,12 @@ namespace pe
     {
         cmd->EndPass();
 
-        cmd->ChangeLayout(albedoRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(normalRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(velocityRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(emissiveRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(srmRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
+        cmd->ImageBarrier(albedoRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(normalRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(velocityRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(emissiveRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(srmRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
     }
 
     void Deferred::Destroy()

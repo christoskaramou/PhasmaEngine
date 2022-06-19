@@ -135,9 +135,9 @@ namespace pe
 
         // FAST APPROXIMATE ANTI-ALIASING
         // Input
-        cmd->ChangeLayout(frameImage, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
         // Output
-        cmd->ChangeLayout(viewportRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->BindPipeline(pipeline);

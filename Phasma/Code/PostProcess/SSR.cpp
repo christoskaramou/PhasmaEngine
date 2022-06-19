@@ -205,12 +205,12 @@ namespace pe
 
         // SCREEN SPACE REFLECTION
         // Input
-        cmd->ChangeLayout(albedoRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(normalRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(srmRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
+        cmd->ImageBarrier(albedoRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(normalRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(srmRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         // Output
-        cmd->ChangeLayout(ssrRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(ssrRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->BindPipeline(pipeline);
@@ -218,7 +218,7 @@ namespace pe
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
 
-        cmd->ChangeLayout(ssrRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(ssrRT, ImageLayout::ShaderReadOnly);
 
         cmd->EndDebugRegion();
     }

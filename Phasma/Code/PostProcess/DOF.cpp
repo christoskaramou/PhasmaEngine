@@ -153,10 +153,10 @@ namespace pe
 
         // DEPTH OF FIELD
         // Input
-        cmd->ChangeLayout(frameImage, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
+        cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         // Output
-        cmd->ChangeLayout(viewportRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, uint32_t(sizeof(float) * values.size()),

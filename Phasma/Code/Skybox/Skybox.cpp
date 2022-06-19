@@ -102,7 +102,7 @@ namespace pe
 
             size_t size = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * 4;
             cmd->CopyDataToImageStaged(texture, pixels, size, i);
-            cmd->AddOnFinishCallback([pixels]()
+            cmd->AfterWaitCallback([pixels]()
                                      { stbi_image_free(pixels); });
         }
     }

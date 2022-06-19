@@ -263,12 +263,12 @@ namespace pe
 
         // TEMPORAL ANTI-ALIASING
         // Input
-        cmd->ChangeLayout(previous, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(frameImage, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(velocityRT, ImageLayout::ShaderReadOnly);
-        cmd->ChangeLayout(depth, ImageLayout::DepthStencilReadOnly);
+        cmd->ImageBarrier(previous, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(velocityRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         // Output
-        cmd->ChangeLayout(taaRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(taaRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPass, framebuffers[imageIndex]);
         cmd->BindPipeline(pipeline);
@@ -283,9 +283,9 @@ namespace pe
 
         // TEMPORAL ANTI-ALIASING SHARPEN
         // Input
-        cmd->ChangeLayout(taaRT, ImageLayout::ShaderReadOnly);
+        cmd->ImageBarrier(taaRT, ImageLayout::ShaderReadOnly);
         // Output
-        cmd->ChangeLayout(viewportRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(renderPassSharpen, framebuffersSharpen[imageIndex]);
         cmd->BindPipeline(pipelineSharpen);
