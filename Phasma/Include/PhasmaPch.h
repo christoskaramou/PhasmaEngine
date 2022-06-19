@@ -68,16 +68,18 @@ SOFTWARE.
     #endif
 #endif
 
+#include "Core/Defines.h"
 #include "Core/Enums.h"
 #include "Core/Settings.h"
 #include "Core/Hash.h"
 #include "Core/Math.h"
 #include "Core/Base.h"
-#include "Core/FileSystem.h"
 #include "Core/Path.h"
 #include "Core/Delegate.h"
 #include "Core/SyncQueue.h"
 #include "Core/Timer.h"
+#include "Core/FileSystem.h"
+#include "Core/EventSystem.h"
 #include "Core/Externs.h"
 
 #include "ECS/ECSBase.h"

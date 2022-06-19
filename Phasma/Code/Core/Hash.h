@@ -81,6 +81,8 @@ namespace pe
         StringHash(const std::string &string) { Combine(string); }
     };
 
+    using EventID = StringHash;
+
     class HashableBase
     {
     public:

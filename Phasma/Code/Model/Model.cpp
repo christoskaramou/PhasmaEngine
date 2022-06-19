@@ -397,7 +397,7 @@ namespace pe
 
         cmd->End();
         queue->Submit(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
-        
+
         cmd->Wait();
         CommandBuffer::Return(cmd);
 
@@ -735,7 +735,7 @@ namespace pe
     {
         uniformBufferIndex = RHII.CreateUniformBufferInfo();
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
-        
+
         uniformImagesIndex = RHII.CreateUniformImageInfo();
         auto &uniformImages = RHII.GetUniformImageInfo(uniformImagesIndex);
 
@@ -753,7 +753,6 @@ namespace pe
             BufferUsage::UniformBufferBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "model_uniform_buffer");
-
 
         DescriptorBindingInfo bindingInfo{};
         bindingInfo.binding = 0;

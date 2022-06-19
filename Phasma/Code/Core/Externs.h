@@ -24,6 +24,15 @@ SOFTWARE.
 
 namespace pe
 {
+    // PREDEFINED EVENTS ---------------
+    extern EventID EventQuit;
+    extern EventID EventCustom;
+    extern EventID EventSetWindowTitle;
+    extern EventID EventCompileShaders;
+    extern EventID EventResize;
+    extern EventID EventFileWrite;
+    // ---------------------------------
+
     extern bool IsDepthFormatVK(VkFormat format);
     extern bool IsDepthFormat(Format format);
     extern bool HasStencilVK(VkFormat format);

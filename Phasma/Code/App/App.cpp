@@ -25,7 +25,6 @@ SOFTWARE.
 #include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/LightSystem.h"
-#include "Systems/EventSystem.h"
 #include "Systems/PostProcessSystem.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Queue.h"
@@ -38,18 +37,18 @@ namespace pe
         // freopen("log.txt", "w", stdout);
         // freopen("errors.txt", "w", stderr);
 
+        EventSystem::Init();
+
         uint32_t flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
 #if PE_VULKAN
         flags |= SDL_WINDOW_VULKAN;
 #endif
-        CONTEXT->CreateSystem<EventSystem>()->Init(nullptr);
-
         window = Window::Create(50, 50, 1280, 720, flags);
         RHII.Init(window->Handle());
 
-        Queue * queue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit, 1);
+        Queue *queue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit, 1);
         CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
-        
+
         cmd->Begin();
         CONTEXT->CreateSystem<CameraSystem>()->Init(cmd);
         CONTEXT->CreateSystem<LightSystem>()->Init(cmd);
@@ -79,6 +78,7 @@ namespace pe
         RHII.Destroy();
         RHII.Remove();
         Window::Destroy(window);
+        EventSystem::Destroy();
     }
 
     void App::Run()

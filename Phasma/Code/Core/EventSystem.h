@@ -24,38 +24,41 @@ SOFTWARE.
 
 namespace pe
 {
-    class EventSystem : public ISystem
+    class EventSystem
     {
     public:
         using Func = Delegate<std::any>::Func_type;
+        
+        static void Init();
 
-        void Init(CommandBuffer *cmd) override;
+        static void Destroy();
 
-        void Update(double delta) override;
+        // DISPATCHING EVENTS ----------------------------------
+        static void RegisterEvent(EventID event);
 
-        void Destroy() override;
+        static void UnregisterEvent(EventID type);
 
-        // Immediately dispatch a registered event
-        void DispatchEvent(EventType type, std::any &&data);
+        static void RegisterCallback(EventID type, Func &&func);
 
-        void RegisterEvent(EventType type);
+        static void UnregisterEventCallback(EventID type, Func &&func);
+        
+        static void DispatchEvent(EventID type, std::any &&data);
 
-        void UnregisterEvent(EventType type);
+        static void ClearEvents();
+        // -----------------------------------------------------
 
-        void RegisterEventAction(EventType type, Func &&func);
+        // POLLING EVENTS --------------------------------------
+        // Push event have to be polled manually
+        static void PushEvent(EventID type);
 
-        void UnregisterEventAction(EventType type, Func &&func);
+        // Poll a pushed event
+        static bool PollEvent(EventID type);
 
-        void PushEvent(EventType type);
-
-        bool PollEvent(EventType type);
-
-        void ClearPushedEvents();
-
-        void ClearEvents();
+        static void ClearPushedEvents();
+        // -----------------------------------------------------
 
     private:
-        std::unordered_map<EventType, Delegate<std::any>> m_events;
-        std::unordered_set<EventType> m_pushedEventTypes;
+        inline static std::unordered_map<size_t, Delegate<std::any>> m_events{};
+        inline static std::unordered_set<size_t> m_pushEvents{};
     };
 }

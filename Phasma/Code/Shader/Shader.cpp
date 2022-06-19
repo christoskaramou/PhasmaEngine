@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "Shader/Shader.h"
-#include "Systems/EventSystem.h"
 
 namespace pe
 {
@@ -137,7 +136,7 @@ namespace pe
             m_reflection.Init(this);
 
         auto modifiedCallback = []()
-        { Context::Get()->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders); };
+        { EventSystem::PushEvent(EventCompileShaders); };
 
         // Watch the file for changes
         FileWatcher::Add(m_cache.GetSourcePath(), modifiedCallback);

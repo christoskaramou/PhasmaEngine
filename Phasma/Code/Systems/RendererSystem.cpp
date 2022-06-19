@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "RendererSystem.h"
-#include "Systems/EventSystem.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Descriptor.h"
@@ -71,7 +70,7 @@ namespace pe
         title += " - Configuration: Release";
 #endif // _DEBUG
 
-        CONTEXT->GetSystem<EventSystem>()->DispatchEvent(EventType::SetWindowTitle, title);
+        EventSystem::DispatchEvent(EventSetWindowTitle, title);
 
         m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit);
         m_viewportRT = CreateRenderTarget("viewport", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit);

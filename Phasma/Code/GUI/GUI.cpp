@@ -26,7 +26,6 @@ SOFTWARE.
 #include "Renderer/Vertex.h"
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
-#include "Systems/EventSystem.h"
 #include "Model/Model.h"
 #include "Systems/CameraSystem.h"
 #include "Window/Window.h"
@@ -160,8 +159,7 @@ namespace pe
                 int result = tinyfd_messageBox(messageBoxTitle, message, "yesno", "warning", 0);
                 if (result == 1)
                 {
-                    EventSystem *eventSystem = CONTEXT->GetSystem<EventSystem>();
-                    eventSystem->PushEvent(EventType::Quit);
+                    EventSystem::PushEvent(EventQuit);
                 }
             };
             SyncQueue<Launch::AsyncNoWait>::Request(lambda);
@@ -410,7 +408,7 @@ namespace pe
         ImGui::Begin("Shaders Folder", &shaders_open);
         if (ImGui::Button("Compile Shaders"))
         {
-            CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::CompileShaders);
+            EventSystem::PushEvent(EventCompileShaders);
         }
         for (uint32_t i = 0; i < shaderList.size(); i++)
         {
@@ -458,7 +456,7 @@ namespace pe
         {
             renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
             RHII.WaitDeviceIdle();
-            CONTEXT->GetSystem<EventSystem>()->PushEvent(EventType::ScaleRenderTargets);
+            EventSystem::PushEvent(EventResize);
         }
         // ImGui::Checkbox("Lock Render Window", &lock_render_window);
         ImGui::Checkbox("IBL", &use_IBL);

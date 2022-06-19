@@ -24,7 +24,7 @@ SOFTWARE.
 
 namespace pe
 {
-    template <typename... T>
+    template <class... T>
     class Delegate
     {
     public:

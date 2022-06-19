@@ -22,8 +22,6 @@ SOFTWARE.
 
 #pragma once
 
-#define PE_DEBUG_MODE 1
-
 namespace pe
 {
     struct GlobalSettings

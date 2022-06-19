@@ -251,16 +251,6 @@ namespace pe
     using QueueTypeFlags = Flags<QueueType>;
     DEFINE_FLAGS_OPERATORS(QueueType)
 
-    enum class EventType
-    {
-        Quit,
-        Custom,
-        SetWindowTitle,
-        CompileShaders,
-        ScaleRenderTargets,
-        FileWrite
-    };
-
     enum class CameraDirection
     {
         FORWARD,

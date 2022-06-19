@@ -24,45 +24,6 @@ SOFTWARE.
 
 namespace pe
 {
-    inline void PE_ERROR_MSG(const std::string &msg,
-                             const std::string &func,
-                             const std::string &file,
-                             int line)
-    {
-        std::string error = "Error: " + msg + ", \nFunc: " + func + ", \nFile: " + file + ", \nLine: " + std::to_string(line) + "\n\n";
-        std::cout << error << std::endl;
-        exit(-1);
-    }
-
-#if _DEBUG
-
-    inline void PE_CHECK_RESULT(uint32_t res, const std::string &func, const std::string &file, int line)
-    {
-        if (res != 0)
-            PE_ERROR_MSG("Result error", func, file, line);
-    }
-
-#define PE_CHECK(res) PE_CHECK_RESULT(res, __func__, __FILE__, __LINE__)
-#define PE_ERROR(msg) PE_ERROR_MSG(msg, __func__, __FILE__, __LINE__)
-
-#else
-
-    inline void PE_CHECK_RESULT(uint32_t res)
-    {
-        if (res != 0)
-            exit(-1);
-    }
-
-#define PE_CHECK(res) PE_CHECK_RESULT(res)
-#define PE_ERROR(msg) exit(-1)
-
-#endif
-
-    constexpr uint32_t BitSet(uint8_t bit)
-    {
-        return 1 << bit;
-    }
-
     inline size_t NextID()
     {
         static size_t ID = 0;

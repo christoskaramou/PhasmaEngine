@@ -24,7 +24,6 @@ SOFTWARE.
 #include "Console/Console.h"
 #include "Renderer/RHI.h"
 #include "Systems/RendererSystem.h"
-#include "Systems/EventSystem.h"
 #include "Systems/CameraSystem.h"
 
 namespace pe
@@ -49,8 +48,7 @@ namespace pe
             SetTitle(std::any_cast<std::string>(title));
         };
 
-        EventSystem *eventSystem = CONTEXT->GetSystem<EventSystem>();
-        eventSystem->RegisterEventAction(EventType::SetWindowTitle, setTitle);
+        EventSystem::RegisterCallback(EventSetWindowTitle, setTitle);
     }
 
     Window::~Window()
@@ -67,9 +65,8 @@ namespace pe
     bool Window::ProcessEvents(double delta)
     {
         if (Console::close_app)
-            return false;
+            EventSystem::PushEvent(EventQuit);
 
-        EventSystem *eventSystem = CONTEXT->GetSystem<EventSystem>();
         RendererSystem *renderer = CONTEXT->GetSystem<RendererSystem>();
         CameraSystem *cameraSystem = CONTEXT->GetSystem<CameraSystem>();
         Camera *camera_main = cameraSystem->GetCamera(0);
@@ -80,9 +77,7 @@ namespace pe
         while (SDL_PollEvent(&event))
         {
             if (event.type == SDL_QUIT)
-            {
-                eventSystem->PushEvent(EventType::Quit);
-            }
+                EventSystem::PushEvent(EventQuit);
 
             if (event.type == SDL_MOUSEWHEEL)
             {
@@ -112,12 +107,10 @@ namespace pe
             }
 
             if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
-            {
-                eventSystem->PushEvent(EventType::ScaleRenderTargets);
-            }
+                EventSystem::PushEvent(EventResize);
         }
 
-        if (eventSystem->PollEvent(EventType::Quit))
+        if (EventSystem::PollEvent(EventQuit))
             return false;
 
         int x, y;
@@ -173,12 +166,10 @@ namespace pe
         if (io.KeysDown[SDL_SCANCODE_D])
             camera_main->Move(CameraDirection::RIGHT, velocity);
 
-        if (eventSystem->PollEvent(EventType::CompileShaders))
-        {
+        if (EventSystem::PollEvent(EventCompileShaders))
             renderer->RecreatePipelines();
-        }
 
-        if (eventSystem->PollEvent(EventType::ScaleRenderTargets))
+        if (EventSystem::PollEvent(EventResize))
         {
             if (!isMinimized())
             {
@@ -188,7 +179,7 @@ namespace pe
             }
         }
 
-        eventSystem->ClearPushedEvents();
+        EventSystem::ClearPushedEvents();
 
         return true;
     }
