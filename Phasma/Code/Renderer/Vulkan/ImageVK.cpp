@@ -304,7 +304,7 @@ namespace pe
                                m_handle,
                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                1, &region);
-        cmd->AfterWaitCallback([staging]()
+        cmd->AddAfterWaitCallback([staging]()
                                  { Buffer::Destroy(staging); });
     }
 

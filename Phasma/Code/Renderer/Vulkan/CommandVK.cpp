@@ -433,7 +433,7 @@ namespace pe
         }
     }
 
-    void CommandBuffer::AfterWaitCallback(Delegate<>::Func_type &&func)
+    void CommandBuffer::AddAfterWaitCallback(Delegate<>::Func_type &&func)
     {
         m_afterWaitCallbacks += std::forward<Delegate<>::Func_type>(func);
     }

@@ -137,7 +137,7 @@ namespace pe
 
         // Copy staging buffer to this buffer
         cmd->CopyBuffer(staging, this, size);
-        cmd->AfterWaitCallback([staging]()
+        cmd->AddAfterWaitCallback([staging]()
                                  { Buffer::Destroy(staging); });
     }
 

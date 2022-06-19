@@ -169,7 +169,7 @@ namespace pe
 
         CommandPool *GetCommandPool() const { return m_commandPool; }
 
-        void AfterWaitCallback(Delegate<>::Func_type &&func);
+        void AddAfterWaitCallback(Delegate<>::Func_type &&func);
 
         static void Init(GpuHandle gpu, uint32_t countPerFamily = 0);
 

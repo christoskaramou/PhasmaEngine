@@ -208,7 +208,7 @@ namespace pe
             cmd->GenerateMipMaps(ibl_brdf_lut);
 
             Mesh::uniqueTextures[path] = ibl_brdf_lut;
-            cmd->AfterWaitCallback([pixels]()
+            cmd->AddAfterWaitCallback([pixels]()
                                      { stbi_image_free(pixels); });
         }
 
