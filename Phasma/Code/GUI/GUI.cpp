@@ -665,7 +665,7 @@ namespace pe
         info.Device = RHII.GetDevice();
         info.QueueFamily = queue->GetFamilyId();
         info.Queue = queue->Handle();
-        info.PipelineCache = nullptr; // Will it help to use it?
+        info.PipelineCache = nullptr;
         info.DescriptorPool = RHII.GetDescriptorPool()->Handle();
         info.Subpass = 0;
         info.MinImageCount = static_cast<uint32_t>(RHII.GetSwapchain()->images.size());

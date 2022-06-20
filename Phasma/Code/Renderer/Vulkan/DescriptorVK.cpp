@@ -28,26 +28,23 @@ SOFTWARE.
 
 namespace pe
 {
-    DescriptorPool::DescriptorPool(uint32_t maxDescriptorSets, const std::string &name)
+    DescriptorPool::DescriptorPool(uint32_t count, DescriptorPoolSize *sizes, const std::string &name)
     {
-        std::vector<VkDescriptorPoolSize> descPoolsize(5);
-        descPoolsize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descPoolsize[0].descriptorCount = maxDescriptorSets;
-        descPoolsize[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        descPoolsize[1].descriptorCount = maxDescriptorSets;
-        descPoolsize[2].type = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
-        descPoolsize[2].descriptorCount = maxDescriptorSets;
-        descPoolsize[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descPoolsize[3].descriptorCount = maxDescriptorSets;
-        descPoolsize[4].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        descPoolsize[4].descriptorCount = maxDescriptorSets;
+        uint32_t maxDescriptors = 0;
+        std::vector<VkDescriptorPoolSize> descPoolsize(count);
+        for (uint32_t i = 0; i < count; i++)
+        {
+            descPoolsize[i].type = GetDescriptorTypeVK(sizes[i].type);
+            descPoolsize[i].descriptorCount = sizes[i].descriptorCount;
+            maxDescriptors += sizes[i].descriptorCount;
+        }
 
         VkDescriptorPoolCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-        createInfo.poolSizeCount = static_cast<uint32_t>(descPoolsize.size());
+        createInfo.poolSizeCount = count;
         createInfo.pPoolSizes = descPoolsize.data();
-        createInfo.maxSets = maxDescriptorSets;
+        createInfo.maxSets = maxDescriptors;
 
         VkDescriptorPool descriptorPoolVK;
         PE_CHECK(vkCreateDescriptorPool(RHII.GetDevice(), &createInfo, nullptr, &descriptorPoolVK));
@@ -143,6 +140,24 @@ namespace pe
 
     Descriptor::Descriptor(DescriptorInfo *info, const std::string &name)
     {
+        std::unordered_map<DescriptorType, uint32_t> typeCounts{};
+        for (uint32_t i = 0; i < info->count; i++)
+        {
+            if (typeCounts.find(info->bindingInfos[i].type) == typeCounts.end())
+                typeCounts[info->bindingInfos[i].type] = 0;
+            
+            typeCounts[info->bindingInfos[i].type]++;
+        }
+        std::vector<DescriptorPoolSize> poolSizes(typeCounts.size());
+        uint32_t i = 0;
+        for (auto const &[type, count] : typeCounts)
+        {
+            poolSizes[i].type = type;
+            poolSizes[i].descriptorCount = count;
+            i++;
+        }
+        m_pool = DescriptorPool::Create(static_cast<uint32_t>(poolSizes.size()), poolSizes.data(), name + "_pool");
+
         m_layout = DescriptorLayout::Create(info, name + "_layout");
 
         uint32_t variableDescCounts[] = {m_layout->GetVariableCount()};
@@ -155,7 +170,7 @@ namespace pe
         VkDescriptorSetLayout dsetLayout = m_layout->Handle();
         VkDescriptorSetAllocateInfo allocateInfo{};
         allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocateInfo.descriptorPool = RHII.GetDescriptorPool()->Handle();
+        allocateInfo.descriptorPool = m_pool->Handle();
         allocateInfo.descriptorSetCount = 1;
         allocateInfo.pSetLayouts = &dsetLayout;
         allocateInfo.pNext = &variableDescriptorCountAllocInfo;
@@ -171,6 +186,7 @@ namespace pe
 
     Descriptor::~Descriptor()
     {
+        DescriptorPool::Destroy(m_pool);
         DescriptorLayout::Destroy(m_layout);
     }
 

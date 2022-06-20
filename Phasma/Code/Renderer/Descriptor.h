@@ -24,10 +24,16 @@ SOFTWARE.
 
 namespace pe
 {
+    struct DescriptorPoolSize
+    {
+        uint32_t descriptorCount;
+        DescriptorType type;
+    };
+
     class DescriptorPool : public IHandle<DescriptorPool, DescriptorPoolHandle>
     {
     public:
-        DescriptorPool(uint32_t maxDescriptorSets, const std::string &name);
+        DescriptorPool(uint32_t count, DescriptorPoolSize *sizes, const std::string &name);
 
         ~DescriptorPool();
     };
@@ -73,9 +79,12 @@ namespace pe
 
         void UpdateDescriptor(DescriptorInfo *info);
 
+        DescriptorPool *GetPool() const { return m_pool; }
+
         DescriptorLayout *GetLayout() const { return m_layout; }
 
     private:
+        DescriptorPool *m_pool;
         DescriptorLayout *m_layout;
     };
 

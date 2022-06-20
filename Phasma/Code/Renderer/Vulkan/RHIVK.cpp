@@ -71,7 +71,7 @@ namespace pe
         InitCommandPools();
         InitCmdBuffers(SWAPCHAIN_IMAGES);
         CreateSwapchain(m_surface);
-        CreateDescriptorPool(15000); // max number of all descriptor sets to allocate
+        CreateDescriptorPool(150); // General purpose descriptor pool
         CreateSemaphores(SWAPCHAIN_IMAGES * 3);
     }
 
@@ -397,7 +397,18 @@ namespace pe
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
     {
-        m_descriptorPool = DescriptorPool::Create(maxDescriptorSets, "RHI_descriptor_pool");
+        DescriptorPoolSize descPoolsizes[5];
+        descPoolsizes[0].type = DescriptorType::UniformBuffer;
+        descPoolsizes[0].descriptorCount = maxDescriptorSets;
+        descPoolsizes[1].type = DescriptorType::StorageBuffer;
+        descPoolsizes[1].descriptorCount = maxDescriptorSets;
+        descPoolsizes[2].type = DescriptorType::StorageTexelBuffer;
+        descPoolsizes[2].descriptorCount = maxDescriptorSets;
+        descPoolsizes[3].type = DescriptorType::CombinedImageSampler;
+        descPoolsizes[3].descriptorCount = maxDescriptorSets;
+        descPoolsizes[4].type = DescriptorType::UniformBufferDynamic;
+        descPoolsizes[4].descriptorCount = maxDescriptorSets;
+        m_descriptorPool = DescriptorPool::Create(5, descPoolsizes, "RHI_descriptor_pool");
     }
 
     void RHI::InitCmdBuffers(uint32_t bufferCount)
