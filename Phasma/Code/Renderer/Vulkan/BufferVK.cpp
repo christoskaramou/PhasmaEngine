@@ -32,8 +32,21 @@ namespace pe
                    BufferUsageFlags usage,
                    AllocationCreateFlags createFlags,
                    const std::string &name)
-        : size(size), data(nullptr)
     {
+        if (usage & BufferUsage::UniformBufferBit)
+        {
+            size = RHII.AlignUniform(size);
+            PE_ERROR_IF(size > RHII.GetMaxUniformBufferSize(), "Buffer size is too large");
+        }
+        else if (usage & BufferUsage::StorageBufferBit)
+        {
+            size = RHII.AlignStorage(size);
+            PE_ERROR_IF(size > RHII.GetMaxStorageBufferSize(), "Buffer size is too large");
+        }
+
+        this->size = size;
+        data = nullptr;
+
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = size;
@@ -111,15 +124,15 @@ namespace pe
         if (!persistent)
         {
             for (uint32_t i = 0; i < count; i++)
-                Flush(ranges[i].offset, ranges[i].size);
+                Flush(ranges[i].size, ranges[i].offset);
 
             Unmap();
         }
     }
 
-    void Buffer::CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t offset)
+    void Buffer::CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t dtsOffset)
     {
-        if (offset + size > this->size)
+        if (dtsOffset + size > this->size)
             PE_ERROR("Buffer::StagedCopy: Data size is too large");
 
         // Staging buffer
@@ -133,20 +146,21 @@ namespace pe
         MemoryRange mr{};
         mr.data = data;
         mr.size = size;
+        mr.offset = 0;
         staging->Copy(1, &mr, false);
 
         // Copy staging buffer to this buffer
-        cmd->CopyBuffer(staging, this, size);
+        cmd->CopyBuffer(staging, this, size, 0, dtsOffset);
         cmd->AddAfterWaitCallback([staging]()
-                                 { Buffer::Destroy(staging); });
+                                  { Buffer::Destroy(staging); });
     }
 
-    void Buffer::Flush(size_t offset, size_t flushSize) const
+    void Buffer::Flush(size_t size, size_t offset) const
     {
         if (!data)
             return;
 
-        PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), allocation, offset, flushSize > 0 ? flushSize : size));
+        PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), allocation, offset, size > 0 ? size : this->size));
     }
 
     size_t Buffer::Size()
@@ -159,14 +173,14 @@ namespace pe
         return data;
     }
 
-    void Buffer::CopyBuffer(CommandBuffer *cmd, Buffer *src, const size_t size)
+    void Buffer::CopyBuffer(CommandBuffer *cmd, Buffer *src, size_t size, size_t srcOffset, size_t dstOffset)
     {
-        if (size > this->size)
-            PE_ERROR("Buffer::CopyBuffer: Source data size is too large");
+        PE_ERROR_IF(size + srcOffset > src->Size(), "Buffer::CopyBuffer: Source size is too large");
+        PE_ERROR_IF(size + dstOffset > this->size, "Buffer::CopyBuffer: Destination size is too small");
 
         VkBufferCopy region{};
-        region.srcOffset = 0;
-        region.dstOffset = 0;
+        region.srcOffset = srcOffset;
+        region.dstOffset = dstOffset;
         region.size = size;
 
         vkCmdCopyBuffer(cmd->Handle(), src->Handle(), Handle(), 1, &region);

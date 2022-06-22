@@ -680,7 +680,7 @@ namespace pe
             BufferUsage::TransferDstBit | BufferUsage::VertexBufferBit,
             AllocationCreate::None,
             "model_vertex_buffer");
-        cmd->CopyBufferStaged(vertexBuffer, vertices.data(), size);
+        cmd->CopyBufferStaged(vertexBuffer, vertices.data(), size, 0);
 
         // SHADOW VERTEX BUFFER
         std::vector<ShadowVertex> shadowsVertices{};
@@ -694,7 +694,7 @@ namespace pe
             BufferUsage::TransferDstBit | BufferUsage::VertexBufferBit,
             AllocationCreate::None,
             "model_shadows_vertex_buffer");
-        cmd->CopyBufferStaged(shadowsVertexBuffer, shadowsVertices.data(), size);
+        cmd->CopyBufferStaged(shadowsVertexBuffer, shadowsVertices.data(), size, 0);
     }
 
     void Model::CreateIndexBuffer(CommandBuffer *cmd)
@@ -727,7 +727,7 @@ namespace pe
             BufferUsage::TransferDstBit | BufferUsage::IndexBufferBit,
             AllocationCreate::None,
             "model_index_buffer");
-        cmd->CopyBufferStaged(indexBuffer, indices.data(), size);
+        cmd->CopyBufferStaged(indexBuffer, indices.data(), size, 0);
     }
 
     // Will calculate the buffer size needed for all meshes and their primitives
@@ -749,7 +749,7 @@ namespace pe
         }
 
         uniformBuffer.buffer = Buffer::Create(
-            uniformBuffer.size,
+            RHII.AlignUniform(uniformBuffer.size) * SWAPCHAIN_IMAGES,
             BufferUsage::UniformBufferBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "model_uniform_buffer");
@@ -757,7 +757,7 @@ namespace pe
         DescriptorBindingInfo bindingInfo{};
         bindingInfo.binding = 0;
         bindingInfo.pBuffer = uniformBuffer.buffer;
-        bindingInfo.type = DescriptorType::UniformBuffer;
+        bindingInfo.type = DescriptorType::UniformBufferDynamic;
 
         DescriptorInfo info{};
         info.count = 1;
@@ -792,8 +792,11 @@ namespace pe
 
                 mr.data = &factors;
                 mr.size = sizeof(factors);
-                mr.offset = primitive.uniformBufferOffset;
-                uniformBuffer.buffer->Copy(1, &mr, true);
+                for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
+                {
+                    mr.offset = RHII.GetFrameDynamicOffset(uniformBuffer.buffer->Size(), i) + primitive.uniformBufferOffset;
+                    uniformBuffer.buffer->Copy(1, &mr, true);
+                }
 
                 DescriptorBindingInfo bindingImageInfo{};
                 bindingImageInfo.binding = 0;
@@ -1015,7 +1018,7 @@ namespace pe
         MemoryRange mr{};
         mr.data = &ubo;
         mr.size = sizeof(ubo);
-        mr.offset = uniformBufferOffset;
+        mr.offset = RHII.GetFrameDynamicOffset(uniformBuffer.buffer->Size(), RHII.GetFrameIndex()) + uniformBufferOffset;
         uniformBuffer.buffer->Copy(1, &mr, true);
 
         if (!animations.empty())
@@ -1068,8 +1071,7 @@ namespace pe
             uniformImages.descriptor};
         cmd->BindDescriptors(m_pipelineGBuffer, 2, dsetHandles);
 
-        uint32_t data[5];
-        data[0] = static_cast<uint32_t>(uniformBufferOffset / sizeof(mat4));
+        m_constants.modelIndex = static_cast<uint32_t>(uniformBufferOffset / sizeof(mat4));
 
         int culled = 0;
         int total = 0;
@@ -1077,8 +1079,8 @@ namespace pe
         {
             if (node->mesh)
             {
-                data[1] = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
-                data[2] = static_cast<uint32_t>(node->mesh->meshData.jointMatrices.size());
+                m_constants.meshIndex = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
+                m_constants.meshJointCount = static_cast<uint32_t>(node->mesh->meshData.jointMatrices.size());
 
                 for (auto &primitive : node->mesh->primitives)
                 {
@@ -1087,15 +1089,15 @@ namespace pe
                         total++;
                         if (!primitive.cull)
                         {
-                            data[3] = static_cast<uint32_t>(primitive.uniformBufferOffset / sizeof(mat4));
-                            data[4] = static_cast<uint32_t>(primitive.uniformImagesIndex);
+                            m_constants.primitiveIndex = static_cast<uint32_t>(primitive.uniformBufferOffset / sizeof(mat4));
+                            m_constants.primitiveImageIndex = static_cast<uint32_t>(primitive.uniformImagesIndex);
 
                             cmd->PushConstants(
                                 m_pipelineGBuffer,
                                 m_pipelineGBuffer->info.pushConstantStage,
                                 0,
-                                sizeof(data),
-                                data);
+                                sizeof(m_constants),
+                                &m_constants);
 
                             cmd->DrawIndexed(
                                 primitive.indicesSize,
@@ -1128,8 +1130,8 @@ namespace pe
         cmd->BindVertexBuffer(shadowsVertexBuffer, 0);
         cmd->BindIndexBuffer(indexBuffer, 0);
 
-        std::vector<Descriptor *> dsetHandles{RHII.GetUniformBufferInfo(uniformBufferIndex).descriptor};
-        cmd->BindDescriptors(m_pipelineShadows, (uint32_t)dsetHandles.size(), dsetHandles.data());
+        Descriptor *dset = RHII.GetUniformBufferInfo(uniformBufferIndex).descriptor;
+        cmd->BindDescriptors(m_pipelineShadows, 1, &dset);
 
         for (auto &node : linearNodes)
         {

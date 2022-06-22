@@ -140,14 +140,21 @@ namespace pe
 
     Descriptor::Descriptor(DescriptorInfo *info, const std::string &name)
     {
+        m_bindingInfos = std::vector<DescriptorBindingInfo>(info->count);
+
+        // Get the count per descriptor type
         std::unordered_map<DescriptorType, uint32_t> typeCounts{};
         for (uint32_t i = 0; i < info->count; i++)
         {
+            m_bindingInfos[i] = info->bindingInfos[i];
+
             if (typeCounts.find(info->bindingInfos[i].type) == typeCounts.end())
                 typeCounts[info->bindingInfos[i].type] = 0;
-            
+
             typeCounts[info->bindingInfos[i].type]++;
         }
+
+        // Create pool sizes typeCounts above 
         std::vector<DescriptorPoolSize> poolSizes(typeCounts.size());
         uint32_t i = 0;
         for (auto const &[type, count] : typeCounts)
@@ -156,10 +163,11 @@ namespace pe
             poolSizes[i].descriptorCount = count;
             i++;
         }
-        m_pool = DescriptorPool::Create(static_cast<uint32_t>(poolSizes.size()), poolSizes.data(), name + "_pool");
 
+        m_pool = DescriptorPool::Create(i, poolSizes.data(), name + "_pool");
         m_layout = DescriptorLayout::Create(info, name + "_layout");
 
+        // DescriptorLayout calculates the variable count on creation
         uint32_t variableDescCounts[] = {m_layout->GetVariableCount()};
 
         VkDescriptorSetVariableDescriptorCountAllocateInfo variableDescriptorCountAllocInfo = {};
@@ -181,6 +189,21 @@ namespace pe
 
         UpdateDescriptor(info);
 
+        // Pre-calculate frame dynamic offsets
+        m_frameDynamicOffsets = {};
+        for (uint32_t j = 0; j < SWAPCHAIN_IMAGES; j++)
+        {
+            for (size_t i = 0; i < m_bindingInfos.size(); i++)
+            {
+                if (m_bindingInfos[i].type == DescriptorType::UniformBufferDynamic ||
+                    m_bindingInfos[i].type == DescriptorType::StorageBufferDynamic)
+                {
+                    size_t bufferSize = m_bindingInfos[i].pBuffer->Size();
+                    m_frameDynamicOffsets.push_back(RHII.GetFrameDynamicOffset(bufferSize, j));
+                }
+            }
+        }
+
         Debug::SetObjectName(m_handle, ObjectType::DescriptorSet, name);
     }
 
@@ -196,7 +219,7 @@ namespace pe
         imageInfos.reserve(info->count);
         std::vector<VkDescriptorBufferInfo> bufferInfos{};
         bufferInfos.reserve(info->count);
-        
+
         // store by binding
         std::map<uint32_t, std::vector<DescriptorBindingInfo>> infosMap{};
         for (uint32_t i = 0; i < info->count; i++)
@@ -211,13 +234,29 @@ namespace pe
             {
                 if (bindingInfo.pImage != nullptr)
                 {
-                    VkImageLayout imageLayout = GetImageLayoutVK(bindingInfo.imageLayout);
-                    imageInfos.push_back(VkDescriptorImageInfo{bindingInfo.pImage->sampler, bindingInfo.pImage->view, imageLayout});
+                    imageInfos.push_back(
+                        VkDescriptorImageInfo{
+                            bindingInfo.pImage->sampler,
+                            bindingInfo.pImage->view,
+                            GetImageLayoutVK(bindingInfo.imageLayout)});
                 }
                 else if (bindingInfo.pBuffer != nullptr)
-                    bufferInfos.push_back(VkDescriptorBufferInfo{bindingInfo.pBuffer->Handle(), 0, bindingInfo.pBuffer->Size()});
+                {
+                    size_t range = bindingInfo.pBuffer->Size();
+                    if (bindingInfos[0].type == DescriptorType::UniformBufferDynamic ||
+                        bindingInfos[0].type == DescriptorType::StorageBufferDynamic)
+                        range /= SWAPCHAIN_IMAGES;
+
+                    bufferInfos.push_back(
+                        VkDescriptorBufferInfo{
+                            bindingInfo.pBuffer->Handle(),
+                            0,
+                            range});
+                }
                 else
+                {
                     PE_ERROR("Descriptor::UpdateDescriptor: pImage and pBuffer are both nullptr");
+                }
             }
 
             VkWriteDescriptorSet writeSet{};
@@ -233,12 +272,10 @@ namespace pe
                 size_t index = imageInfos.size() - bindingInfos.size();
                 writeSet.pImageInfo = &imageInfos[index];
             }
-            else if (bindingInfos[0].type == DescriptorType::UniformBuffer)
-            {
-                size_t index = bufferInfos.size() - bindingInfos.size();
-                writeSet.pBufferInfo = &bufferInfos[index];
-            }
-            else if (bindingInfos[0].type == DescriptorType::StorageBuffer)
+            else if (bindingInfos[0].type == DescriptorType::UniformBuffer ||
+                     bindingInfos[0].type == DescriptorType::StorageBuffer ||
+                     bindingInfos[0].type == DescriptorType::UniformBufferDynamic ||
+                     bindingInfos[0].type == DescriptorType::StorageBufferDynamic)
             {
                 size_t index = bufferInfos.size() - bindingInfos.size();
                 writeSet.pBufferInfo = &bufferInfos[index];
@@ -250,6 +287,37 @@ namespace pe
         }
 
         vkUpdateDescriptorSets(RHII.GetDevice(), static_cast<uint32_t>(writeSets.size()), writeSets.data(), 0, nullptr);
+    }
+
+    void Descriptor::GetFrameDynamicOffsets(uint32_t *count, uint32_t **offsets)
+    {
+        // The count of frame dynamic offsets should be at least SWAPCHAIN_IMAGES count
+        if (m_frameDynamicOffsets.size() >= SWAPCHAIN_IMAGES)
+        {
+            *count = static_cast<uint32_t>(m_frameDynamicOffsets.size() / SWAPCHAIN_IMAGES);
+            *offsets = &m_frameDynamicOffsets[(*count) * RHII.GetFrameIndex()];
+        }
+        else
+        {
+            *count = 0;
+            *offsets = nullptr;
+        }
+    }
+
+    std::vector<uint32_t> Descriptor::GetAllFrameDynamicOffsets(uint32_t count, Descriptor **descriptors)
+    {
+        std::vector<uint32_t> dynamicOffsets{};
+
+        for (uint32_t i = 0; i < count; i++)
+        {
+            uint32_t count;
+            uint32_t *offsets;
+            descriptors[i]->GetFrameDynamicOffsets(&count, &offsets);
+            if (count > 0)
+                dynamicOffsets.insert(dynamicOffsets.end(), offsets, offsets + count);
+        }
+
+        return dynamicOffsets;
     }
 }
 #endif

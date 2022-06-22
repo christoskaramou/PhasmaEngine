@@ -138,7 +138,7 @@ namespace pe
     void TAA::CreateUniforms(CommandBuffer *cmd)
     {
         uniform = Buffer::Create(
-            sizeof(UBO),
+            RHII.AlignUniform(sizeof(UBO)) * SWAPCHAIN_IMAGES,
             BufferUsage::UniformBufferBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "TAA_uniform_buffer");
@@ -170,7 +170,7 @@ namespace pe
         bindingInfos[3].pImage = velocityRT;
 
         bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[4].pBuffer = uniform;
 
         DescriptorInfo info{};
@@ -182,7 +182,7 @@ namespace pe
 
         bindingInfos[0].pImage = taaRT;
 
-        bindingInfos[1].type = DescriptorType::UniformBuffer;
+        bindingInfos[1].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[1].pBuffer = uniform;
         bindingInfos[1].pImage = nullptr;
 
@@ -216,7 +216,7 @@ namespace pe
         bindingInfos[3].pImage = velocityRT;
 
         bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[4].pBuffer = uniform;
 
         DescriptorInfo info{};
@@ -228,7 +228,7 @@ namespace pe
 
         bindingInfos[0].pImage = taaRT;
 
-        bindingInfos[1].type = DescriptorType::UniformBuffer;
+        bindingInfos[1].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[1].pBuffer = uniform;
         bindingInfos[1].pImage = nullptr;
 
@@ -250,7 +250,7 @@ namespace pe
             MemoryRange mr{};
             mr.data = &ubo;
             mr.size = sizeof(ubo);
-            mr.offset = 0;
+            mr.offset = RHII.GetFrameDynamicOffset(uniform->Size(), RHII.GetFrameIndex());
             uniform->Copy(1, &mr, false);
         }
     }

@@ -43,7 +43,7 @@ namespace pe
     void LightSystem::Init(CommandBuffer *cmd)
     {
         uniform = Buffer::Create(
-            sizeof(LightsUBO),
+            RHII.AlignUniform(sizeof(LightsUBO)) * SWAPCHAIN_IMAGES,
             BufferUsage::UniformBufferBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "lights_uniform_buffer");
@@ -70,11 +70,15 @@ namespace pe
         MemoryRange mr{};
         mr.data = &lubo;
         mr.size = sizeof(LightsUBO);
-        uniform->Copy(1, &mr, false);
+        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        {
+            mr.offset = RHII.GetFrameDynamicOffset(uniform->Size(), i);
+            uniform->Copy(1, &mr, false);
+        }
 
         DescriptorBindingInfo bindingInfo{};
         bindingInfo.binding = 0;
-        bindingInfo.type = DescriptorType::UniformBuffer;
+        bindingInfo.type = DescriptorType::UniformBufferDynamic;
         bindingInfo.pBuffer = uniform;
 
         DescriptorInfo info{};
@@ -87,7 +91,7 @@ namespace pe
 
     void LightSystem::Update(double delta)
     {
-        MemoryRange mrs[2]{};
+        MemoryRange mrs[5]{};
         uint32_t count = 1;
 
         Camera &camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
@@ -95,22 +99,29 @@ namespace pe
         lubo.sun.color = {.9765f, .8431f, .9098f, GUI::sun_intensity};
         lubo.sun.direction = {GUI::sun_direction[0], GUI::sun_direction[1], GUI::sun_direction[2], 1.f};
 
+        size_t frameOffset = RHII.GetFrameDynamicOffset(uniform->Size(), RHII.GetFrameIndex());
+
         mrs[0].data = &lubo;
         mrs[0].size = 3 * sizeof(vec4);
+        mrs[0].offset = frameOffset;
 
         if (GUI::randomize_lights)
         {
-            for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+            GUI::randomize_lights = false;
+
+            for (uint32_t i = 0; i < MAX_POINT_LIGHTS; i++)
             {
                 lubo.pointLights[i].color = vec4(rand(0.f, 1.f), rand(0.f, 1.f), rand(0.f, 1.f), 1.f);
                 lubo.pointLights[i].position = vec4(rand(-10.5f, 10.5f), rand(.7f, 6.7f), rand(-4.5f, 4.5f), 10.f);
             }
-            GUI::randomize_lights = false;
 
-            mrs[1].data = lubo.pointLights;
-            mrs[1].size = sizeof(PointLight) * MAX_POINT_LIGHTS;
-            mrs[1].offset = offsetof(LightsUBO, pointLights);
-            count++;
+            for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+            {
+                mrs[i + 1].data = lubo.pointLights;
+                mrs[i + 1].size = sizeof(PointLight) * MAX_POINT_LIGHTS;
+                mrs[i + 1].offset =  RHII.GetFrameDynamicOffset(uniform->Size(), i) + offsetof(LightsUBO, pointLights);
+                count++;
+            }
         }
 
         uniform->Copy(count, mrs, false);

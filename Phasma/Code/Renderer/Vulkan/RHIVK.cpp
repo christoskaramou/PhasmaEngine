@@ -45,11 +45,13 @@ namespace pe
     {
         m_device = {};
         m_semaphores = {};
-
         m_window = nullptr;
-
         m_uniformBuffers = {};
         m_uniformImages = {};
+        m_maxUniformBufferSize = 0;
+        m_maxStorageBufferSize = 0;
+        m_minUniformBufferOffsetAlignment = 0;
+        m_minStorageBufferOffsetAlignment = 0;
     }
 
     RHI::~RHI()
@@ -231,6 +233,10 @@ namespace pe
         VkPhysicalDeviceProperties gpuPropertiesVK;
         vkGetPhysicalDeviceProperties(m_gpu, &gpuPropertiesVK);
         m_gpuName = gpuPropertiesVK.deviceName;
+        m_maxUniformBufferSize = gpuPropertiesVK.limits.maxUniformBufferRange;
+        m_maxStorageBufferSize = gpuPropertiesVK.limits.maxStorageBufferRange;
+        m_minUniformBufferOffsetAlignment = gpuPropertiesVK.limits.minUniformBufferOffsetAlignment;
+        m_minStorageBufferOffsetAlignment = gpuPropertiesVK.limits.minStorageBufferOffsetAlignment;
     }
 
     bool RHI::IsInstanceExtensionValid(const char *name)

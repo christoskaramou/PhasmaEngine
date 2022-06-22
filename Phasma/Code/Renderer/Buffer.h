@@ -45,7 +45,7 @@ namespace pe
 
         void Unmap();
 
-        void Flush(size_t offset = 0, size_t flushSize = 0) const;
+        void Flush(size_t size = 0, size_t offset = 0) const;
 
         void Zero() const;
 
@@ -58,14 +58,15 @@ namespace pe
     private:
         friend class CommandBuffer;
 
-        void CopyBuffer(CommandBuffer* cmd, Buffer *src, size_t size);
+        void CopyBuffer(CommandBuffer* cmd, Buffer *src, size_t size, size_t srcOffset, size_t dstOffset);
 
-        void CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t offset = 0);
+        void CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t dtsOffset);
         
         void CopyDataRaw(const void *data, size_t size, size_t offset = 0);
 
         size_t size;
         void *data;
+        BufferUsageFlags usage;
         AllocationHandle allocation;
         std::string name;
     };

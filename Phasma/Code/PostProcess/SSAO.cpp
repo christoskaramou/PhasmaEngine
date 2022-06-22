@@ -147,16 +147,16 @@ namespace pe
             kernel.emplace_back(sample * scale, 0.f);
         }
 
-        size_t size = kernel.size() * sizeof(vec4);
         UB_Kernel = Buffer::Create(
-            sizeof(vec4) * 16,
+            RHII.AlignUniform(kernel.size() * sizeof(vec4)),
             BufferUsage::UniformBufferBit,
             AllocationCreate::HostAccessRandomBit,
             "ssao_UB_Kernel_buffer");
 
         MemoryRange mr{};
         mr.data = kernel.data();
-        mr.size = size;
+        mr.size = kernel.size() * sizeof(vec4);
+        mr.offset = 0;
         UB_Kernel->Copy(1, &mr, false);
 
         // noise image
@@ -186,11 +186,11 @@ namespace pe
         samplerInfo.maxAnisotropy = 1.0f;
         noiseTex->CreateSampler(samplerInfo);
 
-        cmd->CopyDataToImageStaged(noiseTex, noise.data(), size);
+        cmd->CopyDataToImageStaged(noiseTex, noise.data(), 16 * sizeof(vec4));
 
         // pvm uniform
         UB_PVM = Buffer::Create(
-            3 * sizeof(mat4),
+            RHII.AlignUniform(3 * sizeof(mat4)) * SWAPCHAIN_IMAGES,
             BufferUsage::UniformBufferBit,
             AllocationCreate::HostAccessRandomBit,
             "ssao_UB_PVM_buffer");
@@ -222,7 +222,7 @@ namespace pe
         bindingInfos[3].pBuffer = UB_Kernel;
 
         bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[4].pBuffer = UB_PVM;
 
         DescriptorInfo info{};
@@ -267,7 +267,7 @@ namespace pe
         bindingInfos[3].pBuffer = UB_Kernel;
 
         bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[4].pBuffer = UB_PVM;
 
         DescriptorInfo info{};
@@ -299,7 +299,7 @@ namespace pe
             MemoryRange mr{};
             mr.data = &pvm;
             mr.size = sizeof(pvm);
-            mr.offset = 0;
+            mr.offset = RHII.GetFrameDynamicOffset(UB_PVM->Size(), RHII.GetFrameIndex());
             UB_PVM->Copy(1, &mr, false);
         }
     }

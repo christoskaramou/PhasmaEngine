@@ -100,7 +100,7 @@ namespace pe
     void SSR::CreateUniforms(CommandBuffer *cmd)
     {
         UBReflection = Buffer::Create(
-            4 * sizeof(mat4),
+            RHII.AlignUniform(4 * sizeof(mat4)) * SWAPCHAIN_IMAGES,
             BufferUsage::UniformBufferBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "SSR_UB_Reflection_buffer");
@@ -132,7 +132,7 @@ namespace pe
         bindingInfos[3].pImage = srmRT;
 
         bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[4].pBuffer = UBReflection;
 
         DescriptorInfo info{};
@@ -168,7 +168,7 @@ namespace pe
         bindingInfos[3].pImage = srmRT;
 
         bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[4].pBuffer = UBReflection;
 
         DescriptorInfo info{};
@@ -194,7 +194,7 @@ namespace pe
             MemoryRange mr{};
             mr.data = &reflectionInput;
             mr.size = sizeof(reflectionInput);
-            mr.offset = 0;
+            mr.offset = RHII.GetFrameDynamicOffset(UBReflection->Size(), RHII.GetFrameIndex());
             UBReflection->Copy(1 ,&mr, false);
         }
     }

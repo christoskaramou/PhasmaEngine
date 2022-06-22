@@ -154,5 +154,13 @@ namespace pe
         Image *m_emissiveRT;
         Pipeline *m_pipelineGBuffer;
         Pipeline *m_pipelineShadows;
+        struct Constants
+        {
+            uint32_t modelIndex;
+            uint32_t meshIndex;
+            uint32_t meshJointCount;
+            uint32_t primitiveIndex;
+            uint32_t primitiveImageIndex;
+        } m_constants;
     };
 }

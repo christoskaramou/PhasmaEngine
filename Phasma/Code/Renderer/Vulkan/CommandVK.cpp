@@ -136,7 +136,7 @@ namespace pe
     CommandBuffer::~CommandBuffer()
     {
         Semaphore::Destroy(m_semaphore);
-        
+
         if (m_handle)
         {
             VkCommandBuffer cmd = m_handle;
@@ -243,7 +243,13 @@ namespace pe
         for (uint32_t i = 0; i < count; i++)
             dsets[i] = descriptors[i]->Handle();
 
-        vkCmdBindDescriptorSets(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout, 0, count, dsets.data(), 0, nullptr);
+        auto dynamicOffsets = Descriptor::GetAllFrameDynamicOffsets(count, descriptors);
+
+        vkCmdBindDescriptorSets(m_handle,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                pipeline->layout,
+                                0, count, dsets.data(),
+                                static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
     }
 
     void CommandBuffer::BindComputeDescriptors(Pipeline *pipeline, uint32_t count, Descriptor **descriptors)
@@ -251,8 +257,14 @@ namespace pe
         std::vector<VkDescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
             dsets[i] = descriptors[i]->Handle();
+            
+        auto dynamicOffsets = Descriptor::GetAllFrameDynamicOffsets(count, descriptors);
 
-        vkCmdBindDescriptorSets(m_handle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->layout, 0, count, dsets.data(), 0, nullptr);
+        vkCmdBindDescriptorSets(m_handle,
+                                VK_PIPELINE_BIND_POINT_COMPUTE,
+                                pipeline->layout,
+                                0, count, dsets.data(),
+                                static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
     }
 
     void CommandBuffer::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
@@ -298,14 +310,14 @@ namespace pe
         image->Barrier(this, newLayout, baseArrayLayer, arrayLayers, baseMipLevel, mipLevels);
     }
 
-    void CommandBuffer::CopyBuffer(Buffer *src, Buffer *dst, const size_t size)
+    void CommandBuffer::CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset)
     {
-        dst->CopyBuffer(this, src, size);
+        dst->CopyBuffer(this, src, size, srcOffset, dstOffset);
     }
 
-    void CommandBuffer::CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t offset)
+    void CommandBuffer::CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dtsOffset)
     {
-        buffer->CopyBufferStaged(this, data, size, offset);
+        buffer->CopyBufferStaged(this, data, size, dtsOffset);
     }
 
     void CommandBuffer::CopyDataToImageStaged(Image *image,

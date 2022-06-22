@@ -95,14 +95,14 @@ namespace pe
                 MemoryRange mr{};
                 mr.data = mesh->meshData.jointMatrices.data();
                 mr.size = mesh->meshData.jointMatrices.size() * sizeof(mat4);
-                mr.offset = mesh->uniformBufferOffset + 2 * sizeof(mat4);
+                mr.offset = RHII.GetFrameDynamicOffset(uniformBuffer.buffer->Size(), RHII.GetFrameIndex()) + mesh->uniformBufferOffset + 2 * sizeof(mat4);
                 uniformBuffer.buffer->Copy(1, &mr, true);
             }
 
             MemoryRange mr{};
             mr.data = &mesh->meshData;
             mr.size = 2 * sizeof(mat4);
-            mr.offset = mesh->uniformBufferOffset;
+            mr.offset = RHII.GetFrameDynamicOffset(uniformBuffer.buffer->Size(), RHII.GetFrameIndex()) + mesh->uniformBufferOffset;
             uniformBuffer.buffer->Copy(1, &mr, true);
         }
     }

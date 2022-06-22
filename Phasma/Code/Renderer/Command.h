@@ -134,9 +134,9 @@ namespace pe
                           uint32_t baseMipLevel = 0,
                           uint32_t mipLevels = 1);
 
-        void CopyBuffer(Buffer *src, Buffer *dst, const size_t size);
+        void CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset);
 
-        void CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t offset = 0);
+        void CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dtsOffset);
 
         void CopyDataToImageStaged(Image *image,
                                    void *data,
@@ -181,7 +181,7 @@ namespace pe
 
     private:
         friend class Queue;
-        
+
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
         inline static std::vector<std::map<size_t, CommandBuffer *>> s_allCmds{};
         inline static std::mutex s_getNextMutex{};

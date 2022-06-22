@@ -83,9 +83,17 @@ namespace pe
 
         DescriptorLayout *GetLayout() const { return m_layout; }
 
+        std::vector<DescriptorBindingInfo> &GetBindingInfos() { return m_bindingInfos; }
+
+        void GetFrameDynamicOffsets(uint32_t *count, uint32_t **offsets);
+
+        static std::vector<uint32_t> GetAllFrameDynamicOffsets(uint32_t count, Descriptor **descriptors);
+
     private:
         DescriptorPool *m_pool;
         DescriptorLayout *m_layout;
+        std::vector<DescriptorBindingInfo> m_bindingInfos;
+        std::vector<uint32_t> m_frameDynamicOffsets;
     };
 
 }

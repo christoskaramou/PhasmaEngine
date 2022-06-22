@@ -22,8 +22,7 @@ SOFTWARE.
 
 #pragma once
 
-// RHI Instance
-#define RHII (*RHI::Get())
+#define RHII (*RHI::Get()) // RHI Instance
 #define WIDTH RHII.GetSurface()->actualExtent.width
 #define HEIGHT RHII.GetSurface()->actualExtent.height
 #define WIDTH_f static_cast<float>(WIDTH)
@@ -86,9 +85,17 @@ namespace pe
 
         void WaitDeviceIdle();
 
-        uint32_t GetFrameIndex() { return m_frameCounter % SWAPCHAIN_IMAGES; }
-        size_t GetFrameCounter() { return m_frameCounter; }
         void NextFrame() { m_frameCounter++; }
+        size_t GetFrameCounter() { return m_frameCounter; }
+        uint32_t GetFrameIndex() { return m_frameCounter % SWAPCHAIN_IMAGES; }
+        // For dynamic uniform buffers that are dependent on the frame index
+        uint32_t GetFrameDynamicOffset(size_t size, uint32_t frameIndex) { return static_cast<uint32_t>(size / SWAPCHAIN_IMAGES) * frameIndex; }
+        uint32_t GetMaxUniformBufferSize() { return m_maxUniformBufferSize; }
+        uint32_t GetMaxStorageBufferSize() { return m_maxStorageBufferSize; }
+        uint64_t GetMinUniformBufferOffsetAlignment() { return m_minUniformBufferOffsetAlignment; }
+        uint64_t GetMinStorageBufferOffsetAlignment() { return m_minStorageBufferOffsetAlignment; }
+        size_t AlignUniform(size_t size) { return (size + m_minUniformBufferOffsetAlignment - 1) & ~(m_minUniformBufferOffsetAlignment - 1); }
+        size_t AlignStorage(size_t size) { return (size + m_minStorageBufferOffsetAlignment - 1) & ~(m_minStorageBufferOffsetAlignment - 1); }
 
         const InstanceHandle &GetInstance() { return m_instance; }
         const GpuHandle &GetGpu() { return m_gpu; }
@@ -102,7 +109,7 @@ namespace pe
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
-        
+
         struct UniformBufferInfo
         {
             Buffer *buffer = nullptr;
@@ -119,7 +126,7 @@ namespace pe
             uint32_t count = 0;
             Descriptor *descriptor = nullptr;
         };
-        
+
         size_t CreateUniformImageInfo();
         void RemoveUniformImageInfo(size_t index);
         UniformImageInfo &GetUniformImageInfo(size_t key) { return m_uniformImages[key]; }
@@ -146,5 +153,11 @@ namespace pe
 
         std::unordered_map<size_t, UniformBufferInfo> m_uniformBuffers;
         std::unordered_map<size_t, UniformImageInfo> m_uniformImages;
+
+        // Limits
+        uint32_t m_maxUniformBufferSize;
+        uint32_t m_maxStorageBufferSize;
+        uint64_t m_minUniformBufferOffsetAlignment;
+        uint64_t m_minStorageBufferOffsetAlignment;
     };
 }

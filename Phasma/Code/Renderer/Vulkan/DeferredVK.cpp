@@ -213,7 +213,7 @@ namespace pe
         }
 
         uniform = Buffer::Create(
-            sizeof(ubo),
+            RHII.AlignUniform(sizeof(ubo)) * SWAPCHAIN_IMAGES,
             BufferUsage::UniformBufferBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "Deferred_uniform_buffer");
@@ -245,7 +245,7 @@ namespace pe
         bindingInfos[3].pImage = srmRT;
 
         bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[4].pBuffer = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
 
         bindingInfos[5].binding = 5;
@@ -269,7 +269,7 @@ namespace pe
         bindingInfos[8].pImage = ibl_brdf_lut;
 
         bindingInfos[9].binding = 9;
-        bindingInfos[9].type = DescriptorType::UniformBuffer;
+        bindingInfos[9].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[9].pBuffer = uniform;
 
         DescriptorInfo info{};
@@ -305,7 +305,7 @@ namespace pe
         bindingInfos[3].pImage = srmRT;
 
         bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBuffer;
+        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[4].pBuffer = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
 
         bindingInfos[5].binding = 5;
@@ -329,7 +329,7 @@ namespace pe
         bindingInfos[8].pImage = ibl_brdf_lut;
 
         bindingInfos[9].binding = 9;
-        bindingInfos[9].type = DescriptorType::UniformBuffer;
+        bindingInfos[9].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[9].pBuffer = uniform;
 
         DescriptorInfo info{};
@@ -359,6 +359,7 @@ namespace pe
         MemoryRange mr{};
         mr.data = &ubo;
         mr.size = sizeof(ubo);
+        mr.offset = RHII.GetFrameDynamicOffset(uniform->Size(), RHII.GetFrameIndex());
         uniform->Copy(1, &mr, false);
     }
 

@@ -119,7 +119,7 @@ namespace pe
     void Shadows::CreateUniforms(CommandBuffer *cmd)
     {
         uniformBuffer = Buffer::Create(
-            SHADOWMAP_CASCADES * sizeof(mat4),
+            RHII.AlignUniform(SHADOWMAP_CASCADES * sizeof(mat4)) * SWAPCHAIN_IMAGES,
             BufferUsage::UniformBufferBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "Shadows_uniform_buffer");
@@ -130,7 +130,7 @@ namespace pe
         DescriptorBindingInfo bindingInfos[SHADOWMAP_CASCADES + 1]{};
 
         bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::UniformBuffer;
+        bindingInfos[0].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[0].pBuffer = uniformBuffer;
 
         for (int i = 0; i < SHADOWMAP_CASCADES; i++)
@@ -154,7 +154,7 @@ namespace pe
         DescriptorBindingInfo bindingInfos[SHADOWMAP_CASCADES + 1]{};
 
         bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::UniformBuffer;
+        bindingInfos[0].type = DescriptorType::UniformBufferDynamic;
         bindingInfos[0].pBuffer = uniformBuffer;
 
         for (int i = 0; i < SHADOWMAP_CASCADES; i++)
@@ -182,6 +182,7 @@ namespace pe
             MemoryRange mr{};
             mr.data = &cascades;
             mr.size = SHADOWMAP_CASCADES * sizeof(mat4);
+            mr.offset = RHII.GetFrameDynamicOffset(uniformBuffer->Size(), RHII.GetFrameIndex());
             uniformBuffer->Copy(1, &mr, false);
         }
     }
