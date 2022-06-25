@@ -80,9 +80,9 @@ namespace pe
         return t_duration.count();
     }
 
-    GPUTimer::GPUTimer()
+    GpuTimer::GpuTimer()
     {
-        _cmd = nullptr;
+        m_cmd = nullptr;
 
         VkPhysicalDeviceProperties gpuProps;
         vkGetPhysicalDeviceProperties(RHII.GetGpu(), &gpuProps);
@@ -90,7 +90,7 @@ namespace pe
         if (!gpuProps.limits.timestampComputeAndGraphics)
             PE_ERROR("Timestamps not supported");
 
-        timestampPeriod = gpuProps.limits.timestampPeriod;
+        m_timestampPeriod = gpuProps.limits.timestampPeriod;
 
         VkQueryPoolCreateInfo qpci{};
         qpci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
@@ -99,48 +99,49 @@ namespace pe
 
         VkQueryPool pool;
         PE_CHECK(vkCreateQueryPool(RHII.GetDevice(), &qpci, nullptr, &pool));
-        queryPool = pool;
+        m_handle = pool;
 
-        Debug::SetObjectName(queryPool, ObjectType::QueryPool, "GPUTimer_queryPool");
+        Debug::SetObjectName(m_handle, ObjectType::QueryPool, "GPUTimer_queryPool");
     }
 
-    void GPUTimer::Reset()
+    GpuTimer::~GpuTimer()
     {
-        vkCmdResetQueryPool(_cmd->Handle(), queryPool, 0, 2);
+        if (m_handle)
+            vkDestroyQueryPool(RHII.GetDevice(), m_handle, nullptr);
     }
 
-    void GPUTimer::Start(CommandBuffer *cmd)
+    void GpuTimer::Reset()
     {
-        _cmd = cmd;
+        vkCmdResetQueryPool(m_cmd->Handle(), m_handle, 0, 2);
+    }
+
+    void GpuTimer::Start(CommandBuffer *cmd)
+    {
+        m_cmd = cmd;
         Reset();
-        vkCmdWriteTimestamp(_cmd->Handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
+        vkCmdWriteTimestamp(m_cmd->Handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_handle, 0);
     }
 
-    float GPUTimer::End()
+    float GpuTimer::End()
     {
-        vkCmdWriteTimestamp(_cmd->Handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
+        vkCmdWriteTimestamp(m_cmd->Handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_handle, 1);
+        m_cmd = nullptr;
         return GetTime();
     }
 
-    float GPUTimer::GetTime()
+    float GpuTimer::GetTime()
     {
         VkResult res = vkGetQueryPoolResults(RHII.GetDevice(),
-                                             queryPool,
+                                             m_handle,
                                              0,
                                              2,
                                              2 * sizeof(uint64_t),
-                                             &queries,
+                                             &m_queries,
                                              sizeof(uint64_t),
                                              VK_QUERY_RESULT_64_BIT);
         if (res != VK_SUCCESS)
             return 0.f;
 
-        return static_cast<float>(queries[1] - queries[0]) * timestampPeriod * 1e-6f;
-    }
-
-    void GPUTimer::Destroy()
-    {
-        if (queryPool)
-            vkDestroyQueryPool(RHII.GetDevice(), queryPool, nullptr);
+        return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f;
     }
 }

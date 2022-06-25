@@ -128,7 +128,7 @@ namespace pe
             static_assert(std::is_base_of_v<IHandle<T, HANDLE>, T>);
 
             T *ptr = new T(std::forward<Params>(params)...);
-            ptr->p = ptr;
+            ptr->m_p = ptr;
 
             // Useful for deleting
             size_t id = NextID();
@@ -142,12 +142,12 @@ namespace pe
         {
             static_assert(std::is_base_of_v<IHandle<T, HANDLE>, T>);
 
-            if (ptr && ptr->p)
+            if (ptr && ptr->m_p)
             {
                 s_allHandles.erase(ptr->m_id);
 
-                delete ptr->p;
-                ptr->p = nullptr;
+                delete ptr->m_p;
+                ptr->m_p = nullptr;
             }
         }
 
@@ -162,7 +162,7 @@ namespace pe
     private:
         void Suicide() override { Destroy(static_cast<T *>(this)); }
 
-        T *p;
+        T *m_p;
     };
 
     struct Placeholder

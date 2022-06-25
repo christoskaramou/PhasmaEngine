@@ -89,25 +89,24 @@ namespace pe
 
     class CommandBuffer;
 
-    class GPUTimer
+    class GpuTimer : public IHandle<GpuTimer, QueryPoolHandle>
     {
     public:
-        GPUTimer();
+        GpuTimer();
+
+        ~GpuTimer();
 
         void Start(CommandBuffer *cmd);
 
         float End();
-
-        void Destroy();
 
     private:
         float GetTime();
 
         void Reset();
 
-        QueryPoolHandle queryPool;
-        uint64_t queries[2]{};
-        float timestampPeriod;
-        CommandBuffer *_cmd;
+        uint64_t m_queries[2]{};
+        float m_timestampPeriod;
+        CommandBuffer *m_cmd;
     };
 }

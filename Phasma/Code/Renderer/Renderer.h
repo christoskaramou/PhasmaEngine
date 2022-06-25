@@ -59,6 +59,8 @@ namespace pe
         void Update(float x, float y, float w, float h, float minDepth = 0.f, float maxDepth = 1.f);
     };
 
+    class GpuTimer;
+
     class Renderer
     {
     public:
@@ -109,7 +111,7 @@ namespace pe
 
     public:
         inline static Queue *s_currentQueue = nullptr;
-        std::vector<GPUTimer> gpuTimers{};
+        std::vector<GpuTimer *> gpuTimers{};
         RenderArea renderArea;
         SkyBox skyBoxDay;
         SkyBox skyBoxNight;

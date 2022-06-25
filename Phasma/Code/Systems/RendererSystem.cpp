@@ -241,8 +241,9 @@ namespace pe
     {
         RHII.WaitDeviceIdle();
 
-        for (auto& gpuTimer : gpuTimers)
-            gpuTimer.Destroy();
+        for (GpuTimer *gpuTimer : gpuTimers)
+            GpuTimer::Destroy(gpuTimer);
+        gpuTimers.clear();
 
         for (auto &rc : m_renderComponents)
             rc.second->Destroy();

@@ -120,18 +120,18 @@ namespace pe
         {
             size_t count = 12 - gpuTimers.size();
             for (size_t i = 0; i < count; i++)
-                gpuTimers.push_back(GPUTimer());
+                gpuTimers.push_back(GpuTimer::Create());
         }
 
         FrameTimer &frameTimer = FrameTimer::Instance();
 
         cmd->BeginDebugRegion("RecordPasses");
 
-        gpuTimers[0].Start(cmd);
+        gpuTimers[0]->Start(cmd);
 
         // MODELS
         cmd->BeginDebugRegion("Geometry");
-        gpuTimers[1].Start(cmd);
+        gpuTimers[1]->Start(cmd);
         deferred.BeginPass(cmd, imageIndex);
         for (auto &model : Model::models)
             model.Draw(cmd, RenderQueue::Opaque);
@@ -140,29 +140,29 @@ namespace pe
         for (auto &model : Model::models)
             model.Draw(cmd, RenderQueue::AlphaBlend);
         deferred.EndPass(cmd);
-        frameTimer.timestamps[4] = gpuTimers[1].End();
+        frameTimer.timestamps[4] = gpuTimers[1]->End();
         cmd->EndDebugRegion();
 
         // SCREEN SPACE AMBIENT OCCLUSION
         if (GUI::show_ssao)
         {
-            gpuTimers[2].Start(cmd);
+            gpuTimers[2]->Start(cmd);
             ssao.Draw(cmd, imageIndex);
-            frameTimer.timestamps[5] = gpuTimers[2].End();
+            frameTimer.timestamps[5] = gpuTimers[2]->End();
         }
 
         // SCREEN SPACE REFLECTIONS
         if (GUI::show_ssr)
         {
-            gpuTimers[3].Start(cmd);
+            gpuTimers[3]->Start(cmd);
             ssr.Draw(cmd, imageIndex);
-            frameTimer.timestamps[6] = gpuTimers[3].End();
+            frameTimer.timestamps[6] = gpuTimers[3]->End();
         }
 
         // COMPOSITION
-        gpuTimers[4].Start(cmd);
+        gpuTimers[4]->Start(cmd);
         deferred.Draw(cmd, imageIndex);
-        frameTimer.timestamps[7] = gpuTimers[4].End();
+        frameTimer.timestamps[7] = gpuTimers[4]->End();
 
         if (GUI::use_SSGI)
         {
@@ -176,51 +176,51 @@ namespace pe
             // TAA
             if (GUI::use_TAA)
             {
-                gpuTimers[5].Start(cmd);
+                gpuTimers[5]->Start(cmd);
                 taa.Draw(cmd, imageIndex);
-                frameTimer.timestamps[8] = gpuTimers[5].End();
+                frameTimer.timestamps[8] = gpuTimers[5]->End();
             }
             // FXAA
             else if (GUI::use_FXAA)
             {
-                gpuTimers[6].Start(cmd);
+                gpuTimers[6]->Start(cmd);
                 fxaa.Draw(cmd, imageIndex);
-                frameTimer.timestamps[8] = gpuTimers[6].End();
+                frameTimer.timestamps[8] = gpuTimers[6]->End();
             }
         }
 
         // BLOOM
         if (GUI::show_Bloom)
         {
-            gpuTimers[7].Start(cmd);
+            gpuTimers[7]->Start(cmd);
             bloom.Draw(cmd, imageIndex);
-            frameTimer.timestamps[9] = gpuTimers[7].End();
+            frameTimer.timestamps[9] = gpuTimers[7]->End();
         }
 
         // Depth of Field
         if (GUI::use_DOF)
         {
-            gpuTimers[8].Start(cmd);
+            gpuTimers[8]->Start(cmd);
             dof.Draw(cmd, imageIndex);
-            frameTimer.timestamps[10] = gpuTimers[8].End();
+            frameTimer.timestamps[10] = gpuTimers[8]->End();
         }
 
         // MOTION BLUR
         if (GUI::show_motionBlur)
         {
-            gpuTimers[9].Start(cmd);
+            gpuTimers[9]->Start(cmd);
             motionBlur.Draw(cmd, imageIndex);
-            frameTimer.timestamps[11] = gpuTimers[9].End();
+            frameTimer.timestamps[11] = gpuTimers[9]->End();
         }
 
         BlitToSwapchain(cmd, GUI::s_currRenderImage ? GUI::s_currRenderImage : m_viewportRT, imageIndex);
 
         // GUI
-        gpuTimers[10].Start(cmd);
+        gpuTimers[10]->Start(cmd);
         gui.Draw(cmd, imageIndex);
-        frameTimer.timestamps[12] = gpuTimers[10].End();
+        frameTimer.timestamps[12] = gpuTimers[10]->End();
 
-        frameTimer.timestamps[2] = gpuTimers[0].End();
+        frameTimer.timestamps[2] = gpuTimers[0]->End();
 
         cmd->EndDebugRegion();
     }
@@ -234,7 +234,7 @@ namespace pe
         {
             size_t addCount = count - gpuTimers.size();
             for (size_t i = 0; i < addCount; i++)
-                gpuTimers.push_back(GPUTimer());
+                gpuTimers.push_back(GpuTimer::Create());
         }
 
         for (uint32_t i = 0; i < count; i++)
@@ -244,7 +244,7 @@ namespace pe
 
             cmd->BeginDebugRegion("Shadow_Cascade_" + std::to_string(i));
 
-            gpuTimers[i].Start(cmd);
+            gpuTimers[i]->Start(cmd);
 
             // MODELS
             shadows.BeginPass(cmd, imageIndex, i);
@@ -252,7 +252,7 @@ namespace pe
                 model.DrawShadow(cmd, i);
             shadows.EndPass(cmd, i);
 
-            frameTimer.timestamps[13 + static_cast<size_t>(i)] = gpuTimers[i].End();
+            frameTimer.timestamps[13 + static_cast<size_t>(i)] = gpuTimers[i]->End();
             cmd->EndDebugRegion();
 
             cmd->End();
