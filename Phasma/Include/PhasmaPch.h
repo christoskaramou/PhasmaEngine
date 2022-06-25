@@ -82,7 +82,6 @@ SOFTWARE.
 #include "Core/EventSystem.h"
 #include "Core/Externs.h"
 
-#include "ECS/ECSBase.h"
 #include "ECS/Component.h"
 #include "ECS/System.h"
 #include "ECS/Entity.h"

@@ -31,19 +31,19 @@ namespace pe
     class ISystem
     {
     public:
-        ISystem() : m_enabled(false)
-        {
-        }
+        ISystem() : m_enabled(false) {}
 
-        virtual ~ISystem()
-        {
-        }
+        virtual ~ISystem() {}
 
         virtual void Init(CommandBuffer *cmd) = 0;
 
         virtual void Update(double delta) = 0;
 
         virtual void Destroy() = 0;
+
+        bool IsEnabled() { return m_enabled; }
+
+        void SetEnabled(bool enabled) { m_enabled = enabled; }
 
         template <class T>
         inline bool HasComponents()
@@ -101,16 +101,6 @@ namespace pe
 
             static const std::vector<T *> empty{};
             return empty;
-        }
-
-        bool IsEnabled()
-        {
-            return m_enabled;
-        }
-
-        void SetEnabled(bool enabled)
-        {
-            m_enabled = enabled;
         }
 
     private:
