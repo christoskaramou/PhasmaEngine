@@ -128,7 +128,6 @@ namespace pe
         m_handle = commandBuffer;
 
         this->name = name;
-        nameHash = StringHash(name);
 
         Debug::SetObjectName(m_handle, ObjectType::CommandBuffer, name);
     }
@@ -372,8 +371,8 @@ namespace pe
             {
                 std::string name = "CommandBuffer_" + std::to_string(i) + "_" + std::to_string(j);
                 CommandBuffer *cmd = CommandBuffer::Create(i, name);
-                s_allCmds[i][cmd->nameHash] = cmd;
-                s_availableCmds[i][cmd->nameHash] = cmd;
+                s_allCmds[i][cmd->GetID()] = cmd;
+                s_availableCmds[i][cmd->GetID()] = cmd;
             }
         }
     }
@@ -397,12 +396,12 @@ namespace pe
         {
             std::string name = "CommandBuffer_" + std::to_string(familyId) + "_" + std::to_string(s_allCmds[familyId].size());
             CommandBuffer *cmd = CommandBuffer::Create(familyId, name);
-            s_allCmds[familyId][cmd->nameHash] = cmd;
+            s_allCmds[familyId][cmd->GetID()] = cmd;
             return cmd;
         }
 
         CommandBuffer *cmd = s_availableCmds[familyId].begin()->second;
-        s_availableCmds[familyId].erase(cmd->nameHash);
+        s_availableCmds[familyId].erase(cmd->GetID());
 
         return cmd;
     }
@@ -416,7 +415,7 @@ namespace pe
         if (!cmd || !cmd->Handle())
             PE_ERROR("CommandBuffer::Return: CommandBuffer is null or invalid");
 
-        if (s_allCmds[cmd->GetFamilyId()].find(cmd->nameHash) == s_allCmds[cmd->GetFamilyId()].end())
+        if (s_allCmds[cmd->GetFamilyId()].find(cmd->GetID()) == s_allCmds[cmd->GetFamilyId()].end())
             PE_ERROR("CommandBuffer::Return: CommandBuffer does not belong to pool");
 
         if (cmd->m_recording)
@@ -426,7 +425,7 @@ namespace pe
             PE_ERROR("CommandBuffer::Return: " + cmd->name + " is not finished!");
         //--------------------------------------------------------------
 
-        s_availableCmds[cmd->GetFamilyId()][cmd->nameHash] = cmd;
+        s_availableCmds[cmd->GetFamilyId()][cmd->GetID()] = cmd;
     }
 
     void CommandBuffer::Wait()

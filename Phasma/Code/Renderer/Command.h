@@ -194,7 +194,6 @@ namespace pe
         std::atomic_uint64_t m_submitions;
         bool m_recording = false;
         std::string name;
-        StringHash nameHash;
         Delegate<> m_afterWaitCallbacks;
     };
 }

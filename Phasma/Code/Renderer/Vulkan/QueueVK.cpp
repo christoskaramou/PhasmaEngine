@@ -42,7 +42,6 @@ namespace pe
         m_imageGranularity = imageGranularity;
 
         this->name = name;
-        nameHash = StringHash(name);
     }
 
     Queue::~Queue()
@@ -205,8 +204,8 @@ namespace pe
                     Queue *queue = Queue::Create(queueVK, i, queueFlags, mitg, "Queue_Queue_" + std::to_string(i) + "_" + std::to_string(j));
                     Debug::SetObjectName(queue->Handle(), ObjectType::Queue, queue->name);
 
-                    s_availableQueues[queue->nameHash] = queue;
-                    s_allQueues[queue->nameHash] = queue;
+                    s_availableQueues[queue->GetID()] = queue;
+                    s_allQueues[queue->GetID()] = queue;
                 }
             }
         }
@@ -228,12 +227,12 @@ namespace pe
         for (auto &queuePair : s_availableQueues)
         {
             Queue &queue = *queuePair.second;
-            if (((queue.GetQueueTypeFlags() & queueType) == queueType) &&
+            if ((queue.GetQueueTypeFlags() & queueType) == queueType &&
                 queue.GetImageGranularity().x <= minImageGranularity &&
                 queue.GetImageGranularity().y <= minImageGranularity &&
                 queue.GetImageGranularity().z <= minImageGranularity)
             {
-                s_availableQueues.erase(queue.nameHash);
+                s_availableQueues.erase(queue.GetID());
                 return &queue;
             }
         }
@@ -251,13 +250,13 @@ namespace pe
         if (!queue || !queue->Handle())
             PE_ERROR("Queue::Return() Invalid queue!");
 
-        if (s_allQueues.find(queue->nameHash) == s_allQueues.end())
+        if (s_allQueues.find(queue->GetID()) == s_allQueues.end())
             PE_ERROR("Queue::Return() Queue not found!");
 
-        if (s_availableQueues.find(queue->nameHash) != s_availableQueues.end())
+        if (s_availableQueues.find(queue->GetID()) != s_availableQueues.end())
             PE_ERROR("Queue::Return() Queue is already returned!");
         // -------------------------------------------------
 
-        s_availableQueues[queue->nameHash] = queue;
+        s_availableQueues[queue->GetID()] = queue;
     }
 }

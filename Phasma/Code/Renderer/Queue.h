@@ -80,6 +80,5 @@ namespace pe
         QueueTypeFlags m_queueTypeFlags;
         ivec3 m_imageGranularity;
         std::string name;
-        StringHash nameHash;
     };
 }

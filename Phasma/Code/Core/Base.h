@@ -89,6 +89,8 @@ namespace pe
     class IHandleBase
     {
     public:
+        IHandleBase() : m_id{NextID()} {}
+
         virtual ~IHandleBase() {}
 
         size_t GetID() const { return m_id; }
@@ -109,7 +111,7 @@ namespace pe
         virtual void Suicide() { PE_ERROR("Unused Base"); }
 
         inline static std::map<size_t, IHandleBase *> s_allHandles{};
-        size_t m_id = 0;
+        size_t m_id;
     };
 
     // Manages a class that contains handles
@@ -131,9 +133,7 @@ namespace pe
             ptr->m_p = ptr;
 
             // Useful for deleting
-            size_t id = NextID();
-            ptr->m_id = id;
-            s_allHandles[id] = ptr;
+            s_allHandles[ptr->m_id] = ptr;
 
             return ptr;
         }
