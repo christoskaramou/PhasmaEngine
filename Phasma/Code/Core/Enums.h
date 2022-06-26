@@ -42,89 +42,31 @@ namespace pe
         bool operator!=(T other) { return m_value != static_cast<Type>(other); }
         bool operator!=(const Flags &other) { return m_value != other.m_value; }
 
-        Flags &operator=(T other)
-        {
-            m_value = static_cast<Type>(other);
-            return *this;
-        }
-        Flags &operator=(const Flags &other)
-        {
-            m_value = other.m_value;
-            return *this;
-        }
+        void operator=(T other) { m_value = static_cast<Type>(other); }
+        void operator=(const Flags &other) { m_value = other.m_value; }
 
-        Flags operator|(T other)
-        {
-            Flags result(*this);
-            result.m_value |= static_cast<Type>(other);
-            return result;
-        }
-        Flags operator|(const Flags &other)
-        {
-            Flags result(*this);
-            result.m_value |= other.m_value;
-            return result;
-        }
+        Flags operator|(T other) { return m_value | static_cast<Type>(other); }
+        Flags operator|(const Flags &other) { return m_value | other.m_value; }
 
-        Flags &operator|=(T other)
-        {
-            m_value |= static_cast<Type>(other);
-            return *this;
-        }
-        Flags &operator|=(const Flags &other)
-        {
-            m_value |= other.m_value;
-            return *this;
-        }
+        void operator|=(T other) { m_value |= static_cast<Type>(other); }
+        void operator|=(const Flags &other) { m_value |= other.m_value; }
 
-        Flags operator&(T other)
-        {
-            Flags result(*this);
-            result.m_value &= static_cast<Type>(other);
-            return result;
-        }
-        Flags operator&(const Flags &other)
-        {
-            Flags result(*this);
-            result.m_value &= other.m_value;
-            return result;
-        }
+        Flags operator&(T other) { return m_value & static_cast<Type>(other); }
+        Flags operator&(const Flags &other) { return m_value & other.m_value; }
 
-        Flags &operator&=(T other)
-        {
-            m_value &= static_cast<Type>(other);
-            return *this;
-        }
-        Flags &operator&=(const Flags &other)
-        {
-            m_value &= other.m_value;
-            return *this;
-        }
+        void operator&=(T other) { m_value &= static_cast<Type>(other); }
+        void operator&=(const Flags &other) { m_value &= other.m_value; }
 
-        Flags operator^(T other)
-        {
-            Flags result(*this);
-            result.m_value ^= static_cast<Type>(other);
-            return result;
-        }
-        Flags operator^(const Flags &other)
-        {
-            m_value ^= other.m_value;
-            return *this;
-        }
+        Flags operator^(T other) { return m_value ^ static_cast<Type>(other); }
+        Flags operator^(const Flags &other) { return m_value ^ other.m_value; }
 
-        Flags &operator^=(T other)
-        {
-            m_value ^= static_cast<Type>(other);
-            return *this;
-        }
-        Flags &operator^=(const Flags &other)
-        {
-            m_value ^= other.m_value;
-            return *this;
-        }
+        void operator^=(T other) { m_value ^= static_cast<Type>(other); }
+        void operator^=(const Flags &other) { m_value ^= other.m_value; }
 
     private:
+        // In class use only, for casting Type to Flags
+        Flags(Type value) : m_value(value) {}
+
         Type m_value;
     };
 

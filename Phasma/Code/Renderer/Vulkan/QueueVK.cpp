@@ -227,14 +227,14 @@ namespace pe
 
         for (auto &queuePair : s_availableQueues)
         {
-            Queue *queue = queuePair.second;
-            if ((queue->GetQueueTypeFlags() & queueType) == queueType &&
-                queue->GetImageGranularity().x <= minImageGranularity &&
-                queue->GetImageGranularity().y <= minImageGranularity &&
-                queue->GetImageGranularity().z <= minImageGranularity)
+            Queue &queue = *queuePair.second;
+            if (((queue.GetQueueTypeFlags() & queueType) == queueType) &&
+                queue.GetImageGranularity().x <= minImageGranularity &&
+                queue.GetImageGranularity().y <= minImageGranularity &&
+                queue.GetImageGranularity().z <= minImageGranularity)
             {
-                s_availableQueues.erase(queue->nameHash);
-                return queue;
+                s_availableQueues.erase(queue.nameHash);
+                return &queue;
             }
         }
 
