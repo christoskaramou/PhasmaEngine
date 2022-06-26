@@ -193,7 +193,7 @@ namespace pe
         Semaphore *m_semaphore;
         std::atomic_uint64_t m_submitions;
         bool m_recording = false;
-        std::string name;
+        std::string m_name;
         Delegate<> m_afterWaitCallbacks;
     };
 }

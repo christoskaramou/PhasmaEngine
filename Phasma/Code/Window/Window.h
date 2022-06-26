@@ -26,7 +26,7 @@ namespace pe
 {
     class Context;
 
-    class Window : public IHandle<Window, SDL_Window *>
+    class Window : public IHandle<Window, WindowHandle>
     {
     public:
         Window(int x, int y, int w, int h, uint32_t flags);

@@ -37,6 +37,15 @@ namespace pe
         return typeID;
     }
 
+    struct PlaceHolderBase
+    {
+    };
+
+    template <uint32_t N>
+    struct Placeholder : PlaceHolderBase
+    {
+    };
+
     class NoCopy
     {
     public:
@@ -57,9 +66,17 @@ namespace pe
         NoMove &operator=(NoMove &&) = delete;
     };
 
+    class ApiHandleBase
+    {
+    protected:
+        ApiHandleBase(void *handle) : m_handle{handle} {}
+        virtual ~ApiHandleBase() {}
+        void *m_handle;
+    };
+
     // Used to abstract rendering api handles
     template <class VK_TYPE, class DX_TYPE>
-    class ApiHandle final
+    class ApiHandle final : public ApiHandleBase
     {
         // Only work with pointers
         static_assert(std::is_pointer_v<VK_TYPE>, "ApiHandle type is not a pointer");
@@ -69,9 +86,9 @@ namespace pe
         using BaseVK = VK_TYPE;
         using BaseDX = DX_TYPE;
 
-        ApiHandle() : m_handle(nullptr) {}
-        ApiHandle(const VK_TYPE &handle) : m_handle(handle) {}
-        ApiHandle(const DX_TYPE &handle) : m_handle(handle) {}
+        ApiHandle() : ApiHandleBase(nullptr) {}
+        ApiHandle(const VK_TYPE &handle) : ApiHandleBase(handle) {}
+        ApiHandle(const DX_TYPE &handle) : ApiHandleBase(handle) {}
 
         // Operators for auto casting
         operator VK_TYPE() { return static_cast<VK_TYPE>(m_handle); }
@@ -81,9 +98,6 @@ namespace pe
         operator uintptr_t() { return reinterpret_cast<uintptr_t>(m_handle); }
         operator bool() { return m_handle != nullptr; }
         bool operator!() { return m_handle == nullptr; }
-
-    private:
-        void *m_handle;
     };
 
     class IHandleBase
@@ -127,7 +141,8 @@ namespace pe
         template <class... Params>
         inline static T *Create(Params &&...params)
         {
-            static_assert(std::is_base_of_v<IHandle<T, HANDLE>, T>);
+            ValidateBaseClass<ApiHandleBase, HANDLE>();
+            ValidateBaseClass<IHandle<T, HANDLE>, T>();
 
             T *ptr = new T(std::forward<Params>(params)...);
             ptr->m_p = ptr;
@@ -140,7 +155,8 @@ namespace pe
 
         inline static void Destroy(T *ptr)
         {
-            static_assert(std::is_base_of_v<IHandle<T, HANDLE>, T>);
+            ValidateBaseClass<ApiHandleBase, HANDLE>();
+            ValidateBaseClass<IHandle<T, HANDLE>, T>();
 
             if (ptr && ptr->m_p)
             {
@@ -165,33 +181,31 @@ namespace pe
         T *m_p;
     };
 
-    struct Placeholder
-    {
-    };
-
-    using CommandBufferHandle = ApiHandle<VkCommandBuffer, Placeholder *>;
-    using DescriptorSetLayoutHandle = ApiHandle<VkDescriptorSetLayout, Placeholder *>;
-    using DescriptorSetHandle = ApiHandle<VkDescriptorSet, Placeholder *>;
-    using FrameBufferHandle = ApiHandle<VkFramebuffer, Placeholder *>;
-    using ImageHandle = ApiHandle<VkImage, Placeholder *>;
-    using ImageViewHandle = ApiHandle<VkImageView, Placeholder *>;
-    using SamplerHandle = ApiHandle<VkSampler, Placeholder *>;
-    using RenderPassHandle = ApiHandle<VkRenderPass, Placeholder *>;
-    using CommandPoolHandle = ApiHandle<VkCommandPool, Placeholder *>;
-    using BufferHandle = ApiHandle<VkBuffer, Placeholder *>;
-    using PipelineCacheHandle = ApiHandle<VkPipelineCache, Placeholder *>;
-    using PipelineLayoutHandle = ApiHandle<VkPipelineLayout, Placeholder *>;
-    using PipelineHandle = ApiHandle<VkPipeline, Placeholder *>;
-    using SemaphoreHandle = ApiHandle<VkSemaphore, Placeholder *>;
-    using QueryPoolHandle = ApiHandle<VkQueryPool, Placeholder *>;
-    using SwapchainHandle = ApiHandle<VkSwapchainKHR, Placeholder *>;
-    using DeviceHandle = ApiHandle<VkDevice, Placeholder *>;
-    using SurfaceHandle = ApiHandle<VkSurfaceKHR, Placeholder *>;
-    using InstanceHandle = ApiHandle<VkInstance, Placeholder *>;
-    using GpuHandle = ApiHandle<VkPhysicalDevice, Placeholder *>;
-    using DebugMessengerHandle = ApiHandle<VkDebugUtilsMessengerEXT, Placeholder *>;
-    using QueueHandle = ApiHandle<VkQueue, Placeholder *>;
-    using DescriptorPoolHandle = ApiHandle<VkDescriptorPool, Placeholder *>;
-    using AllocationHandle = ApiHandle<VmaAllocation, Placeholder *>;
-    using AllocatorHandle = ApiHandle<VmaAllocator, Placeholder *>;
+    using CommandBufferHandle = ApiHandle<VkCommandBuffer, Placeholder<0> *>;
+    using DescriptorSetLayoutHandle = ApiHandle<VkDescriptorSetLayout, Placeholder<0> *>;
+    using DescriptorSetHandle = ApiHandle<VkDescriptorSet, Placeholder<0> *>;
+    using FrameBufferHandle = ApiHandle<VkFramebuffer, Placeholder<0> *>;
+    using ImageHandle = ApiHandle<VkImage, Placeholder<0> *>;
+    using ImageViewHandle = ApiHandle<VkImageView, Placeholder<0> *>;
+    using SamplerHandle = ApiHandle<VkSampler, Placeholder<0> *>;
+    using RenderPassHandle = ApiHandle<VkRenderPass, Placeholder<0> *>;
+    using CommandPoolHandle = ApiHandle<VkCommandPool, Placeholder<0> *>;
+    using BufferHandle = ApiHandle<VkBuffer, Placeholder<0> *>;
+    using PipelineCacheHandle = ApiHandle<VkPipelineCache, Placeholder<0> *>;
+    using PipelineLayoutHandle = ApiHandle<VkPipelineLayout, Placeholder<0> *>;
+    using PipelineHandle = ApiHandle<VkPipeline, Placeholder<0> *>;
+    using SemaphoreHandle = ApiHandle<VkSemaphore, Placeholder<0> *>;
+    using QueryPoolHandle = ApiHandle<VkQueryPool, Placeholder<0> *>;
+    using SwapchainHandle = ApiHandle<VkSwapchainKHR, Placeholder<0> *>;
+    using DeviceHandle = ApiHandle<VkDevice, Placeholder<0> *>;
+    using SurfaceHandle = ApiHandle<VkSurfaceKHR, Placeholder<0> *>;
+    using InstanceHandle = ApiHandle<VkInstance, Placeholder<0> *>;
+    using GpuHandle = ApiHandle<VkPhysicalDevice, Placeholder<0> *>;
+    using DebugMessengerHandle = ApiHandle<VkDebugUtilsMessengerEXT, Placeholder<0> *>;
+    using QueueHandle = ApiHandle<VkQueue, Placeholder<0> *>;
+    using DescriptorPoolHandle = ApiHandle<VkDescriptorPool, Placeholder<0> *>;
+    using AllocationHandle = ApiHandle<VmaAllocation, Placeholder<0> *>;
+    using AllocatorHandle = ApiHandle<VmaAllocator, Placeholder<0> *>;
+    using WindowHandle = ApiHandle<SDL_Window *, Placeholder<0> *>;
+    using ShaderHandle = ApiHandle<Placeholder<0> *, Placeholder<1> *>;
 }

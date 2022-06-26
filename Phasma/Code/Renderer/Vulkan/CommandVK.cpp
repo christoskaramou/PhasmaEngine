@@ -127,7 +127,7 @@ namespace pe
         PE_CHECK(vkAllocateCommandBuffers(RHII.GetDevice(), &cbai, &commandBuffer));
         m_handle = commandBuffer;
 
-        this->name = name;
+        m_name = name;
 
         Debug::SetObjectName(m_handle, ObjectType::CommandBuffer, name);
     }
@@ -136,15 +136,12 @@ namespace pe
     {
         Semaphore::Destroy(m_semaphore);
 
-        if (m_handle)
+        if (m_handle && m_commandPool)
         {
             VkCommandBuffer cmd = m_handle;
             vkFreeCommandBuffers(RHII.GetDevice(), m_commandPool->Handle(), 1, &cmd);
             m_handle = {};
-        }
 
-        if (m_commandPool)
-        {
             CommandPool::Return(m_commandPool);
             m_commandPool = nullptr;
         }
@@ -371,8 +368,8 @@ namespace pe
             {
                 std::string name = "CommandBuffer_" + std::to_string(i) + "_" + std::to_string(j);
                 CommandBuffer *cmd = CommandBuffer::Create(i, name);
-                s_allCmds[i][cmd->GetID()] = cmd;
-                s_availableCmds[i][cmd->GetID()] = cmd;
+                s_allCmds[i][cmd->m_id] = cmd;
+                s_availableCmds[i][cmd->m_id] = cmd;
             }
         }
     }
@@ -396,12 +393,12 @@ namespace pe
         {
             std::string name = "CommandBuffer_" + std::to_string(familyId) + "_" + std::to_string(s_allCmds[familyId].size());
             CommandBuffer *cmd = CommandBuffer::Create(familyId, name);
-            s_allCmds[familyId][cmd->GetID()] = cmd;
+            s_allCmds[familyId][cmd->m_id] = cmd;
             return cmd;
         }
 
         CommandBuffer *cmd = s_availableCmds[familyId].begin()->second;
-        s_availableCmds[familyId].erase(cmd->GetID());
+        s_availableCmds[familyId].erase(cmd->m_id);
 
         return cmd;
     }
@@ -412,20 +409,20 @@ namespace pe
 
         // CHECKS
         // -------------------------------------------------------------
-        if (!cmd || !cmd->Handle())
+        if (!cmd || !cmd->m_handle)
             PE_ERROR("CommandBuffer::Return: CommandBuffer is null or invalid");
 
-        if (s_allCmds[cmd->GetFamilyId()].find(cmd->GetID()) == s_allCmds[cmd->GetFamilyId()].end())
+        if (s_allCmds[cmd->GetFamilyId()].find(cmd->m_id) == s_allCmds[cmd->m_familyId].end())
             PE_ERROR("CommandBuffer::Return: CommandBuffer does not belong to pool");
 
         if (cmd->m_recording)
-            PE_ERROR("CommandBuffer::Return: " + cmd->name + " is still recording!");
+            PE_ERROR("CommandBuffer::Return: " + cmd->m_name + " is still recording!");
 
         if (cmd->m_semaphore->GetValue() != cmd->m_submitions)
-            PE_ERROR("CommandBuffer::Return: " + cmd->name + " is not finished!");
+            PE_ERROR("CommandBuffer::Return: " + cmd->m_name + " is not finished!");
         //--------------------------------------------------------------
 
-        s_availableCmds[cmd->GetFamilyId()][cmd->GetID()] = cmd;
+        s_availableCmds[cmd->GetFamilyId()][cmd->m_id] = cmd;
     }
 
     void CommandBuffer::Wait()
@@ -433,7 +430,7 @@ namespace pe
         std::lock_guard<std::mutex> lock(s_WaitMutex);
 
         if (m_recording)
-            PE_ERROR("CommandBuffer::Wait: " + name + " is still recording!");
+            PE_ERROR("CommandBuffer::Wait: " + m_name + " is still recording!");
 
         m_semaphore->Wait(m_submitions);
 
