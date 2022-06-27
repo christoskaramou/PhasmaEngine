@@ -50,12 +50,12 @@ namespace pe
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = size;
-        bufferInfo.usage = GetBufferUsageFlagsVK(usage);
+        bufferInfo.usage = Translate<VkBufferUsageFlags>(usage);
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
         VmaAllocationCreateInfo allocationCreateInfo{};
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-        allocationCreateInfo.flags = GetAllocationCreateFlagsVMA(createFlags);
+        allocationCreateInfo.flags = Translate<VmaAllocationCreateFlags>(createFlags);
 
         VkBuffer bufferVK;
         VmaAllocation allocationVK;

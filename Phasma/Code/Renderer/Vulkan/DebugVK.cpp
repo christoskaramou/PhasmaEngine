@@ -197,7 +197,7 @@ namespace pe
         VkDebugUtilsObjectNameInfoEXT objectInfo{};
         objectInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
         objectInfo.pNext = VK_NULL_HANDLE;
-        objectInfo.objectType = GetObjectTypeVK(type);
+        objectInfo.objectType = Translate<VkObjectType>(type);
         objectInfo.objectHandle = object;
         objectInfo.pObjectName = name.c_str();
 

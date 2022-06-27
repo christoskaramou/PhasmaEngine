@@ -34,7 +34,7 @@ namespace pe
         std::vector<VkDescriptorPoolSize> descPoolsize(count);
         for (uint32_t i = 0; i < count; i++)
         {
-            descPoolsize[i].type = GetDescriptorTypeVK(sizes[i].type);
+            descPoolsize[i].type = Translate<VkDescriptorType>(sizes[i].type);
             descPoolsize[i].descriptorCount = sizes[i].descriptorCount;
             maxDescriptors += sizes[i].descriptorCount;
         }
@@ -80,9 +80,9 @@ namespace pe
         {
             VkDescriptorSetLayoutBinding layoutBinding{};
             layoutBinding.binding = binding;
-            layoutBinding.descriptorType = GetDescriptorTypeVK(bindingInfos[0].type);
+            layoutBinding.descriptorType = Translate<VkDescriptorType>(bindingInfos[0].type);
             layoutBinding.descriptorCount = static_cast<uint32_t>(bindingInfos.size());
-            layoutBinding.stageFlags = GetShaderStageVK(info->stage);
+            layoutBinding.stageFlags = Translate<VkShaderStageFlags>(info->stage);
             layoutBinding.pImmutableSamplers = nullptr;
 
             bindings.push_back(layoutBinding);
@@ -238,7 +238,7 @@ namespace pe
                         VkDescriptorImageInfo{
                             bindingInfo.pImage->sampler,
                             bindingInfo.pImage->view,
-                            GetImageLayoutVK(bindingInfo.imageLayout)});
+                            Translate<VkImageLayout>(bindingInfo.imageLayout)});
                 }
                 else if (bindingInfo.pBuffer != nullptr)
                 {
@@ -265,7 +265,7 @@ namespace pe
             writeSet.dstBinding = binding;
             writeSet.dstArrayElement = 0;
             writeSet.descriptorCount = static_cast<uint32_t>(bindingInfos.size());
-            writeSet.descriptorType = GetDescriptorTypeVK(bindingInfos[0].type);
+            writeSet.descriptorType = Translate<VkDescriptorType>(bindingInfos[0].type);
 
             if (bindingInfos[0].type == DescriptorType::CombinedImageSampler)
             {

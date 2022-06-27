@@ -56,14 +56,14 @@ namespace pe
             Attachment &attachment = attachments[i];
             VkAttachmentDescription attachmentDescription{};
 
-            attachmentDescription.format = GetFormatVK(attachment.format);
-            attachmentDescription.samples = GetSampleCountVK(attachment.samples);
-            attachmentDescription.loadOp = GetAttachmentLoadOpVK(attachment.loadOp);
-            attachmentDescription.storeOp = GetAttachmentStoreOpVK(attachment.storeOp);
-            attachmentDescription.stencilLoadOp = GetAttachmentLoadOpVK(attachment.stencilLoadOp);
-            attachmentDescription.stencilStoreOp = GetAttachmentStoreOpVK(attachment.stencilStoreOp);
-            attachmentDescription.initialLayout = GetImageLayoutVK(attachment.initialLayout);
-            attachmentDescription.finalLayout = GetImageLayoutVK(attachment.finalLayout);
+            attachmentDescription.format = Translate<VkFormat>(attachment.format);
+            attachmentDescription.samples = Translate<VkSampleCountFlagBits>(attachment.samples);
+            attachmentDescription.loadOp = Translate<VkAttachmentLoadOp>(attachment.loadOp);
+            attachmentDescription.storeOp = Translate<VkAttachmentStoreOp>(attachment.storeOp);
+            attachmentDescription.stencilLoadOp = Translate<VkAttachmentLoadOp>(attachment.stencilLoadOp);
+            attachmentDescription.stencilStoreOp = Translate<VkAttachmentStoreOp>(attachment.stencilStoreOp);
+            attachmentDescription.initialLayout = Translate<VkImageLayout>(attachment.initialLayout);
+            attachmentDescription.finalLayout = Translate<VkImageLayout>(attachment.finalLayout);
             attachmentsVK.push_back(attachmentDescription);
 
             if (!IsDepthFormat(attachment.format))

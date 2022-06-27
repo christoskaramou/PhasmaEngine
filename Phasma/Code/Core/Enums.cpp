@@ -120,7 +120,8 @@ namespace pe
         }
     }
 
-    ImageLayout GetLayoutFromVK(VkImageLayout layout)
+    template <>
+    ImageLayout Translate<ImageLayout>(VkImageLayout layout)
     {
         switch (layout)
         {
@@ -172,7 +173,8 @@ namespace pe
         return ImageLayout::Undefined;
     }
 
-    VkImageLayout GetImageLayoutVK(ImageLayout layout)
+    template <>
+    VkImageLayout Translate<VkImageLayout>(ImageLayout layout)
     {
         switch (layout)
         {
@@ -224,7 +226,8 @@ namespace pe
         return VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
-    VkShaderStageFlags GetShaderStageVK(ShaderStageFlags flags)
+    template <>
+    VkShaderStageFlags Translate<VkShaderStageFlags>(ShaderStageFlags flags)
     {
         if (!flags)
             return 0;
@@ -263,7 +266,14 @@ namespace pe
         return vkFlags;
     }
 
-    VkFilter GetFilterVK(Filter filter)
+    template <>
+    VkShaderStageFlags Translate<VkShaderStageFlags>(ShaderStage flag)
+    {
+        return Translate<VkShaderStageFlags, ShaderStageFlags>(flag);
+    }
+
+    template <>
+    VkFilter Translate<VkFilter>(Filter filter)
     {
         switch (filter)
         {
@@ -279,7 +289,8 @@ namespace pe
         return VK_FILTER_NEAREST;
     }
 
-    VkImageAspectFlags GetImageAspectVK(ImageAspectFlags flags)
+    template <>
+    VkImageAspectFlags Translate<VkImageAspectFlags>(ImageAspectFlags flags)
     {
         if (!flags)
             return 0;
@@ -296,7 +307,14 @@ namespace pe
         return vkFlags;
     }
 
-    VkSamplerMipmapMode GetSamplerMipmapModeVK(SamplerMipmapMode mode)
+    template <>
+    VkImageAspectFlags Translate<VkImageAspectFlags>(ImageAspect flag)
+    {
+        return Translate<VkImageAspectFlags, ImageAspectFlags>(flag);
+    }
+
+    template <>
+    VkSamplerMipmapMode Translate<VkSamplerMipmapMode>(SamplerMipmapMode mode)
     {
         switch (mode)
         {
@@ -310,7 +328,8 @@ namespace pe
         return VK_SAMPLER_MIPMAP_MODE_NEAREST;
     }
 
-    VkSamplerAddressMode GetSamplerAddressMode(SamplerAddressMode mode)
+    template <>
+    VkSamplerAddressMode Translate<VkSamplerAddressMode>(SamplerAddressMode mode)
     {
         switch (mode)
         {
@@ -330,7 +349,8 @@ namespace pe
         return VK_SAMPLER_ADDRESS_MODE_REPEAT;
     }
 
-    VkCompareOp GetCompareOpVK(CompareOp op)
+    template <>
+    VkCompareOp Translate<VkCompareOp>(CompareOp op)
     {
         switch (op)
         {
@@ -356,7 +376,8 @@ namespace pe
         return VK_COMPARE_OP_NEVER;
     }
 
-    VkBorderColor GetBorderColorVK(BorderColor color)
+    template <>
+    VkBorderColor Translate<VkBorderColor>(BorderColor color)
     {
         switch (color)
         {
@@ -378,7 +399,8 @@ namespace pe
         return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
     }
 
-    VkImageType GetImageTypeVK(ImageType type)
+    template <>
+    VkImageType Translate<VkImageType>(ImageType type)
     {
         switch (type)
         {
@@ -394,7 +416,8 @@ namespace pe
         return VK_IMAGE_TYPE_1D;
     }
 
-    VkImageViewType GetImageViewTypeVK(ImageViewType type)
+    template <>
+    VkImageViewType Translate<VkImageViewType>(ImageViewType type)
     {
         switch (type)
         {
@@ -418,7 +441,8 @@ namespace pe
         return VK_IMAGE_VIEW_TYPE_1D;
     }
 
-    VkSampleCountFlagBits GetSampleCountVK(SampleCount count)
+    template <>
+    VkSampleCountFlagBits Translate<VkSampleCountFlagBits>(SampleCount count)
     {
         switch (count)
         {
@@ -442,7 +466,8 @@ namespace pe
         return VK_SAMPLE_COUNT_1_BIT;
     }
 
-    VkFormat GetFormatVK(Format format)
+    template <>
+    VkFormat Translate<VkFormat>(Format format)
     {
         switch (format)
         {
@@ -512,7 +537,8 @@ namespace pe
         return VK_FORMAT_UNDEFINED;
     }
 
-    Format GetFormatFromVK(VkFormat format)
+    template <>
+    Format Translate<Format>(VkFormat format)
     {
         switch (format)
         {
@@ -582,7 +608,8 @@ namespace pe
         return Format::Undefined;
     }
 
-    VkImageTiling GetImageTilingVK(ImageTiling tiling)
+    template <>
+    VkImageTiling Translate<VkImageTiling>(ImageTiling tiling)
     {
         switch (tiling)
         {
@@ -596,7 +623,8 @@ namespace pe
         return VK_IMAGE_TILING_OPTIMAL;
     }
 
-    VkImageUsageFlags GetImageUsageVK(ImageUsageFlags flags)
+    template <>
+    VkImageUsageFlags Translate<VkImageUsageFlags>(ImageUsageFlags flags)
     {
         if (!flags)
             return 0;
@@ -623,7 +651,14 @@ namespace pe
         return vkFlags;
     }
 
-    VkSharingMode GetSharingModeVK(SharingMode mode)
+    template <>
+    VkImageUsageFlags Translate<VkImageUsageFlags>(ImageUsage flag)
+    {
+        return Translate<VkImageAspectFlags, ImageUsageFlags>(flag);
+    }
+
+    template <>
+    VkSharingMode Translate<VkSharingMode>(SharingMode mode)
     {
         switch (mode)
         {
@@ -637,7 +672,8 @@ namespace pe
         return VK_SHARING_MODE_EXCLUSIVE;
     }
 
-    VkImageCreateFlags GetImageCreateFlagsVK(ImageCreateFlags flags)
+    template <>
+    VkImageCreateFlags Translate<VkImageCreateFlags>(ImageCreateFlags flags)
     {
         VkImageCreateFlags vkFlags = 0;
 
@@ -680,7 +716,14 @@ namespace pe
         return vkFlags;
     }
 
-    VkCommandBufferUsageFlags GetCommandBufferUsageFlagsVK(CommandBufferUsageFlags flags)
+    template <>
+    VkImageCreateFlags Translate<VkImageCreateFlags>(ImageCreate flag)
+    {
+        return Translate<VkImageCreateFlags, ImageCreateFlags>(flag);
+    }
+
+    template <>
+    VkCommandBufferUsageFlags Translate<VkCommandBufferUsageFlags>(CommandBufferUsageFlags flags)
     {
         if (!flags)
             return 0;
@@ -697,7 +740,14 @@ namespace pe
         return vkFlags;
     }
 
-    VkBufferUsageFlags GetBufferUsageFlagsVK(BufferUsageFlags flags)
+    template <>
+    VkCommandBufferUsageFlags Translate<VkCommandBufferUsageFlags>(CommandBufferUsage flag)
+    {
+        return Translate<VkCommandBufferUsageFlags, CommandBufferUsageFlags>(flag);
+    }
+
+    template <>
+    VkBufferUsageFlags Translate<VkBufferUsageFlags>(BufferUsageFlags flags)
     {
         if (!flags)
             return 0;
@@ -740,7 +790,14 @@ namespace pe
         return vkFlags;
     }
 
-    VkOffset3D GetOffset3DVK(const Offset3D &offset)
+    template <>
+    VkBufferUsageFlags Translate<VkBufferUsageFlags>(BufferUsage flag)
+    {
+        return Translate<VkBufferUsageFlags, BufferUsageFlags>(flag);
+    }
+
+    template <>
+    VkOffset3D Translate<VkOffset3D>(const Offset3D &offset)
     {
         VkOffset3D vkOffset;
         vkOffset.x = offset.x;
@@ -749,7 +806,8 @@ namespace pe
         return vkOffset;
     }
 
-    VkColorSpaceKHR GetColorSpaceVK(ColorSpace colorSpace)
+    template <>
+    VkColorSpaceKHR Translate<VkColorSpaceKHR>(ColorSpace colorSpace)
     {
         switch (colorSpace)
         {
@@ -789,7 +847,8 @@ namespace pe
         return VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     }
 
-    ColorSpace GetColorSpaceFromVK(VkColorSpaceKHR colorSpace)
+    template <>
+    ColorSpace Translate<ColorSpace>(VkColorSpaceKHR colorSpace)
     {
         switch (colorSpace)
         {
@@ -829,7 +888,8 @@ namespace pe
         return ColorSpace::SrgbNonLinear;
     }
 
-    VkPresentModeKHR GetPresentModeVK(PresentMode presentMode)
+    template <>
+    VkPresentModeKHR Translate<VkPresentModeKHR>(PresentMode presentMode)
     {
         switch (presentMode)
         {
@@ -851,7 +911,8 @@ namespace pe
         return VK_PRESENT_MODE_FIFO_KHR;
     }
 
-    PresentMode GetPresentModeFromVK(VkPresentModeKHR presentMode)
+    template <>
+    PresentMode Translate<PresentMode>(VkPresentModeKHR presentMode)
     {
         switch (presentMode)
         {
@@ -873,7 +934,8 @@ namespace pe
         return PresentMode::Fifo;
     }
 
-    VkPipelineStageFlags GetPipelineStageFlagsVK(PipelineStageFlags flags)
+    template <>
+    VkPipelineStageFlags Translate<VkPipelineStageFlags>(PipelineStageFlags flags)
     {
         if (!flags)
             return 0;
@@ -934,6 +996,12 @@ namespace pe
         return vkFlags;
     }
 
+    template <>
+    VkPipelineStageFlags Translate<VkPipelineStageFlags>(PipelineStage flag)
+    {
+        return Translate<VkPipelineStageFlags, PipelineStageFlags>(flag);
+    }
+
     bool IsDepthFormatVK(VkFormat format)
     {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
@@ -960,7 +1028,8 @@ namespace pe
                format == Format::D24UnormS8UInt;
     }
 
-    VkAttachmentLoadOp GetAttachmentLoadOpVK(AttachmentLoadOp loadOp)
+    template <>
+    VkAttachmentLoadOp Translate<VkAttachmentLoadOp>(AttachmentLoadOp loadOp)
     {
         switch (loadOp)
         {
@@ -976,7 +1045,8 @@ namespace pe
         return VK_ATTACHMENT_LOAD_OP_LOAD;
     }
 
-    VkAttachmentStoreOp GetAttachmentStoreOpVK(AttachmentStoreOp storeOp)
+    template <>
+    VkAttachmentStoreOp Translate<VkAttachmentStoreOp>(AttachmentStoreOp storeOp)
     {
         switch (storeOp)
         {
@@ -990,7 +1060,8 @@ namespace pe
         return VK_ATTACHMENT_STORE_OP_STORE;
     }
 
-    VkAccessFlags GetAccessFlagsVK(AccessFlags flags)
+    template <>
+    VkAccessFlags Translate<VkAccessFlags>(AccessFlags flags)
     {
         if (!flags)
             return 0;
@@ -1053,7 +1124,14 @@ namespace pe
         return vkFlags;
     }
 
-    VmaAllocationCreateFlags GetAllocationCreateFlagsVMA(AllocationCreateFlags flags)
+    template <>
+    VkAccessFlags Translate<VkAccessFlags>(Access flag)
+    {
+        return Translate<VkAccessFlags, AccessFlags>(flag);
+    }
+
+    template <>
+    VmaAllocationCreateFlags Translate<VmaAllocationCreateFlags>(AllocationCreateFlags flags)
     {
         if (!flags)
             return 0;
@@ -1092,7 +1170,14 @@ namespace pe
         return vmaFlags;
     }
 
-    VkBlendFactor GetBlendFactorVK(BlendFactor blendFactor)
+    template <>
+    VmaAllocationCreateFlags Translate<VmaAllocationCreateFlags>(AllocationCreate flag)
+    {
+        return Translate<VmaAllocationCreateFlags, AllocationCreateFlags>(flag);
+    }
+
+    template <>
+    VkBlendFactor Translate<VkBlendFactor>(BlendFactor blendFactor)
     {
         switch (blendFactor)
         {
@@ -1140,7 +1225,8 @@ namespace pe
         return VK_BLEND_FACTOR_ZERO;
     }
 
-    VkBlendOp GetBlendOpVK(BlendOp blendOp)
+    template <>
+    VkBlendOp Translate<VkBlendOp>(BlendOp blendOp)
     {
         switch (blendOp)
         {
@@ -1252,7 +1338,8 @@ namespace pe
         return VK_BLEND_OP_ADD;
     }
 
-    VkColorComponentFlags GetColorComponentFlagsVK(ColorComponentFlags flags)
+    template <>
+    VkColorComponentFlags Translate<VkColorComponentFlags>(ColorComponentFlags flags)
     {
         if (!flags)
             return 0;
@@ -1271,7 +1358,14 @@ namespace pe
         return vkFlags;
     }
 
-    VkDynamicState GetDynamicStateVK(DynamicState state)
+    template <>
+    VkColorComponentFlags Translate<VkColorComponentFlags>(ColorComponent flag)
+    {
+        return Translate<VkColorComponentFlags, ColorComponentFlags>(flag);
+    }
+
+    template <>
+    VkDynamicState Translate<VkDynamicState>(DynamicState state)
     {
         switch (state)
         {
@@ -1347,7 +1441,8 @@ namespace pe
         return VK_DYNAMIC_STATE_VIEWPORT;
     }
 
-    VkDescriptorType GetDescriptorTypeVK(DescriptorType type)
+    template <>
+    VkDescriptorType Translate<VkDescriptorType>(DescriptorType type)
     {
         switch (type)
         {
@@ -1383,7 +1478,8 @@ namespace pe
         return VK_DESCRIPTOR_TYPE_SAMPLER;
     }
 
-    VkCullModeFlags GetCullModeVK(CullMode mode)
+    template <>
+    VkCullModeFlags Translate<VkCullModeFlags>(CullMode mode)
     {
         switch (mode)
         {
@@ -1401,7 +1497,8 @@ namespace pe
         return VK_CULL_MODE_NONE;
     }
 
-    VkObjectType GetObjectTypeVK(ObjectType type)
+    template <>
+    VkObjectType Translate<VkObjectType>(ObjectType type)
     {
         switch (type)
         {
@@ -1487,7 +1584,8 @@ namespace pe
         return VK_OBJECT_TYPE_UNKNOWN;
     }
 
-    VkVertexInputRate GetVertexInputRateVK(VertexInputRate rate)
+    template <>
+    VkVertexInputRate Translate<VkVertexInputRate>(VertexInputRate rate)
     {
         switch (rate)
         {
@@ -1501,7 +1599,8 @@ namespace pe
         return VK_VERTEX_INPUT_RATE_VERTEX;
     }
 
-    VkAttachmentDescriptionFlags GetAttachmentDescriptionVK(AttachmentDescriptionFlags flags)
+    template <>
+    VkAttachmentDescriptionFlags Translate<VkAttachmentDescriptionFlags>(AttachmentDescriptionFlags flags)
     {
         if (!flags)
             return 0;
@@ -1512,5 +1611,11 @@ namespace pe
             vkFlags |= VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT;
 
         return vkFlags;
+    }
+
+    template <>
+    VkAttachmentDescriptionFlags Translate<VkAttachmentDescriptionFlags>(AttachmentDescription flag)
+    {
+        return Translate<VkAttachmentDescriptionFlags, AttachmentDescriptionFlags>(flag);
     }
 }

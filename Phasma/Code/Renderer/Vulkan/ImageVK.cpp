@@ -95,7 +95,7 @@ namespace pe
         }
 
         VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), GetFormatVK(imageInfo.format), &fProps);
+        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), Translate<VkFormat>(imageInfo.format), &fProps);
 
         if (imageInfo.tiling == ImageTiling::Optimal)
         {
@@ -117,17 +117,17 @@ namespace pe
 
         VkImageCreateInfo imageInfoVK{};
         imageInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfoVK.flags = GetImageCreateFlagsVK(imageInfo.imageFlags);
-        imageInfoVK.imageType = GetImageTypeVK(imageInfo.imageType);
-        imageInfoVK.format = GetFormatVK(imageInfo.format);
+        imageInfoVK.flags = Translate<VkImageCreateFlags>(imageInfo.imageFlags);
+        imageInfoVK.imageType = Translate<VkImageType>(imageInfo.imageType);
+        imageInfoVK.format = Translate<VkFormat>(imageInfo.format);
         imageInfoVK.extent = VkExtent3D{imageInfo.width, imageInfo.height, imageInfo.depth};
         imageInfoVK.mipLevels = imageInfo.mipLevels;
         imageInfoVK.arrayLayers = imageInfo.arrayLayers;
-        imageInfoVK.samples = GetSampleCountVK(imageInfo.samples);
-        imageInfoVK.tiling = GetImageTilingVK(imageInfo.tiling);
-        imageInfoVK.usage = GetImageUsageVK(imageInfo.usage | ImageUsage::TransferSrcBit); // All images can be copied
-        imageInfoVK.sharingMode = GetSharingModeVK(imageInfo.sharingMode);
-        imageInfoVK.initialLayout = GetImageLayoutVK(imageInfo.initialLayout);
+        imageInfoVK.samples = Translate<VkSampleCountFlagBits>(imageInfo.samples);
+        imageInfoVK.tiling = Translate<VkImageTiling>(imageInfo.tiling);
+        imageInfoVK.usage = Translate<VkImageUsageFlags>(imageInfo.usage | ImageUsage::TransferSrcBit); // All images can be copied
+        imageInfoVK.sharingMode = Translate<VkSharingMode>(imageInfo.sharingMode);
+        imageInfoVK.initialLayout = Translate<VkImageLayout>(imageInfo.initialLayout);
 
         VmaAllocationCreateInfo allocationCreateInfo = {};
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
@@ -181,14 +181,14 @@ namespace pe
 
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.srcAccessMask = GetAccessFlagsVK(srcMask);
-        barrier.dstAccessMask = GetAccessFlagsVK(dstMask);
+        barrier.srcAccessMask = Translate<VkAccessFlags>(srcMask);
+        barrier.dstAccessMask = Translate<VkAccessFlags>(dstMask);
         barrier.image = m_handle;
-        barrier.oldLayout = GetImageLayoutVK(oldLayout);
-        barrier.newLayout = GetImageLayoutVK(newLayout);
+        barrier.oldLayout = Translate<VkImageLayout>(oldLayout);
+        barrier.newLayout = Translate<VkImageLayout>(newLayout);
         barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
         barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
-        barrier.subresourceRange.aspectMask = GetImageAspectVK(viewInfo.aspectMask);
+        barrier.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(viewInfo.aspectMask);
         barrier.subresourceRange.baseMipLevel = baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
@@ -198,8 +198,8 @@ namespace pe
 
         vkCmdPipelineBarrier(
             cmd->Handle(),
-            GetPipelineStageFlagsVK(oldStageMask),
-            GetPipelineStageFlagsVK(newStageMask),
+            Translate<VkPipelineStageFlags>(oldStageMask),
+            Translate<VkPipelineStageFlags>(newStageMask),
             VK_DEPENDENCY_BY_REGION_BIT,
             0, nullptr,
             0, nullptr,
@@ -216,9 +216,9 @@ namespace pe
         VkImageViewCreateInfo viewInfoVK{};
         viewInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfoVK.image = info.image->m_handle;
-        viewInfoVK.viewType = GetImageViewTypeVK(viewInfo.viewType);
-        viewInfoVK.format = GetFormatVK(imageInfo.format);
-        viewInfoVK.subresourceRange.aspectMask = GetImageAspectVK(viewInfo.aspectMask);
+        viewInfoVK.viewType = Translate<VkImageViewType>(viewInfo.viewType);
+        viewInfoVK.format = Translate<VkFormat>(imageInfo.format);
+        viewInfoVK.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(viewInfo.aspectMask);
         viewInfoVK.subresourceRange.baseMipLevel = 0;
         viewInfoVK.subresourceRange.levelCount = imageInfo.mipLevels;
         viewInfoVK.subresourceRange.baseArrayLayer = 0;
@@ -290,7 +290,7 @@ namespace pe
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = GetImageAspectVK(viewInfo.aspectMask);
+        region.imageSubresource.aspectMask = Translate<VkImageAspectFlags>(viewInfo.aspectMask);
         region.imageSubresource.mipLevel = mipLevel;
         region.imageSubresource.baseArrayLayer = baseArrayLayer;
         region.imageSubresource.layerCount = layerCount;
@@ -305,7 +305,7 @@ namespace pe
                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                1, &region);
         cmd->AddAfterWaitCallback([staging]()
-                                 { Buffer::Destroy(staging); });
+                                  { Buffer::Destroy(staging); });
     }
 
     void Image::CopyImage(CommandBuffer *cmd, Image *src)
@@ -314,13 +314,13 @@ namespace pe
 
         VkImageCopy region{};
         // Source
-        region.srcSubresource.aspectMask = GetImageAspectVK(viewInfo.aspectMask);
+        region.srcSubresource.aspectMask = Translate<VkImageAspectFlags>(viewInfo.aspectMask);
         region.srcSubresource.mipLevel = 0;
         region.srcSubresource.baseArrayLayer = 0;
         region.srcSubresource.layerCount = imageInfo.arrayLayers;
         region.srcOffset = VkOffset3D{0, 0, 0};
         // Destination
-        region.dstSubresource.aspectMask = GetImageAspectVK(src->viewInfo.aspectMask);
+        region.dstSubresource.aspectMask = Translate<VkImageAspectFlags>(src->viewInfo.aspectMask);
         region.dstSubresource.mipLevel = 0;
         region.dstSubresource.baseArrayLayer = 0;
         region.dstSubresource.layerCount = src->imageInfo.arrayLayers;
@@ -347,7 +347,7 @@ namespace pe
             PE_ERROR("Image::GenerateMipMaps(): no command buffer specified.");
 
         VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), GetFormatVK(imageInfo.format), &fProps);
+        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), Translate<VkFormat>(imageInfo.format), &fProps);
 
         if (imageInfo.tiling == ImageTiling::Optimal)
         {
@@ -410,20 +410,20 @@ namespace pe
         samplerInfoVK.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfoVK.pNext = nullptr;
         samplerInfoVK.flags = 0;
-        samplerInfoVK.magFilter = GetFilterVK(samplerInfo.magFilter);
-        samplerInfoVK.minFilter = GetFilterVK(samplerInfo.minFilter);
-        samplerInfoVK.mipmapMode = GetSamplerMipmapModeVK(samplerInfo.mipmapMode);
-        samplerInfoVK.addressModeU = GetSamplerAddressMode(samplerInfo.addressModeU);
-        samplerInfoVK.addressModeV = GetSamplerAddressMode(samplerInfo.addressModeV);
-        samplerInfoVK.addressModeW = GetSamplerAddressMode(samplerInfo.addressModeW);
+        samplerInfoVK.magFilter = Translate<VkFilter>(samplerInfo.magFilter);
+        samplerInfoVK.minFilter = Translate<VkFilter>(samplerInfo.minFilter);
+        samplerInfoVK.mipmapMode = Translate<VkSamplerMipmapMode>(samplerInfo.mipmapMode);
+        samplerInfoVK.addressModeU = Translate<VkSamplerAddressMode>(samplerInfo.addressModeU);
+        samplerInfoVK.addressModeV = Translate<VkSamplerAddressMode>(samplerInfo.addressModeV);
+        samplerInfoVK.addressModeW = Translate<VkSamplerAddressMode>(samplerInfo.addressModeW);
         samplerInfoVK.mipLodBias = 0.f;
         samplerInfoVK.anisotropyEnable = samplerInfo.anisotropyEnable;
         samplerInfoVK.maxAnisotropy = samplerInfo.maxAnisotropy;
         samplerInfoVK.compareEnable = samplerInfo.compareEnable;
-        samplerInfoVK.compareOp = GetCompareOpVK(samplerInfo.compareOp);
+        samplerInfoVK.compareOp = Translate<VkCompareOp>(samplerInfo.compareOp);
         samplerInfoVK.minLod = samplerInfo.minLod;
         samplerInfoVK.maxLod = samplerInfo.maxLod;
-        samplerInfoVK.borderColor = GetBorderColorVK(samplerInfo.borderColor);
+        samplerInfoVK.borderColor = Translate<VkBorderColor>(samplerInfo.borderColor);
         samplerInfoVK.unnormalizedCoordinates = samplerInfo.unnormalizedCoordinates;
 
         VkSampler vkSampler;
@@ -443,24 +443,24 @@ namespace pe
         regionVK.srcSubresource.baseArrayLayer = region->srcSubresource.baseArrayLayer;
         regionVK.srcSubresource.layerCount = region->srcSubresource.layerCount;
         regionVK.srcSubresource.mipLevel = region->srcSubresource.mipLevel;
-        regionVK.srcOffsets[0] = GetOffset3DVK(region->srcOffsets[0]);
-        regionVK.srcOffsets[1] = GetOffset3DVK(region->srcOffsets[1]);
+        regionVK.srcOffsets[0] = Translate<VkOffset3D, const Offset3D &>(region->srcOffsets[0]);
+        regionVK.srcOffsets[1] = Translate<VkOffset3D, const Offset3D &>(region->srcOffsets[1]);
 
         regionVK.dstSubresource.aspectMask = region->dstSubresource.aspectMask;
         regionVK.dstSubresource.baseArrayLayer = region->dstSubresource.baseArrayLayer;
         regionVK.dstSubresource.layerCount = region->dstSubresource.layerCount;
         regionVK.dstSubresource.mipLevel = region->dstSubresource.mipLevel;
-        regionVK.dstOffsets[0] = GetOffset3DVK(region->dstOffsets[0]);
-        regionVK.dstOffsets[1] = GetOffset3DVK(region->dstOffsets[1]);
+        regionVK.dstOffsets[0] = Translate<VkOffset3D, const Offset3D &>(region->dstOffsets[0]);
+        regionVK.dstOffsets[1] = Translate<VkOffset3D, const Offset3D &>(region->dstOffsets[1]);
 
         ImageLayout srcLayout = src->layouts[region->srcSubresource.baseArrayLayer][region->srcSubresource.mipLevel];
         ImageLayout dstLayout = layouts[region->dstSubresource.baseArrayLayer][region->dstSubresource.mipLevel];
 
         vkCmdBlitImage(cmd->Handle(),
-                       src->Handle(), GetImageLayoutVK(srcLayout),
-                       Handle(), GetImageLayoutVK(dstLayout),
+                       src->Handle(), Translate<VkImageLayout>(srcLayout),
+                       Handle(), Translate<VkImageLayout>(dstLayout),
                        1, &regionVK,
-                       GetFilterVK(filter));
+                       Translate<VkFilter>(filter));
     }
 }
 #endif

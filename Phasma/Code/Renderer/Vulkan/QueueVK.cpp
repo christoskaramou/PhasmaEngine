@@ -94,7 +94,7 @@ namespace pe
         // Pipeline stages
         std::vector<VkPipelineStageFlags> waitStagesVK(waitSemaphoresCount);
         for (uint32_t i = 0; i < waitSemaphoresCount; i++)
-            waitStagesVK[i] = GetPipelineStageFlagsVK(waitStages[i]);
+            waitStagesVK[i] = Translate<VkPipelineStageFlags>(waitStages[i]);
 
         VkTimelineSemaphoreSubmitInfo timelineInfo{};
         timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;

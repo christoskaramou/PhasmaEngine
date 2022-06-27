@@ -27,9 +27,9 @@ namespace pe
     template <class T, class = typename std::enable_if_t<std::is_enum_v<T>>>
     class Flags
     {
+    public:
         using Type = typename std::underlying_type_t<T>;
 
-    public:
         Flags() : m_value(0) {}
         Flags(T value) : m_value(static_cast<Type>(value)) {}
 
@@ -77,6 +77,9 @@ namespace pe
     inline Flags<##Enum> operator|(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) | b; } \
     inline Flags<##Enum> operator&(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) & b; } \
     inline Flags<##Enum> operator^(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) ^ b; }
+
+    template <class T, class U>
+    T Translate(U u);
 
     enum class Launch
     {
@@ -188,7 +191,7 @@ namespace pe
         TransferBit = 1 << 2,
         SparseBindingBit = 1 << 3,
         ProtectedBit = 1 << 4,
-        PresentBit = 1 << 5
+        PresentBit = 1 << 5,
     };
     using QueueTypeFlags = Flags<QueueType>;
     DEFINE_FLAGS_OPERATORS(QueueType)
@@ -227,7 +230,7 @@ namespace pe
     {
         ColorBit = 1 << 0,
         DepthBit = 1 << 1,
-        StencilBit = 1 << 2
+        StencilBit = 1 << 2,
     };
     using ImageAspectFlags = Flags<ImageAspect>;
     DEFINE_FLAGS_OPERATORS(ImageAspect)
@@ -364,10 +367,8 @@ namespace pe
         Count8,
         Count16,
         Count32,
-        Count64
+        Count64,
     };
-    using SampleCountFlags = Flags<SampleCount>;
-    DEFINE_FLAGS_OPERATORS(SampleCount)
 
     enum class ImageUsage
     {

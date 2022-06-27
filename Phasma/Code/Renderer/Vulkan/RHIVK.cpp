@@ -447,7 +447,7 @@ namespace pe
                 if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) ==
                     VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
                 {
-                    depthFormat = GetFormatFromVK(df);
+                    depthFormat = Translate<Format>(df);
                     break;
                 }
             }

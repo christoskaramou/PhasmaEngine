@@ -270,7 +270,7 @@ namespace pe
 
     void CommandBuffer::PushConstants(Pipeline *pipeline, ShaderStageFlags stage, uint32_t offset, uint32_t size, const void *pValues)
     {
-        uint32_t flags = GetShaderStageVK(stage);
+        auto flags = Translate<VkShaderStageFlags>(stage);
         vkCmdPushConstants(m_handle, pipeline->layout, flags, offset, size, pValues);
     }
 

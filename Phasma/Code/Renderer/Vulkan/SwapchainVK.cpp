@@ -47,14 +47,14 @@ namespace pe
             capabilities.maxImageCount);
         if (SWAPCHAIN_IMAGES != swapchainCreateInfo.minImageCount)
             PE_ERROR("Swapchain image count error");
-        swapchainCreateInfo.imageFormat = GetFormatVK(surface->format);
-        swapchainCreateInfo.imageColorSpace = GetColorSpaceVK(surface->colorSpace);
+        swapchainCreateInfo.imageFormat = Translate<VkFormat>(surface->format);
+        swapchainCreateInfo.imageColorSpace = Translate<VkColorSpaceKHR>(surface->colorSpace);
         swapchainCreateInfo.imageExtent = extent;
         swapchainCreateInfo.imageArrayLayers = 1;
-        swapchainCreateInfo.imageUsage = GetImageUsageVK(ImageUsage::ColorAttachmentBit | ImageUsage::TransferDstBit);
+        swapchainCreateInfo.imageUsage = Translate<VkImageUsageFlags>(ImageUsage::ColorAttachmentBit | ImageUsage::TransferDstBit);
         swapchainCreateInfo.preTransform = capabilities.currentTransform;
         swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        swapchainCreateInfo.presentMode = GetPresentModeVK(surface->presentMode);
+        swapchainCreateInfo.presentMode = Translate<VkPresentModeKHR>(surface->presentMode);
         swapchainCreateInfo.clipped = VK_TRUE;
         if (m_handle)
             swapchainCreateInfo.oldSwapchain = m_handle;
@@ -96,7 +96,7 @@ namespace pe
             imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             imageViewCreateInfo.image = images[i]->Handle();
             imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            imageViewCreateInfo.format =  GetFormatVK(RHII.GetSurface()->format);
+            imageViewCreateInfo.format =  Translate<VkFormat>(RHII.GetSurface()->format);
             imageViewCreateInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
             VkImageView imageView;

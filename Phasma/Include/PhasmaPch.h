@@ -55,6 +55,7 @@ SOFTWARE.
 #include <regex>
 #include <atomic>
 #include <variant>
+#include <bitset>
 
 #include "SDL/SDL.h"
 #include "SDL/SDL_syswm.h"

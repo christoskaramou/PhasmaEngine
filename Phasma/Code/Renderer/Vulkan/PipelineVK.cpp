@@ -77,7 +77,7 @@ namespace pe
             csmci.pCode = info.pCompShader->GetSpriv();
 
             VkPushConstantRange pcr{};
-            pcr.stageFlags = GetShaderStageVK(info.pushConstantStage);
+            pcr.stageFlags = Translate<VkShaderStageFlags>(info.pushConstantStage);
             pcr.offset = 0;
             pcr.size = info.pushConstantSize;
 
@@ -161,7 +161,7 @@ namespace pe
             {
                 vibd[i].binding = info.vertexInputBindingDescriptions[i].binding;
                 vibd[i].stride = info.vertexInputBindingDescriptions[i].stride;
-                vibd[i].inputRate = GetVertexInputRateVK(info.vertexInputBindingDescriptions[i].inputRate);
+                vibd[i].inputRate = Translate<VkVertexInputRate>(info.vertexInputBindingDescriptions[i].inputRate);
             }
 
             std::vector<VkVertexInputAttributeDescription> vida(info.vertexInputAttributeDescriptions.size());
@@ -169,7 +169,7 @@ namespace pe
             {
                 vida[i].location = info.vertexInputAttributeDescriptions[i].location;
                 vida[i].binding = info.vertexInputAttributeDescriptions[i].binding;
-                vida[i].format = GetFormatVK(info.vertexInputAttributeDescriptions[i].format);
+                vida[i].format = Translate<VkFormat>(info.vertexInputAttributeDescriptions[i].format);
                 vida[i].offset = info.vertexInputAttributeDescriptions[i].offset;
             }
 
@@ -214,7 +214,7 @@ namespace pe
             prsci.depthClampEnable = VK_FALSE;
             prsci.rasterizerDiscardEnable = VK_FALSE;
             prsci.polygonMode = VK_POLYGON_MODE_FILL;
-            prsci.cullMode = GetCullModeVK(info.cullMode);
+            prsci.cullMode = Translate<VkCullModeFlags>(info.cullMode);
             prsci.frontFace = VK_FRONT_FACE_CLOCKWISE;
             prsci.depthBiasEnable = VK_FALSE;
             prsci.depthBiasConstantFactor = 0.0f;
@@ -253,13 +253,13 @@ namespace pe
             for (uint32_t i = 0; i < info.colorBlendAttachments.size(); i++)
             {
                 pcbast[i].blendEnable = info.colorBlendAttachments[i].blendEnable;
-                pcbast[i].srcColorBlendFactor = GetBlendFactorVK(info.colorBlendAttachments[i].srcColorBlendFactor);
-                pcbast[i].dstColorBlendFactor = GetBlendFactorVK(info.colorBlendAttachments[i].dstColorBlendFactor);
-                pcbast[i].colorBlendOp = GetBlendOpVK(info.colorBlendAttachments[i].colorBlendOp);
-                pcbast[i].srcAlphaBlendFactor = GetBlendFactorVK(info.colorBlendAttachments[i].srcAlphaBlendFactor);
-                pcbast[i].dstAlphaBlendFactor = GetBlendFactorVK(info.colorBlendAttachments[i].dstAlphaBlendFactor);
-                pcbast[i].alphaBlendOp = GetBlendOpVK(info.colorBlendAttachments[i].alphaBlendOp);
-                pcbast[i].colorWriteMask = GetColorComponentFlagsVK(info.colorBlendAttachments[i].colorWriteMask);
+                pcbast[i].srcColorBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].srcColorBlendFactor);
+                pcbast[i].dstColorBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].dstColorBlendFactor);
+                pcbast[i].colorBlendOp = Translate<VkBlendOp>(info.colorBlendAttachments[i].colorBlendOp);
+                pcbast[i].srcAlphaBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].srcAlphaBlendFactor);
+                pcbast[i].dstAlphaBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].dstAlphaBlendFactor);
+                pcbast[i].alphaBlendOp = Translate<VkBlendOp>(info.colorBlendAttachments[i].alphaBlendOp);
+                pcbast[i].colorWriteMask = Translate<VkColorComponentFlags>(info.colorBlendAttachments[i].colorWriteMask);
             }
 
             VkPipelineColorBlendStateCreateInfo pcbsci{};
@@ -277,7 +277,7 @@ namespace pe
             // Dynamic states
             std::vector<VkDynamicState> ds(info.dynamicStates.size());
             for (uint32_t i = 0; i < info.dynamicStates.size(); i++)
-                ds[i] = GetDynamicStateVK(info.dynamicStates[i]);
+                ds[i] = Translate<VkDynamicState>(info.dynamicStates[i]);
 
             VkPipelineDynamicStateCreateInfo dsi{};
             dsi.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -289,7 +289,7 @@ namespace pe
             VkPushConstantRange pcr{};
             pcr.size = info.pushConstantSize;
             pcr.offset = 0;
-            pcr.stageFlags = GetShaderStageVK(info.pushConstantStage);
+            pcr.stageFlags = Translate<VkShaderStageFlags>(info.pushConstantStage);
 
             // Pipeline Layout
             std::vector<VkDescriptorSetLayout> layouts{};
