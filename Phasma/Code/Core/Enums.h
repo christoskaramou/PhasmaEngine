@@ -63,6 +63,8 @@ namespace pe
         void operator^=(T other) { m_value ^= static_cast<Type>(other); }
         void operator^=(const Flags &other) { m_value ^= other.m_value; }
 
+        Type Value() { return m_value; }
+
     private:
         // In class use only, for casting Type to Flags
         Flags(Type value) : m_value(value) {}

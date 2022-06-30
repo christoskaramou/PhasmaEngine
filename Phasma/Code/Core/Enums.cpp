@@ -120,684 +120,452 @@ namespace pe
         }
     }
 
-    template <>
-    ImageLayout Translate<ImageLayout>(VkImageLayout layout)
-    {
-        switch (layout)
-        {
-        case VK_IMAGE_LAYOUT_UNDEFINED:
-            return ImageLayout::Undefined;
-        case VK_IMAGE_LAYOUT_GENERAL:
-            return ImageLayout::General;
-        case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-            return ImageLayout::ColorAttachment;
-        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-            return ImageLayout::DepthStencilAttachment;
-        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
-            return ImageLayout::DepthStencilReadOnly;
-        case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-            return ImageLayout::ShaderReadOnly;
-        case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-            return ImageLayout::TransferSrc;
-        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-            return ImageLayout::TransferDst;
-        case VK_IMAGE_LAYOUT_PREINITIALIZED:
-            return ImageLayout::Preinitialized;
-        case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
-            return ImageLayout::DepthReadOnlyStencilAttachment;
-        case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
-            return ImageLayout::DepthAttachmentStencilReadOnly;
-        case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL:
-            return ImageLayout::DepthAttachment;
-        case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL:
-            return ImageLayout::DepthReadOnly;
-        case VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL:
-            return ImageLayout::StencilAttachment;
-        case VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL:
-            return ImageLayout::StencilReadOnly;
-        case VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL:
-            return ImageLayout::ReadOnly;
-        case VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL:
-            return ImageLayout::Attachment;
-        case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
-            return ImageLayout::PresentSrc;
-        case VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR:
-            return ImageLayout::SharedPresent;
-        case VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT:
-            return ImageLayout::FragmentDensityMap;
-        case VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR:
-            return ImageLayout::FragmentShadingRateAttachment;
-        }
-
-        PE_ERROR("Unknown image layout");
-        return ImageLayout::Undefined;
-    }
-
-    template <>
-    VkImageLayout Translate<VkImageLayout>(ImageLayout layout)
-    {
-        switch (layout)
-        {
-        case ImageLayout::Undefined:
-            return VK_IMAGE_LAYOUT_UNDEFINED;
-        case ImageLayout::General:
-            return VK_IMAGE_LAYOUT_GENERAL;
-        case ImageLayout::ColorAttachment:
-            return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        case ImageLayout::DepthStencilAttachment:
-            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        case ImageLayout::DepthStencilReadOnly:
-            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-        case ImageLayout::ShaderReadOnly:
-            return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        case ImageLayout::TransferSrc:
-            return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        case ImageLayout::TransferDst:
-            return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        case ImageLayout::Preinitialized:
-            return VK_IMAGE_LAYOUT_PREINITIALIZED;
-        case ImageLayout::DepthReadOnlyStencilAttachment:
-            return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
-        case ImageLayout::DepthAttachmentStencilReadOnly:
-            return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
-        case ImageLayout::DepthAttachment:
-            return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-        case ImageLayout::DepthReadOnly:
-            return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
-        case ImageLayout::StencilAttachment:
-            return VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
-        case ImageLayout::StencilReadOnly:
-            return VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
-        case ImageLayout::ReadOnly:
-            return VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
-        case ImageLayout::Attachment:
-            return VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-        case ImageLayout::PresentSrc:
-            return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        case ImageLayout::SharedPresent:
-            return VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR;
-        case ImageLayout::FragmentDensityMap:
-            return VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
-        case ImageLayout::FragmentShadingRateAttachment:
-            return VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR;
-        }
-
-        PE_ERROR("Unknown image layout");
-        return VK_IMAGE_LAYOUT_UNDEFINED;
-    }
-
-    template <>
-    VkShaderStageFlags Translate<VkShaderStageFlags>(ShaderStageFlags flags)
+    template<class T, class U>
+    U GetFlags(T flags, std::map<T, U> &translator)
     {
         if (!flags)
             return 0;
 
-        VkShaderStageFlags vkFlags = 0;
+        if (translator.find(flags) == translator.end())
+        {
+            for (auto &valuePair : translator)
+            {
+                if ((flags & valuePair.first) == valuePair.first)
+                    translator[flags] |= valuePair.second;
+            }
+        }
 
-        if (flags & ShaderStage::VertexBit)
-            vkFlags |= VK_SHADER_STAGE_VERTEX_BIT;
-        if (flags & ShaderStage::TesslationControlBit)
-            vkFlags |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-        if (flags & ShaderStage::TesslationEvaluationBit)
-            vkFlags |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-        if (flags & ShaderStage::GeometryBit)
-            vkFlags |= VK_SHADER_STAGE_GEOMETRY_BIT;
-        if (flags & ShaderStage::FragmentBit)
-            vkFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
-        if (flags & ShaderStage::ComputeBit)
-            vkFlags |= VK_SHADER_STAGE_COMPUTE_BIT;
-        if (flags & ShaderStage::AllGraphics)
-            vkFlags |= VK_SHADER_STAGE_ALL_GRAPHICS;
-        if (flags & ShaderStage::All)
-            vkFlags |= VK_SHADER_STAGE_ALL;
-        if (flags & ShaderStage::RaygenBit)
-            vkFlags |= VK_SHADER_STAGE_RAYGEN_BIT_NV;
-        if (flags & ShaderStage::AnyHitBit)
-            vkFlags |= VK_SHADER_STAGE_ANY_HIT_BIT_NV;
-        if (flags & ShaderStage::ClosestHitBit)
-            vkFlags |= VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
-        if (flags & ShaderStage::MissBit)
-            vkFlags |= VK_SHADER_STAGE_MISS_BIT_NV;
-        if (flags & ShaderStage::IntersectionBit)
-            vkFlags |= VK_SHADER_STAGE_INTERSECTION_BIT_NV;
-        if (flags & ShaderStage::CallableBit)
-            vkFlags |= VK_SHADER_STAGE_CALLABLE_BIT_NV;
-
-        return vkFlags;
+        return translator[flags];
     }
 
     template <>
-    VkShaderStageFlags Translate<VkShaderStageFlags>(ShaderStage flag)
+    ImageLayout Translate(VkImageLayout layout)
+    {
+        using T = std::underlying_type_t<VkImageLayout>;
+        static std::map<T, ImageLayout> s_translator{
+            {(T)VK_IMAGE_LAYOUT_UNDEFINED, ImageLayout::Undefined},
+            {(T)VK_IMAGE_LAYOUT_GENERAL, ImageLayout::General},
+            {(T)VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, ImageLayout::ColorAttachment},
+            {(T)VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, ImageLayout::DepthStencilAttachment},
+            {(T)VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, ImageLayout::DepthStencilReadOnly},
+            {(T)VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, ImageLayout::ShaderReadOnly},
+            {(T)VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, ImageLayout::TransferSrc},
+            {(T)VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, ImageLayout::TransferDst},
+            {(T)VK_IMAGE_LAYOUT_PREINITIALIZED, ImageLayout::Preinitialized},
+            {(T)VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL, ImageLayout::DepthReadOnlyStencilAttachment},
+            {(T)VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL, ImageLayout::DepthAttachmentStencilReadOnly},
+            {(T)VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, ImageLayout::DepthAttachment},
+            {(T)VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL, ImageLayout::DepthReadOnly},
+            {(T)VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL, ImageLayout::StencilAttachment},
+            {(T)VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL, ImageLayout::StencilReadOnly},
+            {(T)VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, ImageLayout::ReadOnly},
+            {(T)VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL, ImageLayout::Attachment},
+            {(T)VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, ImageLayout::PresentSrc},
+            {(T)VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR, ImageLayout::SharedPresent},
+            {(T)VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT, ImageLayout::FragmentDensityMap},
+            {(T)VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR, ImageLayout::FragmentShadingRateAttachment}};
+
+        return s_translator[(T)layout];
+    }
+
+    template <>
+    VkImageLayout Translate(ImageLayout layout)
+    {
+        using T = std::underlying_type_t<ImageLayout>;
+        static std::map<T, VkImageLayout> s_translator{
+            {(T)ImageLayout::Undefined, VK_IMAGE_LAYOUT_UNDEFINED},
+            {(T)ImageLayout::General, VK_IMAGE_LAYOUT_GENERAL},
+            {(T)ImageLayout::ColorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+            {(T)ImageLayout::DepthStencilAttachment, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
+            {(T)ImageLayout::DepthStencilReadOnly, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL},
+            {(T)ImageLayout::ShaderReadOnly, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {(T)ImageLayout::TransferSrc, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+            {(T)ImageLayout::TransferDst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+            {(T)ImageLayout::Preinitialized, VK_IMAGE_LAYOUT_PREINITIALIZED},
+            {(T)ImageLayout::DepthReadOnlyStencilAttachment, VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL},
+            {(T)ImageLayout::DepthAttachmentStencilReadOnly, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL},
+            {(T)ImageLayout::DepthAttachment, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL},
+            {(T)ImageLayout::DepthReadOnly, VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL},
+            {(T)ImageLayout::StencilAttachment, VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL},
+            {(T)ImageLayout::StencilReadOnly, VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL},
+            {(T)ImageLayout::ReadOnly, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
+            {(T)ImageLayout::Attachment, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL},
+            {(T)ImageLayout::PresentSrc, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
+            {(T)ImageLayout::SharedPresent, VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR},
+            {(T)ImageLayout::FragmentDensityMap, VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT},
+            {(T)ImageLayout::FragmentShadingRateAttachment, VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR}};
+
+        return s_translator[(T)layout];
+    }
+
+    template <>
+    VkShaderStageFlags Translate(ShaderStageFlags flags)
+    {
+        using T = ShaderStageFlags::Type;
+        static std::map<T, VkShaderStageFlags> s_translator{
+            {(T)ShaderStage::VertexBit, VK_SHADER_STAGE_VERTEX_BIT},
+            {(T)ShaderStage::TesslationControlBit, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT},
+            {(T)ShaderStage::TesslationEvaluationBit, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT},
+            {(T)ShaderStage::GeometryBit, VK_SHADER_STAGE_GEOMETRY_BIT},
+            {(T)ShaderStage::FragmentBit, VK_SHADER_STAGE_FRAGMENT_BIT},
+            {(T)ShaderStage::ComputeBit, VK_SHADER_STAGE_COMPUTE_BIT},
+            {(T)ShaderStage::AllGraphics, VK_SHADER_STAGE_ALL_GRAPHICS},
+            {(T)ShaderStage::All, VK_SHADER_STAGE_ALL},
+            {(T)ShaderStage::RaygenBit, VK_SHADER_STAGE_RAYGEN_BIT_NV},
+            {(T)ShaderStage::AnyHitBit, VK_SHADER_STAGE_ANY_HIT_BIT_NV},
+            {(T)ShaderStage::ClosestHitBit, VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV},
+            {(T)ShaderStage::MissBit, VK_SHADER_STAGE_MISS_BIT_NV},
+            {(T)ShaderStage::IntersectionBit, VK_SHADER_STAGE_INTERSECTION_BIT_NV},
+            {(T)ShaderStage::CallableBit, VK_SHADER_STAGE_CALLABLE_BIT_NV}};
+
+        return GetFlags(flags.Value(), s_translator);
+    }
+
+    template <>
+    VkShaderStageFlags Translate(ShaderStage flag)
     {
         return Translate<VkShaderStageFlags, ShaderStageFlags>(flag);
     }
 
     template <>
-    VkFilter Translate<VkFilter>(Filter filter)
+    VkFilter Translate(Filter filter)
     {
-        switch (filter)
-        {
-        case Filter::Nearest:
-            return VK_FILTER_NEAREST;
-        case Filter::Linear:
-            return VK_FILTER_LINEAR;
-        case Filter::Cubic:
-            return VK_FILTER_CUBIC_IMG;
-        }
+        using T = std::underlying_type_t<Filter>;
+        static std::map<T, VkFilter> s_translator{
+            {(T)Filter::Nearest, VK_FILTER_NEAREST},
+            {(T)Filter::Linear, VK_FILTER_LINEAR},
+            {(T)Filter::Cubic, VK_FILTER_CUBIC_IMG}};
 
-        PE_ERROR("Unknown filter");
-        return VK_FILTER_NEAREST;
+        return s_translator[(T)filter];
     }
 
     template <>
-    VkImageAspectFlags Translate<VkImageAspectFlags>(ImageAspectFlags flags)
+    VkImageAspectFlags Translate(ImageAspectFlags flags)
     {
-        if (!flags)
-            return 0;
+        using T = ImageAspectFlags::Type;
+        static std::map<T, VkImageAspectFlags> s_translator{
+            {(T)ImageAspect::ColorBit, VK_IMAGE_ASPECT_COLOR_BIT},
+            {(T)ImageAspect::DepthBit, VK_IMAGE_ASPECT_DEPTH_BIT},
+            {(T)ImageAspect::StencilBit, VK_IMAGE_ASPECT_STENCIL_BIT}};
 
-        VkImageAspectFlags vkFlags = 0;
-
-        if (flags & ImageAspect::ColorBit)
-            vkFlags |= VK_IMAGE_ASPECT_COLOR_BIT;
-        if (flags & ImageAspect::DepthBit)
-            vkFlags |= VK_IMAGE_ASPECT_DEPTH_BIT;
-        if (flags & ImageAspect::StencilBit)
-            vkFlags |= VK_IMAGE_ASPECT_STENCIL_BIT;
-
-        return vkFlags;
+        return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VkImageAspectFlags Translate<VkImageAspectFlags>(ImageAspect flag)
+    VkImageAspectFlags Translate(ImageAspect flag)
     {
         return Translate<VkImageAspectFlags, ImageAspectFlags>(flag);
     }
 
     template <>
-    VkSamplerMipmapMode Translate<VkSamplerMipmapMode>(SamplerMipmapMode mode)
+    VkSamplerMipmapMode Translate(SamplerMipmapMode mode)
     {
-        switch (mode)
-        {
-        case SamplerMipmapMode::Nearest:
-            return VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        case SamplerMipmapMode::Linear:
-            return VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        }
+        using T = std::underlying_type_t<SamplerMipmapMode>;
+        static std::map<T, VkSamplerMipmapMode> s_translator{
+            {(T)SamplerMipmapMode::Nearest, VK_SAMPLER_MIPMAP_MODE_NEAREST},
+            {(T)SamplerMipmapMode::Linear, VK_SAMPLER_MIPMAP_MODE_LINEAR}};
 
-        PE_ERROR("Unknown mipmap mode");
-        return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        return s_translator[(T)mode];
     }
 
     template <>
-    VkSamplerAddressMode Translate<VkSamplerAddressMode>(SamplerAddressMode mode)
+    VkSamplerAddressMode Translate(SamplerAddressMode mode)
     {
-        switch (mode)
-        {
-        case SamplerAddressMode::Repeat:
-            return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        case SamplerAddressMode::MirroredRepeat:
-            return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-        case SamplerAddressMode::ClampToEdge:
-            return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        case SamplerAddressMode::ClampToBorder:
-            return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        case SamplerAddressMode::MirrorClampToEdge:
-            return VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
-        }
+        using T = std::underlying_type_t<SamplerAddressMode>;
+        static std::map<T, VkSamplerAddressMode> s_translator{
+            {(T)SamplerAddressMode::Repeat, VK_SAMPLER_ADDRESS_MODE_REPEAT},
+            {(T)SamplerAddressMode::MirroredRepeat, VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT},
+            {(T)SamplerAddressMode::ClampToEdge, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE},
+            {(T)SamplerAddressMode::ClampToBorder, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER},
+            {(T)SamplerAddressMode::MirrorClampToEdge, VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE}};
 
-        PE_ERROR("Unknown address mode");
-        return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        return s_translator[(T)mode];
     }
 
     template <>
-    VkCompareOp Translate<VkCompareOp>(CompareOp op)
+    VkCompareOp Translate(CompareOp op)
     {
-        switch (op)
-        {
-        case CompareOp::Never:
-            return VK_COMPARE_OP_NEVER;
-        case CompareOp::Less:
-            return VK_COMPARE_OP_LESS;
-        case CompareOp::Equal:
-            return VK_COMPARE_OP_EQUAL;
-        case CompareOp::LessOrEqual:
-            return VK_COMPARE_OP_LESS_OR_EQUAL;
-        case CompareOp::Greater:
-            return VK_COMPARE_OP_GREATER;
-        case CompareOp::NotEqual:
-            return VK_COMPARE_OP_NOT_EQUAL;
-        case CompareOp::GreaterOrEqual:
-            return VK_COMPARE_OP_GREATER_OR_EQUAL;
-        case CompareOp::Always:
-            return VK_COMPARE_OP_ALWAYS;
-        }
+        using T = std::underlying_type_t<CompareOp>;
+        static std::map<T, VkCompareOp> s_translator{
+            {(T)CompareOp::Never, VK_COMPARE_OP_NEVER},
+            {(T)CompareOp::Less, VK_COMPARE_OP_LESS},
+            {(T)CompareOp::Equal, VK_COMPARE_OP_EQUAL},
+            {(T)CompareOp::LessOrEqual, VK_COMPARE_OP_LESS_OR_EQUAL},
+            {(T)CompareOp::Greater, VK_COMPARE_OP_GREATER},
+            {(T)CompareOp::NotEqual, VK_COMPARE_OP_NOT_EQUAL},
+            {(T)CompareOp::GreaterOrEqual, VK_COMPARE_OP_GREATER_OR_EQUAL},
+            {(T)CompareOp::Always, VK_COMPARE_OP_ALWAYS}};
 
-        PE_ERROR("Unknown compare op");
-        return VK_COMPARE_OP_NEVER;
+        return s_translator[(T)op];
     }
 
     template <>
-    VkBorderColor Translate<VkBorderColor>(BorderColor color)
+    VkBorderColor Translate(BorderColor color)
     {
-        switch (color)
-        {
-        case BorderColor::FloatTransparentBlack:
-            return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-        case BorderColor::IntTransparentBlack:
-            return VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
-        case BorderColor::FloatOpaqueBlack:
-            return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-        case BorderColor::IntOpaqueBlack:
-            return VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-        case BorderColor::FloatOpaqueWhite:
-            return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-        case BorderColor::IntOpaqueWhite:
-            return VK_BORDER_COLOR_INT_OPAQUE_WHITE;
-        }
+        using T = std::underlying_type_t<BorderColor>;
+        static std::map<T, VkBorderColor> s_translator{
+            {(T)BorderColor::FloatTransparentBlack, VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK},
+            {(T)BorderColor::IntTransparentBlack, VK_BORDER_COLOR_INT_TRANSPARENT_BLACK},
+            {(T)BorderColor::FloatOpaqueBlack, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK},
+            {(T)BorderColor::IntOpaqueBlack, VK_BORDER_COLOR_INT_OPAQUE_BLACK},
+            {(T)BorderColor::FloatOpaqueWhite, VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE},
+            {(T)BorderColor::IntOpaqueWhite, VK_BORDER_COLOR_INT_OPAQUE_WHITE}};
 
-        PE_ERROR("Unknown border color");
-        return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        return s_translator[(T)color];
     }
 
     template <>
-    VkImageType Translate<VkImageType>(ImageType type)
+    VkImageType Translate(ImageType type)
     {
-        switch (type)
-        {
-        case ImageType::Type1D:
-            return VK_IMAGE_TYPE_1D;
-        case ImageType::Type2D:
-            return VK_IMAGE_TYPE_2D;
-        case ImageType::Type3D:
-            return VK_IMAGE_TYPE_3D;
-        }
+        using T = std::underlying_type_t<ImageType>;
+        static std::map<T, VkImageType> s_translator{
+            {(T)ImageType::Type1D, VK_IMAGE_TYPE_1D},
+            {(T)ImageType::Type2D, VK_IMAGE_TYPE_2D},
+            {(T)ImageType::Type3D, VK_IMAGE_TYPE_3D}};
 
-        PE_ERROR("Unknown image type");
-        return VK_IMAGE_TYPE_1D;
+        return s_translator[(T)type];
     }
 
     template <>
-    VkImageViewType Translate<VkImageViewType>(ImageViewType type)
+    VkImageViewType Translate(ImageViewType type)
     {
-        switch (type)
-        {
-        case ImageViewType::Type1D:
-            return VK_IMAGE_VIEW_TYPE_1D;
-        case ImageViewType::Type2D:
-            return VK_IMAGE_VIEW_TYPE_2D;
-        case ImageViewType::Type3D:
-            return VK_IMAGE_VIEW_TYPE_3D;
-        case ImageViewType::TypeCube:
-            return VK_IMAGE_VIEW_TYPE_CUBE;
-        case ImageViewType::Type1DArray:
-            return VK_IMAGE_VIEW_TYPE_1D_ARRAY;
-        case ImageViewType::Type2DArray:
-            return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-        case ImageViewType::TypeCubeArray:
-            return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
-        }
+        using T = std::underlying_type_t<ImageViewType>;
+        static std::map<T, VkImageViewType> s_translator{
+            {(T)ImageViewType::Type1D, VK_IMAGE_VIEW_TYPE_1D},
+            {(T)ImageViewType::Type2D, VK_IMAGE_VIEW_TYPE_2D},
+            {(T)ImageViewType::Type3D, VK_IMAGE_VIEW_TYPE_3D},
+            {(T)ImageViewType::TypeCube, VK_IMAGE_VIEW_TYPE_CUBE},
+            {(T)ImageViewType::Type1DArray, VK_IMAGE_VIEW_TYPE_1D_ARRAY},
+            {(T)ImageViewType::Type2DArray, VK_IMAGE_VIEW_TYPE_2D_ARRAY},
+            {(T)ImageViewType::TypeCubeArray, VK_IMAGE_VIEW_TYPE_CUBE_ARRAY}};
 
-        PE_ERROR("Unknown image view type");
-        return VK_IMAGE_VIEW_TYPE_1D;
+        return s_translator[(T)type];
     }
 
     template <>
-    VkSampleCountFlagBits Translate<VkSampleCountFlagBits>(SampleCount count)
+    VkSampleCountFlagBits Translate(SampleCount count)
     {
-        switch (count)
-        {
-        case SampleCount::Count1:
-            return VK_SAMPLE_COUNT_1_BIT;
-        case SampleCount::Count2:
-            return VK_SAMPLE_COUNT_2_BIT;
-        case SampleCount::Count4:
-            return VK_SAMPLE_COUNT_4_BIT;
-        case SampleCount::Count8:
-            return VK_SAMPLE_COUNT_8_BIT;
-        case SampleCount::Count16:
-            return VK_SAMPLE_COUNT_16_BIT;
-        case SampleCount::Count32:
-            return VK_SAMPLE_COUNT_32_BIT;
-        case SampleCount::Count64:
-            return VK_SAMPLE_COUNT_64_BIT;
-        }
+        using T = std::underlying_type_t<SampleCount>;
+        static std::map<T, VkSampleCountFlagBits> s_translator{
+            {(T)SampleCount::Count1, VK_SAMPLE_COUNT_1_BIT},
+            {(T)SampleCount::Count2, VK_SAMPLE_COUNT_2_BIT},
+            {(T)SampleCount::Count4, VK_SAMPLE_COUNT_4_BIT},
+            {(T)SampleCount::Count8, VK_SAMPLE_COUNT_8_BIT},
+            {(T)SampleCount::Count16, VK_SAMPLE_COUNT_16_BIT},
+            {(T)SampleCount::Count32, VK_SAMPLE_COUNT_32_BIT},
+            {(T)SampleCount::Count64, VK_SAMPLE_COUNT_64_BIT}};
 
-        PE_ERROR("Unknown sample count");
-        return VK_SAMPLE_COUNT_1_BIT;
+        return s_translator[(T)count];
     }
 
     template <>
-    VkFormat Translate<VkFormat>(Format format)
+    VkFormat Translate(Format format)
     {
-        switch (format)
-        {
-        case Format::Undefined:
-            return VK_FORMAT_UNDEFINED;
-        case Format::R8SInt:
-            return VK_FORMAT_R8_SINT;
-        case Format::R8UInt:
-            return VK_FORMAT_R8_UINT;
-        case Format::R8Unorm:
-            return VK_FORMAT_R8_UNORM;
-        case Format::RGBA8Unorm:
-            return VK_FORMAT_R8G8B8A8_UNORM;
-        case Format::R16SInt:
-            return VK_FORMAT_R16_SINT;
-        case Format::R16UInt:
-            return VK_FORMAT_R16_UINT;
-        case Format::R16SFloat:
-            return VK_FORMAT_R16_SFLOAT;
-        case Format::R16Unorm:
-            return VK_FORMAT_R16_UNORM;
-        case Format::RG16SFloat:
-            return VK_FORMAT_R16G16_SFLOAT;
-        case Format::RGB16SInt:
-            return VK_FORMAT_R16G16B16_SINT;
-        case Format::RGB16UInt:
-            return VK_FORMAT_R16G16B16_UINT;
-        case Format::RGB16SFloat:
-            return VK_FORMAT_R16G16B16_SFLOAT;
-        case Format::RGBA16SFloat:
-            return VK_FORMAT_R16G16B16A16_SFLOAT;
-        case Format::R32SInt:
-            return VK_FORMAT_R32_SINT;
-        case Format::R32UInt:
-            return VK_FORMAT_R32_UINT;
-        case Format::R32SFloat:
-            return VK_FORMAT_R32_SFLOAT;
-        case Format::RG32SInt:
-            return VK_FORMAT_R32G32_SINT;
-        case Format::RG32UInt:
-            return VK_FORMAT_R32G32_UINT;
-        case Format::RG32SFloat:
-            return VK_FORMAT_R32G32_SFLOAT;
-        case Format::RGB32SInt:
-            return VK_FORMAT_R32G32B32_SINT;
-        case Format::RGB32UInt:
-            return VK_FORMAT_R32G32B32_UINT;
-        case Format::RGB32SFloat:
-            return VK_FORMAT_R32G32B32_SFLOAT;
-        case Format::RGBA32SInt:
-            return VK_FORMAT_R32G32B32A32_SINT;
-        case Format::RGBA32UInt:
-            return VK_FORMAT_R32G32B32A32_UINT;
-        case Format::RGBA32SFloat:
-            return VK_FORMAT_R32G32B32A32_SFLOAT;
-        case Format::BGRA8Unorm:
-            return VK_FORMAT_B8G8R8A8_UNORM;
-        case Format::D24UnormS8UInt:
-            return VK_FORMAT_D24_UNORM_S8_UINT;
-        case Format::D32SFloat:
-            return VK_FORMAT_D32_SFLOAT;
-        case Format::D32SFloatS8UInt:
-            return VK_FORMAT_D32_SFLOAT_S8_UINT;
-        }
+        using T = std::underlying_type_t<Format>;
+        static std::map<T, VkFormat> s_translator{
+            {(T)Format::Undefined, VK_FORMAT_UNDEFINED},
+            {(T)Format::R8SInt, VK_FORMAT_R8_SINT},
+            {(T)Format::R8UInt, VK_FORMAT_R8_UINT},
+            {(T)Format::R8Unorm, VK_FORMAT_R8_UNORM},
+            {(T)Format::RGBA8Unorm, VK_FORMAT_R8G8B8A8_UNORM},
+            {(T)Format::R16SInt, VK_FORMAT_R16_SINT},
+            {(T)Format::R16UInt, VK_FORMAT_R16_UINT},
+            {(T)Format::R16SFloat, VK_FORMAT_R16_SFLOAT},
+            {(T)Format::R16Unorm, VK_FORMAT_R16_UNORM},
+            {(T)Format::RG16SFloat, VK_FORMAT_R16G16_SFLOAT},
+            {(T)Format::RGB16SInt, VK_FORMAT_R16G16B16_SINT},
+            {(T)Format::RGB16UInt, VK_FORMAT_R16G16B16_UINT},
+            {(T)Format::RGB16SFloat, VK_FORMAT_R16G16B16_SFLOAT},
+            {(T)Format::RGBA16SFloat, VK_FORMAT_R16G16B16A16_SFLOAT},
+            {(T)Format::R32SInt, VK_FORMAT_R32_SINT},
+            {(T)Format::R32UInt, VK_FORMAT_R32_UINT},
+            {(T)Format::R32SFloat, VK_FORMAT_R32_SFLOAT},
+            {(T)Format::RG32SInt, VK_FORMAT_R32G32_SINT},
+            {(T)Format::RG32UInt, VK_FORMAT_R32G32_UINT},
+            {(T)Format::RG32SFloat, VK_FORMAT_R32G32_SFLOAT},
+            {(T)Format::RGB32SInt, VK_FORMAT_R32G32B32_SINT},
+            {(T)Format::RGB32UInt, VK_FORMAT_R32G32B32_UINT},
+            {(T)Format::RGB32SFloat, VK_FORMAT_R32G32B32_SFLOAT},
+            {(T)Format::RGBA32SInt, VK_FORMAT_R32G32B32A32_SINT},
+            {(T)Format::RGBA32UInt, VK_FORMAT_R32G32B32A32_UINT},
+            {(T)Format::RGBA32SFloat, VK_FORMAT_R32G32B32A32_SFLOAT},
+            {(T)Format::BGRA8Unorm, VK_FORMAT_B8G8R8A8_UNORM},
+            {(T)Format::D24UnormS8UInt, VK_FORMAT_D24_UNORM_S8_UINT},
+            {(T)Format::D32SFloat, VK_FORMAT_D32_SFLOAT},
+            {(T)Format::D32SFloatS8UInt, VK_FORMAT_D32_SFLOAT_S8_UINT}};
 
-        PE_ERROR("Unknown format");
-        return VK_FORMAT_UNDEFINED;
+        return s_translator[(T)format];
     }
 
     template <>
-    Format Translate<Format>(VkFormat format)
+    Format Translate(VkFormat format)
     {
-        switch (format)
-        {
-        case VK_FORMAT_UNDEFINED:
-            return Format::Undefined;
-        case VK_FORMAT_R8_SINT:
-            return Format::R8SInt;
-        case VK_FORMAT_R8_UINT:
-            return Format::R8UInt;
-        case VK_FORMAT_R8_UNORM:
-            return Format::R8Unorm;
-        case VK_FORMAT_R8G8B8A8_UNORM:
-            return Format::RGBA8Unorm;
-        case VK_FORMAT_R16_SINT:
-            return Format::R16SInt;
-        case VK_FORMAT_R16_UINT:
-            return Format::R16UInt;
-        case VK_FORMAT_R16_SFLOAT:
-            return Format::R16SFloat;
-        case VK_FORMAT_R16_UNORM:
-            return Format::R16Unorm;
-        case VK_FORMAT_R16G16_SFLOAT:
-            return Format::RG16SFloat;
-        case VK_FORMAT_R16G16B16_SINT:
-            return Format::RGB16SInt;
-        case VK_FORMAT_R16G16B16_UINT:
-            return Format::RGB16UInt;
-        case VK_FORMAT_R16G16B16_SFLOAT:
-            return Format::RGB16SFloat;
-        case VK_FORMAT_R16G16B16A16_SFLOAT:
-            return Format::RGBA16SFloat;
-        case VK_FORMAT_R32_SINT:
-            return Format::R32SInt;
-        case VK_FORMAT_R32_UINT:
-            return Format::R32UInt;
-        case VK_FORMAT_R32_SFLOAT:
-            return Format::R32SFloat;
-        case VK_FORMAT_R32G32_SINT:
-            return Format::RG32SInt;
-        case VK_FORMAT_R32G32_UINT:
-            return Format::RG32UInt;
-        case VK_FORMAT_R32G32_SFLOAT:
-            return Format::RG32SFloat;
-        case VK_FORMAT_R32G32B32_SINT:
-            return Format::RGB32SInt;
-        case VK_FORMAT_R32G32B32_UINT:
-            return Format::RGB32UInt;
-        case VK_FORMAT_R32G32B32_SFLOAT:
-            return Format::RGB32SFloat;
-        case VK_FORMAT_R32G32B32A32_SINT:
-            return Format::RGBA32SInt;
-        case VK_FORMAT_R32G32B32A32_UINT:
-            return Format::RGBA32UInt;
-        case VK_FORMAT_R32G32B32A32_SFLOAT:
-            return Format::RGBA32SFloat;
-        case VK_FORMAT_B8G8R8A8_UNORM:
-            return Format::BGRA8Unorm;
-        case VK_FORMAT_D24_UNORM_S8_UINT:
-            return Format::D24UnormS8UInt;
-        case VK_FORMAT_D32_SFLOAT:
-            return Format::D32SFloat;
-        case VK_FORMAT_D32_SFLOAT_S8_UINT:
-            return Format::D32SFloatS8UInt;
-        }
+        using T = std::underlying_type_t<VkFormat>;
+        static std::map<T, Format> s_translator{
+            {(T)VK_FORMAT_UNDEFINED, Format::Undefined},
+            {(T)VK_FORMAT_R8_SINT, Format::R8SInt},
+            {(T)VK_FORMAT_R8_UINT, Format::R8UInt},
+            {(T)VK_FORMAT_R8_UNORM, Format::R8Unorm},
+            {(T)VK_FORMAT_R8G8B8A8_UNORM, Format::RGBA8Unorm},
+            {(T)VK_FORMAT_R16_SINT, Format::R16SInt},
+            {(T)VK_FORMAT_R16_UINT, Format::R16UInt},
+            {(T)VK_FORMAT_R16_SFLOAT, Format::R16SFloat},
+            {(T)VK_FORMAT_R16_UNORM, Format::R16Unorm},
+            {(T)VK_FORMAT_R16G16_SFLOAT, Format::RG16SFloat},
+            {(T)VK_FORMAT_R16G16B16_SINT, Format::RGB16SInt},
+            {(T)VK_FORMAT_R16G16B16_UINT, Format::RGB16UInt},
+            {(T)VK_FORMAT_R16G16B16_SFLOAT, Format::RGB16SFloat},
+            {(T)VK_FORMAT_R16G16B16A16_SFLOAT, Format::RGBA16SFloat},
+            {(T)VK_FORMAT_R32_SINT, Format::R32SInt},
+            {(T)VK_FORMAT_R32_UINT, Format::R32UInt},
+            {(T)VK_FORMAT_R32_SFLOAT, Format::R32SFloat},
+            {(T)VK_FORMAT_R32G32_SINT, Format::RG32SInt},
+            {(T)VK_FORMAT_R32G32_UINT, Format::RG32UInt},
+            {(T)VK_FORMAT_R32G32_SFLOAT, Format::RG32SFloat},
+            {(T)VK_FORMAT_R32G32B32_SINT, Format::RGB32SInt},
+            {(T)VK_FORMAT_R32G32B32_UINT, Format::RGB32UInt},
+            {(T)VK_FORMAT_R32G32B32_SFLOAT, Format::RGB32SFloat},
+            {(T)VK_FORMAT_R32G32B32A32_SINT, Format::RGBA32SInt},
+            {(T)VK_FORMAT_R32G32B32A32_UINT, Format::RGBA32UInt},
+            {(T)VK_FORMAT_R32G32B32A32_SFLOAT, Format::RGBA32SFloat},
+            {(T)VK_FORMAT_B8G8R8A8_UNORM, Format::BGRA8Unorm},
+            {(T)VK_FORMAT_D24_UNORM_S8_UINT, Format::D24UnormS8UInt},
+            {(T)VK_FORMAT_D32_SFLOAT, Format::D32SFloat},
+            {(T)VK_FORMAT_D32_SFLOAT_S8_UINT, Format::D32SFloatS8UInt}};
 
-        PE_ERROR("Unknown format");
-        return Format::Undefined;
+        return s_translator[(T)format];
     }
 
     template <>
-    VkImageTiling Translate<VkImageTiling>(ImageTiling tiling)
+    VkImageTiling Translate(ImageTiling tiling)
     {
-        switch (tiling)
-        {
-        case ImageTiling::Optimal:
-            return VK_IMAGE_TILING_OPTIMAL;
-        case ImageTiling::Linear:
-            return VK_IMAGE_TILING_LINEAR;
-        }
+        using T = std::underlying_type_t<ImageTiling>;
+        static std::map<T, VkImageTiling> s_translator{
+            {(T)ImageTiling::Optimal, VK_IMAGE_TILING_OPTIMAL},
+            {(T)ImageTiling::Linear, VK_IMAGE_TILING_LINEAR}};
 
-        PE_ERROR("Unknown tiling");
-        return VK_IMAGE_TILING_OPTIMAL;
+        return s_translator[(T)tiling];
     }
 
     template <>
-    VkImageUsageFlags Translate<VkImageUsageFlags>(ImageUsageFlags flags)
+    VkImageUsageFlags Translate(ImageUsageFlags flags)
     {
+        using T = ImageUsageFlags::Type;
+        static std::map<T, VkImageUsageFlags> s_translator{
+            {(T)ImageUsage::TransferSrcBit, VK_IMAGE_USAGE_TRANSFER_SRC_BIT},
+            {(T)ImageUsage::TransferDstBit, VK_IMAGE_USAGE_TRANSFER_DST_BIT},
+            {(T)ImageUsage::SampledBit, VK_IMAGE_USAGE_SAMPLED_BIT},
+            {(T)ImageUsage::StorageBit, VK_IMAGE_USAGE_STORAGE_BIT},
+            {(T)ImageUsage::ColorAttachmentBit, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT},
+            {(T)ImageUsage::DepthStencilAttachmentBit, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT},
+            {(T)ImageUsage::TransientAttachmentBit, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT},
+            {(T)ImageUsage::InputAttachmentBit, VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT}};
+
         if (!flags)
             return 0;
 
-        VkImageUsageFlags vkFlags = 0;
-
-        if (flags & ImageUsage::TransferSrcBit)
-            vkFlags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        if (flags & ImageUsage::TransferDstBit)
-            vkFlags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        if (flags & ImageUsage::SampledBit)
-            vkFlags |= VK_IMAGE_USAGE_SAMPLED_BIT;
-        if (flags & ImageUsage::StorageBit)
-            vkFlags |= VK_IMAGE_USAGE_STORAGE_BIT;
-        if (flags & ImageUsage::ColorAttachmentBit)
-            vkFlags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        if (flags & ImageUsage::DepthStencilAttachmentBit)
-            vkFlags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        if (flags & ImageUsage::TransientAttachmentBit)
-            vkFlags |= VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
-        if (flags & ImageUsage::InputAttachmentBit)
-            vkFlags |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-
-        return vkFlags;
+        return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VkImageUsageFlags Translate<VkImageUsageFlags>(ImageUsage flag)
+    VkImageUsageFlags Translate(ImageUsage flag)
     {
         return Translate<VkImageAspectFlags, ImageUsageFlags>(flag);
     }
 
     template <>
-    VkSharingMode Translate<VkSharingMode>(SharingMode mode)
+    VkSharingMode Translate(SharingMode mode)
     {
-        switch (mode)
-        {
-        case SharingMode::Exclusive:
-            return VK_SHARING_MODE_EXCLUSIVE;
-        case SharingMode::Concurrent:
-            return VK_SHARING_MODE_CONCURRENT;
-        }
+        using T = std::underlying_type_t<SharingMode>;
+        static std::map<T, VkSharingMode> s_translator{
+            {(T)SharingMode::Exclusive, VK_SHARING_MODE_EXCLUSIVE},
+            {(T)SharingMode::Concurrent, VK_SHARING_MODE_CONCURRENT}};
 
-        PE_ERROR("Unknown sharing mode");
-        return VK_SHARING_MODE_EXCLUSIVE;
+        return s_translator[(T)mode];
     }
 
     template <>
-    VkImageCreateFlags Translate<VkImageCreateFlags>(ImageCreateFlags flags)
+    VkImageCreateFlags Translate(ImageCreateFlags flags)
     {
-        VkImageCreateFlags vkFlags = 0;
+        using T = ImageCreateFlags::Type;
+        static std::map<T, VkImageCreateFlags> s_translator{
+            {(T)ImageCreate::SparceBindingBit, VK_IMAGE_CREATE_SPARSE_BINDING_BIT},
+            {(T)ImageCreate::SparceResidencyBit, VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT},
+            {(T)ImageCreate::SparceAliasedBit, VK_IMAGE_CREATE_SPARSE_ALIASED_BIT},
+            {(T)ImageCreate::MutableFormatBit, VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT},
+            {(T)ImageCreate::CubeCompatibleBit, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT},
+            {(T)ImageCreate::AliasBit, VK_IMAGE_CREATE_ALIAS_BIT},
+            {(T)ImageCreate::SplitInstanceBindRegionsBit, VK_IMAGE_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT},
+            {(T)ImageCreate::Array2DCompatibleBit, VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT},
+            {(T)ImageCreate::BlockTexeViewCompatibleBit, VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT},
+            {(T)ImageCreate::ExtendedUsageBit, VK_IMAGE_CREATE_EXTENDED_USAGE_BIT},
+            {(T)ImageCreate::ProtectedBit, VK_IMAGE_CREATE_PROTECTED_BIT},
+            {(T)ImageCreate::DisjointBit, VK_IMAGE_CREATE_DISJOINT_BIT},
+            {(T)ImageCreate::CornerSampledBit, VK_IMAGE_CREATE_CORNER_SAMPLED_BIT_NV},
+            {(T)ImageCreate::SampleLocationsCompatibleDepthBit, VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT},
+            {(T)ImageCreate::SubsampledBit, VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT},
+            {(T)ImageCreate::View2DCompatibleBit, VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT}};
 
-        if (!flags)
-            return vkFlags;
-
-        if (flags & ImageCreate::SparceBindingBit)
-            vkFlags |= VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
-        if (flags & ImageCreate::SparceResidencyBit)
-            vkFlags |= VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
-        if (flags & ImageCreate::SparceAliasedBit)
-            vkFlags |= VK_IMAGE_CREATE_SPARSE_ALIASED_BIT;
-        if (flags & ImageCreate::MutableFormatBit)
-            vkFlags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
-        if (flags & ImageCreate::CubeCompatibleBit)
-            vkFlags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-        if (flags & ImageCreate::AliasBit)
-            vkFlags |= VK_IMAGE_CREATE_ALIAS_BIT;
-        if (flags & ImageCreate::SplitInstanceBindRegionsBit)
-            vkFlags |= VK_IMAGE_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT;
-        if (flags & ImageCreate::Array2DCompatibleBit)
-            vkFlags |= VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT;
-        if (flags & ImageCreate::BlockTexeViewCompatibleBit)
-            vkFlags |= VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT;
-        if (flags & ImageCreate::ExtendedUsageBit)
-            vkFlags |= VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
-        if (flags & ImageCreate::ProtectedBit)
-            vkFlags |= VK_IMAGE_CREATE_PROTECTED_BIT;
-        if (flags & ImageCreate::DisjointBit)
-            vkFlags |= VK_IMAGE_CREATE_DISJOINT_BIT;
-        if (flags & ImageCreate::CornerSampledBit)
-            vkFlags |= VK_IMAGE_CREATE_CORNER_SAMPLED_BIT_NV;
-        if (flags & ImageCreate::SampleLocationsCompatibleDepthBit)
-            vkFlags |= VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT;
-        if (flags & ImageCreate::SubsampledBit)
-            vkFlags |= VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT;
-        if (flags & ImageCreate::View2DCompatibleBit)
-            vkFlags |= VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT;
-
-        return vkFlags;
+        return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VkImageCreateFlags Translate<VkImageCreateFlags>(ImageCreate flag)
+    VkImageCreateFlags Translate(ImageCreate flag)
     {
         return Translate<VkImageCreateFlags, ImageCreateFlags>(flag);
     }
 
     template <>
-    VkCommandBufferUsageFlags Translate<VkCommandBufferUsageFlags>(CommandBufferUsageFlags flags)
+    VkCommandBufferUsageFlags Translate(CommandBufferUsageFlags flags)
     {
-        if (!flags)
-            return 0;
+        using T = CommandBufferUsageFlags::Type;
+        static std::map<T, VkCommandBufferUsageFlags> s_translator{
+            {(T)CommandBufferUsage::OneTimeSubmitBit, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT},
+            {(T)CommandBufferUsage::RenderPassContinueBit, VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT},
+            {(T)CommandBufferUsage::SimultaneousUseBit, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT}};
 
-        VkCommandBufferUsageFlags vkFlags = 0;
-
-        if (flags & CommandBufferUsage::OneTimeSubmitBit)
-            vkFlags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        if (flags & CommandBufferUsage::RenderPassContinueBit)
-            vkFlags |= VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-        if (flags & CommandBufferUsage::SimultaneousUseBit)
-            vkFlags |= VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-
-        return vkFlags;
+        return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VkCommandBufferUsageFlags Translate<VkCommandBufferUsageFlags>(CommandBufferUsage flag)
+    VkCommandBufferUsageFlags Translate(CommandBufferUsage flag)
     {
         return Translate<VkCommandBufferUsageFlags, CommandBufferUsageFlags>(flag);
     }
 
     template <>
-    VkBufferUsageFlags Translate<VkBufferUsageFlags>(BufferUsageFlags flags)
+    VkBufferUsageFlags Translate(BufferUsageFlags flags)
     {
-        if (!flags)
-            return 0;
+        using T = BufferUsageFlags::Type;
+        static std::map<T, VkBufferUsageFlags> s_translator{
+            {(T)BufferUsage::TransferSrcBit, VK_BUFFER_USAGE_TRANSFER_SRC_BIT},
+            {(T)BufferUsage::TransferDstBit, VK_BUFFER_USAGE_TRANSFER_DST_BIT},
+            {(T)BufferUsage::UniformTexelBufferBit, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT},
+            {(T)BufferUsage::StorageTexelBufferBit, VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT},
+            {(T)BufferUsage::UniformBufferBit, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT},
+            {(T)BufferUsage::StorageBufferBit, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
+            {(T)BufferUsage::IndexBufferBit, VK_BUFFER_USAGE_INDEX_BUFFER_BIT},
+            {(T)BufferUsage::VertexBufferBit, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT},
+            {(T)BufferUsage::IndirectBufferBit, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT},
+            {(T)BufferUsage::ShaderDeviceAddressBit, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT},
+            {(T)BufferUsage::TransformFeedbackBufferBit, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT},
+            {(T)BufferUsage::TransformFeedbackCounterBufferBit, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT},
+            {(T)BufferUsage::ConditionalRenderingBit, VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT},
+            {(T)BufferUsage::AccelerationStructureBuildInputReadBit, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR},
+            {(T)BufferUsage::AccelerationStructureStorageBit, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR},
+            {(T)BufferUsage::ShaderBindingTableBit, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR}};
 
-        VkBufferUsageFlags vkFlags = 0;
-
-        if (flags & BufferUsage::TransferSrcBit)
-            vkFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        if (flags & BufferUsage::TransferDstBit)
-            vkFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        if (flags & BufferUsage::UniformTexelBufferBit)
-            vkFlags |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
-        if (flags & BufferUsage::StorageTexelBufferBit)
-            vkFlags |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
-        if (flags & BufferUsage::UniformBufferBit)
-            vkFlags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        if (flags & BufferUsage::StorageBufferBit)
-            vkFlags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        if (flags & BufferUsage::IndexBufferBit)
-            vkFlags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-        if (flags & BufferUsage::VertexBufferBit)
-            vkFlags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        if (flags & BufferUsage::IndirectBufferBit)
-            vkFlags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-        if (flags & BufferUsage::ShaderDeviceAddressBit)
-            vkFlags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-        if (flags & BufferUsage::TransformFeedbackBufferBit)
-            vkFlags |= VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT;
-        if (flags & BufferUsage::TransformFeedbackCounterBufferBit)
-            vkFlags |= VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT;
-        if (flags & BufferUsage::ConditionalRenderingBit)
-            vkFlags |= VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT;
-        if (flags & BufferUsage::AccelerationStructureBuildInputReadBit)
-            vkFlags |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
-        if (flags & BufferUsage::AccelerationStructureStorageBit)
-            vkFlags |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR;
-        if (flags & BufferUsage::ShaderBindingTableBit)
-            vkFlags |= VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR;
-
-        return vkFlags;
+        return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VkBufferUsageFlags Translate<VkBufferUsageFlags>(BufferUsage flag)
+    VkBufferUsageFlags Translate(BufferUsage flag)
     {
         return Translate<VkBufferUsageFlags, BufferUsageFlags>(flag);
     }
 
     template <>
-    VkOffset3D Translate<VkOffset3D>(const Offset3D &offset)
+    VkOffset3D Translate(const Offset3D &offset)
     {
         VkOffset3D vkOffset;
         vkOffset.x = offset.x;
@@ -807,197 +575,119 @@ namespace pe
     }
 
     template <>
-    VkColorSpaceKHR Translate<VkColorSpaceKHR>(ColorSpace colorSpace)
+    VkColorSpaceKHR Translate(ColorSpace colorSpace)
     {
-        switch (colorSpace)
-        {
-        case ColorSpace::SrgbNonLinear:
-            return VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-        case ColorSpace::DisplayP3NonLinear:
-            return VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT;
-        case ColorSpace::ExtendedSrgbLinear:
-            return VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT;
-        case ColorSpace::DisplayP3Linear:
-            return VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT;
-        case ColorSpace::DciP3NonLinear:
-            return VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT;
-        case ColorSpace::BT709Linear:
-            return VK_COLOR_SPACE_BT709_LINEAR_EXT;
-        case ColorSpace::BT709NonLinear:
-            return VK_COLOR_SPACE_BT709_NONLINEAR_EXT;
-        case ColorSpace::BT2020Linear:
-            return VK_COLOR_SPACE_BT2020_LINEAR_EXT;
-        case ColorSpace::HDR10St2084:
-            return VK_COLOR_SPACE_HDR10_ST2084_EXT;
-        case ColorSpace::DolbyVision:
-            return VK_COLOR_SPACE_DOLBYVISION_EXT;
-        case ColorSpace::HDR10Hlg:
-            return VK_COLOR_SPACE_HDR10_HLG_EXT;
-        case ColorSpace::AdobeRgbLinear:
-            return VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT;
-        case ColorSpace::AdobeRgbNonLinear:
-            return VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT;
-        case ColorSpace::PassThrough:
-            return VK_COLOR_SPACE_PASS_THROUGH_EXT;
-        case ColorSpace::ExtendedSrgbNonLinear:
-            return VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT;
-        }
+        using T = std::underlying_type_t<ColorSpace>;
+        static std::map<T, VkColorSpaceKHR> s_translator{
+            {(T)ColorSpace::SrgbNonLinear, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+            {(T)ColorSpace::DisplayP3NonLinear, VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT},
+            {(T)ColorSpace::ExtendedSrgbLinear, VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT},
+            {(T)ColorSpace::DisplayP3Linear, VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT},
+            {(T)ColorSpace::DciP3NonLinear, VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT},
+            {(T)ColorSpace::BT709Linear, VK_COLOR_SPACE_BT709_LINEAR_EXT},
+            {(T)ColorSpace::BT709NonLinear, VK_COLOR_SPACE_BT709_NONLINEAR_EXT},
+            {(T)ColorSpace::BT2020Linear, VK_COLOR_SPACE_BT2020_LINEAR_EXT},
+            {(T)ColorSpace::HDR10St2084, VK_COLOR_SPACE_HDR10_ST2084_EXT},
+            {(T)ColorSpace::DolbyVision, VK_COLOR_SPACE_DOLBYVISION_EXT},
+            {(T)ColorSpace::HDR10Hlg, VK_COLOR_SPACE_HDR10_HLG_EXT},
+            {(T)ColorSpace::AdobeRgbLinear, VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT},
+            {(T)ColorSpace::AdobeRgbNonLinear, VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT},
+            {(T)ColorSpace::PassThrough, VK_COLOR_SPACE_PASS_THROUGH_EXT},
+            {(T)ColorSpace::ExtendedSrgbNonLinear, VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT}};
 
-        PE_ERROR("Unknown color space");
-        return VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+        return s_translator[(T)colorSpace];
     }
 
     template <>
-    ColorSpace Translate<ColorSpace>(VkColorSpaceKHR colorSpace)
+    ColorSpace Translate(VkColorSpaceKHR colorSpace)
     {
-        switch (colorSpace)
-        {
-        case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
-            return ColorSpace::SrgbNonLinear;
-        case VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT:
-            return ColorSpace::DisplayP3NonLinear;
-        case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
-            return ColorSpace::ExtendedSrgbLinear;
-        case VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT:
-            return ColorSpace::DisplayP3Linear;
-        case VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT:
-            return ColorSpace::DciP3NonLinear;
-        case VK_COLOR_SPACE_BT709_LINEAR_EXT:
-            return ColorSpace::BT709Linear;
-        case VK_COLOR_SPACE_BT709_NONLINEAR_EXT:
-            return ColorSpace::BT709NonLinear;
-        case VK_COLOR_SPACE_BT2020_LINEAR_EXT:
-            return ColorSpace::BT2020Linear;
-        case VK_COLOR_SPACE_HDR10_ST2084_EXT:
-            return ColorSpace::HDR10St2084;
-        case VK_COLOR_SPACE_DOLBYVISION_EXT:
-            return ColorSpace::DolbyVision;
-        case VK_COLOR_SPACE_HDR10_HLG_EXT:
-            return ColorSpace::HDR10Hlg;
-        case VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT:
-            return ColorSpace::AdobeRgbLinear;
-        case VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT:
-            return ColorSpace::AdobeRgbNonLinear;
-        case VK_COLOR_SPACE_PASS_THROUGH_EXT:
-            return ColorSpace::PassThrough;
-        case VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT:
-            return ColorSpace::ExtendedSrgbNonLinear;
-        }
+        using T = std::underlying_type_t<VkColorSpaceKHR>;
+        static std::map<T, ColorSpace> s_translator{
+            {(T)VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, ColorSpace::SrgbNonLinear},
+            {(T)VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT, ColorSpace::DisplayP3NonLinear},
+            {(T)VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT, ColorSpace::ExtendedSrgbLinear},
+            {(T)VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT, ColorSpace::DisplayP3Linear},
+            {(T)VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT, ColorSpace::DciP3NonLinear},
+            {(T)VK_COLOR_SPACE_BT709_LINEAR_EXT, ColorSpace::BT709Linear},
+            {(T)VK_COLOR_SPACE_BT709_NONLINEAR_EXT, ColorSpace::BT709NonLinear},
+            {(T)VK_COLOR_SPACE_BT2020_LINEAR_EXT, ColorSpace::BT2020Linear},
+            {(T)VK_COLOR_SPACE_HDR10_ST2084_EXT, ColorSpace::HDR10St2084},
+            {(T)VK_COLOR_SPACE_DOLBYVISION_EXT, ColorSpace::DolbyVision},
+            {(T)VK_COLOR_SPACE_HDR10_HLG_EXT, ColorSpace::HDR10Hlg},
+            {(T)VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT, ColorSpace::AdobeRgbLinear},
+            {(T)VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT, ColorSpace::AdobeRgbNonLinear},
+            {(T)VK_COLOR_SPACE_PASS_THROUGH_EXT, ColorSpace::PassThrough},
+            {(T)VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT, ColorSpace::ExtendedSrgbNonLinear}};
 
-        PE_ERROR("Unknown color space");
-        return ColorSpace::SrgbNonLinear;
+        return s_translator[(T)colorSpace];
     }
 
     template <>
-    VkPresentModeKHR Translate<VkPresentModeKHR>(PresentMode presentMode)
+    VkPresentModeKHR Translate(PresentMode presentMode)
     {
-        switch (presentMode)
-        {
-        case PresentMode::Immediate:
-            return VK_PRESENT_MODE_IMMEDIATE_KHR;
-        case PresentMode::Mailbox:
-            return VK_PRESENT_MODE_MAILBOX_KHR;
-        case PresentMode::Fifo:
-            return VK_PRESENT_MODE_FIFO_KHR;
-        case PresentMode::FifoRelaxed:
-            return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
-        case PresentMode::SharedDemandRefresh:
-            return VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR;
-        case PresentMode::SharedContinuousRefresh:
-            return VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR;
-        }
+        using T = std::underlying_type_t<PresentMode>;
+        static std::map<T, VkPresentModeKHR> s_translator{
+            {(T)PresentMode::Immediate, VK_PRESENT_MODE_IMMEDIATE_KHR},
+            {(T)PresentMode::Mailbox, VK_PRESENT_MODE_MAILBOX_KHR},
+            {(T)PresentMode::Fifo, VK_PRESENT_MODE_FIFO_KHR},
+            {(T)PresentMode::FifoRelaxed, VK_PRESENT_MODE_FIFO_RELAXED_KHR},
+            {(T)PresentMode::SharedDemandRefresh, VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR},
+            {(T)PresentMode::SharedContinuousRefresh, VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR}};
 
-        PE_ERROR("Unknown present mode");
-        return VK_PRESENT_MODE_FIFO_KHR;
+        return s_translator[(T)presentMode];
     }
 
     template <>
-    PresentMode Translate<PresentMode>(VkPresentModeKHR presentMode)
+    PresentMode Translate(VkPresentModeKHR presentMode)
     {
-        switch (presentMode)
-        {
-        case VK_PRESENT_MODE_IMMEDIATE_KHR:
-            return PresentMode::Immediate;
-        case VK_PRESENT_MODE_MAILBOX_KHR:
-            return PresentMode::Mailbox;
-        case VK_PRESENT_MODE_FIFO_KHR:
-            return PresentMode::Fifo;
-        case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
-            return PresentMode::FifoRelaxed;
-        case VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR:
-            return PresentMode::SharedDemandRefresh;
-        case VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR:
-            return PresentMode::SharedContinuousRefresh;
-        }
+        using T = std::underlying_type_t<VkPresentModeKHR>;
+        static std::map<T, PresentMode> s_translator{
+            {(T)VK_PRESENT_MODE_IMMEDIATE_KHR, PresentMode::Immediate},
+            {(T)VK_PRESENT_MODE_MAILBOX_KHR, PresentMode::Mailbox},
+            {(T)VK_PRESENT_MODE_FIFO_KHR, PresentMode::Fifo},
+            {(T)VK_PRESENT_MODE_FIFO_RELAXED_KHR, PresentMode::FifoRelaxed},
+            {(T)VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR, PresentMode::SharedDemandRefresh},
+            {(T)VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR, PresentMode::SharedContinuousRefresh}};
 
-        PE_ERROR("Unknown present mode");
-        return PresentMode::Fifo;
+        return s_translator[(T)presentMode];
     }
 
     template <>
-    VkPipelineStageFlags Translate<VkPipelineStageFlags>(PipelineStageFlags flags)
+    VkPipelineStageFlags Translate(PipelineStageFlags flags)
     {
-        if (!flags)
-            return 0;
+        using T = PipelineStageFlags::Type;
+        static std::map<T, VkPipelineStageFlags> s_translator{
+            {(T)PipelineStage::TopOfPipeBit, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT},
+            {(T)PipelineStage::DrawIndirectBit, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT},
+            {(T)PipelineStage::VertexInputBit, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT},
+            {(T)PipelineStage::VertexShaderBit, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT},
+            {(T)PipelineStage::TessellationControlShaderBit, VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT},
+            {(T)PipelineStage::TessellationEvaluationShaderBit, VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT},
+            {(T)PipelineStage::GeometryShaderBit, VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT},
+            {(T)PipelineStage::FragmentShaderBit, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT},
+            {(T)PipelineStage::EarlyFragmentTestsBit, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT},
+            {(T)PipelineStage::LateFragmentTestsBit, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT},
+            {(T)PipelineStage::ColorAttachmentOutputBit, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT},
+            {(T)PipelineStage::ComputeShaderBit, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT},
+            {(T)PipelineStage::TransferBit, VK_PIPELINE_STAGE_TRANSFER_BIT},
+            {(T)PipelineStage::BottomOfPipeBit, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT},
+            {(T)PipelineStage::HostBit, VK_PIPELINE_STAGE_HOST_BIT},
+            {(T)PipelineStage::AllGraphicsBit, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT},
+            {(T)PipelineStage::AllCommandsBit, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT},
+            {(T)PipelineStage::TransformFeedbackBit, VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT},
+            {(T)PipelineStage::ConditionalRenderingBit, VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT},
+            {(T)PipelineStage::AccelerationStructureBuildBit, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR},
+            {(T)PipelineStage::RayTracingShaderBit, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR},
+            {(T)PipelineStage::TaskShaderBit, VK_PIPELINE_STAGE_TASK_SHADER_BIT_NV},
+            {(T)PipelineStage::MeshShaderBit, VK_PIPELINE_STAGE_MESH_SHADER_BIT_NV},
+            {(T)PipelineStage::FragmentDensityProcessBit, VK_PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT_EXT},
+            {(T)PipelineStage::FragmentShadingRateAttechmentBit, VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR}};
 
-        VkPipelineStageFlags vkFlags = 0;
-
-        if (flags & PipelineStage::TopOfPipeBit)
-            vkFlags |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        if (flags & PipelineStage::DrawIndirectBit)
-            vkFlags |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
-        if (flags & PipelineStage::VertexInputBit)
-            vkFlags |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-        if (flags & PipelineStage::VertexShaderBit)
-            vkFlags |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
-        if (flags & PipelineStage::TessellationControlShaderBit)
-            vkFlags |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT;
-        if (flags & PipelineStage::TessellationEvaluationShaderBit)
-            vkFlags |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
-        if (flags & PipelineStage::GeometryShaderBit)
-            vkFlags |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
-        if (flags & PipelineStage::FragmentShaderBit)
-            vkFlags |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        if (flags & PipelineStage::EarlyFragmentTestsBit)
-            vkFlags |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        if (flags & PipelineStage::LateFragmentTestsBit)
-            vkFlags |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        if (flags & PipelineStage::ColorAttachmentOutputBit)
-            vkFlags |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        if (flags & PipelineStage::ComputeShaderBit)
-            vkFlags |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-        if (flags & PipelineStage::TransferBit)
-            vkFlags |= VK_PIPELINE_STAGE_TRANSFER_BIT;
-        if (flags & PipelineStage::BottomOfPipeBit)
-            vkFlags |= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-        if (flags & PipelineStage::HostBit)
-            vkFlags |= VK_PIPELINE_STAGE_HOST_BIT;
-        if (flags & PipelineStage::AllGraphicsBit)
-            vkFlags |= VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
-        if (flags & PipelineStage::AllCommandsBit)
-            vkFlags |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-        if (flags & PipelineStage::TransformFeedbackBit)
-            vkFlags |= VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT;
-        if (flags & PipelineStage::ConditionalRenderingBit)
-            vkFlags |= VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT;
-        if (flags & PipelineStage::AccelerationStructureBuildBit)
-            vkFlags |= VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
-        if (flags & PipelineStage::RayTracingShaderBit)
-            vkFlags |= VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
-        if (flags & PipelineStage::TaskShaderBit)
-            vkFlags |= VK_PIPELINE_STAGE_TASK_SHADER_BIT_NV;
-        if (flags & PipelineStage::MeshShaderBit)
-            vkFlags |= VK_PIPELINE_STAGE_MESH_SHADER_BIT_NV;
-        if (flags & PipelineStage::FragmentDensityProcessBit)
-            vkFlags |= VK_PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT_EXT;
-        if (flags & PipelineStage::FragmentShadingRateAttechmentBit)
-            vkFlags |= VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
-
-        return vkFlags;
+        return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VkPipelineStageFlags Translate<VkPipelineStageFlags>(PipelineStage flag)
+    VkPipelineStageFlags Translate(PipelineStage flag)
     {
         return Translate<VkPipelineStageFlags, PipelineStageFlags>(flag);
     }
@@ -1029,592 +719,352 @@ namespace pe
     }
 
     template <>
-    VkAttachmentLoadOp Translate<VkAttachmentLoadOp>(AttachmentLoadOp loadOp)
+    VkAttachmentLoadOp Translate(AttachmentLoadOp loadOp)
     {
-        switch (loadOp)
-        {
-        case AttachmentLoadOp::Load:
-            return VK_ATTACHMENT_LOAD_OP_LOAD;
-        case AttachmentLoadOp::Clear:
-            return VK_ATTACHMENT_LOAD_OP_CLEAR;
-        case AttachmentLoadOp::DontCare:
-            return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        }
+        using T = std::underlying_type_t<AttachmentLoadOp>;
+        static std::map<T, VkAttachmentLoadOp> s_translator{
+            {(T)AttachmentLoadOp::Load, VK_ATTACHMENT_LOAD_OP_LOAD},
+            {(T)AttachmentLoadOp::Clear, VK_ATTACHMENT_LOAD_OP_CLEAR},
+            {(T)AttachmentLoadOp::DontCare, VK_ATTACHMENT_LOAD_OP_DONT_CARE}};
 
-        PE_ERROR("Unknown attachment load op");
-        return VK_ATTACHMENT_LOAD_OP_LOAD;
+        return s_translator[(T)loadOp];
     }
 
     template <>
-    VkAttachmentStoreOp Translate<VkAttachmentStoreOp>(AttachmentStoreOp storeOp)
+    VkAttachmentStoreOp Translate(AttachmentStoreOp storeOp)
     {
-        switch (storeOp)
-        {
-        case AttachmentStoreOp::Store:
-            return VK_ATTACHMENT_STORE_OP_STORE;
-        case AttachmentStoreOp::DontCare:
-            return VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        }
+        using T = std::underlying_type_t<AttachmentStoreOp>;
+        static std::map<T, VkAttachmentStoreOp> s_translator{
+            {(T)AttachmentStoreOp::Store, VK_ATTACHMENT_STORE_OP_STORE},
+            {(T)AttachmentStoreOp::DontCare, VK_ATTACHMENT_STORE_OP_DONT_CARE}};
 
-        PE_ERROR("Unknown attachment store op");
-        return VK_ATTACHMENT_STORE_OP_STORE;
+        return s_translator[(T)storeOp];
     }
 
     template <>
-    VkAccessFlags Translate<VkAccessFlags>(AccessFlags flags)
+    VkAccessFlags Translate(AccessFlags flags)
     {
-        if (!flags)
-            return 0;
+        using T = AccessFlags::Type;
+        static std::map<T, VkAccessFlags> s_translator{
+            {(T)Access::IndirectCommandReadBit, VK_ACCESS_INDIRECT_COMMAND_READ_BIT},
+            {(T)Access::IndexReadBit, VK_ACCESS_INDEX_READ_BIT},
+            {(T)Access::VertexAttributeReadBit, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT},
+            {(T)Access::UniformReadBit, VK_ACCESS_UNIFORM_READ_BIT},
+            {(T)Access::InputAttachmentReadBit, VK_ACCESS_INPUT_ATTACHMENT_READ_BIT},
+            {(T)Access::ShaderReadBit, VK_ACCESS_SHADER_READ_BIT},
+            {(T)Access::ShaderWriteBit, VK_ACCESS_SHADER_WRITE_BIT},
+            {(T)Access::ColorAttachmentReadBit, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT},
+            {(T)Access::ColorAttachmentWriteBit, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+            {(T)Access::DepthStencilAttachmentReadBit, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT},
+            {(T)Access::DepthStencilAttachmentWriteBit, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+            {(T)Access::TransferReadBit, VK_ACCESS_TRANSFER_READ_BIT},
+            {(T)Access::TransferWriteBit, VK_ACCESS_TRANSFER_WRITE_BIT},
+            {(T)Access::HostReadBit, VK_ACCESS_HOST_READ_BIT},
+            {(T)Access::HostWriteBit, VK_ACCESS_HOST_WRITE_BIT},
+            {(T)Access::MemoryReadBit, VK_ACCESS_MEMORY_READ_BIT},
+            {(T)Access::MemoryWriteBit, VK_ACCESS_MEMORY_WRITE_BIT},
+            {(T)Access::TransformFeedbackWriteBit, VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT},
+            {(T)Access::TransformFeedbackCounterReadBit, VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT},
+            {(T)Access::TransformFeedbackCounterWriteBit, VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT},
+            {(T)Access::ConditionalRenderingReadBit, VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT},
+            {(T)Access::ColorAttachmentReadNoncoherentBit, VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT},
+            {(T)Access::AccelerationStructureReadBitKhr, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR},
+            {(T)Access::AccelerationStructureWriteBitKhr, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR},
+            {(T)Access::FragmentDensityMapReadBit, VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT},
+            {(T)Access::FragmentShadingRateAttachmentReadBitKhr, VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR}};
 
-        VkAccessFlags vkFlags = 0;
-
-        if (flags & Access::IndirectCommandReadBit)
-            vkFlags |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-        if (flags & Access::IndexReadBit)
-            vkFlags |= VK_ACCESS_INDEX_READ_BIT;
-        if (flags & Access::VertexAttributeReadBit)
-            vkFlags |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-        if (flags & Access::UniformReadBit)
-            vkFlags |= VK_ACCESS_UNIFORM_READ_BIT;
-        if (flags & Access::InputAttachmentReadBit)
-            vkFlags |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
-        if (flags & Access::ShaderReadBit)
-            vkFlags |= VK_ACCESS_SHADER_READ_BIT;
-        if (flags & Access::ShaderWriteBit)
-            vkFlags |= VK_ACCESS_SHADER_WRITE_BIT;
-        if (flags & Access::ColorAttachmentReadBit)
-            vkFlags |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-        if (flags & Access::ColorAttachmentWriteBit)
-            vkFlags |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        if (flags & Access::DepthStencilAttachmentReadBit)
-            vkFlags |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-        if (flags & Access::DepthStencilAttachmentWriteBit)
-            vkFlags |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        if (flags & Access::TransferReadBit)
-            vkFlags |= VK_ACCESS_TRANSFER_READ_BIT;
-        if (flags & Access::TransferWriteBit)
-            vkFlags |= VK_ACCESS_TRANSFER_WRITE_BIT;
-        if (flags & Access::HostReadBit)
-            vkFlags |= VK_ACCESS_HOST_READ_BIT;
-        if (flags & Access::HostWriteBit)
-            vkFlags |= VK_ACCESS_HOST_WRITE_BIT;
-        if (flags & Access::MemoryReadBit)
-            vkFlags |= VK_ACCESS_MEMORY_READ_BIT;
-        if (flags & Access::MemoryWriteBit)
-            vkFlags |= VK_ACCESS_MEMORY_WRITE_BIT;
-        if (flags & Access::TransformFeedbackWriteBit)
-            vkFlags |= VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT;
-        if (flags & Access::TransformFeedbackCounterReadBit)
-            vkFlags |= VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT;
-        if (flags & Access::TransformFeedbackCounterWriteBit)
-            vkFlags |= VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT;
-        if (flags & Access::ConditionalRenderingReadBit)
-            vkFlags |= VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT;
-        if (flags & Access::ColorAttachmentReadNoncoherentBit)
-            vkFlags |= VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT;
-        if (flags & Access::AccelerationStructureReadBitKhr)
-            vkFlags |= VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-        if (flags & Access::AccelerationStructureWriteBitKhr)
-            vkFlags |= VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-        if (flags & Access::FragmentDensityMapReadBit)
-            vkFlags |= VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT;
-        if (flags & Access::FragmentShadingRateAttachmentReadBitKhr)
-            vkFlags |= VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR;
-
-        return vkFlags;
+        return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VkAccessFlags Translate<VkAccessFlags>(Access flag)
+    VkAccessFlags Translate(Access flag)
     {
         return Translate<VkAccessFlags, AccessFlags>(flag);
     }
 
     template <>
-    VmaAllocationCreateFlags Translate<VmaAllocationCreateFlags>(AllocationCreateFlags flags)
+    VmaAllocationCreateFlags Translate(AllocationCreateFlags flags)
     {
-        if (!flags)
-            return 0;
+        using T = AllocationCreateFlags::Type;
+        static std::map<T, VmaAllocationCreateFlags> s_translator{
+            {(T)AllocationCreate::DedicatedMemoryBit, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT},
+            {(T)AllocationCreate::NeverAllocateBit, VMA_ALLOCATION_CREATE_NEVER_ALLOCATE_BIT},
+            {(T)AllocationCreate::MappedBit, VMA_ALLOCATION_CREATE_MAPPED_BIT},
+            {(T)AllocationCreate::UserDataCopyStringBit, VMA_ALLOCATION_CREATE_USER_DATA_COPY_STRING_BIT},
+            {(T)AllocationCreate::UpperAddressBit, VMA_ALLOCATION_CREATE_UPPER_ADDRESS_BIT},
+            {(T)AllocationCreate::DontBindBit, VMA_ALLOCATION_CREATE_DONT_BIND_BIT},
+            {(T)AllocationCreate::WithinBudgetBit, VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT},
+            {(T)AllocationCreate::CanAliasBit, VMA_ALLOCATION_CREATE_CAN_ALIAS_BIT},
+            {(T)AllocationCreate::HostAccessSequentialWriteBit, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT},
+            {(T)AllocationCreate::HostAccessRandomBit, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT},
+            {(T)AllocationCreate::HostAccessAllowTransferInsteadBit, VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT},
+            {(T)AllocationCreate::StrategyMinMemoryBit, VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT},
+            {(T)AllocationCreate::StrategyMinTimeBit, VMA_ALLOCATION_CREATE_STRATEGY_MIN_TIME_BIT},
+            {(T)AllocationCreate::StrategyMinOffsetBit, VMA_ALLOCATION_CREATE_STRATEGY_MIN_OFFSET_BIT}};
 
-        VmaAllocationCreateFlags vmaFlags = 0;
-
-        if (flags & AllocationCreate::DedicatedMemoryBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
-        if (flags & AllocationCreate::NeverAllocateBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_NEVER_ALLOCATE_BIT;
-        if (flags & AllocationCreate::MappedBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
-        if (flags & AllocationCreate::UserDataCopyStringBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_USER_DATA_COPY_STRING_BIT;
-        if (flags & AllocationCreate::UpperAddressBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_UPPER_ADDRESS_BIT;
-        if (flags & AllocationCreate::DontBindBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_DONT_BIND_BIT;
-        if (flags & AllocationCreate::WithinBudgetBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT;
-        if (flags & AllocationCreate::CanAliasBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_CAN_ALIAS_BIT;
-        if (flags & AllocationCreate::HostAccessSequentialWriteBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-        if (flags & AllocationCreate::HostAccessRandomBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
-        if (flags & AllocationCreate::HostAccessAllowTransferInsteadBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
-        if (flags & AllocationCreate::StrategyMinMemoryBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT;
-        if (flags & AllocationCreate::StrategyMinTimeBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_STRATEGY_MIN_TIME_BIT;
-        if (flags & AllocationCreate::StrategyMinOffsetBit)
-            vmaFlags |= VMA_ALLOCATION_CREATE_STRATEGY_MIN_OFFSET_BIT;
-
-        return vmaFlags;
+        return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VmaAllocationCreateFlags Translate<VmaAllocationCreateFlags>(AllocationCreate flag)
+    VmaAllocationCreateFlags Translate(AllocationCreate flag)
     {
         return Translate<VmaAllocationCreateFlags, AllocationCreateFlags>(flag);
     }
 
     template <>
-    VkBlendFactor Translate<VkBlendFactor>(BlendFactor blendFactor)
+    VkBlendFactor Translate(BlendFactor blendFactor)
     {
-        switch (blendFactor)
-        {
-        case BlendFactor::Zero:
-            return VK_BLEND_FACTOR_ZERO;
-        case BlendFactor::One:
-            return VK_BLEND_FACTOR_ONE;
-        case BlendFactor::SrcColor:
-            return VK_BLEND_FACTOR_SRC_COLOR;
-        case BlendFactor::OneMinusSrcColor:
-            return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
-        case BlendFactor::DstColor:
-            return VK_BLEND_FACTOR_DST_COLOR;
-        case BlendFactor::OneMinusDstColor:
-            return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
-        case BlendFactor::SrcAlpha:
-            return VK_BLEND_FACTOR_SRC_ALPHA;
-        case BlendFactor::OneMinusSrcAlpha:
-            return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        case BlendFactor::DstAlpha:
-            return VK_BLEND_FACTOR_DST_ALPHA;
-        case BlendFactor::OneMinusDstAlpha:
-            return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
-        case BlendFactor::ConstantColor:
-            return VK_BLEND_FACTOR_CONSTANT_COLOR;
-        case BlendFactor::OneMinusConstantColor:
-            return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
-        case BlendFactor::ConstantAlpha:
-            return VK_BLEND_FACTOR_CONSTANT_ALPHA;
-        case BlendFactor::OneMinusConstantAlpha:
-            return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
-        case BlendFactor::SrcAlphaSaturate:
-            return VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
-        case BlendFactor::Src1Color:
-            return VK_BLEND_FACTOR_SRC1_COLOR;
-        case BlendFactor::OneMinusSrc1Color:
-            return VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR;
-        case BlendFactor::Src1Alpha:
-            return VK_BLEND_FACTOR_SRC1_ALPHA;
-        case BlendFactor::OneMinusSrc1Alpha:
-            return VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
-        }
+        using T = std::underlying_type_t<BlendFactor>;
+        static std::map<T, VkBlendFactor> s_translator{
+            {(T)BlendFactor::Zero, VK_BLEND_FACTOR_ZERO},
+            {(T)BlendFactor::One, VK_BLEND_FACTOR_ONE},
+            {(T)BlendFactor::SrcColor, VK_BLEND_FACTOR_SRC_COLOR},
+            {(T)BlendFactor::OneMinusSrcColor, VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR},
+            {(T)BlendFactor::DstColor, VK_BLEND_FACTOR_DST_COLOR},
+            {(T)BlendFactor::OneMinusDstColor, VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR},
+            {(T)BlendFactor::SrcAlpha, VK_BLEND_FACTOR_SRC_ALPHA},
+            {(T)BlendFactor::OneMinusSrcAlpha, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA},
+            {(T)BlendFactor::DstAlpha, VK_BLEND_FACTOR_DST_ALPHA},
+            {(T)BlendFactor::OneMinusDstAlpha, VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA},
+            {(T)BlendFactor::ConstantColor, VK_BLEND_FACTOR_CONSTANT_COLOR},
+            {(T)BlendFactor::OneMinusConstantColor, VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR},
+            {(T)BlendFactor::ConstantAlpha, VK_BLEND_FACTOR_CONSTANT_ALPHA},
+            {(T)BlendFactor::OneMinusConstantAlpha, VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA},
+            {(T)BlendFactor::SrcAlphaSaturate, VK_BLEND_FACTOR_SRC_ALPHA_SATURATE},
+            {(T)BlendFactor::Src1Color, VK_BLEND_FACTOR_SRC1_COLOR},
+            {(T)BlendFactor::OneMinusSrc1Color, VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR},
+            {(T)BlendFactor::Src1Alpha, VK_BLEND_FACTOR_SRC1_ALPHA},
+            {(T)BlendFactor::OneMinusSrc1Alpha, VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA}};
 
-        PE_ERROR("Unknown blend factor");
-        return VK_BLEND_FACTOR_ZERO;
+        return s_translator[(T)blendFactor];
     }
 
     template <>
-    VkBlendOp Translate<VkBlendOp>(BlendOp blendOp)
+    VkBlendOp Translate(BlendOp blendOp)
     {
-        switch (blendOp)
-        {
-        case BlendOp::Add:
-            return VK_BLEND_OP_ADD;
-        case BlendOp::Subtract:
-            return VK_BLEND_OP_SUBTRACT;
-        case BlendOp::ReverseSubtract:
-            return VK_BLEND_OP_REVERSE_SUBTRACT;
-        case BlendOp::Min:
-            return VK_BLEND_OP_MIN;
-        case BlendOp::Max:
-            return VK_BLEND_OP_MAX;
-        case BlendOp::Zero:
-            return VK_BLEND_OP_ZERO_EXT;
-        case BlendOp::Src:
-            return VK_BLEND_OP_SRC_EXT;
-        case BlendOp::Dst:
-            return VK_BLEND_OP_DST_EXT;
-        case BlendOp::SrcOver:
-            return VK_BLEND_OP_SRC_OVER_EXT;
-        case BlendOp::DstOver:
-            return VK_BLEND_OP_DST_OVER_EXT;
-        case BlendOp::SrcIn:
-            return VK_BLEND_OP_SRC_IN_EXT;
-        case BlendOp::DstIn:
-            return VK_BLEND_OP_DST_IN_EXT;
-        case BlendOp::SrcOut:
-            return VK_BLEND_OP_SRC_OUT_EXT;
-        case BlendOp::DstOut:
-            return VK_BLEND_OP_DST_OUT_EXT;
-        case BlendOp::SrcAtop:
-            return VK_BLEND_OP_SRC_ATOP_EXT;
-        case BlendOp::DstAtop:
-            return VK_BLEND_OP_DST_ATOP_EXT;
-        case BlendOp::Xor:
-            return VK_BLEND_OP_XOR_EXT;
-        case BlendOp::Multiply:
-            return VK_BLEND_OP_MULTIPLY_EXT;
-        case BlendOp::Screen:
-            return VK_BLEND_OP_SCREEN_EXT;
-        case BlendOp::Overlay:
-            return VK_BLEND_OP_OVERLAY_EXT;
-        case BlendOp::Darken:
-            return VK_BLEND_OP_DARKEN_EXT;
-        case BlendOp::Lighten:
-            return VK_BLEND_OP_LIGHTEN_EXT;
-        case BlendOp::Colordodge:
-            return VK_BLEND_OP_COLORDODGE_EXT;
-        case BlendOp::Colorburn:
-            return VK_BLEND_OP_COLORBURN_EXT;
-        case BlendOp::Hardlight:
-            return VK_BLEND_OP_HARDLIGHT_EXT;
-        case BlendOp::Softlight:
-            return VK_BLEND_OP_SOFTLIGHT_EXT;
-        case BlendOp::Difference:
-            return VK_BLEND_OP_DIFFERENCE_EXT;
-        case BlendOp::Exclusion:
-            return VK_BLEND_OP_EXCLUSION_EXT;
-        case BlendOp::Invert:
-            return VK_BLEND_OP_INVERT_EXT;
-        case BlendOp::InvertRgb:
-            return VK_BLEND_OP_INVERT_RGB_EXT;
-        case BlendOp::Lineardodge:
-            return VK_BLEND_OP_LINEARDODGE_EXT;
-        case BlendOp::Linearburn:
-            return VK_BLEND_OP_LINEARBURN_EXT;
-        case BlendOp::Vividlight:
-            return VK_BLEND_OP_VIVIDLIGHT_EXT;
-        case BlendOp::Linearlight:
-            return VK_BLEND_OP_LINEARLIGHT_EXT;
-        case BlendOp::Pinlight:
-            return VK_BLEND_OP_PINLIGHT_EXT;
-        case BlendOp::Hardmix:
-            return VK_BLEND_OP_HARDMIX_EXT;
-        case BlendOp::HslHue:
-            return VK_BLEND_OP_HSL_HUE_EXT;
-        case BlendOp::HslSaturation:
-            return VK_BLEND_OP_HSL_SATURATION_EXT;
-        case BlendOp::HslColor:
-            return VK_BLEND_OP_HSL_COLOR_EXT;
-        case BlendOp::HslLuminosity:
-            return VK_BLEND_OP_HSL_LUMINOSITY_EXT;
-        case BlendOp::Plus:
-            return VK_BLEND_OP_PLUS_EXT;
-        case BlendOp::PlusClamped:
-            return VK_BLEND_OP_PLUS_CLAMPED_EXT;
-        case BlendOp::PlusClampedAlpha:
-            return VK_BLEND_OP_PLUS_CLAMPED_ALPHA_EXT;
-        case BlendOp::PlusDarker:
-            return VK_BLEND_OP_PLUS_DARKER_EXT;
-        case BlendOp::Minus:
-            return VK_BLEND_OP_MINUS_EXT;
-        case BlendOp::MinusClamped:
-            return VK_BLEND_OP_MINUS_CLAMPED_EXT;
-        case BlendOp::Contrast:
-            return VK_BLEND_OP_CONTRAST_EXT;
-        case BlendOp::InvertOvg:
-            return VK_BLEND_OP_INVERT_OVG_EXT;
-        case BlendOp::Red:
-            return VK_BLEND_OP_RED_EXT;
-        case BlendOp::Green:
-            return VK_BLEND_OP_GREEN_EXT;
-        case BlendOp::Blue:
-            return VK_BLEND_OP_BLUE_EXT;
-        }
+        using T = std::underlying_type_t<BlendOp>;
+        static std::map<T, VkBlendOp> s_translator{
+            {(T)BlendOp::Add, VK_BLEND_OP_ADD},
+            {(T)BlendOp::Subtract, VK_BLEND_OP_SUBTRACT},
+            {(T)BlendOp::ReverseSubtract, VK_BLEND_OP_REVERSE_SUBTRACT},
+            {(T)BlendOp::Min, VK_BLEND_OP_MIN},
+            {(T)BlendOp::Max, VK_BLEND_OP_MAX},
+            {(T)BlendOp::Zero, VK_BLEND_OP_ZERO_EXT},
+            {(T)BlendOp::Src, VK_BLEND_OP_SRC_EXT},
+            {(T)BlendOp::Dst, VK_BLEND_OP_DST_EXT},
+            {(T)BlendOp::SrcOver, VK_BLEND_OP_SRC_OVER_EXT},
+            {(T)BlendOp::DstOver, VK_BLEND_OP_DST_OVER_EXT},
+            {(T)BlendOp::SrcIn, VK_BLEND_OP_SRC_IN_EXT},
+            {(T)BlendOp::DstIn, VK_BLEND_OP_DST_IN_EXT},
+            {(T)BlendOp::SrcOut, VK_BLEND_OP_SRC_OUT_EXT},
+            {(T)BlendOp::DstOut, VK_BLEND_OP_DST_OUT_EXT},
+            {(T)BlendOp::SrcAtop, VK_BLEND_OP_SRC_ATOP_EXT},
+            {(T)BlendOp::DstAtop, VK_BLEND_OP_DST_ATOP_EXT},
+            {(T)BlendOp::Xor, VK_BLEND_OP_XOR_EXT},
+            {(T)BlendOp::Multiply, VK_BLEND_OP_MULTIPLY_EXT},
+            {(T)BlendOp::Screen, VK_BLEND_OP_SCREEN_EXT},
+            {(T)BlendOp::Overlay, VK_BLEND_OP_OVERLAY_EXT},
+            {(T)BlendOp::Darken, VK_BLEND_OP_DARKEN_EXT},
+            {(T)BlendOp::Lighten, VK_BLEND_OP_LIGHTEN_EXT},
+            {(T)BlendOp::Colordodge, VK_BLEND_OP_COLORDODGE_EXT},
+            {(T)BlendOp::Colorburn, VK_BLEND_OP_COLORBURN_EXT},
+            {(T)BlendOp::Hardlight, VK_BLEND_OP_HARDLIGHT_EXT},
+            {(T)BlendOp::Softlight, VK_BLEND_OP_SOFTLIGHT_EXT},
+            {(T)BlendOp::Difference, VK_BLEND_OP_DIFFERENCE_EXT},
+            {(T)BlendOp::Exclusion, VK_BLEND_OP_EXCLUSION_EXT},
+            {(T)BlendOp::Invert, VK_BLEND_OP_INVERT_EXT},
+            {(T)BlendOp::InvertRgb, VK_BLEND_OP_INVERT_RGB_EXT},
+            {(T)BlendOp::Lineardodge, VK_BLEND_OP_LINEARDODGE_EXT},
+            {(T)BlendOp::Linearburn, VK_BLEND_OP_LINEARBURN_EXT},
+            {(T)BlendOp::Vividlight, VK_BLEND_OP_VIVIDLIGHT_EXT},
+            {(T)BlendOp::Linearlight, VK_BLEND_OP_LINEARLIGHT_EXT},
+            {(T)BlendOp::Pinlight, VK_BLEND_OP_PINLIGHT_EXT},
+            {(T)BlendOp::Hardmix, VK_BLEND_OP_HARDMIX_EXT},
+            {(T)BlendOp::HslHue, VK_BLEND_OP_HSL_HUE_EXT},
+            {(T)BlendOp::HslSaturation, VK_BLEND_OP_HSL_SATURATION_EXT},
+            {(T)BlendOp::HslColor, VK_BLEND_OP_HSL_COLOR_EXT},
+            {(T)BlendOp::HslLuminosity, VK_BLEND_OP_HSL_LUMINOSITY_EXT},
+            {(T)BlendOp::Plus, VK_BLEND_OP_PLUS_EXT},
+            {(T)BlendOp::PlusClamped, VK_BLEND_OP_PLUS_CLAMPED_EXT},
+            {(T)BlendOp::PlusClampedAlpha, VK_BLEND_OP_PLUS_CLAMPED_ALPHA_EXT},
+            {(T)BlendOp::PlusDarker, VK_BLEND_OP_PLUS_DARKER_EXT},
+            {(T)BlendOp::Minus, VK_BLEND_OP_MINUS_EXT},
+            {(T)BlendOp::MinusClamped, VK_BLEND_OP_MINUS_CLAMPED_EXT},
+            {(T)BlendOp::Contrast, VK_BLEND_OP_CONTRAST_EXT},
+            {(T)BlendOp::InvertOvg, VK_BLEND_OP_INVERT_OVG_EXT},
+            {(T)BlendOp::Red, VK_BLEND_OP_RED_EXT},
+            {(T)BlendOp::Green, VK_BLEND_OP_GREEN_EXT},
+            {(T)BlendOp::Blue, VK_BLEND_OP_BLUE_EXT}};
 
-        PE_ERROR("Unknown blend op");
-        return VK_BLEND_OP_ADD;
+        return s_translator[(T)blendOp];
     }
 
     template <>
-    VkColorComponentFlags Translate<VkColorComponentFlags>(ColorComponentFlags flags)
+    VkColorComponentFlags Translate(ColorComponentFlags flags)
     {
-        if (!flags)
-            return 0;
+        using T = ColorComponentFlags::Type;
+        static std::map<T, VkColorComponentFlags> s_translator{
+            {(T)ColorComponent::RBit, VK_COLOR_COMPONENT_R_BIT},
+            {(T)ColorComponent::GBit, VK_COLOR_COMPONENT_G_BIT},
+            {(T)ColorComponent::BBit, VK_COLOR_COMPONENT_B_BIT},
+            {(T)ColorComponent::ABit, VK_COLOR_COMPONENT_A_BIT}};
 
-        VkColorComponentFlags vkFlags = 0;
-
-        if (flags & ColorComponent::RBit)
-            vkFlags |= VK_COLOR_COMPONENT_R_BIT;
-        if (flags & ColorComponent::GBit)
-            vkFlags |= VK_COLOR_COMPONENT_G_BIT;
-        if (flags & ColorComponent::BBit)
-            vkFlags |= VK_COLOR_COMPONENT_B_BIT;
-        if (flags & ColorComponent::ABit)
-            vkFlags |= VK_COLOR_COMPONENT_A_BIT;
-
-        return vkFlags;
+        return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VkColorComponentFlags Translate<VkColorComponentFlags>(ColorComponent flag)
+    VkColorComponentFlags Translate(ColorComponent flag)
     {
         return Translate<VkColorComponentFlags, ColorComponentFlags>(flag);
     }
 
     template <>
-    VkDynamicState Translate<VkDynamicState>(DynamicState state)
+    VkDynamicState Translate(DynamicState state)
     {
-        switch (state)
-        {
-        case DynamicState::Viewport:
-            return VK_DYNAMIC_STATE_VIEWPORT;
-        case DynamicState::Scissor:
-            return VK_DYNAMIC_STATE_SCISSOR;
-        case DynamicState::LineWidth:
-            return VK_DYNAMIC_STATE_LINE_WIDTH;
-        case DynamicState::DepthBias:
-            return VK_DYNAMIC_STATE_DEPTH_BIAS;
-        case DynamicState::BlendConstants:
-            return VK_DYNAMIC_STATE_BLEND_CONSTANTS;
-        case DynamicState::DepthBounds:
-            return VK_DYNAMIC_STATE_DEPTH_BOUNDS;
-        case DynamicState::StencilCompareMask:
-            return VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK;
-        case DynamicState::StencilWriteMask:
-            return VK_DYNAMIC_STATE_STENCIL_WRITE_MASK;
-        case DynamicState::StencilReference:
-            return VK_DYNAMIC_STATE_STENCIL_REFERENCE;
-        case DynamicState::CullMode:
-            return VK_DYNAMIC_STATE_CULL_MODE;
-        case DynamicState::FrontFace:
-            return VK_DYNAMIC_STATE_FRONT_FACE;
-        case DynamicState::PrimitiveTopology:
-            return VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY;
-        case DynamicState::ViewportWithCount:
-            return VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT;
-        case DynamicState::ScissorWithCount:
-            return VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT;
-        case DynamicState::VertexInputBindingStride:
-            return VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT;
-        case DynamicState::DepthTestEnable:
-            return VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT;
-        case DynamicState::DepthWriteEnable:
-            return VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT;
-        case DynamicState::DepthCompareOp:
-            return VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT;
-        case DynamicState::DepthBoundsTestEnable:
-            return VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE_EXT;
-        case DynamicState::StencilTestEnable:
-            return VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT;
-        case DynamicState::StencilOp:
-            return VK_DYNAMIC_STATE_STENCIL_OP_EXT;
-        case DynamicState::RasterizerDiscardEnable:
-            return VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT;
-        case DynamicState::DepthBiasEnable:
-            return VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT;
-        case DynamicState::PrimitiveRestartEnable:
-            return VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE;
-        case DynamicState::DiscardRectangle:
-            return VK_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT;
-        case DynamicState::SampleLocations:
-            return VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT;
-        case DynamicState::RayTracingPipelineStackSize:
-            return VK_DYNAMIC_STATE_RAY_TRACING_PIPELINE_STACK_SIZE_KHR;
-        case DynamicState::FragmentShadingRateKHR:
-            return VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR;
-        case DynamicState::LineStipple:
-            return VK_DYNAMIC_STATE_LINE_STIPPLE_EXT;
-        case DynamicState::VertexInput:
-            return VK_DYNAMIC_STATE_VERTEX_INPUT_EXT;
-        case DynamicState::PatchControlPoints:
-            return VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT;
-        case DynamicState::LogicOp:
-            return VK_DYNAMIC_STATE_LOGIC_OP_EXT;
-        case DynamicState::ColorWriteEnable:
-            return VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT;
-        }
+        using T = std::underlying_type_t<DynamicState>;
+        static std::map<T, VkDynamicState> s_translator{
+            {(T)DynamicState::Viewport, VK_DYNAMIC_STATE_VIEWPORT},
+            {(T)DynamicState::Scissor, VK_DYNAMIC_STATE_SCISSOR},
+            {(T)DynamicState::LineWidth, VK_DYNAMIC_STATE_LINE_WIDTH},
+            {(T)DynamicState::DepthBias, VK_DYNAMIC_STATE_DEPTH_BIAS},
+            {(T)DynamicState::BlendConstants, VK_DYNAMIC_STATE_BLEND_CONSTANTS},
+            {(T)DynamicState::DepthBounds, VK_DYNAMIC_STATE_DEPTH_BOUNDS},
+            {(T)DynamicState::StencilCompareMask, VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK},
+            {(T)DynamicState::StencilWriteMask, VK_DYNAMIC_STATE_STENCIL_WRITE_MASK},
+            {(T)DynamicState::StencilReference, VK_DYNAMIC_STATE_STENCIL_REFERENCE},
+            {(T)DynamicState::CullMode, VK_DYNAMIC_STATE_CULL_MODE},
+            {(T)DynamicState::FrontFace, VK_DYNAMIC_STATE_FRONT_FACE},
+            {(T)DynamicState::PrimitiveTopology, VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY},
+            {(T)DynamicState::ViewportWithCount, VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT},
+            {(T)DynamicState::ScissorWithCount, VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT},
+            {(T)DynamicState::VertexInputBindingStride, VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT},
+            {(T)DynamicState::DepthTestEnable, VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT},
+            {(T)DynamicState::DepthWriteEnable, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT},
+            {(T)DynamicState::DepthCompareOp, VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT},
+            {(T)DynamicState::DepthBoundsTestEnable, VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE_EXT},
+            {(T)DynamicState::StencilTestEnable, VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT},
+            {(T)DynamicState::StencilOp, VK_DYNAMIC_STATE_STENCIL_OP_EXT},
+            {(T)DynamicState::RasterizerDiscardEnable, VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT},
+            {(T)DynamicState::DepthBiasEnable, VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT},
+            {(T)DynamicState::PrimitiveRestartEnable, VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE},
+            {(T)DynamicState::DiscardRectangle, VK_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT},
+            {(T)DynamicState::SampleLocations, VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT},
+            {(T)DynamicState::RayTracingPipelineStackSize, VK_DYNAMIC_STATE_RAY_TRACING_PIPELINE_STACK_SIZE_KHR},
+            {(T)DynamicState::FragmentShadingRateKHR, VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR},
+            {(T)DynamicState::LineStipple, VK_DYNAMIC_STATE_LINE_STIPPLE_EXT},
+            {(T)DynamicState::VertexInput, VK_DYNAMIC_STATE_VERTEX_INPUT_EXT},
+            {(T)DynamicState::PatchControlPoints, VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT},
+            {(T)DynamicState::LogicOp, VK_DYNAMIC_STATE_LOGIC_OP_EXT},
+            {(T)DynamicState::ColorWriteEnable, VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT}};
 
-        PE_ERROR("Unknown dynamic state");
-        return VK_DYNAMIC_STATE_VIEWPORT;
+        return s_translator[(T)state];
     }
 
     template <>
-    VkDescriptorType Translate<VkDescriptorType>(DescriptorType type)
+    VkDescriptorType Translate(DescriptorType type)
     {
-        switch (type)
-        {
-        case DescriptorType::Sampler:
-            return VK_DESCRIPTOR_TYPE_SAMPLER;
-        case DescriptorType::CombinedImageSampler:
-            return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        case DescriptorType::SampledImage:
-            return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        case DescriptorType::StorageImage:
-            return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        case DescriptorType::UniformTexelBuffer:
-            return VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-        case DescriptorType::StorageTexelBuffer:
-            return VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
-        case DescriptorType::UniformBuffer:
-            return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        case DescriptorType::StorageBuffer:
-            return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        case DescriptorType::UniformBufferDynamic:
-            return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        case DescriptorType::StorageBufferDynamic:
-            return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
-        case DescriptorType::InputAttachment:
-            return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-        case DescriptorType::InlineUniformBlock:
-            return VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
-        case DescriptorType::AccelerationStructure:
-            return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-        }
+        using T = std::underlying_type_t<DescriptorType>;
+        static std::map<T, VkDescriptorType> s_translator{
+            {(T)DescriptorType::Sampler, VK_DESCRIPTOR_TYPE_SAMPLER},
+            {(T)DescriptorType::CombinedImageSampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+            {(T)DescriptorType::SampledImage, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE},
+            {(T)DescriptorType::StorageImage, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+            {(T)DescriptorType::UniformTexelBuffer, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER},
+            {(T)DescriptorType::StorageTexelBuffer, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER},
+            {(T)DescriptorType::UniformBuffer, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER},
+            {(T)DescriptorType::StorageBuffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+            {(T)DescriptorType::UniformBufferDynamic, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC},
+            {(T)DescriptorType::StorageBufferDynamic, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
+            {(T)DescriptorType::InputAttachment, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT},
+            {(T)DescriptorType::InlineUniformBlock, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK},
+            {(T)DescriptorType::AccelerationStructure, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR}};
 
-        PE_ERROR("Unknown descriptor type");
-        return VK_DESCRIPTOR_TYPE_SAMPLER;
+        return s_translator[(T)type];
     }
 
     template <>
-    VkCullModeFlags Translate<VkCullModeFlags>(CullMode mode)
+    VkCullModeFlags Translate(CullMode mode)
     {
-        switch (mode)
-        {
-        case CullMode::None:
-            return VK_CULL_MODE_NONE;
-        case CullMode::Front:
-            return VK_CULL_MODE_FRONT_BIT;
-        case CullMode::Back:
-            return VK_CULL_MODE_BACK_BIT;
-        case CullMode::FrontAndBack:
-            return VK_CULL_MODE_FRONT_AND_BACK;
-        }
+        using T = std::underlying_type_t<CullMode>;
+        static std::map<T, VkCullModeFlags> s_translator{
+            {(T)CullMode::None, VK_CULL_MODE_NONE},
+            {(T)CullMode::Front, VK_CULL_MODE_FRONT_BIT},
+            {(T)CullMode::Back, VK_CULL_MODE_BACK_BIT},
+            {(T)CullMode::FrontAndBack, VK_CULL_MODE_FRONT_AND_BACK}};
 
-        PE_ERROR("Unknown cull mode");
-        return VK_CULL_MODE_NONE;
+        return s_translator[(T)mode];
     }
 
     template <>
-    VkObjectType Translate<VkObjectType>(ObjectType type)
+    VkObjectType Translate(ObjectType type)
     {
-        switch (type)
-        {
-        case ObjectType::Unknown:
-            return VK_OBJECT_TYPE_UNKNOWN;
-        case ObjectType::Instance:
-            return VK_OBJECT_TYPE_INSTANCE;
-        case ObjectType::PhysicalDevice:
-            return VK_OBJECT_TYPE_PHYSICAL_DEVICE;
-        case ObjectType::Device:
-            return VK_OBJECT_TYPE_DEVICE;
-        case ObjectType::Queue:
-            return VK_OBJECT_TYPE_QUEUE;
-        case ObjectType::Semaphore:
-            return VK_OBJECT_TYPE_SEMAPHORE;
-        case ObjectType::CommandBuffer:
-            return VK_OBJECT_TYPE_COMMAND_BUFFER;
-        case ObjectType::Fence:
-            return VK_OBJECT_TYPE_FENCE;
-        case ObjectType::DeviceMemory:
-            return VK_OBJECT_TYPE_DEVICE_MEMORY;
-        case ObjectType::Buffer:
-            return VK_OBJECT_TYPE_BUFFER;
-        case ObjectType::Image:
-            return VK_OBJECT_TYPE_IMAGE;
-        case ObjectType::Event:
-            return VK_OBJECT_TYPE_EVENT;
-        case ObjectType::QueryPool:
-            return VK_OBJECT_TYPE_QUERY_POOL;
-        case ObjectType::BufferView:
-            return VK_OBJECT_TYPE_BUFFER_VIEW;
-        case ObjectType::ImageView:
-            return VK_OBJECT_TYPE_IMAGE_VIEW;
-        case ObjectType::ShaderModule:
-            return VK_OBJECT_TYPE_SHADER_MODULE;
-        case ObjectType::PipelineCache:
-            return VK_OBJECT_TYPE_PIPELINE_CACHE;
-        case ObjectType::PipelineLayout:
-            return VK_OBJECT_TYPE_PIPELINE_LAYOUT;
-        case ObjectType::RenderPass:
-            return VK_OBJECT_TYPE_RENDER_PASS;
-        case ObjectType::Pipeline:
-            return VK_OBJECT_TYPE_PIPELINE;
-        case ObjectType::DescriptorSetLayout:
-            return VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
-        case ObjectType::Sampler:
-            return VK_OBJECT_TYPE_SAMPLER;
-        case ObjectType::DescriptorPool:
-            return VK_OBJECT_TYPE_DESCRIPTOR_POOL;
-        case ObjectType::DescriptorSet:
-            return VK_OBJECT_TYPE_DESCRIPTOR_SET;
-        case ObjectType::Framebuffer:
-            return VK_OBJECT_TYPE_FRAMEBUFFER;
-        case ObjectType::CommandPool:
-            return VK_OBJECT_TYPE_COMMAND_POOL;
-        case ObjectType::SamplerYcbcrConversion:
-            return VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION;
-        case ObjectType::DescriptorUpdateTemplate:
-            return VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE;
-        case ObjectType::PrivateDataSlot:
-            return VK_OBJECT_TYPE_PRIVATE_DATA_SLOT;
-        case ObjectType::Surface:
-            return VK_OBJECT_TYPE_SURFACE_KHR;
-        case ObjectType::Swapchain:
-            return VK_OBJECT_TYPE_SWAPCHAIN_KHR;
-        case ObjectType::Display:
-            return VK_OBJECT_TYPE_DISPLAY_KHR;
-        case ObjectType::DisplayMode:
-            return VK_OBJECT_TYPE_DISPLAY_MODE_KHR;
-        case ObjectType::DebugReportCallback:
-            return VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT;
-        case ObjectType::DebugUtilsMessenger:
-            return VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT;
-        case ObjectType::AccelerationStructure:
-            return VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR;
-        case ObjectType::ValidationCache:
-            return VK_OBJECT_TYPE_VALIDATION_CACHE_EXT;
-        case ObjectType::DeferredOperation:
-            return VK_OBJECT_TYPE_DEFERRED_OPERATION_KHR;
-        }
+        using T = std::underlying_type_t<ObjectType>;
+        static std::map<T, VkObjectType> s_translator{
+            {(T)ObjectType::Unknown, VK_OBJECT_TYPE_UNKNOWN},
+            {(T)ObjectType::Instance, VK_OBJECT_TYPE_INSTANCE},
+            {(T)ObjectType::PhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE},
+            {(T)ObjectType::Device, VK_OBJECT_TYPE_DEVICE},
+            {(T)ObjectType::Queue, VK_OBJECT_TYPE_QUEUE},
+            {(T)ObjectType::Semaphore, VK_OBJECT_TYPE_SEMAPHORE},
+            {(T)ObjectType::CommandBuffer, VK_OBJECT_TYPE_COMMAND_BUFFER},
+            {(T)ObjectType::Fence, VK_OBJECT_TYPE_FENCE},
+            {(T)ObjectType::DeviceMemory, VK_OBJECT_TYPE_DEVICE_MEMORY},
+            {(T)ObjectType::Buffer, VK_OBJECT_TYPE_BUFFER},
+            {(T)ObjectType::Image, VK_OBJECT_TYPE_IMAGE},
+            {(T)ObjectType::Event, VK_OBJECT_TYPE_EVENT},
+            {(T)ObjectType::QueryPool, VK_OBJECT_TYPE_QUERY_POOL},
+            {(T)ObjectType::BufferView, VK_OBJECT_TYPE_BUFFER_VIEW},
+            {(T)ObjectType::ImageView, VK_OBJECT_TYPE_IMAGE_VIEW},
+            {(T)ObjectType::ShaderModule, VK_OBJECT_TYPE_SHADER_MODULE},
+            {(T)ObjectType::PipelineCache, VK_OBJECT_TYPE_PIPELINE_CACHE},
+            {(T)ObjectType::PipelineLayout, VK_OBJECT_TYPE_PIPELINE_LAYOUT},
+            {(T)ObjectType::RenderPass, VK_OBJECT_TYPE_RENDER_PASS},
+            {(T)ObjectType::Pipeline, VK_OBJECT_TYPE_PIPELINE},
+            {(T)ObjectType::DescriptorSetLayout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT},
+            {(T)ObjectType::Sampler, VK_OBJECT_TYPE_SAMPLER},
+            {(T)ObjectType::DescriptorPool, VK_OBJECT_TYPE_DESCRIPTOR_POOL},
+            {(T)ObjectType::DescriptorSet, VK_OBJECT_TYPE_DESCRIPTOR_SET},
+            {(T)ObjectType::Framebuffer, VK_OBJECT_TYPE_FRAMEBUFFER},
+            {(T)ObjectType::CommandPool, VK_OBJECT_TYPE_COMMAND_POOL},
+            {(T)ObjectType::SamplerYcbcrConversion, VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION},
+            {(T)ObjectType::DescriptorUpdateTemplate, VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE},
+            {(T)ObjectType::PrivateDataSlot, VK_OBJECT_TYPE_PRIVATE_DATA_SLOT},
+            {(T)ObjectType::Surface, VK_OBJECT_TYPE_SURFACE_KHR},
+            {(T)ObjectType::Swapchain, VK_OBJECT_TYPE_SWAPCHAIN_KHR},
+            {(T)ObjectType::Display, VK_OBJECT_TYPE_DISPLAY_KHR},
+            {(T)ObjectType::DisplayMode, VK_OBJECT_TYPE_DISPLAY_MODE_KHR},
+            {(T)ObjectType::DebugReportCallback, VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT},
+            {(T)ObjectType::DebugUtilsMessenger, VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT},
+            {(T)ObjectType::AccelerationStructure, VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR},
+            {(T)ObjectType::ValidationCache, VK_OBJECT_TYPE_VALIDATION_CACHE_EXT},
+            {(T)ObjectType::DeferredOperation, VK_OBJECT_TYPE_DEFERRED_OPERATION_KHR}};
 
-        PE_ERROR("Unknown object type:");
-        return VK_OBJECT_TYPE_UNKNOWN;
+        return s_translator[(T)type];
     }
 
     template <>
-    VkVertexInputRate Translate<VkVertexInputRate>(VertexInputRate rate)
+    VkVertexInputRate Translate(VertexInputRate rate)
     {
-        switch (rate)
-        {
-        case VertexInputRate::Vertex:
-            return VK_VERTEX_INPUT_RATE_VERTEX;
-        case VertexInputRate::Instance:
-            return VK_VERTEX_INPUT_RATE_INSTANCE;
-        }
+        using T = std::underlying_type_t<VertexInputRate>;
+        static std::map<T, VkVertexInputRate> s_translator{
+            {(T)VertexInputRate::Vertex, VK_VERTEX_INPUT_RATE_VERTEX},
+            {(T)VertexInputRate::Instance, VK_VERTEX_INPUT_RATE_INSTANCE}};
 
-        PE_ERROR("Unknown vertex input rate");
-        return VK_VERTEX_INPUT_RATE_VERTEX;
+        return s_translator[(T)rate];
     }
 
     template <>
-    VkAttachmentDescriptionFlags Translate<VkAttachmentDescriptionFlags>(AttachmentDescriptionFlags flags)
+    VkAttachmentDescriptionFlags Translate(AttachmentDescriptionFlags flags)
     {
-        if (!flags)
-            return 0;
+        using T = AttachmentDescriptionFlags::Type;
+        static std::map<T, VkAttachmentDescriptionFlags> s_translator{
+            {(T)AttachmentDescription::MayAlias, VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT}};
 
-        VkAttachmentDescriptionFlags vkFlags = 0;
-
-        if (flags & AttachmentDescription::MayAlias)
-            vkFlags |= VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT;
-
-        return vkFlags;
+        return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VkAttachmentDescriptionFlags Translate<VkAttachmentDescriptionFlags>(AttachmentDescription flag)
+    VkAttachmentDescriptionFlags Translate(AttachmentDescription flag)
     {
         return Translate<VkAttachmentDescriptionFlags, AttachmentDescriptionFlags>(flag);
     }
