@@ -120,19 +120,27 @@ namespace pe
         }
     }
 
-    template<class T, class U>
+    template <class T, class U>
     U GetFlags(T flags, std::map<T, U> &translator)
     {
+        static_assert(std::is_integral_v<T>, "GetFlags: T must be integral");
+        static_assert(std::is_integral_v<U>, "GetFlags: U must be integral");
+
         if (!flags)
-            return 0;
+            return U{};
 
         if (translator.find(flags) == translator.end())
         {
-            for (auto &valuePair : translator)
+            // Emplace a new pair into translator and get the flags ref
+            U &transFlags = translator.emplace(flags, U{}).first->second;
+
+            for (auto &pair : translator)
             {
-                if ((flags & valuePair.first) == valuePair.first)
-                    translator[flags] |= valuePair.second;
+                if ((flags & pair.first) == pair.first)
+                    transFlags |= pair.second;
             }
+
+            return transFlags;
         }
 
         return translator[flags];
