@@ -200,7 +200,7 @@ namespace pe
         rpi.renderPass = pass->Handle();
         rpi.framebuffer = frameBuffer->Handle();
         rpi.renderArea.offset = VkOffset2D{0, 0};
-        rpi.renderArea.extent = VkExtent2D{frameBuffer->width, frameBuffer->height};
+        rpi.renderArea.extent = VkExtent2D{frameBuffer->GetWidth(), frameBuffer->GetHeight()};
         rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
         rpi.pClearValues = clearValues.data();
 
@@ -253,7 +253,7 @@ namespace pe
         std::vector<VkDescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
             dsets[i] = descriptors[i]->Handle();
-            
+
         auto dynamicOffsets = Descriptor::GetAllFrameDynamicOffsets(count, descriptors);
 
         vkCmdBindDescriptorSets(m_handle,
@@ -261,6 +261,28 @@ namespace pe
                                 pipeline->layout,
                                 0, count, dsets.data(),
                                 static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
+    }
+
+    void CommandBuffer::SetViewport(float x, float y, float width, float height)
+    {
+        VkViewport viewport{};
+        viewport.x = x;
+        viewport.y = y;
+        viewport.width = width;
+        viewport.height = height;
+        viewport.minDepth = 0.f; //GlobalSettings::ReverseZ ? 1.f : 0.f;
+        viewport.maxDepth = 1.f; //GlobalSettings::ReverseZ ? 0.f : 1.f;
+
+        vkCmdSetViewport(m_handle, 0, 1, &viewport);
+    }
+
+    void CommandBuffer::SetScissor(int x, int y, uint32_t width, uint32_t height)
+    {
+        VkRect2D scissor{};
+        scissor.offset = {x, y};
+        scissor.extent = {width, height};
+
+        vkCmdSetScissor(m_handle, 0, 1, &scissor);
     }
 
     void CommandBuffer::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)

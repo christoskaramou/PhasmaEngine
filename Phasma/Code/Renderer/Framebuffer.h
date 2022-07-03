@@ -38,6 +38,11 @@ namespace pe
 
         ~FrameBuffer();
 
-        uint32_t width, height;
+        uint32_t GetWidth() { return m_width; }
+
+        uint32_t GetHeight() { return m_height; }
+
+    private:
+        uint32_t m_width, m_height;
     };
 }

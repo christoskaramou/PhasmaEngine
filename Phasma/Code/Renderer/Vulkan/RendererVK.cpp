@@ -493,11 +493,14 @@ namespace pe
         gui.Destroy();
         gui.CreateRenderPass();
         gui.CreateFrameBuffers();
+
+        for (auto& model : Model::models)
+            model.Resize();
     }
 
     void Renderer::BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)
     {
-        cmd->BeginDebugRegion("BlitToViewport");
+        cmd->BeginDebugRegion("BlitToSwapchain");
 
         Image *swapchainImage = RHII.GetSwapchain()->images[imageIndex];
         Viewport &vp = renderArea.viewport;
@@ -556,6 +559,9 @@ namespace pe
         bloom.CreatePipeline();
         dof.CreatePipeline();
         motionBlur.CreatePipeline();
+
+        for (auto &model : Model::models)
+            model.Resize();
 
         CONTEXT->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
     }

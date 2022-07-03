@@ -102,6 +102,8 @@ namespace pe
 
         void CreatePipelineShadows();
 
+        void Resize();
+
         void Destroy();
 
         // Document holds all info about the gltf model

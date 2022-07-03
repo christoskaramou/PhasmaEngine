@@ -1156,6 +1156,12 @@ namespace pe
         }
     }
 
+    void Model::Resize()
+    {
+        Pipeline::Destroy(m_pipelineGBuffer);
+        CreatePipelineGBuffer();
+    }
+
     void Model::Destroy()
     {
         if (script)

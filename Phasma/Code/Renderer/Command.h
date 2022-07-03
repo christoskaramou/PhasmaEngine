@@ -109,6 +109,10 @@ namespace pe
 
         void BindComputeDescriptors(Pipeline *pipeline, uint32_t count, Descriptor **descriptors);
 
+        void SetViewport(float x, float y, float width, float height);
+
+        void SetScissor(int x, int y, uint32_t width, uint32_t height);
+
         void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
 
         void PushConstants(Pipeline *pipeline, ShaderStageFlags stage, uint32_t offset, uint32_t size,
