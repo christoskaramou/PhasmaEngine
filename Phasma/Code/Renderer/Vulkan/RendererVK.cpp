@@ -528,7 +528,7 @@ namespace pe
 
     void Renderer::RecreatePipelines()
     {
-        s_currentQueue->WaitIdle();
+        RHII.WaitDeviceIdle();
 
         Deferred &deferred = *WORLD_ENTITY->GetComponent<Deferred>();
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
@@ -564,7 +564,6 @@ namespace pe
         {
             Pipeline::Destroy(model.GetPipelineGBuffer());
             Pipeline::Destroy(model.GetPipelineShadows());
-            model.Resize();
             model.CreatePipelineGBuffer();
             model.CreatePipelineShadows();
         }
