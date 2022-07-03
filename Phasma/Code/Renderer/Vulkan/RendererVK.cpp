@@ -561,7 +561,13 @@ namespace pe
         motionBlur.CreatePipeline();
 
         for (auto &model : Model::models)
+        {
+            Pipeline::Destroy(model.GetPipelineGBuffer());
+            Pipeline::Destroy(model.GetPipelineShadows());
             model.Resize();
+            model.CreatePipelineGBuffer();
+            model.CreatePipelineShadows();
+        }
 
         CONTEXT->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
     }

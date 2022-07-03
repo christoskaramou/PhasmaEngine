@@ -102,9 +102,15 @@ namespace pe
 
         void CreatePipelineShadows();
 
+        void InitRenderTargets();
+
         void Resize();
 
         void Destroy();
+
+        Pipeline *GetPipelineGBuffer() { return m_pipelineGBuffer; }
+
+        Pipeline *GetPipelineShadows() { return m_pipelineShadows; }
 
         // Document holds all info about the gltf model
         Microsoft::glTF::Document *document = nullptr;

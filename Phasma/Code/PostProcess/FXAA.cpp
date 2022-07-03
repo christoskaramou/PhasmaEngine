@@ -57,8 +57,7 @@ namespace pe
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/FXAA/FXAA.frag", ShaderStage::FragmentBit});
-        info.width = viewportRT->width_f;
-        info.height = viewportRT->height_f;
+        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {viewportRT->blendAttachment};
         info.descriptorSetLayouts = {DSet->GetLayout()};
@@ -124,6 +123,8 @@ namespace pe
         info.image = viewportRT;
 
         cmd->BeginPass(1, &info);
+        cmd->SetViewport(0.f, 0.f, viewportRT->width_f, viewportRT->height_f);
+        cmd->SetScissor(0, 0, viewportRT->imageInfo.width, viewportRT->imageInfo.height);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
@@ -133,12 +134,9 @@ namespace pe
 
     void FXAA::Resize(uint32_t width, uint32_t height)
     {
-        Pipeline::Destroy(pipeline);
         Image::Destroy(frameImage);
-
         Init();
         UpdateDescriptorSets();
-        CreatePipeline();
     }
 
     void FXAA::Destroy()

@@ -63,8 +63,7 @@ namespace pe
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSR/ssr.frag", ShaderStage::FragmentBit});
-        info.width = ssrRT->width_f;
-        info.height = ssrRT->height_f;
+        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {ssrRT->blendAttachment};
         info.descriptorSetLayouts = {DSet->GetLayout()};
@@ -197,6 +196,8 @@ namespace pe
         info.image = ssrRT;
 
         cmd->BeginPass(1, &info);
+        cmd->SetViewport(0.f, 0.f, ssrRT->width_f, ssrRT->height_f);
+        cmd->SetScissor(0, 0, ssrRT->imageInfo.width, ssrRT->imageInfo.height);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
@@ -209,11 +210,8 @@ namespace pe
 
     void SSR::Resize(uint32_t width, uint32_t height)
     {
-        Pipeline::Destroy(pipeline);
-
         Init();
         UpdateDescriptorSets();
-        CreatePipeline();
     }
 
     void SSR::Destroy()

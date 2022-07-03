@@ -270,6 +270,8 @@ namespace pe
         depthInfo.image = textures[cascade];
 
         cmd->BeginPass(0, nullptr, &depthInfo);
+        cmd->SetViewport(0.f, 0.f, textures[cascade]->width_f, textures[cascade]->height_f);
+        cmd->SetScissor(0, 0, textures[cascade]->imageInfo.width, textures[cascade]->imageInfo.height);
         cmd->SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
     }
 

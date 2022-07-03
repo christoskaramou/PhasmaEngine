@@ -391,6 +391,7 @@ namespace pe
         model.CreateVertexBuffer(cmd);
         model.CreateIndexBuffer(cmd);
         model.CreateUniforms();
+        model.InitRenderTargets();
         model.CreatePipeline();
 
         model.render = true;
@@ -839,21 +840,12 @@ namespace pe
 
     void Model::CreatePipelineGBuffer()
     {
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
-        m_normalRT = rs->GetRenderTarget("normal");
-        m_albedoRT = rs->GetRenderTarget("albedo");
-        m_srmRT = rs->GetRenderTarget("srm");
-        m_velocityRT = rs->GetRenderTarget("velocity");
-        m_emissiveRT = rs->GetRenderTarget("emissive");
-
-        Format colorformats[]
-        {
+        Format colorformats[]{
             m_normalRT->imageInfo.format,
             m_albedoRT->imageInfo.format,
             m_srmRT->imageInfo.format,
             m_velocityRT->imageInfo.format,
-            m_emissiveRT->imageInfo.format
-        };
+            m_emissiveRT->imageInfo.format};
 
         Format depthFormat = RHII.GetDepthFormat();
 
@@ -862,8 +854,7 @@ namespace pe
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.frag", ShaderStage::FragmentBit});
         info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
         info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
-        info.width = m_albedoRT->width_f;
-        info.height = m_albedoRT->height_f;
+        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.pushConstantStage = ShaderStage::VertexBit | ShaderStage::FragmentBit;
         info.pushConstantSize = 5 * sizeof(uint32_t);
         info.cullMode = CullMode::Front;
@@ -900,12 +891,10 @@ namespace pe
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Shadows/shaderShadows.vert", ShaderStage::VertexBit});
         info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
         info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
-        info.width = static_cast<float>(SHADOWMAP_SIZE);
-        info.height = static_cast<float>(SHADOWMAP_SIZE);
+        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::DepthBias};
         info.pushConstantStage = ShaderStage::VertexBit;
         info.pushConstantSize = sizeof(ShadowPushConstData);
         info.colorBlendAttachments = {WORLD_ENTITY->GetComponent<Shadows>()->textures[0]->blendAttachment};
-        info.dynamicStates = {DynamicState::DepthBias};
         info.descriptorSetLayouts = {uniformBuffer.descriptor->GetLayout()};
         info.depthFormat = &depthFormat;
         info.name = "shadows_pipeline";
@@ -1169,11 +1158,20 @@ namespace pe
             }
         }
     }
+    
+    void Model::InitRenderTargets()
+    {
+        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        m_normalRT = rs->GetRenderTarget("normal");
+        m_albedoRT = rs->GetRenderTarget("albedo");
+        m_srmRT = rs->GetRenderTarget("srm");
+        m_velocityRT = rs->GetRenderTarget("velocity");
+        m_emissiveRT = rs->GetRenderTarget("emissive");
+    }
 
     void Model::Resize()
     {
-        Pipeline::Destroy(m_pipelineGBuffer);
-        CreatePipelineGBuffer();
+        InitRenderTargets();
     }
 
     void Model::Destroy()

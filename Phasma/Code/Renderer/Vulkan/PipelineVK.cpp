@@ -190,24 +190,50 @@ namespace pe
             piasci.primitiveRestartEnable = VK_FALSE;
             pipeinfo.pInputAssemblyState = &piasci;
 
+            // Dynamic states
+            std::vector<VkDynamicState> ds(info.dynamicStates.size());
+            bool dynamicViewport = false;
+            bool dynamicScissor = false;
+            for (uint32_t i = 0; i < info.dynamicStates.size(); i++)
+            {
+                if (info.dynamicStates[i] == DynamicState::Viewport)
+                    dynamicViewport = true;
+                if (info.dynamicStates[i] == DynamicState::Scissor)
+                    dynamicScissor = true;
+                ds[i] = Translate<VkDynamicState>(info.dynamicStates[i]);
+            }
+
+            VkPipelineDynamicStateCreateInfo dsi{};
+            dsi.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+            dsi.dynamicStateCount = static_cast<uint32_t>(ds.size());
+            dsi.pDynamicStates = ds.data();
+            pipeinfo.pDynamicState = &dsi;
+
             // Viewports and Scissors
-            VkViewport vp{};
-            vp.x = 0.0f;
-            vp.y = 0.0f;
-            vp.width = info.width;
-            vp.height = info.height;
-            vp.minDepth = 0.0f;
-            vp.maxDepth = 1.0f;
-
-            VkRect2D r2d{};
-            r2d.extent = VkExtent2D{static_cast<uint32_t>(info.width), static_cast<uint32_t>(info.height)};
-
             VkPipelineViewportStateCreateInfo pvsci{};
             pvsci.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+
+            VkViewport vp{};
+            if (!dynamicViewport)
+            {
+                vp.x = 0.0f;
+                vp.y = 0.0f;
+                vp.width = info.width;
+                vp.height = info.height;
+                vp.minDepth = 0.0f;
+                vp.maxDepth = 1.0f;
+                pvsci.pViewports = &vp;
+            }
+
+            VkRect2D r2d{};
+            if (!dynamicScissor)
+            {
+                r2d.extent = VkExtent2D{static_cast<uint32_t>(info.width), static_cast<uint32_t>(info.height)};
+                pvsci.pScissors = &r2d;
+            }
+
             pvsci.viewportCount = 1;
-            pvsci.pViewports = &vp;
             pvsci.scissorCount = 1;
-            pvsci.pScissors = &r2d;
             pipeinfo.pViewportState = &pvsci;
 
             // Rasterization state
@@ -275,17 +301,6 @@ namespace pe
             pcbsci.blendConstants[2] = 0.0f;
             pcbsci.blendConstants[3] = 0.0f;
             pipeinfo.pColorBlendState = &pcbsci;
-
-            // Dynamic states
-            std::vector<VkDynamicState> ds(info.dynamicStates.size());
-            for (uint32_t i = 0; i < info.dynamicStates.size(); i++)
-                ds[i] = Translate<VkDynamicState>(info.dynamicStates[i]);
-
-            VkPipelineDynamicStateCreateInfo dsi{};
-            dsi.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-            dsi.dynamicStateCount = static_cast<uint32_t>(ds.size());
-            dsi.pDynamicStates = ds.data();
-            pipeinfo.pDynamicState = &dsi;
 
             // Push Constant Range
             VkPushConstantRange pcr{};

@@ -84,8 +84,7 @@ namespace pe
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/composition.frag", ShaderStage::FragmentBit, definesFrag});
-        info.width = viewportRT->width_f;
-        info.height = viewportRT->height_f;
+        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = sizeof(mat4);
         info.colorBlendAttachments = {viewportRT->blendAttachment};
@@ -334,6 +333,8 @@ namespace pe
         info.image = viewportRT;
 
         cmd->BeginPass(1, &info);
+        cmd->SetViewport(0.f, 0.f, viewportRT->width_f, viewportRT->height_f);
+        cmd->SetScissor(0, 0, viewportRT->imageInfo.width, viewportRT->imageInfo.height);
         cmd->PushConstants(pipelineComposition, ShaderStage::FragmentBit, 0, sizeof(mat4), &values);
         cmd->BindPipeline(pipelineComposition);
         cmd->BindDescriptors(pipelineComposition, (uint32_t)handles.size(), handles.data());
@@ -345,11 +346,8 @@ namespace pe
 
     void Deferred::Resize(uint32_t width, uint32_t height)
     {
-        Pipeline::Destroy(pipelineComposition);
-
         Init();
         UpdateDescriptorSets();
-        CreatePipeline();
     }
 
     void Deferred::BeginPass(CommandBuffer *cmd, uint32_t imageIndex)
@@ -373,6 +371,8 @@ namespace pe
         depthInfo.image = depth;
 
         cmd->BeginPass(5, colorInfos, &depthInfo);
+        cmd->SetViewport(0.f, 0.f, normalRT->width_f, normalRT->height_f);
+        cmd->SetScissor(0, 0, normalRT->imageInfo.width, normalRT->imageInfo.height);
     }
 
     void Deferred::EndPass(CommandBuffer *cmd)

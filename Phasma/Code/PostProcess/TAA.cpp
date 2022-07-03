@@ -70,8 +70,7 @@ namespace pe
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/TAA/TAA.frag", ShaderStage::FragmentBit});
-        info.width = taaRT->width_f;
-        info.height = taaRT->height_f;
+        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {taaRT->blendAttachment};
         info.descriptorSetLayouts = {DSet->GetLayout()};
@@ -90,8 +89,7 @@ namespace pe
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/TAA/TAASharpen.frag", ShaderStage::FragmentBit});
-        info.width = viewportRT->width_f;
-        info.height = viewportRT->height_f;
+        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {viewportRT->blendAttachment};
         info.descriptorSetLayouts = {DSetSharpen->GetLayout()};
@@ -244,6 +242,8 @@ namespace pe
         info.image = taaRT;
 
         cmd->BeginPass(1, &info);
+        cmd->SetViewport(0.f, 0.f, taaRT->width_f, taaRT->height_f);
+        cmd->SetScissor(0, 0, taaRT->imageInfo.width, taaRT->imageInfo.height);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
@@ -263,6 +263,8 @@ namespace pe
         info.image = viewportRT;
 
         cmd->BeginPass(1, &info);
+        cmd->SetViewport(0.f, 0.f, viewportRT->width_f, viewportRT->height_f);
+        cmd->SetScissor(0, 0, viewportRT->imageInfo.width, viewportRT->imageInfo.height);
         cmd->BindPipeline(pipelineSharpen);
         cmd->BindDescriptors(pipelineSharpen, 1, &DSetSharpen);
         cmd->Draw(3, 1, 0, 0);
@@ -272,15 +274,10 @@ namespace pe
 
     void TAA::Resize(uint32_t width, uint32_t height)
     {
-        Pipeline::Destroy(pipeline);
-        Pipeline::Destroy(pipelineSharpen);
-
         Image::Destroy(previous);
         Image::Destroy(frameImage);
-
         Init();
-        UpdateDescriptorSets();
-        CreatePipeline();
+        UpdateDescriptorSets();;
     }
 
     void TAA::Destroy()
