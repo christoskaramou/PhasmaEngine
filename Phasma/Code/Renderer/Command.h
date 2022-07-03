@@ -49,6 +49,13 @@ namespace pe
         Offset3D dstOffsets[2];
     };
 
+    struct AttachmentInfo
+    {
+        Image *image = nullptr;
+        AttachmentLoadOp loadOp = AttachmentLoadOp::Clear;
+        AttachmentStoreOp storeOp = AttachmentStoreOp::Store;
+    };
+
     class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
     {
     public:
@@ -94,6 +101,8 @@ namespace pe
         void BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter);
 
         void BeginPass(RenderPass *pass, FrameBuffer *frameBuffer);
+
+        void BeginPass(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo = nullptr);
 
         void EndPass();
 
@@ -199,5 +208,6 @@ namespace pe
         bool m_recording = false;
         std::string m_name;
         Delegate<> m_afterWaitCallbacks;
+        bool m_dynamicPass = false;
     };
 }

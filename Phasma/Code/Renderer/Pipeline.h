@@ -67,6 +67,9 @@ namespace pe
         uint32_t pushConstantSize;
         std::vector<DescriptorLayout *> descriptorSetLayouts;
         RenderPass *renderPass;
+        uint32_t dynamicColorTargets;
+        Format *colorFormats;
+        Format *depthFormat;
         PipelineCacheHandle pipelineCache;
         std::string name;
     };

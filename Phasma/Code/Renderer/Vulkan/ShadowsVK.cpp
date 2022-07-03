@@ -34,7 +34,6 @@ SOFTWARE.
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Command.h"
-#include "Renderer/RenderPass.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -51,24 +50,7 @@ namespace pe
     void Shadows::Init()
     {
         depthFormat = RHII.GetDepthFormat();
-    }
 
-    void Shadows::CreateRenderPass()
-    {
-        Attachment attachment{};
-        attachment.format = depthFormat;
-        attachment.samples = SampleCount::Count1;
-        attachment.loadOp = AttachmentLoadOp::Clear;
-        attachment.storeOp = AttachmentStoreOp::Store;
-        attachment.stencilLoadOp = AttachmentLoadOp::DontCare;
-        attachment.stencilStoreOp = AttachmentStoreOp::DontCare;
-        attachment.initialLayout = ImageLayout::Undefined;
-        attachment.finalLayout = ImageLayout::DepthStencilAttachment;
-        renderPass = RenderPass::Create(&attachment, 1, "shadows_renderPass");
-    }
-
-    void Shadows::CreateFrameBuffers()
-    {
         textures.resize(SHADOWMAP_CASCADES);
         int i = 0;
         for (auto *&texture : textures)
@@ -98,17 +80,6 @@ namespace pe
             samplerInfo.compareEnable = VK_TRUE;
             samplerInfo.compareOp = CompareOp::GreaterOrEqual;
             texture->CreateSampler(samplerInfo);
-        }
-
-        framebuffers.resize(SWAPCHAIN_IMAGES);
-        for (uint32_t i = 0; i < framebuffers.size(); ++i)
-        {
-            framebuffers[i] = std::array<FrameBuffer *, SHADOWMAP_CASCADES>{};
-            for (int j = 0; j < SHADOWMAP_CASCADES; j++)
-            {
-                ImageViewHandle view = textures[j]->view;
-                framebuffers[i][j] = FrameBuffer::Create(SHADOWMAP_SIZE, SHADOWMAP_SIZE, &view, 1, renderPass, "shadows_frameBuffer_" + std::to_string(i));
-            }
         }
     }
 
@@ -294,8 +265,11 @@ namespace pe
     void Shadows::BeginPass(CommandBuffer *cmd, uint32_t imageIndex, uint32_t cascade)
     {
         cmd->ImageBarrier(textures[cascade], ImageLayout::DepthStencilAttachment);
-        FrameBuffer *frameBuffer = framebuffers[imageIndex][cascade];
-        cmd->BeginPass(renderPass, frameBuffer);
+
+        AttachmentInfo depthInfo{};
+        depthInfo.image = textures[cascade];
+
+        cmd->BeginPass(0, nullptr, &depthInfo);
         cmd->SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);
     }
 
@@ -307,14 +281,8 @@ namespace pe
 
     void Shadows::Destroy()
     {
-        RenderPass::Destroy(renderPass);
-
         for (auto &texture : textures)
             Image::Destroy(texture);
-
-        for (auto fba : framebuffers)
-            for (auto fb : fba)
-                FrameBuffer::Destroy(fb);
 
         Buffer::Destroy(uniformBuffer);
         Descriptor::Destroy(descriptorSetDeferred);

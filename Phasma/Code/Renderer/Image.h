@@ -142,6 +142,8 @@ namespace pe
                                    uint32_t baseMipLevel,
                                    uint32_t mipLevels);
 
+        ImageLayout GetLayout(uint32_t layer = 0, uint32_t mip = 0) { return m_layouts[layer][mip]; }
+
     public:
         ImageViewHandle view;
         SamplerHandle sampler;
@@ -156,6 +158,6 @@ namespace pe
 
     private:
         friend class Swapchain;
-        std::vector<std::vector<ImageLayout>> layouts{};
+        std::vector<std::vector<ImageLayout>> m_layouts{};
     };
 }

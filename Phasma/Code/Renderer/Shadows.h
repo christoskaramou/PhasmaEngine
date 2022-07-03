@@ -34,9 +34,7 @@ namespace pe
     };
 
     class Descriptor;
-    class FrameBuffer;
     class Image;
-    class RenderPass;
     class Buffer;
     class Pipeline;
 
@@ -48,10 +46,6 @@ namespace pe
         ~Shadows();
 
         void Init() override;
-
-        void CreateRenderPass() override;
-
-        void CreateFrameBuffers() override;
 
         void CreatePipeline() override;
 
@@ -77,10 +71,8 @@ namespace pe
     public:
         mat4 cascades[SHADOWMAP_CASCADES];
         vec4 viewZ;
-        RenderPass *renderPass;
         std::vector<Image *> textures{};
         Descriptor *descriptorSetDeferred;
-        std::vector<std::array<FrameBuffer *, SHADOWMAP_CASCADES>> framebuffers{};
         Buffer *uniformBuffer;
         Format depthFormat;
     };

@@ -29,9 +29,7 @@ SOFTWARE.
 #include "Renderer/Command.h"
 #include "Renderer/Queue.h"
 #include "Renderer/Descriptor.h"
-#include "Renderer/FrameBuffer.h"
 #include "Renderer/Image.h"
-#include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
 #include "Systems/CameraSystem.h"
@@ -47,46 +45,6 @@ namespace pe
         ssaoBlurRT = rs->GetRenderTarget("ssaoBlur");
         normalRT = rs->GetRenderTarget("normal");
         depth = rs->GetDepthTarget("depth");
-    }
-
-    void SSAO::CreateRenderPass()
-    {
-        Attachment attachment{};
-        attachment.format = ssaoRT->imageInfo.format;
-        renderPass = RenderPass::Create(&attachment, 1, "ssao_renderpass");
-
-        attachment.format = ssaoBlurRT->imageInfo.format;
-        blurRenderPass = RenderPass::Create(&attachment, 1, "ssaoBlur_renderpass");
-    }
-
-    void SSAO::CreateFrameBuffers()
-    {
-        CreateSSAOFrameBuffers();
-        CreateSSAOBlurFrameBuffers();
-    }
-
-    void SSAO::CreateSSAOFrameBuffers()
-    {
-        framebuffers.resize(SWAPCHAIN_IMAGES);
-        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
-        {
-            uint32_t width = ssaoRT->imageInfo.width;
-            uint32_t height = ssaoRT->imageInfo.height;
-            ImageViewHandle view = ssaoRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "ssao_frameBuffer_" + std::to_string(i));
-        }
-    }
-
-    void SSAO::CreateSSAOBlurFrameBuffers()
-    {
-        blurFramebuffers.resize(SWAPCHAIN_IMAGES);
-        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
-        {
-            uint32_t width = ssaoBlurRT->imageInfo.width;
-            uint32_t height = ssaoBlurRT->imageInfo.height;
-            ImageViewHandle view = ssaoBlurRT->view;
-            blurFramebuffers[i] = FrameBuffer::Create(width, height, &view, 1, blurRenderPass, "ssaoBlur_frameBuffer_" + std::to_string(i));
-        }
     }
 
     void SSAO::CreatePipeline()
@@ -105,7 +63,8 @@ namespace pe
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {ssaoRT->blendAttachment};
         info.descriptorSetLayouts = {DSet->GetLayout()};
-        info.renderPass = renderPass;
+        info.dynamicColorTargets = 1;
+        info.colorFormats = &ssaoRT->imageInfo.format;
         info.name = "ssao_pipeline";
 
         pipeline = Pipeline::Create(info);
@@ -124,7 +83,8 @@ namespace pe
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {ssaoBlurRT->blendAttachment};
         info.descriptorSetLayouts = {DSBlur->GetLayout()};
-        info.renderPass = blurRenderPass;
+        info.dynamicColorTargets = 1;
+        info.colorFormats = &ssaoBlurRT->imageInfo.format;
         info.name = "ssaoBlur_pipeline";
 
         pipelineBlur = Pipeline::Create(info);
@@ -315,7 +275,10 @@ namespace pe
         // Output
         cmd->ImageBarrier(ssaoRT, ImageLayout::ColorAttachment);
 
-        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+        AttachmentInfo info{};
+        info.image = ssaoRT;
+
+        cmd->BeginPass(1, &info);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
@@ -329,7 +292,9 @@ namespace pe
         // Output
         cmd->ImageBarrier(ssaoBlurRT, ImageLayout::ColorAttachment);
 
-        cmd->BeginPass(blurRenderPass, blurFramebuffers[imageIndex]);
+        info.image = ssaoBlurRT;
+
+        cmd->BeginPass(1, &info);
         cmd->BindPipeline(pipelineBlur);
         cmd->BindDescriptors(pipelineBlur, 1, &DSBlur);
         cmd->Draw(3, 1, 0, 0);
@@ -339,20 +304,10 @@ namespace pe
 
     void SSAO::Resize(uint32_t width, uint32_t height)
     {
-        RenderPass::Destroy(renderPass);
-        RenderPass::Destroy(blurRenderPass);
-
-        for (auto &framebuffer : framebuffers)
-            FrameBuffer::Destroy(framebuffer);
-        for (auto &framebuffer : blurFramebuffers)
-            FrameBuffer::Destroy(framebuffer);
-
         Pipeline::Destroy(pipeline);
         Pipeline::Destroy(pipelineBlur);
 
         Init();
-        CreateRenderPass();
-        CreateFrameBuffers();
         UpdateDescriptorSets();
         CreatePipeline();
     }
@@ -361,14 +316,6 @@ namespace pe
     {
         Descriptor::Destroy(DSet);
         Descriptor::Destroy(DSBlur);
-
-        for (auto frameBuffer : framebuffers)
-            FrameBuffer::Destroy(frameBuffer);
-        for (auto frameBuffer : blurFramebuffers)
-            FrameBuffer::Destroy(frameBuffer);
-
-        RenderPass::Destroy(renderPass);
-        RenderPass::Destroy(blurRenderPass);
 
         Pipeline::Destroy(pipeline);
         Pipeline::Destroy(pipelineBlur);

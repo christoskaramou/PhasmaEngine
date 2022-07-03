@@ -25,10 +25,8 @@ SOFTWARE.
 namespace pe
 {
     class Descriptor;
-    class FrameBuffer;
     class Image;
     class CommandBuffer;
-    class RenderPass;
     class Pipeline;
     class Camera;
 
@@ -40,10 +38,6 @@ namespace pe
         ~FXAA();
         
         void Init() override;
-
-        void CreateRenderPass() override;
-
-        void CreateFrameBuffers() override;
 
         void CreatePipeline() override;
 
@@ -59,9 +53,7 @@ namespace pe
 
         void Destroy() override;
 
-        std::vector<FrameBuffer *> framebuffers{};
         Pipeline *pipeline;
-        RenderPass *renderPass;
         Descriptor *DSet;
         Image *frameImage;
         Image *viewportRT;

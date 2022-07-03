@@ -30,7 +30,6 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
-#include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
 #include "Systems/RendererSystem.h"
 
@@ -53,25 +52,6 @@ namespace pe
         frameImage = rs->CreateFSSampledImage();
     }
 
-    void FXAA::CreateRenderPass()
-    {
-        Attachment attachment{};
-        attachment.format = viewportRT->imageInfo.format;
-        renderPass = RenderPass::Create(&attachment, 1, "fxaa_renderpass");
-    }
-
-    void FXAA::CreateFrameBuffers()
-    {
-        framebuffers.resize(SWAPCHAIN_IMAGES);
-        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
-        {
-            uint32_t width = viewportRT->imageInfo.width;
-            uint32_t height = viewportRT->imageInfo.height;
-            ImageViewHandle view = viewportRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "fxaa_frameBuffer_" + std::to_string(i));
-        }
-    }
-
     void FXAA::CreatePipeline()
     {
         PipelineCreateInfo info{};
@@ -82,7 +62,8 @@ namespace pe
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {viewportRT->blendAttachment};
         info.descriptorSetLayouts = {DSet->GetLayout()};
-        info.renderPass = renderPass;
+        info.dynamicColorTargets = 1;
+        info.colorFormats = &viewportRT->imageInfo.format;
         info.name = "fxaa_pipeline";
 
         pipeline = Pipeline::Create(info);
@@ -139,7 +120,10 @@ namespace pe
         // Output
         cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
 
-        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+        AttachmentInfo info{};
+        info.image = viewportRT;
+
+        cmd->BeginPass(1, &info);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
@@ -149,15 +133,10 @@ namespace pe
 
     void FXAA::Resize(uint32_t width, uint32_t height)
     {
-        for (auto *frameBuffer : framebuffers)
-            FrameBuffer::Destroy(frameBuffer);
-        RenderPass::Destroy(renderPass);
         Pipeline::Destroy(pipeline);
         Image::Destroy(frameImage);
 
         Init();
-        CreateRenderPass();
-        CreateFrameBuffers();
         UpdateDescriptorSets();
         CreatePipeline();
     }
@@ -165,11 +144,6 @@ namespace pe
     void FXAA::Destroy()
     {
         Descriptor::Destroy(DSet);
-
-        for (auto frameBuffer : framebuffers)
-            FrameBuffer::Destroy(frameBuffer);
-
-        RenderPass::Destroy(renderPass);
         Pipeline::Destroy(pipeline);
         Image::Destroy(frameImage);
     }

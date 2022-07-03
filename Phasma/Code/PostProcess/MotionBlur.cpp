@@ -30,7 +30,6 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
-#include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
 #include "Systems/RendererSystem.h"
@@ -56,25 +55,6 @@ namespace pe
         depth = rs->GetDepthTarget("depth");
     }
 
-    void MotionBlur::CreateRenderPass()
-    {
-        Attachment attachment{};
-        attachment.format = viewportRT->imageInfo.format;
-        renderPass = RenderPass::Create(&attachment, 1, "motionBlur_renderPass");
-    }
-
-    void MotionBlur::CreateFrameBuffers()
-    {
-        framebuffers.resize(SWAPCHAIN_IMAGES);
-        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
-        {
-            uint32_t width = viewportRT->imageInfo.width;
-            uint32_t height = viewportRT->imageInfo.height;
-            ImageViewHandle view = viewportRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "motionBlur_frameBuffer_" + std::to_string(i));
-        }
-    }
-
     void MotionBlur::CreatePipeline()
     {
         PipelineCreateInfo info{};
@@ -87,7 +67,8 @@ namespace pe
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = sizeof(vec4);
         info.descriptorSetLayouts = {DSet->GetLayout()};
-        info.renderPass = renderPass;
+        info.dynamicColorTargets = 1;
+        info.colorFormats = &viewportRT->imageInfo.format;
         info.name = "motionBlur_pipeline";
 
         pipeline = Pipeline::Create(info);
@@ -177,8 +158,11 @@ namespace pe
         cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         // Output
         cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
+        
+        AttachmentInfo info{};
+        info.image = viewportRT;
 
-        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+        cmd->BeginPass(1, &info);
         cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, sizeof(vec4), &values);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
@@ -189,15 +173,10 @@ namespace pe
 
     void MotionBlur::Resize(uint32_t width, uint32_t height)
     {
-        for (auto *frameBuffer : framebuffers)
-            FrameBuffer::Destroy(frameBuffer);
-        RenderPass::Destroy(renderPass);
         Pipeline::Destroy(pipeline);
         Image::Destroy(frameImage);
 
         Init();
-        CreateRenderPass();
-        CreateFrameBuffers();
         UpdateDescriptorSets();
         CreatePipeline();
     }
@@ -205,11 +184,6 @@ namespace pe
     void MotionBlur::Destroy()
     {
         Descriptor::Destroy(DSet);
-
-        for (auto frameBuffer : framebuffers)
-            FrameBuffer::Destroy(frameBuffer);
-
-        RenderPass::Destroy(renderPass);
         Pipeline::Destroy(pipeline);
         Image::Destroy(frameImage);
     }

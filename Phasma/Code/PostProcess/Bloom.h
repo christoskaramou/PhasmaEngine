@@ -25,10 +25,8 @@ SOFTWARE.
 namespace pe
 {
     class Descriptor;
-    class FrameBuffer;
     class Image;
     class CommandBuffer;
-    class RenderPass;
     class Pipeline;
     class Camera;
 
@@ -40,10 +38,6 @@ namespace pe
         ~Bloom();
 
         void Init() override;
-
-        void CreateRenderPass() override;
-
-        void CreateFrameBuffers() override;
 
         void CreatePipeline() override;
 
@@ -69,14 +63,10 @@ namespace pe
         void CreateCombinePipeline();
 
     public:
-        std::vector<FrameBuffer *> framebuffers{};
         Pipeline *pipelineBrightFilter;
         Pipeline *pipelineGaussianBlurHorizontal;
         Pipeline *pipelineGaussianBlurVertical;
         Pipeline *pipelineCombine;
-        RenderPass *renderPassBrightFilter;
-        RenderPass *renderPassGaussianBlur;
-        RenderPass *renderPassCombine;
         Descriptor *DSBrightFilter;
         Descriptor *DSGaussianBlurHorizontal;
         Descriptor *DSGaussianBlurVertical;

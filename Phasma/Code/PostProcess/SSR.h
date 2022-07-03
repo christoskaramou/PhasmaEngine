@@ -25,9 +25,7 @@ SOFTWARE.
 namespace pe
 {
     class Descriptor;
-    class FrameBuffer;
     class Image;
-    class RenderPass;
     class Pipeline;
     class Buffer;
     class Camera;
@@ -40,10 +38,6 @@ namespace pe
         ~SSR();
 
         void Init() override;
-
-        void CreateRenderPass() override;
-
-        void CreateFrameBuffers() override;
 
         void CreatePipeline() override;
 
@@ -61,9 +55,7 @@ namespace pe
 
         mat4 reflectionInput[4];
         Buffer *UBReflection;
-        std::vector<FrameBuffer *> framebuffers{};
         Pipeline *pipeline;
-        RenderPass *renderPass;
         Descriptor *DSet;
         Image *ssrRT;
         Image *albedoRT;

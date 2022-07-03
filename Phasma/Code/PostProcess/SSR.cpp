@@ -30,7 +30,6 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
-#include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
 #include "Systems/CameraSystem.h"
@@ -59,25 +58,6 @@ namespace pe
         depth = rs->GetDepthTarget("depth");
     }
 
-    void SSR::CreateRenderPass()
-    {
-        Attachment attachment{};
-        attachment.format = ssrRT->imageInfo.format;
-        renderPass = RenderPass::Create(&attachment, 1, "ssr_renderpass");
-    }
-
-    void SSR::CreateFrameBuffers()
-    {
-        framebuffers.resize(SWAPCHAIN_IMAGES);
-        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
-        {
-            uint32_t width = ssrRT->imageInfo.width;
-            uint32_t height = ssrRT->imageInfo.height;
-            ImageViewHandle view = ssrRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "ssr_frameBuffer_" + std::to_string(i));
-        }
-    }
-
     void SSR::CreatePipeline()
     {
         PipelineCreateInfo info{};
@@ -88,7 +68,8 @@ namespace pe
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {ssrRT->blendAttachment};
         info.descriptorSetLayouts = {DSet->GetLayout()};
-        info.renderPass = renderPass;
+        info.dynamicColorTargets = 1;
+        info.colorFormats = &ssrRT->imageInfo.format;
         info.name = "ssr_pipeline";
 
         pipeline = Pipeline::Create(info);
@@ -212,7 +193,10 @@ namespace pe
         // Output
         cmd->ImageBarrier(ssrRT, ImageLayout::ColorAttachment);
 
-        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+        AttachmentInfo info{};
+        info.image = ssrRT;
+
+        cmd->BeginPass(1, &info);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
@@ -225,14 +209,9 @@ namespace pe
 
     void SSR::Resize(uint32_t width, uint32_t height)
     {
-        for (auto *frameBuffer : framebuffers)
-            FrameBuffer::Destroy(frameBuffer);
-        RenderPass::Destroy(renderPass);
         Pipeline::Destroy(pipeline);
 
         Init();
-        CreateRenderPass();
-        CreateFrameBuffers();
         UpdateDescriptorSets();
         CreatePipeline();
     }
@@ -240,11 +219,6 @@ namespace pe
     void SSR::Destroy()
     {
         Descriptor::Destroy(DSet);
-
-        for (auto framebuffer : framebuffers)
-            FrameBuffer::Destroy(framebuffer);
-
-        RenderPass::Destroy(renderPass);
         Pipeline::Destroy(pipeline);
         Buffer::Destroy(UBReflection);
     }

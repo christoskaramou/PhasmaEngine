@@ -78,7 +78,7 @@ namespace pe
         {
             images[i] = new Image();
             images[i]->Handle() = imagesVK[i];
-            images[i]->layouts = {{ImageLayout::Undefined}};
+            images[i]->m_layouts = {{ImageLayout::Undefined}};
             images[i]->blendAttachment.blendEnable = 1;
             images[i]->blendAttachment.srcColorBlendFactor = BlendFactor::SrcAlpha;
             images[i]->blendAttachment.dstColorBlendFactor = BlendFactor::OneMinusSrcAlpha;

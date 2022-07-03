@@ -28,9 +28,7 @@ SOFTWARE.
 namespace pe
 {
     class Descriptor;
-    class FrameBuffer;
     class Image;
-    class RenderPass;
     class Pipeline;
 
     class Deferred : public IRenderComponent
@@ -41,10 +39,6 @@ namespace pe
         ~Deferred();
 
         void Init() override;
-
-        void CreateRenderPass() override;
-
-        void CreateFrameBuffers() override;
 
         void CreatePipeline() override;
 
@@ -79,9 +73,6 @@ namespace pe
             vec4 screenSpace[8];
         } ubo;
         Buffer *uniform;
-        RenderPass *renderPass;
-        RenderPass *compositionRenderPass;
-        std::vector<FrameBuffer *> framebuffers{}, compositionFramebuffers{};
         Descriptor *DSComposition;
         Pipeline *pipelineComposition;
         Image *ibl_brdf_lut;

@@ -207,9 +207,70 @@ namespace pe
         vkCmdBeginRenderPass(m_handle, &rpi, VK_SUBPASS_CONTENTS_INLINE);
     }
 
+    void CommandBuffer::BeginPass(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo)
+    {
+        m_dynamicPass = true;
+
+        std::vector<VkRenderingAttachmentInfo> vkColorInfos(count);
+        VkRenderingAttachmentInfo vkDepthInfo{};
+
+        for (uint32_t i = 0; i < count; i++)
+        {
+            VkRenderingAttachmentInfo vkColorInfo{};
+            vkColorInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            vkColorInfo.imageView = colorInfos[i].image->view;
+            vkColorInfo.imageLayout = Translate<VkImageLayout>(colorInfos[i].image->GetLayout());
+            vkColorInfo.loadOp = Translate<VkAttachmentLoadOp>(colorInfos[i].loadOp);
+            vkColorInfo.storeOp = Translate<VkAttachmentStoreOp>(colorInfos[i].storeOp);
+            vkColorInfo.clearValue.color = {0.0f, 0.0f, 0.0f, 0.0f};
+            vkColorInfos[i] = vkColorInfo;
+        }
+
+        if (depthInfo)
+        {
+            Image &image = *depthInfo->image;
+            vkDepthInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            vkDepthInfo.imageView = image.view;
+            vkDepthInfo.imageLayout = Translate<VkImageLayout>(image.GetLayout());
+            vkDepthInfo.loadOp = Translate<VkAttachmentLoadOp>(depthInfo->loadOp);
+            vkDepthInfo.storeOp = Translate<VkAttachmentStoreOp>(depthInfo->storeOp);
+            vkDepthInfo.clearValue.depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
+        }
+
+        uint32_t width;
+        uint32_t height;
+        if (count > 0)
+        {
+            width = colorInfos[0].image->imageInfo.width;
+            height = colorInfos[0].image->imageInfo.height;
+        }
+        else
+        {
+            width = depthInfo->image->imageInfo.width;
+            height = depthInfo->image->imageInfo.height;
+        }
+
+        VkRenderingInfo renderingInfo{};
+        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        renderingInfo.renderArea = {0, 0, width, height};
+        renderingInfo.layerCount = 1;
+        renderingInfo.colorAttachmentCount = static_cast<uint32_t>(vkColorInfos.size());
+        renderingInfo.pColorAttachments = vkColorInfos.data();
+        renderingInfo.pDepthAttachment = depthInfo ? &vkDepthInfo : nullptr;
+        renderingInfo.pStencilAttachment = depthInfo ? &vkDepthInfo : nullptr;
+
+        vkCmdBeginRendering(m_handle, &renderingInfo);
+    }
+
     void CommandBuffer::EndPass()
     {
-        vkCmdEndRenderPass(m_handle);
+        if (m_dynamicPass)
+        {
+            vkCmdEndRendering(m_handle);
+            m_dynamicPass = false;
+        }
+        else
+            vkCmdEndRenderPass(m_handle);
     }
 
     void CommandBuffer::BindPipeline(Pipeline *pipeline)
@@ -270,8 +331,8 @@ namespace pe
         viewport.y = y;
         viewport.width = width;
         viewport.height = height;
-        viewport.minDepth = 0.f; //GlobalSettings::ReverseZ ? 1.f : 0.f;
-        viewport.maxDepth = 1.f; //GlobalSettings::ReverseZ ? 0.f : 1.f;
+        viewport.minDepth = 0.f; // GlobalSettings::ReverseZ ? 1.f : 0.f;
+        viewport.maxDepth = 1.f; // GlobalSettings::ReverseZ ? 0.f : 1.f;
 
         vkCmdSetViewport(m_handle, 0, 1, &viewport);
     }

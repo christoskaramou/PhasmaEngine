@@ -25,9 +25,7 @@ SOFTWARE.
 namespace pe
 {
     class Descriptor;
-    class FrameBuffer;
     class Image;
-    class RenderPass;
     class Pipeline;
     class Buffer;
     class Camera;
@@ -40,10 +38,6 @@ namespace pe
         ~TAA();
 
         void Init() override;
-
-        void CreateRenderPass() override;
-
-        void CreateFrameBuffers() override;
 
         void CreatePipeline() override;
 
@@ -65,11 +59,8 @@ namespace pe
         void CreatePipelineSharpen();
 
     public:
-        std::vector<FrameBuffer *> framebuffers{}, framebuffersSharpen{};
         Pipeline *pipeline;
         Pipeline *pipelineSharpen;
-        RenderPass *renderPass;
-        RenderPass *renderPassSharpen;
         Descriptor *DSet;
         Descriptor *DSetSharpen;
         Buffer *uniform;

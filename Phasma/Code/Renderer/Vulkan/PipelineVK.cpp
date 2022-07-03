@@ -58,6 +58,9 @@ namespace pe
         pushConstantSize = 0;
         descriptorSetLayouts = {};
         renderPass = nullptr;
+        dynamicColorTargets = 0;
+        colorFormats = nullptr;
+        depthFormat = nullptr;
         pipelineCache = {};
     }
 
@@ -153,7 +156,6 @@ namespace pe
 
             pipeinfo.stageCount = static_cast<uint32_t>(stages.size());
             pipeinfo.pStages = stages.data();
-
 
             // Vertex Input state
             std::vector<VkVertexInputBindingDescription> vibd(info.vertexInputBindingDescriptions.size());
@@ -311,8 +313,33 @@ namespace pe
             layout = pipelineLayout;
             pipeinfo.layout = layout;
 
-            // Render Pass
-            pipeinfo.renderPass = info.renderPass->Handle();
+            // Dynamic Rendering
+            VkPipelineRenderingCreateInfo prci{};
+            prci.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+
+            std::vector<VkFormat> vkFormats(info.dynamicColorTargets);
+            if (info.dynamicColorTargets > 0 || info.depthFormat)
+            {
+                for (uint32_t i = 0; i < info.dynamicColorTargets; i++)
+                    vkFormats[i] = Translate<VkFormat>(info.colorFormats[i]);
+
+                prci.colorAttachmentCount = info.dynamicColorTargets;
+                prci.pColorAttachmentFormats = vkFormats.data();
+
+                if (info.depthFormat)
+                {
+                    prci.depthAttachmentFormat = Translate<VkFormat>(*info.depthFormat);
+                    prci.stencilAttachmentFormat = Translate<VkFormat>(*info.depthFormat);
+                }
+
+                pipeinfo.pNext = &prci;
+                pipeinfo.renderPass = nullptr;
+            }
+            else
+            {
+                // Render Pass
+                pipeinfo.renderPass = info.renderPass->Handle();
+            }
 
             // Subpass (Index of subpass this pipeline will be used in)
             pipeinfo.subpass = 0;

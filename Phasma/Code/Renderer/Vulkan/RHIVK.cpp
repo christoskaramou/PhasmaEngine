@@ -298,6 +298,8 @@ namespace pe
 
         if (IsDeviceExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME))
             deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        if (IsDeviceExtensionValid(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME))
+            deviceExtensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
 
@@ -346,6 +348,9 @@ namespace pe
               deviceFeatures12.shaderSampledImageArrayNonUniformIndexing &&
               deviceFeatures12.descriptorBindingVariableDescriptorCount))
             PE_ERROR("Bindless descriptors are not supported on this device!");
+
+        if (!deviceFeatures13.dynamicRendering)
+            PE_ERROR("Dynamic Rendering is not supported!");
 
         VkDeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

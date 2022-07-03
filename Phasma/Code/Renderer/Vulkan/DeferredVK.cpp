@@ -36,7 +36,6 @@ SOFTWARE.
 #include "Systems/LightSystem.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
-#include "Renderer/RenderPass.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Queue.h"
@@ -70,71 +69,6 @@ namespace pe
         ssrRT = rs->GetRenderTarget("ssr");
     }
 
-    void Deferred::CreateRenderPass()
-    {
-        Attachment attachments[6];
-
-        // Target attachments are initialized to match render targets by default
-        attachments[0].format = normalRT->imageInfo.format;
-        attachments[1].format = albedoRT->imageInfo.format;
-        attachments[2].format = srmRT->imageInfo.format;
-        attachments[3].format = velocityRT->imageInfo.format;
-        attachments[4].format = emissiveRT->imageInfo.format;
-
-        // Depth
-        attachments[5].flags = {};
-        attachments[5].format = depth->imageInfo.format;
-        attachments[5].samples = SampleCount::Count1;
-        attachments[5].loadOp = AttachmentLoadOp::Clear;
-        attachments[5].storeOp = AttachmentStoreOp::Store;
-        attachments[5].stencilLoadOp = AttachmentLoadOp::DontCare;
-        attachments[5].stencilStoreOp = AttachmentStoreOp::Store;
-        attachments[5].initialLayout = ImageLayout::Undefined;
-        attachments[5].finalLayout = ImageLayout::DepthStencilAttachment;
-
-        renderPass = RenderPass::Create(attachments, 6, "gbuffer_renderpass");
-
-        Attachment attachment{};
-        attachment.format = viewportRT->imageInfo.format;
-        compositionRenderPass = RenderPass::Create(&attachment, 1, "composition_renderpass");
-    }
-
-    void Deferred::CreateFrameBuffers()
-    {
-        CreateGBufferFrameBuffers();
-        CreateCompositionFrameBuffers();
-    }
-
-    void Deferred::CreateGBufferFrameBuffers()
-    {
-        framebuffers.resize(SWAPCHAIN_IMAGES);
-        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
-        {
-            uint32_t width = albedoRT->imageInfo.width;
-            uint32_t height = albedoRT->imageInfo.height;
-            std::array<ImageViewHandle, 6> views{
-                normalRT->view,
-                albedoRT->view,
-                srmRT->view,
-                velocityRT->view,
-                emissiveRT->view,
-                depth->view};
-            framebuffers[i] = FrameBuffer::Create(width, height, views.data(), 6, renderPass, "gbuffer_frameBuffer_" + std::to_string(i));
-        }
-    }
-
-    void Deferred::CreateCompositionFrameBuffers()
-    {
-        compositionFramebuffers.resize(SWAPCHAIN_IMAGES);
-        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
-        {
-            uint32_t width = viewportRT->imageInfo.width;
-            uint32_t height = viewportRT->imageInfo.height;
-            ImageViewHandle view = viewportRT->view;
-            compositionFramebuffers[i] = FrameBuffer::Create(width, height, &view, 1, compositionRenderPass, "composition_frameBuffer_" + std::to_string(i));
-        }
-    }
-
     void Deferred::CreatePipeline()
     {
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
@@ -159,7 +93,8 @@ namespace pe
             DSComposition->GetLayout(),
             shadows.descriptorSetDeferred->GetLayout(),
             skybox.descriptorSet->GetLayout()};
-        info.renderPass = compositionRenderPass;
+        info.dynamicColorTargets = 1;
+        info.colorFormats = &viewportRT->imageInfo.format;
         info.name = "composition_pipeline";
 
         pipelineComposition = Pipeline::Create(info);
@@ -209,7 +144,7 @@ namespace pe
 
             Mesh::uniqueTextures[path] = ibl_brdf_lut;
             cmd->AddAfterWaitCallback([pixels]()
-                                     { stbi_image_free(pixels); });
+                                      { stbi_image_free(pixels); });
         }
 
         uniform = Buffer::Create(
@@ -395,7 +330,10 @@ namespace pe
         // Output
         cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
 
-        cmd->BeginPass(compositionRenderPass, compositionFramebuffers[imageIndex]);
+        AttachmentInfo info{};
+        info.image = viewportRT;
+
+        cmd->BeginPass(1, &info);
         cmd->PushConstants(pipelineComposition, ShaderStage::FragmentBit, 0, sizeof(mat4), &values);
         cmd->BindPipeline(pipelineComposition);
         cmd->BindDescriptors(pipelineComposition, (uint32_t)handles.size(), handles.data());
@@ -407,33 +345,34 @@ namespace pe
 
     void Deferred::Resize(uint32_t width, uint32_t height)
     {
-        for (auto *framebuffer : framebuffers)
-            FrameBuffer::Destroy(framebuffer);
-        for (auto *framebuffer : compositionFramebuffers)
-            FrameBuffer::Destroy(framebuffer);
-
-        RenderPass::Destroy(renderPass);
-        RenderPass::Destroy(compositionRenderPass);
-
         Pipeline::Destroy(pipelineComposition);
 
         Init();
-        CreateRenderPass();
-        CreateFrameBuffers();
         UpdateDescriptorSets();
         CreatePipeline();
     }
 
     void Deferred::BeginPass(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        cmd->ImageBarrier(albedoRT, ImageLayout::ColorAttachment);
         cmd->ImageBarrier(normalRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(albedoRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(srmRT, ImageLayout::ColorAttachment);
         cmd->ImageBarrier(velocityRT, ImageLayout::ColorAttachment);
         cmd->ImageBarrier(emissiveRT, ImageLayout::ColorAttachment);
-        cmd->ImageBarrier(srmRT, ImageLayout::ColorAttachment); // TODO: Check why it throws
         cmd->ImageBarrier(depth, ImageLayout::DepthStencilAttachment);
 
-        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+        // Must be in order as they appear in shader and in pipeline
+        AttachmentInfo colorInfos[5]{};
+        colorInfos[0].image = normalRT;
+        colorInfos[1].image = albedoRT;
+        colorInfos[2].image = srmRT;
+        colorInfos[3].image = velocityRT;
+        colorInfos[4].image = emissiveRT;
+
+        AttachmentInfo depthInfo{};
+        depthInfo.image = depth;
+
+        cmd->BeginPass(5, colorInfos, &depthInfo);
     }
 
     void Deferred::EndPass(CommandBuffer *cmd)
@@ -450,14 +389,6 @@ namespace pe
 
     void Deferred::Destroy()
     {
-        RenderPass::Destroy(renderPass);
-        RenderPass::Destroy(compositionRenderPass);
-
-        for (auto &framebuffer : framebuffers)
-            FrameBuffer::Destroy(framebuffer);
-        for (auto &framebuffer : compositionFramebuffers)
-            FrameBuffer::Destroy(framebuffer);
-
         Descriptor::Destroy(DSComposition);
         Buffer::Destroy(uniform);
         Pipeline::Destroy(pipelineComposition);

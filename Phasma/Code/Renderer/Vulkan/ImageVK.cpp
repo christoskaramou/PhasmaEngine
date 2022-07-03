@@ -86,12 +86,12 @@ namespace pe
 
         imageInfo = info;
 
-        layouts.resize(imageInfo.arrayLayers);
+        m_layouts.resize(imageInfo.arrayLayers);
         for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
         {
-            layouts[i] = std::vector<ImageLayout>(imageInfo.mipLevels);
+            m_layouts[i] = std::vector<ImageLayout>(imageInfo.mipLevels);
             for (uint32_t j = 0; j < imageInfo.mipLevels; j++)
-                layouts[i][j] = info.initialLayout;
+                m_layouts[i][j] = info.initialLayout;
         }
 
         VkFormatProperties fProps;
@@ -207,7 +207,7 @@ namespace pe
 
         for (uint32_t i = 0; i < arrayLayers; i++)
             for (uint32_t j = 0; j < mipLevels; j++)
-                layouts[baseArrayLayer + i][baseMipLevel + j] = newLayout;
+                m_layouts[baseArrayLayer + i][baseMipLevel + j] = newLayout;
     }
 
     void Image::CreateImageView(const ImageViewCreateInfo &info)
@@ -238,12 +238,12 @@ namespace pe
                         uint32_t baseMipLevel,
                         uint32_t mipLevels)
     {
-        ImageLayout oldLayout = layouts[baseArrayLayer][baseMipLevel];
+        ImageLayout oldLayout = m_layouts[baseArrayLayer][baseMipLevel];
         if (newLayout != oldLayout)
         {
             PipelineStageFlags oldPipelineStage;
             AccessFlags oldAccess;
-            GetInfoFromLayout(layouts[baseArrayLayer][baseMipLevel], oldPipelineStage, oldAccess);
+            GetInfoFromLayout(m_layouts[baseArrayLayer][baseMipLevel], oldPipelineStage, oldAccess);
 
             PipelineStageFlags newPipelineStage;
             AccessFlags newAccess;
@@ -453,8 +453,8 @@ namespace pe
         regionVK.dstOffsets[0] = Translate<VkOffset3D, const Offset3D &>(region->dstOffsets[0]);
         regionVK.dstOffsets[1] = Translate<VkOffset3D, const Offset3D &>(region->dstOffsets[1]);
 
-        ImageLayout srcLayout = src->layouts[region->srcSubresource.baseArrayLayer][region->srcSubresource.mipLevel];
-        ImageLayout dstLayout = layouts[region->dstSubresource.baseArrayLayer][region->dstSubresource.mipLevel];
+        ImageLayout srcLayout = src->m_layouts[region->srcSubresource.baseArrayLayer][region->srcSubresource.mipLevel];
+        ImageLayout dstLayout = m_layouts[region->dstSubresource.baseArrayLayer][region->dstSubresource.mipLevel];
 
         vkCmdBlitImage(cmd->Handle(),
                        src->Handle(), Translate<VkImageLayout>(srcLayout),

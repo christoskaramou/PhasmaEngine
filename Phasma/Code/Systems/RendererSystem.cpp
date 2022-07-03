@@ -98,8 +98,6 @@ namespace pe
         for (auto &renderComponent : m_renderComponents)
         {
             renderComponent.second->Init();
-            renderComponent.second->CreateRenderPass();
-            renderComponent.second->CreateFrameBuffers();
             renderComponent.second->CreateUniforms(cmd);
             renderComponent.second->CreatePipeline();
         }

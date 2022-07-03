@@ -846,6 +846,17 @@ namespace pe
         m_velocityRT = rs->GetRenderTarget("velocity");
         m_emissiveRT = rs->GetRenderTarget("emissive");
 
+        Format colorformats[]
+        {
+            m_normalRT->imageInfo.format,
+            m_albedoRT->imageInfo.format,
+            m_srmRT->imageInfo.format,
+            m_velocityRT->imageInfo.format,
+            m_emissiveRT->imageInfo.format
+        };
+
+        Format depthFormat = RHII.GetDepthFormat();
+
         PipelineCreateInfo info{};
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.frag", ShaderStage::FragmentBit});
@@ -868,7 +879,9 @@ namespace pe
         info.descriptorSetLayouts = {
             uniformBuffer.descriptor->GetLayout(),
             uniformImages.descriptor->GetLayout()};
-        info.renderPass = WORLD_ENTITY->GetComponent<Deferred>()->renderPass;
+        info.dynamicColorTargets = 5;
+        info.colorFormats = colorformats;
+        info.depthFormat = &depthFormat;
         info.name = "gbuffer_pipeline";
 
         m_pipelineGBuffer = Pipeline::Create(info);
@@ -880,6 +893,7 @@ namespace pe
     void Model::CreatePipelineShadows()
     {
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
+        Format depthFormat = RHII.GetDepthFormat();
 
         PipelineCreateInfo info{};
 
@@ -893,7 +907,7 @@ namespace pe
         info.colorBlendAttachments = {WORLD_ENTITY->GetComponent<Shadows>()->textures[0]->blendAttachment};
         info.dynamicStates = {DynamicState::DepthBias};
         info.descriptorSetLayouts = {uniformBuffer.descriptor->GetLayout()};
-        info.renderPass = WORLD_ENTITY->GetComponent<Shadows>()->renderPass;
+        info.depthFormat = &depthFormat;
         info.name = "shadows_pipeline";
 
         m_pipelineShadows = Pipeline::Create(info);

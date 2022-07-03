@@ -30,7 +30,6 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
-#include "Renderer/RenderPass.h"
 #include "Renderer/Pipeline.h"
 #include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"
@@ -55,25 +54,6 @@ namespace pe
         depth = rs->GetDepthTarget("depth");
     }
 
-    void SSGI::CreateRenderPass()
-    {
-        Attachment attachment{};
-        attachment.format = viewportRT->imageInfo.format;
-        renderPass = RenderPass::Create(&attachment, 1, "ssgi_renderpass");
-    }
-
-    void SSGI::CreateFrameBuffers()
-    {
-        framebuffers.resize(SWAPCHAIN_IMAGES);
-        for (size_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
-        {
-            uint32_t width = viewportRT->imageInfo.width;
-            uint32_t height = viewportRT->imageInfo.height;
-            ImageViewHandle view = viewportRT->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "ssgi_frameBuffer_" + std::to_string(i));
-        }
-    }
-
     void SSGI::CreatePipeline()
     {
         PipelineCreateInfo info{};
@@ -86,7 +66,8 @@ namespace pe
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = 5 * sizeof(vec4);
         info.descriptorSetLayouts = {DSet->GetLayout()};
-        info.renderPass = renderPass;
+        info.dynamicColorTargets = 1;
+        info.colorFormats = &viewportRT->imageInfo.format;
         info.name = "ssgi_pipeline";
 
         pipeline = Pipeline::Create(info);
@@ -109,7 +90,6 @@ namespace pe
         bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
         bindingInfos[1].pImage = depth;
 
-
         DescriptorInfo info{};
         info.count = 2;
         info.bindingInfos = bindingInfos;
@@ -131,7 +111,6 @@ namespace pe
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
         bindingInfos[1].pImage = depth;
-
 
         DescriptorInfo info{};
         info.count = 2;
@@ -161,7 +140,10 @@ namespace pe
         // Output
         cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
 
-        cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+        AttachmentInfo info{};
+        info.image = viewportRT;
+
+        cmd->BeginPass(1, &info);
         cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, uint32_t(sizeof(mat4)), &camera.invViewProjection);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
@@ -173,15 +155,10 @@ namespace pe
 
     void SSGI::Resize(uint32_t width, uint32_t height)
     {
-        for (auto *frameBuffer : framebuffers)
-            FrameBuffer::Destroy(frameBuffer);
-        RenderPass::Destroy(renderPass);
         Pipeline::Destroy(pipeline);
         Image::Destroy(frameImage);
 
         Init();
-        CreateRenderPass();
-        CreateFrameBuffers();
         UpdateDescriptorSets();
         CreatePipeline();
     }
@@ -189,11 +166,6 @@ namespace pe
     void SSGI::Destroy()
     {
         Descriptor::Destroy(DSet);
-
-        for (auto framebuffer : framebuffers)
-            FrameBuffer::Destroy(framebuffer);
-
-        RenderPass::Destroy(renderPass);
         Pipeline::Destroy(pipeline);
         Image::Destroy(frameImage);
     }

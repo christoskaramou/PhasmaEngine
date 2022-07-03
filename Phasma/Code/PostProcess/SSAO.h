@@ -26,9 +26,7 @@ namespace pe
 {
     class CommandBuffer;
     class Descriptor;
-    class FrameBuffer;
     class Image;
-    class RenderPass;
     class Pipeline;
     class Buffer;
     class Camera;
@@ -37,10 +35,6 @@ namespace pe
     {
     public:
         void Init() override;
-
-        void CreateRenderPass() override;
-
-        void CreateFrameBuffers() override;
 
         void CreatePipeline() override;
 
@@ -70,9 +64,6 @@ namespace pe
         Buffer *UB_Kernel;
         Buffer *UB_PVM;
         Image *noiseTex;
-        RenderPass *renderPass;
-        RenderPass *blurRenderPass;
-        std::vector<FrameBuffer *> framebuffers{}, blurFramebuffers{};
         Pipeline *pipeline;
         Pipeline *pipelineBlur;
         Descriptor *DSet;

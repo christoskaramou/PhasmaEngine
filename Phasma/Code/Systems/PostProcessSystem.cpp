@@ -56,8 +56,6 @@ namespace pe
         for (auto &effect : m_effects)
         {
             effect.second->Init();
-            effect.second->CreateRenderPass();
-            effect.second->CreateFrameBuffers();
             effect.second->CreateUniforms(cmd);
             effect.second->CreatePipeline();
         }
