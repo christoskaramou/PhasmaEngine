@@ -494,4 +494,27 @@ namespace pe
         if (m_uniformImages.find(key) != m_uniformImages.end())
             m_uniformImages.erase(key);
     }
+
+    uint64_t RHI::GetMemoryUsageSnapshot()
+    {
+        static bool hasMemoryBudgetExt = IsDeviceExtensionValid(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+
+        if (hasMemoryBudgetExt)
+            return 0;
+
+        VkPhysicalDeviceMemoryBudgetPropertiesEXT memoryBudgetProperties{};
+        memoryBudgetProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
+
+        VkPhysicalDeviceMemoryProperties2 memoryProperties{};
+        memoryProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+        memoryProperties.pNext = &memoryBudgetProperties;
+
+        vkGetPhysicalDeviceMemoryProperties2(m_gpu, &memoryProperties);
+
+        uint64_t memoryUsage = 0;
+        for (uint32_t i = 0; i < memoryProperties.memoryProperties.memoryTypeCount; i++)
+            memoryUsage += memoryBudgetProperties.heapUsage[i];
+
+        return memoryUsage;
+    }
 }

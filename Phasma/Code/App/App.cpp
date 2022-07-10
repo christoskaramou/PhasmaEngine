@@ -39,7 +39,7 @@ namespace pe
 
         EventSystem::Init();
 
-        uint32_t flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
+        uint32_t flags = SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI;
 #if PE_VULKAN
         flags |= SDL_WINDOW_VULKAN;
 #endif
@@ -94,7 +94,7 @@ namespace pe
             {
                 context->UpdateSystems(frameTimer->GetDelta());
                 SyncQueue<Launch::All>::ExecuteRequests();
-                frameTimer->timestamps[0] = static_cast<float>(frameTimer->Count());
+                frameTimer->cpuStamp = static_cast<float>(frameTimer->Count());
                 context->DrawSystems();
             }
 

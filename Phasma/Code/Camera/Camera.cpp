@@ -22,11 +22,10 @@ SOFTWARE.
 
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
-#include "Renderer/Compute.h"
-#include "Renderer/Pipeline.h"
-#include "Renderer/Buffer.h"
 #include "Renderer/RHI.h"
+#include "PostProcess/SuperResolution.h"
 #include "Systems/RendererSystem.h"
+#include "Systems/PostProcessSystem.h"
 
 namespace pe
 {
@@ -41,7 +40,7 @@ namespace pe
 
         nearPlane = 0.005f;
         farPlane = 100.0f;
-        FOV = radians(87.0f);
+        fovx = radians(87.0f);
         speed = 0.35f;
         rotationSpeed = radians(2.864f);
 
@@ -62,55 +61,46 @@ namespace pe
 
     void Camera::Update()
     {
-        auto &renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
-
         front = orientation * WorldFront();
         right = orientation * WorldRight();
         up = orientation * WorldUp();
-        previousView = view;
-        previousProjection = projection;
-        projOffsetPrevious = projOffset;
-        if (GUI::use_TAA)
-        {
-            // has the aspect ratio of the render area because the projection matrix has the same aspect ratio too,
-            // doesn't matter if it renders in bigger image size,
-            // it will be scaled down to render area size before GUI pass
-            // const int i = static_cast<int>(floor(rand(0.0f, 15.99f)));
-            // projOffset = vec2(&halton16[i * 2]);
-            projOffset = halton_2_3_next(16);
-            projOffset *= vec2(2.0f);
-            projOffset -= vec2(1.0f);
-            projOffset /= vec2(renderArea.viewport.width, renderArea.viewport.height);
-            projOffset *= GUI::renderTargetsScale;
-            projOffset *= GUI::TAA_jitter_scale;
-        }
-        else
-        {
-            projOffset = {0.0f, 0.0f};
-        }
+
         UpdatePerspective();
         UpdateView();
-        invView = inverse(view);
-        invProjection = inverse(projection);
         invViewProjection = invView * invProjection;
         previousViewProjection = viewProjection;
         viewProjection = projection * view;
         ExtractFrustum();
     }
 
-    void Camera::UpdatePerspective()
+    float Camera::GetAspect()
     {
         auto &renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
-        const float aspect = renderArea.viewport.width / renderArea.viewport.height;
-        projection = perspective(FovxToFovy(FOV, aspect), aspect, nearPlane, farPlane, GlobalSettings::ReverseZ);
-        projection[2][0] = projOffset.x;
-        projection[2][1] = projOffset.y;
+        return renderArea.viewport.width / renderArea.viewport.height;
+    }
+
+    void Camera::UpdatePerspective()
+    {
+        previousProjection = projection;
+        projection = perspective(Fovy(), GetAspect(), nearPlane, farPlane, GlobalSettings::ReverseZ);
+
+        if (GUI::use_FSR2)
+        {
+            SuperResolution *sr = Context::Get()->GetSystem<PostProcessSystem>()->GetEffect<SuperResolution>();
+            sr->GenerateJitter();
+            const vec2 &projJitter = sr->GetProjectionJitter();
+            mat4 jitterMat = translate(mat4::identity(), vec3(projJitter.x, projJitter.y, 0.f));
+            projection = jitterMat * projection;
+        }
+        
+        invProjection = inverse(projection);
     }
 
     void Camera::UpdateView()
     {
-        // view = lookAt(position, position + front, WorldUp());
+        previousView = view;
         view = lookAt(position, front, right, up);
+        invView = inverse(view);
     }
 
     void Camera::Move(CameraDirection direction, float velocity)

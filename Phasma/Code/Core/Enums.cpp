@@ -31,8 +31,8 @@ namespace pe
             accessMask = 0;
             break;
         case ImageLayout::General:
-            stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            accessMask = 0;
+            stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            accessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
             break;
         case ImageLayout::ColorAttachment:
             stageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -47,7 +47,7 @@ namespace pe
             accessMask = VK_ACCESS_SHADER_READ_BIT;
             break;
         case ImageLayout::ShaderReadOnly:
-            stageFlags = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            stageFlags = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
             accessMask = VK_ACCESS_SHADER_READ_BIT;
             break;
         case ImageLayout::TransferSrc:
@@ -80,8 +80,8 @@ namespace pe
             accessMask = Access::None;
             break;
         case ImageLayout::General:
-            stageFlags = PipelineStage::TopOfPipeBit;
-            accessMask = Access::None;
+            stageFlags = PipelineStage::TopOfPipeBit | PipelineStage::ComputeShaderBit;
+            accessMask = Access::ShaderReadBit | Access::ShaderWriteBit;
             break;
         case ImageLayout::ColorAttachment:
             stageFlags = PipelineStage::ColorAttachmentOutputBit;
@@ -96,7 +96,7 @@ namespace pe
             accessMask = Access::ShaderReadBit;
             break;
         case ImageLayout::ShaderReadOnly:
-            stageFlags = PipelineStage::FragmentShaderBit;
+            stageFlags = PipelineStage::FragmentShaderBit | PipelineStage::ComputeShaderBit;
             accessMask = Access::ShaderReadBit;
             break;
         case ImageLayout::TransferSrc:

@@ -38,9 +38,5 @@ namespace pe
         void Destroy() override;
 
         void Draw() override;
-
-    private:
-        CommandBuffer *m_previousCmds[SWAPCHAIN_IMAGES];
-        CommandBuffer *m_previousShadowCmds[SWAPCHAIN_IMAGES][SHADOWMAP_CASCADES];
     };
 }

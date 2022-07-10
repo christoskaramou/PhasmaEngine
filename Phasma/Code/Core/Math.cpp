@@ -1051,6 +1051,17 @@ namespace pe
             m[0] * v.x + m[1] * v.y + m[2] * v.z + m[3]);
     }
 
+    mat4 translate(cmat4 &m, cvec3 &v)
+    {
+        mat4 &mat = const_cast<mat4&>(m);
+        
+        return mat4(
+            mat[0],
+            mat[1],
+            mat[2],
+            mat[0] * v.x + mat[1] * v.y + mat[2] * v.z + mat[3]);
+    }
+
     mat4 scale(mat4 &m, cvec3 &v)
     {
         return mat4(
@@ -1127,8 +1138,6 @@ namespace pe
 
         cfloat m00 = 1.f / (aspect * tanHalfFovy);
         cfloat m11 = 1.f / (tanHalfFovy);
-        // cfloat m20 = projOffset.x;
-        // cfloat m21 = projOffset.y;
         cfloat m22 = zFar / (zFar - zNear);
         cfloat m23 = 1.0f; // reverseZ ? -1.0f : 1.0f;
         cfloat m32 = -(zFar * zNear) / (zFar - zNear);
@@ -1151,8 +1160,6 @@ namespace pe
 
         cfloat m00 = 1.f / (aspect * tanHalfFovy);
         cfloat m11 = 1.f / (tanHalfFovy);
-        // cfloat m20 = projOffset.x;
-        // cfloat m21 = projOffset.y;
         cfloat m22 = zFar / (zNear - zFar);
         cfloat m23 = -1.0f; // reverseZ ? 1.0f : -1.0f;
         cfloat m32 = -(zFar * zNear) / (zFar - zNear);

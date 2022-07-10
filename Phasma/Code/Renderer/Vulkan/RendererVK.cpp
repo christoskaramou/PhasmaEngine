@@ -37,8 +37,8 @@ SOFTWARE.
 #include "PostProcess/MotionBlur.h"
 #include "PostProcess/SSAO.h"
 #include "PostProcess/SSR.h"
-#include "PostProcess/TAA.h"
 #include "PostProcess/SSGI.h"
+#include "PostProcess/SuperResolution.h"
 
 namespace pe
 {
@@ -110,28 +110,21 @@ namespace pe
         SSAO &ssao = *WORLD_ENTITY->GetComponent<SSAO>();
         SSR &ssr = *WORLD_ENTITY->GetComponent<SSR>();
         FXAA &fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
-        TAA &taa = *WORLD_ENTITY->GetComponent<TAA>();
         Bloom &bloom = *WORLD_ENTITY->GetComponent<Bloom>();
         DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
         SSGI &ssgi = *WORLD_ENTITY->GetComponent<SSGI>();
-
-        if (gpuTimers.size() < 12)
-        {
-            size_t count = 12 - gpuTimers.size();
-            for (size_t i = 0; i < count; i++)
-                gpuTimers.push_back(GpuTimer::Create());
-        }
+        SuperResolution &sr = *WORLD_ENTITY->GetComponent<SuperResolution>();
 
         FrameTimer &frameTimer = FrameTimer::Instance();
 
         cmd->BeginDebugRegion("RecordPasses");
 
-        gpuTimers[0]->Start(cmd);
+        GpuTimer::gpu->Start(cmd);
 
         // MODELS
         cmd->BeginDebugRegion("Geometry");
-        gpuTimers[1]->Start(cmd);
+        GpuTimer::geometry->Start(cmd);
         deferred.BeginPass(cmd, imageIndex);
         for (auto &model : Model::models)
             model.Draw(cmd, RenderQueue::Opaque);
@@ -140,87 +133,88 @@ namespace pe
         for (auto &model : Model::models)
             model.Draw(cmd, RenderQueue::AlphaBlend);
         deferred.EndPass(cmd);
-        frameTimer.timestamps[4] = gpuTimers[1]->End();
+        frameTimer.geometryStamp = GpuTimer::geometry->End();
         cmd->EndDebugRegion();
 
         // SCREEN SPACE AMBIENT OCCLUSION
         if (GUI::show_ssao)
         {
-            gpuTimers[2]->Start(cmd);
+            GpuTimer::ssao->Start(cmd);
             ssao.Draw(cmd, imageIndex);
-            frameTimer.timestamps[5] = gpuTimers[2]->End();
+            frameTimer.ssaoStamp = GpuTimer::ssao->End();
         }
 
         // SCREEN SPACE REFLECTIONS
         if (GUI::show_ssr)
         {
-            gpuTimers[3]->Start(cmd);
+            GpuTimer::ssr->Start(cmd);
             ssr.Draw(cmd, imageIndex);
-            frameTimer.timestamps[6] = gpuTimers[3]->End();
+            frameTimer.ssrStamp = GpuTimer::ssr->End();
         }
 
         // COMPOSITION
-        gpuTimers[4]->Start(cmd);
+        GpuTimer::ssgi->Start(cmd);
         deferred.Draw(cmd, imageIndex);
-        frameTimer.timestamps[7] = gpuTimers[4]->End();
+        frameTimer.compositionStamp = GpuTimer::ssgi->End();
 
         if (GUI::use_SSGI)
         {
-            // gpuTimers[8].Start(cmd);
+            // GpuTimer::ssgi.Start(cmd);
             ssgi.Draw(cmd, imageIndex);
-            // frameTimer.timestamps[10] = gpuTimers[8].End();
+            // frameTimer.ssgiStamp = GpuTimer::ssgi.End();
         }
 
-        if (GUI::use_AntiAliasing)
+        // FXAA
+        if (GUI::use_FXAA)
         {
-            // TAA
-            if (GUI::use_TAA)
-            {
-                gpuTimers[5]->Start(cmd);
-                taa.Draw(cmd, imageIndex);
-                frameTimer.timestamps[8] = gpuTimers[5]->End();
-            }
-            // FXAA
-            else if (GUI::use_FXAA)
-            {
-                gpuTimers[6]->Start(cmd);
-                fxaa.Draw(cmd, imageIndex);
-                frameTimer.timestamps[8] = gpuTimers[6]->End();
-            }
+            GpuTimer::fxaa->Start(cmd);
+            fxaa.Draw(cmd, imageIndex);
+            frameTimer.fxaaStamp = GpuTimer::fxaa->End();
         }
 
         // BLOOM
         if (GUI::show_Bloom)
         {
-            gpuTimers[7]->Start(cmd);
+            GpuTimer::bloom->Start(cmd);
             bloom.Draw(cmd, imageIndex);
-            frameTimer.timestamps[9] = gpuTimers[7]->End();
+            frameTimer.bloomStamp = GpuTimer::bloom->End();
         }
 
         // Depth of Field
         if (GUI::use_DOF)
         {
-            gpuTimers[8]->Start(cmd);
+            GpuTimer::dof->Start(cmd);
             dof.Draw(cmd, imageIndex);
-            frameTimer.timestamps[10] = gpuTimers[8]->End();
+            frameTimer.ssgiStamp = GpuTimer::dof->End();
         }
 
         // MOTION BLUR
         if (GUI::show_motionBlur)
         {
-            gpuTimers[9]->Start(cmd);
+            GpuTimer::motionBlur->Start(cmd);
             motionBlur.Draw(cmd, imageIndex);
-            frameTimer.timestamps[11] = gpuTimers[9]->End();
+            frameTimer.motionBlurStamp = GpuTimer::motionBlur->End();
         }
 
-        BlitToSwapchain(cmd, GUI::s_currRenderImage ? GUI::s_currRenderImage : m_viewportRT, imageIndex);
+        // FSR2
+        if (GUI::use_FSR2)
+        {
+            GpuTimer::fsr->Start(cmd);
+            sr.Draw(cmd, imageIndex);
+            frameTimer.fsrStamp = GpuTimer::fsr->End();
+        }
+
+        Image *finalImage = GUI::s_currRenderImage ? GUI::s_currRenderImage : GUI::use_FSR2 ? sr.GetOutput()
+                                                                                            : m_viewportRT;
+
+        BlitToSwapchain(cmd, finalImage, imageIndex);
 
         // GUI
-        gpuTimers[10]->Start(cmd);
+        GpuTimer::gui->Start(cmd);
         gui.Draw(cmd, imageIndex);
-        frameTimer.timestamps[12] = gpuTimers[10]->End();
+        frameTimer.guiStamp = GpuTimer::gui->End();
 
-        frameTimer.timestamps[2] = gpuTimers[0]->End();
+        frameTimer.gpuStamp = GpuTimer::gpu->End();
 
         cmd->EndDebugRegion();
     }
@@ -230,13 +224,6 @@ namespace pe
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
         FrameTimer &frameTimer = FrameTimer::Instance();
 
-        if (gpuTimers.size() < count)
-        {
-            size_t addCount = count - gpuTimers.size();
-            for (size_t i = 0; i < addCount; i++)
-                gpuTimers.push_back(GpuTimer::Create());
-        }
-
         for (uint32_t i = 0; i < count; i++)
         {
             CommandBuffer *cmd = cmds[i];
@@ -244,7 +231,7 @@ namespace pe
 
             cmd->BeginDebugRegion("Shadow_Cascade_" + std::to_string(i));
 
-            gpuTimers[i]->Start(cmd);
+            GpuTimer::shadows[i]->Start(cmd);
 
             // MODELS
             shadows.BeginPass(cmd, imageIndex, i);
@@ -252,19 +239,27 @@ namespace pe
                 model.DrawShadow(cmd, i);
             shadows.EndPass(cmd, i);
 
-            frameTimer.timestamps[13 + static_cast<size_t>(i)] = gpuTimers[i]->End();
+            frameTimer.shadowStamp[i] = GpuTimer::shadows[i]->End();
             cmd->EndDebugRegion();
 
             cmd->End();
         }
     }
 
-    Image *Renderer::CreateRenderTarget(const std::string &name, Format format, bool blendEnable, ImageUsageFlags additionalFlags)
+    Image *Renderer::CreateRenderTarget(const std::string &name,
+                                        Format format,
+                                        bool blendEnable,
+                                        ImageUsageFlags additionalFlags,
+                                        bool useRenderTergetScale)
     {
+        float renderTargetScale = useRenderTergetScale ? GUI::renderTargetsScale : 1.f;
+        uint32_t width = static_cast<uint32_t>(WIDTH_f * renderTargetScale);
+        uint32_t heigth = static_cast<uint32_t>(HEIGHT_f * renderTargetScale);
+
         ImageCreateInfo info{};
         info.format = format;
-        info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
-        info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+        info.width = width;
+        info.height = heigth;
         info.usage = additionalFlags | ImageUsage::ColorAttachmentBit | ImageUsage::SampledBit;
         info.properties = MemoryProperty::DeviceLocalBit;
         info.name = name;
@@ -293,11 +288,16 @@ namespace pe
         return rt;
     }
 
-    Image *Renderer::CreateDepthTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags)
+    Image *Renderer::CreateDepthTarget(const std::string &name,
+                                       Format format,
+                                       ImageUsageFlags additionalFlags,
+                                       bool useRenderTergetScale)
     {
+        float renderTargetScale = useRenderTergetScale ? GUI::renderTargetsScale : 1.f;
+
         ImageCreateInfo info{};
-        info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
-        info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+        info.width = static_cast<uint32_t>(WIDTH_f * renderTargetScale);
+        info.height = static_cast<uint32_t>(HEIGHT_f * renderTargetScale);
         info.usage = additionalFlags;
         info.properties = MemoryProperty::DeviceLocalBit;
         info.format = format;
@@ -483,7 +483,7 @@ namespace pe
         CreateRenderTarget("gaussianBlurHorizontal", format, false);
         CreateRenderTarget("gaussianBlurVertical", format, false);
         CreateRenderTarget("emissive", format, false);
-        CreateRenderTarget("taa", format, false, ImageUsage::TransferSrcBit);
+        CreateRenderTarget("superResolution", format, false, ImageUsage::StorageBit, false);
 
         for (auto &rc : m_renderComponents)
             rc.second->Resize(width, height);
@@ -494,7 +494,7 @@ namespace pe
         gui.CreateRenderPass();
         gui.CreateFrameBuffers();
 
-        for (auto& model : Model::models)
+        for (auto &model : Model::models)
             model.Resize();
     }
 
@@ -535,7 +535,6 @@ namespace pe
         SSAO &ssao = *WORLD_ENTITY->GetComponent<SSAO>();
         SSR &ssr = *WORLD_ENTITY->GetComponent<SSR>();
         FXAA &fxaa = *WORLD_ENTITY->GetComponent<FXAA>();
-        TAA &taa = *WORLD_ENTITY->GetComponent<TAA>();
         Bloom &bloom = *WORLD_ENTITY->GetComponent<Bloom>();
         DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
@@ -545,8 +544,6 @@ namespace pe
         Pipeline::Destroy(ssr.pipeline);
         Pipeline::Destroy(deferred.pipelineComposition);
         Pipeline::Destroy(fxaa.pipeline);
-        Pipeline::Destroy(taa.pipeline);
-        Pipeline::Destroy(taa.pipelineSharpen);
         Pipeline::Destroy(dof.pipeline);
         Pipeline::Destroy(motionBlur.pipeline);
 
@@ -555,7 +552,6 @@ namespace pe
         ssao.CreatePipeline();
         ssr.CreatePipeline();
         fxaa.CreatePipeline();
-        taa.CreatePipeline();
         bloom.CreatePipeline();
         dof.CreatePipeline();
         motionBlur.CreatePipeline();

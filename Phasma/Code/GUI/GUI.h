@@ -43,24 +43,24 @@ namespace pe
         ~GUI();
 
         // Data
-        static inline float renderTargetsScale = 1.0f;
+        static inline float renderTargetsScale = 0.4f;
         static inline bool use_IBL = true;
         static inline bool use_Volumetric_lights = false;
         static inline int volumetric_steps = 32;
         static inline int volumetric_dither_strength = 400;
         static inline bool show_ssr = false;
-        static inline bool show_ssao = false;
+        static inline bool show_ssao = true;
         static inline bool show_tonemapping = false;
         static inline float exposure = 4.5f;
-        static inline bool use_AntiAliasing = false;
         static inline bool use_FXAA = false;
-        static inline bool use_TAA = false;
-        static inline float TAA_jitter_scale = 1.0f;
-        static inline float TAA_feedback_min = 0.01f;
-        static inline float TAA_feedback_max = 0.2f;
-        static inline float TAA_sharp_strength = 2.0f;
-        static inline float TAA_sharp_clamp = 0.35f;
-        static inline float TAA_sharp_offset_bias = 1.0f;
+        static inline bool use_FSR2 = true;
+        static inline float FSR2_JitterScaleX = 1.0f;
+        static inline float FSR2_JitterScaleY = 1.0f;
+        static inline float FSR2_MotionScaleX = 0.5f;
+        static inline float FSR2_MotionScaleY = 0.5f;
+        static inline float FSR2_ProjScaleX = 0.25f;
+        static inline float FSR2_ProjScaleY = 0.25f;
+        static inline float FSR2_Sharpness = 0.0f;
         static inline bool use_DOF = false;
         static inline float DOF_focus_scale = 15.0f;
         static inline float DOF_blur_range = 5.0f;
@@ -72,7 +72,7 @@ namespace pe
         static inline bool use_tonemap = false;
         static inline bool use_compute = false;
         static inline float Bloom_exposure = 3.5f;
-        static inline bool show_motionBlur = false;
+        static inline bool show_motionBlur = true;
         static inline float motionBlur_strength = 1.0f;
         static inline bool randomize_lights = false;
         static inline float lights_intensity = 10.0f;

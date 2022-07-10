@@ -282,7 +282,7 @@ namespace pe
         ubo.screenSpace[3] = {camera->invViewProjection[3]};
         ubo.screenSpace[4] = {
             static_cast<float>(GUI::show_ssao), static_cast<float>(GUI::show_ssr),
-            static_cast<float>(GUI::show_tonemapping), static_cast<float>(GUI::use_AntiAliasing)};
+            static_cast<float>(GUI::show_tonemapping), static_cast<float>(GUI::use_FSR2)};
         ubo.screenSpace[5] = {
             static_cast<float>(GUI::use_IBL), static_cast<float>(GUI::use_Volumetric_lights),
             static_cast<float>(GUI::volumetric_steps), static_cast<float>(GUI::volumetric_dither_strength)};

@@ -60,7 +60,6 @@ namespace pe
     {
         m_total = std::chrono::high_resolution_clock::now();
         m_delta = {};
-        timestamps.resize(22);
     }
 
     void FrameTimer::Tick()
@@ -142,6 +141,6 @@ namespace pe
         if (res != VK_SUCCESS)
             return 0.f;
 
-        return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f;
+        return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f; // ms
     }
 }

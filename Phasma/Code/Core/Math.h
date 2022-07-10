@@ -473,6 +473,8 @@ namespace pe
 
     mat4 translate(mat4 &m, cvec3 &v);
 
+    mat4 translate(cmat4 &m, cvec3 &v);
+
     mat4 scale(mat4 &m, cvec3 &v);
 
     mat4 rotate(mat4 &m, cfloat angle, cvec3 &axis);

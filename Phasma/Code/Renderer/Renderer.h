@@ -31,6 +31,7 @@ SOFTWARE.
 #include "Renderer/Deferred.h"
 #include "Renderer/Compute.h"
 #include "Script/Script.h"
+#include "Script/Script.h"
 
 #define IGNORE_SCRIPTS
 
@@ -70,13 +71,20 @@ namespace pe
 
         RenderArea &GetRenderArea() { return renderArea; }
 
-        Image *CreateRenderTarget(const std::string &name, Format format, bool blendEnable, ImageUsageFlags additionalFlags = {});
+        Image *CreateRenderTarget(const std::string &name,
+                                  Format format,
+                                  bool blendEnable,
+                                  ImageUsageFlags additionalFlags = {},
+                                  bool useRenderTergetScale = true);
 
         Image *GetRenderTarget(const std::string &name);
 
         Image *GetRenderTarget(size_t hash);
 
-        Image *CreateDepthTarget(const std::string &name, Format format, ImageUsageFlags additionalFlags = {});
+        Image *CreateDepthTarget(const std::string &name,
+                                 Format format,
+                                 ImageUsageFlags additionalFlags = {},
+                                 bool useRenderTergetScale = true);
 
         Image *GetDepthTarget(const std::string &name);
 
@@ -111,11 +119,14 @@ namespace pe
 
     public:
         inline static Queue *s_currentQueue = nullptr;
-        std::vector<GpuTimer *> gpuTimers{};
         RenderArea renderArea;
         SkyBox skyBoxDay;
         SkyBox skyBoxNight;
         GUI gui;
+
+    protected:
+        CommandBuffer *m_previousCmds[SWAPCHAIN_IMAGES];
+        CommandBuffer *m_previousShadowCmds[SWAPCHAIN_IMAGES][SHADOWMAP_CASCADES];
 
 #ifndef IGNORE_SCRIPTS
         std::vector<Script *> scripts{};

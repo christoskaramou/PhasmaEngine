@@ -26,6 +26,7 @@ SOFTWARE.
 #include "Renderer/Command.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Queue.h"
+#include "GUI/GUI.h"
 
 namespace pe
 {
@@ -223,6 +224,10 @@ namespace pe
         viewInfoVK.subresourceRange.levelCount = imageInfo.mipLevels;
         viewInfoVK.subresourceRange.baseArrayLayer = 0;
         viewInfoVK.subresourceRange.layerCount = imageInfo.arrayLayers;
+        viewInfoVK.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfoVK.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfoVK.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfoVK.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
 
         VkImageView vkView;
         PE_CHECK(vkCreateImageView(RHII.GetDevice(), &viewInfoVK, nullptr, &vkView));
@@ -416,7 +421,7 @@ namespace pe
         samplerInfoVK.addressModeU = Translate<VkSamplerAddressMode>(samplerInfo.addressModeU);
         samplerInfoVK.addressModeV = Translate<VkSamplerAddressMode>(samplerInfo.addressModeV);
         samplerInfoVK.addressModeW = Translate<VkSamplerAddressMode>(samplerInfo.addressModeW);
-        samplerInfoVK.mipLodBias = 0.f;
+        samplerInfoVK.mipLodBias = log2(GUI::renderTargetsScale) - 1.0f;
         samplerInfoVK.anisotropyEnable = samplerInfo.anisotropyEnable;
         samplerInfoVK.maxAnisotropy = samplerInfo.maxAnisotropy;
         samplerInfoVK.compareEnable = samplerInfo.compareEnable;
@@ -424,7 +429,7 @@ namespace pe
         samplerInfoVK.minLod = samplerInfo.minLod;
         samplerInfoVK.maxLod = samplerInfo.maxLod;
         samplerInfoVK.borderColor = Translate<VkBorderColor>(samplerInfo.borderColor);
-        samplerInfoVK.unnormalizedCoordinates = samplerInfo.unnormalizedCoordinates;
+        samplerInfoVK.unnormalizedCoordinates = samplerInfo.unnormalizedCoordinates;        
 
         VkSampler vkSampler;
         PE_CHECK(vkCreateSampler(RHII.GetDevice(), &samplerInfoVK, nullptr, &vkSampler));

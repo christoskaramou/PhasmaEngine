@@ -22,6 +22,8 @@ SOFTWARE.
 
 #pragma once
 
+#include "Renderer/Buffer.h"
+
 namespace pe
 {
     constexpr uint32_t AUTO = UINT32_MAX;

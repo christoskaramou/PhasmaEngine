@@ -131,6 +131,8 @@ namespace pe
         void RemoveUniformImageInfo(size_t index);
         UniformImageInfo &GetUniformImageInfo(size_t key) { return m_uniformImages[key]; }
 
+        uint64_t GetMemoryUsageSnapshot();
+
     private:
         RHI();
 

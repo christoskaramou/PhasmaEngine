@@ -64,7 +64,21 @@ namespace pe
 
         double CountTotal();
 
-        std::vector<double> timestamps{};
+        double cpuStamp;
+        double gpuStamp;
+        double shadowStamp[SHADOWMAP_CASCADES];
+        double computeStamp;
+        double geometryStamp;
+        double ssaoStamp;
+        double ssrStamp;
+        double compositionStamp;
+        double fxaaStamp;
+        double bloomStamp;
+        double ssgiStamp;
+        double dofStamp;
+        double motionBlurStamp;
+        double guiStamp;
+        double fsrStamp;
 
     private:
         std::chrono::duration<double> m_delta{};
@@ -100,8 +114,24 @@ namespace pe
 
         float End();
 
+        inline static GpuTimer *gpu = nullptr;
+        inline static GpuTimer *shadows[SHADOWMAP_CASCADES]{};
+        inline static GpuTimer *compute = nullptr;
+        inline static GpuTimer *geometry = nullptr;
+        inline static GpuTimer *ssao = nullptr;
+        inline static GpuTimer *ssr = nullptr;
+        inline static GpuTimer *composition = nullptr;
+        inline static GpuTimer *fxaa = nullptr;
+        inline static GpuTimer *bloom = nullptr;
+        inline static GpuTimer *ssgi = nullptr;
+        inline static GpuTimer *motionBlur = nullptr;
+        inline static GpuTimer *gui = nullptr;
+        inline static GpuTimer *dof = nullptr;
+        inline static GpuTimer *fsr = nullptr;
+
     private:
-        float GetTime();
+        float
+        GetTime();
 
         void Reset();
 

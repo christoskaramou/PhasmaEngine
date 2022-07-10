@@ -240,14 +240,15 @@ namespace pe
         FrameTimer &frameTimer = FrameTimer::Instance();
         ImGui::Text("CPU Total: %.3f ms", static_cast<float>(MILLI(frameTimer.GetDelta())));
         ImGui::Indent(16.0f);
-        ImGui::Text("CPU: %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[0])));
-        ImGui::Text(
-            "GPU: %.3f ms",
-            frameTimer.timestamps[2] +
-                (shadow_cast ? frameTimer.timestamps[13] + frameTimer.timestamps[14] + frameTimer.timestamps[15]
-                             : 0.f) +
-                (use_compute ? frameTimer.timestamps[16] : 0.f));
-        // ImGui::Text("Fence %.3f ms", static_cast<float>(MILLI(frameTimer.timestamps[1])));
+        ImGui::Text("CPU: %.3f ms", static_cast<float>(MILLI(frameTimer.cpuStamp)));
+
+        double shadowsTotal = 0.0;
+        if (shadow_cast)
+        {
+            for (int i = 0; i < SHADOWMAP_CASCADES; i++)
+                shadowsTotal += frameTimer.shadowStamp[i];
+        }
+        ImGui::Text("GPU: %.3f ms", frameTimer.gpuStamp + shadowsTotal);
         ImGui::Unindent(16.0f);
         ImGui::Separator();
         ImGui::Text("Render Passes:");
@@ -260,64 +261,70 @@ namespace pe
         {
             for (int i = 0; i < SHADOWMAP_CASCADES; i++)
             {
-                int index = 13 + i;
-                ImGui::Text("ShadowPass%i: %.3f ms", i, frameTimer.timestamps[index]);
+                ImGui::Text("ShadowPass%i: %.3f ms", i, frameTimer.shadowStamp[i]);
                 totalPasses++;
-                totalTime += (float)frameTimer.timestamps[index];
             }
+            totalTime += static_cast<float>(shadowsTotal);
         }
-        ImGui::Text("GBuffer: %.3f ms", frameTimer.timestamps[4]);
+        ImGui::Text("GBuffer: %.3f ms", frameTimer.geometryStamp);
         totalPasses++;
-        totalTime += (float)frameTimer.timestamps[4];
+        totalTime += static_cast<float>(frameTimer.geometryStamp);
         if (show_ssao)
         {
-            ImGui::Text("SSAO: %.3f ms", frameTimer.timestamps[5]);
+            ImGui::Text("SSAO: %.3f ms", frameTimer.ssaoStamp);
             totalPasses++;
-            totalTime += (float)frameTimer.timestamps[5];
+            totalTime += static_cast<float>(frameTimer.ssaoStamp);
         }
         if (show_ssr)
         {
-            ImGui::Text("SSR: %.3f ms", frameTimer.timestamps[6]);
+            ImGui::Text("SSR: %.3f ms", frameTimer.ssrStamp);
             totalPasses++;
-            totalTime += (float)frameTimer.timestamps[6];
+            totalTime += static_cast<float>(frameTimer.ssrStamp);
         }
-        ImGui::Text("Color Pass: %.3f ms", frameTimer.timestamps[7]);
+        ImGui::Text("Color Pass: %.3f ms", frameTimer.compositionStamp);
         totalPasses++;
-        totalTime += (float)frameTimer.timestamps[7];
-        if ((use_FXAA || use_TAA) && use_AntiAliasing)
+        totalTime += static_cast<float>(frameTimer.compositionStamp);
+
+        if (use_FSR2)
         {
-            ImGui::Text("Anti aliasing: %.3f ms", frameTimer.timestamps[8]);
+            ImGui::Text("FSR2: %.3f ms", frameTimer.fsrStamp); // TODO: Set a new timestamp for FSR2
             totalPasses++;
-            totalTime += (float)frameTimer.timestamps[8];
+            totalTime += static_cast<float>(frameTimer.fsrStamp);
+        }
+        if (use_FXAA)
+        {
+            ImGui::Text("FXAA: %.3f ms", frameTimer.fxaaStamp);
+            totalPasses++;
+            totalTime += static_cast<float>(frameTimer.fxaaStamp);
         }
         if (show_Bloom)
         {
-            ImGui::Text("Bloom: %.3f ms", frameTimer.timestamps[9]);
+            ImGui::Text("Bloom: %.3f ms", frameTimer.bloomStamp);
             totalPasses++;
-            totalTime += (float)frameTimer.timestamps[9];
+            totalTime += static_cast<float>(frameTimer.bloomStamp);
         }
         if (use_DOF)
         {
-            ImGui::Text("Depth of Field: %.3f ms", frameTimer.timestamps[10]);
+            ImGui::Text("Depth of Field: %.3f ms", frameTimer.dofStamp);
             totalPasses++;
-            totalTime += (float)frameTimer.timestamps[10];
+            totalTime += static_cast<float>(frameTimer.dofStamp);
         }
         if (use_SSGI)
         {
-            ImGui::Text("SSGI: %.3f ms", frameTimer.timestamps[10]);
+            ImGui::Text("SSGI: %.3f ms", frameTimer.ssgiStamp);
             totalPasses++;
-            totalTime += (float)frameTimer.timestamps[10];
+            totalTime += static_cast<float>(frameTimer.ssgiStamp);
         }
         if (show_motionBlur)
         {
-            ImGui::Text("Motion Blur: %.3f ms", frameTimer.timestamps[11]);
+            ImGui::Text("Motion Blur: %.3f ms", frameTimer.motionBlurStamp);
             totalPasses++;
-            totalTime += (float)frameTimer.timestamps[11];
+            totalTime += static_cast<float>(frameTimer.motionBlurStamp);
         }
 
-        ImGui::Text("GUI: %.3f ms", frameTimer.timestamps[12]);
+        ImGui::Text("GUI: %.3f ms", frameTimer.guiStamp);
         totalPasses++;
-        totalTime += (float)frameTimer.timestamps[12];
+        totalTime += static_cast<float>(frameTimer.guiStamp);
         ImGui::Unindent(16.0f);
         ImGui::Separator();
         ImGui::Separator();
@@ -500,38 +507,18 @@ namespace pe
             ImGui::Separator();
             ImGui::Separator();
         }
-        ImGui::Checkbox("Anti aliasing", &use_AntiAliasing);
-        if (use_AntiAliasing)
+
+        ImGui::Checkbox("FSR2", &use_FSR2);
+        if (use_FSR2)
         {
-            ImGui::Indent(16.0f);
-            if (ImGui::Checkbox("FXAA", &use_FXAA))
-            {
-                use_TAA = false;
-            }
-            if (ImGui::Checkbox("TAA", &use_TAA))
-            {
-                use_FXAA = false;
-            }
-            if (use_TAA)
-            {
-                ImGui::Indent(16.0f);
-                ImGui::DragFloat("Jitter", &TAA_jitter_scale, 0.01f, 0.1f);
-                ImGui::DragFloat("FeedbackMin", &TAA_feedback_min, 0.005f, 0.05f);
-                ImGui::DragFloat("FeedbackMax", &TAA_feedback_max, 0.005f, 0.05f);
-                ImGui::DragFloat("Strength", &TAA_sharp_strength, 0.1f, 0.2f);
-                ImGui::DragFloat("Clamp", &TAA_sharp_clamp, 0.01f, 0.05f);
-                ImGui::DragFloat("Bias", &TAA_sharp_offset_bias, 0.1f, 0.3f);
-                ImGui::Unindent(16.0f);
-            }
-            ImGui::Unindent(16.0f);
-            ImGui::Separator();
-            ImGui::Separator();
+            ImGui::InputFloat("MotionX", &FSR2_MotionScaleX, 0.1f, 1.f);
+            ImGui::InputFloat("MotionY", &FSR2_MotionScaleY, 0.1f, 1.f);
+            ImGui::InputFloat("ProjX", &FSR2_ProjScaleX, 0.1f, 1.f);
+            ImGui::InputFloat("ProjY", &FSR2_ProjScaleY, 0.1f, 1.f);
+            ImGui::InputFloat("Sharpnesss", &FSR2_Sharpness, 0.05f, .2f);
         }
-        else
-        {
-            use_TAA = false;
-            use_FXAA = false;
-        }
+
+        ImGui::Checkbox("FXAA", &use_FXAA);
 
         ImGui::Checkbox("Bloom", &show_Bloom);
         if (show_Bloom)
@@ -606,9 +593,9 @@ namespace pe
             const std::string s = "Scale##" + toStr;
             const std::string p = "Position##" + toStr;
             const std::string r = "Rotation##" + toStr;
-            ImGui::DragFloat3(s.c_str(), model_scale[modelItemSelected].data());
-            ImGui::DragFloat3(p.c_str(), model_pos[modelItemSelected].data());
-            ImGui::DragFloat3(r.c_str(), model_rot[modelItemSelected].data());
+            ImGui::DragFloat3(s.c_str(), model_scale[modelItemSelected].data(), 0.005f);
+            ImGui::DragFloat3(p.c_str(), model_pos[modelItemSelected].data(), 0.005f);
+            ImGui::DragFloat3(r.c_str(), model_rot[modelItemSelected].data(), 0.005f);
 
             ImGui::Separator();
             if (ImGui::Button("Unload Model"))

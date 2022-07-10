@@ -204,7 +204,7 @@ namespace pe
             // Project frustum corners into world space
             auto &renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
             const float aspect = renderArea.viewport.width / renderArea.viewport.height;
-            mat4 projection = perspective(camera->FovxToFovy(camera->FOV, aspect), aspect, nearClip, farClip, false);
+            mat4 projection = perspective(camera->Fovy(), aspect, nearClip, farClip, false);
             mat4 view = lookAt(camera->position, camera->position + camera->front, camera->WorldUp());
             mat4 invVP = inverse(projection * view);
             for (uint32_t i = 0; i < 8; i++)

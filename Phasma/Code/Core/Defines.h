@@ -24,11 +24,11 @@ SOFTWARE.
 
 namespace pe
 {
-    template <class T, class U>
+    template <class Base, class T>
     constexpr void ValidateBaseClass()
     {
-        static_assert(std::is_base_of<T, U>::value,
-                      "ValidateBaseClass<T, U>(): \"T is not the base class of U\" assertion");
+        static_assert(std::is_base_of<Base, T>::value,
+                      "ValidateBaseClass<Base, T>(): \"Base class of T\" assertion");
     }
 
 #define PE_DEBUG_MODE 1

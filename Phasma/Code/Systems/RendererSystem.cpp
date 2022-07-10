@@ -85,7 +85,7 @@ namespace pe
         CreateRenderTarget("gaussianBlurHorizontal", format, false);
         CreateRenderTarget("gaussianBlurVertical", format, false);
         CreateRenderTarget("emissive", format, false);
-        CreateRenderTarget("taa", format, false, ImageUsage::TransferSrcBit);
+        CreateRenderTarget("superResolution", format, false, ImageUsage::StorageBit, false);
 
         // LOAD RESOURCES
         LoadResources(cmd);
@@ -115,6 +115,23 @@ namespace pe
             for (uint32_t j = 0; j < SHADOWMAP_CASCADES; j++)
                 m_previousShadowCmds[i][j] = nullptr;
         }
+
+        // GPU TIMERS
+        GpuTimer::gpu = GpuTimer::Create();
+        GpuTimer::compute = GpuTimer::Create();
+        GpuTimer::geometry = GpuTimer::Create();
+        GpuTimer::ssao = GpuTimer::Create();
+        GpuTimer::ssr = GpuTimer::Create();
+        GpuTimer::composition = GpuTimer::Create();
+        GpuTimer::fxaa = GpuTimer::Create();
+        GpuTimer::bloom = GpuTimer::Create();
+        GpuTimer::ssgi = GpuTimer::Create();
+        GpuTimer::dof = GpuTimer::Create();
+        GpuTimer::motionBlur = GpuTimer::Create();
+        GpuTimer::gui = GpuTimer::Create();
+        GpuTimer::fsr = GpuTimer::Create();
+        for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
+            GpuTimer::shadows[i] = GpuTimer::Create();
     }
 
     void RendererSystem::Update(double delta)
@@ -165,8 +182,6 @@ namespace pe
 
         static Timer timer;
         timer.Start();
-
-        FrameTimer::Instance().timestamps[1] = timer.Count();
 
         if (GUI::shadow_cast)
         {
@@ -221,7 +236,7 @@ namespace pe
 
         // SUBMIT TO QUEUE
         cmd->Submit(queue, &waitStage, 1, &waitSemaphore, 1, &signalSemaphore);
-        
+
         m_previousCmds[imageIndex] = cmd;
 
         // PRESENT
@@ -239,9 +254,21 @@ namespace pe
     {
         RHII.WaitDeviceIdle();
 
-        for (GpuTimer *gpuTimer : gpuTimers)
-            GpuTimer::Destroy(gpuTimer);
-        gpuTimers.clear();
+        GpuTimer::Destroy(GpuTimer::gpu);
+        GpuTimer::Destroy(GpuTimer::compute);
+        GpuTimer::Destroy(GpuTimer::geometry);
+        GpuTimer::Destroy(GpuTimer::ssao);
+        GpuTimer::Destroy(GpuTimer::ssr);
+        GpuTimer::Destroy(GpuTimer::composition);
+        GpuTimer::Destroy(GpuTimer::fxaa);
+        GpuTimer::Destroy(GpuTimer::bloom);
+        GpuTimer::Destroy(GpuTimer::ssgi);
+        GpuTimer::Destroy(GpuTimer::dof);
+        GpuTimer::Destroy(GpuTimer::motionBlur);
+        GpuTimer::Destroy(GpuTimer::gui);
+        GpuTimer::Destroy(GpuTimer::fsr);
+        for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
+            GpuTimer::Destroy(GpuTimer::shadows[i]);
 
         for (auto &rc : m_renderComponents)
             rc.second->Destroy();

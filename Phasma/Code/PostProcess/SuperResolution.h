@@ -22,20 +22,22 @@ SOFTWARE.
 
 #pragma once
 
+struct FfxFsr2Context;
+struct FfxFsr2ContextDescription;
+struct FfxFsr2DispatchDescription;
+
 namespace pe
 {
-    class Descriptor;
+    class CommandBuffer;
     class Image;
-    class Pipeline;
-    class Buffer;
     class Camera;
 
-    class TAA : public IRenderComponent
+    class SuperResolution : public IRenderComponent
     {
     public:
-        TAA();
+        SuperResolution();
 
-        ~TAA();
+        ~SuperResolution();
 
         void Init() override;
 
@@ -53,29 +55,23 @@ namespace pe
 
         void Destroy() override;
 
+        void GenerateJitter();
+
+        const vec2 &GetJitter() { return m_jitter; }
+
+        const vec2 &GetProjectionJitter() { return m_projectionJitter; }
+
+        Image *GetOutput() { return m_superResolution; }
+
     private:
-        void CreateTAAPipeline();
-
-        void CreatePipelineSharpen();
-
-    public:
-        Pipeline *pipeline;
-        Pipeline *pipelineSharpen;
-        Descriptor *DSet;
-        Descriptor *DSetSharpen;
-        Buffer *uniform;
-        Image *previous;
-        Image *frameImage;
-        Image *taaRT;
-        Image *viewportRT;
-        Image *velocityRT;
-        Image *depth;
-
-        struct UBO
-        {
-            vec4 values;
-            vec4 sharpenValues;
-            mat4 invProj;
-        } ubo;
+        std::shared_ptr<FfxFsr2Context> m_context;
+        std::shared_ptr<FfxFsr2ContextDescription> m_contextDescription;
+        float m_memoryUsageInMegabytes;
+        Image *m_superResolution;
+        Image *m_viewportRT;
+        Image *m_velocityRT;
+        Image *m_depth;
+        vec2 m_jitter;
+        vec2 m_projectionJitter;
     };
 }
