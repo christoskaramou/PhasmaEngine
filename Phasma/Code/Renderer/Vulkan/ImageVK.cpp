@@ -315,6 +315,9 @@ namespace pe
 
     void Image::CopyImage(CommandBuffer *cmd, Image *src)
     {
+        PE_ERROR_IF(imageInfo.width != src->imageInfo.width && imageInfo.height != src->imageInfo.height,
+                    "Image sizes are different");
+
         cmd->InsertDebugLabel("CopyImage: " + src->imageInfo.name);
 
         VkImageCopy region{};
@@ -429,7 +432,7 @@ namespace pe
         samplerInfoVK.minLod = samplerInfo.minLod;
         samplerInfoVK.maxLod = samplerInfo.maxLod;
         samplerInfoVK.borderColor = Translate<VkBorderColor>(samplerInfo.borderColor);
-        samplerInfoVK.unnormalizedCoordinates = samplerInfo.unnormalizedCoordinates;        
+        samplerInfoVK.unnormalizedCoordinates = samplerInfo.unnormalizedCoordinates;
 
         VkSampler vkSampler;
         PE_CHECK(vkCreateSampler(RHII.GetDevice(), &samplerInfoVK, nullptr, &vkSampler));

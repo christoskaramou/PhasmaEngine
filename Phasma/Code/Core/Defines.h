@@ -83,4 +83,7 @@ namespace pe
 #define PE_ERROR_IF(condition, msg) PE_ERROR_IF_MSG(condition)
 
 #endif
+
+#define USE_GLM
+
 }

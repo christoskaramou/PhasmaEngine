@@ -147,7 +147,7 @@ namespace pe
         }
 
         uniform = Buffer::Create(
-            RHII.AlignUniform(sizeof(ubo)) * SWAPCHAIN_IMAGES,
+            RHII.AlignUniform(sizeof(UBO)) * SWAPCHAIN_IMAGES,
             BufferUsage::UniformBufferBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "Deferred_uniform_buffer");
@@ -292,7 +292,7 @@ namespace pe
 
         MemoryRange mr{};
         mr.data = &ubo;
-        mr.size = sizeof(ubo);
+        mr.size = sizeof(UBO);
         mr.offset = RHII.GetFrameDynamicOffset(uniform->Size(), RHII.GetFrameIndex());
         uniform->Copy(1, &mr, false);
     }

@@ -41,30 +41,20 @@ namespace pe
         uint32_t offset;
     };
 
-    class Vertex
+    struct Vertex
     {
-    public:
-        Vertex() {}
-
-        Vertex(vec3 &pos, vec2 &uv, vec3 &norm, vec4 &color, ivec4 &bonesIDs, vec4 &weights);
-
-        vec3 position;
-        vec2 uv;
-        vec3 normals;
-        vec4 color;
-        ivec4 bonesIDs;
-        vec4 weights;
+        float position[3];
+        float uv[2];
+        float normals[3];
+        float color[4];
+        int bonesIDs[4];
+        float weights[4];
     };
 
-    class ShadowVertex
+    struct ShadowVertex
     {
-    public:
-        ShadowVertex() {}
-
-        ShadowVertex(vec3 &pos, ivec4 &bonesIDs, vec4 &weights);
-
-        vec3 position;
-        ivec4 bonesIDs;
-        vec4 weights;
+        float position[3];
+        int bonesIDs[4];
+        float weights[4];
     };
 }

@@ -34,7 +34,7 @@ namespace pe
     class Descriptor;
     class Image;
     class Buffer;
-    class Vertex;
+    struct Vertex;
     class CommandBuffer;
 
     class Primitive

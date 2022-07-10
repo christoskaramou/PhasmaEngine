@@ -90,7 +90,7 @@ namespace pe
 
         Image *GetDepthTarget(size_t hash);
 
-        Image *CreateFSSampledImage();
+        Image *CreateFSSampledImage(bool useRenderTergetScale = true);
 
         void LoadResources(CommandBuffer *cmd);
 
@@ -111,6 +111,7 @@ namespace pe
 
         void RecordShadowsCmds(uint32_t count, CommandBuffer **cmds, uint32_t imageIndex);
 
+        Image *m_displayRT;
         Image *m_viewportRT;
         Image *m_depth;
         std::unordered_map<size_t, IRenderComponent *> m_renderComponents{};

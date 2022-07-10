@@ -233,7 +233,7 @@ namespace pe
         auto framerate = ImGui::GetIO().Framerate;
         ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
         ImGui::DragInt("FPS", &fps, 0.1f);
-        fps = maximum(fps, 10);
+        fps = max(fps, 10);
         ImGui::Separator();
         ImGui::Separator();
 
@@ -458,7 +458,7 @@ namespace pe
 
         static float rtScale = renderTargetsScale;
         ImGui::Begin("Global Properties", &properties_open);
-        ImGui::DragFloat("Quality.", &rtScale, 0.01f, 0.05f);
+        ImGui::DragFloat("Quality.", &rtScale, 0.01f, 0.05f, 1.0f);
         if (ImGui::Button("Apply"))
         {
             renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
@@ -561,7 +561,7 @@ namespace pe
             ImGui::Separator();
             ImGui::Separator();
             {
-                vec3 direction = normalize(vec3(&sun_direction[0]));
+                vec3 direction = normalize(make_vec3(&sun_direction[0]));
                 sun_direction[0] = direction.x;
                 sun_direction[1] = direction.y;
                 sun_direction[2] = direction.z;

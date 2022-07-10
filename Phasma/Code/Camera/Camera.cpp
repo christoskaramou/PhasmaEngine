@@ -82,24 +82,24 @@ namespace pe
     void Camera::UpdatePerspective()
     {
         previousProjection = projection;
-        projection = perspective(Fovy(), GetAspect(), nearPlane, farPlane, GlobalSettings::ReverseZ);
+        projection = perspective(Fovy(), GetAspect(), farPlane, nearPlane);
 
         if (GUI::use_FSR2)
         {
             SuperResolution *sr = Context::Get()->GetSystem<PostProcessSystem>()->GetEffect<SuperResolution>();
             sr->GenerateJitter();
             const vec2 &projJitter = sr->GetProjectionJitter();
-            mat4 jitterMat = translate(mat4::identity(), vec3(projJitter.x, projJitter.y, 0.f));
+            mat4 jitterMat = translate(mat4(1.0f), vec3(projJitter.x, projJitter.y, 0.f));
             projection = jitterMat * projection;
         }
-        
+
         invProjection = inverse(projection);
     }
 
     void Camera::UpdateView()
     {
         previousView = view;
-        view = lookAt(position, front, right, up);
+        view = lookAt(position, position + front, up);
         invView = inverse(view);
     }
 
@@ -199,7 +199,8 @@ namespace pe
     {
         for (auto &plane : frustum)
         {
-            const float dist = dot(plane.normal, point) + plane.d;
+            vec3 normal = make_vec3(plane.normal);
+            const float dist = dot(normal, point) + plane.d;
 
             if (dist < -radius)
                 return false;

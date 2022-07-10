@@ -56,7 +56,7 @@ namespace pe
         Pipeline *pipeline;
         Descriptor *DSet;
         Image *frameImage;
-        Image *viewportRT;
+        Image *displayRT;
         Image *depth;
     };
 }

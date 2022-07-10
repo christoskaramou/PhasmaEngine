@@ -31,7 +31,7 @@ namespace pe
     public:
         struct Plane
         {
-            vec3 normal;
+            float normal[3];
             float d;
         };
 

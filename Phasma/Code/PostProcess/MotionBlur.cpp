@@ -49,10 +49,10 @@ namespace pe
     {
         RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
 
-        viewportRT = rs->GetRenderTarget("viewport");
+        displayRT = rs->GetRenderTarget("display");
         velocityRT = rs->GetRenderTarget("velocity");
-        frameImage = rs->CreateFSSampledImage();
         depth = rs->GetDepthTarget("depth");
+        frameImage = rs->CreateFSSampledImage(false);
     }
 
     void MotionBlur::CreatePipeline()
@@ -62,12 +62,12 @@ namespace pe
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/MotionBlur/motionBlur.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
-        info.colorBlendAttachments = {viewportRT->blendAttachment};
+        info.colorBlendAttachments = {displayRT->blendAttachment};
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = sizeof(vec4);
         info.descriptorSetLayouts = {DSet->GetLayout()};
         info.dynamicColorTargets = 1;
-        info.colorFormats = &viewportRT->imageInfo.format;
+        info.colorFormats = &displayRT->imageInfo.format;
         info.name = "motionBlur_pipeline";
 
         pipeline = Pipeline::Create(info);
@@ -147,8 +147,8 @@ namespace pe
             0.f};
 
         cmd->BeginDebugRegion("MotionBlur");
-        // Copy viewport image
-        cmd->CopyImage(viewportRT, frameImage);
+        // Copy RT
+        cmd->CopyImage(displayRT, frameImage);
 
         // MOTION BLUR
         // Input
@@ -156,14 +156,14 @@ namespace pe
         cmd->ImageBarrier(velocityRT, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         // Output
-        cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(displayRT, ImageLayout::ColorAttachment);
         
         AttachmentInfo info{};
-        info.image = viewportRT;
+        info.image = displayRT;
 
         cmd->BeginPass(1, &info);
-        cmd->SetViewport(0.f, 0.f, viewportRT->width_f, viewportRT->height_f);
-        cmd->SetScissor(0, 0, viewportRT->imageInfo.width, viewportRT->imageInfo.height);
+        cmd->SetViewport(0.f, 0.f, displayRT->width_f, displayRT->height_f);
+        cmd->SetScissor(0, 0, displayRT->imageInfo.width, displayRT->imageInfo.height);
         cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, sizeof(vec4), &values);
         cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);

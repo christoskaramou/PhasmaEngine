@@ -20,6 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#ifndef USE_GLM
+
 #include "Core/Math.h"
 
 namespace pe
@@ -1567,3 +1569,5 @@ namespace pe
         return halton_vec[counter++ % samples];
     }
 }
+
+#endif

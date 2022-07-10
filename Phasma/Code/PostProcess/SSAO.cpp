@@ -101,7 +101,7 @@ namespace pe
             sample = normalize(sample);
             sample *= rand(0.f, 1.f);
             float scale = (float)i / 16.f;
-            scale = lerp(.1f, 1.f, scale * scale);
+            scale = mix(.1f, 1.f, scale * scale);
             kernel.emplace_back(sample * scale, 0.f);
         }
 
@@ -256,7 +256,7 @@ namespace pe
 
             MemoryRange mr{};
             mr.data = &pvm;
-            mr.size = sizeof(pvm);
+            mr.size = sizeof(mat4);
             mr.offset = RHII.GetFrameDynamicOffset(UB_PVM->Size(), RHII.GetFrameIndex());
             UB_PVM->Copy(1, &mr, false);
         }

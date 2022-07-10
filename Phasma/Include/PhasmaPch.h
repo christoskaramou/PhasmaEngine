@@ -74,7 +74,6 @@ SOFTWARE.
 #include "Core/Settings.h"
 #include "Core/Hash.h"
 #include "Core/Math.h"
-#include "vectormath/vectormath.hpp"
 #include "Core/Base.h"
 #include "Core/Path.h"
 #include "Core/Delegate.h"

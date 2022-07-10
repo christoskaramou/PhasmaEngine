@@ -61,13 +61,13 @@ namespace pe
 
         const vec2 &GetProjectionJitter() { return m_projectionJitter; }
 
-        Image *GetOutput() { return m_superResolution; }
+        Image *GetOutput() { return m_display; }
 
     private:
         std::shared_ptr<FfxFsr2Context> m_context;
         std::shared_ptr<FfxFsr2ContextDescription> m_contextDescription;
         float m_memoryUsageInMegabytes;
-        Image *m_superResolution;
+        Image *m_display;
         Image *m_viewportRT;
         Image *m_velocityRT;
         Image *m_depth;

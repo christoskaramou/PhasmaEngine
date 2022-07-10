@@ -49,9 +49,9 @@ namespace pe
     {
         RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
 
-        viewportRT = rs->GetRenderTarget("viewport");
-        frameImage = rs->CreateFSSampledImage();
+        displayRT = rs->GetRenderTarget("display");
         depth = rs->GetDepthTarget("depth");
+        frameImage = rs->CreateFSSampledImage(false);
     }
 
     void DOF::CreatePipeline()
@@ -61,12 +61,12 @@ namespace pe
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/DepthOfField/DOF.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
-        info.colorBlendAttachments = {viewportRT->blendAttachment};
+        info.colorBlendAttachments = {displayRT->blendAttachment};
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = static_cast<uint32_t>(sizeof(vec4));
         info.descriptorSetLayouts = {DSet->GetLayout()};
         info.dynamicColorTargets = 1;
-        info.colorFormats = &viewportRT->imageInfo.format;
+        info.colorFormats = &displayRT->imageInfo.format;
         info.name = "dof_pipeline";
 
         pipeline = Pipeline::Create(info);
@@ -128,22 +128,22 @@ namespace pe
         std::vector<float> values{GUI::DOF_focus_scale, GUI::DOF_blur_range, 0.0f, 0.0f};
 
         cmd->BeginDebugRegion("DOF");
-        // Copy viewport image
-        cmd->CopyImage(viewportRT, frameImage);
+        // Copy RT
+        cmd->CopyImage(displayRT, frameImage);
 
         // DEPTH OF FIELD
         // Input
         cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         // Output
-        cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(displayRT, ImageLayout::ColorAttachment);
 
         AttachmentInfo info{};
-        info.image = viewportRT;
+        info.image = displayRT;
 
         cmd->BeginPass(1, &info);
-        cmd->SetViewport(0.f, 0.f, viewportRT->width_f, viewportRT->height_f);
-        cmd->SetScissor(0, 0, viewportRT->imageInfo.width, viewportRT->imageInfo.height);
+        cmd->SetViewport(0.f, 0.f, displayRT->width_f, displayRT->height_f);
+        cmd->SetScissor(0, 0, displayRT->imageInfo.width, displayRT->imageInfo.height);
         cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, uint32_t(sizeof(float) * values.size()),
                            values.data());
         cmd->BindPipeline(pipeline);

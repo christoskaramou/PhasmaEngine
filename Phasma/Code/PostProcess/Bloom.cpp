@@ -50,8 +50,8 @@ namespace pe
         brightFilterRT = rs->GetRenderTarget("brightFilter");
         gaussianBlurHorizontalRT = rs->GetRenderTarget("gaussianBlurHorizontal");
         gaussianBlurVerticalRT = rs->GetRenderTarget("gaussianBlurVertical");
-        viewportRT = rs->GetRenderTarget("viewport");
-        frameImage = rs->CreateFSSampledImage();
+        displayRT = rs->GetRenderTarget("display");
+        frameImage = rs->CreateFSSampledImage(false);
     }
 
     void Bloom::CreatePipeline()
@@ -132,12 +132,12 @@ namespace pe
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/combine.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
-        info.colorBlendAttachments = {viewportRT->blendAttachment};
+        info.colorBlendAttachments = {displayRT->blendAttachment};
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = 5 * sizeof(float);
         info.descriptorSetLayouts = {DSCombine->GetLayout()};
         info.dynamicColorTargets = 1;
-        info.colorFormats = &viewportRT->imageInfo.format;
+        info.colorFormats = &displayRT->imageInfo.format;
         info.name = "BloomCombine_pipeline";
 
         pipelineCombine = Pipeline::Create(info);
@@ -224,8 +224,8 @@ namespace pe
         cmd->BeginDebugRegion("Bloom");
 
         cmd->BeginDebugRegion("BrightFilter");
-        // Copy viewport image
-        cmd->CopyImage(viewportRT, frameImage);
+        // Copy RT
+        cmd->CopyImage(displayRT, frameImage);
 
         // BRIGHT FILTER
         // Input
@@ -291,12 +291,12 @@ namespace pe
         cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(gaussianBlurVerticalRT, ImageLayout::ShaderReadOnly);
         // Output
-        cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(displayRT, ImageLayout::ColorAttachment);
 
-        info.image = viewportRT;
+        info.image = displayRT;
         cmd->BeginPass(1, &info);
-        cmd->SetViewport(0.f, 0.f, viewportRT->width_f, viewportRT->height_f);
-        cmd->SetScissor(0, 0, viewportRT->imageInfo.width, viewportRT->imageInfo.height);
+        cmd->SetViewport(0.f, 0.f, displayRT->width_f, displayRT->height_f);
+        cmd->SetScissor(0, 0, displayRT->imageInfo.width, displayRT->imageInfo.height);
         cmd->PushConstants(pipelineCombine, ShaderStage::FragmentBit, 0, uint32_t(sizeof(float) * values.size()),
                            values.data());
         cmd->BindPipeline(pipelineCombine);

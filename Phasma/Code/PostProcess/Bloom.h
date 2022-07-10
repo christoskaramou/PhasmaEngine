@@ -75,6 +75,6 @@ namespace pe
         Image *brightFilterRT;
         Image *gaussianBlurHorizontalRT;
         Image *gaussianBlurVerticalRT;
-        Image *viewportRT;
+        Image *displayRT;
     };
 }

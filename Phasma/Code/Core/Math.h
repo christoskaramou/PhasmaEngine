@@ -22,6 +22,24 @@ SOFTWARE.
 
 #pragma once
 
+#ifdef USE_GLM
+
+#ifdef _DEBUG
+    #define GLM_FORCE_MESSAGES
+#endif
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define GLM_FORCE_INTRINSICS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_LEFT_HANDED
+
+#include "glm/glm.hpp"
+#include "glm/gtx/quaternion.hpp"
+#include "glm/gtc/type_ptr.hpp"
+
+using namespace glm;
+
+#else
+
 namespace pe
 {
     class vec2;
@@ -428,29 +446,6 @@ namespace pe
         vec3 position;
     };
 
-    class Rect2D
-    {
-    public:
-        int x;
-        int y;
-        int width;
-        int height;
-    };
-
-    class AABB
-    {
-    public:
-        vec3 min;
-        vec3 max;
-    };
-
-    struct Offset3D
-    {
-        int32_t x;
-        int32_t y;
-        int32_t z;
-    };
-
     vec2 operator*(cfloat scalar, cvec2 &v);
 
     vec3 operator*(cfloat scalar, cvec3 &v);
@@ -606,4 +601,44 @@ namespace pe
     vec2 halton_2_3(uint32_t index);
 
     vec2 halton_2_3_next(uint32_t samples = 16);
+}
+
+#endif
+
+namespace pe
+{
+    class AABB
+    {
+    public:
+        vec3 min;
+        vec3 max;
+    };
+
+    struct Offset3D
+    {
+        int32_t x;
+        int32_t y;
+        int32_t z;
+    };
+
+    class Rect2D
+    {
+    public:
+        int x;
+        int y;
+        int width;
+        int height;
+    };
+
+    template<class T>
+    inline T rand(T a, T b)
+    {
+        static_assert(std::is_arithmetic_v<T>, "T must be arithmetic");
+
+        static auto seed = std::chrono::system_clock::now().time_since_epoch().count();
+        static std::default_random_engine gen(static_cast<unsigned int>(seed));
+
+        const std::uniform_real_distribution<T> x(a, b);
+        return x(gen);
+    }
 }

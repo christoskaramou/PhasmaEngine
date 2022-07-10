@@ -129,7 +129,7 @@ namespace pe
 
         Camera &camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
 
-        // Copy viewport image
+        // Copy RT
         cmd->CopyImage(viewportRT, frameImage);
 
         // SCREEN SPACE GLOBAL ILLUMINATION

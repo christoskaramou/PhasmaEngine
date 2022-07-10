@@ -123,14 +123,14 @@ namespace pe
 
         struct UBOModel
         {
-            mat4 matrix = mat4::identity();
-            mat4 mvp = mat4::identity();
-            mat4 previousMvp = mat4::identity();
+            mat4 matrix = mat4(1.f);
+            mat4 mvp = mat4(1.f);
+            mat4 previousMvp = mat4(1.f);
         } ubo;
         vec3 scale = vec3(1.0f);
         vec3 pos = vec3(0.0f);
         vec3 rot = vec3(0.0f); // euler angles
-        mat4 transform = mat4::identity();
+        mat4 transform = mat4(1.f);
         vec4 boundingSphere;
         bool render = true;
 

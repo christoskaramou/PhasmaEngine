@@ -45,10 +45,10 @@ namespace pe
     {
         RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
 
-        m_superResolution = rs->GetRenderTarget("superResolution");
         m_viewportRT = rs->GetRenderTarget("viewport");
         m_velocityRT = rs->GetRenderTarget("velocity");
         m_depth = rs->GetDepthTarget("depth");
+        m_display = rs->GetRenderTarget("display");
 
         m_context = std::make_shared<FfxFsr2Context>();
         m_contextDescription = std::make_shared<FfxFsr2ContextDescription>();
@@ -60,8 +60,8 @@ namespace pe
         m_contextDescription->device = ffxGetDeviceVK(RHII.GetDevice());
         m_contextDescription->maxRenderSize.width = m_viewportRT->imageInfo.width;
         m_contextDescription->maxRenderSize.height = m_viewportRT->imageInfo.height;
-        m_contextDescription->displaySize.width = m_superResolution->imageInfo.width;
-        m_contextDescription->displaySize.height = m_superResolution->imageInfo.height;
+        m_contextDescription->displaySize.width = m_display->imageInfo.width;
+        m_contextDescription->displaySize.height = m_display->imageInfo.height;
         m_contextDescription->flags = FFX_FSR2_ENABLE_DEPTH_INVERTED |
                                       FFX_FSR2_ENABLE_AUTO_EXPOSURE |
                                       FFX_FSR2_ENABLE_HIGH_DYNAMIC_RANGE;
@@ -99,7 +99,7 @@ namespace pe
         cmd->ImageBarrier(m_velocityRT, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(m_depth, ImageLayout::ShaderReadOnly);
         // Output
-        cmd->ImageBarrier(m_superResolution, ImageLayout::General);
+        cmd->ImageBarrier(m_display, ImageLayout::General);
 
         Camera &camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
 
@@ -148,11 +148,11 @@ namespace pe
                                                                 VK_FORMAT_UNDEFINED,
                                                                 L"FSR2_TransparencyAndComposition");
         dd.output = ffxGetTextureResourceVK(m_context.get(),
-                                            m_superResolution->Handle(),
-                                            m_superResolution->view,
-                                            m_superResolution->imageInfo.width,
-                                            m_superResolution->imageInfo.height,
-                                            Translate<VkFormat>(m_superResolution->imageInfo.format),
+                                            m_display->Handle(),
+                                            m_display->view,
+                                            m_display->imageInfo.width,
+                                            m_display->imageInfo.height,
+                                            Translate<VkFormat>(m_display->imageInfo.format),
                                             L"FSR2_Output",
                                             FFX_RESOURCE_STATE_UNORDERED_ACCESS);
         dd.jitterOffset.x = m_jitter.x;

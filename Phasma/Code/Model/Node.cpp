@@ -34,10 +34,10 @@ namespace pe
         case TransformationType::Matrix:
             return matrix;
         case TransformationType::TRS:
-            return transform(rotation, scale, translation);
+            return translate(mat4(1.0f), translation) * mat4(rotation) * glm::scale(mat4(1.0f), scale);
         case TransformationType::Identity:
         default:
-            return mat4::identity();
+            return mat4(1.f);
         }
     }
 

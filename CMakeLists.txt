@@ -11,6 +11,8 @@ if (MSVC)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP${N}")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP${N}")   
     endif()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Oi")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Oi") 
 endif()
 message("CMAKE_CXX_FLAGS = ${CMAKE_CXX_FLAGS}")
 

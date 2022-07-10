@@ -74,6 +74,7 @@ namespace pe
 
         m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit);
         m_viewportRT = CreateRenderTarget("viewport", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit);
+        m_displayRT = CreateRenderTarget("display", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::StorageBit, false);
         CreateRenderTarget("normal", Format::RGBA32SFloat, false);
         CreateRenderTarget("albedo", format, true);
         CreateRenderTarget("srm", format, false); // Specular Roughness Metallic
@@ -81,11 +82,10 @@ namespace pe
         CreateRenderTarget("ssaoBlur", Format::R8Unorm, false);
         CreateRenderTarget("ssr", format, false);
         CreateRenderTarget("velocity", Format::RG16SFloat, false);
-        CreateRenderTarget("brightFilter", format, false);
-        CreateRenderTarget("gaussianBlurHorizontal", format, false);
-        CreateRenderTarget("gaussianBlurVertical", format, false);
         CreateRenderTarget("emissive", format, false);
-        CreateRenderTarget("superResolution", format, false, ImageUsage::StorageBit, false);
+        CreateRenderTarget("brightFilter", format, false, {}, false);
+        CreateRenderTarget("gaussianBlurHorizontal", format, false, {}, false);
+        CreateRenderTarget("gaussianBlurVertical", format, false, {}, false);
 
         // LOAD RESOURCES
         LoadResources(cmd);
@@ -148,9 +148,9 @@ namespace pe
         // MODELS
         if (GUI::modelItemSelected > -1)
         {
-            Model::models[GUI::modelItemSelected].scale = vec3(GUI::model_scale[GUI::modelItemSelected].data());
-            Model::models[GUI::modelItemSelected].pos = vec3(GUI::model_pos[GUI::modelItemSelected].data());
-            Model::models[GUI::modelItemSelected].rot = vec3(GUI::model_rot[GUI::modelItemSelected].data());
+            Model::models[GUI::modelItemSelected].scale = make_vec3(GUI::model_scale[GUI::modelItemSelected].data());
+            Model::models[GUI::modelItemSelected].pos = make_vec3(GUI::model_pos[GUI::modelItemSelected].data());
+            Model::models[GUI::modelItemSelected].rot = make_vec3(GUI::model_rot[GUI::modelItemSelected].data());
         }
         for (auto &m : Model::models)
             m.Update(*camera_main, delta);

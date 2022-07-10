@@ -298,9 +298,9 @@ namespace pe
             // factors
             myPrimitive.pbrMaterial.alphaCutoff = material.alphaCutoff;
             myPrimitive.pbrMaterial.renderQueue = (RenderQueue)material.alphaMode;
-            myPrimitive.pbrMaterial.baseColorFactor = vec4(&material.metallicRoughness.baseColorFactor.r);
+            myPrimitive.pbrMaterial.baseColorFactor = make_vec4(&material.metallicRoughness.baseColorFactor.r);
             myPrimitive.pbrMaterial.doubleSided = material.doubleSided;
-            myPrimitive.pbrMaterial.emissiveFactor = vec3(&material.emissiveFactor.r);
+            myPrimitive.pbrMaterial.emissiveFactor = make_vec3(&material.emissiveFactor.r);
             myPrimitive.pbrMaterial.metallicFactor = material.metallicRoughness.metallicFactor;
             myPrimitive.pbrMaterial.roughnessFactor = material.metallicRoughness.roughnessFactor;
 
@@ -328,21 +328,27 @@ namespace pe
             myPrimitive.verticesSize = static_cast<uint32_t>(accessorPos->count);
             myPrimitive.indexOffset = static_cast<uint32_t>(myMesh->indices.size());
             myPrimitive.indicesSize = static_cast<uint32_t>(indices.size());
-            myPrimitive.min = vec3(&accessorPos->min[0]);
-            myPrimitive.max = vec3(&accessorPos->max[0]);
+            myPrimitive.min = make_vec3(&accessorPos->min[0]);
+            myPrimitive.max = make_vec3(&accessorPos->max[0]);
             myPrimitive.CalculateBoundingSphere();
             myPrimitive.calculateBoundingBox();
             myPrimitive.hasBones = !bonesIDs.empty() && !weights.empty();
 
             for (size_t i = 0; i < accessorPos->count; i++)
             {
-                Vertex vertex;
-                vertex.position = !positions.empty() ? vec3(&positions[i * 3]) : vec3();
-                vertex.uv = !uvs.empty() ? vec2(&uvs[i * 2]) : vec2();
-                vertex.normals = !normals.empty() ? vec3(&normals[i * 3]) : vec3();
-                vertex.color = !colors.empty() ? vec4(&colors[i * 4]) : vec4();
-                vertex.bonesIDs = !bonesIDs.empty() ? ivec4(&bonesIDs[i * 4]) : ivec4();
-                vertex.weights = !weights.empty() ? vec4(&weights[i * 4]) : vec4();
+                Vertex vertex{};
+                if (!positions.empty())
+                    std::copy(positions.begin() + i * 3, positions.begin() + (i * 3 + 3), vertex.position);
+                if (!uvs.empty())
+                    std::copy(uvs.begin() + i * 2, uvs.begin() + (i * 2 + 2), vertex.uv);
+                if (!normals.empty())
+                    std::copy(normals.begin() + i * 3, normals.begin() + (i * 3 + 3), vertex.normals);
+                if (!colors.empty())
+                    std::copy(colors.begin() + i * 4, colors.begin() + (i * 4 + 4), vertex.color);
+                if (!bonesIDs.empty())
+                    std::copy(bonesIDs.begin() + i * 4, bonesIDs.begin() + (i * 4 + 4), vertex.bonesIDs);
+                if (!weights.empty())
+                    std::copy(weights.begin() + i * 4, weights.begin() + (i * 4 + 4), vertex.weights);
                 myMesh->vertices.push_back(vertex);
             }
             for (auto &index : indices)
@@ -418,7 +424,7 @@ namespace pe
             {
                 for (auto &primitive : node->mesh->primitives)
                 {
-                    cvec3 center = vec3(primitive.boundingSphere);
+                    vec3 center = vec3(primitive.boundingSphere);
 
                     const float lenMax = length(center) + primitive.boundingSphere.w;
                     if (lenMax > centerMax.w)
@@ -468,10 +474,10 @@ namespace pe
             PE_ERROR("Node " + node.name + " has Invalid TransformationType");
         }
 
-        newNode->translation = vec3(&node.translation.x);
-        newNode->scale = vec3(&node.scale.x);
-        newNode->rotation = quat(&node.rotation.x);
-        newNode->matrix = mat4(&node.matrix.values[0]);
+        newNode->translation = make_vec3(&node.translation.x);
+        newNode->scale = make_vec3(&node.scale.x);
+        newNode->rotation = make_quat(&node.rotation.x);
+        newNode->matrix = make_mat4(node.matrix.values.data());
 
         // Node with children
         for (auto &child : node.children)
@@ -555,7 +561,7 @@ namespace pe
                     {
                         for (size_t i = 0; i < accessor.count; i++)
                         {
-                            const vec3 v3(&data[i * 3]);
+                            const vec3 v3 = make_vec3(&data[i * 3]);
                             sampler.outputsVec4.emplace_back(v3, 0.0f);
                         }
                         break;
@@ -564,7 +570,7 @@ namespace pe
                     {
                         for (size_t i = 0; i < accessor.count; i++)
                         {
-                            sampler.outputsVec4.emplace_back(&data[i * 4]);
+                            sampler.outputsVec4.emplace_back(make_vec4(&data[i * 4]));
                         }
                         break;
                     }
@@ -687,7 +693,13 @@ namespace pe
         std::vector<ShadowVertex> shadowsVertices{};
         shadowsVertices.reserve(numberOfVertices);
         for (auto &vert : vertices)
-            shadowsVertices.emplace_back(vert.position, vert.bonesIDs, vert.weights);
+        {
+            ShadowVertex svert;
+            std::copy(vert.position, vert.position + 3, svert.position);
+            std::copy(vert.bonesIDs, vert.bonesIDs + 4, svert.bonesIDs);
+            std::copy(vert.weights, vert.weights + 4, svert.weights);
+            shadowsVertices.push_back(svert);
+        }
 
         size = sizeof(ShadowVertex) * numberOfVertices;
         shadowsVertexBuffer = Buffer::Create(
@@ -913,7 +925,7 @@ namespace pe
         mat4 trans = model->transform * mesh->meshData.matrix;
 
         vec3 point = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
-        float range = mesh->primitives[index].boundingSphere.w * abs(trans.scale().x); // scale
+        float range = mesh->primitives[index].boundingSphere.w * length(vec3(trans[0])); // scale
         mesh->primitives[index].cull = !camera.PointInFrustum(point, range);
         mesh->primitives[index].transformedBS = vec4(point, range);
 
@@ -950,20 +962,20 @@ namespace pe
                         {
                         case AnimationPathType::TRANSLATION:
                         {
-                            cvec4 t = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
+                            vec4 t = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
                             channel.node->translation = vec3(t);
                             break;
                         }
                         case AnimationPathType::SCALE:
                         {
-                            cvec4 s = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
+                            vec4 s = mix(sampler.outputsVec4[i], sampler.outputsVec4[i + 1], u);
                             channel.node->scale = vec3(s);
                             break;
                         }
                         case AnimationPathType::ROTATION:
                         {
-                            cquat q1(&sampler.outputsVec4[i].x);
-                            cquat q2(&sampler.outputsVec4[i + 1].x);
+                            quat q1 = make_quat(&sampler.outputsVec4[i].x);
+                            quat q2 = make_quat(&sampler.outputsVec4[i + 1].x);
                             channel.node->rotation = normalize(slerp(q1, q2, u));
                             break;
                         }
@@ -1013,7 +1025,7 @@ namespace pe
         }
 
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
-        transform = pe::transform(quat(radians(rot)), scale, pos);
+        transform = translate(mat4(1.0f), pos) * mat4(quat(radians(rot))) * glm::scale(mat4(1.0f), scale);
         ubo.matrix = transform;
         ubo.previousMvp = ubo.mvp;
         ubo.mvp = camera.viewProjection * transform;
@@ -1158,7 +1170,7 @@ namespace pe
             }
         }
     }
-    
+
     void Model::InitRenderTargets()
     {
         RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();

@@ -172,6 +172,38 @@ namespace pe
             frameTimer.fxaaStamp = GpuTimer::fxaa->End();
         }
 
+        // FSR2
+        if (GUI::use_FSR2)
+        {
+            GpuTimer::fsr->Start(cmd);
+            sr.Draw(cmd, imageIndex);
+            frameTimer.fsrStamp = GpuTimer::fsr->End();
+        }
+        else
+        {
+            // Blit viewport to display if FSR2 didn't render into it
+            cmd->BeginDebugRegion("BlitToDisplay");
+
+            Viewport &vp = renderArea.viewport;
+
+            ImageBlit region{};
+            region.srcOffsets[0] = Offset3D{0, 0, 0};
+            region.srcOffsets[1] = Offset3D{static_cast<int32_t>(m_viewportRT->imageInfo.width), static_cast<int32_t>(m_viewportRT->imageInfo.height), 1};
+            region.srcSubresource.aspectMask = m_viewportRT->viewInfo.aspectMask;
+            region.srcSubresource.layerCount = 1;
+            region.dstOffsets[0] = Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
+            region.dstOffsets[1] = Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
+            region.dstSubresource.aspectMask = m_displayRT->viewInfo.aspectMask;
+            region.dstSubresource.layerCount = 1;
+
+            cmd->ImageBarrier(m_viewportRT, ImageLayout::TransferSrc);
+            cmd->ImageBarrier(m_displayRT, ImageLayout::TransferDst);
+
+            cmd->BlitImage(m_viewportRT, m_displayRT, &region, Filter::Linear);
+
+            cmd->EndDebugRegion();
+        }
+
         // BLOOM
         if (GUI::show_Bloom)
         {
@@ -196,16 +228,7 @@ namespace pe
             frameTimer.motionBlurStamp = GpuTimer::motionBlur->End();
         }
 
-        // FSR2
-        if (GUI::use_FSR2)
-        {
-            GpuTimer::fsr->Start(cmd);
-            sr.Draw(cmd, imageIndex);
-            frameTimer.fsrStamp = GpuTimer::fsr->End();
-        }
-
-        Image *finalImage = GUI::s_currRenderImage ? GUI::s_currRenderImage : GUI::use_FSR2 ? sr.GetOutput()
-                                                                                            : m_viewportRT;
+        Image *finalImage = GUI::s_currRenderImage ? GUI::s_currRenderImage : m_displayRT;
 
         BlitToSwapchain(cmd, finalImage, imageIndex);
 
@@ -344,13 +367,15 @@ namespace pe
         return m_depthTargets[hash];
     }
 
-    Image *Renderer::CreateFSSampledImage()
+    Image *Renderer::CreateFSSampledImage(bool useRenderTergetScale)
     {
+        float renderTargetScale = useRenderTergetScale ? GUI::renderTargetsScale : 1.f;
+
         ImageCreateInfo info{};
         info.format = RHII.GetSurface()->format;
         info.initialLayout = ImageLayout::Undefined;
-        info.width = static_cast<uint32_t>(WIDTH_f * GUI::renderTargetsScale);
-        info.height = static_cast<uint32_t>(HEIGHT_f * GUI::renderTargetsScale);
+        info.width = static_cast<uint32_t>(WIDTH_f * renderTargetScale);
+        info.height = static_cast<uint32_t>(HEIGHT_f * renderTargetScale);
         info.tiling = ImageTiling::Optimal;
         info.usage = ImageUsage::TransferDstBit | ImageUsage::SampledBit;
         info.properties = MemoryProperty::DeviceLocalBit;
@@ -472,6 +497,7 @@ namespace pe
 
         m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit);
         m_viewportRT = CreateRenderTarget("viewport", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit);
+        m_displayRT = CreateRenderTarget("display", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::StorageBit, false);
         CreateRenderTarget("normal", Format::RGBA32SFloat, false);
         CreateRenderTarget("albedo", format, true);
         CreateRenderTarget("srm", format, false); // Specular Roughness Metallic
@@ -479,11 +505,10 @@ namespace pe
         CreateRenderTarget("ssaoBlur", Format::R8Unorm, false);
         CreateRenderTarget("ssr", format, false);
         CreateRenderTarget("velocity", Format::RG16SFloat, false);
-        CreateRenderTarget("brightFilter", format, false);
-        CreateRenderTarget("gaussianBlurHorizontal", format, false);
-        CreateRenderTarget("gaussianBlurVertical", format, false);
         CreateRenderTarget("emissive", format, false);
-        CreateRenderTarget("superResolution", format, false, ImageUsage::StorageBit, false);
+        CreateRenderTarget("brightFilter", format, false, {}, false);
+        CreateRenderTarget("gaussianBlurHorizontal", format, false, {}, false);
+        CreateRenderTarget("gaussianBlurVertical", format, false, {}, false);
 
         for (auto &rc : m_renderComponents)
             rc.second->Resize(width, height);

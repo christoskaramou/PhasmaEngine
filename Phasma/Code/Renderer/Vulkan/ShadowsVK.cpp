@@ -204,7 +204,7 @@ namespace pe
             // Project frustum corners into world space
             auto &renderArea = Context::Get()->GetSystem<RendererSystem>()->GetRenderArea();
             const float aspect = renderArea.viewport.width / renderArea.viewport.height;
-            mat4 projection = perspective(camera->Fovy(), aspect, nearClip, farClip, false);
+            mat4 projection = perspective(camera->Fovy(), aspect, nearClip, farClip);
             mat4 view = lookAt(camera->position, camera->position + camera->front, camera->WorldUp());
             mat4 invVP = inverse(projection * view);
             for (uint32_t i = 0; i < 8; i++)
@@ -232,17 +232,17 @@ namespace pe
             for (uint32_t i = 0; i < 8; i++)
             {
                 float distance = length(frustumCorners[i] - frustumCenter);
-                radius = maximum(radius, distance);
+                radius = max(radius, distance);
             }
             radius = std::ceil(radius * 16.0f) / 16.0f;
 
             vec3 maxExtents = vec3(radius);
             vec3 minExtents = -maxExtents;
 
-            vec3 lightDir = -normalize(vec3((float *)&GUI::sun_direction));
+            vec3 lightDir = -normalize(make_vec3(GUI::sun_direction.data()));
             auto v0 = frustumCenter - (lightDir * radius);
             mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, camera->WorldUp());
-            mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, -clipRange, maxExtents.z - minExtents.z, GlobalSettings::ReverseZ);
+            mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, maxExtents.z - minExtents.z, -clipRange);
 
             // Store split distance and matrix in cascade
             cascades[i] = lightOrthoMatrix * lightViewMatrix;

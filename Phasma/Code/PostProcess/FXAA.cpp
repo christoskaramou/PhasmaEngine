@@ -110,7 +110,7 @@ namespace pe
     void FXAA::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
         cmd->BeginDebugRegion("FXAA");
-        // Copy viewport image
+        // Copy RT
         cmd->CopyImage(viewportRT, frameImage);
 
         // FAST APPROXIMATE ANTI-ALIASING
