@@ -26,6 +26,7 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Code")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/SDL")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/imgui")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Include/FSR2")
 
 link_directories("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Libs")
 
@@ -57,10 +58,14 @@ set(ADDITIONAL_LIBRARY_DEPENDENCIES
     $<$<CONFIG:Debug>:
         spirv-cross-cored
         GLTFSDKd
+        ffx_fsr2_api_x64d
+        ffx_fsr2_api_vk_x64d
     >
     $<$<CONFIG:Release>:
         spirv-cross-core
         GLTFSDK
+        ffx_fsr2_api_x64
+        ffx_fsr2_api_vk_x64
     >
     shaderc_shared
     SDL2main
