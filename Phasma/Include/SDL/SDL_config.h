@@ -246,13 +246,14 @@
 #define HAVE_DSOUND_H 1
 #define HAVE_DINPUT_H 1
 #define HAVE_XINPUT_H 1
-/* #undef HAVE_WINDOWS_GAMING_INPUT_H */
+#define HAVE_WINDOWS_GAMING_INPUT_H 1
 #define HAVE_DXGI_H 1
 
 #define HAVE_MMDEVICEAPI_H 1
 #define HAVE_AUDIOCLIENT_H 1
 #define HAVE_TPCSHRD_H 1
 #define HAVE_SENSORSAPI_H 1
+#define HAVE_ROAPI_H 1
 
 /* #undef HAVE_XINPUT_GAMEPAD_EX */
 /* #undef HAVE_XINPUT_STATE_EX */
@@ -277,6 +278,8 @@
 /* #undef SDL_VIDEO_DISABLED */
 /* #undef SDL_POWER_DISABLED */
 /* #undef SDL_FILESYSTEM_DISABLED */
+/* #undef SDL_LOCALE_DISABLED */
+/* #undef SDL_MISC_DISABLED */
 
 /* Enable various audio drivers */
 /* #undef SDL_AUDIO_DRIVER_ALSA */
@@ -324,7 +327,7 @@
 /* #undef SDL_INPUT_FBSDKBIO */
 /* #undef SDL_JOYSTICK_ANDROID */
 /* #undef SDL_JOYSTICK_HAIKU */
-/* #undef SDL_JOYSTICK_WGI */
+#define SDL_JOYSTICK_WGI 1
 #define SDL_JOYSTICK_DINPUT 1
 #define SDL_JOYSTICK_XINPUT 1
 /* #undef SDL_JOYSTICK_DUMMY */
@@ -491,6 +494,12 @@
 /* #undef SDL_FILESYSTEM_VITA */
 /* #undef SDL_FILESYSTEM_PSP */
 
+/* Enable misc subsystem */
+/* #undef SDL_MISC_DUMMY */
+
+/* Enable locale subsystem */
+/* #undef SDL_LOCALE_DUMMY */
+
 /* Enable assembly routines */
 #define SDL_ASSEMBLY_ROUTINES 1
 /* #undef SDL_ALTIVEC_BLITTERS */
@@ -512,6 +521,7 @@
 
 /* #undef SDL_VIDEO_VITA_PIB */
 /* #undef SDL_VIDEO_VITA_PVR */
+/* #undef SDL_VIDEO_VITA_PVR_OGL */
 
 #if !defined(__WIN32__) && !defined(__WINRT__)
 #  if !defined(_STDINT_H_) && !defined(_STDINT_H) && !defined(HAVE_STDINT_H) && !defined(_HAVE_STDINT_H)

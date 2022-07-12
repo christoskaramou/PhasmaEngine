@@ -368,6 +368,12 @@ protected:
 	bool current_emitting_switch_fallthrough = false;
 
 	virtual void emit_instruction(const Instruction &instr);
+	struct TemporaryCopy
+	{
+		uint32_t dst_id;
+		uint32_t src_id;
+	};
+	TemporaryCopy handle_instruction_precision(const Instruction &instr);
 	void emit_block_instructions(SPIRBlock &block);
 
 	// For relax_nan_checks.
@@ -512,6 +518,7 @@ protected:
 	// on a single line separated by comma.
 	SmallVector<std::string> *redirect_statement = nullptr;
 	const SPIRBlock *current_continue_block = nullptr;
+	bool block_temporary_hoisting = false;
 
 	void begin_scope();
 	void end_scope();
@@ -605,6 +612,7 @@ protected:
 		bool support_precise_qualifier = false;
 		bool support_64bit_switch = false;
 		bool workgroup_size_is_hidden = false;
+		bool requires_relaxed_precision_analysis = false;
 	} backend;
 
 	void emit_struct(SPIRType &type);
@@ -808,6 +816,10 @@ protected:
 	void replace_fragment_outputs();
 	std::string legacy_tex_op(const std::string &op, const SPIRType &imgtype, uint32_t id);
 
+	void forward_relaxed_precision(uint32_t dst_id, const uint32_t *args, uint32_t length);
+	void analyze_precision_requirements(uint32_t type_id, uint32_t dst_id, uint32_t *args, uint32_t length);
+	Options::Precision analyze_expression_precision(const uint32_t *args, uint32_t length) const;
+
 	uint32_t indent = 0;
 
 	std::unordered_set<uint32_t> emitted_functions;
@@ -865,6 +877,7 @@ protected:
 	bool requires_transpose_3x3 = false;
 	bool requires_transpose_4x4 = false;
 	bool ray_tracing_is_khr = false;
+	bool barycentric_is_nv = false;
 	void ray_tracing_khr_fixup_locations();
 
 	bool args_will_forward(uint32_t id, const uint32_t *args, uint32_t num_args, bool pure);
@@ -900,6 +913,11 @@ protected:
 	void handle_invalid_expression(uint32_t id);
 	void force_temporary_and_recompile(uint32_t id);
 	void find_static_extensions();
+
+	uint32_t consume_temporary_in_precision_context(uint32_t type_id, uint32_t id, Options::Precision precision);
+	std::unordered_map<uint32_t, uint32_t> temporary_to_mirror_precision_alias;
+	std::unordered_set<uint32_t> composite_insert_overwritten;
+	std::unordered_set<uint32_t> block_composite_insert_overwrite;
 
 	std::string emit_for_loop_initializers(const SPIRBlock &block);
 	void emit_while_loop_initializers(const SPIRBlock &block);

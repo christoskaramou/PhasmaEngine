@@ -2998,6 +2998,7 @@ static const VpFeatureDesc featureDesc = {
                     VkPhysicalDeviceVulkan13Features* s = static_cast<VkPhysicalDeviceVulkan13Features*>(static_cast<void*>(p));
                     s->computeFullSubgroups = VK_TRUE;
                     s->descriptorBindingInlineUniformBlockUpdateAfterBind = VK_TRUE;
+                    s->dynamicRendering = VK_TRUE;
                     s->inlineUniformBlock = VK_TRUE;
                     s->maintenance4 = VK_TRUE;
                     s->pipelineCreationCacheControl = VK_TRUE;
@@ -3077,6 +3078,7 @@ static const VpFeatureDesc featureDesc = {
                     VkPhysicalDeviceVulkan13Features* s = static_cast<VkPhysicalDeviceVulkan13Features*>(static_cast<void*>(p));
                     ret = ret && (s->computeFullSubgroups == VK_TRUE);
                     ret = ret && (s->descriptorBindingInlineUniformBlockUpdateAfterBind == VK_TRUE);
+                    ret = ret && (s->dynamicRendering == VK_TRUE);
                     ret = ret && (s->inlineUniformBlock == VK_TRUE);
                     ret = ret && (s->maintenance4 == VK_TRUE);
                     ret = ret && (s->pipelineCreationCacheControl == VK_TRUE);
@@ -8107,6 +8109,18 @@ VPAPI_ATTR VkResult vpCreateInstance(const VpInstanceCreateInfo *pCreateInfo,
                                     pDesc->instanceExtensionCount,
                                     pDesc->pInstanceExtensions,
                                     extensions, merge, override);
+            {
+                bool foundPortEnum = false;
+                for (size_t i = 0; i < extensions.size(); ++i) {
+                    if (strcmp(extensions[i], VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) == 0) {
+                        foundPortEnum = true;
+                        break;
+                    }
+                }
+                if (foundPortEnum) {
+                    createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+                }
+            }
 
             // Need to include VK_KHR_get_physical_device_properties2 if we are on Vulkan 1.0
             if (createInfo.pApplicationInfo->apiVersion < VK_API_VERSION_1_1) {
