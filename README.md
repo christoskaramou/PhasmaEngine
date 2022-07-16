@@ -11,24 +11,20 @@ PhasmaEngine is intended as a project for learning 3D graphics and techniques, u
 * Image Based Lighting
 * Volumetric Lighting
 * Depth of Field
-* Fog
-* TAA
+* Upscale (FRS2)
 * FXAA
 * Bloom
 * Motion Blur
 * Cascaded Shadows
 * Functional and Interactive GUI (ImGui)
-* Scripts with C# (Mono)
+* Scripts with C# (Mono) (Turned off for now)
 * Event System
 * Frutum Culling
 * Animation
 * Cube Map Reflections
-* Dynamic Skybox (Day/Night)
 * CPU/GPU Metrics
 
 Here is a [demo video](https://www.youtube.com/watch?v=Dj1CpDCSy_k) with some of these features.
-
-And some other primitive implemented ideas in a certain degree like Compute shaders.
 
 ![Screenshot](Phasma/Images/example_image3.png)
 ![Screenshot](Phasma/Images/example_image7.png)
