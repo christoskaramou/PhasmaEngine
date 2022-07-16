@@ -29,6 +29,7 @@ namespace pe
     class CommandBuffer;
     class Pipeline;
     class Camera;
+    class PipelineCreateInfo;
 
     class Bloom : public IRenderComponent
     {
@@ -67,6 +68,10 @@ namespace pe
         Pipeline *pipelineGaussianBlurHorizontal;
         Pipeline *pipelineGaussianBlurVertical;
         Pipeline *pipelineCombine;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfoBF;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfoGBH;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfoGBV;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfoCombine;
         Descriptor *DSBrightFilter;
         Descriptor *DSGaussianBlurHorizontal;
         Descriptor *DSGaussianBlurVertical;

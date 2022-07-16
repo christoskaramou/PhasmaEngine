@@ -31,8 +31,8 @@ namespace pe
     public:
         FrameBuffer(uint32_t width,
                     uint32_t height,
+                    uint32_t count,
                     ImageViewHandle *views,
-                    uint32_t viewsCount,
                     RenderPass *renderPass,
                     const std::string &name);
 

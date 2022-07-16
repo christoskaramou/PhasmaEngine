@@ -32,6 +32,7 @@ namespace pe
     class Image;
     class Descriptor;
     class Semaphore;
+    class PipelineCreateInfo;
 
     struct ImageSubresourceLayers
     {
@@ -102,11 +103,16 @@ namespace pe
 
         void BeginPass(RenderPass *pass, FrameBuffer *frameBuffer);
 
-        void BeginPass(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo = nullptr);
+        void BeginPass(uint32_t count,
+                       AttachmentInfo *colorInfos,
+                       AttachmentInfo *depthInfo,
+                       RenderPass **outRenderPass);
 
         void EndPass();
 
         void BindPipeline(Pipeline *pipeline);
+
+        void BindPipeline(const PipelineCreateInfo &pipelineInfo, Pipeline **outPipeline);
 
         void BindComputePipeline(Pipeline *pipeline);
 
@@ -195,11 +201,29 @@ namespace pe
     private:
         friend class Queue;
 
+        static size_t GetHash(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo);
+
+        static RenderPass *GetRenderPass(size_t hash,
+                                         uint32_t count,
+                                         AttachmentInfo *colorInfos,
+                                         AttachmentInfo *depthInfo);
+
+        static FrameBuffer *GetFrameBuffer(size_t hash,
+                                           uint32_t count,
+                                           AttachmentInfo *colorInfos,
+                                           AttachmentInfo *depthInfo,
+                                           RenderPass *renderPass);
+
+        static Pipeline *GetPipeline(const PipelineCreateInfo &info);
+
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
         inline static std::vector<std::map<size_t, CommandBuffer *>> s_allCmds{};
         inline static std::mutex s_getNextMutex{};
         inline static std::mutex s_returnMutex{};
         inline static std::mutex s_WaitMutex{};
+        inline static std::map<size_t, RenderPass *> s_renderPasses{};
+        inline static std::map<size_t, FrameBuffer *> s_frameBuffers{};
+        inline static std::map<size_t, Pipeline *> s_pipelines{};
 
         CommandPool *m_commandPool;
         uint32_t m_familyId;

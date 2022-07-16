@@ -29,8 +29,8 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
+#include "Renderer/RenderPass.h"
 #include "Renderer/Image.h"
-#include "Renderer/Framebuffer.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Command.h"
@@ -269,7 +269,7 @@ namespace pe
         AttachmentInfo depthInfo{};
         depthInfo.image = textures[cascade];
 
-        cmd->BeginPass(0, nullptr, &depthInfo);
+        cmd->BeginPass(0, nullptr, &depthInfo, &m_renderPassShadows);
         cmd->SetViewport(0.f, 0.f, textures[cascade]->width_f, textures[cascade]->height_f);
         cmd->SetScissor(0, 0, textures[cascade]->imageInfo.width, textures[cascade]->imageInfo.height);
         cmd->SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);

@@ -190,7 +190,9 @@ namespace pe
         vkEnumeratePhysicalDevices(m_instance, &gpuCount, gpuList.data());
 
         std::vector<VkPhysicalDevice> validGpuList{};
-        VkPhysicalDevice discreteGpu;
+        VkPhysicalDevice preferredGpu;
+        VkPhysicalDeviceType preferredGpuType = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+        // VkPhysicalDeviceType preferredGpuType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
 
         for (auto &GPU : gpuList)
         {
@@ -218,9 +220,9 @@ namespace pe
             {
                 VkPhysicalDeviceProperties properties;
                 vkGetPhysicalDeviceProperties(GPU, &properties);
-                if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+                if (properties.deviceType == preferredGpuType)
                 {
-                    discreteGpu = GPU;
+                    preferredGpu = GPU;
                     break;
                 }
 
@@ -228,7 +230,7 @@ namespace pe
             }
         }
 
-        m_gpu = discreteGpu ? discreteGpu : validGpuList[0];
+        m_gpu = preferredGpu ? preferredGpu : validGpuList[0];
 
         VkPhysicalDeviceProperties gpuPropertiesVK;
         vkGetPhysicalDeviceProperties(m_gpu, &gpuPropertiesVK);
@@ -298,8 +300,6 @@ namespace pe
 
         if (IsDeviceExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME))
             deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        if (IsDeviceExtensionValid(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME))
-            deviceExtensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
 
@@ -349,8 +349,13 @@ namespace pe
               deviceFeatures12.descriptorBindingVariableDescriptorCount))
             PE_ERROR("Bindless descriptors are not supported on this device!");
 
+#if (USE_DYNAMIC_RENDERING == 1)
         if (!deviceFeatures13.dynamicRendering)
             PE_ERROR("Dynamic Rendering is not supported!");
+#endif
+
+        if (!deviceFeatures2.features.shaderInt64 && !deviceFeatures2.features.shaderInt16)
+            PE_ERROR("shaderInt16 is not supported!");
 
         VkDeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

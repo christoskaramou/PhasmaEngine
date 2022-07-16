@@ -39,6 +39,7 @@ namespace pe
     MotionBlur::MotionBlur()
     {
         DSet = {};
+        pipeline = nullptr;
     }
 
     MotionBlur::~MotionBlur()
@@ -57,7 +58,10 @@ namespace pe
 
     void MotionBlur::CreatePipeline()
     {
-        PipelineCreateInfo info{};
+        //PipelineCreateInfo info{};
+        pipelineInfo = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfo;
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/MotionBlur/motionBlur.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -70,10 +74,10 @@ namespace pe
         info.colorFormats = &displayRT->imageInfo.format;
         info.name = "motionBlur_pipeline";
 
-        pipeline = Pipeline::Create(info);
+        // pipeline = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
+        // Shader::Destroy(info.pVertShader);
+        // Shader::Destroy(info.pFragShader);
     }
 
     void MotionBlur::CreateUniforms(CommandBuffer *cmd)
@@ -161,11 +165,11 @@ namespace pe
         AttachmentInfo info{};
         info.image = displayRT;
 
-        cmd->BeginPass(1, &info);
+        cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
+        cmd->BindPipeline(*pipelineInfo, &pipeline);
         cmd->SetViewport(0.f, 0.f, displayRT->width_f, displayRT->height_f);
         cmd->SetScissor(0, 0, displayRT->imageInfo.width, displayRT->imageInfo.height);
         cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, sizeof(vec4), &values);
-        cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

@@ -43,7 +43,6 @@ namespace pe
 
     PipelineCreateInfo::PipelineCreateInfo()
     {
-        blendEnable = false;
         pVertShader = nullptr;
         pFragShader = nullptr;
         pCompShader = nullptr;
@@ -320,14 +319,15 @@ namespace pe
             plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             plci.setLayoutCount = static_cast<uint32_t>(layouts.size());
             plci.pSetLayouts = layouts.data();
-            plci.pushConstantRangeCount = info.pushConstantSize ? 1 : 0;
-            plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
+            plci.pushConstantRangeCount = info.pushConstantSize > 0 ? 1 : 0;
+            plci.pPushConstantRanges = info.pushConstantSize > 0 ? &pcr : nullptr;
 
             VkPipelineLayout pipelineLayout;
             PE_CHECK(vkCreatePipelineLayout(RHII.GetDevice(), &plci, nullptr, &pipelineLayout));
             layout = pipelineLayout;
             pipeinfo.layout = layout;
 
+#if (USE_DYNAMIC_RENDERING == 1)
             // Dynamic Rendering
             VkPipelineRenderingCreateInfo prci{};
             prci.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -355,6 +355,10 @@ namespace pe
                 // Render Pass
                 pipeinfo.renderPass = info.renderPass->Handle();
             }
+#else
+            // Render Pass
+            pipeinfo.renderPass = info.renderPass->Handle();
+#endif
 
             // Subpass (Index of subpass this pipeline will be used in)
             pipeinfo.subpass = 0;

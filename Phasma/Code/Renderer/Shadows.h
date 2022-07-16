@@ -37,6 +37,7 @@ namespace pe
     class Image;
     class Buffer;
     class Pipeline;
+    class RenderPass;
 
     class Shadows : public IRenderComponent
     {
@@ -65,6 +66,8 @@ namespace pe
 
         void EndPass(CommandBuffer *cmd, uint32_t cascade);
 
+        RenderPass *GetRenderPassShadows() { return m_renderPassShadows; }
+
     private:
         void CalculateCascades(Camera *camera);
 
@@ -75,5 +78,6 @@ namespace pe
         Descriptor *descriptorSetDeferred;
         Buffer *uniformBuffer;
         Format depthFormat;
+        RenderPass *m_renderPassShadows;
     };
 }

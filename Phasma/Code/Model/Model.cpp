@@ -44,6 +44,8 @@ namespace pe
 
     Model::Model()
     {
+        m_pipelineGBuffer = nullptr;
+        m_pipelineShadows = nullptr;
         uniformBufferIndex = std::numeric_limits<size_t>::max();
         uniformBufferOffset = std::numeric_limits<size_t>::max();
         uniformImagesIndex = std::numeric_limits<size_t>::max();
@@ -861,14 +863,17 @@ namespace pe
 
         Format depthFormat = RHII.GetDepthFormat();
 
-        PipelineCreateInfo info{};
+        // PipelineCreateInfo info{};
+        pipelineInfoGBuffer = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfoGBuffer;
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.frag", ShaderStage::FragmentBit});
         info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
         info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.pushConstantStage = ShaderStage::VertexBit | ShaderStage::FragmentBit;
-        info.pushConstantSize = 5 * sizeof(uint32_t);
+        info.pushConstantSize = sizeof(Constants);
         info.cullMode = CullMode::Front;
         info.colorBlendAttachments = {
             m_normalRT->blendAttachment,
@@ -887,10 +892,10 @@ namespace pe
         info.depthFormat = &depthFormat;
         info.name = "gbuffer_pipeline";
 
-        m_pipelineGBuffer = Pipeline::Create(info);
+        // m_pipelineGBuffer = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
+        // Shader::Destroy(info.pVertShader);
+        // Shader::Destroy(info.pFragShader);
     }
 
     void Model::CreatePipelineShadows()
@@ -898,7 +903,9 @@ namespace pe
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
         Format depthFormat = RHII.GetDepthFormat();
 
-        PipelineCreateInfo info{};
+        // PipelineCreateInfo info{};
+        pipelineInfoShadows = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfoShadows;
 
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Shadows/shaderShadows.vert", ShaderStage::VertexBit});
         info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
@@ -911,13 +918,9 @@ namespace pe
         info.depthFormat = &depthFormat;
         info.name = "shadows_pipeline";
 
-        m_pipelineShadows = Pipeline::Create(info);
+        // m_pipelineShadows = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-
-        // TODO: Follow the same pattern as the deferred pass
-        // Begin pass etc.
-        // This pipeline should belong to model
+        // Shader::Destroy(info.pVertShader);
     }
 
     void CullPrimitiveAsync(Model *model, Mesh *mesh, const Camera &camera, uint32_t index)
@@ -1077,7 +1080,8 @@ namespace pe
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
         auto &uniformImages = RHII.GetUniformImageInfo(uniformImagesIndex);
 
-        cmd->BindPipeline(m_pipelineGBuffer);
+        pipelineInfoGBuffer->renderPass = WORLD_ENTITY->GetComponent<Deferred>()->GetRenderPassModels();
+        cmd->BindPipeline(*pipelineInfoGBuffer, &m_pipelineGBuffer);
         cmd->BindVertexBuffer(vertexBuffer, 0);
         cmd->BindIndexBuffer(indexBuffer, 0);
 
@@ -1085,6 +1089,12 @@ namespace pe
             uniformBuffer.descriptor,
             uniformImages.descriptor};
         cmd->BindDescriptors(m_pipelineGBuffer, 2, dsetHandles);
+
+        Camera *camera = CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
+        m_constants.projJitter[0] = camera->projJitter.x;
+        m_constants.projJitter[1] = camera->projJitter.y;
+        m_constants.prevProjJitter[0] = camera->prevProjJitter.x;
+        m_constants.prevProjJitter[1] = camera->prevProjJitter.y;
 
         m_constants.modelIndex = static_cast<uint32_t>(uniformBufferOffset / sizeof(mat4));
 
@@ -1111,7 +1121,7 @@ namespace pe
                                 m_pipelineGBuffer,
                                 m_pipelineGBuffer->info.pushConstantStage,
                                 0,
-                                sizeof(m_constants),
+                                sizeof(Constants),
                                 &m_constants);
 
                             cmd->DrawIndexed(
@@ -1141,7 +1151,8 @@ namespace pe
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
         ShadowPushConstData data;
 
-        cmd->BindPipeline(m_pipelineShadows);
+        pipelineInfoShadows->renderPass = shadows.GetRenderPassShadows();
+        cmd->BindPipeline(*pipelineInfoShadows, &m_pipelineShadows);
         cmd->BindVertexBuffer(shadowsVertexBuffer, 0);
         cmd->BindIndexBuffer(indexBuffer, 0);
 

@@ -40,7 +40,7 @@ namespace pe
         finalLayout = ImageLayout::ColorAttachment;
     }
 
-    RenderPass::RenderPass(Attachment *attachments, uint32_t count, const std::string &name)
+    RenderPass::RenderPass(uint32_t count, Attachment *attachments, const std::string &name)
     {
         this->attachments = std::vector<Attachment>(count);
 

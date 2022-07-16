@@ -25,6 +25,8 @@ SOFTWARE.
 #include "Renderer/RHI.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/CameraSystem.h"
+#include "Systems/CameraSystem.h"
+#include "imgui/imgui_impl_sdl.h"
 
 namespace pe
 {
@@ -79,32 +81,7 @@ namespace pe
             if (event.type == SDL_QUIT)
                 EventSystem::PushEvent(EventQuit);
 
-            if (event.type == SDL_MOUSEWHEEL)
-            {
-                if (event.wheel.x > 0)
-                    io.MouseWheelH += 1;
-                if (event.wheel.x < 0)
-                    io.MouseWheelH -= 1;
-                if (event.wheel.y > 0)
-                    io.MouseWheel += 1;
-                if (event.wheel.y < 0)
-                    io.MouseWheel -= 1;
-            }
-
-            if (event.type == SDL_KEYDOWN)
-            {
-                const int key = event.key.keysym.scancode;
-                io.KeysDown[key] = true;
-            }
-            else if (event.type == SDL_KEYUP)
-            {
-                const int key = event.key.keysym.scancode;
-                io.KeysDown[key] = false;
-                io.KeyShift = ((SDL_GetModState() & KMOD_SHIFT) != 0);
-                io.KeyCtrl = ((SDL_GetModState() & KMOD_CTRL) != 0);
-                io.KeyAlt = ((SDL_GetModState() & KMOD_ALT) != 0);
-                io.KeySuper = ((SDL_GetModState() & KMOD_GUI) != 0);
-            }
+            ImGui_ImplSDL2_ProcessEvent(&event);
 
             if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
                 EventSystem::PushEvent(EventResize);
@@ -116,15 +93,14 @@ namespace pe
         int x, y;
         if (SDL_GetMouseState(&x, &y) & SDL_BUTTON(SDL_BUTTON_RIGHT))
         {
-            bool skipFrame = false;
+            bool skip = false;
             if (!SDL_GetRelativeMouseMode())
             {
                 SDL_SetRelativeMouseMode(SDL_TRUE);
-                skipFrame = true;
+                skip = true;
             }
             SDL_GetRelativeMouseState(&x, &y);
-
-            if (!skipFrame)
+            if (!skip)
                 camera_main->Rotate(static_cast<float>(x), static_cast<float>(y));
         }
         else
@@ -136,7 +112,7 @@ namespace pe
             }
         }
 
-        if (io.KeysDown[SDL_SCANCODE_ESCAPE])
+        if (ImGui::IsKeyDown(ImGuiKey_Escape))
         {
             const SDL_MessageBoxButtonData buttons[] = {
                 {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "cancel"},
@@ -153,17 +129,17 @@ namespace pe
         }
 
         float velocity = GUI::cameraSpeed * static_cast<float>(delta);
-        if ((io.KeysDown[SDL_SCANCODE_W] || io.KeysDown[SDL_SCANCODE_S]) &&
-            (io.KeysDown[SDL_SCANCODE_A] || io.KeysDown[SDL_SCANCODE_D]))
+        if ((ImGui::IsKeyDown(ImGuiKey_W) || ImGui::IsKeyDown(ImGuiKey_S)) &&
+            (ImGui::IsKeyDown(ImGuiKey_A) || ImGui::IsKeyDown(ImGuiKey_D)))
             velocity *= 0.707f;
 
-        if (io.KeysDown[SDL_SCANCODE_W])
+        if (ImGui::IsKeyDown(ImGuiKey_W))
             camera_main->Move(CameraDirection::FORWARD, velocity);
-        if (io.KeysDown[SDL_SCANCODE_S])
+        if (ImGui::IsKeyDown(ImGuiKey_S))
             camera_main->Move(CameraDirection::BACKWARD, velocity);
-        if (io.KeysDown[SDL_SCANCODE_A])
+        if (ImGui::IsKeyDown(ImGuiKey_A))
             camera_main->Move(CameraDirection::LEFT, velocity);
-        if (io.KeysDown[SDL_SCANCODE_D])
+        if (ImGui::IsKeyDown(ImGuiKey_D))
             camera_main->Move(CameraDirection::RIGHT, velocity);
 
         if (EventSystem::PollEvent(EventCompileShaders))

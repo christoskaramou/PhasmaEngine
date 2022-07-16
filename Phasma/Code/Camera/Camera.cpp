@@ -86,9 +86,12 @@ namespace pe
 
         if (GUI::use_FSR2)
         {
+            prevProjJitter = projJitter;
+
             SuperResolution *sr = Context::Get()->GetSystem<PostProcessSystem>()->GetEffect<SuperResolution>();
             sr->GenerateJitter();
-            const vec2 &projJitter = sr->GetProjectionJitter();
+            projJitter = sr->GetProjectionJitter();
+
             mat4 jitterMat = translate(mat4(1.0f), vec3(projJitter.x, projJitter.y, 0.f));
             projection = jitterMat * projection;
         }

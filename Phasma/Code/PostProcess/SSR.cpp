@@ -40,6 +40,7 @@ namespace pe
     SSR::SSR()
     {
         DSet = {};
+        pipeline = nullptr;
     }
 
     SSR::~SSR()
@@ -60,7 +61,10 @@ namespace pe
 
     void SSR::CreatePipeline()
     {
-        PipelineCreateInfo info{};
+        //PipelineCreateInfo info{};
+        pipelineInfo = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfo;
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSR/ssr.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -71,10 +75,10 @@ namespace pe
         info.colorFormats = &ssrRT->imageInfo.format;
         info.name = "ssr_pipeline";
 
-        pipeline = Pipeline::Create(info);
+        // pipeline = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
+        // Shader::Destroy(info.pVertShader);
+        // Shader::Destroy(info.pFragShader);
     }
 
     void SSR::CreateUniforms(CommandBuffer *cmd)
@@ -195,10 +199,10 @@ namespace pe
         AttachmentInfo info{};
         info.image = ssrRT;
 
-        cmd->BeginPass(1, &info);
+        cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
+        cmd->BindPipeline(*pipelineInfo, &pipeline);
         cmd->SetViewport(0.f, 0.f, ssrRT->width_f, ssrRT->height_f);
         cmd->SetScissor(0, 0, ssrRT->imageInfo.width, ssrRT->imageInfo.height);
-        cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

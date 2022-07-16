@@ -29,6 +29,7 @@ namespace pe
     class Pipeline;
     class Buffer;
     class Camera;
+    class PipelineCreateInfo;
 
     class SSR : public IRenderComponent
     {
@@ -56,6 +57,7 @@ namespace pe
         mat4 reflectionInput[4];
         Buffer *UBReflection;
         Pipeline *pipeline;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfo;
         Descriptor *DSet;
         Image *ssrRT;
         Image *albedoRT;

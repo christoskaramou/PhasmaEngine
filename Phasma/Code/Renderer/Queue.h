@@ -43,7 +43,7 @@ namespace pe
 
         static void Clear();
 
-        static Queue *GetNext(QueueTypeFlags queueType, int minImageGranularity);
+        static Queue *GetNext(QueueTypeFlags queueTypeFlags, int minImageGranularity);
 
         static void Return(Queue *queue);
 
@@ -71,8 +71,9 @@ namespace pe
         ivec3 GetImageGranularity() const { return m_imageGranularity; }
 
     private:
-        inline static std::unordered_map<size_t, Queue *> s_availableQueues{};
-        inline static std::map<size_t, Queue *> s_allQueues{};
+        inline static std::vector<QueueTypeFlags::Type> s_allFlags{};
+        inline static std::unordered_map<QueueTypeFlags::Type, std::unordered_map<size_t, Queue *>> s_availableQueues{};
+        inline static std::map<QueueTypeFlags::Type, std::map<size_t, Queue *>> s_allQueues{};
         inline static std::mutex s_getNextMutex{};
         inline static std::mutex s_returnMutex{};
 

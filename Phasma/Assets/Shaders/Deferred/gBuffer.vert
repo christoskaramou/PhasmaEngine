@@ -26,8 +26,9 @@ SOFTWARE.
 const int MAX_DATA_SIZE = 2048; // TODO: calculate on init
 const int MAX_NUM_JOINTS = 128;
 
-// mat4 indexing
 layout(push_constant) uniform Constants {
+    vec2 projJitter;
+    vec2 prevProjJitter;
     uint modelIndex;
     uint meshIndex;
     uint meshJointCount;

@@ -27,6 +27,8 @@ SOFTWARE.
 #include "../Common/common.glsl"
 
 layout(push_constant) uniform Constants {
+    vec2 projJitter;
+    vec2 prevProjJitter;
     uint modelIndex;
     uint meshIndex;
     uint meshJointCount;
@@ -70,6 +72,8 @@ void main() {
     outNormal = GetNormal(positionWS.xyz, nSampler, inNormal, inUV);
     outAlbedo = vec4(basicColor.xyz * ao, basicColor.a) * baseColorFactor;
     outMetRough = vec3(0.0, metRough.y, metRough.z);
-    outVelocity = (positionCS.xy / positionCS.w - previousPositionCS.xy / previousPositionCS.w); // * vec2(0.5f, 0.5f); // ndc space
+    vec2 cancelJitter = constants.prevProjJitter - constants.projJitter;
+    outVelocity = (previousPositionCS.xy / previousPositionCS.w - positionCS.xy / positionCS.w) - cancelJitter;
+    outVelocity *= vec2(0.5f, 0.5f);
     outEmissive = vec4(emissive * emissiveFactor, 0.0);
 }

@@ -34,6 +34,7 @@ SOFTWARE.
 namespace pe
 {
     class Pipeline;
+    class PipelineCreateInfo;
     class CommandBuffer;
     class Descriptor;
     class Buffer;
@@ -162,8 +163,14 @@ namespace pe
         Image *m_emissiveRT;
         Pipeline *m_pipelineGBuffer;
         Pipeline *m_pipelineShadows;
+
+        std::shared_ptr<PipelineCreateInfo> pipelineInfoGBuffer;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfoShadows;
+
         struct Constants
         {
+            float projJitter[2];
+            float prevProjJitter[2];
             uint32_t modelIndex;
             uint32_t meshIndex;
             uint32_t meshJointCount;

@@ -45,6 +45,8 @@ namespace pe
         float nearPlane, farPlane, fovx, speed, rotationSpeed;
         std::vector<Plane> frustum{};
         Compute frustumCompute;
+        vec2 projJitter;
+        vec2 prevProjJitter;
 
         Camera();
 

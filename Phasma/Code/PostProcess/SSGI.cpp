@@ -39,6 +39,7 @@ namespace pe
     SSGI::SSGI()
     {
         DSet = {};
+        pipeline = nullptr;
     }
 
     SSGI::~SSGI()
@@ -56,7 +57,10 @@ namespace pe
 
     void SSGI::CreatePipeline()
     {
-        PipelineCreateInfo info{};
+        //PipelineCreateInfo info{};
+        pipelineInfo = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfo;
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSGI/SSGI.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -69,10 +73,10 @@ namespace pe
         info.colorFormats = &viewportRT->imageInfo.format;
         info.name = "ssgi_pipeline";
 
-        pipeline = Pipeline::Create(info);
+        // pipeline = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
+        // Shader::Destroy(info.pVertShader);
+        // Shader::Destroy(info.pFragShader);
     }
 
     void SSGI::CreateUniforms(CommandBuffer *cmd)
@@ -142,11 +146,11 @@ namespace pe
         AttachmentInfo info{};
         info.image = viewportRT;
 
-        cmd->BeginPass(1, &info);
+        cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
+        cmd->BindPipeline(*pipelineInfo, &pipeline);
         cmd->SetViewport(0.f, 0.f, viewportRT->width_f, viewportRT->height_f);
         cmd->SetScissor(0, 0, viewportRT->imageInfo.width, viewportRT->imageInfo.height);
         cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, uint32_t(sizeof(mat4)), &camera.invViewProjection);
-        cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

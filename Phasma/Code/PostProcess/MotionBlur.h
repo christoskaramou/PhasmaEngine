@@ -31,6 +31,7 @@ namespace pe
     class Buffer;
     class Pipeline;
     class Camera;
+    class PipelineCreateInfo;
 
     class MotionBlur : public IRenderComponent
     {
@@ -56,6 +57,7 @@ namespace pe
         void Destroy() override;
 
         Pipeline *pipeline;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfo;
         Descriptor *DSet;
         Image *frameImage;
         Image *displayRT;

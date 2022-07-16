@@ -501,7 +501,7 @@ namespace pe
         CreateRenderTarget("normal", Format::RGBA32SFloat, false);
         CreateRenderTarget("albedo", format, true);
         CreateRenderTarget("srm", format, false); // Specular Roughness Metallic
-        CreateRenderTarget("ssao", Format::R16Unorm, false);
+        CreateRenderTarget("ssao", Format::R8Unorm, false);
         CreateRenderTarget("ssaoBlur", Format::R8Unorm, false);
         CreateRenderTarget("ssr", format, false);
         CreateRenderTarget("velocity", Format::RG16SFloat, false);

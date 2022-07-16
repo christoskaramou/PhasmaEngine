@@ -79,7 +79,7 @@ namespace pe
         return t_duration.count();
     }
 
-    GpuTimer::GpuTimer()
+    GpuTimer::GpuTimer(const std::string &name)
     {
         m_cmd = nullptr;
 
@@ -100,7 +100,7 @@ namespace pe
         PE_CHECK(vkCreateQueryPool(RHII.GetDevice(), &qpci, nullptr, &pool));
         m_handle = pool;
 
-        Debug::SetObjectName(m_handle, ObjectType::QueryPool, "GPUTimer_queryPool");
+        Debug::SetObjectName(m_handle, ObjectType::QueryPool, name);
     }
 
     GpuTimer::~GpuTimer()

@@ -515,7 +515,6 @@ namespace pe
             ImGui::InputFloat("MotionY", &FSR2_MotionScaleY, 0.1f, 1.f);
             ImGui::InputFloat("ProjX", &FSR2_ProjScaleX, 0.1f, 1.f);
             ImGui::InputFloat("ProjY", &FSR2_ProjScaleY, 0.1f, 1.f);
-            ImGui::InputFloat("Sharpnesss", &FSR2_Sharpness, 0.05f, .2f);
         }
 
         ImGui::Checkbox("FXAA", &use_FXAA);
@@ -660,7 +659,7 @@ namespace pe
         info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         info.Allocator = nullptr;
         info.CheckVkResultFn = nullptr;
-        ImGui_ImplVulkan_Init(&info, renderPass->Handle());
+        ImGui_ImplVulkan_Init(&info, renderPass);
 
         CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
         cmd->Begin();
@@ -697,9 +696,21 @@ namespace pe
         cmd->BeginDebugRegion("GUI");
         if (render && ImGui::GetDrawData()->TotalVtxCount > 0)
         {
-            cmd->BeginPass(renderPass, framebuffers[imageIndex]);
+            VkClearValue clearValue;
+            clearValue.color = {1.0f, 0.0f, 0.0f, 1.0f};
+
+            VkRenderPassBeginInfo rpi{};
+            rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            rpi.renderPass = renderPass;
+            rpi.framebuffer = framebuffers[imageIndex];
+            rpi.renderArea.offset = VkOffset2D{0, 0};
+            rpi.renderArea.extent = VkExtent2D{static_cast<uint32_t>(WIDTH), static_cast<uint32_t>(HEIGHT)};
+            rpi.clearValueCount = 1;
+            rpi.pClearValues = &clearValue;
+
+            vkCmdBeginRenderPass(cmd->Handle(), &rpi, VK_SUBPASS_CONTENTS_INLINE);
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
-            cmd->EndPass();
+            vkCmdEndRenderPass(cmd->Handle());
         }
         cmd->EndDebugRegion();
     }
@@ -712,17 +723,42 @@ namespace pe
 
     void GUI::CreateRenderPass()
     {
-        Attachment colorAttachment;
-        colorAttachment.format = RHII.GetSurface()->format;
-        colorAttachment.samples = SampleCount::Count1;
-        colorAttachment.loadOp = AttachmentLoadOp::Load;
-        colorAttachment.storeOp = AttachmentStoreOp::Store;
-        colorAttachment.stencilLoadOp = AttachmentLoadOp::DontCare;
-        colorAttachment.stencilStoreOp = AttachmentStoreOp::DontCare;
-        colorAttachment.initialLayout = ImageLayout::PresentSrc;
-        colorAttachment.finalLayout = ImageLayout::PresentSrc;
+        VkAttachmentDescription attachment = {};
+        attachment.format = Translate<VkFormat>(RHII.GetSurface()->format);
+        attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        attachment.loadOp = /*wd->ClearEnable ? VK_ATTACHMENT_LOAD_OP_CLEAR : */ VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        VkAttachmentReference color_attachment = {};
+        color_attachment.attachment = 0;
+        color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        VkSubpassDescription subpass = {};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &color_attachment;
+        VkSubpassDependency dependency = {};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        VkRenderPassCreateInfo info = {};
+        info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        info.attachmentCount = 1;
+        info.pAttachments = &attachment;
+        info.subpassCount = 1;
+        info.pSubpasses = &subpass;
+        info.dependencyCount = 1;
+        info.pDependencies = &dependency;
+        VkRenderPass renderPassVK;
+        PE_CHECK(vkCreateRenderPass(RHII.GetDevice(), &info, nullptr, &renderPassVK));
+        renderPass = renderPassVK;
 
-        renderPass = RenderPass::Create(&colorAttachment, 1, "GUI_renderPass");
+        Debug::SetObjectName(renderPass, ObjectType::RenderPass, "GUI_renderPass");
     }
 
     void GUI::CreateFrameBuffers()
@@ -730,19 +766,41 @@ namespace pe
         framebuffers.resize(SWAPCHAIN_IMAGES);
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; ++i)
         {
-            uint32_t width = WIDTH;
-            uint32_t height = HEIGHT;
-            ImageViewHandle view = RHII.GetSwapchain()->images[i]->view;
-            framebuffers[i] = FrameBuffer::Create(width, height, &view, 1, renderPass, "GUI_frameBuffer_" + std::to_string(i));
+            VkImageView view = RHII.GetSwapchain()->images[i]->view;
+
+            VkFramebufferCreateInfo fbci{};
+            fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            fbci.renderPass = renderPass;
+            fbci.attachmentCount = 1;
+            fbci.pAttachments = &view;
+            fbci.width = WIDTH;
+            fbci.height = HEIGHT;
+            fbci.layers = 1;
+
+            VkFramebuffer frameBuffer;
+            PE_CHECK(vkCreateFramebuffer(RHII.GetDevice(), &fbci, nullptr, &frameBuffer));
+            framebuffers[i] = frameBuffer;
+
+            Debug::SetObjectName(framebuffers[i], ObjectType::Framebuffer, "GUI_frameBuffer_" + std::to_string(i));
         }
     }
 
     void GUI::Destroy()
     {
-        RenderPass::Destroy(renderPass);
+        if (renderPass)
+        {
+            vkDestroyRenderPass(RHII.GetDevice(), renderPass, nullptr);
+            renderPass = {};
+        }
 
         for (auto &framebuffer : framebuffers)
-            FrameBuffer::Destroy(framebuffer);
+        {
+            if (framebuffer)
+            {
+                vkDestroyFramebuffer(RHII.GetDevice(), framebuffer, nullptr);
+                framebuffer = {};
+            }
+        }
     }
 
     void GUI::Update()

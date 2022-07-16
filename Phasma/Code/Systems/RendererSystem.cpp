@@ -78,7 +78,7 @@ namespace pe
         CreateRenderTarget("normal", Format::RGBA32SFloat, false);
         CreateRenderTarget("albedo", format, true);
         CreateRenderTarget("srm", format, false); // Specular Roughness Metallic
-        CreateRenderTarget("ssao", Format::R16Unorm, false);
+        CreateRenderTarget("ssao", Format::R8Unorm, false);
         CreateRenderTarget("ssaoBlur", Format::R8Unorm, false);
         CreateRenderTarget("ssr", format, false);
         CreateRenderTarget("velocity", Format::RG16SFloat, false);
@@ -117,21 +117,21 @@ namespace pe
         }
 
         // GPU TIMERS
-        GpuTimer::gpu = GpuTimer::Create();
-        GpuTimer::compute = GpuTimer::Create();
-        GpuTimer::geometry = GpuTimer::Create();
-        GpuTimer::ssao = GpuTimer::Create();
-        GpuTimer::ssr = GpuTimer::Create();
-        GpuTimer::composition = GpuTimer::Create();
-        GpuTimer::fxaa = GpuTimer::Create();
-        GpuTimer::bloom = GpuTimer::Create();
-        GpuTimer::ssgi = GpuTimer::Create();
-        GpuTimer::dof = GpuTimer::Create();
-        GpuTimer::motionBlur = GpuTimer::Create();
-        GpuTimer::gui = GpuTimer::Create();
-        GpuTimer::fsr = GpuTimer::Create();
+        GpuTimer::gpu = GpuTimer::Create("GPUTimer_queryPool_gpu");
+        GpuTimer::compute = GpuTimer::Create("GPUTimer_queryPool_compute");
+        GpuTimer::geometry = GpuTimer::Create("GPUTimer_queryPool_geometry");
+        GpuTimer::ssao = GpuTimer::Create("GPUTimer_queryPool_ssao");
+        GpuTimer::ssr = GpuTimer::Create("GPUTimer_queryPool_ssr");
+        GpuTimer::composition = GpuTimer::Create("GPUTimer_queryPool_composition");
+        GpuTimer::fxaa = GpuTimer::Create("GPUTimer_queryPool_fxaa");
+        GpuTimer::bloom = GpuTimer::Create("GPUTimer_queryPool_bloom");
+        GpuTimer::ssgi = GpuTimer::Create("GPUTimer_queryPool_ssgi");
+        GpuTimer::dof = GpuTimer::Create("GPUTimer_queryPool_dof");
+        GpuTimer::motionBlur = GpuTimer::Create("GPUTimer_queryPool_motionBlur");
+        GpuTimer::gui = GpuTimer::Create("GPUTimer_queryPool_gui");
+        GpuTimer::fsr = GpuTimer::Create("GPUTimer_queryPool_fsr");
         for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
-            GpuTimer::shadows[i] = GpuTimer::Create();
+            GpuTimer::shadows[i] = GpuTimer::Create("GPUTimer_queryPool_shadows_" + std::to_string(i));
     }
 
     void RendererSystem::Update(double delta)
@@ -206,7 +206,7 @@ namespace pe
 
             // submit the shadow command buffers
             auto &shadowWaitSemaphore = aquireSignalSemaphore;
-            auto &shadowSignalSemaphore = RHII.GetSemaphores()[imageIndex * 3 + 1];
+            auto &shadowSignalSemaphore = RHII.GetSemaphores()[SWAPCHAIN_IMAGES + frameIndex];
 
             queue->Submit(
                 SHADOWMAP_CASCADES, shadowCmds,
@@ -219,7 +219,7 @@ namespace pe
 
         PipelineStageFlags waitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
         Semaphore *waitSemaphore = aquireSignalSemaphore;
-        Semaphore *signalSemaphore = RHII.GetSemaphores()[imageIndex * 3 + 2];
+        Semaphore *signalSemaphore = RHII.GetSemaphores()[SWAPCHAIN_IMAGES * 2 + frameIndex];
 
         // Wait for unfinished work
         if (m_previousCmds[imageIndex])
@@ -235,7 +235,7 @@ namespace pe
         cmd->End();
 
         // SUBMIT TO QUEUE
-        cmd->Submit(queue, &waitStage, 1, &waitSemaphore, 1, &signalSemaphore);
+        queue->Submit(1, &cmd, &waitStage, 1, &waitSemaphore, 1, &signalSemaphore);
 
         m_previousCmds[imageIndex] = cmd;
 

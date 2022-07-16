@@ -157,12 +157,12 @@ namespace pe
                                             FFX_RESOURCE_STATE_UNORDERED_ACCESS);
         dd.jitterOffset.x = m_jitter.x;
         dd.jitterOffset.y = m_jitter.y;
-        dd.motionVectorScale.x = GUI::FSR2_MotionScaleX * -m_viewportRT->width_f;
-        dd.motionVectorScale.y = GUI::FSR2_MotionScaleX * -m_viewportRT->height_f;
+        dd.motionVectorScale.x = GUI::FSR2_MotionScaleX * m_viewportRT->width_f;
+        dd.motionVectorScale.y = GUI::FSR2_MotionScaleY * m_viewportRT->height_f;
         dd.renderSize.width = m_viewportRT->imageInfo.width;
         dd.renderSize.height = m_viewportRT->imageInfo.height;
         dd.enableSharpening = true;
-        dd.sharpness = GUI::FSR2_Sharpness;
+        dd.sharpness = 1.0f - (GUI::renderTargetsScale * GUI::renderTargetsScale);
         dd.frameTimeDelta = static_cast<float>(MILLI(FrameTimer::Instance().GetDelta()));
         dd.preExposure = 1.0f;
         dd.reset = false;
@@ -171,6 +171,8 @@ namespace pe
         dd.cameraFovAngleVertical = camera.Fovy();
 
         PE_CHECK(ffxFsr2ContextDispatch(m_context.get(), &dd));
+
+        cmd->EndDebugRegion();
     }
 
     void SuperResolution::Resize(uint32_t width, uint32_t height)
@@ -192,7 +194,7 @@ namespace pe
         int32_t phaseCount = ffxFsr2GetJitterPhaseCount(m_contextDescription->maxRenderSize.width, m_contextDescription->displaySize.width);
         ffxFsr2GetJitterOffset(&m_jitter.x, &m_jitter.y, index, phaseCount);
 
-        m_projectionJitter.x = GUI::FSR2_ProjScaleX * m_jitter.x / m_viewportRT->width_f;
-        m_projectionJitter.y = GUI::FSR2_ProjScaleY * m_jitter.y / m_viewportRT->height_f;
+        m_projectionJitter.x = GUI::FSR2_ProjScaleX * 2.0f * m_jitter.x / m_viewportRT->width_f;
+        m_projectionJitter.y = GUI::FSR2_ProjScaleY * 2.0f * m_jitter.y / m_viewportRT->height_f;
     }
 }

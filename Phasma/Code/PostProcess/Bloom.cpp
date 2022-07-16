@@ -37,6 +37,10 @@ namespace pe
 {
     Bloom::Bloom()
     {
+        pipelineBrightFilter = nullptr;
+        pipelineGaussianBlurHorizontal = nullptr;
+        pipelineGaussianBlurVertical = nullptr;
+        pipelineCombine = nullptr;
     }
 
     Bloom::~Bloom()
@@ -64,7 +68,10 @@ namespace pe
 
     void Bloom::CreateBrightFilterPipeline()
     {
-        PipelineCreateInfo info{};
+        //PipelineCreateInfo info{};
+        pipelineInfoBF = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfoBF;
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/brightFilter.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -77,15 +84,18 @@ namespace pe
         info.colorFormats = &brightFilterRT->imageInfo.format;
         info.name = "BrightFilter_pipeline";
 
-        pipelineBrightFilter = Pipeline::Create(info);
+        // pipelineBrightFilter = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
+        // Shader::Destroy(info.pVertShader);
+        // Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateGaussianBlurHorizontaPipeline()
     {
-        PipelineCreateInfo info{};
+        //PipelineCreateInfo info{};
+        pipelineInfoGBH = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfoGBH;
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/gaussianBlurHorizontal.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -98,15 +108,18 @@ namespace pe
         info.colorFormats = &gaussianBlurHorizontalRT->imageInfo.format;
         info.name = "GaussianBlurHorizontal_pipeline";
 
-        pipelineGaussianBlurHorizontal = Pipeline::Create(info);
+        // pipelineGaussianBlurHorizontal = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
+        // Shader::Destroy(info.pVertShader);
+        // Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateGaussianBlurVerticalPipeline()
     {
-        PipelineCreateInfo info{};
+        //PipelineCreateInfo info{};
+        pipelineInfoGBV = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfoGBV;
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/gaussianBlurVertical.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -119,15 +132,18 @@ namespace pe
         info.colorFormats = &gaussianBlurVerticalRT->imageInfo.format;
         info.name = "GaussianBlurVertical_pipeline";
 
-        pipelineGaussianBlurVertical = Pipeline::Create(info);
+        // pipelineGaussianBlurVertical = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
+        // Shader::Destroy(info.pVertShader);
+        // Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateCombinePipeline()
     {
-        PipelineCreateInfo info{};
+        //PipelineCreateInfo info{};
+        pipelineInfoCombine = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfoCombine;
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/combine.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -140,10 +156,10 @@ namespace pe
         info.colorFormats = &displayRT->imageInfo.format;
         info.name = "BloomCombine_pipeline";
 
-        pipelineCombine = Pipeline::Create(info);
+        // pipelineCombine = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
+        // Shader::Destroy(info.pVertShader);
+        // Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateUniforms(CommandBuffer *cmd)
@@ -236,12 +252,12 @@ namespace pe
         AttachmentInfo info{};
         info.image = brightFilterRT;
 
-        cmd->BeginPass(1, &info);
+        cmd->BeginPass(1, &info, nullptr, &pipelineInfoBF->renderPass);
+        cmd->BindPipeline(*pipelineInfoBF, &pipelineBrightFilter);
         cmd->SetViewport(0.f, 0.f, brightFilterRT->width_f, brightFilterRT->height_f);
         cmd->SetScissor(0, 0, brightFilterRT->imageInfo.width, brightFilterRT->imageInfo.height);
         cmd->PushConstants(pipelineBrightFilter, ShaderStage::FragmentBit, 0,
                            uint32_t(sizeof(float) * values.size()), values.data());
-        cmd->BindPipeline(pipelineBrightFilter);
         cmd->BindDescriptors(pipelineBrightFilter, 1, &DSBrightFilter);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
@@ -255,12 +271,12 @@ namespace pe
         cmd->ImageBarrier(gaussianBlurHorizontalRT, ImageLayout::ColorAttachment);
 
         info.image = gaussianBlurHorizontalRT;
-        cmd->BeginPass(1, &info);
+        cmd->BeginPass(1, &info, nullptr, &pipelineInfoGBH->renderPass);
+        cmd->BindPipeline(*pipelineInfoGBH, &pipelineGaussianBlurHorizontal);
         cmd->SetViewport(0.f, 0.f, gaussianBlurHorizontalRT->width_f, gaussianBlurHorizontalRT->height_f);
         cmd->SetScissor(0, 0, gaussianBlurHorizontalRT->imageInfo.width, gaussianBlurHorizontalRT->imageInfo.height);
         cmd->PushConstants(pipelineGaussianBlurHorizontal, ShaderStage::FragmentBit, 0,
                            uint32_t(sizeof(float) * values.size()), values.data());
-        cmd->BindPipeline(pipelineGaussianBlurHorizontal);
         cmd->BindDescriptors(pipelineGaussianBlurHorizontal, 1, &DSGaussianBlurHorizontal);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
@@ -274,12 +290,12 @@ namespace pe
         cmd->ImageBarrier(gaussianBlurVerticalRT, ImageLayout::ColorAttachment);
 
         info.image = gaussianBlurVerticalRT;
-        cmd->BeginPass(1, &info);
+        cmd->BeginPass(1, &info, nullptr, &pipelineInfoGBV->renderPass);
+        cmd->BindPipeline(*pipelineInfoGBV, &pipelineGaussianBlurVertical);
         cmd->SetViewport(0.f, 0.f, gaussianBlurVerticalRT->width_f, gaussianBlurVerticalRT->height_f);
         cmd->SetScissor(0, 0, gaussianBlurVerticalRT->imageInfo.width, gaussianBlurVerticalRT->imageInfo.height);
         cmd->PushConstants(pipelineGaussianBlurVertical, ShaderStage::FragmentBit, 0,
                            uint32_t(sizeof(float) * values.size()), values.data());
-        cmd->BindPipeline(pipelineGaussianBlurVertical);
         cmd->BindDescriptors(pipelineGaussianBlurVertical, 1, &DSGaussianBlurVertical);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
@@ -294,12 +310,12 @@ namespace pe
         cmd->ImageBarrier(displayRT, ImageLayout::ColorAttachment);
 
         info.image = displayRT;
-        cmd->BeginPass(1, &info);
+        cmd->BeginPass(1, &info, nullptr, &pipelineInfoCombine->renderPass);
+        cmd->BindPipeline(*pipelineInfoCombine, &pipelineCombine);
         cmd->SetViewport(0.f, 0.f, displayRT->width_f, displayRT->height_f);
         cmd->SetScissor(0, 0, displayRT->imageInfo.width, displayRT->imageInfo.height);
         cmd->PushConstants(pipelineCombine, ShaderStage::FragmentBit, 0, uint32_t(sizeof(float) * values.size()),
                            values.data());
-        cmd->BindPipeline(pipelineCombine);
         cmd->BindDescriptors(pipelineCombine, 1, &DSCombine);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

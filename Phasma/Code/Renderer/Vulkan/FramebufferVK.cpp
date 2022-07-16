@@ -29,16 +29,16 @@ namespace pe
 {
     FrameBuffer::FrameBuffer(uint32_t width,
                              uint32_t height,
+                             uint32_t count,
                              ImageViewHandle *views,
-                             uint32_t viewsCount,
                              RenderPass *renderPass,
                              const std::string &name)
     {
         m_width = width;
         m_height = height;
 
-        std::vector<VkImageView> _views(viewsCount);
-        for (uint32_t i = 0; i < viewsCount; i++)
+        std::vector<VkImageView> _views(count);
+        for (uint32_t i = 0; i < count; i++)
             _views[i] = views[i];
 
         VkFramebufferCreateInfo fbci{};

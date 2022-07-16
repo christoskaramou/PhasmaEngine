@@ -35,6 +35,7 @@ SOFTWARE.
 #include "Renderer/Descriptor.h"
 #include "Systems/LightSystem.h"
 #include "Renderer/Framebuffer.h"
+#include "Renderer/RenderPass.h"
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Pipeline.h"
@@ -48,6 +49,7 @@ namespace pe
     Deferred::Deferred()
     {
         DSComposition = {};
+        pipelineComposition = nullptr;
     }
 
     Deferred::~Deferred()
@@ -81,7 +83,10 @@ namespace pe
             Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
             Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
 
-        PipelineCreateInfo info{};
+        //PipelineCreateInfo info{};
+        pipelineInfoComposition = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfoComposition;
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/composition.frag", ShaderStage::FragmentBit, definesFrag});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -96,10 +101,10 @@ namespace pe
         info.colorFormats = &viewportRT->imageInfo.format;
         info.name = "composition_pipeline";
 
-        pipelineComposition = Pipeline::Create(info);
+        // pipelineComposition = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
+        // Shader::Destroy(info.pVertShader);
+        // Shader::Destroy(info.pFragShader);
     }
 
     void Deferred::CreateUniforms(CommandBuffer *cmd)
@@ -332,11 +337,11 @@ namespace pe
         AttachmentInfo info{};
         info.image = viewportRT;
 
-        cmd->BeginPass(1, &info);
+        cmd->BeginPass(1, &info, nullptr, &pipelineInfoComposition->renderPass);
+        cmd->BindPipeline(*pipelineInfoComposition, &pipelineComposition);
         cmd->SetViewport(0.f, 0.f, viewportRT->width_f, viewportRT->height_f);
         cmd->SetScissor(0, 0, viewportRT->imageInfo.width, viewportRT->imageInfo.height);
         cmd->PushConstants(pipelineComposition, ShaderStage::FragmentBit, 0, sizeof(mat4), &values);
-        cmd->BindPipeline(pipelineComposition);
         cmd->BindDescriptors(pipelineComposition, (uint32_t)handles.size(), handles.data());
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
@@ -370,7 +375,7 @@ namespace pe
         AttachmentInfo depthInfo{};
         depthInfo.image = depth;
 
-        cmd->BeginPass(5, colorInfos, &depthInfo);
+        cmd->BeginPass(5, colorInfos, &depthInfo, &m_renderPassModels);
         cmd->SetViewport(0.f, 0.f, normalRT->width_f, normalRT->height_f);
         cmd->SetScissor(0, 0, normalRT->imageInfo.width, normalRT->imageInfo.height);
     }

@@ -37,6 +37,17 @@ SOFTWARE.
 
 namespace pe
 {
+    SSAO::SSAO()
+    {
+        pipeline = nullptr;
+        pipelineBlur = nullptr;
+    }
+
+    SSAO::~SSAO()
+    {
+
+    }
+
     void SSAO::Init()
     {
         RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
@@ -55,7 +66,10 @@ namespace pe
 
     void SSAO::CreateSSAOPipeline()
     {
-        PipelineCreateInfo info{};
+        //PipelineCreateInfo info{};
+        pipelineInfo = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfo;
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSAO/ssao.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -66,15 +80,18 @@ namespace pe
         info.colorFormats = &ssaoRT->imageInfo.format;
         info.name = "ssao_pipeline";
 
-        pipeline = Pipeline::Create(info);
+        // pipeline = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
+        // Shader::Destroy(info.pVertShader);
+        // Shader::Destroy(info.pFragShader);
     }
 
     void SSAO::CreateBlurPipeline()
     {
-        PipelineCreateInfo info{};
+        //PipelineCreateInfo info{};
+        pipelineInfoBlur = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfoBlur;
+
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSAO/ssaoBlur.frag", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -85,10 +102,10 @@ namespace pe
         info.colorFormats = &ssaoBlurRT->imageInfo.format;
         info.name = "ssaoBlur_pipeline";
 
-        pipelineBlur = Pipeline::Create(info);
+        // pipelineBlur = Pipeline::Create(info);
 
-        Shader::Destroy(info.pVertShader);
-        Shader::Destroy(info.pFragShader);
+        // Shader::Destroy(info.pVertShader);
+        // Shader::Destroy(info.pFragShader);
     }
 
     void SSAO::CreateUniforms(CommandBuffer *cmd)
@@ -250,13 +267,13 @@ namespace pe
     {
         if (GUI::show_ssao)
         {
-            pvm[0] = camera->projection;
-            pvm[1] = camera->view;
-            pvm[2] = camera->invProjection;
+            ubo.projection = camera->projection;
+            ubo.view = camera->view;
+            ubo.invProjection = camera->invProjection;
 
             MemoryRange mr{};
-            mr.data = &pvm;
-            mr.size = sizeof(mat4);
+            mr.data = &ubo;
+            mr.size = sizeof(UBO);
             mr.offset = RHII.GetFrameDynamicOffset(UB_PVM->Size(), RHII.GetFrameIndex());
             UB_PVM->Copy(1, &mr, false);
         }
@@ -275,11 +292,10 @@ namespace pe
 
         AttachmentInfo info{};
         info.image = ssaoRT;
-
-        cmd->BeginPass(1, &info);
+        cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
+        cmd->BindPipeline(*pipelineInfo, &pipeline);
         cmd->SetViewport(0.f, 0.f, ssaoRT->width_f, ssaoRT->height_f);
         cmd->SetScissor(0, 0, ssaoRT->imageInfo.width, ssaoRT->imageInfo.height);
-        cmd->BindPipeline(pipeline);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
@@ -293,11 +309,10 @@ namespace pe
         cmd->ImageBarrier(ssaoBlurRT, ImageLayout::ColorAttachment);
 
         info.image = ssaoBlurRT;
-
-        cmd->BeginPass(1, &info);
+        cmd->BeginPass(1, &info, nullptr, &pipelineInfoBlur->renderPass);
+        cmd->BindPipeline(*pipelineInfoBlur, &pipelineBlur);
         cmd->SetViewport(0.f, 0.f, ssaoBlurRT->width_f, ssaoBlurRT->height_f);
         cmd->SetScissor(0, 0, ssaoBlurRT->imageInfo.width, ssaoBlurRT->imageInfo.height);
-        cmd->BindPipeline(pipelineBlur);
         cmd->BindDescriptors(pipelineBlur, 1, &DSBlur);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

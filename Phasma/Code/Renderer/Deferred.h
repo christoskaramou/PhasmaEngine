@@ -30,6 +30,8 @@ namespace pe
     class Descriptor;
     class Image;
     class Pipeline;
+    class RenderPass;
+    class PipelineCreateInfo;
 
     class Deferred : public IRenderComponent
     {
@@ -58,6 +60,8 @@ namespace pe
 
         void EndPass(CommandBuffer *cmd);
 
+        RenderPass *GetRenderPassModels() { return m_renderPassModels; }
+
     private:
         void CreateGBufferFrameBuffers();
 
@@ -75,6 +79,8 @@ namespace pe
         Buffer *uniform;
         Descriptor *DSComposition;
         Pipeline *pipelineComposition;
+        RenderPass *m_renderPassModels;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfoComposition;
         Image *ibl_brdf_lut;
         Image *normalRT;
         Image *albedoRT;

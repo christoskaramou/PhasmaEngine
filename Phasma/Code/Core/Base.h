@@ -68,6 +68,9 @@ namespace pe
 
     class ApiHandleBase
     {
+    public:
+        void *Get() const { return m_handle; }
+
     protected:
         ApiHandleBase(void *handle) : m_handle{handle} {}
         virtual ~ApiHandleBase() {}
@@ -83,8 +86,8 @@ namespace pe
         static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle type is not a pointer");
 
     public:
-        using BaseVK = VK_TYPE;
-        using BaseDX = DX_TYPE;
+        using VKType = VK_TYPE;
+        using DXType = DX_TYPE;
 
         ApiHandle() : ApiHandleBase(nullptr) {}
         ApiHandle(const VK_TYPE &handle) : ApiHandleBase(handle) {}

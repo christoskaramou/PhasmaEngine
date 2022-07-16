@@ -43,7 +43,7 @@ namespace pe
         ~GUI();
 
         // Data
-        static inline float renderTargetsScale = 0.7071f;
+        static inline float renderTargetsScale = 0.5f;
         static inline bool use_IBL = true;
         static inline bool use_Volumetric_lights = false;
         static inline int volumetric_steps = 32;
@@ -56,11 +56,10 @@ namespace pe
         static inline bool use_FSR2 = true;
         static inline float FSR2_JitterScaleX = 1.0f;
         static inline float FSR2_JitterScaleY = 1.0f;
-        static inline float FSR2_MotionScaleX = 0.5f;
-        static inline float FSR2_MotionScaleY = 0.5f;
-        static inline float FSR2_ProjScaleX = 0.25f;
-        static inline float FSR2_ProjScaleY = 0.25f;
-        static inline float FSR2_Sharpness = 0.0f;
+        static inline float FSR2_MotionScaleX = 1.0f;
+        static inline float FSR2_MotionScaleY = 1.0f;
+        static inline float FSR2_ProjScaleX = 1.0f;
+        static inline float FSR2_ProjScaleY = 1.0f;
         static inline bool use_DOF = false;
         static inline float DOF_focus_scale = 15.0f;
         static inline float DOF_blur_range = 5.0f;
@@ -144,7 +143,7 @@ namespace pe
         bool show_demo_window = false;
         bool render = true;
         std::string name;
-        RenderPass *renderPass;
-        std::vector<FrameBuffer *> framebuffers;
+        RenderPassHandle renderPass;
+        std::vector<FrameBufferHandle> framebuffers;
     };
 }

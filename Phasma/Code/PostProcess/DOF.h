@@ -29,6 +29,7 @@ namespace pe
     class CommandBuffer;
     class Pipeline;
     class Camera;
+    class PipelineCreateInfo;
 
     class DOF : public IRenderComponent
     {
@@ -54,6 +55,7 @@ namespace pe
         void Destroy() override;
 
         Pipeline *pipeline;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfo;
         Descriptor *DSet;
         Image *frameImage;
         Image *displayRT;

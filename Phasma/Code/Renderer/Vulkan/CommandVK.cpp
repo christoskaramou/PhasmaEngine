@@ -184,6 +184,103 @@ namespace pe
         dst->BlitImage(this, src, region, filter);
     }
 
+    size_t CommandBuffer::GetHash(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo)
+    {
+        Hash hash;
+        hash.Combine(count);
+        for (uint32_t i = 0; i < count; i++)
+        {
+            hash.Combine(reinterpret_cast<std::intptr_t>(colorInfos[i].image));
+            hash.Combine(static_cast<uint32_t>(colorInfos[i].loadOp));
+            hash.Combine(static_cast<uint32_t>(colorInfos[i].storeOp));
+        }
+        if (depthInfo)
+        {
+            hash.Combine(reinterpret_cast<std::intptr_t>(depthInfo->image));
+            hash.Combine(static_cast<uint32_t>(depthInfo->loadOp));
+            hash.Combine(static_cast<uint32_t>(depthInfo->storeOp));
+        }
+
+        return hash;
+    }
+
+    RenderPass *CommandBuffer::GetRenderPass(size_t hash,
+                                             uint32_t count,
+                                             AttachmentInfo *colorInfos,
+                                             AttachmentInfo *depthInfo)
+    {
+        if (s_renderPasses.find(hash) == s_renderPasses.end())
+        {
+            std::vector<Attachment> attachements{};
+            for (uint32_t i = 0; i < count; i++)
+            {
+                Attachment attachement{};
+                attachement.format = colorInfos[i].image->imageInfo.format;
+                attachement.samples = colorInfos[i].image->imageInfo.samples;
+                attachement.loadOp = colorInfos[i].loadOp;
+                attachement.storeOp = colorInfos[i].storeOp;
+                attachement.finalLayout = colorInfos[i].image->GetLayout(0, 0);
+                attachements.push_back(attachement);
+            }
+
+            if (depthInfo)
+            {
+                Attachment attachement{};
+                attachement.format = depthInfo->image->imageInfo.format;
+                attachement.samples = depthInfo->image->imageInfo.samples;
+                attachement.loadOp = depthInfo->loadOp;
+                attachement.storeOp = depthInfo->storeOp;
+                attachement.finalLayout = depthInfo->image->GetLayout(0, 0);
+                attachements.push_back(attachement);
+            }
+
+            std::string name = "Auto_Gen_RenderPass_" + std::to_string(s_renderPasses.size());
+            s_renderPasses[hash] = RenderPass::Create(static_cast<uint32_t>(attachements.size()), attachements.data(), name);
+        }
+
+        return s_renderPasses[hash];
+    }
+
+    FrameBuffer *CommandBuffer::GetFrameBuffer(size_t hash,
+                                               uint32_t count,
+                                               AttachmentInfo *colorInfos,
+                                               AttachmentInfo *depthInfo,
+                                               RenderPass *renderPass)
+    {
+        if (s_frameBuffers.find(hash) == s_frameBuffers.end())
+        {
+            uint32_t width;
+            uint32_t height;
+            if (count > 0)
+            {
+                width = colorInfos[0].image->imageInfo.width;
+                height = colorInfos[0].image->imageInfo.height;
+            }
+            else
+            {
+                width = depthInfo->image->imageInfo.width;
+                height = depthInfo->image->imageInfo.height;
+            }
+
+            std::vector<ImageViewHandle> views{};
+            for (uint32_t i = 0; i < count; i++)
+                views.push_back(colorInfos[i].image->view);
+
+            if (depthInfo)
+                views.push_back(depthInfo->image->view);
+
+            std::string name = "Auto_Gen_FrameBuffer_" + std::to_string(s_frameBuffers.size());
+            s_frameBuffers[hash] = FrameBuffer::Create(width,
+                                                       height,
+                                                       static_cast<uint32_t>(views.size()),
+                                                       views.data(),
+                                                       renderPass,
+                                                       name);
+        }
+
+        return s_frameBuffers[hash];
+    }
+
     void CommandBuffer::BeginPass(RenderPass *pass, FrameBuffer *frameBuffer)
     {
         std::vector<VkClearValue> clearValues(pass->attachments.size());
@@ -207,8 +304,20 @@ namespace pe
         vkCmdBeginRenderPass(m_handle, &rpi, VK_SUBPASS_CONTENTS_INLINE);
     }
 
-    void CommandBuffer::BeginPass(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo)
+    void CommandBuffer::BeginPass(uint32_t count,
+                                  AttachmentInfo *colorInfos,
+                                  AttachmentInfo *depthInfo,
+                                  RenderPass **outRenderPass)
     {
+#if (USE_DYNAMIC_RENDERING == 0)
+        Hash hash = GetHash(count, colorInfos, depthInfo);
+        RenderPass *rp = GetRenderPass(hash, count, colorInfos, depthInfo);
+        FrameBuffer *fb = GetFrameBuffer(hash, count, colorInfos, depthInfo, rp);
+        
+        *outRenderPass = rp;
+
+        BeginPass(rp, fb);
+#else
         m_dynamicPass = true;
 
         std::vector<VkRenderingAttachmentInfo> vkColorInfos(count);
@@ -260,6 +369,7 @@ namespace pe
         renderingInfo.pStencilAttachment = depthInfo ? &vkDepthInfo : nullptr;
 
         vkCmdBeginRendering(m_handle, &renderingInfo);
+#endif
     }
 
     void CommandBuffer::EndPass()
@@ -273,9 +383,86 @@ namespace pe
             vkCmdEndRenderPass(m_handle);
     }
 
+    Pipeline *CommandBuffer::GetPipeline(const PipelineCreateInfo &pipelineInfo)
+    {
+        Hash hash;
+
+        if (pipelineInfo.pVertShader)
+            hash.Combine(pipelineInfo.pVertShader->GetCache().GetHash());
+
+        if (pipelineInfo.pFragShader)
+            hash.Combine(pipelineInfo.pFragShader->GetCache().GetHash());
+
+        if (pipelineInfo.pCompShader)
+            hash.Combine(pipelineInfo.pCompShader->GetCache().GetHash());
+
+        for (auto &binding : pipelineInfo.vertexInputBindingDescriptions)
+        {
+            hash.Combine(binding.binding);
+            hash.Combine(binding.stride);
+            hash.Combine(static_cast<int>(binding.inputRate));
+        }
+
+        for (auto &attribute : pipelineInfo.vertexInputAttributeDescriptions)
+        {
+            hash.Combine(attribute.location);
+            hash.Combine(attribute.binding);
+            hash.Combine(static_cast<int>(attribute.format));
+            hash.Combine(attribute.offset);
+        }
+
+        hash.Combine(pipelineInfo.width);
+        hash.Combine(pipelineInfo.height);
+        hash.Combine(static_cast<int>(pipelineInfo.cullMode));
+
+        for (auto &attachment : pipelineInfo.colorBlendAttachments)
+        {
+            hash.Combine(attachment.blendEnable);
+            hash.Combine(static_cast<int>(attachment.srcColorBlendFactor));
+            hash.Combine(static_cast<int>(attachment.dstColorBlendFactor));
+            hash.Combine(static_cast<int>(attachment.colorBlendOp));
+            hash.Combine(static_cast<int>(attachment.srcAlphaBlendFactor));
+            hash.Combine(static_cast<int>(attachment.dstAlphaBlendFactor));
+            hash.Combine(static_cast<int>(attachment.alphaBlendOp));
+            hash.Combine(attachment.colorWriteMask.Value());
+        }
+
+        for (auto &dynamic : pipelineInfo.dynamicStates)
+            hash.Combine(static_cast<int>(dynamic));
+
+        hash.Combine(pipelineInfo.pushConstantStage.Value());
+        hash.Combine(pipelineInfo.pushConstantSize);
+
+        for (auto &layout : pipelineInfo.descriptorSetLayouts)
+            hash.Combine(reinterpret_cast<intptr_t>(layout));
+
+        if (pipelineInfo.renderPass)
+            hash.Combine(reinterpret_cast<intptr_t>(pipelineInfo.renderPass));
+
+        hash.Combine(pipelineInfo.dynamicColorTargets);
+        for (uint32_t i = 0; i < pipelineInfo.dynamicColorTargets; i++)
+            hash.Combine(static_cast<int>(pipelineInfo.colorFormats[i]));
+        if (pipelineInfo.depthFormat)
+            hash.Combine(static_cast<int>(*pipelineInfo.depthFormat));
+
+        hash.Combine(reinterpret_cast<intptr_t>(pipelineInfo.pipelineCache.Get()));
+
+        if (s_pipelines.find(hash) == s_pipelines.end())
+            s_pipelines[hash] = Pipeline::Create(pipelineInfo);
+
+        return s_pipelines[hash];
+    }
+
     void CommandBuffer::BindPipeline(Pipeline *pipeline)
     {
         vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->Handle());
+    }
+
+    void CommandBuffer::BindPipeline(const PipelineCreateInfo &pipelineInfo, Pipeline **outPipeline)
+    {
+        Pipeline *pipeline = GetPipeline(pipelineInfo);
+        *outPipeline = pipeline;
+        BindPipeline(pipeline);
     }
 
     void CommandBuffer::BindComputePipeline(Pipeline *pipeline)

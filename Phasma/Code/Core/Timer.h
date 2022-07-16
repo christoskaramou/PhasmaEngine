@@ -106,7 +106,7 @@ namespace pe
     class GpuTimer : public IHandle<GpuTimer, QueryPoolHandle>
     {
     public:
-        GpuTimer();
+        GpuTimer(const std::string &name);
 
         ~GpuTimer();
 

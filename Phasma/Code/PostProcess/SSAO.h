@@ -30,10 +30,15 @@ namespace pe
     class Pipeline;
     class Buffer;
     class Camera;
+    class PipelineCreateInfo;
 
     class SSAO : public IRenderComponent
     {
     public:
+        SSAO();
+
+        ~SSAO();
+
         void Init() override;
 
         void CreatePipeline() override;
@@ -60,12 +65,19 @@ namespace pe
         void CreateBlurPipeline();
 
     public:
-        mat4 pvm[3];
+        struct UBO
+        {
+            mat4 projection;
+            mat4 view;
+            mat4 invProjection;
+        }ubo;
         Buffer *UB_Kernel;
         Buffer *UB_PVM;
         Image *noiseTex;
         Pipeline *pipeline;
         Pipeline *pipelineBlur;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfo;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfoBlur;
         Descriptor *DSet;
         Descriptor *DSBlur;
         Image *ssaoRT;
