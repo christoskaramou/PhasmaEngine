@@ -74,6 +74,8 @@ namespace pe
         static inline int modelItemSelected = -1;
         static inline Image *s_currRenderImage = nullptr;
         static inline std::vector<Image *> s_renderImages{};
+        static inline std::atomic_uint32_t loadingCurrent{};
+        static inline std::atomic_uint32_t loadingTotal{};
 
         void InitGUI(bool show = true);
 

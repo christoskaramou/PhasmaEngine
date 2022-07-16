@@ -335,13 +335,34 @@ namespace pe
             {
                 myMesh->indices.push_back(index);
             }
+
+            GUI::loadingCurrent++;
         }
+    }
+
+    void CountPrimitives(Microsoft::glTF::Document *document, const glTF::Node &node, uint32_t &count)
+    {
+        for (auto &child : node.children)
+            CountPrimitives(document, document->nodes.Get(child), count);
+
+        if (node.meshId.empty())
+            return;
+
+        const auto &mesh = document->meshes.Get(node.meshId);
+        for (const auto &primitive : mesh.primitives)
+            count++;
     }
 
     void Model::LoadModelGltf(CommandBuffer *cmd, const std::filesystem::path &file)
     {
         // reads and gets the document and resourceReader objects
         ReadGltf(file);
+
+        uint32_t count = 0;
+        for (auto &node : document->GetDefaultScene().nodes)
+            CountPrimitives(document, document->nodes.Get(node), count);
+        GUI::loadingCurrent = 0;
+        GUI::loadingTotal = count;
 
         for (auto &node : document->GetDefaultScene().nodes)
             LoadNode(cmd, nullptr, document->nodes.Get(node), file);

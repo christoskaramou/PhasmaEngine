@@ -14,12 +14,12 @@ namespace pe
         if (usage & BufferUsage::UniformBufferBit)
         {
             size = RHII.AlignUniform(size);
-            PE_ERROR_IF(size > RHII.GetMaxUniformBufferSize(), "Buffer size is too large");
+            PE_ERROR_IF(size > RHII.GetMaxUniformBufferSize(), "Buffer size is too big");
         }
         else if (usage & BufferUsage::StorageBufferBit)
         {
             size = RHII.AlignStorage(size);
-            PE_ERROR_IF(size > RHII.GetMaxStorageBufferSize(), "Buffer size is too large");
+            PE_ERROR_IF(size > RHII.GetMaxStorageBufferSize(), "Buffer size is too big");
         }
 
         this->size = size;

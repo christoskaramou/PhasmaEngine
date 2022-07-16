@@ -101,6 +101,9 @@ namespace pe
     {
         if (ImGui::MenuItem(menuLabel))
         {
+            if (s_modelLoading)
+                return;
+
             auto lambda = [dialogTitle, filter]()
             {
                 const char *result = tinyfd_openFileDialog(dialogTitle, "", static_cast<int>(filter.size()), filter.data(), "", 0);
@@ -191,9 +194,13 @@ namespace pe
             int x, y;
             const float topBarHeight = 16.f;
             SDL_GetWindowPosition(RHII.GetWindow(), &x, &y);
-            ImGui::SetNextWindowPos(ImVec2(x + WIDTH_f / 2, y + topBarHeight + HEIGHT_f / 2));
+            ImVec2 size(-0.001f, 25.f);
+            ImGui::SetNextWindowPos(ImVec2(x + WIDTH_f / 2 - 200.f, y + topBarHeight + HEIGHT_f / 2 - size.y / 2));
+            ImGui::SetNextWindowSize(ImVec2(400.f, 25.f));
             ImGui::Begin("Loading", &metrics_open, flags);
-            LoadingIndicatorCircle("Loading", radius, color, bdcolor, 10, 4.5f);
+            // LoadingIndicatorCircle("Loading", radius, color, bdcolor, 10, 4.5f);
+            const float progress = loadingCurrent / static_cast<float>(loadingTotal);
+            ImGui::ProgressBar(progress, size);
             ImGui::End();
         }
     }
