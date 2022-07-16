@@ -154,6 +154,9 @@ namespace pe
         Buffer *shadowsVertexBuffer;
         Buffer *indexBuffer;
         uint32_t numberOfVertices = 0, numberOfIndices = 0;
+        
+        std::shared_ptr<PipelineCreateInfo> pipelineInfoGBuffer;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfoShadows;
 
     private:
         Image *m_normalRT;
@@ -163,9 +166,6 @@ namespace pe
         Image *m_emissiveRT;
         Pipeline *m_pipelineGBuffer;
         Pipeline *m_pipelineShadows;
-
-        std::shared_ptr<PipelineCreateInfo> pipelineInfoGBuffer;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfoShadows;
 
         struct Constants
         {

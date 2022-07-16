@@ -551,7 +551,7 @@ namespace pe
         cmd->EndDebugRegion();
     }
 
-    void Renderer::RecreatePipelines()
+    void Renderer::PollShaders()
     {
         RHII.WaitDeviceIdle();
 
@@ -564,32 +564,67 @@ namespace pe
         DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
-        Pipeline::Destroy(ssao.pipeline);
-        Pipeline::Destroy(ssao.pipelineBlur);
-        Pipeline::Destroy(ssr.pipeline);
-        Pipeline::Destroy(deferred.pipelineComposition);
-        Pipeline::Destroy(fxaa.pipeline);
-        Pipeline::Destroy(dof.pipeline);
-        Pipeline::Destroy(motionBlur.pipeline);
+        auto NeedsUpdate = [](std::shared_ptr<PipelineCreateInfo> info)
+        {
+            bool recreatePipeline = false;
 
-        deferred.CreatePipeline();
-        shadows.CreatePipeline();
-        ssao.CreatePipeline();
-        ssr.CreatePipeline();
-        fxaa.CreatePipeline();
-        bloom.CreatePipeline();
-        dof.CreatePipeline();
-        motionBlur.CreatePipeline();
+            // PollEvent simply catches a pushed event pushed from FileWatcher
+            if (info->pCompShader && EventSystem::PollEvent(info->pCompShader->GetPathID()))
+                recreatePipeline = true;
+            if (info->pVertShader && EventSystem::PollEvent(info->pVertShader->GetPathID()))
+                recreatePipeline = true;
+            if (info->pFragShader && EventSystem::PollEvent(info->pFragShader->GetPathID()))
+                recreatePipeline = true;
+
+            if (recreatePipeline)
+            {
+                Shader::Destroy(info->pCompShader);
+                Shader::Destroy(info->pVertShader);
+                Shader::Destroy(info->pFragShader);
+
+                return true;
+            }
+
+            return false;
+        };
+
+        if (NeedsUpdate(deferred.pipelineInfoComposition))
+            deferred.CreatePipeline();
+
+        if (NeedsUpdate(ssao.pipelineInfo))
+            ssao.CreateSSAOPipeline();
+        if (NeedsUpdate(ssao.pipelineInfoBlur))
+            ssao.CreateBlurPipeline();
+
+        if (NeedsUpdate(ssr.pipelineInfo))
+            ssr.CreatePipeline();
+
+        if (NeedsUpdate(fxaa.pipelineInfo))
+            fxaa.CreatePipeline();
+
+        if (NeedsUpdate(bloom.pipelineInfoBF))
+            bloom.CreateBrightFilterPipeline();
+        if (NeedsUpdate(bloom.pipelineInfoGBH))
+            bloom.CreateGaussianBlurHorizontaPipeline();
+        if (NeedsUpdate(bloom.pipelineInfoGBV))
+            bloom.CreateGaussianBlurVerticalPipeline();
+        if (NeedsUpdate(bloom.pipelineInfoCombine))
+            bloom.CreateCombinePipeline();
+
+        if (NeedsUpdate(dof.pipelineInfo))
+            dof.CreatePipeline();
+
+        if (NeedsUpdate(motionBlur.pipelineInfo))
+            motionBlur.CreatePipeline();
 
         for (auto &model : Model::models)
         {
-            Pipeline::Destroy(model.GetPipelineGBuffer());
-            Pipeline::Destroy(model.GetPipelineShadows());
-            model.CreatePipelineGBuffer();
-            model.CreatePipelineShadows();
-        }
+            if (NeedsUpdate(model.pipelineInfoGBuffer))
+                model.CreatePipelineGBuffer();
 
-        CONTEXT->GetSystem<CameraSystem>()->GetCamera(0)->ReCreateComputePipelines();
+            if (NeedsUpdate(model.pipelineInfoShadows))
+                model.CreatePipelineShadows();
+        }
     }
 }
 #endif

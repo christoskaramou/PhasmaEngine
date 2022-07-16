@@ -86,7 +86,7 @@ namespace pe
         void WaitDeviceIdle();
 
         void NextFrame() { m_frameCounter++; }
-        size_t GetFrameCounter() { return m_frameCounter; }
+        uint32_t GetFrameCounter() { return m_frameCounter; }
         uint32_t GetFrameIndex() { return m_frameCounter % SWAPCHAIN_IMAGES; }
         // For dynamic uniform buffers that are dependent on the frame index
         uint32_t GetFrameDynamicOffset(size_t size, uint32_t frameIndex) { return static_cast<uint32_t>(size / SWAPCHAIN_IMAGES) * frameIndex; }
@@ -151,7 +151,7 @@ namespace pe
         Surface *m_surface;
         Swapchain *m_swapchain;
 
-        size_t m_frameCounter;
+        uint32_t m_frameCounter;
 
         std::unordered_map<size_t, UniformBufferInfo> m_uniformBuffers;
         std::unordered_map<size_t, UniformImageInfo> m_uniformImages;

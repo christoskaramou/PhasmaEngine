@@ -100,7 +100,7 @@ namespace pe
 
         void BlitToSwapchain(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
 
-        void RecreatePipelines();
+        void PollShaders();
 
     protected:
         static void CheckModelsQueue();

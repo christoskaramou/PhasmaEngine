@@ -57,7 +57,6 @@ namespace pe
 
     void DOF::CreatePipeline()
     {
-        //PipelineCreateInfo info{};
         pipelineInfo = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfo;
 
@@ -72,11 +71,6 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &displayRT->imageInfo.format;
         info.name = "dof_pipeline";
-
-        // pipeline = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
-        // Shader::Destroy(info.pFragShader);
     }
 
     void DOF::CreateUniforms(CommandBuffer *cmd)

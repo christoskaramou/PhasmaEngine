@@ -58,8 +58,8 @@ namespace pe
         FFX_ASSERT(errorCode == FFX_OK);
 
         m_contextDescription->device = ffxGetDeviceVK(RHII.GetDevice());
-        m_contextDescription->maxRenderSize.width = m_viewportRT->imageInfo.width;
-        m_contextDescription->maxRenderSize.height = m_viewportRT->imageInfo.height;
+        m_contextDescription->maxRenderSize.width = m_display->imageInfo.width;   // m_viewportRT->imageInfo.width;
+        m_contextDescription->maxRenderSize.height = m_display->imageInfo.height; // m_viewportRT->imageInfo.height;
         m_contextDescription->displaySize.width = m_display->imageInfo.width;
         m_contextDescription->displaySize.height = m_display->imageInfo.height;
         m_contextDescription->flags = FFX_FSR2_ENABLE_DEPTH_INVERTED |
@@ -177,8 +177,12 @@ namespace pe
 
     void SuperResolution::Resize(uint32_t width, uint32_t height)
     {
-        Destroy();
-        Init();
+        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+
+        m_viewportRT = rs->GetRenderTarget("viewport");
+        m_velocityRT = rs->GetRenderTarget("velocity");
+        m_depth = rs->GetDepthTarget("depth");
+        m_display = rs->GetRenderTarget("display");
     }
 
     void SuperResolution::Destroy()
@@ -188,11 +192,8 @@ namespace pe
 
     void SuperResolution::GenerateJitter()
     {
-        static uint32_t index = 0;
-        index++;
-
-        int32_t phaseCount = ffxFsr2GetJitterPhaseCount(m_contextDescription->maxRenderSize.width, m_contextDescription->displaySize.width);
-        ffxFsr2GetJitterOffset(&m_jitter.x, &m_jitter.y, index, phaseCount);
+        int32_t phaseCount = ffxFsr2GetJitterPhaseCount(m_viewportRT->imageInfo.width, m_display->imageInfo.width);
+        ffxFsr2GetJitterOffset(&m_jitter.x, &m_jitter.y, RHII.GetFrameCounter(), phaseCount);
 
         m_projectionJitter.x = GUI::FSR2_ProjScaleX * 2.0f * m_jitter.x / m_viewportRT->width_f;
         m_projectionJitter.y = GUI::FSR2_ProjScaleY * 2.0f * m_jitter.y / m_viewportRT->height_f;

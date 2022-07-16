@@ -61,7 +61,6 @@ namespace pe
 
     void SSR::CreatePipeline()
     {
-        //PipelineCreateInfo info{};
         pipelineInfo = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfo;
 
@@ -74,11 +73,6 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &ssrRT->imageInfo.format;
         info.name = "ssr_pipeline";
-
-        // pipeline = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
-        // Shader::Destroy(info.pFragShader);
     }
 
     void SSR::CreateUniforms(CommandBuffer *cmd)

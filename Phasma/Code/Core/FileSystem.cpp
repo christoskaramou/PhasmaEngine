@@ -164,6 +164,33 @@ namespace pe
         };
 
         SyncQueue<Launch::AsyncNoWait>::Request(watchLambda);
+
+        // Watch Shaders folder files
+        for (auto &file : std::filesystem::recursive_directory_iterator(Path::Assets + "Shaders"))
+        {
+            std::string filePath = file.path().string();
+            std::replace(filePath.begin(), filePath.end(), '\\', '/');
+
+            // The event id will match with the path id from the shader when created
+            EventID event(filePath);
+            EventSystem::RegisterEvent(event);
+
+            auto callback = [event]()
+            {
+                // Single event to notify shader changed events
+                // It will trigger Renderer::PollShaders
+                // Polled in Window::ProcessEvents
+                EventSystem::PushEvent(EventCompileShaders);
+
+                // After Window::ProcessEvents, the specific shader event accurs
+                // Easy to poll, we have PipelineCreateInfo::Shader::GetPathID() == EventID
+                // Polled in Renderer::PollShaders
+                EventSystem::PushEvent(event);
+            };
+
+            // Add the callback for this shader file
+            Add(filePath, callback);
+        }
     }
 
     FileWatcher::FileWatcher(const std::string &file, Func &&callback)

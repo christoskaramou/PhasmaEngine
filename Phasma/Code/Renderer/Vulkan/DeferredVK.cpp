@@ -83,7 +83,6 @@ namespace pe
             Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
             Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
 
-        //PipelineCreateInfo info{};
         pipelineInfoComposition = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoComposition;
 
@@ -100,11 +99,6 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &viewportRT->imageInfo.format;
         info.name = "composition_pipeline";
-
-        // pipelineComposition = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
-        // Shader::Destroy(info.pFragShader);
     }
 
     void Deferred::CreateUniforms(CommandBuffer *cmd)

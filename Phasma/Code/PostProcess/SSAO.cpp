@@ -66,7 +66,6 @@ namespace pe
 
     void SSAO::CreateSSAOPipeline()
     {
-        //PipelineCreateInfo info{};
         pipelineInfo = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfo;
 
@@ -79,16 +78,10 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &ssaoRT->imageInfo.format;
         info.name = "ssao_pipeline";
-
-        // pipeline = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
-        // Shader::Destroy(info.pFragShader);
     }
 
     void SSAO::CreateBlurPipeline()
     {
-        //PipelineCreateInfo info{};
         pipelineInfoBlur = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoBlur;
 
@@ -101,11 +94,6 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &ssaoBlurRT->imageInfo.format;
         info.name = "ssaoBlur_pipeline";
-
-        // pipelineBlur = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
-        // Shader::Destroy(info.pFragShader);
     }
 
     void SSAO::CreateUniforms(CommandBuffer *cmd)

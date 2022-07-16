@@ -55,6 +55,8 @@ namespace pe
         void Destroy() override;
 
     private:
+        friend class Renderer;
+        
         void CreateBrightFilterPipeline();
 
         void CreateGaussianBlurHorizontaPipeline();

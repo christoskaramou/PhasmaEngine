@@ -100,6 +100,8 @@ namespace pe
 
         inline ShaderCache &GetCache() { return m_cache; }
 
+        inline StringHash GetPathID() { return m_pathID; }
+
     private:
         std::string PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions &options);
 
@@ -117,6 +119,7 @@ namespace pe
         shaderc::Compiler m_compiler;
         std::vector<Define> defines{};
         std::vector<uint32_t> m_spirv{};
+        StringHash m_pathID;
 
         inline static std::vector<Define> m_globalDefines{};
     };

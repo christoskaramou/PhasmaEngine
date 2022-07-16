@@ -68,7 +68,6 @@ namespace pe
 
     void Bloom::CreateBrightFilterPipeline()
     {
-        //PipelineCreateInfo info{};
         pipelineInfoBF = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoBF;
 
@@ -83,16 +82,10 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &brightFilterRT->imageInfo.format;
         info.name = "BrightFilter_pipeline";
-
-        // pipelineBrightFilter = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
-        // Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateGaussianBlurHorizontaPipeline()
     {
-        //PipelineCreateInfo info{};
         pipelineInfoGBH = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoGBH;
 
@@ -107,16 +100,10 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &gaussianBlurHorizontalRT->imageInfo.format;
         info.name = "GaussianBlurHorizontal_pipeline";
-
-        // pipelineGaussianBlurHorizontal = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
-        // Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateGaussianBlurVerticalPipeline()
     {
-        //PipelineCreateInfo info{};
         pipelineInfoGBV = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoGBV;
 
@@ -131,16 +118,10 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &gaussianBlurVerticalRT->imageInfo.format;
         info.name = "GaussianBlurVertical_pipeline";
-
-        // pipelineGaussianBlurVertical = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
-        // Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateCombinePipeline()
     {
-        //PipelineCreateInfo info{};
         pipelineInfoCombine = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoCombine;
 
@@ -155,11 +136,6 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &displayRT->imageInfo.format;
         info.name = "BloomCombine_pipeline";
-
-        // pipelineCombine = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
-        // Shader::Destroy(info.pFragShader);
     }
 
     void Bloom::CreateUniforms(CommandBuffer *cmd)

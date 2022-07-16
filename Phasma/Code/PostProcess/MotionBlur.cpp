@@ -58,7 +58,6 @@ namespace pe
 
     void MotionBlur::CreatePipeline()
     {
-        //PipelineCreateInfo info{};
         pipelineInfo = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfo;
 
@@ -73,11 +72,6 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &displayRT->imageInfo.format;
         info.name = "motionBlur_pipeline";
-
-        // pipeline = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
-        // Shader::Destroy(info.pFragShader);
     }
 
     void MotionBlur::CreateUniforms(CommandBuffer *cmd)

@@ -78,6 +78,8 @@ namespace pe
         if (path.find(Path::Assets) == std::string::npos)
             path = Path::Assets + info.sourcePath;
 
+        m_pathID = StringHash(path);
+
         m_shaderStage = info.shaderStage;
 
         Hash definesHash;
@@ -134,16 +136,6 @@ namespace pe
 
         if (m_spirv.size() > 0)
             m_reflection.Init(this);
-
-        auto modifiedCallback = []()
-        { EventSystem::PushEvent(EventCompileShaders); };
-
-        // Watch the file for changes
-        FileWatcher::Add(m_cache.GetSourcePath(), modifiedCallback);
-
-        // Watch included files also
-        for (const std::string &included_file : m_cache.GetIncludes())
-            FileWatcher::Add(included_file, modifiedCallback);
     }
 
     Shader::~Shader()

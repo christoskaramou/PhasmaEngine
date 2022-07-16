@@ -863,7 +863,6 @@ namespace pe
 
         Format depthFormat = RHII.GetDepthFormat();
 
-        // PipelineCreateInfo info{};
         pipelineInfoGBuffer = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoGBuffer;
 
@@ -891,11 +890,6 @@ namespace pe
         info.colorFormats = colorformats;
         info.depthFormat = &depthFormat;
         info.name = "gbuffer_pipeline";
-
-        // m_pipelineGBuffer = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
-        // Shader::Destroy(info.pFragShader);
     }
 
     void Model::CreatePipelineShadows()
@@ -903,7 +897,6 @@ namespace pe
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
         Format depthFormat = RHII.GetDepthFormat();
 
-        // PipelineCreateInfo info{};
         pipelineInfoShadows = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoShadows;
 
@@ -917,10 +910,6 @@ namespace pe
         info.descriptorSetLayouts = {uniformBuffer.descriptor->GetLayout()};
         info.depthFormat = &depthFormat;
         info.name = "shadows_pipeline";
-
-        // m_pipelineShadows = Pipeline::Create(info);
-
-        // Shader::Destroy(info.pVertShader);
     }
 
     void CullPrimitiveAsync(Model *model, Mesh *mesh, const Camera &camera, uint32_t index)

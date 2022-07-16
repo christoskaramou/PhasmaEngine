@@ -143,7 +143,7 @@ namespace pe
             camera_main->Move(CameraDirection::RIGHT, velocity);
 
         if (EventSystem::PollEvent(EventCompileShaders))
-            renderer->RecreatePipelines();
+            renderer->PollShaders();
 
         if (EventSystem::PollEvent(EventResize))
         {

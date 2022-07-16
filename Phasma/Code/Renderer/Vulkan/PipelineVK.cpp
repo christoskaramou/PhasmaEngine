@@ -65,6 +65,16 @@ namespace pe
 
     PipelineCreateInfo::~PipelineCreateInfo()
     {
+        if (pCompShader)
+            Shader::Destroy(pCompShader);
+        if (pVertShader)
+            Shader::Destroy(pVertShader);
+        if (pFragShader)
+            Shader::Destroy(pFragShader);
+
+        pCompShader = nullptr;
+        pVertShader = nullptr;
+        pFragShader = nullptr;
     }
 
     Pipeline::Pipeline(const PipelineCreateInfo &info)
