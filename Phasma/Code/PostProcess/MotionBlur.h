@@ -41,5 +41,7 @@ namespace pe
         Image *displayRT;
         Image *velocityRT;
         Image *depth;
+        
+        vec4 pushConstData;
     };
 }

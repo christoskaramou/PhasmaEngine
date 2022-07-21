@@ -111,16 +111,15 @@ namespace pe
     {
         if (GUI::show_motionBlur)
         {
+            pushConstData[0] = 1.f / static_cast<float>(FrameTimer::Instance().GetDelta());
+            pushConstData[1] = GUI::motionBlur_strength;
+            pushConstData[2] = camera->prevProjJitter.x - camera->projJitter.x;
+            pushConstData[3] = camera->prevProjJitter.y - camera->projJitter.y;
         }
     }
 
     void MotionBlur::Draw(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        const vec4 values{
-            1.f / static_cast<float>(FrameTimer::Instance().GetDelta()),
-            0.f, // sin(static_cast<float>(FrameTimer::Instance().Count()) * 0.125f),
-            GUI::motionBlur_strength,
-            0.f};
 
         cmd->BeginDebugRegion("MotionBlur");
         // Copy RT
@@ -133,7 +132,7 @@ namespace pe
         cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         // Output
         cmd->ImageBarrier(displayRT, ImageLayout::ColorAttachment);
-        
+
         AttachmentInfo info{};
         info.image = displayRT;
         info.initialLayout = displayRT->GetCurrentLayout();
@@ -143,7 +142,7 @@ namespace pe
         cmd->BindPipeline(*pipelineInfo, &pipeline);
         cmd->SetViewport(0.f, 0.f, displayRT->width_f, displayRT->height_f);
         cmd->SetScissor(0, 0, displayRT->imageInfo.width, displayRT->imageInfo.height);
-        cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, sizeof(vec4), &values);
+        cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, sizeof(vec4), &pushConstData);
         cmd->BindDescriptors(pipeline, 1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

@@ -15,16 +15,17 @@ const int max_samples = 16;
 
 void main()
 {
-    vec2 outUv;
-    float depth = DilateDepth3X3_UV(depthSampler, inUV, outUv);
+    float depth = texture(depthSampler, inUV).x;
     if (depth == 0.0)
     {
         outColor = texture(frameSampler, inUV);
         return;
     }
 
+    vec2 outUv;
+    DilateDepth3X3_UV(depthSampler, inUV, outUv);
     vec2 velocity = texture(velocitySampler, outUv).xy;
-    velocity *= pushConst.values.z; // strength
+    velocity *= pushConst.values.y; // strength
     velocity *= pushConst.values.x; // fix for low and high fps giving different velocities
     velocity *= 0.01666666; // scale the effect 1/60
 

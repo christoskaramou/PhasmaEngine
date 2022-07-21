@@ -49,7 +49,7 @@ namespace pe
         static inline bool use_tonemap = false;
         static inline bool use_compute = false;
         static inline float Bloom_exposure = 3.5f;
-        static inline bool show_motionBlur = false;
+        static inline bool show_motionBlur = true;
         static inline float motionBlur_strength = 1.0f;
         static inline bool randomize_lights = false;
         static inline float lights_intensity = 10.0f;
