@@ -68,22 +68,35 @@ namespace pe
 
         m_variableCount = 1;
 
+        bool allowAfterBindUpdate = true;
+        for (int i = 0; i < bindings.size(); i++)
+        {
+            if (bindings[i].descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT ||
+                bindings[i].descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
+                bindings[i].descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+            {
+                allowAfterBindUpdate = false;
+                break;
+            }
+        }
+
         // Bindings flags
         std::vector<VkDescriptorBindingFlags> bindingFlags(bindings.size());
         for (int i = 0; i < bindings.size(); i++)
         {
+            bindingFlags[i] = 0;
+
+            if (allowAfterBindUpdate)
+                bindingFlags[i] |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+
             if (bindings[i].descriptorCount > 1)
             {
                 // Note: As for now, there can be only one unbound array in a descriptor set and it must be the last binding
                 // I think this is a Vulkan limitation
                 if (i != bindings.size() - 1)
                     PE_ERROR("DescriptorLayout: An unbound array must be the last binding");
-                bindingFlags[i] = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+                bindingFlags[i] |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
                 m_variableCount = bindings[i].descriptorCount;
-            }
-            else
-            {
-                bindingFlags[i] = 0;
             }
         }
 
@@ -99,6 +112,8 @@ namespace pe
         dslci.bindingCount = static_cast<uint32_t>(bindings.size());
         dslci.pBindings = bindings.data();
         dslci.pNext = &layoutBindingFlags;
+        if (allowAfterBindUpdate)
+            dslci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 
         VkDescriptorSetLayout layout;
         PE_CHECK(vkCreateDescriptorSetLayout(RHII.GetDevice(), &dslci, nullptr, &layout));
@@ -132,7 +147,7 @@ namespace pe
             typeCounts[info->bindingInfos[i].type]++;
         }
 
-        // Create pool sizes typeCounts above 
+        // Create pool sizes typeCounts above
         std::vector<DescriptorPoolSize> poolSizes(typeCounts.size());
         uint32_t i = 0;
         for (auto const &[type, count] : typeCounts)
