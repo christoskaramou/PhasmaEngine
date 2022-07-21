@@ -36,13 +36,13 @@ namespace pe
         depth = rs->GetDepthTarget("depth");
     }
 
-    void SSAO::CreatePipeline()
+    void SSAO::UpdatePipelineInfo()
     {
-        CreateSSAOPipeline();
-        CreateBlurPipeline();
+        UpdatePipelineInfoSSAO();
+        UpdatePipelineInfoBlur();
     }
 
-    void SSAO::CreateSSAOPipeline()
+    void SSAO::UpdatePipelineInfoSSAO()
     {
         pipelineInfo = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfo;
@@ -58,7 +58,7 @@ namespace pe
         info.name = "ssao_pipeline";
     }
 
-    void SSAO::CreateBlurPipeline()
+    void SSAO::UpdatePipelineInfoBlur()
     {
         pipelineInfoBlur = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoBlur;
@@ -258,6 +258,9 @@ namespace pe
 
         AttachmentInfo info{};
         info.image = ssaoRT;
+        info.initialLayout = ssaoRT->GetCurrentLayout();
+        info.finalLayout = ImageLayout::ColorAttachment;
+
         cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
         cmd->BindPipeline(*pipelineInfo, &pipeline);
         cmd->SetViewport(0.f, 0.f, ssaoRT->width_f, ssaoRT->height_f);
@@ -275,6 +278,8 @@ namespace pe
         cmd->ImageBarrier(ssaoBlurRT, ImageLayout::ColorAttachment);
 
         info.image = ssaoBlurRT;
+        info.initialLayout = ssaoBlurRT->GetCurrentLayout();
+
         cmd->BeginPass(1, &info, nullptr, &pipelineInfoBlur->renderPass);
         cmd->BindPipeline(*pipelineInfoBlur, &pipelineBlur);
         cmd->SetViewport(0.f, 0.f, ssaoBlurRT->width_f, ssaoBlurRT->height_f);

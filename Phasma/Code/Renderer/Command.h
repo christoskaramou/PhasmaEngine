@@ -33,12 +33,14 @@ namespace pe
         Image *image = nullptr;
         AttachmentLoadOp loadOp = AttachmentLoadOp::Clear;
         AttachmentStoreOp storeOp = AttachmentStoreOp::Store;
+        ImageLayout initialLayout = ImageLayout::Undefined;
+        ImageLayout finalLayout = ImageLayout::ColorAttachment;
     };
 
     class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
     {
     public:
-        CommandPool(uint32_t familyId, const std::string &name);
+        CommandPool(uint32_t familyId, CommandPoolCreateFlags flags, const std::string &name);
 
         ~CommandPool();
 
@@ -52,6 +54,8 @@ namespace pe
 
         uint32_t GetFamilyId() const { return m_familyId; }
 
+        CommandPoolCreateFlags GetFlags() { return m_flags; }
+
     private:
         inline static std::vector<std::unordered_map<CommandPool *, CommandPool *>> s_availableCps{};
         inline static std::vector<std::unordered_map<CommandPool *, CommandPool *>> s_allCps{};
@@ -60,6 +64,7 @@ namespace pe
 
     private:
         uint32_t m_familyId;
+        CommandPoolCreateFlags m_flags;
     };
 
     class CommandBuffer : public IHandle<CommandBuffer, CommandBufferHandle>
@@ -73,18 +78,18 @@ namespace pe
 
         void End();
 
+        void Reset();
+
         void PipelineBarrier();
 
         void SetDepthBias(float constantFactor, float clamp, float slopeFactor);
 
         void BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter);
 
-        void BeginPass(RenderPass *pass, FrameBuffer *frameBuffer);
-
         void BeginPass(uint32_t count,
                        AttachmentInfo *colorInfos,
                        AttachmentInfo *depthInfo,
-                       RenderPass **outRenderPass);
+                       RenderPass **outRenderPass = nullptr);
 
         void EndPass();
 
@@ -176,23 +181,13 @@ namespace pe
 
         static void Return(CommandBuffer *cmd);
 
+        // Cached resourses functionality
+        static RenderPass *GetRenderPass(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo);
+        static FrameBuffer *GetFrameBuffer(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo, RenderPass *renderPass);
+        static Pipeline *GetPipeline(const PipelineCreateInfo &info);
+
     private:
         friend class Queue;
-
-        static size_t GetHash(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo);
-
-        static RenderPass *GetRenderPass(size_t hash,
-                                         uint32_t count,
-                                         AttachmentInfo *colorInfos,
-                                         AttachmentInfo *depthInfo);
-
-        static FrameBuffer *GetFrameBuffer(size_t hash,
-                                           uint32_t count,
-                                           AttachmentInfo *colorInfos,
-                                           AttachmentInfo *depthInfo,
-                                           RenderPass *renderPass);
-
-        static Pipeline *GetPipeline(const PipelineCreateInfo &info);
 
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
         inline static std::vector<std::map<size_t, CommandBuffer *>> s_allCmds{};

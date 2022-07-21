@@ -399,7 +399,7 @@ namespace pe
         model.CreateIndexBuffer(cmd);
         model.CreateUniforms();
         model.InitRenderTargets();
-        model.CreatePipeline();
+        model.UpdatePipelineInfo();
 
         model.render = true;
 
@@ -845,13 +845,13 @@ namespace pe
         uniformImages.descriptor = Descriptor::Create(&info, "model_images_descriptor");
     }
 
-    void Model::CreatePipeline()
+    void Model::UpdatePipelineInfo()
     {
-        CreatePipelineGBuffer();
-        CreatePipelineShadows();
+        UpdatePipelineInfoGBuffer();
+        UpdatePipelineInfoShadows();
     }
 
-    void Model::CreatePipelineGBuffer()
+    void Model::UpdatePipelineInfoGBuffer()
     {
         Format colorformats[]{
             m_normalRT->imageInfo.format,
@@ -891,7 +891,7 @@ namespace pe
         info.name = "gbuffer_pipeline";
     }
 
-    void Model::CreatePipelineShadows()
+    void Model::UpdatePipelineInfoShadows()
     {
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
         Format depthFormat = RHII.GetDepthFormat();

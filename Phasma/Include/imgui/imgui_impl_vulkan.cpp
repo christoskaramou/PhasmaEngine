@@ -1436,8 +1436,8 @@ void ImGui_ImplVulkanH_CreateWindowSwapChain(VkPhysicalDevice physical_device, V
         info.pAttachments = &attachment;
         info.subpassCount = 1;
         info.pSubpasses = &subpass;
-        info.dependencyCount = 1;
-        info.pDependencies = &dependency;
+        //info.dependencyCount = 1;
+        //info.pDependencies = &dependency;
         err = vkCreateRenderPass(device, &info, allocator, &wd->RenderPass);
         check_vk_result(err);
 

@@ -61,7 +61,7 @@ namespace pe
         }
     }
 
-    void Shadows::CreatePipeline()
+    void Shadows::UpdatePipelineInfo()
     {
     }
 
@@ -246,6 +246,8 @@ namespace pe
 
         AttachmentInfo depthInfo{};
         depthInfo.image = textures[cascade];
+        depthInfo.initialLayout = textures[cascade]->GetCurrentLayout();
+        depthInfo.finalLayout = ImageLayout::DepthStencilAttachment;
 
         cmd->BeginPass(0, nullptr, &depthInfo, &m_renderPassShadows);
         cmd->SetViewport(0.f, 0.f, textures[cascade]->width_f, textures[cascade]->height_f);

@@ -50,7 +50,7 @@ namespace pe
         m_memoryUsageInMegabytes = (memoryUsageAfter - memoryUsageBefore) * 0.000001f;
     }
 
-    void SuperResolution::CreatePipeline()
+    void SuperResolution::UpdatePipelineInfo()
     {
     }
 
@@ -149,6 +149,8 @@ namespace pe
         dd.cameraFovAngleVertical = camera.Fovy();
 
         PE_CHECK(ffxFsr2ContextDispatch(m_context.get(), &dd));
+
+        cmd->ImageBarrier(m_display, ImageLayout::ColorAttachment);
 
         cmd->EndDebugRegion();
     }

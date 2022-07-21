@@ -179,6 +179,9 @@ namespace pe
 
             cmd->BlitImage(m_viewportRT, m_displayRT, &region, Filter::Linear);
 
+            cmd->ImageBarrier(m_viewportRT, ImageLayout::ShaderReadOnly);
+            cmd->ImageBarrier(m_displayRT, ImageLayout::ColorAttachment);
+
             cmd->EndDebugRegion();
         }
 
@@ -205,15 +208,16 @@ namespace pe
             motionBlur.Draw(cmd, imageIndex);
             frameTimer.motionBlurStamp = GpuTimer::motionBlur->End();
         }
-
-        Image *finalImage = GUI::s_currRenderImage ? GUI::s_currRenderImage : m_displayRT;
-
-        BlitToSwapchain(cmd, finalImage, imageIndex);
+        else
+            int i = 0;
 
         // GUI
         GpuTimer::gui->Start(cmd);
         gui.Draw(cmd, imageIndex);
         frameTimer.guiStamp = GpuTimer::gui->End();
+
+        Image *finalImage = GUI::s_currRenderImage ? GUI::s_currRenderImage : m_displayRT;
+        BlitToSwapchain(cmd, finalImage, imageIndex);
 
         frameTimer.gpuStamp = GpuTimer::gpu->End();
 
@@ -493,10 +497,6 @@ namespace pe
 
         CONTEXT->GetSystem<PostProcessSystem>()->Resize(width, height);
 
-        gui.Destroy();
-        gui.CreateRenderPass();
-        gui.CreateFrameBuffers();
-
         for (auto &model : Model::models)
             model.Resize();
     }
@@ -509,8 +509,8 @@ namespace pe
         Viewport &vp = renderArea.viewport;
 
         ImageBlit region{};
-        region.srcOffsets[0] = Offset3D{static_cast<int32_t>(src->imageInfo.width), static_cast<int32_t>(src->imageInfo.height), 0};
-        region.srcOffsets[1] = Offset3D{0, 0, 1};
+        region.srcOffsets[0] = Offset3D{0, 0, 0};
+        region.srcOffsets[1] = Offset3D{static_cast<int32_t>(src->imageInfo.width), static_cast<int32_t>(src->imageInfo.height), 1};
         region.srcSubresource.aspectMask = src->viewInfo.aspectMask;
         region.srcSubresource.layerCount = 1;
         region.dstOffsets[0] = Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
@@ -571,41 +571,41 @@ namespace pe
         };
 
         if (NeedsUpdate(deferred.pipelineInfoComposition))
-            deferred.CreatePipeline();
+            deferred.UpdatePipelineInfo();
 
         if (NeedsUpdate(ssao.pipelineInfo))
-            ssao.CreateSSAOPipeline();
+            ssao.UpdatePipelineInfoSSAO();
         if (NeedsUpdate(ssao.pipelineInfoBlur))
-            ssao.CreateBlurPipeline();
+            ssao.UpdatePipelineInfoBlur();
 
         if (NeedsUpdate(ssr.pipelineInfo))
-            ssr.CreatePipeline();
+            ssr.UpdatePipelineInfo();
 
         if (NeedsUpdate(fxaa.pipelineInfo))
-            fxaa.CreatePipeline();
+            fxaa.UpdatePipelineInfo();
 
         if (NeedsUpdate(bloom.pipelineInfoBF))
-            bloom.CreateBrightFilterPipeline();
+            bloom.UpdatePipelineInfoBrightFilter();
         if (NeedsUpdate(bloom.pipelineInfoGBH))
-            bloom.CreateGaussianBlurHorizontaPipeline();
+            bloom.UpdatePipelineInfoGaussianBlurHorizontal();
         if (NeedsUpdate(bloom.pipelineInfoGBV))
-            bloom.CreateGaussianBlurVerticalPipeline();
+            bloom.UpdatePipelineInfoGaussianBlurVertical();
         if (NeedsUpdate(bloom.pipelineInfoCombine))
-            bloom.CreateCombinePipeline();
+            bloom.UpdatePipelineInfoCombine();
 
         if (NeedsUpdate(dof.pipelineInfo))
-            dof.CreatePipeline();
+            dof.UpdatePipelineInfo();
 
         if (NeedsUpdate(motionBlur.pipelineInfo))
-            motionBlur.CreatePipeline();
+            motionBlur.UpdatePipelineInfo();
 
         for (auto &model : Model::models)
         {
             if (NeedsUpdate(model.pipelineInfoGBuffer))
-                model.CreatePipelineGBuffer();
+                model.UpdatePipelineInfoGBuffer();
 
             if (NeedsUpdate(model.pipelineInfoShadows))
-                model.CreatePipelineShadows();
+                model.UpdatePipelineInfoShadows();
         }
     }
 }

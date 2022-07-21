@@ -26,7 +26,7 @@ namespace pe
 
         void Init() override;
 
-        void CreatePipeline() override;
+        void UpdatePipelineInfo() override;
 
         void CreateUniforms(CommandBuffer *cmd) override;
 

@@ -35,7 +35,7 @@ namespace pe
         {
             effect.second->Init();
             effect.second->CreateUniforms(cmd);
-            effect.second->CreatePipeline();
+            effect.second->UpdatePipelineInfo();
         }
     }
 

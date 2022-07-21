@@ -19,7 +19,7 @@ namespace pe
 
         void Init() override;
 
-        void CreatePipeline() override;
+        void UpdatePipelineInfo() override;
 
         void CreateUniforms(CommandBuffer *cmd) override;
 
@@ -35,14 +35,10 @@ namespace pe
 
     private:
         friend class Renderer;
-        
-        void CreateSSAOFrameBuffers();
 
-        void CreateSSAOBlurFrameBuffers();
+        void UpdatePipelineInfoSSAO();
 
-        void CreateSSAOPipeline();
-
-        void CreateBlurPipeline();
+        void UpdatePipelineInfoBlur();
 
     public:
         struct UBO

@@ -12,14 +12,15 @@
 
 namespace pe
 {
-    CommandPool::CommandPool(uint32_t familyId, const std::string &name)
+    CommandPool::CommandPool(uint32_t familyId, CommandPoolCreateFlags flags, const std::string &name)
     {
         m_familyId = familyId;
+        m_flags = flags;
 
         VkCommandPoolCreateInfo cpci{};
         cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         cpci.queueFamilyIndex = familyId;
-        cpci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        cpci.flags = Translate<VkCommandPoolCreateFlags>(flags);
 
         VkCommandPool commandPool;
         PE_CHECK(vkCreateCommandPool(RHII.GetDevice(), &cpci, nullptr, &commandPool));
@@ -68,7 +69,8 @@ namespace pe
 
         if (s_availableCps[familyId].empty())
         {
-            CommandPool *cp = CommandPool::Create(familyId, "CommandPool_" + std::to_string(familyId) + "_" + std::to_string(s_allCps[familyId].size()));
+            CommandPoolCreateFlags flags = CommandPoolCreate::TransientBit; // | CommandPoolCreate::ResetCommandBuffer;
+            CommandPool *cp = CommandPool::Create(familyId, flags, "CommandPool_" + std::to_string(familyId) + "_" + std::to_string(s_allCps[familyId].size()));
             s_allCps[familyId][cp] = cp;
             return cp;
         }
@@ -130,6 +132,8 @@ namespace pe
         if (m_recording)
             PE_ERROR("CommandBuffer::Begin: CommandBuffer is already recording!");
 
+        Reset();
+
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -148,6 +152,14 @@ namespace pe
         m_recording = false;
     }
 
+    void CommandBuffer::Reset()
+    {
+        if (m_commandPool->GetFlags() & CommandPoolCreate::ResetCommandBuffer)
+            vkResetCommandBuffer(m_handle, 0);
+        else
+            vkResetCommandPool(RHII.GetDevice(), m_commandPool->Handle(), 0);
+    }
+
     void CommandBuffer::PipelineBarrier()
     {
     }
@@ -162,32 +174,38 @@ namespace pe
         dst->BlitImage(this, src, region, filter);
     }
 
-    size_t CommandBuffer::GetHash(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo)
+    RenderPass *CommandBuffer::GetRenderPass(uint32_t count,
+                                             AttachmentInfo *colorInfos,
+                                             AttachmentInfo *depthInfo)
     {
+
         Hash hash;
         hash.Combine(count);
         for (uint32_t i = 0; i < count; i++)
         {
-            hash.Combine(reinterpret_cast<std::intptr_t>(colorInfos[i].image));
+            hash.Combine(static_cast<uint32_t>(colorInfos[i].image->imageInfo.format));
+            hash.Combine(static_cast<uint32_t>(colorInfos[i].image->imageInfo.samples));
             hash.Combine(static_cast<uint32_t>(colorInfos[i].loadOp));
             hash.Combine(static_cast<uint32_t>(colorInfos[i].storeOp));
+            hash.Combine(static_cast<uint32_t>(colorInfos[i].initialLayout));
+            hash.Combine(static_cast<uint32_t>(colorInfos[i].finalLayout));
         }
         if (depthInfo)
         {
-            hash.Combine(reinterpret_cast<std::intptr_t>(depthInfo->image));
+            hash.Combine(static_cast<uint32_t>(depthInfo->image->imageInfo.format));
+            hash.Combine(static_cast<uint32_t>(depthInfo->image->imageInfo.samples));
             hash.Combine(static_cast<uint32_t>(depthInfo->loadOp));
             hash.Combine(static_cast<uint32_t>(depthInfo->storeOp));
+            hash.Combine(static_cast<uint32_t>(depthInfo->initialLayout));
+            hash.Combine(static_cast<uint32_t>(depthInfo->finalLayout));
         }
 
-        return hash;
-    }
-
-    RenderPass *CommandBuffer::GetRenderPass(size_t hash,
-                                             uint32_t count,
-                                             AttachmentInfo *colorInfos,
-                                             AttachmentInfo *depthInfo)
-    {
-        if (s_renderPasses.find(hash) == s_renderPasses.end())
+        auto it = s_renderPasses.find(hash);
+        if (s_renderPasses.find(hash) != s_renderPasses.end())
+        {
+            return it->second;
+        }
+        else
         {
             std::vector<Attachment> attachements{};
             for (uint32_t i = 0; i < count; i++)
@@ -197,7 +215,8 @@ namespace pe
                 attachement.samples = colorInfos[i].image->imageInfo.samples;
                 attachement.loadOp = colorInfos[i].loadOp;
                 attachement.storeOp = colorInfos[i].storeOp;
-                attachement.finalLayout = colorInfos[i].image->GetLayout(0, 0);
+                attachement.initialLayout = colorInfos[i].initialLayout;
+                attachement.finalLayout = colorInfos[i].finalLayout;
                 attachements.push_back(attachement);
             }
 
@@ -208,24 +227,38 @@ namespace pe
                 attachement.samples = depthInfo->image->imageInfo.samples;
                 attachement.loadOp = depthInfo->loadOp;
                 attachement.storeOp = depthInfo->storeOp;
-                attachement.finalLayout = depthInfo->image->GetLayout(0, 0);
+                attachement.initialLayout = depthInfo->initialLayout;
+                attachement.finalLayout = depthInfo->finalLayout;
                 attachements.push_back(attachement);
             }
 
             std::string name = "Auto_Gen_RenderPass_" + std::to_string(s_renderPasses.size());
-            s_renderPasses[hash] = RenderPass::Create(static_cast<uint32_t>(attachements.size()), attachements.data(), name);
-        }
+            RenderPass *newRenderPass = RenderPass::Create(static_cast<uint32_t>(attachements.size()), attachements.data(), name);
+            s_renderPasses[hash] = newRenderPass;
 
-        return s_renderPasses[hash];
+            return newRenderPass;
+        }
     }
 
-    FrameBuffer *CommandBuffer::GetFrameBuffer(size_t hash,
-                                               uint32_t count,
+    FrameBuffer *CommandBuffer::GetFrameBuffer(uint32_t count,
                                                AttachmentInfo *colorInfos,
                                                AttachmentInfo *depthInfo,
                                                RenderPass *renderPass)
     {
-        if (s_frameBuffers.find(hash) == s_frameBuffers.end())
+        Hash hash;
+        hash.Combine(count);
+        hash.Combine(reinterpret_cast<std::intptr_t>(renderPass));
+        for (uint32_t i = 0; i < count; i++)
+            hash.Combine(reinterpret_cast<std::intptr_t>(colorInfos[i].image));
+        if (depthInfo)
+            hash.Combine(reinterpret_cast<std::intptr_t>(depthInfo->image));
+
+        auto it = s_frameBuffers.find(hash);
+        if (it != s_frameBuffers.end())
+        {
+            return it->second;
+        }
+        else
         {
             uint32_t width;
             uint32_t height;
@@ -248,38 +281,16 @@ namespace pe
                 views.push_back(depthInfo->image->view);
 
             std::string name = "Auto_Gen_FrameBuffer_" + std::to_string(s_frameBuffers.size());
-            s_frameBuffers[hash] = FrameBuffer::Create(width,
-                                                       height,
-                                                       static_cast<uint32_t>(views.size()),
-                                                       views.data(),
-                                                       renderPass,
-                                                       name);
+            FrameBuffer *newFrameBuffer = FrameBuffer::Create(width,
+                                                              height,
+                                                              static_cast<uint32_t>(views.size()),
+                                                              views.data(),
+                                                              renderPass,
+                                                              name);
+            s_frameBuffers[hash] = newFrameBuffer;
+
+            return newFrameBuffer;
         }
-
-        return s_frameBuffers[hash];
-    }
-
-    void CommandBuffer::BeginPass(RenderPass *pass, FrameBuffer *frameBuffer)
-    {
-        std::vector<VkClearValue> clearValues(pass->attachments.size());
-        for (int i = 0; i < pass->attachments.size(); i++)
-        {
-            if (IsDepthFormat(pass->attachments[i].format))
-                clearValues[i].depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
-            else
-                clearValues[i].color = {1.0f, 0.0f, 0.0f, 1.0f};
-        }
-
-        VkRenderPassBeginInfo rpi{};
-        rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rpi.renderPass = pass->Handle();
-        rpi.framebuffer = frameBuffer->Handle();
-        rpi.renderArea.offset = VkOffset2D{0, 0};
-        rpi.renderArea.extent = VkExtent2D{frameBuffer->GetWidth(), frameBuffer->GetHeight()};
-        rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        rpi.pClearValues = clearValues.data();
-
-        vkCmdBeginRenderPass(m_handle, &rpi, VK_SUBPASS_CONTENTS_INLINE);
     }
 
     void CommandBuffer::BeginPass(uint32_t count,
@@ -288,13 +299,37 @@ namespace pe
                                   RenderPass **outRenderPass)
     {
 #if (USE_DYNAMIC_RENDERING == 0)
-        Hash hash = GetHash(count, colorInfos, depthInfo);
-        RenderPass *rp = GetRenderPass(hash, count, colorInfos, depthInfo);
-        FrameBuffer *fb = GetFrameBuffer(hash, count, colorInfos, depthInfo, rp);
-        
-        *outRenderPass = rp;
+        RenderPass *rp = GetRenderPass(count, colorInfos, depthInfo);
+        FrameBuffer *fb = GetFrameBuffer(count, colorInfos, depthInfo, rp);
 
-        BeginPass(rp, fb);
+        // Update the image layouts now, they will end up as their finalLayout after render pass
+        for (uint32_t i = 0; i < count; i++)
+           colorInfos[i].image->SetCurrentLayout(colorInfos[i].finalLayout);
+        if (depthInfo)
+           depthInfo->image->SetCurrentLayout(depthInfo->finalLayout);
+
+        if (outRenderPass)
+            *outRenderPass = rp;
+
+        std::vector<VkClearValue> clearValues(rp->attachments.size());
+        for (int i = 0; i < rp->attachments.size(); i++)
+        {
+            if (IsDepthFormat(rp->attachments[i].format))
+                clearValues[i].depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
+            else
+                clearValues[i].color = {1.0f, 0.0f, 0.0f, 1.0f};
+        }
+
+        VkRenderPassBeginInfo rpi{};
+        rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        rpi.renderPass = rp->Handle();
+        rpi.framebuffer = fb->Handle();
+        rpi.renderArea.offset = VkOffset2D{0, 0};
+        rpi.renderArea.extent = VkExtent2D{fb->GetWidth(), fb->GetHeight()};
+        rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        rpi.pClearValues = clearValues.data();
+
+        vkCmdBeginRenderPass(m_handle, &rpi, VK_SUBPASS_CONTENTS_INLINE);
 #else
         m_dynamicPass = true;
 
@@ -306,7 +341,7 @@ namespace pe
             VkRenderingAttachmentInfo vkColorInfo{};
             vkColorInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             vkColorInfo.imageView = colorInfos[i].image->view;
-            vkColorInfo.imageLayout = Translate<VkImageLayout>(colorInfos[i].image->GetLayout());
+            vkColorInfo.imageLayout = Translate<VkImageLayout>(colorInfos[i].image->GetCurrentLayout());
             vkColorInfo.loadOp = Translate<VkAttachmentLoadOp>(colorInfos[i].loadOp);
             vkColorInfo.storeOp = Translate<VkAttachmentStoreOp>(colorInfos[i].storeOp);
             vkColorInfo.clearValue.color = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -318,7 +353,7 @@ namespace pe
             Image &image = *depthInfo->image;
             vkDepthInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             vkDepthInfo.imageView = image.view;
-            vkDepthInfo.imageLayout = Translate<VkImageLayout>(image.GetLayout());
+            vkDepthInfo.imageLayout = Translate<VkImageLayout>(image.GetCurrentLayout());
             vkDepthInfo.loadOp = Translate<VkAttachmentLoadOp>(depthInfo->loadOp);
             vkDepthInfo.storeOp = Translate<VkAttachmentStoreOp>(depthInfo->storeOp);
             vkDepthInfo.clearValue.depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
@@ -425,10 +460,18 @@ namespace pe
 
         hash.Combine(reinterpret_cast<intptr_t>(pipelineInfo.pipelineCache.Get()));
 
-        if (s_pipelines.find(hash) == s_pipelines.end())
-            s_pipelines[hash] = Pipeline::Create(pipelineInfo);
+        auto it = s_pipelines.find(hash);
+        if (it != s_pipelines.end())
+        {
+            return it->second;
+        }
+        else
+        {
+            Pipeline *newPipeline = Pipeline::Create(pipelineInfo);
+            s_pipelines[hash] = newPipeline;
 
-        return s_pipelines[hash];
+            return newPipeline;
+        }
     }
 
     void CommandBuffer::BindPipeline(Pipeline *pipeline)

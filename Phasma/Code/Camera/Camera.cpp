@@ -9,7 +9,7 @@ namespace pe
 {
     Camera::Camera()
     {
-        worldOrientation = vec3(1.f, 1.f, 1.f);
+        worldOrientation = vec3(1.f, -1.f, 1.f);
 
         // total pitch, yaw, roll
         euler = vec3(0.f, 0.0f, 0.f);

@@ -762,4 +762,13 @@ namespace pe
     };
     using AttachmentDescriptionFlags = Flags<AttachmentDescription>;
     DEFINE_FLAGS_OPERATORS(AttachmentDescription)
+
+    enum class CommandPoolCreate
+    {
+        TransientBit = 1 << 0,
+        ResetCommandBuffer = 1 << 1,
+        Protected = 1 << 2,
+    };
+    using CommandPoolCreateFlags = Flags<CommandPoolCreate>;
+    DEFINE_FLAGS_OPERATORS(CommandPoolCreate);
 }

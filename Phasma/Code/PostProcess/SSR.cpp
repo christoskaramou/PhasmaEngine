@@ -37,7 +37,7 @@ namespace pe
         depth = rs->GetDepthTarget("depth");
     }
 
-    void SSR::CreatePipeline()
+    void SSR::UpdatePipelineInfo()
     {
         pipelineInfo = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfo;
@@ -170,6 +170,8 @@ namespace pe
 
         AttachmentInfo info{};
         info.image = ssrRT;
+        info.initialLayout = ssrRT->GetCurrentLayout();
+        info.finalLayout = ImageLayout::ColorAttachment;
 
         cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
         cmd->BindPipeline(*pipelineInfo, &pipeline);

@@ -82,6 +82,10 @@ namespace pe
         void CreateImageView(const ImageViewCreateInfo &info);
 
         void CreateSampler(const SamplerCreateInfo &info);
+        
+        ImageLayout GetCurrentLayout(uint32_t layer = 0, uint32_t mip = 0) { return m_layouts[layer][mip]; }
+
+        void SetCurrentLayout(ImageLayout layout, uint32_t layer = 0, uint32_t mip = 0) { m_layouts[layer][mip] = layout; }
 
     private:
         friend class CommandBuffer;
@@ -119,8 +123,6 @@ namespace pe
                                    uint32_t arrayLayers,
                                    uint32_t baseMipLevel,
                                    uint32_t mipLevels);
-
-        ImageLayout GetLayout(uint32_t layer = 0, uint32_t mip = 0) { return m_layouts[layer][mip]; }
 
     public:
         ImageViewHandle view;

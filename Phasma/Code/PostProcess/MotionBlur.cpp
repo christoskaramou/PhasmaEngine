@@ -34,7 +34,7 @@ namespace pe
         frameImage = rs->CreateFSSampledImage(false);
     }
 
-    void MotionBlur::CreatePipeline()
+    void MotionBlur::UpdatePipelineInfo()
     {
         pipelineInfo = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfo;
@@ -136,6 +136,8 @@ namespace pe
         
         AttachmentInfo info{};
         info.image = displayRT;
+        info.initialLayout = displayRT->GetCurrentLayout();
+        info.finalLayout = ImageLayout::ColorAttachment;
 
         cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
         cmd->BindPipeline(*pipelineInfo, &pipeline);

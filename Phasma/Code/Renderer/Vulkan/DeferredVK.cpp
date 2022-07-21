@@ -49,7 +49,7 @@ namespace pe
         ssrRT = rs->GetRenderTarget("ssr");
     }
 
-    void Deferred::CreatePipeline()
+    void Deferred::UpdatePipelineInfo()
     {
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
         SkyBox &skybox = CONTEXT->GetSystem<RendererSystem>()->skyBoxDay;
@@ -308,6 +308,8 @@ namespace pe
 
         AttachmentInfo info{};
         info.image = viewportRT;
+        info.initialLayout = viewportRT->GetCurrentLayout();
+        info.finalLayout = ImageLayout::ColorAttachment;
 
         cmd->BeginPass(1, &info, nullptr, &pipelineInfoComposition->renderPass);
         cmd->BindPipeline(*pipelineInfoComposition, &pipelineComposition);
@@ -339,13 +341,25 @@ namespace pe
         // Must be in order as they appear in shader and in pipeline
         AttachmentInfo colorInfos[5]{};
         colorInfos[0].image = normalRT;
+        colorInfos[0].initialLayout = normalRT->GetCurrentLayout();
+        colorInfos[0].finalLayout = ImageLayout::ColorAttachment;
         colorInfos[1].image = albedoRT;
+        colorInfos[1].initialLayout = albedoRT->GetCurrentLayout();
+        colorInfos[1].finalLayout = ImageLayout::ColorAttachment;
         colorInfos[2].image = srmRT;
+        colorInfos[2].initialLayout = srmRT->GetCurrentLayout();
+        colorInfos[2].finalLayout = ImageLayout::ColorAttachment;
         colorInfos[3].image = velocityRT;
+        colorInfos[3].initialLayout = velocityRT->GetCurrentLayout();
+        colorInfos[3].finalLayout = ImageLayout::ColorAttachment;
         colorInfos[4].image = emissiveRT;
+        colorInfos[4].initialLayout = emissiveRT->GetCurrentLayout();
+        colorInfos[4].finalLayout = ImageLayout::ColorAttachment;
 
         AttachmentInfo depthInfo{};
         depthInfo.image = depth;
+        depthInfo.initialLayout = depth->GetCurrentLayout();
+        depthInfo.finalLayout = ImageLayout::DepthStencilAttachment;
 
         cmd->BeginPass(5, colorInfos, &depthInfo, &m_renderPassModels);
         cmd->SetViewport(0.f, 0.f, normalRT->width_f, normalRT->height_f);

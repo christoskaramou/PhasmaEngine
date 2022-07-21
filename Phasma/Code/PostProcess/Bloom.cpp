@@ -36,15 +36,15 @@ namespace pe
         frameImage = rs->CreateFSSampledImage(false);
     }
 
-    void Bloom::CreatePipeline()
+    void Bloom::UpdatePipelineInfo()
     {
-        CreateBrightFilterPipeline();
-        CreateGaussianBlurHorizontaPipeline();
-        CreateGaussianBlurVerticalPipeline();
-        CreateCombinePipeline();
+        UpdatePipelineInfoBrightFilter();
+        UpdatePipelineInfoGaussianBlurHorizontal();
+        UpdatePipelineInfoGaussianBlurVertical();
+        UpdatePipelineInfoCombine();
     }
 
-    void Bloom::CreateBrightFilterPipeline()
+    void Bloom::UpdatePipelineInfoBrightFilter()
     {
         pipelineInfoBF = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoBF;
@@ -62,7 +62,7 @@ namespace pe
         info.name = "BrightFilter_pipeline";
     }
 
-    void Bloom::CreateGaussianBlurHorizontaPipeline()
+    void Bloom::UpdatePipelineInfoGaussianBlurHorizontal()
     {
         pipelineInfoGBH = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoGBH;
@@ -80,7 +80,7 @@ namespace pe
         info.name = "GaussianBlurHorizontal_pipeline";
     }
 
-    void Bloom::CreateGaussianBlurVerticalPipeline()
+    void Bloom::UpdatePipelineInfoGaussianBlurVertical()
     {
         pipelineInfoGBV = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoGBV;
@@ -98,7 +98,7 @@ namespace pe
         info.name = "GaussianBlurVertical_pipeline";
     }
 
-    void Bloom::CreateCombinePipeline()
+    void Bloom::UpdatePipelineInfoCombine()
     {
         pipelineInfoCombine = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoCombine;
@@ -205,6 +205,8 @@ namespace pe
 
         AttachmentInfo info{};
         info.image = brightFilterRT;
+        info.initialLayout = brightFilterRT->GetCurrentLayout();
+        info.finalLayout = ImageLayout::ColorAttachment;
 
         cmd->BeginPass(1, &info, nullptr, &pipelineInfoBF->renderPass);
         cmd->BindPipeline(*pipelineInfoBF, &pipelineBrightFilter);
@@ -225,6 +227,8 @@ namespace pe
         cmd->ImageBarrier(gaussianBlurHorizontalRT, ImageLayout::ColorAttachment);
 
         info.image = gaussianBlurHorizontalRT;
+        info.initialLayout = gaussianBlurHorizontalRT->GetCurrentLayout();
+
         cmd->BeginPass(1, &info, nullptr, &pipelineInfoGBH->renderPass);
         cmd->BindPipeline(*pipelineInfoGBH, &pipelineGaussianBlurHorizontal);
         cmd->SetViewport(0.f, 0.f, gaussianBlurHorizontalRT->width_f, gaussianBlurHorizontalRT->height_f);
@@ -244,6 +248,8 @@ namespace pe
         cmd->ImageBarrier(gaussianBlurVerticalRT, ImageLayout::ColorAttachment);
 
         info.image = gaussianBlurVerticalRT;
+        info.initialLayout = gaussianBlurVerticalRT->GetCurrentLayout();
+
         cmd->BeginPass(1, &info, nullptr, &pipelineInfoGBV->renderPass);
         cmd->BindPipeline(*pipelineInfoGBV, &pipelineGaussianBlurVertical);
         cmd->SetViewport(0.f, 0.f, gaussianBlurVerticalRT->width_f, gaussianBlurVerticalRT->height_f);
@@ -264,6 +270,8 @@ namespace pe
         cmd->ImageBarrier(displayRT, ImageLayout::ColorAttachment);
 
         info.image = displayRT;
+        info.initialLayout = displayRT->GetCurrentLayout();
+
         cmd->BeginPass(1, &info, nullptr, &pipelineInfoCombine->renderPass);
         cmd->BindPipeline(*pipelineInfoCombine, &pipelineCombine);
         cmd->SetViewport(0.f, 0.f, displayRT->width_f, displayRT->height_f);

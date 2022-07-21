@@ -53,7 +53,7 @@ namespace pe
     public:
         virtual void Init() = 0;
 
-        virtual void CreatePipeline() = 0;
+        virtual void UpdatePipelineInfo() = 0;
 
         virtual void CreateUniforms(CommandBuffer *cmd) = 0;
 

@@ -75,11 +75,11 @@ namespace pe
 
         void CreateUniforms();
 
-        void CreatePipeline();
+        void UpdatePipelineInfo();
 
-        void CreatePipelineGBuffer();
+        void UpdatePipelineInfoGBuffer();
 
-        void CreatePipelineShadows();
+        void UpdatePipelineInfoShadows();
 
         void InitRenderTargets();
 

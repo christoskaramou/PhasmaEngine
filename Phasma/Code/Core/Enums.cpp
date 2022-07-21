@@ -44,9 +44,9 @@ namespace pe
             stageFlags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
             accessMask = 0;
             break;
+        default:
+            PE_ERROR("Unsupported image layout");
         }
-
-        PE_ERROR("Unsupported image layout");
     }
 
     void GetInfoFromLayout(ImageLayout layout, PipelineStageFlags &stageFlags, AccessFlags &accessMask)
@@ -1053,5 +1053,23 @@ namespace pe
     VkAttachmentDescriptionFlags Translate(AttachmentDescription flag)
     {
         return Translate<VkAttachmentDescriptionFlags, AttachmentDescriptionFlags>(flag);
+    }
+
+    template <>
+    VkCommandPoolCreateFlags Translate(CommandPoolCreateFlags flags)
+    {
+        using T = CommandPoolCreateFlags::Type;
+        static std::map<T, VkCommandPoolCreateFlags> s_translator{
+            {(T)CommandPoolCreate::TransientBit, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT},
+            {(T)CommandPoolCreate::ResetCommandBuffer, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT},
+            {(T)CommandPoolCreate::Protected, VK_COMMAND_POOL_CREATE_PROTECTED_BIT}};
+
+        return GetFlags(flags.Value(), s_translator);
+    }
+
+    template <>
+    VkCommandPoolCreateFlags Translate(CommandPoolCreate flag)
+    {
+        return Translate<VkCommandPoolCreateFlags, CommandPoolCreateFlags>(flag);
     }
 }

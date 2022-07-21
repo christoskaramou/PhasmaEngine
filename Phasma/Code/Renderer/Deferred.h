@@ -20,7 +20,7 @@ namespace pe
 
         void Init() override;
 
-        void CreatePipeline() override;
+        void UpdatePipelineInfo() override;
 
         void CreateUniforms(CommandBuffer *cmd) override;
 
@@ -39,15 +39,6 @@ namespace pe
         void EndPass(CommandBuffer *cmd);
 
         RenderPass *GetRenderPassModels() { return m_renderPassModels; }
-
-    private:
-        void CreateGBufferFrameBuffers();
-
-        void CreateCompositionFrameBuffers();
-
-        void CreateGBufferPipeline();
-
-        void CreateCompositionPipeline();
 
     public:
         struct UBO

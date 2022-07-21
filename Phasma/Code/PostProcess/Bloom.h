@@ -18,7 +18,7 @@ namespace pe
 
         void Init() override;
 
-        void CreatePipeline() override;
+        void UpdatePipelineInfo() override;
 
         void CreateUniforms(CommandBuffer *cmd) override;
 
@@ -35,13 +35,13 @@ namespace pe
     private:
         friend class Renderer;
         
-        void CreateBrightFilterPipeline();
+        void UpdatePipelineInfoBrightFilter();
 
-        void CreateGaussianBlurHorizontaPipeline();
+        void UpdatePipelineInfoGaussianBlurHorizontal();
 
-        void CreateGaussianBlurVerticalPipeline();
+        void UpdatePipelineInfoGaussianBlurVertical();
 
-        void CreateCombinePipeline();
+        void UpdatePipelineInfoCombine();
 
     public:
         Pipeline *pipelineBrightFilter;

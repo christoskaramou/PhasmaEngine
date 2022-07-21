@@ -33,7 +33,7 @@ namespace pe
         depth = rs->GetDepthTarget("depth");
     }
 
-    void SSGI::CreatePipeline()
+    void SSGI::UpdatePipelineInfo()
     {
         pipelineInfo = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfo;
@@ -117,6 +117,8 @@ namespace pe
 
         AttachmentInfo info{};
         info.image = viewportRT;
+        info.initialLayout = viewportRT->GetCurrentLayout();
+        info.finalLayout = ImageLayout::ColorAttachment;
 
         cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
         cmd->BindPipeline(*pipelineInfo, &pipeline);
