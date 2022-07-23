@@ -88,6 +88,7 @@ namespace pe
             bindingInfos[i + 1].type = DescriptorType::CombinedImageSampler;
             bindingInfos[i + 1].imageLayout = ImageLayout::DepthStencilReadOnly;
             bindingInfos[i + 1].pImage = textures[i];
+            bindingInfos[i + 1].sampler = textures[i]->sampler;
         }
 
         DescriptorInfo info{};
@@ -112,6 +113,7 @@ namespace pe
             bindingInfos[i + 1].type = DescriptorType::CombinedImageSampler;
             bindingInfos[i + 1].imageLayout = ImageLayout::DepthStencilReadOnly;
             bindingInfos[i + 1].pImage = textures[i];
+            bindingInfos[i + 1].sampler = textures[i]->sampler;
         }
 
         DescriptorInfo info{};

@@ -59,11 +59,13 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[0].pImage = frameImage;
+        bindingInfos[0].sampler = frameImage->sampler;
 
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
         bindingInfos[1].pImage = depth;
+        bindingInfos[1].sampler = depth->sampler;
 
         DescriptorInfo info{};
         info.count = 2;
@@ -81,11 +83,13 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[0].pImage = frameImage;
+        bindingInfos[0].sampler = frameImage->sampler;
 
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
         bindingInfos[1].pImage = depth;
+        bindingInfos[1].sampler = depth->sampler;
 
         DescriptorInfo info{};
         info.count = 2;

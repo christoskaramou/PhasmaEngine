@@ -147,16 +147,19 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::DepthStencilReadOnly;
         bindingInfos[0].pImage = depth;
+        bindingInfos[0].sampler = depth->sampler;
 
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[1].pImage = normalRT;
+        bindingInfos[1].sampler = normalRT->sampler;
 
         bindingInfos[2].binding = 2;
         bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[2].pImage = noiseTex;
+        bindingInfos[2].sampler = noiseTex->sampler;
 
         bindingInfos[3].binding = 3;
         bindingInfos[3].type = DescriptorType::UniformBuffer;
@@ -178,6 +181,7 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[0].pImage = ssaoRT;
+        bindingInfos[0].sampler = ssaoRT->sampler;
 
         info.count = 1;
 
@@ -192,16 +196,19 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::DepthStencilReadOnly;
         bindingInfos[0].pImage = depth;
+        bindingInfos[0].sampler = depth->sampler;
 
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[1].pImage = normalRT;
+        bindingInfos[1].sampler = normalRT->sampler;
 
         bindingInfos[2].binding = 2;
         bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[2].pImage = noiseTex;
+        bindingInfos[2].sampler = noiseTex->sampler;
 
         bindingInfos[3].binding = 3;
         bindingInfos[3].type = DescriptorType::UniformBuffer;
@@ -223,6 +230,7 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[0].pImage = ssaoRT;
+        bindingInfos[0].sampler = ssaoRT->sampler;
 
         info.count = 1;
 

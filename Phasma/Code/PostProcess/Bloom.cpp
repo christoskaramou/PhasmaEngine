@@ -132,16 +132,21 @@ namespace pe
         info.stage = ShaderStage::FragmentBit;
 
         bindingInfos[0].pImage = frameImage;
+        bindingInfos[0].sampler = frameImage->sampler;
         DSBrightFilter = Descriptor::Create(&info, "Bloom_BrightFilter_descriptor");
 
         bindingInfos[0].pImage = brightFilterRT;
+        bindingInfos[0].sampler = brightFilterRT->sampler;
         DSGaussianBlurHorizontal = Descriptor::Create(&info, "Bloom_GaussianBlurHorizontal_descriptor");
 
         bindingInfos[0].pImage = gaussianBlurHorizontalRT;
+        bindingInfos[0].sampler = gaussianBlurHorizontalRT->sampler;
         DSGaussianBlurVertical = Descriptor::Create(&info, "Bloom_GaussianBlurVertical_descriptor");
 
         bindingInfos[0].pImage = frameImage;
+        bindingInfos[0].sampler = frameImage->sampler;
         bindingInfos[1].pImage = gaussianBlurVerticalRT;
+        bindingInfos[1].sampler = gaussianBlurVerticalRT->sampler;
         info.count = 2;
         DSCombine = Descriptor::Create(&info, "Bloom_Combine_descriptor");
     }
@@ -162,16 +167,21 @@ namespace pe
         info.stage = ShaderStage::FragmentBit;
 
         bindingInfos[0].pImage = frameImage;
+        bindingInfos[0].sampler = frameImage->sampler;
         DSBrightFilter->UpdateDescriptor(&info);
 
         bindingInfos[0].pImage = brightFilterRT;
+        bindingInfos[0].sampler = brightFilterRT->sampler;
         DSGaussianBlurHorizontal->UpdateDescriptor(&info);
 
         bindingInfos[0].pImage = gaussianBlurHorizontalRT;
+        bindingInfos[0].sampler = gaussianBlurHorizontalRT->sampler;
         DSGaussianBlurVertical->UpdateDescriptor(&info);
 
         bindingInfos[0].pImage = frameImage;
+        bindingInfos[0].sampler = frameImage->sampler;
         bindingInfos[1].pImage = gaussianBlurVerticalRT;
+        bindingInfos[1].sampler = gaussianBlurVerticalRT->sampler;
         info.count = 2;
         DSCombine->UpdateDescriptor(&info);
     }

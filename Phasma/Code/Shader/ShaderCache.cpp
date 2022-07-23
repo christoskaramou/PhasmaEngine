@@ -18,6 +18,10 @@ namespace pe
         std::string line;
         while (line = file.ReadLine(), !file.EndOfFile())
         {
+            size_t commentPos = line.find("//");
+            if (commentPos != std::string::npos)
+                line = line.substr(0, commentPos);
+
             size_t pos = line.find("#include");
             if (pos != std::string::npos)
             {

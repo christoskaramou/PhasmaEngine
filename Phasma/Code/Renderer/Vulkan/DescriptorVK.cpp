@@ -68,14 +68,14 @@ namespace pe
 
         m_variableCount = 1;
 
-        bool allowAfterBindUpdate = true;
+        bool allowUpdateAfterBind = true;
         for (int i = 0; i < bindings.size(); i++)
         {
             if (bindings[i].descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT ||
                 bindings[i].descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
                 bindings[i].descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
             {
-                allowAfterBindUpdate = false;
+                allowUpdateAfterBind = false;
                 break;
             }
         }
@@ -86,7 +86,7 @@ namespace pe
         {
             bindingFlags[i] = 0;
 
-            if (allowAfterBindUpdate)
+            if (allowUpdateAfterBind)
                 bindingFlags[i] |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
 
             if (bindings[i].descriptorCount > 1)
@@ -112,7 +112,7 @@ namespace pe
         dslci.bindingCount = static_cast<uint32_t>(bindings.size());
         dslci.pBindings = bindings.data();
         dslci.pNext = &layoutBindingFlags;
-        if (allowAfterBindUpdate)
+        if (allowUpdateAfterBind)
             dslci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 
         VkDescriptorSetLayout layout;
@@ -229,7 +229,7 @@ namespace pe
                 {
                     imageInfos.push_back(
                         VkDescriptorImageInfo{
-                            bindingInfo.pImage->sampler,
+                            bindingInfo.sampler,
                             bindingInfo.pImage->view,
                             Translate<VkImageLayout>(bindingInfo.imageLayout)});
                 }
@@ -260,7 +260,10 @@ namespace pe
             writeSet.descriptorCount = static_cast<uint32_t>(bindingInfos.size());
             writeSet.descriptorType = Translate<VkDescriptorType>(bindingInfos[0].type);
 
-            if (bindingInfos[0].type == DescriptorType::CombinedImageSampler)
+            if (bindingInfos[0].type == DescriptorType::CombinedImageSampler ||
+                bindingInfos[0].type == DescriptorType::SampledImage ||
+                bindingInfos[0].type == DescriptorType::StorageImage ||
+                bindingInfos[0].type == DescriptorType::Sampler)
             {
                 size_t index = imageInfos.size() - bindingInfos.size();
                 writeSet.pImageInfo = &imageInfos[index];

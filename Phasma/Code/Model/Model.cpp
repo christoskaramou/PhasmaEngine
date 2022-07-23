@@ -818,18 +818,23 @@ namespace pe
                 bindingImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
                 bindingImageInfo.pImage = primitive.pbrMaterial.baseColorTexture;
+                bindingImageInfo.sampler = primitive.pbrMaterial.baseColorTexture->sampler;
                 bindingInfos.push_back(bindingImageInfo);
 
                 bindingImageInfo.pImage = primitive.pbrMaterial.metallicRoughnessTexture;
+                bindingImageInfo.sampler = primitive.pbrMaterial.metallicRoughnessTexture->sampler;
                 bindingInfos.push_back(bindingImageInfo);
 
                 bindingImageInfo.pImage = primitive.pbrMaterial.normalTexture;
+                bindingImageInfo.sampler = primitive.pbrMaterial.normalTexture->sampler;
                 bindingInfos.push_back(bindingImageInfo);
 
                 bindingImageInfo.pImage = primitive.pbrMaterial.occlusionTexture;
+                bindingImageInfo.sampler = primitive.pbrMaterial.occlusionTexture->sampler;
                 bindingInfos.push_back(bindingImageInfo);
 
                 bindingImageInfo.pImage = primitive.pbrMaterial.emissiveTexture;
+                bindingImageInfo.sampler = primitive.pbrMaterial.emissiveTexture->sampler;
                 bindingInfos.push_back(bindingImageInfo);
             }
         }

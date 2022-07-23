@@ -26,6 +26,7 @@ namespace pe
         Image *pImage = nullptr;
         ImageLayout imageLayout = ImageLayout::Undefined;
         DescriptorType type = DescriptorType::CombinedImageSampler;
+        SamplerHandle sampler = {};
     };
 
     struct DescriptorInfo

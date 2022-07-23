@@ -47,6 +47,9 @@ namespace pe
     class Image;
     class CommandBuffer;
     class Camera;
+    class Pipeline;
+    class PipelineCreateInfo;
+    class Descriptor;
 
     class IRenderComponent : public IComponent
     {

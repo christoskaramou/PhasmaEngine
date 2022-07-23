@@ -26,6 +26,7 @@ namespace pe
         bindingInfo.type = DescriptorType::CombinedImageSampler;
         bindingInfo.imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfo.pImage = texture;
+        bindingInfo.sampler = texture->sampler;
 
         DescriptorInfo info{};
         info.count = 1;

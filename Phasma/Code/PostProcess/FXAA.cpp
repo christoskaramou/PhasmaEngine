@@ -54,6 +54,7 @@ namespace pe
         bindingInfo.type = DescriptorType::CombinedImageSampler;
         bindingInfo.imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfo.pImage = frameImage;
+        bindingInfo.sampler = frameImage->sampler;
 
         DescriptorInfo info{};
         info.count = 1;
@@ -70,6 +71,7 @@ namespace pe
         bindingInfo.type = DescriptorType::CombinedImageSampler;
         bindingInfo.imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfo.pImage = frameImage;
+        bindingInfo.sampler = frameImage->sampler;
 
         DescriptorInfo info{};
         info.count = 1;

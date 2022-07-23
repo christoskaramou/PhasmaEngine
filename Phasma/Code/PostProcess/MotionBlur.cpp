@@ -60,16 +60,19 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[0].pImage = frameImage;
+        bindingInfos[0].sampler = frameImage->sampler;
 
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
         bindingInfos[1].pImage = depth;
+        bindingInfos[1].sampler = depth->sampler;
 
         bindingInfos[2].binding = 2;
         bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[2].pImage = velocityRT;
+        bindingInfos[2].sampler = velocityRT->sampler;
 
         DescriptorInfo info{};
         info.count = 3;
@@ -88,16 +91,19 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[0].pImage = frameImage;
+        bindingInfos[0].sampler = frameImage->sampler;
 
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
         bindingInfos[1].pImage = depth;
+        bindingInfos[1].sampler = depth->sampler;
 
         bindingInfos[2].binding = 2;
         bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[2].pImage = velocityRT;
+        bindingInfos[2].sampler = velocityRT->sampler;
 
         DescriptorInfo info{};
         info.count = 3;

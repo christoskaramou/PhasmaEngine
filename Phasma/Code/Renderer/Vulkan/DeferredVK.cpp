@@ -139,21 +139,25 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::DepthStencilReadOnly;
         bindingInfos[0].pImage = depth;
+        bindingInfos[0].sampler = depth->sampler;
 
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[1].pImage = normalRT;
+        bindingInfos[1].sampler = normalRT->sampler;
 
         bindingInfos[2].binding = 2;
         bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[2].pImage = albedoRT;
+        bindingInfos[2].sampler = albedoRT->sampler;
 
         bindingInfos[3].binding = 3;
         bindingInfos[3].type = DescriptorType::CombinedImageSampler;
         bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[3].pImage = srmRT;
+        bindingInfos[3].sampler = srmRT->sampler;
 
         bindingInfos[4].binding = 4;
         bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
@@ -163,21 +167,25 @@ namespace pe
         bindingInfos[5].type = DescriptorType::CombinedImageSampler;
         bindingInfos[5].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[5].pImage = ssaoBlurRT;
+        bindingInfos[5].sampler = ssaoBlurRT->sampler;
 
         bindingInfos[6].binding = 6;
         bindingInfos[6].type = DescriptorType::CombinedImageSampler;
         bindingInfos[6].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[6].pImage = ssrRT;
+        bindingInfos[6].sampler = ssrRT->sampler;
 
         bindingInfos[7].binding = 7;
         bindingInfos[7].type = DescriptorType::CombinedImageSampler;
         bindingInfos[7].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[7].pImage = emissiveRT;
+        bindingInfos[7].sampler = emissiveRT->sampler;
 
         bindingInfos[8].binding = 8;
         bindingInfos[8].type = DescriptorType::CombinedImageSampler;
         bindingInfos[8].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[8].pImage = ibl_brdf_lut;
+        bindingInfos[8].sampler = ibl_brdf_lut->sampler;
 
         bindingInfos[9].binding = 9;
         bindingInfos[9].type = DescriptorType::UniformBufferDynamic;
@@ -199,21 +207,25 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::DepthStencilReadOnly;
         bindingInfos[0].pImage = depth;
+        bindingInfos[0].sampler = albedoRT->sampler;
 
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[1].pImage = normalRT;
+        bindingInfos[1].sampler = normalRT->sampler;
 
         bindingInfos[2].binding = 2;
         bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[2].pImage = albedoRT;
+        bindingInfos[2].sampler = albedoRT->sampler;
 
         bindingInfos[3].binding = 3;
         bindingInfos[3].type = DescriptorType::CombinedImageSampler;
         bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[3].pImage = srmRT;
+        bindingInfos[3].sampler = srmRT->sampler;
 
         bindingInfos[4].binding = 4;
         bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
@@ -223,21 +235,25 @@ namespace pe
         bindingInfos[5].type = DescriptorType::CombinedImageSampler;
         bindingInfos[5].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[5].pImage = ssaoBlurRT;
+        bindingInfos[5].sampler = ssaoBlurRT->sampler;
 
         bindingInfos[6].binding = 6;
         bindingInfos[6].type = DescriptorType::CombinedImageSampler;
         bindingInfos[6].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[6].pImage = ssrRT;
+        bindingInfos[6].sampler = ssrRT->sampler;
 
         bindingInfos[7].binding = 7;
         bindingInfos[7].type = DescriptorType::CombinedImageSampler;
         bindingInfos[7].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[7].pImage = emissiveRT;
+        bindingInfos[7].sampler = emissiveRT->sampler;
 
         bindingInfos[8].binding = 8;
         bindingInfos[8].type = DescriptorType::CombinedImageSampler;
         bindingInfos[8].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[8].pImage = ibl_brdf_lut;
+        bindingInfos[8].sampler = ibl_brdf_lut->sampler;
 
         bindingInfos[9].binding = 9;
         bindingInfos[9].type = DescriptorType::UniformBufferDynamic;
