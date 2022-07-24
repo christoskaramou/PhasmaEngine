@@ -128,16 +128,16 @@ namespace pe
                            ShaderStage stage,
                            const std::string &name)
     {
-        m_bindingInfos = {};
-        m_updateInfos = {};
+        m_bindingInfoMap = {};
+        m_updateInfoMap = {};
 
-        for (const auto &bingingInfo : bindingInfos)
+        for (const auto &bindingInfo : bindingInfos)
         {
-            auto it = m_bindingInfos.find(bingingInfo.binding);
-            if (it != m_bindingInfos.end())
-                PE_ERROR("Bindin has already beed added");
+            auto it = m_bindingInfoMap.find(bindingInfo.binding);
+            if (it != m_bindingInfoMap.end())
+                PE_ERROR("Binding has already beed added");
 
-            m_bindingInfos[bingingInfo.binding] = bingingInfo;
+            m_bindingInfoMap[bindingInfo.binding] = bindingInfo;
         }
 
         uint32_t size = static_cast<uint32_t>(bindingInfos.size());
@@ -196,8 +196,8 @@ namespace pe
 
     void Descriptor::SetImages(uint32_t binding, const std::vector<Image *> &images)
     {
-        auto it = m_updateInfos.find(binding);
-        if (it != m_updateInfos.end())
+        auto it = m_updateInfoMap.find(binding);
+        if (it != m_updateInfoMap.end())
         {
             it->second.images = images;
         }
@@ -206,7 +206,7 @@ namespace pe
             DescriptorUpdateInfo info{};
             info.binding = binding;
             info.images = images;
-            m_updateInfos[binding] = info;
+            m_updateInfoMap[binding] = info;
         }
     }
 
@@ -217,8 +217,8 @@ namespace pe
 
     void Descriptor::SetBuffers(uint32_t binding, const std::vector<Buffer *> &buffers)
     {
-        auto it = m_updateInfos.find(binding);
-        if (it != m_updateInfos.end())
+        auto it = m_updateInfoMap.find(binding);
+        if (it != m_updateInfoMap.end())
         {
             it->second.buffers = buffers;
         }
@@ -227,7 +227,7 @@ namespace pe
             DescriptorUpdateInfo info{};
             info.binding = binding;
             info.buffers = buffers;
-            m_updateInfos[binding] = info;
+            m_updateInfoMap[binding] = info;
         }
     }
 
@@ -238,8 +238,8 @@ namespace pe
 
     void Descriptor::SetSampler(uint32_t binding, SamplerHandle sampler)
     {
-        auto it = m_updateInfos.find(binding);
-        if (it != m_updateInfos.end())
+        auto it = m_updateInfoMap.find(binding);
+        if (it != m_updateInfoMap.end())
         {
             it->second.sampler = sampler;
         }
@@ -248,16 +248,16 @@ namespace pe
             DescriptorUpdateInfo info{};
             info.binding = binding;
             info.sampler = sampler;
-            m_updateInfos[binding] = info;
+            m_updateInfoMap[binding] = info;
         }
     }
 
     void Descriptor::UpdateDescriptor()
     {
-        for (auto it = m_updateInfos.begin(); it != m_updateInfos.end(); it++)
+        for (auto it = m_updateInfoMap.begin(); it != m_updateInfoMap.end(); it++)
         {
             const DescriptorUpdateInfo &updateInfo = it->second;
-            const DescriptorBindingInfo &bindingInfo = m_bindingInfos[it->first];
+            const DescriptorBindingInfo &bindingInfo = m_bindingInfoMap[it->first];
 
             std::vector<VkDescriptorImageInfo> imageInfoVK{};
             std::vector<VkDescriptorBufferInfo> bufferInfoVK{};
@@ -305,10 +305,10 @@ namespace pe
         m_frameDynamicOffsets = {};
         for (uint32_t j = 0; j < SWAPCHAIN_IMAGES; j++)
         {
-            for (auto it = m_updateInfos.begin(); it != m_updateInfos.end(); it++)
+            for (auto it = m_updateInfoMap.begin(); it != m_updateInfoMap.end(); it++)
             {
                 const DescriptorUpdateInfo &updateInfo = it->second;
-                const DescriptorBindingInfo &bindingInfo = m_bindingInfos[it->first];
+                const DescriptorBindingInfo &bindingInfo = m_bindingInfoMap[it->first];
 
                 if (bindingInfo.type == DescriptorType::UniformBufferDynamic ||
                     bindingInfo.type == DescriptorType::StorageBufferDynamic)
@@ -322,7 +322,7 @@ namespace pe
             }
         }
 
-        m_updateInfos.clear();
+        m_updateInfoMap.clear();
     }
 
     void Descriptor::GetFrameDynamicOffsets(uint32_t *count, uint32_t **offsets)
