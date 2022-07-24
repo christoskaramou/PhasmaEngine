@@ -72,8 +72,10 @@ namespace pe
             {
                 context->UpdateSystems(frameTimer->GetDelta());
                 SyncQueue<Launch::All>::ExecuteRequests();
-                frameTimer->cpuStamp = static_cast<float>(frameTimer->Count());
+                frameTimer->updatesStamp = static_cast<float>(frameTimer->Count());
+                
                 context->DrawSystems();
+                frameTimer->cpuTotal = static_cast<float>(frameTimer->Count());
             }
 
             frameTimer->ThreadSleep(1.0 / static_cast<double>(GUI::fps) - frameTimer->Count());

@@ -12,8 +12,8 @@ namespace pe
 
         ~SkyBox();
 
-        Image *texture;
-        Descriptor *descriptorSet;
+        Image *cubeMap;
+        Descriptor *DSet;
 
         void createDescriptorSet();
 

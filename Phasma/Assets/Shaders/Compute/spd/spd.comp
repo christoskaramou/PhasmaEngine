@@ -24,12 +24,6 @@
 #extension GL_ARB_compute_shader : enable
 #extension GL_ARB_shader_group_vote : enable
 
-// Defines
-#define A_GPU
-#define A_GLSL
-#define SPD_LINEAR_SAMPLER
-#define SPD_NO_WAVE_OPERATIONS
-
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 layout(push_constant) uniform SpdConstants

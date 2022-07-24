@@ -42,7 +42,8 @@ namespace pe
 
         double CountTotal();
 
-        double cpuStamp;
+        double updatesStamp;
+        double cpuTotal;
         double gpuStamp;
         double shadowStamp[SHADOWMAP_CASCADES];
         double computeStamp;

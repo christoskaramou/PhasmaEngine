@@ -79,10 +79,10 @@ namespace pe
 
             VkImageView imageView;
             PE_CHECK(vkCreateImageView(RHII.GetDevice(), &imageViewCreateInfo, nullptr, &imageView));
-            images[i]->view = imageView;
+            images[i]->SetImageView(imageView);
 
             Debug::SetObjectName(images[i]->Handle(), ObjectType::Image, "Swapchain_image" + std::to_string(i));
-            Debug::SetObjectName(images[i]->view, ObjectType::ImageView, "Swapchain_image_view" + std::to_string(i));
+            Debug::SetObjectName(images[i]->GetImageView(), ObjectType::ImageView, "Swapchain_image_view" + std::to_string(i));
         }
 
         if (m_handle)

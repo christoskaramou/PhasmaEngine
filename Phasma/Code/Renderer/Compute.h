@@ -49,11 +49,10 @@ namespace pe
         void CreatePipeline(const std::string &shaderName);
 
     private:
-        inline static Queue *s_queue = nullptr;
         Buffer *SBIn;
         Buffer *SBOut;
         Pipeline *pipeline;
-        Descriptor *DSCompute;
+        Descriptor *DSet;
         CommandBuffer *commandBuffer;
     };
 }

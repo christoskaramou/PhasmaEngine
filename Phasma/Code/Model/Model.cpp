@@ -768,24 +768,20 @@ namespace pe
             AllocationCreate::HostAccessSequentialWriteBit,
             "model_uniform_buffer");
 
-        DescriptorBindingInfo bindingInfo{};
-        bindingInfo.binding = 0;
-        bindingInfo.pBuffer = uniformBuffer.buffer;
-        bindingInfo.type = DescriptorType::UniformBufferDynamic;
+        std::vector<DescriptorBindingInfo> bindingInfos(1);
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::UniformBufferDynamic;
+        uniformBuffer.descriptor = Descriptor::Create(bindingInfos, ShaderStage::VertexBit, "model_uniform_buffer_descriptor");
 
-        DescriptorInfo info{};
-        info.count = 1;
-        info.bindingInfos = &bindingInfo;
-        info.stage = ShaderStage::VertexBit;
-
-        uniformBuffer.descriptor = Descriptor::Create(&info, "model_uniform_buffer_descriptor");
+        uniformBuffer.descriptor->SetBuffer(0, uniformBuffer.buffer);
+        uniformBuffer.descriptor->UpdateDescriptor();
 
         // Map to copy factors in uniform buffer
         MemoryRange mr{};
         uniformBuffer.buffer->Map();
 
-        std::vector<DescriptorBindingInfo> bindingInfos{};
         // mesh dSets
+        std::vector<Image *> images{};
         for (auto &node : linearNodes)
         {
             if (!node->mesh)
@@ -794,7 +790,7 @@ namespace pe
             for (auto &primitive : node->mesh->primitives)
             {
                 // this primitive's starting index of images in the uniform array of all images
-                primitive.uniformImagesIndex = bindingInfos.size();
+                primitive.uniformImagesIndex = images.size();
 
                 mat4 factors;
                 factors[0] = primitive.pbrMaterial.baseColorFactor != vec4(0.f) ? primitive.pbrMaterial.baseColorFactor : vec4(1.f);
@@ -812,30 +808,11 @@ namespace pe
                     uniformBuffer.buffer->Copy(1, &mr, true);
                 }
 
-                DescriptorBindingInfo bindingImageInfo{};
-                bindingImageInfo.binding = 0;
-                bindingImageInfo.type = DescriptorType::CombinedImageSampler;
-                bindingImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
-                bindingImageInfo.pImage = primitive.pbrMaterial.baseColorTexture;
-                bindingImageInfo.sampler = primitive.pbrMaterial.baseColorTexture->sampler;
-                bindingInfos.push_back(bindingImageInfo);
-
-                bindingImageInfo.pImage = primitive.pbrMaterial.metallicRoughnessTexture;
-                bindingImageInfo.sampler = primitive.pbrMaterial.metallicRoughnessTexture->sampler;
-                bindingInfos.push_back(bindingImageInfo);
-
-                bindingImageInfo.pImage = primitive.pbrMaterial.normalTexture;
-                bindingImageInfo.sampler = primitive.pbrMaterial.normalTexture->sampler;
-                bindingInfos.push_back(bindingImageInfo);
-
-                bindingImageInfo.pImage = primitive.pbrMaterial.occlusionTexture;
-                bindingImageInfo.sampler = primitive.pbrMaterial.occlusionTexture->sampler;
-                bindingInfos.push_back(bindingImageInfo);
-
-                bindingImageInfo.pImage = primitive.pbrMaterial.emissiveTexture;
-                bindingImageInfo.sampler = primitive.pbrMaterial.emissiveTexture->sampler;
-                bindingInfos.push_back(bindingImageInfo);
+                images.push_back(primitive.pbrMaterial.baseColorTexture);
+                images.push_back(primitive.pbrMaterial.metallicRoughnessTexture);
+                images.push_back(primitive.pbrMaterial.normalTexture);
+                images.push_back(primitive.pbrMaterial.occlusionTexture);
+                images.push_back(primitive.pbrMaterial.emissiveTexture);
             }
         }
 
@@ -843,11 +820,16 @@ namespace pe
         uniformBuffer.buffer->Flush();
         uniformBuffer.buffer->Unmap();
 
-        info.count = static_cast<uint32_t>(bindingInfos.size());
-        info.bindingInfos = bindingInfos.data();
-        info.stage = ShaderStage::FragmentBit;
+        std::vector<DescriptorBindingInfo> imageBindingInfos(1);
+        imageBindingInfos[0].binding = 0;
+        imageBindingInfos[0].count = static_cast<uint32_t>(images.size());
+        imageBindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        imageBindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        imageBindingInfos[0].bindless = true;
+        uniformImages.descriptor = Descriptor::Create(imageBindingInfos, ShaderStage::FragmentBit, "model_images_descriptor");
 
-        uniformImages.descriptor = Descriptor::Create(&info, "model_images_descriptor");
+        uniformImages.descriptor->SetImages(0, images);
+        uniformImages.descriptor->UpdateDescriptor();
     }
 
     void Model::UpdatePipelineInfo()

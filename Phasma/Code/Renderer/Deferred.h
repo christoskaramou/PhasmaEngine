@@ -46,10 +46,10 @@ namespace pe
             vec4 screenSpace[8];
         } ubo;
         Buffer *uniform;
-        Descriptor *DSComposition;
-        Pipeline *pipelineComposition;
+        Descriptor *DSet;
+        Pipeline *pipeline;
         RenderPass *m_renderPassModels;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfoComposition;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfo;
         Image *ibl_brdf_lut;
         Image *normalRT;
         Image *albedoRT;

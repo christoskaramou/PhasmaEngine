@@ -11,7 +11,7 @@ namespace pe
     {
         lubo = {};
         uniform = nullptr;
-        descriptorSet = nullptr;
+        DSet = nullptr;
     }
 
     LightSystem::~LightSystem()
@@ -54,17 +54,13 @@ namespace pe
             uniform->Copy(1, &mr, false);
         }
 
-        DescriptorBindingInfo bindingInfo{};
-        bindingInfo.binding = 0;
-        bindingInfo.type = DescriptorType::UniformBufferDynamic;
-        bindingInfo.pBuffer = uniform;
+        std::vector<DescriptorBindingInfo> bindingInfos(1);
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::UniformBufferDynamic;
+        DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Lights_descriptor");
 
-        DescriptorInfo info{};
-        info.count = 1;
-        info.bindingInfos = &bindingInfo;
-        info.stage = ShaderStage::FragmentBit;
-
-        descriptorSet = Descriptor::Create(&info, "Lights_descriptor");
+        DSet->SetBuffer(0, uniform);
+        DSet->UpdateDescriptor();
     }
 
     void LightSystem::Update(double delta)
@@ -108,6 +104,6 @@ namespace pe
     void LightSystem::Destroy()
     {
         Buffer::Destroy(uniform);
-        Descriptor::Destroy(descriptorSet);
+        Descriptor::Destroy(DSet);
     }
 }

@@ -18,7 +18,7 @@ namespace pe
 {
     Shadows::Shadows()
     {
-        descriptorSetDeferred = {};
+        DSetDeferred = {};
     }
 
     Shadows::~Shadows()
@@ -46,7 +46,6 @@ namespace pe
 
             ImageViewCreateInfo viewInfo{};
             viewInfo.image = texture;
-            viewInfo.aspectMask = ImageAspect::DepthBit; // | ImageAspect::StencilBit;
             texture->CreateImageView(viewInfo);
 
             SamplerCreateInfo samplerInfo{};
@@ -76,52 +75,23 @@ namespace pe
         uniformBuffer->Zero();
         uniformBuffer->Flush();
 
-        DescriptorBindingInfo bindingInfos[SHADOWMAP_CASCADES + 1]{};
-
+        std::vector<DescriptorBindingInfo> bindingInfos(2);
         bindingInfos[0].binding = 0;
         bindingInfos[0].type = DescriptorType::UniformBufferDynamic;
-        bindingInfos[0].pBuffer = uniformBuffer;
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].count = SHADOWMAP_CASCADES;
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+        DSetDeferred = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Shadows_deferred_descriptor");
 
-        for (int i = 0; i < SHADOWMAP_CASCADES; i++)
-        {
-            bindingInfos[i + 1].binding = 1;
-            bindingInfos[i + 1].type = DescriptorType::CombinedImageSampler;
-            bindingInfos[i + 1].imageLayout = ImageLayout::DepthStencilReadOnly;
-            bindingInfos[i + 1].pImage = textures[i];
-            bindingInfos[i + 1].sampler = textures[i]->sampler;
-        }
-
-        DescriptorInfo info{};
-        info.count = SHADOWMAP_CASCADES + 1;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
-
-        descriptorSetDeferred = Descriptor::Create(&info, "Shadows_deferred_descriptor");
+        UpdateDescriptorSets();
     }
 
     void Shadows::UpdateDescriptorSets()
     {
-        DescriptorBindingInfo bindingInfos[SHADOWMAP_CASCADES + 1]{};
-
-        bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::UniformBufferDynamic;
-        bindingInfos[0].pBuffer = uniformBuffer;
-
-        for (int i = 0; i < SHADOWMAP_CASCADES; i++)
-        {
-            bindingInfos[i + 1].binding = 1;
-            bindingInfos[i + 1].type = DescriptorType::CombinedImageSampler;
-            bindingInfos[i + 1].imageLayout = ImageLayout::DepthStencilReadOnly;
-            bindingInfos[i + 1].pImage = textures[i];
-            bindingInfos[i + 1].sampler = textures[i]->sampler;
-        }
-
-        DescriptorInfo info{};
-        info.count = SHADOWMAP_CASCADES + 1;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
-
-        descriptorSetDeferred->UpdateDescriptor(&info);
+        DSetDeferred->SetBuffer(0, uniformBuffer);
+        DSetDeferred->SetImages(1, textures);
+        DSetDeferred->UpdateDescriptor();
     }
 
     void Shadows::Update(Camera *camera)
@@ -269,7 +239,7 @@ namespace pe
             Image::Destroy(texture);
 
         Buffer::Destroy(uniformBuffer);
-        Descriptor::Destroy(descriptorSetDeferred);
+        Descriptor::Destroy(DSetDeferred);
     }
 }
 #endif

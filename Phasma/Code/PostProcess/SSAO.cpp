@@ -141,100 +141,43 @@ namespace pe
         UB_PVM->Unmap();
 
         // DESCRIPTOR SET FOR SSAO
-        DescriptorBindingInfo bindingInfos[5]{};
-
+        std::vector<DescriptorBindingInfo> bindingInfos(5);
         bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::DepthStencilReadOnly;
-        bindingInfos[0].pImage = depth;
-        bindingInfos[0].sampler = depth->sampler;
-
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].binding = 1;
-        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[1].pImage = normalRT;
-        bindingInfos[1].sampler = normalRT->sampler;
-
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].binding = 2;
-        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[2].pImage = noiseTex;
-        bindingInfos[2].sampler = noiseTex->sampler;
-
+        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[3].binding = 3;
         bindingInfos[3].type = DescriptorType::UniformBuffer;
-        bindingInfos[3].pBuffer = UB_Kernel;
-
         bindingInfos[4].binding = 4;
         bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
-        bindingInfos[4].pBuffer = UB_PVM;
-
-        DescriptorInfo info{};
-        info.count = 5;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
-
-        DSet = Descriptor::Create(&info, "ssao_descriptor");
+        DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "ssao_descriptor");
 
         // DESCRIPTOR SET FOR SSAO BLUR
+        bindingInfos.resize(1);
         bindingInfos[0].binding = 0;
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[0].pImage = ssaoRT;
-        bindingInfos[0].sampler = ssaoRT->sampler;
+        DSBlur = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "ssao_blur_descriptor");
 
-        info.count = 1;
-
-        DSBlur = Descriptor::Create(&info, "ssao_blur_descriptor");
+        UpdateDescriptorSets(); 
     }
 
     void SSAO::UpdateDescriptorSets()
     {
-        DescriptorBindingInfo bindingInfos[5]{};
+        DSet->SetImage(0, depth);
+        DSet->SetImage(1, normalRT);
+        DSet->SetImage(2, noiseTex);
+        DSet->SetBuffer(3, UB_Kernel);
+        DSet->SetBuffer(4, UB_PVM);
+        DSet->UpdateDescriptor();
 
-        bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[0].imageLayout = ImageLayout::DepthStencilReadOnly;
-        bindingInfos[0].pImage = depth;
-        bindingInfos[0].sampler = depth->sampler;
-
-        bindingInfos[1].binding = 1;
-        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[1].pImage = normalRT;
-        bindingInfos[1].sampler = normalRT->sampler;
-
-        bindingInfos[2].binding = 2;
-        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[2].pImage = noiseTex;
-        bindingInfos[2].sampler = noiseTex->sampler;
-
-        bindingInfos[3].binding = 3;
-        bindingInfos[3].type = DescriptorType::UniformBuffer;
-        bindingInfos[3].pBuffer = UB_Kernel;
-
-        bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
-        bindingInfos[4].pBuffer = UB_PVM;
-
-        DescriptorInfo info{};
-        info.count = 5;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
-
-        DSet->UpdateDescriptor(&info);
-
-        // DESCRIPTOR SET FOR SSAO BLUR
-        bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[0].pImage = ssaoRT;
-        bindingInfos[0].sampler = ssaoRT->sampler;
-
-        info.count = 1;
-
-        DSBlur->UpdateDescriptor(&info);
+        DSBlur->SetImage(0, ssaoRT);
+        DSBlur->UpdateDescriptor();
     }
 
     void SSAO::Update(Camera *camera)

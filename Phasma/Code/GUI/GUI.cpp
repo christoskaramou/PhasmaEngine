@@ -210,9 +210,6 @@ namespace pe
         if (!metrics_open)
             return;
 
-        int totalPasses = 0;
-        float totalTime = 0.f;
-
         ImGui::Begin("Metrics", &metrics_open);
         ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
         auto framerate = ImGui::GetIO().Framerate;
@@ -223,9 +220,6 @@ namespace pe
         ImGui::Separator();
 
         FrameTimer &frameTimer = FrameTimer::Instance();
-        ImGui::Text("CPU Total: %.3f ms", static_cast<float>(MILLI(frameTimer.GetDelta())));
-        ImGui::Indent(16.0f);
-        ImGui::Text("CPU: %.3f ms", static_cast<float>(MILLI(frameTimer.cpuStamp)));
 
         double shadowsTotal = 0.0;
         if (shadow_cast)
@@ -233,87 +227,59 @@ namespace pe
             for (int i = 0; i < SHADOWMAP_CASCADES; i++)
                 shadowsTotal += frameTimer.shadowStamp[i];
         }
-        ImGui::Text("GPU: %.3f ms", frameTimer.gpuStamp + shadowsTotal);
+
+        ImGui::Text("CPU Total: %.3f ms", static_cast<float>(MILLI(frameTimer.cpuTotal)));
+        ImGui::Indent(16.0f);
+        ImGui::Text("CPU Updates: %.3f ms", static_cast<float>(MILLI(frameTimer.updatesStamp)));
+        ImGui::Text("CPU Draw: %.3f ms", static_cast<float>(MILLI(frameTimer.cpuTotal - frameTimer.updatesStamp)));
         ImGui::Unindent(16.0f);
-        ImGui::Separator();
-        ImGui::Text("Render Passes:");
-        // if (use_compute) {
-        //	ImGui::Text("   Compute: %.3f ms", stats[13]); totalPasses++;
-        // }
-        // ImGui::Text("   Skybox: %.3f ms", stats[1]); totalPasses++;
+        ImGui::Text("GPU Total: %.3f ms", frameTimer.gpuStamp + shadowsTotal);
         ImGui::Indent(16.0f);
         if (shadow_cast)
         {
             for (int i = 0; i < SHADOWMAP_CASCADES; i++)
             {
                 ImGui::Text("ShadowPass%i: %.3f ms", i, frameTimer.shadowStamp[i]);
-                totalPasses++;
             }
-            totalTime += static_cast<float>(shadowsTotal);
         }
         ImGui::Text("GBuffer: %.3f ms", frameTimer.geometryStamp);
-        totalPasses++;
-        totalTime += static_cast<float>(frameTimer.geometryStamp);
         if (show_ssao)
         {
             ImGui::Text("SSAO: %.3f ms", frameTimer.ssaoStamp);
-            totalPasses++;
-            totalTime += static_cast<float>(frameTimer.ssaoStamp);
         }
         if (show_ssr)
         {
             ImGui::Text("SSR: %.3f ms", frameTimer.ssrStamp);
-            totalPasses++;
-            totalTime += static_cast<float>(frameTimer.ssrStamp);
         }
         ImGui::Text("Color Pass: %.3f ms", frameTimer.compositionStamp);
-        totalPasses++;
-        totalTime += static_cast<float>(frameTimer.compositionStamp);
 
         if (use_FSR2)
         {
-            ImGui::Text("FSR2: %.3f ms", frameTimer.fsrStamp); // TODO: Set a new timestamp for FSR2
-            totalPasses++;
-            totalTime += static_cast<float>(frameTimer.fsrStamp);
+            ImGui::Text("FSR2: %.3f ms", frameTimer.fsrStamp);
         }
         if (use_FXAA)
         {
             ImGui::Text("FXAA: %.3f ms", frameTimer.fxaaStamp);
-            totalPasses++;
-            totalTime += static_cast<float>(frameTimer.fxaaStamp);
         }
         if (show_Bloom)
         {
             ImGui::Text("Bloom: %.3f ms", frameTimer.bloomStamp);
-            totalPasses++;
-            totalTime += static_cast<float>(frameTimer.bloomStamp);
         }
         if (use_DOF)
         {
             ImGui::Text("Depth of Field: %.3f ms", frameTimer.dofStamp);
-            totalPasses++;
-            totalTime += static_cast<float>(frameTimer.dofStamp);
         }
         if (use_SSGI)
         {
             ImGui::Text("SSGI: %.3f ms", frameTimer.ssgiStamp);
-            totalPasses++;
-            totalTime += static_cast<float>(frameTimer.ssgiStamp);
         }
         if (show_motionBlur)
         {
             ImGui::Text("Motion Blur: %.3f ms", frameTimer.motionBlurStamp);
-            totalPasses++;
-            totalTime += static_cast<float>(frameTimer.motionBlurStamp);
         }
 
         ImGui::Text("GUI: %.3f ms", frameTimer.guiStamp);
-        totalPasses++;
-        totalTime += static_cast<float>(frameTimer.guiStamp);
         ImGui::Unindent(16.0f);
-        ImGui::Separator();
-        ImGui::Separator();
-        ImGui::Text("Total: %i (%.3f ms)", totalPasses, totalTime);
 
         ImGui::Separator();
         ImGui::Separator();

@@ -13,6 +13,9 @@ namespace pe
 
     extern bool IsDepthFormatVK(VkFormat format);
     extern bool IsDepthFormat(Format format);
+    extern VkImageAspectFlags GetAspectMaskVK(Format format);
+    extern VkImageAspectFlags GetAspectMaskVK(VkFormat format);
+    extern ImageAspectFlags GetAspectMask(Format format);
     extern bool HasStencilVK(VkFormat format);
     extern bool HasStencil(Format format);
     extern void GetVkInfoFromLayout(ImageLayout layout, VkPipelineStageFlags &stageFlags, VkAccessFlags &accessMask);

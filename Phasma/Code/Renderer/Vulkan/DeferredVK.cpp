@@ -26,8 +26,8 @@ namespace pe
 {
     Deferred::Deferred()
     {
-        DSComposition = {};
-        pipelineComposition = nullptr;
+        DSet = {};
+        pipeline = nullptr;
     }
 
     Deferred::~Deferred()
@@ -61,8 +61,8 @@ namespace pe
             Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
             Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
 
-        pipelineInfoComposition = std::make_shared<PipelineCreateInfo>();
-        PipelineCreateInfo &info = *pipelineInfoComposition;
+        pipelineInfo = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfo;
 
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.vert", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/composition.frag", ShaderStage::FragmentBit, definesFrag});
@@ -71,9 +71,9 @@ namespace pe
         info.pushConstantSize = sizeof(mat4);
         info.colorBlendAttachments = {viewportRT->blendAttachment};
         info.descriptorSetLayouts = {
-            DSComposition->GetLayout(),
-            shadows.descriptorSetDeferred->GetLayout(),
-            skybox.descriptorSet->GetLayout()};
+            DSet->GetLayout(),
+            shadows.DSetDeferred->GetLayout(),
+            skybox.DSet->GetLayout()};
         info.dynamicColorTargets = 1;
         info.colorFormats = &viewportRT->imageInfo.format;
         info.name = "composition_pipeline";
@@ -133,138 +133,64 @@ namespace pe
         uniform->Flush();
         uniform->Unmap();
 
-        DescriptorBindingInfo bindingInfos[10]{};
+        std::vector<DescriptorBindingInfo> bindingInfos(10);
 
         bindingInfos[0].binding = 0;
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::DepthStencilReadOnly;
-        bindingInfos[0].pImage = depth;
-        bindingInfos[0].sampler = depth->sampler;
 
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[1].pImage = normalRT;
-        bindingInfos[1].sampler = normalRT->sampler;
 
         bindingInfos[2].binding = 2;
         bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[2].pImage = albedoRT;
-        bindingInfos[2].sampler = albedoRT->sampler;
 
         bindingInfos[3].binding = 3;
         bindingInfos[3].type = DescriptorType::CombinedImageSampler;
         bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[3].pImage = srmRT;
-        bindingInfos[3].sampler = srmRT->sampler;
 
         bindingInfos[4].binding = 4;
         bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
-        bindingInfos[4].pBuffer = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
 
         bindingInfos[5].binding = 5;
         bindingInfos[5].type = DescriptorType::CombinedImageSampler;
         bindingInfos[5].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[5].pImage = ssaoBlurRT;
-        bindingInfos[5].sampler = ssaoBlurRT->sampler;
 
         bindingInfos[6].binding = 6;
         bindingInfos[6].type = DescriptorType::CombinedImageSampler;
         bindingInfos[6].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[6].pImage = ssrRT;
-        bindingInfos[6].sampler = ssrRT->sampler;
 
         bindingInfos[7].binding = 7;
         bindingInfos[7].type = DescriptorType::CombinedImageSampler;
         bindingInfos[7].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[7].pImage = emissiveRT;
-        bindingInfos[7].sampler = emissiveRT->sampler;
 
         bindingInfos[8].binding = 8;
         bindingInfos[8].type = DescriptorType::CombinedImageSampler;
         bindingInfos[8].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[8].pImage = ibl_brdf_lut;
-        bindingInfos[8].sampler = ibl_brdf_lut->sampler;
 
         bindingInfos[9].binding = 9;
         bindingInfos[9].type = DescriptorType::UniformBufferDynamic;
-        bindingInfos[9].pBuffer = uniform;
+        
+        DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Deferred_Composition_descriptor");
 
-        DescriptorInfo info{};
-        info.count = 10;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
-
-        DSComposition = Descriptor::Create(&info, "Deferred_Composition_descriptor");
+        UpdateDescriptorSets(); 
     }
 
     void Deferred::UpdateDescriptorSets()
     {
-        DescriptorBindingInfo bindingInfos[10]{};
-
-        bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[0].imageLayout = ImageLayout::DepthStencilReadOnly;
-        bindingInfos[0].pImage = depth;
-        bindingInfos[0].sampler = albedoRT->sampler;
-
-        bindingInfos[1].binding = 1;
-        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[1].pImage = normalRT;
-        bindingInfos[1].sampler = normalRT->sampler;
-
-        bindingInfos[2].binding = 2;
-        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[2].pImage = albedoRT;
-        bindingInfos[2].sampler = albedoRT->sampler;
-
-        bindingInfos[3].binding = 3;
-        bindingInfos[3].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[3].pImage = srmRT;
-        bindingInfos[3].sampler = srmRT->sampler;
-
-        bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
-        bindingInfos[4].pBuffer = &CONTEXT->GetSystem<LightSystem>()->GetUniform();
-
-        bindingInfos[5].binding = 5;
-        bindingInfos[5].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[5].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[5].pImage = ssaoBlurRT;
-        bindingInfos[5].sampler = ssaoBlurRT->sampler;
-
-        bindingInfos[6].binding = 6;
-        bindingInfos[6].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[6].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[6].pImage = ssrRT;
-        bindingInfos[6].sampler = ssrRT->sampler;
-
-        bindingInfos[7].binding = 7;
-        bindingInfos[7].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[7].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[7].pImage = emissiveRT;
-        bindingInfos[7].sampler = emissiveRT->sampler;
-
-        bindingInfos[8].binding = 8;
-        bindingInfos[8].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[8].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[8].pImage = ibl_brdf_lut;
-        bindingInfos[8].sampler = ibl_brdf_lut->sampler;
-
-        bindingInfos[9].binding = 9;
-        bindingInfos[9].type = DescriptorType::UniformBufferDynamic;
-        bindingInfos[9].pBuffer = uniform;
-
-        DescriptorInfo info{};
-        info.count = 10;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
-
-        DSComposition->UpdateDescriptor(&info);
+        DSet->SetImage(0, depth);
+        DSet->SetImage(1, normalRT);
+        DSet->SetImage(2, albedoRT);
+        DSet->SetImage(3, srmRT);
+        DSet->SetBuffer(4, CONTEXT->GetSystem<LightSystem>()->GetUniform());
+        DSet->SetImage(5, ssaoBlurRT);
+        DSet->SetImage(6, ssrRT);
+        DSet->SetImage(7, emissiveRT);
+        DSet->SetImage(8, ibl_brdf_lut);
+        DSet->SetBuffer(9, uniform);
+        DSet->UpdateDescriptor();
     }
 
     void Deferred::Update(Camera *camera)
@@ -303,7 +229,7 @@ namespace pe
         mat4 values{};
         values[0] = shadows.viewZ;
         values[1] = vec4(GUI::shadow_cast);
-        std::vector<Descriptor *> handles{DSComposition, shadows.descriptorSetDeferred, skybox.descriptorSet};
+        std::vector<Descriptor *> handles{DSet, shadows.DSetDeferred, skybox.DSet};
 
         // COMBINE
         // Input
@@ -315,7 +241,7 @@ namespace pe
         cmd->ImageBarrier(ssaoBlurRT, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(ssrRT, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(ibl_brdf_lut, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(skybox.texture, ImageLayout::ShaderReadOnly, 0, skybox.texture->imageInfo.arrayLayers);
+        cmd->ImageBarrier(skybox.cubeMap, ImageLayout::ShaderReadOnly, 0, skybox.cubeMap->imageInfo.arrayLayers);
         cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         for (auto &shadowMap : shadows.textures)
             cmd->ImageBarrier(shadowMap, ImageLayout::DepthStencilReadOnly);
@@ -327,12 +253,12 @@ namespace pe
         info.initialLayout = viewportRT->GetCurrentLayout();
         info.finalLayout = ImageLayout::ColorAttachment;
 
-        cmd->BeginPass(1, &info, nullptr, &pipelineInfoComposition->renderPass);
-        cmd->BindPipeline(*pipelineInfoComposition, &pipelineComposition);
+        cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
+        cmd->BindPipeline(*pipelineInfo, &pipeline);
         cmd->SetViewport(0.f, 0.f, viewportRT->width_f, viewportRT->height_f);
         cmd->SetScissor(0, 0, viewportRT->imageInfo.width, viewportRT->imageInfo.height);
-        cmd->PushConstants(pipelineComposition, ShaderStage::FragmentBit, 0, sizeof(mat4), &values);
-        cmd->BindDescriptors(pipelineComposition, (uint32_t)handles.size(), handles.data());
+        cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, sizeof(mat4), &values);
+        cmd->BindDescriptors(pipeline, (uint32_t)handles.size(), handles.data());
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
 
@@ -396,9 +322,9 @@ namespace pe
 
     void Deferred::Destroy()
     {
-        Descriptor::Destroy(DSComposition);
+        Descriptor::Destroy(DSet);
         Buffer::Destroy(uniform);
-        Pipeline::Destroy(pipelineComposition);
+        Pipeline::Destroy(pipeline);
     }
 }
 #endif

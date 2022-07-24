@@ -39,9 +39,6 @@ namespace pe
 
         Image *image;
         ImageViewType viewType;
-        // VkComponentMapping         components;
-        // VkImageSubresourceRange    subresourceRange;
-        ImageAspectFlags aspectMask;
     };
 
     class ImageCreateInfo
@@ -71,21 +68,23 @@ namespace pe
     class Image : public IHandle<Image, ImageHandle>
     {
     public:
-        Image()
-        {
-        }
+        Image() {}
 
         Image(const ImageCreateInfo &info);
 
         ~Image();
 
-        void CreateImageView(const ImageViewCreateInfo &info);
+        void CreateImageView(const ImageViewCreateInfo &info, uint32_t mip = -1);
 
         void CreateSampler(const SamplerCreateInfo &info);
-        
+
         ImageLayout GetCurrentLayout(uint32_t layer = 0, uint32_t mip = 0) { return m_layouts[layer][mip]; }
 
         void SetCurrentLayout(ImageLayout layout, uint32_t layer = 0, uint32_t mip = 0) { m_layouts[layer][mip] = layout; }
+
+        ImageViewHandle &GetImageView(uint32_t mip = -1) { return mip == -1 ? m_view : m_views[mip]; }
+
+        void SetImageView(ImageViewHandle view, uint32_t mip = -1) { GetImageView(mip) = view; }
 
     private:
         friend class CommandBuffer;
@@ -125,7 +124,6 @@ namespace pe
                                    uint32_t mipLevels);
 
     public:
-        ImageViewHandle view;
         SamplerHandle sampler;
         AllocationHandle allocation;
         ImageCreateInfo imageInfo;
@@ -138,6 +136,8 @@ namespace pe
 
     private:
         friend class Swapchain;
+        ImageViewHandle m_view;
+        std::vector<ImageViewHandle> m_views; // single mip views
         std::vector<std::vector<ImageLayout>> m_layouts{};
     };
 }

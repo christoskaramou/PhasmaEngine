@@ -692,6 +692,21 @@ namespace pe
                format == Format::D24UnormS8UInt;
     }
 
+    VkImageAspectFlags GetAspectMaskVK(Format format)
+    {
+        return IsDepthFormat(format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+
+    VkImageAspectFlags GetAspectMaskVK(VkFormat format)
+    {
+        return IsDepthFormatVK(format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+ 
+    ImageAspectFlags GetAspectMask(Format format)
+    {
+        return IsDepthFormat(format) ? ImageAspect::DepthBit : ImageAspect::ColorBit;
+    }
+
     bool HasStencilVK(VkFormat format)
     {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT ||

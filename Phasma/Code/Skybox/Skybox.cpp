@@ -12,7 +12,7 @@ namespace pe
 {
     SkyBox::SkyBox()
     {
-        descriptorSet = {};
+        DSet = {};
     }
 
     SkyBox::~SkyBox()
@@ -21,19 +21,14 @@ namespace pe
 
     void SkyBox::createDescriptorSet()
     {
-        DescriptorBindingInfo bindingInfo{};
-        bindingInfo.binding = 0;
-        bindingInfo.type = DescriptorType::CombinedImageSampler;
-        bindingInfo.imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfo.pImage = texture;
-        bindingInfo.sampler = texture->sampler;
+        std::vector<DescriptorBindingInfo> bindingInfos(1);
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Skybox_descriptor");
 
-        DescriptorInfo info{};
-        info.count = 1;
-        info.bindingInfos = &bindingInfo;
-        info.stage = ShaderStage::FragmentBit;
-
-        descriptorSet = Descriptor::Create(&info, "Skybox_descriptor");
+        DSet->SetImage(0, cubeMap);
+        DSet->UpdateDescriptor();
     }
 
     void SkyBox::loadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames, uint32_t imageSideSize, bool show)
@@ -55,22 +50,22 @@ namespace pe
         info.usage = ImageUsage::SampledBit | ImageUsage::TransferDstBit;
         info.properties = MemoryProperty::DeviceLocalBit;
         info.name = "skybox_image";
-        texture = Image::Create(info);
+        cubeMap = Image::Create(info);
 
         ImageViewCreateInfo viewInfo{};
-        viewInfo.image = texture;
+        viewInfo.image = cubeMap;
         viewInfo.viewType = ImageViewType::TypeCube;
-        texture->CreateImageView(viewInfo);
+        cubeMap->CreateImageView(viewInfo);
 
         SamplerCreateInfo samplerInfo{};
         samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
         samplerInfo.addressModeV = SamplerAddressMode::ClampToEdge;
         samplerInfo.addressModeW = SamplerAddressMode::ClampToEdge;
-        texture->CreateSampler(samplerInfo);
+        cubeMap->CreateSampler(samplerInfo);
 
-        for (uint32_t i = 0; i < texture->imageInfo.arrayLayers; ++i)
+        // CubeMap Load
+        for (uint32_t i = 0; i < cubeMap->imageInfo.arrayLayers; ++i)
         {
-            // Texture Load
             int texWidth, texHeight, texChannels;
             // stbi_set_flip_vertically_on_load(true);
             stbi_uc *pixels = stbi_load(paths[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -80,15 +75,15 @@ namespace pe
                 PE_ERROR("No pixel data loaded");
 
             size_t size = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * 4;
-            cmd->CopyDataToImageStaged(texture, pixels, size, i);
+            cmd->CopyDataToImageStaged(cubeMap, pixels, size, i);
             cmd->AddAfterWaitCallback([pixels]()
-                                     { stbi_image_free(pixels); });
+                                      { stbi_image_free(pixels); });
         }
     }
 
     void SkyBox::destroy()
     {
-        Image::Destroy(texture);
-        Descriptor::Destroy(descriptorSet);
+        Image::Destroy(cubeMap);
+        Descriptor::Destroy(DSet);
     }
 }

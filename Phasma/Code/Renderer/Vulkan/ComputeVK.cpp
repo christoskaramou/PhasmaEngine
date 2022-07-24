@@ -16,7 +16,7 @@ namespace pe
         SBIn = nullptr;
         SBOut = nullptr;
         pipeline = nullptr;
-        DSCompute = nullptr;
+        DSet = nullptr;
         commandBuffer = nullptr;
     }
 
@@ -31,19 +31,19 @@ namespace pe
 
     void Compute::Dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
     {
-        s_queue->BeginDebugRegion("Compute::Dispatch queue");
+        RHII.GetComputeQueue(0)->BeginDebugRegion("Compute::Dispatch queue");
         
         commandBuffer->Begin();
         commandBuffer->BeginDebugRegion("Compute::Dispatch command");
         commandBuffer->BindComputePipeline(pipeline);
-        commandBuffer->BindComputeDescriptors(pipeline, 1, &DSCompute);
+        commandBuffer->BindComputeDescriptors(pipeline, 1, &DSet);
         commandBuffer->Dispatch(sizeX, sizeY, sizeZ);
         commandBuffer->EndDebugRegion();
         commandBuffer->End();
+        
+        commandBuffer->Submit(RHII.GetComputeQueue(0), nullptr, 0, nullptr, 0, nullptr);
 
-        s_queue->Submit(1, &commandBuffer, nullptr, 0, nullptr, 0, nullptr);
-
-        s_queue->EndDebugRegion();
+        RHII.GetComputeQueue(0)->EndDebugRegion();
     }
 
     void Compute::Wait()
@@ -65,42 +65,21 @@ namespace pe
             AllocationCreate::HostAccessSequentialWriteBit,
             "Compute_Output_storage_buffer");
 
-        DescriptorBindingInfo bindingInfos[2]{};
-
+        std::vector<DescriptorBindingInfo> bindingInfos(2);
         bindingInfos[0].binding = 0;
         bindingInfos[0].type = DescriptorType::StorageBuffer;
-        bindingInfos[0].pBuffer = SBIn;
-
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::StorageBuffer;
-        bindingInfos[1].pBuffer = SBOut;
+        DSet = Descriptor::Create(bindingInfos, ShaderStage::ComputeBit, "Compute_descriptor");
 
-        DescriptorInfo info{};
-        info.count = 2;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::ComputeBit;
-
-        DSCompute = Descriptor::Create(&info, "Compute_descriptor");
+        UpdateDescriptorSet();
     }
 
     void Compute::UpdateDescriptorSet()
     {
-        DescriptorBindingInfo bindingInfos[2]{};
-
-        bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::StorageBuffer;
-        bindingInfos[0].pBuffer = SBIn;
-
-        bindingInfos[1].binding = 1;
-        bindingInfos[1].type = DescriptorType::StorageBuffer;
-        bindingInfos[1].pBuffer = SBOut;
-
-        DescriptorInfo info{};
-        info.count = 2;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::ComputeBit;
-
-        DSCompute->UpdateDescriptor(&info);
+        DSet->SetBuffer(0, SBIn);
+        DSet->SetBuffer(1, SBOut);
+        DSet->UpdateDescriptor();
     }
 
     void Compute::CreatePipeline(const std::string &shaderName)
@@ -110,7 +89,7 @@ namespace pe
 
         PipelineCreateInfo info{};
         info.pCompShader = Shader::Create(ShaderInfo{shaderName, ShaderStage::ComputeBit});
-        info.descriptorSetLayouts = {DSCompute->GetLayout()};
+        info.descriptorSetLayouts = {DSet->GetLayout()};
         info.name = "Compute_pipeline";
 
         pipeline = Pipeline::Create(info);
@@ -127,16 +106,13 @@ namespace pe
 
         Pipeline::Destroy(pipeline);
 
-        Descriptor::Destroy(DSCompute);
+        Descriptor::Destroy(DSet);
     }
 
     Compute Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, const std::string &name)
     {
-        if (!s_queue)
-            s_queue = Queue::GetNext(QueueType::ComputeBit, 1);
-
         Compute compute;
-        compute.commandBuffer = CommandBuffer::GetNext(s_queue->GetFamilyId());
+        compute.commandBuffer = CommandBuffer::GetNext(RHII.GetComputeQueue(0)->GetFamilyId());
         compute.CreateUniforms(sizeIn, sizeOut);
         compute.CreatePipeline(shaderName);
 
@@ -145,16 +121,13 @@ namespace pe
 
     std::vector<Compute> Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, uint32_t count, const std::string &name)
     {
-        if (!s_queue)
-            s_queue = Queue::GetNext(QueueType::ComputeBit, 1);
-
         std::vector<CommandBuffer *> commandBuffers(count);
         std::vector<Compute> computes(count);
 
         for (uint32_t i = 0; i < count; i++)
         {
             Compute compute;
-            compute.commandBuffer = CommandBuffer::GetNext(s_queue->GetFamilyId());
+            compute.commandBuffer = CommandBuffer::GetNext(RHII.GetComputeQueue(0)->GetFamilyId());
             compute.CreateUniforms(sizeIn, sizeOut);
             compute.CreatePipeline(shaderName);
 
@@ -166,8 +139,6 @@ namespace pe
 
     void Compute::DestroyResources()
     {
-        s_queue->WaitIdle();
-        Queue::Return(s_queue);
     }
 }
 #endif

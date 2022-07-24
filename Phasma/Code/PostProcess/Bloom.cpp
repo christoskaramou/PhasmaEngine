@@ -118,72 +118,41 @@ namespace pe
 
     void Bloom::CreateUniforms(CommandBuffer *cmd)
     {
-        DescriptorBindingInfo bindingInfos[2]{};
+        std::vector<DescriptorBindingInfo> bindingInfos(1);
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+
+        DSBrightFilter = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Bloom_BrightFilter_descriptor");
+        DSGaussianBlurHorizontal = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Bloom_GaussianBlurHorizontal_descriptor");
+        DSGaussianBlurVertical = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Bloom_GaussianBlurVertical_descriptor");
+
+        bindingInfos.resize(2);
         bindingInfos[0].binding = 0;
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].binding = 1;
         bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        DSCombine = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Bloom_Combine_descriptor");
 
-        DescriptorInfo info{};
-        info.count = 1;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
-
-        bindingInfos[0].pImage = frameImage;
-        bindingInfos[0].sampler = frameImage->sampler;
-        DSBrightFilter = Descriptor::Create(&info, "Bloom_BrightFilter_descriptor");
-
-        bindingInfos[0].pImage = brightFilterRT;
-        bindingInfos[0].sampler = brightFilterRT->sampler;
-        DSGaussianBlurHorizontal = Descriptor::Create(&info, "Bloom_GaussianBlurHorizontal_descriptor");
-
-        bindingInfos[0].pImage = gaussianBlurHorizontalRT;
-        bindingInfos[0].sampler = gaussianBlurHorizontalRT->sampler;
-        DSGaussianBlurVertical = Descriptor::Create(&info, "Bloom_GaussianBlurVertical_descriptor");
-
-        bindingInfos[0].pImage = frameImage;
-        bindingInfos[0].sampler = frameImage->sampler;
-        bindingInfos[1].pImage = gaussianBlurVerticalRT;
-        bindingInfos[1].sampler = gaussianBlurVerticalRT->sampler;
-        info.count = 2;
-        DSCombine = Descriptor::Create(&info, "Bloom_Combine_descriptor");
+        UpdateDescriptorSets();
     }
 
     void Bloom::UpdateDescriptorSets()
     {
-        DescriptorBindingInfo bindingInfos[2]{};
-        bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[1].binding = 1;
-        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
+        DSBrightFilter->SetImage(0, frameImage);
+        DSBrightFilter->UpdateDescriptor();
 
-        DescriptorInfo info{};
-        info.count = 1;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
+        DSGaussianBlurHorizontal->SetImage(0, brightFilterRT);
+        DSGaussianBlurHorizontal->UpdateDescriptor();
 
-        bindingInfos[0].pImage = frameImage;
-        bindingInfos[0].sampler = frameImage->sampler;
-        DSBrightFilter->UpdateDescriptor(&info);
+        DSGaussianBlurVertical->SetImage(0, gaussianBlurHorizontalRT);
+        DSGaussianBlurVertical->UpdateDescriptor();
 
-        bindingInfos[0].pImage = brightFilterRT;
-        bindingInfos[0].sampler = brightFilterRT->sampler;
-        DSGaussianBlurHorizontal->UpdateDescriptor(&info);
-
-        bindingInfos[0].pImage = gaussianBlurHorizontalRT;
-        bindingInfos[0].sampler = gaussianBlurHorizontalRT->sampler;
-        DSGaussianBlurVertical->UpdateDescriptor(&info);
-
-        bindingInfos[0].pImage = frameImage;
-        bindingInfos[0].sampler = frameImage->sampler;
-        bindingInfos[1].pImage = gaussianBlurVerticalRT;
-        bindingInfos[1].sampler = gaussianBlurVerticalRT->sampler;
-        info.count = 2;
-        DSCombine->UpdateDescriptor(&info);
+        DSCombine->SetImage(0, frameImage);
+        DSCombine->SetImage(1, gaussianBlurVerticalRT);
+        DSCombine->UpdateDescriptor();
     }
 
     void Bloom::Update(Camera *camera)

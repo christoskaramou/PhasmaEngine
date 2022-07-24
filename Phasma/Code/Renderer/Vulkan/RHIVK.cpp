@@ -376,6 +376,7 @@ namespace pe
         {
             m_renderQueue[i] = Queue::GetNext(QueueType::GraphicsBit, 1);
             m_presentQueue[i] = Queue::GetNext(QueueType::PresentBit, 1);
+            m_computeQueue[i] = Queue::GetNext(QueueType::ComputeBit, 1);
         }
     }
 

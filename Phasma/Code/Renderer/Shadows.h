@@ -53,7 +53,7 @@ namespace pe
         mat4 cascades[SHADOWMAP_CASCADES];
         vec4 viewZ;
         std::vector<Image *> textures{};
-        Descriptor *descriptorSetDeferred;
+        Descriptor *DSetDeferred;
         Buffer *uniformBuffer;
         Format depthFormat;
         RenderPass *m_renderPassShadows;

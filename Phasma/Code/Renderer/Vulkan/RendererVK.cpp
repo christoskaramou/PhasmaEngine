@@ -167,11 +167,11 @@ namespace pe
             ImageBlit region{};
             region.srcOffsets[0] = Offset3D{0, 0, 0};
             region.srcOffsets[1] = Offset3D{static_cast<int32_t>(m_viewportRT->imageInfo.width), static_cast<int32_t>(m_viewportRT->imageInfo.height), 1};
-            region.srcSubresource.aspectMask = m_viewportRT->viewInfo.aspectMask;
+            region.srcSubresource.aspectMask = GetAspectMask(m_viewportRT->imageInfo.format);
             region.srcSubresource.layerCount = 1;
             region.dstOffsets[0] = Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
             region.dstOffsets[1] = Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
-            region.dstSubresource.aspectMask = m_displayRT->viewInfo.aspectMask;
+            region.dstSubresource.aspectMask = GetAspectMask(m_displayRT->imageInfo.format);
             region.dstSubresource.layerCount = 1;
 
             cmd->ImageBarrier(m_viewportRT, ImageLayout::TransferSrc);
@@ -311,7 +311,6 @@ namespace pe
 
         ImageViewCreateInfo viewInfo{};
         viewInfo.image = depth;
-        viewInfo.aspectMask = ImageAspect::DepthBit;
         depth->CreateImageView(viewInfo);
 
         SamplerCreateInfo samplerInfo{};
@@ -511,11 +510,11 @@ namespace pe
         ImageBlit region{};
         region.srcOffsets[0] = Offset3D{0, 0, 0};
         region.srcOffsets[1] = Offset3D{static_cast<int32_t>(src->imageInfo.width), static_cast<int32_t>(src->imageInfo.height), 1};
-        region.srcSubresource.aspectMask = src->viewInfo.aspectMask;
+        region.srcSubresource.aspectMask = GetAspectMask(src->imageInfo.format);
         region.srcSubresource.layerCount = 1;
         region.dstOffsets[0] = Offset3D{(int32_t)vp.x, (int32_t)vp.y, 0};
         region.dstOffsets[1] = Offset3D{(int32_t)vp.x + (int32_t)vp.width, (int32_t)vp.y + (int32_t)vp.height, 1};
-        region.dstSubresource.aspectMask = swapchainImage->viewInfo.aspectMask;
+        region.dstSubresource.aspectMask = GetAspectMask(swapchainImage->imageInfo.format);
         region.dstSubresource.layerCount = 1;
 
         cmd->ImageBarrier(src, ImageLayout::TransferSrc);
@@ -570,7 +569,7 @@ namespace pe
             return false;
         };
 
-        if (NeedsUpdate(deferred.pipelineInfoComposition))
+        if (NeedsUpdate(deferred.pipelineInfo))
             deferred.UpdatePipelineInfo();
 
         if (NeedsUpdate(ssao.pipelineInfo))

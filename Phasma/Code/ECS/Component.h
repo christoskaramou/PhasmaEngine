@@ -50,6 +50,7 @@ namespace pe
     class Pipeline;
     class PipelineCreateInfo;
     class Descriptor;
+    class Buffer;
 
     class IRenderComponent : public IComponent
     {

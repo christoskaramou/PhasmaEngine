@@ -32,14 +32,14 @@ namespace pe
 
         void Destroy() override;
 
-        Buffer &GetUniform()
+        Buffer *GetUniform()
         {
-            return *uniform;
+            return uniform;
         }
 
     private:
         LightsUBO lubo;
         Buffer *uniform;
-        Descriptor *descriptorSet;
+        Descriptor *DSet;
     };
 }

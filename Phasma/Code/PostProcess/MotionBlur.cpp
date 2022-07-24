@@ -54,63 +54,27 @@ namespace pe
 
     void MotionBlur::CreateUniforms(CommandBuffer *cmd)
     {
-        DescriptorBindingInfo bindingInfos[3]{};
-
+        std::vector<DescriptorBindingInfo> bindingInfos(3);
         bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[0].pImage = frameImage;
-        bindingInfos[0].sampler = frameImage->sampler;
-
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].binding = 1;
-        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
-        bindingInfos[1].pImage = depth;
-        bindingInfos[1].sampler = depth->sampler;
-
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].binding = 2;
-        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[2].pImage = velocityRT;
-        bindingInfos[2].sampler = velocityRT->sampler;
+        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
+        DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "MotionBlur_descriptor");
 
-        DescriptorInfo info{};
-        info.count = 3;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
-
-        DSet = Descriptor::Create(&info, "MotionBlur_descriptor");
-        UpdateDescriptorSets();
+        UpdateDescriptorSets(); 
     }
 
     void MotionBlur::UpdateDescriptorSets()
     {
-        DescriptorBindingInfo bindingInfos[3]{};
-
-        bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[0].pImage = frameImage;
-        bindingInfos[0].sampler = frameImage->sampler;
-
-        bindingInfos[1].binding = 1;
-        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
-        bindingInfos[1].pImage = depth;
-        bindingInfos[1].sampler = depth->sampler;
-
-        bindingInfos[2].binding = 2;
-        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[2].pImage = velocityRT;
-        bindingInfos[2].sampler = velocityRT->sampler;
-
-        DescriptorInfo info{};
-        info.count = 3;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
-
-        DSet->UpdateDescriptor(&info);
+        DSet->SetImage(0, frameImage);
+        DSet->SetImage(1, depth);
+        DSet->SetImage(2, velocityRT);
+        DSet->UpdateDescriptor();
     }
 
     void MotionBlur::Update(Camera *camera)

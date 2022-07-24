@@ -275,10 +275,10 @@ namespace pe
 
             std::vector<ImageViewHandle> views{};
             for (uint32_t i = 0; i < count; i++)
-                views.push_back(colorInfos[i].image->view);
+                views.push_back(colorInfos[i].image->GetImageView());
 
             if (depthInfo)
-                views.push_back(depthInfo->image->view);
+                views.push_back(depthInfo->image->GetImageView());
 
             std::string name = "Auto_Gen_FrameBuffer_" + std::to_string(s_frameBuffers.size());
             FrameBuffer *newFrameBuffer = FrameBuffer::Create(width,
@@ -304,9 +304,9 @@ namespace pe
 
         // Update the image layouts now, they will end up as their finalLayout after render pass
         for (uint32_t i = 0; i < count; i++)
-           colorInfos[i].image->SetCurrentLayout(colorInfos[i].finalLayout);
+            colorInfos[i].image->SetCurrentLayout(colorInfos[i].finalLayout);
         if (depthInfo)
-           depthInfo->image->SetCurrentLayout(depthInfo->finalLayout);
+            depthInfo->image->SetCurrentLayout(depthInfo->finalLayout);
 
         if (outRenderPass)
             *outRenderPass = rp;
@@ -474,21 +474,25 @@ namespace pe
         }
     }
 
-    void CommandBuffer::BindPipeline(Pipeline *pipeline)
+    void CommandBuffer::BindGraphicsPipeline(Pipeline *pipeline)
     {
         vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->Handle());
+    }
+
+    void CommandBuffer::BindComputePipeline(Pipeline *pipeline)
+    {
+        vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->Handle());
     }
 
     void CommandBuffer::BindPipeline(const PipelineCreateInfo &pipelineInfo, Pipeline **outPipeline)
     {
         Pipeline *pipeline = GetPipeline(pipelineInfo);
         *outPipeline = pipeline;
-        BindPipeline(pipeline);
-    }
 
-    void CommandBuffer::BindComputePipeline(Pipeline *pipeline)
-    {
-        vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->Handle());
+        if (pipelineInfo.pCompShader)
+            BindComputePipeline(pipeline);
+        else
+            BindGraphicsPipeline(pipeline);
     }
 
     void CommandBuffer::BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount)

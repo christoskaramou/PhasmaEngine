@@ -93,11 +93,11 @@ namespace pe
 
         void EndPass();
 
-        void BindPipeline(Pipeline *pipeline);
-
-        void BindPipeline(const PipelineCreateInfo &pipelineInfo, Pipeline **outPipeline);
+        void BindGraphicsPipeline(Pipeline *pipeline);
 
         void BindComputePipeline(Pipeline *pipeline);
+
+        void BindPipeline(const PipelineCreateInfo &pipelineInfo, Pipeline **outPipeline);
 
         void BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding = 0, uint32_t bindingCount = 1);
 

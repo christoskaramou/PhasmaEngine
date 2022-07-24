@@ -84,6 +84,7 @@ namespace pe
         const AllocatorHandle &GetAllocator() { return m_allocator; }
         Queue *GetRenderQueue(uint32_t index) { return m_renderQueue[index]; }
         Queue *GetPresentQueue(uint32_t index) { return m_presentQueue[index]; }
+        Queue *GetComputeQueue(uint32_t index) { return m_computeQueue[index]; }
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
@@ -124,6 +125,7 @@ namespace pe
 
         Queue *m_renderQueue[SWAPCHAIN_IMAGES];
         Queue *m_presentQueue[SWAPCHAIN_IMAGES];
+        Queue *m_computeQueue[SWAPCHAIN_IMAGES];
 
         SDL_Window *m_window;
         Surface *m_surface;

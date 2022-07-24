@@ -49,36 +49,19 @@ namespace pe
 
     void FXAA::CreateUniforms(CommandBuffer *cmd)
     {
-        DescriptorBindingInfo bindingInfo{};
-        bindingInfo.binding = 0;
-        bindingInfo.type = DescriptorType::CombinedImageSampler;
-        bindingInfo.imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfo.pImage = frameImage;
-        bindingInfo.sampler = frameImage->sampler;
+        std::vector<DescriptorBindingInfo> bindingInfos(1);
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+        DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "FXAA_descriptor");
 
-        DescriptorInfo info{};
-        info.count = 1;
-        info.bindingInfos = &bindingInfo;
-        info.stage = ShaderStage::FragmentBit;
-
-        DSet = Descriptor::Create(&info, "FXAA_descriptor");
+        UpdateDescriptorSets(); 
     }
 
     void FXAA::UpdateDescriptorSets()
     {
-        DescriptorBindingInfo bindingInfo{};
-        bindingInfo.binding = 0;
-        bindingInfo.type = DescriptorType::CombinedImageSampler;
-        bindingInfo.imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfo.pImage = frameImage;
-        bindingInfo.sampler = frameImage->sampler;
-
-        DescriptorInfo info{};
-        info.count = 1;
-        info.bindingInfos = &bindingInfo;
-        info.stage = ShaderStage::FragmentBit;
-
-        DSet->UpdateDescriptor(&info);
+        DSet->SetImage(0, frameImage);
+        DSet->UpdateDescriptor();
     }
 
     void FXAA::Update(Camera *camera)

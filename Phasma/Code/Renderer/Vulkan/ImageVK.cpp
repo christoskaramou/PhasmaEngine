@@ -31,7 +31,6 @@ namespace pe
     {
         image = nullptr;
         viewType = ImageViewType::Type2D;
-        aspectMask = ImageAspect::ColorBit;
     }
 
     ImageCreateInfo::ImageCreateInfo()
@@ -56,21 +55,23 @@ namespace pe
 
     Image::Image(const ImageCreateInfo &info)
     {
-        view = {};
+        imageInfo = info;
+
         sampler = {};
-        imageInfo = {};
         viewInfo = {};
         samplerInfo = {};
         blendAttachment = {};
 
-        imageInfo = info;
+        m_views.resize(imageInfo.mipLevels);
+        for (uint32_t i = 0; i < imageInfo.mipLevels; i++)
+            m_views[i] = {};
 
         m_layouts.resize(imageInfo.arrayLayers);
         for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
         {
             m_layouts[i] = std::vector<ImageLayout>(imageInfo.mipLevels);
             for (uint32_t j = 0; j < imageInfo.mipLevels; j++)
-                m_layouts[i][j] = info.initialLayout;
+                m_layouts[i][j] = imageInfo.initialLayout;
         }
 
         VkFormatProperties fProps;
@@ -118,15 +119,24 @@ namespace pe
         m_handle = imageVK;
         allocation = allocationVK;
 
-        Debug::SetObjectName(m_handle, ObjectType::Image, info.name);
+        Debug::SetObjectName(m_handle, ObjectType::Image, imageInfo.name);
     }
 
     Image::~Image()
     {
-        if (view)
+        if (m_view)
         {
-            vkDestroyImageView(RHII.GetDevice(), view, nullptr);
-            view = {};
+            vkDestroyImageView(RHII.GetDevice(), m_view, nullptr);
+            m_view = {};
+        }
+
+        for (auto &view : m_views)
+        {
+            if (view)
+            {
+                vkDestroyImageView(RHII.GetDevice(), view, nullptr);
+                view = {};
+            }
         }
 
         if (m_handle)
@@ -167,7 +177,7 @@ namespace pe
         barrier.newLayout = Translate<VkImageLayout>(newLayout);
         barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
         barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
-        barrier.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(viewInfo.aspectMask);
+        barrier.subresourceRange.aspectMask = GetAspectMaskVK(imageInfo.format);
         barrier.subresourceRange.baseMipLevel = baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
@@ -189,17 +199,18 @@ namespace pe
                 m_layouts[baseArrayLayer + i][baseMipLevel + j] = newLayout;
     }
 
-    void Image::CreateImageView(const ImageViewCreateInfo &info)
+    void Image::CreateImageView(const ImageViewCreateInfo &info, uint32_t mip)
     {
         viewInfo = info;
+        
         VkImageViewCreateInfo viewInfoVK{};
         viewInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfoVK.image = info.image->m_handle;
+        viewInfoVK.image = viewInfo.image->m_handle;
         viewInfoVK.viewType = Translate<VkImageViewType>(viewInfo.viewType);
         viewInfoVK.format = Translate<VkFormat>(imageInfo.format);
-        viewInfoVK.subresourceRange.aspectMask = Translate<VkImageAspectFlags>(viewInfo.aspectMask);
-        viewInfoVK.subresourceRange.baseMipLevel = 0;
-        viewInfoVK.subresourceRange.levelCount = imageInfo.mipLevels;
+        viewInfoVK.subresourceRange.aspectMask = GetAspectMaskVK(imageInfo.format);
+        viewInfoVK.subresourceRange.baseMipLevel = mip == -1 ? 0 : mip;
+        viewInfoVK.subresourceRange.levelCount = mip == -1 ? imageInfo.mipLevels : 1;
         viewInfoVK.subresourceRange.baseArrayLayer = 0;
         viewInfoVK.subresourceRange.layerCount = imageInfo.arrayLayers;
         viewInfoVK.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -209,9 +220,17 @@ namespace pe
 
         VkImageView vkView;
         PE_CHECK(vkCreateImageView(RHII.GetDevice(), &viewInfoVK, nullptr, &vkView));
-        view = vkView;
 
-        Debug::SetObjectName(view, ObjectType::ImageView, imageInfo.name);
+        if (mip == -1)
+        {
+            m_view = vkView;
+            Debug::SetObjectName(m_view, ObjectType::ImageView, imageInfo.name);
+        }
+        else
+        {
+            m_views[mip] = vkView;
+            Debug::SetObjectName(m_views[mip], ObjectType::ImageView, imageInfo.name);
+        }
     }
 
     void Image::Barrier(CommandBuffer *cmd,
@@ -273,7 +292,7 @@ namespace pe
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = Translate<VkImageAspectFlags>(viewInfo.aspectMask);
+        region.imageSubresource.aspectMask = GetAspectMaskVK(imageInfo.format);
         region.imageSubresource.mipLevel = mipLevel;
         region.imageSubresource.baseArrayLayer = baseArrayLayer;
         region.imageSubresource.layerCount = layerCount;
@@ -300,13 +319,13 @@ namespace pe
 
         VkImageCopy region{};
         // Source
-        region.srcSubresource.aspectMask = Translate<VkImageAspectFlags>(viewInfo.aspectMask);
+        region.srcSubresource.aspectMask = GetAspectMaskVK(imageInfo.format);
         region.srcSubresource.mipLevel = 0;
         region.srcSubresource.baseArrayLayer = 0;
         region.srcSubresource.layerCount = imageInfo.arrayLayers;
         region.srcOffset = VkOffset3D{0, 0, 0};
         // Destination
-        region.dstSubresource.aspectMask = Translate<VkImageAspectFlags>(src->viewInfo.aspectMask);
+        region.dstSubresource.aspectMask = GetAspectMaskVK(imageInfo.format);
         region.dstSubresource.mipLevel = 0;
         region.dstSubresource.baseArrayLayer = 0;
         region.dstSubresource.layerCount = src->imageInfo.arrayLayers;
@@ -356,12 +375,12 @@ namespace pe
         ImageBlit region;
         region.srcOffsets[0] = Offset3D{0, 0, 0};
         region.srcOffsets[1] = Offset3D{mipWidth, mipHeight, 1};
-        region.srcSubresource.aspectMask = viewInfo.aspectMask;
+        region.srcSubresource.aspectMask = GetAspectMask(imageInfo.format);
         region.srcSubresource.layerCount = 1;
         region.srcSubresource.mipLevel = 0;
 
         region.dstOffsets[0] = Offset3D{0, 0, 0};
-        region.dstSubresource.aspectMask = viewInfo.aspectMask;
+        region.dstSubresource.aspectMask = GetAspectMask(imageInfo.format);
         region.dstSubresource.layerCount = 1;
 
         for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)

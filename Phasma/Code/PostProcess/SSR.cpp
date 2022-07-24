@@ -65,82 +65,34 @@ namespace pe
         UBReflection->Flush();
         UBReflection->Unmap();
 
-        DescriptorBindingInfo bindingInfos[5]{};
-
+        std::vector<DescriptorBindingInfo> bindingInfos(5);
         bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[0].pImage = albedoRT;
-        bindingInfos[0].sampler = albedoRT->sampler;
-
+        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].binding = 1;
-        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
-        bindingInfos[1].pImage = depth;
-        bindingInfos[1].sampler = depth->sampler;
-
+        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].binding = 2;
-        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[2].pImage = normalRT;
-        bindingInfos[2].sampler = normalRT->sampler;
-
+        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
         bindingInfos[3].binding = 3;
-        bindingInfos[3].type = DescriptorType::CombinedImageSampler;
         bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[3].pImage = srmRT;
-        bindingInfos[3].sampler = srmRT->sampler;
-
+        bindingInfos[3].type = DescriptorType::CombinedImageSampler;
         bindingInfos[4].binding = 4;
         bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
-        bindingInfos[4].pBuffer = UBReflection;
+        DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "SSR_descriptor");
 
-        DescriptorInfo info{};
-        info.count = 5;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
-
-        DSet = Descriptor::Create(&info, "SSR_descriptor");
+        UpdateDescriptorSets();
     }
 
     void SSR::UpdateDescriptorSets()
     {
-        DescriptorBindingInfo bindingInfos[5]{};
-
-        bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[0].pImage = albedoRT;
-        bindingInfos[0].sampler = albedoRT->sampler;
-
-        bindingInfos[1].binding = 1;
-        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
-        bindingInfos[1].pImage = depth;
-        bindingInfos[1].sampler = depth->sampler;
-
-        bindingInfos[2].binding = 2;
-        bindingInfos[2].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[2].pImage = normalRT;
-        bindingInfos[2].sampler = normalRT->sampler;
-
-        bindingInfos[3].binding = 3;
-        bindingInfos[3].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[3].pImage = srmRT;
-        bindingInfos[3].sampler = srmRT->sampler;
-
-        bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
-        bindingInfos[4].pBuffer = UBReflection;
-
-        DescriptorInfo info{};
-        info.count = 5;
-        info.bindingInfos = bindingInfos;
-        info.stage = ShaderStage::FragmentBit;
-
-        DSet->UpdateDescriptor(&info);
+        DSet->SetImage(0, albedoRT);
+        DSet->SetImage(1, depth);
+        DSet->SetImage(2, normalRT);
+        DSet->SetImage(3, srmRT);
+        DSet->SetBuffer(4, UBReflection);
+        DSet->UpdateDescriptor();
     }
 
     void SSR::Update(Camera *camera)
@@ -159,7 +111,7 @@ namespace pe
             mr.data = &reflectionInput;
             mr.size = sizeof(reflectionInput);
             mr.offset = RHII.GetFrameDynamicOffset(UBReflection->Size(), RHII.GetFrameIndex());
-            UBReflection->Copy(1 ,&mr, false);
+            UBReflection->Copy(1, &mr, false);
         }
     }
 
