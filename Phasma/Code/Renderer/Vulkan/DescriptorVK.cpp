@@ -140,7 +140,7 @@ namespace pe
             if (typeCounts.find(bindingInfos[i].type) == typeCounts.end())
                 typeCounts[bindingInfos[i].type] = 0;
 
-            typeCounts[bindingInfos[i].type]++;
+            typeCounts[bindingInfos[i].type] += bindingInfos[i].count;
         }
 
         // Create pool sizes typeCounts above

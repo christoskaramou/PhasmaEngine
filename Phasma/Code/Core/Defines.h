@@ -35,7 +35,7 @@ namespace pe
     inline void PE_CHECK_RESULT(uint32_t res, const std::string &func, const std::string &file, int line)
     {
         if (res != 0)
-            PE_ERROR_MSG("Result error", func, file, line);
+            PE_ERROR_MSG("Check result error: " + std::to_string(res), func, file, line);
     }
 
 #define PE_CHECK(res) PE_CHECK_RESULT(res, __func__, __FILE__, __LINE__)
