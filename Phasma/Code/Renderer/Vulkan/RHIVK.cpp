@@ -227,7 +227,6 @@ namespace pe
         std::vector<VkExtensionProperties> extensions(count);
         vkEnumerateInstanceExtensionProperties(nullptr, &count, extensions.data());
 
-        // === Debug Extensions ========================
         for (auto &extension : extensions)
         {
             if (std::string(extension.extensionName) == name)
