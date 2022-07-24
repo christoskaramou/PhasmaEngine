@@ -128,8 +128,17 @@ namespace pe
                            ShaderStage stage,
                            const std::string &name)
     {
-        m_bindingInfos = bindingInfos;
+        m_bindingInfos = {};
         m_updateInfos = {};
+
+        for (const auto &bingingInfo : bindingInfos)
+        {
+            auto it = m_bindingInfos.find(bingingInfo.binding);
+            if (it != m_bindingInfos.end())
+                PE_ERROR("Bindin has already beed added");
+
+            m_bindingInfos[bingingInfo.binding] = bingingInfo;
+        }
 
         uint32_t size = static_cast<uint32_t>(bindingInfos.size());
 
@@ -154,7 +163,7 @@ namespace pe
         }
 
         m_pool = DescriptorPool::Create(i, poolSizes.data(), name + "_pool");
-        m_layout = DescriptorLayout::Create(m_bindingInfos, stage, name + "_layout");
+        m_layout = DescriptorLayout::Create(bindingInfos, stage, name + "_layout");
 
         // DescriptorLayout calculates the variable count on creation
         uint32_t variableDescCounts[] = {m_layout->GetVariableCount()};
@@ -187,19 +196,18 @@ namespace pe
 
     void Descriptor::SetImages(uint32_t binding, const std::vector<Image *> &images)
     {
-        for (auto &info : m_updateInfos)
+        auto it = m_updateInfos.find(binding);
+        if (it != m_updateInfos.end())
         {
-            if (info.binding == binding)
-            {
-                info.images = images;
-                return;
-            }
+            it->second.images = images;
         }
-
-        DescriptorUpdateInfo info{};
-        info.binding = binding;
-        info.images = images;
-        m_updateInfos.push_back(info);
+        else
+        {
+            DescriptorUpdateInfo info{};
+            info.binding = binding;
+            info.images = images;
+            m_updateInfos[binding] = info;
+        }
     }
 
     void Descriptor::SetImage(uint32_t binding, Image *image)
@@ -209,19 +217,18 @@ namespace pe
 
     void Descriptor::SetBuffers(uint32_t binding, const std::vector<Buffer *> &buffers)
     {
-        for (auto &info : m_updateInfos)
+        auto it = m_updateInfos.find(binding);
+        if (it != m_updateInfos.end())
         {
-            if (info.binding == binding)
-            {
-                info.buffers = buffers;
-                return;
-            }
+            it->second.buffers = buffers;
         }
-
-        DescriptorUpdateInfo info{};
-        info.binding = binding;
-        info.buffers = buffers;
-        m_updateInfos.push_back(info);
+        else
+        {
+            DescriptorUpdateInfo info{};
+            info.binding = binding;
+            info.buffers = buffers;
+            m_updateInfos[binding] = info;
+        }
     }
 
     void Descriptor::SetBuffer(uint32_t binding, Buffer *buffer)
@@ -231,41 +238,26 @@ namespace pe
 
     void Descriptor::SetSampler(uint32_t binding, SamplerHandle sampler)
     {
-        for (auto &info : m_updateInfos)
+        auto it = m_updateInfos.find(binding);
+        if (it != m_updateInfos.end())
         {
-            if (info.binding == binding)
-            {
-                info.sampler = sampler;
-                return;
-            }
+            it->second.sampler = sampler;
         }
-
-        DescriptorUpdateInfo info{};
-        info.binding = binding;
-        info.sampler = sampler;
-        m_updateInfos.push_back(info);
+        else
+        {
+            DescriptorUpdateInfo info{};
+            info.binding = binding;
+            info.sampler = sampler;
+            m_updateInfos[binding] = info;
+        }
     }
 
     void Descriptor::UpdateDescriptor()
     {
-        // Lambda helper to get the corresponding DescriptorBindingInfo
-        auto &GetBindingInfo = [this](const DescriptorUpdateInfo &updateInfo)
+        for (auto it = m_updateInfos.begin(); it != m_updateInfos.end(); it++)
         {
-            for (auto &info : m_bindingInfos)
-            {
-                if (info.binding == updateInfo.binding)
-                    return info;
-            }
-
-            PE_ERROR("Couldn't find binding");
-            return DescriptorBindingInfo{};
-        };
-
-        uint32_t count = static_cast<uint32_t>(m_updateInfos.size());
-        for (uint32_t i = 0; i < count; i++)
-        {
-            const DescriptorUpdateInfo &updateInfo = m_updateInfos[i];
-            const DescriptorBindingInfo &bindingInfo = GetBindingInfo(updateInfo);
+            const DescriptorUpdateInfo &updateInfo = it->second;
+            const DescriptorBindingInfo &bindingInfo = m_bindingInfos[it->first];
 
             std::vector<VkDescriptorImageInfo> imageInfoVK{};
             std::vector<VkDescriptorBufferInfo> bufferInfoVK{};
@@ -313,10 +305,10 @@ namespace pe
         m_frameDynamicOffsets = {};
         for (uint32_t j = 0; j < SWAPCHAIN_IMAGES; j++)
         {
-            for (size_t i = 0; i < count; i++)
+            for (auto it = m_updateInfos.begin(); it != m_updateInfos.end(); it++)
             {
-                const DescriptorUpdateInfo &updateInfo = m_updateInfos[i];
-                const DescriptorBindingInfo &bindingInfo = GetBindingInfo(updateInfo);
+                const DescriptorUpdateInfo &updateInfo = it->second;
+                const DescriptorBindingInfo &bindingInfo = m_bindingInfos[it->first];
 
                 if (bindingInfo.type == DescriptorType::UniformBufferDynamic ||
                     bindingInfo.type == DescriptorType::StorageBufferDynamic)

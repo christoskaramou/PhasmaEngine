@@ -82,8 +82,8 @@ namespace pe
         DescriptorPool *m_pool;
         DescriptorLayout *m_layout;
         std::vector<uint32_t> m_frameDynamicOffsets;
-        std::vector<DescriptorBindingInfo> m_bindingInfos;
-        std::vector<DescriptorUpdateInfo> m_updateInfos;
+        std::map<uint32_t, DescriptorBindingInfo> m_bindingInfos;
+        std::map<uint32_t, DescriptorUpdateInfo> m_updateInfos;
     };
 
 }
