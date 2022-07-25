@@ -1,3 +1,10 @@
+#version 450
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+#extension GL_ARB_compute_shader : enable
+#extension GL_ARB_shader_group_vote : enable
+
 // SPDSample
 //
 // Copyright (c) 2020 Advanced Micro Devices, Inc. All rights reserved.
@@ -17,28 +24,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#version 450
-#extension GL_GOOGLE_include_directive : enable
-#extension GL_ARB_separate_shader_objects : enable
-#extension GL_ARB_shading_language_420pack : enable
-#extension GL_ARB_compute_shader : enable
-#extension GL_ARB_shader_group_vote : enable
-
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
+//--------------------------------------------------------------------------------------
+// Push Constants
+//--------------------------------------------------------------------------------------
 layout(push_constant) uniform SpdConstants
 {
     uint mips;
     uint numWorkGroups;
     ivec2 workGroupOffset;
-    vec2 invInputSize;
 } spdConstants;
 
-layout(set=0, binding=0, rgba16f) uniform image2DArray imgDst[12]; // don't access MIP [5]
-layout(set=0, binding=1, rgba16f) coherent uniform image2DArray imgDst5;
-layout(std430, binding=2) coherent buffer SpdGlobalAtomicBuffer { uint counter[6]; } spdGlobalAtomic;
-layout(set=0, binding=3) uniform texture2DArray imgSrc;
-layout(set=0, binding=4) uniform sampler srcSampler;
+//--------------------------------------------------------------------------------------
+// Texture definitions
+//--------------------------------------------------------------------------------------
+layout(set=0, binding=0, rgba16f) uniform image2DArray imgDst[13]; // don't access mip [6]
+layout(set=0, binding=1, rgba16f) coherent uniform image2DArray imgDst6;
+
+//--------------------------------------------------------------------------------------
+// Buffer definitions - global atomic counter
+//--------------------------------------------------------------------------------------
+layout(std430, binding=2) coherent buffer spdGlobalAtomicBuffer
+{
+    uint counter[6];
+} spdGlobalAtomic;
+
+#define A_GPU
+#define A_GLSL
 
 #include "ffx_a.h"
 
@@ -53,21 +66,20 @@ shared AF1 spdIntermediateA[16][16];
 
 AF4 SpdLoadSourceImage(ASU2 p, AU1 slice)
 {
-    AF2 textureCoord = p * spdConstants.invInputSize + spdConstants.invInputSize;
-    return texture(sampler2DArray(imgSrc, srcSampler), vec3(textureCoord,slice));
+    return imageLoad(imgDst[0], ivec3(p,slice));
 }
 AF4 SpdLoad(ASU2 p, AU1 slice)
 {
-    return imageLoad(imgDst5,ivec3(p,slice));
-    }
+    return imageLoad(imgDst6,ivec3(p,slice));
+}
 void SpdStore(ASU2 p, AF4 value, AU1 mip, AU1 slice)
 {
     if (mip == 5)
     {
-        imageStore(imgDst5, ivec3(p,slice), value);
+        imageStore(imgDst6, ivec3(p,slice), value);
         return;
     }
-    imageStore(imgDst[mip], ivec3(p,slice), value);
+    imageStore(imgDst[mip+1], ivec3(p,slice), value);
 }
 void SpdIncreaseAtomicCounter(AU1 slice)
 {
@@ -109,21 +121,20 @@ shared AH2 spdIntermediateBA[16][16];
 
 AH4 SpdLoadSourceImageH(ASU2 p, AU1 slice)
 {
-    AF2 textureCoord = p * spdConstants.invInputSize + spdConstants.invInputSize;
-    return AH4(texture(sampler2DArray(imgSrc, srcSampler), vec3(textureCoord, slice)));
+    return AH4(imageLoad(imgDst[0], ivec3(p,slice)));
 }
 AH4 SpdLoadH(ASU2 p, AU1 slice)
 {
-    return AH4(imageLoad(imgDst5,ivec3(p, slice)));
+    return AH4(imageLoad(imgDst6, ivec3(p,slice)));
 }
 void SpdStoreH(ASU2 p, AH4 value, AU1 mip, AU1 slice)
 {
     if (mip == 5)
     {
-        imageStore(imgDst5, ivec3(p,slice), AF4(value));
+        imageStore(imgDst6, ivec3(p,slice), AF4(value));
         return;
     }
-    imageStore(imgDst[mip], ivec3(p,slice), AF4(value));
+    imageStore(imgDst[mip+1], ivec3(p,slice), AF4(value));
 }
 void SpdIncreaseAtomicCounter(AU1 slice)
 {
@@ -143,10 +154,8 @@ AH4 SpdLoadIntermediateH(AU1 x, AU1 y)
     spdIntermediateRG[x][y].x,
     spdIntermediateRG[x][y].y,
     spdIntermediateBA[x][y].x,
-    spdIntermediateBA[x][y].y);
-}
-void SpdStoreIntermediateH(AU1 x, AU1 y, AH4 value)
-{
+    spdIntermediateBA[x][y].y);}
+void SpdStoreIntermediateH(AU1 x, AU1 y, AH4 value){
     spdIntermediateRG[x][y] = value.xy;
     spdIntermediateBA[x][y] = value.zw;
 }

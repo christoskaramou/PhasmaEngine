@@ -31,7 +31,7 @@ namespace pe
 
     void Compute::Dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
     {
-        RHII.GetComputeQueue(0)->BeginDebugRegion("Compute::Dispatch queue");
+        RHII.GetComputeQueue()->BeginDebugRegion("Compute::Dispatch queue");
         
         commandBuffer->Begin();
         commandBuffer->BeginDebugRegion("Compute::Dispatch command");
@@ -41,9 +41,9 @@ namespace pe
         commandBuffer->EndDebugRegion();
         commandBuffer->End();
         
-        commandBuffer->Submit(RHII.GetComputeQueue(0), nullptr, 0, nullptr, 0, nullptr);
+        commandBuffer->Submit(RHII.GetComputeQueue(), nullptr, 0, nullptr, 0, nullptr);
 
-        RHII.GetComputeQueue(0)->EndDebugRegion();
+        RHII.GetComputeQueue()->EndDebugRegion();
     }
 
     void Compute::Wait()
@@ -112,7 +112,7 @@ namespace pe
     Compute Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, const std::string &name)
     {
         Compute compute;
-        compute.commandBuffer = CommandBuffer::GetNext(RHII.GetComputeQueue(0)->GetFamilyId());
+        compute.commandBuffer = CommandBuffer::GetNext(RHII.GetComputeQueue()->GetFamilyId());
         compute.CreateUniforms(sizeIn, sizeOut);
         compute.CreatePipeline(shaderName);
 
@@ -127,7 +127,7 @@ namespace pe
         for (uint32_t i = 0; i < count; i++)
         {
             Compute compute;
-            compute.commandBuffer = CommandBuffer::GetNext(RHII.GetComputeQueue(0)->GetFamilyId());
+            compute.commandBuffer = CommandBuffer::GetNext(RHII.GetComputeQueue()->GetFamilyId());
             compute.CreateUniforms(sizeIn, sizeOut);
             compute.CreatePipeline(shaderName);
 

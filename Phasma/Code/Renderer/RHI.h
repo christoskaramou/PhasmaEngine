@@ -82,9 +82,8 @@ namespace pe
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
         std::vector<Semaphore *> &GetSemaphores() { return m_semaphores; }
         const AllocatorHandle &GetAllocator() { return m_allocator; }
-        Queue *GetRenderQueue(uint32_t index) { return m_renderQueue[index]; }
-        Queue *GetPresentQueue(uint32_t index) { return m_presentQueue[index]; }
-        Queue *GetComputeQueue(uint32_t index) { return m_computeQueue[index]; }
+        Queue *GetRenderQueue() { return m_renderQueue; }
+        Queue *GetComputeQueue() { return m_computeQueue; }
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
@@ -123,9 +122,8 @@ namespace pe
         std::vector<Semaphore *> m_semaphores;
         AllocatorHandle m_allocator;
 
-        Queue *m_renderQueue[SWAPCHAIN_IMAGES];
-        Queue *m_presentQueue[SWAPCHAIN_IMAGES];
-        Queue *m_computeQueue[SWAPCHAIN_IMAGES];
+        Queue *m_renderQueue;
+        Queue *m_computeQueue;
 
         SDL_Window *m_window;
         Surface *m_surface;

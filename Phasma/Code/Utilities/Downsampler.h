@@ -26,6 +26,8 @@ namespace pe
         void Destroy() override;
 
     private:
+        uvec2 SpdSetup();
+
         Pipeline *m_pipeline;
         std::shared_ptr<PipelineCreateInfo> m_pipelineInfo;
         Descriptor *m_DSet;
@@ -33,16 +35,14 @@ namespace pe
         uint32_t m_counter[6];
         
         // Shader data
-        Image *m_input;
-        Image *m_output;
-        Image *m_output5;
-        Buffer *m_buffer;
+        Image *m_image; // max 12 mips/views, 1st is the image itself
+        Image *m_image6; // 6th mip/view
+        Buffer *m_atomicCounter;
         struct PushConstants
         {
             uint32_t mips;
-            uint32_t numWorkGroups;
-            ivec2 workGroupOffset;
-            vec2 invInputSize;
+            uint32_t numWorkGroupsPerSlice;
+            uvec2 workGroupOffset;
         } m_pushConstants;
     };
 }

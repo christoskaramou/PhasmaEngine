@@ -23,7 +23,6 @@ namespace pe
         cmd->Wait();
         
         CommandBuffer::Return(cmd);
-        Queue::Return(queue);
     }
 
     void Context::DestroySystems()

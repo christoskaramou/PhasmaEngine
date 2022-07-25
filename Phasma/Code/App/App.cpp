@@ -41,7 +41,6 @@ namespace pe
         CommandBuffer::Return(cmd);
 
         queue->WaitIdle();
-        Queue::Return(queue);
 
         FileWatcher::Start(0.25);
         frameTimer = &FrameTimer::Instance();

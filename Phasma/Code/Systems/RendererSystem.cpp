@@ -145,7 +145,7 @@ namespace pe
     {
         uint32_t frameIndex = RHII.GetFrameIndex();
 
-        Queue *queue = RHII.GetRenderQueue(frameIndex);
+        Queue *queue = RHII.GetRenderQueue();
         s_currentQueue = queue;
 
         queue->BeginDebugRegion("RendererSystem::Draw");
@@ -218,10 +218,9 @@ namespace pe
         m_previousCmds[imageIndex] = cmd;
 
         // PRESENT
-        Queue *presentQueue = RHII.GetPresentQueue(frameIndex);
         Swapchain *swapchain = RHII.GetSwapchain();
         Semaphore *presentWaitSemaphore = signalSemaphore;
-        presentQueue->Present(1, &swapchain, &imageIndex, 1, &presentWaitSemaphore);
+        queue->Present(1, &swapchain, &imageIndex, 1, &presentWaitSemaphore);
 
         gui.RenderViewPorts();
 

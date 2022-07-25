@@ -371,12 +371,8 @@ namespace pe
     {
         Queue::Init(m_gpu, m_device, m_surface->Handle());
 
-        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
-        {
-            m_renderQueue[i] = Queue::GetNext(QueueType::GraphicsBit, 1);
-            m_presentQueue[i] = Queue::GetNext(QueueType::PresentBit, 1);
-            m_computeQueue[i] = Queue::GetNext(QueueType::ComputeBit, 1);
-        }
+        m_renderQueue = Queue::GetNext(QueueType::GraphicsBit | QueueType::PresentBit, 1);
+        m_computeQueue = Queue::GetNext(QueueType::ComputeBit, 1);
     }
 
     void RHI::CreateSwapchain(Surface *surface)

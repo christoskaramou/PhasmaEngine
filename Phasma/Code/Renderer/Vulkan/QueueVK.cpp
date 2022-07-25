@@ -186,12 +186,10 @@ namespace pe
                     if (it == s_allQueues.end())
                     {
                         s_allQueues[queueFlags.Value()] = std::map<size_t, Queue *>();
-                        s_availableQueues[queueFlags.Value()] = std::unordered_map<size_t, Queue *>();
                         s_allFlags.push_back(queueFlags.Value());
                     }
 
                     s_allQueues[queueFlags.Value()][queue->GetID()] = queue;
-                    s_availableQueues[queueFlags.Value()][queue->GetID()] = queue;
                 }
             }
         }
@@ -206,7 +204,6 @@ namespace pe
                 Queue::Destroy(queue.second);
 
         s_allQueues.clear();
-        s_availableQueues.clear();
     }
 
     Queue *Queue::GetNext(QueueTypeFlags queueTypeFlags, int minImageGranularity)
@@ -214,43 +211,25 @@ namespace pe
         std::lock_guard<std::mutex> lock(s_getNextMutex);
 
         // Find the best suitable flags in the sorted s_allFlags vector
-        QueueTypeFlags::Type flags = 0;
-        for (QueueTypeFlags::Type f : s_allFlags)
+        for (QueueTypeFlags::Type flags : s_allFlags)
         {
-            if (f >= queueTypeFlags.Value() && (f & queueTypeFlags.Value()) == queueTypeFlags.Value())
+            if (flags >= queueTypeFlags.Value() && (flags & queueTypeFlags.Value()) == queueTypeFlags.Value())
             {
-                flags = f;
-                break;
+                auto &queues = s_allQueues[flags];
+                for (auto it = queues.begin(); it != queues.end(); it++)
+                {
+                    Queue *queue = it->second;
+                    if (queue->GetImageGranularity().x <= minImageGranularity &&
+                        queue->GetImageGranularity().y <= minImageGranularity &&
+                        queue->GetImageGranularity().z <= minImageGranularity)
+                    {
+                        return queue;
+                    }
+                }
             }
         }
 
-        if (flags == 0)
-            PE_ERROR("Queue::GetNext() A queue with these flags is not available!");
-
-        auto &queueMaps = s_availableQueues[flags];
-        for (auto &queuePair : queueMaps)
-        {
-            Queue &queue = *queuePair.second;
-            if (queue.GetImageGranularity().x <= minImageGranularity &&
-                queue.GetImageGranularity().y <= minImageGranularity &&
-                queue.GetImageGranularity().z <= minImageGranularity)
-            {
-                queueMaps.erase(queue.GetID());
-                return &queue;
-            }
-        }
-
-        Queue *fallbackQueue = s_allQueues[flags].begin()->second;
-        return fallbackQueue;
-    }
-
-    void Queue::Return(Queue *queue)
-    {
-        std::lock_guard<std::mutex> lock(s_returnMutex);
-
-        if (!queue || !queue->Handle())
-            PE_ERROR("Queue::Return() Invalid queue!");
-
-        s_availableQueues[queue->GetQueueTypeFlags().Value()][queue->GetID()] = queue;
+        PE_ERROR("Queue::GetNext() A queue with these flags is not available!");
+        return nullptr;
     }
 }

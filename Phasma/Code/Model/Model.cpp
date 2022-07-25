@@ -410,7 +410,6 @@ namespace pe
         CommandBuffer::Return(cmd);
 
         queue->WaitIdle();
-        Queue::Return(queue);
     }
 
     // position x, y, z and radius w

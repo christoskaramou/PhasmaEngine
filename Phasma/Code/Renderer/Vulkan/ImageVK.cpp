@@ -21,8 +21,8 @@ namespace pe
         maxAnisotropy = 16.0f;
         compareEnable = 0;
         compareOp = CompareOp::Less;
-        minLod = 0.f;
-        maxLod = 1.f;
+        minLod = -1000.f;
+        maxLod = 1000.f;
         borderColor = BorderColor::FloatOpaqueBlack;
         unnormalizedCoordinates = 0;
     }

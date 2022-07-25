@@ -599,14 +599,20 @@ namespace pe
         int32_t z;
     };
 
-    class Rect2D
+    template<class T>
+    class Rect2D_t
     {
+        static_assert(std::is_arithmetic_v<T>);
     public:
-        int x;
-        int y;
-        int width;
-        int height;
+        T x;
+        T y;
+        T width;
+        T height;
     };
+
+    using Rect2D = Rect2D_t<int>;
+    using Rect2Du = Rect2D_t<uint32_t>;
+    using Rect2Df = Rect2D_t<float>;
 
     template<class T>
     inline T rand(T a, T b)
