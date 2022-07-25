@@ -65,6 +65,6 @@ jobs:
           title: "Development Build"
           files: |
             PhasmaEngine.zip
-            LICENSE.txt
+            LICENSE
         
       
