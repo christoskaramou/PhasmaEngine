@@ -26,12 +26,17 @@ jobs:
     - name: Test
       working-directory: ${{github.workspace}}/build
       run: ctest -C ${{env.BUILD_TYPE}}
+    
+    - name: Zip
+      uses: montudor/action-zip@v1
+      with:
+        args: zip -qq -r PhasmaEngine.zip ${{github.workspace}}/build/Release/
       
     - name: Upload artifact
       uses: actions/upload-artifact@master
       with:
         name: phasma_build
-        path: ${{github.workspace}}/build/Release/
+        path: PhasmaEngine.zip
 
   pre-release:
     name: "release"
@@ -48,7 +53,7 @@ jobs:
         uses: actions/download-artifact@master
         with:
           name: phasma_build
-          path: ${{github.workspace}}/build/Release/
+          path: PhasmaEngine.zip
       
       - name: Publish Artifacts
         uses: "marvinpinto/action-automatic-releases@latest"
@@ -57,6 +62,8 @@ jobs:
           automatic_release_tag: "latest"
           prerelease: true
           title: "Phasma Development Build"
-          files: ${{github.workspace}}/build/Release/
+          files: |
+            PhasmaEngine.zip
+            LICENSE.txt
         
       
