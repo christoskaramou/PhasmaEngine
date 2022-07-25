@@ -23,8 +23,6 @@ namespace pe
 
         static Queue *GetNext(QueueTypeFlags queueTypeFlags, int minImageGranularity);
 
-        static void Return(Queue *queue);
-
         void Submit(uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
                     PipelineStageFlags *waitStages,
                     uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
