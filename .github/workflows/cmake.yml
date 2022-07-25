@@ -27,8 +27,7 @@ jobs:
       working-directory: ${{github.workspace}}/build
       run: ctest -C ${{env.BUILD_TYPE}}
         
-    - name: PhasmaEngine Zip
-    - uses: actions/checkout@v2
+    - name: PhasmaEngineZip
     - uses: vimtor/action-zip@v1
       with:
         files: ${{github.workspace}}/build/Release/
