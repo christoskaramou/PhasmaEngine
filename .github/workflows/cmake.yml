@@ -26,11 +26,13 @@ jobs:
     - name: Test
       working-directory: ${{github.workspace}}/build
       run: ctest -C ${{env.BUILD_TYPE}}
-    
-    - name: Zip
-      uses: montudor/action-zip@v1
+        
+    - name: PhasmaEngine Zip
+    - uses: actions/checkout@v2
+    - uses: vimtor/action-zip@v1
       with:
-        args: zip -qq -r PhasmaEngine.zip ${{github.workspace}}/build/Release/
+        files: ${{github.workspace}}/build/Release/
+        dest: PhasmaEngine.zip
       
     - name: Upload artifact
       uses: actions/upload-artifact@master
