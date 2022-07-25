@@ -54,8 +54,8 @@ jobs:
       - name: Download PhasmaEngine.zip
         uses: actions/download-artifact@master
         with:
-          name: PhasmaEngine.zip
-          path: ${{github.workspace}}/build/Release/
+          name: PhasmaEngine
+          path: ${{github.workspace}}/build/Release/PhasmaEngine.zip
       
       - name: Automatic Release
         uses: "marvinpinto/action-automatic-releases@latest"
