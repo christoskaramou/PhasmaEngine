@@ -55,7 +55,6 @@ jobs:
         uses: actions/download-artifact@master
         with:
           name: PhasmaEngine
-          path: ${{github.workspace}}/build/Release/PhasmaEngine.zip
       
       - name: Automatic Release
         uses: "marvinpinto/action-automatic-releases@latest"
@@ -65,7 +64,7 @@ jobs:
           prerelease: true
           title: "Development Build"
           files: |
-            ${{github.workspace}}/build/Release/PhasmaEngine.zip
-            ${{github.workspace}}/LICENSE.txt
+            PhasmaEngine.zip
+            LICENSE.txt
         
       
