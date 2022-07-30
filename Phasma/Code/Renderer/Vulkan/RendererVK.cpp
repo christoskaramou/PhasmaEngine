@@ -208,8 +208,6 @@ namespace pe
             motionBlur.Draw(cmd, imageIndex);
             frameTimer.motionBlurStamp = GpuTimer::motionBlur->End();
         }
-        else
-            int i = 0;
 
         // GUI
         GpuTimer::gui->Start(cmd);
