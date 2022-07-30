@@ -60,7 +60,7 @@ namespace pe
 
     void FXAA::UpdateDescriptorSets()
     {
-        DSet->SetImage(0, frameImage);
+        DSet->SetImage(0, frameImage->GetSRV(), frameImage->sampler);
         DSet->UpdateDescriptor();
     }
 

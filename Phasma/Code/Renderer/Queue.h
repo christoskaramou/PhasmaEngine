@@ -50,10 +50,13 @@ namespace pe
         inline static std::vector<QueueTypeFlags::Type> s_allFlags{};
         inline static std::map<QueueTypeFlags::Type, std::map<size_t, Queue *>> s_allQueues{};
         inline static std::mutex s_getNextMutex{};
+        inline static std::mutex s_submitMutex{};
 
         uint32_t m_familyId;
         QueueTypeFlags m_queueTypeFlags;
         ivec3 m_imageGranularity;
         std::string name;
+        Semaphore *m_semaphore;
+        std::atomic_uint64_t m_submitions;
     };
 }

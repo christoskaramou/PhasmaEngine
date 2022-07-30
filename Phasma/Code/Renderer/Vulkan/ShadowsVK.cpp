@@ -44,9 +44,8 @@ namespace pe
             info.name = "ShadowMap_" + std::to_string(i++);
             texture = Image::Create(info);
 
-            ImageViewCreateInfo viewInfo{};
-            viewInfo.image = texture;
-            texture->CreateImageView(viewInfo);
+            texture->CreateRTV();
+            texture->CreateSRV(ImageViewType::Type2D);
 
             SamplerCreateInfo samplerInfo{};
             samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
@@ -89,8 +88,16 @@ namespace pe
 
     void Shadows::UpdateDescriptorSets()
     {
+        std::vector<ImageViewHandle> views(textures.size());
+        std::vector<SamplerHandle> samplers(textures.size());
+        for (uint32_t i = 0; i < textures.size(); i++)
+        {
+            views[i] = textures[i]->GetSRV();
+            samplers[i] = textures[i]->sampler;
+        }
+
         DSetDeferred->SetBuffer(0, uniformBuffer);
-        DSetDeferred->SetImages(1, textures);
+        DSetDeferred->SetImages(1, views, samplers);
         DSetDeferred->UpdateDescriptor();
     }
 

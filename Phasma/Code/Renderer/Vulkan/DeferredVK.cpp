@@ -21,6 +21,7 @@
 #include "Systems/RendererSystem.h"
 #include "PostProcess/SSAO.h"
 #include "PostProcess/SSR.h"
+#include "Utilities/Downsampler.h"
 
 namespace pe
 {
@@ -82,9 +83,10 @@ namespace pe
     void Deferred::CreateUniforms(CommandBuffer *cmd)
     {
         const std::string path = Path::Assets + "Objects/ibl_brdf_lut.png";
-        if (Mesh::uniqueTextures.find(path) != Mesh::uniqueTextures.end())
+        StringHash hash = StringHash(path);
+        if (Image::uniqueImages.find(hash) != Image::uniqueImages.end())
         {
-            ibl_brdf_lut = Mesh::uniqueTextures[path];
+            ibl_brdf_lut = Image::uniqueImages[hash];
         }
         else
         {
@@ -98,27 +100,24 @@ namespace pe
 
             ImageCreateInfo info{};
             info.format = Format::RGBA8Unorm;
-            info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
+            info.mipLevels = Image::CalculateMips(texWidth, texHeight);
             info.width = texWidth;
             info.height = texHeight;
-            info.usage = ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::SampledBit;
+            info.usage = ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::SampledBit | ImageUsage::StorageBit;
             info.properties = MemoryProperty::DeviceLocalBit;
             info.initialLayout = ImageLayout::Preinitialized;
             info.name = "Deferred_ibl_brdf_lut_image";
             ibl_brdf_lut = Image::Create(info);
 
-            ImageViewCreateInfo viewInfo{};
-            viewInfo.image = ibl_brdf_lut;
-            ibl_brdf_lut->CreateImageView(viewInfo);
+            ibl_brdf_lut->CreateSRV(ImageViewType::Type2D);
 
             SamplerCreateInfo samplerInfo{};
             samplerInfo.maxLod = static_cast<float>(info.mipLevels);
             ibl_brdf_lut->CreateSampler(samplerInfo);
 
             cmd->CopyDataToImageStaged(ibl_brdf_lut, pixels, texWidth * texHeight * STBI_rgb_alpha);
-            cmd->GenerateMipMaps(ibl_brdf_lut);
 
-            Mesh::uniqueTextures[path] = ibl_brdf_lut;
+            Image::uniqueImages[hash] = ibl_brdf_lut;
             cmd->AddAfterWaitCallback([pixels]()
                                       { stbi_image_free(pixels); });
         }
@@ -172,23 +171,23 @@ namespace pe
 
         bindingInfos[9].binding = 9;
         bindingInfos[9].type = DescriptorType::UniformBufferDynamic;
-        
+
         DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Deferred_Composition_descriptor");
 
-        UpdateDescriptorSets(); 
+        UpdateDescriptorSets();
     }
 
     void Deferred::UpdateDescriptorSets()
     {
-        DSet->SetImage(0, depth);
-        DSet->SetImage(1, normalRT);
-        DSet->SetImage(2, albedoRT);
-        DSet->SetImage(3, srmRT);
+        DSet->SetImage(0, depth->GetSRV(), depth->sampler);
+        DSet->SetImage(1, normalRT->GetSRV(), normalRT->sampler);
+        DSet->SetImage(2, albedoRT->GetSRV(), albedoRT->sampler);
+        DSet->SetImage(3, srmRT->GetSRV(), srmRT->sampler);
         DSet->SetBuffer(4, CONTEXT->GetSystem<LightSystem>()->GetUniform());
-        DSet->SetImage(5, ssaoBlurRT);
-        DSet->SetImage(6, ssrRT);
-        DSet->SetImage(7, emissiveRT);
-        DSet->SetImage(8, ibl_brdf_lut);
+        DSet->SetImage(5, ssaoBlurRT->GetSRV(), ssaoBlurRT->sampler);
+        DSet->SetImage(6, ssrRT->GetSRV(), ssrRT->sampler);
+        DSet->SetImage(7, emissiveRT->GetSRV(), emissiveRT->sampler);
+        DSet->SetImage(8, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->sampler);
         DSet->SetBuffer(9, uniform);
         DSet->UpdateDescriptor();
     }
@@ -241,7 +240,7 @@ namespace pe
         cmd->ImageBarrier(ssaoBlurRT, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(ssrRT, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(ibl_brdf_lut, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(skybox.cubeMap, ImageLayout::ShaderReadOnly, 0, skybox.cubeMap->imageInfo.arrayLayers);
+        cmd->ImageBarrier(skybox.cubeMap, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         for (auto &shadowMap : shadows.textures)
             cmd->ImageBarrier(shadowMap, ImageLayout::DepthStencilReadOnly);

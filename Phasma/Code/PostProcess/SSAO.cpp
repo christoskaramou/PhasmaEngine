@@ -115,9 +115,7 @@ namespace pe
         imageInfo.name = "ssao_noise_image";
         noiseTex = Image::Create(imageInfo);
 
-        ImageViewCreateInfo viewInfo{};
-        viewInfo.image = noiseTex;
-        noiseTex->CreateImageView(viewInfo);
+        noiseTex->CreateSRV(ImageViewType::Type2D);
 
         SamplerCreateInfo samplerInfo{};
         samplerInfo.minFilter = Filter::Nearest;
@@ -169,14 +167,14 @@ namespace pe
 
     void SSAO::UpdateDescriptorSets()
     {
-        DSet->SetImage(0, depth);
-        DSet->SetImage(1, normalRT);
-        DSet->SetImage(2, noiseTex);
+        DSet->SetImage(0, depth->GetSRV(), depth->sampler);
+        DSet->SetImage(1, normalRT->GetSRV(), normalRT->sampler);
+        DSet->SetImage(2, noiseTex->GetSRV(), noiseTex->sampler);
         DSet->SetBuffer(3, UB_Kernel);
         DSet->SetBuffer(4, UB_PVM);
         DSet->UpdateDescriptor();
 
-        DSBlur->SetImage(0, ssaoRT);
+        DSBlur->SetImage(0, ssaoRT->GetSRV(), ssaoRT->sampler);
         DSBlur->UpdateDescriptor();
     }
 

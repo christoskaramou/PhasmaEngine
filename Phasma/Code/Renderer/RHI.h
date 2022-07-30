@@ -58,6 +58,7 @@ namespace pe
         void CreateGlobalDescriptors();
         void InitCmdBuffers(uint32_t bufferCount = 0);
         void CreateSemaphores(uint32_t semaphoresCount);
+        void InitDownSampler();
 
         Format GetDepthFormat();
 

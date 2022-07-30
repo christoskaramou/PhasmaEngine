@@ -19,11 +19,15 @@ namespace pe
         m_queueTypeFlags = queueTypeFlags;
         m_imageGranularity = imageGranularity;
 
+        m_semaphore = Semaphore::Create(true, name + "_queue_semaphore");
+        m_submitions = 0;
+
         this->name = name;
     }
 
     Queue::~Queue()
     {
+        Semaphore::Destroy(m_semaphore);
     }
 
     void Queue::Submit(
@@ -32,6 +36,8 @@ namespace pe
         uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
         uint32_t signalSemaphoresCount, Semaphore **signalSemaphores)
     {
+        std::lock_guard<std::mutex> lock(s_submitMutex);
+        
         // Translates from IHandles<T, ApiHandle> to VK handles are auto converted
         // via ApiHandle operator T() casts
 
@@ -46,7 +52,7 @@ namespace pe
             waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
 
         // SignalSemaphores
-        uint32_t signalsCount = signalSemaphoresCount + commandBuffersCount;
+        uint32_t signalsCount = signalSemaphoresCount + commandBuffersCount + 1;
         std::vector<VkSemaphore> signalSemaphoresVK(signalsCount);
         std::vector<uint64_t> semaphoreValues(signalsCount);
 
@@ -57,7 +63,7 @@ namespace pe
                 signalSemaphoresVK[i] = signalSemaphores[i]->Handle();
                 semaphoreValues[i] = 0;
             }
-            else
+            else if (i < signalsCount - 1)
             {
                 uint32_t index = i - signalSemaphoresCount;
                 // Increase the submit count of the current command buffer
@@ -66,6 +72,13 @@ namespace pe
                 signalSemaphoresVK[i] = commandBuffers[index]->GetSemaphore()->Handle();
                 // Set the signal values from the current command buffer submition counter
                 semaphoreValues[i] = commandBuffers[index]->GetSumbitionCount();
+            }
+            else
+            {
+                m_semaphore->Wait(m_submitions); // Wait previous submition so we can submit again
+                m_submitions++;
+                signalSemaphoresVK[i] = m_semaphore->Handle();
+                semaphoreValues[i] = m_submitions;
             }
         }
 

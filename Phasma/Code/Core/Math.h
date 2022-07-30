@@ -3,7 +3,7 @@
 #ifdef USE_GLM
 
 #ifdef _DEBUG
-    #define GLM_FORCE_MESSAGES
+#define GLM_FORCE_MESSAGES
 #endif
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_FORCE_INTRINSICS
@@ -599,10 +599,11 @@ namespace pe
         int32_t z;
     };
 
-    template<class T>
+    template <class T>
     class Rect2D_t
     {
-        static_assert(std::is_arithmetic_v<T>);
+        static_assert(std::is_arithmetic_v<T>, "T must be arithmetic");
+
     public:
         T x;
         T y;
@@ -614,7 +615,7 @@ namespace pe
     using Rect2Du = Rect2D_t<uint32_t>;
     using Rect2Df = Rect2D_t<float>;
 
-    template<class T>
+    template <class T>
     inline T rand(T a, T b)
     {
         static_assert(std::is_arithmetic_v<T>, "T must be arithmetic");
@@ -622,7 +623,6 @@ namespace pe
         static auto seed = std::chrono::system_clock::now().time_since_epoch().count();
         static std::default_random_engine gen(static_cast<unsigned int>(seed));
 
-        const std::uniform_real_distribution<T> x(a, b);
-        return x(gen);
+        return std::uniform_real_distribution<T>(a, b)(gen);
     }
 }

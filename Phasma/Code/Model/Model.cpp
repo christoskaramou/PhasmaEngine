@@ -382,9 +382,8 @@ namespace pe
 
     void Model::Load(const std::filesystem::path &file)
     {
-        Queue *queue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit, 1);
+        Queue *queue = RHII.GetRenderQueue();
         CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
-        cmd->Begin();
 
         Model::models.emplace_back();
         Model &model = Model::models.back();
@@ -392,24 +391,44 @@ namespace pe
         // This works as a flag to when the loading is done
         model.render = false;
 
+        cmd->Begin();
         model.LoadModelGltf(cmd, file);
-        model.name = file.filename().string();
-        model.fullPathName = file.string();
         model.CreateVertexBuffer(cmd);
         model.CreateIndexBuffer(cmd);
+        cmd->End();
+        cmd->Submit(queue, nullptr, 0, nullptr, 0, nullptr);
+        cmd->Wait();
+
         model.CreateUniforms();
         model.InitRenderTargets();
         model.UpdatePipelineInfo();
 
+        model.name = file.filename().string();
+        model.fullPathName = file.string();
         model.render = true;
 
-        cmd->End();
-        queue->Submit(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
-
-        cmd->Wait();
-        CommandBuffer::Return(cmd);
-
-        queue->WaitIdle();
+        Queue *computeQueue = RHII.GetComputeQueue();
+        CommandBuffer *cmdCompute = CommandBuffer::GetNext(computeQueue->GetFamilyId());
+        for (auto &node : model.linearNodes)
+        {
+            if (node->mesh)
+            {
+                for (auto &primitive : node->mesh->primitives)
+                {
+                    for (Image *image : primitive.images)
+                    {
+                        if (image->HasGeneratedMips())
+                            continue;
+                        
+                        cmdCompute->Begin();
+                        cmdCompute->GenerateMipMaps(image);
+                        cmdCompute->End();
+                        cmdCompute->Submit(computeQueue, nullptr, 0, nullptr, 0, nullptr);
+                        cmdCompute->Wait();
+                    }
+                }
+            }
+        }
     }
 
     // position x, y, z and radius w
@@ -780,7 +799,8 @@ namespace pe
         uniformBuffer.buffer->Map();
 
         // mesh dSets
-        std::vector<Image *> images{};
+        std::vector<ImageViewHandle> views{};
+        std::vector<SamplerHandle> samplers{};
         for (auto &node : linearNodes)
         {
             if (!node->mesh)
@@ -789,7 +809,7 @@ namespace pe
             for (auto &primitive : node->mesh->primitives)
             {
                 // this primitive's starting index of images in the uniform array of all images
-                primitive.uniformImagesIndex = images.size();
+                primitive.uniformImagesIndex = views.size();
 
                 mat4 factors;
                 factors[0] = primitive.pbrMaterial.baseColorFactor != vec4(0.f) ? primitive.pbrMaterial.baseColorFactor : vec4(1.f);
@@ -807,11 +827,16 @@ namespace pe
                     uniformBuffer.buffer->Copy(1, &mr, true);
                 }
 
-                images.push_back(primitive.pbrMaterial.baseColorTexture);
-                images.push_back(primitive.pbrMaterial.metallicRoughnessTexture);
-                images.push_back(primitive.pbrMaterial.normalTexture);
-                images.push_back(primitive.pbrMaterial.occlusionTexture);
-                images.push_back(primitive.pbrMaterial.emissiveTexture);
+                views.push_back(primitive.pbrMaterial.baseColorTexture->GetSRV());
+                views.push_back(primitive.pbrMaterial.metallicRoughnessTexture->GetSRV());
+                views.push_back(primitive.pbrMaterial.normalTexture->GetSRV());
+                views.push_back(primitive.pbrMaterial.occlusionTexture->GetSRV());
+                views.push_back(primitive.pbrMaterial.emissiveTexture->GetSRV());
+                samplers.push_back(primitive.pbrMaterial.baseColorTexture->sampler);
+                samplers.push_back(primitive.pbrMaterial.metallicRoughnessTexture->sampler);
+                samplers.push_back(primitive.pbrMaterial.normalTexture->sampler);
+                samplers.push_back(primitive.pbrMaterial.occlusionTexture->sampler);
+                samplers.push_back(primitive.pbrMaterial.emissiveTexture->sampler);
             }
         }
 
@@ -821,13 +846,13 @@ namespace pe
 
         std::vector<DescriptorBindingInfo> imageBindingInfos(1);
         imageBindingInfos[0].binding = 0;
-        imageBindingInfos[0].count = static_cast<uint32_t>(images.size());
+        imageBindingInfos[0].count = static_cast<uint32_t>(views.size());
         imageBindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
         imageBindingInfos[0].type = DescriptorType::CombinedImageSampler;
         imageBindingInfos[0].bindless = true;
         uniformImages.descriptor = Descriptor::Create(imageBindingInfos, ShaderStage::FragmentBit, "model_images_descriptor");
 
-        uniformImages.descriptor->SetImages(0, images);
+        uniformImages.descriptor->SetImages(0, views, samplers);
         uniformImages.descriptor->UpdateDescriptor();
     }
 

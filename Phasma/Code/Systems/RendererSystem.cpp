@@ -73,6 +73,7 @@ namespace pe
         // INIT render components
         m_renderComponents[GetTypeID<Shadows>()] = WORLD_ENTITY->CreateComponent<Shadows>();
         m_renderComponents[GetTypeID<Deferred>()] = WORLD_ENTITY->CreateComponent<Deferred>();
+
         for (auto &renderComponent : m_renderComponents)
         {
             renderComponent.second->Init();
@@ -256,9 +257,9 @@ namespace pe
 #endif
         for (auto &model : Model::models)
             model.Destroy();
-        for (auto &texture : Mesh::uniqueTextures)
+        for (auto &texture : Image::uniqueImages)
             Image::Destroy(texture.second);
-        Mesh::uniqueTextures.clear();
+        Image::uniqueImages.clear();
 
         Compute::DestroyResources();
         skyBoxDay.destroy();

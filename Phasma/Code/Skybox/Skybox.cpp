@@ -27,7 +27,7 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Skybox_descriptor");
 
-        DSet->SetImage(0, cubeMap);
+        DSet->SetImage(0, cubeMap->GetSRV(), cubeMap->sampler);
         DSet->UpdateDescriptor();
     }
 
@@ -52,10 +52,7 @@ namespace pe
         info.name = "skybox_image";
         cubeMap = Image::Create(info);
 
-        ImageViewCreateInfo viewInfo{};
-        viewInfo.image = cubeMap;
-        viewInfo.viewType = ImageViewType::TypeCube;
-        cubeMap->CreateImageView(viewInfo);
+        cubeMap->CreateSRV(ImageViewType::TypeCube);
 
         SamplerCreateInfo samplerInfo{};
         samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
@@ -75,7 +72,7 @@ namespace pe
                 PE_ERROR("No pixel data loaded");
 
             size_t size = static_cast<size_t>(texWidth) * static_cast<size_t>(texHeight) * 4;
-            cmd->CopyDataToImageStaged(cubeMap, pixels, size, i);
+            cmd->CopyDataToImageStaged(cubeMap, pixels, size, i, 1);
             cmd->AddAfterWaitCallback([pixels]()
                                       { stbi_image_free(pixels); });
         }

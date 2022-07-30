@@ -275,10 +275,18 @@ namespace pe
 
             std::vector<ImageViewHandle> views{};
             for (uint32_t i = 0; i < count; i++)
-                views.push_back(colorInfos[i].image->GetImageView());
+            {
+                if (!colorInfos[i].image->HasRTV())
+                    colorInfos[i].image->CreateRTV();
+                views.push_back(colorInfos[i].image->GetRTV());
+            }
 
             if (depthInfo)
-                views.push_back(depthInfo->image->GetImageView());
+            {
+                if (!depthInfo->image->HasRTV())
+                    depthInfo->image->CreateRTV();
+                views.push_back(depthInfo->image->GetRTV());
+            }
 
             std::string name = "Auto_Gen_FrameBuffer_" + std::to_string(s_frameBuffers.size());
             FrameBuffer *newFrameBuffer = FrameBuffer::Create(width,
@@ -400,65 +408,74 @@ namespace pe
     {
         Hash hash;
 
-        if (pipelineInfo.pVertShader)
-            hash.Combine(pipelineInfo.pVertShader->GetCache().GetHash());
-
-        if (pipelineInfo.pFragShader)
-            hash.Combine(pipelineInfo.pFragShader->GetCache().GetHash());
-
         if (pipelineInfo.pCompShader)
+        {
             hash.Combine(pipelineInfo.pCompShader->GetCache().GetHash());
-
-        for (auto &binding : pipelineInfo.vertexInputBindingDescriptions)
-        {
-            hash.Combine(binding.binding);
-            hash.Combine(binding.stride);
-            hash.Combine(static_cast<int>(binding.inputRate));
+            hash.Combine(pipelineInfo.pushConstantStage.Value());
+            hash.Combine(pipelineInfo.pushConstantSize);
+            for (auto &layout : pipelineInfo.descriptorSetLayouts)
+                hash.Combine(reinterpret_cast<intptr_t>(layout));
         }
-
-        for (auto &attribute : pipelineInfo.vertexInputAttributeDescriptions)
+        else
         {
-            hash.Combine(attribute.location);
-            hash.Combine(attribute.binding);
-            hash.Combine(static_cast<int>(attribute.format));
-            hash.Combine(attribute.offset);
+
+            if (pipelineInfo.pVertShader)
+                hash.Combine(pipelineInfo.pVertShader->GetCache().GetHash());
+
+            if (pipelineInfo.pFragShader)
+                hash.Combine(pipelineInfo.pFragShader->GetCache().GetHash());
+
+            for (auto &binding : pipelineInfo.vertexInputBindingDescriptions)
+            {
+                hash.Combine(binding.binding);
+                hash.Combine(binding.stride);
+                hash.Combine(static_cast<int>(binding.inputRate));
+            }
+
+            for (auto &attribute : pipelineInfo.vertexInputAttributeDescriptions)
+            {
+                hash.Combine(attribute.location);
+                hash.Combine(attribute.binding);
+                hash.Combine(static_cast<int>(attribute.format));
+                hash.Combine(attribute.offset);
+            }
+
+            hash.Combine(pipelineInfo.width);
+            hash.Combine(pipelineInfo.height);
+            hash.Combine(static_cast<int>(pipelineInfo.cullMode));
+
+            for (auto &attachment : pipelineInfo.colorBlendAttachments)
+            {
+                hash.Combine(attachment.blendEnable);
+                hash.Combine(static_cast<int>(attachment.srcColorBlendFactor));
+                hash.Combine(static_cast<int>(attachment.dstColorBlendFactor));
+                hash.Combine(static_cast<int>(attachment.colorBlendOp));
+                hash.Combine(static_cast<int>(attachment.srcAlphaBlendFactor));
+                hash.Combine(static_cast<int>(attachment.dstAlphaBlendFactor));
+                hash.Combine(static_cast<int>(attachment.alphaBlendOp));
+                hash.Combine(attachment.colorWriteMask.Value());
+            }
+
+            for (auto &dynamic : pipelineInfo.dynamicStates)
+                hash.Combine(static_cast<int>(dynamic));
+
+            hash.Combine(pipelineInfo.pushConstantStage.Value());
+            hash.Combine(pipelineInfo.pushConstantSize);
+
+            for (auto &layout : pipelineInfo.descriptorSetLayouts)
+                hash.Combine(reinterpret_cast<intptr_t>(layout));
+
+            if (pipelineInfo.renderPass)
+                hash.Combine(reinterpret_cast<intptr_t>(pipelineInfo.renderPass));
+
+            hash.Combine(pipelineInfo.dynamicColorTargets);
+            for (uint32_t i = 0; i < pipelineInfo.dynamicColorTargets; i++)
+                hash.Combine(static_cast<int>(pipelineInfo.colorFormats[i]));
+            if (pipelineInfo.depthFormat)
+                hash.Combine(static_cast<int>(*pipelineInfo.depthFormat));
+
+            hash.Combine(reinterpret_cast<intptr_t>(pipelineInfo.pipelineCache.Get()));
         }
-
-        hash.Combine(pipelineInfo.width);
-        hash.Combine(pipelineInfo.height);
-        hash.Combine(static_cast<int>(pipelineInfo.cullMode));
-
-        for (auto &attachment : pipelineInfo.colorBlendAttachments)
-        {
-            hash.Combine(attachment.blendEnable);
-            hash.Combine(static_cast<int>(attachment.srcColorBlendFactor));
-            hash.Combine(static_cast<int>(attachment.dstColorBlendFactor));
-            hash.Combine(static_cast<int>(attachment.colorBlendOp));
-            hash.Combine(static_cast<int>(attachment.srcAlphaBlendFactor));
-            hash.Combine(static_cast<int>(attachment.dstAlphaBlendFactor));
-            hash.Combine(static_cast<int>(attachment.alphaBlendOp));
-            hash.Combine(attachment.colorWriteMask.Value());
-        }
-
-        for (auto &dynamic : pipelineInfo.dynamicStates)
-            hash.Combine(static_cast<int>(dynamic));
-
-        hash.Combine(pipelineInfo.pushConstantStage.Value());
-        hash.Combine(pipelineInfo.pushConstantSize);
-
-        for (auto &layout : pipelineInfo.descriptorSetLayouts)
-            hash.Combine(reinterpret_cast<intptr_t>(layout));
-
-        if (pipelineInfo.renderPass)
-            hash.Combine(reinterpret_cast<intptr_t>(pipelineInfo.renderPass));
-
-        hash.Combine(pipelineInfo.dynamicColorTargets);
-        for (uint32_t i = 0; i < pipelineInfo.dynamicColorTargets; i++)
-            hash.Combine(static_cast<int>(pipelineInfo.colorFormats[i]));
-        if (pipelineInfo.depthFormat)
-            hash.Combine(static_cast<int>(*pipelineInfo.depthFormat));
-
-        hash.Combine(reinterpret_cast<intptr_t>(pipelineInfo.pipelineCache.Get()));
 
         auto it = s_pipelines.find(hash);
         if (it != s_pipelines.end())

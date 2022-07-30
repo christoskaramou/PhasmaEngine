@@ -32,15 +32,6 @@ namespace pe
         uint32_t unnormalizedCoordinates;
     };
 
-    class ImageViewCreateInfo
-    {
-    public:
-        ImageViewCreateInfo();
-
-        Image *image;
-        ImageViewType viewType;
-    };
-
     class ImageCreateInfo
     {
     public:
@@ -74,35 +65,49 @@ namespace pe
 
         ~Image();
 
-        void CreateImageView(const ImageViewCreateInfo &info, uint32_t mip = -1);
-
         void CreateSampler(const SamplerCreateInfo &info);
 
         ImageLayout GetCurrentLayout(uint32_t layer = 0, uint32_t mip = 0) { return m_layouts[layer][mip]; }
 
         void SetCurrentLayout(ImageLayout layout, uint32_t layer = 0, uint32_t mip = 0) { m_layouts[layer][mip] = layout; }
 
-        ImageViewHandle &GetImageView(uint32_t mip = -1) { return mip == -1 ? m_view : m_views[mip]; }
+        void CreateRTV();
+        void CreateSRV(ImageViewType type, int mip = -1);
+        void CreateUAV(ImageViewType type, uint32_t mip);
 
-        void SetImageView(ImageViewHandle view, uint32_t mip = -1) { GetImageView(mip) = view; }
+        bool HasRTV() { return !!m_rtv; }
+        bool HasSRV(int mip = -1) { return mip == -1 ? !!m_srv : !!m_srvs[mip]; }
+        bool HasUAV(uint32_t mip) { return !!m_uavs[mip]; }
+
+        ImageViewHandle GetRTV() { return m_rtv; }
+        ImageViewHandle GetSRV(int mip = -1) { return mip == -1 ? m_srv : m_srvs[mip]; }
+        ImageViewHandle GetUAV(uint32_t mip) { return m_uavs[mip]; }
+
+        void SetRTV(ImageViewHandle view) { m_rtv = view; }
+
+        bool HasGeneratedMips() { return m_mipmapsGenerated; }
+
+        static uint32_t CalculateMips(uint32_t width, uint32_t height);
 
     private:
         friend class CommandBuffer;
+
+        ImageViewHandle CreateImageView(ImageViewType type, int mip = -1);
 
         // For arrayLayers and/or mipLevels bigger than size 1, all of their layouts must be the same
         // TODO: Manage transitions for different layouts in arrayLayers and/or mipLevels
         void Barrier(CommandBuffer *cmd,
                      ImageLayout newLayout,
                      uint32_t baseArrayLayer = 0,
-                     uint32_t arrayLayers = 1,
+                     uint32_t arrayLayers = 0,
                      uint32_t baseMipLevel = 0,
-                     uint32_t mipLevels = 1);
+                     uint32_t mipLevels = 0);
 
         void CopyDataToImageStaged(CommandBuffer *cmd,
                                    void *data,
                                    size_t size = 0,
                                    uint32_t baseArrayLayer = 0,
-                                   uint32_t layerCount = 1,
+                                   uint32_t layerCount = 0,
                                    uint32_t mipLevel = 0);
 
         void CopyImage(CommandBuffer *cmd, Image *src);
@@ -127,17 +132,21 @@ namespace pe
         SamplerHandle sampler;
         AllocationHandle allocation;
         ImageCreateInfo imageInfo;
-        ImageViewCreateInfo viewInfo;
         SamplerCreateInfo samplerInfo;
 
         float width_f{};
         float height_f{};
         PipelineColorBlendAttachmentState blendAttachment;
 
+        inline static std::map<size_t, Image *> uniqueImages{};
+
     private:
         friend class Swapchain;
-        ImageViewHandle m_view;
-        std::vector<ImageViewHandle> m_views; // single mip views
+        ImageViewHandle m_rtv;
+        ImageViewHandle m_srv;
+        std::vector<ImageViewHandle> m_srvs;
+        std::vector<ImageViewHandle> m_uavs;
         std::vector<std::vector<ImageLayout>> m_layouts{};
+        bool m_mipmapsGenerated = false;
     };
 }

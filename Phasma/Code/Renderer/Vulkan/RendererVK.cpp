@@ -255,7 +255,8 @@ namespace pe
                                         Format format,
                                         bool blendEnable,
                                         ImageUsageFlags additionalFlags,
-                                        bool useRenderTergetScale)
+                                        bool useRenderTergetScale,
+                                        bool useMips)
     {
         float renderTargetScale = useRenderTergetScale ? GUI::renderTargetsScale : 1.f;
         uint32_t width = static_cast<uint32_t>(WIDTH_f * renderTargetScale);
@@ -265,14 +266,15 @@ namespace pe
         info.format = format;
         info.width = width;
         info.height = heigth;
-        info.usage = additionalFlags | ImageUsage::ColorAttachmentBit | ImageUsage::SampledBit;
+        info.usage = additionalFlags | ImageUsage::ColorAttachmentBit | ImageUsage::SampledBit | ImageUsage::StorageBit;
         info.properties = MemoryProperty::DeviceLocalBit;
         info.name = name;
+        if (useMips)
+            info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(width > heigth ? width : heigth))) + 1;
         Image *rt = Image::Create(info);
 
-        ImageViewCreateInfo viewInfo{};
-        viewInfo.image = rt;
-        rt->CreateImageView(viewInfo);
+        rt->CreateRTV();
+        rt->CreateSRV(ImageViewType::Type2D);
 
         SamplerCreateInfo samplerInfo{};
         samplerInfo.anisotropyEnable = 0;
@@ -309,9 +311,8 @@ namespace pe
         info.name = name;
         Image *depth = Image::Create(info);
 
-        ImageViewCreateInfo viewInfo{};
-        viewInfo.image = depth;
-        depth->CreateImageView(viewInfo);
+        depth->CreateRTV();
+        depth->CreateSRV(ImageViewType::Type2D);
 
         SamplerCreateInfo samplerInfo{};
         samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
@@ -363,9 +364,7 @@ namespace pe
         info.name = "FSSampledImage";
         Image *sampledImage = Image::Create(info);
 
-        ImageViewCreateInfo viewInfo{};
-        viewInfo.image = sampledImage;
-        sampledImage->CreateImageView(viewInfo);
+        sampledImage->CreateSRV(ImageViewType::Type2D);
 
         SamplerCreateInfo samplerInfo{};
         sampledImage->CreateSampler(samplerInfo);
@@ -468,6 +467,9 @@ namespace pe
 
         for (auto &rt : m_renderTargets)
             Image::Destroy(rt.second);
+        for (auto &rt : m_depthTargets)
+            Image::Destroy(rt.second);
+
         Image::Destroy(m_depth);
         GUI::s_renderImages.clear();
 

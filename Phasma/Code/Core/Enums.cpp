@@ -9,7 +9,7 @@ namespace pe
             accessMask = 0;
             break;
         case ImageLayout::General:
-            stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            stageFlags = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
             accessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
             break;
         case ImageLayout::ColorAttachment:
@@ -58,7 +58,7 @@ namespace pe
             accessMask = Access::None;
             break;
         case ImageLayout::General:
-            stageFlags = PipelineStage::TopOfPipeBit | PipelineStage::ComputeShaderBit;
+            stageFlags = PipelineStage::ComputeShaderBit;
             accessMask = Access::ShaderReadBit | Access::ShaderWriteBit;
             break;
         case ImageLayout::ColorAttachment:

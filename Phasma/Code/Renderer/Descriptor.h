@@ -32,7 +32,8 @@ namespace pe
     {
         uint32_t binding = (uint32_t)-1;
         std::vector<Buffer *> buffers{};
-        std::vector<Image *> images{};
+        std::vector<ImageViewHandle> views{};
+        std::vector<SamplerHandle> samplers{};
         SamplerHandle sampler{};
     };
 
@@ -60,8 +61,10 @@ namespace pe
 
         ~Descriptor();
 
-        void SetImages(uint32_t binding, const std::vector<Image *> &images);
-        void SetImage(uint32_t binding, Image *image);
+        void SetImages(uint32_t binding,
+                       const std::vector<ImageViewHandle> &views,
+                       const std::vector<SamplerHandle> &samplers);
+        void SetImage(uint32_t binding, ImageViewHandle view, SamplerHandle sampler);
 
         void SetBuffers(uint32_t binding, const std::vector<Buffer *> &buffers);
         void SetBuffer(uint32_t binding, Buffer *buffer);

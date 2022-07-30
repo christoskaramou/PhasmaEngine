@@ -3,9 +3,13 @@
 #include "Renderer/RHI.h"
 #include "Renderer/Queue.h"
 #include "Renderer/Command.h"
+#include "RenderDoc/renderdoc_app.h"
 
 namespace pe
 {
+    // Frame Capture
+    void *capture_api = nullptr;
+
 #if PE_DEBUG_MODE
     PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT = VK_NULL_HANDLE;
     PFN_vkDestroyDebugUtilsMessengerEXT vkDestroyDebugUtilsMessengerEXT = VK_NULL_HANDLE;
@@ -60,6 +64,15 @@ namespace pe
 
             if (!vkCmdInsertDebugUtilsLabelEXT)
                 vkCmdInsertDebugUtilsLabelEXT = (PFN_vkCmdInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkCmdInsertDebugUtilsLabelEXT");
+
+#if defined(WIN32) && PE_RENDER_DOC == 1
+            if (HMODULE mod = LoadLibraryA("renderdoc.dll"))
+            {
+                pRENDERDOC_GetAPI RENDERDOC_GetAPI = (pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
+                int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_2_0, &capture_api);
+                assert(ret == 1);
+            }
+#endif
 
             initialized = true;
         }
@@ -274,6 +287,22 @@ namespace pe
 
         vkCmdEndDebugUtilsLabelEXT(cmd->Handle());
         s_labelDepth--;
+    }
+
+    void Debug::StartFrameCapture()
+    {
+#if PE_RENDER_DOC == 1
+        if (capture_api)
+            static_cast<RENDERDOC_API_1_2_0 *>(capture_api)->StartFrameCapture(NULL, NULL);
+#endif
+    }
+
+    void Debug::EndFrameCapture()
+    {
+#if PE_RENDER_DOC == 1
+        if (capture_api)
+            static_cast<RENDERDOC_API_1_2_0 *>(capture_api)->EndFrameCapture(NULL, NULL);
+#endif
     }
 #endif
 };

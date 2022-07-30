@@ -5,6 +5,7 @@
 #include "Renderer/Buffer.h"
 #include "Renderer/Queue.h"
 #include "GUI/GUI.h"
+#include "Utilities/Downsampler.h"
 
 namespace pe
 {
@@ -27,12 +28,6 @@ namespace pe
         unnormalizedCoordinates = 0;
     }
 
-    ImageViewCreateInfo::ImageViewCreateInfo()
-    {
-        image = nullptr;
-        viewType = ImageViewType::Type2D;
-    }
-
     ImageCreateInfo::ImageCreateInfo()
     {
         width = 0;
@@ -53,18 +48,36 @@ namespace pe
         initialLayout = ImageLayout::Undefined;
     }
 
+    bool LinearFilterSupport(Format format, ImageTiling tiling)
+    {
+        VkFormatProperties fProps;
+        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), Translate<VkFormat>(format), &fProps);
+
+        VkFormatFeatureFlags flags = tiling == ImageTiling::Optimal ? fProps.optimalTilingFeatures : fProps.linearTilingFeatures;
+        if (flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)
+            return true;
+
+        return false;
+    }
+
     Image::Image(const ImageCreateInfo &info)
     {
+        if (!LinearFilterSupport(info.format, info.tiling))
+            PE_ERROR("Image::generateMipMaps(): Linear filter is not supported.");
+
         imageInfo = info;
 
         sampler = {};
-        viewInfo = {};
         samplerInfo = {};
         blendAttachment = {};
 
-        m_views.resize(imageInfo.mipLevels);
+        m_rtv = {};
+        m_srvs.resize(imageInfo.mipLevels);
         for (uint32_t i = 0; i < imageInfo.mipLevels; i++)
-            m_views[i] = {};
+            m_srvs[i] = {};
+        m_uavs.resize(imageInfo.mipLevels);
+        for (uint32_t i = 0; i < imageInfo.mipLevels; i++)
+            m_uavs[i] = {};
 
         m_layouts.resize(imageInfo.arrayLayers);
         for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
@@ -124,13 +137,22 @@ namespace pe
 
     Image::~Image()
     {
-        if (m_view)
+        if (m_rtv)
         {
-            vkDestroyImageView(RHII.GetDevice(), m_view, nullptr);
-            m_view = {};
+            vkDestroyImageView(RHII.GetDevice(), m_rtv, nullptr);
+            m_rtv = {};
         }
 
-        for (auto &view : m_views)
+        for (auto &view : m_srvs)
+        {
+            if (view)
+            {
+                vkDestroyImageView(RHII.GetDevice(), view, nullptr);
+                view = {};
+            }
+        }
+
+        for (auto &view : m_uavs)
         {
             if (view)
             {
@@ -168,6 +190,12 @@ namespace pe
         if (!cmd)
             PE_ERROR("Image::TransitionImageLayout(): no command buffer specified.");
 
+        if (mipLevels == 0)
+            mipLevels = imageInfo.mipLevels;
+
+        if (arrayLayers == 0)
+            arrayLayers = imageInfo.arrayLayers;
+
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         barrier.srcAccessMask = Translate<VkAccessFlags>(srcMask);
@@ -199,14 +227,50 @@ namespace pe
                 m_layouts[baseArrayLayer + i][baseMipLevel + j] = newLayout;
     }
 
-    void Image::CreateImageView(const ImageViewCreateInfo &info, uint32_t mip)
+    void Image::CreateRTV()
     {
-        viewInfo = info;
-        
+        if (!(imageInfo.usage & ImageUsage::ColorAttachmentBit ||
+              imageInfo.usage & ImageUsage::DepthStencilAttachmentBit))
+            PE_ERROR("Image was not created with ColorAttachmentBit or DepthStencilAttachmentBit");
+
+        m_rtv = CreateImageView(ImageViewType::Type2D, 0);
+    }
+
+    void Image::CreateSRV(ImageViewType type, int mip)
+    {
+        if (!(imageInfo.usage & ImageUsage::SampledBit))
+            PE_ERROR("Image was not created with SampledBit");
+
+        ImageViewHandle view = CreateImageView(type, mip);
+        if (mip == -1)
+            m_srv = view;
+        else
+            m_srvs[mip] = view;
+    }
+
+    void Image::CreateUAV(ImageViewType type, uint32_t mip)
+    {
+        if (!(imageInfo.usage & ImageUsage::StorageBit))
+            PE_ERROR("Image was not created with StorageBit");
+
+        m_uavs[mip] = CreateImageView(type, static_cast<int>(mip));
+    }
+
+    uint32_t Image::CalculateMips(uint32_t width, uint32_t height)
+    {
+        static const uint32_t maxMips = 12;
+
+        const uint32_t resolution = max(width, height);
+        const uint32_t mips = static_cast<uint32_t>(floor(log2(static_cast<double>(resolution)))) + 1;
+        return min(mips, maxMips);
+    }
+
+    ImageViewHandle Image::CreateImageView(ImageViewType type, int mip)
+    {
         VkImageViewCreateInfo viewInfoVK{};
         viewInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfoVK.image = viewInfo.image->m_handle;
-        viewInfoVK.viewType = Translate<VkImageViewType>(viewInfo.viewType);
+        viewInfoVK.image = m_handle;
+        viewInfoVK.viewType = Translate<VkImageViewType>(type);
         viewInfoVK.format = Translate<VkFormat>(imageInfo.format);
         viewInfoVK.subresourceRange.aspectMask = GetAspectMaskVK(imageInfo.format);
         viewInfoVK.subresourceRange.baseMipLevel = mip == -1 ? 0 : mip;
@@ -220,17 +284,10 @@ namespace pe
 
         VkImageView vkView;
         PE_CHECK(vkCreateImageView(RHII.GetDevice(), &viewInfoVK, nullptr, &vkView));
+        ImageViewHandle view = vkView;
+        Debug::SetObjectName(view, ObjectType::ImageView, imageInfo.name);
 
-        if (mip == -1)
-        {
-            m_view = vkView;
-            Debug::SetObjectName(m_view, ObjectType::ImageView, imageInfo.name);
-        }
-        else
-        {
-            m_views[mip] = vkView;
-            Debug::SetObjectName(m_views[mip], ObjectType::ImageView, imageInfo.name);
-        }
+        return view;
     }
 
     void Image::Barrier(CommandBuffer *cmd,
@@ -295,7 +352,7 @@ namespace pe
         region.imageSubresource.aspectMask = GetAspectMaskVK(imageInfo.format);
         region.imageSubresource.mipLevel = mipLevel;
         region.imageSubresource.baseArrayLayer = baseArrayLayer;
-        region.imageSubresource.layerCount = layerCount;
+        region.imageSubresource.layerCount = layerCount ? layerCount : imageInfo.arrayLayers;
         region.imageOffset = VkOffset3D{0, 0, 0};
         region.imageExtent = VkExtent3D{imageInfo.width, imageInfo.height, imageInfo.depth};
 
@@ -348,26 +405,17 @@ namespace pe
 
     void Image::GenerateMipMaps(CommandBuffer *cmd)
     {
+        if (m_mipmapsGenerated || imageInfo.mipLevels < 2)
+            return;
+
         if (!cmd)
-            PE_ERROR("Image::GenerateMipMaps(): no command buffer specified.");
+            PE_ERROR("Image::GenerateMipMaps(): No command buffer specified.");
 
-        VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), Translate<VkFormat>(imageInfo.format), &fProps);
+        Downsampler::Dispatch(cmd, this);
 
-        if (imageInfo.tiling == ImageTiling::Optimal)
-        {
-            if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
-                PE_ERROR("generateMipMaps(): Image tiling error, linear filter is not supported.");
-        }
-        else if (imageInfo.tiling == ImageTiling::Linear)
-        {
-            if (!(fProps.linearTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
-                PE_ERROR("generateMipMaps(): Image tiling error, linear filter is not supported.");
-        }
-        else
-        {
-            PE_ERROR("generateMipMaps(): Image tiling error.");
-        }
+        m_mipmapsGenerated = true;
+
+        return;
 
         auto mipWidth = static_cast<int32_t>(imageInfo.width);
         auto mipHeight = static_cast<int32_t>(imageInfo.height);

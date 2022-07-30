@@ -53,7 +53,8 @@ namespace pe
                                   Format format,
                                   bool blendEnable,
                                   ImageUsageFlags additionalFlags = {},
-                                  bool useRenderTergetScale = true);
+                                  bool useRenderTergetScale = true,
+                                  bool useMips = false);
 
         Image *GetRenderTarget(const std::string &name);
 

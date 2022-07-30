@@ -10,23 +10,46 @@
 
 namespace pe
 {
-    Downsampler::Downsampler()
-    {
-        m_pipeline = nullptr;
-        m_pipelineInfo = {};
-        m_DSet = {};
-        m_image = nullptr;
-        m_image6 = nullptr;
-        memset(m_counter, 0, 6 * sizeof(uint32_t));
-        m_pushConstants = {};
-    }
-
-    Downsampler::~Downsampler()
-    {
-    }
-
     void Downsampler::Init()
     {
+        s_pipeline = nullptr;
+        s_pipelineInfo = {};
+        s_DSet = {};
+        s_image = nullptr;
+        memset(s_counter, 0, 6 * sizeof(uint32_t));
+        s_pushConstants = {};
+
+        CreateUniforms();
+        UpdatePipelineInfo();
+    }
+
+    void Downsampler::Dispatch(CommandBuffer *cmd, Image *image)
+    {
+        std::lock_guard<std::mutex> guard(s_dispatchMutex);
+
+        cmd->BeginDebugRegion("Downsampler::Dispatch Command");
+
+        SetInputImage(image);
+        UpdateDescriptorSet();
+
+        uvec2 groupCount = SpdSetup();
+
+        cmd->ImageBarrier(s_image, ImageLayout::General);
+
+        cmd->BindPipeline(*s_pipelineInfo, &s_pipeline);
+        cmd->BindComputeDescriptors(s_pipeline, 1, &s_DSet);
+        cmd->PushConstants(s_pipeline, ShaderStage::ComputeBit, 0, sizeof(PushConstants), &s_pushConstants);
+        cmd->Dispatch(groupCount.x, groupCount.y, s_image->imageInfo.arrayLayers);
+
+        ResetInputImage();
+
+        cmd->EndDebugRegion();
+    }
+
+    void Downsampler::Destroy()
+    {
+        Descriptor::Destroy(s_DSet);
+        Buffer::Destroy(s_atomicCounter);
     }
 
     void Downsampler::UpdatePipelineInfo()
@@ -35,98 +58,93 @@ namespace pe
         const std::vector<Define> defines{
             Define{"A_GPU", ""},
             Define{"A_GLSL", ""},
-            Define{"SPD_LINEAR_SAMPLER", ""},
+            // Define{"SPD_LINEAR_SAMPLER", ""},
             Define{"SPD_NO_WAVE_OPERATIONS", ""}};
 
-        m_pipelineInfo = std::make_shared<PipelineCreateInfo>();
-        m_pipelineInfo->pCompShader = Shader::Create(ShaderInfo{"Shaders/Compute/spd/spd.comp", ShaderStage::ComputeBit, defines});
-        m_pipelineInfo->descriptorSetLayouts = {m_DSet->GetLayout()};
-        m_pipelineInfo->pushConstantSize = sizeof(PushConstants);
-        m_pipelineInfo->pushConstantStage = ShaderStage::ComputeBit;
-        m_pipelineInfo->name = "Downsample_pipeline";
+        s_pipelineInfo = std::make_shared<PipelineCreateInfo>();
+        s_pipelineInfo->pCompShader = Shader::Create(ShaderInfo{"Shaders/Compute/spd/spd.comp", ShaderStage::ComputeBit, defines});
+        s_pipelineInfo->descriptorSetLayouts = {s_DSet->GetLayout()};
+        s_pipelineInfo->pushConstantSize = sizeof(PushConstants);
+        s_pipelineInfo->pushConstantStage = ShaderStage::ComputeBit;
+        s_pipelineInfo->name = "Downsample_pipeline";
     }
 
-    void Downsampler::CreateUniforms(CommandBuffer *cmd)
+    void Downsampler::CreateUniforms()
     {
-        m_atomicCounter = Buffer::Create(
-            sizeof(m_counter),
+        s_atomicCounter = Buffer::Create(
+            sizeof(s_counter),
             BufferUsage::StorageBufferBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "Downsample_storage_buffer");
 
-        std::vector<DescriptorBindingInfo> bindingInfos(5);
+        std::vector<DescriptorBindingInfo> bindingInfos(3);
         bindingInfos[0].binding = 0;
         bindingInfos[0].type = DescriptorType::StorageImage;
+        bindingInfos[0].imageLayout = ImageLayout::General;
+        bindingInfos[0].count = 13;
 
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::StorageImage;
+        bindingInfos[1].imageLayout = ImageLayout::General;
 
         bindingInfos[2].binding = 2;
         bindingInfos[2].type = DescriptorType::StorageBuffer;
 
-        m_DSet = Descriptor::Create(bindingInfos, ShaderStage::ComputeBit, "Downsample_descriptor");
-
-        UpdateDescriptorSets();
+        s_DSet = Descriptor::Create(bindingInfos, ShaderStage::ComputeBit, "Downsample_descriptor");
     }
 
-    void Downsampler::UpdateDescriptorSets()
+    void Downsampler::SetInputImage(Image *image)
     {
-        m_DSet->SetImage(0, m_image); // TODO: figure how to set different image views, maybe change to view inputs?
-        m_DSet->SetImage(1, m_image6);
-        m_DSet->SetBuffer(2, m_atomicCounter);
-        m_DSet->UpdateDescriptor();
+        uint32_t mips = image->imageInfo.mipLevels;
+
+        if (mips <= 1)
+            PE_ERROR("Image has no mips!");
+
+        for (uint32_t i = 0; i < mips; i++)
+        {
+            if (!image->HasUAV(i))
+                image->CreateUAV(ImageViewType::Type2DArray, i);
+        }
+
+        s_image = image;
     }
 
-    void Downsampler::Update(Camera *camera)
+    void Downsampler::ResetInputImage()
     {
+        s_image = nullptr;
+    }
+
+    void Downsampler::UpdateDescriptorSet()
+    {
+        int mips = static_cast<int>(s_image->imageInfo.mipLevels);
+        std::vector<ImageViewHandle> views(mips);
+        for (int i = 0; i < mips; i++)
+            views[i] = s_image->GetUAV(i);
+
+        s_DSet->SetImages(0, views, {});
+        if (mips >= 6)
+            s_DSet->SetImage(1, s_image->GetUAV(6), {});
+        s_DSet->SetBuffer(2, s_atomicCounter);
+
+        s_DSet->UpdateDescriptor();
     }
 
     uvec2 Downsampler::SpdSetup()
     {
-        const Rect2Du rectInfo{0, 0, m_image->imageInfo.width, m_image->imageInfo.height};
+        const Rect2Du rectInfo{0, 0, s_image->imageInfo.width, s_image->imageInfo.height};
 
-        m_pushConstants.workGroupOffset.x = rectInfo.x / 64;
-        m_pushConstants.workGroupOffset.y = rectInfo.y / 64;
+        s_pushConstants.workGroupOffset.x = rectInfo.x / 64;
+        s_pushConstants.workGroupOffset.y = rectInfo.y / 64;
 
         const uint32_t endIndexX = (rectInfo.x + rectInfo.width - 1) / 64;
         const uint32_t endIndexY = (rectInfo.y + rectInfo.height - 1) / 64;
 
-        uvec2 dispatchThreadGroupCount(endIndexX + 1 - m_pushConstants.workGroupOffset.x,
-                                       endIndexY + 1 - m_pushConstants.workGroupOffset.y);
+        uvec2 dispatchThreadGroupCount(endIndexX + 1 - s_pushConstants.workGroupOffset.x,
+                                       endIndexY + 1 - s_pushConstants.workGroupOffset.y);
 
-        m_pushConstants.numWorkGroupsPerSlice = dispatchThreadGroupCount.x * dispatchThreadGroupCount.y;
-        m_pushConstants.mips = m_image->imageInfo.mipLevels;
+        s_pushConstants.numWorkGroupsPerSlice = dispatchThreadGroupCount.x * dispatchThreadGroupCount.y;
+        s_pushConstants.mips = s_image->imageInfo.mipLevels - 1;
 
         return dispatchThreadGroupCount;
-    }
-
-    void Downsampler::Draw(CommandBuffer *cmd, uint32_t imageIndex)
-    {
-        uvec2 dispatchThreadGroupCount = SpdSetup();
-
-        Queue *queue = RHII.GetComputeQueue();
-        queue->BeginDebugRegion("Downsampler::Dispatch Queue");
-
-        cmd->Begin();
-        cmd->BeginDebugRegion("Compute::Dispatch command");
-        cmd->BindPipeline(*m_pipelineInfo, &m_pipeline);
-        cmd->BindComputeDescriptors(m_pipeline, 1, &m_DSet);
-        cmd->PushConstants(m_pipeline, ShaderStage::ComputeBit, 0, sizeof(PushConstants), &m_pushConstants);
-        cmd->Dispatch(dispatchThreadGroupCount.x, dispatchThreadGroupCount.y, m_image->imageInfo.arrayLayers);
-        cmd->EndDebugRegion();
-        cmd->End();
-
-        PipelineStageFlags waitStage{PipelineStage::ComputeShaderBit};
-        cmd->Submit(queue, &waitStage, 0, nullptr, 0, nullptr);
-
-        queue->EndDebugRegion();
-    }
-
-    void Downsampler::Resize(uint32_t width, uint32_t height)
-    {
-    }
-
-    void Downsampler::Destroy()
-    {
     }
 }

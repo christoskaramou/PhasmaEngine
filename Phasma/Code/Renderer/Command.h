@@ -132,9 +132,9 @@ namespace pe
         void ImageBarrier(Image *image,
                           ImageLayout newLayout,
                           uint32_t baseArrayLayer = 0,
-                          uint32_t arrayLayers = 1,
+                          uint32_t arrayLayers = 0,
                           uint32_t baseMipLevel = 0,
-                          uint32_t mipLevels = 1);
+                          uint32_t mipLevels = 0);
 
         void CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset);
 
@@ -144,7 +144,7 @@ namespace pe
                                    void *data,
                                    size_t size,
                                    uint32_t baseArrayLayer = 0,
-                                   uint32_t layerCount = 1,
+                                   uint32_t layerCount = 0,
                                    uint32_t mipLevel = 0);
 
         void CopyImage(Image *src, Image *dst);

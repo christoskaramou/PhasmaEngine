@@ -58,6 +58,8 @@ namespace pe
                          const Microsoft::glTF::Image *image = nullptr,
                          const Microsoft::glTF::Document *document = nullptr,
                          const Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr);
+
+        std::vector<Image *> images;
     };
 
     class Mesh
@@ -77,7 +79,6 @@ namespace pe
             std::vector<mat4> jointMatrices{};
         } meshData;
 
-        static std::map<std::string, Image *> uniqueTextures;
         std::vector<Primitive> primitives{};
 
         size_t uniformBufferIndex;

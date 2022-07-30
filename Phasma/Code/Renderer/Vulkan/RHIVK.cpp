@@ -8,6 +8,7 @@
 #include "Renderer/Swapchain.h"
 #include "Renderer/Queue.h"
 #include "Renderer/Buffer.h"
+#include "Utilities/Downsampler.h"
 
 #if defined(_WIN32)
 // On Windows, Vulkan commands use the stdcall convention
@@ -53,11 +54,14 @@ namespace pe
         CreateSwapchain(m_surface);
         CreateDescriptorPool(150); // General purpose descriptor pool
         CreateSemaphores(SWAPCHAIN_IMAGES * 3);
+        InitDownSampler();
     }
 
     void RHI::Destroy()
     {
         WaitDeviceIdle();
+
+        Downsampler::Destroy();
 
         for (auto it = m_uniformBuffers.begin(); it != m_uniformBuffers.end(); ++it)
         {
@@ -371,7 +375,7 @@ namespace pe
     {
         Queue::Init(m_gpu, m_device, m_surface->Handle());
 
-        m_renderQueue = Queue::GetNext(QueueType::GraphicsBit | QueueType::PresentBit, 1);
+        m_renderQueue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit | QueueType::PresentBit, 1);
         m_computeQueue = Queue::GetNext(QueueType::ComputeBit, 1);
     }
 
@@ -411,6 +415,11 @@ namespace pe
         m_semaphores.resize(semaphoresCount);
         for (uint32_t i = 0; i < semaphoresCount; i++)
             m_semaphores[i] = Semaphore::Create(false, "RHI_semaphore_" + std::to_string(i));
+    }
+
+    void RHI::InitDownSampler()
+    {
+        Downsampler::Init();
     }
 
     Format RHI::GetDepthFormat()

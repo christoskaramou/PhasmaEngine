@@ -95,7 +95,6 @@ namespace pe
         Microsoft::glTF::Document *document = nullptr;
         Microsoft::glTF::GLTFResourceReader *resourceReader = nullptr;
 
-        static std::deque<Model> models;
         size_t uniformBufferIndex;
         size_t uniformImagesIndex;
         size_t uniformBufferOffset;
@@ -135,6 +134,8 @@ namespace pe
         
         std::shared_ptr<PipelineCreateInfo> pipelineInfoGBuffer;
         std::shared_ptr<PipelineCreateInfo> pipelineInfoShadows;
+        
+        static std::deque<Model> models;
 
     private:
         Image *m_normalRT;

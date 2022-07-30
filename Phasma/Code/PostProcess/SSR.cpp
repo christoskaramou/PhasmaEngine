@@ -87,10 +87,10 @@ namespace pe
 
     void SSR::UpdateDescriptorSets()
     {
-        DSet->SetImage(0, albedoRT);
-        DSet->SetImage(1, depth);
-        DSet->SetImage(2, normalRT);
-        DSet->SetImage(3, srmRT);
+        DSet->SetImage(0, albedoRT->GetSRV(), albedoRT->sampler);
+        DSet->SetImage(1, depth->GetSRV(), depth->sampler);
+        DSet->SetImage(2, normalRT->GetSRV(), normalRT->sampler);
+        DSet->SetImage(3, srmRT->GetSRV(), srmRT->sampler);
         DSet->SetBuffer(4, UBReflection);
         DSet->UpdateDescriptor();
     }

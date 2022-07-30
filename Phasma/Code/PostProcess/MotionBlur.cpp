@@ -71,9 +71,9 @@ namespace pe
 
     void MotionBlur::UpdateDescriptorSets()
     {
-        DSet->SetImage(0, frameImage);
-        DSet->SetImage(1, depth);
-        DSet->SetImage(2, velocityRT);
+        DSet->SetImage(0, frameImage->GetSRV(), frameImage->sampler);
+        DSet->SetImage(1, depth->GetSRV(), depth->sampler);
+        DSet->SetImage(2, velocityRT->GetSRV(), velocityRT->sampler);
         DSet->UpdateDescriptor();
     }
 

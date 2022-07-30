@@ -10,8 +10,6 @@
 
 namespace pe
 {
-    std::map<std::string, Image *> Mesh::uniqueTextures{};
-
     Primitive::Primitive() : pbrMaterial({})
     {
         uniformBufferIndex = std::numeric_limits<size_t>::max();
@@ -92,11 +90,8 @@ namespace pe
         }
 
         // Check if it is already loaded
-        if (Mesh::uniqueTextures.find(path.string()) != Mesh::uniqueTextures.end())
-        {
-            *tex = Mesh::uniqueTextures[path.string()];
-        }
-        else
+        StringHash hash(path.string());
+        if (Image::uniqueImages.find(hash) == Image::uniqueImages.end())
         {
             int texWidth, texHeight, texChannels;
             unsigned char *pixels;
@@ -115,31 +110,33 @@ namespace pe
 
             ImageCreateInfo info{};
             info.format = Format::RGBA8Unorm;
-            info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(texWidth > texHeight ? texWidth : texHeight))) + 1;
+            info.mipLevels = Image::CalculateMips(texWidth, texHeight);
             info.width = texWidth;
             info.height = texHeight;
-            info.usage = ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::SampledBit;
+            info.usage = ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::SampledBit | ImageUsage::StorageBit;
             info.properties = MemoryProperty::DeviceLocalBit;
             info.initialLayout = ImageLayout::Preinitialized;
             info.name = image ? image->uri : path.filename().string();
             *tex = Image::Create(info);
 
-            ImageViewCreateInfo viewInfo{};
-            viewInfo.image = *tex;
-            (*tex)->CreateImageView(viewInfo);
+            (*tex)->CreateSRV(ImageViewType::Type2D);
 
             SamplerCreateInfo samplerInfo{};
             samplerInfo.maxLod = static_cast<float>(info.mipLevels);
             (*tex)->CreateSampler(samplerInfo);
 
             cmd->CopyDataToImageStaged(*tex, pixels, texWidth * texHeight * STBI_rgb_alpha);
-
-            cmd->GenerateMipMaps(*tex);
-
-            Mesh::uniqueTextures[path.string()] = *tex;
             cmd->AddAfterWaitCallback([pixels]()
-                                     { stbi_image_free(pixels); });
+                                      { stbi_image_free(pixels); });
+
+            Image::uniqueImages[hash] = *tex;
         }
+        else
+        {
+            *tex = Image::uniqueImages[hash];
+        }
+
+        images.push_back(*tex);
     }
 
     void Mesh::destroy()

@@ -20,6 +20,10 @@ namespace pe
 
         static void SetObjectName(uintptr_t object, ObjectType type, const std::string &name);
 
+        static void StartFrameCapture();
+
+        static void EndFrameCapture();
+
     private:
         friend class CommandBuffer;
         friend class Queue;
@@ -53,6 +57,11 @@ namespace pe
         static void DestroyDebugMessenger() {}
 
         static void SetObjectName(uint64_t object, ObjectType type, const std::string &name) {}
+
+        static void StartFrameCapture() {}
+
+        static void EndFrameCapture() {}
+        
     private:
         friend class CommandBuffer;
         friend class Queue;

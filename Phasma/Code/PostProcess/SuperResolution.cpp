@@ -85,21 +85,21 @@ namespace pe
         dd.commandList = ffxGetCommandListVK(cmd->Handle());
         dd.color = ffxGetTextureResourceVK(m_context.get(),
                                            m_viewportRT->Handle(),
-                                           m_viewportRT->GetImageView(),
+                                           m_viewportRT->GetSRV(),
                                            m_viewportRT->imageInfo.width,
                                            m_viewportRT->imageInfo.height,
                                            Translate<VkFormat>(m_viewportRT->imageInfo.format),
                                            L"FSR2_Input");
         dd.depth = ffxGetTextureResourceVK(m_context.get(),
                                            m_depth->Handle(),
-                                           m_depth->GetImageView(),
+                                           m_depth->GetSRV(),
                                            m_depth->imageInfo.width,
                                            m_depth->imageInfo.height,
                                            Translate<VkFormat>(m_depth->imageInfo.format),
                                            L"FSR2_Depth");
         dd.motionVectors = ffxGetTextureResourceVK(m_context.get(),
                                                    m_velocityRT->Handle(),
-                                                   m_velocityRT->GetImageView(),
+                                                   m_velocityRT->GetSRV(),
                                                    m_velocityRT->imageInfo.width,
                                                    m_velocityRT->imageInfo.height,
                                                    Translate<VkFormat>(m_velocityRT->imageInfo.format),
@@ -127,7 +127,7 @@ namespace pe
                                                                 L"FSR2_TransparencyAndComposition");
         dd.output = ffxGetTextureResourceVK(m_context.get(),
                                             m_display->Handle(),
-                                            m_display->GetImageView(),
+                                            m_display->GetSRV(),
                                             m_display->imageInfo.width,
                                             m_display->imageInfo.height,
                                             Translate<VkFormat>(m_display->imageInfo.format),

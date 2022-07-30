@@ -74,9 +74,9 @@ namespace pe
 
         // Bindings flags
         std::vector<VkDescriptorBindingFlags> bindingFlags(bindingsVK.size());
-        for (int i = 0; i < bindingInfos.size(); i++)
+        for (int i = 0; i < bindingsVK.size(); i++)
         {
-            bindingFlags[i] = 0;
+            bindingFlags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
 
             if (allowUpdateAfterBind)
                 bindingFlags[i] |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
@@ -88,7 +88,7 @@ namespace pe
                 if (i != bindingInfos.size() - 1)
                     PE_ERROR("DescriptorLayout: An unbound array must be the last binding");
 
-                bindingFlags[i] |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+                bindingFlags[i] |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
                 m_variableCount = bindingsVK[i].descriptorCount;
             }
         }
@@ -194,25 +194,29 @@ namespace pe
         DescriptorLayout::Destroy(m_layout);
     }
 
-    void Descriptor::SetImages(uint32_t binding, const std::vector<Image *> &images)
+    void Descriptor::SetImages(uint32_t binding,
+                               const std::vector<ImageViewHandle> &views,
+                               const std::vector<SamplerHandle> &samplers)
     {
         auto it = m_updateInfoMap.find(binding);
         if (it != m_updateInfoMap.end())
         {
-            it->second.images = images;
+            it->second.views = views;
+            it->second.samplers = samplers;
         }
         else
         {
             DescriptorUpdateInfo info{};
             info.binding = binding;
-            info.images = images;
+            info.views = views;
+            info.samplers = samplers;
             m_updateInfoMap[binding] = info;
         }
     }
 
-    void Descriptor::SetImage(uint32_t binding, Image *image)
+    void Descriptor::SetImage(uint32_t binding, ImageViewHandle view, SamplerHandle sampler)
     {
-        SetImages(binding, {image});
+        SetImages(binding, {view}, {sampler});
     }
 
     void Descriptor::SetBuffers(uint32_t binding, const std::vector<Buffer *> &buffers)
@@ -256,21 +260,35 @@ namespace pe
     {
         for (auto it = m_updateInfoMap.begin(); it != m_updateInfoMap.end(); it++)
         {
-            const DescriptorUpdateInfo &updateInfo = it->second;
-            const DescriptorBindingInfo &bindingInfo = m_bindingInfoMap[it->first];
+            DescriptorUpdateInfo &updateInfo = it->second;
+            DescriptorBindingInfo &bindingInfo = m_bindingInfoMap[it->first];
+
+            uint32_t typeCount = 0;
+            typeCount += !updateInfo.sampler.IsNull() ? 1 : 0;
+            typeCount += updateInfo.views.size() ? 1 : 0;
+            typeCount += updateInfo.buffers.size() ? 1 : 0;
+            if (typeCount != 1)
+                PE_ERROR("DescriptorUpdateInfo type count error");
 
             std::vector<VkDescriptorImageInfo> imageInfoVK{};
             std::vector<VkDescriptorBufferInfo> bufferInfoVK{};
 
-            for (auto *image : updateInfo.images)
+            if (updateInfo.sampler)
             {
-                SamplerHandle sampler = bindingInfo.type == DescriptorType::CombinedImageSampler
-                                            ? image->sampler
-                                            : updateInfo.sampler;
+                imageInfoVK.push_back(
+                    VkDescriptorImageInfo{
+                        updateInfo.sampler,
+                        nullptr,
+                        VK_IMAGE_LAYOUT_UNDEFINED});
+            }
+
+            for (uint32_t i = 0; i < updateInfo.views.size(); i++)
+            {
+                SamplerHandle sampler = updateInfo.samplers.size() > 0 ? updateInfo.samplers[i] : SamplerHandle{};
                 imageInfoVK.push_back(
                     VkDescriptorImageInfo{
                         sampler,
-                        image->GetImageView(),
+                        updateInfo.views[i],
                         Translate<VkImageLayout>(bindingInfo.imageLayout)});
             }
 
@@ -293,7 +311,7 @@ namespace pe
             writeSet.dstSet = m_handle;
             writeSet.dstBinding = bindingInfo.binding;
             writeSet.dstArrayElement = 0;
-            writeSet.descriptorCount = bindingInfo.count;
+            writeSet.descriptorCount = static_cast<uint32_t>(max(imageInfoVK.size(), bufferInfoVK.size()));
             writeSet.descriptorType = Translate<VkDescriptorType>(bindingInfo.type);
             writeSet.pImageInfo = imageInfoVK.size() > 0 ? imageInfoVK.data() : nullptr;
             writeSet.pBufferInfo = bufferInfoVK.size() > 0 ? bufferInfoVK.data() : nullptr;
