@@ -28,7 +28,7 @@ vec3 ScreenSpaceReflections(vec3 position, vec3 normal);
 void main()
 {
     vec3 position = GetPosFromUV(inUV, texture(depthSampler, inUV).x, ubo.invProj);
-    vec4 normal = ubo.view * vec4(texture(normalSampler, inUV).xyz, 0.0);
+    vec4 normal = ubo.view * vec4(texture(normalSampler, inUV).xyz * vec3(2.0) - vec3(1.0), 0.0);
 
     outColor = vec4(ScreenSpaceReflections(position, normalize(normal.xyz)), 1.0);
 }

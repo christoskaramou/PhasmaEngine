@@ -47,7 +47,7 @@ void main() {
     vec3 emissive = texture(eSampler, inUV).xyz;
     float ao = texture(oSampler, inUV).r;
 
-    outNormal = GetNormal(positionWS.xyz, nSampler, inNormal, inUV);
+    outNormal = GetNormal(positionWS.xyz, nSampler, inNormal, inUV) * vec3(0.5) + vec3(0.5);
     outAlbedo = vec4(basicColor.xyz * ao, basicColor.a) * baseColorFactor;
     outMetRough = vec3(0.0, metRough.y, metRough.z);
     vec2 cancelJitter = constants.prevProjJitter - constants.projJitter;

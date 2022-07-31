@@ -23,7 +23,7 @@ void main()
 {
     // Get G-Buffer values
     vec3 fragPos = GetPosFromUV(inUV, texture(samplerDepth, inUV).x, pvm.invProjection);
-    vec4 normal = pvm.view * texture(samplerNormal, inUV);
+    vec3 normal = pvm.view * texture(samplerNormal, inUV).xyz * vec3(2.0) - vec3(1.0);
 
     // Get a random vector using a noise lookup
     ivec2 texDim = textureSize(samplerDepth, 0);
@@ -32,9 +32,9 @@ void main()
     vec3 randomVec = texture(samplerNoise, noiseUV).xyz * 2.0 - 1.0;
 
     // Create TBN matrix
-    vec3 tangent = normalize(randomVec - normal.xyz * dot(randomVec, normal.xyz));
-    vec3 bitangent = cross(normal.xyz, tangent);
-    mat3 TBN = mat3(tangent, bitangent, normal.xyz);
+    vec3 tangent = normalize(randomVec - normal * dot(randomVec, normal));
+    vec3 bitangent = cross(normal, tangent);
+    mat3 TBN = mat3(tangent, bitangent, normal);
 
     // Calculate occlusion value
     float occlusion = 0.0f;
@@ -42,7 +42,7 @@ void main()
     {
         vec3 offset = TBN * kernel.samples[i].xyz * RADIUS;
         vec3 origin_to_sample = offset - fragPos.xyz;
-        if (dot(normal.xyz, origin_to_sample) < 0.0f)
+        if (dot(normal, origin_to_sample) < 0.0f)
         {
             offset *= -1.0;
         }

@@ -53,7 +53,7 @@ namespace pe
         m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit);
         m_viewportRT = CreateRenderTarget("viewport", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit);
         m_displayRT = CreateRenderTarget("display", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::StorageBit, false);
-        CreateRenderTarget("normal", Format::RGBA32SFloat, false);
+        CreateRenderTarget("normal", Format::RGBA16SFloat, false);
         CreateRenderTarget("albedo", format, true);
         CreateRenderTarget("srm", format, false); // Specular Roughness Metallic
         CreateRenderTarget("ssao", Format::R8Unorm, false);

@@ -309,6 +309,7 @@ namespace pe
         RGB16SInt,
         RGB16UInt,
         RGB16SFloat,
+        RGBA16UInt,
         RGBA16SFloat,
 
         R32SInt,

@@ -53,7 +53,7 @@ void main()
     }
 
     vec3 wolrdPos = GetPosFromUV(in_UV, depth, screenSpace.invViewProj);
-    vec3 normal = texture(sampler_normal, in_UV).xyz;
+    vec3 normal = texture(sampler_normal, in_UV).xyz * vec3(2.0) - vec3(1.0);
     vec3 metRough = texture(sampler_met_rough, in_UV).xyz;
     vec4 albedo = texture(sampler_albedo, in_UV);
 

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "CACAO/ffx_cacao.h"
+#include "CACAO/ffx_cacao_impl.h"
+
 namespace pe
 {
     class CommandBuffer;
@@ -19,11 +22,11 @@ namespace pe
 
         void Init() override;
 
-        void UpdatePipelineInfo() override;
+        void UpdatePipelineInfo() override{};
 
-        void CreateUniforms(CommandBuffer *cmd) override;
+        void CreateUniforms(CommandBuffer *cmd) override{};
 
-        void UpdateDescriptorSets() override;
+        void UpdateDescriptorSets() override{};
 
         void Update(Camera *camera) override;
 
@@ -33,32 +36,12 @@ namespace pe
 
         void Destroy() override;
 
-    private:
-        friend class Renderer;
-
-        void UpdatePipelineInfoSSAO();
-
-        void UpdatePipelineInfoBlur();
-
-    public:
-        struct UBO
-        {
-            mat4 projection;
-            mat4 view;
-            mat4 invProjection;
-        }ubo;
-        Buffer *UB_Kernel;
-        Buffer *UB_PVM;
-        Image *noiseTex;
-        Pipeline *pipeline;
-        Pipeline *pipelineBlur;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfo;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfoBlur;
-        Descriptor *DSet;
-        Descriptor *DSBlur;
         Image *ssaoRT;
         Image *ssaoBlurRT;
         Image *normalRT;
         Image *depth;
+        FFX_CACAO_VkContext *m_context;
+        FFX_CACAO_Matrix4x4 m_proj;/* row major projection matrix */
+        FFX_CACAO_Matrix4x4 m_normalsToView;/* row major matrix to convert normals to viewspace */
     };
 }

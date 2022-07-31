@@ -362,6 +362,7 @@ namespace pe
             {(T)Format::RGB16SInt, VK_FORMAT_R16G16B16_SINT},
             {(T)Format::RGB16UInt, VK_FORMAT_R16G16B16_UINT},
             {(T)Format::RGB16SFloat, VK_FORMAT_R16G16B16_SFLOAT},
+            {(T)Format::RGBA16UInt, VK_FORMAT_R16G16B16A16_UINT},
             {(T)Format::RGBA16SFloat, VK_FORMAT_R16G16B16A16_SFLOAT},
             {(T)Format::R32SInt, VK_FORMAT_R32_SINT},
             {(T)Format::R32UInt, VK_FORMAT_R32_UINT},

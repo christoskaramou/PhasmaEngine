@@ -479,7 +479,7 @@ namespace pe
         m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit);
         m_viewportRT = CreateRenderTarget("viewport", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit);
         m_displayRT = CreateRenderTarget("display", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::StorageBit, false);
-        CreateRenderTarget("normal", Format::RGBA32SFloat, false);
+        CreateRenderTarget("normal", Format::RGBA16SFloat, false);
         CreateRenderTarget("albedo", format, true);
         CreateRenderTarget("srm", format, false); // Specular Roughness Metallic
         CreateRenderTarget("ssao", Format::R8Unorm, false);
@@ -571,17 +571,6 @@ namespace pe
 
         if (NeedsUpdate(deferred.pipelineInfo))
             deferred.UpdatePipelineInfo();
-
-        if (NeedsUpdate(ssao.pipelineInfo))
-            ssao.UpdatePipelineInfoSSAO();
-        if (NeedsUpdate(ssao.pipelineInfoBlur))
-            ssao.UpdatePipelineInfoBlur();
-
-        if (NeedsUpdate(ssr.pipelineInfo))
-            ssr.UpdatePipelineInfo();
-
-        if (NeedsUpdate(fxaa.pipelineInfo))
-            fxaa.UpdatePipelineInfo();
 
         if (NeedsUpdate(bloom.pipelineInfoBF))
             bloom.UpdatePipelineInfoBrightFilter();
