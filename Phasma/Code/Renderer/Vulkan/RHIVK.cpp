@@ -66,26 +66,44 @@ namespace pe
         for (auto it = m_uniformBuffers.begin(); it != m_uniformBuffers.end(); ++it)
         {
             Buffer::Destroy(it->second.buffer);
+            it->second.buffer = nullptr;
+
             Descriptor::Destroy(it->second.descriptor);
+            it->second.descriptor = nullptr;
         }
 
         for (auto it = m_uniformImages.begin(); it != m_uniformImages.end(); ++it)
+        {
             Descriptor::Destroy(it->second.descriptor);
+            it->second.descriptor = nullptr;
+        }
 
         Queue::Clear();
         CommandBuffer::Clear();
         CommandPool::Clear();
-        for (auto *semaphore : m_semaphores)
+        for (auto &semaphore : m_semaphores)
+        {
             Semaphore::Destroy(semaphore);
+            semaphore = nullptr;
+        }
         DescriptorPool::Destroy(m_descriptorPool);
+        m_descriptorPool = nullptr;
         Swapchain::Destroy(m_swapchain);
+        m_swapchain = nullptr;
         vmaDestroyAllocator(m_allocator);
+
+        for (auto &image : Image::uniqueImages)
+        {
+            Image::Destroy(image.second);
+            image.second = nullptr;
+        }
 
         IHandleBase::DestroyAllIHandles();
 
         if (m_device)
             vkDestroyDevice(m_device, nullptr);
         Surface::Destroy(m_surface);
+        m_surface = nullptr;
         Debug::DestroyDebugMessenger();
         if (m_instance)
             vkDestroyInstance(m_instance, nullptr);

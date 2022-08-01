@@ -107,7 +107,7 @@ namespace pe
     protected:
         virtual void Suicide() { PE_ERROR("Unused Base"); }
 
-        inline static std::map<size_t, IHandleBase *> s_allHandles{};
+        inline static std::map<IHandleBase *, IHandleBase *> s_allHandles{};
         size_t m_id;
     };
 
@@ -128,10 +128,9 @@ namespace pe
             ValidateBaseClass<IHandle<T, HANDLE>, T>();
 
             T *ptr = new T(std::forward<Params>(params)...);
-            ptr->m_p = ptr;
 
             // Useful for deleting
-            s_allHandles[ptr->m_id] = ptr;
+            s_allHandles[ptr] = ptr;
 
             return ptr;
         }
@@ -141,14 +140,8 @@ namespace pe
             ValidateBaseClass<ApiHandleBase, HANDLE>();
             ValidateBaseClass<IHandle<T, HANDLE>, T>();
 
-            if (ptr && ptr->m_p)
-            {
-                if (s_allHandles.erase(ptr->m_id))
-                {
-                    delete ptr->m_p;
-                    ptr->m_p = nullptr;
-                }
-            }
+            if (ptr && s_allHandles.erase(ptr))
+                delete ptr;
         }
 
         virtual ~IHandle() {}
@@ -161,8 +154,6 @@ namespace pe
 
     private:
         void Suicide() override { Destroy(static_cast<T *>(this)); }
-
-        T *m_p;
     };
 
     using CommandBufferHandle = ApiHandle<VkCommandBuffer, Placeholder<0> *>;

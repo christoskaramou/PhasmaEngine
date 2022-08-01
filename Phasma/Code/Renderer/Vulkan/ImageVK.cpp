@@ -142,7 +142,11 @@ namespace pe
             vkDestroyImageView(RHII.GetDevice(), m_rtv, nullptr);
             m_rtv = {};
         }
-
+        if (m_srv)
+        {
+            vkDestroyImageView(RHII.GetDevice(), m_srv, nullptr);
+            m_srv = {};
+        }
         for (auto &view : m_srvs)
         {
             if (view)

@@ -121,15 +121,16 @@ namespace pe
         for (uint32_t i = 0; i < ssaoBlurRT->imageInfo.arrayLayers; i++)
             for (uint32_t j = 0; j < ssaoBlurRT->imageInfo.mipLevels; j++)
                 ssaoBlurRT->SetCurrentLayout(ImageLayout::ShaderReadOnly, i, j);
-                
-        cmd->ImageBarrier(ssaoBlurRT, ImageLayout::General);
 
+        cmd->ImageBarrier(ssaoBlurRT, ImageLayout::General);
 
         cmd->EndDebugRegion();
     }
 
     void SSAO::Resize(uint32_t width, uint32_t height)
     {
+        PE_CHECK(FFX_CACAO_VkDestroyScreenSizeDependentResources(m_context));
+        
         RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
         ssaoRT = rs->GetRenderTarget("ssao");
         ssaoBlurRT = rs->GetRenderTarget("ssaoBlur");
@@ -148,7 +149,7 @@ namespace pe
 
     void SSAO::Destroy()
     {
-
+        PE_CHECK(FFX_CACAO_VkDestroyScreenSizeDependentResources(m_context));
         PE_CHECK(FFX_CACAO_VkDestroyContext(m_context));
         free(m_context);
     }

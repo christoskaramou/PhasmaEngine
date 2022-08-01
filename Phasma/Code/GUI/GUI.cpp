@@ -33,6 +33,8 @@ namespace pe
     GUI::~GUI()
     {
         ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
     }
 
     bool endsWithExt(const std::string &mainStr, const std::string &toMatch)

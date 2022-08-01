@@ -31,6 +31,8 @@ namespace pe
 
         for (auto &system : m_systems)
             system.second->Destroy();
+
+        m_systems.clear();
     }
 
     void Context::UpdateSystems(double delta)

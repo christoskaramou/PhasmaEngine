@@ -32,7 +32,7 @@ namespace pe
     void Compute::Dispatch(const uint32_t sizeX, const uint32_t sizeY, const uint32_t sizeZ)
     {
         RHII.GetComputeQueue()->BeginDebugRegion("Compute::Dispatch queue");
-        
+
         commandBuffer->Begin();
         commandBuffer->BeginDebugRegion("Compute::Dispatch command");
         commandBuffer->BindComputePipeline(pipeline);
@@ -40,7 +40,7 @@ namespace pe
         commandBuffer->Dispatch(sizeX, sizeY, sizeZ);
         commandBuffer->EndDebugRegion();
         commandBuffer->End();
-        
+
         commandBuffer->Submit(RHII.GetComputeQueue(), nullptr, 0, nullptr, 0, nullptr);
 
         RHII.GetComputeQueue()->EndDebugRegion();
@@ -85,7 +85,10 @@ namespace pe
     void Compute::CreatePipeline(const std::string &shaderName)
     {
         if (pipeline)
+        {
             Pipeline::Destroy(pipeline);
+            pipeline = nullptr;
+        }
 
         PipelineCreateInfo info{};
         info.pCompShader = Shader::Create(ShaderInfo{shaderName, ShaderStage::ComputeBit});
@@ -95,6 +98,7 @@ namespace pe
         pipeline = Pipeline::Create(info);
 
         Shader::Destroy(info.pCompShader);
+        info.pCompShader = nullptr;
     }
 
     void Compute::Destroy()
@@ -102,11 +106,15 @@ namespace pe
         CommandBuffer::Return(commandBuffer);
 
         Buffer::Destroy(SBIn);
+        SBIn = nullptr;
         Buffer::Destroy(SBOut);
+        SBOut = nullptr;
 
         Pipeline::Destroy(pipeline);
+        pipeline = nullptr;
 
         Descriptor::Destroy(DSet);
+        DSet = nullptr;
     }
 
     Compute Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, const std::string &name)
