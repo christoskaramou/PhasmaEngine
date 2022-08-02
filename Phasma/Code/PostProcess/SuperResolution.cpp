@@ -83,55 +83,62 @@ namespace pe
 
         FfxFsr2DispatchDescription dd = {};
         dd.commandList = ffxGetCommandListVK(cmd->Handle());
+        wchar_t fsr2InputName[] = L"FSR2_Input";
         dd.color = ffxGetTextureResourceVK(m_context.get(),
                                            m_viewportRT->Handle(),
                                            m_viewportRT->GetSRV(),
                                            m_viewportRT->imageInfo.width,
                                            m_viewportRT->imageInfo.height,
                                            Translate<VkFormat>(m_viewportRT->imageInfo.format),
-                                           L"FSR2_Input");
+                                           fsr2InputName);
+        wchar_t fsr2DepthName[] = L"FSR2_Depth";
         dd.depth = ffxGetTextureResourceVK(m_context.get(),
                                            m_depth->Handle(),
                                            m_depth->GetSRV(),
                                            m_depth->imageInfo.width,
                                            m_depth->imageInfo.height,
                                            Translate<VkFormat>(m_depth->imageInfo.format),
-                                           L"FSR2_Depth");
+                                           fsr2DepthName);
+        wchar_t fsr2VelocityName[] = L"FSR2_Velocity";
         dd.motionVectors = ffxGetTextureResourceVK(m_context.get(),
                                                    m_velocityRT->Handle(),
                                                    m_velocityRT->GetSRV(),
                                                    m_velocityRT->imageInfo.width,
                                                    m_velocityRT->imageInfo.height,
                                                    Translate<VkFormat>(m_velocityRT->imageInfo.format),
-                                                   L"FSR2_Velocity");
+                                                   fsr2VelocityName);
+        wchar_t fsr2ExposureName[] = L"FSR2_Exposure";
         dd.exposure = ffxGetTextureResourceVK(m_context.get(),
                                               nullptr,
                                               nullptr,
                                               1,
                                               1,
                                               VK_FORMAT_UNDEFINED,
-                                              L"FSR2_Exposure");
+                                              fsr2ExposureName);
+        wchar_t fsr2ReactiveName[] = L"FSR2_Reactive";
         dd.reactive = ffxGetTextureResourceVK(m_context.get(),
                                               nullptr,
                                               nullptr,
                                               1,
                                               1,
                                               VK_FORMAT_UNDEFINED,
-                                              L"FSR2_Reactive");
+                                              fsr2ReactiveName);
+        wchar_t fsr2TACName[] = L"FSR2_TransparencyAndComposition";
         dd.transparencyAndComposition = ffxGetTextureResourceVK(m_context.get(),
                                                                 nullptr,
                                                                 nullptr,
                                                                 1,
                                                                 1,
                                                                 VK_FORMAT_UNDEFINED,
-                                                                L"FSR2_TransparencyAndComposition");
+                                                                fsr2TACName);
+        wchar_t fsr2OutputName[] = L"FSR2_Output";
         dd.output = ffxGetTextureResourceVK(m_context.get(),
                                             m_display->Handle(),
                                             m_display->GetSRV(),
                                             m_display->imageInfo.width,
                                             m_display->imageInfo.height,
                                             Translate<VkFormat>(m_display->imageInfo.format),
-                                            L"FSR2_Output",
+                                            fsr2OutputName,
                                             FFX_RESOURCE_STATE_UNORDERED_ACCESS);
         dd.jitterOffset.x = m_jitter.x;
         dd.jitterOffset.y = m_jitter.y;

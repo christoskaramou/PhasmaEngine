@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Material.h"
+#include "Renderer/Vertex.h"
 #include "GLTFSDK/GLTF.h"
 #include "GLTFSDK/Document.h"
 #include "GLTFSDK/GLTFResourceReader.h"
@@ -12,7 +13,6 @@ namespace pe
     class Descriptor;
     class Image;
     class Buffer;
-    struct Vertex;
     class CommandBuffer;
 
     class Primitive

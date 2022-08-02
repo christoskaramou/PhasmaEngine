@@ -31,13 +31,12 @@ namespace pe
         inline static Pipeline *s_pipeline = nullptr;
         inline static std::shared_ptr<PipelineCreateInfo> s_pipelineInfo{};
 
-        // Downsampler is not reusable with only one descriptor, unless it is synchronized with waits,
-        // because descriptor updates and command buffers are not having the same execution principles
+        // Downsampler is not reusable within a command recording, it can be with though with multiple descriptors
         inline static const uint32_t MAX_DESCRIPTORS_PER_CMD = 100;
         inline static uint32_t s_currentIndex{};
         inline static Descriptor *s_DSet[MAX_DESCRIPTORS_PER_CMD]{};
 
-        inline static Image *s_image = nullptr; // max 12 mips/views, 1st is the image itself
+        inline static Image *s_image = nullptr; // max 12 mips/views
 
         inline static uint32_t s_counter[6]{};
         inline static Buffer *s_atomicCounter[MAX_DESCRIPTORS_PER_CMD]{};

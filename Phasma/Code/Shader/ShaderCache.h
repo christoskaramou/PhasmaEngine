@@ -19,7 +19,7 @@ namespace pe
 
         std::vector<uint32_t> ReadSpvFile();
 
-        std::string ShaderCache::ParseFileAndIncludes(const std::string &sourcePath);
+        std::string ParseFileAndIncludes(const std::string &sourcePath);
 
         void WriteSpvToFile(const std::vector<uint32_t> &spirv);
 
