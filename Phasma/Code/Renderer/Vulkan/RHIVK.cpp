@@ -393,7 +393,7 @@ namespace pe
     {
         Queue::Init(m_gpu, m_device, m_surface->Handle());
 
-        m_renderQueue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit | QueueType::PresentBit, 1);
+        m_renderQueue = Queue::GetNext(QueueType::GraphicsBit | QueueType::ComputeBit | QueueType::TransferBit | QueueType::PresentBit, 1);
         m_computeQueue = Queue::GetNext(QueueType::ComputeBit, 1);
     }
 

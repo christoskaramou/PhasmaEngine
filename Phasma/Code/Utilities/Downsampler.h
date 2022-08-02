@@ -11,8 +11,9 @@ namespace pe
 
         static void Destroy();
 
-    private:
+        inline static void ResetCounter() { s_currentIndex = 0; }
 
+    private:
         static void UpdatePipelineInfo();
 
         static void CreateUniforms();
@@ -27,21 +28,25 @@ namespace pe
 
         inline static std::mutex s_dispatchMutex{};
 
-        inline static Pipeline *s_pipeline;
-        inline static std::shared_ptr<PipelineCreateInfo> s_pipelineInfo;
-        inline static Descriptor *s_DSet;
+        inline static Pipeline *s_pipeline = nullptr;
+        inline static std::shared_ptr<PipelineCreateInfo> s_pipelineInfo{};
 
-        inline static uint32_t s_counter[6];
+        // Downsampler is not reusable with only one descriptor, unless it is synchronized with waits,
+        // because descriptor updates and command buffers are not having the same execution principles
+        inline static const uint32_t MAX_DESCRIPTORS_PER_CMD = 100;
+        inline static uint32_t s_currentIndex{};
+        inline static Descriptor *s_DSet[MAX_DESCRIPTORS_PER_CMD]{};
 
-        // Shader data
-        inline static Image *s_image;  // max 12 mips/views, 1st is the image itself
-        inline static Buffer *s_atomicCounter;
+        inline static Image *s_image = nullptr; // max 12 mips/views, 1st is the image itself
+
+        inline static uint32_t s_counter[6]{};
+        inline static Buffer *s_atomicCounter[MAX_DESCRIPTORS_PER_CMD]{};
+
         struct PushConstants
         {
             uint32_t mips;
             uint32_t numWorkGroupsPerSlice;
             uvec2 workGroupOffset;
-        }
-        inline static s_pushConstants;
+        } inline static s_pushConstants{};
     };
 }

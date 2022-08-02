@@ -388,7 +388,6 @@ namespace pe
         Model::models.emplace_back();
         Model &model = Model::models.back();
 
-        // This works as a flag to when the loading is done
         model.render = false;
 
         cmd->Begin();
@@ -397,7 +396,6 @@ namespace pe
         model.CreateIndexBuffer(cmd);
         cmd->End();
         cmd->Submit(queue, nullptr, 0, nullptr, 0, nullptr);
-        cmd->Wait();
 
         model.CreateUniforms();
         model.InitRenderTargets();
@@ -405,30 +403,10 @@ namespace pe
 
         model.name = file.filename().string();
         model.fullPathName = file.string();
-        model.render = true;
 
-        Queue *computeQueue = RHII.GetComputeQueue();
-        CommandBuffer *cmdCompute = CommandBuffer::GetNext(computeQueue->GetFamilyId());
-        for (auto &node : model.linearNodes)
-        {
-            if (node->mesh)
-            {
-                for (auto &primitive : node->mesh->primitives)
-                {
-                    for (Image *image : primitive.images)
-                    {
-                        if (image->HasGeneratedMips())
-                            continue;
-                        
-                        cmdCompute->Begin();
-                        cmdCompute->GenerateMipMaps(image);
-                        cmdCompute->End();
-                        cmdCompute->Submit(computeQueue, nullptr, 0, nullptr, 0, nullptr);
-                        cmdCompute->Wait();
-                    }
-                }
-            }
-        }
+        cmd->Wait();
+
+        model.render = true;
     }
 
     // position x, y, z and radius w

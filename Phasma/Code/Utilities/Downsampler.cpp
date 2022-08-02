@@ -12,13 +12,6 @@ namespace pe
 {
     void Downsampler::Init()
     {
-        s_pipeline = nullptr;
-        s_pipelineInfo = {};
-        s_DSet = {};
-        s_image = nullptr;
-        memset(s_counter, 0, 6 * sizeof(uint32_t));
-        s_pushConstants = {};
-
         CreateUniforms();
         UpdatePipelineInfo();
     }
@@ -27,7 +20,7 @@ namespace pe
     {
         std::lock_guard<std::mutex> guard(s_dispatchMutex);
 
-        cmd->BeginDebugRegion("Downsampler::Dispatch Command");
+        cmd->BeginDebugRegion("Downsampler::Dispatch Command_" + std::to_string(s_currentIndex));
 
         SetInputImage(image);
         UpdateDescriptorSet();
@@ -37,19 +30,26 @@ namespace pe
         cmd->ImageBarrier(s_image, ImageLayout::General);
 
         cmd->BindPipeline(*s_pipelineInfo, &s_pipeline);
-        cmd->BindComputeDescriptors(s_pipeline, 1, &s_DSet);
+        cmd->BindComputeDescriptors(s_pipeline, 1, &s_DSet[s_currentIndex]);
         cmd->PushConstants(s_pipeline, ShaderStage::ComputeBit, 0, sizeof(PushConstants), &s_pushConstants);
         cmd->Dispatch(groupCount.x, groupCount.y, s_image->imageInfo.arrayLayers);
 
         ResetInputImage();
 
         cmd->EndDebugRegion();
+
+        s_currentIndex = (s_currentIndex + 1) % MAX_DESCRIPTORS_PER_CMD;
     }
 
     void Downsampler::Destroy()
     {
-        Descriptor::Destroy(s_DSet);
-        Buffer::Destroy(s_atomicCounter);
+        for (uint32_t i = 0; i < MAX_DESCRIPTORS_PER_CMD; i++)
+        {
+            Descriptor::Destroy(s_DSet[i]);
+            s_DSet[i] = nullptr;
+            Buffer::Destroy(s_atomicCounter[i]);
+            s_atomicCounter[i] = nullptr;
+        }
     }
 
     void Downsampler::UpdatePipelineInfo()
@@ -63,7 +63,7 @@ namespace pe
 
         s_pipelineInfo = std::make_shared<PipelineCreateInfo>();
         s_pipelineInfo->pCompShader = Shader::Create(ShaderInfo{"Shaders/Compute/spd/spd.comp", ShaderStage::ComputeBit, defines});
-        s_pipelineInfo->descriptorSetLayouts = {s_DSet->GetLayout()};
+        s_pipelineInfo->descriptorSetLayouts = {s_DSet[0]->GetLayout()};
         s_pipelineInfo->pushConstantSize = sizeof(PushConstants);
         s_pipelineInfo->pushConstantStage = ShaderStage::ComputeBit;
         s_pipelineInfo->name = "Downsample_pipeline";
@@ -71,12 +71,6 @@ namespace pe
 
     void Downsampler::CreateUniforms()
     {
-        s_atomicCounter = Buffer::Create(
-            sizeof(s_counter),
-            BufferUsage::StorageBufferBit,
-            AllocationCreate::HostAccessSequentialWriteBit,
-            "Downsample_storage_buffer");
-
         std::vector<DescriptorBindingInfo> bindingInfos(3);
         bindingInfos[0].binding = 0;
         bindingInfos[0].type = DescriptorType::StorageImage;
@@ -90,7 +84,16 @@ namespace pe
         bindingInfos[2].binding = 2;
         bindingInfos[2].type = DescriptorType::StorageBuffer;
 
-        s_DSet = Descriptor::Create(bindingInfos, ShaderStage::ComputeBit, "Downsample_descriptor");
+        for (uint32_t i = 0; i < MAX_DESCRIPTORS_PER_CMD; i++)
+        {
+            s_atomicCounter[i] = Buffer::Create(
+                sizeof(s_counter),
+                BufferUsage::StorageBufferBit,
+                AllocationCreate::HostAccessSequentialWriteBit,
+                "Downsample_storage_buffer_" + std::to_string(i));
+
+            s_DSet[i] = Descriptor::Create(bindingInfos, ShaderStage::ComputeBit, "Downsample_descriptor_" + std::to_string(i));
+        }
     }
 
     void Downsampler::SetInputImage(Image *image)
@@ -121,12 +124,13 @@ namespace pe
         for (int i = 0; i < mips; i++)
             views[i] = s_image->GetUAV(i);
 
-        s_DSet->SetImages(0, views, {});
+        Descriptor &dSet = *s_DSet[s_currentIndex];
+        dSet.SetImages(0, views, {});
         if (mips >= 6)
-            s_DSet->SetImage(1, s_image->GetUAV(6), {});
-        s_DSet->SetBuffer(2, s_atomicCounter);
+            dSet.SetImage(1, s_image->GetUAV(6), {});
+        dSet.SetBuffer(2, s_atomicCounter[s_currentIndex]);
 
-        s_DSet->UpdateDescriptor();
+        dSet.UpdateDescriptor();
     }
 
     uvec2 Downsampler::SpdSetup()

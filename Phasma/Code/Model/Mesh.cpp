@@ -126,6 +126,7 @@ namespace pe
             (*tex)->CreateSampler(samplerInfo);
 
             cmd->CopyDataToImageStaged(*tex, pixels, texWidth * texHeight * STBI_rgb_alpha);
+            cmd->GenerateMipMaps(*tex);
             cmd->AddAfterWaitCallback([pixels]()
                                       { stbi_image_free(pixels); });
 

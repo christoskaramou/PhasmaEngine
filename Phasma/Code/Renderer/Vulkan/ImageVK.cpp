@@ -412,51 +412,8 @@ namespace pe
         if (m_mipmapsGenerated || imageInfo.mipLevels < 2)
             return;
 
-        if (!cmd)
-            PE_ERROR("Image::GenerateMipMaps(): No command buffer specified.");
-
         Downsampler::Dispatch(cmd, this);
-
         m_mipmapsGenerated = true;
-
-        return;
-
-        auto mipWidth = static_cast<int32_t>(imageInfo.width);
-        auto mipHeight = static_cast<int32_t>(imageInfo.height);
-
-        ImageBlit region;
-        region.srcOffsets[0] = Offset3D{0, 0, 0};
-        region.srcOffsets[1] = Offset3D{mipWidth, mipHeight, 1};
-        region.srcSubresource.aspectMask = GetAspectMask(imageInfo.format);
-        region.srcSubresource.layerCount = 1;
-        region.srcSubresource.mipLevel = 0;
-
-        region.dstOffsets[0] = Offset3D{0, 0, 0};
-        region.dstSubresource.aspectMask = GetAspectMask(imageInfo.format);
-        region.dstSubresource.layerCount = 1;
-
-        for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
-        {
-            cmd->ImageBarrier(this, ImageLayout::TransferSrc, i, 1, 0, 1);
-            region.srcSubresource.baseArrayLayer = i;
-            region.dstSubresource.baseArrayLayer = i;
-            for (uint32_t j = 1; j < imageInfo.mipLevels; j++)
-            {
-                mipWidth = std::max(1, mipWidth / 2);
-                mipHeight = std::max(1, mipHeight / 2);
-                region.dstOffsets[1] = Offset3D{mipWidth, mipHeight, 1};
-                region.dstSubresource.mipLevel = j;
-
-                cmd->ImageBarrier(this, ImageLayout::TransferDst, i, 1, j, 1);
-                cmd->BlitImage(this, this, &region, Filter::Linear);
-            }
-        }
-
-        for (uint32_t i = 0; i < imageInfo.arrayLayers; i++)
-        {
-            for (uint32_t j = 0; j < imageInfo.mipLevels; j++)
-                cmd->ImageBarrier(this, ImageLayout::ShaderReadOnly, i, 1, j, 1);
-        }
     }
 
     void Image::CreateSampler(const SamplerCreateInfo &info)
