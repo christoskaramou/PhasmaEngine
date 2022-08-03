@@ -50,6 +50,88 @@ namespace pe
         delete include_result;
     }
 
+    // void CompileHlsl(const ShaderInfo &info, ShaderCache &cache)
+    // {
+    //     std::string path = info.sourcePath;
+    //     if (path.find(Path::Assets) == std::string::npos)
+    //         path = Path::Assets + info.sourcePath;
+
+    //     std::vector<LPCWSTR> args{};
+
+    //     // Entry point
+    //     args.push_back(L"-E");
+    //     args.push_back(L"mainVS");
+
+    //     // Shade model
+    //     args.push_back(L"-T");
+    //     args.push_back(L"vs_6_0");
+
+    //     args.push_back(DXC_ARG_WARNINGS_ARE_ERRORS);   //-WX
+    //     args.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR); //-Zp
+
+    //     // Generate symbols
+    //     args.push_back(DXC_ARG_DEBUG); //-Zi
+    //     args.push_back(L"-Fd");
+    //     args.push_back(std::wstring(path.begin(), path.end()).c_str());
+
+    //     // Generate reflection
+    //     args.push_back(L"-Qstrip_reflect");
+    //     args.push_back(L"-Fre");
+    //     args.push_back(std::wstring(path.begin(), path.end()).c_str());
+
+    //     // Defines
+    //     for (const Define &def : info.defines)
+    //     {
+    //         std::string define = def.name;
+    //         if (!def.value.empty())
+    //             define += "=" + def.value;
+
+    //         args.push_back(L"-D");
+    //         args.push_back(std::wstring(define.begin(), define.end()).c_str());
+    //     }
+    //     using namespace Microsoft::WRL;
+    //     ComPtr<IDxcUtils> dxc_utils;
+    //     auto hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(dxc_utils.ReleaseAndGetAddressOf()));
+    //     if (FAILED(hr))
+    //         throw std::runtime_error("Failed to create DXC instance.");
+
+    //     ComPtr<IDxcIncludeHandler> include_handler;
+    //     hr = dxc_utils->CreateDefaultIncludeHandler(include_handler.ReleaseAndGetAddressOf());
+    //     if (FAILED(hr))
+    //         throw std::runtime_error("Failed to create include handler.");
+
+    //     ComPtr<IDxcCompiler3> dxc_compiler;
+    //     hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxc_compiler));
+    //     if (FAILED(hr))
+    //         throw std::runtime_error("Failed to create DXC compiler.");
+
+    //     ComPtr<IDxcUtils> pUtils;
+    //     DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(pUtils.GetAddressOf()));
+    //     ComPtr<IDxcBlobEncoding> pSource;
+    //     pUtils->CreateBlob(cache.GetShaderCode().c_str(), cache.GetShaderCode().size(), CP_UTF8, pSource.GetAddressOf());
+
+    //     DxcBuffer sourceBuffer;
+    //     sourceBuffer.Ptr = pSource->GetBufferPointer();
+    //     sourceBuffer.Size = pSource->GetBufferSize();
+    //     sourceBuffer.Encoding = 0;
+
+    //     ComPtr<IDxcResult> result;
+    //     hr = dxc_compiler->Compile(
+    //         &sourceBuffer,
+    //         args.data(),
+    //         args.size(),
+    //         include_handler.Get(),
+    //         IID_PPV_ARGS(&result));
+
+    //     // Error Handling
+    //     ComPtr<IDxcBlobUtf8> pErrors;
+    //     result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(pErrors.GetAddressOf()), nullptr);
+    //     if (pErrors && pErrors->GetStringLength() > 0)
+    //     {
+    //         PE_ERROR((char *)pErrors->GetBufferPointer());
+    //     }
+    // }
+
     Shader::Shader(const ShaderInfo &info)
     {
         std::string path = info.sourcePath;
@@ -73,6 +155,9 @@ namespace pe
         }
 
         m_cache.Init(path, definesHash);
+        // if (path.ends_with(".hlsl"))
+        //     CompileHlsl(info, m_cache);
+
         if (m_cache.ShaderNeedsCompile())
         {
             shaderc::CompileOptions options;

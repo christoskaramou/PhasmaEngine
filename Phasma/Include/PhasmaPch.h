@@ -41,10 +41,10 @@
 #include <vulkan/vulkan.h>
 #include "vma/vk_mem_alloc.h"
 #ifdef WIN32
-    #include <DX12/d3d12.h>
-    #ifdef _DEBUG
-        #include <DX12/d3d12sdklayers.h>
-    #endif
+    #include <dxgi1_6.h>
+    #include <d3d12.h>
+    #include <wrl.h>
+    #include <d3d12sdklayers.h>
 #endif
 
 #include "Core/Defines.h"

@@ -216,7 +216,7 @@ extern "C"
 	*/
 	FFX_CACAO_Status FFX_CACAO_D3D12Draw(FFX_CACAO_D3D12Context* context, ID3D12GraphicsCommandList* commandList, const FFX_CACAO_Matrix4x4* proj, const FFX_CACAO_Matrix4x4* normalsToView);
 
-#if FFX_CACAO_ENABLE_PROFILING
+#ifdef FFX_CACAO_ENABLE_PROFILING
 	/**
 		Get detailed performance timings from the previous frame.
 

@@ -3,6 +3,7 @@
 #include "shaderc/shaderc.hpp"
 #include "Shader/Reflection.h"
 #include "Shader/ShaderCache.h"
+#include "dxc/dxcapi.h"
 
 namespace pe
 {
