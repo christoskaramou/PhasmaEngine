@@ -52,6 +52,8 @@ namespace pe
 
         ~Shader();
 
+        std::string &GetEntryName();
+
         inline ShaderStage GetShaderStage() { return m_shaderStage; }
 
         inline const uint32_t *GetSpriv() { return m_spirv.data(); }
@@ -82,15 +84,11 @@ namespace pe
         inline StringHash GetPathID() { return m_pathID; }
 
     private:
-        std::string PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions &options);
+        bool CompileGlsl(shaderc_shader_kind kind, shaderc::CompileOptions &options);
 
-        bool CompileFileToAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options);
+        void AddDefineGlsl(Define &define, shaderc::CompileOptions &options);
 
-        bool CompileAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options);
-
-        bool CompileFile(shaderc_shader_kind kind, shaderc::CompileOptions &options);
-
-        void AddDefine(Define &define, shaderc::CompileOptions &options);
+        bool CompileHlsl(const ShaderInfo &info, ShaderCache &cache);
 
         ShaderCache m_cache;
         Reflection m_reflection;
@@ -99,6 +97,8 @@ namespace pe
         std::vector<Define> defines{};
         std::vector<uint32_t> m_spirv{};
         StringHash m_pathID;
+
+        bool m_isHlsl = false;
 
         inline static std::vector<Define> m_globalDefines{};
     };

@@ -50,121 +50,13 @@ namespace pe
         delete include_result;
     }
 
-    std::vector<uint32_t> CompileHlsl(const ShaderInfo &info, ShaderCache &cache)
-    {
-        std::string path = info.sourcePath;
-        if (path.find(Path::Assets) == std::string::npos)
-            path = Path::Assets + info.sourcePath;
-
-        std::vector<LPCWSTR> args{};
-
-        args.push_back(L"-spirv");
-
-        // Entry point
-        args.push_back(L"-E");
-        args.push_back(L"main");
-
-        // Shade model
-        args.push_back(L"-T");
-        args.push_back(L"ps_6_0");
-
-        args.push_back(DXC_ARG_WARNINGS_ARE_ERRORS);   //-WX
-        args.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR); //-Zp
-        
-        // Generate symbols
-        args.push_back(DXC_ARG_DEBUG); //-Zi
-        args.push_back(L"-fspv-reflect");
-        args.push_back(std::wstring(path.begin(), path.end()).c_str());
-        
-
-        // Generate symbols
-        //args.push_back(DXC_ARG_DEBUG); //-Zi
-        //args.push_back(L"-Fd");
-        //args.push_back(std::wstring(path.begin(), path.end()).c_str());
-
-        // Generate reflection
-        //args.push_back(L"-Qstrip_reflect");
-        //args.push_back(L"-Fre");
-        //args.push_back(std::wstring(path.begin(), path.end()).c_str());
-
-        // Defines
-        for (const Define &def : info.defines)
-        {
-            std::string define = def.name;
-            if (!def.value.empty())
-                define += "=" + def.value;
-
-            args.push_back(L"-D");
-            args.push_back(std::wstring(define.begin(), define.end()).c_str());
-        }
-        using namespace Microsoft::WRL;
-        ComPtr<IDxcUtils> dxc_utils;
-        auto hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(dxc_utils.ReleaseAndGetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to create DXC instance.");
-
-        ComPtr<IDxcIncludeHandler> include_handler;
-        hr = dxc_utils->CreateDefaultIncludeHandler(include_handler.ReleaseAndGetAddressOf());
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to create include handler.");
-
-        ComPtr<IDxcCompiler3> dxc_compiler;
-        hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxc_compiler));
-        if (FAILED(hr))
-            throw std::runtime_error("Failed to create DXC compiler.");
-
-        ComPtr<IDxcUtils> pUtils;
-        DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(pUtils.GetAddressOf()));
-        ComPtr<IDxcBlobEncoding> pSource;
-        pUtils->CreateBlob(cache.GetShaderCode().c_str(), cache.GetShaderCode().size(), CP_UTF8, pSource.GetAddressOf());
-
-        DxcBuffer sourceBuffer;
-        sourceBuffer.Ptr = pSource->GetBufferPointer();
-        sourceBuffer.Size = pSource->GetBufferSize();
-        sourceBuffer.Encoding = 0;
-
-        ComPtr<IDxcResult> result;
-        hr = dxc_compiler->Compile(
-            &sourceBuffer,
-            args.data(),
-            args.size(),
-            include_handler.Get(),
-            IID_PPV_ARGS(&result));
-
-        // Error Handling
-        ComPtr<IDxcBlobUtf8> pErrors;
-        result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(pErrors.GetAddressOf()), nullptr);
-        if (pErrors && pErrors->GetStringLength() > 0)
-        {
-            PE_ERROR((char *)pErrors->GetBufferPointer());
-        }
-
-        ComPtr<IDxcBlob> pObject;
-        result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(pObject.GetAddressOf()), nullptr);
-        if (!pObject)
-            throw std::runtime_error("Failed to compile shader.");
-
-        std::vector<uint32_t> spirv(pObject->GetBufferSize() / sizeof(uint32_t)); 
-        memcpy(spirv.data(), pObject->GetBufferPointer(), pObject->GetBufferSize());
-
-        ComPtr<IDxcBlob> pReflect;
-        result->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(pReflect.GetAddressOf()), nullptr);
-        if (!pReflect)
-            throw std::runtime_error("Failed to compile shader.");
-
-        DxcBuffer reflectionBuffer;
-        reflectionBuffer.Ptr = pReflect->GetBufferPointer();
-        reflectionBuffer.Size = pReflect->GetBufferSize();
-        reflectionBuffer.Encoding = 0;
-
-        return spirv;
-    }
-
     Shader::Shader(const ShaderInfo &info)
     {
         std::string path = info.sourcePath;
         if (path.find(Path::Assets) == std::string::npos)
             path = Path::Assets + info.sourcePath;
+
+        m_isHlsl = path.ends_with(".hlsl");
 
         m_pathID = StringHash(path);
 
@@ -183,45 +75,45 @@ namespace pe
         }
 
         m_cache.Init(path, definesHash);
-        if (path.ends_with(".hlsl"))
-        {
-            m_spirv = CompileHlsl(info, m_cache);
-            return;
-        }
 
         if (m_cache.ShaderNeedsCompile())
         {
-            shaderc::CompileOptions options;
+            if (m_isHlsl)
+            {
+                CompileHlsl(info, m_cache);
+            }
+            else
+            {
+                shaderc::CompileOptions options;
 
-            options.SetIncluder(std::make_unique<FileIncluder>());
-            options.SetOptimizationLevel(shaderc_optimization_level_performance);
+                options.SetIncluder(std::make_unique<FileIncluder>());
+                options.SetOptimizationLevel(shaderc_optimization_level_performance);
 
-            for (auto def : m_globalDefines)
-                AddDefine(def, options);
+                for (auto def : m_globalDefines)
+                    AddDefineGlsl(def, options);
 
-            for (auto def : info.defines)
-                AddDefine(def, options);
+                for (auto def : info.defines)
+                    AddDefineGlsl(def, options);
 
 #if PE_DEBUG_MODE
-            // Useful for debugging shaders
-            options.SetGenerateDebugInfo();
+                // Useful for debugging shaders
+                options.SetGenerateDebugInfo();
 #endif
 
-            uint32_t shaderFlags = 0;
-            if (m_shaderStage == ShaderStage::VertexBit)
-                shaderFlags |= shaderc_shader_kind::shaderc_vertex_shader;
-            else if (m_shaderStage == ShaderStage::FragmentBit)
-                shaderFlags |= shaderc_shader_kind::shaderc_fragment_shader;
-            else if (m_shaderStage == ShaderStage::ComputeBit)
-                shaderFlags |= shaderc_shader_kind::shaderc_compute_shader;
-            else
-                PE_ERROR("Invalid shader stage!");
+                uint32_t shaderFlags = 0;
+                if (m_shaderStage == ShaderStage::VertexBit)
+                    shaderFlags |= shaderc_shader_kind::shaderc_vertex_shader;
+                else if (m_shaderStage == ShaderStage::FragmentBit)
+                    shaderFlags |= shaderc_shader_kind::shaderc_fragment_shader;
+                else if (m_shaderStage == ShaderStage::ComputeBit)
+                    shaderFlags |= shaderc_shader_kind::shaderc_compute_shader;
+                else
+                    PE_ERROR("Invalid shader stage!");
 
-            if (CompileFileToAssembly(static_cast<shaderc_shader_kind>(shaderFlags), options))
-            {
-                CompileAssembly(static_cast<shaderc_shader_kind>(shaderFlags), options);
-                m_cache.WriteSpvToFile(m_spirv);
+                CompileGlsl(static_cast<shaderc_shader_kind>(shaderFlags), options);
             }
+
+            m_cache.WriteSpvToFile(m_spirv);
         }
         else
         {
@@ -236,7 +128,35 @@ namespace pe
     {
     }
 
-    void Shader::AddDefine(Define &def, shaderc::CompileOptions &options)
+    std::string &Shader::GetEntryName()
+    {
+        static std::string empty = "";
+        static std::string entryNameGlsl = "main";
+        static std::string entryNameHlslVS = "mainVS";
+        static std::string entryNameHlslPS = "mainPS";
+        static std::string entryNameHlslCS = "mainCS";
+
+        if (m_isHlsl)
+        {
+            if (m_shaderStage == ShaderStage::VertexBit)
+                return entryNameHlslVS;
+            if (m_shaderStage == ShaderStage::FragmentBit)
+                return entryNameHlslPS;
+            if (m_shaderStage == ShaderStage::ComputeBit)
+                return entryNameHlslCS;
+
+            PE_ERROR("Invalid shader stage!");
+        }
+        else
+        {
+            return entryNameGlsl;
+        }
+
+        PE_ERROR("Invalid shader stage!");
+        return empty;
+    }
+
+    void Shader::AddDefineGlsl(Define &def, shaderc::CompileOptions &options)
     {
         if (def.name.empty())
             return;
@@ -249,67 +169,13 @@ namespace pe
         defines.push_back(def);
     }
 
-    std::string Shader::PreprocessShader(shaderc_shader_kind kind, shaderc::CompileOptions &options)
-    {
-        if (m_cache.GetShaderCode().empty() || m_cache.GetSourcePath().empty())
-            PE_ERROR("source file was empty");
-
-        shaderc::PreprocessedSourceCompilationResult result = m_compiler.PreprocessGlsl(
-            m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options);
-
-        if (result.GetCompilationStatus() != shaderc_compilation_status_success)
-        {
-            std::cerr << result.GetErrorMessage();
-            return "";
-        }
-
-        return {result.cbegin(), result.cend()};
-    }
-
-    bool Shader::CompileFileToAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options)
-    {
-        if (m_cache.GetShaderCode().empty() || m_cache.GetSourcePath().empty())
-            PE_ERROR("source file was empty");
-
-        shaderc::AssemblyCompilationResult result = m_compiler.CompileGlslToSpvAssembly(
-            m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options);
-
-        if (result.GetCompilationStatus() != shaderc_compilation_status_success)
-        {
-            std::cerr << result.GetErrorMessage();
-            return false;
-        }
-
-        m_cache.SetAssembly({result.cbegin(), result.cend()});
-
-        return true;
-    }
-
-    bool Shader::CompileAssembly(shaderc_shader_kind kind, shaderc::CompileOptions &options)
-    {
-        if (m_cache.GetAssembly().empty())
-            PE_ERROR("assembly was empty");
-
-        shaderc::SpvCompilationResult result = m_compiler.AssembleToSpv(m_cache.GetAssembly(), options);
-
-        if (result.GetCompilationStatus() != shaderc_compilation_status_success)
-        {
-            std::cerr << result.GetErrorMessage();
-            return false;
-        }
-
-        m_spirv = {result.cbegin(), result.cend()};
-
-        return true;
-    }
-
-    bool Shader::CompileFile(shaderc_shader_kind kind, shaderc::CompileOptions &options)
+    bool Shader::CompileGlsl(shaderc_shader_kind kind, shaderc::CompileOptions &options)
     {
         if (m_cache.GetShaderCode().empty() || m_cache.GetSourcePath().empty())
             PE_ERROR("source file was empty");
 
         shaderc::SpvCompilationResult module = m_compiler.CompileGlslToSpv(
-            m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), options);
+            m_cache.GetShaderCode(), kind, m_cache.GetSourcePath().c_str(), GetEntryName().c_str(), options);
 
         if (module.GetCompilationStatus() != shaderc_compilation_status_success)
         {
@@ -318,6 +184,115 @@ namespace pe
         }
 
         m_spirv = {module.cbegin(), module.cend()};
+
+        return true;
+    }
+
+    bool Shader::CompileHlsl(const ShaderInfo &info, ShaderCache &cache)
+    {
+        std::string path = info.sourcePath;
+        if (path.find(Path::Assets) == std::string::npos)
+            path = Path::Assets + info.sourcePath;
+
+        std::vector<LPCWSTR> args{};
+
+        args.push_back(L"-spirv");
+
+        // Shade model
+        if (info.shaderStage == ShaderStage::VertexBit)
+        {
+            // Shader model
+            args.push_back(L"-T");
+            args.push_back(L"vs_6_0");
+        }
+        else if (info.shaderStage == ShaderStage::FragmentBit)
+        {
+            // Shader model
+            args.push_back(L"-T");
+            args.push_back(L"ps_6_0");
+        }
+        else if (info.shaderStage == ShaderStage::ComputeBit)
+        {
+            // Shader model
+            args.push_back(L"-T");
+            args.push_back(L"cs_6_0");
+        }
+        else
+            PE_ERROR("Invalid shader stage!");
+
+        // Entry point
+        std::string entryName = GetEntryName();
+        std::wstring entryNameW(entryName.begin(), entryName.end());
+        args.push_back(L"-E");
+        args.push_back(entryNameW.c_str());
+
+        args.push_back(DXC_ARG_WARNINGS_ARE_ERRORS);   //-WX
+        args.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR); //-Zp
+
+#if PE_DEBUG_MODE
+        // Generate symbols
+        args.push_back(DXC_ARG_DEBUG); //-Zi
+#endif
+
+        // Defines
+        for (const Define &def : info.defines)
+        {
+            std::string define = def.name;
+            if (!def.value.empty())
+                define += "=" + def.value;
+
+            args.push_back(L"-D");
+            args.push_back(std::wstring(define.begin(), define.end()).c_str());
+        }
+        using namespace Microsoft::WRL;
+        ComPtr<IDxcUtils> dxc_utils;
+        auto hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(dxc_utils.ReleaseAndGetAddressOf()));
+        if (FAILED(hr))
+            return false;
+
+        ComPtr<IDxcIncludeHandler> include_handler;
+        hr = dxc_utils->CreateDefaultIncludeHandler(include_handler.ReleaseAndGetAddressOf());
+        if (FAILED(hr))
+            return false;
+
+        ComPtr<IDxcCompiler3> dxc_compiler;
+        hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxc_compiler));
+        if (FAILED(hr))
+            return false;
+
+        ComPtr<IDxcUtils> pUtils;
+        DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(pUtils.GetAddressOf()));
+        ComPtr<IDxcBlobEncoding> pSource;
+        uint32_t size = static_cast<uint32_t>(cache.GetShaderCode().size());
+        pUtils->CreateBlob(cache.GetShaderCode().c_str(), size, CP_UTF8, pSource.GetAddressOf());
+
+        DxcBuffer sourceBuffer;
+        sourceBuffer.Ptr = pSource->GetBufferPointer();
+        sourceBuffer.Size = pSource->GetBufferSize();
+        sourceBuffer.Encoding = 0;
+
+        ComPtr<IDxcResult> result;
+        hr = dxc_compiler->Compile(
+            &sourceBuffer,
+            args.data(),
+            static_cast<uint32_t>(args.size()),
+            include_handler.Get(),
+            IID_PPV_ARGS(&result));
+
+        // Error Handling
+        ComPtr<IDxcBlobUtf8> pErrors;
+        result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(pErrors.GetAddressOf()), nullptr);
+        if (pErrors && pErrors->GetStringLength() > 0)
+            PE_ERROR(pErrors->GetStringPointer());
+
+        // Get shader output
+        ComPtr<IDxcBlob> pObject;
+        result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(pObject.GetAddressOf()), nullptr);
+        if (!pObject)
+            return false;
+
+        m_spirv.resize(pObject->GetBufferSize() / sizeof(uint32_t));
+        memcpy(m_spirv.data(), pObject->GetBufferPointer(), pObject->GetBufferSize());
 
         return true;
     }

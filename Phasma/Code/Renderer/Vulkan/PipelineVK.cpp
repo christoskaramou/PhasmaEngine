@@ -86,7 +86,7 @@ namespace pe
             compinfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
             compinfo.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             compinfo.stage.module = module;
-            compinfo.stage.pName = "main";
+            compinfo.stage.pName = info.pCompShader->GetEntryName().c_str();
             compinfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
 
             VkPipelineLayout vklayout;
@@ -117,7 +117,7 @@ namespace pe
             pssci1.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             pssci1.stage = VK_SHADER_STAGE_VERTEX_BIT;
             pssci1.module = vertModule;
-            pssci1.pName = "main";
+            pssci1.pName = info.pVertShader->GetEntryName().c_str();
 
             VkShaderModuleCreateInfo fsmci{};
             VkShaderModule fragModule;
@@ -132,7 +132,7 @@ namespace pe
                 pssci2.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
                 pssci2.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
                 pssci2.module = fragModule;
-                pssci2.pName = "main";
+                pssci2.pName = info.pFragShader->GetEntryName().c_str();
             }
 
             std::vector<VkPipelineShaderStageCreateInfo> stages{pssci1};
