@@ -1,10 +1,11 @@
 #ifndef MATERIAL_H_
 #define MATERIAL_H_
 
-struct Material {
-    vec3 albedo;
+struct Material
+{
+    float3 albedo;
     float roughness;
-    vec3 F0;
+    float3 F0;
     float metallic;
 };
 

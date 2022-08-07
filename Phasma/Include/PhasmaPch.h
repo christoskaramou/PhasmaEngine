@@ -34,6 +34,7 @@
 #include <atomic>
 #include <variant>
 #include <bitset>
+#include <codecvt>
 
 #include "SDL/SDL.h"
 #include "SDL/SDL_syswm.h"

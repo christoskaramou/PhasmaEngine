@@ -24,6 +24,8 @@ namespace pe
 
         static void EndFrameCapture();
 
+        static void TriggerCapture();
+
     private:
         friend class CommandBuffer;
         friend class Queue;

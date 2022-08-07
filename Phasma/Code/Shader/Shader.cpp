@@ -188,6 +188,14 @@ namespace pe
         return true;
     }
 
+    std::wstring ConvertUtf8ToWide(const std::string &str)
+    {
+        int count = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), str.length(), NULL, 0);
+        std::wstring wstr(count, 0);
+        MultiByteToWideChar(CP_UTF8, 0, str.c_str(), str.length(), &wstr[0], count);
+        return wstr;
+    }
+
     bool Shader::CompileHlsl(const ShaderInfo &info, ShaderCache &cache)
     {
         std::string path = info.sourcePath;
@@ -221,10 +229,9 @@ namespace pe
             PE_ERROR("Invalid shader stage!");
 
         // Entry point
-        std::string entryName = GetEntryName();
-        std::wstring entryNameW(entryName.begin(), entryName.end());
         args.push_back(L"-E");
-        args.push_back(entryNameW.c_str());
+        std::wstring entryName = ConvertUtf8ToWide(GetEntryName());
+        args.push_back(entryName.c_str());
 
         args.push_back(DXC_ARG_WARNINGS_ARE_ERRORS);   //-WX
         args.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR); //-Zp
@@ -235,15 +242,18 @@ namespace pe
 #endif
 
         // Defines
+        std::vector<std::wstring> wdefines(info.defines.size());
+        uint32_t i = 0;
         for (const Define &def : info.defines)
         {
-            std::string define = def.name;
+            wdefines[i] += ConvertUtf8ToWide(def.name);
             if (!def.value.empty())
-                define += "=" + def.value;
-
+                wdefines[i] += ConvertUtf8ToWide("=" + def.value);
+                
             args.push_back(L"-D");
-            args.push_back(std::wstring(define.begin(), define.end()).c_str());
+            args.push_back(wdefines[i++].c_str());
         }
+
         using namespace Microsoft::WRL;
         ComPtr<IDxcUtils> dxc_utils;
         auto hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(dxc_utils.ReleaseAndGetAddressOf()));

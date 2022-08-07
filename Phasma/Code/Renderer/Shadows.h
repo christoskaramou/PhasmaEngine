@@ -13,6 +13,7 @@ namespace pe
 
     class Descriptor;
     class Image;
+    class Sampler;
     class Buffer;
     class Pipeline;
     class RenderPass;
@@ -53,6 +54,7 @@ namespace pe
         mat4 cascades[SHADOWMAP_CASCADES];
         vec4 viewZ;
         std::vector<Image *> textures{};
+        Sampler *sampler = nullptr;
         Descriptor *DSetDeferred;
         Buffer *uniformBuffer;
         Format depthFormat;

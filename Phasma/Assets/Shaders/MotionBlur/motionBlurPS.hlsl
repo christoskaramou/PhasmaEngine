@@ -3,9 +3,9 @@
 struct PushConstants { float4 values; };
 [[vk::push_constant]] PushConstants pc;
 
-ImgSamplerDecl(0, 0, frameTex)
-ImgSamplerDecl(1, 0, depthTex)
-ImgSamplerDecl(2, 0, velocityTex)
+TexSamplerDecl(0, 0, frameTex)
+TexSamplerDecl(1, 0, depthTex)
+TexSamplerDecl(2, 0, velocityTex)
 
 struct PS_INPUT {
     float2 uv : TEXCOORD0;

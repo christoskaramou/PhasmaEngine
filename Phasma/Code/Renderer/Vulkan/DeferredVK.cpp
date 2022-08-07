@@ -66,7 +66,7 @@ namespace pe
         PipelineCreateInfo &info = *pipelineInfo;
 
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/composition.frag", ShaderStage::FragmentBit, definesFrag});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/compositionPS.hlsl", ShaderStage::FragmentBit, definesFrag});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = sizeof(mat4);

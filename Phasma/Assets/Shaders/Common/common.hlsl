@@ -1,13 +1,20 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+// Defines
 #define PI 3.1415926535897932384626433832795
 #define FLT_EPS 0.00000001
 #define length2(x) dot(x, x)
 
-#define ImgSamplerDecl(bind, set, tex) \
+#define TexSamplerDecl(bind, set, tex) \
 [[vk::combinedImageSampler]][[vk::binding(bind, set)]] \
 Texture2D tex; \
+[[vk::combinedImageSampler]][[vk::binding(bind, set)]] \
+SamplerState sampler_##tex;
+
+#define CubeSamplerDecl(bind, set, tex) \
+[[vk::combinedImageSampler]][[vk::binding(bind, set)]] \
+TextureCube tex; \
 [[vk::combinedImageSampler]][[vk::binding(bind, set)]] \
 SamplerState sampler_##tex;
 
@@ -69,7 +76,21 @@ float3 TextureSize(uint mip, Texture2D tex)
     return float3(width, height, numMips);
 }
 
+float3 TextureSize(uint mip, TextureCube tex)
+{
+    float width;
+    float height;
+    float numMips;
+    tex.GetDimensions(mip, width, height, numMips);
+    return float3(width, height, numMips);
+}
+
 float2 TexelSize(uint mip, Texture2D tex)
+{
+    return 1.0f / TextureSize(mip, tex).xy;
+}
+
+float2 TexelSize(uint mip, TextureCube tex)
 {
     return 1.0f / TextureSize(mip, tex).xy;
 }
@@ -125,16 +146,6 @@ float3 SharpenSimple(Texture2D tex, SamplerState sampler_tex, float2 UV)
 
 float3 SharpenLuma(Texture2D tex, SamplerState sampler_tex, float2 UV, float sharp_strength, float sharp_clamp, float offset_bias)
 {
-    /*
-        LumaSharpen 1.4.1
-        original hlsl by Christian Cann Schuldt Jensen ~ CeeJay.dk
-        port to glsl by Anon
-        ported back to hlsl and modified by Panos karabelas
-        It blurs the original pixel with the surrounding pixels and then subtracts this blur to sharpen the image.
-        It does this in luma to avoid color artifacts and allows limiting the maximum sharpning to avoid or lessen halo artifacts.
-        This is similar to using Unsharp Mask in Photoshop.
-    */
-
     // -- Sharpening --
     //#define sharp_strength 1.0f   //[0.10 to 3.00] Strength of the sharpening
     //#define sharp_clamp    0.35f  //[0.000 to 1.000] Limits maximum amount of sharpening a pixel receives - Default is 0.035
@@ -154,7 +165,6 @@ float3 SharpenLuma(Texture2D tex, SamplerState sampler_tex, float2 UV, float sha
     //   [ .50,   1, .50]  =  [ 2 , 4 , 2 ]
     //   [ .25, .50, .25]     [ 1 , 2 , 1 ]
 
-    
     float2 texelSize = TexelSize(0, tex);
     float tx = texelSize.x;
     float ty = texelSize.y;

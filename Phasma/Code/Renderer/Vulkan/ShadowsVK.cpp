@@ -46,17 +46,18 @@ namespace pe
 
             texture->CreateRTV();
             texture->CreateSRV(ImageViewType::Type2D);
-
-            SamplerCreateInfo samplerInfo{};
-            samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
-            samplerInfo.addressModeV = SamplerAddressMode::ClampToEdge;
-            samplerInfo.addressModeW = SamplerAddressMode::ClampToEdge;
-            samplerInfo.maxAnisotropy = 1.f;
-            samplerInfo.borderColor = BorderColor::FloatOpaqueWhite;
-            samplerInfo.compareEnable = VK_TRUE;
-            samplerInfo.compareOp = CompareOp::GreaterOrEqual;
-            texture->sampler = Sampler::Create(samplerInfo);
         }
+
+        SamplerCreateInfo samplerInfo{};
+        samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
+        samplerInfo.addressModeV = SamplerAddressMode::ClampToEdge;
+        samplerInfo.addressModeW = SamplerAddressMode::ClampToEdge;
+        samplerInfo.maxAnisotropy = 1.f;
+        samplerInfo.borderColor = BorderColor::FloatOpaqueWhite;
+        samplerInfo.compareEnable = VK_TRUE;
+        samplerInfo.compareOp = CompareOp::GreaterOrEqual;
+        samplerInfo.name = "ShadowMapSampler_compare";
+        sampler = Sampler::Create(samplerInfo);
     }
 
     void Shadows::UpdatePipelineInfo()
@@ -74,13 +75,19 @@ namespace pe
         uniformBuffer->Zero();
         uniformBuffer->Flush();
 
-        std::vector<DescriptorBindingInfo> bindingInfos(2);
+        std::vector<DescriptorBindingInfo> bindingInfos(3);
+
         bindingInfos[0].binding = 0;
         bindingInfos[0].type = DescriptorType::UniformBufferDynamic;
+
         bindingInfos[1].binding = 1;
         bindingInfos[1].count = SHADOWMAP_CASCADES;
-        bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+        bindingInfos[1].type = DescriptorType::SampledImage;
         bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+
+        bindingInfos[2].binding = 2;
+        bindingInfos[2].type = DescriptorType::Sampler;
+
         DSetDeferred = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Shadows_deferred_descriptor");
 
         UpdateDescriptorSets();
@@ -89,15 +96,12 @@ namespace pe
     void Shadows::UpdateDescriptorSets()
     {
         std::vector<ImageViewHandle> views(textures.size());
-        std::vector<SamplerHandle> samplers(textures.size());
         for (uint32_t i = 0; i < textures.size(); i++)
-        {
             views[i] = textures[i]->GetSRV();
-            samplers[i] = textures[i]->sampler->Handle();
-        }
 
         DSetDeferred->SetBuffer(0, uniformBuffer);
-        DSetDeferred->SetImages(1, views, samplers);
+        DSetDeferred->SetImages(1, views, {});
+        DSetDeferred->SetSampler(2, sampler->Handle());
         DSetDeferred->UpdateDescriptor();
     }
 

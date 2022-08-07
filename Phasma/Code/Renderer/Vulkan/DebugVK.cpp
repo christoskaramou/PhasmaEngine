@@ -304,6 +304,22 @@ namespace pe
             static_cast<RENDERDOC_API_1_2_0 *>(capture_api)->EndFrameCapture(NULL, NULL);
 #endif
     }
+    
+    void Debug::TriggerCapture()
+    {
+#if PE_RENDER_DOC == 1
+        if (capture_api)
+        {
+            RENDERDOC_API_1_2_0 *cap_api = static_cast<RENDERDOC_API_1_2_0 *>(capture_api);
+            cap_api->TriggerCapture();
+
+            if (cap_api->IsTargetControlConnected())
+                cap_api->ShowReplayUI();
+            else
+                cap_api->LaunchReplayUI(true, "");
+        }
+#endif
+    }
 #endif
 };
 #endif
