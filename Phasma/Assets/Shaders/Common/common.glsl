@@ -47,10 +47,10 @@ vec3 GetPosFromUV(vec2 UV, float depth, mat4 mat)
 
 // Find the normal for this fragment, pulling either from a predefined normal map
 // or from the interpolated mesh normal and tangent attributes.
-vec3 GetNormal(vec3 positionWS, sampler2D normalMap, vec3 inNormal, vec2 inUV)
+vec3 GetNormal(vec3 positionWS, vec3 tangentNormal, vec3 inNormal, vec2 inUV)
 {
     // Perturb normal, see http://www.thetenthplanet.de/archives/1180
-    vec3 tangentNormal = texture(normalMap, inUV).xyz * 2.0f - 1.0f;
+    vec3 tNormal = tangentNormal * 2.0f - 1.0f;
 
     vec3 q1 = dFdx(positionWS);
     vec3 q2 = dFdy(positionWS);
@@ -62,7 +62,7 @@ vec3 GetNormal(vec3 positionWS, sampler2D normalMap, vec3 inNormal, vec2 inUV)
     vec3 B = normalize(cross(N, T));
     mat3 TBN = mat3(T, B, N);
 
-    return normalize(TBN * tangentNormal);
+    return normalize(TBN * tNormal);
 }
 
 // Returns the closest depth in a 3X3 pixel grid

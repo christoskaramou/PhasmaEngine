@@ -14,9 +14,10 @@ layout(push_constant) uniform Constants {
     uint primitiveImageIndex;
 } constants;
 
-layout (set = 1, binding = 0) uniform sampler2D samplers[];
+layout(set = 1, binding = 0) uniform sampler material_sampler;
+layout(set = 1, binding = 1) uniform texture2D textures[];
 
-#define sampler(index) samplers[nonuniformEXT(index)]
+#define sampler(index) sampler2D(textures[nonuniformEXT(index)], material_sampler)
 
 #define bcSampler sampler(constants.primitiveImageIndex + 0) // BaseColor
 #define mrSampler sampler(constants.primitiveImageIndex + 1) // MetallicRoughness
@@ -46,8 +47,9 @@ void main() {
     vec3 metRough = texture(mrSampler, inUV).xyz;
     vec3 emissive = texture(eSampler, inUV).xyz;
     float ao = texture(oSampler, inUV).r;
-
-    outNormal = GetNormal(positionWS.xyz, nSampler, inNormal, inUV) * vec3(0.5) + vec3(0.5);
+    vec3 tangentNormal = texture(nSampler, inUV).xyz;
+    
+    outNormal = GetNormal(positionWS.xyz, tangentNormal, inNormal, inUV) * vec3(0.5) + vec3(0.5);
     outAlbedo = vec4(basicColor.xyz * ao, basicColor.a) * baseColorFactor;
     outMetRough = vec3(0.0, metRough.y, metRough.z);
     vec2 cancelJitter = constants.prevProjJitter - constants.projJitter;

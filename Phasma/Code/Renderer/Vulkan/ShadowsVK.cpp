@@ -55,7 +55,7 @@ namespace pe
             samplerInfo.borderColor = BorderColor::FloatOpaqueWhite;
             samplerInfo.compareEnable = VK_TRUE;
             samplerInfo.compareOp = CompareOp::GreaterOrEqual;
-            texture->CreateSampler(samplerInfo);
+            texture->sampler = Sampler::Create(samplerInfo);
         }
     }
 
@@ -93,7 +93,7 @@ namespace pe
         for (uint32_t i = 0; i < textures.size(); i++)
         {
             views[i] = textures[i]->GetSRV();
-            samplers[i] = textures[i]->sampler;
+            samplers[i] = textures[i]->sampler->Handle();
         }
 
         DSetDeferred->SetBuffer(0, uniformBuffer);

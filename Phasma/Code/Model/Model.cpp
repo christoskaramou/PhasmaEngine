@@ -778,7 +778,6 @@ namespace pe
 
         // mesh dSets
         std::vector<ImageViewHandle> views{};
-        std::vector<SamplerHandle> samplers{};
         for (auto &node : linearNodes)
         {
             if (!node->mesh)
@@ -810,11 +809,6 @@ namespace pe
                 views.push_back(primitive.pbrMaterial.normalTexture->GetSRV());
                 views.push_back(primitive.pbrMaterial.occlusionTexture->GetSRV());
                 views.push_back(primitive.pbrMaterial.emissiveTexture->GetSRV());
-                samplers.push_back(primitive.pbrMaterial.baseColorTexture->sampler);
-                samplers.push_back(primitive.pbrMaterial.metallicRoughnessTexture->sampler);
-                samplers.push_back(primitive.pbrMaterial.normalTexture->sampler);
-                samplers.push_back(primitive.pbrMaterial.occlusionTexture->sampler);
-                samplers.push_back(primitive.pbrMaterial.emissiveTexture->sampler);
             }
         }
 
@@ -822,15 +816,27 @@ namespace pe
         uniformBuffer.buffer->Flush();
         uniformBuffer.buffer->Unmap();
 
-        std::vector<DescriptorBindingInfo> imageBindingInfos(1);
+        std::vector<DescriptorBindingInfo> imageBindingInfos(2);
+
         imageBindingInfos[0].binding = 0;
-        imageBindingInfos[0].count = static_cast<uint32_t>(views.size());
-        imageBindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
-        imageBindingInfos[0].type = DescriptorType::CombinedImageSampler;
-        imageBindingInfos[0].bindless = true;
+        imageBindingInfos[0].count = 1;
+        imageBindingInfos[0].type = DescriptorType::Sampler;
+
+        imageBindingInfos[1].binding = 1;
+        imageBindingInfos[1].count = static_cast<uint32_t>(views.size());
+        imageBindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
+        imageBindingInfos[1].type = DescriptorType::SampledImage;
+        imageBindingInfos[1].bindless = true;
+
         uniformImages.descriptor = Descriptor::Create(imageBindingInfos, ShaderStage::FragmentBit, "model_images_descriptor");
 
-        uniformImages.descriptor->SetImages(0, views, samplers);
+        SamplerCreateInfo samplerInfo{};
+        samplerInfo.maxLod = 12;
+        samplerInfo.name = "material_sampler";
+        Sampler *sampler = Sampler::Create(samplerInfo);
+
+        uniformImages.descriptor->SetSampler(0, sampler->Handle());
+        uniformImages.descriptor->SetImages(1, views, {});
         uniformImages.descriptor->UpdateDescriptor();
     }
 
@@ -854,8 +860,8 @@ namespace pe
         pipelineInfoGBuffer = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoGBuffer;
 
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.vert", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBuffer.frag", ShaderStage::FragmentBit});
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBufferVS.hlsl", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBufferPS.hlsl", ShaderStage::FragmentBit});
         info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
         info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};

@@ -26,6 +26,7 @@ namespace pe
         maxLod = 1000.f;
         borderColor = BorderColor::FloatOpaqueBlack;
         unnormalizedCoordinates = 0;
+        name = "";
     }
 
     ImageCreateInfo::ImageCreateInfo()
@@ -60,6 +61,44 @@ namespace pe
         return false;
     }
 
+    Sampler::Sampler(const SamplerCreateInfo &info)
+    {
+        this->info = info;
+
+        VkSamplerCreateInfo infoVK{};
+        infoVK.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        infoVK.pNext = nullptr;
+        infoVK.flags = 0;
+        infoVK.magFilter = Translate<VkFilter>(info.magFilter);
+        infoVK.minFilter = Translate<VkFilter>(info.minFilter);
+        infoVK.mipmapMode = Translate<VkSamplerMipmapMode>(info.mipmapMode);
+        infoVK.addressModeU = Translate<VkSamplerAddressMode>(info.addressModeU);
+        infoVK.addressModeV = Translate<VkSamplerAddressMode>(info.addressModeV);
+        infoVK.addressModeW = Translate<VkSamplerAddressMode>(info.addressModeW);
+        infoVK.mipLodBias = log2(GUI::renderTargetsScale) - 1.0f;
+        infoVK.anisotropyEnable = info.anisotropyEnable;
+        infoVK.maxAnisotropy = info.maxAnisotropy;
+        infoVK.compareEnable = info.compareEnable;
+        infoVK.compareOp = Translate<VkCompareOp>(info.compareOp);
+        infoVK.minLod = info.minLod;
+        infoVK.maxLod = info.maxLod;
+        infoVK.borderColor = Translate<VkBorderColor>(info.borderColor);
+        infoVK.unnormalizedCoordinates = info.unnormalizedCoordinates;
+
+        VkSampler vkSampler;
+        PE_CHECK(vkCreateSampler(RHII.GetDevice(), &infoVK, nullptr, &vkSampler));
+        m_handle = vkSampler;
+
+        Debug::SetObjectName(m_handle, ObjectType::Sampler, info.name);
+    }
+
+    Sampler::~Sampler()
+    {
+        if (m_handle)
+            vkDestroySampler(RHII.GetDevice(), m_handle, nullptr);
+    }
+
+
     Image::Image(const ImageCreateInfo &info)
     {
         if (!LinearFilterSupport(info.format, info.tiling))
@@ -67,8 +106,7 @@ namespace pe
 
         imageInfo = info;
 
-        sampler = {};
-        samplerInfo = {};
+        sampler = nullptr;
         blendAttachment = {};
 
         m_rtv = {};
@@ -171,10 +209,10 @@ namespace pe
             m_handle = {};
         }
 
-        if (VkSampler(sampler))
+        if (sampler)
         {
-            vkDestroySampler(RHII.GetDevice(), sampler, nullptr);
-            sampler = {};
+            Sampler::Destroy(sampler);
+            sampler = nullptr;
         }
     }
 
@@ -414,37 +452,6 @@ namespace pe
 
         Downsampler::Dispatch(cmd, this);
         m_mipmapsGenerated = true;
-    }
-
-    void Image::CreateSampler(const SamplerCreateInfo &info)
-    {
-        samplerInfo = info;
-
-        VkSamplerCreateInfo samplerInfoVK{};
-        samplerInfoVK.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfoVK.pNext = nullptr;
-        samplerInfoVK.flags = 0;
-        samplerInfoVK.magFilter = Translate<VkFilter>(samplerInfo.magFilter);
-        samplerInfoVK.minFilter = Translate<VkFilter>(samplerInfo.minFilter);
-        samplerInfoVK.mipmapMode = Translate<VkSamplerMipmapMode>(samplerInfo.mipmapMode);
-        samplerInfoVK.addressModeU = Translate<VkSamplerAddressMode>(samplerInfo.addressModeU);
-        samplerInfoVK.addressModeV = Translate<VkSamplerAddressMode>(samplerInfo.addressModeV);
-        samplerInfoVK.addressModeW = Translate<VkSamplerAddressMode>(samplerInfo.addressModeW);
-        samplerInfoVK.mipLodBias = log2(GUI::renderTargetsScale) - 1.0f;
-        samplerInfoVK.anisotropyEnable = samplerInfo.anisotropyEnable;
-        samplerInfoVK.maxAnisotropy = samplerInfo.maxAnisotropy;
-        samplerInfoVK.compareEnable = samplerInfo.compareEnable;
-        samplerInfoVK.compareOp = Translate<VkCompareOp>(samplerInfo.compareOp);
-        samplerInfoVK.minLod = samplerInfo.minLod;
-        samplerInfoVK.maxLod = samplerInfo.maxLod;
-        samplerInfoVK.borderColor = Translate<VkBorderColor>(samplerInfo.borderColor);
-        samplerInfoVK.unnormalizedCoordinates = samplerInfo.unnormalizedCoordinates;
-
-        VkSampler vkSampler;
-        PE_CHECK(vkCreateSampler(RHII.GetDevice(), &samplerInfoVK, nullptr, &vkSampler));
-        sampler = vkSampler;
-
-        Debug::SetObjectName(sampler, ObjectType::Sampler, imageInfo.name);
     }
 
     void Image::BlitImage(CommandBuffer *cmd, Image *src, ImageBlit *region, Filter filter)

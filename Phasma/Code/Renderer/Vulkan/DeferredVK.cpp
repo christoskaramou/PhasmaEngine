@@ -113,7 +113,7 @@ namespace pe
 
             SamplerCreateInfo samplerInfo{};
             samplerInfo.maxLod = static_cast<float>(info.mipLevels);
-            ibl_brdf_lut->CreateSampler(samplerInfo);
+            ibl_brdf_lut->sampler = Sampler::Create(samplerInfo);
 
             cmd->CopyDataToImageStaged(ibl_brdf_lut, pixels, texWidth * texHeight * STBI_rgb_alpha);
 
@@ -179,15 +179,15 @@ namespace pe
 
     void Deferred::UpdateDescriptorSets()
     {
-        DSet->SetImage(0, depth->GetSRV(), depth->sampler);
-        DSet->SetImage(1, normalRT->GetSRV(), normalRT->sampler);
-        DSet->SetImage(2, albedoRT->GetSRV(), albedoRT->sampler);
-        DSet->SetImage(3, srmRT->GetSRV(), srmRT->sampler);
+        DSet->SetImage(0, depth->GetSRV(), depth->sampler->Handle());
+        DSet->SetImage(1, normalRT->GetSRV(), normalRT->sampler->Handle());
+        DSet->SetImage(2, albedoRT->GetSRV(), albedoRT->sampler->Handle());
+        DSet->SetImage(3, srmRT->GetSRV(), srmRT->sampler->Handle());
         DSet->SetBuffer(4, CONTEXT->GetSystem<LightSystem>()->GetUniform());
-        DSet->SetImage(5, ssaoBlurRT->GetSRV(), ssaoBlurRT->sampler);
-        DSet->SetImage(6, ssrRT->GetSRV(), ssrRT->sampler);
-        DSet->SetImage(7, emissiveRT->GetSRV(), emissiveRT->sampler);
-        DSet->SetImage(8, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->sampler);
+        DSet->SetImage(5, ssaoBlurRT->GetSRV(), ssaoBlurRT->sampler->Handle());
+        DSet->SetImage(6, ssrRT->GetSRV(), ssrRT->sampler->Handle());
+        DSet->SetImage(7, emissiveRT->GetSRV(), emissiveRT->sampler->Handle());
+        DSet->SetImage(8, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->sampler->Handle());
         DSet->SetBuffer(9, uniform);
         DSet->UpdateDescriptor();
     }

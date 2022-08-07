@@ -27,7 +27,7 @@ namespace pe
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Skybox_descriptor");
 
-        DSet->SetImage(0, cubeMap->GetSRV(), cubeMap->sampler);
+        DSet->SetImage(0, cubeMap->GetSRV(), cubeMap->sampler->Handle());
         DSet->UpdateDescriptor();
     }
 
@@ -58,7 +58,7 @@ namespace pe
         samplerInfo.addressModeU = SamplerAddressMode::ClampToEdge;
         samplerInfo.addressModeV = SamplerAddressMode::ClampToEdge;
         samplerInfo.addressModeW = SamplerAddressMode::ClampToEdge;
-        cubeMap->CreateSampler(samplerInfo);
+        cubeMap->sampler = Sampler::Create(samplerInfo);
 
         // CubeMap Load
         for (uint32_t i = 0; i < cubeMap->imageInfo.arrayLayers; ++i)

@@ -67,8 +67,8 @@ namespace pe
 
     void DOF::UpdateDescriptorSets()
     {
-        DSet->SetImage(0, frameImage->GetSRV(), frameImage->sampler);
-        DSet->SetImage(1, depth->GetSRV(), depth->sampler);
+        DSet->SetImage(0, frameImage->GetSRV(), frameImage->sampler->Handle());
+        DSet->SetImage(1, depth->GetSRV(), depth->sampler->Handle());
         DSet->UpdateDescriptor();
     }
 

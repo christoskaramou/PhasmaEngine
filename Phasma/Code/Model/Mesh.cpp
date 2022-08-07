@@ -123,7 +123,7 @@ namespace pe
 
             SamplerCreateInfo samplerInfo{};
             samplerInfo.maxLod = static_cast<float>(info.mipLevels);
-            (*tex)->CreateSampler(samplerInfo);
+            (*tex)->sampler = Sampler::Create(samplerInfo);
 
             cmd->CopyDataToImageStaged(*tex, pixels, texWidth * texHeight * STBI_rgb_alpha);
             cmd->GenerateMipMaps(*tex);

@@ -40,7 +40,7 @@ namespace pe
         PipelineCreateInfo &info = *pipelineInfo;
 
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/MotionBlur/motionBlur.frag", ShaderStage::FragmentBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/MotionBlur/motionBlurPS.hlsl", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {displayRT->blendAttachment};
@@ -71,9 +71,9 @@ namespace pe
 
     void MotionBlur::UpdateDescriptorSets()
     {
-        DSet->SetImage(0, frameImage->GetSRV(), frameImage->sampler);
-        DSet->SetImage(1, depth->GetSRV(), depth->sampler);
-        DSet->SetImage(2, velocityRT->GetSRV(), velocityRT->sampler);
+        DSet->SetImage(0, frameImage->GetSRV(), frameImage->sampler->Handle());
+        DSet->SetImage(1, depth->GetSRV(), depth->sampler->Handle());
+        DSet->SetImage(2, velocityRT->GetSRV(), velocityRT->sampler->Handle());
         DSet->UpdateDescriptor();
     }
 

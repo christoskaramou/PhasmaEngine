@@ -276,7 +276,7 @@ namespace pe
 
         SamplerCreateInfo samplerInfo{};
         samplerInfo.anisotropyEnable = 0;
-        rt->CreateSampler(samplerInfo);
+        rt->sampler = Sampler::Create(samplerInfo);
 
         rt->blendAttachment.blendEnable = blendEnable ? 1 : 0;
         rt->blendAttachment.srcColorBlendFactor = BlendFactor::SrcAlpha;
@@ -319,7 +319,7 @@ namespace pe
         samplerInfo.anisotropyEnable = 0;
         samplerInfo.borderColor = BorderColor::FloatOpaqueWhite;
         samplerInfo.compareEnable = 1;
-        depth->CreateSampler(samplerInfo);
+        depth->sampler = Sampler::Create(samplerInfo);
 
         GUI::s_renderImages.push_back(depth);
         m_depthTargets[StringHash(name)] = depth;
@@ -365,7 +365,7 @@ namespace pe
         sampledImage->CreateSRV(ImageViewType::Type2D);
 
         SamplerCreateInfo samplerInfo{};
-        sampledImage->CreateSampler(samplerInfo);
+        sampledImage->sampler = Sampler::Create(samplerInfo);
 
         return sampledImage;
     }

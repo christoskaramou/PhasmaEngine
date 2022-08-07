@@ -141,17 +141,17 @@ namespace pe
 
     void Bloom::UpdateDescriptorSets()
     {
-        DSBrightFilter->SetImage(0, frameImage->GetSRV(), frameImage->sampler);
+        DSBrightFilter->SetImage(0, frameImage->GetSRV(), frameImage->sampler->Handle());
         DSBrightFilter->UpdateDescriptor();
 
-        DSGaussianBlurHorizontal->SetImage(0, brightFilterRT->GetSRV(), brightFilterRT->sampler);
+        DSGaussianBlurHorizontal->SetImage(0, brightFilterRT->GetSRV(), brightFilterRT->sampler->Handle());
         DSGaussianBlurHorizontal->UpdateDescriptor();
 
-        DSGaussianBlurVertical->SetImage(0, gaussianBlurHorizontalRT->GetSRV(), gaussianBlurHorizontalRT->sampler);
+        DSGaussianBlurVertical->SetImage(0, gaussianBlurHorizontalRT->GetSRV(), gaussianBlurHorizontalRT->sampler->Handle());
         DSGaussianBlurVertical->UpdateDescriptor();
 
-        DSCombine->SetImage(0, frameImage->GetSRV(), frameImage->sampler);
-        DSCombine->SetImage(1, gaussianBlurVerticalRT->GetSRV(), gaussianBlurVerticalRT->sampler);
+        DSCombine->SetImage(0, frameImage->GetSRV(), frameImage->sampler->Handle());
+        DSCombine->SetImage(1, gaussianBlurVerticalRT->GetSRV(), gaussianBlurVerticalRT->sampler->Handle());
         DSCombine->UpdateDescriptor();
     }
 

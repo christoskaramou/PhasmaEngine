@@ -30,6 +30,7 @@ namespace pe
         float maxLod;
         BorderColor borderColor;
         uint32_t unnormalizedCoordinates;
+        std::string name;
     };
 
     class ImageCreateInfo
@@ -56,6 +57,16 @@ namespace pe
         std::string name;
     };
 
+    class Sampler : public IHandle<Sampler, SamplerHandle>
+    {
+    public:
+        Sampler(const SamplerCreateInfo &info);
+
+        ~Sampler();
+
+        SamplerCreateInfo info;
+    };
+
     class Image : public IHandle<Image, ImageHandle>
     {
     public:
@@ -64,8 +75,6 @@ namespace pe
         Image(const ImageCreateInfo &info);
 
         ~Image();
-
-        void CreateSampler(const SamplerCreateInfo &info);
 
         ImageLayout GetCurrentLayout(uint32_t layer = 0, uint32_t mip = 0) { return m_layouts[layer][mip]; }
 
@@ -129,10 +138,9 @@ namespace pe
                                    uint32_t mipLevels);
 
     public:
-        SamplerHandle sampler;
+        Sampler *sampler;
         AllocationHandle allocation;
         ImageCreateInfo imageInfo;
-        SamplerCreateInfo samplerInfo;
 
         float width_f{};
         float height_f{};
