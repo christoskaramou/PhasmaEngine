@@ -50,7 +50,7 @@ namespace pe
         PipelineCreateInfo &info = *pipelineInfoBF;
 
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/brightFilter.frag", ShaderStage::FragmentBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/brightFilterPS.hlsl", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {brightFilterRT->blendAttachment};
@@ -68,7 +68,7 @@ namespace pe
         PipelineCreateInfo &info = *pipelineInfoGBH;
 
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/gaussianBlurHorizontal.frag", ShaderStage::FragmentBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/gaussianBlurHorizontalPS.hlsl", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {gaussianBlurHorizontalRT->blendAttachment};
@@ -86,7 +86,7 @@ namespace pe
         PipelineCreateInfo &info = *pipelineInfoGBV;
 
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/gaussianBlurVertical.frag", ShaderStage::FragmentBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/gaussianBlurVerticalPS.hlsl", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {gaussianBlurVerticalRT->blendAttachment};
@@ -104,7 +104,7 @@ namespace pe
         PipelineCreateInfo &info = *pipelineInfoCombine;
 
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/combine.frag", ShaderStage::FragmentBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/combinePS.hlsl", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {displayRT->blendAttachment};
