@@ -39,7 +39,7 @@ namespace pe
         PipelineCreateInfo &info = *pipelineInfo;
 
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/DepthOfField/DOF.frag", ShaderStage::FragmentBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/DepthOfField/dofPS.hlsl", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {displayRT->blendAttachment};
