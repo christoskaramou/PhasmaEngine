@@ -104,7 +104,6 @@ namespace pe
         GpuTimer::composition = GpuTimer::Create("GPUTimer_queryPool_composition");
         GpuTimer::fxaa = GpuTimer::Create("GPUTimer_queryPool_fxaa");
         GpuTimer::bloom = GpuTimer::Create("GPUTimer_queryPool_bloom");
-        GpuTimer::ssgi = GpuTimer::Create("GPUTimer_queryPool_ssgi");
         GpuTimer::dof = GpuTimer::Create("GPUTimer_queryPool_dof");
         GpuTimer::motionBlur = GpuTimer::Create("GPUTimer_queryPool_motionBlur");
         GpuTimer::gui = GpuTimer::Create("GPUTimer_queryPool_gui");
@@ -240,7 +239,6 @@ namespace pe
         GpuTimer::Destroy(GpuTimer::composition);
         GpuTimer::Destroy(GpuTimer::fxaa);
         GpuTimer::Destroy(GpuTimer::bloom);
-        GpuTimer::Destroy(GpuTimer::ssgi);
         GpuTimer::Destroy(GpuTimer::dof);
         GpuTimer::Destroy(GpuTimer::motionBlur);
         GpuTimer::Destroy(GpuTimer::gui);

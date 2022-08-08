@@ -7,7 +7,6 @@
 #include "PostProcess/MotionBlur.h"
 #include "PostProcess/SSAO.h"
 #include "PostProcess/SSR.h"
-#include "PostProcess/SSGI.h"
 #include "PostProcess/SuperResolution.h"
 
 namespace pe
@@ -28,7 +27,6 @@ namespace pe
         m_effects[GetTypeID<MotionBlur>()] = WORLD_ENTITY->CreateComponent<MotionBlur>();
         m_effects[GetTypeID<SSAO>()] = WORLD_ENTITY->CreateComponent<SSAO>();
         m_effects[GetTypeID<SSR>()] = WORLD_ENTITY->CreateComponent<SSR>();
-        m_effects[GetTypeID<SSGI>()] = WORLD_ENTITY->CreateComponent<SSGI>();
         m_effects[GetTypeID<SuperResolution>()] = WORLD_ENTITY->CreateComponent<SuperResolution>();
 
         for (auto &effect : m_effects)

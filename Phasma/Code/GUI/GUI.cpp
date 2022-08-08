@@ -245,6 +245,7 @@ namespace pe
             }
         }
         ImGui::Text("GBuffer: %.3f ms", frameTimer.geometryStamp);
+        ImGui::Text("Composition: %.3f ms", frameTimer.compositionStamp);
         if (show_ssao)
         {
             ImGui::Text("SSAO: %.3f ms", frameTimer.ssaoStamp);
@@ -270,10 +271,6 @@ namespace pe
         if (use_DOF)
         {
             ImGui::Text("Depth of Field: %.3f ms", frameTimer.dofStamp);
-        }
-        if (use_SSGI)
-        {
-            ImGui::Text("SSGI: %.3f ms", frameTimer.ssgiStamp);
         }
         if (show_motionBlur)
         {
@@ -432,15 +429,6 @@ namespace pe
             ImGui::Separator();
             ImGui::Separator();
         }
-        ImGui::Checkbox("SSGI", &use_SSGI);
-        if (use_SSGI)
-        {
-            ImGui::Indent(16.0f);
-
-            ImGui::Unindent(16.0f);
-            ImGui::Separator();
-            ImGui::Separator();
-        }
         ImGui::Checkbox("Motion Blur", &show_motionBlur);
         if (show_motionBlur)
         {
@@ -528,7 +516,7 @@ namespace pe
             randomize_lights = true;
         ImGui::SliderFloat("Light Intst", &lights_intensity, 0.01f, 30.f);
         ImGui::SliderFloat("Light Rng", &lights_range, 0.1f, 30.f);
-        // ImGui::Checkbox("FreezeCamCull", &freezeFrustumCulling);
+        ImGui::Checkbox("FreezeCamCull", &freezeFrustumCulling);
 
         // Model properties
         ImGui::Separator();

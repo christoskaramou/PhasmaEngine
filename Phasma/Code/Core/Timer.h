@@ -53,7 +53,6 @@ namespace pe
         double compositionStamp;
         double fxaaStamp;
         double bloomStamp;
-        double ssgiStamp;
         double dofStamp;
         double motionBlurStamp;
         double guiStamp;
@@ -102,7 +101,6 @@ namespace pe
         inline static GpuTimer *composition = nullptr;
         inline static GpuTimer *fxaa = nullptr;
         inline static GpuTimer *bloom = nullptr;
-        inline static GpuTimer *ssgi = nullptr;
         inline static GpuTimer *motionBlur = nullptr;
         inline static GpuTimer *gui = nullptr;
         inline static GpuTimer *dof = nullptr;

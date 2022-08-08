@@ -15,7 +15,6 @@
 #include "PostProcess/MotionBlur.h"
 #include "PostProcess/SSAO.h"
 #include "PostProcess/SSR.h"
-#include "PostProcess/SSGI.h"
 #include "PostProcess/SuperResolution.h"
 
 namespace pe
@@ -91,7 +90,6 @@ namespace pe
         Bloom &bloom = *WORLD_ENTITY->GetComponent<Bloom>();
         DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
-        SSGI &ssgi = *WORLD_ENTITY->GetComponent<SSGI>();
         SuperResolution &sr = *WORLD_ENTITY->GetComponent<SuperResolution>();
 
         FrameTimer &frameTimer = FrameTimer::Instance();
@@ -131,16 +129,9 @@ namespace pe
         }
 
         // COMPOSITION
-        GpuTimer::ssgi->Start(cmd);
+        GpuTimer::composition->Start(cmd);
         deferred.Draw(cmd, imageIndex);
-        frameTimer.compositionStamp = GpuTimer::ssgi->End();
-
-        if (GUI::use_SSGI)
-        {
-            // GpuTimer::ssgi.Start(cmd);
-            ssgi.Draw(cmd, imageIndex);
-            // frameTimer.ssgiStamp = GpuTimer::ssgi.End();
-        }
+        frameTimer.compositionStamp = GpuTimer::composition->End();
 
         // FXAA
         if (GUI::use_FXAA)
@@ -198,7 +189,7 @@ namespace pe
         {
             GpuTimer::dof->Start(cmd);
             dof.Draw(cmd, imageIndex);
-            frameTimer.ssgiStamp = GpuTimer::dof->End();
+            frameTimer.dofStamp = GpuTimer::dof->End();
         }
 
         // MOTION BLUR
