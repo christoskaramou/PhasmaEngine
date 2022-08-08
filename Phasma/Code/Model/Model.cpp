@@ -894,7 +894,7 @@ namespace pe
         pipelineInfoShadows = std::make_shared<PipelineCreateInfo>();
         PipelineCreateInfo &info = *pipelineInfoShadows;
 
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Shadows/shaderShadows.vert", ShaderStage::VertexBit});
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Shadows/shadowsVS.hlsl", ShaderStage::VertexBit});
         info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
         info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::DepthBias};
