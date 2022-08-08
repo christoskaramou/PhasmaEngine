@@ -57,12 +57,12 @@ namespace pe
         // SPD defines
         const std::vector<Define> defines{
             Define{"A_GPU", ""},
-            Define{"A_GLSL", ""},
+            Define{"A_HLSL", ""},
             // Define{"SPD_LINEAR_SAMPLER", ""},
             Define{"SPD_NO_WAVE_OPERATIONS", ""}};
 
         s_pipelineInfo = std::make_shared<PipelineCreateInfo>();
-        s_pipelineInfo->pCompShader = Shader::Create(ShaderInfo{"Shaders/Compute/spd/spd.comp", ShaderStage::ComputeBit, defines});
+        s_pipelineInfo->pCompShader = Shader::Create(ShaderInfo{"Shaders/Compute/spd/spd.hlsl", ShaderStage::ComputeBit, defines});
         s_pipelineInfo->descriptorSetLayouts = {s_DSet[0]->GetLayout()};
         s_pipelineInfo->pushConstantSize = sizeof(PushConstants);
         s_pipelineInfo->pushConstantStage = ShaderStage::ComputeBit;
