@@ -24,12 +24,12 @@ namespace pe
 
         frustum.resize(6);
 
-        frustumCompute = Compute::Create("Shaders/Compute/frustum.comp", 64, 96, "camera_frustum_compute");
+        frustumCompute = Compute::Create("Shaders/Compute/frustumCS.hlsl", 64, 96, "camera_frustum_compute");
     }
 
     void Camera::ReCreateComputePipelines()
     {
-        frustumCompute.CreatePipeline("Shaders/Compute/frustum.comp");
+        frustumCompute.CreatePipeline("Shaders/Compute/frustumCS.hlsl");
     }
 
     void Camera::Destroy()
@@ -124,6 +124,9 @@ namespace pe
 
     void Camera::ExtractFrustum()
     {
+        if (GUI::freezeFrustumCulling)
+            return;
+
         // Just testing computes, the specific one is not speeding up any process
         frustumCompute.Wait();
         frustumCompute.CopyDataTo(frustum.data(), frustum.size()); // Update frustum planes

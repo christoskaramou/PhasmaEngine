@@ -528,6 +528,7 @@ namespace pe
             randomize_lights = true;
         ImGui::SliderFloat("Light Intst", &lights_intensity, 0.01f, 30.f);
         ImGui::SliderFloat("Light Rng", &lights_range, 0.1f, 30.f);
+        // ImGui::Checkbox("FreezeCamCull", &freezeFrustumCulling);
 
         // Model properties
         ImGui::Separator();
