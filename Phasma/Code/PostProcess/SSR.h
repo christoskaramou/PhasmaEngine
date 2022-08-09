@@ -40,7 +40,6 @@ namespace pe
         Image *ssrRT;
         Image *albedoRT;
         Image *normalRT;
-        Image *srmRT;
         Image *depth;
     };
 }

@@ -33,7 +33,6 @@ namespace pe
         ssrRT = rs->GetRenderTarget("ssr");
         albedoRT = rs->GetRenderTarget("albedo");
         normalRT = rs->GetRenderTarget("normal");
-        srmRT = rs->GetRenderTarget("srm");
         depth = rs->GetDepthTarget("depth");
     }
 
@@ -43,7 +42,7 @@ namespace pe
         PipelineCreateInfo &info = *pipelineInfo;
 
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSR/ssr.frag", ShaderStage::FragmentBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSR/ssrPS.hlsl", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {ssrRT->blendAttachment};
@@ -65,21 +64,23 @@ namespace pe
         UBReflection->Flush();
         UBReflection->Unmap();
 
-        std::vector<DescriptorBindingInfo> bindingInfos(5);
+        std::vector<DescriptorBindingInfo> bindingInfos(4);
+
         bindingInfos[0].binding = 0;
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
+
         bindingInfos[1].binding = 1;
         bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
+
         bindingInfos[2].binding = 2;
         bindingInfos[2].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[2].type = DescriptorType::CombinedImageSampler;
+
         bindingInfos[3].binding = 3;
-        bindingInfos[3].imageLayout = ImageLayout::ShaderReadOnly;
-        bindingInfos[3].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[4].binding = 4;
-        bindingInfos[4].type = DescriptorType::UniformBufferDynamic;
+        bindingInfos[3].type = DescriptorType::UniformBufferDynamic;
+
         DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "SSR_descriptor");
 
         UpdateDescriptorSets();
@@ -90,8 +91,7 @@ namespace pe
         DSet->SetImage(0, albedoRT->GetSRV(), albedoRT->sampler->Handle());
         DSet->SetImage(1, depth->GetSRV(), depth->sampler->Handle());
         DSet->SetImage(2, normalRT->GetSRV(), normalRT->sampler->Handle());
-        DSet->SetImage(3, srmRT->GetSRV(), srmRT->sampler->Handle());
-        DSet->SetBuffer(4, UBReflection);
+        DSet->SetBuffer(3, UBReflection);
         DSet->UpdateDescriptor();
     }
 
@@ -123,7 +123,6 @@ namespace pe
         // Input
         cmd->ImageBarrier(albedoRT, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(normalRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(srmRT, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
         // Output
         cmd->ImageBarrier(ssrRT, ImageLayout::ColorAttachment);
