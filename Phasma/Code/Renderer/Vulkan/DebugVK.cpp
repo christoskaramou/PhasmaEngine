@@ -453,8 +453,8 @@ namespace pe
             capture_api->TriggerCapture();
             if (capture_api->IsTargetControlConnected())
                 capture_api->ShowReplayUI();
-
-            capture_api->LaunchReplayUI(true, "");
+            else
+                capture_api->LaunchReplayUI(true, "");
         }
 #endif
     }
