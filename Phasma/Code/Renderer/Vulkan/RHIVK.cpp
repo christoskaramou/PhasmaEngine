@@ -106,7 +106,8 @@ namespace pe
             vkDestroyDevice(m_device, nullptr);
         Surface::Destroy(m_surface);
         m_surface = nullptr;
-        Debug::Destroy();
+        Debug::DestroyDebugMessenger();
+        Debug::DestroyCaptureApi();
         if (m_instance)
             vkDestroyInstance(m_instance, nullptr);
     }

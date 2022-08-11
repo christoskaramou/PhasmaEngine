@@ -11,8 +11,6 @@ namespace pe
     public:
         static void Init(InstanceHandle instance);
 
-        static void Destroy();
-
         static void GetInstanceUtils(std::vector<const char *> &instanceExtensions,
                                      std::vector<const char *> &instanceLayers);
 
@@ -56,8 +54,6 @@ namespace pe
     {
     public:
         static void Init(InstanceHandle instance) {}
-
-        static void Destroy() {}
 
         static void GetInstanceUtils(std::vector<const char *> &instanceExtensions,
                                      std::vector<const char *> &instanceLayers) {}
