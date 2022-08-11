@@ -68,4 +68,5 @@ namespace pe
 // maybe with multiple command buffers when needed
 #define USE_DYNAMIC_RENDERING 0
 
+#define PE_RENDER_DOC 1
 }

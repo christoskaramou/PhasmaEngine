@@ -120,6 +120,9 @@ namespace pe
         if (ImGui::IsKeyDown(ImGuiKey_D))
             camera_main->Move(CameraDirection::RIGHT, velocity);
 
+        if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_T))
+            Debug::TriggerCapture();
+
         if (EventSystem::PollEvent(EventCompileShaders))
             renderer->PollShaders();
 

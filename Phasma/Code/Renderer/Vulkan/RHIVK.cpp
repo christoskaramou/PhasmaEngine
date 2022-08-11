@@ -41,6 +41,8 @@ namespace pe
     {
         m_window = window;
         m_frameCounter = 0;
+        
+        Debug::InitCaptureApi();
 
         CreateInstance(window);
         CreateSurface();
@@ -104,7 +106,7 @@ namespace pe
             vkDestroyDevice(m_device, nullptr);
         Surface::Destroy(m_surface);
         m_surface = nullptr;
-        Debug::DestroyDebugMessenger();
+        Debug::Destroy();
         if (m_instance)
             vkDestroyInstance(m_instance, nullptr);
     }

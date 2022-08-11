@@ -20,8 +20,4 @@ namespace pe
     extern bool HasStencil(Format format);
     extern void GetVkInfoFromLayout(ImageLayout layout, VkPipelineStageFlags &stageFlags, VkAccessFlags &accessMask);
     extern void GetInfoFromLayout(ImageLayout layout, PipelineStageFlags &stageFlags, AccessFlags &accessMask);
-
-    // Frame Capture
-    extern void *capture_api;
-    #define PE_RENDER_DOC 0
 }

@@ -11,6 +11,8 @@ namespace pe
     public:
         static void Init(InstanceHandle instance);
 
+        static void Destroy();
+
         static void GetInstanceUtils(std::vector<const char *> &instanceExtensions,
                                      std::vector<const char *> &instanceLayers);
 
@@ -19,6 +21,10 @@ namespace pe
         static void DestroyDebugMessenger();
 
         static void SetObjectName(uintptr_t object, ObjectType type, const std::string &name);
+
+        static void InitCaptureApi();
+
+        static void DestroyCaptureApi();
 
         static void StartFrameCapture();
 
@@ -51,6 +57,8 @@ namespace pe
     public:
         static void Init(InstanceHandle instance) {}
 
+        static void Destroy() {}
+
         static void GetInstanceUtils(std::vector<const char *> &instanceExtensions,
                                      std::vector<const char *> &instanceLayers) {}
 
@@ -58,16 +66,22 @@ namespace pe
 
         static void DestroyDebugMessenger() {}
 
+        static void InitCaptureApi() {}
+
+        static void DestroyCaptureApi() {}
+
         static void SetObjectName(uint64_t object, ObjectType type, const std::string &name) {}
 
         static void StartFrameCapture() {}
 
         static void EndFrameCapture() {}
-        
+
+        static void TriggerCapture() {}
+
     private:
         friend class CommandBuffer;
         friend class Queue;
-        
+
         static void BeginQueueRegion(Queue *queue, const std::string &name) {}
 
         static void InsertQueueLabel(Queue *queue, const std::string &name) {}
