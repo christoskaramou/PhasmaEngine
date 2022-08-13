@@ -405,6 +405,14 @@ namespace pe
     {
         if (!properties_open)
             return;
+        
+        static bool initialized = false;
+        if (!initialized)
+        {
+            ImGui::SetNextWindowPos(ImVec2(WIDTH - 200, 100));
+            ImGui::SetNextWindowSize(ImVec2(200, HEIGHT - 150));
+            initialized = true;
+        }
 
         static float rtScale = renderTargetsScale;
         ImGui::Begin("Global Properties", &properties_open);

@@ -10,12 +10,6 @@ namespace pe
 {
     Window::Window(int x, int y, int w, int h, uint32_t flags)
     {
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
-        {
-            std::cout << SDL_GetError();
-            return;
-        }
-
         m_handle = SDL_CreateWindow("", x, y, w, h, flags);
         if (!m_handle)
         {
@@ -177,5 +171,30 @@ namespace pe
     bool Window::isMinimized()
     {
         return (SDL_GetWindowFlags(m_handle) & SDL_WINDOW_MINIMIZED) != 0;
+    }
+
+    void Window::GetDrawableSize(int &width, int &height)
+    {
+        SDL_Vulkan_GetDrawableSize(m_handle, &width, &height);
+    }
+
+    void Window::Show()
+    {
+        SDL_ShowWindow(m_handle);
+    }
+
+    void Window::Hide()
+    {
+        SDL_HideWindow(m_handle);
+    }
+
+    void Window::Minimize()
+    {
+        SDL_MinimizeWindow(m_handle);
+    }
+
+    void Window::Maximize()
+    {
+        SDL_MaximizeWindow(m_handle);
     }
 }

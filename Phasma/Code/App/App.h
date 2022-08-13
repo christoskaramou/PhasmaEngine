@@ -5,6 +5,7 @@ namespace pe
     class Context;
     class Window;
     class FrameTimer;
+    class SplashScreen;
 
     class App
     {
@@ -13,11 +14,14 @@ namespace pe
 
         ~App();
 
+        bool RenderFrame();
+
         void Run();
 
     private:
-        Context *context = nullptr;
-        Window *window = nullptr;
-        FrameTimer *frameTimer = nullptr;
+        Context *m_context = nullptr;
+        Window *m_window = nullptr;
+        FrameTimer *m_frameTimer = nullptr;
+        SplashScreen *m_splashScreen = nullptr;
     };
 }

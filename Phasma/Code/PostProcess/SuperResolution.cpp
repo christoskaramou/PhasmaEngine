@@ -164,12 +164,7 @@ namespace pe
 
     void SuperResolution::Resize(uint32_t width, uint32_t height)
     {
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
-
-        m_viewportRT = rs->GetRenderTarget("viewport");
-        m_velocityRT = rs->GetRenderTarget("velocity");
-        m_depth = rs->GetDepthTarget("depth");
-        m_display = rs->GetRenderTarget("display");
+        Init();
     }
 
     void SuperResolution::Destroy()
