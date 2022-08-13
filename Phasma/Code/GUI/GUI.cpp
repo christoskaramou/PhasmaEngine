@@ -409,8 +409,8 @@ namespace pe
         static bool initialized = false;
         if (!initialized)
         {
-            ImGui::SetNextWindowPos(ImVec2(WIDTH - 200, 100));
-            ImGui::SetNextWindowSize(ImVec2(200, HEIGHT - 150));
+            ImGui::SetNextWindowPos(ImVec2(WIDTH_f - 200.f, 100.f));
+            ImGui::SetNextWindowSize(ImVec2(200.f, HEIGHT_f - 150.f));
             initialized = true;
         }
 
