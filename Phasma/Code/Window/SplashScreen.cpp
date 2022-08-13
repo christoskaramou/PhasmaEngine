@@ -13,10 +13,15 @@ namespace pe
                 return;
             }
         }
-
-        const char *surface_path = "C:/Users/chris/source/repos/PhasmaEngine/Phasma/Images/splash_screen.jpg";
+    
+        std::string surface_path = Path::Assets + "SplashScreen/splash_screen.jpg";
+        if (!std::filesystem::exists(surface_path))
+        {
+            std::cout << "Splash screen not found: " << surface_path << std::endl;
+            return;
+        }
         int width, height, nrChannels;
-        unsigned char *data = stbi_load(surface_path, &width, &height, &nrChannels, STBI_rgb_alpha);
+        unsigned char *data = stbi_load(surface_path.c_str(), &width, &height, &nrChannels, STBI_rgb_alpha);
         m_surface = SDL_CreateRGBSurfaceFrom(data, width, height, 32, width * 4, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000);
         if (!m_surface)
         {
@@ -49,8 +54,11 @@ namespace pe
 
     SplashScreen::~SplashScreen()
     {
-        SDL_DestroyWindow(m_handle);
-        SDL_DestroyRenderer(m_renderer);
-        SDL_DestroyTexture(m_texture);
+        if (m_handle)
+            SDL_DestroyWindow(m_handle);
+        if (m_renderer)
+            SDL_DestroyRenderer(m_renderer);
+        if (m_texture)
+            SDL_DestroyTexture(m_texture);
     }
 }
