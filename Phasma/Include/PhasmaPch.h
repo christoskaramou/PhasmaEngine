@@ -43,7 +43,8 @@
 #include "vma/vk_mem_alloc.h"
 #ifdef WIN32
     #include <dxgi1_6.h>
-    #include <d3d12.h>
+    #include <dxgidebug.h>
+    #include <dxc/Support/d3dx12.h>
     #include <wrl.h>
     #include <d3d12sdklayers.h>
 #endif

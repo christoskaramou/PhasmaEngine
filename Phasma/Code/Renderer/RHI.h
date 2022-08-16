@@ -37,6 +37,20 @@ namespace pe
 
         ~RHI();
 
+#if PE_DX12
+
+InstanceHandle m_instanceDX;
+GpuHandle m_gpuDX;
+DeviceHandle m_deviceDX;
+
+        void InitDX();
+        void DestroyDX();
+        void CreateInstanceDX();
+        void FindGpuDX();
+        void CreateDeviceDX();
+        
+#endif
+
         void Init(SDL_Window *window);
         void Destroy();
         void CreateInstance(SDL_Window *window);

@@ -1,4 +1,3 @@
-#if PE_VULKAN
 #include "Renderer/Renderer.h"
 #include "Model/Mesh.h"
 #include "Renderer/RHI.h"
@@ -588,4 +587,3 @@ namespace pe
         }
     }
 }
-#endif

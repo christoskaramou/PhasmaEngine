@@ -13,34 +13,40 @@ namespace pe
 
 #if _DEBUG
     inline void PE_ERROR_MSG(const std::string &msg,
+                             const std::string &condStr,
                              const std::string &func,
                              const std::string &file,
                              int line)
     {
-        std::string error = "Error: " + msg + ", \nFunc: " + func + ", \nFile: " + file + ", \nLine: " + std::to_string(line) + "\n\n";
+        std::string error = "Error: " + msg +
+                            ", \nCondition: " + condStr +
+                            ", \nFunction: " + func +
+                            ", \nFile: " + file +
+                            ", \nLine: " + std::to_string(line) + "\n\n";
         std::cout << error << std::endl;
         exit(-1);
     }
 
     inline void PE_ERROR_IF_MSG(bool condition,
                                 const std::string &msg,
+                                const std::string &condStr,
                                 const std::string &func,
                                 const std::string &file,
                                 int line)
     {
         if (condition)
-            PE_ERROR_MSG(msg, func, file, line);
+            PE_ERROR_MSG(msg, condStr, func, file, line);
     }
 
-    inline void PE_CHECK_RESULT(uint32_t res, const std::string &func, const std::string &file, int line)
+    inline void PE_CHECK_RESULT(uint32_t res, const std::string &condStr, const std::string &func, const std::string &file, int line)
     {
         if (res != 0)
-            PE_ERROR_MSG("Check result error: " + std::to_string(res), func, file, line);
+            PE_ERROR_MSG("Check result error: " + std::to_string(res), condStr, func, file, line);
     }
 
-#define PE_CHECK(res) PE_CHECK_RESULT(res, __func__, __FILE__, __LINE__)
-#define PE_ERROR(msg) PE_ERROR_MSG(msg, __func__, __FILE__, __LINE__)
-#define PE_ERROR_IF(condition, msg) PE_ERROR_IF_MSG(condition, msg, __func__, __FILE__, __LINE__)
+#define PE_CHECK(res) PE_CHECK_RESULT(res, #res, __func__, __FILE__, __LINE__)
+#define PE_ERROR(msg) PE_ERROR_MSG(msg, "PE_ERROR", __func__, __FILE__, __LINE__)
+#define PE_ERROR_IF(condition, msg) PE_ERROR_IF_MSG(condition, msg, #condition, __func__, __FILE__, __LINE__)
 
 #else
 

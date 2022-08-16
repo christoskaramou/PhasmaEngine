@@ -15,6 +15,18 @@ namespace pe
         return typeID;
     }
 
+#ifdef PE_DX12
+    template <class T>
+    inline void ReleaseDX(T *&ptr)
+    {
+        if (ptr)
+        {
+            ptr->Release();
+            ptr = nullptr;
+        }
+    }
+#endif
+
     struct PlaceHolderBase
     {
     };
@@ -68,17 +80,21 @@ namespace pe
         using DXType = DX_TYPE;
 
         ApiHandle() : ApiHandleBase(nullptr) {}
-        ApiHandle(const VK_TYPE &handle) : ApiHandleBase(handle) {}
-        ApiHandle(const DX_TYPE &handle) : ApiHandleBase(handle) {}
+        ApiHandle(const VKType &handle) : ApiHandleBase(handle) {}
+        ApiHandle(const DXType &handle) : ApiHandleBase(handle) {}
 
         // Operators for auto casting
-        operator VK_TYPE() { return static_cast<VK_TYPE>(m_handle); }
-        operator VK_TYPE() const { return static_cast<VK_TYPE>(m_handle); }
-        operator DX_TYPE() { return static_cast<DX_TYPE>(m_handle); }
-        operator DX_TYPE() const { return static_cast<DX_TYPE>(m_handle); }
+        operator VKType() { return static_cast<VKType>(m_handle); }
+        operator VKType() const { return static_cast<VKType>(m_handle); }
+        operator DXType() { return static_cast<DXType>(m_handle); }
+        operator DXType() const { return static_cast<DXType>(m_handle); }
         operator uintptr_t() { return reinterpret_cast<uintptr_t>(m_handle); }
+
         operator bool() { return m_handle != nullptr; }
         bool operator!() { return m_handle == nullptr; }
+
+        // Only DX types are having class operator
+        DXType operator->() { return static_cast<DXType>(m_handle); }
 
         bool IsNull() const { return m_handle == nullptr; }
     };
@@ -172,10 +188,10 @@ namespace pe
     using SemaphoreHandle = ApiHandle<VkSemaphore, Placeholder<0> *>;
     using QueryPoolHandle = ApiHandle<VkQueryPool, Placeholder<0> *>;
     using SwapchainHandle = ApiHandle<VkSwapchainKHR, Placeholder<0> *>;
-    using DeviceHandle = ApiHandle<VkDevice, Placeholder<0> *>;
+    using DeviceHandle = ApiHandle<VkDevice, ID3D12Device8 *>;
     using SurfaceHandle = ApiHandle<VkSurfaceKHR, Placeholder<0> *>;
-    using InstanceHandle = ApiHandle<VkInstance, Placeholder<0> *>;
-    using GpuHandle = ApiHandle<VkPhysicalDevice, Placeholder<0> *>;
+    using InstanceHandle = ApiHandle<VkInstance, IDXGIFactory7 *>;
+    using GpuHandle = ApiHandle<VkPhysicalDevice, IDXGIAdapter4 *>;
     using DebugMessengerHandle = ApiHandle<VkDebugUtilsMessengerEXT, Placeholder<0> *>;
     using QueueHandle = ApiHandle<VkQueue, Placeholder<0> *>;
     using DescriptorPoolHandle = ApiHandle<VkDescriptorPool, Placeholder<0> *>;

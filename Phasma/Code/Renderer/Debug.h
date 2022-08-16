@@ -9,6 +9,11 @@ namespace pe
     class Debug
     {
     public:
+#if PE_DX12
+        static void CreateDebugMessengerDX();
+        static void DestroyDebugMessengerDX();
+        static void SetObjectNameDX(uintptr_t object, ObjectType type, const std::string &name);
+#endif
         static void Init(InstanceHandle instance);
 
         static void GetInstanceUtils(std::vector<const char *> &instanceExtensions,

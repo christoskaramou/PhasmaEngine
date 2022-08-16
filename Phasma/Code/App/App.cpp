@@ -26,17 +26,21 @@ namespace pe
         }
 
         EventSystem::Init();
+
+#ifdef NDEBUG
         m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
+#endif
 
         uint32_t flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
 #if PE_VULKAN
         flags |= SDL_WINDOW_VULKAN;
 #endif
         SDL_DisplayMode dm;
-        SDL_GetDesktopDisplayMode (0, &dm);
+        SDL_GetDesktopDisplayMode(0, &dm);
         m_window = Window::Create(SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, dm.w - 100, dm.h - 100, flags);
 
         RHII.Init(m_window->Handle());
+        RHII.InitDX();
 
         Queue *queue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit, 1);
         CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
@@ -65,7 +69,9 @@ namespace pe
             RenderFrame();
 
         m_window->Show();
+#ifdef NDEBUG
         SplashScreen::Destroy(m_splashScreen);
+#endif
     }
 
     App::~App()
@@ -74,6 +80,7 @@ namespace pe
         FileWatcher::Stop();
         m_context->DestroySystems();
         RHII.Destroy();
+        RHII.DestroyDX();
         RHII.Remove();
         Window::Destroy(m_window);
         EventSystem::Destroy();
