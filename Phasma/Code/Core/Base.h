@@ -189,7 +189,7 @@ namespace pe
     using QueryPoolHandle = ApiHandle<VkQueryPool, Placeholder<0> *>;
     using SwapchainHandle = ApiHandle<VkSwapchainKHR, Placeholder<0> *>;
     using DeviceHandle = ApiHandle<VkDevice, ID3D12Device8 *>;
-    using SurfaceHandle = ApiHandle<VkSurfaceKHR, Placeholder<0> *>;
+    using SurfaceHandle = ApiHandle<VkSurfaceKHR, IDXGIOutput6 *>;
     using InstanceHandle = ApiHandle<VkInstance, IDXGIFactory7 *>;
     using GpuHandle = ApiHandle<VkPhysicalDevice, IDXGIAdapter4 *>;
     using DebugMessengerHandle = ApiHandle<VkDebugUtilsMessengerEXT, Placeholder<0> *>;

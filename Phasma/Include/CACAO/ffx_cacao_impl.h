@@ -29,7 +29,7 @@
 #endif
 
 #if PE_DX12
-//#define FFX_CACAO_ENABLE_D3D12
+#define FFX_CACAO_ENABLE_D3D12
 #endif
 
 #if PE_VULKAN

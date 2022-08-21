@@ -10,6 +10,7 @@
 #include "Renderer/Image.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffer.h"
+#include "Renderer/Deferred.h"
 #include "Systems/CameraSystem.h"
 #include "Systems/RendererSystem.h"
 

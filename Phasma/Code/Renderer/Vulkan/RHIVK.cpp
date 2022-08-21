@@ -8,6 +8,7 @@
 #include "Renderer/Swapchain.h"
 #include "Renderer/Queue.h"
 #include "Renderer/Buffer.h"
+#include "Renderer/Surface.h"
 #include "Utilities/Downsampler.h"
 
 #if defined(_WIN32)
@@ -44,7 +45,7 @@ namespace pe
         
         Debug::InitCaptureApi();
 
-        CreateInstance(window);
+        CreateInstance();
         CreateSurface();
         FindGpu();
         GetSurfaceProperties();
@@ -112,17 +113,17 @@ namespace pe
             vkDestroyInstance(m_instance, nullptr);
     }
 
-    void RHI::CreateInstance(SDL_Window *window)
+    void RHI::CreateInstance()
     {
         std::vector<const char *> instanceExtensions{};
         std::vector<const char *> instanceLayers{};
 
         // === Extentions ==============================
         unsigned extCount;
-        if (!SDL_Vulkan_GetInstanceExtensions(window, &extCount, nullptr))
+        if (!SDL_Vulkan_GetInstanceExtensions(m_window, &extCount, nullptr))
             PE_ERROR(SDL_GetError());
         instanceExtensions.resize(extCount);
-        if (!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()))
+        if (!SDL_Vulkan_GetInstanceExtensions(m_window, &extCount, instanceExtensions.data()))
             PE_ERROR(SDL_GetError());
 
         if (IsInstanceExtensionValid("VK_KHR_get_physical_device_properties2"))

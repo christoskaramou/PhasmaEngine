@@ -1,20 +1,20 @@
 #pragma once
 
+#define TEST_RENDERER 0
+
 #include "Renderer/Renderer.h"
+#include "Renderer/TestRenderer.h"
 
 namespace pe
 {
     class CommandBuffer;
 
-    class RendererSystem : public Renderer, public IDrawSystem
+    class RendererSystem :
+#if TEST_RENDERER
+        public TestRenderer
+#else
+        public Renderer
+#endif
     {
-    public:
-        void Init(CommandBuffer *cmd) override;
-
-        void Update(double delta) override;
-
-        void Destroy() override;
-
-        void Draw() override;
     };
 }

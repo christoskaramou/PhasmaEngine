@@ -38,22 +38,21 @@ namespace pe
         ~RHI();
 
 #if PE_DX12
+        InstanceHandle m_instanceDX;
+        GpuHandle m_gpuDX;
+        DeviceHandle m_deviceDX;
 
-InstanceHandle m_instanceDX;
-GpuHandle m_gpuDX;
-DeviceHandle m_deviceDX;
-
-        void InitDX();
+        void InitDX(SDL_Window *window);
         void DestroyDX();
         void CreateInstanceDX();
+        void CreateSurfaceDX();
         void FindGpuDX();
         void CreateDeviceDX();
-        
 #endif
 
         void Init(SDL_Window *window);
         void Destroy();
-        void CreateInstance(SDL_Window *window);
+        void CreateInstance();
         void CreateSurface();
         void GetSurfaceProperties();
         void FindGpu();
@@ -91,7 +90,7 @@ DeviceHandle m_deviceDX;
         size_t AlignStorage(size_t size) { return (size + m_minStorageBufferOffsetAlignment - 1) & ~(m_minStorageBufferOffsetAlignment - 1); }
 
         const InstanceHandle &GetInstance() { return m_instance; }
-        const GpuHandle &GetGpu() { return m_gpu; }
+        GpuHandle &GetGpu() { return m_gpu; }
         const std::string &GetGpuName() { return m_gpuName; }
         const DeviceHandle &GetDevice() { return m_device; }
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }

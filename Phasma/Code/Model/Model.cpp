@@ -10,6 +10,8 @@
 #include <GLTFSDK/Deserialize.h>
 #include "Renderer/RHI.h"
 #include "Renderer/Vertex.h"
+#include "Renderer/Shadows.h"
+#include "Renderer/Deferred.h"
 #include "Systems/RendererSystem.h"
 
 #undef max

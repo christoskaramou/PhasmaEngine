@@ -1,15 +1,7 @@
 #pragma once
 
-#include "Renderer/Surface.h"
-#include "Renderer/Swapchain.h"
-#include "GUI/GUI.h"
 #include "Skybox/Skybox.h"
-#include "Renderer/Shadows.h"
-#include "Model/Model.h"
-#include "Renderer/Deferred.h"
-#include "Renderer/Compute.h"
-#include "Script/Script.h"
-#include "Script/Script.h"
+#include "GUI/GUI.h"
 
 #define IGNORE_SCRIPTS
 
@@ -17,6 +9,8 @@ namespace pe
 {
     class CommandBuffer;
     class Image;
+    class IRenderComponent;
+    class Script;
 
     class Viewport
     {
@@ -40,12 +34,20 @@ namespace pe
 
     class GpuTimer;
 
-    class Renderer
+    class Renderer : public IDrawSystem
     {
     public:
-        Renderer();
+        virtual ~Renderer() {}
 
-        virtual ~Renderer();
+        void InitRenderTargets();
+
+        virtual void Init(CommandBuffer *cmd) override;
+
+        virtual void Update(double delta) override;
+
+        virtual void Destroy() override;
+
+        virtual void Draw() override;
 
         RenderArea &GetRenderArea() { return renderArea; }
 
