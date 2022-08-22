@@ -759,7 +759,7 @@ namespace pe
         }
 
         uniformBuffer.buffer = Buffer::Create(
-            RHII.AlignUniform(uniformBuffer.size) * SWAPCHAIN_IMAGES,
+            RHII.AlignStorage(uniformBuffer.size) * SWAPCHAIN_IMAGES,
             BufferUsage::StorageBufferBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "model_uniform_buffer");
