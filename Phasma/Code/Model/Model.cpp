@@ -760,13 +760,13 @@ namespace pe
 
         uniformBuffer.buffer = Buffer::Create(
             RHII.AlignUniform(uniformBuffer.size) * SWAPCHAIN_IMAGES,
-            BufferUsage::UniformBufferBit,
+            BufferUsage::StorageBufferBit,
             AllocationCreate::HostAccessSequentialWriteBit,
             "model_uniform_buffer");
 
         std::vector<DescriptorBindingInfo> bindingInfos(1);
         bindingInfos[0].binding = 0;
-        bindingInfos[0].type = DescriptorType::UniformBufferDynamic;
+        bindingInfos[0].type = DescriptorType::StorageBufferDynamic;
         uniformBuffer.descriptor = Descriptor::Create(bindingInfos, ShaderStage::VertexBit, "model_uniform_buffer_descriptor");
 
         uniformBuffer.descriptor->SetBuffer(0, uniformBuffer.buffer);
