@@ -14,7 +14,7 @@ struct PushConstants
 
 [[vk::push_constant]] PushConstants pc;
 
-[[vk::binding(0)]] cbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
+[[vk::binding(0)]] tbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
 
 #define meshMatrix data[pc.meshIndex]
 #define meshPreviousMatrix data[pc.meshIndex + 1]
