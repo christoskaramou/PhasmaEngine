@@ -41,7 +41,7 @@ namespace pe
     {
         m_window = window;
         m_frameCounter = 0;
-        
+
         Debug::InitCaptureApi();
 
         CreateInstance(window);

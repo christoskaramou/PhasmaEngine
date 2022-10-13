@@ -538,7 +538,7 @@ namespace pe
                         if (input < animation.start)
                         {
                             animation.start = input;
-                        };
+                        }
                         if (input > animation.end)
                         {
                             animation.end = input;

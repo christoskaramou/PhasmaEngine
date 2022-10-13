@@ -107,21 +107,25 @@ namespace pe
         if (!flags)
             return U{};
 
-        if (translator.find(flags) == translator.end())
+        auto it = translator.find(flags);
+        if (it == translator.end())
         {
-            // Emplace a new pair into translator and get the flags ref
-            U &transFlags = translator.emplace(flags, U{}).first->second;
+            // Emplace the new flags pair into translator
+
+            // template< class... Args >
+            // std::pair<iterator,bool> emplace( Args&&... args );
+            it = translator.emplace(flags, U{}).first;
 
             for (auto &pair : translator)
             {
                 if ((flags & pair.first) == pair.first)
-                    transFlags |= pair.second;
+                    it->second |= pair.second;
             }
 
-            return transFlags;
+            return it->second;
         }
 
-        return translator[flags];
+        return it->second;
     }
 
     template <>

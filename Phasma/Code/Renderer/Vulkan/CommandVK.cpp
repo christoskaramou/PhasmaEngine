@@ -201,7 +201,7 @@ namespace pe
         }
 
         auto it = s_renderPasses.find(hash);
-        if (s_renderPasses.find(hash) != s_renderPasses.end())
+        if (it != s_renderPasses.end())
         {
             return it->second;
         }

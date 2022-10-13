@@ -15,12 +15,8 @@ namespace pe
         return typeID;
     }
 
-    struct PlaceHolderBase
-    {
-    };
-
     template <uint32_t N>
-    struct Placeholder : PlaceHolderBase
+    struct Placeholder
     {
     };
 
