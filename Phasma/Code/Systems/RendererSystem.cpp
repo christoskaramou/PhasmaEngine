@@ -108,6 +108,7 @@ namespace pe
         GpuTimer::motionBlur = GpuTimer::Create("GPUTimer_queryPool_motionBlur");
         GpuTimer::gui = GpuTimer::Create("GPUTimer_queryPool_gui");
         GpuTimer::fsr = GpuTimer::Create("GPUTimer_queryPool_fsr");
+        GpuTimer::AABBs = GpuTimer::Create("GPUTimer_queryPool_AABBs");
         for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
             GpuTimer::shadows[i] = GpuTimer::Create("GPUTimer_queryPool_shadows_" + std::to_string(i));
     }
@@ -243,6 +244,7 @@ namespace pe
         GpuTimer::Destroy(GpuTimer::motionBlur);
         GpuTimer::Destroy(GpuTimer::gui);
         GpuTimer::Destroy(GpuTimer::fsr);
+        GpuTimer::Destroy(GpuTimer::AABBs);
         for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
             GpuTimer::Destroy(GpuTimer::shadows[i]);
 

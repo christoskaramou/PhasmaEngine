@@ -16,6 +16,8 @@ namespace pe
     class CommandBuffer;
     class Descriptor;
     class Buffer;
+    class RenderPass;
+    class Primitive;
 
     class Model : public NoCopy
     {
@@ -35,7 +37,9 @@ namespace pe
 
         void Draw(CommandBuffer *cmd, RenderQueue renderQueue);
 
-        void DrawShadow(CommandBuffer *cmd, uint32_t cascade);
+        void DrawAABBs(CommandBuffer *cmd);
+
+        void DrawShadows(CommandBuffer *cmd, uint32_t cascade);
 
         void Update(Camera &camera, double delta);
 
@@ -69,15 +73,17 @@ namespace pe
 
         Microsoft::glTF::Image *GetImage(const std::string &textureID) const;
 
-        void CreateVertexBuffer(CommandBuffer *cmd);
+        void CreateVertexBuffers(CommandBuffer *cmd);
 
-        void CreateIndexBuffer(CommandBuffer *cmd);
+        void CreateIndexBuffers(CommandBuffer *cmd);
 
         void CreateUniforms();
 
         void UpdatePipelineInfo();
 
         void UpdatePipelineInfoGBuffer();
+
+        void UpdatePipelineInfoAABBs();
 
         void UpdatePipelineInfoShadows();
 
@@ -128,11 +134,14 @@ namespace pe
 #endif
 
         Buffer *vertexBuffer;
+        Buffer *AABBsVertexBuffer;
         Buffer *shadowsVertexBuffer;
         Buffer *indexBuffer;
-        uint32_t numberOfVertices = 0, numberOfIndices = 0;
+        Buffer *AABBsIndexBuffer;
+        uint32_t numberOfVertices = 0, numberOfIndices = 0, primitivesCount = 0;
         
         std::shared_ptr<PipelineCreateInfo> pipelineInfoGBuffer;
+        std::shared_ptr<PipelineCreateInfo> pipelineInfoAABBs;
         std::shared_ptr<PipelineCreateInfo> pipelineInfoShadows;
         
         static std::deque<Model> models;
@@ -144,6 +153,7 @@ namespace pe
         Image *m_velocityRT;
         Image *m_emissiveRT;
         Pipeline *m_pipelineGBuffer;
+        Pipeline *m_pipelineAABBs;
         Pipeline *m_pipelineShadows;
 
         struct Constants
@@ -156,5 +166,13 @@ namespace pe
             uint32_t primitiveIndex;
             uint32_t primitiveImageIndex;
         } m_constants;
+
+        struct ConstantsAABBs
+        {
+            float projJitter[2];
+            uint32_t modelIndex;
+            uint32_t meshIndex;
+            uint32_t color;
+        } m_constantsAABBs;
     };
 }

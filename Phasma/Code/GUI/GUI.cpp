@@ -276,6 +276,10 @@ namespace pe
         {
             ImGui::Text("Motion Blur: %.3f ms", frameTimer.motionBlurStamp);
         }
+        if (drawAABBs)
+        {
+            ImGui::Text("AABBs: %.3f ms", frameTimer.AABBsStamp);
+        }
 
         ImGui::Text("GUI: %.3f ms", frameTimer.guiStamp);
         ImGui::Unindent(16.0f);
@@ -525,6 +529,7 @@ namespace pe
         ImGui::SliderFloat("Light Intst", &lights_intensity, 0.01f, 30.f);
         ImGui::SliderFloat("Light Rng", &lights_range, 0.1f, 30.f);
         ImGui::Checkbox("FreezeCamCull", &freezeFrustumCulling);
+        ImGui::Checkbox("Draw AABBs", &drawAABBs);
 
         // Model properties
         ImGui::Separator();

@@ -81,6 +81,10 @@ namespace pe
 
         void PollShaders();
 
+        void AddToDrawlist(Primitive *primitive) { m_drawlist.push_back(primitive); }
+
+        void ClearDrawlist() { m_drawlist.clear(); }
+
     protected:
         static void CheckModelsQueue();
 
@@ -96,6 +100,8 @@ namespace pe
         std::unordered_map<size_t, IRenderComponent *> m_renderComponents{};
         std::map<size_t, Image *> m_renderTargets{};
         std::map<size_t, Image *> m_depthTargets{};
+
+        std::vector<Primitive *> m_drawlist{};
 
     public:
         inline static Queue *s_currentQueue = nullptr;

@@ -590,6 +590,8 @@ namespace pe
     public:
         vec3 min;
         vec3 max;
+        inline vec3 GetSize() const { return max - min; }
+        inline vec3 GetCenter() const { return (min + max) * 0.5f; }
     };
 
     struct Offset3D
@@ -623,6 +625,9 @@ namespace pe
         static auto seed = std::chrono::system_clock::now().time_since_epoch().count();
         static std::default_random_engine gen(static_cast<unsigned int>(seed));
 
-        return std::uniform_real_distribution<T>(a, b)(gen);
+        if constexpr (std::is_integral_v<T>)
+            return std::uniform_int_distribution<T>(a, b)(gen);
+        else
+            return std::uniform_real_distribution<T>(a, b)(gen);
     }
 }

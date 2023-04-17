@@ -76,6 +76,7 @@ namespace pe
         static inline std::atomic_uint32_t loadingCurrent{};
         static inline std::atomic_uint32_t loadingTotal{};
         static inline bool freezeFrustumCulling = false;
+        static inline bool drawAABBs = false;
 
         void InitGUI(bool show = true);
 

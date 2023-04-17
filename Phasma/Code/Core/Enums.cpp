@@ -706,7 +706,7 @@ namespace pe
     {
         return IsDepthFormatVK(format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
     }
- 
+
     ImageAspectFlags GetAspectMask(Format format)
     {
         return IsDepthFormat(format) ? ImageAspect::DepthBit : ImageAspect::ColorBit;
@@ -1091,5 +1091,37 @@ namespace pe
     VkCommandPoolCreateFlags Translate(CommandPoolCreate flag)
     {
         return Translate<VkCommandPoolCreateFlags, CommandPoolCreateFlags>(flag);
+    }
+
+    template <>
+    VkPrimitiveTopology Translate(PrimitiveTopology mode)
+    {
+        using T = std::underlying_type_t<PrimitiveTopology>;
+        static std::map<T, VkPrimitiveTopology> s_translator{
+            {(T)PrimitiveTopology::PointLis, VK_PRIMITIVE_TOPOLOGY_POINT_LIST},
+            {(T)PrimitiveTopology::LineList, VK_PRIMITIVE_TOPOLOGY_LINE_LIST},
+            {(T)PrimitiveTopology::LineStrip, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP},
+            {(T)PrimitiveTopology::TriangleList, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST},
+            {(T)PrimitiveTopology::TriangleStrip, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP},
+            {(T)PrimitiveTopology::TriangleFan, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN},
+            {(T)PrimitiveTopology::LineListWithAdjacency, VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY},
+            {(T)PrimitiveTopology::LineStripWithAdjacency, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY},
+            {(T)PrimitiveTopology::TriangleListWithAdjacency, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY},
+            {(T)PrimitiveTopology::TriangleStripWithAdjacency, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY},
+            {(T)PrimitiveTopology::PatchList, VK_PRIMITIVE_TOPOLOGY_PATCH_LIST}};
+
+        return s_translator[(T)mode];
+    }
+
+    template <>
+    VkPolygonMode Translate(PolygonMode mode)
+    {
+        using T = std::underlying_type_t<PolygonMode>;
+        static std::map<T, VkPolygonMode> s_translator{
+            {(T)PolygonMode::Fill, VK_POLYGON_MODE_FILL},
+            {(T)PolygonMode::Line, VK_POLYGON_MODE_LINE},
+            {(T)PolygonMode::Point, VK_POLYGON_MODE_POINT}};
+
+        return s_translator[(T)mode];
     }
 }

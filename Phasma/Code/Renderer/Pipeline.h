@@ -37,6 +37,8 @@ namespace pe
         std::vector<VertexInputAttributeDescription> vertexInputAttributeDescriptions;
         float width;
         float height;
+        PrimitiveTopology topology;
+        PolygonMode polygonMode;
         CullMode cullMode;
         std::vector<PipelineColorBlendAttachmentState> colorBlendAttachments;
         std::vector<DynamicState> dynamicStates;
@@ -48,6 +50,7 @@ namespace pe
         Format *colorFormats;
         Format *depthFormat;
         PipelineCacheHandle pipelineCache;
+        bool depthWriteEnable = true;
         std::string name;
     };
 

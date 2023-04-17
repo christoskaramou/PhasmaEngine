@@ -29,6 +29,11 @@ namespace pe
         float weights[4];
     };
 
+    struct AABBVertex
+    {
+        float position[3];
+    };
+
     struct ShadowVertex
     {
         float position[3];

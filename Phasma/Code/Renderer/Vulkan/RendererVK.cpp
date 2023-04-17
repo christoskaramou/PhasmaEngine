@@ -200,6 +200,14 @@ namespace pe
             frameTimer.motionBlurStamp = GpuTimer::motionBlur->End();
         }
 
+        if (GUI::drawAABBs)
+        {
+            GpuTimer::AABBs->Start(cmd);
+            for (auto &model : Model::models)
+                model.DrawAABBs(cmd);
+            frameTimer.AABBsStamp = GpuTimer::AABBs->End();
+        }
+
         // GUI
         GpuTimer::gui->Start(cmd);
         gui.Draw(cmd, imageIndex);
@@ -230,7 +238,7 @@ namespace pe
             // MODELS
             shadows.BeginPass(cmd, imageIndex, i);
             for (auto &model : Model::models)
-                model.DrawShadow(cmd, i);
+                model.DrawShadows(cmd, i);
             shadows.EndPass(cmd, i);
 
             frameTimer.shadowStamp[i] = GpuTimer::shadows[i]->End();
@@ -582,6 +590,9 @@ namespace pe
         {
             if (NeedsUpdate(model.pipelineInfoGBuffer))
                 model.UpdatePipelineInfoGBuffer();
+                
+            if (NeedsUpdate(model.pipelineInfoAABBs))
+                model.UpdatePipelineInfoAABBs();
 
             if (NeedsUpdate(model.pipelineInfoShadows))
                 model.UpdatePipelineInfoShadows();

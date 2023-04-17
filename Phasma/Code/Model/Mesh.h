@@ -14,6 +14,7 @@ namespace pe
     class Image;
     class Buffer;
     class CommandBuffer;
+    class Mesh;
 
     class Primitive
     {
@@ -23,6 +24,8 @@ namespace pe
         ~Primitive();
 
         std::string name;
+        Mesh *mesh;
+        uint32_t primitiveIndex; // index of the primitive in the primitives vector in mesh
 
         size_t uniformImagesIndex;
         size_t uniformBufferIndex;
@@ -31,12 +34,13 @@ namespace pe
         bool render = true, cull = true;
         uint32_t vertexOffset = 0, indexOffset = 0;
         uint32_t verticesSize = 0, indicesSize = 0;
+        uint32_t aabbVertexStart = 0, aabbIndexStart = 0;
         PBRMaterial pbrMaterial;
         vec3 min;
         vec3 max;
+        uint32_t aabbColor;
         vec4 boundingSphere;
         AABB boundingBox;
-        vec4 transformedBS;
         bool hasBones = false;
 
         void CalculateBoundingSphere()
@@ -46,13 +50,13 @@ namespace pe
             boundingSphere = vec4(center, sphereRadius);
         }
 
-        void calculateBoundingBox()
+        void CalculateBoundingBox()
         {
             boundingBox.min = min;
             boundingBox.max = max;
         }
 
-        void loadTexture(CommandBuffer *cmd,
+        void LoadTexture(CommandBuffer *cmd,
                          MaterialType type,
                          const std::filesystem::path &file,
                          const Microsoft::glTF::Image *image = nullptr,

@@ -6,6 +6,7 @@
 #include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
+#include "Renderer/RenderPass.h"
 #include <GLTFSDK/GLBResourceReader.h>
 #include <GLTFSDK/Deserialize.h>
 #include "Renderer/RHI.h"
@@ -274,6 +275,7 @@ namespace pe
 
             myMesh->primitives.emplace_back();
             auto &myPrimitive = myMesh->primitives.back();
+            myPrimitive.mesh = myMesh;
 
             // factors
             myPrimitive.pbrMaterial.alphaCutoff = material.alphaCutoff;
@@ -290,11 +292,11 @@ namespace pe
             const auto normalImage = GetImage(material.normalTexture.textureId);
             const auto occlusionImage = GetImage(material.occlusionTexture.textureId);
             const auto emissiveImage = GetImage(material.emissiveTexture.textureId);
-            myPrimitive.loadTexture(cmd, MaterialType::BaseColor, file, baseColorImage, document, resourceReader);
-            myPrimitive.loadTexture(cmd, MaterialType::MetallicRoughness, file, metallicRoughnessImage, document, resourceReader);
-            myPrimitive.loadTexture(cmd, MaterialType::Normal, file, normalImage, document, resourceReader);
-            myPrimitive.loadTexture(cmd, MaterialType::Occlusion, file, occlusionImage, document, resourceReader);
-            myPrimitive.loadTexture(cmd, MaterialType::Emissive, file, emissiveImage, document, resourceReader);
+            myPrimitive.LoadTexture(cmd, MaterialType::BaseColor, file, baseColorImage, document, resourceReader);
+            myPrimitive.LoadTexture(cmd, MaterialType::MetallicRoughness, file, metallicRoughnessImage, document, resourceReader);
+            myPrimitive.LoadTexture(cmd, MaterialType::Normal, file, normalImage, document, resourceReader);
+            myPrimitive.LoadTexture(cmd, MaterialType::Occlusion, file, occlusionImage, document, resourceReader);
+            myPrimitive.LoadTexture(cmd, MaterialType::Emissive, file, emissiveImage, document, resourceReader);
 
             if (baseColorImage)
                 myPrimitive.name = baseColorImage->name;
@@ -311,7 +313,7 @@ namespace pe
             myPrimitive.min = make_vec3(&accessorPos->min[0]);
             myPrimitive.max = make_vec3(&accessorPos->max[0]);
             myPrimitive.CalculateBoundingSphere();
-            myPrimitive.calculateBoundingBox();
+            myPrimitive.CalculateBoundingBox();
             myPrimitive.hasBones = !bonesIDs.empty() && !weights.empty();
 
             for (size_t i = 0; i < accessorPos->count; i++)
@@ -331,6 +333,7 @@ namespace pe
                     std::copy(weights.begin() + i * 4, weights.begin() + (i * 4 + 4), vertex.weights);
                 myMesh->vertices.push_back(vertex);
             }
+
             for (auto &index : indices)
             {
                 myMesh->indices.push_back(index);
@@ -392,8 +395,8 @@ namespace pe
 
         cmd->Begin();
         model.LoadModelGltf(cmd, file);
-        model.CreateVertexBuffer(cmd);
-        model.CreateIndexBuffer(cmd);
+        model.CreateVertexBuffers(cmd);
+        model.CreateIndexBuffers(cmd);
         cmd->End();
         cmd->Submit(queue, nullptr, 0, nullptr, 0, nullptr);
 
@@ -654,7 +657,7 @@ namespace pe
         }
     }
 
-    void Model::CreateVertexBuffer(CommandBuffer *cmd)
+    void Model::CreateVertexBuffers(CommandBuffer *cmd)
     {
         numberOfVertices = 0;
         for (auto &node : linearNodes)
@@ -665,11 +668,16 @@ namespace pe
 
         std::vector<Vertex> vertices{};
         vertices.reserve(numberOfVertices);
-
+        primitivesCount = 0;
         for (auto &node : linearNodes)
         {
             if (node->mesh)
             {
+                for (auto &primitive : node->mesh->primitives)
+                {
+                    primitivesCount++;
+                }
+
                 node->mesh->vertexOffset = static_cast<uint32_t>(vertices.size());
                 for (auto &vertex : node->mesh->vertices)
                 {
@@ -678,6 +686,7 @@ namespace pe
             }
         }
 
+        // VERTEX BUFFER
         auto size = sizeof(Vertex) * numberOfVertices;
         vertexBuffer = Buffer::Create(
             size,
@@ -685,6 +694,47 @@ namespace pe
             AllocationCreate::None,
             "model_vertex_buffer");
         cmd->CopyBufferStaged(vertexBuffer, vertices.data(), size, 0);
+
+        // AABBs VERTEX BUFFER
+        std::vector<AABBVertex> AABBVertices{};
+        AABBVertices.reserve(primitivesCount * 8);
+        uint32_t primitiveIndex = 0;
+        for (auto &node : linearNodes)
+        {
+            if (node->mesh)
+            {
+                for (auto &primitive : node->mesh->primitives)
+                {
+                    primitive.primitiveIndex = primitiveIndex++;
+                    primitive.aabbColor = (rand(0, 255) << 24) + (rand(0, 255) << 16) + (rand(0, 255) << 8) + 256;
+                    primitive.aabbVertexStart = static_cast<uint32_t>(AABBVertices.size());
+
+                    const vec3 &min = primitive.boundingBox.min;
+                    const vec3 &max = primitive.boundingBox.max;
+
+                    AABBVertex corners[8];
+                    corners[0] = AABBVertex{min.x, min.y, min.z};
+                    corners[1] = AABBVertex{max.x, min.y, min.z};
+                    corners[2] = AABBVertex{max.x, max.y, min.z};
+                    corners[3] = AABBVertex{min.x, max.y, min.z};
+                    corners[4] = AABBVertex{min.x, min.y, max.z};
+                    corners[5] = AABBVertex{max.x, min.y, max.z};
+                    corners[6] = AABBVertex{max.x, max.y, max.z};
+                    corners[7] = AABBVertex{min.x, max.y, max.z};
+                    for (uint32_t i = 0; i < 8; i++)
+                    {
+                        AABBVertices.push_back(corners[i]);
+                    }
+                }
+            }
+        }
+        size = sizeof(AABBVertex) * AABBVertices.size();
+        AABBsVertexBuffer = Buffer::Create(
+            size,
+            BufferUsage::TransferDstBit | BufferUsage::VertexBufferBit,
+            AllocationCreate::None,
+            "AABBs_vertex_buffer");
+        cmd->CopyBufferStaged(AABBsVertexBuffer, AABBVertices.data(), size, 0);
 
         // SHADOW VERTEX BUFFER
         std::vector<ShadowVertex> shadowsVertices{};
@@ -707,8 +757,9 @@ namespace pe
         cmd->CopyBufferStaged(shadowsVertexBuffer, shadowsVertices.data(), size, 0);
     }
 
-    void Model::CreateIndexBuffer(CommandBuffer *cmd)
+    void Model::CreateIndexBuffers(CommandBuffer *cmd)
     {
+        // INDEX BUFFER
         numberOfIndices = 0;
         for (auto &node : linearNodes)
         {
@@ -731,13 +782,44 @@ namespace pe
             }
         }
 
-        auto size = sizeof(uint32_t) * numberOfIndices;
+        uint32_t size = sizeof(uint32_t) * numberOfIndices;
         indexBuffer = Buffer::Create(
             size,
             BufferUsage::TransferDstBit | BufferUsage::IndexBufferBit,
             AllocationCreate::None,
             "model_index_buffer");
         cmd->CopyBufferStaged(indexBuffer, indices.data(), size, 0);
+
+        // AABBs INDEX BUFFER
+        // Define the indices for the AABB
+        std::vector<uint32_t> AABBIndices = {
+            0, 1, 1, 2, 2, 3, 3, 0, // Near face edges
+            4, 5, 5, 6, 6, 7, 7, 4, // Far face edges
+            0, 4, 1, 5, 2, 6, 3, 7  // Connecting edges between near and far faces
+        };
+
+        // Multiply the number of indices by the number of primitives (AABBs)
+        std::vector<uint32_t> allAABBIndices;
+        allAABBIndices.reserve(AABBIndices.size() * primitivesCount);
+        for (uint32_t i = 0; i < primitivesCount; ++i)
+        {
+            uint32_t offset = i * 8;
+            for (uint32_t index : AABBIndices)
+            {
+                allAABBIndices.push_back(offset + index);
+            }
+        }
+
+        // Create the index buffer
+        size = static_cast<uint32_t>(allAABBIndices.size() * sizeof(uint32_t));
+        AABBsIndexBuffer = Buffer::Create(
+            size,
+            BufferUsage::TransferDstBit | BufferUsage::IndexBufferBit,
+            AllocationCreate::None,
+            "AABBs_index_buffer");
+
+        // Copy the index data to the buffer
+        cmd->CopyBufferStaged(AABBsIndexBuffer, allAABBIndices.data(), size, 0);
     }
 
     // Will calculate the buffer size needed for all meshes and their primitives
@@ -843,6 +925,7 @@ namespace pe
     void Model::UpdatePipelineInfo()
     {
         UpdatePipelineInfoGBuffer();
+        UpdatePipelineInfoAABBs();
         UpdatePipelineInfoShadows();
     }
 
@@ -886,6 +969,37 @@ namespace pe
         info.name = "gbuffer_pipeline";
     }
 
+    void Model::UpdatePipelineInfoAABBs()
+    {
+        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        Image *display = rs->GetRenderTarget("display");
+        Format colorformat = display->imageInfo.format;
+        // Format depthFormat = RHII.GetDepthFormat();
+
+        pipelineInfoAABBs = std::make_shared<PipelineCreateInfo>();
+        PipelineCreateInfo &info = *pipelineInfoAABBs;
+
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Utilities/AABBsVS.hlsl", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Utilities/AABBsPS.hlsl", ShaderStage::FragmentBit});
+        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
+        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
+        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
+        info.pushConstantStage = ShaderStage::VertexBit;
+        info.pushConstantSize = sizeof(ConstantsAABBs);
+        info.topology = PrimitiveTopology::LineList;
+        info.cullMode = CullMode::None;
+        info.colorBlendAttachments = {
+            display->blendAttachment,
+        };
+        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
+        info.descriptorSetLayouts = {uniformBuffer.descriptor->GetLayout()};
+        info.dynamicColorTargets = 1;
+        info.colorFormats = &colorformat;
+        // info.depthFormat = &depthFormat;
+        info.depthWriteEnable = false;
+        info.name = "AABBs_pipeline";
+    }
+
     void Model::UpdatePipelineInfoShadows()
     {
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
@@ -904,21 +1018,6 @@ namespace pe
         info.descriptorSetLayouts = {uniformBuffer.descriptor->GetLayout()};
         info.depthFormat = &depthFormat;
         info.name = "shadows_pipeline";
-    }
-
-    void CullPrimitiveAsync(Model *model, Mesh *mesh, const Camera &camera, uint32_t index)
-    {
-        mat4 trans = model->transform * mesh->meshData.matrix;
-
-        vec3 point = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
-        float range = mesh->primitives[index].boundingSphere.w * length(vec3(trans[0])); // scale
-        mesh->primitives[index].cull = !camera.PointInFrustum(point, range);
-        mesh->primitives[index].transformedBS = vec4(point, range);
-
-        // AABB aabb;
-        // aabb.min = trans * vec4(mesh->primitives[index].boundingBox.min, 1.0f);
-        // aabb.max = trans * vec4(mesh->primitives[index].boundingBox.max, 1.0f);
-        // mesh->primitives[index].cull = !camera.AABBInFrustum(aabb);
     }
 
     void Model::UpdateAnimation(uint32_t index, float time)
@@ -972,6 +1071,20 @@ namespace pe
         }
     }
 
+    void CullPrimitiveAsync(Model *model, Mesh *mesh, uint32_t primitiveIndex, const Camera &camera)
+    {
+        mat4 trans = model->transform * mesh->meshData.matrix;
+
+        // vec3 point = trans * vec4(vec3(mesh->primitives[index].boundingSphere), 1.0f);
+        // float range = mesh->primitives[index].boundingSphere.w * length(vec3(trans[0])); // scale
+        // mesh->primitives[index].cull = !camera.PointInFrustum(point, range);
+
+        AABB aabb;
+        aabb.min = trans * vec4(mesh->primitives[primitiveIndex].boundingBox.min, 1.0f);
+        aabb.max = trans * vec4(mesh->primitives[primitiveIndex].boundingBox.max, 1.0f);
+        mesh->primitives[primitiveIndex].cull = !camera.AABBInFrustum(aabb);
+    }
+
     void UpdateNodeAsync(Model *model, Node *node, const Camera &camera)
     {
         if (node->mesh)
@@ -984,7 +1097,7 @@ namespace pe
                 std::vector<std::future<void>> futures(node->mesh->primitives.size());
 
                 for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
-                    futures[i] = std::async(std::launch::async, CullPrimitiveAsync, model, node->mesh, camera, i);
+                    futures[i] = std::async(std::launch::async, CullPrimitiveAsync, model, node->mesh, i, camera);
 
                 for (auto &f : futures)
                     f.get();
@@ -992,7 +1105,7 @@ namespace pe
             else
             {
                 for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
-                    CullPrimitiveAsync(model, node->mesh, camera, i);
+                    CullPrimitiveAsync(model, node->mesh, i, camera);
             }
         }
     }
@@ -1126,7 +1239,90 @@ namespace pe
         cmd->EndDebugRegion();
     }
 
-    void Model::DrawShadow(CommandBuffer *cmd, uint32_t cascade)
+    void Model::DrawAABBs(CommandBuffer *cmd)
+    {
+        if (!render)
+            return;
+
+        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        Image *display = rs->GetRenderTarget("display");
+        // Image *depth = rs->GetDepthTarget("depth");
+        cmd->ImageBarrier(display, ImageLayout::ColorAttachment);
+        // cmd->ImageBarrier(depth, ImageLayout::DepthStencilAttachment);
+
+        AttachmentInfo colorInfo{};
+        colorInfo.image = display;
+        colorInfo.loadOp = AttachmentLoadOp::Load;
+        colorInfo.storeOp = AttachmentStoreOp::Store;
+        colorInfo.initialLayout = display->GetCurrentLayout();
+        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+
+        // AttachmentInfo depthInfo{};
+        // depthInfo.image = depth;
+        // depthInfo.loadOp = AttachmentLoadOp::Load;
+        // depthInfo.storeOp = AttachmentStoreOp::Store;
+        // depthInfo.initialLayout = depth->GetCurrentLayout();
+        // depthInfo.finalLayout = ImageLayout::DepthStencilAttachment;
+
+        cmd->BeginDebugRegion("Draw AABBs");
+        // cmd->BeginPass(1, &colorInfo, &depthInfo, &pipelineInfoAABBs->renderPass);
+        cmd->BeginPass(1, &colorInfo, nullptr, &pipelineInfoAABBs->renderPass);
+        cmd->SetViewport(0.f, 0.f, display->width_f, display->height_f);
+        cmd->SetScissor(0, 0, display->imageInfo.width, display->imageInfo.height);
+
+        cmd->BindPipeline(*pipelineInfoAABBs, &m_pipelineAABBs);
+        cmd->BindVertexBuffer(AABBsVertexBuffer, 0);
+        cmd->BindIndexBuffer(AABBsIndexBuffer, 0);
+
+        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
+        Descriptor *dsetHandles[]{uniformBuffer.descriptor};
+        cmd->BindDescriptors(m_pipelineAABBs, 1, dsetHandles);
+
+        Camera *camera = CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
+        m_constantsAABBs.projJitter[0] = camera->projJitter.x;
+        m_constantsAABBs.projJitter[1] = camera->projJitter.y;
+
+        m_constantsAABBs.modelIndex = static_cast<uint32_t>(uniformBufferOffset / sizeof(mat4));
+
+        for (auto &node : linearNodes)
+        {
+            if (node->mesh)
+            {
+                m_constantsAABBs.meshIndex = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
+
+                for (auto &primitive : node->mesh->primitives)
+                {
+                    if (primitive.render && !primitive.cull)
+                    {
+                        m_constantsAABBs.color = primitive.aabbColor;
+
+                        cmd->PushConstants(
+                            m_pipelineAABBs,
+                            m_pipelineAABBs->info.pushConstantStage,
+                            0,
+                            sizeof(ConstantsAABBs),
+                            &m_constantsAABBs);
+
+                        cmd->DrawIndexed(
+                            24,
+                            1,
+                            primitive.aabbIndexStart,
+                            primitive.aabbVertexStart,
+                            0);
+                    }
+                }
+            }
+        }
+
+        cmd->EndPass();
+
+        cmd->ImageBarrier(display, ImageLayout::ShaderReadOnly);
+        // cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
+
+        cmd->EndDebugRegion();
+    }
+
+    void Model::DrawShadows(CommandBuffer *cmd, uint32_t cascade)
     {
         if (!render)
             return;
@@ -1189,6 +1385,7 @@ namespace pe
         }
 
         Pipeline::Destroy(m_pipelineGBuffer);
+        Pipeline::Destroy(m_pipelineAABBs);
         Pipeline::Destroy(m_pipelineShadows);
 
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
@@ -1222,7 +1419,9 @@ namespace pe
         }
 
         Buffer::Destroy(vertexBuffer);
+        Buffer::Destroy(AABBsVertexBuffer);
         Buffer::Destroy(shadowsVertexBuffer);
         Buffer::Destroy(indexBuffer);
+        Buffer::Destroy(AABBsIndexBuffer);
     }
 }

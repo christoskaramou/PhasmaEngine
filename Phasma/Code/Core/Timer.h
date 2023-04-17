@@ -57,6 +57,7 @@ namespace pe
         double motionBlurStamp;
         double guiStamp;
         double fsrStamp;
+        double AABBsStamp;
 
     private:
         std::chrono::duration<double> m_delta{};
@@ -105,6 +106,7 @@ namespace pe
         inline static GpuTimer *gui = nullptr;
         inline static GpuTimer *dof = nullptr;
         inline static GpuTimer *fsr = nullptr;
+        inline static GpuTimer *AABBs = nullptr;
 
     private:
         float

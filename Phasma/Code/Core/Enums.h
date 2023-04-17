@@ -772,4 +772,26 @@ namespace pe
     };
     using CommandPoolCreateFlags = Flags<CommandPoolCreate>;
     DEFINE_FLAGS_OPERATORS(CommandPoolCreate);
+
+    enum class PrimitiveTopology
+    {
+        PointLis,
+        LineList,
+        LineStrip,
+        TriangleList,
+        TriangleStrip,
+        TriangleFan,
+        LineListWithAdjacency,
+        LineStripWithAdjacency,
+        TriangleListWithAdjacency,
+        TriangleStripWithAdjacency,
+        PatchList
+    };
+
+    enum class PolygonMode
+    {
+        Fill,
+        Line,
+        Point,
+    };
 }

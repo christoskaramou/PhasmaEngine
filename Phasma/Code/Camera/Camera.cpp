@@ -71,6 +71,7 @@ namespace pe
             projJitter = sr->GetProjectionJitter();
 
             mat4 jitterMat = translate(mat4(1.0f), vec3(projJitter.x, projJitter.y, 0.f));
+            projectionNoJitter = projection; // save projection with no jitter
             projection = jitterMat * projection;
         }
 
@@ -181,7 +182,7 @@ namespace pe
 
     bool Camera::PointInFrustum(const vec3 &point, float radius) const
     {
-        for (auto &plane : frustum)
+        for (const auto &plane : frustum)
         {
             vec3 normal = make_vec3(plane.normal);
             const float dist = dot(normal, point) + plane.d;
@@ -197,28 +198,30 @@ namespace pe
 
     bool Camera::AABBInFrustum(const AABB &aabb) const
     {
-        const vec3 &min = aabb.min;
-        const vec3 &max = aabb.max;
-
-        vec3 center = (max - min) * 0.5f;
-        if (PointInFrustum(center, 0.0f))
-            return true;
-
-        vec3 corners[8];
-        corners[0] = min;                       // blb
-        corners[1] = vec3(min.x, min.y, max.z); // blf
-        corners[2] = vec3(min.x, max.y, min.z); // tlb
-        corners[3] = vec3(min.x, max.y, max.z); // tlf
-        corners[4] = vec3(max.x, min.y, min.z); // brb
-        corners[5] = vec3(max.x, min.y, max.z); // brf
-        corners[6] = vec3(max.x, max.y, min.z); // trb
-        corners[7] = max;                       // trf
-
-        for (int i = 0; i < 8; i++)
+        vec3 center = aabb.GetCenter();
+        vec3 size = aabb.GetSize();
+        
+        // Iterate through all six planes of the frustum
+        for (int i = 0; i < 6; i++)
         {
-            if (PointInFrustum(corners[i], 0.0f))
-                return true;
+            const Plane &plane = frustum[i];
+            vec3 normal(plane.normal[0], plane.normal[1], plane.normal[2]);
+
+            // Calculate the distance between the AABB center and the plane
+            float distance = dot(normal, center) + plane.d;
+
+            // Calculate the maximum distance of the AABB from the center along the plane normal
+            float radius = dot(abs(normal), size * 0.5f);
+
+            // Check if the AABB is outside of the plane
+            if (distance < -radius)
+            {
+                // AABB is completely outside of the frustum, cull it
+                return false;
+            }
         }
-        return false;
+
+        // AABB is not completely outside of any plane, it is inside or intersecting with the frustum
+        return true;
     }
 }

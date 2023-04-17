@@ -45,7 +45,7 @@ namespace pe
         }
     }
 
-    void Primitive::loadTexture(CommandBuffer *cmd,
+    void Primitive::LoadTexture(CommandBuffer *cmd,
                                 MaterialType type,
                                 const std::filesystem::path &file,
                                 const Microsoft::glTF::Image *image,

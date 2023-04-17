@@ -14,7 +14,7 @@ namespace pe
         };
 
         mat4 view, previousView;
-        mat4 projection, previousProjection;
+        mat4 projection, previousProjection, projectionNoJitter;
         mat4 viewProjection, previousViewProjection;
         mat4 invView, invProjection, invViewProjection;
         quat orientation;

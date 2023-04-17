@@ -28,6 +28,8 @@ namespace pe
         vertexInputAttributeDescriptions = {};
         width = 0.f;
         height = 0.f;
+        topology = PrimitiveTopology::TriangleList;
+        polygonMode = PolygonMode::Fill;
         cullMode = CullMode::Back;
         colorBlendAttachments = {};
         dynamicStates = {};
@@ -171,7 +173,7 @@ namespace pe
             // Input Assembly stage
             VkPipelineInputAssemblyStateCreateInfo piasci{};
             piasci.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-            piasci.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            piasci.topology = Translate<VkPrimitiveTopology>(info.topology);
             piasci.primitiveRestartEnable = VK_FALSE;
             pipeinfo.pInputAssemblyState = &piasci;
 
@@ -226,7 +228,7 @@ namespace pe
             prsci.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
             prsci.depthClampEnable = VK_FALSE;
             prsci.rasterizerDiscardEnable = VK_FALSE;
-            prsci.polygonMode = VK_POLYGON_MODE_FILL;
+            prsci.polygonMode = Translate<VkPolygonMode>(info.polygonMode);
             prsci.cullMode = Translate<VkCullModeFlags>(info.cullMode);
             prsci.frontFace = VK_FRONT_FACE_CLOCKWISE;
             prsci.depthBiasEnable = VK_FALSE;
@@ -251,7 +253,7 @@ namespace pe
             VkPipelineDepthStencilStateCreateInfo pdssci{};
             pdssci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
             pdssci.depthTestEnable = VK_TRUE;
-            pdssci.depthWriteEnable = VK_TRUE;
+            pdssci.depthWriteEnable = info.depthWriteEnable;
             pdssci.depthCompareOp = GlobalSettings::ReverseZ ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
             pdssci.depthBoundsTestEnable = VK_FALSE;
             pdssci.stencilTestEnable = VK_FALSE;
