@@ -442,6 +442,8 @@ namespace pe
 
             hash.Combine(pipelineInfo.width);
             hash.Combine(pipelineInfo.height);
+            hash.Combine(static_cast<int>(pipelineInfo.topology));
+            hash.Combine(static_cast<int>(pipelineInfo.polygonMode));
             hash.Combine(static_cast<int>(pipelineInfo.cullMode));
 
             for (auto &attachment : pipelineInfo.colorBlendAttachments)
@@ -475,6 +477,7 @@ namespace pe
                 hash.Combine(static_cast<int>(*pipelineInfo.depthFormat));
 
             hash.Combine(reinterpret_cast<intptr_t>(pipelineInfo.pipelineCache.Get()));
+            hash.Combine(static_cast<int>(pipelineInfo.depthWriteEnable));
         }
 
         auto it = s_pipelines.find(hash);

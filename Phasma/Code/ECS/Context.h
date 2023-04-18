@@ -94,7 +94,7 @@ namespace pe
             system->SetEnabled(true);
             // system->Init();
 
-            if (std::is_base_of<IDrawSystem, T>::value)
+            if constexpr (std::is_base_of<IDrawSystem, T>::value)
                 m_drawSystems[id] = static_cast<IDrawSystem *>(system);
 
             return static_cast<T *>(system);
