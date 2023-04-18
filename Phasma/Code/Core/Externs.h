@@ -20,4 +20,6 @@ namespace pe
     extern bool HasStencil(Format format);
     extern void GetVkInfoFromLayout(ImageLayout layout, VkPipelineStageFlags &stageFlags, VkAccessFlags &accessMask);
     extern void GetInfoFromLayout(ImageLayout layout, PipelineStageFlags &stageFlags, AccessFlags &accessMask);
+
+    extern ThreadPool e_ThreadPool;
 }

@@ -17,7 +17,7 @@ namespace pe
 
             if constexpr (launch == Launch::Async)
             {
-                s_futures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
+                s_tasks.push_back(e_ThreadPool.Enqueue(std::forward<Func>(func)));
                 s_signals.push_back(std::forward<Func>(signal));
             }
             else if constexpr (launch == Launch::AsyncDeferred)
@@ -27,7 +27,7 @@ namespace pe
             }
             else if constexpr (launch == Launch::AsyncNoWait)
             {
-                s_futures.push_back(std::async(std::launch::async, std::forward<Func>(func)));
+                s_tasks.push_back(e_ThreadPool.Enqueue(std::forward<Func>(func)));
                 s_signals.push_back(std::forward<Func>(signal));
             }
             else if constexpr (launch == Launch::Sync)
@@ -76,27 +76,27 @@ namespace pe
     private:
         inline static void Async()
         {
-            for (int i = static_cast<int>(s_futures.size()) - 1; i >= 0; i--)
+            for (int i = static_cast<int>(s_tasks.size()) - 1; i >= 0; i--)
             {
-                s_futures[i].get();
+                s_tasks[i].get();
 
                 if (s_signals[i])
                     s_signals[i]();
             }
 
-            s_futures.clear();
+            s_tasks.clear();
             s_signals.clear();
         }
 
         inline static void AsyncDeferred()
         {
-            std::vector<std::future<void>> futures(s_funcs.size());
+            std::vector<Task<void>> tasks(s_funcs.size());
             for (int i = 0; i < static_cast<int>(s_funcs.size()); i++)
-                futures[i] = std::async(std::launch::async, s_funcs[i]);
+                tasks[i] = e_ThreadPool.Enqueue(s_funcs[i]);
 
-            for (int i = static_cast<int>(futures.size()) - 1; i >= 0; i--)
+            for (int i = static_cast<int>(tasks.size()) - 1; i >= 0; i--)
             {
-                futures[i].get();
+                tasks[i].get();
 
                 if (s_signals[i])
                     s_signals[i]();
@@ -109,13 +109,13 @@ namespace pe
         inline static void AsyncNoWait()
         {
             int i = 0;
-            for (auto it = s_futures.begin(); it != s_futures.end();)
+            for (auto it = s_tasks.begin(); it != s_tasks.end();)
             {
                 auto status = it->wait_for(std::chrono::seconds(0));
                 if (status != std::future_status::timeout)
                 {
                     it->get();
-                    it = s_futures.erase(it);
+                    it = s_tasks.erase(it);
 
                     if (s_signals[i])
                         s_signals[i]();
@@ -145,7 +145,7 @@ namespace pe
         }
 
     private:
-        inline static std::deque<std::future<void>> s_futures;
+        inline static std::deque<Task<void>> s_tasks;
         inline static std::deque<Func> s_funcs;
         inline static std::deque<Func> s_signals;
         inline static std::mutex s_requestMutex;

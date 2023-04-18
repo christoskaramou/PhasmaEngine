@@ -228,7 +228,6 @@ namespace pe
                                       uint32_t baseMipLevel,
                                       uint32_t mipLevels)
     {
-        // If no cmd exists, start the general cmd
         if (!cmd)
             PE_ERROR("Image::TransitionImageLayout(): no command buffer specified.");
 

@@ -55,14 +55,13 @@ namespace pe
                 // async calls should be at least bigger than a number, else this will be slower
                 if (numJoints > 3)
                 {
-                    std::vector<std::future<void>> futures(numJoints);
+                    std::vector<Task<void>> tasks(numJoints);
 
                     for (size_t i = 0; i < numJoints; i++)
-                        futures[i] = std::async(std::launch::async, CalculateJointMatrixAsync, mesh, skin,
-                                                inverseTransform, i);
+                        tasks[i] = e_ThreadPool.Enqueue(CalculateJointMatrixAsync, mesh, skin, inverseTransform, i);
 
-                    for (auto &f : futures)
-                        f.get();
+                    for (auto &task : tasks)
+                        task.get();
                 }
                 else
                 {

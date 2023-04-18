@@ -1100,13 +1100,13 @@ namespace pe
             // async calls should be at least bigger than a number, else this will be slower
             if (node->mesh->primitives.size() > 3)
             {
-                std::vector<std::future<void>> futures(node->mesh->primitives.size());
+                std::vector<Task<void>> tasks(node->mesh->primitives.size());
 
                 for (uint32_t i = 0; i < node->mesh->primitives.size(); i++)
-                    futures[i] = std::async(std::launch::async, CullPrimitiveAsync, model, node->mesh, i, camera);
+                    tasks[i] = e_ThreadPool.Enqueue(CullPrimitiveAsync, model, node->mesh, i, camera);
 
-                for (auto &f : futures)
-                    f.get();
+                for (auto &task : tasks)
+                    task.get();
             }
             else
             {
@@ -1154,13 +1154,13 @@ namespace pe
         // async calls should be at least bigger than a number, else this will be slower
         if (linearNodes.size() > 3)
         {
-            std::vector<std::future<void>> futureNodes(linearNodes.size());
+            std::vector<Task<void>> tasks(linearNodes.size());
 
             for (uint32_t i = 0; i < linearNodes.size(); i++)
-                futureNodes[i] = std::async(std::launch::async, UpdateNodeAsync, this, linearNodes[i], camera);
+                tasks[i] = e_ThreadPool.Enqueue(UpdateNodeAsync, this, linearNodes[i], camera);
 
-            for (auto &f : futureNodes)
-                f.get();
+            for (auto &task : tasks)
+                task.get();
         }
         else
         {
