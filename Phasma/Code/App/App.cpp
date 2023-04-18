@@ -76,8 +76,8 @@ namespace pe
 
     App::~App()
     {
-        FileWatcher::Clear();
         FileWatcher::Stop();
+        FileWatcher::Clear();
         m_context->DestroySystems();
         RHII.Destroy();
         RHII.Remove();

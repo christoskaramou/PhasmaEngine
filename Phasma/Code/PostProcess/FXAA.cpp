@@ -45,6 +45,8 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &viewportRT->imageInfo.format;
         info.name = "fxaa_pipeline";
+        
+        info.UpdateHash();
     }
 
     void FXAA::CreateUniforms(CommandBuffer *cmd)

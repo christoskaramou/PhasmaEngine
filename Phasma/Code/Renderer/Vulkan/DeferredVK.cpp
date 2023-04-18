@@ -78,6 +78,8 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &viewportRT->imageInfo.format;
         info.name = "composition_pipeline";
+        
+        info.UpdateHash();
     }
 
     void Deferred::CreateUniforms(CommandBuffer *cmd)

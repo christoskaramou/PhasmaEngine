@@ -406,81 +406,7 @@ namespace pe
 
     Pipeline *CommandBuffer::GetPipeline(const PipelineCreateInfo &pipelineInfo)
     {
-        Hash hash;
-
-        if (pipelineInfo.pCompShader)
-        {
-            hash.Combine(pipelineInfo.pCompShader->GetCache().GetHash());
-            hash.Combine(pipelineInfo.pushConstantStage.Value());
-            hash.Combine(pipelineInfo.pushConstantSize);
-            for (auto &layout : pipelineInfo.descriptorSetLayouts)
-                hash.Combine(reinterpret_cast<intptr_t>(layout));
-        }
-        else
-        {
-
-            if (pipelineInfo.pVertShader)
-                hash.Combine(pipelineInfo.pVertShader->GetCache().GetHash());
-
-            if (pipelineInfo.pFragShader)
-                hash.Combine(pipelineInfo.pFragShader->GetCache().GetHash());
-
-            for (auto &binding : pipelineInfo.vertexInputBindingDescriptions)
-            {
-                hash.Combine(binding.binding);
-                hash.Combine(binding.stride);
-                hash.Combine(static_cast<int>(binding.inputRate));
-            }
-
-            for (auto &attribute : pipelineInfo.vertexInputAttributeDescriptions)
-            {
-                hash.Combine(attribute.location);
-                hash.Combine(attribute.binding);
-                hash.Combine(static_cast<int>(attribute.format));
-                hash.Combine(attribute.offset);
-            }
-
-            hash.Combine(pipelineInfo.width);
-            hash.Combine(pipelineInfo.height);
-            hash.Combine(static_cast<int>(pipelineInfo.topology));
-            hash.Combine(static_cast<int>(pipelineInfo.polygonMode));
-            hash.Combine(static_cast<int>(pipelineInfo.cullMode));
-
-            for (auto &attachment : pipelineInfo.colorBlendAttachments)
-            {
-                hash.Combine(attachment.blendEnable);
-                hash.Combine(static_cast<int>(attachment.srcColorBlendFactor));
-                hash.Combine(static_cast<int>(attachment.dstColorBlendFactor));
-                hash.Combine(static_cast<int>(attachment.colorBlendOp));
-                hash.Combine(static_cast<int>(attachment.srcAlphaBlendFactor));
-                hash.Combine(static_cast<int>(attachment.dstAlphaBlendFactor));
-                hash.Combine(static_cast<int>(attachment.alphaBlendOp));
-                hash.Combine(attachment.colorWriteMask.Value());
-            }
-
-            for (auto &dynamic : pipelineInfo.dynamicStates)
-                hash.Combine(static_cast<int>(dynamic));
-
-            hash.Combine(pipelineInfo.pushConstantStage.Value());
-            hash.Combine(pipelineInfo.pushConstantSize);
-
-            for (auto &layout : pipelineInfo.descriptorSetLayouts)
-                hash.Combine(reinterpret_cast<intptr_t>(layout));
-
-            if (pipelineInfo.renderPass)
-                hash.Combine(reinterpret_cast<intptr_t>(pipelineInfo.renderPass));
-
-            hash.Combine(pipelineInfo.dynamicColorTargets);
-            for (uint32_t i = 0; i < pipelineInfo.dynamicColorTargets; i++)
-                hash.Combine(static_cast<int>(pipelineInfo.colorFormats[i]));
-            if (pipelineInfo.depthFormat)
-                hash.Combine(static_cast<int>(*pipelineInfo.depthFormat));
-
-            hash.Combine(reinterpret_cast<intptr_t>(pipelineInfo.pipelineCache.Get()));
-            hash.Combine(static_cast<int>(pipelineInfo.depthWriteEnable));
-        }
-
-        auto it = s_pipelines.find(hash);
+        auto it = s_pipelines.find(pipelineInfo.GetHash()); // PipelineCreateInfo is hashable
         if (it != s_pipelines.end())
         {
             return it->second;
@@ -488,7 +414,7 @@ namespace pe
         else
         {
             Pipeline *newPipeline = Pipeline::Create(pipelineInfo);
-            s_pipelines[hash] = newPipeline;
+            s_pipelines[pipelineInfo.GetHash()] = newPipeline;
 
             return newPipeline;
         }

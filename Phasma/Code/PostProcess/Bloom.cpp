@@ -60,6 +60,8 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &brightFilterRT->imageInfo.format;
         info.name = "BrightFilter_pipeline";
+        
+        info.UpdateHash();
     }
 
     void Bloom::UpdatePipelineInfoGaussianBlurHorizontal()
@@ -78,6 +80,8 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &gaussianBlurHorizontalRT->imageInfo.format;
         info.name = "GaussianBlurHorizontal_pipeline";
+        
+        info.UpdateHash();
     }
 
     void Bloom::UpdatePipelineInfoGaussianBlurVertical()
@@ -96,6 +100,8 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &gaussianBlurVerticalRT->imageInfo.format;
         info.name = "GaussianBlurVertical_pipeline";
+        
+        info.UpdateHash();
     }
 
     void Bloom::UpdatePipelineInfoCombine()
@@ -114,6 +120,8 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &displayRT->imageInfo.format;
         info.name = "BloomCombine_pipeline";
+        
+        info.UpdateHash();
     }
 
     void Bloom::CreateUniforms(CommandBuffer *cmd)

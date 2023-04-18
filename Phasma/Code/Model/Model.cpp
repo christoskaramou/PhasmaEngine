@@ -967,6 +967,8 @@ namespace pe
         info.colorFormats = colorformats;
         info.depthFormat = &depthFormat;
         info.name = "gbuffer_pipeline";
+        
+        info.UpdateHash();
     }
 
     void Model::UpdatePipelineInfoAABBs()
@@ -998,6 +1000,8 @@ namespace pe
         // info.depthFormat = &depthFormat;
         info.depthWriteEnable = false;
         info.name = "AABBs_pipeline";
+
+        info.UpdateHash();
     }
 
     void Model::UpdatePipelineInfoShadows()
@@ -1018,6 +1022,8 @@ namespace pe
         info.descriptorSetLayouts = {uniformBuffer.descriptor->GetLayout()};
         info.depthFormat = &depthFormat;
         info.name = "shadows_pipeline";
+        
+        info.UpdateHash();
     }
 
     void Model::UpdateAnimation(uint32_t index, float time)

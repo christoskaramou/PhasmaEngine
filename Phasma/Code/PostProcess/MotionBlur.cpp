@@ -50,6 +50,8 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &displayRT->imageInfo.format;
         info.name = "motionBlur_pipeline";
+        
+        info.UpdateHash();
     }
 
     void MotionBlur::CreateUniforms(CommandBuffer *cmd)

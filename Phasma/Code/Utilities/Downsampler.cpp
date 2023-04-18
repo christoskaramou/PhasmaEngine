@@ -67,6 +67,8 @@ namespace pe
         s_pipelineInfo->pushConstantSize = sizeof(PushConstants);
         s_pipelineInfo->pushConstantStage = ShaderStage::ComputeBit;
         s_pipelineInfo->name = "Downsample_pipeline";
+        
+        s_pipelineInfo->UpdateHash();
     }
 
     void Downsampler::CreateUniforms()

@@ -49,6 +49,8 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &displayRT->imageInfo.format;
         info.name = "dof_pipeline";
+        
+        info.UpdateHash();
     }
 
     void DOF::CreateUniforms(CommandBuffer *cmd)

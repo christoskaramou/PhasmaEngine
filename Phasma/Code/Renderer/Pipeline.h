@@ -23,9 +23,11 @@ namespace pe
         ColorComponentFlags colorWriteMask;
     };
 
-    class PipelineCreateInfo
+    class PipelineCreateInfo : public Hashable
     {
     public:
+        void UpdateHash() override;
+
         PipelineCreateInfo();
 
         ~PipelineCreateInfo();
@@ -49,8 +51,8 @@ namespace pe
         uint32_t dynamicColorTargets;
         Format *colorFormats;
         Format *depthFormat;
+        bool depthWriteEnable;
         PipelineCacheHandle pipelineCache;
-        bool depthWriteEnable = true;
         std::string name;
     };
 

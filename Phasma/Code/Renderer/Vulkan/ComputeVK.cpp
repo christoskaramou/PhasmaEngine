@@ -95,6 +95,8 @@ namespace pe
         info.descriptorSetLayouts = {DSet->GetLayout()};
         info.name = "Compute_pipeline";
 
+        info.UpdateHash();
+
         pipeline = Pipeline::Create(info);
 
         Shader::Destroy(info.pCompShader);

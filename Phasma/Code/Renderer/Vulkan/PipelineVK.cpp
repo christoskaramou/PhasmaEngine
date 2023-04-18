@@ -19,6 +19,83 @@ namespace pe
         colorWriteMask = {};
     }
 
+    void PipelineCreateInfo::UpdateHash()
+    {
+        m_hash = {};
+
+        if (pCompShader)
+        {
+            m_hash.Combine(pCompShader->GetCache().GetHash());
+            m_hash.Combine(pushConstantStage.Value());
+            m_hash.Combine(pushConstantSize);
+            for (auto &layout : descriptorSetLayouts)
+                m_hash.Combine(reinterpret_cast<intptr_t>(layout));
+        }
+        else
+        {
+
+            if (pVertShader)
+                m_hash.Combine(pVertShader->GetCache().GetHash());
+
+            if (pFragShader)
+                m_hash.Combine(pFragShader->GetCache().GetHash());
+
+            for (auto &binding : vertexInputBindingDescriptions)
+            {
+                m_hash.Combine(binding.binding);
+                m_hash.Combine(binding.stride);
+                m_hash.Combine(static_cast<int>(binding.inputRate));
+            }
+
+            for (auto &attribute : vertexInputAttributeDescriptions)
+            {
+                m_hash.Combine(attribute.location);
+                m_hash.Combine(attribute.binding);
+                m_hash.Combine(static_cast<int>(attribute.format));
+                m_hash.Combine(attribute.offset);
+            }
+
+            m_hash.Combine(width);
+            m_hash.Combine(height);
+            m_hash.Combine(static_cast<int>(topology));
+            m_hash.Combine(static_cast<int>(polygonMode));
+            m_hash.Combine(static_cast<int>(cullMode));
+
+            for (auto &attachment : colorBlendAttachments)
+            {
+                m_hash.Combine(attachment.blendEnable);
+                m_hash.Combine(static_cast<int>(attachment.srcColorBlendFactor));
+                m_hash.Combine(static_cast<int>(attachment.dstColorBlendFactor));
+                m_hash.Combine(static_cast<int>(attachment.colorBlendOp));
+                m_hash.Combine(static_cast<int>(attachment.srcAlphaBlendFactor));
+                m_hash.Combine(static_cast<int>(attachment.dstAlphaBlendFactor));
+                m_hash.Combine(static_cast<int>(attachment.alphaBlendOp));
+                m_hash.Combine(attachment.colorWriteMask.Value());
+            }
+
+            for (auto &dynamic : dynamicStates)
+                m_hash.Combine(static_cast<int>(dynamic));
+
+            m_hash.Combine(pushConstantStage.Value());
+            m_hash.Combine(pushConstantSize);
+
+            for (auto &layout : descriptorSetLayouts)
+                m_hash.Combine(reinterpret_cast<intptr_t>(layout));
+
+            if (renderPass)
+                m_hash.Combine(reinterpret_cast<intptr_t>(renderPass));
+
+            m_hash.Combine(dynamicColorTargets);
+            for (uint32_t i = 0; i < dynamicColorTargets; i++)
+                m_hash.Combine(static_cast<int>(colorFormats[i]));
+            if (depthFormat)
+                m_hash.Combine(static_cast<int>(*depthFormat));
+
+            m_hash.Combine(depthWriteEnable);
+            m_hash.Combine(reinterpret_cast<intptr_t>(pipelineCache.Get()));
+        }
+    }
+
     PipelineCreateInfo::PipelineCreateInfo()
     {
         pVertShader = nullptr;
@@ -40,6 +117,7 @@ namespace pe
         dynamicColorTargets = 0;
         colorFormats = nullptr;
         depthFormat = nullptr;
+        depthWriteEnable = true;
         pipelineCache = {};
     }
 

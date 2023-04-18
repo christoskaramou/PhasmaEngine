@@ -11,7 +11,6 @@ namespace pe
     class Pipeline;
     class Buffer;
     class Camera;
-    class PipelineCreateInfo;
 
     class SSAO : public IRenderComponent
     {

@@ -544,7 +544,7 @@ namespace pe
         {
             bool recreatePipeline = false;
 
-            // PollEvent simply catches a pushed event pushed from FileWatcher
+            // PollEvent simply catches a pushed event from FileWatcher
             if (info->pCompShader && EventSystem::PollEvent(info->pCompShader->GetPathID()))
                 recreatePipeline = true;
             if (info->pVertShader && EventSystem::PollEvent(info->pVertShader->GetPathID()))

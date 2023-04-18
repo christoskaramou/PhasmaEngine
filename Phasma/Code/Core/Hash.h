@@ -61,24 +61,16 @@ namespace pe
 
     using EventID = StringHash;
 
-    class HashableBase
+    class Hashable
     {
     public:
-        HashableBase() : m_hash{} {}
+        Hashable() : m_hash{} {}
+
+        virtual void UpdateHash() = 0;
 
         Hash GetHash() const { return m_hash; }
 
-        void SetHash(Hash hash) { m_hash = hash; }
-
     protected:
         Hash m_hash;
-    };
-
-    template <class... Params>
-    class Hashable : public HashableBase
-    {
-    public:
-        // Implement in each class that inherits from Hashable
-        virtual void CreateHash(Params &&...params);
     };
 }

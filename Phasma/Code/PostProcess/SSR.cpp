@@ -50,6 +50,8 @@ namespace pe
         info.dynamicColorTargets = 1;
         info.colorFormats = &ssrRT->imageInfo.format;
         info.name = "ssr_pipeline";
+        
+        info.UpdateHash();
     }
 
     void SSR::CreateUniforms(CommandBuffer *cmd)
