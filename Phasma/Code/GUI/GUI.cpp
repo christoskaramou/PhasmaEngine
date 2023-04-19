@@ -125,11 +125,11 @@ namespace pe
 
                         s_modelLoading = false;
                     };
-                    SyncQueue<Launch::AsyncNoWait>::Request(loadAsync);
+                    e_GUI_ThreadPool.Enqueue(loadAsync);
                 }
             };
 
-            SyncQueue<Launch::AsyncNoWait>::Request(lambda);
+            e_GUI_ThreadPool.Enqueue(lambda);
         }
     }
 
@@ -145,7 +145,7 @@ namespace pe
                     EventSystem::PushEvent(EventQuit);
                 }
             };
-            SyncQueue<Launch::AsyncNoWait>::Request(lambda);
+            e_GUI_ThreadPool.Enqueue(lambda);
         }
     }
 
@@ -381,7 +381,7 @@ namespace pe
                     std::string s = Path::Assets + "Shaders\\" + shaderList[i];
                     auto lambda = [s]()
                     { system(s.c_str()); };
-                    SyncQueue<Launch::AsyncNoWait>::Request(lambda);
+                    e_GUI_ThreadPool.Enqueue(lambda);
                 }
             }
         }

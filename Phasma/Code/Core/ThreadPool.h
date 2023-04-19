@@ -2,8 +2,9 @@
 
 namespace pe
 {
-    template<class T>
+    template <class T>
     using Task = std::future<T>;
+    using TaskStatus = std::future_status;
 
     class ThreadPool
     {

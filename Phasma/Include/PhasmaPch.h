@@ -18,6 +18,7 @@
 #include <deque>
 #include <any>
 #include <mutex>
+#include <shared_mutex>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -63,9 +64,9 @@
 #include "Core/Delegate.h"
 #include "Core/Timer.h"
 #include "Core/FileSystem.h"
+#include "Core/FileWatcher.h"
 #include "Core/EventSystem.h"
 #include "Core/Externs.h"
-#include "Core/SyncQueue.h"
 
 #include "ECS/Component.h"
 #include "ECS/System.h"

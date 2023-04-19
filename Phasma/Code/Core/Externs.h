@@ -22,4 +22,6 @@ namespace pe
     extern void GetInfoFromLayout(ImageLayout layout, PipelineStageFlags &stageFlags, AccessFlags &accessMask);
 
     extern ThreadPool e_ThreadPool;
+    extern ThreadPool e_FW_ThreadPool;
+    extern ThreadPool e_GUI_ThreadPool;
 }

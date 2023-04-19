@@ -43,7 +43,6 @@ namespace pe
 
         for (auto &effect : m_effects)
             effect.second->Update(camera_main);
-        // SyncQueue<Launch::Async>::Request([camera_main, effect]() { effect.second->Update(camera_main); });
     }
 
     void PostProcessSystem::Destroy()

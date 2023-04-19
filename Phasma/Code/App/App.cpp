@@ -95,7 +95,6 @@ namespace pe
         if (!m_window->isMinimized())
         {
             m_context->UpdateSystems(m_frameTimer->GetDelta());
-            SyncQueue<Launch::All>::ExecuteRequests();
             m_frameTimer->updatesStamp = static_cast<float>(m_frameTimer->Count());
 
             m_context->DrawSystems();
