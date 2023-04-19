@@ -13,23 +13,6 @@ namespace pe
             m_functions.push_back(std::forward<Func_type>(func));
         }
 
-        inline void operator-=(Func_type &&func)
-        {
-            const size_t funcAddress = *reinterpret_cast<long *>(reinterpret_cast<char *>(&func));
-
-            int index = 0;
-            for (auto &function : m_functions)
-            {
-                const size_t functionAddress = *reinterpret_cast<long *>(reinterpret_cast<char *>(&function));
-
-                // This equality seems to work, holding back though since it might not be accurate
-                if (funcAddress == functionAddress)
-                    m_functions.erase(m_functions.begin() + index);
-                else
-                    index++;
-            }
-        }
-
         inline void Invoke(T &&...args)
         {
             for (auto &function : m_functions)

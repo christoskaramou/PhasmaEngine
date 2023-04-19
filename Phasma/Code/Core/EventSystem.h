@@ -17,8 +17,6 @@ namespace pe
         static void UnregisterEvent(EventID type);
 
         static void RegisterCallback(EventID type, Func &&func);
-
-        static void UnregisterEventCallback(EventID type, Func &&func);
         
         static void DispatchEvent(EventID type, std::any &&data);
 

@@ -45,13 +45,6 @@ namespace pe
         it->second += std::forward<Func>(func);
     }
 
-    void EventSystem::UnregisterEventCallback(EventID event, Func &&func)
-    {
-        auto it = m_events.find(event);
-        PE_ERROR_IF(it == m_events.end(), "Event not registered!");
-        it->second -= std::forward<Func>(func);
-    }
-
     void EventSystem::DispatchEvent(EventID event, std::any &&data)
     {
         auto it = m_events.find(event);
