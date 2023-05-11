@@ -27,7 +27,7 @@ namespace pe
 
         inline bool IsEmpty()
         {
-            return m_functions.size() == 0;
+            return m_functions.empty();
         }
 
         inline void Clear()

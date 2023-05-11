@@ -852,7 +852,7 @@ namespace pe
         uniformBuffer.descriptor = Descriptor::Create(bindingInfos, ShaderStage::VertexBit, "model_uniform_buffer_descriptor");
 
         uniformBuffer.descriptor->SetBuffer(0, uniformBuffer.buffer);
-        uniformBuffer.descriptor->UpdateDescriptor();
+        uniformBuffer.descriptor->Update();
 
         // Map to copy factors in uniform buffer
         MemoryRange mr{};
@@ -919,7 +919,7 @@ namespace pe
 
         uniformImages.descriptor->SetSampler(0, sampler->Handle());
         uniformImages.descriptor->SetImages(1, views, {});
-        uniformImages.descriptor->UpdateDescriptor();
+        uniformImages.descriptor->Update();
     }
 
     void Model::UpdatePipelineInfo()

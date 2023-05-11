@@ -79,7 +79,7 @@ namespace pe
     {
         DSet->SetBuffer(0, SBIn);
         DSet->SetBuffer(1, SBOut);
-        DSet->UpdateDescriptor();
+        DSet->Update();
     }
 
     void Compute::CreatePipeline(const std::string &shaderName)

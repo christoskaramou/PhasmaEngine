@@ -132,7 +132,7 @@ namespace pe
             dSet.SetImage(1, s_image->GetUAV(6), {});
         dSet.SetBuffer(2, s_atomicCounter[s_currentIndex]);
 
-        dSet.UpdateDescriptor();
+        dSet.Update();
     }
 
     uvec2 Downsampler::SpdSetup()

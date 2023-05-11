@@ -28,7 +28,7 @@ namespace pe
         DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Skybox_descriptor");
 
         DSet->SetImage(0, cubeMap->GetSRV(), cubeMap->sampler->Handle());
-        DSet->UpdateDescriptor();
+        DSet->Update();
     }
 
     void SkyBox::loadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames, uint32_t imageSideSize, bool show)

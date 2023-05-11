@@ -71,7 +71,7 @@ namespace pe
 
         void SetSampler(uint32_t binding, SamplerHandle sampler);
 
-        void UpdateDescriptor();
+        void Update();
 
         DescriptorPool *GetPool() const { return m_pool; }
 

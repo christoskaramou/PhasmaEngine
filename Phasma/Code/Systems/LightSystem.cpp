@@ -60,7 +60,7 @@ namespace pe
         DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "Lights_descriptor");
 
         DSet->SetBuffer(0, uniform);
-        DSet->UpdateDescriptor();
+        DSet->Update();
     }
 
     void LightSystem::Update(double delta)

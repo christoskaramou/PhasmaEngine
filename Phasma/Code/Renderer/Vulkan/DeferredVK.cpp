@@ -191,7 +191,7 @@ namespace pe
         DSet->SetImage(7, emissiveRT->GetSRV(), emissiveRT->sampler->Handle());
         DSet->SetImage(8, ibl_brdf_lut->GetSRV(), ibl_brdf_lut->sampler->Handle());
         DSet->SetBuffer(9, uniform);
-        DSet->UpdateDescriptor();
+        DSet->Update();
     }
 
     void Deferred::Update(Camera *camera)

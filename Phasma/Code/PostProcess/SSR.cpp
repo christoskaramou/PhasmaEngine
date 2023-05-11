@@ -94,7 +94,7 @@ namespace pe
         DSet->SetImage(1, depth->GetSRV(), depth->sampler->Handle());
         DSet->SetImage(2, normalRT->GetSRV(), normalRT->sampler->Handle());
         DSet->SetBuffer(3, UBReflection);
-        DSet->UpdateDescriptor();
+        DSet->Update();
     }
 
     void SSR::Update(Camera *camera)

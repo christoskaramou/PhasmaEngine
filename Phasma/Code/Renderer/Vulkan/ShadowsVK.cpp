@@ -102,7 +102,7 @@ namespace pe
         DSetDeferred->SetBuffer(0, uniformBuffer);
         DSetDeferred->SetImages(1, views, {});
         DSetDeferred->SetSampler(2, sampler->Handle());
-        DSetDeferred->UpdateDescriptor();
+        DSetDeferred->Update();
     }
 
     void Shadows::Update(Camera *camera)

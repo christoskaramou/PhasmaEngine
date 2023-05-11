@@ -256,7 +256,7 @@ namespace pe
         }
     }
 
-    void Descriptor::UpdateDescriptor()
+    void Descriptor::Update()
     {
         for (auto it = m_updateInfoMap.begin(); it != m_updateInfoMap.end(); it++)
         {
