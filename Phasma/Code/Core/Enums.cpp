@@ -116,13 +116,12 @@ namespace pe
             // std::pair<iterator,bool> emplace( Args&&... args );
             it = translator.emplace(flags, U{}).first;
 
-            for (auto &pair : translator)
+            // Check each existing flag to see if it is included in the new flags
+            for (auto &[existing_flags, value] : translator)
             {
-                if ((flags & pair.first) == pair.first)
-                    it->second |= pair.second;
+                if ((flags & existing_flags) == existing_flags)
+                    it->second |= value;
             }
-
-            return it->second;
         }
 
         return it->second;
