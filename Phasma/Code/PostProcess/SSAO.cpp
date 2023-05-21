@@ -37,7 +37,7 @@ namespace pe
         FFX_CACAO_VkCreateInfo info = {};
         info.physicalDevice = RHII.GetGpu();
         info.device = RHII.GetDevice();
-        info.flags = FFX_CACAO_VK_CREATE_USE_16_BIT | FFX_CACAO_VK_CREATE_USE_DEBUG_MARKERS | FFX_CACAO_VK_CREATE_NAME_OBJECTS;
+        info.flags = FFX_CACAO_VK_CREATE_USE_DEBUG_MARKERS | FFX_CACAO_VK_CREATE_NAME_OBJECTS; // | FFX_CACAO_VK_CREATE_USE_16_BIT;
         PE_CHECK(FFX_CACAO_VkInitContext(m_context, &info));
 
         FFX_CACAO_VkScreenSizeInfo screenSizeInfo = {};
