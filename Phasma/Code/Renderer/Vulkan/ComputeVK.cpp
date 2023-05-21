@@ -8,6 +8,7 @@
 #include "Renderer/Image.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/Queue.h"
+#include "Renderer/Pipeline.h"
 
 namespace pe
 {
@@ -15,7 +16,6 @@ namespace pe
     {
         SBIn = nullptr;
         SBOut = nullptr;
-        pipeline = nullptr;
         DSet = nullptr;
         commandBuffer = nullptr;
     }
@@ -35,8 +35,8 @@ namespace pe
 
         commandBuffer->Begin();
         commandBuffer->BeginDebugRegion("Compute::Dispatch command");
-        commandBuffer->BindComputePipeline(pipeline);
-        commandBuffer->BindComputeDescriptors(pipeline, 1, &DSet);
+        commandBuffer->BindPipeline(*passInfo);
+        commandBuffer->BindComputeDescriptors(1, &DSet);
         commandBuffer->Dispatch(sizeX, sizeY, sizeZ);
         commandBuffer->EndDebugRegion();
         commandBuffer->End();
@@ -82,25 +82,12 @@ namespace pe
         DSet->Update();
     }
 
-    void Compute::CreatePipeline(const std::string &shaderName)
+    void Compute::UpdatePassInfo(const std::string &shaderName)
     {
-        if (pipeline)
-        {
-            Pipeline::Destroy(pipeline);
-            pipeline = nullptr;
-        }
-
-        PipelineCreateInfo info{};
-        info.pCompShader = Shader::Create(ShaderInfo{shaderName, ShaderStage::ComputeBit});
-        info.descriptorSetLayouts = {DSet->GetLayout()};
-        info.name = "Compute_pipeline";
-
-        info.UpdateHash();
-
-        pipeline = Pipeline::Create(info);
-
-        Shader::Destroy(info.pCompShader);
-        info.pCompShader = nullptr;
+        passInfo = std::make_shared<PassInfo>();
+        passInfo->pCompShader = Shader::Create(ShaderInfo{shaderName, ShaderStage::ComputeBit});
+        passInfo->descriptorSetLayouts = {DSet->GetLayout()};
+        passInfo->name = "Compute_pipeline";
     }
 
     void Compute::Destroy()
@@ -112,9 +99,6 @@ namespace pe
         Buffer::Destroy(SBOut);
         SBOut = nullptr;
 
-        Pipeline::Destroy(pipeline);
-        pipeline = nullptr;
-
         Descriptor::Destroy(DSet);
         DSet = nullptr;
     }
@@ -124,7 +108,7 @@ namespace pe
         Compute compute;
         compute.commandBuffer = CommandBuffer::GetNext(RHII.GetComputeQueue()->GetFamilyId());
         compute.CreateUniforms(sizeIn, sizeOut);
-        compute.CreatePipeline(shaderName);
+        compute.UpdatePassInfo(shaderName);
 
         return compute;
     }
@@ -139,7 +123,7 @@ namespace pe
             Compute compute;
             compute.commandBuffer = CommandBuffer::GetNext(RHII.GetComputeQueue()->GetFamilyId());
             compute.CreateUniforms(sizeIn, sizeOut);
-            compute.CreatePipeline(shaderName);
+            compute.UpdatePassInfo(shaderName);
 
             computes.push_back(compute);
         }

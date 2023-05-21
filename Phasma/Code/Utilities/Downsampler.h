@@ -14,7 +14,7 @@ namespace pe
         inline static void ResetCounter() { s_currentIndex = 0; }
 
     private:
-        static void UpdatePipelineInfo();
+        static void UpdatePassInfo();
 
         static void CreateUniforms();
 
@@ -28,8 +28,7 @@ namespace pe
 
         inline static std::mutex s_dispatchMutex{};
 
-        inline static Pipeline *s_pipeline = nullptr;
-        inline static std::shared_ptr<PipelineCreateInfo> s_pipelineInfo{};
+        inline static std::shared_ptr<PassInfo> s_passInfo{};
 
         // Downsampler is not reusable within a command recording, it can be with though with multiple descriptors
         inline static const uint32_t MAX_DESCRIPTORS_PER_CMD = 100;

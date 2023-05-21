@@ -98,7 +98,7 @@ namespace pe
                 EventSystem::PushEvent(EventCompileShaders);
 
                 // After Window::ProcessEvents, the specific shader event accurs
-                // Easy to poll, we have PipelineCreateInfo::Shader::GetPathID() == EventID
+                // Easy to poll, we have PassInfo::Shader::GetPathID() == EventID
                 // Polled in Renderer::PollShaders
                 EventSystem::PushEvent(event);
             };

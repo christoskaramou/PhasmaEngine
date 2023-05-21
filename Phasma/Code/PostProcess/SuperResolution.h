@@ -19,7 +19,7 @@ namespace pe
 
         void Init() override;
 
-        void UpdatePipelineInfo() override;
+        void UpdatePassInfo() override;
 
         void CreateUniforms(CommandBuffer *cmd) override;
 

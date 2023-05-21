@@ -15,8 +15,9 @@ namespace pe
     class Image;
     class Sampler;
     class Buffer;
-    class Pipeline;
     class RenderPass;
+    class PassInfo;
+    class DescriptorLayout;
 
     class Shadows : public IRenderComponent
     {
@@ -27,7 +28,7 @@ namespace pe
 
         void Init() override;
 
-        void UpdatePipelineInfo() override;
+        void UpdatePassInfo() override;
 
         void CreateUniforms(CommandBuffer *cmd) override;
 
@@ -45,7 +46,7 @@ namespace pe
 
         void EndPass(CommandBuffer *cmd, uint32_t cascade);
 
-        RenderPass *GetRenderPassShadows() { return m_renderPassShadows; }
+        const PassInfo &GetPassInfo() { return *passInfo; }
 
     private:
         void CalculateCascades(Camera *camera);
@@ -58,6 +59,7 @@ namespace pe
         Descriptor *DSetDeferred;
         Buffer *uniformBuffer;
         Format depthFormat;
-        RenderPass *m_renderPassShadows;
+        std::shared_ptr<PassInfo> passInfo;
+        DescriptorLayout *dlShadows;
     };
 }

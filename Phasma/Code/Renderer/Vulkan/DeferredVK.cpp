@@ -28,7 +28,8 @@ namespace pe
     Deferred::Deferred()
     {
         DSet = {};
-        pipeline = nullptr;
+        dlBuffer = {};
+        dlImages = {};
     }
 
     Deferred::~Deferred()
@@ -48,9 +49,26 @@ namespace pe
         depth = rs->GetDepthTarget("depth");
         ssaoBlurRT = rs->GetRenderTarget("ssaoBlur");
         ssrRT = rs->GetRenderTarget("ssr");
+
+        // Pre-create DescriptorLayouts for Models
+        std::vector<DescriptorBindingInfo> bufferBindingInfos(1);
+        bufferBindingInfos[0].binding = 0;
+        bufferBindingInfos[0].type = DescriptorType::StorageBufferDynamic;
+        dlBuffer = DescriptorLayout::GetOrCreate(bufferBindingInfos, ShaderStage::VertexBit);
+
+        std::vector<DescriptorBindingInfo> imagesBindingInfos(2);
+        imagesBindingInfos[0].binding = 0;
+        imagesBindingInfos[0].count = 1;
+        imagesBindingInfos[0].type = DescriptorType::Sampler;
+        imagesBindingInfos[1].binding = 1;
+        imagesBindingInfos[1].count = 5;
+        imagesBindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
+        imagesBindingInfos[1].type = DescriptorType::SampledImage;
+        imagesBindingInfos[1].bindless = true;
+        dlImages = DescriptorLayout::GetOrCreate(imagesBindingInfos, ShaderStage::FragmentBit);
     }
 
-    void Deferred::UpdatePipelineInfo()
+    void Deferred::UpdatePassInfo()
     {
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
         SkyBox &skybox = CONTEXT->GetSystem<RendererSystem>()->skyBoxDay;
@@ -62,9 +80,10 @@ namespace pe
             Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
             Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
 
-        pipelineInfo = std::make_shared<PipelineCreateInfo>();
-        PipelineCreateInfo &info = *pipelineInfo;
+        passInfo = std::make_shared<PassInfo>();
+        PassInfo &info = *passInfo;
 
+        info.name = "composition_pipeline";
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/compositionPS.hlsl", ShaderStage::FragmentBit, definesFrag});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -77,8 +96,117 @@ namespace pe
             skybox.DSet->GetLayout()};
         info.dynamicColorTargets = 1;
         info.colorFormats = &viewportRT->imageInfo.format;
-        info.name = "composition_pipeline";
-        
+
+        AttachmentInfo colorInfo{};
+        colorInfo.image = viewportRT;
+        colorInfo.initialLayout = ImageLayout::ColorAttachment;
+        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
+
+        info.UpdateHash();
+
+        UpdatePassInfoGBuffer();
+        UpdatePassInfoAABBs();
+    }
+
+    void Deferred::UpdatePassInfoGBuffer()
+    {
+        Format colorformats[]{
+            normalRT->imageInfo.format,
+            albedoRT->imageInfo.format,
+            srmRT->imageInfo.format,
+            velocityRT->imageInfo.format,
+            emissiveRT->imageInfo.format};
+
+        Format depthFormat = RHII.GetDepthFormat();
+
+        passInfoGBuffer = std::make_shared<PassInfo>();
+        PassInfo &info = *passInfoGBuffer;
+
+        info.name = "gbuffer_pipeline";
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBufferVS.hlsl", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBufferPS.hlsl", ShaderStage::FragmentBit});
+        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
+        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
+        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
+        info.pushConstantStage = ShaderStage::VertexBit | ShaderStage::FragmentBit;
+        info.pushConstantSize = sizeof(Model::Constants);
+        info.cullMode = CullMode::Front;
+        info.colorBlendAttachments = {
+            normalRT->blendAttachment,
+            albedoRT->blendAttachment,
+            srmRT->blendAttachment,
+            velocityRT->blendAttachment,
+            emissiveRT->blendAttachment,
+        };
+
+        info.descriptorSetLayouts = {dlBuffer, dlImages};
+        info.dynamicColorTargets = 5;
+        info.colorFormats = colorformats;
+        info.depthFormat = &depthFormat;
+
+        // Must be in order as they appear in shader and in pipeline
+        AttachmentInfo colorInfos[5]{};
+        colorInfos[0].image = normalRT;
+        colorInfos[0].initialLayout = ImageLayout::ColorAttachment;
+        colorInfos[0].finalLayout = ImageLayout::ColorAttachment;
+        colorInfos[1].image = albedoRT;
+        colorInfos[1].initialLayout = ImageLayout::ColorAttachment;
+        colorInfos[1].finalLayout = ImageLayout::ColorAttachment;
+        colorInfos[2].image = srmRT;
+        colorInfos[2].initialLayout = ImageLayout::ColorAttachment;
+        colorInfos[2].finalLayout = ImageLayout::ColorAttachment;
+        colorInfos[3].image = velocityRT;
+        colorInfos[3].initialLayout = ImageLayout::ColorAttachment;
+        colorInfos[3].finalLayout = ImageLayout::ColorAttachment;
+        colorInfos[4].image = emissiveRT;
+        colorInfos[4].initialLayout = ImageLayout::ColorAttachment;
+        colorInfos[4].finalLayout = ImageLayout::ColorAttachment;
+        AttachmentInfo depthInfo{};
+        depthInfo.image = depth;
+        depthInfo.initialLayout = ImageLayout::DepthStencilAttachment;
+        depthInfo.finalLayout = ImageLayout::DepthStencilAttachment;
+        info.renderPass = CommandBuffer::GetRenderPass(5, colorInfos, &depthInfo);
+
+        info.UpdateHash();
+    }
+
+    void Deferred::UpdatePassInfoAABBs()
+    {
+        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        Image *display = rs->GetRenderTarget("display");
+        Format colorformat = display->imageInfo.format;
+        // Format depthFormat = RHII.GetDepthFormat();
+
+        passInfoAABBs = std::make_shared<PassInfo>();
+        PassInfo &info = *passInfoAABBs;
+
+        info.name = "AABBs_pipeline";
+        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Utilities/AABBsVS.hlsl", ShaderStage::VertexBit});
+        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Utilities/AABBsPS.hlsl", ShaderStage::FragmentBit});
+        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
+        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
+        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
+        info.pushConstantStage = ShaderStage::VertexBit;
+        info.pushConstantSize = sizeof(Model::ConstantsAABBs);
+        info.topology = PrimitiveTopology::LineList;
+        info.cullMode = CullMode::None;
+        info.colorBlendAttachments = {
+            display->blendAttachment,
+        };
+        info.descriptorSetLayouts = {dlBuffer};
+        info.dynamicColorTargets = 1;
+        info.colorFormats = &colorformat;
+        info.depthWriteEnable = false;
+
+        AttachmentInfo colorInfo{};
+        colorInfo.image = display;
+        colorInfo.loadOp = AttachmentLoadOp::Load;
+        colorInfo.storeOp = AttachmentStoreOp::Store;
+        colorInfo.initialLayout = ImageLayout::ColorAttachment;
+        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
+
         info.UpdateHash();
     }
 
@@ -254,12 +382,12 @@ namespace pe
         info.initialLayout = viewportRT->GetCurrentLayout();
         info.finalLayout = ImageLayout::ColorAttachment;
 
-        cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
-        cmd->BindPipeline(*pipelineInfo, &pipeline);
+        cmd->BeginPass(passInfo->renderPass, &viewportRT, nullptr);
+        cmd->BindPipeline(*passInfo);
         cmd->SetViewport(0.f, 0.f, viewportRT->width_f, viewportRT->height_f);
         cmd->SetScissor(0, 0, viewportRT->imageInfo.width, viewportRT->imageInfo.height);
-        cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, sizeof(mat4), &values);
-        cmd->BindDescriptors(pipeline, (uint32_t)handles.size(), handles.data());
+        cmd->PushConstants(ShaderStage::FragmentBit, 0, sizeof(mat4), &values);
+        cmd->BindDescriptors((uint32_t)handles.size(), handles.data());
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
 
@@ -281,30 +409,9 @@ namespace pe
         cmd->ImageBarrier(emissiveRT, ImageLayout::ColorAttachment);
         cmd->ImageBarrier(depth, ImageLayout::DepthStencilAttachment);
 
-        // Must be in order as they appear in shader and in pipeline
-        AttachmentInfo colorInfos[5]{};
-        colorInfos[0].image = normalRT;
-        colorInfos[0].initialLayout = normalRT->GetCurrentLayout();
-        colorInfos[0].finalLayout = ImageLayout::ColorAttachment;
-        colorInfos[1].image = albedoRT;
-        colorInfos[1].initialLayout = albedoRT->GetCurrentLayout();
-        colorInfos[1].finalLayout = ImageLayout::ColorAttachment;
-        colorInfos[2].image = srmRT;
-        colorInfos[2].initialLayout = srmRT->GetCurrentLayout();
-        colorInfos[2].finalLayout = ImageLayout::ColorAttachment;
-        colorInfos[3].image = velocityRT;
-        colorInfos[3].initialLayout = velocityRT->GetCurrentLayout();
-        colorInfos[3].finalLayout = ImageLayout::ColorAttachment;
-        colorInfos[4].image = emissiveRT;
-        colorInfos[4].initialLayout = emissiveRT->GetCurrentLayout();
-        colorInfos[4].finalLayout = ImageLayout::ColorAttachment;
+        Image *colorTargets[5]{normalRT, albedoRT, srmRT, velocityRT, emissiveRT};
 
-        AttachmentInfo depthInfo{};
-        depthInfo.image = depth;
-        depthInfo.initialLayout = depth->GetCurrentLayout();
-        depthInfo.finalLayout = ImageLayout::DepthStencilAttachment;
-
-        cmd->BeginPass(5, colorInfos, &depthInfo, &m_renderPassModels);
+        cmd->BeginPass(passInfoGBuffer->renderPass, colorTargets, depth);
         cmd->SetViewport(0.f, 0.f, normalRT->width_f, normalRT->height_f);
         cmd->SetScissor(0, 0, normalRT->imageInfo.width, normalRT->imageInfo.height);
     }
@@ -325,7 +432,6 @@ namespace pe
     {
         Descriptor::Destroy(DSet);
         Buffer::Destroy(uniform);
-        Pipeline::Destroy(pipeline);
     }
 }
 #endif

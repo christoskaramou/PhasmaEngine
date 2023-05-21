@@ -9,7 +9,7 @@ namespace pe
     class Descriptor;
     class CommandBuffer;
     class Buffer;
-    class Pipeline;
+    class PassInfo;
 
     class Compute
     {
@@ -46,13 +46,13 @@ namespace pe
 
         void UpdateDescriptorSet();
 
-        void CreatePipeline(const std::string &shaderName);
+        void UpdatePassInfo(const std::string &shaderName);
 
     private:
         Buffer *SBIn;
         Buffer *SBOut;
-        Pipeline *pipeline;
         Descriptor *DSet;
         CommandBuffer *commandBuffer;
+        std::shared_ptr<PassInfo> passInfo;
     };
 }

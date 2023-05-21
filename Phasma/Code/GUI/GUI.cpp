@@ -664,13 +664,8 @@ namespace pe
 
             // Output
             cmd->ImageBarrier(m_displayRT, ImageLayout::General);
-
-            AttachmentInfo info{};
-            info.image = m_displayRT;
-            info.loadOp = AttachmentLoadOp::Load;
-            info.initialLayout = m_displayRT->GetCurrentLayout();
-            info.finalLayout = ImageLayout::ColorAttachment;
-            cmd->BeginPass(1, &info, nullptr, &renderPass);
+            
+            cmd->BeginPass(renderPass, &m_displayRT, nullptr);
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
             cmd->EndPass();
         }
@@ -697,8 +692,6 @@ namespace pe
         {
             RenderPass::Destroy(renderPass);
             renderPass = nullptr;
-            // vkDestroyRenderPass(RHII.GetDevice(), renderPass, nullptr);
-            // renderPass = {};
         }
 
         for (auto &framebuffer : framebuffers)

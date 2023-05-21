@@ -11,8 +11,7 @@
 
 namespace pe
 {
-    class Pipeline;
-    class PipelineCreateInfo;
+    class PassInfo;
     class CommandBuffer;
     class Descriptor;
     class Buffer;
@@ -79,23 +78,9 @@ namespace pe
 
         void CreateUniforms();
 
-        void UpdatePipelineInfo();
-
-        void UpdatePipelineInfoGBuffer();
-
-        void UpdatePipelineInfoAABBs();
-
-        void UpdatePipelineInfoShadows();
-
-        void InitRenderTargets();
-
         void Resize();
 
         void Destroy();
-
-        Pipeline *GetPipelineGBuffer() { return m_pipelineGBuffer; }
-
-        Pipeline *GetPipelineShadows() { return m_pipelineShadows; }
 
         // Document holds all info about the gltf model
         Microsoft::glTF::Document *document = nullptr;
@@ -140,21 +125,7 @@ namespace pe
         Buffer *AABBsIndexBuffer;
         uint32_t numberOfVertices = 0, numberOfIndices = 0, primitivesCount = 0;
         
-        std::shared_ptr<PipelineCreateInfo> pipelineInfoGBuffer;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfoAABBs;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfoShadows;
-        
         static std::deque<Model> models;
-
-    private:
-        Image *m_normalRT;
-        Image *m_albedoRT;
-        Image *m_srmRT;
-        Image *m_velocityRT;
-        Image *m_emissiveRT;
-        Pipeline *m_pipelineGBuffer;
-        Pipeline *m_pipelineAABBs;
-        Pipeline *m_pipelineShadows;
 
         struct Constants
         {

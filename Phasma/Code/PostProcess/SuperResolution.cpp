@@ -50,7 +50,7 @@ namespace pe
         m_memoryUsageInMegabytes = (memoryUsageAfter - memoryUsageBefore) * 0.000001f;
     }
 
-    void SuperResolution::UpdatePipelineInfo()
+    void SuperResolution::UpdatePassInfo()
     {
     }
 

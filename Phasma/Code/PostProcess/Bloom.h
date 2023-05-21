@@ -5,9 +5,8 @@ namespace pe
     class Descriptor;
     class Image;
     class CommandBuffer;
-    class Pipeline;
     class Camera;
-    class PipelineCreateInfo;
+    class PassInfo;
 
     class Bloom : public IRenderComponent
     {
@@ -18,7 +17,7 @@ namespace pe
 
         void Init() override;
 
-        void UpdatePipelineInfo() override;
+        void UpdatePassInfo() override;
 
         void CreateUniforms(CommandBuffer *cmd) override;
 
@@ -35,23 +34,19 @@ namespace pe
     private:
         friend class Renderer;
         
-        void UpdatePipelineInfoBrightFilter();
+        void UpdatePassInfoBrightFilter();
 
-        void UpdatePipelineInfoGaussianBlurHorizontal();
+        void UpdatePassInfoGaussianBlurHorizontal();
 
-        void UpdatePipelineInfoGaussianBlurVertical();
+        void UpdatePassInfoGaussianBlurVertical();
 
-        void UpdatePipelineInfoCombine();
+        void UpdatePassInfoCombine();
 
     public:
-        Pipeline *pipelineBrightFilter;
-        Pipeline *pipelineGaussianBlurHorizontal;
-        Pipeline *pipelineGaussianBlurVertical;
-        Pipeline *pipelineCombine;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfoBF;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfoGBH;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfoGBV;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfoCombine;
+        std::shared_ptr<PassInfo> passInfoBF;
+        std::shared_ptr<PassInfo> passInfoGBH;
+        std::shared_ptr<PassInfo> passInfoGBV;
+        std::shared_ptr<PassInfo> passInfoCombine;
         Descriptor *DSBrightFilter;
         Descriptor *DSGaussianBlurHorizontal;
         Descriptor *DSGaussianBlurVertical;

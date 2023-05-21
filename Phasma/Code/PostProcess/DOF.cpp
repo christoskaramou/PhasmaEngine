@@ -17,7 +17,6 @@ namespace pe
     DOF::DOF()
     {
         DSet = {};
-        pipeline = nullptr;
     }
 
     DOF::~DOF()
@@ -33,11 +32,12 @@ namespace pe
         frameImage = rs->CreateFSSampledImage(false);
     }
 
-    void DOF::UpdatePipelineInfo()
+    void DOF::UpdatePassInfo()
     {
-        pipelineInfo = std::make_shared<PipelineCreateInfo>();
-        PipelineCreateInfo &info = *pipelineInfo;
+        passInfo = std::make_shared<PassInfo>();
+        PassInfo &info = *passInfo;
 
+        info.name = "dof_pipeline";
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/DepthOfField/dofPS.hlsl", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -48,8 +48,13 @@ namespace pe
         info.descriptorSetLayouts = {DSet->GetLayout()};
         info.dynamicColorTargets = 1;
         info.colorFormats = &displayRT->imageInfo.format;
-        info.name = "dof_pipeline";
         
+        AttachmentInfo colorInfo{};
+        colorInfo.image = displayRT;
+        colorInfo.initialLayout = ImageLayout::ColorAttachment;
+        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
+
         info.UpdateHash();
     }
 
@@ -93,18 +98,12 @@ namespace pe
         // Output
         cmd->ImageBarrier(displayRT, ImageLayout::ColorAttachment);
 
-        AttachmentInfo info{};
-        info.image = displayRT;
-        info.initialLayout = displayRT->GetCurrentLayout();
-        info.finalLayout = ImageLayout::ColorAttachment;
-
-        cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
-        cmd->BindPipeline(*pipelineInfo, &pipeline);
+        cmd->BeginPass(passInfo->renderPass, &displayRT, nullptr);
+        cmd->BindPipeline(*passInfo);
         cmd->SetViewport(0.f, 0.f, displayRT->width_f, displayRT->height_f);
         cmd->SetScissor(0, 0, displayRT->imageInfo.width, displayRT->imageInfo.height);
-        cmd->PushConstants(pipeline, ShaderStage::FragmentBit, 0, uint32_t(sizeof(float) * values.size()),
-                           values.data());
-        cmd->BindDescriptors(pipeline, 1, &DSet);
+        cmd->PushConstants(ShaderStage::FragmentBit, 0, uint32_t(sizeof(float) * values.size()), values.data());
+        cmd->BindDescriptors(1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
         cmd->EndDebugRegion();
@@ -120,7 +119,6 @@ namespace pe
     void DOF::Destroy()
     {
         Descriptor::Destroy(DSet);
-        Pipeline::Destroy(pipeline);
         Image::Destroy(frameImage);
     }
 }

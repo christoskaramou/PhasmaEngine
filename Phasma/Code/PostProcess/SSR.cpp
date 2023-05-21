@@ -18,7 +18,6 @@ namespace pe
     SSR::SSR()
     {
         DSet = {};
-        pipeline = nullptr;
     }
 
     SSR::~SSR()
@@ -36,11 +35,12 @@ namespace pe
         depth = rs->GetDepthTarget("depth");
     }
 
-    void SSR::UpdatePipelineInfo()
+    void SSR::UpdatePassInfo()
     {
-        pipelineInfo = std::make_shared<PipelineCreateInfo>();
-        PipelineCreateInfo &info = *pipelineInfo;
+        passInfo = std::make_shared<PassInfo>();
+        PassInfo &info = *passInfo;
 
+        info.name = "ssr_pipeline";
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSR/ssrPS.hlsl", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -48,8 +48,13 @@ namespace pe
         info.colorBlendAttachments = {ssrRT->blendAttachment};
         info.descriptorSetLayouts = {DSet->GetLayout()};
         info.dynamicColorTargets = 1;
-        info.colorFormats = &ssrRT->imageInfo.format;
-        info.name = "ssr_pipeline";
+        info.colorFormats = &ssrRT->imageInfo.format;   
+
+        AttachmentInfo colorInfo{};
+        colorInfo.image = ssrRT;
+        colorInfo.initialLayout = ImageLayout::ColorAttachment;
+        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
         
         info.UpdateHash();
     }
@@ -129,16 +134,11 @@ namespace pe
         // Output
         cmd->ImageBarrier(ssrRT, ImageLayout::ColorAttachment);
 
-        AttachmentInfo info{};
-        info.image = ssrRT;
-        info.initialLayout = ssrRT->GetCurrentLayout();
-        info.finalLayout = ImageLayout::ColorAttachment;
-
-        cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
-        cmd->BindPipeline(*pipelineInfo, &pipeline);
+        cmd->BeginPass(passInfo->renderPass, &ssrRT, nullptr);
+        cmd->BindPipeline(*passInfo);
         cmd->SetViewport(0.f, 0.f, ssrRT->width_f, ssrRT->height_f);
         cmd->SetScissor(0, 0, ssrRT->imageInfo.width, ssrRT->imageInfo.height);
-        cmd->BindDescriptors(pipeline, 1, &DSet);
+        cmd->BindDescriptors(1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
 
@@ -156,7 +156,6 @@ namespace pe
     void SSR::Destroy()
     {
         Descriptor::Destroy(DSet);
-        Pipeline::Destroy(pipeline);
         Buffer::Destroy(UBReflection);
     }
 }

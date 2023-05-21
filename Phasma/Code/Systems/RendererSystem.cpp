@@ -78,7 +78,7 @@ namespace pe
         {
             renderComponent.second->Init();
             renderComponent.second->CreateUniforms(cmd);
-            renderComponent.second->UpdatePipelineInfo();
+            renderComponent.second->UpdatePassInfo();
         }
 
         // GUI LOAD

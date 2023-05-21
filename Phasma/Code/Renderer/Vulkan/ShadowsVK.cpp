@@ -19,6 +19,7 @@ namespace pe
     Shadows::Shadows()
     {
         DSetDeferred = {};
+        dlShadows = {};
     }
 
     Shadows::~Shadows()
@@ -58,10 +59,43 @@ namespace pe
         samplerInfo.compareOp = CompareOp::GreaterOrEqual;
         samplerInfo.name = "ShadowMapSampler_compare";
         sampler = Sampler::Create(samplerInfo);
+
+        std::vector<DescriptorBindingInfo> bindingInfos(3);
+        bindingInfos[0].binding = 0;
+        bindingInfos[0].type = DescriptorType::UniformBufferDynamic;
+        bindingInfos[1].binding = 1;
+        bindingInfos[1].count = SHADOWMAP_CASCADES;
+        bindingInfos[1].type = DescriptorType::SampledImage;
+        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[2].binding = 2;
+        bindingInfos[2].type = DescriptorType::Sampler;
+        dlShadows = DescriptorLayout::GetOrCreate(bindingInfos, ShaderStage::VertexBit);
     }
 
-    void Shadows::UpdatePipelineInfo()
+    void Shadows::UpdatePassInfo()
     {
+        Format depthFormat = RHII.GetDepthFormat();
+
+        passInfo = std::make_shared<PassInfo>();
+
+        passInfo->name = "shadows_pipeline";
+        passInfo->pVertShader = Shader::Create(ShaderInfo{"Shaders/Shadows/shadowsVS.hlsl", ShaderStage::VertexBit});
+        passInfo->vertexInputBindingDescriptions = passInfo->pVertShader->GetReflection().GetVertexBindings();
+        passInfo->vertexInputAttributeDescriptions = passInfo->pVertShader->GetReflection().GetVertexAttributes();
+        passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::DepthBias};
+        passInfo->pushConstantStage = ShaderStage::VertexBit;
+        passInfo->pushConstantSize = sizeof(ShadowPushConstData);
+        passInfo->colorBlendAttachments = {textures[0]->blendAttachment};
+        passInfo->descriptorSetLayouts = {dlShadows};
+        passInfo->depthFormat = &depthFormat;
+
+        AttachmentInfo depthInfo{};
+        depthInfo.image = textures[0];
+        depthInfo.initialLayout = ImageLayout::DepthStencilAttachment;
+        depthInfo.finalLayout = ImageLayout::DepthStencilAttachment;
+        passInfo->renderPass = CommandBuffer::GetRenderPass(0, nullptr, &depthInfo);
+
+        passInfo->UpdateHash();
     }
 
     void Shadows::CreateUniforms(CommandBuffer *cmd)
@@ -227,12 +261,7 @@ namespace pe
     {
         cmd->ImageBarrier(textures[cascade], ImageLayout::DepthStencilAttachment);
 
-        AttachmentInfo depthInfo{};
-        depthInfo.image = textures[cascade];
-        depthInfo.initialLayout = textures[cascade]->GetCurrentLayout();
-        depthInfo.finalLayout = ImageLayout::DepthStencilAttachment;
-
-        cmd->BeginPass(0, nullptr, &depthInfo, &m_renderPassShadows);
+        cmd->BeginPass(passInfo->renderPass, nullptr, textures[cascade]);
         cmd->SetViewport(0.f, 0.f, textures[cascade]->width_f, textures[cascade]->height_f);
         cmd->SetScissor(0, 0, textures[cascade]->imageInfo.width, textures[cascade]->imageInfo.height);
         cmd->SetDepthBias(GUI::depthBias[0], GUI::depthBias[1], GUI::depthBias[2]);

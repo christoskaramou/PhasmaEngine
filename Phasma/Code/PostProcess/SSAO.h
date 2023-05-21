@@ -8,7 +8,6 @@ namespace pe
     class CommandBuffer;
     class Descriptor;
     class Image;
-    class Pipeline;
     class Buffer;
     class Camera;
 
@@ -21,7 +20,7 @@ namespace pe
 
         void Init() override;
 
-        void UpdatePipelineInfo() override{};
+        void UpdatePassInfo() override{};
 
         void CreateUniforms(CommandBuffer *cmd) override{};
 

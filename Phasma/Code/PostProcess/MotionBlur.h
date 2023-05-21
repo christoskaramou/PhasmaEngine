@@ -7,9 +7,8 @@ namespace pe
     class Descriptor;
     class Image;
     class Buffer;
-    class Pipeline;
     class Camera;
-    class PipelineCreateInfo;
+    class PassInfo;
 
     class MotionBlur : public IRenderComponent
     {
@@ -20,7 +19,7 @@ namespace pe
 
         void Init() override;
 
-        void UpdatePipelineInfo() override;
+        void UpdatePassInfo() override;
 
         void CreateUniforms(CommandBuffer *cmd) override;
 
@@ -34,8 +33,7 @@ namespace pe
 
         void Destroy() override;
 
-        Pipeline *pipeline;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfo;
+        std::shared_ptr<PassInfo> passInfo;
         Descriptor *DSet;
         Image *frameImage;
         Image *displayRT;

@@ -13,7 +13,7 @@ namespace pe
     void Downsampler::Init()
     {
         CreateUniforms();
-        UpdatePipelineInfo();
+        UpdatePassInfo();
     }
 
     void Downsampler::Dispatch(CommandBuffer *cmd, Image *image)
@@ -29,9 +29,9 @@ namespace pe
 
         cmd->ImageBarrier(s_image, ImageLayout::General);
 
-        cmd->BindPipeline(*s_pipelineInfo, &s_pipeline);
-        cmd->BindComputeDescriptors(s_pipeline, 1, &s_DSet[s_currentIndex]);
-        cmd->PushConstants(s_pipeline, ShaderStage::ComputeBit, 0, sizeof(PushConstants), &s_pushConstants);
+        cmd->BindPipeline(*s_passInfo);
+        cmd->BindComputeDescriptors(1, &s_DSet[s_currentIndex]);
+        cmd->PushConstants(ShaderStage::ComputeBit, 0, sizeof(PushConstants), &s_pushConstants);
         cmd->Dispatch(groupCount.x, groupCount.y, s_image->imageInfo.arrayLayers);
 
         ResetInputImage();
@@ -52,7 +52,7 @@ namespace pe
         }
     }
 
-    void Downsampler::UpdatePipelineInfo()
+    void Downsampler::UpdatePassInfo()
     {
         // SPD defines
         const std::vector<Define> defines{
@@ -61,14 +61,14 @@ namespace pe
             // Define{"SPD_LINEAR_SAMPLER", ""},
             Define{"SPD_NO_WAVE_OPERATIONS", ""}};
 
-        s_pipelineInfo = std::make_shared<PipelineCreateInfo>();
-        s_pipelineInfo->pCompShader = Shader::Create(ShaderInfo{"Shaders/Compute/spd/spd.hlsl", ShaderStage::ComputeBit, defines});
-        s_pipelineInfo->descriptorSetLayouts = {s_DSet[0]->GetLayout()};
-        s_pipelineInfo->pushConstantSize = sizeof(PushConstants);
-        s_pipelineInfo->pushConstantStage = ShaderStage::ComputeBit;
-        s_pipelineInfo->name = "Downsample_pipeline";
+        s_passInfo = std::make_shared<PassInfo>();
+        s_passInfo->pCompShader = Shader::Create(ShaderInfo{"Shaders/Compute/spd/spd.hlsl", ShaderStage::ComputeBit, defines});
+        s_passInfo->descriptorSetLayouts = {s_DSet[0]->GetLayout()};
+        s_passInfo->pushConstantSize = sizeof(PushConstants);
+        s_passInfo->pushConstantStage = ShaderStage::ComputeBit;
+        s_passInfo->name = "Downsample_pipeline";
         
-        s_pipelineInfo->UpdateHash();
+        s_passInfo->UpdateHash();
     }
 
     void Downsampler::CreateUniforms()

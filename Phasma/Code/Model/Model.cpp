@@ -23,8 +23,6 @@ namespace pe
 
     Model::Model()
     {
-        m_pipelineGBuffer = nullptr;
-        m_pipelineShadows = nullptr;
         uniformBufferIndex = std::numeric_limits<size_t>::max();
         uniformBufferOffset = std::numeric_limits<size_t>::max();
         uniformImagesIndex = std::numeric_limits<size_t>::max();
@@ -401,8 +399,6 @@ namespace pe
         cmd->Submit(queue, nullptr, 0, nullptr, 0, nullptr);
 
         model.CreateUniforms();
-        model.InitRenderTargets();
-        model.UpdatePipelineInfo();
 
         model.name = file.filename().string();
         model.fullPathName = file.string();
@@ -899,11 +895,9 @@ namespace pe
         uniformBuffer.buffer->Unmap();
 
         std::vector<DescriptorBindingInfo> imageBindingInfos(2);
-
         imageBindingInfos[0].binding = 0;
         imageBindingInfos[0].count = 1;
         imageBindingInfos[0].type = DescriptorType::Sampler;
-
         imageBindingInfos[1].binding = 1;
         imageBindingInfos[1].count = static_cast<uint32_t>(views.size());
         imageBindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
@@ -920,110 +914,6 @@ namespace pe
         uniformImages.descriptor->SetSampler(0, sampler->Handle());
         uniformImages.descriptor->SetImages(1, views, {});
         uniformImages.descriptor->Update();
-    }
-
-    void Model::UpdatePipelineInfo()
-    {
-        UpdatePipelineInfoGBuffer();
-        UpdatePipelineInfoAABBs();
-        UpdatePipelineInfoShadows();
-    }
-
-    void Model::UpdatePipelineInfoGBuffer()
-    {
-        Format colorformats[]{
-            m_normalRT->imageInfo.format,
-            m_albedoRT->imageInfo.format,
-            m_srmRT->imageInfo.format,
-            m_velocityRT->imageInfo.format,
-            m_emissiveRT->imageInfo.format};
-
-        Format depthFormat = RHII.GetDepthFormat();
-
-        pipelineInfoGBuffer = std::make_shared<PipelineCreateInfo>();
-        PipelineCreateInfo &info = *pipelineInfoGBuffer;
-
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBufferVS.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBufferPS.hlsl", ShaderStage::FragmentBit});
-        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
-        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
-        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        info.pushConstantStage = ShaderStage::VertexBit | ShaderStage::FragmentBit;
-        info.pushConstantSize = sizeof(Constants);
-        info.cullMode = CullMode::Front;
-        info.colorBlendAttachments = {
-            m_normalRT->blendAttachment,
-            m_albedoRT->blendAttachment,
-            m_srmRT->blendAttachment,
-            m_velocityRT->blendAttachment,
-            m_emissiveRT->blendAttachment,
-        };
-        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
-        auto &uniformImages = RHII.GetUniformImageInfo(uniformImagesIndex);
-        info.descriptorSetLayouts = {
-            uniformBuffer.descriptor->GetLayout(),
-            uniformImages.descriptor->GetLayout()};
-        info.dynamicColorTargets = 5;
-        info.colorFormats = colorformats;
-        info.depthFormat = &depthFormat;
-        info.name = "gbuffer_pipeline";
-        
-        info.UpdateHash();
-    }
-
-    void Model::UpdatePipelineInfoAABBs()
-    {
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
-        Image *display = rs->GetRenderTarget("display");
-        Format colorformat = display->imageInfo.format;
-        // Format depthFormat = RHII.GetDepthFormat();
-
-        pipelineInfoAABBs = std::make_shared<PipelineCreateInfo>();
-        PipelineCreateInfo &info = *pipelineInfoAABBs;
-
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Utilities/AABBsVS.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Utilities/AABBsPS.hlsl", ShaderStage::FragmentBit});
-        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
-        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
-        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
-        info.pushConstantStage = ShaderStage::VertexBit;
-        info.pushConstantSize = sizeof(ConstantsAABBs);
-        info.topology = PrimitiveTopology::LineList;
-        info.cullMode = CullMode::None;
-        info.colorBlendAttachments = {
-            display->blendAttachment,
-        };
-        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
-        info.descriptorSetLayouts = {uniformBuffer.descriptor->GetLayout()};
-        info.dynamicColorTargets = 1;
-        info.colorFormats = &colorformat;
-        // info.depthFormat = &depthFormat;
-        info.depthWriteEnable = false;
-        info.name = "AABBs_pipeline";
-
-        info.UpdateHash();
-    }
-
-    void Model::UpdatePipelineInfoShadows()
-    {
-        auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
-        Format depthFormat = RHII.GetDepthFormat();
-
-        pipelineInfoShadows = std::make_shared<PipelineCreateInfo>();
-        PipelineCreateInfo &info = *pipelineInfoShadows;
-
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Shadows/shadowsVS.hlsl", ShaderStage::VertexBit});
-        info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
-        info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
-        info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::DepthBias};
-        info.pushConstantStage = ShaderStage::VertexBit;
-        info.pushConstantSize = sizeof(ShadowPushConstData);
-        info.colorBlendAttachments = {WORLD_ENTITY->GetComponent<Shadows>()->textures[0]->blendAttachment};
-        info.descriptorSetLayouts = {uniformBuffer.descriptor->GetLayout()};
-        info.depthFormat = &depthFormat;
-        info.name = "shadows_pipeline";
-        
-        info.UpdateHash();
     }
 
     void Model::UpdateAnimation(uint32_t index, float time)
@@ -1182,15 +1072,16 @@ namespace pe
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
         auto &uniformImages = RHII.GetUniformImageInfo(uniformImagesIndex);
 
-        pipelineInfoGBuffer->renderPass = WORLD_ENTITY->GetComponent<Deferred>()->GetRenderPassModels();
-        cmd->BindPipeline(*pipelineInfoGBuffer, &m_pipelineGBuffer);
+        Deferred *deferred = WORLD_ENTITY->GetComponent<Deferred>();
+        const PassInfo &passInfo = deferred->GetGBufferPassInfo();
+        cmd->BindPipeline(passInfo);
         cmd->BindVertexBuffer(vertexBuffer, 0);
         cmd->BindIndexBuffer(indexBuffer, 0);
 
         Descriptor *dsetHandles[]{
             uniformBuffer.descriptor,
             uniformImages.descriptor};
-        cmd->BindDescriptors(m_pipelineGBuffer, 2, dsetHandles);
+        cmd->BindDescriptors(2, dsetHandles);
 
         Camera *camera = CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
         m_constants.projJitter[0] = camera->projJitter.x;
@@ -1220,8 +1111,7 @@ namespace pe
                             m_constants.primitiveImageIndex = static_cast<uint32_t>(primitive.uniformImagesIndex);
 
                             cmd->PushConstants(
-                                m_pipelineGBuffer,
-                                m_pipelineGBuffer->info.pushConstantStage,
+                                passInfo.pushConstantStage,
                                 0,
                                 sizeof(Constants),
                                 &m_constants);
@@ -1252,37 +1142,23 @@ namespace pe
 
         RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
         Image *display = rs->GetRenderTarget("display");
-        // Image *depth = rs->GetDepthTarget("depth");
         cmd->ImageBarrier(display, ImageLayout::ColorAttachment);
-        // cmd->ImageBarrier(depth, ImageLayout::DepthStencilAttachment);
-
-        AttachmentInfo colorInfo{};
-        colorInfo.image = display;
-        colorInfo.loadOp = AttachmentLoadOp::Load;
-        colorInfo.storeOp = AttachmentStoreOp::Store;
-        colorInfo.initialLayout = display->GetCurrentLayout();
-        colorInfo.finalLayout = ImageLayout::ColorAttachment;
-
-        // AttachmentInfo depthInfo{};
-        // depthInfo.image = depth;
-        // depthInfo.loadOp = AttachmentLoadOp::Load;
-        // depthInfo.storeOp = AttachmentStoreOp::Store;
-        // depthInfo.initialLayout = depth->GetCurrentLayout();
-        // depthInfo.finalLayout = ImageLayout::DepthStencilAttachment;
 
         cmd->BeginDebugRegion("Draw AABBs");
-        // cmd->BeginPass(1, &colorInfo, &depthInfo, &pipelineInfoAABBs->renderPass);
-        cmd->BeginPass(1, &colorInfo, nullptr, &pipelineInfoAABBs->renderPass);
+
+        Deferred *deferred = WORLD_ENTITY->GetComponent<Deferred>();
+        const PassInfo &passInfo = deferred->GetAABBsPassInfo();
+        cmd->BeginPass(passInfo.renderPass, &display, nullptr);
         cmd->SetViewport(0.f, 0.f, display->width_f, display->height_f);
         cmd->SetScissor(0, 0, display->imageInfo.width, display->imageInfo.height);
 
-        cmd->BindPipeline(*pipelineInfoAABBs, &m_pipelineAABBs);
+        cmd->BindPipeline(passInfo);
         cmd->BindVertexBuffer(AABBsVertexBuffer, 0);
         cmd->BindIndexBuffer(AABBsIndexBuffer, 0);
 
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
         Descriptor *dsetHandles[]{uniformBuffer.descriptor};
-        cmd->BindDescriptors(m_pipelineAABBs, 1, dsetHandles);
+        cmd->BindDescriptors(1, dsetHandles);
 
         Camera *camera = CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
         m_constantsAABBs.projJitter[0] = camera->projJitter.x;
@@ -1303,8 +1179,7 @@ namespace pe
                         m_constantsAABBs.color = primitive.aabbColor;
 
                         cmd->PushConstants(
-                            m_pipelineAABBs,
-                            m_pipelineAABBs->info.pushConstantStage,
+                            passInfo.pushConstantStage,
                             0,
                             sizeof(ConstantsAABBs),
                             &m_constantsAABBs);
@@ -1336,13 +1211,13 @@ namespace pe
         Shadows &shadows = *WORLD_ENTITY->GetComponent<Shadows>();
         ShadowPushConstData data;
 
-        pipelineInfoShadows->renderPass = shadows.GetRenderPassShadows();
-        cmd->BindPipeline(*pipelineInfoShadows, &m_pipelineShadows);
+        const PassInfo &passInfo = shadows.GetPassInfo();
+        cmd->BindPipeline(passInfo);
         cmd->BindVertexBuffer(shadowsVertexBuffer, 0);
         cmd->BindIndexBuffer(indexBuffer, 0);
 
         Descriptor *dset = RHII.GetUniformBufferInfo(uniformBufferIndex).descriptor;
-        cmd->BindDescriptors(m_pipelineShadows, 1, &dset);
+        cmd->BindDescriptors(1, &dset);
 
         for (auto &node : linearNodes)
         {
@@ -1352,7 +1227,7 @@ namespace pe
                 data.meshIndex = static_cast<uint32_t>(node->mesh->uniformBufferOffset / sizeof(mat4));
                 data.meshJointCount = static_cast<uint32_t>(node->mesh->meshData.jointMatrices.size());
 
-                cmd->PushConstants(m_pipelineShadows, ShaderStage::VertexBit, 0, sizeof(ShadowPushConstData), &data);
+                cmd->PushConstants(ShaderStage::VertexBit, 0, sizeof(ShadowPushConstData), &data);
                 for (auto &primitive : node->mesh->primitives)
                 {
                     // if (primitive.render)
@@ -1367,19 +1242,8 @@ namespace pe
         }
     }
 
-    void Model::InitRenderTargets()
-    {
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
-        m_normalRT = rs->GetRenderTarget("normal");
-        m_albedoRT = rs->GetRenderTarget("albedo");
-        m_srmRT = rs->GetRenderTarget("srm");
-        m_velocityRT = rs->GetRenderTarget("velocity");
-        m_emissiveRT = rs->GetRenderTarget("emissive");
-    }
-
     void Model::Resize()
     {
-        InitRenderTargets();
     }
 
     void Model::Destroy()
@@ -1389,10 +1253,6 @@ namespace pe
             delete script;
             script = nullptr;
         }
-
-        Pipeline::Destroy(m_pipelineGBuffer);
-        Pipeline::Destroy(m_pipelineAABBs);
-        Pipeline::Destroy(m_pipelineShadows);
 
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
         Buffer::Destroy(uniformBuffer.buffer);

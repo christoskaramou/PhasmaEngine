@@ -16,7 +16,6 @@ namespace pe
     FXAA::FXAA()
     {
         DSet = {};
-        pipeline = nullptr;
     }
 
     FXAA::~FXAA()
@@ -31,11 +30,12 @@ namespace pe
         frameImage = rs->CreateFSSampledImage();
     }
 
-    void FXAA::UpdatePipelineInfo()
+    void FXAA::UpdatePassInfo()
     {
-        pipelineInfo = std::make_shared<PipelineCreateInfo>();
-        PipelineCreateInfo &info = *pipelineInfo;
+        passInfo = std::make_shared<PassInfo>();
+        PassInfo &info = *passInfo;
 
+        info.name = "fxaa_pipeline";
         info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
         info.pFragShader = Shader::Create(ShaderInfo{"Shaders/FXAA/fxaaPS.hlsl", ShaderStage::FragmentBit});
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -44,7 +44,12 @@ namespace pe
         info.descriptorSetLayouts = {DSet->GetLayout()};
         info.dynamicColorTargets = 1;
         info.colorFormats = &viewportRT->imageInfo.format;
-        info.name = "fxaa_pipeline";
+
+        AttachmentInfo colorInfo{};
+        colorInfo.image = viewportRT;
+        colorInfo.initialLayout = ImageLayout::ColorAttachment;
+        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
         
         info.UpdateHash();
     }
@@ -82,16 +87,11 @@ namespace pe
         // Output
         cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
 
-        AttachmentInfo info{};
-        info.image = viewportRT;
-        info.initialLayout = viewportRT->GetCurrentLayout();
-        info.finalLayout = ImageLayout::ColorAttachment;
-
-        cmd->BeginPass(1, &info, nullptr, &pipelineInfo->renderPass);
-        cmd->BindPipeline(*pipelineInfo, &pipeline);
+        cmd->BeginPass(passInfo->renderPass, &viewportRT, nullptr);
+        cmd->BindPipeline(*passInfo);
         cmd->SetViewport(0.f, 0.f, viewportRT->width_f, viewportRT->height_f);
         cmd->SetScissor(0, 0, viewportRT->imageInfo.width, viewportRT->imageInfo.height);
-        cmd->BindDescriptors(pipeline, 1, &DSet);
+        cmd->BindDescriptors(1, &DSet);
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();
         cmd->EndDebugRegion();
@@ -107,7 +107,6 @@ namespace pe
     void FXAA::Destroy()
     {
         Descriptor::Destroy(DSet);
-        Pipeline::Destroy(pipeline);
         Image::Destroy(frameImage);
     }
 }

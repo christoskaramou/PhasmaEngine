@@ -540,7 +540,7 @@ namespace pe
         DOF &dof = *WORLD_ENTITY->GetComponent<DOF>();
         MotionBlur &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlur>();
 
-        auto NeedsUpdate = [](std::shared_ptr<PipelineCreateInfo> info)
+        auto NeedsUpdate = [](std::shared_ptr<PassInfo> info)
         {
             bool recreatePipeline = false;
 
@@ -568,35 +568,30 @@ namespace pe
             return false;
         };
 
-        if (NeedsUpdate(deferred.pipelineInfo))
-            deferred.UpdatePipelineInfo();
+        if (NeedsUpdate(deferred.passInfo))
+            deferred.UpdatePassInfo();
+        if (NeedsUpdate(deferred.passInfoGBuffer))
+            deferred.UpdatePassInfo();
+        if (NeedsUpdate(deferred.passInfoAABBs))
+            deferred.UpdatePassInfo();
 
-        if (NeedsUpdate(bloom.pipelineInfoBF))
-            bloom.UpdatePipelineInfoBrightFilter();
-        if (NeedsUpdate(bloom.pipelineInfoGBH))
-            bloom.UpdatePipelineInfoGaussianBlurHorizontal();
-        if (NeedsUpdate(bloom.pipelineInfoGBV))
-            bloom.UpdatePipelineInfoGaussianBlurVertical();
-        if (NeedsUpdate(bloom.pipelineInfoCombine))
-            bloom.UpdatePipelineInfoCombine();
+        if (NeedsUpdate(shadows.passInfo))
+            shadows.UpdatePassInfo();
 
-        if (NeedsUpdate(dof.pipelineInfo))
-            dof.UpdatePipelineInfo();
+        if (NeedsUpdate(bloom.passInfoBF))
+            bloom.UpdatePassInfoBrightFilter();
+        if (NeedsUpdate(bloom.passInfoGBH))
+            bloom.UpdatePassInfoGaussianBlurHorizontal();
+        if (NeedsUpdate(bloom.passInfoGBV))
+            bloom.UpdatePassInfoGaussianBlurVertical();
+        if (NeedsUpdate(bloom.passInfoCombine))
+            bloom.UpdatePassInfoCombine();
 
-        if (NeedsUpdate(motionBlur.pipelineInfo))
-            motionBlur.UpdatePipelineInfo();
+        if (NeedsUpdate(dof.passInfo))
+            dof.UpdatePassInfo();
 
-        for (auto &model : Model::models)
-        {
-            if (NeedsUpdate(model.pipelineInfoGBuffer))
-                model.UpdatePipelineInfoGBuffer();
-                
-            if (NeedsUpdate(model.pipelineInfoAABBs))
-                model.UpdatePipelineInfoAABBs();
-
-            if (NeedsUpdate(model.pipelineInfoShadows))
-                model.UpdatePipelineInfoShadows();
-        }
+        if (NeedsUpdate(motionBlur.passInfo))
+            motionBlur.UpdatePassInfo();
     }
 }
 #endif

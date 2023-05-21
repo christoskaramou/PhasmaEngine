@@ -10,7 +10,7 @@ namespace pe
     class Image;
     class Descriptor;
     class Semaphore;
-    class PipelineCreateInfo;
+    class PassInfo;
 
     struct ImageSubresourceLayers
     {
@@ -86,26 +86,19 @@ namespace pe
 
         void BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter);
 
-        void BeginPass(uint32_t count,
-                       AttachmentInfo *colorInfos,
-                       AttachmentInfo *depthInfo,
-                       RenderPass **outRenderPass = nullptr);
+        void BeginPass(RenderPass *renderPass, Image **colorTargets, Image *depthTarget);
 
         void EndPass();
 
-        void BindGraphicsPipeline(Pipeline *pipeline);
-
-        void BindComputePipeline(Pipeline *pipeline);
-
-        void BindPipeline(const PipelineCreateInfo &pipelineInfo, Pipeline **outPipeline);
+        void BindPipeline(const PassInfo &passInfo);
 
         void BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding = 0, uint32_t bindingCount = 1);
 
         void BindIndexBuffer(Buffer *buffer, size_t offset);
 
-        void BindDescriptors(Pipeline *pipeline, uint32_t count, Descriptor **descriptors);
+        void BindDescriptors(uint32_t count, Descriptor **descriptors);
 
-        void BindComputeDescriptors(Pipeline *pipeline, uint32_t count, Descriptor **descriptors);
+        void BindComputeDescriptors(uint32_t count, Descriptor **descriptors);
 
         void SetViewport(float x, float y, float width, float height);
 
@@ -113,7 +106,7 @@ namespace pe
 
         void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
 
-        void PushConstants(Pipeline *pipeline, ShaderStageFlags stage, uint32_t offset, uint32_t size,
+        void PushConstants(ShaderStageFlags stage, uint32_t offset, uint32_t size,
                            const void *pValues);
 
         void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
@@ -183,10 +176,14 @@ namespace pe
 
         // Cached resourses functionality
         static RenderPass *GetRenderPass(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo);
-        static FrameBuffer *GetFrameBuffer(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo, RenderPass *renderPass);
-        static Pipeline *GetPipeline(const PipelineCreateInfo &info);
+        static FrameBuffer *GetFrameBuffer(RenderPass *renderPass, Image **colorTargets, Image *depthTarget);
+        static Pipeline *GetPipeline(const PassInfo &info);
 
     private:
+        void BindGraphicsPipeline(Pipeline *pipeline);
+
+        void BindComputePipeline(Pipeline *pipeline);
+        
         friend class Queue;
 
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
@@ -206,5 +203,6 @@ namespace pe
         std::string m_name;
         Delegate<> m_afterWaitCallbacks;
         bool m_dynamicPass = false;
+        Pipeline *m_boundPipeline;
     };
 }

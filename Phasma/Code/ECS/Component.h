@@ -47,8 +47,7 @@ namespace pe
     class Image;
     class CommandBuffer;
     class Camera;
-    class Pipeline;
-    class PipelineCreateInfo;
+    class PassInfo;
     class Descriptor;
     class Buffer;
 
@@ -57,7 +56,7 @@ namespace pe
     public:
         virtual void Init() = 0;
 
-        virtual void UpdatePipelineInfo() = 0;
+        virtual void UpdatePassInfo() = 0;
 
         virtual void CreateUniforms(CommandBuffer *cmd) = 0;
 

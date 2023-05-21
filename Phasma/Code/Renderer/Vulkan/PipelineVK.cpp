@@ -19,7 +19,7 @@ namespace pe
         colorWriteMask = {};
     }
 
-    void PipelineCreateInfo::UpdateHash()
+    void PassInfo::UpdateHash()
     {
         m_hash = {};
 
@@ -96,7 +96,7 @@ namespace pe
         }
     }
 
-    PipelineCreateInfo::PipelineCreateInfo()
+    PassInfo::PassInfo()
     {
         pVertShader = nullptr;
         pFragShader = nullptr;
@@ -121,7 +121,7 @@ namespace pe
         pipelineCache = {};
     }
 
-    PipelineCreateInfo::~PipelineCreateInfo()
+    PassInfo::~PassInfo()
     {
         Shader::Destroy(pCompShader);
         pCompShader = nullptr;
@@ -133,7 +133,7 @@ namespace pe
         pFragShader = nullptr;
     }
 
-    Pipeline::Pipeline(const PipelineCreateInfo &info)
+    Pipeline::Pipeline(const PassInfo &info)
     {
         this->info = info;
 

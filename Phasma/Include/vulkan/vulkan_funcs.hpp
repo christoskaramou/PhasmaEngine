@@ -17290,7 +17290,7 @@ namespace VULKAN_HPP_NAMESPACE
   template <typename PipelineExecutablePropertiesKHRAllocator, typename Dispatch>
   VULKAN_HPP_NODISCARD VULKAN_HPP_INLINE
     typename ResultValueType<std::vector<VULKAN_HPP_NAMESPACE::PipelineExecutablePropertiesKHR, PipelineExecutablePropertiesKHRAllocator>>::type
-    Device::getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & pipelineInfo, Dispatch const & d ) const
+    Device::getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & passInfo, Dispatch const & d ) const
   {
     VULKAN_HPP_ASSERT( d.getVkHeaderVersion() == VK_HEADER_VERSION );
 
@@ -17299,12 +17299,12 @@ namespace VULKAN_HPP_NAMESPACE
     VkResult                                                                                                     result;
     do
     {
-      result = d.vkGetPipelineExecutablePropertiesKHR( m_device, reinterpret_cast<const VkPipelineInfoKHR *>( &pipelineInfo ), &executableCount, nullptr );
+      result = d.vkGetPipelineExecutablePropertiesKHR( m_device, reinterpret_cast<const VkPipelineInfoKHR *>( &passInfo ), &executableCount, nullptr );
       if ( ( result == VK_SUCCESS ) && executableCount )
       {
         properties.resize( executableCount );
         result = d.vkGetPipelineExecutablePropertiesKHR( m_device,
-                                                         reinterpret_cast<const VkPipelineInfoKHR *>( &pipelineInfo ),
+                                                         reinterpret_cast<const VkPipelineInfoKHR *>( &passInfo ),
                                                          &executableCount,
                                                          reinterpret_cast<VkPipelineExecutablePropertiesKHR *>( properties.data() ) );
       }
@@ -17324,7 +17324,7 @@ namespace VULKAN_HPP_NAMESPACE
             typename std::enable_if<std::is_same<typename B1::value_type, PipelineExecutablePropertiesKHR>::value, int>::type>
   VULKAN_HPP_NODISCARD VULKAN_HPP_INLINE
     typename ResultValueType<std::vector<VULKAN_HPP_NAMESPACE::PipelineExecutablePropertiesKHR, PipelineExecutablePropertiesKHRAllocator>>::type
-    Device::getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & pipelineInfo,
+    Device::getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & passInfo,
                                                 PipelineExecutablePropertiesKHRAllocator &    pipelineExecutablePropertiesKHRAllocator,
                                                 Dispatch const &                              d ) const
   {
@@ -17336,12 +17336,12 @@ namespace VULKAN_HPP_NAMESPACE
     VkResult result;
     do
     {
-      result = d.vkGetPipelineExecutablePropertiesKHR( m_device, reinterpret_cast<const VkPipelineInfoKHR *>( &pipelineInfo ), &executableCount, nullptr );
+      result = d.vkGetPipelineExecutablePropertiesKHR( m_device, reinterpret_cast<const VkPipelineInfoKHR *>( &passInfo ), &executableCount, nullptr );
       if ( ( result == VK_SUCCESS ) && executableCount )
       {
         properties.resize( executableCount );
         result = d.vkGetPipelineExecutablePropertiesKHR( m_device,
-                                                         reinterpret_cast<const VkPipelineInfoKHR *>( &pipelineInfo ),
+                                                         reinterpret_cast<const VkPipelineInfoKHR *>( &passInfo ),
                                                          &executableCount,
                                                          reinterpret_cast<VkPipelineExecutablePropertiesKHR *>( properties.data() ) );
       }
@@ -19335,13 +19335,13 @@ namespace VULKAN_HPP_NAMESPACE
 #ifndef VULKAN_HPP_DISABLE_ENHANCED_MODE
   template <typename Dispatch>
   VULKAN_HPP_NODISCARD VULKAN_HPP_INLINE typename ResultValueType<VULKAN_HPP_NAMESPACE::BaseOutStructure>::type
-                       Device::getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & pipelineInfo, Dispatch const & d ) const
+                       Device::getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & passInfo, Dispatch const & d ) const
   {
     VULKAN_HPP_ASSERT( d.getVkHeaderVersion() == VK_HEADER_VERSION );
 
     VULKAN_HPP_NAMESPACE::BaseOutStructure pipelineProperties;
     VkResult                               result = d.vkGetPipelinePropertiesEXT(
-      m_device, reinterpret_cast<const VkPipelineInfoEXT *>( &pipelineInfo ), reinterpret_cast<VkBaseOutStructure *>( &pipelineProperties ) );
+      m_device, reinterpret_cast<const VkPipelineInfoEXT *>( &passInfo ), reinterpret_cast<VkBaseOutStructure *>( &pipelineProperties ) );
     resultCheck( static_cast<VULKAN_HPP_NAMESPACE::Result>( result ), VULKAN_HPP_NAMESPACE_STRING "::Device::getPipelinePropertiesEXT" );
 
     return createResultValueType( static_cast<VULKAN_HPP_NAMESPACE::Result>( result ), pipelineProperties );
@@ -19349,14 +19349,14 @@ namespace VULKAN_HPP_NAMESPACE
 
   template <typename X, typename Y, typename... Z, typename Dispatch>
   VULKAN_HPP_NODISCARD VULKAN_HPP_INLINE typename ResultValueType<StructureChain<X, Y, Z...>>::type
-                       Device::getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & pipelineInfo, Dispatch const & d ) const
+                       Device::getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & passInfo, Dispatch const & d ) const
   {
     VULKAN_HPP_ASSERT( d.getVkHeaderVersion() == VK_HEADER_VERSION );
 
     StructureChain<X, Y, Z...>               structureChain;
     VULKAN_HPP_NAMESPACE::BaseOutStructure & pipelineProperties = structureChain.template get<VULKAN_HPP_NAMESPACE::BaseOutStructure>();
     VkResult                                 result             = d.vkGetPipelinePropertiesEXT(
-      m_device, reinterpret_cast<const VkPipelineInfoEXT *>( &pipelineInfo ), reinterpret_cast<VkBaseOutStructure *>( &pipelineProperties ) );
+      m_device, reinterpret_cast<const VkPipelineInfoEXT *>( &passInfo ), reinterpret_cast<VkBaseOutStructure *>( &pipelineProperties ) );
     resultCheck( static_cast<VULKAN_HPP_NAMESPACE::Result>( result ), VULKAN_HPP_NAMESPACE_STRING "::Device::getPipelinePropertiesEXT" );
 
     return createResultValueType( static_cast<VULKAN_HPP_NAMESPACE::Result>( result ), structureChain );

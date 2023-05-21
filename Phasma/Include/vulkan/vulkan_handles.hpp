@@ -10726,7 +10726,7 @@ namespace VULKAN_HPP_NAMESPACE
               typename Dispatch                                 = VULKAN_HPP_DEFAULT_DISPATCHER_TYPE>
     VULKAN_HPP_NODISCARD
       typename ResultValueType<std::vector<VULKAN_HPP_NAMESPACE::PipelineExecutablePropertiesKHR, PipelineExecutablePropertiesKHRAllocator>>::type
-      getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & pipelineInfo,
+      getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & passInfo,
                                           Dispatch const & d                            VULKAN_HPP_DEFAULT_DISPATCHER_ASSIGNMENT ) const;
     template <typename PipelineExecutablePropertiesKHRAllocator = std::allocator<VULKAN_HPP_NAMESPACE::PipelineExecutablePropertiesKHR>,
               typename Dispatch                                 = VULKAN_HPP_DEFAULT_DISPATCHER_TYPE,
@@ -10734,7 +10734,7 @@ namespace VULKAN_HPP_NAMESPACE
               typename std::enable_if<std::is_same<typename B1::value_type, PipelineExecutablePropertiesKHR>::value, int>::type = 0>
     VULKAN_HPP_NODISCARD
       typename ResultValueType<std::vector<VULKAN_HPP_NAMESPACE::PipelineExecutablePropertiesKHR, PipelineExecutablePropertiesKHRAllocator>>::type
-      getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & pipelineInfo,
+      getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & passInfo,
                                           PipelineExecutablePropertiesKHRAllocator &    pipelineExecutablePropertiesKHRAllocator,
                                           Dispatch const & d                            VULKAN_HPP_DEFAULT_DISPATCHER_ASSIGNMENT ) const;
 #endif /*VULKAN_HPP_DISABLE_ENHANCED_MODE*/
@@ -11215,10 +11215,10 @@ namespace VULKAN_HPP_NAMESPACE
 #ifndef VULKAN_HPP_DISABLE_ENHANCED_MODE
     template <typename Dispatch = VULKAN_HPP_DEFAULT_DISPATCHER_TYPE>
     VULKAN_HPP_NODISCARD typename ResultValueType<VULKAN_HPP_NAMESPACE::BaseOutStructure>::type
-      getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & pipelineInfo, Dispatch const & d VULKAN_HPP_DEFAULT_DISPATCHER_ASSIGNMENT ) const;
+      getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & passInfo, Dispatch const & d VULKAN_HPP_DEFAULT_DISPATCHER_ASSIGNMENT ) const;
     template <typename X, typename Y, typename... Z, typename Dispatch = VULKAN_HPP_DEFAULT_DISPATCHER_TYPE>
     VULKAN_HPP_NODISCARD typename ResultValueType<StructureChain<X, Y, Z...>>::type
-      getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & pipelineInfo, Dispatch const & d VULKAN_HPP_DEFAULT_DISPATCHER_ASSIGNMENT ) const;
+      getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & passInfo, Dispatch const & d VULKAN_HPP_DEFAULT_DISPATCHER_ASSIGNMENT ) const;
 #endif /*VULKAN_HPP_DISABLE_ENHANCED_MODE*/
 
     //=== VK_EXT_pageable_device_local_memory ===

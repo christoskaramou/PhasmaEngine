@@ -23,14 +23,14 @@ namespace pe
         ColorComponentFlags colorWriteMask;
     };
 
-    class PipelineCreateInfo : public Hashable
+    class PassInfo : public Hashable
     {
     public:
         void UpdateHash() override;
 
-        PipelineCreateInfo();
+        PassInfo();
 
-        ~PipelineCreateInfo();
+        ~PassInfo();
 
         Shader *pVertShader;
         Shader *pFragShader;
@@ -59,11 +59,11 @@ namespace pe
     class Pipeline : public IHandle<Pipeline, PipelineHandle>
     {
     public:
-        Pipeline(const PipelineCreateInfo &info);
+        Pipeline(const PassInfo &info);
 
         ~Pipeline();
 
-        PipelineCreateInfo info;
+        PassInfo info;
 
         PipelineLayoutHandle layout;
     };

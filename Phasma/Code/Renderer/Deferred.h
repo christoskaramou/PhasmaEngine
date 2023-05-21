@@ -7,9 +7,9 @@ namespace pe
 {
     class Descriptor;
     class Image;
-    class Pipeline;
     class RenderPass;
-    class PipelineCreateInfo;
+    class PassInfo;
+    class DescriptorLayout;
 
     class Deferred : public IRenderComponent
     {
@@ -20,7 +20,11 @@ namespace pe
 
         void Init() override;
 
-        void UpdatePipelineInfo() override;
+        void UpdatePassInfo() override;
+
+        void UpdatePassInfoGBuffer();
+
+        void UpdatePassInfoAABBs();
 
         void CreateUniforms(CommandBuffer *cmd) override;
 
@@ -38,7 +42,8 @@ namespace pe
 
         void EndPass(CommandBuffer *cmd);
 
-        RenderPass *GetRenderPassModels() { return m_renderPassModels; }
+        const PassInfo &GetGBufferPassInfo() { return *passInfoGBuffer; }
+        const PassInfo &GetAABBsPassInfo() { return *passInfoAABBs; }
 
     public:
         struct UBO
@@ -47,9 +52,8 @@ namespace pe
         } ubo;
         Buffer *uniform;
         Descriptor *DSet;
-        Pipeline *pipeline;
-        RenderPass *m_renderPassModels;
-        std::shared_ptr<PipelineCreateInfo> pipelineInfo;
+        DescriptorLayout *dlBuffer;
+        DescriptorLayout *dlImages;
         Image *ibl_brdf_lut;
         Image *normalRT;
         Image *albedoRT;
@@ -60,5 +64,9 @@ namespace pe
         Image *depth;
         Image *ssaoBlurRT;
         Image *ssrRT;
+
+        std::shared_ptr<PassInfo> passInfo;
+        std::shared_ptr<PassInfo> passInfoGBuffer;
+        std::shared_ptr<PassInfo> passInfoAABBs;
     };
 }

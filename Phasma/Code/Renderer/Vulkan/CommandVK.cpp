@@ -96,6 +96,7 @@ namespace pe
         m_commandPool = CommandPool::GetNext(familyId);
         m_semaphore = Semaphore::Create(true, name + "_semaphore");
         m_submitions = 0;
+        m_boundPipeline = nullptr;
 
         VkCommandBufferAllocateInfo cbai{};
         cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -174,11 +175,8 @@ namespace pe
         dst->BlitImage(this, src, region, filter);
     }
 
-    RenderPass *CommandBuffer::GetRenderPass(uint32_t count,
-                                             AttachmentInfo *colorInfos,
-                                             AttachmentInfo *depthInfo)
+    RenderPass *CommandBuffer::GetRenderPass(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo)
     {
-
         Hash hash;
         hash.Combine(count);
         for (uint32_t i = 0; i < count; i++)
@@ -240,18 +238,19 @@ namespace pe
         }
     }
 
-    FrameBuffer *CommandBuffer::GetFrameBuffer(uint32_t count,
-                                               AttachmentInfo *colorInfos,
-                                               AttachmentInfo *depthInfo,
-                                               RenderPass *renderPass)
+    FrameBuffer *CommandBuffer::GetFrameBuffer(RenderPass *renderPass, Image **colorTargets, Image *depthTarget)
     {
+        uint32_t count = static_cast<uint32_t>(renderPass->attachments.size());
+
         Hash hash;
         hash.Combine(count);
         hash.Combine(reinterpret_cast<std::intptr_t>(renderPass));
-        for (uint32_t i = 0; i < count; i++)
-            hash.Combine(reinterpret_cast<std::intptr_t>(colorInfos[i].image));
-        if (depthInfo)
-            hash.Combine(reinterpret_cast<std::intptr_t>(depthInfo->image));
+
+        uint32_t colorCount = depthTarget ? count - 1 : count;
+        for (uint32_t i = 0; i < colorCount; i++)
+            hash.Combine(reinterpret_cast<std::intptr_t>(colorTargets[i]));
+        if (depthTarget)
+            hash.Combine(reinterpret_cast<std::intptr_t>(depthTarget));
 
         auto it = s_frameBuffers.find(hash);
         if (it != s_frameBuffers.end())
@@ -262,30 +261,34 @@ namespace pe
         {
             uint32_t width;
             uint32_t height;
-            if (count > 0)
+
+            // if no color attachments pick depth
+            if (colorCount > 0)
             {
-                width = colorInfos[0].image->imageInfo.width;
-                height = colorInfos[0].image->imageInfo.height;
+                width = colorTargets[0]->imageInfo.width;
+                height = colorTargets[0]->imageInfo.height;
             }
             else
             {
-                width = depthInfo->image->imageInfo.width;
-                height = depthInfo->image->imageInfo.height;
+                width = depthTarget->imageInfo.width;
+                height = depthTarget->imageInfo.height;
             }
 
             std::vector<ImageViewHandle> views{};
-            for (uint32_t i = 0; i < count; i++)
+            for (uint32_t i = 0; i < colorCount; i++)
             {
-                if (!colorInfos[i].image->HasRTV())
-                    colorInfos[i].image->CreateRTV();
-                views.push_back(colorInfos[i].image->GetRTV());
+                // create render target view if not exists
+                if (!colorTargets[i]->HasRTV())
+                    colorTargets[i]->CreateRTV();
+                views.push_back(colorTargets[i]->GetRTV());
             }
 
-            if (depthInfo)
+            if (depthTarget)
             {
-                if (!depthInfo->image->HasRTV())
-                    depthInfo->image->CreateRTV();
-                views.push_back(depthInfo->image->GetRTV());
+                // create render target view if not exists
+                if (!depthTarget->HasRTV())
+                    depthTarget->CreateRTV();
+                views.push_back(depthTarget->GetRTV());
             }
 
             std::string name = "Auto_Gen_FrameBuffer_" + std::to_string(s_frameBuffers.size());
@@ -301,39 +304,35 @@ namespace pe
         }
     }
 
-    void CommandBuffer::BeginPass(uint32_t count,
-                                  AttachmentInfo *colorInfos,
-                                  AttachmentInfo *depthInfo,
-                                  RenderPass **outRenderPass)
+    void CommandBuffer::BeginPass(RenderPass *renderPass, Image **colorTargets, Image *depthTarget)
     {
 #if (USE_DYNAMIC_RENDERING == 0)
-        RenderPass *rp = GetRenderPass(count, colorInfos, depthInfo);
-        FrameBuffer *fb = GetFrameBuffer(count, colorInfos, depthInfo, rp);
+        FrameBuffer *frameBuffer = GetFrameBuffer(renderPass, colorTargets, depthTarget);
 
-        // Update the image layouts now, they will end up as their finalLayout after render pass
-        for (uint32_t i = 0; i < count; i++)
-            colorInfos[i].image->SetCurrentLayout(colorInfos[i].finalLayout);
-        if (depthInfo)
-            depthInfo->image->SetCurrentLayout(depthInfo->finalLayout);
+        std::vector<Attachment> &attachments = renderPass->attachments;
+        uint32_t count = static_cast<uint32_t>(attachments.size());
 
-        if (outRenderPass)
-            *outRenderPass = rp;
+        std::vector<VkClearValue> clearValues(count);
 
-        std::vector<VkClearValue> clearValues(rp->attachments.size());
-        for (int i = 0; i < rp->attachments.size(); i++)
+        uint32_t colorCount = depthTarget ? count - 1 : count;
+        uint32_t i = 0;
+        for (; i < colorCount; i++)
         {
-            if (IsDepthFormat(rp->attachments[i].format))
-                clearValues[i].depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
-            else
-                clearValues[i].color = {1.0f, 0.0f, 0.0f, 1.0f};
+            colorTargets[i]->SetCurrentLayout(attachments[i].finalLayout);
+            clearValues[i].color = {1.0f, 0.0f, 0.0f, 1.0f};
+        }
+        if (depthTarget)
+        {
+            depthTarget->SetCurrentLayout(attachments[i].finalLayout);
+            clearValues[i].depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
         }
 
         VkRenderPassBeginInfo rpi{};
         rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rpi.renderPass = rp->Handle();
-        rpi.framebuffer = fb->Handle();
+        rpi.renderPass = renderPass->Handle();
+        rpi.framebuffer = frameBuffer->Handle();
         rpi.renderArea.offset = VkOffset2D{0, 0};
-        rpi.renderArea.extent = VkExtent2D{fb->GetWidth(), fb->GetHeight()};
+        rpi.renderArea.extent = VkExtent2D{frameBuffer->GetWidth(), frameBuffer->GetHeight()};
         rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
         rpi.pClearValues = clearValues.data();
 
@@ -401,20 +400,24 @@ namespace pe
             m_dynamicPass = false;
         }
         else
+        {
             vkCmdEndRenderPass(m_handle);
+        }
+
+        m_boundPipeline = nullptr;
     }
 
-    Pipeline *CommandBuffer::GetPipeline(const PipelineCreateInfo &pipelineInfo)
+    Pipeline *CommandBuffer::GetPipeline(const PassInfo &passInfo)
     {
-        auto it = s_pipelines.find(pipelineInfo.GetHash()); // PipelineCreateInfo is hashable
+        auto it = s_pipelines.find(passInfo.GetHash()); // PassInfo is hashable
         if (it != s_pipelines.end())
         {
             return it->second;
         }
         else
         {
-            Pipeline *newPipeline = Pipeline::Create(pipelineInfo);
-            s_pipelines[pipelineInfo.GetHash()] = newPipeline;
+            Pipeline *newPipeline = Pipeline::Create(passInfo);
+            s_pipelines[passInfo.GetHash()] = newPipeline;
 
             return newPipeline;
         }
@@ -430,15 +433,14 @@ namespace pe
         vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->Handle());
     }
 
-    void CommandBuffer::BindPipeline(const PipelineCreateInfo &pipelineInfo, Pipeline **outPipeline)
+    void CommandBuffer::BindPipeline(const PassInfo &passInfo)
     {
-        Pipeline *pipeline = GetPipeline(pipelineInfo);
-        *outPipeline = pipeline;
+        m_boundPipeline = GetPipeline(passInfo);
 
-        if (pipelineInfo.pCompShader)
-            BindComputePipeline(pipeline);
+        if (passInfo.pCompShader)
+            BindComputePipeline(m_boundPipeline);
         else
-            BindGraphicsPipeline(pipeline);
+            BindGraphicsPipeline(m_boundPipeline);
     }
 
     void CommandBuffer::BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount)
@@ -452,8 +454,9 @@ namespace pe
         vkCmdBindIndexBuffer(m_handle, buffer->Handle(), offset, VK_INDEX_TYPE_UINT32);
     }
 
-    void CommandBuffer::BindDescriptors(Pipeline *pipeline, uint32_t count, Descriptor **descriptors)
+    void CommandBuffer::BindDescriptors(uint32_t count, Descriptor **descriptors)
     {
+        PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::BindDescriptors: No bound pipeline found!");
         std::vector<VkDescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
             dsets[i] = descriptors[i]->Handle();
@@ -462,13 +465,14 @@ namespace pe
 
         vkCmdBindDescriptorSets(m_handle,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                pipeline->layout,
+                                m_boundPipeline->layout,
                                 0, count, dsets.data(),
                                 static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
     }
 
-    void CommandBuffer::BindComputeDescriptors(Pipeline *pipeline, uint32_t count, Descriptor **descriptors)
+    void CommandBuffer::BindComputeDescriptors(uint32_t count, Descriptor **descriptors)
     {
+        PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::BindComputeDescriptors: No bound pipeline found!");
         std::vector<VkDescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
             dsets[i] = descriptors[i]->Handle();
@@ -477,7 +481,7 @@ namespace pe
 
         vkCmdBindDescriptorSets(m_handle,
                                 VK_PIPELINE_BIND_POINT_COMPUTE,
-                                pipeline->layout,
+                                m_boundPipeline->layout,
                                 0, count, dsets.data(),
                                 static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
     }
@@ -509,10 +513,11 @@ namespace pe
         vkCmdDispatch(m_handle, groupCountX, groupCountY, groupCountZ);
     }
 
-    void CommandBuffer::PushConstants(Pipeline *pipeline, ShaderStageFlags stage, uint32_t offset, uint32_t size, const void *pValues)
+    void CommandBuffer::PushConstants(ShaderStageFlags stage, uint32_t offset, uint32_t size, const void *pValues)
     {
+        PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::PushConstants: No bound pipeline found!");
         auto flags = Translate<VkShaderStageFlags>(stage);
-        vkCmdPushConstants(m_handle, pipeline->layout, flags, offset, size, pValues);
+        vkCmdPushConstants(m_handle, m_boundPipeline->layout, flags, offset, size, pValues);
     }
 
     void CommandBuffer::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)

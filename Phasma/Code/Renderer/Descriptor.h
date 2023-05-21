@@ -48,6 +48,42 @@ namespace pe
 
         uint32_t GetVariableCount() { return m_variableCount; }
 
+        inline static std::map<size_t, DescriptorLayout *> s_descriptorLayouts{};
+
+        inline static Hash CalculateHash(const std::vector<DescriptorBindingInfo> &bindingInfos, ShaderStage stage)
+        {
+            Hash hash;
+            hash.Combine(static_cast<uint32_t>(stage));
+            for (size_t i = 0; i < bindingInfos.size(); i++)
+            {
+                const DescriptorBindingInfo &info = bindingInfos[i];
+                hash.Combine(info.binding);
+                hash.Combine(info.count);
+                hash.Combine(static_cast<uint32_t>(info.imageLayout));
+                hash.Combine(static_cast<uint32_t>(info.type));
+                hash.Combine(info.bindless);
+            }
+
+            return hash;
+        }
+
+        inline static DescriptorLayout *GetOrCreate(const std::vector<DescriptorBindingInfo> &bindingInfos, ShaderStage stage)
+        {
+            static size_t count = 0; 
+            Hash hash = DescriptorLayout::CalculateHash(bindingInfos, stage);
+            auto it = DescriptorLayout::s_descriptorLayouts.find(hash);
+            if (it == DescriptorLayout::s_descriptorLayouts.end())
+            {
+                DescriptorLayout *layout = DescriptorLayout::Create(bindingInfos, stage, "Descriptor_layout_" + std::to_string(count));
+                DescriptorLayout::s_descriptorLayouts[hash] = layout;
+                return layout;
+            }
+            else
+            {
+                return it->second;
+            }
+        }
+
     private:
         uint32_t m_variableCount;
     };

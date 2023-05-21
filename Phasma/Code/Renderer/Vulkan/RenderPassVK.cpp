@@ -23,7 +23,11 @@ namespace pe
         this->attachments = std::vector<Attachment>(count);
 
         std::vector<VkAttachmentDescription> attachmentsVK{};
+        attachmentsVK.reserve(count);
+
         std::vector<VkAttachmentReference> colorReferencesVK{};
+        colorReferencesVK.reserve(count); // may be 1 less if depth is included
+        
         VkAttachmentReference depthReferenceVK{};
 
         bool hasDepth = false;

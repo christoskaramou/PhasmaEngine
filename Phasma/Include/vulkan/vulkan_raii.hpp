@@ -3672,7 +3672,7 @@ namespace VULKAN_HPP_NAMESPACE
       //=== VK_KHR_pipeline_executable_properties ===
 
       VULKAN_HPP_NODISCARD std::vector<VULKAN_HPP_NAMESPACE::PipelineExecutablePropertiesKHR>
-                           getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & pipelineInfo ) const;
+                           getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & passInfo ) const;
 
       VULKAN_HPP_NODISCARD std::vector<VULKAN_HPP_NAMESPACE::PipelineExecutableStatisticKHR>
                            getPipelineExecutableStatisticsKHR( const VULKAN_HPP_NAMESPACE::PipelineExecutableInfoKHR & executableInfo ) const;
@@ -3759,10 +3759,10 @@ namespace VULKAN_HPP_NAMESPACE
 
       //=== VK_EXT_pipeline_properties ===
 
-      VULKAN_HPP_NODISCARD VULKAN_HPP_NAMESPACE::BaseOutStructure getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & pipelineInfo ) const;
+      VULKAN_HPP_NODISCARD VULKAN_HPP_NAMESPACE::BaseOutStructure getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & passInfo ) const;
 
       template <typename X, typename Y, typename... Z>
-      VULKAN_HPP_NODISCARD StructureChain<X, Y, Z...> getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & pipelineInfo ) const;
+      VULKAN_HPP_NODISCARD StructureChain<X, Y, Z...> getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & passInfo ) const;
 
       //=== VK_KHR_maintenance4 ===
 
@@ -16289,7 +16289,7 @@ namespace VULKAN_HPP_NAMESPACE
     //=== VK_KHR_pipeline_executable_properties ===
 
     VULKAN_HPP_NODISCARD VULKAN_HPP_INLINE std::vector<VULKAN_HPP_NAMESPACE::PipelineExecutablePropertiesKHR>
-                                           Device::getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & pipelineInfo ) const
+                                           Device::getPipelineExecutablePropertiesKHR( const VULKAN_HPP_NAMESPACE::PipelineInfoKHR & passInfo ) const
     {
       VULKAN_HPP_ASSERT( getDispatcher()->vkGetPipelineExecutablePropertiesKHR &&
                          "Function <vkGetPipelineExecutablePropertiesKHR> needs extension <VK_KHR_pipeline_executable_properties> enabled!" );
@@ -16299,13 +16299,13 @@ namespace VULKAN_HPP_NAMESPACE
       do
       {
         result = static_cast<VULKAN_HPP_NAMESPACE::Result>( getDispatcher()->vkGetPipelineExecutablePropertiesKHR(
-          static_cast<VkDevice>( m_device ), reinterpret_cast<const VkPipelineInfoKHR *>( &pipelineInfo ), &executableCount, nullptr ) );
+          static_cast<VkDevice>( m_device ), reinterpret_cast<const VkPipelineInfoKHR *>( &passInfo ), &executableCount, nullptr ) );
         if ( ( result == VULKAN_HPP_NAMESPACE::Result::eSuccess ) && executableCount )
         {
           properties.resize( executableCount );
           result = static_cast<VULKAN_HPP_NAMESPACE::Result>(
             getDispatcher()->vkGetPipelineExecutablePropertiesKHR( static_cast<VkDevice>( m_device ),
-                                                                   reinterpret_cast<const VkPipelineInfoKHR *>( &pipelineInfo ),
+                                                                   reinterpret_cast<const VkPipelineInfoKHR *>( &passInfo ),
                                                                    &executableCount,
                                                                    reinterpret_cast<VkPipelineExecutablePropertiesKHR *>( properties.data() ) ) );
         }
@@ -17123,14 +17123,14 @@ namespace VULKAN_HPP_NAMESPACE
     //=== VK_EXT_pipeline_properties ===
 
     VULKAN_HPP_NODISCARD VULKAN_HPP_INLINE VULKAN_HPP_NAMESPACE::BaseOutStructure
-                                           Device::getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & pipelineInfo ) const
+                                           Device::getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & passInfo ) const
     {
       VULKAN_HPP_ASSERT( getDispatcher()->vkGetPipelinePropertiesEXT &&
                          "Function <vkGetPipelinePropertiesEXT> needs extension <VK_EXT_pipeline_properties> enabled!" );
       VULKAN_HPP_NAMESPACE::BaseOutStructure pipelineProperties;
       VULKAN_HPP_NAMESPACE::Result           result = static_cast<VULKAN_HPP_NAMESPACE::Result>(
         getDispatcher()->vkGetPipelinePropertiesEXT( static_cast<VkDevice>( m_device ),
-                                                     reinterpret_cast<const VkPipelineInfoEXT *>( &pipelineInfo ),
+                                                     reinterpret_cast<const VkPipelineInfoEXT *>( &passInfo ),
                                                      reinterpret_cast<VkBaseOutStructure *>( &pipelineProperties ) ) );
       if ( result != VULKAN_HPP_NAMESPACE::Result::eSuccess )
       {
@@ -17140,13 +17140,13 @@ namespace VULKAN_HPP_NAMESPACE
     }
 
     template <typename X, typename Y, typename... Z>
-    VULKAN_HPP_NODISCARD StructureChain<X, Y, Z...> Device::getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & pipelineInfo ) const
+    VULKAN_HPP_NODISCARD StructureChain<X, Y, Z...> Device::getPipelinePropertiesEXT( const VULKAN_HPP_NAMESPACE::PipelineInfoEXT & passInfo ) const
     {
       StructureChain<X, Y, Z...>               structureChain;
       VULKAN_HPP_NAMESPACE::BaseOutStructure & pipelineProperties = structureChain.template get<VULKAN_HPP_NAMESPACE::BaseOutStructure>();
       VULKAN_HPP_NAMESPACE::Result             result             = static_cast<VULKAN_HPP_NAMESPACE::Result>(
         getDispatcher()->vkGetPipelinePropertiesEXT( static_cast<VkDevice>( m_device ),
-                                                     reinterpret_cast<const VkPipelineInfoEXT *>( &pipelineInfo ),
+                                                     reinterpret_cast<const VkPipelineInfoEXT *>( &passInfo ),
                                                      reinterpret_cast<VkBaseOutStructure *>( &pipelineProperties ) ) );
       if ( result != VULKAN_HPP_NAMESPACE::Result::eSuccess )
       {

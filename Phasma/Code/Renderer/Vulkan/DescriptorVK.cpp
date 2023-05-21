@@ -163,7 +163,7 @@ namespace pe
         }
 
         m_pool = DescriptorPool::Create(i, poolSizes.data(), name + "_pool");
-        m_layout = DescriptorLayout::Create(bindingInfos, stage, name + "_layout");
+        m_layout = DescriptorLayout::GetOrCreate(bindingInfos, stage);
 
         // DescriptorLayout calculates the variable count on creation
         uint32_t variableDescCounts[] = {m_layout->GetVariableCount()};
