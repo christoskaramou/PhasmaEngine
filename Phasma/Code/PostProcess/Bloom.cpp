@@ -46,15 +46,14 @@ namespace pe
         PassInfo &info = *passInfoBF;
 
         info.name = "BrightFilter_pipeline";
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/brightFilterPS.hlsl", ShaderStage::FragmentBit});
+        info.pVertShader = Shader::Create("Shaders/Common/quad.hlsl", ShaderStage::VertexBit);
+        info.pFragShader = Shader::Create("Shaders/Bloom/brightFilterPS.hlsl", ShaderStage::FragmentBit);
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {brightFilterRT->blendAttachment};
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = 5 * sizeof(float);
         info.descriptorSetLayouts = {DSBrightFilter->GetLayout()};
-        info.dynamicColorTargets = 1;
         info.colorFormats = &brightFilterRT->imageInfo.format;
 
         AttachmentInfo colorInfo{};
@@ -72,15 +71,14 @@ namespace pe
         PassInfo &info = *passInfoGBH;
 
         info.name = "GaussianBlurHorizontal_pipeline";
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/gaussianBlurHorizontalPS.hlsl", ShaderStage::FragmentBit});
+        info.pVertShader = Shader::Create("Shaders/Common/quad.hlsl", ShaderStage::VertexBit);
+        info.pFragShader = Shader::Create("Shaders/Bloom/gaussianBlurHorizontalPS.hlsl", ShaderStage::FragmentBit);
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {gaussianBlurHorizontalRT->blendAttachment};
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = 5 * sizeof(float);
         info.descriptorSetLayouts = {DSGaussianBlurHorizontal->GetLayout()};
-        info.dynamicColorTargets = 1;
         info.colorFormats = &gaussianBlurHorizontalRT->imageInfo.format;
 
         AttachmentInfo colorInfo{};
@@ -98,15 +96,14 @@ namespace pe
         PassInfo &info = *passInfoGBV;
 
         info.name = "GaussianBlurVertical_pipeline";
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/gaussianBlurVerticalPS.hlsl", ShaderStage::FragmentBit});
+        info.pVertShader = Shader::Create("Shaders/Common/quad.hlsl", ShaderStage::VertexBit);
+        info.pFragShader = Shader::Create("Shaders/Bloom/gaussianBlurVerticalPS.hlsl", ShaderStage::FragmentBit);
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {gaussianBlurVerticalRT->blendAttachment};
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = 5 * sizeof(float);
         info.descriptorSetLayouts = {DSGaussianBlurVertical->GetLayout()};
-        info.dynamicColorTargets = 1;
         info.colorFormats = &gaussianBlurVerticalRT->imageInfo.format;
 
         AttachmentInfo colorInfo{};
@@ -124,15 +121,14 @@ namespace pe
         PassInfo &info = *passInfoCombine;
 
         info.name = "BloomCombine_pipeline";
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Bloom/combinePS.hlsl", ShaderStage::FragmentBit});
+        info.pVertShader = Shader::Create("Shaders/Common/quad.hlsl", ShaderStage::VertexBit);
+        info.pFragShader = Shader::Create("Shaders/Bloom/combinePS.hlsl", ShaderStage::FragmentBit);
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {displayRT->blendAttachment};
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = 5 * sizeof(float);
         info.descriptorSetLayouts = {DSCombine->GetLayout()};
-        info.dynamicColorTargets = 1;
         info.colorFormats = &displayRT->imageInfo.format;
 
         AttachmentInfo colorInfo{};

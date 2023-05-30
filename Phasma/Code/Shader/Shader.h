@@ -35,20 +35,12 @@ namespace pe
         std::unordered_set<std::string> included_files;
     };
 
-    class ShaderInfo
-    {
-    public:
-        std::string sourcePath;
-        ShaderStage shaderStage;
-        std::vector<Define> defines{};
-    };
-
     class Reflection;
 
     class Shader : public IHandle<Shader, ShaderHandle>
     {
-    public:
-        Shader(const ShaderInfo &info);
+    public:        
+        Shader(const std::string &sourcePath, ShaderStage shaderStage, const std::vector<Define> &defines = {});
 
         ~Shader();
 
@@ -86,9 +78,9 @@ namespace pe
     private:
         bool CompileGlsl(shaderc_shader_kind kind, shaderc::CompileOptions &options);
 
-        void AddDefineGlsl(Define &define, shaderc::CompileOptions &options);
+        void AddDefineGlsl(const Define &define, shaderc::CompileOptions &options);
 
-        bool CompileHlsl(const ShaderInfo &info, ShaderCache &cache);
+        bool CompileHlsl(const std::string &sourcePath, ShaderStage shaderStage, const std::vector<Define> &defines, const std::string &shaderCode);
 
         ShaderCache m_cache;
         Reflection m_reflection;

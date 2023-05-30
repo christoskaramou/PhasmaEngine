@@ -568,11 +568,7 @@ namespace pe
             return false;
         };
 
-        if (NeedsUpdate(deferred.passInfo))
-            deferred.UpdatePassInfo();
-        if (NeedsUpdate(deferred.passInfoGBuffer))
-            deferred.UpdatePassInfo();
-        if (NeedsUpdate(deferred.passInfoAABBs))
+        if (NeedsUpdate(deferred.passInfo) || NeedsUpdate(deferred.passInfoGBuffer) || NeedsUpdate(deferred.passInfoAABBs))
             deferred.UpdatePassInfo();
 
         if (NeedsUpdate(shadows.passInfo))

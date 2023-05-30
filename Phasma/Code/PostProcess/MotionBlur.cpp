@@ -39,15 +39,14 @@ namespace pe
         PassInfo &info = *passInfo;
 
         info.name = "motionBlur_pipeline";
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/MotionBlur/motionBlurPS.hlsl", ShaderStage::FragmentBit});
+        info.pVertShader = Shader::Create("Shaders/Common/quad.hlsl", ShaderStage::VertexBit);
+        info.pFragShader = Shader::Create("Shaders/MotionBlur/motionBlurPS.hlsl", ShaderStage::FragmentBit);
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {displayRT->blendAttachment};
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = sizeof(vec4);
         info.descriptorSetLayouts = {DSet->GetLayout()};
-        info.dynamicColorTargets = 1;
         info.colorFormats = &displayRT->imageInfo.format;
         
         AttachmentInfo colorInfo{};

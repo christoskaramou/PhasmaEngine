@@ -84,8 +84,8 @@ namespace pe
         PassInfo &info = *passInfo;
 
         info.name = "composition_pipeline";
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/compositionPS.hlsl", ShaderStage::FragmentBit, definesFrag});
+        info.pVertShader = Shader::Create("Shaders/Common/quad.hlsl", ShaderStage::VertexBit);
+        info.pFragShader = Shader::Create("Shaders/Deferred/compositionPS.hlsl", ShaderStage::FragmentBit, definesFrag);
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.pushConstantStage = ShaderStage::FragmentBit;
         info.pushConstantSize = sizeof(mat4);
@@ -94,7 +94,6 @@ namespace pe
             DSet->GetLayout(),
             shadows.DSetDeferred->GetLayout(),
             skybox.DSet->GetLayout()};
-        info.dynamicColorTargets = 1;
         info.colorFormats = &viewportRT->imageInfo.format;
 
         AttachmentInfo colorInfo{};
@@ -124,8 +123,8 @@ namespace pe
         PassInfo &info = *passInfoGBuffer;
 
         info.name = "gbuffer_pipeline";
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBufferVS.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Deferred/gBufferPS.hlsl", ShaderStage::FragmentBit});
+        info.pVertShader = Shader::Create("Shaders/Deferred/gBufferVS.hlsl", ShaderStage::VertexBit);
+        info.pFragShader = Shader::Create("Shaders/Deferred/gBufferPS.hlsl", ShaderStage::FragmentBit);
         info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
         info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -141,7 +140,6 @@ namespace pe
         };
 
         info.descriptorSetLayouts = {dlBuffer, dlImages};
-        info.dynamicColorTargets = 5;
         info.colorFormats = colorformats;
         info.depthFormat = &depthFormat;
 
@@ -182,8 +180,8 @@ namespace pe
         PassInfo &info = *passInfoAABBs;
 
         info.name = "AABBs_pipeline";
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Utilities/AABBsVS.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/Utilities/AABBsPS.hlsl", ShaderStage::FragmentBit});
+        info.pVertShader = Shader::Create("Shaders/Utilities/AABBsVS.hlsl", ShaderStage::VertexBit);
+        info.pFragShader = Shader::Create("Shaders/Utilities/AABBsPS.hlsl", ShaderStage::FragmentBit);
         info.vertexInputBindingDescriptions = info.pVertShader->GetReflection().GetVertexBindings();
         info.vertexInputAttributeDescriptions = info.pVertShader->GetReflection().GetVertexAttributes();
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
@@ -195,7 +193,6 @@ namespace pe
             display->blendAttachment,
         };
         info.descriptorSetLayouts = {dlBuffer};
-        info.dynamicColorTargets = 1;
         info.colorFormats = &colorformat;
         info.depthWriteEnable = false;
 

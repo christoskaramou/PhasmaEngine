@@ -53,7 +53,7 @@ namespace pe
 
     void FileSystem::Write(const std::string &data)
     {
-        Write(data.data(), data.size());
+        m_fstream.write(data.data(), data.size());
     }
 
     void FileSystem::Write(const char *data, size_t size)

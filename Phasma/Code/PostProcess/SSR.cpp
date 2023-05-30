@@ -41,13 +41,12 @@ namespace pe
         PassInfo &info = *passInfo;
 
         info.name = "ssr_pipeline";
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/SSR/ssrPS.hlsl", ShaderStage::FragmentBit});
+        info.pVertShader = Shader::Create("Shaders/Common/quad.hlsl", ShaderStage::VertexBit);
+        info.pFragShader = Shader::Create("Shaders/SSR/ssrPS.hlsl", ShaderStage::FragmentBit);
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {ssrRT->blendAttachment};
         info.descriptorSetLayouts = {DSet->GetLayout()};
-        info.dynamicColorTargets = 1;
         info.colorFormats = &ssrRT->imageInfo.format;   
 
         AttachmentInfo colorInfo{};

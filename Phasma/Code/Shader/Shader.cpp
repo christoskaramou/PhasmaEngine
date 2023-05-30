@@ -50,17 +50,17 @@ namespace pe
         delete include_result;
     }
 
-    Shader::Shader(const ShaderInfo &info)
+    Shader::Shader(const std::string &sourcePath, ShaderStage shaderStage, const std::vector<Define> &defines)
     {
-        std::string path = info.sourcePath;
+        std::string path = sourcePath;
         if (path.find(Path::Assets) == std::string::npos)
-            path = Path::Assets + info.sourcePath;
+            path = Path::Assets + sourcePath;
 
         m_isHlsl = path.ends_with(".hlsl");
 
         m_pathID = StringHash(path);
 
-        m_shaderStage = info.shaderStage;
+        m_shaderStage = shaderStage;
 
         Hash definesHash;
         for (const Define &def : m_globalDefines)
@@ -68,7 +68,7 @@ namespace pe
             definesHash.Combine(def.name);
             definesHash.Combine(def.value);
         }
-        for (const Define &def : info.defines)
+        for (const Define &def : defines)
         {
             definesHash.Combine(def.name);
             definesHash.Combine(def.value);
@@ -80,7 +80,7 @@ namespace pe
         {
             if (m_isHlsl)
             {
-                CompileHlsl(info, m_cache);
+                CompileHlsl(sourcePath, shaderStage, defines, m_cache.GetShaderCode());
             }
             else
             {
@@ -89,11 +89,15 @@ namespace pe
                 options.SetIncluder(std::make_unique<FileIncluder>());
                 options.SetOptimizationLevel(shaderc_optimization_level_performance);
 
-                for (auto def : m_globalDefines)
+                for (const Define &def : m_globalDefines)
+                {
                     AddDefineGlsl(def, options);
+                }
 
-                for (auto def : info.defines)
+                for (const Define &def : defines)
+                {
                     AddDefineGlsl(def, options);
+                }
 
 #if PE_DEBUG_MODE
                 // Useful for debugging shaders
@@ -156,7 +160,7 @@ namespace pe
         return empty;
     }
 
-    void Shader::AddDefineGlsl(Define &def, shaderc::CompileOptions &options)
+    void Shader::AddDefineGlsl(const Define &def, shaderc::CompileOptions &options)
     {
         if (def.name.empty())
             return;
@@ -196,37 +200,34 @@ namespace pe
         return wstr;
     }
 
-    bool Shader::CompileHlsl(const ShaderInfo &info, ShaderCache &cache)
+    bool Shader::CompileHlsl(const std::string &sourcePath, ShaderStage shaderStage, const std::vector<Define> &defines, const std::string &shaderCode)
     {
-        std::string path = info.sourcePath;
+        std::string path = sourcePath;
         if (path.find(Path::Assets) == std::string::npos)
-            path = Path::Assets + info.sourcePath;
+            path = Path::Assets + sourcePath;
 
         std::vector<LPCWSTR> args{};
 
         args.push_back(L"-spirv");
 
-        // Shade model
-        if (info.shaderStage == ShaderStage::VertexBit)
+        // Shader stage
+        args.push_back(L"-T");
+        if (shaderStage == ShaderStage::VertexBit)
         {
-            // Shader model
-            args.push_back(L"-T");
             args.push_back(L"vs_6_0");
         }
-        else if (info.shaderStage == ShaderStage::FragmentBit)
+        else if (shaderStage == ShaderStage::FragmentBit)
         {
-            // Shader model
-            args.push_back(L"-T");
             args.push_back(L"ps_6_0");
         }
-        else if (info.shaderStage == ShaderStage::ComputeBit)
+        else if (shaderStage == ShaderStage::ComputeBit)
         {
-            // Shader model
-            args.push_back(L"-T");
             args.push_back(L"cs_6_0");
         }
         else
+        {
             PE_ERROR("Invalid shader stage!");
+        }
 
         // Entry point
         args.push_back(L"-E");
@@ -242,14 +243,25 @@ namespace pe
 #endif
 
         // Defines
-        std::vector<std::wstring> wdefines(info.defines.size());
+        std::vector<std::wstring> wdefines(defines.size());
         uint32_t i = 0;
-        for (const Define &def : info.defines)
+
+        for (const Define &def : m_globalDefines)
         {
             wdefines[i] += ConvertUtf8ToWide(def.name);
             if (!def.value.empty())
                 wdefines[i] += ConvertUtf8ToWide("=" + def.value);
-                
+
+            args.push_back(L"-D");
+            args.push_back(wdefines[i++].c_str());
+        }
+
+        for (const Define &def : defines)
+        {
+            wdefines[i] += ConvertUtf8ToWide(def.name);
+            if (!def.value.empty())
+                wdefines[i] += ConvertUtf8ToWide("=" + def.value);
+
             args.push_back(L"-D");
             args.push_back(wdefines[i++].c_str());
         }
@@ -273,8 +285,8 @@ namespace pe
         ComPtr<IDxcUtils> pUtils;
         DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(pUtils.GetAddressOf()));
         ComPtr<IDxcBlobEncoding> pSource;
-        uint32_t size = static_cast<uint32_t>(cache.GetShaderCode().size());
-        pUtils->CreateBlob(cache.GetShaderCode().c_str(), size, CP_UTF8, pSource.GetAddressOf());
+        uint32_t size = static_cast<uint32_t>(shaderCode.size());
+        pUtils->CreateBlob(shaderCode.c_str(), size, CP_UTF8, pSource.GetAddressOf());
 
         DxcBuffer sourceBuffer;
         sourceBuffer.Ptr = pSource->GetBufferPointer();

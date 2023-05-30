@@ -36,13 +36,12 @@ namespace pe
         PassInfo &info = *passInfo;
 
         info.name = "fxaa_pipeline";
-        info.pVertShader = Shader::Create(ShaderInfo{"Shaders/Common/quad.hlsl", ShaderStage::VertexBit});
-        info.pFragShader = Shader::Create(ShaderInfo{"Shaders/FXAA/fxaaPS.hlsl", ShaderStage::FragmentBit});
+        info.pVertShader = Shader::Create("Shaders/Common/quad.hlsl", ShaderStage::VertexBit);
+        info.pFragShader = Shader::Create("Shaders/FXAA/fxaaPS.hlsl", ShaderStage::FragmentBit);
         info.dynamicStates = {DynamicState::Viewport, DynamicState::Scissor};
         info.cullMode = CullMode::Back;
         info.colorBlendAttachments = {viewportRT->blendAttachment};
         info.descriptorSetLayouts = {DSet->GetLayout()};
-        info.dynamicColorTargets = 1;
         info.colorFormats = &viewportRT->imageInfo.format;
 
         AttachmentInfo colorInfo{};

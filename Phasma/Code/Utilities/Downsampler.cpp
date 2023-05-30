@@ -30,7 +30,7 @@ namespace pe
         cmd->ImageBarrier(s_image, ImageLayout::General);
 
         cmd->BindPipeline(*s_passInfo);
-        cmd->BindComputeDescriptors(1, &s_DSet[s_currentIndex]);
+        cmd->BindDescriptors(1, &s_DSet[s_currentIndex]);
         cmd->PushConstants(ShaderStage::ComputeBit, 0, sizeof(PushConstants), &s_pushConstants);
         cmd->Dispatch(groupCount.x, groupCount.y, s_image->imageInfo.arrayLayers);
 
@@ -62,7 +62,7 @@ namespace pe
             Define{"SPD_NO_WAVE_OPERATIONS", ""}};
 
         s_passInfo = std::make_shared<PassInfo>();
-        s_passInfo->pCompShader = Shader::Create(ShaderInfo{"Shaders/Compute/spd/spd.hlsl", ShaderStage::ComputeBit, defines});
+        s_passInfo->pCompShader = Shader::Create("Shaders/Compute/spd/spd.hlsl", ShaderStage::ComputeBit, defines);
         s_passInfo->descriptorSetLayouts = {s_DSet[0]->GetLayout()};
         s_passInfo->pushConstantSize = sizeof(PushConstants);
         s_passInfo->pushConstantStage = ShaderStage::ComputeBit;

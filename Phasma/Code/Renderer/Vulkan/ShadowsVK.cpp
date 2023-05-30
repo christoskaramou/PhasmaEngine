@@ -79,7 +79,7 @@ namespace pe
         passInfo = std::make_shared<PassInfo>();
 
         passInfo->name = "shadows_pipeline";
-        passInfo->pVertShader = Shader::Create(ShaderInfo{"Shaders/Shadows/shadowsVS.hlsl", ShaderStage::VertexBit});
+        passInfo->pVertShader = Shader::Create("Shaders/Shadows/shadowsVS.hlsl", ShaderStage::VertexBit);
         passInfo->vertexInputBindingDescriptions = passInfo->pVertShader->GetReflection().GetVertexBindings();
         passInfo->vertexInputAttributeDescriptions = passInfo->pVertShader->GetReflection().GetVertexAttributes();
         passInfo->dynamicStates = {DynamicState::Viewport, DynamicState::Scissor, DynamicState::DepthBias};

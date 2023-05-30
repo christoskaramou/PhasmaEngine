@@ -36,7 +36,7 @@ namespace pe
         commandBuffer->Begin();
         commandBuffer->BeginDebugRegion("Compute::Dispatch command");
         commandBuffer->BindPipeline(*passInfo);
-        commandBuffer->BindComputeDescriptors(1, &DSet);
+        commandBuffer->BindDescriptors(1, &DSet);
         commandBuffer->Dispatch(sizeX, sizeY, sizeZ);
         commandBuffer->EndDebugRegion();
         commandBuffer->End();
@@ -85,7 +85,7 @@ namespace pe
     void Compute::UpdatePassInfo(const std::string &shaderName)
     {
         passInfo = std::make_shared<PassInfo>();
-        passInfo->pCompShader = Shader::Create(ShaderInfo{shaderName, ShaderStage::ComputeBit});
+        passInfo->pCompShader = Shader::Create(shaderName, ShaderStage::ComputeBit);
         passInfo->descriptorSetLayouts = {DSet->GetLayout()};
         passInfo->name = "Compute_pipeline";
     }

@@ -409,7 +409,7 @@ namespace pe
     {
         if (!properties_open)
             return;
-        
+
         static bool initialized = false;
         if (!initialized)
         {
@@ -657,14 +657,15 @@ namespace pe
     {
         if (!render)
             return;
+
         cmd->BeginDebugRegion("GUI");
-        if (render && ImGui::GetDrawData()->TotalVtxCount > 0)
+        if (ImGui::GetDrawData()->TotalVtxCount > 0)
         {
             m_displayRT = CONTEXT->GetSystem<RendererSystem>()->GetRenderTarget("display");
 
             // Output
             cmd->ImageBarrier(m_displayRT, ImageLayout::General);
-            
+
             cmd->BeginPass(renderPass, &m_displayRT, nullptr);
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
             cmd->EndPass();

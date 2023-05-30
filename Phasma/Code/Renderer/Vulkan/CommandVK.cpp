@@ -457,30 +457,16 @@ namespace pe
     void CommandBuffer::BindDescriptors(uint32_t count, Descriptor **descriptors)
     {
         PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::BindDescriptors: No bound pipeline found!");
+
         std::vector<VkDescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
             dsets[i] = descriptors[i]->Handle();
 
         auto dynamicOffsets = Descriptor::GetAllFrameDynamicOffsets(count, descriptors);
 
+        VkPipelineBindPoint pipelineBindPoint = m_boundPipeline->info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
         vkCmdBindDescriptorSets(m_handle,
-                                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                m_boundPipeline->layout,
-                                0, count, dsets.data(),
-                                static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
-    }
-
-    void CommandBuffer::BindComputeDescriptors(uint32_t count, Descriptor **descriptors)
-    {
-        PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::BindComputeDescriptors: No bound pipeline found!");
-        std::vector<VkDescriptorSet> dsets(count);
-        for (uint32_t i = 0; i < count; i++)
-            dsets[i] = descriptors[i]->Handle();
-
-        auto dynamicOffsets = Descriptor::GetAllFrameDynamicOffsets(count, descriptors);
-
-        vkCmdBindDescriptorSets(m_handle,
-                                VK_PIPELINE_BIND_POINT_COMPUTE,
+                                pipelineBindPoint,
                                 m_boundPipeline->layout,
                                 0, count, dsets.data(),
                                 static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());

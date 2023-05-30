@@ -98,8 +98,6 @@ namespace pe
 
         void BindDescriptors(uint32_t count, Descriptor **descriptors);
 
-        void BindComputeDescriptors(uint32_t count, Descriptor **descriptors);
-
         void SetViewport(float x, float y, float width, float height);
 
         void SetScissor(int x, int y, uint32_t width, uint32_t height);
