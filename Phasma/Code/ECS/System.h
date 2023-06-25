@@ -24,45 +24,45 @@ namespace pe
         void SetEnabled(bool enabled) { m_enabled = enabled; }
 
         template <class T>
-        inline bool HasComponents()
-        {
-            ValidateBaseClass<IComponent, T>();
-
-            if (m_components.find(GetTypeID<T>()) != m_components.end())
-                return true;
-
-            return false;
-        }
-
-        template <class T>
         inline void AttachComponent(T *component)
         {
             size_t id = GetTypeID<T>();
-            if (!HasComponents<T>())
-                m_components[id] = std::vector<IComponent *>();
-            m_components[id].push_back(component);
+            auto it = m_components.find(id);
+
+            if (it == m_components.end())
+                it = m_components.emplace(id, std::vector<IComponent *>()).first;
+
+            it->second.push_back(component);
         }
 
         template <class T>
         void RemoveComponent(IComponent *component)
         {
-            if (HasComponents<T>())
+            ValidateBaseClass<IComponent, T>();
+
+            auto id = GetTypeID<T>();
+            auto map_it = m_components.find(id);
+
+            if (map_it != m_components.end())
             {
-                size_t id = GetTypeID<T>();
-                auto it = std::find(m_components[id].begin(), m_components[id].end(), component);
-                if (it != m_components[id].end())
-                    m_components[id].erase(it);
+                auto &vec = map_it->second;
+                auto vec_it = std::find(vec.begin(), vec.end(), component);
+                if (vec_it != vec.end())
+                    vec.erase(vec_it);
             }
         }
 
         template <class T>
         void RemoveComponents()
         {
-            if (HasComponents<T>())
-                m_components[GetTypeID<T>()].clear();
+            ValidateBaseClass<IComponent, T>();
+
+            auto id = GetTypeID<T>();
+            auto it = m_components.find(id);
+            if (it != m_components.end())
+                it->second.clear();
         }
 
-        template <class T>
         void RemoveAllComponents()
         {
             m_components.clear();
@@ -71,13 +71,15 @@ namespace pe
         template <class T>
         const std::vector<T *> &GetComponentsOfType()
         {
-            if (HasComponents<T>())
-            {
-                size_t id = GetTypeID<T>();
-                return *reinterpret_cast<std::vector<T *> *>(&m_components[id]);
-            }
+            ValidateBaseClass<IComponent, T>();
 
             static const std::vector<T *> empty{};
+            auto id = GetTypeID<T>();
+            auto it = m_components.find(id);
+
+            if (it != m_components.end())
+                return *reinterpret_cast<std::vector<T *> *>(&it->second);
+
             return empty;
         }
 

@@ -8,11 +8,17 @@ namespace pe
         return ID++;
     }
 
-    template <class T>
-    inline size_t GetTypeID()
+    template <typename T>
+    struct TypeIDHelper
     {
-        static size_t typeID = NextID();
-        return typeID;
+        static constexpr char value{};
+    };
+
+    template <typename T>
+    constexpr size_t GetTypeID()
+    {
+        static_assert(sizeof(size_t) >= sizeof(void *), "size_t is too small to hold a pointer");
+        return reinterpret_cast<size_t>(&TypeIDHelper<T>::value);
     }
 
     template <uint32_t N>
@@ -38,6 +44,85 @@ namespace pe
         NoMove &operator=(const NoMove &) = default;
         NoMove(NoMove &&) = delete;
         NoMove &operator=(NoMove &&) = delete;
+    };
+
+    // Maintains the order items added
+    template <class Key, class T>
+    class OrderedMap
+    {
+    public:
+        using ListType = std::list<std::pair<Key, T>>;
+        using iterator = typename ListType::iterator;
+        using const_iterator = typename ListType::const_iterator;
+        using reverse_iterator = typename ListType::reverse_iterator;
+        using const_reverse_iterator = typename ListType::const_reverse_iterator;
+
+        uint32_t size() { return static_cast<uint32_t>(m_list.size()); }
+
+        bool exists(const Key &key) const { return m_map.find(key) != m_map.end(); }
+
+        T &get(const Key &key) { return m_map[key]->second; }
+        const T &get(const Key &key) const { return m_map.at(key)->second; }
+
+        const T &operator[](const Key &key) const { return m_map.at(key)->second; }
+        T &operator[](const Key &key)
+        {
+            auto it = m_map.find(key);
+            if (it == m_map.end())
+            {
+                m_list.push_back({key, T()});
+                it = m_map.insert({key, std::prev(m_list.end())}).first;
+            }
+            return it->second->second;
+        }
+
+
+        iterator begin() { return m_list.begin(); }
+        iterator end() { return m_list.end(); }
+        reverse_iterator rbegin() { return m_list.rbegin(); }
+        reverse_iterator rend() { return m_list.rend(); }
+        const_iterator cbegin() { return m_list.cbegin(); }
+        const_iterator cend() { return m_list.cend(); }
+        const_reverse_iterator crbegin() const { return m_list.crbegin(); }
+        const_reverse_iterator crend() const { return m_list.crend(); }
+
+        bool insert(const Key &key, const T &value)
+        {
+            if (m_map.find(key) == m_map.end())
+            {
+                m_list.push_back({key, value});
+                m_map[key] = std::prev(m_list.end());
+
+                return true;
+            }
+
+            return false;
+        }
+
+        bool erase(const Key &key)
+        {
+            auto map_it = m_map.find(key);
+            if (map_it != m_map.end())
+            {
+                // map_it->second is the iterator of the list (that makes the erase O(1))
+                m_list.erase(map_it->second);
+                m_map.erase(map_it);
+
+                return true;
+            }
+
+            return false;
+        }
+
+        void clear()
+        {
+            m_list.clear();
+            m_map.clear();
+        }
+
+    private:
+        ListType m_list;
+        std::unordered_map<Key, iterator> m_map;
     };
 
     class ApiHandleBase
@@ -90,20 +175,18 @@ namespace pe
 
         inline static void DestroyAllIHandles()
         {
-            for (auto rit = s_allHandles.rbegin(); rit != s_allHandles.rend();)
+            for (auto it = s_allHandles.rbegin(); it != s_allHandles.rend(); ++it)
             {
-                IHandleBase *handle = rit->second;
-                if (handle)
-                    handle->Suicide();
-                else
-                    ++rit;
+                it->second->Suicide();
             }
+
+            s_allHandles.clear();
         }
 
     protected:
         virtual void Suicide() { PE_ERROR("Unused Base"); }
 
-        inline static std::map<IHandleBase *, IHandleBase *> s_allHandles{};
+        inline static OrderedMap<IHandleBase *, IHandleBase *> s_allHandles{};
         size_t m_id;
     };
 
@@ -126,7 +209,7 @@ namespace pe
             T *ptr = new T(std::forward<Params>(params)...);
 
             // Useful for deleting
-            s_allHandles[ptr] = ptr;
+            s_allHandles.insert(ptr, ptr);
 
             return ptr;
         }

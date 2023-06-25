@@ -99,7 +99,7 @@ namespace pe
     }
 
     template <class T, class U>
-    U GetFlags(T flags, std::map<T, U> &translator)
+    U GetFlags(T flags, std::unordered_map<T, U> &translator)
     {
         static_assert(std::is_integral_v<T>, "GetFlags: T must be integral");
         static_assert(std::is_integral_v<U>, "GetFlags: U must be integral");
@@ -131,7 +131,7 @@ namespace pe
     ImageLayout Translate(VkImageLayout layout)
     {
         using T = std::underlying_type_t<VkImageLayout>;
-        static std::map<T, ImageLayout> s_translator{
+        static std::unordered_map<T, ImageLayout> s_translator{
             {(T)VK_IMAGE_LAYOUT_UNDEFINED, ImageLayout::Undefined},
             {(T)VK_IMAGE_LAYOUT_GENERAL, ImageLayout::General},
             {(T)VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, ImageLayout::ColorAttachment},
@@ -161,7 +161,7 @@ namespace pe
     VkImageLayout Translate(ImageLayout layout)
     {
         using T = std::underlying_type_t<ImageLayout>;
-        static std::map<T, VkImageLayout> s_translator{
+        static std::unordered_map<T, VkImageLayout> s_translator{
             {(T)ImageLayout::Undefined, VK_IMAGE_LAYOUT_UNDEFINED},
             {(T)ImageLayout::General, VK_IMAGE_LAYOUT_GENERAL},
             {(T)ImageLayout::ColorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
@@ -191,7 +191,7 @@ namespace pe
     VkShaderStageFlags Translate(ShaderStageFlags flags)
     {
         using T = ShaderStageFlags::Type;
-        static std::map<T, VkShaderStageFlags> s_translator{
+        static std::unordered_map<T, VkShaderStageFlags> s_translator{
             {(T)ShaderStage::VertexBit, VK_SHADER_STAGE_VERTEX_BIT},
             {(T)ShaderStage::TesslationControlBit, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT},
             {(T)ShaderStage::TesslationEvaluationBit, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT},
@@ -220,7 +220,7 @@ namespace pe
     VkFilter Translate(Filter filter)
     {
         using T = std::underlying_type_t<Filter>;
-        static std::map<T, VkFilter> s_translator{
+        static std::unordered_map<T, VkFilter> s_translator{
             {(T)Filter::Nearest, VK_FILTER_NEAREST},
             {(T)Filter::Linear, VK_FILTER_LINEAR},
             {(T)Filter::Cubic, VK_FILTER_CUBIC_IMG}};
@@ -232,7 +232,7 @@ namespace pe
     VkImageAspectFlags Translate(ImageAspectFlags flags)
     {
         using T = ImageAspectFlags::Type;
-        static std::map<T, VkImageAspectFlags> s_translator{
+        static std::unordered_map<T, VkImageAspectFlags> s_translator{
             {(T)ImageAspect::ColorBit, VK_IMAGE_ASPECT_COLOR_BIT},
             {(T)ImageAspect::DepthBit, VK_IMAGE_ASPECT_DEPTH_BIT},
             {(T)ImageAspect::StencilBit, VK_IMAGE_ASPECT_STENCIL_BIT}};
@@ -250,7 +250,7 @@ namespace pe
     VkSamplerMipmapMode Translate(SamplerMipmapMode mode)
     {
         using T = std::underlying_type_t<SamplerMipmapMode>;
-        static std::map<T, VkSamplerMipmapMode> s_translator{
+        static std::unordered_map<T, VkSamplerMipmapMode> s_translator{
             {(T)SamplerMipmapMode::Nearest, VK_SAMPLER_MIPMAP_MODE_NEAREST},
             {(T)SamplerMipmapMode::Linear, VK_SAMPLER_MIPMAP_MODE_LINEAR}};
 
@@ -261,7 +261,7 @@ namespace pe
     VkSamplerAddressMode Translate(SamplerAddressMode mode)
     {
         using T = std::underlying_type_t<SamplerAddressMode>;
-        static std::map<T, VkSamplerAddressMode> s_translator{
+        static std::unordered_map<T, VkSamplerAddressMode> s_translator{
             {(T)SamplerAddressMode::Repeat, VK_SAMPLER_ADDRESS_MODE_REPEAT},
             {(T)SamplerAddressMode::MirroredRepeat, VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT},
             {(T)SamplerAddressMode::ClampToEdge, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE},
@@ -275,7 +275,7 @@ namespace pe
     VkCompareOp Translate(CompareOp op)
     {
         using T = std::underlying_type_t<CompareOp>;
-        static std::map<T, VkCompareOp> s_translator{
+        static std::unordered_map<T, VkCompareOp> s_translator{
             {(T)CompareOp::Never, VK_COMPARE_OP_NEVER},
             {(T)CompareOp::Less, VK_COMPARE_OP_LESS},
             {(T)CompareOp::Equal, VK_COMPARE_OP_EQUAL},
@@ -292,7 +292,7 @@ namespace pe
     VkBorderColor Translate(BorderColor color)
     {
         using T = std::underlying_type_t<BorderColor>;
-        static std::map<T, VkBorderColor> s_translator{
+        static std::unordered_map<T, VkBorderColor> s_translator{
             {(T)BorderColor::FloatTransparentBlack, VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK},
             {(T)BorderColor::IntTransparentBlack, VK_BORDER_COLOR_INT_TRANSPARENT_BLACK},
             {(T)BorderColor::FloatOpaqueBlack, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK},
@@ -307,7 +307,7 @@ namespace pe
     VkImageType Translate(ImageType type)
     {
         using T = std::underlying_type_t<ImageType>;
-        static std::map<T, VkImageType> s_translator{
+        static std::unordered_map<T, VkImageType> s_translator{
             {(T)ImageType::Type1D, VK_IMAGE_TYPE_1D},
             {(T)ImageType::Type2D, VK_IMAGE_TYPE_2D},
             {(T)ImageType::Type3D, VK_IMAGE_TYPE_3D}};
@@ -319,7 +319,7 @@ namespace pe
     VkImageViewType Translate(ImageViewType type)
     {
         using T = std::underlying_type_t<ImageViewType>;
-        static std::map<T, VkImageViewType> s_translator{
+        static std::unordered_map<T, VkImageViewType> s_translator{
             {(T)ImageViewType::Type1D, VK_IMAGE_VIEW_TYPE_1D},
             {(T)ImageViewType::Type2D, VK_IMAGE_VIEW_TYPE_2D},
             {(T)ImageViewType::Type3D, VK_IMAGE_VIEW_TYPE_3D},
@@ -335,7 +335,7 @@ namespace pe
     VkSampleCountFlagBits Translate(SampleCount count)
     {
         using T = std::underlying_type_t<SampleCount>;
-        static std::map<T, VkSampleCountFlagBits> s_translator{
+        static std::unordered_map<T, VkSampleCountFlagBits> s_translator{
             {(T)SampleCount::Count1, VK_SAMPLE_COUNT_1_BIT},
             {(T)SampleCount::Count2, VK_SAMPLE_COUNT_2_BIT},
             {(T)SampleCount::Count4, VK_SAMPLE_COUNT_4_BIT},
@@ -351,7 +351,7 @@ namespace pe
     VkFormat Translate(Format format)
     {
         using T = std::underlying_type_t<Format>;
-        static std::map<T, VkFormat> s_translator{
+        static std::unordered_map<T, VkFormat> s_translator{
             {(T)Format::Undefined, VK_FORMAT_UNDEFINED},
             {(T)Format::R8SInt, VK_FORMAT_R8_SINT},
             {(T)Format::R8UInt, VK_FORMAT_R8_UINT},
@@ -391,7 +391,7 @@ namespace pe
     Format Translate(VkFormat format)
     {
         using T = std::underlying_type_t<VkFormat>;
-        static std::map<T, Format> s_translator{
+        static std::unordered_map<T, Format> s_translator{
             {(T)VK_FORMAT_UNDEFINED, Format::Undefined},
             {(T)VK_FORMAT_R8_SINT, Format::R8SInt},
             {(T)VK_FORMAT_R8_UINT, Format::R8UInt},
@@ -430,7 +430,7 @@ namespace pe
     VkImageTiling Translate(ImageTiling tiling)
     {
         using T = std::underlying_type_t<ImageTiling>;
-        static std::map<T, VkImageTiling> s_translator{
+        static std::unordered_map<T, VkImageTiling> s_translator{
             {(T)ImageTiling::Optimal, VK_IMAGE_TILING_OPTIMAL},
             {(T)ImageTiling::Linear, VK_IMAGE_TILING_LINEAR}};
 
@@ -441,7 +441,7 @@ namespace pe
     VkImageUsageFlags Translate(ImageUsageFlags flags)
     {
         using T = ImageUsageFlags::Type;
-        static std::map<T, VkImageUsageFlags> s_translator{
+        static std::unordered_map<T, VkImageUsageFlags> s_translator{
             {(T)ImageUsage::TransferSrcBit, VK_IMAGE_USAGE_TRANSFER_SRC_BIT},
             {(T)ImageUsage::TransferDstBit, VK_IMAGE_USAGE_TRANSFER_DST_BIT},
             {(T)ImageUsage::SampledBit, VK_IMAGE_USAGE_SAMPLED_BIT},
@@ -467,7 +467,7 @@ namespace pe
     VkSharingMode Translate(SharingMode mode)
     {
         using T = std::underlying_type_t<SharingMode>;
-        static std::map<T, VkSharingMode> s_translator{
+        static std::unordered_map<T, VkSharingMode> s_translator{
             {(T)SharingMode::Exclusive, VK_SHARING_MODE_EXCLUSIVE},
             {(T)SharingMode::Concurrent, VK_SHARING_MODE_CONCURRENT}};
 
@@ -478,7 +478,7 @@ namespace pe
     VkImageCreateFlags Translate(ImageCreateFlags flags)
     {
         using T = ImageCreateFlags::Type;
-        static std::map<T, VkImageCreateFlags> s_translator{
+        static std::unordered_map<T, VkImageCreateFlags> s_translator{
             {(T)ImageCreate::SparceBindingBit, VK_IMAGE_CREATE_SPARSE_BINDING_BIT},
             {(T)ImageCreate::SparceResidencyBit, VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT},
             {(T)ImageCreate::SparceAliasedBit, VK_IMAGE_CREATE_SPARSE_ALIASED_BIT},
@@ -509,7 +509,7 @@ namespace pe
     VkCommandBufferUsageFlags Translate(CommandBufferUsageFlags flags)
     {
         using T = CommandBufferUsageFlags::Type;
-        static std::map<T, VkCommandBufferUsageFlags> s_translator{
+        static std::unordered_map<T, VkCommandBufferUsageFlags> s_translator{
             {(T)CommandBufferUsage::OneTimeSubmitBit, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT},
             {(T)CommandBufferUsage::RenderPassContinueBit, VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT},
             {(T)CommandBufferUsage::SimultaneousUseBit, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT}};
@@ -527,7 +527,7 @@ namespace pe
     VkBufferUsageFlags Translate(BufferUsageFlags flags)
     {
         using T = BufferUsageFlags::Type;
-        static std::map<T, VkBufferUsageFlags> s_translator{
+        static std::unordered_map<T, VkBufferUsageFlags> s_translator{
             {(T)BufferUsage::TransferSrcBit, VK_BUFFER_USAGE_TRANSFER_SRC_BIT},
             {(T)BufferUsage::TransferDstBit, VK_BUFFER_USAGE_TRANSFER_DST_BIT},
             {(T)BufferUsage::UniformTexelBufferBit, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT},
@@ -568,7 +568,7 @@ namespace pe
     VkColorSpaceKHR Translate(ColorSpace colorSpace)
     {
         using T = std::underlying_type_t<ColorSpace>;
-        static std::map<T, VkColorSpaceKHR> s_translator{
+        static std::unordered_map<T, VkColorSpaceKHR> s_translator{
             {(T)ColorSpace::SrgbNonLinear, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
             {(T)ColorSpace::DisplayP3NonLinear, VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT},
             {(T)ColorSpace::ExtendedSrgbLinear, VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT},
@@ -592,7 +592,7 @@ namespace pe
     ColorSpace Translate(VkColorSpaceKHR colorSpace)
     {
         using T = std::underlying_type_t<VkColorSpaceKHR>;
-        static std::map<T, ColorSpace> s_translator{
+        static std::unordered_map<T, ColorSpace> s_translator{
             {(T)VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, ColorSpace::SrgbNonLinear},
             {(T)VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT, ColorSpace::DisplayP3NonLinear},
             {(T)VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT, ColorSpace::ExtendedSrgbLinear},
@@ -616,7 +616,7 @@ namespace pe
     VkPresentModeKHR Translate(PresentMode presentMode)
     {
         using T = std::underlying_type_t<PresentMode>;
-        static std::map<T, VkPresentModeKHR> s_translator{
+        static std::unordered_map<T, VkPresentModeKHR> s_translator{
             {(T)PresentMode::Immediate, VK_PRESENT_MODE_IMMEDIATE_KHR},
             {(T)PresentMode::Mailbox, VK_PRESENT_MODE_MAILBOX_KHR},
             {(T)PresentMode::Fifo, VK_PRESENT_MODE_FIFO_KHR},
@@ -631,7 +631,7 @@ namespace pe
     PresentMode Translate(VkPresentModeKHR presentMode)
     {
         using T = std::underlying_type_t<VkPresentModeKHR>;
-        static std::map<T, PresentMode> s_translator{
+        static std::unordered_map<T, PresentMode> s_translator{
             {(T)VK_PRESENT_MODE_IMMEDIATE_KHR, PresentMode::Immediate},
             {(T)VK_PRESENT_MODE_MAILBOX_KHR, PresentMode::Mailbox},
             {(T)VK_PRESENT_MODE_FIFO_KHR, PresentMode::Fifo},
@@ -646,7 +646,7 @@ namespace pe
     VkPipelineStageFlags Translate(PipelineStageFlags flags)
     {
         using T = PipelineStageFlags::Type;
-        static std::map<T, VkPipelineStageFlags> s_translator{
+        static std::unordered_map<T, VkPipelineStageFlags> s_translator{
             {(T)PipelineStage::TopOfPipeBit, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT},
             {(T)PipelineStage::DrawIndirectBit, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT},
             {(T)PipelineStage::VertexInputBit, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT},
@@ -727,7 +727,7 @@ namespace pe
     VkAttachmentLoadOp Translate(AttachmentLoadOp loadOp)
     {
         using T = std::underlying_type_t<AttachmentLoadOp>;
-        static std::map<T, VkAttachmentLoadOp> s_translator{
+        static std::unordered_map<T, VkAttachmentLoadOp> s_translator{
             {(T)AttachmentLoadOp::Load, VK_ATTACHMENT_LOAD_OP_LOAD},
             {(T)AttachmentLoadOp::Clear, VK_ATTACHMENT_LOAD_OP_CLEAR},
             {(T)AttachmentLoadOp::DontCare, VK_ATTACHMENT_LOAD_OP_DONT_CARE}};
@@ -739,7 +739,7 @@ namespace pe
     VkAttachmentStoreOp Translate(AttachmentStoreOp storeOp)
     {
         using T = std::underlying_type_t<AttachmentStoreOp>;
-        static std::map<T, VkAttachmentStoreOp> s_translator{
+        static std::unordered_map<T, VkAttachmentStoreOp> s_translator{
             {(T)AttachmentStoreOp::Store, VK_ATTACHMENT_STORE_OP_STORE},
             {(T)AttachmentStoreOp::DontCare, VK_ATTACHMENT_STORE_OP_DONT_CARE}};
 
@@ -750,7 +750,7 @@ namespace pe
     VkAccessFlags Translate(AccessFlags flags)
     {
         using T = AccessFlags::Type;
-        static std::map<T, VkAccessFlags> s_translator{
+        static std::unordered_map<T, VkAccessFlags> s_translator{
             {(T)Access::IndirectCommandReadBit, VK_ACCESS_INDIRECT_COMMAND_READ_BIT},
             {(T)Access::IndexReadBit, VK_ACCESS_INDEX_READ_BIT},
             {(T)Access::VertexAttributeReadBit, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT},
@@ -791,7 +791,7 @@ namespace pe
     VmaAllocationCreateFlags Translate(AllocationCreateFlags flags)
     {
         using T = AllocationCreateFlags::Type;
-        static std::map<T, VmaAllocationCreateFlags> s_translator{
+        static std::unordered_map<T, VmaAllocationCreateFlags> s_translator{
             {(T)AllocationCreate::DedicatedMemoryBit, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT},
             {(T)AllocationCreate::NeverAllocateBit, VMA_ALLOCATION_CREATE_NEVER_ALLOCATE_BIT},
             {(T)AllocationCreate::MappedBit, VMA_ALLOCATION_CREATE_MAPPED_BIT},
@@ -820,7 +820,7 @@ namespace pe
     VkBlendFactor Translate(BlendFactor blendFactor)
     {
         using T = std::underlying_type_t<BlendFactor>;
-        static std::map<T, VkBlendFactor> s_translator{
+        static std::unordered_map<T, VkBlendFactor> s_translator{
             {(T)BlendFactor::Zero, VK_BLEND_FACTOR_ZERO},
             {(T)BlendFactor::One, VK_BLEND_FACTOR_ONE},
             {(T)BlendFactor::SrcColor, VK_BLEND_FACTOR_SRC_COLOR},
@@ -848,7 +848,7 @@ namespace pe
     VkBlendOp Translate(BlendOp blendOp)
     {
         using T = std::underlying_type_t<BlendOp>;
-        static std::map<T, VkBlendOp> s_translator{
+        static std::unordered_map<T, VkBlendOp> s_translator{
             {(T)BlendOp::Add, VK_BLEND_OP_ADD},
             {(T)BlendOp::Subtract, VK_BLEND_OP_SUBTRACT},
             {(T)BlendOp::ReverseSubtract, VK_BLEND_OP_REVERSE_SUBTRACT},
@@ -908,7 +908,7 @@ namespace pe
     VkColorComponentFlags Translate(ColorComponentFlags flags)
     {
         using T = ColorComponentFlags::Type;
-        static std::map<T, VkColorComponentFlags> s_translator{
+        static std::unordered_map<T, VkColorComponentFlags> s_translator{
             {(T)ColorComponent::RBit, VK_COLOR_COMPONENT_R_BIT},
             {(T)ColorComponent::GBit, VK_COLOR_COMPONENT_G_BIT},
             {(T)ColorComponent::BBit, VK_COLOR_COMPONENT_B_BIT},
@@ -927,7 +927,7 @@ namespace pe
     VkDynamicState Translate(DynamicState state)
     {
         using T = std::underlying_type_t<DynamicState>;
-        static std::map<T, VkDynamicState> s_translator{
+        static std::unordered_map<T, VkDynamicState> s_translator{
             {(T)DynamicState::Viewport, VK_DYNAMIC_STATE_VIEWPORT},
             {(T)DynamicState::Scissor, VK_DYNAMIC_STATE_SCISSOR},
             {(T)DynamicState::LineWidth, VK_DYNAMIC_STATE_LINE_WIDTH},
@@ -969,7 +969,7 @@ namespace pe
     VkDescriptorType Translate(DescriptorType type)
     {
         using T = std::underlying_type_t<DescriptorType>;
-        static std::map<T, VkDescriptorType> s_translator{
+        static std::unordered_map<T, VkDescriptorType> s_translator{
             {(T)DescriptorType::Sampler, VK_DESCRIPTOR_TYPE_SAMPLER},
             {(T)DescriptorType::CombinedImageSampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
             {(T)DescriptorType::SampledImage, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE},
@@ -991,7 +991,7 @@ namespace pe
     VkCullModeFlags Translate(CullMode mode)
     {
         using T = std::underlying_type_t<CullMode>;
-        static std::map<T, VkCullModeFlags> s_translator{
+        static std::unordered_map<T, VkCullModeFlags> s_translator{
             {(T)CullMode::None, VK_CULL_MODE_NONE},
             {(T)CullMode::Front, VK_CULL_MODE_FRONT_BIT},
             {(T)CullMode::Back, VK_CULL_MODE_BACK_BIT},
@@ -1004,7 +1004,7 @@ namespace pe
     VkObjectType Translate(ObjectType type)
     {
         using T = std::underlying_type_t<ObjectType>;
-        static std::map<T, VkObjectType> s_translator{
+        static std::unordered_map<T, VkObjectType> s_translator{
             {(T)ObjectType::Unknown, VK_OBJECT_TYPE_UNKNOWN},
             {(T)ObjectType::Instance, VK_OBJECT_TYPE_INSTANCE},
             {(T)ObjectType::PhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE},
@@ -1051,7 +1051,7 @@ namespace pe
     VkVertexInputRate Translate(VertexInputRate rate)
     {
         using T = std::underlying_type_t<VertexInputRate>;
-        static std::map<T, VkVertexInputRate> s_translator{
+        static std::unordered_map<T, VkVertexInputRate> s_translator{
             {(T)VertexInputRate::Vertex, VK_VERTEX_INPUT_RATE_VERTEX},
             {(T)VertexInputRate::Instance, VK_VERTEX_INPUT_RATE_INSTANCE}};
 
@@ -1062,7 +1062,7 @@ namespace pe
     VkAttachmentDescriptionFlags Translate(AttachmentDescriptionFlags flags)
     {
         using T = AttachmentDescriptionFlags::Type;
-        static std::map<T, VkAttachmentDescriptionFlags> s_translator{
+        static std::unordered_map<T, VkAttachmentDescriptionFlags> s_translator{
             {(T)AttachmentDescription::MayAlias, VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT}};
 
         return GetFlags(flags.Value(), s_translator);
@@ -1078,7 +1078,7 @@ namespace pe
     VkCommandPoolCreateFlags Translate(CommandPoolCreateFlags flags)
     {
         using T = CommandPoolCreateFlags::Type;
-        static std::map<T, VkCommandPoolCreateFlags> s_translator{
+        static std::unordered_map<T, VkCommandPoolCreateFlags> s_translator{
             {(T)CommandPoolCreate::TransientBit, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT},
             {(T)CommandPoolCreate::ResetCommandBuffer, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT},
             {(T)CommandPoolCreate::Protected, VK_COMMAND_POOL_CREATE_PROTECTED_BIT}};
@@ -1096,7 +1096,7 @@ namespace pe
     VkPrimitiveTopology Translate(PrimitiveTopology mode)
     {
         using T = std::underlying_type_t<PrimitiveTopology>;
-        static std::map<T, VkPrimitiveTopology> s_translator{
+        static std::unordered_map<T, VkPrimitiveTopology> s_translator{
             {(T)PrimitiveTopology::PointLis, VK_PRIMITIVE_TOPOLOGY_POINT_LIST},
             {(T)PrimitiveTopology::LineList, VK_PRIMITIVE_TOPOLOGY_LINE_LIST},
             {(T)PrimitiveTopology::LineStrip, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP},
@@ -1116,7 +1116,7 @@ namespace pe
     VkPolygonMode Translate(PolygonMode mode)
     {
         using T = std::underlying_type_t<PolygonMode>;
-        static std::map<T, VkPolygonMode> s_translator{
+        static std::unordered_map<T, VkPolygonMode> s_translator{
             {(T)PolygonMode::Fill, VK_POLYGON_MODE_FILL},
             {(T)PolygonMode::Line, VK_POLYGON_MODE_LINE},
             {(T)PolygonMode::Point, VK_POLYGON_MODE_POINT}};

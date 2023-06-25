@@ -590,11 +590,11 @@ namespace pe
 
         // CommandPools are creating CommandBuffers from a specific family id, this will have to
         // match with the Queue created from a falily id that this CommandBuffer will be submited to.
-        s_allCmds = std::vector<std::map<size_t, CommandBuffer *>>(queueFamPropCount);
+        s_allCmds = std::vector<std::unordered_map<size_t, CommandBuffer *>>(queueFamPropCount);
         s_availableCmds = std::vector<std::unordered_map<size_t, CommandBuffer *>>(queueFamPropCount);
         for (uint32_t i = 0; i < queueFamPropCount; i++)
         {
-            s_allCmds[i] = std::map<size_t, CommandBuffer *>();
+            s_allCmds[i] = std::unordered_map<size_t, CommandBuffer *>();
             s_availableCmds[i] = std::unordered_map<size_t, CommandBuffer *>();
             for (uint32_t j = 0; j < countPerFamily; j++)
             {

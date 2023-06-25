@@ -75,18 +75,22 @@ namespace pe
         vkGetPhysicalDeviceSurfacePresentModesKHR(RHII.GetGpu(), m_handle, &presentModesCount, presentModes.data());
 
         for (const auto &i : presentModes)
+        {
             if (i == VK_PRESENT_MODE_MAILBOX_KHR)
             {
                 presentMode = Translate<PresentMode>(i);
                 return;
             }
+        }
 
         for (const auto &i : presentModes)
+        {
             if (i == VK_PRESENT_MODE_IMMEDIATE_KHR)
             {
                 presentMode = Translate<PresentMode>(i);
                 return;
             }
+        }
 
         presentMode = Translate<PresentMode>(VK_PRESENT_MODE_FIFO_KHR);
     }

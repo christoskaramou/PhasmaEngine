@@ -73,8 +73,9 @@ namespace pe
 
     void Context::RemoveEntity(size_t id)
     {
-        if (m_entities.find(id) != m_entities.end())
-            m_entities.erase(id);
+        auto it = m_entities.find(id);
+        if(it != m_entities.end())
+            m_entities.erase(it);
     }
 
     std::unordered_map<size_t, std::shared_ptr<ISystem>> Context::GetSystems()

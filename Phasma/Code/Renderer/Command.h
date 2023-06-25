@@ -185,13 +185,13 @@ namespace pe
         friend class Queue;
 
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
-        inline static std::vector<std::map<size_t, CommandBuffer *>> s_allCmds{};
+        inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_allCmds{};
         inline static std::mutex s_getNextMutex{};
         inline static std::mutex s_returnMutex{};
         inline static std::mutex s_WaitMutex{};
-        inline static std::map<size_t, RenderPass *> s_renderPasses{};
-        inline static std::map<size_t, FrameBuffer *> s_frameBuffers{};
-        inline static std::map<size_t, Pipeline *> s_pipelines{};
+        inline static std::unordered_map<size_t, RenderPass *> s_renderPasses{};
+        inline static std::unordered_map<size_t, FrameBuffer *> s_frameBuffers{};
+        inline static std::unordered_map<size_t, Pipeline *> s_pipelines{};
 
         CommandPool *m_commandPool;
         uint32_t m_familyId;

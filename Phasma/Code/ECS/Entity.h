@@ -41,9 +41,6 @@ namespace pe
         }
 
         template <class T>
-        inline bool HasComponent();
-
-        template <class T>
         inline T *GetComponent();
 
         template <class T, class... Params>
@@ -60,21 +57,10 @@ namespace pe
     };
 
     template <class T>
-    inline bool Entity::HasComponent()
-    {
-        ValidateBaseClass<IComponent, T>();
-
-        if (m_components.find(GetTypeID<T>()) != m_components.end())
-            return true;
-        else
-            return false;
-    }
-
-    template <class T>
     inline T *Entity::GetComponent()
     {
         ValidateBaseClass<IComponent, T>();
-        
+
         auto it = m_components.find(GetTypeID<T>());
         if (it != m_components.end())
             return static_cast<T *>(it->second.get());
@@ -85,22 +71,31 @@ namespace pe
     template <class T, class... Params>
     inline T *Entity::CreateComponent(Params &&...params)
     {
-        size_t id = GetTypeID<T>();
+        ValidateBaseClass<IComponent, T>();
 
-        if (!HasComponent<T>())
+        size_t id = GetTypeID<T>();
+        auto it = m_components.find(id);
+
+        if (it == m_components.end())
         {
-            m_components[id] = std::make_shared<T>(std::forward<Params>(params)...);
-            m_components[id]->SetEntity(this);
-            m_components[id]->SetEnabled(true);
+            auto comp = std::make_shared<T>(std::forward<Params>(params)...);
+            comp->SetEntity(this);
+            comp->SetEnabled(true);
+            it = m_components.emplace(id, comp).first;
         }
 
-        return static_cast<T *>(m_components[id].get());
+        return static_cast<T *>(it->second.get());
     }
 
     template <class T>
     inline void Entity::RemoveComponent()
     {
-        if (HasComponent<T>())
-            m_components.erase(GetTypeID<T>());
+        ValidateBaseClass<IComponent, T>();
+
+        size_t id = GetTypeID<T>();
+        auto it = m_components.find(id);
+
+        if (it != m_components.end())
+            m_components.erase(it);
     }
 }

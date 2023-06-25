@@ -198,7 +198,7 @@ namespace pe
                     auto it = s_allQueues.find(queueFlags.Value());
                     if (it == s_allQueues.end())
                     {
-                        s_allQueues[queueFlags.Value()] = std::map<size_t, Queue *>();
+                        s_allQueues[queueFlags.Value()] = std::unordered_map<size_t, Queue *>();
                         s_allFlags.push_back(queueFlags.Value());
                     }
 

@@ -146,7 +146,7 @@ namespace pe
         float height_f{};
         PipelineColorBlendAttachmentState blendAttachment;
 
-        inline static std::map<size_t, Image *> uniqueImages{};
+        inline static std::unordered_map<size_t, Image *> uniqueImages{};
 
     private:
         friend class Swapchain;

@@ -48,7 +48,7 @@ namespace pe
 
         uint32_t GetVariableCount() { return m_variableCount; }
 
-        inline static std::map<size_t, DescriptorLayout *> s_descriptorLayouts{};
+        inline static std::unordered_map<size_t, DescriptorLayout *> s_descriptorLayouts{};
 
         inline static Hash CalculateHash(const std::vector<DescriptorBindingInfo> &bindingInfos, ShaderStage stage)
         {
@@ -121,8 +121,8 @@ namespace pe
         DescriptorPool *m_pool;
         DescriptorLayout *m_layout;
         std::vector<uint32_t> m_frameDynamicOffsets;
-        std::map<uint32_t, DescriptorBindingInfo> m_bindingInfoMap;
-        std::map<uint32_t, DescriptorUpdateInfo> m_updateInfoMap;
+        std::unordered_map<uint32_t, DescriptorBindingInfo> m_bindingInfoMap;
+        std::unordered_map<uint32_t, DescriptorUpdateInfo> m_updateInfoMap;
     };
 
 }

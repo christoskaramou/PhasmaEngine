@@ -48,7 +48,7 @@ namespace pe
 
     private:
         inline static std::vector<QueueTypeFlags::Type> s_allFlags{};
-        inline static std::map<QueueTypeFlags::Type, std::map<size_t, Queue *>> s_allQueues{};
+        inline static std::unordered_map<QueueTypeFlags::Type, std::unordered_map<size_t, Queue *>> s_allQueues{};
         inline static std::mutex s_getNextMutex{};
         inline static std::mutex s_submitMutex{};
 

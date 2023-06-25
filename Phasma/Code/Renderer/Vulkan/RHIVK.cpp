@@ -324,10 +324,6 @@ namespace pe
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
-        // Indexing features
-        VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
-        indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-
         // Vulkan 1.2 features
         VkPhysicalDeviceVulkan12Features deviceFeatures12{};
         deviceFeatures12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;

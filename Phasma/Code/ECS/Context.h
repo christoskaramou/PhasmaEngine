@@ -47,9 +47,6 @@ namespace pe
         inline T *GetSystem();
 
         template <class T>
-        inline bool HasSystem();
-
-        template <class T>
         inline void RemoveSystem();
 
         Entity *CreateEntity();
@@ -62,62 +59,52 @@ namespace pe
 
     private:
         std::unordered_map<size_t, std::shared_ptr<ISystem>> m_systems;
-        std::unordered_map<size_t, IDrawSystem *> m_drawSystems; // Keep the pointers for draw systems. All are stored in m_systems
+        std::unordered_map<size_t, IDrawSystem *> m_drawSystems;
         std::unordered_map<size_t, std::shared_ptr<Entity>> m_entities;
     };
-
-    template <class T>
-    inline bool Context::HasSystem()
-    {
-        ValidateBaseClass<ISystem, T>();
-
-        if (m_systems.find(GetTypeID<T>()) != m_systems.end())
-            return true;
-        else
-            return false;
-    }
 
     template <class T, class... Params>
     inline T *Context::CreateSystem(Params &&...params)
     {
+        ValidateBaseClass<ISystem, T>();
+
         size_t id = GetTypeID<T>();
-
-        if (HasSystem<T>())
+        auto it = m_systems.find(id);
+        if (it == m_systems.end())
         {
-            return static_cast<T *>(m_systems[id].get());
-        }
-        else
-        {
-            m_systems[id] = std::make_shared<T>(std::forward<Params>(params)...);
-
-            ISystem *system = m_systems[id].get();
+            auto system = std::make_shared<T>(std::forward<Params>(params)...);
             system->SetEnabled(true);
-            // system->Init();
+            m_systems[id] = system;
 
             if constexpr (std::is_base_of<IDrawSystem, T>::value)
-                m_drawSystems[id] = static_cast<IDrawSystem *>(system);
+                m_drawSystems[id] = static_cast<IDrawSystem *>(system.get());
 
-            return static_cast<T *>(system);
+            return static_cast<T *>(system.get());
         }
+        return static_cast<T *>(it->second.get());
     }
 
     template <class T>
     inline T *Context::GetSystem()
     {
-        if (HasSystem<T>())
-            return static_cast<T *>(m_systems[GetTypeID<T>()].get());
-        else
-            return nullptr;
+        ValidateBaseClass<ISystem, T>();
+
+        auto it = m_systems.find(GetTypeID<T>());
+        if (it != m_systems.end())
+            return static_cast<T *>(it->second.get());
+        return nullptr;
     }
 
     template <class T>
     inline void Context::RemoveSystem()
     {
-        if (HasSystem<T>())
+        ValidateBaseClass<ISystem, T>();
+
+        auto it = m_systems.find(GetTypeID<T>());
+        if (it != m_systems.end())
         {
-            size_t id = GetTypeID<T>();
-            m_systems[id]->Destroy();
-            m_systems.erase(id);
+            it->second->Destroy();
+            m_systems.erase(it);
         }
     }
 }

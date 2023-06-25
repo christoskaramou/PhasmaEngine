@@ -4,6 +4,7 @@
 
 #include <string>
 #include <vector>
+#include <list>
 #include <memory>
 #include <type_traits>
 #include <typeinfo>

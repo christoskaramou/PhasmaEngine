@@ -98,8 +98,8 @@ namespace pe
         Image *m_viewportRT;
         Image *m_depth;
         std::unordered_map<size_t, IRenderComponent *> m_renderComponents{};
-        std::map<size_t, Image *> m_renderTargets{};
-        std::map<size_t, Image *> m_depthTargets{};
+        std::unordered_map<size_t, Image *> m_renderTargets{};
+        std::unordered_map<size_t, Image *> m_depthTargets{};
 
         std::vector<Primitive *> m_drawlist{};
 
