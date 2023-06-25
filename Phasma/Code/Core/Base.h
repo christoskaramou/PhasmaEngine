@@ -51,7 +51,7 @@ namespace pe
     class OrderedMap
     {
     public:
-        using ListType = std::list<std::pair<Key, T>>;
+        using ListType = std::list<T>;
         using iterator = typename ListType::iterator;
         using const_iterator = typename ListType::const_iterator;
         using reverse_iterator = typename ListType::reverse_iterator;
@@ -61,28 +61,37 @@ namespace pe
 
         bool exists(const Key &key) const { return m_map.find(key) != m_map.end(); }
 
-        T &get(const Key &key) { return m_map[key]->second; }
-        const T &get(const Key &key) const { return m_map.at(key)->second; }
+        T &get(const Key &key)
+        {
+            auto it = m_map.find(key);
+            if (it == m_map.end())
+            {
+                throw std::out_of_range("Key not found in map");
+            }
+            return *(it->second);
+        }
 
-        const T &operator[](const Key &key) const { return m_map.at(key)->second; }
+        const T &get(const Key &key) const { return *(m_map.at(key)); }
+
         T &operator[](const Key &key)
         {
             auto it = m_map.find(key);
             if (it == m_map.end())
             {
-                m_list.push_back({key, T()});
+                m_list.push_back(T());
                 it = m_map.insert({key, std::prev(m_list.end())}).first;
             }
-            return it->second->second;
+            return *(it->second);
         }
 
+        const T &operator[](const Key &key) const { return *(m_map.at(key)); }
 
         iterator begin() { return m_list.begin(); }
         iterator end() { return m_list.end(); }
         reverse_iterator rbegin() { return m_list.rbegin(); }
         reverse_iterator rend() { return m_list.rend(); }
-        const_iterator cbegin() { return m_list.cbegin(); }
-        const_iterator cend() { return m_list.cend(); }
+        const_iterator cbegin() const { return m_list.cbegin(); }
+        const_iterator cend() const { return m_list.cend(); }
         const_reverse_iterator crbegin() const { return m_list.crbegin(); }
         const_reverse_iterator crend() const { return m_list.crend(); }
 
@@ -90,12 +99,10 @@ namespace pe
         {
             if (m_map.find(key) == m_map.end())
             {
-                m_list.push_back({key, value});
+                m_list.push_back(value);
                 m_map[key] = std::prev(m_list.end());
-
                 return true;
             }
-
             return false;
         }
 
@@ -104,13 +111,10 @@ namespace pe
             auto map_it = m_map.find(key);
             if (map_it != m_map.end())
             {
-                // map_it->second is the iterator of the list (that makes the erase O(1))
                 m_list.erase(map_it->second);
                 m_map.erase(map_it);
-
                 return true;
             }
-
             return false;
         }
 
@@ -177,7 +181,7 @@ namespace pe
         {
             for (auto it = s_allHandles.rbegin(); it != s_allHandles.rend(); ++it)
             {
-                it->second->Suicide();
+                (*it)->Suicide();
             }
 
             s_allHandles.clear();
