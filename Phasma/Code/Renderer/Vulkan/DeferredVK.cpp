@@ -10,6 +10,7 @@
 #include "Shader/Reflection.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
+#include "Renderer/RenderPass.h"
 #include "Renderer/Descriptor.h"
 #include "Systems/LightSystem.h"
 #include "Renderer/Framebuffer.h"
@@ -359,25 +360,21 @@ namespace pe
 
         // COMBINE
         // Input
-        cmd->ImageBarrier(normalRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(albedoRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(srmRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(velocityRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(emissiveRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(ssaoBlurRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(ssrRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(ibl_brdf_lut, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(skybox.cubeMap, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
-        for (auto &shadowMap : shadows.textures)
-            cmd->ImageBarrier(shadowMap, ImageLayout::DepthStencilReadOnly);
-        // Output
-        cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
+        cmd->AddToImageGroupBarrier(normalRT, ImageLayout::ShaderReadOnly);
+        cmd->AddToImageGroupBarrier(albedoRT, ImageLayout::ShaderReadOnly);
+        cmd->AddToImageGroupBarrier(srmRT, ImageLayout::ShaderReadOnly);
+        cmd->AddToImageGroupBarrier(velocityRT, ImageLayout::ShaderReadOnly);
+        cmd->AddToImageGroupBarrier(emissiveRT, ImageLayout::ShaderReadOnly);
+        cmd->AddToImageGroupBarrier(ssaoBlurRT, ImageLayout::ShaderReadOnly);
+        cmd->AddToImageGroupBarrier(ssrRT, ImageLayout::ShaderReadOnly);
+        cmd->AddToImageGroupBarrier(ibl_brdf_lut, ImageLayout::ShaderReadOnly);
+        cmd->AddToImageGroupBarrier(skybox.cubeMap, ImageLayout::ShaderReadOnly);
+        cmd->ImageGroupBarrier();
 
-        AttachmentInfo info{};
-        info.image = viewportRT;
-        info.initialLayout = viewportRT->GetCurrentLayout();
-        info.finalLayout = ImageLayout::ColorAttachment;
+        cmd->AddToImageGroupBarrier(depth, ImageLayout::DepthStencilReadOnly);
+        for (auto &shadowMap : shadows.textures)
+            cmd->AddToImageGroupBarrier(shadowMap, ImageLayout::DepthStencilReadOnly);
+        cmd->ImageGroupBarrier();
 
         cmd->BeginPass(passInfo->renderPass, &viewportRT, nullptr);
         cmd->BindPipeline(*passInfo);
@@ -399,16 +396,11 @@ namespace pe
 
     void Deferred::BeginPass(CommandBuffer *cmd, uint32_t imageIndex)
     {
-        cmd->ImageBarrier(normalRT, ImageLayout::ColorAttachment);
-        cmd->ImageBarrier(albedoRT, ImageLayout::ColorAttachment);
-        cmd->ImageBarrier(srmRT, ImageLayout::ColorAttachment);
-        cmd->ImageBarrier(velocityRT, ImageLayout::ColorAttachment);
-        cmd->ImageBarrier(emissiveRT, ImageLayout::ColorAttachment);
-        cmd->ImageBarrier(depth, ImageLayout::DepthStencilAttachment);
+        RenderPass *rp = passInfoGBuffer->renderPass;
 
         Image *colorTargets[5]{normalRT, albedoRT, srmRT, velocityRT, emissiveRT};
 
-        cmd->BeginPass(passInfoGBuffer->renderPass, colorTargets, depth);
+        cmd->BeginPass(rp, colorTargets, depth);
         cmd->SetViewport(0.f, 0.f, normalRT->width_f, normalRT->height_f);
         cmd->SetScissor(0, 0, normalRT->imageInfo.width, normalRT->imageInfo.height);
     }
@@ -416,13 +408,6 @@ namespace pe
     void Deferred::EndPass(CommandBuffer *cmd)
     {
         cmd->EndPass();
-
-        cmd->ImageBarrier(albedoRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(normalRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(velocityRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(emissiveRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(srmRT, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
     }
 
     void Deferred::Destroy()

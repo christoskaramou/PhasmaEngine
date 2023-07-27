@@ -347,11 +347,6 @@ namespace pe
               deviceFeatures12.descriptorBindingVariableDescriptorCount))
             PE_ERROR("Bindless descriptors are not supported on this device!");
 
-#if (USE_DYNAMIC_RENDERING == 1)
-        if (!deviceFeatures13.dynamicRendering)
-            PE_ERROR("Dynamic Rendering is not supported!");
-#endif
-
         if (!deviceFeatures2.features.shaderInt64 && !deviceFeatures2.features.shaderInt16)
             PE_ERROR("shaderInt16 is not supported!");
 

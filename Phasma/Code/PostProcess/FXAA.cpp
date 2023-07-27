@@ -5,6 +5,7 @@
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
+#include "Renderer/RenderPass.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
@@ -83,8 +84,6 @@ namespace pe
         // FAST APPROXIMATE ANTI-ALIASING
         // Input
         cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
-        // Output
-        cmd->ImageBarrier(viewportRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(passInfo->renderPass, &viewportRT, nullptr);
         cmd->BindPipeline(*passInfo);

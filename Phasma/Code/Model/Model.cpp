@@ -1142,7 +1142,6 @@ namespace pe
 
         RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
         Image *display = rs->GetRenderTarget("display");
-        cmd->ImageBarrier(display, ImageLayout::ColorAttachment);
 
         cmd->BeginDebugRegion("Draw AABBs");
 

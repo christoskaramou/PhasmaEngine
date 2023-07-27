@@ -5,6 +5,7 @@
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
+#include "Renderer/RenderPass.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
@@ -203,8 +204,6 @@ namespace pe
         // BRIGHT FILTER
         // Input
         cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
-        // Output
-        cmd->ImageBarrier(brightFilterRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(passInfoBF->renderPass, &brightFilterRT, nullptr);
         cmd->BindPipeline(*passInfoBF);
@@ -220,8 +219,6 @@ namespace pe
         // GUASSIAN BLUR HORIZONTAL
         // Input
         cmd->ImageBarrier(brightFilterRT, ImageLayout::ShaderReadOnly);
-        // Output
-        cmd->ImageBarrier(gaussianBlurHorizontalRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(passInfoGBH->renderPass, &gaussianBlurHorizontalRT, nullptr);
         cmd->BindPipeline(*passInfoGBH);
@@ -237,8 +234,6 @@ namespace pe
         // GAUSSIAN BLUR VERTICAL
         // Input
         cmd->ImageBarrier(gaussianBlurHorizontalRT, ImageLayout::ShaderReadOnly);
-        // Output
-        cmd->ImageBarrier(gaussianBlurVerticalRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(passInfoGBV->renderPass, &gaussianBlurVerticalRT, nullptr);
         cmd->BindPipeline(*passInfoGBV);
@@ -255,8 +250,6 @@ namespace pe
         // Input
         cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(gaussianBlurVerticalRT, ImageLayout::ShaderReadOnly);
-        // Output
-        cmd->ImageBarrier(displayRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(passInfoCombine->renderPass, &displayRT, nullptr);
         cmd->BindPipeline(*passInfoCombine);

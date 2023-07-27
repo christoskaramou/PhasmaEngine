@@ -5,6 +5,7 @@
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Command.h"
+#include "Renderer/RenderPass.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
@@ -106,8 +107,6 @@ namespace pe
         cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(velocityRT, ImageLayout::ShaderReadOnly);
         cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
-        // Output
-        cmd->ImageBarrier(displayRT, ImageLayout::ColorAttachment);
 
         cmd->BeginPass(passInfo->renderPass, &displayRT, nullptr);
         cmd->BindPipeline(*passInfo);

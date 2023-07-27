@@ -98,7 +98,6 @@ namespace pe
             vkDestroySampler(RHII.GetDevice(), m_handle, nullptr);
     }
 
-
     Image::Image(const ImageCreateInfo &info)
     {
         if (!LinearFilterSupport(info.format, info.tiling))
@@ -266,6 +265,96 @@ namespace pe
         for (uint32_t i = 0; i < arrayLayers; i++)
             for (uint32_t j = 0; j < mipLevels; j++)
                 m_layouts[baseArrayLayer + i][baseMipLevel + j] = newLayout;
+    }
+
+    struct PairHash
+    {
+        std::size_t operator()(const std::pair<PipelineStageFlags, PipelineStageFlags> &p) const
+        {
+            Hash hash;
+            hash.Combine(p.first.Value());
+            hash.Combine(p.second.Value());
+            return hash;
+        }
+    };
+
+    void Image::GroupBarrier(CommandBuffer *cmd, const std::vector<BarrierInfo> &barrierInfos)
+    {
+        if (barrierInfos.empty())
+            return;
+
+        PE_ERROR_IF(!cmd, "Image::TransitionImageLayout(): no command buffer specified.");
+
+        using StagePair = std::pair<PipelineStageFlags, PipelineStageFlags>;
+        std::unordered_map<StagePair, std::vector<VkImageMemoryBarrier>, PairHash> groupedBarriers;
+
+        for (auto &barrierInfo : barrierInfos)
+        {
+            Image *image = barrierInfo.image;
+            const ImageCreateInfo &imageInfo = image->imageInfo;
+
+            ImageLayout oldLayout = image->m_layouts[barrierInfo.baseArrayLayer][barrierInfo.baseMipLevel];
+            ImageLayout newLayout = barrierInfo.newLayout;
+
+            if (newLayout == oldLayout)
+                continue;
+
+            PipelineStageFlags oldPipelineStage;
+            AccessFlags oldAccess;
+            GetInfoFromLayout(oldLayout, oldPipelineStage, oldAccess);
+
+            PipelineStageFlags newPipelineStage;
+            AccessFlags newAccess;
+            GetInfoFromLayout(newLayout, newPipelineStage, newAccess);
+
+            StagePair stagePair = std::make_pair(oldPipelineStage, newPipelineStage);
+
+            uint mipLevels = barrierInfo.mipLevels;
+            if (mipLevels == 0)
+                mipLevels = imageInfo.mipLevels;
+
+            uint arrayLayers = barrierInfo.arrayLayers;
+            if (arrayLayers == 0)
+                arrayLayers = imageInfo.arrayLayers;
+
+            VkImageMemoryBarrier barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.srcAccessMask = Translate<VkAccessFlags>(oldAccess);
+            barrier.dstAccessMask = Translate<VkAccessFlags>(newAccess);
+            barrier.image = image->Handle();
+            barrier.oldLayout = Translate<VkImageLayout>(oldLayout);
+            barrier.newLayout = Translate<VkImageLayout>(newLayout);
+            barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
+            barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
+            barrier.subresourceRange.aspectMask = GetAspectMaskVK(imageInfo.format);
+            barrier.subresourceRange.baseMipLevel = barrierInfo.baseMipLevel;
+            barrier.subresourceRange.levelCount = mipLevels;
+            barrier.subresourceRange.baseArrayLayer = barrierInfo.baseArrayLayer;
+            barrier.subresourceRange.layerCount = arrayLayers;
+            if (HasStencil(imageInfo.format))
+                barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+
+            for (uint32_t i = 0; i < arrayLayers; i++)
+                for (uint32_t j = 0; j < mipLevels; j++)
+                    image->m_layouts[barrierInfo.baseArrayLayer + i][barrierInfo.baseMipLevel + j] = newLayout;
+
+            groupedBarriers[stagePair].push_back(barrier);
+        }
+
+        for (const auto &pair : groupedBarriers)
+        {
+            PipelineStageFlags srcStageMask = pair.first.first;
+            PipelineStageFlags dstStageMask = pair.first.second;
+
+            vkCmdPipelineBarrier(
+                cmd->Handle(),
+                Translate<VkPipelineStageFlags>(srcStageMask),
+                Translate<VkPipelineStageFlags>(dstStageMask),
+                VK_DEPENDENCY_BY_REGION_BIT,
+                0, nullptr,
+                0, nullptr,
+                static_cast<uint32_t>(pair.second.size()), pair.second.data());
+        }
     }
 
     void Image::CreateRTV()

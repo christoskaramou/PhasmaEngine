@@ -186,7 +186,6 @@ namespace pe
             // submit the shadow command buffers
             auto &shadowWaitSemaphore = aquireSignalSemaphore;
             auto &shadowSignalSemaphore = RHII.GetSemaphores()[SWAPCHAIN_IMAGES + frameIndex];
-
             queue->Submit(
                 SHADOWMAP_CASCADES, shadowCmds,
                 &waitStages[0],

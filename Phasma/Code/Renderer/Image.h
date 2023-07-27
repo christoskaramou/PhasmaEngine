@@ -9,6 +9,7 @@ namespace pe
     class Buffer;
     class Image;
     struct ImageBlit;
+    struct BarrierInfo;
 
     class SamplerCreateInfo
     {
@@ -111,6 +112,8 @@ namespace pe
                      uint32_t arrayLayers = 0,
                      uint32_t baseMipLevel = 0,
                      uint32_t mipLevels = 0);
+
+        static void GroupBarrier(CommandBuffer *cmd, const std::vector<BarrierInfo> &barrierInfos);
 
         void CopyDataToImageStaged(CommandBuffer *cmd,
                                    void *data,

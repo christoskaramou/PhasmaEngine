@@ -52,5 +52,4 @@ namespace pe
         m_condition.notify_one();
         return task;
     }
-
 }

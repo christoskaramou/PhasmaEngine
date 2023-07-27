@@ -259,8 +259,6 @@ namespace pe
 
     void Shadows::BeginPass(CommandBuffer *cmd, uint32_t imageIndex, uint32_t cascade)
     {
-        cmd->ImageBarrier(textures[cascade], ImageLayout::DepthStencilAttachment);
-
         cmd->BeginPass(passInfo->renderPass, nullptr, textures[cascade]);
         cmd->SetViewport(0.f, 0.f, textures[cascade]->width_f, textures[cascade]->height_f);
         cmd->SetScissor(0, 0, textures[cascade]->imageInfo.width, textures[cascade]->imageInfo.height);
@@ -270,7 +268,6 @@ namespace pe
     void Shadows::EndPass(CommandBuffer *cmd, uint32_t cascade)
     {
         cmd->EndPass();
-        cmd->ImageBarrier(textures[cascade], ImageLayout::DepthStencilReadOnly);
     }
 
     void Shadows::Destroy()

@@ -67,6 +67,16 @@ namespace pe
         CommandPoolCreateFlags m_flags;
     };
 
+    struct BarrierInfo
+    {
+        Image *image;
+        ImageLayout newLayout;
+        uint32_t baseArrayLayer = 0;
+        uint32_t arrayLayers = 0;
+        uint32_t baseMipLevel = 0;
+        uint32_t mipLevels = 0;
+    };
+
     class CommandBuffer : public IHandle<CommandBuffer, CommandBufferHandle>
     {
     public:
@@ -127,6 +137,15 @@ namespace pe
                           uint32_t baseMipLevel = 0,
                           uint32_t mipLevels = 0);
 
+        void AddToImageGroupBarrier(Image *image,
+                                    ImageLayout newLayout,
+                                    uint32_t baseArrayLayer = 0,
+                                    uint32_t arrayLayers = 0,
+                                    uint32_t baseMipLevel = 0,
+                                    uint32_t mipLevels = 0);
+        
+        void ImageGroupBarrier();
+
         void CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset);
 
         void CopyBufferStaged(Buffer *buffer, void *data, size_t size, size_t dtsOffset);
@@ -181,7 +200,7 @@ namespace pe
         void BindGraphicsPipeline(Pipeline *pipeline);
 
         void BindComputePipeline(Pipeline *pipeline);
-        
+
         friend class Queue;
 
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
@@ -202,5 +221,6 @@ namespace pe
         Delegate<> m_afterWaitCallbacks;
         bool m_dynamicPass = false;
         Pipeline *m_boundPipeline;
+        std::vector<BarrierInfo> m_barrierInfos{};
     };
 }

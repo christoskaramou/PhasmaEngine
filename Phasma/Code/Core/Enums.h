@@ -41,6 +41,12 @@ namespace pe
         void operator^=(T other) { m_value ^= static_cast<Type>(other); }
         void operator^=(const Flags &other) { m_value ^= other.m_value; }
 
+        Flags operator<<(unsigned int shift) { return m_value << shift; }
+        Flags operator>>(unsigned int shift) { return m_value >> shift; }
+
+        void operator<<=(unsigned int shift) { m_value <<= shift; }
+        void operator>>=(unsigned int shift) { m_value >>= shift; }
+
         Type Value() const { return m_value; }
         const Type Value() { return m_value; }
 
@@ -51,12 +57,14 @@ namespace pe
         Type m_value;
     };
 
-#define DEFINE_FLAGS_OPERATORS(Enum)                                                                  \
-    inline Flags<##Enum> operator|(##Enum a, ##Enum b) { return Flags<##Enum>(a) | b; }               \
-    inline Flags<##Enum> operator&(##Enum a, ##Enum b) { return Flags<##Enum>(a) & b; }               \
-    inline Flags<##Enum> operator^(##Enum a, ##Enum b) { return Flags<##Enum>(a) ^ b; }               \
-    inline Flags<##Enum> operator|(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) | b; } \
-    inline Flags<##Enum> operator&(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) & b; } \
+#define DEFINE_FLAGS_OPERATORS(Enum)                                                                    \
+    inline Flags<##Enum> operator|(##Enum a, ##Enum b) { return Flags<##Enum>(a) | b; }                 \
+    inline Flags<##Enum> operator&(##Enum a, ##Enum b) { return Flags<##Enum>(a) & b; }                 \
+    inline Flags<##Enum> operator^(##Enum a, ##Enum b) { return Flags<##Enum>(a) ^ b; }                 \
+    inline Flags<##Enum> operator<<(##Enum a, unsigned int shift) { return Flags<##Enum>(a) << shift; } \
+    inline Flags<##Enum> operator>>(##Enum a, unsigned int shift) { return Flags<##Enum>(a) >> shift; } \
+    inline Flags<##Enum> operator|(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) | b; }   \
+    inline Flags<##Enum> operator&(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) & b; }   \
     inline Flags<##Enum> operator^(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) ^ b; }
 
     template <class T, class U>

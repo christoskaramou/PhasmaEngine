@@ -31,16 +31,23 @@ VS_OUTPUT mainVS(VS_INPUT input)
 {
     VS_OUTPUT output;
 
-    float4x4 boneTransform = identity_mat;
+    float4x4 transform;
+    float4 position = float4(input.position, 1.0);
+
     if (pc.meshJointCount > 0.0)
     {
-        boneTransform = mul(meshJointMatrix(input.jointIndices[0]), input.jointWeights[0]) +
-                        mul(meshJointMatrix(input.jointIndices[1]), input.jointWeights[1]) +
-                        mul(meshJointMatrix(input.jointIndices[2]), input.jointWeights[2]) +
-                        mul(meshJointMatrix(input.jointIndices[3]), input.jointWeights[3]);
-    }
+        float4x4 boneTransform = mul(meshJointMatrix(input.jointIndices[0]), input.jointWeights[0]) +
+                                 mul(meshJointMatrix(input.jointIndices[1]), input.jointWeights[1]) +
+                                 mul(meshJointMatrix(input.jointIndices[2]), input.jointWeights[2]) +
+                                 mul(meshJointMatrix(input.jointIndices[3]), input.jointWeights[3]);
 
-    output.position = mul(float4(input.position, 1.0), mul(boneTransform, pc.mvp));
+        transform = mul(boneTransform, pc.mvp);
+        output.position = mul(position, transform);
+    }
+    else
+    {
+        output.position = mul(position, pc.mvp);
+    }
 
     return output;
 }

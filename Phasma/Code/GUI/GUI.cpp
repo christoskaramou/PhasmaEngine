@@ -663,9 +663,6 @@ namespace pe
         {
             m_displayRT = CONTEXT->GetSystem<RendererSystem>()->GetRenderTarget("display");
 
-            // Output
-            cmd->ImageBarrier(m_displayRT, ImageLayout::General);
-
             cmd->BeginPass(renderPass, &m_displayRT, nullptr);
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
             cmd->EndPass();

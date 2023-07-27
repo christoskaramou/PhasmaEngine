@@ -64,9 +64,5 @@ namespace pe
 
 #define USE_GLM
 
-// Before enabling dynamic rendering "VUID-vkCmdBindPipeline-pipeline-06196" error must be fixed,
-// maybe with multiple command buffers when needed
-#define USE_DYNAMIC_RENDERING 0
-
 #define PE_RENDER_DOC 1
 }

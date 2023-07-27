@@ -306,7 +306,6 @@ namespace pe
 
     void CommandBuffer::BeginPass(RenderPass *renderPass, Image **colorTargets, Image *depthTarget)
     {
-#if (USE_DYNAMIC_RENDERING == 0)
         FrameBuffer *frameBuffer = GetFrameBuffer(renderPass, colorTargets, depthTarget);
 
         std::vector<Attachment> &attachments = renderPass->attachments;
@@ -316,15 +315,30 @@ namespace pe
 
         uint32_t colorCount = depthTarget ? count - 1 : count;
         uint32_t i = 0;
+        uint32_t clearOps = 0;
         for (; i < colorCount; i++)
         {
+            // Set render targets to the correct layout for the pass
+            ImageBarrier(colorTargets[i], renderPass->attachments[i].initialLayout);
+
             colorTargets[i]->SetCurrentLayout(attachments[i].finalLayout);
-            clearValues[i].color = {1.0f, 0.0f, 0.0f, 1.0f};
+            if (attachments[i].loadOp == AttachmentLoadOp::Clear)
+            {
+                clearValues[i].color = {1.0f, 0.0f, 0.0f, 1.0f};
+                clearOps++;
+            }
         }
         if (depthTarget)
         {
+            // Set depth target to the correct layout for the pass
+            ImageBarrier(depthTarget, renderPass->attachments[i].initialLayout);
+
             depthTarget->SetCurrentLayout(attachments[i].finalLayout);
-            clearValues[i].depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
+            if (attachments[i].loadOp == AttachmentLoadOp::Clear)
+            {
+                clearValues[i].depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
+                clearOps++;
+            }
         }
 
         VkRenderPassBeginInfo rpi{};
@@ -333,63 +347,10 @@ namespace pe
         rpi.framebuffer = frameBuffer->Handle();
         rpi.renderArea.offset = VkOffset2D{0, 0};
         rpi.renderArea.extent = VkExtent2D{frameBuffer->GetWidth(), frameBuffer->GetHeight()};
-        rpi.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        rpi.pClearValues = clearValues.data();
+        rpi.clearValueCount = clearOps > 0 ? static_cast<uint32_t>(clearValues.size()) : 0;
+        rpi.pClearValues = clearOps > 0 ? clearValues.data() : nullptr;
 
         vkCmdBeginRenderPass(m_handle, &rpi, VK_SUBPASS_CONTENTS_INLINE);
-#else
-        m_dynamicPass = true;
-
-        std::vector<VkRenderingAttachmentInfo> vkColorInfos(count);
-        VkRenderingAttachmentInfo vkDepthInfo{};
-
-        for (uint32_t i = 0; i < count; i++)
-        {
-            VkRenderingAttachmentInfo vkColorInfo{};
-            vkColorInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-            vkColorInfo.imageView = colorInfos[i].image->view;
-            vkColorInfo.imageLayout = Translate<VkImageLayout>(colorInfos[i].image->GetCurrentLayout());
-            vkColorInfo.loadOp = Translate<VkAttachmentLoadOp>(colorInfos[i].loadOp);
-            vkColorInfo.storeOp = Translate<VkAttachmentStoreOp>(colorInfos[i].storeOp);
-            vkColorInfo.clearValue.color = {0.0f, 0.0f, 0.0f, 0.0f};
-            vkColorInfos[i] = vkColorInfo;
-        }
-
-        if (depthInfo)
-        {
-            Image &image = *depthInfo->image;
-            vkDepthInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-            vkDepthInfo.imageView = image.view;
-            vkDepthInfo.imageLayout = Translate<VkImageLayout>(image.GetCurrentLayout());
-            vkDepthInfo.loadOp = Translate<VkAttachmentLoadOp>(depthInfo->loadOp);
-            vkDepthInfo.storeOp = Translate<VkAttachmentStoreOp>(depthInfo->storeOp);
-            vkDepthInfo.clearValue.depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
-        }
-
-        uint32_t width;
-        uint32_t height;
-        if (count > 0)
-        {
-            width = colorInfos[0].image->imageInfo.width;
-            height = colorInfos[0].image->imageInfo.height;
-        }
-        else
-        {
-            width = depthInfo->image->imageInfo.width;
-            height = depthInfo->image->imageInfo.height;
-        }
-
-        VkRenderingInfo renderingInfo{};
-        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-        renderingInfo.renderArea = {0, 0, width, height};
-        renderingInfo.layerCount = 1;
-        renderingInfo.colorAttachmentCount = static_cast<uint32_t>(vkColorInfos.size());
-        renderingInfo.pColorAttachments = vkColorInfos.data();
-        renderingInfo.pDepthAttachment = depthInfo ? &vkDepthInfo : nullptr;
-        renderingInfo.pStencilAttachment = depthInfo ? &vkDepthInfo : nullptr;
-
-        vkCmdBeginRendering(m_handle, &renderingInfo);
-#endif
     }
 
     void CommandBuffer::EndPass()
@@ -536,6 +497,22 @@ namespace pe
                                      uint32_t mipLevels)
     {
         image->Barrier(this, newLayout, baseArrayLayer, arrayLayers, baseMipLevel, mipLevels);
+    }
+
+    void CommandBuffer::AddToImageGroupBarrier(Image *image,
+                                               ImageLayout newLayout,
+                                               uint32_t baseArrayLayer,
+                                               uint32_t arrayLayers,
+                                               uint32_t baseMipLevel,
+                                               uint32_t mipLevels)
+    {
+        m_barrierInfos.emplace_back(image, newLayout, baseArrayLayer, arrayLayers, baseMipLevel, mipLevels);
+    }
+
+    void CommandBuffer::ImageGroupBarrier()
+    {
+        Image::GroupBarrier(this, m_barrierInfos);
+        m_barrierInfos.clear();
     }
 
     void CommandBuffer::CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset)
