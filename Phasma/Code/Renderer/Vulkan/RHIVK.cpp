@@ -119,14 +119,12 @@ namespace pe
 
         // === Extentions ==============================
         unsigned extCount;
-        if (!SDL_Vulkan_GetInstanceExtensions(window, &extCount, nullptr))
-            PE_ERROR(SDL_GetError());
+        PE_ERROR_IF(!SDL_Vulkan_GetInstanceExtensions(window, &extCount, nullptr), SDL_GetError());
         instanceExtensions.resize(extCount);
-        if (!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()))
-            PE_ERROR(SDL_GetError());
+        PE_ERROR_IF(!SDL_Vulkan_GetInstanceExtensions(window, &extCount, instanceExtensions.data()), SDL_GetError());
 
-        if (IsInstanceExtensionValid("VK_KHR_get_physical_device_properties2"))
-            instanceExtensions.push_back("VK_KHR_get_physical_device_properties2");
+        if (IsInstanceExtensionValid(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
+            instanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
         // =============================================
 
         // === Debugging ===============================
@@ -246,11 +244,14 @@ namespace pe
 
     bool RHI::IsInstanceExtensionValid(const char *name)
     {
-        uint32_t count;
-        vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
-
-        std::vector<VkExtensionProperties> extensions(count);
-        vkEnumerateInstanceExtensionProperties(nullptr, &count, extensions.data());
+        static std::vector<VkExtensionProperties> extensions;
+        if (extensions.empty())
+        {
+            uint32_t count;
+            vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
+            extensions.resize(count);
+            vkEnumerateInstanceExtensionProperties(nullptr, &count, extensions.data());
+        }
 
         for (auto &extension : extensions)
         {
@@ -263,11 +264,14 @@ namespace pe
 
     bool RHI::IsInstanceLayerValid(const char *name)
     {
-        uint32_t count;
-        vkEnumerateInstanceLayerProperties(&count, nullptr);
-
-        std::vector<VkLayerProperties> layers(count);
-        vkEnumerateInstanceLayerProperties(&count, layers.data());
+        static std::vector<VkLayerProperties> layers;
+        if (layers.empty())
+        {
+            uint32_t count;
+            vkEnumerateInstanceLayerProperties(&count, nullptr);
+            layers.resize(count);
+            vkEnumerateInstanceLayerProperties(&count, layers.data());
+        }
 
         for (auto &layer : layers)
         {
@@ -280,14 +284,16 @@ namespace pe
 
     bool RHI::IsDeviceExtensionValid(const char *name)
     {
-        if (!m_gpu)
-            PE_ERROR("No GPU found!");
+        PE_ERROR_IF(!m_gpu, "Must find GPU before checking device extensions!");
 
-        uint32_t count;
-        vkEnumerateDeviceExtensionProperties(m_gpu, nullptr, &count, nullptr);
-
-        std::vector<VkExtensionProperties> extensions(count);
-        vkEnumerateDeviceExtensionProperties(m_gpu, nullptr, &count, extensions.data());
+        static std::vector<VkExtensionProperties> extensions;
+        if (extensions.empty())
+        {
+            uint32_t count;
+            vkEnumerateDeviceExtensionProperties(m_gpu, nullptr, &count, nullptr);
+            extensions.resize(count);
+            vkEnumerateDeviceExtensionProperties(m_gpu, nullptr, &count, extensions.data());
+        }
 
         for (auto &extension : extensions)
             if (std::string(extension.extensionName) == name)
@@ -298,16 +304,16 @@ namespace pe
 
     void RHI::CreateDevice()
     {
-        std::vector<const char *> deviceExtensions{};
+        PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME), "Swapchain extension not supported!");
+        PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME), "Synchronization2 extension not supported!");
 
-        if (IsDeviceExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME))
-            deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        std::vector<const char *> deviceExtensions{};
+        deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        deviceExtensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
-
         uint32_t queueFamPropCount;
         vkGetPhysicalDeviceQueueFamilyProperties(m_gpu, &queueFamPropCount, nullptr);
-
         std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
         vkGetPhysicalDeviceQueueFamilyProperties(m_gpu, &queueFamPropCount, queueFamilyProperties.data());
 
@@ -341,14 +347,15 @@ namespace pe
         vkGetPhysicalDeviceFeatures2(m_gpu, &deviceFeatures2);
 
         // Check for bindless descriptors
-        if (!(deviceFeatures12.descriptorBindingPartiallyBound &&
-              deviceFeatures12.runtimeDescriptorArray &&
-              deviceFeatures12.shaderSampledImageArrayNonUniformIndexing &&
-              deviceFeatures12.descriptorBindingVariableDescriptorCount))
-            PE_ERROR("Bindless descriptors are not supported on this device!");
+        PE_ERROR_IF(!deviceFeatures12.descriptorBindingPartiallyBound &&
+                        !deviceFeatures12.runtimeDescriptorArray &&
+                        !deviceFeatures12.shaderSampledImageArrayNonUniformIndexing &&
+                        !deviceFeatures12.descriptorBindingVariableDescriptorCount,
+                    "Bindless descriptors are not supported on this device!");
 
-        if (!deviceFeatures2.features.shaderInt64 && !deviceFeatures2.features.shaderInt16)
-            PE_ERROR("shaderInt16 is not supported!");
+        PE_ERROR_IF(!deviceFeatures2.features.shaderInt64 &&
+                        !deviceFeatures2.features.shaderInt16,
+                    "shaderInt64 and shaderInt16 are not supported!");
 
         VkDeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -457,8 +464,7 @@ namespace pe
                 }
             }
 
-            if (depthFormat == Format::Undefined)
-                PE_ERROR("Depth format is undefined");
+            PE_ERROR_IF(depthFormat == Format::Undefined, "Depth format is undefined");
         }
 
         return depthFormat;

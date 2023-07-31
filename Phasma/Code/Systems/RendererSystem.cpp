@@ -151,12 +151,8 @@ namespace pe
 
         queue->BeginDebugRegion("RendererSystem::Draw");
 
-        static PipelineStageFlags waitStages[] = {
-            PipelineStage::ColorAttachmentOutputBit,
-            PipelineStage::FragmentShaderBit};
-
         // acquire the image
-        auto aquireSignalSemaphore = RHII.GetSemaphores()[frameIndex];
+        Semaphore *aquireSignalSemaphore = RHII.GetSemaphores()[frameIndex];
         uint32_t imageIndex = RHII.GetSwapchain()->Aquire(aquireSignalSemaphore);
 
         static Timer timer;
@@ -184,18 +180,17 @@ namespace pe
             queue->EndDebugRegion();
 
             // submit the shadow command buffers
-            auto &shadowWaitSemaphore = aquireSignalSemaphore;
-            auto &shadowSignalSemaphore = RHII.GetSemaphores()[SWAPCHAIN_IMAGES + frameIndex];
-            queue->Submit(
-                SHADOWMAP_CASCADES, shadowCmds,
-                &waitStages[0],
-                1, &shadowWaitSemaphore,
-                1, &shadowSignalSemaphore);
+            Semaphore *shadowWaitSemaphore = aquireSignalSemaphore;
+            Semaphore *shadowSignalSemaphore = RHII.GetSemaphores()[SWAPCHAIN_IMAGES + frameIndex];
+            PipelineStageFlags waitStage = PipelineStage::ColorAttachmentOutputBit;
+            PipelineStageFlags signalStage = PipelineStage::FragmentShaderBit;
+            queue->Submit(SHADOWMAP_CASCADES, shadowCmds,
+                          1, &waitStage, &shadowWaitSemaphore,
+                          1, &signalStage, &shadowSignalSemaphore);
 
             aquireSignalSemaphore = shadowSignalSemaphore;
         }
 
-        PipelineStageFlags waitStage = GUI::shadow_cast ? waitStages[1] : waitStages[0];
         Semaphore *waitSemaphore = aquireSignalSemaphore;
         Semaphore *signalSemaphore = RHII.GetSemaphores()[SWAPCHAIN_IMAGES * 2 + frameIndex];
 
@@ -213,7 +208,11 @@ namespace pe
         cmd->End();
 
         // SUBMIT TO QUEUE
-        queue->Submit(1, &cmd, &waitStage, 1, &waitSemaphore, 1, &signalSemaphore);
+        PipelineStageFlags waitStage = PipelineStage::FragmentShaderBit;
+        PipelineStageFlags signalStage = PipelineStage::BottomOfPipeBit;
+        queue->Submit(1, &cmd,
+                      1, &waitStage, &waitSemaphore,
+                      1, &signalStage, &signalSemaphore);
 
         m_previousCmds[imageIndex] = cmd;
 

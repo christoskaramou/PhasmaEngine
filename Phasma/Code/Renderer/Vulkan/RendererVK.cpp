@@ -171,7 +171,7 @@ namespace pe
             cmd->BlitImage(m_viewportRT, m_displayRT, &region, Filter::Linear);
 
             cmd->ImageBarrier(m_viewportRT, ImageLayout::ShaderReadOnly);
-            cmd->ImageBarrier(m_displayRT, ImageLayout::ColorAttachment);
+            cmd->ImageBarrier(m_displayRT, ImageLayout::Attachment);
 
             cmd->EndDebugRegion();
         }
@@ -516,13 +516,15 @@ namespace pe
         region.dstSubresource.aspectMask = GetAspectMask(swapchainImage->imageInfo.format);
         region.dstSubresource.layerCount = 1;
 
-        cmd->ImageBarrier(src, ImageLayout::TransferSrc);
-        cmd->ImageBarrier(swapchainImage, ImageLayout::TransferDst);
+        cmd->AddToImageGroupBarrier(src, ImageLayout::TransferSrc);
+        cmd->AddToImageGroupBarrier(swapchainImage, ImageLayout::TransferDst);
+        cmd->ImageGroupBarrier();
 
         cmd->BlitImage(src, swapchainImage, &region, Filter::Linear);
 
-        cmd->ImageBarrier(src, ImageLayout::ColorAttachment);
-        cmd->ImageBarrier(swapchainImage, ImageLayout::PresentSrc);
+        cmd->AddToImageGroupBarrier(src, ImageLayout::Attachment);
+        cmd->AddToImageGroupBarrier(swapchainImage, ImageLayout::PresentSrc);
+        cmd->ImageGroupBarrier();
 
         cmd->EndDebugRegion();
     }

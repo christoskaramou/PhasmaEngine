@@ -9,6 +9,8 @@ namespace pe
 
         ~Semaphore();
 
+        bool IsTimeline() { return m_timeline; }
+
         void Wait(uint64_t value);
 
         void Signal(uint64_t value);
@@ -17,5 +19,6 @@ namespace pe
 
     private:
         bool m_timeline;
+        PipelineStageFlags m_waitStageFlags;
     };
 }

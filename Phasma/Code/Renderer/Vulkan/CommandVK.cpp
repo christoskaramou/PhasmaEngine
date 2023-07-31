@@ -478,15 +478,15 @@ namespace pe
     }
 
     void CommandBuffer::Submit(Queue *queue,
-                               PipelineStageFlags *waitStages,
-                               uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-                               uint32_t signalSemaphoresCount, Semaphore **signalSemaphores)
+                               uint32_t waitSemaphoresCount,
+                               PipelineStageFlags *waitStages, Semaphore **waitSemaphores,
+                               uint32_t signalSemaphoresCount,
+                               PipelineStageFlags *signalStages, Semaphore **signalSemaphores)
     {
         CommandBuffer *cmd = this;
         queue->Submit(1, &cmd,
-                      waitStages,
-                      waitSemaphoresCount, waitSemaphores,
-                      signalSemaphoresCount, signalSemaphores);
+                      waitSemaphoresCount, waitStages, waitSemaphores,
+                      signalSemaphoresCount, signalStages, signalSemaphores);
     }
 
     void CommandBuffer::ImageBarrier(Image *image,

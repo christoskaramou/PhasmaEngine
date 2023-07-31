@@ -81,9 +81,9 @@ namespace pe
 
         void SetCurrentLayout(ImageLayout layout, uint32_t layer = 0, uint32_t mip = 0) { m_layouts[layer][mip] = layout; }
 
-        void CreateRTV();
-        void CreateSRV(ImageViewType type, int mip = -1);
-        void CreateUAV(ImageViewType type, uint32_t mip);
+        void CreateRTV(bool useStencil = false);
+        void CreateSRV(ImageViewType type, int mip = -1, bool useStencil = false);
+        void CreateUAV(ImageViewType type, uint32_t mip, bool useStencil = false);
 
         bool HasRTV() { return !!m_rtv; }
         bool HasSRV(int mip = -1) { return mip == -1 ? !!m_srv : !!m_srvs[mip]; }
@@ -102,7 +102,7 @@ namespace pe
     private:
         friend class CommandBuffer;
 
-        ImageViewHandle CreateImageView(ImageViewType type, int mip = -1);
+        ImageViewHandle CreateImageView(ImageViewType type, int mip = -1, bool useStencil = false);
 
         // For arrayLayers and/or mipLevels bigger than size 1, all of their layouts must be the same
         // TODO: Manage transitions for different layouts in arrayLayers and/or mipLevels

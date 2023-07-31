@@ -143,17 +143,10 @@ namespace pe
     {
         Undefined,
         General,
-        ColorAttachment,
-        DepthStencilAttachment,
-        DepthStencilReadOnly,
         ShaderReadOnly,
         TransferSrc,
         TransferDst,
         Preinitialized,
-        DepthReadOnlyStencilAttachment,
-        DepthAttachmentStencilReadOnly,
-        DepthAttachment,
-        DepthReadOnly,
         StencilAttachment,
         StencilReadOnly,
         ReadOnly,
@@ -459,7 +452,7 @@ namespace pe
         SharedContinuousRefresh,
     };
 
-    enum class PipelineStage
+    enum class PipelineStage : uint64_t
     {
         None = 0,
         TopOfPipeBit = 1 << 0,
@@ -479,14 +472,6 @@ namespace pe
         HostBit = 1 << 14,
         AllGraphicsBit = 1 << 15,
         AllCommandsBit = 1 << 16,
-        TransformFeedbackBit = 1 << 17,
-        ConditionalRenderingBit = 1 << 18,
-        AccelerationStructureBuildBit = 1 << 19,
-        RayTracingShaderBit = 1 << 20,
-        TaskShaderBit = 1 << 21,
-        MeshShaderBit = 1 << 22,
-        FragmentDensityProcessBit = 1 << 23,
-        FragmentShadingRateAttechmentBit = 1 << 24,
     };
     using PipelineStageFlags = Flags<PipelineStage>;
     DEFINE_FLAGS_OPERATORS(PipelineStage)
@@ -504,7 +489,7 @@ namespace pe
         DontCare,
     };
 
-    enum class Access
+    enum class Access : uint64_t
     {
         None = 0,
         IndirectCommandReadBit = 1 << 0,
@@ -526,14 +511,9 @@ namespace pe
         MemoryWriteBit = 1 << 16,
         TransformFeedbackWriteBit = 1 << 17,
         TransformFeedbackCounterReadBit = 1 << 18,
-        TransformFeedbackCounterWriteBit = 1 << 19,
-        ConditionalRenderingReadBit = 1 << 20,
-        ColorAttachmentReadNoncoherentBit = 1 << 21,
-        AccelerationStructureReadBitKhr = 1 << 22,
-        AccelerationStructureWriteBitKhr = 1 << 23,
-        FragmentDensityMapReadBit = 1 << 24,
-        FragmentShadingRateAttachmentReadBitKhr = 1 << 25,
+        TransformFeedbackCounterWriteBit = 1 << 19
     };
+
     using AccessFlags = Flags<Access>;
     DEFINE_FLAGS_OPERATORS(Access)
 

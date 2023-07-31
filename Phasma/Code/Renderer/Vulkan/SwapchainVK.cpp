@@ -56,6 +56,8 @@ namespace pe
         {
             images[i] = new Image();
             images[i]->Handle() = imagesVK[i];
+            images[i]->imageInfo.name = "Swapchain_image_" + std::to_string(i);
+            images[i]->imageInfo.format = surface->format;
             images[i]->m_layouts = {{ImageLayout::Undefined}};
             images[i]->blendAttachment.blendEnable = 1;
             images[i]->blendAttachment.srcColorBlendFactor = BlendFactor::SrcAlpha;
@@ -74,7 +76,7 @@ namespace pe
             imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             imageViewCreateInfo.image = images[i]->Handle();
             imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            imageViewCreateInfo.format =  Translate<VkFormat>(RHII.GetSurface()->format);
+            imageViewCreateInfo.format =  Translate<VkFormat>(surface->format);
             imageViewCreateInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
             VkImageView imageView;

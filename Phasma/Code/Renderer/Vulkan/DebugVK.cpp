@@ -72,7 +72,7 @@ namespace pe
         if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
             instanceExtensions.push_back("VK_EXT_debug_utils");
 
-#ifdef _DEBUG
+#if defined(_DEBUG) && PE_DEBUG_MESSENGER == 1
         // === Debug Layers ============================
         // To use these debug layers, here is assumed VulkanSDK is installed
         // Also VK_LAYER_PATH environmental variable has to be created and target the bin
@@ -132,7 +132,7 @@ namespace pe
 
     void Debug::CreateDebugMessenger()
     {
-#ifdef _DEBUG
+#if defined(_DEBUG) && PE_DEBUG_MESSENGER == 1
         if (!s_instance)
             PE_ERROR("Invalid instance handle");
 
@@ -160,7 +160,7 @@ namespace pe
 
     void Debug::DestroyDebugMessenger()
     {
-#ifdef _DEBUG
+#if defined(_DEBUG) && PE_DEBUG_MESSENGER == 1
         if (s_debugMessenger)
         {
             vkDestroyDebugUtilsMessengerEXT(s_instance, s_debugMessenger, nullptr);

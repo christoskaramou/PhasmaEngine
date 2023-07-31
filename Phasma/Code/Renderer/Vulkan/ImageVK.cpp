@@ -236,47 +236,37 @@ namespace pe
         if (arrayLayers == 0)
             arrayLayers = imageInfo.arrayLayers;
 
-        VkImageMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.srcAccessMask = Translate<VkAccessFlags>(srcMask);
-        barrier.dstAccessMask = Translate<VkAccessFlags>(dstMask);
-        barrier.image = m_handle;
+        VkImageMemoryBarrier2 barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        barrier.srcStageMask = Translate<VkPipelineStageFlags2>(oldStageMask);
+        barrier.srcAccessMask = Translate<VkAccessFlags2>(srcMask);
+        barrier.dstStageMask = Translate<VkPipelineStageFlags2>(newStageMask);
+        barrier.dstAccessMask = Translate<VkAccessFlags2>(dstMask);
         barrier.oldLayout = Translate<VkImageLayout>(oldLayout);
         barrier.newLayout = Translate<VkImageLayout>(newLayout);
         barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
         barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
+        barrier.image = m_handle;
         barrier.subresourceRange.aspectMask = GetAspectMaskVK(imageInfo.format);
         barrier.subresourceRange.baseMipLevel = baseMipLevel;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
         barrier.subresourceRange.layerCount = arrayLayers;
-        if (HasStencil(imageInfo.format))
-            barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 
-        vkCmdPipelineBarrier(
-            cmd->Handle(),
-            Translate<VkPipelineStageFlags>(oldStageMask),
-            Translate<VkPipelineStageFlags>(newStageMask),
-            VK_DEPENDENCY_BY_REGION_BIT,
-            0, nullptr,
-            0, nullptr,
-            1, &barrier);
+        VkDependencyInfo depInfo{};
+        depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        depInfo.imageMemoryBarrierCount = 1;
+        depInfo.pImageMemoryBarriers = &barrier;
+
+        if (imageInfo.name == "Swapchain_image_0")
+            int i = 0;
+
+        vkCmdPipelineBarrier2(cmd->Handle(), &depInfo);
 
         for (uint32_t i = 0; i < arrayLayers; i++)
             for (uint32_t j = 0; j < mipLevels; j++)
                 m_layouts[baseArrayLayer + i][baseMipLevel + j] = newLayout;
     }
-
-    struct PairHash
-    {
-        std::size_t operator()(const std::pair<PipelineStageFlags, PipelineStageFlags> &p) const
-        {
-            Hash hash;
-            hash.Combine(p.first.Value());
-            hash.Combine(p.second.Value());
-            return hash;
-        }
-    };
 
     void Image::GroupBarrier(CommandBuffer *cmd, const std::vector<BarrierInfo> &barrierInfos)
     {
@@ -285,8 +275,8 @@ namespace pe
 
         PE_ERROR_IF(!cmd, "Image::TransitionImageLayout(): no command buffer specified.");
 
-        using StagePair = std::pair<PipelineStageFlags, PipelineStageFlags>;
-        std::unordered_map<StagePair, std::vector<VkImageMemoryBarrier>, PairHash> groupedBarriers;
+        std::vector<VkImageMemoryBarrier2> barriers;
+        barriers.reserve(barrierInfos.size());
 
         for (auto &barrierInfo : barrierInfos)
         {
@@ -307,8 +297,6 @@ namespace pe
             AccessFlags newAccess;
             GetInfoFromLayout(newLayout, newPipelineStage, newAccess);
 
-            StagePair stagePair = std::make_pair(oldPipelineStage, newPipelineStage);
-
             uint mipLevels = barrierInfo.mipLevels;
             if (mipLevels == 0)
                 mipLevels = imageInfo.mipLevels;
@@ -317,73 +305,65 @@ namespace pe
             if (arrayLayers == 0)
                 arrayLayers = imageInfo.arrayLayers;
 
-            VkImageMemoryBarrier barrier{};
-            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.srcAccessMask = Translate<VkAccessFlags>(oldAccess);
-            barrier.dstAccessMask = Translate<VkAccessFlags>(newAccess);
-            barrier.image = image->Handle();
+            VkImageMemoryBarrier2 barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+            barrier.srcStageMask = Translate<VkPipelineStageFlags2>(oldPipelineStage);
+            barrier.srcAccessMask = Translate<VkAccessFlags2>(oldAccess);
+            barrier.dstStageMask = Translate<VkPipelineStageFlags2>(newPipelineStage);
+            barrier.dstAccessMask = Translate<VkAccessFlags2>(newAccess);
             barrier.oldLayout = Translate<VkImageLayout>(oldLayout);
             barrier.newLayout = Translate<VkImageLayout>(newLayout);
             barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
             barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
+            barrier.image = image->m_handle;
             barrier.subresourceRange.aspectMask = GetAspectMaskVK(imageInfo.format);
             barrier.subresourceRange.baseMipLevel = barrierInfo.baseMipLevel;
             barrier.subresourceRange.levelCount = mipLevels;
             barrier.subresourceRange.baseArrayLayer = barrierInfo.baseArrayLayer;
             barrier.subresourceRange.layerCount = arrayLayers;
-            if (HasStencil(imageInfo.format))
-                barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+
+            barriers.push_back(barrier);
 
             for (uint32_t i = 0; i < arrayLayers; i++)
                 for (uint32_t j = 0; j < mipLevels; j++)
                     image->m_layouts[barrierInfo.baseArrayLayer + i][barrierInfo.baseMipLevel + j] = newLayout;
-
-            groupedBarriers[stagePair].push_back(barrier);
         }
 
-        for (const auto &pair : groupedBarriers)
-        {
-            PipelineStageFlags srcStageMask = pair.first.first;
-            PipelineStageFlags dstStageMask = pair.first.second;
+        VkDependencyInfo depInfo{};
+        depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
+        depInfo.pImageMemoryBarriers = barriers.data();
 
-            vkCmdPipelineBarrier(
-                cmd->Handle(),
-                Translate<VkPipelineStageFlags>(srcStageMask),
-                Translate<VkPipelineStageFlags>(dstStageMask),
-                VK_DEPENDENCY_BY_REGION_BIT,
-                0, nullptr,
-                0, nullptr,
-                static_cast<uint32_t>(pair.second.size()), pair.second.data());
-        }
+        vkCmdPipelineBarrier2(cmd->Handle(), &depInfo);
     }
 
-    void Image::CreateRTV()
+    void Image::CreateRTV(bool useStencil)
     {
         if (!(imageInfo.usage & ImageUsage::ColorAttachmentBit ||
               imageInfo.usage & ImageUsage::DepthStencilAttachmentBit))
             PE_ERROR("Image was not created with ColorAttachmentBit or DepthStencilAttachmentBit");
 
-        m_rtv = CreateImageView(ImageViewType::Type2D, 0);
+        m_rtv = CreateImageView(ImageViewType::Type2D, 0, useStencil);
     }
 
-    void Image::CreateSRV(ImageViewType type, int mip)
+    void Image::CreateSRV(ImageViewType type, int mip, bool useStencil)
     {
         if (!(imageInfo.usage & ImageUsage::SampledBit))
             PE_ERROR("Image was not created with SampledBit");
 
-        ImageViewHandle view = CreateImageView(type, mip);
+        ImageViewHandle view = CreateImageView(type, mip, useStencil);
         if (mip == -1)
             m_srv = view;
         else
             m_srvs[mip] = view;
     }
 
-    void Image::CreateUAV(ImageViewType type, uint32_t mip)
+    void Image::CreateUAV(ImageViewType type, uint32_t mip, bool useStencil)
     {
         if (!(imageInfo.usage & ImageUsage::StorageBit))
             PE_ERROR("Image was not created with StorageBit");
 
-        m_uavs[mip] = CreateImageView(type, static_cast<int>(mip));
+        m_uavs[mip] = CreateImageView(type, static_cast<int>(mip), useStencil);
     }
 
     uint32_t Image::CalculateMips(uint32_t width, uint32_t height)
@@ -395,14 +375,25 @@ namespace pe
         return min(mips, maxMips);
     }
 
-    ImageViewHandle Image::CreateImageView(ImageViewType type, int mip)
+    ImageViewHandle Image::CreateImageView(ImageViewType type, int mip, bool useStencil)
     {
         VkImageViewCreateInfo viewInfoVK{};
         viewInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfoVK.image = m_handle;
         viewInfoVK.viewType = Translate<VkImageViewType>(type);
         viewInfoVK.format = Translate<VkFormat>(imageInfo.format);
-        viewInfoVK.subresourceRange.aspectMask = GetAspectMaskVK(imageInfo.format);
+        if (IsDepthFormat(imageInfo.format))
+        {
+            if (useStencil && HasStencil(imageInfo.format))
+                viewInfoVK.subresourceRange.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+            else
+                viewInfoVK.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        }
+        else
+        {
+            viewInfoVK.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+
         viewInfoVK.subresourceRange.baseMipLevel = mip == -1 ? 0 : mip;
         viewInfoVK.subresourceRange.levelCount = mip == -1 ? imageInfo.mipLevels : 1;
         viewInfoVK.subresourceRange.baseArrayLayer = 0;

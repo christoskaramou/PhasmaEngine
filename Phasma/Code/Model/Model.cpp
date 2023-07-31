@@ -396,7 +396,7 @@ namespace pe
         model.CreateVertexBuffers(cmd);
         model.CreateIndexBuffers(cmd);
         cmd->End();
-        cmd->Submit(queue, nullptr, 0, nullptr, 0, nullptr);
+        cmd->Submit(queue, 0, nullptr, nullptr, 0, nullptr, nullptr);
 
         model.CreateUniforms();
 
@@ -1197,7 +1197,6 @@ namespace pe
         cmd->EndPass();
 
         cmd->ImageBarrier(display, ImageLayout::ShaderReadOnly);
-        // cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
 
         cmd->EndDebugRegion();
     }

@@ -66,7 +66,7 @@ namespace pe
         bindingInfos[1].binding = 1;
         bindingInfos[1].count = SHADOWMAP_CASCADES;
         bindingInfos[1].type = DescriptorType::SampledImage;
-        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[2].binding = 2;
         bindingInfos[2].type = DescriptorType::Sampler;
         dlShadows = DescriptorLayout::GetOrCreate(bindingInfos, ShaderStage::VertexBit);
@@ -91,8 +91,8 @@ namespace pe
 
         AttachmentInfo depthInfo{};
         depthInfo.image = textures[0];
-        depthInfo.initialLayout = ImageLayout::DepthStencilAttachment;
-        depthInfo.finalLayout = ImageLayout::DepthStencilAttachment;
+        depthInfo.initialLayout = ImageLayout::Attachment;
+        depthInfo.finalLayout = ImageLayout::Attachment;
         passInfo->renderPass = CommandBuffer::GetRenderPass(0, nullptr, &depthInfo);
 
         passInfo->UpdateHash();
@@ -117,7 +117,7 @@ namespace pe
         bindingInfos[1].binding = 1;
         bindingInfos[1].count = SHADOWMAP_CASCADES;
         bindingInfos[1].type = DescriptorType::SampledImage;
-        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
 
         bindingInfos[2].binding = 2;
         bindingInfos[2].type = DescriptorType::Sampler;

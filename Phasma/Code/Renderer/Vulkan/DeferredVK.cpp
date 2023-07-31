@@ -99,8 +99,8 @@ namespace pe
 
         AttachmentInfo colorInfo{};
         colorInfo.image = viewportRT;
-        colorInfo.initialLayout = ImageLayout::ColorAttachment;
-        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        colorInfo.initialLayout = ImageLayout::Attachment;
+        colorInfo.finalLayout = ImageLayout::Attachment;
         info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
 
         info.UpdateHash();
@@ -147,24 +147,24 @@ namespace pe
         // Must be in order as they appear in shader and in pipeline
         AttachmentInfo colorInfos[5]{};
         colorInfos[0].image = normalRT;
-        colorInfos[0].initialLayout = ImageLayout::ColorAttachment;
-        colorInfos[0].finalLayout = ImageLayout::ColorAttachment;
+        colorInfos[0].initialLayout = ImageLayout::Attachment;
+        colorInfos[0].finalLayout = ImageLayout::Attachment;
         colorInfos[1].image = albedoRT;
-        colorInfos[1].initialLayout = ImageLayout::ColorAttachment;
-        colorInfos[1].finalLayout = ImageLayout::ColorAttachment;
+        colorInfos[1].initialLayout = ImageLayout::Attachment;
+        colorInfos[1].finalLayout = ImageLayout::Attachment;
         colorInfos[2].image = srmRT;
-        colorInfos[2].initialLayout = ImageLayout::ColorAttachment;
-        colorInfos[2].finalLayout = ImageLayout::ColorAttachment;
+        colorInfos[2].initialLayout = ImageLayout::Attachment;
+        colorInfos[2].finalLayout = ImageLayout::Attachment;
         colorInfos[3].image = velocityRT;
-        colorInfos[3].initialLayout = ImageLayout::ColorAttachment;
-        colorInfos[3].finalLayout = ImageLayout::ColorAttachment;
+        colorInfos[3].initialLayout = ImageLayout::Attachment;
+        colorInfos[3].finalLayout = ImageLayout::Attachment;
         colorInfos[4].image = emissiveRT;
-        colorInfos[4].initialLayout = ImageLayout::ColorAttachment;
-        colorInfos[4].finalLayout = ImageLayout::ColorAttachment;
+        colorInfos[4].initialLayout = ImageLayout::Attachment;
+        colorInfos[4].finalLayout = ImageLayout::Attachment;
         AttachmentInfo depthInfo{};
         depthInfo.image = depth;
-        depthInfo.initialLayout = ImageLayout::DepthStencilAttachment;
-        depthInfo.finalLayout = ImageLayout::DepthStencilAttachment;
+        depthInfo.initialLayout = ImageLayout::Attachment;
+        depthInfo.finalLayout = ImageLayout::Attachment;
         info.renderPass = CommandBuffer::GetRenderPass(5, colorInfos, &depthInfo);
 
         info.UpdateHash();
@@ -201,8 +201,8 @@ namespace pe
         colorInfo.image = display;
         colorInfo.loadOp = AttachmentLoadOp::Load;
         colorInfo.storeOp = AttachmentStoreOp::Store;
-        colorInfo.initialLayout = ImageLayout::ColorAttachment;
-        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        colorInfo.initialLayout = ImageLayout::Attachment;
+        colorInfo.finalLayout = ImageLayout::Attachment;
         info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
 
         info.UpdateHash();
@@ -264,7 +264,7 @@ namespace pe
 
         bindingInfos[0].binding = 0;
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
-        bindingInfos[0].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
 
         bindingInfos[1].binding = 1;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
@@ -371,9 +371,9 @@ namespace pe
         cmd->AddToImageGroupBarrier(skybox.cubeMap, ImageLayout::ShaderReadOnly);
         cmd->ImageGroupBarrier();
 
-        cmd->AddToImageGroupBarrier(depth, ImageLayout::DepthStencilReadOnly);
+        cmd->AddToImageGroupBarrier(depth, ImageLayout::ShaderReadOnly);
         for (auto &shadowMap : shadows.textures)
-            cmd->AddToImageGroupBarrier(shadowMap, ImageLayout::DepthStencilReadOnly);
+            cmd->AddToImageGroupBarrier(shadowMap, ImageLayout::ShaderReadOnly);
         cmd->ImageGroupBarrier();
 
         cmd->BeginPass(passInfo->renderPass, &viewportRT, nullptr);

@@ -157,7 +157,7 @@ namespace pe
 
         PE_CHECK(ffxFsr2ContextDispatch(m_context.get(), &dd));
 
-        cmd->ImageBarrier(m_display, ImageLayout::ColorAttachment);
+        cmd->ImageBarrier(m_display, ImageLayout::Attachment);
 
         cmd->EndDebugRegion();
     }

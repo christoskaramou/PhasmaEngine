@@ -51,8 +51,8 @@ namespace pe
         
         AttachmentInfo colorInfo{};
         colorInfo.image = displayRT;
-        colorInfo.initialLayout = ImageLayout::ColorAttachment;
-        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        colorInfo.initialLayout = ImageLayout::Attachment;
+        colorInfo.finalLayout = ImageLayout::Attachment;
         info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
 
         info.UpdateHash();
@@ -65,7 +65,7 @@ namespace pe
         bindingInfos[0].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[0].type = DescriptorType::CombinedImageSampler;
         bindingInfos[1].binding = 1;
-        bindingInfos[1].imageLayout = ImageLayout::DepthStencilReadOnly;
+        bindingInfos[1].imageLayout = ImageLayout::ShaderReadOnly;
         bindingInfos[1].type = DescriptorType::CombinedImageSampler;
         DSet = Descriptor::Create(bindingInfos, ShaderStage::FragmentBit, "DOF_descriptor");
 
@@ -94,7 +94,7 @@ namespace pe
         // DEPTH OF FIELD
         // Input
         cmd->ImageBarrier(frameImage, ImageLayout::ShaderReadOnly);
-        cmd->ImageBarrier(depth, ImageLayout::DepthStencilReadOnly);
+        cmd->ImageBarrier(depth, ImageLayout::ShaderReadOnly);
         
         cmd->BeginPass(passInfo->renderPass, &displayRT, nullptr);
         cmd->BindPipeline(*passInfo);

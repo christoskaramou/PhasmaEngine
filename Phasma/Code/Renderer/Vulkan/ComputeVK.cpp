@@ -41,7 +41,7 @@ namespace pe
         commandBuffer->EndDebugRegion();
         commandBuffer->End();
 
-        commandBuffer->Submit(RHII.GetComputeQueue(), nullptr, 0, nullptr, 0, nullptr);
+        commandBuffer->Submit(RHII.GetComputeQueue(), 0, nullptr, nullptr, 0, nullptr, nullptr);
 
         RHII.GetComputeQueue()->EndDebugRegion();
     }

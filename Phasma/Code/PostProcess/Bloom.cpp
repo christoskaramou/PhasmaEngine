@@ -59,8 +59,8 @@ namespace pe
 
         AttachmentInfo colorInfo{};
         colorInfo.image = brightFilterRT;
-        colorInfo.initialLayout = ImageLayout::ColorAttachment;
-        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        colorInfo.initialLayout = ImageLayout::Attachment;
+        colorInfo.finalLayout = ImageLayout::Attachment;
         info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
 
         info.UpdateHash();
@@ -84,8 +84,8 @@ namespace pe
 
         AttachmentInfo colorInfo{};
         colorInfo.image = gaussianBlurHorizontalRT;
-        colorInfo.initialLayout = ImageLayout::ColorAttachment;
-        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        colorInfo.initialLayout = ImageLayout::Attachment;
+        colorInfo.finalLayout = ImageLayout::Attachment;
         info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
 
         info.UpdateHash();
@@ -109,8 +109,8 @@ namespace pe
 
         AttachmentInfo colorInfo{};
         colorInfo.image = gaussianBlurVerticalRT;
-        colorInfo.initialLayout = ImageLayout::ColorAttachment;
-        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        colorInfo.initialLayout = ImageLayout::Attachment;
+        colorInfo.finalLayout = ImageLayout::Attachment;
         info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
 
         info.UpdateHash();
@@ -134,8 +134,8 @@ namespace pe
 
         AttachmentInfo colorInfo{};
         colorInfo.image = displayRT;
-        colorInfo.initialLayout = ImageLayout::ColorAttachment;
-        colorInfo.finalLayout = ImageLayout::ColorAttachment;
+        colorInfo.initialLayout = ImageLayout::Attachment;
+        colorInfo.finalLayout = ImageLayout::Attachment;
         info.renderPass = CommandBuffer::GetRenderPass(1, &colorInfo, nullptr);
 
         info.UpdateHash();

@@ -1,54 +1,5 @@
 namespace pe
 {
-    void GetVkInfoFromLayout(ImageLayout layout, VkPipelineStageFlags &stageFlags, VkAccessFlags &accessMask)
-    {
-        switch (layout)
-        {
-        case ImageLayout::Undefined:
-            stageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            accessMask = 0;
-            break;
-        case ImageLayout::General:
-            stageFlags = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-            accessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-            break;
-        case ImageLayout::ColorAttachment:
-            stageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            accessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            break;
-        case ImageLayout::DepthStencilAttachment:
-            stageFlags = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-            accessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            break;
-        case ImageLayout::DepthStencilReadOnly:
-            stageFlags = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-            accessMask = VK_ACCESS_SHADER_READ_BIT;
-            break;
-        case ImageLayout::ShaderReadOnly:
-            stageFlags = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-            accessMask = VK_ACCESS_SHADER_READ_BIT;
-            break;
-        case ImageLayout::TransferSrc:
-            stageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            accessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            break;
-        case ImageLayout::TransferDst:
-            stageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            accessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            break;
-        case ImageLayout::Preinitialized:
-            stageFlags = VK_PIPELINE_STAGE_HOST_BIT;
-            accessMask = VK_ACCESS_HOST_WRITE_BIT;
-            break;
-        case ImageLayout::PresentSrc:
-            stageFlags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-            accessMask = 0;
-            break;
-        default:
-            PE_ERROR("Unsupported image layout");
-        }
-    }
-
     void GetInfoFromLayout(ImageLayout layout, PipelineStageFlags &stageFlags, AccessFlags &accessMask)
     {
         switch (layout)
@@ -61,21 +12,17 @@ namespace pe
             stageFlags = PipelineStage::ComputeShaderBit;
             accessMask = Access::ShaderReadBit | Access::ShaderWriteBit;
             break;
-        case ImageLayout::ColorAttachment:
-            stageFlags = PipelineStage::ColorAttachmentOutputBit;
-            accessMask = Access::ColorAttachmentWriteBit;
+        case ImageLayout::Attachment:
+            stageFlags = PipelineStage::ColorAttachmentOutputBit | PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
+            accessMask = Access::ColorAttachmentWriteBit |
+                         Access::ColorAttachmentReadBit |
+                         Access::DepthStencilAttachmentWriteBit |
+                         Access::DepthStencilAttachmentReadBit;
             break;
-        case ImageLayout::DepthStencilAttachment:
-            stageFlags = PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
-            accessMask = Access::DepthStencilAttachmentWriteBit;
-            break;
-        case ImageLayout::DepthStencilReadOnly:
-            stageFlags = PipelineStage::FragmentShaderBit;
-            accessMask = Access::ShaderReadBit;
-            break;
+        case ImageLayout::ReadOnly:
         case ImageLayout::ShaderReadOnly:
-            stageFlags = PipelineStage::FragmentShaderBit | PipelineStage::ComputeShaderBit;
-            accessMask = Access::ShaderReadBit;
+            stageFlags = PipelineStage::FragmentShaderBit | PipelineStage::ComputeShaderBit | PipelineStage::EarlyFragmentTestsBit | PipelineStage::LateFragmentTestsBit;
+            accessMask = Access::ShaderReadBit | Access::DepthStencilAttachmentReadBit;
             break;
         case ImageLayout::TransferSrc:
             stageFlags = PipelineStage::TransferBit;
@@ -134,17 +81,10 @@ namespace pe
         static std::unordered_map<T, ImageLayout> s_translator{
             {(T)VK_IMAGE_LAYOUT_UNDEFINED, ImageLayout::Undefined},
             {(T)VK_IMAGE_LAYOUT_GENERAL, ImageLayout::General},
-            {(T)VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, ImageLayout::ColorAttachment},
-            {(T)VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, ImageLayout::DepthStencilAttachment},
-            {(T)VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, ImageLayout::DepthStencilReadOnly},
             {(T)VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, ImageLayout::ShaderReadOnly},
             {(T)VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, ImageLayout::TransferSrc},
             {(T)VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, ImageLayout::TransferDst},
             {(T)VK_IMAGE_LAYOUT_PREINITIALIZED, ImageLayout::Preinitialized},
-            {(T)VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL, ImageLayout::DepthReadOnlyStencilAttachment},
-            {(T)VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL, ImageLayout::DepthAttachmentStencilReadOnly},
-            {(T)VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, ImageLayout::DepthAttachment},
-            {(T)VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL, ImageLayout::DepthReadOnly},
             {(T)VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL, ImageLayout::StencilAttachment},
             {(T)VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL, ImageLayout::StencilReadOnly},
             {(T)VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, ImageLayout::ReadOnly},
@@ -164,17 +104,10 @@ namespace pe
         static std::unordered_map<T, VkImageLayout> s_translator{
             {(T)ImageLayout::Undefined, VK_IMAGE_LAYOUT_UNDEFINED},
             {(T)ImageLayout::General, VK_IMAGE_LAYOUT_GENERAL},
-            {(T)ImageLayout::ColorAttachment, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
-            {(T)ImageLayout::DepthStencilAttachment, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
-            {(T)ImageLayout::DepthStencilReadOnly, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL},
             {(T)ImageLayout::ShaderReadOnly, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {(T)ImageLayout::TransferSrc, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
             {(T)ImageLayout::TransferDst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
             {(T)ImageLayout::Preinitialized, VK_IMAGE_LAYOUT_PREINITIALIZED},
-            {(T)ImageLayout::DepthReadOnlyStencilAttachment, VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL},
-            {(T)ImageLayout::DepthAttachmentStencilReadOnly, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL},
-            {(T)ImageLayout::DepthAttachment, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL},
-            {(T)ImageLayout::DepthReadOnly, VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL},
             {(T)ImageLayout::StencilAttachment, VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL},
             {(T)ImageLayout::StencilReadOnly, VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL},
             {(T)ImageLayout::ReadOnly, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
@@ -643,43 +576,35 @@ namespace pe
     }
 
     template <>
-    VkPipelineStageFlags Translate(PipelineStageFlags flags)
+    VkPipelineStageFlags2 Translate(PipelineStageFlags flags)
     {
         using T = PipelineStageFlags::Type;
-        static std::unordered_map<T, VkPipelineStageFlags> s_translator{
-            {(T)PipelineStage::TopOfPipeBit, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT},
-            {(T)PipelineStage::DrawIndirectBit, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT},
-            {(T)PipelineStage::VertexInputBit, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT},
-            {(T)PipelineStage::VertexShaderBit, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT},
-            {(T)PipelineStage::TessellationControlShaderBit, VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT},
-            {(T)PipelineStage::TessellationEvaluationShaderBit, VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT},
-            {(T)PipelineStage::GeometryShaderBit, VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT},
-            {(T)PipelineStage::FragmentShaderBit, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT},
-            {(T)PipelineStage::EarlyFragmentTestsBit, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT},
-            {(T)PipelineStage::LateFragmentTestsBit, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT},
-            {(T)PipelineStage::ColorAttachmentOutputBit, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT},
-            {(T)PipelineStage::ComputeShaderBit, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT},
-            {(T)PipelineStage::TransferBit, VK_PIPELINE_STAGE_TRANSFER_BIT},
-            {(T)PipelineStage::BottomOfPipeBit, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT},
-            {(T)PipelineStage::HostBit, VK_PIPELINE_STAGE_HOST_BIT},
-            {(T)PipelineStage::AllGraphicsBit, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT},
-            {(T)PipelineStage::AllCommandsBit, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT},
-            {(T)PipelineStage::TransformFeedbackBit, VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT},
-            {(T)PipelineStage::ConditionalRenderingBit, VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT},
-            {(T)PipelineStage::AccelerationStructureBuildBit, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR},
-            {(T)PipelineStage::RayTracingShaderBit, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR},
-            {(T)PipelineStage::TaskShaderBit, VK_PIPELINE_STAGE_TASK_SHADER_BIT_NV},
-            {(T)PipelineStage::MeshShaderBit, VK_PIPELINE_STAGE_MESH_SHADER_BIT_NV},
-            {(T)PipelineStage::FragmentDensityProcessBit, VK_PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT_EXT},
-            {(T)PipelineStage::FragmentShadingRateAttechmentBit, VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR}};
+        static std::unordered_map<T, VkPipelineStageFlags2> s_translator{
+            {(T)PipelineStage::TopOfPipeBit, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT},
+            {(T)PipelineStage::DrawIndirectBit, VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT},
+            {(T)PipelineStage::VertexInputBit, VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT},
+            {(T)PipelineStage::VertexShaderBit, VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT},
+            {(T)PipelineStage::TessellationControlShaderBit, VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT},
+            {(T)PipelineStage::TessellationEvaluationShaderBit, VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT},
+            {(T)PipelineStage::GeometryShaderBit, VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT},
+            {(T)PipelineStage::FragmentShaderBit, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
+            {(T)PipelineStage::EarlyFragmentTestsBit, VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT},
+            {(T)PipelineStage::LateFragmentTestsBit, VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT},
+            {(T)PipelineStage::ColorAttachmentOutputBit, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT},
+            {(T)PipelineStage::ComputeShaderBit, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT},
+            {(T)PipelineStage::TransferBit, VK_PIPELINE_STAGE_2_TRANSFER_BIT},
+            {(T)PipelineStage::BottomOfPipeBit, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT},
+            {(T)PipelineStage::HostBit, VK_PIPELINE_STAGE_2_HOST_BIT},
+            {(T)PipelineStage::AllGraphicsBit, VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT},
+            {(T)PipelineStage::AllCommandsBit, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT}};
 
         return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VkPipelineStageFlags Translate(PipelineStage flag)
+    VkPipelineStageFlags2 Translate(PipelineStage flag)
     {
-        return Translate<VkPipelineStageFlags, PipelineStageFlags>(flag);
+        return Translate<VkPipelineStageFlags2, PipelineStageFlags>(flag);
     }
 
     bool IsDepthFormatVK(VkFormat format)
@@ -698,17 +623,41 @@ namespace pe
 
     VkImageAspectFlags GetAspectMaskVK(Format format)
     {
-        return IsDepthFormat(format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+        if (IsDepthFormat(format))
+        {
+            VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT;
+            if (HasStencil(format))
+                flags |= VK_IMAGE_ASPECT_STENCIL_BIT;
+            return flags;
+        }
+
+        return VK_IMAGE_ASPECT_COLOR_BIT;
     }
 
     VkImageAspectFlags GetAspectMaskVK(VkFormat format)
     {
-        return IsDepthFormatVK(format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+        if (IsDepthFormatVK(format))
+        {
+            VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT;
+            if (HasStencilVK(format))
+                flags |= VK_IMAGE_ASPECT_STENCIL_BIT;
+            return flags;
+        }
+
+        return VK_IMAGE_ASPECT_COLOR_BIT;
     }
 
     ImageAspectFlags GetAspectMask(Format format)
     {
-        return IsDepthFormat(format) ? ImageAspect::DepthBit : ImageAspect::ColorBit;
+        if (IsDepthFormat(format))
+        {
+            ImageAspectFlags flags = ImageAspect::DepthBit;
+            if (HasStencil(format))
+                flags |= ImageAspect::StencilBit;
+            return flags;
+        }
+
+        return ImageAspect::ColorBit;
     }
 
     bool HasStencilVK(VkFormat format)
@@ -747,44 +696,38 @@ namespace pe
     }
 
     template <>
-    VkAccessFlags Translate(AccessFlags flags)
+    VkAccessFlags2 Translate(AccessFlags flags)
     {
         using T = AccessFlags::Type;
-        static std::unordered_map<T, VkAccessFlags> s_translator{
-            {(T)Access::IndirectCommandReadBit, VK_ACCESS_INDIRECT_COMMAND_READ_BIT},
-            {(T)Access::IndexReadBit, VK_ACCESS_INDEX_READ_BIT},
-            {(T)Access::VertexAttributeReadBit, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT},
-            {(T)Access::UniformReadBit, VK_ACCESS_UNIFORM_READ_BIT},
-            {(T)Access::InputAttachmentReadBit, VK_ACCESS_INPUT_ATTACHMENT_READ_BIT},
-            {(T)Access::ShaderReadBit, VK_ACCESS_SHADER_READ_BIT},
-            {(T)Access::ShaderWriteBit, VK_ACCESS_SHADER_WRITE_BIT},
-            {(T)Access::ColorAttachmentReadBit, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT},
-            {(T)Access::ColorAttachmentWriteBit, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
-            {(T)Access::DepthStencilAttachmentReadBit, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT},
-            {(T)Access::DepthStencilAttachmentWriteBit, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-            {(T)Access::TransferReadBit, VK_ACCESS_TRANSFER_READ_BIT},
-            {(T)Access::TransferWriteBit, VK_ACCESS_TRANSFER_WRITE_BIT},
-            {(T)Access::HostReadBit, VK_ACCESS_HOST_READ_BIT},
-            {(T)Access::HostWriteBit, VK_ACCESS_HOST_WRITE_BIT},
-            {(T)Access::MemoryReadBit, VK_ACCESS_MEMORY_READ_BIT},
-            {(T)Access::MemoryWriteBit, VK_ACCESS_MEMORY_WRITE_BIT},
-            {(T)Access::TransformFeedbackWriteBit, VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT},
-            {(T)Access::TransformFeedbackCounterReadBit, VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT},
-            {(T)Access::TransformFeedbackCounterWriteBit, VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT},
-            {(T)Access::ConditionalRenderingReadBit, VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT},
-            {(T)Access::ColorAttachmentReadNoncoherentBit, VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT},
-            {(T)Access::AccelerationStructureReadBitKhr, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR},
-            {(T)Access::AccelerationStructureWriteBitKhr, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR},
-            {(T)Access::FragmentDensityMapReadBit, VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT},
-            {(T)Access::FragmentShadingRateAttachmentReadBitKhr, VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR}};
+        static std::unordered_map<T, VkAccessFlags2> s_translator{
+            {(T)Access::IndirectCommandReadBit, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT},
+            {(T)Access::IndexReadBit, VK_ACCESS_2_INDEX_READ_BIT},
+            {(T)Access::VertexAttributeReadBit, VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT},
+            {(T)Access::UniformReadBit, VK_ACCESS_2_UNIFORM_READ_BIT},
+            {(T)Access::InputAttachmentReadBit, VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT},
+            {(T)Access::ShaderReadBit, VK_ACCESS_2_SHADER_READ_BIT},
+            {(T)Access::ShaderWriteBit, VK_ACCESS_2_SHADER_WRITE_BIT},
+            {(T)Access::ColorAttachmentReadBit, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT},
+            {(T)Access::ColorAttachmentWriteBit, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT},
+            {(T)Access::DepthStencilAttachmentReadBit, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT},
+            {(T)Access::DepthStencilAttachmentWriteBit, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+            {(T)Access::TransferReadBit, VK_ACCESS_2_TRANSFER_READ_BIT},
+            {(T)Access::TransferWriteBit, VK_ACCESS_2_TRANSFER_WRITE_BIT},
+            {(T)Access::HostReadBit, VK_ACCESS_2_HOST_READ_BIT},
+            {(T)Access::HostWriteBit, VK_ACCESS_2_HOST_WRITE_BIT},
+            {(T)Access::MemoryReadBit, VK_ACCESS_2_MEMORY_READ_BIT},
+            {(T)Access::MemoryWriteBit, VK_ACCESS_2_MEMORY_WRITE_BIT},
+            {(T)Access::TransformFeedbackWriteBit, VK_ACCESS_2_TRANSFORM_FEEDBACK_WRITE_BIT_EXT},
+            {(T)Access::TransformFeedbackCounterReadBit, VK_ACCESS_2_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT},
+            {(T)Access::TransformFeedbackCounterWriteBit, VK_ACCESS_2_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT}};
 
         return GetFlags(flags.Value(), s_translator);
     }
 
     template <>
-    VkAccessFlags Translate(Access flag)
+    VkAccessFlags2 Translate(Access flag)
     {
-        return Translate<VkAccessFlags, AccessFlags>(flag);
+        return Translate<VkAccessFlags2, AccessFlags>(flag);
     }
 
     template <>

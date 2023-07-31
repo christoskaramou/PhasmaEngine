@@ -51,8 +51,7 @@ namespace pe
         CONTEXT->CreateSystem<PostProcessSystem>()->Init(cmd);
         cmd->End();
 
-        PipelineStageFlags stages[1]{PipelineStage::AllCommandsBit};
-        queue->Submit(1, &cmd, stages, 0, nullptr, 0, nullptr);
+        queue->Submit(1, &cmd, 0, nullptr, nullptr, 0, nullptr, nullptr);
 
         cmd->Wait();
         CommandBuffer::Return(cmd);

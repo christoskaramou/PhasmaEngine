@@ -34,7 +34,7 @@ namespace pe
         AttachmentLoadOp loadOp = AttachmentLoadOp::Clear;
         AttachmentStoreOp storeOp = AttachmentStoreOp::Store;
         ImageLayout initialLayout = ImageLayout::Undefined;
-        ImageLayout finalLayout = ImageLayout::ColorAttachment;
+        ImageLayout finalLayout = ImageLayout::Attachment;
     };
 
     class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
@@ -126,9 +126,10 @@ namespace pe
                          uint32_t firstInstance);
 
         void Submit(Queue *queue,
-                    PipelineStageFlags *waitStages,
-                    uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-                    uint32_t signalSemaphoresCount, Semaphore **signalSemaphores);
+                    uint32_t waitSemaphoresCount,
+                    PipelineStageFlags *waitStages, Semaphore **waitSemaphores,
+                    uint32_t signalSemaphoresCount,
+                    PipelineStageFlags *signalStages, Semaphore **signalSemaphores);
 
         void ImageBarrier(Image *image,
                           ImageLayout newLayout,

@@ -10,6 +10,7 @@ namespace pe
     }
 
 #define PE_DEBUG_MODE 1
+#define PE_DEBUG_MESSENGER 0
 
 #if _DEBUG
     inline void PE_ERROR_MSG(const std::string &msg,
@@ -64,5 +65,5 @@ namespace pe
 
 #define USE_GLM
 
-#define PE_RENDER_DOC 1
+#define PE_RENDER_DOC 0
 }

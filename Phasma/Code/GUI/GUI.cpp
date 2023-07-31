@@ -621,7 +621,7 @@ namespace pe
         attachmentInfo.image = m_displayRT;
         attachmentInfo.loadOp = AttachmentLoadOp::Load;
         attachmentInfo.initialLayout = ImageLayout::General;
-        attachmentInfo.finalLayout = ImageLayout::ColorAttachment;
+        attachmentInfo.finalLayout = ImageLayout::Attachment;
         renderPass = CommandBuffer::GetRenderPass(1, &attachmentInfo, nullptr);
         ImGui_ImplVulkan_Init(&initInfo, renderPass->Handle());
 
@@ -629,7 +629,7 @@ namespace pe
         cmd->Begin();
         ImGui_ImplVulkan_CreateFontsTexture(cmd->Handle());
         cmd->End();
-        queue->Submit(1, &cmd, nullptr, 0, nullptr, 0, nullptr);
+        queue->Submit(1, &cmd, 0, nullptr, nullptr, 0, nullptr, nullptr);
 
         cmd->Wait();
         CommandBuffer::Return(cmd);

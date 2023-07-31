@@ -55,9 +55,8 @@ namespace pe
         if (!m_timeline)
             PE_ERROR("Semaphore::Wait() called on non-timeline semaphore!");
 
-        VkSemaphoreSignalInfo ssi;
+        VkSemaphoreSignalInfo ssi{};
         ssi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO;
-        ssi.pNext = NULL;
         ssi.semaphore = m_handle;
         ssi.value = value;
 
@@ -67,7 +66,7 @@ namespace pe
     uint64_t Semaphore::GetValue()
     {
         if (!m_timeline)
-            PE_ERROR("Semaphore::Wait() called on non-timeline semaphore!");
+            return 0;
 
         uint64_t value;
         vkGetSemaphoreCounterValue(RHII.GetDevice(), m_handle, &value);

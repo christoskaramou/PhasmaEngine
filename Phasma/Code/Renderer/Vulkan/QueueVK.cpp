@@ -30,83 +30,84 @@ namespace pe
         Semaphore::Destroy(m_semaphore);
     }
 
-    void Queue::Submit(
-        uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
-        PipelineStageFlags *waitStages,
-        uint32_t waitSemaphoresCount, Semaphore **waitSemaphores,
-        uint32_t signalSemaphoresCount, Semaphore **signalSemaphores)
+    void Queue::Submit(uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
+                       uint32_t waitSemaphoresCount,
+                       PipelineStageFlags *waitStages, Semaphore **waitSemaphores,
+                       uint32_t signalSemaphoresCount,
+                       PipelineStageFlags *signalStages, Semaphore **signalSemaphores)
     {
         std::lock_guard<std::mutex> lock(s_submitMutex);
-        
-        // Translates from IHandles<T, ApiHandle> to VK handles are auto converted
-        // via ApiHandle operator T() casts
+
+        std::vector<VkCommandBufferSubmitInfo> commandBufferSubmitInfos(commandBuffersCount);
+        std::vector<VkSemaphoreSubmitInfo> waitSemaphoreSubmitInfos(waitSemaphoresCount);
+        // semaphores requested + command buffers semaphores + queue semaphore
+        std::vector<VkSemaphoreSubmitInfo> signalSemaphoreSubmitInfos(signalSemaphoresCount + commandBuffersCount + 1);
 
         // CommandBuffers
-        std::vector<VkCommandBuffer> commandBuffersVK(commandBuffersCount);
         for (uint32_t i = 0; i < commandBuffersCount; i++)
-            commandBuffersVK[i] = commandBuffers[i]->Handle();
-
-        // WaitSemaphores
-        std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoresCount);
-        for (uint32_t i = 0; i < waitSemaphoresCount; i++)
-            waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
-
-        // SignalSemaphores
-        uint32_t signalsCount = signalSemaphoresCount + commandBuffersCount + 1;
-        std::vector<VkSemaphore> signalSemaphoresVK(signalsCount);
-        std::vector<uint64_t> semaphoreValues(signalsCount);
-
-        for (uint32_t i = 0; i < signalsCount; i++)
         {
-            if (i < signalSemaphoresCount)
-            {
-                signalSemaphoresVK[i] = signalSemaphores[i]->Handle();
-                semaphoreValues[i] = 0;
-            }
-            else if (i < signalsCount - 1)
-            {
-                uint32_t index = i - signalSemaphoresCount;
-                // Increase the submit count of the current command buffer
-                commandBuffers[index]->IncreaceSubmitionCount();
-                // Add command buffer timeline semaphores as signal semaphores
-                signalSemaphoresVK[i] = commandBuffers[index]->GetSemaphore()->Handle();
-                // Set the signal values from the current command buffer submition counter
-                semaphoreValues[i] = commandBuffers[index]->GetSumbitionCount();
-            }
-            else
-            {
-                m_semaphore->Wait(m_submitions); // Wait previous submition so we can submit again
-                m_submitions++;
-                signalSemaphoresVK[i] = m_semaphore->Handle();
-                semaphoreValues[i] = m_submitions;
-            }
+            commandBufferSubmitInfos[i].sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+            commandBufferSubmitInfos[i].commandBuffer = commandBuffers[i]->Handle();
         }
 
-        // Pipeline stages
-        std::vector<VkPipelineStageFlags> waitStagesVK(waitSemaphoresCount);
+        // WaitSemaphores
         for (uint32_t i = 0; i < waitSemaphoresCount; i++)
-            waitStagesVK[i] = Translate<VkPipelineStageFlags>(waitStages[i]);
+        {
+            waitSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+            waitSemaphoreSubmitInfos[i].semaphore = waitSemaphores[i]->Handle();
+            waitSemaphoreSubmitInfos[i].stageMask = Translate<VkPipelineStageFlags2>(waitStages[i]);
+            waitSemaphoreSubmitInfos[i].value = waitSemaphores[i]->GetValue();
+        }
 
-        VkTimelineSemaphoreSubmitInfo timelineInfo{};
-        timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
-        timelineInfo.pNext = NULL;
-        timelineInfo.waitSemaphoreValueCount = 0;
-        timelineInfo.pWaitSemaphoreValues = nullptr;
-        timelineInfo.signalSemaphoreValueCount = signalsCount;
-        timelineInfo.pSignalSemaphoreValues = semaphoreValues.data();
+        // SignalSemaphores
+        uint32_t signalsCount = static_cast<uint32_t>(signalSemaphoreSubmitInfos.size());
+        uint32_t i = 0;
+        uint32_t count = 0;
 
-        VkSubmitInfo si{};
-        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        si.pNext = &timelineInfo;
-        si.waitSemaphoreCount = waitSemaphoresCount;
-        si.pWaitSemaphores = waitSemaphoresVK.data();
-        si.pWaitDstStageMask = waitStagesVK.data();
-        si.commandBufferCount = commandBuffersCount;
-        si.pCommandBuffers = commandBuffersVK.data();
-        si.signalSemaphoreCount = signalsCount;
-        si.pSignalSemaphores = signalSemaphoresVK.data();
+        // semaphores requested
+        count += signalSemaphoresCount;
+        for (; i < count; i++)
+        {
+            signalSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+            signalSemaphoreSubmitInfos[i].semaphore = signalSemaphores[i]->Handle();
+            signalSemaphoreSubmitInfos[i].stageMask = Translate<VkPipelineStageFlags2>(signalStages[i]);
+            // TODO: figure the value, +1 is probably wrong, for now income signals are not timeline semaphores either way
+            signalSemaphoreSubmitInfos[i].value = signalSemaphores[i]->GetValue() + 1;
+        }
 
-        PE_CHECK(vkQueueSubmit(m_handle, 1, &si, nullptr));
+        // command buffers semaphores
+        count += commandBuffersCount;
+        for (; i < count; i++)
+        {
+            // Increase the submit count of the current command buffer
+            uint32_t index = i - signalSemaphoresCount;
+            commandBuffers[index]->IncreaceSubmitionCount();
+            signalSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+            signalSemaphoreSubmitInfos[i].semaphore = commandBuffers[index]->GetSemaphore()->Handle();
+            signalSemaphoreSubmitInfos[i].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+            signalSemaphoreSubmitInfos[i].value = commandBuffers[index]->GetSumbitionCount();
+        }
+
+        // queue semaphore
+        {
+            m_semaphore->Wait(m_submitions); // Wait previous submition so we can submit again
+            m_submitions++;
+            signalSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+            signalSemaphoreSubmitInfos[i].semaphore = m_semaphore->Handle();
+            signalSemaphoreSubmitInfos[i].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+            signalSemaphoreSubmitInfos[i].value = m_submitions;
+        }
+
+        VkSubmitInfo2 si{};
+        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+        si.waitSemaphoreInfoCount = waitSemaphoresCount;
+        si.pWaitSemaphoreInfos = waitSemaphoreSubmitInfos.data();
+        si.commandBufferInfoCount = commandBuffersCount;
+        si.pCommandBufferInfos = commandBufferSubmitInfos.data();
+        si.signalSemaphoreInfoCount = signalsCount;
+        si.pSignalSemaphoreInfos = signalSemaphoreSubmitInfos.data();
+
+        PE_CHECK(vkQueueSubmit2(m_handle, 1, &si, nullptr));
     }
 
     void Queue::Present(

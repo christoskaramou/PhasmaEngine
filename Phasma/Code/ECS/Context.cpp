@@ -19,7 +19,7 @@ namespace pe
         }
 
         cmd->End();
-        cmd->Submit(queue, nullptr, 0, nullptr, 0, nullptr);
+        cmd->Submit(queue, 0, nullptr, nullptr, 0, nullptr, nullptr);
         cmd->Wait();
         
         CommandBuffer::Return(cmd);
