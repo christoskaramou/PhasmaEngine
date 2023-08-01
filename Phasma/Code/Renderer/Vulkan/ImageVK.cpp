@@ -49,14 +49,19 @@ namespace pe
         initialLayout = ImageLayout::Undefined;
     }
 
-    bool LinearFilterSupport(Format format, ImageTiling tiling)
+    bool ImageTilingSupport(Format format, ImageTiling tiling)
     {
         VkFormatProperties fProps;
         vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), Translate<VkFormat>(format), &fProps);
 
-        VkFormatFeatureFlags flags = tiling == ImageTiling::Optimal ? fProps.optimalTilingFeatures : fProps.linearTilingFeatures;
-        if (flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)
-            return true;
+        if (tiling == ImageTiling::Optimal)
+        {
+            return fProps.optimalTilingFeatures;
+        }
+        else if (tiling == ImageTiling::Linear)
+        {
+            return fProps.linearTilingFeatures;
+        }
 
         return false;
     }
@@ -100,8 +105,7 @@ namespace pe
 
     Image::Image(const ImageCreateInfo &info)
     {
-        if (!LinearFilterSupport(info.format, info.tiling))
-            PE_ERROR("Image::generateMipMaps(): Linear filter is not supported.");
+        PE_ERROR_IF(!ImageTilingSupport(info.format, info.tiling), "Image::Image(const ImageCreateInfo &info): Image tiling support error.");
 
         imageInfo = info;
 
@@ -122,24 +126,6 @@ namespace pe
             m_layouts[i] = std::vector<ImageLayout>(imageInfo.mipLevels);
             for (uint32_t j = 0; j < imageInfo.mipLevels; j++)
                 m_layouts[i][j] = imageInfo.initialLayout;
-        }
-
-        VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), Translate<VkFormat>(imageInfo.format), &fProps);
-
-        if (imageInfo.tiling == ImageTiling::Optimal)
-        {
-            if (!fProps.optimalTilingFeatures)
-                PE_ERROR("Image(): no optimal tiling features supported");
-        }
-        else if (imageInfo.tiling == ImageTiling::Linear)
-        {
-            if (!fProps.linearTilingFeatures)
-                PE_ERROR("Image(): no linear tiling features supported");
-        }
-        else
-        {
-            PE_ERROR("Image(): tiling not supported.");
         }
 
         width_f = static_cast<float>(imageInfo.width);
@@ -215,65 +201,68 @@ namespace pe
         }
     }
 
-    void Image::TransitionImageLayout(CommandBuffer *cmd,
-                                      ImageLayout oldLayout,
-                                      ImageLayout newLayout,
-                                      PipelineStageFlags oldStageMask,
-                                      PipelineStageFlags newStageMask,
-                                      AccessFlags srcMask,
-                                      AccessFlags dstMask,
-                                      uint32_t baseArrayLayer,
-                                      uint32_t arrayLayers,
-                                      uint32_t baseMipLevel,
-                                      uint32_t mipLevels)
+    void Image::Barrier(CommandBuffer *cmd,
+                        ImageLayout newLayout,
+                        uint32_t baseArrayLayer,
+                        uint32_t arrayLayers,
+                        uint32_t baseMipLevel,
+                        uint32_t mipLevels)
     {
-        if (!cmd)
-            PE_ERROR("Image::TransitionImageLayout(): no command buffer specified.");
+        PE_ERROR_IF(!cmd, "Image::Barrier(): no command buffer specified.");
 
-        if (mipLevels == 0)
-            mipLevels = imageInfo.mipLevels;
+        ImageLayout oldLayout = m_layouts[baseArrayLayer][baseMipLevel];
+        if (newLayout != oldLayout)
+        {
+            PipelineStageFlags oldPipelineStage;
+            AccessFlags oldAccess;
+            GetInfoFromLayout(oldLayout, oldPipelineStage, oldAccess);
 
-        if (arrayLayers == 0)
-            arrayLayers = imageInfo.arrayLayers;
+            PipelineStageFlags newPipelineStage;
+            AccessFlags newAccess;
+            GetInfoFromLayout(newLayout, newPipelineStage, newAccess);
 
-        VkImageMemoryBarrier2 barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-        barrier.srcStageMask = Translate<VkPipelineStageFlags2>(oldStageMask);
-        barrier.srcAccessMask = Translate<VkAccessFlags2>(srcMask);
-        barrier.dstStageMask = Translate<VkPipelineStageFlags2>(newStageMask);
-        barrier.dstAccessMask = Translate<VkAccessFlags2>(dstMask);
-        barrier.oldLayout = Translate<VkImageLayout>(oldLayout);
-        barrier.newLayout = Translate<VkImageLayout>(newLayout);
-        barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
-        barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
-        barrier.image = m_handle;
-        barrier.subresourceRange.aspectMask = GetAspectMaskVK(imageInfo.format);
-        barrier.subresourceRange.baseMipLevel = baseMipLevel;
-        barrier.subresourceRange.levelCount = mipLevels;
-        barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
-        barrier.subresourceRange.layerCount = arrayLayers;
+            if (mipLevels == 0)
+                mipLevels = imageInfo.mipLevels;
 
-        VkDependencyInfo depInfo{};
-        depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-        depInfo.imageMemoryBarrierCount = 1;
-        depInfo.pImageMemoryBarriers = &barrier;
+            if (arrayLayers == 0)
+                arrayLayers = imageInfo.arrayLayers;
 
-        if (imageInfo.name == "Swapchain_image_0")
-            int i = 0;
+            VkImageMemoryBarrier2 barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+            barrier.srcStageMask = Translate<VkPipelineStageFlags2>(oldPipelineStage);
+            barrier.srcAccessMask = Translate<VkAccessFlags2>(oldAccess);
+            barrier.dstStageMask = Translate<VkPipelineStageFlags2>(newPipelineStage);
+            barrier.dstAccessMask = Translate<VkAccessFlags2>(newAccess);
+            barrier.oldLayout = Translate<VkImageLayout>(oldLayout);
+            barrier.newLayout = Translate<VkImageLayout>(newLayout);
+            barrier.srcQueueFamilyIndex = cmd->GetFamilyId();
+            barrier.dstQueueFamilyIndex = cmd->GetFamilyId();
+            barrier.image = m_handle;
+            barrier.subresourceRange.aspectMask = GetAspectMaskVK(imageInfo.format);
+            barrier.subresourceRange.baseMipLevel = baseMipLevel;
+            barrier.subresourceRange.levelCount = mipLevels;
+            barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
+            barrier.subresourceRange.layerCount = arrayLayers;
 
-        vkCmdPipelineBarrier2(cmd->Handle(), &depInfo);
+            VkDependencyInfo depInfo{};
+            depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+            depInfo.imageMemoryBarrierCount = 1;
+            depInfo.pImageMemoryBarriers = &barrier;
 
-        for (uint32_t i = 0; i < arrayLayers; i++)
-            for (uint32_t j = 0; j < mipLevels; j++)
-                m_layouts[baseArrayLayer + i][baseMipLevel + j] = newLayout;
+            vkCmdPipelineBarrier2(cmd->Handle(), &depInfo);
+
+            for (uint32_t i = 0; i < arrayLayers; i++)
+                for (uint32_t j = 0; j < mipLevels; j++)
+                    m_layouts[baseArrayLayer + i][baseMipLevel + j] = newLayout;
+        }
     }
 
     void Image::GroupBarrier(CommandBuffer *cmd, const std::vector<BarrierInfo> &barrierInfos)
     {
+        PE_ERROR_IF(!cmd, "Image::GroupBarrier(): no command buffer specified.");
+
         if (barrierInfos.empty())
             return;
-
-        PE_ERROR_IF(!cmd, "Image::TransitionImageLayout(): no command buffer specified.");
 
         std::vector<VkImageMemoryBarrier2> barriers;
         barriers.reserve(barrierInfos.size());
@@ -339,17 +328,16 @@ namespace pe
 
     void Image::CreateRTV(bool useStencil)
     {
-        if (!(imageInfo.usage & ImageUsage::ColorAttachmentBit ||
-              imageInfo.usage & ImageUsage::DepthStencilAttachmentBit))
-            PE_ERROR("Image was not created with ColorAttachmentBit or DepthStencilAttachmentBit");
+        PE_ERROR_IF(!(imageInfo.usage & ImageUsage::ColorAttachmentBit ||
+                      imageInfo.usage & ImageUsage::DepthStencilAttachmentBit),
+                    "Image was not created with ColorAttachmentBit or DepthStencilAttachmentBit");
 
         m_rtv = CreateImageView(ImageViewType::Type2D, 0, useStencil);
     }
 
     void Image::CreateSRV(ImageViewType type, int mip, bool useStencil)
     {
-        if (!(imageInfo.usage & ImageUsage::SampledBit))
-            PE_ERROR("Image was not created with SampledBit");
+        PE_ERROR_IF(!(imageInfo.usage & ImageUsage::SampledBit), "Image was not created with SampledBit");
 
         ImageViewHandle view = CreateImageView(type, mip, useStencil);
         if (mip == -1)
@@ -360,8 +348,7 @@ namespace pe
 
     void Image::CreateUAV(ImageViewType type, uint32_t mip, bool useStencil)
     {
-        if (!(imageInfo.usage & ImageUsage::StorageBit))
-            PE_ERROR("Image was not created with StorageBit");
+        PE_ERROR_IF(!(imageInfo.usage & ImageUsage::StorageBit), "Image was not created with StorageBit");
 
         m_uavs[mip] = CreateImageView(type, static_cast<int>(mip), useStencil);
     }
@@ -411,38 +398,6 @@ namespace pe
         return view;
     }
 
-    void Image::Barrier(CommandBuffer *cmd,
-                        ImageLayout newLayout,
-                        uint32_t baseArrayLayer,
-                        uint32_t arrayLayers,
-                        uint32_t baseMipLevel,
-                        uint32_t mipLevels)
-    {
-        ImageLayout oldLayout = m_layouts[baseArrayLayer][baseMipLevel];
-        if (newLayout != oldLayout)
-        {
-            PipelineStageFlags oldPipelineStage;
-            AccessFlags oldAccess;
-            GetInfoFromLayout(m_layouts[baseArrayLayer][baseMipLevel], oldPipelineStage, oldAccess);
-
-            PipelineStageFlags newPipelineStage;
-            AccessFlags newAccess;
-            GetInfoFromLayout(newLayout, newPipelineStage, newAccess);
-
-            TransitionImageLayout(cmd,
-                                  oldLayout,
-                                  newLayout,
-                                  oldPipelineStage,
-                                  newPipelineStage,
-                                  oldAccess,
-                                  newAccess,
-                                  baseArrayLayer,
-                                  arrayLayers,
-                                  baseMipLevel,
-                                  mipLevels);
-        }
-    }
-
     void Image::CopyDataToImageStaged(CommandBuffer *cmd,
                                       void *data,
                                       size_t size,
@@ -450,8 +405,7 @@ namespace pe
                                       uint32_t layerCount,
                                       uint32_t mipLevel)
     {
-        if (!cmd)
-            PE_ERROR("Image::CopyDataToImageStaged(): no command buffer specified.");
+        PE_ERROR_IF(!cmd, "Image::CopyDataToImageStaged(): no command buffer specified.");
 
         // Staging buffer
         Buffer *staging = Buffer::Create(
@@ -535,8 +489,7 @@ namespace pe
 
     void Image::BlitImage(CommandBuffer *cmd, Image *src, ImageBlit *region, Filter filter)
     {
-        if (!cmd)
-            PE_ERROR("BlitImage(): Command buffer is null.");
+        PE_ERROR_IF(!cmd, "BlitImage(): Command buffer is null.");
 
         VkImageBlit regionVK{};
         regionVK.srcSubresource.aspectMask = region->srcSubresource.aspectMask;

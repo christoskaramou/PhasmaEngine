@@ -128,18 +128,6 @@ namespace pe
 
         void BlitImage(CommandBuffer *cmd, Image *src, ImageBlit *region, Filter filter);
 
-        void TransitionImageLayout(CommandBuffer *cmd,
-                                   ImageLayout oldLayout,
-                                   ImageLayout newLayout,
-                                   PipelineStageFlags oldStageMask,
-                                   PipelineStageFlags newStageMask,
-                                   AccessFlags srcMask,
-                                   AccessFlags dstMask,
-                                   uint32_t baseArrayLayer,
-                                   uint32_t arrayLayers,
-                                   uint32_t baseMipLevel,
-                                   uint32_t mipLevels);
-
     public:
         Sampler *sampler;
         AllocationHandle allocation;
