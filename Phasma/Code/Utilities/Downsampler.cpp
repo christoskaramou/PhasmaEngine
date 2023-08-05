@@ -33,11 +33,9 @@ namespace pe
         cmd->BindDescriptors(1, &s_DSet[s_currentIndex]);
         cmd->PushConstants(ShaderStage::ComputeBit, 0, sizeof(PushConstants), &s_pushConstants);
         cmd->Dispatch(groupCount.x, groupCount.y, s_image->imageInfo.arrayLayers);
-
-        ResetInputImage();
-
         cmd->EndDebugRegion();
 
+        s_image = nullptr;
         s_currentIndex = (s_currentIndex + 1) % MAX_DESCRIPTORS_PER_CMD;
     }
 
@@ -102,8 +100,7 @@ namespace pe
     {
         uint32_t mips = image->imageInfo.mipLevels;
 
-        if (mips <= 1)
-            PE_ERROR("Image has no mips!");
+        PE_ERROR_IF(mips <= 1, "Image has no extra mips!");
 
         for (uint32_t i = 0; i < mips; i++)
         {
@@ -112,11 +109,6 @@ namespace pe
         }
 
         s_image = image;
-    }
-
-    void Downsampler::ResetInputImage()
-    {
-        s_image = nullptr;
     }
 
     void Downsampler::UpdateDescriptorSet()
