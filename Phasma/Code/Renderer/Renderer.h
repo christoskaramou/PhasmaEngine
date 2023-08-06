@@ -104,7 +104,6 @@ namespace pe
         std::vector<Primitive *> m_drawlist{};
 
     public:
-        inline static Queue *s_currentQueue = nullptr;
         RenderArea renderArea;
         SkyBox skyBoxDay;
         SkyBox skyBoxNight;

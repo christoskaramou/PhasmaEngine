@@ -21,7 +21,7 @@ namespace pe
 
         static void Clear();
 
-        static Queue *GetNext(QueueTypeFlags queueTypeFlags, int minImageGranularity);
+        static Queue *Get(QueueTypeFlags queueTypeFlags, int minImageGranularity);
 
         void Submit(uint32_t commandBuffersCount, CommandBuffer **commandBuffers,
                     uint32_t waitSemaphoresCount,
@@ -50,7 +50,7 @@ namespace pe
     private:
         inline static std::vector<QueueTypeFlags::Type> s_allFlags{};
         inline static std::unordered_map<QueueTypeFlags::Type, std::unordered_map<size_t, Queue *>> s_allQueues{};
-        inline static std::mutex s_getNextMutex{};
+        inline static std::mutex s_getMutex{};
         inline static std::mutex s_submitMutex{};
 
         uint32_t m_familyId;

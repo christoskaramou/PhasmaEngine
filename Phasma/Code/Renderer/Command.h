@@ -48,7 +48,7 @@ namespace pe
 
         static void Clear();
 
-        static CommandPool *GetNext(uint32_t familyId);
+        static CommandPool *GetFree(uint32_t familyId);
 
         static void Return(CommandPool *commandPool);
 
@@ -188,7 +188,7 @@ namespace pe
 
         static void Clear();
 
-        static CommandBuffer *GetNext(uint32_t familyId);
+        static CommandBuffer *GetFree(uint32_t familyId);
 
         static void Return(CommandBuffer *cmd);
 

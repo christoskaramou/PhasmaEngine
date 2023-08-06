@@ -146,10 +146,10 @@ namespace pe
     {
         uint32_t frameIndex = RHII.GetFrameIndex();
 
-        Queue *queue = RHII.GetRenderQueue();
-        s_currentQueue = queue;
+        Queue *renderQueue = RHII.GetRenderQueue();
+        Queue *presentQueue = RHII.GetPresentQueue();
 
-        queue->BeginDebugRegion("RendererSystem::Draw");
+        renderQueue->BeginDebugRegion("RendererSystem::Draw");
 
         // acquire the image
         Semaphore *aquireSignalSemaphore = RHII.GetSemaphores()[frameIndex];
@@ -170,21 +170,21 @@ namespace pe
                     CommandBuffer::Return(m_previousShadowCmds[imageIndex][i]);
                 }
 
-                shadowCmds[i] = CommandBuffer::GetNext(queue->GetFamilyId());
+                shadowCmds[i] = CommandBuffer::GetFree(renderQueue->GetFamilyId());
                 m_previousShadowCmds[imageIndex][i] = shadowCmds[i];
             }
 
             // record the shadow command buffers
-            queue->BeginDebugRegion("Record Shadow Cmds");
+            renderQueue->BeginDebugRegion("Record Shadow Cmds");
             RecordShadowsCmds(SHADOWMAP_CASCADES, shadowCmds, imageIndex);
-            queue->EndDebugRegion();
+            renderQueue->EndDebugRegion();
 
             // submit the shadow command buffers
             Semaphore *shadowWaitSemaphore = aquireSignalSemaphore;
             Semaphore *shadowSignalSemaphore = RHII.GetSemaphores()[SWAPCHAIN_IMAGES + frameIndex];
             PipelineStageFlags waitStage = PipelineStage::ColorAttachmentOutputBit;
             PipelineStageFlags signalStage = PipelineStage::FragmentShaderBit;
-            queue->Submit(SHADOWMAP_CASCADES, shadowCmds,
+            renderQueue->Submit(SHADOWMAP_CASCADES, shadowCmds,
                           1, &waitStage, &shadowWaitSemaphore,
                           1, &signalStage, &shadowSignalSemaphore);
 
@@ -201,8 +201,8 @@ namespace pe
             CommandBuffer::Return(m_previousCmds[imageIndex]);
         }
 
-        // RECORD
-        CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
+        // RECORD COMMANDS
+        CommandBuffer *cmd = CommandBuffer::GetFree(renderQueue->GetFamilyId());
         cmd->Begin();
         RecordPasses(cmd, imageIndex);
         cmd->End();
@@ -210,7 +210,7 @@ namespace pe
         // SUBMIT TO QUEUE
         PipelineStageFlags waitStage = PipelineStage::FragmentShaderBit;
         PipelineStageFlags signalStage = PipelineStage::BottomOfPipeBit;
-        queue->Submit(1, &cmd,
+        renderQueue->Submit(1, &cmd,
                       1, &waitStage, &waitSemaphore,
                       1, &signalStage, &signalSemaphore);
 
@@ -219,11 +219,11 @@ namespace pe
         // PRESENT
         Swapchain *swapchain = RHII.GetSwapchain();
         Semaphore *presentWaitSemaphore = signalSemaphore;
-        queue->Present(1, &swapchain, &imageIndex, 1, &presentWaitSemaphore);
+        presentQueue->Present(1, &swapchain, &imageIndex, 1, &presentWaitSemaphore);
 
         gui.RenderViewPorts();
 
-        queue->EndDebugRegion();
+        renderQueue->EndDebugRegion();
     }
 
     void RendererSystem::Destroy()

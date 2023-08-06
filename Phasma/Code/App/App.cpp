@@ -41,8 +41,8 @@ namespace pe
 
         RHII.Init(m_window->Handle());
 
-        Queue *queue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit, 1);
-        CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
+        Queue *queue = Queue::Get(QueueType::GraphicsBit | QueueType::TransferBit, 1);
+        CommandBuffer *cmd = CommandBuffer::GetFree(queue->GetFamilyId());
 
         cmd->Begin();
         CONTEXT->CreateSystem<CameraSystem>()->Init(cmd);

@@ -599,7 +599,7 @@ namespace pe
 
         ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
 
-        Queue *queue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit, 1);
+        Queue *queue = Queue::Get(QueueType::GraphicsBit | QueueType::TransferBit, 1);
         ImGui_ImplVulkan_InitInfo initInfo{};
         initInfo.Instance = RHII.GetInstance();
         initInfo.PhysicalDevice = RHII.GetGpu();
@@ -625,7 +625,7 @@ namespace pe
         renderPass = CommandBuffer::GetRenderPass(1, &attachmentInfo, nullptr);
         ImGui_ImplVulkan_Init(&initInfo, renderPass->Handle());
 
-        CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(queue->GetFamilyId());
         cmd->Begin();
         ImGui_ImplVulkan_CreateFontsTexture(cmd->Handle());
         cmd->End();

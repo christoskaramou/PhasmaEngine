@@ -47,11 +47,11 @@ namespace pe
     };
 
     // Maintains the order items added
-    template <class Key, class T>
+    template <class Key, class Value>
     class OrderedMap
     {
     public:
-        using ListType = std::list<T>;
+        using ListType = std::list<Value>;
         using iterator = typename ListType::iterator;
         using const_iterator = typename ListType::const_iterator;
         using reverse_iterator = typename ListType::reverse_iterator;
@@ -61,7 +61,7 @@ namespace pe
 
         bool exists(const Key &key) const { return m_map.find(key) != m_map.end(); }
 
-        T &get(const Key &key)
+        Value &get(const Key &key)
         {
             auto it = m_map.find(key);
             if (it == m_map.end())
@@ -71,20 +71,20 @@ namespace pe
             return *(it->second);
         }
 
-        const T &get(const Key &key) const { return *(m_map.at(key)); }
+        const Value &get(const Key &key) const { return *(m_map.at(key)); }
 
-        T &operator[](const Key &key)
+        Value &operator[](const Key &key)
         {
             auto it = m_map.find(key);
             if (it == m_map.end())
             {
-                m_list.push_back(T());
+                m_list.push_back(Value());
                 it = m_map.insert({key, std::prev(m_list.end())}).first;
             }
             return *(it->second);
         }
 
-        const T &operator[](const Key &key) const { return *(m_map.at(key)); }
+        const Value &operator[](const Key &key) const { return *(m_map.at(key)); }
 
         iterator begin() { return m_list.begin(); }
         iterator end() { return m_list.end(); }
@@ -95,7 +95,7 @@ namespace pe
         const_reverse_iterator crbegin() const { return m_list.crbegin(); }
         const_reverse_iterator crend() const { return m_list.crend(); }
 
-        bool insert(const Key &key, const T &value)
+        bool insert(const Key &key, const Value &value)
         {
             if (m_map.find(key) == m_map.end())
             {

@@ -106,7 +106,7 @@ namespace pe
     Compute Compute::Create(const std::string &shaderName, size_t sizeIn, size_t sizeOut, const std::string &name)
     {
         Compute compute;
-        compute.commandBuffer = CommandBuffer::GetNext(RHII.GetComputeQueue()->GetFamilyId());
+        compute.commandBuffer = CommandBuffer::GetFree(RHII.GetComputeQueue()->GetFamilyId());
         compute.CreateUniforms(sizeIn, sizeOut);
         compute.UpdatePassInfo(shaderName);
 
@@ -121,7 +121,7 @@ namespace pe
         for (uint32_t i = 0; i < count; i++)
         {
             Compute compute;
-            compute.commandBuffer = CommandBuffer::GetNext(RHII.GetComputeQueue()->GetFamilyId());
+            compute.commandBuffer = CommandBuffer::GetFree(RHII.GetComputeQueue()->GetFamilyId());
             compute.CreateUniforms(sizeIn, sizeOut);
             compute.UpdatePassInfo(shaderName);
 

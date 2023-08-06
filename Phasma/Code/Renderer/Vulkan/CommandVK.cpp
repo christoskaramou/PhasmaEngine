@@ -63,7 +63,7 @@ namespace pe
         s_availableCps.clear();
     }
 
-    CommandPool *CommandPool::GetNext(uint32_t familyId)
+    CommandPool *CommandPool::GetFree(uint32_t familyId)
     {
         std::lock_guard<std::mutex> lock(s_getNextMutex);
 
@@ -93,7 +93,7 @@ namespace pe
     CommandBuffer::CommandBuffer(uint32_t familyId, const std::string &name)
     {
         m_familyId = familyId;
-        m_commandPool = CommandPool::GetNext(familyId);
+        m_commandPool = CommandPool::GetFree(familyId);
         m_semaphore = Semaphore::Create(true, name + "_semaphore");
         m_submitions = 0;
         m_boundPipeline = nullptr;
@@ -594,7 +594,7 @@ namespace pe
         s_availableCmds.clear();
     }
 
-    CommandBuffer *CommandBuffer::GetNext(uint32_t familyId)
+    CommandBuffer *CommandBuffer::GetFree(uint32_t familyId)
     {
         std::lock_guard<std::mutex> lock(s_getNextMutex);
 
@@ -618,17 +618,10 @@ namespace pe
 
         // CHECKS
         // -------------------------------------------------------------
-        if (!cmd || !cmd->m_handle)
-            PE_ERROR("CommandBuffer::Return: CommandBuffer is null or invalid");
-
-        if (s_allCmds[cmd->GetFamilyId()].find(cmd->m_id) == s_allCmds[cmd->m_familyId].end())
-            PE_ERROR("CommandBuffer::Return: CommandBuffer does not belong to pool");
-
-        if (cmd->m_recording)
-            PE_ERROR("CommandBuffer::Return: " + cmd->m_name + " is still recording!");
-
-        if (cmd->m_semaphore->GetValue() != cmd->m_submitions)
-            PE_ERROR("CommandBuffer::Return: " + cmd->m_name + " is not finished!");
+        PE_ERROR_IF(!cmd || !cmd->m_handle, "CommandBuffer::Return: CommandBuffer is null or invalid");
+        PE_ERROR_IF(s_allCmds[cmd->GetFamilyId()].find(cmd->m_id) == s_allCmds[cmd->m_familyId].end(), "CommandBuffer::Return: CommandBuffer does not belong to pool");
+        PE_ERROR_IF(cmd->m_recording, "CommandBuffer::Return: " + cmd->m_name + " is still recording!");
+        PE_ERROR_IF(cmd->m_semaphore->GetValue() != cmd->m_submitions, "CommandBuffer::Return: " + cmd->m_name + " is not finished!");
         //--------------------------------------------------------------
 
         s_availableCmds[cmd->GetFamilyId()][cmd->m_id] = cmd;
@@ -638,8 +631,7 @@ namespace pe
     {
         std::lock_guard<std::mutex> lock(s_WaitMutex);
 
-        if (m_recording)
-            PE_ERROR("CommandBuffer::Wait: " + m_name + " is still recording!");
+        PE_ERROR_IF(m_recording, "CommandBuffer::Wait: " + m_name + " is still recording!");
 
         m_semaphore->Wait(m_submitions);
 

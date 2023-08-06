@@ -220,9 +220,9 @@ namespace pe
         s_allQueues.clear();
     }
 
-    Queue *Queue::GetNext(QueueTypeFlags queueTypeFlags, int minImageGranularity)
+    Queue *Queue::Get(QueueTypeFlags queueTypeFlags, int minImageGranularity)
     {
-        std::lock_guard<std::mutex> lock(s_getNextMutex);
+        std::lock_guard<std::mutex> lock(s_getMutex);
 
         // Find the best suitable flags in the sorted s_allFlags vector
         for (QueueTypeFlags::Type flags : s_allFlags)
@@ -243,7 +243,7 @@ namespace pe
             }
         }
 
-        PE_ERROR("Queue::GetNext() A queue with these flags is not available!");
+        PE_ERROR("Queue::Get() A queue with these flags is not available!");
         return nullptr;
     }
 }

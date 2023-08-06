@@ -384,7 +384,7 @@ namespace pe
     void Model::Load(const std::filesystem::path &file)
     {
         Queue *queue = RHII.GetRenderQueue();
-        CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(queue->GetFamilyId());
 
         Model::models.emplace_back();
         Model &model = Model::models.back();

@@ -85,6 +85,8 @@ namespace pe
         const AllocatorHandle &GetAllocator() { return m_allocator; }
         Queue *GetRenderQueue() { return m_renderQueue; }
         Queue *GetComputeQueue() { return m_computeQueue; }
+        Queue *GetTransferQueue() { return m_transferQueue; }
+        Queue *GetPresentQueue() { return m_presentQueue; }
         SDL_Window *GetWindow() { return m_window; }
         Surface *GetSurface() { return m_surface; }
         Swapchain *GetSwapchain() { return m_swapchain; }
@@ -125,6 +127,8 @@ namespace pe
 
         Queue *m_renderQueue;
         Queue *m_computeQueue;
+        Queue *m_transferQueue;
+        Queue *m_presentQueue;
 
         SDL_Window *m_window;
         Surface *m_surface;

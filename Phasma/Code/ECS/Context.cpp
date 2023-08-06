@@ -8,8 +8,8 @@ namespace pe
 
     void Context::InitSystems()
     {
-        Queue *queue = Queue::GetNext(QueueType::GraphicsBit | QueueType::TransferBit, 1);
-        CommandBuffer *cmd = CommandBuffer::GetNext(queue->GetFamilyId());
+        Queue *queue = Queue::Get(QueueType::GraphicsBit | QueueType::TransferBit, 1);
+        CommandBuffer *cmd = CommandBuffer::GetFree(queue->GetFamilyId());
         cmd->Begin();
 
         for (auto &system : m_systems)

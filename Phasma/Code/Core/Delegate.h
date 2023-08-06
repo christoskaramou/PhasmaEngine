@@ -8,9 +8,9 @@ namespace pe
     public:
         using Func_type = std::function<void(T &&...)>;
 
-        inline void operator+=(Func_type &&func)
+        inline void operator+=(Func_type func)
         {
-            m_functions.push_back(std::forward<Func_type>(func));
+            m_functions.push_back(func);
         }
 
         inline void Invoke(T &&...args)
