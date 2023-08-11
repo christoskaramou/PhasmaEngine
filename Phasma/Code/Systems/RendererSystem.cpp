@@ -147,7 +147,6 @@ namespace pe
         uint32_t frameIndex = RHII.GetFrameIndex();
 
         Queue *renderQueue = RHII.GetRenderQueue();
-        Queue *presentQueue = RHII.GetPresentQueue();
 
         renderQueue->BeginDebugRegion("RendererSystem::Draw");
 
@@ -191,9 +190,6 @@ namespace pe
             aquireSignalSemaphore = shadowSignalSemaphore;
         }
 
-        Semaphore *waitSemaphore = aquireSignalSemaphore;
-        Semaphore *signalSemaphore = RHII.GetSemaphores()[SWAPCHAIN_IMAGES * 2 + frameIndex];
-
         // Wait for unfinished work
         if (m_previousCmds[imageIndex])
         {
@@ -208,18 +204,18 @@ namespace pe
         cmd->End();
 
         // SUBMIT TO QUEUE
+        Semaphore *renderFinishedSemaphore = RHII.GetSemaphores()[SWAPCHAIN_IMAGES * 2 + frameIndex];
         PipelineStageFlags waitStage = PipelineStage::FragmentShaderBit;
         PipelineStageFlags signalStage = PipelineStage::BottomOfPipeBit;
         renderQueue->Submit(1, &cmd,
-                      1, &waitStage, &waitSemaphore,
-                      1, &signalStage, &signalSemaphore);
+                      1, &waitStage, &aquireSignalSemaphore,
+                      1, &signalStage, &renderFinishedSemaphore);
 
         m_previousCmds[imageIndex] = cmd;
 
         // PRESENT
         Swapchain *swapchain = RHII.GetSwapchain();
-        Semaphore *presentWaitSemaphore = signalSemaphore;
-        presentQueue->Present(1, &swapchain, &imageIndex, 1, &presentWaitSemaphore);
+        renderQueue->Present(1, &swapchain, &imageIndex, 1, &renderFinishedSemaphore);
 
         gui.RenderViewPorts();
 

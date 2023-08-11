@@ -186,7 +186,7 @@ namespace pe
         RIGHT
     };
 
-    enum class RenderQueue
+    enum class RenderType
     {
         Opaque = 1,
         AlphaCut = 2,

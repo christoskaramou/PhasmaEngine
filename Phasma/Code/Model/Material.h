@@ -12,7 +12,7 @@ namespace pe
         vec3 emissiveFactor;
         float alphaCutoff{};
         bool doubleSided{};
-        RenderQueue renderQueue{};
+        RenderType renderType{};
 
         Image *baseColorTexture;
         Image *metallicRoughnessTexture;

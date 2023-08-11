@@ -277,7 +277,7 @@ namespace pe
 
             // factors
             myPrimitive.pbrMaterial.alphaCutoff = material.alphaCutoff;
-            myPrimitive.pbrMaterial.renderQueue = (RenderQueue)material.alphaMode;
+            myPrimitive.pbrMaterial.renderType = (RenderType)material.alphaMode;
             myPrimitive.pbrMaterial.baseColorFactor = make_vec4(&material.metallicRoughness.baseColorFactor.r);
             myPrimitive.pbrMaterial.doubleSided = material.doubleSided;
             myPrimitive.pbrMaterial.emissiveFactor = make_vec3(&material.emissiveFactor.r);
@@ -1059,15 +1059,15 @@ namespace pe
         }
     }
 
-    void Model::Draw(CommandBuffer *cmd, RenderQueue renderQueue)
+    void Model::Draw(CommandBuffer *cmd, RenderType renderType)
     {
         if (!render)
             return;
 
         cmd->BeginDebugRegion(
-            renderQueue == RenderQueue::Opaque     ? "Opaque"
-            : renderQueue == RenderQueue::AlphaCut ? "AlphaCut"
-                                                   : "AlphaBlend");
+            renderType == RenderType::Opaque     ? "Opaque"
+            : renderType == RenderType::AlphaCut ? "AlphaCut"
+                                                 : "AlphaBlend");
 
         auto &uniformBuffer = RHII.GetUniformBufferInfo(uniformBufferIndex);
         auto &uniformImages = RHII.GetUniformImageInfo(uniformImagesIndex);
@@ -1102,7 +1102,7 @@ namespace pe
 
                 for (auto &primitive : node->mesh->primitives)
                 {
-                    if (primitive.pbrMaterial.renderQueue == renderQueue && primitive.render)
+                    if (primitive.pbrMaterial.renderType == renderType && primitive.render)
                     {
                         total++;
                         if (!primitive.cull)

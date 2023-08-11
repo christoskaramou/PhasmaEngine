@@ -34,7 +34,7 @@ namespace pe
 
         static void Load(const std::filesystem::path &file);
 
-        void Draw(CommandBuffer *cmd, RenderQueue renderQueue);
+        void Draw(CommandBuffer *cmd, RenderType renderType);
 
         void DrawAABBs(CommandBuffer *cmd);
 

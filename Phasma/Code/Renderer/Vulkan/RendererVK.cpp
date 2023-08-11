@@ -103,11 +103,11 @@ namespace pe
         GpuTimer::geometry->Start(cmd);
         deferred.BeginPass(cmd, imageIndex);
         for (auto &model : Model::models)
-            model.Draw(cmd, RenderQueue::Opaque);
+            model.Draw(cmd, RenderType::Opaque);
         for (auto &model : Model::models)
-            model.Draw(cmd, RenderQueue::AlphaCut);
+            model.Draw(cmd, RenderType::AlphaCut);
         for (auto &model : Model::models)
-            model.Draw(cmd, RenderQueue::AlphaBlend);
+            model.Draw(cmd, RenderType::AlphaBlend);
         deferred.EndPass(cmd);
         frameTimer.geometryStamp = GpuTimer::geometry->End();
         cmd->EndDebugRegion();
