@@ -1,7 +1,7 @@
 #ifndef FXAA_H_
 #define FXAA_H_
 
-#include "../Common/common.hlsl"
+#include "../Common/Common.hlsl"
 
 static const float RDC_MIN = 0.015625f; // 1.0 / 64.0;
 static const float RDC = 0.25f; // 1.0 / 4.0

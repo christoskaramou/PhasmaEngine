@@ -258,6 +258,10 @@ public:
 	// require_extension("GL_KHR_my_extension");
 	void require_extension(const std::string &ext);
 
+	// Returns the list of required extensions. After compilation this will contains any other 
+	// extensions that the compiler used automatically, in addition to the user specified ones.
+	const SmallVector<std::string> &get_required_extensions() const;
+
 	// Legacy GLSL compatibility method.
 	// Takes a uniform or push constant variable and flattens it into a (i|u)vec4 array[N]; array instead.
 	// For this to work, all types in the block must be the same basic type, e.g. mixing vec2 and vec4 is fine, but
@@ -282,6 +286,14 @@ public:
 	// Masking builtins only takes effect if the builtin in question is part of the stage output interface.
 	void mask_stage_output_by_location(uint32_t location, uint32_t component);
 	void mask_stage_output_by_builtin(spv::BuiltIn builtin);
+
+	// Allow to control how to format float literals in the output.
+	// Set to "nullptr" to use the default "convert_to_string" function.
+	// This handle is not owned by SPIRV-Cross and must remain valid until compile() has been called.
+	void set_float_formatter(FloatFormatter *formatter)
+	{
+		float_formatter = formatter;
+	}
 
 protected:
 	struct ShaderSubgroupSupportHelper
@@ -393,6 +405,7 @@ protected:
 	};
 	TemporaryCopy handle_instruction_precision(const Instruction &instr);
 	void emit_block_instructions(SPIRBlock &block);
+	void emit_block_instructions_with_masked_debug(SPIRBlock &block);
 
 	// For relax_nan_checks.
 	GLSLstd450 get_remapped_glsl_op(GLSLstd450 std450_op) const;
@@ -426,7 +439,9 @@ protected:
 	                                const std::string &qualifier = "", uint32_t base_offset = 0);
 	virtual void emit_struct_padding_target(const SPIRType &type);
 	virtual std::string image_type_glsl(const SPIRType &type, uint32_t id = 0);
-	std::string constant_expression(const SPIRConstant &c, bool inside_block_like_struct_scope = false);
+	std::string constant_expression(const SPIRConstant &c,
+	                                bool inside_block_like_struct_scope = false,
+	                                bool inside_struct_scope = false);
 	virtual std::string constant_op_expression(const SPIRConstantOp &cop);
 	virtual std::string constant_expression_vector(const SPIRConstant &c, uint32_t vector);
 	virtual void emit_fixup();
@@ -476,6 +491,8 @@ protected:
 	                                           bool packed_type, bool row_major);
 
 	virtual bool builtin_translates_to_nonarray(spv::BuiltIn builtin) const;
+
+	virtual bool is_user_type_structured(uint32_t id) const;
 
 	void emit_copy_logical_type(uint32_t lhs_id, uint32_t lhs_type_id, uint32_t rhs_id, uint32_t rhs_type_id,
 	                            SmallVector<uint32_t> chain);
@@ -537,6 +554,7 @@ protected:
 	SmallVector<std::string> *redirect_statement = nullptr;
 	const SPIRBlock *current_continue_block = nullptr;
 	bool block_temporary_hoisting = false;
+	bool block_debug_directives = false;
 
 	void begin_scope();
 	void end_scope();
@@ -602,6 +620,7 @@ protected:
 		const char *uint16_t_literal_suffix = "us";
 		const char *nonuniform_qualifier = "nonuniformEXT";
 		const char *boolean_mix_function = "mix";
+		SPIRType::BaseType boolean_in_struct_remapped_type = SPIRType::Boolean;
 		bool swizzle_is_function = false;
 		bool shared_is_implied = false;
 		bool unsized_array_supported = true;
@@ -738,7 +757,7 @@ protected:
 	virtual bool access_chain_needs_stage_io_builtin_translation(uint32_t base);
 
 	virtual void check_physical_type_cast(std::string &expr, const SPIRType *type, uint32_t physical_type);
-	virtual void prepare_access_chain_for_scalar_access(std::string &expr, const SPIRType &type,
+	virtual bool prepare_access_chain_for_scalar_access(std::string &expr, const SPIRType &type,
 	                                                    spv::StorageClass storage, bool &is_packed);
 
 	std::string access_chain(uint32_t base, const uint32_t *indices, uint32_t count, const SPIRType &target_type,
@@ -770,8 +789,8 @@ protected:
 	void append_global_func_args(const SPIRFunction &func, uint32_t index, SmallVector<std::string> &arglist);
 	std::string to_non_uniform_aware_expression(uint32_t id);
 	std::string to_expression(uint32_t id, bool register_expression_read = true);
-	std::string to_composite_constructor_expression(uint32_t id, bool block_like_type);
-	std::string to_rerolled_array_expression(const std::string &expr, const SPIRType &type);
+	std::string to_composite_constructor_expression(const SPIRType &parent_type, uint32_t id, bool block_like_type);
+	std::string to_rerolled_array_expression(const SPIRType &parent_type, const std::string &expr, const SPIRType &type);
 	std::string to_enclosed_expression(uint32_t id, bool register_expression_read = true);
 	std::string to_unpacked_expression(uint32_t id, bool register_expression_read = true);
 	std::string to_unpacked_row_major_matrix_expression(uint32_t id);
@@ -804,7 +823,7 @@ protected:
 	std::string layout_for_variable(const SPIRVariable &variable);
 	std::string to_combined_image_sampler(VariableID image_id, VariableID samp_id);
 	virtual bool skip_argument(uint32_t id) const;
-	virtual void emit_array_copy(const std::string &lhs, uint32_t lhs_id, uint32_t rhs_id,
+	virtual bool emit_array_copy(const char *expr, uint32_t lhs_id, uint32_t rhs_id,
 	                             spv::StorageClass lhs_storage, spv::StorageClass rhs_storage);
 	virtual void emit_block_hints(const SPIRBlock &block);
 	virtual std::string to_initializer_expression(const SPIRVariable &var);
@@ -982,6 +1001,7 @@ protected:
 	// Builtins in GLSL are always specific signedness, but the SPIR-V can declare them
 	// as either unsigned or signed.
 	// Sometimes we will need to automatically perform casts on load and store to make this work.
+	virtual SPIRType::BaseType get_builtin_basetype(spv::BuiltIn builtin, SPIRType::BaseType default_type);
 	virtual void cast_to_variable_store(uint32_t target_id, std::string &expr, const SPIRType &expr_type);
 	virtual void cast_from_variable_load(uint32_t source_id, std::string &expr, const SPIRType &expr_type);
 	void unroll_array_from_complex_load(uint32_t target_id, uint32_t source_id, std::string &expr);
@@ -1018,6 +1038,10 @@ protected:
 	uint32_t get_declared_member_location(const SPIRVariable &var, uint32_t mbr_idx, bool strip_array) const;
 	std::unordered_set<LocationComponentPair, InternalHasher> masked_output_locations;
 	std::unordered_set<uint32_t> masked_output_builtins;
+
+	FloatFormatter *float_formatter = nullptr;
+	std::string format_float(float value) const;
+	std::string format_double(double value) const;
 
 private:
 	void init();

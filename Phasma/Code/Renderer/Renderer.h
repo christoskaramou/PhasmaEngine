@@ -3,15 +3,11 @@
 #include "Renderer/Surface.h"
 #include "Renderer/Swapchain.h"
 #include "GUI/GUI.h"
-#include "Skybox/Skybox.h"
-#include "Renderer/Shadows.h"
-#include "Model/Model.h"
-#include "Renderer/Deferred.h"
-#include "Renderer/Compute.h"
+#include "Renderer/Skybox.h"
+#include "Renderer/RenderPasses/ShadowPass.h"
+#include "Scene/Model.h"
 #include "Script/Script.h"
-#include "Script/Script.h"
-
-#define IGNORE_SCRIPTS
+#include "Scene/Scene.h"
 
 namespace pe
 {
@@ -47,27 +43,30 @@ namespace pe
 
         virtual ~Renderer();
 
-        RenderArea &GetRenderArea() { return renderArea; }
+        RenderArea &GetRenderArea() { return m_renderArea; }
 
         Image *CreateRenderTarget(const std::string &name,
                                   Format format,
                                   bool blendEnable,
                                   ImageUsageFlags additionalFlags = {},
                                   bool useRenderTergetScale = true,
-                                  bool useMips = false);
-
+                                  bool useMips = false,
+                                  vec4 clearColor = Color::Transparent);
         Image *GetRenderTarget(const std::string &name);
-
         Image *GetRenderTarget(size_t hash);
 
-        Image *CreateDepthTarget(const std::string &name,
-                                 Format format,
-                                 ImageUsageFlags additionalFlags = {},
-                                 bool useRenderTergetScale = true);
+        Image *CreateDepthStencilTarget(const std::string &name,
+                                        Format format,
+                                        ImageUsageFlags additionalFlags = {},
+                                        bool useRenderTergetScale = true,
+                                        float clearDepth = Color::Depth,
+                                        uint32_t clearStencil = Color::Stencil);
+        Image *GetDepthStencilTarget(const std::string &name);
+        Image *GetDepthStencilTarget(size_t hash);
 
-        Image *GetDepthTarget(const std::string &name);
-
-        Image *GetDepthTarget(size_t hash);
+        Image *GetDisplayRT() { return m_displayRT; }
+        Image *GetViewportRT() { return m_viewportRT; }
+        Image *GetDepthStencilRT() { return m_depthStencil; }
 
         Image *CreateFSSampledImage(bool useRenderTergetScale = true);
 
@@ -77,43 +76,47 @@ namespace pe
 
         void Resize(uint32_t width, uint32_t height);
 
-        void BlitToSwapchain(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
+        CommandBuffer *BlitToSwapchain(CommandBuffer *cmd, Image *renderedImage, uint32_t imageIndex);
 
         void PollShaders();
 
-        void AddToDrawlist(Primitive *primitive) { m_drawlist.push_back(primitive); }
+        Scene &GetScene() { return m_scene; }
 
-        void ClearDrawlist() { m_drawlist.clear(); }
+        const SkyBox &GetSkyBoxDay() const { return m_skyBoxDay; }
+
+        const SkyBox &GetSkyBoxNight() const { return m_skyBoxNight; }
+
+        const GUI &GetGUI() const { return m_gui; }
+
+        void ToggleGUI() { m_gui.render = !m_gui.render; }
 
     protected:
         static void CheckModelsQueue();
 
         void ComputeAnimations();
 
-        void RecordPasses(CommandBuffer *cmd, uint32_t imageIndex);
+        CommandBuffer *Upsample(Filter filter);
 
-        void RecordShadowsCmds(uint32_t count, CommandBuffer **cmds, uint32_t imageIndex);
+        void CreateRenderTargets();
+
+        std::vector<CommandBuffer *> RecordPasses(uint32_t imageIndex);
 
         Image *m_displayRT;
         Image *m_viewportRT;
-        Image *m_depth;
-        std::unordered_map<size_t, IRenderComponent *> m_renderComponents{};
+        Image *m_depthStencil;
+        OrderedMap<size_t, IRenderPassComponent *> m_renderPassComponents{};
         std::unordered_map<size_t, Image *> m_renderTargets{};
-        std::unordered_map<size_t, Image *> m_depthTargets{};
+        std::unordered_map<size_t, Image *> m_depthStencilTargets{};
 
-        std::vector<Primitive *> m_drawlist{};
+        Scene m_scene;
+        std::vector<CommandBuffer *> m_cmds[SWAPCHAIN_IMAGES];
 
-    public:
-        RenderArea renderArea;
-        SkyBox skyBoxDay;
-        SkyBox skyBoxNight;
-        GUI gui;
+        RenderArea m_renderArea;
+        SkyBox m_skyBoxDay;
+        SkyBox m_skyBoxNight;
+        GUI m_gui;
 
-    protected:
-        CommandBuffer *m_previousCmds[SWAPCHAIN_IMAGES];
-        CommandBuffer *m_previousShadowCmds[SWAPCHAIN_IMAGES][SHADOWMAP_CASCADES];
-
-#ifndef IGNORE_SCRIPTS
+#if PE_SCRIPTS
         std::vector<Script *> scripts{};
 #endif
     };

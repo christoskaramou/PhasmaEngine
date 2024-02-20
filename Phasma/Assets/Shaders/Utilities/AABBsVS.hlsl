@@ -1,46 +1,19 @@
+#include "../Common/Structures.hlsl"
+#include "../Common/Common.hlsl"
+
 static const int MAX_DATA_SIZE = 2048; // TODO: calculate on init
 
-struct PushConstants
-{
-    float2 projJitter;
-    uint modelIndex;
-    uint meshIndex;
-    uint color;
-};
-
-float4 UnpackColor(uint color)
-{
-    float4 col;
-    col.r = color >> 24;
-    col.g = (color << 8) >> 24;
-    col.b = (color << 16) >> 24;
-    col.a = (color << 24) >> 24;
-    return col / 256.0;
-}
-
-[[vk::push_constant]] PushConstants pc;
+[[vk::push_constant]] PushConstants_AABB pc;
 
 [[vk::binding(0)]] tbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
 
-#define meshMatrix data[pc.meshIndex]
-#define modelMvp data[pc.modelIndex + 1]
+float4x4 GetViewProjection() { return data[0]; }
+float4x4 GetMeshMatrix()     { return data[pc.meshIndex]; }
 
-struct VS_INPUT
+VS_OUTPUT_AABB mainVS(VS_INPUT_Position input)
 {
-    float3 position : POSITION;
-};
-
-struct VS_OUTPUT
-{
-    float4 position : SV_POSITION;
-    float3 color : COLOR;
-};
-
-VS_OUTPUT mainVS(VS_INPUT input)
-{
-    VS_OUTPUT o;
-    float3 position = input.position;
-    o.position = mul(float4(input.position, 1.0f), mul(meshMatrix, modelMvp));
-    o.color = UnpackColor(pc.color).rgb;
-    return o;
+    VS_OUTPUT_AABB output;
+    output.position = mul(float4(input.position, 1.0f), mul(GetMeshMatrix(), GetViewProjection()));
+    output.color    = UnpackColorRGBA(pc.color).rgb;
+    return output;
 }

@@ -3,9 +3,11 @@
 namespace pe
 {
     // externs
-    ThreadPool e_ThreadPool(std::thread::hardware_concurrency()); // general ThreadPool
-    ThreadPool e_FW_ThreadPool(1); // FileWatcher ThreadPool
-    ThreadPool e_GUI_ThreadPool(std::thread::hardware_concurrency()); // GUI ThreadPool
+    ThreadPool e_ThreadPool(std::thread::hardware_concurrency());        // general ThreadPool
+    ThreadPool e_Update_ThreadPool(std::thread::hardware_concurrency()); // Update ThreadPool
+    ThreadPool e_Render_ThreadPool(std::thread::hardware_concurrency()); // Render ThreadPool
+    ThreadPool e_FW_ThreadPool(1);                                       // FileWatcher ThreadPool
+    ThreadPool e_GUI_ThreadPool(std::thread::hardware_concurrency());    // GUI ThreadPool
 
     // the constructor just launches some amount of workers
     inline ThreadPool::ThreadPool(size_t threads) : m_stop(false)

@@ -46,7 +46,12 @@ namespace pe
         NoMove &operator=(NoMove &&) = delete;
     };
 
-    // Maintains the order items added
+    struct BarrierInfo
+    {
+        BarrierType type;
+    };
+
+    // Maintains the order of items
     template <class Key, class Value>
     class OrderedMap
     {
@@ -57,9 +62,61 @@ namespace pe
         using reverse_iterator = typename ListType::reverse_iterator;
         using const_reverse_iterator = typename ListType::const_reverse_iterator;
 
+        iterator begin() { return m_list.begin(); }
+        iterator end() { return m_list.end(); }
+        reverse_iterator rbegin() { return m_list.rbegin(); }
+        reverse_iterator rend() { return m_list.rend(); }
+        const_iterator cbegin() const { return m_list.cbegin(); }
+        const_iterator cend() const { return m_list.cend(); }
+        const_reverse_iterator crbegin() const { return m_list.crbegin(); }
+        const_reverse_iterator crend() const { return m_list.crend(); }
+
+        OrderedMap() = default;
+
+        OrderedMap(size_t capacity)
+        {
+            m_map.reserve(capacity);
+        }
+
+        OrderedMap(std::initializer_list<std::pair<const Key, Value>> init)
+        {
+            for (const auto &item : init)
+            {
+                insert(item.first, item.second);
+            }
+        }
+
         uint32_t size() { return static_cast<uint32_t>(m_list.size()); }
 
-        bool exists(const Key &key) const { return m_map.find(key) != m_map.end(); }
+        iterator find(const Key &key)
+        {
+            auto it = m_map.find(key);
+            if (it != m_map.end())
+            {
+                return it->second;
+            }
+            return m_list.end();
+        }
+
+        const_iterator find(const Key &key) const
+        {
+            auto it = m_map.find(key);
+            if (it != m_map.end())
+            {
+                return it->second;
+            }
+            return m_list.end();
+        }
+
+        std::optional<iterator> exists(const Key &key)
+        {
+            auto it = m_map.find(key);
+            if (it != m_map.end())
+            {
+                return it->second;
+            }
+            return std::nullopt;
+        }
 
         Value &get(const Key &key)
         {
@@ -71,39 +128,37 @@ namespace pe
             return *(it->second);
         }
 
-        const Value &get(const Key &key) const { return *(m_map.at(key)); }
+        const Value &get(const Key &key) const
+        {
+            return *(m_map.at(key));
+        }
 
         Value &operator[](const Key &key)
         {
-            auto it = m_map.find(key);
-            if (it == m_map.end())
+            auto [it, inserted] = m_map.try_emplace(key, m_list.end());
+            if (inserted)
             {
                 m_list.push_back(Value());
-                it = m_map.insert({key, std::prev(m_list.end())}).first;
+                it->second = std::prev(m_list.end());
             }
             return *(it->second);
         }
 
-        const Value &operator[](const Key &key) const { return *(m_map.at(key)); }
-
-        iterator begin() { return m_list.begin(); }
-        iterator end() { return m_list.end(); }
-        reverse_iterator rbegin() { return m_list.rbegin(); }
-        reverse_iterator rend() { return m_list.rend(); }
-        const_iterator cbegin() const { return m_list.cbegin(); }
-        const_iterator cend() const { return m_list.cend(); }
-        const_reverse_iterator crbegin() const { return m_list.crbegin(); }
-        const_reverse_iterator crend() const { return m_list.crend(); }
-
-        bool insert(const Key &key, const Value &value)
+        const Value &operator[](const Key &key) const
         {
-            if (m_map.find(key) == m_map.end())
+            return *(m_map.at(key));
+        }
+
+        std::pair<bool, std::optional<iterator>> insert(const Key &key, const Value &value)
+        {
+            auto it = m_map.find(key);
+            if (it == m_map.end())
             {
                 m_list.push_back(value);
-                m_map[key] = std::prev(m_list.end());
-                return true;
+                auto iter = m_map.emplace_hint(m_map.end(), key, std::prev(m_list.end()));
+                return {true, iter->second};
             }
-            return false;
+            return {false, std::nullopt};
         }
 
         bool erase(const Key &key)
@@ -141,6 +196,7 @@ namespace pe
     };
 
     // Used to abstract rendering api handles
+    // We can add more types here
     template <class VK_TYPE, class DX_TYPE>
     class ApiHandle final : public ApiHandleBase
     {
@@ -179,16 +235,20 @@ namespace pe
 
         inline static void DestroyAllIHandles()
         {
-            for (auto it = s_allHandles.rbegin(); it != s_allHandles.rend(); ++it)
+            std::vector<IHandleBase *> toDestroy;
+            for (auto handle : s_allHandles)
+            {
+                toDestroy.push_back(handle);
+            }
+
+            for (auto it = toDestroy.rbegin(); it != toDestroy.rend(); ++it)
             {
                 (*it)->Suicide();
             }
-
-            s_allHandles.clear();
         }
 
     protected:
-        virtual void Suicide() { PE_ERROR("Unused Base"); }
+        virtual void Suicide() = 0;
 
         inline static OrderedMap<IHandleBase *, IHandleBase *> s_allHandles{};
         size_t m_id;
@@ -218,13 +278,15 @@ namespace pe
             return ptr;
         }
 
-        inline static void Destroy(T *ptr)
+        inline static void Destroy(T *&ptr)
         {
             ValidateBaseClass<ApiHandleBase, HANDLE>();
             ValidateBaseClass<IHandle<T, HANDLE>, T>();
 
             if (ptr && s_allHandles.erase(ptr))
-                delete ptr;
+                delete ptr; // should call ~T() destructor
+
+            ptr = nullptr;
         }
 
         virtual ~IHandle() {}
@@ -233,10 +295,14 @@ namespace pe
 
     protected:
         IHandle() : m_handle{} {}
-        HANDLE m_handle;
 
-    private:
-        void Suicide() override { Destroy(static_cast<T *>(this)); }
+        void Suicide() override
+        {
+            T *temp = static_cast<T *>(this);
+            Destroy(temp);
+        }
+
+        HANDLE m_handle;
     };
 
     using CommandBufferHandle = ApiHandle<VkCommandBuffer, Placeholder<0> *>;
@@ -266,4 +332,5 @@ namespace pe
     using AllocatorHandle = ApiHandle<VmaAllocator, Placeholder<0> *>;
     using WindowHandle = ApiHandle<SDL_Window *, Placeholder<0> *>;
     using ShaderHandle = ApiHandle<Placeholder<0> *, Placeholder<1> *>;
+    using EventHandle = ApiHandle<VkEvent, Placeholder<0> *>;
 }

@@ -21,77 +21,79 @@ namespace pe
 
     void PassInfo::UpdateHash()
     {
+        for (auto &descriptors : m_descriptors)
+        {
+            descriptors.clear();
+            descriptors = Shader::PassDescriptors(*this);
+        }
+
         m_hash = {};
+
+        for (auto &descriptors : m_descriptors)
+        {
+            for (auto *descriptor : descriptors)
+            {
+                if (descriptor)
+                {
+                    m_hash.Combine(reinterpret_cast<intptr_t>(descriptor->GetLayout()));
+                }
+            }
+        }
 
         if (pCompShader)
         {
             m_hash.Combine(pCompShader->GetCache().GetHash());
-            m_hash.Combine(pushConstantStage.Value());
-            m_hash.Combine(pushConstantSize);
-            for (auto &layout : descriptorSetLayouts)
-                m_hash.Combine(reinterpret_cast<intptr_t>(layout));
         }
         else
         {
+            m_hash.Combine(static_cast<uint64_t>(topology));
+            m_hash.Combine(static_cast<uint64_t>(polygonMode));
+            m_hash.Combine(static_cast<uint64_t>(cullMode));
+            m_hash.Combine(lineWidth);
 
-            if (pVertShader)
-                m_hash.Combine(pVertShader->GetCache().GetHash());
-
-            if (pFragShader)
-                m_hash.Combine(pFragShader->GetCache().GetHash());
-
-            for (auto &binding : vertexInputBindingDescriptions)
-            {
-                m_hash.Combine(binding.binding);
-                m_hash.Combine(binding.stride);
-                m_hash.Combine(static_cast<int>(binding.inputRate));
-            }
-
-            for (auto &attribute : vertexInputAttributeDescriptions)
-            {
-                m_hash.Combine(attribute.location);
-                m_hash.Combine(attribute.binding);
-                m_hash.Combine(static_cast<int>(attribute.format));
-                m_hash.Combine(attribute.offset);
-            }
-
-            m_hash.Combine(width);
-            m_hash.Combine(height);
-            m_hash.Combine(static_cast<int>(topology));
-            m_hash.Combine(static_cast<int>(polygonMode));
-            m_hash.Combine(static_cast<int>(cullMode));
+            m_hash.Combine(alphaBlend);
 
             for (auto &attachment : colorBlendAttachments)
             {
                 m_hash.Combine(attachment.blendEnable);
-                m_hash.Combine(static_cast<int>(attachment.srcColorBlendFactor));
-                m_hash.Combine(static_cast<int>(attachment.dstColorBlendFactor));
-                m_hash.Combine(static_cast<int>(attachment.colorBlendOp));
-                m_hash.Combine(static_cast<int>(attachment.srcAlphaBlendFactor));
-                m_hash.Combine(static_cast<int>(attachment.dstAlphaBlendFactor));
-                m_hash.Combine(static_cast<int>(attachment.alphaBlendOp));
+                m_hash.Combine(static_cast<uint64_t>(attachment.srcColorBlendFactor));
+                m_hash.Combine(static_cast<uint64_t>(attachment.dstColorBlendFactor));
+                m_hash.Combine(static_cast<uint64_t>(attachment.colorBlendOp));
+                m_hash.Combine(static_cast<uint64_t>(attachment.srcAlphaBlendFactor));
+                m_hash.Combine(static_cast<uint64_t>(attachment.dstAlphaBlendFactor));
+                m_hash.Combine(static_cast<uint64_t>(attachment.alphaBlendOp));
                 m_hash.Combine(attachment.colorWriteMask.Value());
             }
 
             for (auto &dynamic : dynamicStates)
-                m_hash.Combine(static_cast<int>(dynamic));
+            {
+                m_hash.Combine(static_cast<uint64_t>(dynamic));
+            }
 
-            m_hash.Combine(pushConstantStage.Value());
-            m_hash.Combine(pushConstantSize);
+            if (pVertShader)
+            {
+                m_hash.Combine(pVertShader->GetCache().GetHash());
+            }
 
-            for (auto &layout : descriptorSetLayouts)
-                m_hash.Combine(reinterpret_cast<intptr_t>(layout));
+            if (pFragShader)
+            {
+                m_hash.Combine(pFragShader->GetCache().GetHash());
+            }
 
-            if (renderPass)
-                m_hash.Combine(reinterpret_cast<intptr_t>(renderPass));
-
-            m_hash.Combine(dynamicColorTargets);
-            for (uint32_t i = 0; i < dynamicColorTargets; i++)
-                m_hash.Combine(static_cast<int>(colorFormats[i]));
-            if (depthFormat)
-                m_hash.Combine(static_cast<int>(*depthFormat));
-
+            m_hash.Combine(static_cast<uint64_t>(depthFormat));
             m_hash.Combine(depthWriteEnable);
+            m_hash.Combine(depthTestEnable);
+            m_hash.Combine(static_cast<uint64_t>(depthCompareOp));
+
+            m_hash.Combine(stencilTestEnable);
+            m_hash.Combine(static_cast<uint64_t>(stencilFailOp));
+            m_hash.Combine(static_cast<uint64_t>(stencilPassOp));
+            m_hash.Combine(static_cast<uint64_t>(stencilDepthFailOp));
+            m_hash.Combine(static_cast<uint64_t>(stencilCompareOp));
+            m_hash.Combine(stencilCompareMask);
+            m_hash.Combine(stencilWriteMask);
+            m_hash.Combine(stencilReference);
+
             m_hash.Combine(reinterpret_cast<intptr_t>(pipelineCache.Get()));
         }
     }
@@ -101,24 +103,27 @@ namespace pe
         pVertShader = nullptr;
         pFragShader = nullptr;
         pCompShader = nullptr;
-        vertexInputBindingDescriptions = {};
-        vertexInputAttributeDescriptions = {};
-        width = 0.f;
-        height = 0.f;
         topology = PrimitiveTopology::TriangleList;
         polygonMode = PolygonMode::Fill;
         cullMode = CullMode::Back;
+        alphaBlend = false;
         colorBlendAttachments = {};
         dynamicStates = {};
-        pushConstantStage = ShaderStage::VertexBit;
-        pushConstantSize = 0;
-        descriptorSetLayouts = {};
-        renderPass = nullptr;
-        dynamicColorTargets = 0;
         colorFormats = nullptr;
-        depthFormat = nullptr;
+        lineWidth = 1.0f;
+        depthFormat = Format::Undefined;
         depthWriteEnable = true;
+        depthTestEnable = true;
+        depthCompareOp = Settings::Get<Global>().reverseZ ? CompareOp::GreaterOrEqual : CompareOp::LessOrEqual;
         pipelineCache = {};
+        stencilTestEnable = false;
+        stencilFailOp = StencilOp::Keep;
+        stencilPassOp = StencilOp::Replace;
+        stencilDepthFailOp = StencilOp::Keep;
+        stencilCompareOp = CompareOp::Always;
+        stencilCompareMask = 0x00u;
+        stencilWriteMask = 0x00u;
+        stencilReference = 0;
     }
 
     PassInfo::~PassInfo()
@@ -128,15 +133,13 @@ namespace pe
 
         Shader::Destroy(pVertShader);
         pVertShader = nullptr;
-        
+
         Shader::Destroy(pFragShader);
         pFragShader = nullptr;
     }
 
-    Pipeline::Pipeline(const PassInfo &info)
+    Pipeline::Pipeline(RenderPass *renderPass, PassInfo &info) : m_info(info)
     {
-        this->info = info;
-
         if (info.pCompShader)
         {
             VkShaderModuleCreateInfo csmci{};
@@ -145,19 +148,29 @@ namespace pe
             csmci.pCode = info.pCompShader->GetSpriv();
 
             VkPushConstantRange pcr{};
-            pcr.stageFlags = Translate<VkShaderStageFlags>(info.pushConstantStage);
-            pcr.offset = 0;
-            pcr.size = info.pushConstantSize;
+            const PushConstantDesc &pushConstantComp = info.pCompShader->GetPushConstantDesc();
+            if (pushConstantComp.size > 0)
+            {
+                pcr.size = static_cast<uint32_t>(pushConstantComp.size);
+                pcr.offset = 0;
+                pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+                PE_ERROR_IF(pcr.size > 128, "Compute push constant size is greater than 128 bytes");
+                info.m_pushConstantStages.push_back(ShaderStage::ComputeBit);
+                info.m_pushConstantOffsets.push_back(pcr.offset);
+                info.m_pushConstantSizes.push_back(pcr.size);
+            }
 
-            std::vector<VkDescriptorSetLayout> layouts(info.descriptorSetLayouts.size());
-            for (uint32_t i = 0; i < info.descriptorSetLayouts.size(); i++)
-                layouts[i] = info.descriptorSetLayouts[i]->Handle();
+            std::vector<VkDescriptorSetLayout> layouts{};
+            const auto &descriptors = info.GetDescriptors(0);
+            for (uint32_t i = 0; i < descriptors.size(); i++)
+                layouts.push_back(descriptors[i]->GetLayout()->Handle());
+
             VkPipelineLayoutCreateInfo plci{};
             plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             plci.setLayoutCount = static_cast<uint32_t>(layouts.size());
             plci.pSetLayouts = layouts.data();
-            plci.pushConstantRangeCount = info.pushConstantSize ? 1 : 0;
-            plci.pPushConstantRanges = info.pushConstantSize ? &pcr : nullptr;
+            plci.pushConstantRangeCount = pcr.size ? 1 : 0;
+            plci.pPushConstantRanges = pcr.size ? &pcr : nullptr;
 
             VkShaderModule module;
             PE_CHECK(vkCreateShaderModule(RHII.GetDevice(), &csmci, nullptr, &module));
@@ -171,8 +184,8 @@ namespace pe
 
             VkPipelineLayout vklayout;
             PE_CHECK(vkCreatePipelineLayout(RHII.GetDevice(), &plci, nullptr, &vklayout));
-            layout = vklayout;
-            compinfo.layout = layout;
+            m_layout = vklayout;
+            compinfo.layout = m_layout;
 
             VkPipeline vkPipeline;
             PE_CHECK(vkCreateComputePipelines(RHII.GetDevice(), nullptr, 1, &compinfo, nullptr, &vkPipeline));
@@ -223,29 +236,31 @@ namespace pe
             pipeinfo.pStages = stages.data();
 
             // Vertex Input state
-            std::vector<VkVertexInputBindingDescription> vibd(info.vertexInputBindingDescriptions.size());
-            for (uint32_t i = 0; i < info.vertexInputBindingDescriptions.size(); i++)
+            std::vector<VkVertexInputBindingDescription> vibds{};
+            for (auto &vertexBinding : info.pVertShader->GetReflection().GetVertexBindings())
             {
-                vibd[i].binding = info.vertexInputBindingDescriptions[i].binding;
-                vibd[i].stride = info.vertexInputBindingDescriptions[i].stride;
-                vibd[i].inputRate = Translate<VkVertexInputRate>(info.vertexInputBindingDescriptions[i].inputRate);
+                VkVertexInputBindingDescription vibd{};
+                vibd.binding = vertexBinding.binding;
+                vibd.stride = vertexBinding.stride;
+                vibd.inputRate = Translate<VkVertexInputRate>(vertexBinding.inputRate);
+                vibds.push_back(vibd);
             }
-
-            std::vector<VkVertexInputAttributeDescription> vida(info.vertexInputAttributeDescriptions.size());
-            for (uint32_t i = 0; i < info.vertexInputAttributeDescriptions.size(); i++)
+            std::vector<VkVertexInputAttributeDescription> vidas{};
+            for (auto &vertexAttribute : info.pVertShader->GetReflection().GetVertexAttributes())
             {
-                vida[i].location = info.vertexInputAttributeDescriptions[i].location;
-                vida[i].binding = info.vertexInputAttributeDescriptions[i].binding;
-                vida[i].format = Translate<VkFormat>(info.vertexInputAttributeDescriptions[i].format);
-                vida[i].offset = info.vertexInputAttributeDescriptions[i].offset;
+                VkVertexInputAttributeDescription vida{};
+                vida.location = vertexAttribute.location;
+                vida.binding = vertexAttribute.binding;
+                vida.format = Translate<VkFormat>(vertexAttribute.format);
+                vida.offset = vertexAttribute.offset;
+                vidas.push_back(vida);
             }
-
             VkPipelineVertexInputStateCreateInfo pvisci{};
             pvisci.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-            pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(vibd.size());
-            pvisci.pVertexBindingDescriptions = vibd.data();
-            pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(vida.size());
-            pvisci.pVertexAttributeDescriptions = vida.data();
+            pvisci.vertexBindingDescriptionCount = static_cast<uint32_t>(vibds.size());
+            pvisci.pVertexBindingDescriptions = vibds.data();
+            pvisci.vertexAttributeDescriptionCount = static_cast<uint32_t>(vidas.size());
+            pvisci.pVertexAttributeDescriptions = vidas.data();
             pipeinfo.pVertexInputState = &pvisci;
 
             // Input Assembly stage
@@ -277,26 +292,6 @@ namespace pe
             // Viewports and Scissors
             VkPipelineViewportStateCreateInfo pvsci{};
             pvsci.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-
-            VkViewport vp{};
-            if (!dynamicViewport)
-            {
-                vp.x = 0.0f;
-                vp.y = 0.0f;
-                vp.width = info.width;
-                vp.height = info.height;
-                vp.minDepth = 0.0f;
-                vp.maxDepth = 1.0f;
-                pvsci.pViewports = &vp;
-            }
-
-            VkRect2D r2d{};
-            if (!dynamicScissor)
-            {
-                r2d.extent = VkExtent2D{static_cast<uint32_t>(info.width), static_cast<uint32_t>(info.height)};
-                pvsci.pScissors = &r2d;
-            }
-
             pvsci.viewportCount = 1;
             pvsci.scissorCount = 1;
             pipeinfo.pViewportState = &pvsci;
@@ -313,7 +308,7 @@ namespace pe
             prsci.depthBiasConstantFactor = 0.0f;
             prsci.depthBiasClamp = 0.0f;
             prsci.depthBiasSlopeFactor = 0.0f;
-            prsci.lineWidth = 1.0f;
+            prsci.lineWidth = max(info.lineWidth, 1.0f);
             pipeinfo.pRasterizationState = &prsci;
 
             // Multisample state
@@ -330,13 +325,19 @@ namespace pe
             // Depth stencil state
             VkPipelineDepthStencilStateCreateInfo pdssci{};
             pdssci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-            pdssci.depthTestEnable = VK_TRUE;
+            pdssci.depthTestEnable = info.depthTestEnable;
             pdssci.depthWriteEnable = info.depthWriteEnable;
-            pdssci.depthCompareOp = GlobalSettings::ReverseZ ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
+            pdssci.depthCompareOp = Translate<VkCompareOp>(info.depthCompareOp);
+            pdssci.stencilTestEnable = info.stencilTestEnable;
+            pdssci.front.failOp = Translate<VkStencilOp>(info.stencilFailOp);
+            pdssci.front.passOp = Translate<VkStencilOp>(info.stencilPassOp);
+            pdssci.front.depthFailOp = Translate<VkStencilOp>(info.stencilDepthFailOp);
+            pdssci.front.compareOp = Translate<VkCompareOp>(info.stencilCompareOp);
+            pdssci.front.compareMask = info.stencilCompareMask;
+            pdssci.front.writeMask = info.stencilWriteMask;
+            pdssci.front.reference = info.stencilReference;
+            pdssci.back = pdssci.front;
             pdssci.depthBoundsTestEnable = VK_FALSE;
-            pdssci.stencilTestEnable = VK_FALSE;
-            pdssci.front.compareOp = VK_COMPARE_OP_ALWAYS;
-            pdssci.back.compareOp = VK_COMPARE_OP_ALWAYS;
             pdssci.minDepthBounds = 0.0f;
             pdssci.maxDepthBounds = 0.0f;
             pipeinfo.pDepthStencilState = &pdssci;
@@ -345,14 +346,23 @@ namespace pe
             std::vector<VkPipelineColorBlendAttachmentState> pcbast(info.colorBlendAttachments.size());
             for (uint32_t i = 0; i < info.colorBlendAttachments.size(); i++)
             {
-                pcbast[i].blendEnable = info.colorBlendAttachments[i].blendEnable;
-                pcbast[i].srcColorBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].srcColorBlendFactor);
-                pcbast[i].dstColorBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].dstColorBlendFactor);
-                pcbast[i].colorBlendOp = Translate<VkBlendOp>(info.colorBlendAttachments[i].colorBlendOp);
-                pcbast[i].srcAlphaBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].srcAlphaBlendFactor);
-                pcbast[i].dstAlphaBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].dstAlphaBlendFactor);
-                pcbast[i].alphaBlendOp = Translate<VkBlendOp>(info.colorBlendAttachments[i].alphaBlendOp);
-                pcbast[i].colorWriteMask = Translate<VkColorComponentFlags>(info.colorBlendAttachments[i].colorWriteMask);
+                pcbast[i] = {};
+                if (info.alphaBlend && info.colorBlendAttachments[i].blendEnable)
+                {
+                    pcbast[i].blendEnable = VK_TRUE;
+                    pcbast[i].srcColorBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].srcColorBlendFactor);
+                    pcbast[i].dstColorBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].dstColorBlendFactor);
+                    pcbast[i].colorBlendOp = Translate<VkBlendOp>(info.colorBlendAttachments[i].colorBlendOp);
+                    pcbast[i].srcAlphaBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].srcAlphaBlendFactor);
+                    pcbast[i].dstAlphaBlendFactor = Translate<VkBlendFactor>(info.colorBlendAttachments[i].dstAlphaBlendFactor);
+                    pcbast[i].alphaBlendOp = Translate<VkBlendOp>(info.colorBlendAttachments[i].alphaBlendOp);
+                    pcbast[i].colorWriteMask = Translate<VkColorComponentFlags>(info.colorBlendAttachments[i].colorWriteMask);
+                }
+                else
+                {
+                    pcbast[i].blendEnable = VK_FALSE;
+                    pcbast[i].colorWriteMask = Translate<VkColorComponentFlags>(info.colorBlendAttachments[i].colorWriteMask);
+                }
             }
 
             VkPipelineColorBlendStateCreateInfo pcbsci{};
@@ -368,33 +378,73 @@ namespace pe
             pipeinfo.pColorBlendState = &pcbsci;
 
             // Push Constant Range
-            VkPushConstantRange pcr{};
-            pcr.size = info.pushConstantSize;
-            pcr.offset = 0;
-            pcr.stageFlags = Translate<VkShaderStageFlags>(info.pushConstantStage);
+            std::vector<VkPushConstantRange> pcrs;
+            pcrs.reserve(2);
+            const PushConstantDesc &pushConstantVert = info.pVertShader ? info.pVertShader->GetPushConstantDesc() : PushConstantDesc{};
+            const PushConstantDesc &pushConstantFrag = info.pFragShader ? info.pFragShader->GetPushConstantDesc() : PushConstantDesc{};
+            if (pushConstantVert.size > 0 && pushConstantVert == pushConstantFrag)
+            {
+                VkPushConstantRange vertPcr{};
+                vertPcr.size = static_cast<uint32_t>(pushConstantVert.size);
+                vertPcr.offset = 0;
+                vertPcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+                pcrs.push_back(vertPcr);
+                PE_ERROR_IF(vertPcr.size > 128, "Push constant size is greater than 128 bytes");
+
+                info.m_pushConstantStages.push_back(ShaderStage::VertexBit | ShaderStage::FragmentBit);
+                info.m_pushConstantOffsets.push_back(vertPcr.offset);
+                info.m_pushConstantSizes.push_back(vertPcr.size);
+            }
+            else
+            {
+                VkPushConstantRange vertPcr{};
+                VkPushConstantRange fragPcr{};
+                if (pushConstantVert.size > 0)
+                {
+                    vertPcr.size = static_cast<uint32_t>(pushConstantVert.size);
+                    vertPcr.offset = 0;
+                    vertPcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+                    pcrs.push_back(vertPcr);
+                    PE_ERROR_IF(vertPcr.size > 128, "Vertex push constant size is greater than 128 bytes");
+
+                    info.m_pushConstantStages.push_back(ShaderStage::VertexBit);
+                    info.m_pushConstantOffsets.push_back(vertPcr.offset);
+                    info.m_pushConstantSizes.push_back(vertPcr.size);
+                }
+                if (pushConstantFrag.size > 0)
+                {
+                    fragPcr.size = static_cast<uint32_t>(pushConstantFrag.size);
+                    fragPcr.offset = vertPcr.size;
+                    fragPcr.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+                    pcrs.push_back(fragPcr);
+                    PE_ERROR_IF(fragPcr.offset + fragPcr.size > 128, "Fragment push constant size is greater than 128 bytes");
+
+                    info.m_pushConstantStages.push_back(ShaderStage::FragmentBit);
+                    info.m_pushConstantOffsets.push_back(fragPcr.offset);
+                    info.m_pushConstantSizes.push_back(fragPcr.size);
+                }
+            }
 
             // Pipeline Layout
             std::vector<VkDescriptorSetLayout> layouts{};
-            if (info.descriptorSetLayouts.size() > 0)
-            {
-                for (uint32_t i = 0; i < info.descriptorSetLayouts.size(); i++)
-                    layouts.push_back(info.descriptorSetLayouts[i]->Handle());
-            }
+            const auto &descriptors = info.GetDescriptors(0);
+            for (uint32_t i = 0; i < descriptors.size(); i++)
+                layouts.push_back(descriptors[i]->GetLayout()->Handle());
 
             VkPipelineLayoutCreateInfo plci{};
             plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             plci.setLayoutCount = static_cast<uint32_t>(layouts.size());
             plci.pSetLayouts = layouts.data();
-            plci.pushConstantRangeCount = info.pushConstantSize > 0 ? 1 : 0;
-            plci.pPushConstantRanges = info.pushConstantSize > 0 ? &pcr : nullptr;
+            plci.pushConstantRangeCount = static_cast<uint32_t>(pcrs.size());
+            plci.pPushConstantRanges = pcrs.data();
 
             VkPipelineLayout pipelineLayout;
             PE_CHECK(vkCreatePipelineLayout(RHII.GetDevice(), &plci, nullptr, &pipelineLayout));
-            layout = pipelineLayout;
-            pipeinfo.layout = layout;
+            m_layout = pipelineLayout;
+            pipeinfo.layout = m_layout;
 
             // Render Pass
-            pipeinfo.renderPass = info.renderPass->Handle();
+            pipeinfo.renderPass = renderPass->Handle();
 
             // Subpass (Index of subpass this pipeline will be used in)
             pipeinfo.subpass = 0;
@@ -419,10 +469,10 @@ namespace pe
 
     Pipeline::~Pipeline()
     {
-        if (layout)
+        if (m_layout)
         {
-            vkDestroyPipelineLayout(RHII.GetDevice(), layout, nullptr);
-            layout = {};
+            vkDestroyPipelineLayout(RHII.GetDevice(), m_layout, nullptr);
+            m_layout = {};
         }
 
         if (m_handle)

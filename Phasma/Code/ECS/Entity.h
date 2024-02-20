@@ -43,6 +43,8 @@ namespace pe
         template <class T>
         inline T *GetComponent();
 
+        auto &GetComponents() { return m_components; }
+
         template <class T, class... Params>
         inline T *CreateComponent(Params &&...params);
 

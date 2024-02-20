@@ -9,12 +9,39 @@ namespace pe
     class Buffer;
     class Image;
     struct ImageBlit;
-    struct BarrierInfo;
 
-    class SamplerCreateInfo
+    struct ImageBarrierInfo : public BarrierInfo
+    {
+        ImageBarrierInfo() { type = BarrierType::Image; }
+        Image *image = nullptr;
+        ImageLayout layout = ImageLayout::Undefined;
+        PipelineStageFlags stageFlags = PipelineStage::None;
+        AccessFlags accessMask = Access::None;
+        uint32_t baseArrayLayer = 0;
+        uint32_t arrayLayers = 0;
+        uint32_t baseMipLevel = 0;
+        uint32_t mipLevels = 0;
+        uint32_t queueFamilyId = VK_QUEUE_FAMILY_IGNORED;
+
+        bool operator!=(const ImageBarrierInfo &other) const
+        {
+            return !(image == other.image &&
+                     layout == other.layout &&
+                     stageFlags == other.stageFlags &&
+                     accessMask == other.accessMask &&
+                     baseArrayLayer == other.baseArrayLayer &&
+                     arrayLayers == other.arrayLayers &&
+                     baseMipLevel == other.baseMipLevel &&
+                     mipLevels == other.mipLevels &&
+                     queueFamilyId == other.queueFamilyId);
+        }
+    };
+
+    class SamplerCreateInfo : public Hashable
     {
     public:
         SamplerCreateInfo();
+        void UpdateHash() override;
 
         Filter magFilter;
         Filter minFilter;
@@ -44,8 +71,8 @@ namespace pe
         uint32_t depth;
         ImageTiling tiling;
         ImageUsageFlags usage;
-        MemoryPropertyFlags properties;
         Format format;
+        ImageLayout initialLayout;
         ImageCreateFlags imageFlags;
         ImageType imageType;
         uint32_t mipLevels;
@@ -54,7 +81,7 @@ namespace pe
         SharingMode sharingMode;
         uint32_t queueFamilyIndexCount;
         const uint32_t *pQueueFamilyIndices;
-        ImageLayout initialLayout;
+        vec4 clearColor;
         std::string name;
     };
 
@@ -77,9 +104,33 @@ namespace pe
 
         ~Image();
 
-        ImageLayout GetCurrentLayout(uint32_t layer = 0, uint32_t mip = 0) { return m_layouts[layer][mip]; }
+        uint32_t GetWidth() { return m_imageInfo.width; }
+        uint32_t GetHeight() { return m_imageInfo.height; }
+        float GetWidth_f() { return width_f; }
+        float GetHeight_f() { return height_f; }
+        Sampler *GetSampler() { return m_sampler; }
+        const std::string &GetName() { return m_imageInfo.name; }
+        Format GetFormat() { return m_imageInfo.format; }
+        Format *GetFormatPtr() { return &m_imageInfo.format; }
+        uint32_t GetMipLevels() { return m_imageInfo.mipLevels; }
+        uint32_t GetArrayLayers() { return m_imageInfo.arrayLayers; }
+        SampleCount GetSamples() { return m_imageInfo.samples; }
+        const PipelineColorBlendAttachmentState &GetBlendAttachment() { return m_blendAttachment; }
 
-        void SetCurrentLayout(ImageLayout layout, uint32_t layer = 0, uint32_t mip = 0) { m_layouts[layer][mip] = layout; }
+        const ImageBarrierInfo &GetCurrentInfo(uint32_t layer = 0, uint32_t mip = 0) { return m_infos[layer][mip]; }
+
+        void SetCurrentInfo(const ImageBarrierInfo &info, uint32_t layer = 0, uint32_t mip = 0) { m_infos[layer][mip] = info; }
+
+        void SetCurrentInfoAll(const ImageBarrierInfo &info)
+        {
+            for (uint32_t i = 0; i < m_infos.size(); i++)
+            {
+                for (uint32_t j = 0; j < m_infos[i].size(); j++)
+                {
+                    m_infos[i][j] = info;
+                }
+            }
+        }
 
         void CreateRTV(bool useStencil = false);
         void CreateSRV(ImageViewType type, int mip = -1, bool useStencil = false);
@@ -99,21 +150,21 @@ namespace pe
 
         static uint32_t CalculateMips(uint32_t width, uint32_t height);
 
+        static Image *LoadRGBA8(CommandBuffer *cmd, const std::string &path);
+
+        static Image *LoadRGBA8Cubemap(CommandBuffer *cmd, const std::array<std::string, 6> &paths, int imageSize);
+
     private:
         friend class CommandBuffer;
+        friend class Swapchain;
+        friend class Renderer;
+        friend class RendererSystem;
 
         ImageViewHandle CreateImageView(ImageViewType type, int mip = -1, bool useStencil = false);
 
-        // For arrayLayers and/or mipLevels bigger than size 1, all of their layouts must be the same
-        // TODO: Manage transitions for different layouts in arrayLayers and/or mipLevels
-        void Barrier(CommandBuffer *cmd,
-                     ImageLayout newLayout,
-                     uint32_t baseArrayLayer = 0,
-                     uint32_t arrayLayers = 0,
-                     uint32_t baseMipLevel = 0,
-                     uint32_t mipLevels = 0);
+        void Barrier(CommandBuffer *cmd, const ImageBarrierInfo &info);
 
-        static void GroupBarrier(CommandBuffer *cmd, const std::vector<BarrierInfo> &barrierInfos);
+        static void Barriers(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos);
 
         void CopyDataToImageStaged(CommandBuffer *cmd,
                                    void *data,
@@ -128,24 +179,19 @@ namespace pe
 
         void BlitImage(CommandBuffer *cmd, Image *src, ImageBlit *region, Filter filter);
 
-    public:
-        Sampler *sampler;
-        AllocationHandle allocation;
-        ImageCreateInfo imageInfo;
+        inline static std::unordered_map<size_t, Image *> uniqueImages{};
 
         float width_f{};
         float height_f{};
-        PipelineColorBlendAttachmentState blendAttachment;
-
-        inline static std::unordered_map<size_t, Image *> uniqueImages{};
-
-    private:
-        friend class Swapchain;
-        ImageViewHandle m_rtv;
-        ImageViewHandle m_srv;
-        std::vector<ImageViewHandle> m_srvs;
-        std::vector<ImageViewHandle> m_uavs;
-        std::vector<std::vector<ImageLayout>> m_layouts{};
+        Sampler *m_sampler;
+        AllocationHandle m_allocation;
+        ImageCreateInfo m_imageInfo;
+        PipelineColorBlendAttachmentState m_blendAttachment;
+        ImageViewHandle m_rtv; // Render target view
+        ImageViewHandle m_srv; // Shader resource view
+        std::vector<ImageViewHandle> m_srvs; // Shader resource views for multiple mip levels
+        std::vector<ImageViewHandle> m_uavs; // Unordered access views
+        std::vector<std::vector<ImageBarrierInfo>> m_infos{}; // Tracking image barrier info for each layer and mip level
         bool m_mipmapsGenerated = false;
     };
 }

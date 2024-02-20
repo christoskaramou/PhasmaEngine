@@ -358,6 +358,9 @@ public:
 		// Tier capabilities based on recommendations from Apple engineering.
 		ArgumentBuffersTier argument_buffers_tier = ArgumentBuffersTier::Tier1;
 
+		// Enables specifick argument buffer format with extra information to track SSBO-length
+		bool runtime_array_rich_descriptor = false;
+
 		// Ensures vertex and instance indices start at zero. This reflects the behavior of HLSL with SV_VertexID and SV_InstanceID.
 		bool enable_base_index_zero = false;
 
@@ -495,6 +498,26 @@ public:
 		// expected to be needed until the bug is fixed in Metal; it is provided as an option
 		// so it can be enabled only when the bug is present.
 		bool sample_dref_lod_array_as_grad = false;
+
+		// MSL doesn't guarantee coherence between writes and subsequent reads of read_write textures.
+		// This inserts fences before each read of a read_write texture to ensure coherency.
+		// If you're sure you never rely on this, you can set this to false for a possible performance improvement.
+		// Note: Only Apple's GPU compiler takes advantage of the lack of coherency, so make sure to test on Apple GPUs if you disable this.
+		bool readwrite_texture_fences = true;
+
+		// Metal 3.1 introduced a Metal regression bug which causes infinite recursion during 
+		// Metal's analysis of an entry point input structure that is itself recursive. Enabling
+		// this option will replace the recursive input declaration with a alternate variable of
+		// type void*, and then cast to the correct type at the top of the entry point function.
+		// The bug has been reported to Apple, and will hopefully be fixed in future releases.
+		bool replace_recursive_inputs = false;
+
+		// If set, manual fixups of gradient vectors for cube texture lookups will be performed.
+		// All released Apple Silicon GPUs to date behave incorrectly when sampling a cube texture
+		// with explicit gradients. They will ignore one of the three partial derivatives based
+		// on the selected major axis, and expect the remaining derivatives to be partially
+		// transformed.
+		bool agx_manual_cube_grad_fixup = false;
 
 		bool is_ios() const
 		{
@@ -740,6 +763,7 @@ protected:
 		SPVFuncImplArrayOfArrayCopy6Dim = SPVFuncImplArrayCopyMultidimBase + 6,
 		SPVFuncImplTexelBufferCoords,
 		SPVFuncImplImage2DAtomicCoords, // Emulate texture2D atomic operations
+		SPVFuncImplGradientCube,
 		SPVFuncImplFMul,
 		SPVFuncImplFAdd,
 		SPVFuncImplFSub,
@@ -795,6 +819,11 @@ protected:
 		SPVFuncImplConvertYCbCrBT601,
 		SPVFuncImplConvertYCbCrBT2020,
 		SPVFuncImplDynamicImageSampler,
+		SPVFuncImplRayQueryIntersectionParams,
+		SPVFuncImplVariableDescriptor,
+		SPVFuncImplVariableSizedDescriptor,
+		SPVFuncImplVariableDescriptorArray,
+		SPVFuncImplPaddedStd140
 	};
 
 	// If the underlying resource has been used for comparison then duplicate loads of that resource must be too
@@ -827,9 +856,6 @@ protected:
 	// Allow Metal to use the array<T> template to make arrays a value type
 	std::string type_to_array_glsl(const SPIRType &type) override;
 	std::string constant_op_expression(const SPIRConstantOp &cop) override;
-
-	// Threadgroup arrays can't have a wrapper type
-	std::string variable_decl(const SPIRVariable &variable) override;
 
 	bool variable_decl_is_remapped_storage(const SPIRVariable &variable, spv::StorageClass storage) const override;
 
@@ -950,7 +976,8 @@ protected:
 	void emit_specialization_constants_and_structs();
 	void emit_interface_block(uint32_t ib_var_id);
 	bool maybe_emit_array_assignment(uint32_t id_lhs, uint32_t id_rhs);
-	uint32_t get_resource_array_size(uint32_t id) const;
+	bool is_var_runtime_size_array(const SPIRVariable &var) const;
+	uint32_t get_resource_array_size(const SPIRType &type, uint32_t id) const;
 
 	void fix_up_shader_inputs_outputs();
 
@@ -1032,7 +1059,7 @@ protected:
 	void add_pragma_line(const std::string &line);
 	void add_typedef_line(const std::string &line);
 	void emit_barrier(uint32_t id_exe_scope, uint32_t id_mem_scope, uint32_t id_mem_sem);
-	void emit_array_copy(const std::string &lhs, uint32_t lhs_id, uint32_t rhs_id,
+	bool emit_array_copy(const char *expr, uint32_t lhs_id, uint32_t rhs_id,
 	                     spv::StorageClass lhs_storage, spv::StorageClass rhs_storage) override;
 	void build_implicit_builtins();
 	uint32_t build_constant_uint_array_pointer();
@@ -1076,7 +1103,7 @@ protected:
 	void analyze_sampled_image_usage();
 
 	bool access_chain_needs_stage_io_builtin_translation(uint32_t base) override;
-	void prepare_access_chain_for_scalar_access(std::string &expr, const SPIRType &type, spv::StorageClass storage,
+	bool prepare_access_chain_for_scalar_access(std::string &expr, const SPIRType &type, spv::StorageClass storage,
 	                                            bool &is_packed) override;
 	void fix_up_interpolant_access_chain(const uint32_t *ops, uint32_t length);
 	void check_physical_type_cast(std::string &expr, const SPIRType *type, uint32_t physical_type) override;
@@ -1177,11 +1204,13 @@ protected:
 	const MSLConstexprSampler *find_constexpr_sampler(uint32_t id) const;
 
 	std::unordered_set<uint32_t> buffers_requiring_array_length;
-	SmallVector<uint32_t> buffer_arrays_discrete;
 	SmallVector<std::pair<uint32_t, uint32_t>> buffer_aliases_argument;
 	SmallVector<uint32_t> buffer_aliases_discrete;
-	std::unordered_set<uint32_t> atomic_image_vars; // Emulate texture2D atomic operations
+	std::unordered_set<uint32_t> atomic_image_vars_emulated; // Emulate texture2D atomic operations
 	std::unordered_set<uint32_t> pull_model_inputs;
+	std::unordered_set<uint32_t> recursive_inputs;
+
+	SmallVector<SPIRVariable *> entry_point_bindings;
 
 	// Must be ordered since array is in a specific order.
 	std::map<SetBindingPair, std::pair<uint32_t, uint32_t>> buffers_requiring_dynamic_offset;
@@ -1247,7 +1276,7 @@ protected:
 
 		CompilerMSL &compiler;
 		std::unordered_map<uint32_t, uint32_t> result_types;
-		std::unordered_map<uint32_t, uint32_t> image_pointers; // Emulate texture2D atomic operations
+		std::unordered_map<uint32_t, uint32_t> image_pointers_emulated; // Emulate texture2D atomic operations
 		bool suppress_missing_prototypes = false;
 		bool uses_atomics = false;
 		bool uses_image_write = false;

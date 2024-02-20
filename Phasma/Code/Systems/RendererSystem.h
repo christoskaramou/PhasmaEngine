@@ -16,5 +16,7 @@ namespace pe
         void Destroy() override;
 
         void Draw() override;
+
+        void WaitPreviousFrameCommands();
     };
 }

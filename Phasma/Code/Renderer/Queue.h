@@ -47,6 +47,8 @@ namespace pe
 
         ivec3 GetImageGranularity() const { return m_imageGranularity; }
 
+        static Semaphore *SubmitCommands(Semaphore *wait, std::vector<CommandBuffer *> cmds);
+
     private:
         inline static std::vector<QueueTypeFlags::Type> s_allFlags{};
         inline static std::unordered_map<QueueTypeFlags::Type, std::unordered_map<size_t, Queue *>> s_allQueues{};

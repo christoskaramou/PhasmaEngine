@@ -2,17 +2,15 @@
 
 namespace pe
 {
-    class VertexInputBindingDescription
+    struct VertexInputBindingDescription
     {
-    public:
         uint32_t binding;
         uint32_t stride;
         VertexInputRate inputRate;
     };
 
-    class VertexInputAttributeDescription
+    struct VertexInputAttributeDescription
     {
-    public:
         uint32_t location;
         uint32_t binding;
         Format format;
@@ -25,19 +23,20 @@ namespace pe
         float uv[2];
         float normals[3];
         float color[4];
-        int bonesIDs[4];
+        uint32_t joints[4];
         float weights[4];
     };
 
-    struct AABBVertex
+    struct AabbVertex
     {
         float position[3];
     };
 
-    struct ShadowVertex
+    struct PositionUvVertex
     {
         float position[3];
-        int bonesIDs[4];
+        float uv[2];
+        uint32_t joints[4];
         float weights[4];
     };
 }

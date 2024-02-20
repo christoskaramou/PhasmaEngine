@@ -15,8 +15,7 @@ namespace pe
 
         int w, h;
         SDL_Vulkan_GetDrawableSize(window, &w, &h);
-
-        actualExtent = Rect2D{0, 0, w, h};
+        m_actualExtent = Rect2Du{0, 0, static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
     }
 
     Surface::~Surface()
@@ -46,20 +45,24 @@ namespace pe
         std::vector<VkSurfaceFormatKHR> formats(formatsCount);
         vkGetPhysicalDeviceSurfaceFormatsKHR(RHII.GetGpu(), m_handle, &formatsCount, formats.data());
 
-        format = Translate<Format>(formats[0].format);
-        colorSpace = Translate<ColorSpace>(formats[0].colorSpace);
+        VkFormat formatVK = formats[0].format;
+        VkColorSpaceKHR colorSpaceVK = formats[0].colorSpace;
         for (const auto &f : formats)
         {
             if (f.format == VK_FORMAT_B8G8R8A8_UNORM && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
             {
-                format = Translate<Format>(f.format);
-                colorSpace = Translate<ColorSpace>(f.colorSpace);
+                formatVK = f.format;
+                colorSpaceVK = f.colorSpace;
+                break;
             }
         }
+        
+        m_format = Translate<Format>(formatVK);
+        m_colorSpace = Translate<ColorSpace>(colorSpaceVK);
 
         // Check for blit operation
         VkFormatProperties fProps;
-        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), Translate<VkFormat>(format), &fProps);
+        vkGetPhysicalDeviceFormatProperties(RHII.GetGpu(), Translate<VkFormat>(m_format), &fProps);
         if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT))
             PE_ERROR("No blit source operation supported");
         if (!(fProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
@@ -78,7 +81,7 @@ namespace pe
         {
             if (i == VK_PRESENT_MODE_MAILBOX_KHR)
             {
-                presentMode = Translate<PresentMode>(i);
+                m_presentMode = Translate<PresentMode>(i);
                 return;
             }
         }
@@ -87,12 +90,12 @@ namespace pe
         {
             if (i == VK_PRESENT_MODE_IMMEDIATE_KHR)
             {
-                presentMode = Translate<PresentMode>(i);
+                m_presentMode = Translate<PresentMode>(i);
                 return;
             }
         }
 
-        presentMode = Translate<PresentMode>(VK_PRESENT_MODE_FIFO_KHR);
+        m_presentMode = Translate<PresentMode>(VK_PRESENT_MODE_FIFO_KHR);
     }
 
     void Surface::FindProperties()

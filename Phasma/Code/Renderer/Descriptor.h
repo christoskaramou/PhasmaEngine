@@ -26,15 +26,19 @@ namespace pe
         ImageLayout imageLayout = ImageLayout::Undefined;
         DescriptorType type = DescriptorType::CombinedImageSampler;
         bool bindless = false;
+        std::string name{};
     };
 
     struct DescriptorUpdateInfo
     {
         uint32_t binding = (uint32_t)-1;
+
         std::vector<Buffer *> buffers{};
+        std::vector<uint64_t> offsets{};
+        std::vector<uint64_t> ranges{}; // range of the buffers in bytes to use
+
         std::vector<ImageViewHandle> views{};
-        std::vector<SamplerHandle> samplers{};
-        SamplerHandle sampler{};
+        std::vector<SamplerHandle> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
     };
 
     class DescriptorLayout : public IHandle<DescriptorLayout, DescriptorSetLayoutHandle>
@@ -42,18 +46,22 @@ namespace pe
     public:
         DescriptorLayout(const std::vector<DescriptorBindingInfo> &bindingInfos,
                          ShaderStage stage,
-                         const std::string &name);
+                         const std::string &name,
+                         bool pushDescriptor = false);
 
         ~DescriptorLayout();
 
         uint32_t GetVariableCount() { return m_variableCount; }
 
+        bool IsPushDescriptor() { return m_pushDescriptor; }
+
         inline static std::unordered_map<size_t, DescriptorLayout *> s_descriptorLayouts{};
 
-        inline static Hash CalculateHash(const std::vector<DescriptorBindingInfo> &bindingInfos, ShaderStage stage)
+        inline static Hash CalculateHash(const std::vector<DescriptorBindingInfo> &bindingInfos, ShaderStage stage, bool pushDescriptor = false)
         {
             Hash hash;
             hash.Combine(static_cast<uint32_t>(stage));
+            hash.Combine(pushDescriptor);
             for (size_t i = 0; i < bindingInfos.size(); i++)
             {
                 const DescriptorBindingInfo &info = bindingInfos[i];
@@ -67,14 +75,14 @@ namespace pe
             return hash;
         }
 
-        inline static DescriptorLayout *GetOrCreate(const std::vector<DescriptorBindingInfo> &bindingInfos, ShaderStage stage)
+        inline static DescriptorLayout *GetOrCreate(const std::vector<DescriptorBindingInfo> &bindingInfos, ShaderStage stage, bool pushDescriptor = false)
         {
-            static size_t count = 0; 
-            Hash hash = DescriptorLayout::CalculateHash(bindingInfos, stage);
+            static size_t count = 0;
+            Hash hash = DescriptorLayout::CalculateHash(bindingInfos, stage, pushDescriptor);
             auto it = DescriptorLayout::s_descriptorLayouts.find(hash);
             if (it == DescriptorLayout::s_descriptorLayouts.end())
             {
-                DescriptorLayout *layout = DescriptorLayout::Create(bindingInfos, stage, "Descriptor_layout_" + std::to_string(count));
+                DescriptorLayout *layout = DescriptorLayout::Create(bindingInfos, stage, "Descriptor_layout_" + std::to_string(count), pushDescriptor);
                 DescriptorLayout::s_descriptorLayouts[hash] = layout;
                 return layout;
             }
@@ -86,6 +94,8 @@ namespace pe
 
     private:
         uint32_t m_variableCount;
+        bool m_pushDescriptor;
+        bool m_allowUpdateAfterBind;
     };
 
     class Descriptor : public IHandle<Descriptor, DescriptorSetHandle>
@@ -93,17 +103,25 @@ namespace pe
     public:
         Descriptor(const std::vector<DescriptorBindingInfo> &bindingInfos,
                    ShaderStage stage,
+                   bool pushDescriptor,
                    const std::string &name);
 
         ~Descriptor();
 
-        void SetImages(uint32_t binding,
-                       const std::vector<ImageViewHandle> &views,
-                       const std::vector<SamplerHandle> &samplers);
-        void SetImage(uint32_t binding, ImageViewHandle view, SamplerHandle sampler);
+        void SetImageViews(uint32_t binding,
+                           const std::vector<ImageViewHandle> &views,
+                           const std::vector<SamplerHandle> &samplers);
 
-        void SetBuffers(uint32_t binding, const std::vector<Buffer *> &buffers);
-        void SetBuffer(uint32_t binding, Buffer *buffer);
+        void SetImageView(uint32_t binding, ImageViewHandle view, SamplerHandle sampler);
+
+        void SetBuffers(uint32_t binding,
+                        const std::vector<Buffer *> &buffers,
+                        const std::vector<uint64_t> &offsets = {},
+                        const std::vector<uint64_t> &ranges = {});
+
+        void SetBuffer(uint32_t binding, Buffer *buffer, uint64_t offset = 0, uint64_t range = 0);
+
+        void SetSamplers(uint32_t binding, const std::vector<SamplerHandle> &samplers);
 
         void SetSampler(uint32_t binding, SamplerHandle sampler);
 
@@ -113,16 +131,13 @@ namespace pe
 
         DescriptorLayout *GetLayout() const { return m_layout; }
 
-        void GetFrameDynamicOffsets(uint32_t *count, uint32_t **offsets);
-
-        static std::vector<uint32_t> GetAllFrameDynamicOffsets(uint32_t count, Descriptor **descriptors);
-
     private:
         DescriptorPool *m_pool;
         DescriptorLayout *m_layout;
-        std::vector<uint32_t> m_frameDynamicOffsets;
-        std::unordered_map<uint32_t, DescriptorBindingInfo> m_bindingInfoMap;
-        std::unordered_map<uint32_t, DescriptorUpdateInfo> m_updateInfoMap;
+        std::vector<DescriptorBindingInfo> m_bindingInfos{};
+        std::vector<DescriptorUpdateInfo> m_updateInfos{};
+        bool m_pushDescriptor;
+        std::vector<uint32_t> m_dynamicOffsets{};
     };
 
 }

@@ -1,10 +1,11 @@
 #pragma once
 
-#ifdef USE_GLM
+#if PE_USE_GLM
 
-#ifdef _DEBUG
+#if _DEBUG
 #define GLM_FORCE_MESSAGES
 #endif
+
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_FORCE_INTRINSICS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -456,17 +457,17 @@ namespace pe
 
     mat4 transform(cquat &r, cvec3 &s, cvec3 &t);
 
-    mat4 perspective(float fovy, float aspect, float zNear, float zFar, bool reverseZ);
+    mat4 perspective(float fovy, float aspect, float zNear, float zFar);
 
-    mat4 perspectiveLH(float fovy, float aspect, float zNear, float zFar, bool reverseZ);
+    mat4 perspectiveLH(float fovy, float aspect, float zNear, float zFar);
 
-    mat4 perspectiveRH(float fovy, float aspect, float zNear, float zFar, bool reverseZ);
+    mat4 perspectiveRH(float fovy, float aspect, float zNear, float zFar);
 
-    mat4 ortho(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ);
+    mat4 ortho(float left, float right, float bottom, float top, float zNear, float zFar);
 
-    mat4 orthoLH(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ);
+    mat4 orthoLH(float left, float right, float bottom, float top, float zNear, float zFar);
 
-    mat4 orthoRH(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ);
+    mat4 orthoRH(float left, float right, float bottom, float top, float zNear, float zFar);
 
     mat4 lookAt(cvec3 &eye, cvec3 &center, cvec3 &up);
 
@@ -588,10 +589,11 @@ namespace pe
     class AABB
     {
     public:
-        vec3 min;
-        vec3 max;
         inline vec3 GetSize() const { return max - min; }
         inline vec3 GetCenter() const { return (min + max) * 0.5f; }
+
+        vec3 min;
+        vec3 max;
     };
 
     struct Offset3D
@@ -629,5 +631,30 @@ namespace pe
             return std::uniform_int_distribution<T>(a, b)(gen);
         else
             return std::uniform_real_distribution<T>(a, b)(gen);
+    }
+
+    namespace Color
+    {
+        inline static vec4 White{1.0f, 1.0f, 1.0f, 1.0f};
+        inline static vec4 Black{0.0f, 0.0f, 0.0f, 1.0f};
+        inline static vec4 Red{1.0f, 0.0f, 0.0f, 1.0f};
+        inline static vec4 Green{0.0f, 1.0f, 0.0f, 1.0f};
+        inline static vec4 Blue{0.0f, 0.0f, 1.0f, 1.0f};
+        inline static vec4 Yellow{1.0f, 1.0f, 0.0f, 1.0f};
+        inline static vec4 Magenta{1.0f, 0.0f, 1.0f, 1.0f};
+        inline static vec4 Cyan{0.0f, 1.0f, 1.0f, 1.0f};
+        inline static vec4 Transparent{0.0f, 0.0f, 0.0f, 0.0f};
+
+        inline static vec3 White3{1.0f, 1.0f, 1.0f};
+        inline static vec3 Black3{0.0f, 0.0f, 0.0f};
+        inline static vec3 Red3{1.0f, 0.0f, 0.0f};
+        inline static vec3 Green3{0.0f, 1.0f, 0.0f};
+        inline static vec3 Blue3{0.0f, 0.0f, 1.0f};
+        inline static vec3 Yellow3{1.0f, 1.0f, 0.0f};
+        inline static vec3 Magenta3{1.0f, 0.0f, 1.0f};
+        inline static vec3 Cyan3{0.0f, 1.0f, 1.0f};
+
+        inline static float Depth{Settings::Get<Global>().reverseZ ? 0.0f : 1.0f};
+        inline static uint32_t Stencil{0};
     }
 }

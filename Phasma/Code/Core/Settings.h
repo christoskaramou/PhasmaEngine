@@ -2,13 +2,30 @@
 
 namespace pe
 {
-    struct GlobalSettings
+    constexpr uint32_t SWAPCHAIN_IMAGES = 3;
+
+    class Setting
     {
-        inline static bool RightHanded = false;
-        inline static bool ReverseZ = true;
     };
 
-    constexpr uint32_t SHADOWMAP_CASCADES = 4;
-    constexpr uint32_t SHADOWMAP_SIZE = 2048;
-    constexpr uint32_t SWAPCHAIN_IMAGES = 2;
+    class Settings
+    {
+    public:
+        template <class T>
+        static T &Get()
+        {
+            ValidateBaseClass<Setting, T>();
+            static T value{};
+            return value;
+        }
+    };
+
+    struct Global : public Setting
+    {
+        bool rightHanded = false;
+        bool reverseZ = true;
+        bool frustumCulling = true;
+        uint32_t shadowMapSize = 2048;
+        uint32_t shadowMapCascades = 4;
+    };
 }

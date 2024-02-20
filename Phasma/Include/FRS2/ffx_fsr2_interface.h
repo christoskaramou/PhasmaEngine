@@ -1,6 +1,6 @@
 // This file is part of the FidelityFX SDK.
 //
-// Copyright (c) 2022 Advanced Micro Devices, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Advanced Micro Devices, Inc. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -40,7 +40,7 @@ FFX_FORWARD_DECLARE(FfxFsr2Interface);
 ///
 /// FSR2 is implemented as a composite of several compute passes each
 /// computing a key part of the final result. Each call to the 
-/// <c><i>FfxFsr2ScheduleRenderJobFunc</i></c> callback function will
+/// <c><i>FfxFsr2ScheduleGpuJobFunc</i></c> callback function will
 /// correspond to a single pass included in <c><i>FfxFsr2Pass</i></c>. For a
 /// more comprehensive description of each pass, please refer to the FSR2
 /// reference documentation.
@@ -55,63 +55,32 @@ FFX_FORWARD_DECLARE(FfxFsr2Interface);
 /// @ingroup FSR2
 typedef enum FfxFsr2Pass {
 
-    FFX_FSR2_PASS_PREPARE_INPUT_COLOR = 0,                              ///< A pass which prepares input colors for subsequent use.
-    FFX_FSR2_PASS_DEPTH_CLIP = 1,                                       ///< A pass which performs depth clipping.
-    FFX_FSR2_PASS_RECONSTRUCT_PREVIOUS_DEPTH = 2,                       ///< A pass which performs reconstruction of previous frame's depth.
-    FFX_FSR2_PASS_LOCK = 3,                                             ///< A pass which calculates pixel locks.
-    FFX_FSR2_PASS_ACCUMULATE = 4,                                       ///< A pass which performs upscaling.
-    FFX_FSR2_PASS_ACCUMULATE_SHARPEN = 5,                               ///< A pass which performs upscaling when sharpening is used.
-    FFX_FSR2_PASS_RCAS = 6,                                             ///< A pass which performs sharpening.
-    FFX_FSR2_PASS_COMPUTE_LUMINANCE_PYRAMID = 7,                        ///< A pass which generates the luminance mipmap chain for the current frame.
-    FFX_FSR2_PASS_GENERATE_REACTIVE = 8,                                ///< An optional pass to generate a reactive mask
+    FFX_FSR2_PASS_DEPTH_CLIP = 0,                                       ///< A pass which performs depth clipping.
+    FFX_FSR2_PASS_RECONSTRUCT_PREVIOUS_DEPTH = 1,                       ///< A pass which performs reconstruction of previous frame's depth.
+    FFX_FSR2_PASS_LOCK = 2,                                             ///< A pass which calculates pixel locks.
+    FFX_FSR2_PASS_ACCUMULATE = 3,                                       ///< A pass which performs upscaling.
+    FFX_FSR2_PASS_ACCUMULATE_SHARPEN = 4,                               ///< A pass which performs upscaling when sharpening is used.
+    FFX_FSR2_PASS_RCAS = 5,                                             ///< A pass which performs sharpening.
+    FFX_FSR2_PASS_COMPUTE_LUMINANCE_PYRAMID = 6,                        ///< A pass which generates the luminance mipmap chain for the current frame.
+    FFX_FSR2_PASS_GENERATE_REACTIVE = 7,                                ///< An optional pass to generate a reactive mask
+    FFX_FSR2_PASS_TCR_AUTOGENERATE = 8,                                 ///< An optional pass to generate a texture-and-composition and reactive masks
 
     FFX_FSR2_PASS_COUNT                                                 ///< The number of passes performed by FSR2.
 } FfxFsr2Pass;
 
-/// A structure containing the description used to create a
-/// <c><i>FfxPipeline</i></c> structure.
-///
-/// A pipeline is the name given to a shader and the collection of state that
-/// is required to dispatch it. In the context of FSR2 and its architecture
-/// this means that a <c><i>FfxPipelineDescription</i></c> will map to either a
-/// monolithic object in an explicit API (such as a
-/// <c><i>PipelineStateObject</i></c> in DirectX 12). Or a shader and some
-/// ancillary API objects (in something like DirectX 11).
-///
-/// The <c><i>contextFlags</i></c> field contains a copy of the flags passed
-/// to <c><i>ffxFsr2ContextCreate</i></c> via the <c><i>flags</i></c> field of
-/// the <c><i>FfxFsr2InitializationParams</i></c> structure. These flags are
-/// used to determine which permutation of a pipeline for a specific
-/// <c><i>FfxFsr2Pass</i></c> should be used to implement the features required
-/// by each application, as well as to acheive the best performance on specific
-/// target hardware configurations.
-/// 
-/// When using one of the provided backends for FSR2 (such as DirectX 12 or
-/// Vulkan) the data required to create a pipeline is compiled offline and
-/// included into the backend library that you are using. For cases where the
-/// backend interface is overriden by providing custom callback function
-/// implementations care should be taken to respect the contents of the
-/// <c><i>contextFlags</i></c> field in order to correctly support the options
-/// provided by FSR2, and acheive best performance.
-///
-/// @ingroup FSR2
-typedef struct FfxPipelineDescription {
+typedef enum FfxFsr2MsgType {
+    FFX_FSR2_MESSAGE_TYPE_ERROR = 0,
+    FFX_FSR2_MESSAGE_TYPE_WARNING = 1,
+    FFX_FSR2_MESSAGE_TYPE_COUNT
+} FfxFsr2MsgType;
 
-    uint32_t                            contextFlags;                   ///< A collection of <c><i>FfxFsr2InitializationFlagBits</i></c> which were passed to the context.
-    FfxFilterType*                      samplers;                       ///< Array of static samplers.
-    size_t                              samplerCount;                   ///< The number of samples contained inside <c><i>samplers</i></c>.
-    const uint32_t*                     rootConstantBufferSizes;        ///< Array containing the sizes of the root constant buffers (count of 32 bit elements).
-    uint32_t                            rootConstantBufferCount;        ///< The number of root constants contained within <c><i>rootConstantBufferSizes</i></c>.
-} FfxPipelineDescription;
-
-/// Create (or reference) a device.
+/// Create and initialize the backend context.
 ///
-/// The callback function should either create a new device or (more likely) it
-/// should return an already existing device and add a reference to it (for 
-/// those APIs which implement reference counting, such as DirectX 11 and 12).
+/// The callback function sets up the backend context for rendering.
+/// It will create or reference the device and create required internal data structures.
 ///
 /// @param [in] backendInterface                    A pointer to the backend interface.
-/// @param [out] outDevice                          The device that is either created (or referenced).
+/// @param [in] device                              The FfxDevice obtained by ffxGetDevice(DX12/VK/...).
 ///
 /// @retval
 /// FFX_OK                                          The operation completed successfully.
@@ -119,9 +88,9 @@ typedef struct FfxPipelineDescription {
 /// Anything else                                   The operation failed.
 ///
 /// @ingroup FSR2
-typedef FfxErrorCode (*FfxFsr2CreateDeviceFunc)(
+typedef FfxErrorCode (*FfxFsr2CreateBackendContextFunc)(
     FfxFsr2Interface* backendInterface,
-    FfxDevice outDevice);
+    FfxDevice device);
 
 /// Get a list of capabilities of the device.
 ///
@@ -153,12 +122,11 @@ typedef FfxErrorCode(*FfxFsr2GetDeviceCapabilitiesFunc)(
     FfxDeviceCapabilities* outDeviceCapabilities,
     FfxDevice device);
 
-/// Destroy (or dereference) a device.
+/// Destroy the backend context and dereference the device.
 ///
 /// This function is called when the <c><i>FfxFsr2Context</i></c> is destroyed.
 ///
 /// @param [in] backendInterface                    A pointer to the backend interface.
-/// @param [in] device                              The <c><i>FfxDevice</i></c> object to be destroyed (or deferenced).
 ///
 /// @retval
 /// FFX_OK                                          The operation completed successfully.
@@ -166,9 +134,8 @@ typedef FfxErrorCode(*FfxFsr2GetDeviceCapabilitiesFunc)(
 /// Anything else                                   The operation failed.
 ///
 /// @ingroup FSR2
-typedef FfxErrorCode(*FfxFsr2DestroyDeviceFunc)(
-    FfxFsr2Interface* backendInterface,
-    FfxDevice device);
+typedef FfxErrorCode(*FfxFsr2DestroyBackendContextFunc)(
+    FfxFsr2Interface* backendInterface);
 
 /// Create a resource.
 ///
@@ -308,13 +275,13 @@ typedef FfxErrorCode (*FfxFsr2DestroyPipelineFunc)(
     FfxPipelineState* pipeline);
 
 /// Schedule a render job to be executed on the next call of
-/// <c><i>FfxFsr2ExecuteRenderJobsFunc</i></c>.
+/// <c><i>FfxFsr2ExecuteGpuJobsFunc</i></c>.
 ///
 /// Render jobs can perform one of three different tasks: clear, copy or
 /// compute dispatches.
 ///
 /// @param [in] backendInterface                    A pointer to the backend interface.
-/// @param [in] job                                 A pointer to a <c><i>FfxRenderJobDescription</i></c> structure.
+/// @param [in] job                                 A pointer to a <c><i>FfxGpuJobDescription</i></c> structure.
 /// 
 /// @retval
 /// FFX_OK                                          The operation completed successfully.
@@ -322,15 +289,15 @@ typedef FfxErrorCode (*FfxFsr2DestroyPipelineFunc)(
 /// Anything else                                   The operation failed.
 /// 
 /// @ingroup FSR2
-typedef FfxErrorCode (*FfxFsr2ScheduleRenderJobFunc)(
+typedef FfxErrorCode (*FfxFsr2ScheduleGpuJobFunc)(
     FfxFsr2Interface* backendInterface,
-    const FfxRenderJobDescription* job);
+    const FfxGpuJobDescription* job);
 
 /// Execute scheduled render jobs on the <c><i>comandList</i></c> provided.
 /// 
 /// The recording of the graphics API commands should take place in this
 /// callback function, the render jobs which were previously enqueued (via
-/// callbacks made to <c><i>FfxFsr2ScheduleRenderJobFunc</i></c>) should be
+/// callbacks made to <c><i>FfxFsr2ScheduleGpuJobFunc</i></c>) should be
 /// processed in the order they were received. Advanced users might choose to
 /// reorder the rendering jobs, but should do so with care to respect the
 /// resource dependencies.
@@ -348,9 +315,22 @@ typedef FfxErrorCode (*FfxFsr2ScheduleRenderJobFunc)(
 /// Anything else                                   The operation failed.
 /// 
 /// @ingroup FSR2
-typedef FfxErrorCode (*FfxFsr2ExecuteRenderJobsFunc)(
+typedef FfxErrorCode (*FfxFsr2ExecuteGpuJobsFunc)(
     FfxFsr2Interface* backendInterface,
     FfxCommandList commandList);
+
+/// Pass a string message
+///
+/// Used for debug messages.
+///
+/// @param [in] type                       The type of message.
+/// @param [in] message                    A string message to pass.
+///
+///
+/// @ingroup FSR2
+typedef void(*FfxFsr2Message)(
+    FfxFsr2MsgType type,
+    const wchar_t* message);
 
 /// A structure encapsulating the interface between the core implentation of
 /// the FSR2 algorithm and any graphics API that it should ultimately call.
@@ -370,8 +350,8 @@ typedef FfxErrorCode (*FfxFsr2ExecuteRenderJobsFunc)(
 ///     <c><i>FfxFsr2DestroyResourceFunc</i></c>
 ///     <c><i>FfxFsr2CreatePipelineFunc</i></c>
 ///     <c><i>FfxFsr2DestroyPipelineFunc</i></c>
-///     <c><i>FfxFsr2ScheduleRenderJobFunc</i></c>
-///     <c><i>FfxFsr2ExecuteRenderJobsFunc</i></c>
+///     <c><i>FfxFsr2ScheduleGpuJobFunc</i></c>
+///     <c><i>FfxFsr2ExecuteGpuJobsFunc</i></c>
 ///
 /// Depending on the graphics API that is abstracted by the backend, it may be
 /// required that the backend is to some extent stateful. To ensure that
@@ -393,9 +373,9 @@ typedef FfxErrorCode (*FfxFsr2ExecuteRenderJobsFunc)(
 /// @ingroup FSR2
 typedef struct FfxFsr2Interface {
 
-    FfxFsr2CreateDeviceFunc                 fpCreateDevice;                 ///< A callback function to create (or reference) a device.
+    FfxFsr2CreateBackendContextFunc         fpCreateBackendContext;         ///< A callback function to create and initialize the backend context.
     FfxFsr2GetDeviceCapabilitiesFunc        fpGetDeviceCapabilities;        ///< A callback function to query device capabilites.
-    FfxFsr2DestroyDeviceFunc                fpDestroyDevice;                ///< A callback function to destroy (or dereference) a device.
+    FfxFsr2DestroyBackendContextFunc        fpDestroyBackendContext;        ///< A callback function to destroy the backendcontext. This also dereferences the device.
     FfxFsr2CreateResourceFunc               fpCreateResource;               ///< A callback function to create a resource.
     FfxFsr2RegisterResourceFunc             fpRegisterResource;             ///< A callback function to register an external resource.
     FfxFsr2UnregisterResourcesFunc          fpUnregisterResources;          ///< A callback function to unregister external resource.
@@ -403,8 +383,8 @@ typedef struct FfxFsr2Interface {
     FfxFsr2DestroyResourceFunc              fpDestroyResource;              ///< A callback function to destroy a resource.
     FfxFsr2CreatePipelineFunc               fpCreatePipeline;               ///< A callback function to create a render or compute pipeline.
     FfxFsr2DestroyPipelineFunc              fpDestroyPipeline;              ///< A callback function to destroy a render or compute pipeline.
-    FfxFsr2ScheduleRenderJobFunc            fpScheduleRenderJob;            ///< A callback function to schedule a render job.
-    FfxFsr2ExecuteRenderJobsFunc            fpExecuteRenderJobs;            ///< A callback function to execute all queued render jobs.
+    FfxFsr2ScheduleGpuJobFunc               fpScheduleGpuJob;               ///< A callback function to schedule a render job.
+    FfxFsr2ExecuteGpuJobsFunc               fpExecuteGpuJobs;               ///< A callback function to execute all queued render jobs.
 
     void*                                   scratchBuffer;                  ///< A preallocated buffer for memory utilized internally by the backend.
     size_t                                  scratchBufferSize;              ///< Size of the buffer pointed to by <c><i>scratchBuffer</i></c>.

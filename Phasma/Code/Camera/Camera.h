@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Renderer/Compute.h"
-
 namespace pe
 {
     class Camera : public IComponent
@@ -13,32 +11,17 @@ namespace pe
             float d;
         };
 
-        mat4 view, previousView;
-        mat4 projection, previousProjection, projectionNoJitter;
-        mat4 viewProjection, previousViewProjection;
-        mat4 invView, invProjection, invViewProjection;
-        quat orientation;
-        vec3 position, euler, worldOrientation;
-        vec3 front, right, up;
-        float nearPlane, farPlane, fovx, speed, rotationSpeed;
-        std::vector<Plane> frustum{};
-        Compute frustumCompute;
-        vec2 projJitter;
-        vec2 prevProjJitter;
-
         Camera();
 
         void Update();
 
         void UpdatePerspective();
 
-        // In radians
-        inline float FovyToFovx(float fovy) { return 2.0f * atan(tan(fovy * 0.5f) * GetAspect()); }
+        inline float FovyToFovx(float fovy) { return 2.0f * atan(tan(fovy * 0.5f) * GetAspect()); } // In radians
 
-        // In radians
-        inline float FovxToFovy(float fovx) { return 2.0f * atan(tan(fovx * 0.5f) / GetAspect()); }
+        inline float FovxToFovy(float fovx) { return 2.0f * atan(tan(fovx * 0.5f) / GetAspect()); } // In radians
 
-        inline float Fovy() { return 2.0f * atan(tan(fovx * 0.5f) / GetAspect()); }
+        inline float Fovy() { return 2.0f * atan(tan(m_fovx * 0.5f) / GetAspect()); }
 
         float GetAspect();
 
@@ -50,7 +33,7 @@ namespace pe
 
         vec3 WorldUp() const;
 
-        void Move(CameraDirection direction, float velocity);
+        void Move(CameraDirection direction, float speed);
 
         void Rotate(float xoffset, float yoffset);
 
@@ -63,5 +46,32 @@ namespace pe
         void ReCreateComputePipelines();
 
         void Destroy() override;
+
+        inline mat4 GetView() const { return m_view; }
+        inline mat4 GetProjection() const { return m_projection; }
+        inline mat4 GetViewProjection() const { return m_viewProjection; }
+        inline mat4 GetPreviousViewProjection() const { return m_previousViewProjection; }
+        inline mat4 GetInvView() const { return m_invView; }
+        inline mat4 GetInvProjection() const { return m_invProjection; }
+        inline mat4 GetInvViewProjection() const { return m_invViewProjection; }
+        inline vec3 GetPosition() const { return m_position; }
+        inline vec3 GetFront() const { return m_front; }
+        inline float GetNearPlane() const { return m_nearPlane; }
+        inline float GetFarPlane() const { return m_farPlane; }
+        inline vec2 GetProjJitter() const { return m_projJitter; }
+        inline vec2 GetPrevProjJitter() const { return m_prevProjJitter; }
+
+    private:
+        mat4 m_view, m_previousView;
+        mat4 m_projection, m_previousProjection, m_projectionNoJitter;
+        mat4 m_viewProjection, m_previousViewProjection;
+        mat4 m_invView, m_invProjection, m_invViewProjection;
+        quat m_orientation;
+        vec3 m_position, m_euler, m_worldOrientation;
+        vec3 m_front, m_right, m_up;
+        float m_nearPlane, m_farPlane, m_fovx, m_rotationSpeed;
+        std::vector<Plane> m_frustum{};
+        vec2 m_projJitter;
+        vec2 m_prevProjJitter;
     };
 }

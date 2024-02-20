@@ -42,8 +42,12 @@ namespace pe
 
     DescriptorLayout::DescriptorLayout(const std::vector<DescriptorBindingInfo> &bindingInfos,
                                        ShaderStage stage,
-                                       const std::string &name)
+                                       const std::string &name,
+                                       bool pushDescriptor)
     {
+        m_pushDescriptor = pushDescriptor;
+        m_variableCount = 1;
+
         // Bindings
         std::vector<VkDescriptorSetLayoutBinding> bindingsVK{};
         for (auto const &bindingInfo : bindingInfos)
@@ -58,16 +62,14 @@ namespace pe
             bindingsVK.push_back(layoutBinding);
         }
 
-        m_variableCount = 1;
-
-        bool allowUpdateAfterBind = true;
+        m_allowUpdateAfterBind = true;
         for (int i = 0; i < bindingsVK.size(); i++)
         {
             if (bindingsVK[i].descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT ||
                 bindingsVK[i].descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
                 bindingsVK[i].descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
             {
-                allowUpdateAfterBind = false;
+                m_allowUpdateAfterBind = false;
                 break;
             }
         }
@@ -78,7 +80,7 @@ namespace pe
         {
             bindingFlags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
 
-            if (allowUpdateAfterBind)
+            if (m_allowUpdateAfterBind && !pushDescriptor)
                 bindingFlags[i] |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
 
             if (bindingInfos[i].bindless)
@@ -105,8 +107,10 @@ namespace pe
         dslci.bindingCount = static_cast<uint32_t>(bindingsVK.size());
         dslci.pBindings = bindingsVK.data();
         dslci.pNext = &layoutBindingFlags;
-        if (allowUpdateAfterBind)
-            dslci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+        if (pushDescriptor)
+            dslci.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+        else if (m_allowUpdateAfterBind)
+            dslci.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 
         VkDescriptorSetLayout layout;
         PE_CHECK(vkCreateDescriptorSetLayout(RHII.GetDevice(), &dslci, nullptr, &layout));
@@ -126,33 +130,27 @@ namespace pe
 
     Descriptor::Descriptor(const std::vector<DescriptorBindingInfo> &bindingInfos,
                            ShaderStage stage,
+                           bool pushDescriptor,
                            const std::string &name)
     {
-        m_bindingInfoMap = {};
-        m_updateInfoMap = {};
-
-        for (const auto &bindingInfo : bindingInfos)
-        {
-            auto it = m_bindingInfoMap.find(bindingInfo.binding);
-            if (it != m_bindingInfoMap.end())
-                PE_ERROR("Binding has already beed added");
-
-            m_bindingInfoMap[bindingInfo.binding] = bindingInfo;
-        }
-
-        uint32_t size = static_cast<uint32_t>(bindingInfos.size());
+        m_pushDescriptor = pushDescriptor;
+        m_bindingInfos = bindingInfos;
+        m_updateInfos.resize(bindingInfos.size());
+        std::sort(m_bindingInfos.begin(), m_bindingInfos.end(), [](const DescriptorBindingInfo &a, const DescriptorBindingInfo &b)
+                  { return a.binding < b.binding; });
 
         // Get the count per descriptor type
         std::unordered_map<DescriptorType, uint32_t> typeCounts{};
-        for (uint32_t i = 0; i < size; i++)
+        for (auto i = 0; i < bindingInfos.size(); i++)
         {
-            if (typeCounts.find(bindingInfos[i].type) == typeCounts.end())
-                typeCounts[bindingInfos[i].type] = 0;
-
-            typeCounts[bindingInfos[i].type] += bindingInfos[i].count;
+            auto it = typeCounts.find(bindingInfos[i].type);
+            if (it == typeCounts.end())
+                typeCounts[bindingInfos[i].type] = bindingInfos[i].count;
+            else
+                it->second += bindingInfos[i].count;
         }
 
-        // Create pool sizes typeCounts above
+        // Create pool sizes from typeCounts above
         std::vector<DescriptorPoolSize> poolSizes(typeCounts.size());
         uint32_t i = 0;
         for (auto const &[type, count] : typeCounts)
@@ -163,7 +161,7 @@ namespace pe
         }
 
         m_pool = DescriptorPool::Create(i, poolSizes.data(), name + "_pool");
-        m_layout = DescriptorLayout::GetOrCreate(bindingInfos, stage);
+        m_layout = DescriptorLayout::GetOrCreate(bindingInfos, stage, pushDescriptor);
 
         // DescriptorLayout calculates the variable count on creation
         uint32_t variableDescCounts[] = {m_layout->GetVariableCount()};
@@ -190,188 +188,133 @@ namespace pe
 
     Descriptor::~Descriptor()
     {
-        DescriptorPool::Destroy(m_pool);
-        DescriptorLayout::Destroy(m_layout);
+        //DescriptorPool::Destroy(m_pool);
+        //DescriptorLayout::Destroy(m_layout);
     }
 
-    void Descriptor::SetImages(uint32_t binding,
-                               const std::vector<ImageViewHandle> &views,
-                               const std::vector<SamplerHandle> &samplers)
+    void Descriptor::SetImageViews(uint32_t binding,
+                                   const std::vector<ImageViewHandle> &views,
+                                   const std::vector<SamplerHandle> &samplers)
     {
-        auto it = m_updateInfoMap.find(binding);
-        if (it != m_updateInfoMap.end())
-        {
-            it->second.views = views;
-            it->second.samplers = samplers;
-        }
-        else
-        {
-            DescriptorUpdateInfo info{};
-            info.binding = binding;
-            info.views = views;
-            info.samplers = samplers;
-            m_updateInfoMap[binding] = info;
-        }
+        DescriptorUpdateInfo info{};
+        info.binding = binding;
+        info.views = views;
+        info.samplers = samplers;
+        m_updateInfos[binding] = info;
     }
 
-    void Descriptor::SetImage(uint32_t binding, ImageViewHandle view, SamplerHandle sampler)
+    void Descriptor::SetImageView(uint32_t binding, ImageViewHandle view, SamplerHandle sampler)
     {
-        SetImages(binding, {view}, {sampler});
+        SetImageViews(binding, {view}, {sampler});
     }
 
-    void Descriptor::SetBuffers(uint32_t binding, const std::vector<Buffer *> &buffers)
+    void Descriptor::SetBuffers(uint32_t binding,
+                                const std::vector<Buffer *> &buffers,
+                                const std::vector<uint64_t> &offsets,
+                                const std::vector<uint64_t> &ranges)
     {
-        auto it = m_updateInfoMap.find(binding);
-        if (it != m_updateInfoMap.end())
-        {
-            it->second.buffers = buffers;
-        }
-        else
-        {
-            DescriptorUpdateInfo info{};
-            info.binding = binding;
-            info.buffers = buffers;
-            m_updateInfoMap[binding] = info;
-        }
+        DescriptorUpdateInfo info{};
+        info.binding = binding;
+        info.buffers = buffers;
+        info.offsets = offsets;
+        info.ranges = ranges;
+        m_updateInfos[binding] = info;
     }
 
-    void Descriptor::SetBuffer(uint32_t binding, Buffer *buffer)
+    void Descriptor::SetBuffer(uint32_t binding, Buffer *buffer, uint64_t offset, uint64_t range)
     {
-        SetBuffers(binding, {buffer});
+        SetBuffers(binding, {buffer}, {offset}, {range});
+    }
+
+    void Descriptor::SetSamplers(uint32_t binding, const std::vector<SamplerHandle> &samplers)
+    {
+        DescriptorUpdateInfo info{};
+        info.binding = binding;
+        info.samplers = samplers;
+        m_updateInfos[binding] = info;
     }
 
     void Descriptor::SetSampler(uint32_t binding, SamplerHandle sampler)
     {
-        auto it = m_updateInfoMap.find(binding);
-        if (it != m_updateInfoMap.end())
-        {
-            it->second.sampler = sampler;
-        }
-        else
-        {
-            DescriptorUpdateInfo info{};
-            info.binding = binding;
-            info.sampler = sampler;
-            m_updateInfoMap[binding] = info;
-        }
+        SetSamplers(binding, {sampler});
     }
 
     void Descriptor::Update()
     {
-        for (auto it = m_updateInfoMap.begin(); it != m_updateInfoMap.end(); it++)
+        std::vector<VkWriteDescriptorSet> writes{};
+        std::vector<std::vector<VkDescriptorImageInfo>> imageInfosVK{};
+        std::vector<std::vector<VkDescriptorBufferInfo>> bufferInfosVK{};
+        auto &info = m_updateInfos;
+        imageInfosVK.reserve(info.size());
+        bufferInfosVK.reserve(info.size());
+        writes.reserve(info.size());
+
+        for (uint32_t i = 0; i < info.size(); i++)
         {
-            DescriptorUpdateInfo &updateInfo = it->second;
-            DescriptorBindingInfo &bindingInfo = m_bindingInfoMap[it->first];
-
-            uint32_t typeCount = 0;
-            typeCount += !updateInfo.sampler.IsNull() ? 1 : 0;
-            typeCount += updateInfo.views.size() ? 1 : 0;
-            typeCount += updateInfo.buffers.size() ? 1 : 0;
-            if (typeCount != 1)
-                PE_ERROR("DescriptorUpdateInfo type count error");
-
-            std::vector<VkDescriptorImageInfo> imageInfoVK{};
-            std::vector<VkDescriptorBufferInfo> bufferInfoVK{};
-
-            if (updateInfo.sampler)
+            VkWriteDescriptorSet write{};
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = m_handle;
+            write.dstBinding = info[i].binding;
+            write.dstArrayElement = 0;
+            write.descriptorType = Translate<VkDescriptorType>(m_bindingInfos[i].type);
+            if (info[i].views.size() > 0)
             {
-                imageInfoVK.push_back(
-                    VkDescriptorImageInfo{
-                        updateInfo.sampler,
-                        nullptr,
-                        VK_IMAGE_LAYOUT_UNDEFINED});
-            }
-
-            for (uint32_t i = 0; i < updateInfo.views.size(); i++)
-            {
-                SamplerHandle sampler = updateInfo.samplers.size() > 0 ? updateInfo.samplers[i] : SamplerHandle{};
-                imageInfoVK.push_back(
-                    VkDescriptorImageInfo{
-                        sampler,
-                        updateInfo.views[i],
-                        Translate<VkImageLayout>(bindingInfo.imageLayout)});
-            }
-
-            for (auto *buffer : updateInfo.buffers)
-            {
-                size_t range = buffer->Size();
-                if (bindingInfo.type == DescriptorType::UniformBufferDynamic ||
-                    bindingInfo.type == DescriptorType::StorageBufferDynamic)
-                    range /= SWAPCHAIN_IMAGES;
-
-                bufferInfoVK.push_back(
-                    VkDescriptorBufferInfo{
-                        buffer->Handle(),
-                        0,
-                        range});
-            }
-
-            VkWriteDescriptorSet writeSet{};
-            writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writeSet.dstSet = m_handle;
-            writeSet.dstBinding = bindingInfo.binding;
-            writeSet.dstArrayElement = 0;
-            writeSet.descriptorCount = static_cast<uint32_t>(max(imageInfoVK.size(), bufferInfoVK.size()));
-            writeSet.descriptorType = Translate<VkDescriptorType>(bindingInfo.type);
-            writeSet.pImageInfo = imageInfoVK.size() > 0 ? imageInfoVK.data() : nullptr;
-            writeSet.pBufferInfo = bufferInfoVK.size() > 0 ? bufferInfoVK.data() : nullptr;
-
-            vkUpdateDescriptorSets(RHII.GetDevice(), 1, &writeSet, 0, nullptr);
-        }
-
-        // Calculate frame dynamic offsets
-        m_frameDynamicOffsets = {};
-        for (uint32_t j = 0; j < SWAPCHAIN_IMAGES; j++)
-        {
-            for (auto it = m_updateInfoMap.begin(); it != m_updateInfoMap.end(); it++)
-            {
-                const DescriptorUpdateInfo &updateInfo = it->second;
-                const DescriptorBindingInfo &bindingInfo = m_bindingInfoMap[it->first];
-
-                if (bindingInfo.type == DescriptorType::UniformBufferDynamic ||
-                    bindingInfo.type == DescriptorType::StorageBufferDynamic)
+                auto &infosVK = imageInfosVK.emplace_back(std::vector<VkDescriptorImageInfo>{});
+                infosVK.resize(info[i].views.size());
+                for (uint32_t j = 0; j < info[i].views.size(); j++)
                 {
-                    if (updateInfo.buffers.size() > 1)
-                        PE_ERROR("Cannot have more than one dynamic buffer in a binding");
-
-                    size_t bufferSize = updateInfo.buffers[0]->Size();
-                    m_frameDynamicOffsets.push_back(RHII.GetFrameDynamicOffset(bufferSize, j));
+                    infosVK[j] = {};
+                    infosVK[j].imageView = info[i].views[j];
+                    infosVK[j].imageLayout = Translate<VkImageLayout>(m_bindingInfos[i].imageLayout);
+                    infosVK[j].sampler = m_bindingInfos[i].type == DescriptorType::CombinedImageSampler ? info[i].samplers[j] : SamplerHandle{};
                 }
+
+                write.descriptorCount = static_cast<uint32_t>(infosVK.size());
+                write.pImageInfo = infosVK.data();
+                imageInfosVK.push_back(infosVK);
             }
+            else if (info[i].buffers.size() > 0)
+            {
+                auto &infosVK = bufferInfosVK.emplace_back(std::vector<VkDescriptorBufferInfo>{});
+                infosVK.resize(info[i].buffers.size());
+                for (uint32_t j = 0; j < info[i].buffers.size(); j++)
+                {
+                    infosVK[j] = {};
+                    infosVK[j].buffer = info[i].buffers[j]->Handle();
+                    infosVK[j].offset = info[i].offsets.size() > 0 ? info[i].offsets[j] : 0;
+                    infosVK[j].range = info[i].ranges.size() > 0 ? (info[i].ranges[j] > 0 ? info[i].ranges[j] : VK_WHOLE_SIZE) : VK_WHOLE_SIZE;
+                }
+
+                write.descriptorCount = static_cast<uint32_t>(infosVK.size());
+                write.pBufferInfo = infosVK.data();
+            }
+            else if (info[i].samplers.size() > 0 && m_bindingInfos[i].type != DescriptorType::CombinedImageSampler)
+            {
+                auto &infosVK = imageInfosVK.emplace_back(std::vector<VkDescriptorImageInfo>{});
+                infosVK.resize(info[i].samplers.size());
+                for (uint32_t j = 0; j < info[i].samplers.size(); j++)
+                {
+                    infosVK[j] = {};
+                    infosVK[j].imageView = nullptr;
+                    infosVK[j].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                    infosVK[j].sampler = info[i].samplers[j];
+                }
+
+                write.descriptorCount = static_cast<uint32_t>(infosVK.size());
+                write.pImageInfo = infosVK.data();
+            }
+            else
+            {
+                continue; // We are allowing this since all bindings can be partially bound
+            }
+
+            writes.push_back(write);
         }
 
-        m_updateInfoMap.clear();
-    }
+        vkUpdateDescriptorSets(RHII.GetDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 
-    void Descriptor::GetFrameDynamicOffsets(uint32_t *count, uint32_t **offsets)
-    {
-        // The count of frame dynamic offsets should be at least SWAPCHAIN_IMAGES count
-        if (m_frameDynamicOffsets.size() >= SWAPCHAIN_IMAGES)
-        {
-            *count = static_cast<uint32_t>(m_frameDynamicOffsets.size() / SWAPCHAIN_IMAGES);
-            *offsets = &m_frameDynamicOffsets[(*count) * RHII.GetFrameIndex()];
-        }
-        else
-        {
-            *count = 0;
-            *offsets = nullptr;
-        }
-    }
-
-    std::vector<uint32_t> Descriptor::GetAllFrameDynamicOffsets(uint32_t count, Descriptor **descriptors)
-    {
-        std::vector<uint32_t> dynamicOffsets{};
-
-        for (uint32_t i = 0; i < count; i++)
-        {
-            uint32_t count;
-            uint32_t *offsets;
-            descriptors[i]->GetFrameDynamicOffsets(&count, &offsets);
-            if (count > 0)
-                dynamicOffsets.insert(dynamicOffsets.end(), offsets, offsets + count);
-        }
-
-        return dynamicOffsets;
+        m_updateInfos.clear();
+        m_updateInfos.resize(m_bindingInfos.size());
     }
 }
 #endif

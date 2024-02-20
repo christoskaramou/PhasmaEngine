@@ -32,14 +32,10 @@ namespace pe
 
         void Destroy() override;
 
-        Buffer *GetUniform()
-        {
-            return uniform;
-        }
+        Buffer *GetUniform(uint32_t frame) { return m_uniform[frame]; }
 
     private:
-        LightsUBO lubo;
-        Buffer *uniform;
-        Descriptor *DSet;
+        LightsUBO m_lubo;
+        Buffer *m_uniform[SWAPCHAIN_IMAGES];
     };
 }

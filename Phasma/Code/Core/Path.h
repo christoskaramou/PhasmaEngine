@@ -9,8 +9,6 @@ namespace pe
         inline static std::string Executable;
 
     private:
-        friend class Constructor;
-
         // Helper to initialize static variables
         class Constructor
         {

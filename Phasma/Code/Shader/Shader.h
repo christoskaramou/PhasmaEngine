@@ -4,6 +4,7 @@
 #include "Shader/Reflection.h"
 #include "Shader/ShaderCache.h"
 #include "dxc/dxcapi.h"
+#include "Renderer/Descriptor.h"
 
 namespace pe
 {
@@ -36,27 +37,28 @@ namespace pe
     };
 
     class Reflection;
+    class PassInfo;
 
     class Shader : public IHandle<Shader, ShaderHandle>
     {
-    public:        
+    public:
         Shader(const std::string &sourcePath, ShaderStage shaderStage, const std::vector<Define> &defines = {});
 
         ~Shader();
 
         std::string &GetEntryName();
 
-        inline ShaderStage GetShaderStage() { return m_shaderStage; }
+        ShaderStage GetShaderStage() { return m_shaderStage; }
 
-        inline const uint32_t *GetSpriv() { return m_spirv.data(); }
+        const uint32_t *GetSpriv() { return m_spirv.data(); }
 
-        inline size_t Size() { return m_spirv.size(); }
+        size_t Size() { return m_spirv.size(); }
 
-        inline size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
+        size_t BytesCount() { return m_spirv.size() * sizeof(uint32_t); }
 
-        inline Reflection &GetReflection() { return m_reflection; }
+        Reflection &GetReflection() { return m_reflection; }
 
-        inline static void SetGlobalDefine(const std::string &name, const std::string &value)
+        static void SetGlobalDefine(const std::string &name, const std::string &value)
         {
             for (auto &def : m_globalDefines)
             {
@@ -71,9 +73,13 @@ namespace pe
             m_globalDefines.push_back(define);
         }
 
-        inline ShaderCache &GetCache() { return m_cache; }
+        static std::vector<Descriptor *> PassDescriptors(const PassInfo &passInfo);
 
-        inline StringHash GetPathID() { return m_pathID; }
+        ShaderCache &GetCache() { return m_cache; }
+
+        StringHash GetPathID() { return m_pathID; }
+
+        const PushConstantDesc &GetPushConstantDesc() { return m_reflection.GetPushConstantDesc(); }
 
     private:
         bool CompileGlsl(shaderc_shader_kind kind, shaderc::CompileOptions &options);

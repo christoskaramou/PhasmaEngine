@@ -3,7 +3,7 @@
 
 // Defines
 #define PI 3.1415926535897932384626433832795
-#define FLT_EPS 0.00000001
+#define FLT_EPSILON 0.00000001
 #define length2(x) dot(x, x)
 
 #define TexSamplerDecl(bind, set, tex) \
@@ -18,8 +18,20 @@ TextureCube tex; \
 [[vk::combinedImageSampler]][[vk::binding(bind, set)]] \
 SamplerState sampler_##tex;
 
-bool IsSaturated(float x) { return x == saturate(x); }
-bool IsSaturated(float2 x) { return IsSaturated(x.x) && IsSaturated(x.y); }
+bool IsNearlyEqual(float a, float b, float epsilon = 1e-5f)
+{
+    return abs(a - b) < epsilon;
+}
+
+bool IsSaturated(float x) 
+{
+    return IsNearlyEqual(x, saturate(x));
+}
+
+bool IsSaturated(float2 x) 
+{
+    return IsSaturated(x.x) && IsSaturated(x.y);
+}
 
 // [0.0, 1.0]
 float PDnrand(float2 n)
@@ -49,7 +61,7 @@ float3 GetPosFromUV(float2 UV, float depth, float4x4 mat)
 
 // Find the normal for this fragment, pulling either from a predefined normal map
 // or from the interpolated mesh normal and tangent attributes.
-float3 GetNormal(float3 positionWS, float3 tangentNormal, float3 inNormal, float2 inUV)
+float3 CalculateNormal(float3 positionWS, float3 tangentNormal, float3 inNormal, float2 inUV)
 {
     // Perturb normal, see http://www.thetenthplanet.de/archives/1180
     float3 tNormal = tangentNormal * 2.0f - 1.0f;
@@ -189,13 +201,54 @@ float3 SharpenLuma(Texture2D tex, SamplerState sampler_tex, float2 UV, float sha
     return saturate(colorInput).rgb;
 }
 
-float MipMapLevel(float2 texture_coordinate)// in texel units
+float MipMapLevel(float2 texture_coordinate) // in texel units
 {
+    // Compute the rate of change of the texture coordinates in screen space
     float2 dxVtc = ddx(texture_coordinate);
     float2 dyVtc = ddy(texture_coordinate);
-    float delta_max_sqr = max(dot(dxVtc, dxVtc), dot(dyVtc, dyVtc));
+  
+    // Calculate squared magnitudes of derivatives
+    float dxVtcSqrMag = dot(dxVtc, dxVtc);
+    float dyVtcSqrMag = dot(dyVtc, dyVtc);
+  
+    // Take the maximum of the two squared magnitudes
+    float delta_max_sqr = max(dxVtcSqrMag, dyVtcSqrMag);
+  
+    // Avoid negative or zero values before taking the log
+    delta_max_sqr = max(delta_max_sqr, 1e-6);
+  
+    // Calculate mip map level based on maximum change
     float mml = 0.5 * log2(delta_max_sqr);
+  
     return max(0.f, mml);
+}
+
+static const float4x4 identity_mat = {1.0f, 0.0f, 0.0f, 0.0f,
+                                      0.0f, 1.0f, 0.0f, 0.0f,
+                                      0.0f, 0.0f, 1.0f, 0.0f,
+                                      0.0f, 0.0f, 0.0f, 1.0f};
+
+float3x3 remove_scale3x3(float3x3 m)
+{
+    return float3x3(normalize(m[0]), normalize(m[1]), normalize(m[2]));
+}
+
+uint PackColorRGBA(float4 color)
+{
+    uint r = uint(color.r * 255.0 + 0.5);
+    uint g = uint(color.g * 255.0 + 0.5);
+    uint b = uint(color.b * 255.0 + 0.5);
+    uint a = uint(color.a * 255.0 + 0.5);
+    return (r << 24) | (g << 16) | (b << 8) | a;
+}
+
+float4 UnpackColorRGBA(uint color)
+{
+    float r = float((color >> 24) & 0xFF) / 255.0;
+    float g = float((color >> 16) & 0xFF) / 255.0;
+    float b = float((color >> 8) & 0xFF) / 255.0;
+    float a = float(color & 0xFF) / 255.0;
+    return float4(r, g, b, a);
 }
 
 #endif

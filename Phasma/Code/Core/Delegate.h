@@ -1,41 +1,56 @@
 #pragma once
-
 namespace pe
 {
-    template <class... T>
+    template <class... Args>
     class Delegate
     {
     public:
-        using Func_type = std::function<void(T &&...)>;
+        using FunctionType = std::function<void(Args...)>;
 
-        inline void operator+=(Func_type func)
+        // Adds a function to the delegate
+        inline void Add(FunctionType func)
         {
-            m_functions.push_back(func);
+            m_functions.push_back(std::move(func));
         }
 
-        inline void Invoke(T &&...args)
+        // Adds a function to the delegate
+        inline void operator+=(FunctionType func)
         {
-            for (auto &function : m_functions)
-                function(std::forward<T>(args)...);
+            m_functions.push_back(std::move(func));
         }
 
-        inline void ReverseInvoke(T &&...args)
+        // Invokes all functions stored in the delegate
+        inline void Invoke(Args... args) const
         {
-            for (int i = static_cast<int>(m_functions.size()) - 1; i >= 0; i--)
-                m_functions[i](std::forward<T>(args)...);
+            for (const auto &function : m_functions)
+            {
+                function(args...);
+            }
         }
 
-        inline bool IsEmpty()
+        // Invokes all functions stored in the delegate in reverse order
+        inline void ReverseInvoke(Args... args) const
+        {
+            for (int i = static_cast<int>(m_functions.size()) - 1; i >= 0; --i)
+            {
+                m_functions[i](args...);
+            }
+        }
+
+        // Checks if the delegate is empty
+        inline bool IsEmpty() const
         {
             return m_functions.empty();
         }
 
+        // Clears all functions from the delegate
         inline void Clear()
         {
             m_functions.clear();
         }
 
     private:
-        std::deque<Func_type> m_functions{};
+        std::deque<FunctionType> m_functions;
     };
+
 }

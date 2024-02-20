@@ -50,8 +50,9 @@ namespace pe
     class PassInfo;
     class Descriptor;
     class Buffer;
+    struct Attachment;
 
-    class IRenderComponent : public IComponent
+    class IRenderPassComponent : public IComponent
     {
     public:
         virtual void Init() = 0;
@@ -64,10 +65,15 @@ namespace pe
 
         virtual void Update(Camera *camera) = 0;
 
-        virtual void Draw(CommandBuffer *cmd, uint32_t imageIndex) = 0;
+        virtual CommandBuffer *Draw() = 0;
 
         virtual void Resize(uint32_t width, uint32_t height) = 0;
 
         virtual void Destroy() = 0;
+        
+        const std::vector<Attachment> &GetAttachments() { return attachments; }
+
+    protected:
+        std::vector<Attachment> attachments;
     };
 }

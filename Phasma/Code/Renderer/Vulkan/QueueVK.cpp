@@ -79,19 +79,17 @@ namespace pe
         count += commandBuffersCount;
         for (; i < count; i++)
         {
-            // Increase the submit count of the current command buffer
             uint32_t index = i - signalSemaphoresCount;
-            commandBuffers[index]->IncreaceSubmitionCount();
             signalSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
             signalSemaphoreSubmitInfos[i].semaphore = commandBuffers[index]->GetSemaphore()->Handle();
             signalSemaphoreSubmitInfos[i].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-            signalSemaphoreSubmitInfos[i].value = commandBuffers[index]->GetSumbitionCount();
+            signalSemaphoreSubmitInfos[i].value = commandBuffers[index]->IncreaseAndGetSumbitionsCount();
         }
 
         // queue semaphore
         {
-            m_semaphore->Wait(m_submitions); // Wait previous submition so we can submit again
-            m_submitions++;
+            m_semaphore->Wait(m_submitions++); // Wait previous submition so we can submit again
+            
             signalSemaphoreSubmitInfos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
             signalSemaphoreSubmitInfos[i].semaphore = m_semaphore->Handle();
             signalSemaphoreSubmitInfos[i].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
@@ -120,8 +118,18 @@ namespace pe
             swapchainsVK[i] = swapchains[i]->Handle();
 
         std::vector<VkSemaphore> waitSemaphoresVK(waitSemaphoreCount);
-        for (uint32_t i = 0; i < waitSemaphoreCount; i++)
-            waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
+        uint32_t count = waitSemaphoreCount;
+        for (uint32_t i = 0; i < count; i++)
+        {
+            if (waitSemaphores[i])
+            {
+                waitSemaphoresVK[i] = waitSemaphores[i]->Handle();
+            }
+            else
+            {
+                waitSemaphoreCount--;
+            }
+        }
 
         VkPresentInfoKHR pi{};
         pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -245,5 +253,90 @@ namespace pe
 
         PE_ERROR("Queue::Get() A queue with these flags is not available!");
         return nullptr;
+    }
+
+    Queue *GetQueueFromCmd(CommandBuffer *cmd)
+    {
+        Queue *renderQueue = RHII.GetRenderQueue();
+        Queue *computeQueue = RHII.GetComputeQueue();
+        Queue *transferQueue = RHII.GetTransferQueue();
+
+        if (cmd->GetFamilyId() == renderQueue->GetFamilyId())
+            return renderQueue;
+        else if (cmd->GetFamilyId() == computeQueue->GetFamilyId())
+            return computeQueue;
+        else if (cmd->GetFamilyId() == transferQueue->GetFamilyId())
+            return transferQueue;
+        else
+            return nullptr;
+    }
+
+    PipelineStageFlags GetStagesFromCmd(CommandBuffer *cmd)
+    {
+        PipelineStageFlags flags{};
+        if (cmd->GetCommandFlags() & CommandType::TransferBit)
+            flags = PipelineStage::TransferBit;
+        if (cmd->GetCommandFlags() & CommandType::ComputeBit)
+            flags = PipelineStage::ComputeShaderBit;
+        if (cmd->GetCommandFlags() & CommandType::GraphicsBit)
+            flags = PipelineStage::FragmentShaderBit | PipelineStage::ColorAttachmentOutputBit;
+        return flags;
+    }
+
+    Semaphore *Queue::SubmitCommands(Semaphore *wait, std::vector<CommandBuffer *> cmds)
+    {
+        if (cmds.empty())
+            return nullptr;
+
+        std::vector<CommandBuffer *> currentCmds{};
+        currentCmds.reserve(cmds.size());
+
+        Queue *prevQueue = GetQueueFromCmd(cmds[0]);
+        PipelineStageFlags waitStages = wait ? wait->GetWaitStageFlags() : PipelineStage::None;
+        PipelineStageFlags signalStages = PipelineStage::AllCommandsBit;
+
+        const uint32_t frameIndex = RHII.GetFrameIndex();
+        const auto &frameSemaphores = RHII.GetSemaphores(frameIndex);
+        uint32_t semaphoresOffset = 1; // the first semaphore in all semaphores is the aquire semaphore
+        uint32_t semaphoresUsed = 0;
+
+        Semaphore *signal = nullptr;
+
+        for (CommandBuffer *cmd : cmds)
+        {
+            if (!cmd)
+                continue;
+
+            signalStages |= GetStagesFromCmd(cmd);
+            
+            Queue *cmdQueue = GetQueueFromCmd(cmd);
+            if (cmdQueue != prevQueue)
+            {
+                signal = frameSemaphores[semaphoresUsed + semaphoresOffset];
+                prevQueue->Submit(static_cast<uint32_t>(currentCmds.size()), currentCmds.data(),
+                                  1, &waitStages, &wait,
+                                  1, &signalStages, &signal);
+                currentCmds.clear();
+                prevQueue = cmdQueue;
+                waitStages = signalStages & ~PipelineStage::AllCommandsBit;
+                signalStages = PipelineStage::AllCommandsBit;
+                wait = signal;
+                semaphoresUsed++;
+            }
+            else
+            {
+                currentCmds.push_back(cmd);
+            }
+        }
+
+        if (!currentCmds.empty())
+        {
+            signal = frameSemaphores[semaphoresUsed + semaphoresOffset];
+            prevQueue->Submit(static_cast<uint32_t>(currentCmds.size()), currentCmds.data(),
+                              1, &waitStages, &wait,
+                              1, &signalStages, &signal);
+        }
+
+        return signal;
     }
 }

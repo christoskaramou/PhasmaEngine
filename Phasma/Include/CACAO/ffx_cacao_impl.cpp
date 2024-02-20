@@ -1,4 +1,4 @@
-// Modifications Copyright © 2021. Advanced Micro Devices, Inc. All Rights Reserved.
+// Modifications Copyright ï¿½ 2021. Advanced Micro Devices, Inc. All Rights Reserved.
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Copyright (c) 2016, Intel Corporation

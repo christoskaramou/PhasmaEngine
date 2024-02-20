@@ -1,7 +1,7 @@
 #pragma once
 
 namespace pe
-{    
+{
     class Surface;
     class Semaphore;
     class Image;
@@ -15,6 +15,12 @@ namespace pe
 
         uint32_t Aquire(Semaphore *semaphore);
 
-        std::vector<Image *> images;
+        Image *GetImage(uint32_t index) { return m_images[index]; }
+
+        uint32_t GetImageCount() const { return static_cast<uint32_t>(m_images.size()); }
+
+    private:
+        std::vector<Image *> m_images;
+        Rect2Du m_extent;
     };
 }

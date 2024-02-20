@@ -12,8 +12,7 @@ namespace pe
                              RenderPass *renderPass,
                              const std::string &name)
     {
-        m_width = width;
-        m_height = height;
+        m_size = uvec2(width, height);
 
         std::vector<VkImageView> _views(count);
         for (uint32_t i = 0; i < count; i++)

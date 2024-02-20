@@ -17,6 +17,12 @@ namespace pe
 
         uint64_t GetValue();
 
+        void SetWaitStageFlags(PipelineStageFlags flags) { m_waitStageFlags = flags; }
+
+        void AddWaitStageFlags(PipelineStageFlags flags) { m_waitStageFlags |= flags; }
+
+        PipelineStageFlags GetWaitStageFlags() { return m_waitStageFlags; }
+
     private:
         bool m_timeline;
         PipelineStageFlags m_waitStageFlags;

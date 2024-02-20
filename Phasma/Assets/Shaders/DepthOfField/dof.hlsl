@@ -1,7 +1,7 @@
 #ifndef DOF_H_
 #define DOF_H_
 
-#include "../Common/common.hlsl"
+#include "../Common/Common.hlsl"
 
 // ----- Bokeh Depth of Field ----
 static const float GOLDEN_ANGLE = 2.39996323;

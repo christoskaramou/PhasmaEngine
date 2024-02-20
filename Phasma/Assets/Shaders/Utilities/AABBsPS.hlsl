@@ -1,16 +1,8 @@
-struct PS_INPUT
-{
-    float3 color : COLOR;
-};
+#include "../Common/Structures.hlsl"
 
-struct PS_OUTPUT
+PS_OUTPUT_Color mainPS(PS_INPUT_Color input)
 {
-    float4 color : SV_TARGET;
-};
-
-PS_OUTPUT mainPS(PS_INPUT input)
-{
-    PS_OUTPUT o;
+    PS_OUTPUT_Color o;
     o.color = float4(input.color, 1.0f);
     return o;
 }

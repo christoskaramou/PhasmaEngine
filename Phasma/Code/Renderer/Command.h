@@ -1,5 +1,7 @@
 #pragma once
 
+#undef MemoryBarrier
+
 namespace pe
 {
     class RenderPass;
@@ -11,6 +13,20 @@ namespace pe
     class Descriptor;
     class Semaphore;
     class PassInfo;
+    class Event;
+    struct ImageBarrierInfo;
+    struct BufferBarrierInfo;
+    struct Attachment;
+
+    template <class T>
+    inline uint32_t GetUboDataOffset(T offset)
+    {
+        static_assert(std::is_integral_v<T>, "T must be integral");
+
+        // THe UBO data buffer is using mat4 chunks, so we need to align the offset as such
+        // tbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
+        return static_cast<uint32_t>(offset >> 6);
+    }
 
     struct ImageSubresourceLayers
     {
@@ -28,13 +44,50 @@ namespace pe
         Offset3D dstOffsets[2];
     };
 
-    struct AttachmentInfo
+    struct MemoryBarrierInfo : public BarrierInfo
     {
-        Image *image = nullptr;
-        AttachmentLoadOp loadOp = AttachmentLoadOp::Clear;
-        AttachmentStoreOp storeOp = AttachmentStoreOp::Store;
-        ImageLayout initialLayout = ImageLayout::Undefined;
-        ImageLayout finalLayout = ImageLayout::Attachment;
+        MemoryBarrierInfo() { type = BarrierType::Memory; }
+        PipelineStageFlags srcStageMask = PipelineStage::None;
+        PipelineStageFlags dstStageMask = PipelineStage::None;
+        AccessFlags srcAccessMask = Access::None;
+        AccessFlags dstAccessMask = Access::None;
+    };
+
+    struct PushDescriptorInfo
+    {
+        DescriptorType type = DescriptorType::CombinedImageSampler;
+        uint32_t binding = (uint32_t)-1;
+
+        std::vector<Buffer *> buffers{};
+        std::vector<size_t> offsets{};
+        std::vector<size_t> ranges{}; // range of the buffers in bytes to use
+
+        std::vector<ImageLayout> layouts{};
+        std::vector<ImageViewHandle> views{};
+        std::vector<SamplerHandle> samplers{}; // if type == DescriptorType::CombinedImageSampler, these are the samplers for each view
+    };
+
+    template <uint16_t N>
+    class PushConstantsBlock
+    {
+        static_assert(N % 4 == 0, "N must be a multiple of 4 bytes");
+
+    public:
+        // offset for every 4 bytes count (minimum alignment), thus is counts floats, uint32_t, etc.
+        template <class T>
+        void Set(uint16_t offset, const T &value)
+        {
+            uint16_t offsetBytes = offset * 4;
+            PE_ERROR_IF(offsetBytes + sizeof(T) > N, "PushConstants buffer overflow");
+            memcpy(&m_data[offsetBytes], &value, sizeof(T));
+        }
+
+        void Reset() { memset(m_data, 0, N); }
+
+        const void *Data() const { return m_data; }
+
+    private:
+        uint8_t m_data[N];
     };
 
     class CommandPool : public IHandle<CommandPool, CommandPoolHandle>
@@ -67,16 +120,6 @@ namespace pe
         CommandPoolCreateFlags m_flags;
     };
 
-    struct BarrierInfo
-    {
-        Image *image;
-        ImageLayout newLayout;
-        uint32_t baseArrayLayer = 0;
-        uint32_t arrayLayers = 0;
-        uint32_t baseMipLevel = 0;
-        uint32_t mipLevels = 0;
-    };
-
     class CommandBuffer : public IHandle<CommandBuffer, CommandBufferHandle>
     {
     public:
@@ -90,17 +133,17 @@ namespace pe
 
         void Reset();
 
-        void PipelineBarrier();
-
-        void SetDepthBias(float constantFactor, float clamp, float slopeFactor);
-
         void BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter);
 
-        void BeginPass(RenderPass *renderPass, Image **colorTargets, Image *depthTarget);
+        void ClearColors(std::vector<Image *> images);
+
+        void ClearDepthStencils(std::vector<Image *> images);
+
+        void BeginPass(const std::vector<Attachment> &attachments, const std::string &name);
 
         void EndPass();
 
-        void BindPipeline(const PassInfo &passInfo);
+        void BindPipeline(PassInfo &passInfo, bool bindDescriptors = true);
 
         void BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding = 0, uint32_t bindingCount = 1);
 
@@ -108,14 +151,28 @@ namespace pe
 
         void BindDescriptors(uint32_t count, Descriptor **descriptors);
 
+        void BindDescriptors(const std::vector<Descriptor *> &descriptors);
+
+        void PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info);
+
         void SetViewport(float x, float y, float width, float height);
 
         void SetScissor(int x, int y, uint32_t width, uint32_t height);
 
+        void SetLineWidth(float width);
+        
+        void SetDepthBias(float constantFactor, float clamp, float slopeFactor);
+
+        void SetDepthTestEnable(uint32_t enable);
+
+        void SetDepthWriteEnable(uint32_t enable);
+
         void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
 
-        void PushConstants(ShaderStageFlags stage, uint32_t offset, uint32_t size,
-                           const void *pValues);
+        template <class T>
+        void SetConstant(uint16_t offset, const T &value) { m_pushConstants.Set(offset, value); }
+
+        void PushConstants();
 
         void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
 
@@ -131,21 +188,17 @@ namespace pe
                     uint32_t signalSemaphoresCount,
                     PipelineStageFlags *signalStages, Semaphore **signalSemaphores);
 
-        void ImageBarrier(Image *image,
-                          ImageLayout newLayout,
-                          uint32_t baseArrayLayer = 0,
-                          uint32_t arrayLayers = 0,
-                          uint32_t baseMipLevel = 0,
-                          uint32_t mipLevels = 0);
+        void BufferBarrier(const BufferBarrierInfo &info);
 
-        void AddToImageGroupBarrier(Image *image,
-                                    ImageLayout newLayout,
-                                    uint32_t baseArrayLayer = 0,
-                                    uint32_t arrayLayers = 0,
-                                    uint32_t baseMipLevel = 0,
-                                    uint32_t mipLevels = 0);
-        
-        void ImageGroupBarrier();
+        void BufferBarriers(const std::vector<BufferBarrierInfo> &infos);
+
+        void ImageBarrier(const ImageBarrierInfo &info);
+
+        void ImageBarriers(const std::vector<ImageBarrierInfo> &infos);
+
+        void MemoryBarrier(const MemoryBarrierInfo &info);
+
+        void MemoryBarriers(const std::vector<MemoryBarrierInfo> &infos);
 
         void CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset);
 
@@ -162,6 +215,15 @@ namespace pe
 
         void GenerateMipMaps(Image *image);
 
+        void SetEvent(Image *image,
+                      ImageLayout scrLayout, ImageLayout dstLayout,
+                      PipelineStageFlags srcStage, PipelineStageFlags dstStage,
+                      AccessFlags srcAccess, AccessFlags dstAccess);
+
+        void WaitEvent();
+
+        void ResetEvent(PipelineStageFlags resetStage);
+
         bool IsRecording() const { return m_recording; }
 
         void BeginDebugRegion(const std::string &name);
@@ -174,15 +236,19 @@ namespace pe
 
         Semaphore *GetSemaphore() const { return m_semaphore; }
 
-        uint64_t GetSumbitionCount() const { return m_submitions; }
-
-        void IncreaceSubmitionCount() { m_submitions++; }
+        uint64_t IncreaseAndGetSumbitionsCount() { return ++m_submitions; }
 
         void Wait();
 
         CommandPool *GetCommandPool() const { return m_commandPool; }
 
-        void AddAfterWaitCallback(Delegate<>::Func_type &&func);
+        CommandTypeFlags GetCommandFlags() const { return m_commandFlags; }
+
+        void AddAfterWaitCallback(Delegate<>::FunctionType &&func);
+
+        void SetPassName(const std::string &name) { m_passName = name; }
+
+        void AddFlags(CommandTypeFlags flags) { m_commandFlags |= flags; }
 
         static void Init(GpuHandle gpu, uint32_t countPerFamily = 0);
 
@@ -193,9 +259,9 @@ namespace pe
         static void Return(CommandBuffer *cmd);
 
         // Cached resourses functionality
-        static RenderPass *GetRenderPass(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo);
-        static FrameBuffer *GetFrameBuffer(RenderPass *renderPass, Image **colorTargets, Image *depthTarget);
-        static Pipeline *GetPipeline(const PassInfo &info);
+        static RenderPass *GetRenderPass(const std::vector<Attachment> &attachments);
+        static FrameBuffer *GetFrameBuffer(RenderPass *renderPass, const std::vector<Attachment> &attachments);
+        static Pipeline *GetPipeline(RenderPass *renderPass, PassInfo &info);
 
     private:
         void BindGraphicsPipeline(Pipeline *pipeline);
@@ -203,6 +269,7 @@ namespace pe
         void BindComputePipeline(Pipeline *pipeline);
 
         friend class Queue;
+        friend class Renderer;
 
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_allCmds{};
@@ -216,12 +283,23 @@ namespace pe
         CommandPool *m_commandPool;
         uint32_t m_familyId;
         Semaphore *m_semaphore;
+        Event *m_event;
         std::atomic_uint64_t m_submitions;
         bool m_recording = false;
+        bool m_passActive = false;
         std::string m_name;
+        std::string m_passName;
         Delegate<> m_afterWaitCallbacks;
-        bool m_dynamicPass = false;
+        RenderPass *m_renderPass;
+        FrameBuffer *m_frameBuffer;
         Pipeline *m_boundPipeline;
-        std::vector<BarrierInfo> m_barrierInfos{};
+        Buffer *m_boundVertexBuffer;
+        size_t m_boundVertexBufferOffset;
+        uint32_t m_boundVertexBufferFirstBinding;
+        uint32_t m_boundVertexBufferBindingCount;
+        Buffer *m_boundIndexBuffer;
+        size_t m_boundIndexBufferOffset;
+        PushConstantsBlock<128> m_pushConstants{};
+        CommandTypeFlags m_commandFlags;
     };
 }

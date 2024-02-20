@@ -1,10 +1,9 @@
 #include "GUI.h"
 #include "TinyFileDialogs/tinyfiledialogs.h"
-#include "Console/Console.h"
 #include "Renderer/Vertex.h"
 #include "Shader/Shader.h"
 #include "Renderer/RHI.h"
-#include "Model/Model.h"
+#include "Scene/Model.h"
 #include "Systems/CameraSystem.h"
 #include "Window/Window.h"
 #include "Renderer/Surface.h"
@@ -16,13 +15,17 @@
 #include "Renderer/Semaphore.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Image.h"
-#include "Renderer/RenderPass.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/Queue.h"
+#include "Renderer/Command.h"
+#include "Renderer/RenderPasses/LightPass.h"
+#include "Renderer/RenderPasses/AabbsPass.h"
+#include "Renderer/RenderPasses/SuperResolutionPass.h"
 #include "Systems/RendererSystem.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_impl_sdl.h"
 #include "imgui/imgui_internal.h"
+#include "Core/Timer.h"
 
 namespace pe
 {
@@ -35,12 +38,6 @@ namespace pe
         ImGui_ImplVulkan_Shutdown();
         ImGui_ImplSDL2_Shutdown();
         ImGui::DestroyContext();
-    }
-
-    bool endsWithExt(const std::string &mainStr, const std::string &toMatch)
-    {
-        return mainStr.size() >= toMatch.size() &&
-               mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0;
     }
 
     // https://github.com/ocornut/imgui/issues/1901#issuecomment-444929973
@@ -92,7 +89,6 @@ namespace pe
         Properties();
         Shaders();
         Models();
-        ConsoleWindow();
         Scripts();
     }
 
@@ -116,12 +112,7 @@ namespace pe
                         s_modelLoading = true;
 
                         std::filesystem::path path(result);
-                        Model::Load(path);
-
-                        GUI::modelList.push_back(path.filename().string());
-                        GUI::model_scale.push_back({1.f, 1.f, 1.f});
-                        GUI::model_pos.push_back({0.f, 0.f, 0.f});
-                        GUI::model_rot.push_back({0.f, 0.f, 0.f});
+                        ModelGltf::Load(path);
 
                         s_modelLoading = false;
                     };
@@ -153,7 +144,6 @@ namespace pe
     static bool properties_open = true;
     static bool shaders_open = false;
     static bool models_open = false;
-    static bool console_open = false;
     static bool scripts_open = false;
 
     void GUI::Menu() const
@@ -174,7 +164,6 @@ namespace pe
                 ImGui::Checkbox("Properties", &properties_open);
                 ImGui::Checkbox("Shaders", &shaders_open);
                 ImGui::Checkbox("Models", &models_open);
-                ImGui::Checkbox("Console", &console_open);
                 ImGui::Checkbox("Scripts", &scripts_open);
 
                 ImGui::EndMenu();
@@ -199,7 +188,7 @@ namespace pe
             ImVec2 size(-0.001f, 25.f);
             ImGui::SetNextWindowPos(ImVec2(x + WIDTH_f / 2 - 200.f, y + topBarHeight + HEIGHT_f / 2 - size.y / 2));
             ImGui::SetNextWindowSize(ImVec2(400.f, 25.f));
-            ImGui::Begin("Loading", &metrics_open, flags);
+            ImGui::Begin("Model Loading", &metrics_open, flags);
             // LoadingIndicatorCircle("Loading", radius, color, bdcolor, 10, 4.5f);
             const float progress = loadingCurrent / static_cast<float>(loadingTotal);
             ImGui::ProgressBar(progress, size);
@@ -222,66 +211,36 @@ namespace pe
         ImGui::Separator();
 
         FrameTimer &frameTimer = FrameTimer::Instance();
-
-        double shadowsTotal = 0.0;
-        if (shadow_cast)
-        {
-            for (int i = 0; i < SHADOWMAP_CASCADES; i++)
-                shadowsTotal += frameTimer.shadowStamp[i];
-        }
-
-        ImGui::Text("CPU Total: %.3f ms", static_cast<float>(MILLI(frameTimer.cpuTotal)));
+        ImGui::Text("CPU Total: %.3f ms", static_cast<float>(MILLI(frameTimer.GetCpuTotal())));
         ImGui::Indent(16.0f);
-        ImGui::Text("CPU Updates: %.3f ms", static_cast<float>(MILLI(frameTimer.updatesStamp)));
-        ImGui::Text("CPU Draw: %.3f ms", static_cast<float>(MILLI(frameTimer.cpuTotal - frameTimer.updatesStamp)));
+        ImGui::Text("CPU Updates: %.3f ms", static_cast<float>(MILLI(frameTimer.GetUpdatesStamp())));
+        ImGui::Text("CPU Draw: %.3f ms", static_cast<float>(MILLI(frameTimer.GetCpuTotal() - frameTimer.GetUpdatesStamp())));
         ImGui::Unindent(16.0f);
-        ImGui::Text("GPU Total: %.3f ms", frameTimer.gpuStamp + shadowsTotal);
+
+        float gpuTotal = 0.f;
+        for (auto &timeInfo : Debug::s_timeInfos)
+        {
+            if (timeInfo.depth == 0)
+                gpuTotal += timeInfo.timer->GetTime();
+        }
+
+        ImGui::Text("GPU Total: %.3f ms", gpuTotal);
         ImGui::Indent(16.0f);
-        if (shadow_cast)
-        {
-            for (int i = 0; i < SHADOWMAP_CASCADES; i++)
-            {
-                ImGui::Text("ShadowPass%i: %.3f ms", i, frameTimer.shadowStamp[i]);
-            }
-        }
-        ImGui::Text("GBuffer: %.3f ms", frameTimer.geometryStamp);
-        ImGui::Text("Composition: %.3f ms", frameTimer.compositionStamp);
-        if (show_ssao)
-        {
-            ImGui::Text("SSAO: %.3f ms", frameTimer.ssaoStamp);
-        }
-        if (show_ssr)
-        {
-            ImGui::Text("SSR: %.3f ms", frameTimer.ssrStamp);
-        }
-        ImGui::Text("Color Pass: %.3f ms", frameTimer.compositionStamp);
 
-        if (use_FSR2)
+        for (auto &timeInfo : Debug::s_timeInfos)
         {
-            ImGui::Text("FSR2: %.3f ms", frameTimer.fsrStamp);
-        }
-        if (use_FXAA)
-        {
-            ImGui::Text("FXAA: %.3f ms", frameTimer.fxaaStamp);
-        }
-        if (show_Bloom)
-        {
-            ImGui::Text("Bloom: %.3f ms", frameTimer.bloomStamp);
-        }
-        if (use_DOF)
-        {
-            ImGui::Text("Depth of Field: %.3f ms", frameTimer.dofStamp);
-        }
-        if (show_motionBlur)
-        {
-            ImGui::Text("Motion Blur: %.3f ms", frameTimer.motionBlurStamp);
-        }
-        if (drawAABBs)
-        {
-            ImGui::Text("AABBs: %.3f ms", frameTimer.AABBsStamp);
-        }
+            if (timeInfo.depth > 0)
+                ImGui::Indent(timeInfo.depth * 16.0f);
 
-        ImGui::Text("GUI: %.3f ms", frameTimer.guiStamp);
+            ImGui::Text("%s: %.3f ms", timeInfo.name.c_str(), timeInfo.timer->GetTime());
+
+            if (timeInfo.depth > 0)
+                ImGui::Unindent(timeInfo.depth * 16.0f);
+
+            GpuTimer::Return(timeInfo.timer);
+        }
+        Debug::s_timers.clear();
+        Debug::s_timeInfos.clear();
         ImGui::Unindent(16.0f);
 
         ImGui::Separator();
@@ -291,7 +250,7 @@ namespace pe
         static const char *current_item = "viewport";
         std::vector<const char *> items(s_renderImages.size());
         for (int i = 0; i < items.size(); i++)
-            items[i] = s_renderImages[i]->imageInfo.name.c_str();
+            items[i] = s_renderImages[i]->GetName().c_str();
 
         if (ImGui::BeginCombo("##combo", current_item))
         {
@@ -309,16 +268,6 @@ namespace pe
             ImGui::EndCombo();
         }
         ImGui::End();
-    }
-
-    void GUI::ConsoleWindow()
-    {
-        static Console console;
-
-        if (!console_open)
-            return;
-
-        console.Draw("Console", &console_open);
     }
 
     void GUI::Scripts() const
@@ -392,17 +341,6 @@ namespace pe
     {
         if (!models_open)
             return;
-
-        ImGui::Begin("Models Loaded", &models_open);
-
-        for (uint32_t i = 0; i < modelList.size(); i++)
-        {
-            std::string s = modelList[i] + "##" + std::to_string(i);
-            if (ImGui::Selectable(s.c_str(), false))
-                modelItemSelected = i;
-        }
-
-        ImGui::End();
     }
 
     void GUI::Properties() const
@@ -420,15 +358,23 @@ namespace pe
 
         static float rtScale = renderTargetsScale;
         ImGui::Begin("Global Properties", &properties_open);
-        ImGui::DragFloat("Quality.", &rtScale, 0.01f, 0.05f, 1.0f);
+        ImGui::Text("Resolution: %d x %d", static_cast<int>(WIDTH_f * renderTargetsScale), static_cast<int>(HEIGHT_f * renderTargetsScale));
+        ImGui::DragFloat("Quality", &rtScale, 0.01f, 0.05f, 1.0f);
         if (ImGui::Button("Apply"))
         {
             renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
             RHII.WaitDeviceIdle();
             EventSystem::PushEvent(EventResize);
         }
-        // ImGui::Checkbox("Lock Render Window", &lock_render_window);
+        ImGui::Separator();
+
         ImGui::Checkbox("IBL", &use_IBL);
+        if (use_IBL)
+        {
+            ImGui::Indent(16.0f);
+            ImGui::DragFloat("IBL Intensity", &IBL_intensity, 0.01f, 0.0f, 10.0f);
+            ImGui::Unindent(16.0f);
+        }
         ImGui::Checkbox("SSR", &show_ssr);
         ImGui::Checkbox("SSAO", &show_ssao);
         ImGui::Checkbox("Depth of Field", &use_DOF);
@@ -439,35 +385,40 @@ namespace pe
             ImGui::DragFloat("Range##DOF", &DOF_blur_range, 0.05f, 0.5f);
             ImGui::Unindent(16.0f);
             ImGui::Separator();
-            ImGui::Separator();
         }
         ImGui::Checkbox("Motion Blur", &show_motionBlur);
         if (show_motionBlur)
         {
             ImGui::Indent(16.0f);
             ImGui::DragFloat("Strength#mb", &motionBlur_strength, 0.05f, 0.2f);
+            ImGui::DragInt("Samples#mb", &motionBlur_samples, 0.1f, 8, 64);
             ImGui::Unindent(16.0f);
-            ImGui::Separator();
             ImGui::Separator();
         }
         ImGui::Checkbox("Tone Mapping", &show_tonemapping);
-        // ImGui::Checkbox("Compute shaders", &use_compute);
-        if (show_tonemapping)
+        // if (show_tonemapping)
+        // {
+        //     ImGui::Indent(16.0f);
+        //     ImGui::SliderFloat("Exposure", &exposure, 0.01f, 10.f);
+        //     ImGui::Unindent(16.0f);
+        //     ImGui::Separator();
+        // }
+
+        auto &srSettings = Settings::Get<SRSettings>();
+#if 0
+        ImGui::Checkbox("FSR2", &srSettings.enable);
+#else
+        // TODO: FSR2 is out of sync and out of date
+        ImGui::Checkbox("FSR2 (broken)", &srSettings.enable);
+        srSettings.enable = false;
+#endif
+        if (srSettings.enable)
         {
             ImGui::Indent(16.0f);
-            ImGui::SliderFloat("Exposure", &exposure, 0.01f, 10.f);
+            ImGui::InputFloat2("Motion", (float *)&srSettings.motionScale);
+            ImGui::InputFloat2("Proj", (float *)&srSettings.projScale);
             ImGui::Unindent(16.0f);
             ImGui::Separator();
-            ImGui::Separator();
-        }
-
-        ImGui::Checkbox("FSR2", &use_FSR2);
-        if (use_FSR2)
-        {
-            ImGui::InputFloat("MotionX", &FSR2_MotionScaleX, 0.1f, 1.f);
-            ImGui::InputFloat("MotionY", &FSR2_MotionScaleY, 0.1f, 1.f);
-            ImGui::InputFloat("ProjX", &FSR2_ProjScaleX, 0.1f, 1.f);
-            ImGui::InputFloat("ProjY", &FSR2_ProjScaleY, 0.1f, 1.f);
         }
 
         ImGui::Checkbox("FXAA", &use_FXAA);
@@ -476,41 +427,42 @@ namespace pe
         if (show_Bloom)
         {
             ImGui::Indent(16.0f);
-            ImGui::SliderFloat("Inv Brightness", &Bloom_Inv_brightness, 0.01f, 50.f);
-            ImGui::SliderFloat("Intensity", &Bloom_intensity, 0.01f, 10.f);
+            ImGui::SliderFloat("Strength", &Bloom_strength, 0.01f, 10.f);
             ImGui::SliderFloat("Range", &Bloom_range, 0.1f, 20.f);
-            ImGui::Checkbox("Bloom Tone Mapping", &use_tonemap);
-            if (use_tonemap)
-                ImGui::SliderFloat("Bloom Exposure", &Bloom_exposure, 0.01f, 10.f);
             ImGui::Unindent(16.0f);
             ImGui::Separator();
-            ImGui::Separator();
         }
-        ImGui::Checkbox("Fog", &use_fog);
-        if (use_fog)
+
+        // ImGui::Checkbox("Fog", &use_fog);
+        // if (use_fog)
+        // {
+        //     ImGui::Indent(16.0f);
+        //     ImGui::DragFloat("Ground Thickness", &fog_ground_thickness, 0.1f, 1.0f);
+        //     ImGui::DragFloat("Global Thickness", &fog_global_thickness, 0.1f, 1.0f);
+        //     ImGui::DragFloat("Max Height", &fog_max_height, 0.01f, 0.1f);
+        //     ImGui::Checkbox("Volumetric", &use_Volumetric_lights);
+        //     if (use_Volumetric_lights)
+        //     {
+        //         ImGui::Indent(16.0f);
+        //         ImGui::InputInt("Iterations", &volumetric_steps, 1, 3);
+        //         ImGui::InputFloat("Dither", &volumetric_dither_strength, 1.0f, 10.0f);
+        //         ImGui::Unindent(16.0f);
+        //     }
+        //     ImGui::Unindent(16.0f);
+        // }
+
+        if (ImGui::Checkbox("Sun Light", &shadow_cast))
         {
-            ImGui::Indent(16.0f);
-            ImGui::DragFloat("Ground Thickness", &fog_ground_thickness, 0.1f, 1.0f);
-            ImGui::DragFloat("Global Thickness", &fog_global_thickness, 0.1f, 1.0f);
-            ImGui::DragFloat("Max Height", &fog_max_height, 0.01f, 0.1f);
-            ImGui::Checkbox("Volumetric", &use_Volumetric_lights);
-            if (use_Volumetric_lights)
-            {
-                ImGui::Indent(16.0f);
-                ImGui::InputInt("Iterations", &volumetric_steps, 1, 3);
-                ImGui::InputInt("Dither", &volumetric_dither_strength, 1, 10);
-                ImGui::Unindent(16.0f);
-            }
-            ImGui::Unindent(16.0f);
+            // Update light pass descriptor sets for the skybox change
+            LightPass &lightPass = *WORLD_ENTITY->GetComponent<LightPass>();
+            lightPass.UpdateDescriptorSets();
         }
-        ImGui::Checkbox("Sun Light", &shadow_cast);
         if (shadow_cast)
         {
             ImGui::Indent(16.0f);
             ImGui::SliderFloat("Intst", &sun_intensity, 0.1f, 50.f);
             ImGui::DragFloat3("Dir", sun_direction.data(), 0.01f, -1.f, 1.f);
             ImGui::DragFloat("Slope", &depthBias[2], 0.15f, 0.5f);
-            ImGui::Separator();
             ImGui::Separator();
             {
                 vec3 direction = normalize(make_vec3(&sun_direction[0]));
@@ -520,9 +472,9 @@ namespace pe
             }
             ImGui::Unindent(16.0f);
         }
+
         ImGui::DragFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f);
         ImGui::DragFloat("TimeScale", &timeScale, 0.05f, 0.2f);
-        ImGui::Separator();
         ImGui::Separator();
         if (ImGui::Button("Randomize Lights"))
             randomize_lights = true;
@@ -530,40 +482,15 @@ namespace pe
         ImGui::SliderFloat("Light Rng", &lights_range, 0.1f, 30.f);
         ImGui::Checkbox("FreezeCamCull", &freezeFrustumCulling);
         ImGui::Checkbox("Draw AABBs", &drawAABBs);
-
-        // Model properties
-        ImGui::Separator();
-        ImGui::Separator();
-        ImGui::Separator();
-        ImGui::LabelText("", "Model Properties");
-        if (modelItemSelected > -1)
+        if (drawAABBs)
         {
-            const std::string toStr = std::to_string(modelItemSelected);
-            const std::string id = " ID[" + toStr + "]";
-            const std::string fmt = modelList[modelItemSelected] + id;
-            ImGui::TextColored(ImVec4(.6f, 1.f, .5f, 1.f), "%s", fmt.c_str());
-
-            ImGui::Separator();
-            const std::string s = "Scale##" + toStr;
-            const std::string p = "Position##" + toStr;
-            const std::string r = "Rotation##" + toStr;
-            ImGui::DragFloat3(s.c_str(), model_scale[modelItemSelected].data(), 0.005f);
-            ImGui::DragFloat3(p.c_str(), model_pos[modelItemSelected].data(), 0.005f);
-            ImGui::DragFloat3(r.c_str(), model_rot[modelItemSelected].data(), 0.005f);
-
-            ImGui::Separator();
-            if (ImGui::Button("Unload Model"))
-            {
-                RHII.WaitDeviceIdle();
-                Model::models[modelItemSelected].Destroy();
-                Model::models.erase(Model::models.begin() + modelItemSelected);
-                GUI::modelList.erase(GUI::modelList.begin() + modelItemSelected);
-                GUI::model_scale.erase(GUI::model_scale.begin() + modelItemSelected);
-                GUI::model_pos.erase(GUI::model_pos.begin() + modelItemSelected);
-                GUI::model_rot.erase(GUI::model_rot.begin() + modelItemSelected);
-                GUI::modelItemSelected = -1;
-            }
+            bool depthAware = aabbDepthAware;
+            ImGui::Indent(16.0f);
+            ImGui::Checkbox("Depth Aware", &aabbDepthAware);
+            ImGui::Unindent(16.0f);
         }
+        ImGui::DragInt("Culls Per Task", &cullsPerTask, 1.f, 1, 100);
+
         ImGui::End();
     }
 
@@ -573,7 +500,7 @@ namespace pe
         for (auto &file : std::filesystem::recursive_directory_iterator(directory))
         {
             auto pathStr = file.path().string();
-            if (endsWithExt(pathStr, ".cs"))
+            if (pathStr.ends_with(".cs"))
                 fileList.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size() + 1));
         }
 
@@ -581,8 +508,8 @@ namespace pe
         for (auto &file : std::filesystem::recursive_directory_iterator(directory))
         {
             auto pathStr = file.path().string();
-            if (endsWithExt(pathStr, ".vert") || endsWithExt(pathStr, ".frag") || endsWithExt(pathStr, ".comp") ||
-                endsWithExt(pathStr, ".glsl"))
+            if (pathStr.ends_with(".vert") || pathStr.ends_with(".frag") || pathStr.ends_with(".comp") ||
+                pathStr.ends_with(".glsl"))
             {
                 shaderList.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size() + 1));
             }
@@ -609,20 +536,20 @@ namespace pe
         initInfo.PipelineCache = nullptr;
         initInfo.DescriptorPool = RHII.GetDescriptorPool()->Handle();
         initInfo.Subpass = 0;
-        initInfo.MinImageCount = static_cast<uint32_t>(RHII.GetSwapchain()->images.size());
-        initInfo.ImageCount = static_cast<uint32_t>(RHII.GetSwapchain()->images.size());
+        initInfo.MinImageCount = RHII.GetSwapchain()->GetImageCount();
+        initInfo.ImageCount = RHII.GetSwapchain()->GetImageCount();
         initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         initInfo.Allocator = nullptr;
         initInfo.CheckVkResultFn = nullptr;
 
-        m_displayRT = CONTEXT->GetSystem<RendererSystem>()->GetRenderTarget("display");
-
-        AttachmentInfo attachmentInfo{};
-        attachmentInfo.image = m_displayRT;
-        attachmentInfo.loadOp = AttachmentLoadOp::Load;
-        attachmentInfo.initialLayout = ImageLayout::General;
-        attachmentInfo.finalLayout = ImageLayout::Attachment;
-        renderPass = CommandBuffer::GetRenderPass(1, &attachmentInfo, nullptr);
+        renderer = CONTEXT->GetSystem<RendererSystem>();
+        attachments.resize(1);
+        attachments[0] = {};
+        attachments[0].image = renderer->GetDisplayRT();
+        attachments[0].loadOp = AttachmentLoadOp::Load;
+        attachments[0].initialLayout = ImageLayout::Attachment;
+        attachments[0].finalLayout = ImageLayout::ShaderReadOnly;
+        renderPass = CommandBuffer::GetRenderPass({attachments});
         ImGui_ImplVulkan_Init(&initInfo, renderPass->Handle());
 
         CommandBuffer *cmd = CommandBuffer::GetFree(queue->GetFamilyId());
@@ -637,7 +564,7 @@ namespace pe
         queue->WaitIdle();
     }
 
-    void GUI::InitGUI(bool show)
+    void GUI::InitGUI()
     {
         //                   counter clock wise
         // x, y, z coords orientation   // u, v coords orientation
@@ -649,25 +576,41 @@ namespace pe
         //        /	|                   //     |
         //       /  |/ +y               //     |/ v
 
-        render = show;
+        m_renderQueue = RHII.GetRenderQueue();
+
         InitImGui();
     }
 
-    void GUI::Draw(CommandBuffer *cmd, uint32_t imageIndex)
+    CommandBuffer *GUI::Draw()
     {
-        if (!render)
-            return;
+        if (!render || ImGui::GetDrawData()->TotalVtxCount <= 0)
+            return nullptr;
+
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
+        cmd->Begin();
 
         cmd->BeginDebugRegion("GUI");
-        if (ImGui::GetDrawData()->TotalVtxCount > 0)
-        {
-            m_displayRT = CONTEXT->GetSystem<RendererSystem>()->GetRenderTarget("display");
 
-            cmd->BeginPass(renderPass, &m_displayRT, nullptr);
-            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
-            cmd->EndPass();
-        }
+        Image *displayRT = renderer->GetDisplayRT();
+        attachments[0].image = displayRT;
+
+        ImageBarrierInfo barrierInfo{};
+        barrierInfo.image = displayRT;
+        barrierInfo.layout = ImageLayout::Attachment;
+        barrierInfo.stageFlags = PipelineStage::ColorAttachmentOutputBit;
+        barrierInfo.accessMask = Access::ColorAttachmentWriteBit;
+        cmd->ImageBarrier(barrierInfo);
+
+        cmd->BeginPass(attachments, "GUI");
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd->Handle());
+        cmd->EndPass();
         cmd->EndDebugRegion();
+
+        cmd->End();
+
+        ImGui::RenderPlatformWindowsDefault(); // draws the windows outside the surface
+
+        return cmd;
     }
 
     void GUI::SetWindowStyle(ImGuiStyle *dst)
@@ -691,35 +634,11 @@ namespace pe
             RenderPass::Destroy(renderPass);
             renderPass = nullptr;
         }
-
-        for (auto &framebuffer : framebuffers)
-        {
-            if (framebuffer)
-            {
-                vkDestroyFramebuffer(RHII.GetDevice(), framebuffer, nullptr);
-                framebuffer = {};
-            }
-        }
     }
 
     void GUI::Update()
     {
-        if (!render)
-            return;
-
-        ImGui_ImplSDL2_NewFrame();
-        ImGui_ImplVulkan_NewFrame();
-        ImGui::NewFrame();
-        UpdateWindows();
-        ImGui::Render();
-    }
-
-    void GUI::RenderViewPorts()
-    {
-        if (!render)
-            return;
-
-        ImGui::UpdatePlatformWindows();
-        ImGui::RenderPlatformWindowsDefault();
+        if (render)
+            UpdateWindows();
     }
 }

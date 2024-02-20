@@ -20,11 +20,11 @@ namespace pe
         template <class T>
         T *GetEffect()
         {
-            ValidateBaseClass<IRenderComponent, T>();
-            return static_cast<T *>(m_effects[GetTypeID<T>()]);
+            ValidateBaseClass<IRenderPassComponent, T>();
+            return static_cast<T *>(m_renderPassComponents[GetTypeID<T>()]);
         }
 
     private:
-        std::unordered_map<size_t, IRenderComponent *> m_effects;
+        std::unordered_map<size_t, IRenderPassComponent *> m_renderPassComponents;
     };
 }

@@ -1,53 +1,32 @@
-static const int MAX_DATA_SIZE = 2048; // TODO: calculate on init
-static const int MAX_NUM_JOINTS = 128;
+#include "../Common/Structures.hlsl"
+#include "../Common/Common.hlsl"
 
-struct PushConstants
+static const int MAX_DATA_SIZE = 2048;
+
+[[vk::push_constant]] PushConstants_Shadows pc;
+[[vk::binding(0, 0)]] tbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
+
+float4x4 GetMeshMatrix()            { return data[pc.meshIndex]; }
+float4x4 GetJointMatrix(uint index) { return data[pc.meshIndex + 2 + index]; }
+
+VS_OUTPUT_Position_Uv mainVS(VS_INPUT_Depth input)
 {
-    float4x4 mvp;
-    uint meshIndex;
-    uint meshJointCount;
-};
-[[vk::push_constant]] PushConstants pc;
-
-[[vk::binding(0)]] tbuffer UBO { float4x4 data[MAX_DATA_SIZE]; };
-
-#define meshJointMatrix(x) data[pc.meshIndex + 2 + x]
-
-static const float4x4 identity_mat = {  1.0f, 0.0f, 0.0f, 0.0f,
-                                        0.0f, 1.0f, 0.0f, 0.0f,
-                                        0.0f, 0.0f, 1.0f, 0.0f,
-                                        0.0f, 0.0f, 0.0f, 1.0f};
-
-struct VS_INPUT {
-    float3 position     : POSITION;
-    int4 jointIndices   : BLENDINDICES;
-    float4 jointWeights : BLENDWEIGHT;
-};
-struct VS_OUTPUT {
-    float4 position     : SV_POSITION;
-};
-
-VS_OUTPUT mainVS(VS_INPUT input)
-{
-    VS_OUTPUT output;
-
-    float4x4 transform;
-    float4 position = float4(input.position, 1.0);
-
-    if (pc.meshJointCount > 0.0)
+    VS_OUTPUT_Position_Uv output;
+    
+    float4x4 jointTransform = identity_mat;
+    if (pc.meshJointCount > 0)
     {
-        float4x4 boneTransform = mul(meshJointMatrix(input.jointIndices[0]), input.jointWeights[0]) +
-                                 mul(meshJointMatrix(input.jointIndices[1]), input.jointWeights[1]) +
-                                 mul(meshJointMatrix(input.jointIndices[2]), input.jointWeights[2]) +
-                                 mul(meshJointMatrix(input.jointIndices[3]), input.jointWeights[3]);
+        jointTransform = mul(GetJointMatrix(input.joints[0]), input.weights[0]) +
+                         mul(GetJointMatrix(input.joints[1]), input.weights[1]) +
+                         mul(GetJointMatrix(input.joints[2]), input.weights[2]) +
+                         mul(GetJointMatrix(input.joints[3]), input.weights[3]);
+    }
 
-        transform = mul(boneTransform, pc.mvp);
-        output.position = mul(position, transform);
-    }
-    else
-    {
-        output.position = mul(position, pc.mvp);
-    }
+    float4x4 combinedMatrix = mul(jointTransform, GetMeshMatrix());
+    float4x4 final = mul(combinedMatrix, pc.vp);
+
+    output.position = mul(float4(input.position, 1.0), final);
+    //output.uv = input.uv; // TODO: UVs are not used in shadow pass, remove this when we have shadow vertices in the buffer
 
     return output;
 }

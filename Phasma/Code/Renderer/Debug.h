@@ -30,6 +30,23 @@ namespace pe
 
         static void TriggerCapture();
 
+        struct GpuTimerInfo
+        {
+            GpuTimer *timer;
+            std::string name;
+        };
+
+        struct TimeInfo
+        {
+            GpuTimer *timer;
+            std::string name;
+            uint32_t depth;
+        };
+
+        inline static OrderedMap<CommandBuffer *, std::vector<GpuTimerInfo>> s_timers{}; // needs to be cleared every frame
+        inline static OrderedMap<GpuTimer *, TimeInfo> s_timeInfos{};                    // needs to be cleared every frame
+        inline static std::mutex s_infosMutex{};
+
     private:
         friend class CommandBuffer;
         friend class Queue;

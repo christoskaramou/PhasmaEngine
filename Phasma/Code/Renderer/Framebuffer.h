@@ -16,11 +16,13 @@ namespace pe
 
         ~FrameBuffer();
 
-        uint32_t GetWidth() { return m_width; }
+        uvec2 GetSize() { return m_size; }
 
-        uint32_t GetHeight() { return m_height; }
+        uint32_t GetWidth() { return m_size.x; }
+
+        uint32_t GetHeight() { return m_size.y; }
 
     private:
-        uint32_t m_width, m_height;
+        uvec2 m_size;
     };
 }

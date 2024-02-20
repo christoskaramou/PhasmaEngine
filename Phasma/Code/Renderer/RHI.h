@@ -1,8 +1,8 @@
 #pragma once
 
 #define RHII (*RHI::Get()) // RHI Instance
-#define WIDTH RHII.GetSurface()->actualExtent.width
-#define HEIGHT RHII.GetSurface()->actualExtent.height
+#define WIDTH RHII.GetSurface()->GetActualExtent().width
+#define HEIGHT RHII.GetSurface()->GetActualExtent().height
 #define WIDTH_f static_cast<float>(WIDTH)
 #define HEIGHT_f static_cast<float>(HEIGHT)
 
@@ -75,13 +75,14 @@ namespace pe
         uint64_t GetMinStorageBufferOffsetAlignment() { return m_minStorageBufferOffsetAlignment; }
         size_t AlignUniform(size_t size) { return (size + m_minUniformBufferOffsetAlignment - 1) & ~(m_minUniformBufferOffsetAlignment - 1); }
         size_t AlignStorage(size_t size) { return (size + m_minStorageBufferOffsetAlignment - 1) & ~(m_minStorageBufferOffsetAlignment - 1); }
+        uint32_t GetMaxPushDescriptorsPerSet() { return m_maxPushDescriptorsPerSet; }
 
         const InstanceHandle &GetInstance() { return m_instance; }
         const GpuHandle &GetGpu() { return m_gpu; }
         const std::string &GetGpuName() { return m_gpuName; }
         const DeviceHandle &GetDevice() { return m_device; }
         DescriptorPool *GetDescriptorPool() { return m_descriptorPool; }
-        std::vector<Semaphore *> &GetSemaphores() { return m_semaphores; }
+        std::vector<Semaphore *> &GetSemaphores(uint32_t frameIndex) { return m_semaphores[frameIndex]; }
         const AllocatorHandle &GetAllocator() { return m_allocator; }
         Queue *GetRenderQueue() { return m_renderQueue; }
         Queue *GetComputeQueue() { return m_computeQueue; }
@@ -122,7 +123,7 @@ namespace pe
         std::string m_gpuName;
         DeviceHandle m_device;
         DescriptorPool *m_descriptorPool;
-        std::vector<Semaphore *> m_semaphores;
+        std::vector<Semaphore *> m_semaphores[SWAPCHAIN_IMAGES];
         AllocatorHandle m_allocator;
 
         Queue *m_renderQueue;
@@ -144,5 +145,6 @@ namespace pe
         uint32_t m_maxStorageBufferSize;
         uint64_t m_minUniformBufferOffsetAlignment;
         uint64_t m_minStorageBufferOffsetAlignment;
+        uint32_t m_maxPushDescriptorsPerSet;
     };
 }

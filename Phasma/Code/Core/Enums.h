@@ -2,11 +2,15 @@
 
 namespace pe
 {
+    class FlagsBase
+    {
+    };
+
     template <class T, class = typename std::enable_if_t<std::is_enum_v<T>>>
-    class Flags
+    class Flags : public FlagsBase
     {
     public:
-        using Type = typename std::underlying_type_t<T>;
+        using Type = uint64_t;
 
         Flags() : m_value(0) {}
         Flags(T value) : m_value(static_cast<Type>(value)) {}
@@ -14,38 +18,40 @@ namespace pe
         operator bool() const { return m_value != 0; }
         bool operator!() const { return m_value == 0; }
 
-        bool operator==(T other) { return m_value == static_cast<Type>(other); }
-        bool operator==(const Flags &other) { return m_value == other.m_value; }
+        bool operator==(T other) const { return m_value == static_cast<Type>(other); }
+        bool operator==(const Flags &other) const { return m_value == other.m_value; }
 
-        bool operator!=(T other) { return m_value != static_cast<Type>(other); }
-        bool operator!=(const Flags &other) { return m_value != other.m_value; }
+        bool operator!=(T other) const { return m_value != static_cast<Type>(other); }
+        bool operator!=(const Flags &other) const { return m_value != other.m_value; }
 
         void operator=(T other) { m_value = static_cast<Type>(other); }
         void operator=(const Flags &other) { m_value = other.m_value; }
 
-        Flags operator|(T other) { return m_value | static_cast<Type>(other); }
-        Flags operator|(const Flags &other) { return m_value | other.m_value; }
+        Flags operator|(T other) const { return Flags(m_value | static_cast<Type>(other)); }
+        Flags operator|(const Flags &other) const { return Flags(m_value | other.m_value); }
 
         void operator|=(T other) { m_value |= static_cast<Type>(other); }
         void operator|=(const Flags &other) { m_value |= other.m_value; }
 
-        Flags operator&(T other) { return m_value & static_cast<Type>(other); }
-        Flags operator&(const Flags &other) { return m_value & other.m_value; }
+        Flags operator&(T other) const { return Flags(m_value & static_cast<Type>(other)); }
+        Flags operator&(const Flags &other) const { return Flags(m_value & other.m_value); }
 
         void operator&=(T other) { m_value &= static_cast<Type>(other); }
         void operator&=(const Flags &other) { m_value &= other.m_value; }
 
-        Flags operator^(T other) { return m_value ^ static_cast<Type>(other); }
-        Flags operator^(const Flags &other) { return m_value ^ other.m_value; }
+        Flags operator^(T other) const { return Flags(m_value ^ static_cast<Type>(other)); }
+        Flags operator^(const Flags &other) const { return Flags(m_value ^ other.m_value); }
 
         void operator^=(T other) { m_value ^= static_cast<Type>(other); }
         void operator^=(const Flags &other) { m_value ^= other.m_value; }
 
-        Flags operator<<(unsigned int shift) { return m_value << shift; }
-        Flags operator>>(unsigned int shift) { return m_value >> shift; }
+        Flags operator<<(unsigned int shift) const { return Flags(m_value << shift); }
+        Flags operator>>(unsigned int shift) const { return Flags(m_value >> shift); }
 
         void operator<<=(unsigned int shift) { m_value <<= shift; }
         void operator>>=(unsigned int shift) { m_value >>= shift; }
+
+        Flags operator~() const { return Flags(~m_value); }
 
         Type Value() const { return m_value; }
         const Type Value() { return m_value; }
@@ -65,10 +71,59 @@ namespace pe
     inline Flags<##Enum> operator>>(##Enum a, unsigned int shift) { return Flags<##Enum>(a) >> shift; } \
     inline Flags<##Enum> operator|(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) | b; }   \
     inline Flags<##Enum> operator&(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) & b; }   \
-    inline Flags<##Enum> operator^(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) ^ b; }
+    inline Flags<##Enum> operator^(##Enum a, const Flags<##Enum> &b) { return Flags<##Enum>(a) ^ b; }   \
+    inline Flags<##Enum> operator~(##Enum a) { return ~Flags<##Enum>(a); }
 
     template <class T, class U>
     T Translate(U u);
+
+    template <class T, class U>
+    U GetFlags(T flags, std::unordered_map<T, U> &translator)
+    {
+        static_assert(std::is_integral_v<T>, "GetFlags: T must be integral");
+        static_assert(std::is_integral_v<U>, "GetFlags: U must be integral");
+
+        if (!flags)
+            return U{};
+
+        auto it = translator.find(flags);
+        if (it == translator.end())
+        {
+            // Emplace the new flags pair into translator
+
+            // template< class... Args >
+            // std::pair<iterator,bool> emplace( Args&&... args );
+            it = translator.emplace(flags, U{}).first;
+
+            // Check each existing flag to see if it is included in the new flags
+            for (auto &[existing_flags, value] : translator)
+            {
+                if ((flags & existing_flags) == existing_flags)
+                    it->second |= value;
+            }
+        }
+
+        return it->second;
+    }
+
+    template <class U, size_t N>
+    U GetFlags(uint64_t flags, const U (&translator)[N])
+    {
+        static_assert(std::is_integral_v<U>, "GetFlags: U must be integral");
+
+        U result{};
+
+        if (!flags)
+            return result;
+
+        for (size_t i = 0; i < N; ++i)
+        {
+            if ((flags & (1ULL << i)) == (1ULL << i))
+                result = result | translator[i];
+        }
+
+        return result;
+    }
 
     enum class Launch
     {
@@ -77,7 +132,7 @@ namespace pe
         AsyncNoWait, // Does not block the main thread, useful for loading.
         Sync,
         SyncDeferred,
-        All // Used for convenience to call all the above in one go.
+        All, // Used for convenience to call all the above in one go.
     };
 
     enum class ShaderStage
@@ -104,14 +159,14 @@ namespace pe
     {
         TRANSLATION,
         ROTATION,
-        SCALE
+        SCALE,
     };
 
     enum class AnimationInterpolationType
     {
         LINEAR,
         STEP,
-        CUBICSPLINE
+        CUBICSPLINE,
     };
 
     enum class MaterialType
@@ -120,7 +175,7 @@ namespace pe
         MetallicRoughness,
         Normal,
         Occlusion,
-        Emissive
+        Emissive,
     };
 
     // It is invalid to have both 'matrix' and any of 'translation'/'rotation'/'scale'
@@ -129,14 +184,14 @@ namespace pe
     {
         Identity,
         Matrix,
-        TRS
+        TRS,
     };
 
     enum class BarrierType
     {
         Memory,
         Buffer,
-        Image
+        Image,
     };
 
     enum class ImageLayout
@@ -147,6 +202,8 @@ namespace pe
         TransferSrc,
         TransferDst,
         Preinitialized,
+        DepthAttachmentStencilReadOnly,
+        DepthReadOnlyStencilAttachment,
         StencilAttachment,
         StencilReadOnly,
         ReadOnly,
@@ -162,12 +219,11 @@ namespace pe
         None = 0,
         Front = 1,
         Back = 2,
-        FrontAndBack = 3
+        FrontAndBack = 3,
     };
 
     enum class QueueType
     {
-        None = 0,
         GraphicsBit = 1 << 0,
         ComputeBit = 1 << 1,
         TransferBit = 1 << 2,
@@ -183,14 +239,14 @@ namespace pe
         FORWARD,
         BACKWARD,
         LEFT,
-        RIGHT
+        RIGHT,
     };
 
     enum class RenderType
     {
         Opaque = 1,
         AlphaCut = 2,
-        AlphaBlend = 3
+        AlphaBlend = 3,
     };
 
     enum class ReflectionVariableType
@@ -198,14 +254,14 @@ namespace pe
         None,
         SInt,
         UInt,
-        SFloat
+        SFloat,
     };
 
     enum class Filter
     {
         Nearest,
         Linear,
-        Cubic
+        Cubic,
     };
 
     enum class ImageAspect
@@ -220,7 +276,7 @@ namespace pe
     enum class SamplerMipmapMode
     {
         Nearest,
-        Linear
+        Linear,
     };
 
     enum class SamplerAddressMode
@@ -229,7 +285,7 @@ namespace pe
         MirroredRepeat,
         ClampToEdge,
         ClampToBorder,
-        MirrorClampToEdge
+        MirrorClampToEdge,
     };
 
     enum class CompareOp
@@ -241,7 +297,7 @@ namespace pe
         Greater,
         NotEqual,
         GreaterOrEqual,
-        Always
+        Always,
     };
 
     enum class BorderColor
@@ -253,14 +309,14 @@ namespace pe
         FloatOpaqueWhite,
         IntOpaqueWhite,
         FloatCustom,
-        IntCustom
+        IntCustom,
     };
 
     enum class ImageType
     {
         Type1D,
         Type2D,
-        Type3D
+        Type3D,
     };
 
     enum class ImageViewType
@@ -271,13 +327,13 @@ namespace pe
         TypeCube,
         Type1DArray,
         Type2DArray,
-        TypeCubeArray
+        TypeCubeArray,
     };
 
     enum class ImageTiling
     {
         Optimal,
-        Linear
+        Linear,
     };
 
     enum class MemoryProperty
@@ -300,6 +356,8 @@ namespace pe
         R8SInt,
         R8UInt,
         R8Unorm,
+        RG8Unorm,
+        RGB8Unorm,
         RGBA8Unorm,
 
         R16SInt,
@@ -334,12 +392,14 @@ namespace pe
 
         D32SFloat,
         D32SFloatS8UInt,
+
+        S8UInt,
     };
 
     enum class SharingMode
     {
         Exclusive,
-        Concurrent
+        Concurrent,
     };
 
     enum class SampleCount
@@ -454,8 +514,7 @@ namespace pe
 
     enum class PipelineStage : uint64_t
     {
-        None = 0,
-        TopOfPipeBit = 1 << 0,
+        None = 1 << 0,
         DrawIndirectBit = 1 << 1,
         VertexInputBit = 1 << 2,
         VertexShaderBit = 1 << 3,
@@ -468,10 +527,9 @@ namespace pe
         ColorAttachmentOutputBit = 1 << 10,
         ComputeShaderBit = 1 << 11,
         TransferBit = 1 << 12,
-        BottomOfPipeBit = 1 << 13,
-        HostBit = 1 << 14,
-        AllGraphicsBit = 1 << 15,
-        AllCommandsBit = 1 << 16,
+        HostBit = 1 << 13,
+        AllGraphicsBit = 1 << 14,
+        AllCommandsBit = 1 << 15,
     };
     using PipelineStageFlags = Flags<PipelineStage>;
     DEFINE_FLAGS_OPERATORS(PipelineStage)
@@ -491,31 +549,41 @@ namespace pe
 
     enum class Access : uint64_t
     {
-        None = 0,
-        IndirectCommandReadBit = 1 << 0,
-        IndexReadBit = 1 << 1,
-        VertexAttributeReadBit = 1 << 2,
-        UniformReadBit = 1 << 3,
-        InputAttachmentReadBit = 1 << 4,
-        ShaderReadBit = 1 << 5,
-        ShaderWriteBit = 1 << 6,
-        ColorAttachmentReadBit = 1 << 7,
-        ColorAttachmentWriteBit = 1 << 8,
-        DepthStencilAttachmentReadBit = 1 << 9,
-        DepthStencilAttachmentWriteBit = 1 << 10,
-        TransferReadBit = 1 << 11,
-        TransferWriteBit = 1 << 12,
-        HostReadBit = 1 << 13,
-        HostWriteBit = 1 << 14,
-        MemoryReadBit = 1 << 15,
-        MemoryWriteBit = 1 << 16,
-        TransformFeedbackWriteBit = 1 << 17,
-        TransformFeedbackCounterReadBit = 1 << 18,
-        TransformFeedbackCounterWriteBit = 1 << 19
+        None = 1 << 0,
+        IndirectCommandReadBit = 1 << 1,
+        IndexReadBit = 1 << 2,
+        VertexAttributeReadBit = 1 << 3,
+        UniformReadBit = 1 << 4,
+        InputAttachmentReadBit = 1 << 5,
+        ShaderReadBit = 1 << 6,
+        ShaderWriteBit = 1 << 7,
+        ColorAttachmentReadBit = 1 << 8,
+        ColorAttachmentWriteBit = 1 << 9,
+        DepthStencilAttachmentReadBit = 1 << 10,
+        DepthStencilAttachmentWriteBit = 1 << 11,
+        TransferReadBit = 1 << 12,
+        TransferWriteBit = 1 << 13,
+        HostReadBit = 1 << 14,
+        HostWriteBit = 1 << 15,
+        MemoryReadBit = 1 << 16,
+        MemoryWriteBit = 1 << 17,
+        TransformFeedbackWriteBit = 1 << 18,
+        TransformFeedbackCounterReadBit = 1 << 19,
+        TransformFeedbackCounterWriteBit = 1 << 20,
+        ShaderSampledReadBit = 1 << 21,
+        ShaderStorageReadBit = 1 << 22,
     };
 
     using AccessFlags = Flags<Access>;
     DEFINE_FLAGS_OPERATORS(Access)
+
+    enum class ResourceAccess : uint64_t
+    {
+        Unused = 0,
+        ReadOnly = 1 << 0,
+        WriteOnly = 1 << 1,
+        ReadWrite = ReadOnly | WriteOnly,
+    };
 
     enum class AllocationCreate
     {
@@ -763,7 +831,7 @@ namespace pe
 
     enum class PrimitiveTopology
     {
-        PointLis,
+        PointList,
         LineList,
         LineStrip,
         TriangleList,
@@ -773,7 +841,7 @@ namespace pe
         LineStripWithAdjacency,
         TriangleListWithAdjacency,
         TriangleStripWithAdjacency,
-        PatchList
+        PatchList,
     };
 
     enum class PolygonMode
@@ -781,5 +849,40 @@ namespace pe
         Fill,
         Line,
         Point,
+    };
+
+    enum class BlendType
+    {
+        None,
+        Opaque,
+        Transparent
+    };
+
+    enum class CommandType
+    {
+        None = 0,
+        GraphicsBit = 1 << 0,
+        ComputeBit = 1 << 1,
+        TransferBit = 1 << 2,
+    };
+    using CommandTypeFlags = Flags<CommandType>;
+    DEFINE_FLAGS_OPERATORS(CommandType);
+
+    enum class StencilOp
+    {
+        Keep,
+        Zero,
+        Replace,
+        IncrementAndClamp,
+        DecrementAndClamp,
+        Invert,
+        IncrementAndWrap,
+        DecrementAndWrap,
+    };
+
+    enum class DependencyOp
+    {
+        DontCare,
+        Wait,
     };
 }

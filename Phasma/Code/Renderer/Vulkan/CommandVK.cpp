@@ -9,6 +9,7 @@
 #include "Renderer/Image.h"
 #include "Renderer/Queue.h"
 #include "Renderer/Semaphore.h"
+#include "Renderer/Event.h"
 
 namespace pe
 {
@@ -95,7 +96,9 @@ namespace pe
         m_familyId = familyId;
         m_commandPool = CommandPool::GetFree(familyId);
         m_semaphore = Semaphore::Create(true, name + "_semaphore");
+        m_event = Event::Create(name + "_event");
         m_submitions = 0;
+        m_renderPass = nullptr;
         m_boundPipeline = nullptr;
 
         VkCommandBufferAllocateInfo cbai{};
@@ -142,6 +145,7 @@ namespace pe
 
         PE_CHECK(vkBeginCommandBuffer(m_handle, &beginInfo));
         m_recording = true;
+        m_commandFlags = CommandType::None;
     }
 
     void CommandBuffer::End()
@@ -161,10 +165,6 @@ namespace pe
             vkResetCommandPool(RHII.GetDevice(), m_commandPool->Handle(), 0);
     }
 
-    void CommandBuffer::PipelineBarrier()
-    {
-    }
-
     void CommandBuffer::SetDepthBias(float constantFactor, float clamp, float slopeFactor)
     {
         vkCmdSetDepthBias(m_handle, constantFactor, clamp, slopeFactor);
@@ -173,29 +173,97 @@ namespace pe
     void CommandBuffer::BlitImage(Image *src, Image *dst, ImageBlit *region, Filter filter)
     {
         dst->BlitImage(this, src, region, filter);
+        m_commandFlags |= CommandType::TransferBit;
     }
 
-    RenderPass *CommandBuffer::GetRenderPass(uint32_t count, AttachmentInfo *colorInfos, AttachmentInfo *depthInfo)
+    void CommandBuffer::ClearColors(std::vector<Image *> images)
+    {
+        std::vector<ImageBarrierInfo> barriers(images.size());
+        for (uint32_t i = 0; i < images.size(); i++)
+        {
+            barriers[i].image = images[i];
+            barriers[i].layout = ImageLayout::TransferDst;
+            barriers[i].stageFlags = PipelineStage::TransferBit;
+            barriers[i].accessMask = Access::TransferWriteBit;
+        }
+        Image::Barriers(this, barriers);
+
+        for (uint32_t i = 0; i < images.size(); i++)
+        {
+            Image *image = images[i];
+            const vec4 &color = image->m_imageInfo.clearColor;
+
+            VkClearColorValue clearValue{};
+            clearValue.float32[0] = color[0];
+            clearValue.float32[1] = color[1];
+            clearValue.float32[2] = color[2];
+            clearValue.float32[3] = color[3];
+
+            VkImageSubresourceRange rangeVK{};
+            rangeVK.aspectMask = GetAspectMaskVK(image->GetFormat());
+            rangeVK.baseMipLevel = 0;
+            rangeVK.levelCount = 1;
+            rangeVK.baseArrayLayer = 0;
+            rangeVK.layerCount = 1;
+
+            BeginDebugRegion("Clear Color: " + image->m_imageInfo.name);
+            vkCmdClearColorImage(m_handle, image->Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
+            EndDebugRegion();
+
+            m_commandFlags |= CommandType::TransferBit;
+        }
+    }
+
+    void CommandBuffer::ClearDepthStencils(std::vector<Image *> images)
+    {
+        std::vector<ImageBarrierInfo> barriers(images.size());
+        for (uint32_t i = 0; i < images.size(); i++)
+        {
+            barriers[i].image = images[i];
+            barriers[i].layout = ImageLayout::TransferDst;
+            barriers[i].stageFlags = PipelineStage::TransferBit;
+            barriers[i].accessMask = Access::TransferWriteBit;
+        }
+        Image::Barriers(this, barriers);
+
+        for (uint32_t i = 0; i < images.size(); i++)
+        {
+            Image *image = images[i];
+
+            VkClearDepthStencilValue clearValue{};
+            clearValue.depth = image->m_imageInfo.clearColor[0];
+            clearValue.stencil = static_cast<uint32_t>(image->m_imageInfo.clearColor[1]);
+
+            VkImageSubresourceRange rangeVK{};
+            rangeVK.aspectMask = GetAspectMaskVK(image->GetFormat());
+            rangeVK.baseMipLevel = 0;
+            rangeVK.levelCount = 1;
+            rangeVK.baseArrayLayer = 0;
+            rangeVK.layerCount = 1;
+
+            BeginDebugRegion("Clear Depth: " + image->m_imageInfo.name);
+            vkCmdClearDepthStencilImage(m_handle, image->Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &rangeVK);
+            EndDebugRegion();
+
+            m_commandFlags |= CommandType::TransferBit;
+        }
+    }
+
+    // Note: We don't care about the actual images, having the Attachment struct for convenience
+    RenderPass *CommandBuffer::GetRenderPass(const std::vector<Attachment> &attachments)
     {
         Hash hash;
-        hash.Combine(count);
-        for (uint32_t i = 0; i < count; i++)
+        hash.Combine(attachments.size());
+        for (const auto &attachment : attachments)
         {
-            hash.Combine(static_cast<uint32_t>(colorInfos[i].image->imageInfo.format));
-            hash.Combine(static_cast<uint32_t>(colorInfos[i].image->imageInfo.samples));
-            hash.Combine(static_cast<uint32_t>(colorInfos[i].loadOp));
-            hash.Combine(static_cast<uint32_t>(colorInfos[i].storeOp));
-            hash.Combine(static_cast<uint32_t>(colorInfos[i].initialLayout));
-            hash.Combine(static_cast<uint32_t>(colorInfos[i].finalLayout));
-        }
-        if (depthInfo)
-        {
-            hash.Combine(static_cast<uint32_t>(depthInfo->image->imageInfo.format));
-            hash.Combine(static_cast<uint32_t>(depthInfo->image->imageInfo.samples));
-            hash.Combine(static_cast<uint32_t>(depthInfo->loadOp));
-            hash.Combine(static_cast<uint32_t>(depthInfo->storeOp));
-            hash.Combine(static_cast<uint32_t>(depthInfo->initialLayout));
-            hash.Combine(static_cast<uint32_t>(depthInfo->finalLayout));
+            hash.Combine(static_cast<uint32_t>(attachment.image->GetFormat()));
+            hash.Combine(static_cast<uint32_t>(attachment.image->m_imageInfo.samples));
+            hash.Combine(static_cast<uint32_t>(attachment.loadOp));
+            hash.Combine(static_cast<uint32_t>(attachment.storeOp));
+            hash.Combine(static_cast<uint32_t>(attachment.stencilLoadOp));
+            hash.Combine(static_cast<uint32_t>(attachment.stencilStoreOp));
+            hash.Combine(static_cast<uint32_t>(attachment.initialLayout));
+            hash.Combine(static_cast<uint32_t>(attachment.finalLayout));
         }
 
         auto it = s_renderPasses.find(hash);
@@ -205,52 +273,22 @@ namespace pe
         }
         else
         {
-            std::vector<Attachment> attachements{};
-            for (uint32_t i = 0; i < count; i++)
-            {
-                Attachment attachement{};
-                attachement.format = colorInfos[i].image->imageInfo.format;
-                attachement.samples = colorInfos[i].image->imageInfo.samples;
-                attachement.loadOp = colorInfos[i].loadOp;
-                attachement.storeOp = colorInfos[i].storeOp;
-                attachement.initialLayout = colorInfos[i].initialLayout;
-                attachement.finalLayout = colorInfos[i].finalLayout;
-                attachements.push_back(attachement);
-            }
-
-            if (depthInfo)
-            {
-                Attachment attachement{};
-                attachement.format = depthInfo->image->imageInfo.format;
-                attachement.samples = depthInfo->image->imageInfo.samples;
-                attachement.loadOp = depthInfo->loadOp;
-                attachement.storeOp = depthInfo->storeOp;
-                attachement.initialLayout = depthInfo->initialLayout;
-                attachement.finalLayout = depthInfo->finalLayout;
-                attachements.push_back(attachement);
-            }
-
             std::string name = "Auto_Gen_RenderPass_" + std::to_string(s_renderPasses.size());
-            RenderPass *newRenderPass = RenderPass::Create(static_cast<uint32_t>(attachements.size()), attachements.data(), name);
+            RenderPass *newRenderPass = RenderPass::Create(attachments, name);
             s_renderPasses[hash] = newRenderPass;
 
             return newRenderPass;
         }
     }
 
-    FrameBuffer *CommandBuffer::GetFrameBuffer(RenderPass *renderPass, Image **colorTargets, Image *depthTarget)
+    // Note: Cares only about the actual images, just having the Attachment struct for convenience
+    FrameBuffer *CommandBuffer::GetFrameBuffer(RenderPass *renderPass, const std::vector<Attachment> &attachments)
     {
-        uint32_t count = static_cast<uint32_t>(renderPass->attachments.size());
-
         Hash hash;
-        hash.Combine(count);
         hash.Combine(reinterpret_cast<std::intptr_t>(renderPass));
 
-        uint32_t colorCount = depthTarget ? count - 1 : count;
-        for (uint32_t i = 0; i < colorCount; i++)
-            hash.Combine(reinterpret_cast<std::intptr_t>(colorTargets[i]));
-        if (depthTarget)
-            hash.Combine(reinterpret_cast<std::intptr_t>(depthTarget));
+        for (const auto &attachment : attachments)
+            hash.Combine(reinterpret_cast<std::intptr_t>(attachment.image));
 
         auto it = s_frameBuffers.find(hash);
         if (it != s_frameBuffers.end())
@@ -259,41 +297,18 @@ namespace pe
         }
         else
         {
-            uint32_t width;
-            uint32_t height;
-
-            // if no color attachments pick depth
-            if (colorCount > 0)
-            {
-                width = colorTargets[0]->imageInfo.width;
-                height = colorTargets[0]->imageInfo.height;
-            }
-            else
-            {
-                width = depthTarget->imageInfo.width;
-                height = depthTarget->imageInfo.height;
-            }
-
             std::vector<ImageViewHandle> views{};
-            for (uint32_t i = 0; i < colorCount; i++)
+            for (const auto &attachment : attachments)
             {
-                // create render target view if not exists
-                if (!colorTargets[i]->HasRTV())
-                    colorTargets[i]->CreateRTV();
-                views.push_back(colorTargets[i]->GetRTV());
-            }
-
-            if (depthTarget)
-            {
-                // create render target view if not exists
-                if (!depthTarget->HasRTV())
-                    depthTarget->CreateRTV();
-                views.push_back(depthTarget->GetRTV());
+                Image *image = attachment.image;
+                if (!image->HasRTV())
+                    image->CreateRTV();
+                views.push_back(image->GetRTV());
             }
 
             std::string name = "Auto_Gen_FrameBuffer_" + std::to_string(s_frameBuffers.size());
-            FrameBuffer *newFrameBuffer = FrameBuffer::Create(width,
-                                                              height,
+            FrameBuffer *newFrameBuffer = FrameBuffer::Create(attachments[0].image->m_imageInfo.width,
+                                                              attachments[0].image->m_imageInfo.height,
                                                               static_cast<uint32_t>(views.size()),
                                                               views.data(),
                                                               renderPass,
@@ -304,81 +319,85 @@ namespace pe
         }
     }
 
-    void CommandBuffer::BeginPass(RenderPass *renderPass, Image **colorTargets, Image *depthTarget)
+    void CommandBuffer::BeginPass(const std::vector<Attachment> &attachments, const std::string &name)
     {
-        FrameBuffer *frameBuffer = GetFrameBuffer(renderPass, colorTargets, depthTarget);
-
-        std::vector<Attachment> &attachments = renderPass->attachments;
-        uint32_t count = static_cast<uint32_t>(attachments.size());
-
-        std::vector<VkClearValue> clearValues(count);
-
-        uint32_t colorCount = depthTarget ? count - 1 : count;
-        uint32_t i = 0;
+        m_passActive = true;
+        m_renderPass = GetRenderPass(attachments);
+        m_frameBuffer = GetFrameBuffer(m_renderPass, attachments);
+        std::vector<VkClearValue> clearValues(attachments.size());
         uint32_t clearOps = 0;
-        for (; i < colorCount; i++)
-        {
-            // Set render targets to the correct layout for the pass
-            ImageBarrier(colorTargets[i], renderPass->attachments[i].initialLayout);
 
-            colorTargets[i]->SetCurrentLayout(attachments[i].finalLayout);
-            if (attachments[i].loadOp == AttachmentLoadOp::Clear)
+        for (const auto &attachment : attachments)
+        {
+            Image *renderTarget = attachment.image;
+            Format format = renderTarget->GetFormat();
+            if (IsDepthFormat(format) && (attachment.loadOp == AttachmentLoadOp::Clear || attachment.stencilLoadOp == AttachmentLoadOp::Clear))
             {
-                clearValues[i].color = {1.0f, 0.0f, 0.0f, 1.0f};
+                const float clearDepth = renderTarget->m_imageInfo.clearColor[0];
+                uint32_t clearStencil = static_cast<uint32_t>(renderTarget->m_imageInfo.clearColor[1]);
+                clearValues[clearOps].depthStencil = {clearDepth, clearStencil};
                 clearOps++;
             }
-        }
-        if (depthTarget)
-        {
-            // Set depth target to the correct layout for the pass
-            ImageBarrier(depthTarget, renderPass->attachments[i].initialLayout);
-
-            depthTarget->SetCurrentLayout(attachments[i].finalLayout);
-            if (attachments[i].loadOp == AttachmentLoadOp::Clear)
+            else if (attachment.loadOp == AttachmentLoadOp::Clear)
             {
-                clearValues[i].depthStencil = {GlobalSettings::ReverseZ ? 0.f : 1.f, 0};
+                const vec4 &clearColor = renderTarget->m_imageInfo.clearColor;
+                clearValues[clearOps].color = {clearColor[0], clearColor[1], clearColor[2], clearColor[3]};
                 clearOps++;
             }
+
+            ImageBarrierInfo info{};
+            info.layout = attachment.finalLayout;
+            info.stageFlags = PipelineStage::AllGraphicsBit;
+            info.accessMask = Access::None;
+            renderTarget->SetCurrentInfo(info);
         }
 
         VkRenderPassBeginInfo rpi{};
         rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rpi.renderPass = renderPass->Handle();
-        rpi.framebuffer = frameBuffer->Handle();
+        rpi.renderPass = m_renderPass->Handle();
+        rpi.framebuffer = m_frameBuffer->Handle();
         rpi.renderArea.offset = VkOffset2D{0, 0};
-        rpi.renderArea.extent = VkExtent2D{frameBuffer->GetWidth(), frameBuffer->GetHeight()};
+        rpi.renderArea.extent = VkExtent2D{m_frameBuffer->GetWidth(), m_frameBuffer->GetHeight()};
         rpi.clearValueCount = clearOps > 0 ? static_cast<uint32_t>(clearValues.size()) : 0;
         rpi.pClearValues = clearOps > 0 ? clearValues.data() : nullptr;
 
+        BeginDebugRegion(name + "_pass");
         vkCmdBeginRenderPass(m_handle, &rpi, VK_SUBPASS_CONTENTS_INLINE);
+        m_commandFlags |= CommandType::GraphicsBit;
     }
 
     void CommandBuffer::EndPass()
     {
-        if (m_dynamicPass)
-        {
-            vkCmdEndRendering(m_handle);
-            m_dynamicPass = false;
-        }
-        else
-        {
-            vkCmdEndRenderPass(m_handle);
-        }
+        vkCmdEndRenderPass(m_handle);
+        EndDebugRegion();
 
+        m_renderPass = nullptr;
+        m_frameBuffer = nullptr;
         m_boundPipeline = nullptr;
+        m_boundVertexBuffer = nullptr;
+        m_boundVertexBufferOffset = -1;
+        m_boundVertexBufferFirstBinding = UINT32_MAX;
+        m_boundVertexBufferBindingCount = UINT32_MAX;
+        m_boundIndexBuffer = nullptr;
+        m_boundIndexBufferOffset = -1;
+        m_passActive = false;
     }
 
-    Pipeline *CommandBuffer::GetPipeline(const PassInfo &passInfo)
+    Pipeline *CommandBuffer::GetPipeline(RenderPass *renderPass, PassInfo &passInfo)
     {
-        auto it = s_pipelines.find(passInfo.GetHash()); // PassInfo is hashable
+        Hash hash;
+        hash.Combine(reinterpret_cast<std::intptr_t>(renderPass));
+        hash.Combine(passInfo.GetHash());
+
+        auto it = s_pipelines.find(hash); // PassInfo is hashable
         if (it != s_pipelines.end())
         {
             return it->second;
         }
         else
         {
-            Pipeline *newPipeline = Pipeline::Create(passInfo);
-            s_pipelines[passInfo.GetHash()] = newPipeline;
+            Pipeline *newPipeline = Pipeline::Create(renderPass, passInfo);
+            s_pipelines[hash] = newPipeline;
 
             return newPipeline;
         }
@@ -394,24 +413,53 @@ namespace pe
         vkCmdBindPipeline(m_handle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->Handle());
     }
 
-    void CommandBuffer::BindPipeline(const PassInfo &passInfo)
+    void CommandBuffer::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
     {
-        m_boundPipeline = GetPipeline(passInfo);
+        Pipeline *pipeline = GetPipeline(m_renderPass, passInfo);
+        if (pipeline == m_boundPipeline)
+            return;
+
+        m_boundPipeline = pipeline;
 
         if (passInfo.pCompShader)
+        {
             BindComputePipeline(m_boundPipeline);
+        }
         else
+        {
             BindGraphicsPipeline(m_boundPipeline);
+        }
+
+        if (bindDescriptors)
+        {
+            // auto bind descriptor sets
+            BindDescriptors(passInfo.GetDescriptors(RHII.GetFrameIndex()));
+        }
     }
 
     void CommandBuffer::BindVertexBuffer(Buffer *buffer, size_t offset, uint32_t firstBinding, uint32_t bindingCount)
     {
+        if (m_boundVertexBuffer == buffer &&
+            m_boundVertexBufferOffset == offset &&
+            m_boundVertexBufferFirstBinding == firstBinding &&
+            m_boundVertexBufferBindingCount == bindingCount)
+            return;
+
+        m_boundVertexBuffer = buffer;
+        m_boundVertexBufferOffset = offset;
+        m_boundVertexBufferFirstBinding = firstBinding;
+        m_boundVertexBufferBindingCount = bindingCount;
+
         VkBuffer buff = buffer->Handle();
         vkCmdBindVertexBuffers(m_handle, firstBinding, bindingCount, &buff, &offset);
     }
 
     void CommandBuffer::BindIndexBuffer(Buffer *buffer, size_t offset)
     {
+        if (m_boundIndexBuffer == buffer && m_boundIndexBufferOffset == offset)
+            return;
+
+        m_boundIndexBuffer = buffer;
         vkCmdBindIndexBuffer(m_handle, buffer->Handle(), offset, VK_INDEX_TYPE_UINT32);
     }
 
@@ -419,18 +467,104 @@ namespace pe
     {
         PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::BindDescriptors: No bound pipeline found!");
 
+        if (count == 0)
+            return;
+
         std::vector<VkDescriptorSet> dsets(count);
         for (uint32_t i = 0; i < count; i++)
             dsets[i] = descriptors[i]->Handle();
 
-        auto dynamicOffsets = Descriptor::GetAllFrameDynamicOffsets(count, descriptors);
+        // auto dynamicOffsets = Descriptor::GetAllFrameDynamicOffsets(count, descriptors);
 
-        VkPipelineBindPoint pipelineBindPoint = m_boundPipeline->info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
+        VkPipelineBindPoint pipelineBindPoint = m_boundPipeline->m_info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
         vkCmdBindDescriptorSets(m_handle,
                                 pipelineBindPoint,
-                                m_boundPipeline->layout,
+                                m_boundPipeline->m_layout,
                                 0, count, dsets.data(),
-                                static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
+                                0, nullptr); // static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
+    }
+
+    void CommandBuffer::BindDescriptors(const std::vector<Descriptor *> &descriptors)
+    {
+        BindDescriptors(static_cast<uint32_t>(descriptors.size()), const_cast<Descriptor **>(descriptors.data()));
+    }
+
+    void CommandBuffer::PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info)
+    {
+        PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::PushDescriptor: No bound pipeline found!");
+
+        std::vector<VkWriteDescriptorSet> writes{};
+        std::vector<std::vector<VkDescriptorImageInfo>> imageInfoVK{};
+        std::vector<std::vector<VkDescriptorBufferInfo>> bufferInfoVK{};
+        imageInfoVK.resize(info.size());
+        bufferInfoVK.resize(info.size());
+        writes.resize(info.size());
+
+        for (uint32_t i = 0; i < info.size(); i++)
+        {
+            writes[i] = {};
+            writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i].dstBinding = info[i].binding;
+            writes[i].dstArrayElement = 0;
+            writes[i].descriptorType = Translate<VkDescriptorType>(info[i].type);
+            if (info[i].views.size() > 0)
+            {
+                imageInfoVK[i].resize(info[i].views.size());
+                for (uint32_t j = 0; j < info[i].views.size(); j++)
+                {
+                    imageInfoVK[i][j] = {};
+                    imageInfoVK[i][j].imageView = info[i].views[j];
+                    imageInfoVK[i][j].imageLayout = Translate<VkImageLayout>(info[i].layouts[j]);
+                    imageInfoVK[i][j].sampler = info[i].type == DescriptorType::CombinedImageSampler ? info[i].samplers[j] : SamplerHandle{};
+                }
+
+                writes[i].descriptorCount = static_cast<uint32_t>(imageInfoVK[i].size());
+                writes[i].pImageInfo = imageInfoVK[i].data();
+            }
+            else if (info[i].buffers.size() > 0)
+            {
+                bufferInfoVK[i].resize(info[i].buffers.size());
+                for (uint32_t j = 0; j < info[i].buffers.size(); j++)
+                {
+                    bufferInfoVK[i][j] = {};
+                    bufferInfoVK[i][j].buffer = info[i].buffers[j]->Handle();
+                    bufferInfoVK[i][j].offset = info[i].offsets.size() > 0 ? info[i].offsets[j] : 0;
+                    bufferInfoVK[i][j].range = info[i].ranges.size() > 0 ? info[i].ranges[j] : VK_WHOLE_SIZE;
+                }
+
+                writes[i].descriptorCount = static_cast<uint32_t>(bufferInfoVK[i].size());
+                writes[i].pBufferInfo = bufferInfoVK[i].data();
+            }
+            else if (info[i].samplers.size() > 0 && info[i].type != DescriptorType::CombinedImageSampler)
+            {
+                imageInfoVK[i].resize(info[i].samplers.size());
+                for (uint32_t j = 0; j < info[i].samplers.size(); j++)
+                {
+                    imageInfoVK[i][j] = {};
+                    imageInfoVK[i][j].imageView = nullptr;
+                    imageInfoVK[i][j].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                    imageInfoVK[i][j].sampler = info[i].samplers[j];
+                }
+
+                writes[i].descriptorCount = static_cast<uint32_t>(imageInfoVK[i].size());
+                writes[i].pImageInfo = imageInfoVK[i].data();
+            }
+            else
+            {
+                PE_ERROR("CommandBuffer::PushDescriptor: No views or buffers or samplers found!");
+            }
+        }
+
+        // vkCmdPushDescriptorSetKHR is part of VK_KHR_push_descriptor extension, has to be loaded
+        static auto vkCmdPushDescriptorSetKHR = (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(RHII.GetDevice(), "vkCmdPushDescriptorSetKHR");
+        PE_ERROR_IF(!vkCmdPushDescriptorSetKHR, "CommandBuffer::PushDescriptor: vkCmdPushDescriptorSetKHR not found!");
+
+        vkCmdPushDescriptorSetKHR(m_handle,
+                                  m_boundPipeline->m_info.pCompShader ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                  m_boundPipeline->m_layout,
+                                  set,
+                                  static_cast<uint32_t>(writes.size()),
+                                  writes.data());
     }
 
     void CommandBuffer::SetViewport(float x, float y, float width, float height)
@@ -440,8 +574,8 @@ namespace pe
         viewport.y = y;
         viewport.width = width;
         viewport.height = height;
-        viewport.minDepth = 0.f; // GlobalSettings::ReverseZ ? 1.f : 0.f;
-        viewport.maxDepth = 1.f; // GlobalSettings::ReverseZ ? 0.f : 1.f;
+        viewport.minDepth = 0.f;
+        viewport.maxDepth = 1.f;
 
         vkCmdSetViewport(m_handle, 0, 1, &viewport);
     }
@@ -455,16 +589,44 @@ namespace pe
         vkCmdSetScissor(m_handle, 0, 1, &scissor);
     }
 
+    void CommandBuffer::SetLineWidth(float width)
+    {
+        vkCmdSetLineWidth(m_handle, width);
+    }
+
+    void CommandBuffer::SetDepthTestEnable(uint32_t enable)
+    {
+        vkCmdSetDepthTestEnable(m_handle, enable);
+    }
+
+    void CommandBuffer::SetDepthWriteEnable(uint32_t enable)
+    {
+        vkCmdSetDepthWriteEnable(m_handle, enable);
+    }
+
     void CommandBuffer::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
         vkCmdDispatch(m_handle, groupCountX, groupCountY, groupCountZ);
+        m_commandFlags |= CommandType::ComputeBit;
     }
 
-    void CommandBuffer::PushConstants(ShaderStageFlags stage, uint32_t offset, uint32_t size, const void *pValues)
+    void CommandBuffer::PushConstants()
     {
         PE_ERROR_IF(!m_boundPipeline, "CommandBuffer::PushConstants: No bound pipeline found!");
-        auto flags = Translate<VkShaderStageFlags>(stage);
-        vkCmdPushConstants(m_handle, m_boundPipeline->layout, flags, offset, size, pValues);
+
+        const auto &stages = m_boundPipeline->m_info.m_pushConstantStages;
+        const auto &offsets = m_boundPipeline->m_info.m_pushConstantOffsets;
+        const auto &sizes = m_boundPipeline->m_info.m_pushConstantSizes;
+
+        for (size_t i = 0; i < stages.size(); i++)
+        {
+            vkCmdPushConstants(m_handle,
+                               m_boundPipeline->m_layout,
+                               Translate<VkShaderStageFlags>(stages[i]),
+                               offsets[i],
+                               sizes[i],
+                               m_pushConstants.Data());
+        }
     }
 
     void CommandBuffer::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
@@ -489,30 +651,62 @@ namespace pe
                       signalSemaphoresCount, signalStages, signalSemaphores);
     }
 
-    void CommandBuffer::ImageBarrier(Image *image,
-                                     ImageLayout newLayout,
-                                     uint32_t baseArrayLayer,
-                                     uint32_t arrayLayers,
-                                     uint32_t baseMipLevel,
-                                     uint32_t mipLevels)
+    void CommandBuffer::BufferBarrier(const BufferBarrierInfo &info)
     {
-        image->Barrier(this, newLayout, baseArrayLayer, arrayLayers, baseMipLevel, mipLevels);
+        info.buffer->Barrier(this, info);
     }
 
-    void CommandBuffer::AddToImageGroupBarrier(Image *image,
-                                               ImageLayout newLayout,
-                                               uint32_t baseArrayLayer,
-                                               uint32_t arrayLayers,
-                                               uint32_t baseMipLevel,
-                                               uint32_t mipLevels)
+    void CommandBuffer::BufferBarriers(const std::vector<BufferBarrierInfo> &infos)
     {
-        m_barrierInfos.emplace_back(image, newLayout, baseArrayLayer, arrayLayers, baseMipLevel, mipLevels);
+        Buffer::Barriers(this, infos);
     }
 
-    void CommandBuffer::ImageGroupBarrier()
+    void CommandBuffer::ImageBarrier(const ImageBarrierInfo &info)
     {
-        Image::GroupBarrier(this, m_barrierInfos);
-        m_barrierInfos.clear();
+        info.image->Barrier(this, info);
+    }
+
+    void CommandBuffer::ImageBarriers(const std::vector<ImageBarrierInfo> &infos)
+    {
+        Image::Barriers(this, infos);
+    }
+
+    void CommandBuffer::MemoryBarrier(const MemoryBarrierInfo &info)
+    {
+        VkMemoryBarrier2 barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+        barrier.srcStageMask = Translate<VkPipelineStageFlags2>(info.srcStageMask);
+        barrier.srcAccessMask = Translate<VkAccessFlags2>(info.srcAccessMask);
+        barrier.dstStageMask = Translate<VkPipelineStageFlags2>(info.dstStageMask);
+        barrier.dstAccessMask = Translate<VkAccessFlags2>(info.dstAccessMask);
+
+        VkDependencyInfo dependencyInfo{};
+        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependencyInfo.memoryBarrierCount = 1;
+        dependencyInfo.pMemoryBarriers = &barrier;
+
+        vkCmdPipelineBarrier2(m_handle, &dependencyInfo);
+    }
+
+    void CommandBuffer::MemoryBarriers(const std::vector<MemoryBarrierInfo> &infos)
+    {
+        std::vector<VkMemoryBarrier2> barriers(infos.size());
+
+        for (uint32_t i = 0; i < infos.size(); i++)
+        {
+            barriers[i].sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+            barriers[i].srcStageMask = Translate<VkPipelineStageFlags2>(infos[i].srcStageMask);
+            barriers[i].srcAccessMask = Translate<VkAccessFlags2>(infos[i].srcAccessMask);
+            barriers[i].dstStageMask = Translate<VkPipelineStageFlags2>(infos[i].dstStageMask);
+            barriers[i].dstAccessMask = Translate<VkAccessFlags2>(infos[i].dstAccessMask);
+        }
+
+        VkDependencyInfo dependencyInfo{};
+        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependencyInfo.memoryBarrierCount = static_cast<uint32_t>(barriers.size());
+        dependencyInfo.pMemoryBarriers = barriers.data();
+
+        vkCmdPipelineBarrier2(m_handle, &dependencyInfo);
     }
 
     void CommandBuffer::CopyBuffer(Buffer *src, Buffer *dst, const size_t size, size_t srcOffset, size_t dstOffset)
@@ -533,16 +727,37 @@ namespace pe
                                               uint32_t mipLevel)
     {
         image->CopyDataToImageStaged(this, data, size, baseArrayLayer, layerCount, mipLevel);
+        m_commandFlags |= CommandType::TransferBit;
     }
 
     void CommandBuffer::CopyImage(Image *src, Image *dst)
     {
         dst->CopyImage(this, src);
+        m_commandFlags |= CommandType::TransferBit;
     }
 
     void CommandBuffer::GenerateMipMaps(Image *image)
     {
         image->GenerateMipMaps(this);
+        m_commandFlags |= CommandType::TransferBit;
+    }
+
+    void CommandBuffer::SetEvent(Image *image,
+                                 ImageLayout scrLayout, ImageLayout dstLayout,
+                                 PipelineStageFlags srcStage, PipelineStageFlags dstStage,
+                                 AccessFlags srcAccess, AccessFlags dstAccess)
+    {
+        m_event->Set(this, image, scrLayout, dstLayout, srcStage, dstStage, srcAccess, dstAccess);
+    }
+
+    void CommandBuffer::WaitEvent()
+    {
+        m_event->Wait();
+    }
+
+    void CommandBuffer::ResetEvent(PipelineStageFlags resetStage)
+    {
+        m_event->Reset(resetStage);
     }
 
     void CommandBuffer::BeginDebugRegion(const std::string &name)
@@ -642,9 +857,9 @@ namespace pe
         }
     }
 
-    void CommandBuffer::AddAfterWaitCallback(Delegate<>::Func_type &&func)
+    void CommandBuffer::AddAfterWaitCallback(Delegate<>::FunctionType &&func)
     {
-        m_afterWaitCallbacks += std::forward<Delegate<>::Func_type>(func);
+        m_afterWaitCallbacks += std::forward<Delegate<>::FunctionType>(func);
     }
 }
 #endif

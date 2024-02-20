@@ -38,31 +38,16 @@ namespace pe
     public:
         void Tick();
 
-        double GetDelta();
+        double GetDelta() const;
 
-        double CountTotal();
+        double CountTotal() const;
 
-        double updatesStamp;
-        double cpuTotal;
-        double gpuStamp;
-        double shadowStamp[SHADOWMAP_CASCADES];
-        double computeStamp;
-        double geometryStamp;
-        double ssaoStamp;
-        double ssrStamp;
-        double compositionStamp;
-        double fxaaStamp;
-        double bloomStamp;
-        double dofStamp;
-        double motionBlurStamp;
-        double guiStamp;
-        double fsrStamp;
-        double AABBsStamp;
+        void CountUpdatesStamp();
+        void CountCpuTotalStamp();
 
-    private:
-        std::chrono::duration<double> m_delta{};
+        double GetUpdatesStamp() const { return m_updatesStamp; }
+        double GetCpuTotal() const { return m_cpuTotalStamp; }
 
-    public:
         static FrameTimer &Instance()
         {
             static FrameTimer frame_timer;
@@ -73,10 +58,14 @@ namespace pe
         FrameTimer(FrameTimer &&) noexcept = delete;        // move constructor
         FrameTimer &operator=(FrameTimer const &) = delete; // copy assignment
         FrameTimer &operator=(FrameTimer &&) = delete;      // move assignment
+
     private:
         FrameTimer();            // default constructor
         ~FrameTimer() = default; // destructor
 
+        double m_updatesStamp;
+        double m_cpuTotalStamp;
+        std::chrono::duration<double> m_delta{};
         std::chrono::high_resolution_clock::time_point m_total;
     };
 
@@ -85,37 +74,29 @@ namespace pe
     class GpuTimer : public IHandle<GpuTimer, QueryPoolHandle>
     {
     public:
+        static GpuTimer *GetFree();
+
+        static void Return(GpuTimer *gpuTimer);
+
+        static void DestroyAll();
+
         GpuTimer(const std::string &name);
 
         ~GpuTimer();
 
         void Start(CommandBuffer *cmd);
 
-        float End();
+        void End();
 
-        inline static GpuTimer *gpu = nullptr;
-        inline static GpuTimer *shadows[SHADOWMAP_CASCADES]{};
-        inline static GpuTimer *compute = nullptr;
-        inline static GpuTimer *geometry = nullptr;
-        inline static GpuTimer *ssao = nullptr;
-        inline static GpuTimer *ssr = nullptr;
-        inline static GpuTimer *composition = nullptr;
-        inline static GpuTimer *fxaa = nullptr;
-        inline static GpuTimer *bloom = nullptr;
-        inline static GpuTimer *motionBlur = nullptr;
-        inline static GpuTimer *gui = nullptr;
-        inline static GpuTimer *dof = nullptr;
-        inline static GpuTimer *fsr = nullptr;
-        inline static GpuTimer *AABBs = nullptr;
+        float GetTime();
 
     private:
-        float
-        GetTime();
-
-        void Reset();
-
         uint64_t m_queries[2]{};
         float m_timestampPeriod;
         CommandBuffer *m_cmd;
+        bool m_resultsReady;
+        bool m_inUse;
+
+        inline static std::stack<GpuTimer *> s_gpuTimers{};
     };
 }

@@ -12,27 +12,32 @@ namespace pe
 {
     void Downsampler::Init()
     {
-        CreateUniforms();
         UpdatePassInfo();
+        CreateUniforms();
     }
 
     void Downsampler::Dispatch(CommandBuffer *cmd, Image *image)
     {
         std::lock_guard<std::mutex> guard(s_dispatchMutex);
 
-        cmd->BeginDebugRegion("Downsampler::Dispatch Command_" + std::to_string(s_currentIndex));
-
         SetInputImage(image);
         UpdateDescriptorSet();
 
         uvec2 groupCount = SpdSetup();
 
-        cmd->ImageBarrier(s_image, ImageLayout::General);
+        ImageBarrierInfo barrier{};
+        barrier.image = s_image;
+        barrier.layout = ImageLayout::General;
+        barrier.stageFlags = PipelineStage::ComputeShaderBit;
+        barrier.accessMask = Access::ShaderWriteBit;
 
-        cmd->BindPipeline(*s_passInfo);
+        cmd->BeginDebugRegion("Downsampler::Dispatch Command_" + std::to_string(s_currentIndex));
+        cmd->ImageBarrier(barrier);
+        cmd->BindPipeline(*s_passInfo, false);
         cmd->BindDescriptors(1, &s_DSet[s_currentIndex]);
-        cmd->PushConstants(ShaderStage::ComputeBit, 0, sizeof(PushConstants), &s_pushConstants);
-        cmd->Dispatch(groupCount.x, groupCount.y, s_image->imageInfo.arrayLayers);
+        cmd->SetConstant(0, s_pushConstants);
+        cmd->PushConstants();
+        cmd->Dispatch(groupCount.x, groupCount.y, s_image->GetArrayLayers());
         cmd->EndDebugRegion();
 
         s_image = nullptr;
@@ -61,9 +66,6 @@ namespace pe
 
         s_passInfo = std::make_shared<PassInfo>();
         s_passInfo->pCompShader = Shader::Create("Shaders/Compute/spd/spd.hlsl", ShaderStage::ComputeBit, defines);
-        s_passInfo->descriptorSetLayouts = {s_DSet[0]->GetLayout()};
-        s_passInfo->pushConstantSize = sizeof(PushConstants);
-        s_passInfo->pushConstantStage = ShaderStage::ComputeBit;
         s_passInfo->name = "Downsample_pipeline";
         
         s_passInfo->UpdateHash();
@@ -92,13 +94,13 @@ namespace pe
                 AllocationCreate::HostAccessSequentialWriteBit,
                 "Downsample_storage_buffer_" + std::to_string(i));
 
-            s_DSet[i] = Descriptor::Create(bindingInfos, ShaderStage::ComputeBit, "Downsample_descriptor_" + std::to_string(i));
+            s_DSet[i] = Descriptor::Create(bindingInfos, ShaderStage::ComputeBit, false, "Downsample_descriptor_" + std::to_string(i));
         }
     }
 
     void Downsampler::SetInputImage(Image *image)
     {
-        uint32_t mips = image->imageInfo.mipLevels;
+        uint32_t mips = image->GetMipLevels();
 
         PE_ERROR_IF(mips <= 1, "Image has no extra mips!");
 
@@ -113,15 +115,15 @@ namespace pe
 
     void Downsampler::UpdateDescriptorSet()
     {
-        int mips = static_cast<int>(s_image->imageInfo.mipLevels);
+        int mips = static_cast<int>(s_image->GetMipLevels());
         std::vector<ImageViewHandle> views(mips);
         for (int i = 0; i < mips; i++)
             views[i] = s_image->GetUAV(i);
 
         Descriptor &dSet = *s_DSet[s_currentIndex];
-        dSet.SetImages(0, views, {});
+        dSet.SetImageViews(0, views, {});
         if (mips >= 6)
-            dSet.SetImage(1, s_image->GetUAV(6), {});
+            dSet.SetImageView(1, s_image->GetUAV(6), {});
         dSet.SetBuffer(2, s_atomicCounter[s_currentIndex]);
 
         dSet.Update();
@@ -129,7 +131,7 @@ namespace pe
 
     uvec2 Downsampler::SpdSetup()
     {
-        const Rect2Du rectInfo{0, 0, s_image->imageInfo.width, s_image->imageInfo.height};
+        const Rect2Du rectInfo{0, 0, s_image->GetWidth(), s_image->GetHeight()};
 
         s_pushConstants.workGroupOffset.x = rectInfo.x / 64;
         s_pushConstants.workGroupOffset.y = rectInfo.y / 64;
@@ -141,7 +143,7 @@ namespace pe
                                        endIndexY + 1 - s_pushConstants.workGroupOffset.y);
 
         s_pushConstants.numWorkGroupsPerSlice = dispatchThreadGroupCount.x * dispatchThreadGroupCount.y;
-        s_pushConstants.mips = s_image->imageInfo.mipLevels - 1;
+        s_pushConstants.mips = s_image->GetMipLevels() - 1;
 
         return dispatchThreadGroupCount;
     }

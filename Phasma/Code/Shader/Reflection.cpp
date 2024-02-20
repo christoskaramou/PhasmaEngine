@@ -1,32 +1,44 @@
 #include "Reflection.h"
 #include "Shader.h"
-#include "spirv_cross/spirv_cross.hpp"
-#include "Renderer/Vertex.h"
+#include "Renderer/RHI.h"
+#include "Renderer/Descriptor.h"
 
 namespace pe
 {
-    ShaderInOutDesc::ShaderInOutDesc()
+    std::string GetResourceName(const spirv_cross::Compiler &compiler, spirv_cross::ID id)
     {
-        location = -1;
+        std::string name = compiler.get_name(id);
+        if (name.empty())
+            name = compiler.get_fallback_name(id);
+
+        return name;
     }
 
-    CombinedImageSamplerDesc::CombinedImageSamplerDesc()
+    constexpr uint32_t MAX_COUNT_PER_BINDING = 500; // if open or unbounded array, we will use this value with partially bound arrays
+    uint32_t GetResourceArrayCount(spirv_cross::SPIRType typeInfo)
     {
-        set = -1;
-        binding = -1;
+        // TODO: support arrays of arrays
+        if (typeInfo.array.empty())
+        {
+            return 1; // Not an array
+        }
+
+        if (typeInfo.array_size_literal[0])
+        {
+            if (typeInfo.array[0] == 0)
+                return MAX_COUNT_PER_BINDING; // Open array
+            else
+                return typeInfo.array[0]; // Fixed-size array
+        }
+        else
+        {
+            // Unbounded array. Size is determined at runtime.
+            return MAX_COUNT_PER_BINDING; // Use a default max size or handle as needed
+        }
     }
 
-    BufferDesc::BufferDesc()
+    Reflection::~Reflection()
     {
-        set = -1;
-        binding = -1;
-        bufferSize = 0;
-    }
-
-    PushConstantDesc::PushConstantDesc()
-    {
-        size = 0;
-        offset = 0;
     }
 
     void Reflection::Init(Shader *shader)
@@ -34,71 +46,136 @@ namespace pe
         m_shader = shader;
 
         spirv_cross::Compiler compiler{shader->GetSpriv(), shader->Size()};
-        spirv_cross::ShaderResources resources = compiler.get_shader_resources();
-
         auto active = compiler.get_active_interface_variables();
+        spirv_cross::ShaderResources resources = compiler.get_shader_resources();
         compiler.set_enabled_interface_variables(std::move(active));
+        auto specConstants = compiler.get_specialization_constants();
+
+        // Specialization constants
+        for (const spirv_cross::SpecializationConstant &specConstant : specConstants)
+        {
+            SpecializationConstantDesc desc;
+            const spirv_cross::SPIRConstant &constant = compiler.get_constant(specConstant.id);
+            desc.name = GetResourceName(compiler, specConstant.id);
+            desc.typeInfo = compiler.get_type(constant.constant_type);
+            desc.constantId = specConstant.constant_id;
+
+            m_specializationConstants.push_back(desc);
+        }
 
         // Shader inputs
         for (const spirv_cross::Resource &resource : resources.stage_inputs)
         {
             ShaderInOutDesc desc;
+            desc.name = GetResourceName(compiler, resource.id);
+            desc.typeInfo = compiler.get_type(resource.type_id);
             desc.location = compiler.get_decoration(resource.id, spv::DecorationLocation);
-            desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
 
-            inputs.push_back(desc);
+            m_inputs.push_back(desc);
         }
-        std::sort(inputs.begin(), inputs.end(), [](auto &a, auto &b)
+        std::sort(m_inputs.begin(), m_inputs.end(), [](auto &a, auto &b)
                   { return a.location < b.location; });
 
         // Shader outputs
         for (const spirv_cross::Resource &resource : resources.stage_outputs)
         {
             ShaderInOutDesc desc;
+            desc.name = GetResourceName(compiler, resource.id);
+            desc.typeInfo = compiler.get_type(resource.type_id);
             desc.location = compiler.get_decoration(resource.id, spv::DecorationLocation);
-            desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
 
-            outputs.push_back(desc);
+            m_outputs.push_back(desc);
         }
-        std::sort(outputs.begin(), outputs.end(), [](auto &a, auto &b)
+        std::sort(m_outputs.begin(), m_outputs.end(), [](auto &a, auto &b)
                   { return a.location < b.location; });
 
-        // Combined image samplers
+        // Combined Image Samplers
         for (const spirv_cross::Resource &resource : resources.sampled_images)
         {
             CombinedImageSamplerDesc desc;
+            desc.name = GetResourceName(compiler, resource.id);
+            desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
 
-            samplers.push_back(desc);
+            m_combinedImageSamplers.push_back(desc);
         }
 
-        // Uniform buffers
+        // Samplers
+        for (const spirv_cross::Resource &resource : resources.separate_samplers)
+        {
+            SamplerDesc desc;
+            desc.name = GetResourceName(compiler, resource.id);
+            desc.typeInfo = compiler.get_type(resource.type_id);
+            desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+            desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
+
+            m_samplers.push_back(desc);
+        }
+
+        // Images
+        for (const spirv_cross::Resource &resource : resources.separate_images)
+        {
+            ImageDesc desc;
+            desc.name = GetResourceName(compiler, resource.id);
+            desc.typeInfo = compiler.get_type(resource.type_id);
+            desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+            desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
+
+            m_images.push_back(desc);
+        }
+
+        // Storage Images
+        for (const spirv_cross::Resource &resource : resources.storage_images)
+        {
+            ImageDesc desc;
+            desc.name = GetResourceName(compiler, resource.id);
+            desc.typeInfo = compiler.get_type(resource.type_id);
+            desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+            desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
+
+            m_storageImages.push_back(desc);
+        }
+
+        // Uniform Buffers
         for (const spirv_cross::Resource &resource : resources.uniform_buffers)
         {
             BufferDesc desc;
+            desc.name = GetResourceName(compiler, resource.id);
+            desc.typeInfo = compiler.get_type(resource.type_id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
-            desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
-            desc.bufferSize = compiler.get_declared_struct_size(*desc.type);
+            desc.bufferSize = compiler.get_declared_struct_size(desc.typeInfo);
 
-            uniformBuffers.push_back(desc);
+            m_uniformBuffers.push_back(desc);
+        }
+
+        // Storage Buffers
+        for (const spirv_cross::Resource &resource : resources.storage_buffers)
+        {
+            BufferDesc desc;
+            desc.name = GetResourceName(compiler, resource.id);
+            desc.typeInfo = compiler.get_type(resource.type_id);
+            desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+            desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
+            desc.bufferSize = compiler.get_declared_struct_size(desc.typeInfo);
+
+            m_storageBuffers.push_back(desc);
         }
 
         // Push constants
         for (const spirv_cross::Resource &resource : resources.push_constant_buffers)
         {
-            PushConstantDesc desc;
-            desc.offset = compiler.get_decoration(resource.id, spv::DecorationOffset);
-            desc.type = std::make_shared<spirv_cross::SPIRType>(compiler.get_type(resource.base_type_id));
-            desc.size = compiler.get_declared_struct_size(*desc.type);
-            pushConstantBuffers.push_back(desc);
+            m_pushConstants.name = GetResourceName(compiler, resource.id);
+            m_pushConstants.typeInfo = compiler.get_type(resource.base_type_id); // compiler.get_type(resource.type_id);
+            m_pushConstants.structName = compiler.get_name(m_pushConstants.typeInfo.self);
+            m_pushConstants.size = compiler.get_declared_struct_size(m_pushConstants.typeInfo);
         }
     }
 
     uint32_t GetTypeSize(const ShaderInOutDesc &inout)
     {
-        switch (inout.type->basetype)
+        switch (inout.typeInfo.basetype)
         {
         case spirv_cross::SPIRType::Unknown:
         case spirv_cross::SPIRType::Void:
@@ -144,7 +221,7 @@ namespace pe
 
     ReflectionVariableType GetReflectionVariableType(const ShaderInOutDesc &inout)
     {
-        switch (inout.type->basetype)
+        switch (inout.typeInfo.basetype)
         {
         case spirv_cross::SPIRType::Unknown:
         case spirv_cross::SPIRType::Void:
@@ -181,7 +258,7 @@ namespace pe
 
     Format GetAttibuteType(const ShaderInOutDesc &input)
     {
-        uint32_t size = GetTypeSize(input) * input.type->vecsize * input.type->columns;
+        uint32_t size = GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
         ReflectionVariableType type = GetReflectionVariableType(input);
         switch (size)
         {
@@ -246,26 +323,36 @@ namespace pe
 
     std::vector<VertexInputBindingDescription> Reflection::GetVertexBindings()
     {
+        PE_ERROR_IF(m_shader->GetShaderStage() != ShaderStage::VertexBit, "Vertex bindings are only available for vertex shaders");
+
         uint32_t stride = 0;
-        for (const ShaderInOutDesc &input : inputs)
-            stride += GetTypeSize(input) * input.type->vecsize * input.type->columns;
+        for (const ShaderInOutDesc &input : m_inputs)
+            stride += GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
+
+        if (stride == 0)
+            return {};
+
+        std::vector<VertexInputBindingDescription> vertexBindings{};
 
         VertexInputBindingDescription binding;
         binding.binding = 0;
         binding.stride = stride;
         binding.inputRate = VertexInputRate::Vertex;
+        vertexBindings.push_back(binding);
 
-        return {binding};
+        return vertexBindings;
     }
 
     std::vector<VertexInputAttributeDescription> Reflection::GetVertexAttributes()
     {
-        std::vector<VertexInputAttributeDescription> attributes;
+        PE_ERROR_IF(m_shader->GetShaderStage() != ShaderStage::VertexBit, "Vertex attributes are only available for vertex shaders");
+
+        std::vector<VertexInputAttributeDescription> vertexAttributes{};
 
         uint32_t offset = 0;
-        for (const ShaderInOutDesc &input : inputs)
+        for (const ShaderInOutDesc &input : m_inputs)
         {
-            uint32_t size = GetTypeSize(input) * input.type->vecsize * input.type->columns;
+            uint32_t size = GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
             VertexInputAttributeDescription attribute;
             attribute.location = input.location;
             attribute.binding = 0;
@@ -273,9 +360,137 @@ namespace pe
             attribute.offset = offset;
             offset += size;
 
-            attributes.push_back(attribute);
+            vertexAttributes.push_back(attribute);
         }
 
-        return attributes;
+        return vertexAttributes;
+    }
+
+    std::vector<Descriptor *> Reflection::GetDescriptors()
+    {
+        // Check if we have any descriptors
+        int maxSet = INT32_MIN;
+        for (const CombinedImageSamplerDesc &desc : m_combinedImageSamplers)
+            maxSet = std::max(maxSet, desc.set);
+        for (const SamplerDesc &desc : m_samplers)
+            maxSet = std::max(maxSet, desc.set);
+        for (const ImageDesc &desc : m_images)
+            maxSet = std::max(maxSet, desc.set);
+        for (const ImageDesc &desc : m_storageImages)
+            maxSet = std::max(maxSet, desc.set);
+        for (const BufferDesc &desc : m_uniformBuffers)
+            maxSet = std::max(maxSet, desc.set);
+        for (const BufferDesc &desc : m_storageBuffers)
+            maxSet = std::max(maxSet, desc.set);
+
+        if (maxSet == INT32_MIN)
+            return {};
+
+        // Sets with their info
+        std::vector<std::vector<DescriptorBindingInfo>> setInfos{};
+        setInfos.resize(maxSet + 1);
+
+        std::vector<Descriptor *> descriptors{};
+        descriptors.reserve(maxSet + 1);
+
+        for (const CombinedImageSamplerDesc &desc : m_combinedImageSamplers)
+        {
+            DescriptorBindingInfo info;
+            info.binding = desc.binding;
+            info.count = GetResourceArrayCount(desc.typeInfo);
+            info.imageLayout = ImageLayout::ShaderReadOnly;
+            info.type = DescriptorType::CombinedImageSampler;
+            info.name = desc.name;
+
+            setInfos[desc.set].push_back(info);
+        }
+
+        for (const SamplerDesc &desc : m_samplers)
+        {
+            DescriptorBindingInfo info;
+            info.binding = desc.binding;
+            info.count = GetResourceArrayCount(desc.typeInfo);
+            info.type = DescriptorType::Sampler;
+            info.name = desc.name;
+
+            setInfos[desc.set].push_back(info);
+        }
+
+        for (const ImageDesc &desc : m_images)
+        {
+            DescriptorBindingInfo info;
+            info.binding = desc.binding;
+            info.count = GetResourceArrayCount(desc.typeInfo);
+            info.imageLayout = ImageLayout::ShaderReadOnly;
+            info.type = DescriptorType::SampledImage;
+            info.name = desc.name;
+
+            setInfos[desc.set].push_back(info);
+        }
+
+        for (const ImageDesc &desc : m_storageImages)
+        {
+            DescriptorBindingInfo info;
+            info.binding = desc.binding;
+            info.count = GetResourceArrayCount(desc.typeInfo);
+            info.imageLayout = ImageLayout::General;
+            info.type = DescriptorType::StorageImage;
+            info.name = desc.name;
+
+            setInfos[desc.set].push_back(info);
+        }
+
+        for (const BufferDesc &desc : m_uniformBuffers)
+        {
+            DescriptorBindingInfo info;
+            info.binding = desc.binding;
+            info.count = GetResourceArrayCount(desc.typeInfo);
+            info.type = DescriptorType::UniformBuffer;
+            info.name = desc.name;
+
+            setInfos[desc.set].push_back(info);
+        }
+
+        for (const BufferDesc &desc : m_storageBuffers)
+        {
+            DescriptorBindingInfo info;
+            info.binding = desc.binding;
+            info.count = GetResourceArrayCount(desc.typeInfo);
+            info.type = DescriptorType::StorageBuffer;
+            info.name = desc.name;
+
+            setInfos[desc.set].push_back(info);
+        }
+
+        for (auto &setInfo : setInfos)
+        {
+            if (setInfo.empty())
+                continue;
+
+            std::sort(setInfo.begin(), setInfo.end(), [](auto &a, auto &b)
+                      { return a.binding < b.binding; });
+        }
+
+        for (auto &setInfo : setInfos)
+        {
+            if (setInfo.empty())
+            {
+                descriptors.push_back(nullptr);
+                continue;
+            }
+
+            // // count all bindings and decide if we can use push descriptor
+            // uint32_t count = 0;
+            // for (const DescriptorBindingInfo &bindingInfo : setInfo)
+            // count += bindingInfo.count;
+            // bool pushDescriptor = count <= RHII.GetMaxPushDescriptorsPerSet();
+
+            bool usePushDescriptor = false;
+
+            Descriptor *descriptor = Descriptor::Create(setInfo, m_shader->GetShaderStage(), usePushDescriptor, "auto_descriptor_" + m_shader->GetID());
+            descriptors.push_back(descriptor);
+        }
+
+        return descriptors;
     }
 }

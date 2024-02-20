@@ -3,6 +3,7 @@
 namespace pe
 {
     class Context;
+    class Camera;
 
     class Window : public IHandle<Window, WindowHandle>
     {
@@ -10,6 +11,8 @@ namespace pe
         Window(int x, int y, int w, int h, uint32_t flags);
 
         ~Window();
+
+        void SmoothMouseRotation(Camera *camera, uint32_t triggerButton);
 
         bool ProcessEvents(double delta);
 

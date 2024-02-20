@@ -14,14 +14,14 @@ namespace pe
 
         ~App();
 
-        bool RenderFrame();
+        bool Frame();
 
         void Run();
 
     private:
         Context *m_context = nullptr;
         Window *m_window = nullptr;
-        FrameTimer *m_frameTimer = nullptr;
+        FrameTimer &m_frameTimer;
         SplashScreen *m_splashScreen = nullptr;
     };
 }

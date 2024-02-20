@@ -1,7 +1,7 @@
 #include "Camera/Camera.h"
 #include "GUI/GUI.h"
 #include "Renderer/RHI.h"
-#include "PostProcess/SuperResolution.h"
+#include "Renderer/RenderPasses/SuperResolutionPass.h"
 #include "Systems/RendererSystem.h"
 #include "Systems/PostProcessSystem.h"
 
@@ -9,45 +9,47 @@ namespace pe
 {
     Camera::Camera()
     {
-        worldOrientation = vec3(1.f, -1.f, 1.f);
+        m_worldOrientation = vec3(1.f, -1.f, 1.f);
 
         // total pitch, yaw, roll
-        euler = vec3(0.f, 0.0f, 0.f);
-        orientation = quat(euler);
-        position = vec3(0.f, 0.f, 0.f);
+        m_euler = vec3(0.f, 0.0f, 0.f);
+        m_orientation = quat(m_euler);
+        m_position = vec3(0.f, 0.f, 0.f);
 
-        nearPlane = 0.005f;
-        farPlane = 100.0f;
-        fovx = radians(87.0f);
-        speed = 0.35f;
-        rotationSpeed = radians(2.864f);
+        m_nearPlane = 0.005f;
+        m_farPlane = 100.0f;
+        m_fovx = radians(87.0f);
+        m_rotationSpeed = radians(2.864f);
 
-        frustum.resize(6);
+        m_projJitter = vec2(0.f, 0.f);
+        m_prevProjJitter = vec2(0.f, 0.f);
 
-        // frustumCompute = Compute::Create("Shaders/Compute/frustumCS.hlsl", 64, 96, "camera_frustum_compute");
+        m_frustum.resize(6);
+
+        // m_frustumCompute = Compute::Create("Shaders/Compute/FrustumCS.hlsl", 64, 96, "camera_frustum_compute");
     }
 
     void Camera::ReCreateComputePipelines()
     {
-        // frustumCompute.CreatePipeline("Shaders/Compute/frustumCS.hlsl");
+        // m_frustumCompute.CreatePipeline("Shaders/Compute/FrustumCS.hlsl");
     }
 
     void Camera::Destroy()
     {
-        // frustumCompute.Destroy();
+        // m_frustumCompute.Destroy();
     }
 
     void Camera::Update()
     {
-        front = orientation * WorldFront();
-        right = orientation * WorldRight();
-        up = orientation * WorldUp();
+        m_front = m_orientation * WorldFront();
+        m_right = m_orientation * WorldRight();
+        m_up = m_orientation * WorldUp();
 
         UpdatePerspective();
         UpdateView();
-        invViewProjection = invView * invProjection;
-        previousViewProjection = viewProjection;
-        viewProjection = projection * view;
+        m_invViewProjection = m_invView * m_invProjection;
+        m_previousViewProjection = m_viewProjection;
+        m_viewProjection = m_projection * m_view;
         ExtractFrustum();
     }
 
@@ -59,68 +61,69 @@ namespace pe
 
     void Camera::UpdatePerspective()
     {
-        previousProjection = projection;
-        projection = perspective(Fovy(), GetAspect(), farPlane, nearPlane);
+        m_prevProjJitter = m_projJitter;
+        m_previousProjection = m_projection;
 
-        if (GUI::use_FSR2)
+        m_projection = perspective(Fovy(), GetAspect(), m_farPlane, m_nearPlane);
+        m_projectionNoJitter = m_projection; // Save the clean projection matrix
+
+        // If using FSR2, apply jitter to the projection matrix
+        if (Settings::Get<SRSettings>().enable)
         {
-            prevProjJitter = projJitter;
-
-            SuperResolution *sr = Context::Get()->GetSystem<PostProcessSystem>()->GetEffect<SuperResolution>();
+            SuperResolutionPass *sr = Context::Get()->GetSystem<PostProcessSystem>()->GetEffect<SuperResolutionPass>();
             sr->GenerateJitter();
-            projJitter = sr->GetProjectionJitter();
+            m_projJitter = sr->GetProjectionJitter();
 
-            mat4 jitterMat = translate(mat4(1.0f), vec3(projJitter.x, projJitter.y, 0.f));
-            projectionNoJitter = projection; // save projection with no jitter
-            projection = jitterMat * projection;
+            mat4 jitterMat = translate(mat4(1.0f), vec3(m_projJitter.x, m_projJitter.y, 0.f));
+            m_projection = jitterMat * m_projection;
         }
 
-        invProjection = inverse(projection);
+        m_invProjection = inverse(m_projection);
     }
 
     void Camera::UpdateView()
     {
-        previousView = view;
-        view = lookAt(position, position + front, up);
-        invView = inverse(view);
+        m_previousView = m_view;
+        m_view = lookAt(m_position, m_position + m_front, m_up);
+        m_invView = inverse(m_view);
     }
 
-    void Camera::Move(CameraDirection direction, float velocity)
+    void Camera::Move(CameraDirection direction, float speed)
     {
         if (direction == CameraDirection::FORWARD)
-            position += front * velocity;
+            m_position += m_front * speed;
         if (direction == CameraDirection::BACKWARD)
-            position -= front * velocity;
+            m_position -= m_front * speed;
         if (direction == CameraDirection::RIGHT)
-            position -= right * velocity;
+            m_position -= m_right * speed;
         if (direction == CameraDirection::LEFT)
-            position += right * velocity;
+            m_position += m_right * speed;
     }
 
     void Camera::Rotate(float xoffset, float yoffset)
     {
-        const float x = radians(yoffset * rotationSpeed);  // pitch
-        const float y = radians(-xoffset * rotationSpeed); // yaw
+        const float x = radians(yoffset * m_rotationSpeed);  // pitch
+        const float y = radians(-xoffset * m_rotationSpeed); // yaw
 
-        euler.x += x;
-        euler.y += y;
+        m_euler.x += x;
+        m_euler.y += y;
 
-        orientation = quat(euler);
+        m_orientation = quat(m_euler);
     }
 
     vec3 Camera::WorldRight() const
     {
-        return vec3(worldOrientation.x, 0.f, 0.f);
+        return vec3(m_worldOrientation.x, 0.f, 0.f);
     }
 
     vec3 Camera::WorldUp() const
     {
-        return vec3(0.f, worldOrientation.y, 0.f);
+        return vec3(0.f, m_worldOrientation.y, 0.f);
     }
 
     vec3 Camera::WorldFront() const
     {
-        return vec3(0.f, 0.f, worldOrientation.z);
+        return vec3(0.f, 0.f, m_worldOrientation.z);
     }
 
     void Camera::ExtractFrustum()
@@ -128,73 +131,34 @@ namespace pe
         if (GUI::freezeFrustumCulling)
             return;
 
-        // Just testing computes, the specific one is not speeding up any process
-        // frustumCompute.UpdateInput(&viewProjection, sizeof(mat4));
-        // frustumCompute.Dispatch(1, 1, 1);
-        // frustumCompute.Wait();
-        // frustumCompute.CopyDataTo(frustum.data(), frustum.size()); // Update frustum planes
+        // Transpose just to make the calculations look simpler
+        mat4 pv = transpose(m_viewProjection);
 
-        // transpose just to make the calculations look simpler
-        mat4 pvm = transpose(viewProjection);
+        auto extractAndNormalize = [&](int index, const vec4 &row_diff)
+        {
+            vec4 temp = row_diff / length(vec3(row_diff));
+            m_frustum[index].normal[0] = temp.x;
+            m_frustum[index].normal[1] = temp.y;
+            m_frustum[index].normal[2] = temp.z;
+            m_frustum[index].d = temp.w;
+        };
 
-        /* Extract the numbers for the RIGHT plane */
-        vec4 temp = pvm[3] - pvm[0];
-        temp /= length(vec3(temp));
+        // Right and Left planes
+        extractAndNormalize(0, pv[3] - pv[0]);
+        extractAndNormalize(1, pv[3] + pv[0]);
 
-        frustum[0].normal[0] = temp.x;
-        frustum[0].normal[1] = temp.y;
-        frustum[0].normal[2] = temp.z;
-        frustum[0].d = temp.w;
+        // Bottom and Top planes
+        extractAndNormalize(2, pv[3] - pv[1]);
+        extractAndNormalize(3, pv[3] + pv[1]);
 
-        /* Extract the numbers for the LEFT plane */
-        temp = pvm[3] + pvm[0];
-        temp /= length(vec3(temp));
-
-        frustum[1].normal[0] = temp.x;
-        frustum[1].normal[1] = temp.y;
-        frustum[1].normal[2] = temp.z;
-        frustum[1].d = temp.w;
-
-        /* Extract the BOTTOM plane */
-        temp = pvm[3] - pvm[1];
-        temp /= length(vec3(temp));
-
-        frustum[2].normal[0] = temp.x;
-        frustum[2].normal[1] = temp.y;
-        frustum[2].normal[2] = temp.z;
-        frustum[2].d = temp.w;
-
-        /* Extract the TOP plane */
-        temp = pvm[3] + pvm[1];
-        temp /= length(vec3(temp));
-
-        frustum[3].normal[0] = temp.x;
-        frustum[3].normal[1] = temp.y;
-        frustum[3].normal[2] = temp.z;
-        frustum[3].d = temp.w;
-
-        /* Extract the FAR plane */
-        temp = pvm[3] - pvm[2];
-        temp /= length(vec3(temp));
-
-        frustum[4].normal[0] = temp.x;
-        frustum[4].normal[1] = temp.y;
-        frustum[4].normal[2] = temp.z;
-        frustum[4].d = temp.w;
-
-        /* Extract the NEAR plane */
-        temp = pvm[3] + pvm[2];
-        temp /= length(vec3(temp));
-
-        frustum[5].normal[0] = temp.x;
-        frustum[5].normal[1] = temp.y;
-        frustum[5].normal[2] = temp.z;
-        frustum[5].d = temp.w;
+        // Far and Near planes
+        extractAndNormalize(4, pv[3] - pv[2]);
+        extractAndNormalize(5, pv[3] + pv[2]);
     }
 
     bool Camera::PointInFrustum(const vec3 &point, float radius) const
     {
-        for (const auto &plane : frustum)
+        for (const auto &plane : m_frustum)
         {
             vec3 normal = make_vec3(plane.normal);
             const float dist = dot(normal, point) + plane.d;
@@ -210,30 +174,29 @@ namespace pe
 
     bool Camera::AABBInFrustum(const AABB &aabb) const
     {
-        vec3 center = aabb.GetCenter();
-        vec3 size = aabb.GetSize();
+        const vec3 &center = aabb.GetCenter();
+        const vec3 &size = aabb.GetSize();
 
         // Iterate through all six planes of the frustum
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 6; ++i)
         {
-            const Plane &plane = frustum[i];
-            vec3 normal(plane.normal[0], plane.normal[1], plane.normal[2]);
+            const Plane &plane = m_frustum[i];
+            vec3 normal = vec3(plane.normal[0], plane.normal[1], plane.normal[2]);
 
-            // Calculate the distance between the AABB center and the plane
+            // Calculate the distance from the center of the AABB to the plane
             float distance = dot(normal, center) + plane.d;
 
-            // Calculate the maximum distance of the AABB from the center along the plane normal
+            // Calculate the projection of half the AABB size onto the plane normal
             float radius = dot(abs(normal), size * 0.5f);
 
-            // Check if the AABB is outside of the plane
+            // Check if the AABB is outside of the frustum
             if (distance < -radius)
             {
-                // AABB is completely outside of the frustum, cull it
-                return false;
+                return false; // The AABB is completely outside the frustum
             }
         }
 
-        // AABB is not completely outside of any plane, it is inside or intersecting with the frustum
+        // The AABB is either inside or partially intersecting the frustum
         return true;
     }
 }

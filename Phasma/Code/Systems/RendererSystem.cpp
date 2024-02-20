@@ -1,11 +1,14 @@
-#include "RendererSystem.h"
+#include "Systems/RendererSystem.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Semaphore.h"
 #include "Renderer/Descriptor.h"
 #include "Renderer/Image.h"
 #include "Renderer/Queue.h"
 #include "Renderer/Command.h"
-#include "Model/Mesh.h"
+#include "Renderer/RenderPasses/DepthPass.h"
+#include "Renderer/RenderPasses/GbufferPass.h"
+#include "Renderer/RenderPasses/LightPass.h"
+#include "Renderer/RenderPasses/AabbsPass.h"
 #include "Systems/PostProcessSystem.h"
 
 namespace pe
@@ -35,14 +38,14 @@ namespace pe
     void RendererSystem::Init(CommandBuffer *cmd)
     {
         Surface *surface = RHII.GetSurface();
-        Format format = surface->format;
+        Format surfaceFormat = surface->GetFormat();
 
-        // SET WINDOW TITLE
+        // Set Window Title
         std::string title = "PhasmaEngine";
         title += " - Device: " + RHII.GetGpuName();
         title += " - API: Vulkan";
-        title += " - Present Mode: " + PresentModeToString(surface->presentMode);
-#ifdef _DEBUG
+        title += " - Present Mode: " + PresentModeToString(surface->GetPresentMode());
+#if _DEBUG
         title += " - Configuration: Debug";
 #else
         title += " - Configuration: Release";
@@ -50,219 +53,142 @@ namespace pe
 
         EventSystem::DispatchEvent(EventSetWindowTitle, title);
 
-        m_depth = CreateDepthTarget("depth", RHII.GetDepthFormat(), ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit);
-        m_viewportRT = CreateRenderTarget("viewport", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit);
-        m_displayRT = CreateRenderTarget("display", format, false, ImageUsage::TransferSrcBit | ImageUsage::TransferDstBit | ImageUsage::StorageBit, false);
-        CreateRenderTarget("normal", Format::RGBA16SFloat, false);
-        CreateRenderTarget("albedo", format, true);
-        CreateRenderTarget("srm", format, false); // Specular Roughness Metallic
-        CreateRenderTarget("ssao", Format::R8Unorm, false);
-        CreateRenderTarget("ssaoBlur", Format::R8Unorm, false);
-        CreateRenderTarget("ssr", format, false);
-        CreateRenderTarget("velocity", Format::RG16SFloat, false);
-        CreateRenderTarget("emissive", format, false);
-        CreateRenderTarget("brightFilter", format, false, {}, false);
-        CreateRenderTarget("gaussianBlurHorizontal", format, false, {}, false);
-        CreateRenderTarget("gaussianBlurVertical", format, false, {}, false);
+        // Create all render targets
+        CreateRenderTargets();
 
-        // LOAD RESOURCES
+        // Load Skyboxes
         LoadResources(cmd);
-        // CREATE UNIFORMS AND DESCRIPTOR SETS
-        CreateUniforms();
 
-        // INIT render components
-        m_renderComponents[GetTypeID<Shadows>()] = WORLD_ENTITY->CreateComponent<Shadows>();
-        m_renderComponents[GetTypeID<Deferred>()] = WORLD_ENTITY->CreateComponent<Deferred>();
+        // Create render components
+        m_renderPassComponents[GetTypeID<ShadowPass>()] = WORLD_ENTITY->CreateComponent<ShadowPass>();
+        m_renderPassComponents[GetTypeID<DepthPass>()] = WORLD_ENTITY->CreateComponent<DepthPass>();
+        m_renderPassComponents[GetTypeID<GbufferPass>()] = WORLD_ENTITY->CreateComponent<GbufferPass>();
+        m_renderPassComponents[GetTypeID<LightPass>()] = WORLD_ENTITY->CreateComponent<LightPass>();
+        m_renderPassComponents[GetTypeID<AabbsPass>()] = WORLD_ENTITY->CreateComponent<AabbsPass>();
 
-        for (auto &renderComponent : m_renderComponents)
+        for (auto &renderPassComponent : m_renderPassComponents)
         {
-            renderComponent.second->Init();
-            renderComponent.second->CreateUniforms(cmd);
-            renderComponent.second->UpdatePassInfo();
+            renderPassComponent->Init();
+            renderPassComponent->UpdatePassInfo();
+            renderPassComponent->CreateUniforms(cmd);
         }
 
-        // GUI LOAD
-        gui.CreateRenderPass();
-        gui.CreateFrameBuffers();
-        gui.InitGUI();
+        // Init GUI
+        m_gui.InitGUI();
 
-        renderArea.Update(0.0f, 0.0f, WIDTH_f, HEIGHT_f);
+        m_renderArea.Update(0.0f, 0.0f, WIDTH_f, HEIGHT_f);
 
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
         {
-            m_previousCmds[i] = nullptr;
-            for (uint32_t j = 0; j < SHADOWMAP_CASCADES; j++)
-                m_previousShadowCmds[i][j] = nullptr;
-        }
+            ImageBarrierInfo barrierInfo{};
+            barrierInfo.image = RHII.GetSwapchain()->GetImage(i);
+            barrierInfo.layout = ImageLayout::PresentSrc;
+            barrierInfo.stageFlags = PipelineStage::AllCommandsBit;
+            barrierInfo.accessMask = Access::None;
+            cmd->ImageBarrier(barrierInfo); // transition from undefined to present
 
-        // GPU TIMERS
-        GpuTimer::gpu = GpuTimer::Create("GPUTimer_queryPool_gpu");
-        GpuTimer::compute = GpuTimer::Create("GPUTimer_queryPool_compute");
-        GpuTimer::geometry = GpuTimer::Create("GPUTimer_queryPool_geometry");
-        GpuTimer::ssao = GpuTimer::Create("GPUTimer_queryPool_ssao");
-        GpuTimer::ssr = GpuTimer::Create("GPUTimer_queryPool_ssr");
-        GpuTimer::composition = GpuTimer::Create("GPUTimer_queryPool_composition");
-        GpuTimer::fxaa = GpuTimer::Create("GPUTimer_queryPool_fxaa");
-        GpuTimer::bloom = GpuTimer::Create("GPUTimer_queryPool_bloom");
-        GpuTimer::dof = GpuTimer::Create("GPUTimer_queryPool_dof");
-        GpuTimer::motionBlur = GpuTimer::Create("GPUTimer_queryPool_motionBlur");
-        GpuTimer::gui = GpuTimer::Create("GPUTimer_queryPool_gui");
-        GpuTimer::fsr = GpuTimer::Create("GPUTimer_queryPool_fsr");
-        GpuTimer::AABBs = GpuTimer::Create("GPUTimer_queryPool_AABBs");
-        for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
-            GpuTimer::shadows[i] = GpuTimer::Create("GPUTimer_queryPool_shadows_" + std::to_string(i));
+            m_cmds[i] = std::vector<CommandBuffer *>{};
+        }
     }
 
     void RendererSystem::Update(double delta)
     {
-#ifndef IGNORE_SCRIPTS
+        // Wait for the previous corresponding frame commands to finish first
+        WaitPreviousFrameCommands();
+
+#if PE_SCRIPTS
         // universal scripts
         for (auto &s : scripts)
             s->update(static_cast<float>(delta));
 #endif
+        // GUI
+        m_gui.Update();
+
+        // Scene
+        m_scene.Update(delta);
 
         CameraSystem *cameraSystem = CONTEXT->GetSystem<CameraSystem>();
         Camera *camera_main = cameraSystem->GetCamera(0);
 
-        // MODELS
-        if (GUI::modelItemSelected > -1)
+        // Render Components
+        std::vector<Task<void>> tasks;
+        tasks.reserve(m_renderPassComponents.size());
+        for (auto &rc : m_renderPassComponents)
         {
-            Model::models[GUI::modelItemSelected].scale = make_vec3(GUI::model_scale[GUI::modelItemSelected].data());
-            Model::models[GUI::modelItemSelected].pos = make_vec3(GUI::model_pos[GUI::modelItemSelected].data());
-            Model::models[GUI::modelItemSelected].rot = make_vec3(GUI::model_rot[GUI::modelItemSelected].data());
+            auto task = e_Update_ThreadPool.Enqueue([rc, camera_main]()
+                                             { rc->Update(camera_main); });
+            tasks.push_back(std::move(task));
         }
-        for (auto &m : Model::models)
-            m.Update(*camera_main, delta);
+        for (auto &task : tasks)
+            task.get();
+    }
 
-        // RENDER COMPONENTS
-        for (auto &rc : m_renderComponents)
-            rc.second->Update(camera_main);
+    void RendererSystem::WaitPreviousFrameCommands()
+    {
+        uint32_t frameIndex = RHII.GetFrameIndex();
+        auto &frameCmds = m_cmds[frameIndex];
 
-        // GUI
-        gui.Update();
+        // Wait for unfinished work
+        for (auto &cmd : frameCmds)
+        {
+            if (cmd)
+            {
+                cmd->Wait();
+                CommandBuffer::Return(cmd);
+            }
+        }
+        frameCmds.clear();
     }
 
     void RendererSystem::Draw()
     {
         uint32_t frameIndex = RHII.GetFrameIndex();
 
-        Queue *renderQueue = RHII.GetRenderQueue();
-
-        renderQueue->BeginDebugRegion("RendererSystem::Draw");
-
         // acquire the image
-        Semaphore *aquireSignalSemaphore = RHII.GetSemaphores()[frameIndex];
-        uint32_t imageIndex = RHII.GetSwapchain()->Aquire(aquireSignalSemaphore);
+        Semaphore *aquireSignalSemaphore = RHII.GetSemaphores(frameIndex)[0];
+        Swapchain *swapchain = RHII.GetSwapchain();
+        uint32_t imageIndex = swapchain->Aquire(aquireSignalSemaphore);
 
         static Timer timer;
         timer.Start();
 
-        if (GUI::shadow_cast)
-        {
-            CommandBuffer *shadowCmds[SHADOWMAP_CASCADES];
-            for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
-            {
-                // Wait for unfinished work
-                if (m_previousShadowCmds[imageIndex][i])
-                {
-                    m_previousShadowCmds[imageIndex][i]->Wait();
-                    CommandBuffer::Return(m_previousShadowCmds[imageIndex][i]);
-                }
-
-                shadowCmds[i] = CommandBuffer::GetFree(renderQueue->GetFamilyId());
-                m_previousShadowCmds[imageIndex][i] = shadowCmds[i];
-            }
-
-            // record the shadow command buffers
-            renderQueue->BeginDebugRegion("Record Shadow Cmds");
-            RecordShadowsCmds(SHADOWMAP_CASCADES, shadowCmds, imageIndex);
-            renderQueue->EndDebugRegion();
-
-            // submit the shadow command buffers
-            Semaphore *shadowWaitSemaphore = aquireSignalSemaphore;
-            Semaphore *shadowSignalSemaphore = RHII.GetSemaphores()[SWAPCHAIN_IMAGES + frameIndex];
-            PipelineStageFlags waitStage = PipelineStage::ColorAttachmentOutputBit;
-            PipelineStageFlags signalStage = PipelineStage::FragmentShaderBit;
-            renderQueue->Submit(SHADOWMAP_CASCADES, shadowCmds,
-                          1, &waitStage, &shadowWaitSemaphore,
-                          1, &signalStage, &shadowSignalSemaphore);
-
-            aquireSignalSemaphore = shadowSignalSemaphore;
-        }
-
-        // Wait for unfinished work
-        if (m_previousCmds[imageIndex])
-        {
-            m_previousCmds[imageIndex]->Wait();
-            CommandBuffer::Return(m_previousCmds[imageIndex]);
-        }
+        auto &frameCmds = m_cmds[frameIndex];
 
         // RECORD COMMANDS
-        CommandBuffer *cmd = CommandBuffer::GetFree(renderQueue->GetFamilyId());
-        cmd->Begin();
-        RecordPasses(cmd, imageIndex);
-        cmd->End();
+        frameCmds = RecordPasses(imageIndex);
 
         // SUBMIT TO QUEUE
-        Semaphore *renderFinishedSemaphore = RHII.GetSemaphores()[SWAPCHAIN_IMAGES * 2 + frameIndex];
-        PipelineStageFlags waitStage = PipelineStage::FragmentShaderBit;
-        PipelineStageFlags signalStage = PipelineStage::BottomOfPipeBit;
-        renderQueue->Submit(1, &cmd,
-                      1, &waitStage, &aquireSignalSemaphore,
-                      1, &signalStage, &renderFinishedSemaphore);
-
-        m_previousCmds[imageIndex] = cmd;
+        aquireSignalSemaphore->SetWaitStageFlags(PipelineStage::ColorAttachmentOutputBit | PipelineStage::ComputeShaderBit);
+        Semaphore *submitsSemaphore = Queue::SubmitCommands(aquireSignalSemaphore, frameCmds);
 
         // PRESENT
-        Swapchain *swapchain = RHII.GetSwapchain();
-        renderQueue->Present(1, &swapchain, &imageIndex, 1, &renderFinishedSemaphore);
-
-        gui.RenderViewPorts();
-
-        renderQueue->EndDebugRegion();
+        RHII.GetRenderQueue()->Present(1, &swapchain, &imageIndex, 1, &submitsSemaphore);
     }
 
     void RendererSystem::Destroy()
     {
         RHII.WaitDeviceIdle();
 
-        GpuTimer::Destroy(GpuTimer::gpu);
-        GpuTimer::Destroy(GpuTimer::compute);
-        GpuTimer::Destroy(GpuTimer::geometry);
-        GpuTimer::Destroy(GpuTimer::ssao);
-        GpuTimer::Destroy(GpuTimer::ssr);
-        GpuTimer::Destroy(GpuTimer::composition);
-        GpuTimer::Destroy(GpuTimer::fxaa);
-        GpuTimer::Destroy(GpuTimer::bloom);
-        GpuTimer::Destroy(GpuTimer::dof);
-        GpuTimer::Destroy(GpuTimer::motionBlur);
-        GpuTimer::Destroy(GpuTimer::gui);
-        GpuTimer::Destroy(GpuTimer::fsr);
-        GpuTimer::Destroy(GpuTimer::AABBs);
-        for (uint32_t i = 0; i < SHADOWMAP_CASCADES; i++)
-            GpuTimer::Destroy(GpuTimer::shadows[i]);
+        for (auto &rc : m_renderPassComponents)
+            rc->Destroy();
 
-        for (auto &rc : m_renderComponents)
-            rc.second->Destroy();
-
-#ifndef IGNORE_SCRIPTS
+#if PE_SCRIPTS
         for (auto &script : scripts)
             delete script;
 #endif
-        for (auto &model : Model::models)
-            model.Destroy();
+
         for (auto &texture : Image::uniqueImages)
             Image::Destroy(texture.second);
         Image::uniqueImages.clear();
 
-        Compute::DestroyResources();
-        skyBoxDay.destroy();
-        skyBoxNight.destroy();
-        gui.Destroy();
+        m_skyBoxDay.Destroy();
+        m_skyBoxNight.Destroy();
+        m_gui.Destroy();
 
         for (auto &rt : m_renderTargets)
             Image::Destroy(rt.second);
-        for (auto &dt : m_depthTargets)
+
+        for (auto &dt : m_depthStencilTargets)
             Image::Destroy(dt.second);
     }
 }

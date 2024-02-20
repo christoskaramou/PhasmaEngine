@@ -9,6 +9,18 @@ namespace pe
         size_t offset; // offset to destination data in bytes
     };
 
+    struct BufferBarrierInfo : public BarrierInfo
+    {
+        BufferBarrierInfo() { type = BarrierType::Buffer; }
+        Buffer *buffer = nullptr;
+        PipelineStageFlags srcStage = PipelineStage::None;
+        PipelineStageFlags dstStage = PipelineStage::None;
+        AccessFlags srcAccess = Access::None;
+        AccessFlags dstAccess = Access::None;
+        size_t size = 0;
+        size_t offset = 0;
+    };
+
     class Buffer : public IHandle<Buffer, BufferHandle>
     {
     public:
@@ -27,11 +39,15 @@ namespace pe
 
         void Zero() const;
 
-        void Copy(uint32_t count, MemoryRange *ranges, bool persistent);
+        void Copy(uint32_t count, MemoryRange *ranges, bool keepMapped);
 
         size_t Size();
 
         void *Data();
+
+        void Barrier(CommandBuffer *cmd, const BufferBarrierInfo &info);
+
+        static void Barriers(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos);
 
     private:
         friend class CommandBuffer;
@@ -42,8 +58,8 @@ namespace pe
         
         void CopyDataRaw(const void *data, size_t size, size_t offset = 0);
 
-        size_t size;
-        void *data;
+        size_t m_size;
+        void *m_data;
         BufferUsageFlags usage;
         AllocationHandle allocation;
         std::string name;

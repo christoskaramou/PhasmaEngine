@@ -18,9 +18,16 @@ namespace pe
     extern ImageAspectFlags GetAspectMask(Format format);
     extern bool HasStencilVK(VkFormat format);
     extern bool HasStencil(Format format);
+    extern bool IsStencilFormatVK(VkFormat format);
+    extern bool IsStencilFormat(Format format);
     extern void GetInfoFromLayout(ImageLayout layout, PipelineStageFlags &stageFlags, AccessFlags &accessMask);
 
     extern ThreadPool e_ThreadPool;
+    extern ThreadPool e_Update_ThreadPool;
+    extern ThreadPool e_Render_ThreadPool;
     extern ThreadPool e_FW_ThreadPool;
     extern ThreadPool e_GUI_ThreadPool;
+
+    // Main thread id
+    extern std::thread::id e_MainThreadID;
 }

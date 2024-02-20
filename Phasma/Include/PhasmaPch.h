@@ -17,6 +17,7 @@
 #include <cassert>
 #include <tuple>
 #include <deque>
+#include <stack>
 #include <any>
 #include <mutex>
 #include <shared_mutex>
@@ -41,6 +42,7 @@
 #include <variant>
 #include <bitset>
 #include <codecvt>
+#include <optional>
 
 #include "SDL/SDL.h"
 #include "SDL/SDL_syswm.h"

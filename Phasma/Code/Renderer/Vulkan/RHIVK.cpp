@@ -23,7 +23,6 @@ namespace pe
     RHI::RHI()
     {
         m_device = {};
-        m_semaphores = {};
         m_window = nullptr;
         m_uniformBuffers = {};
         m_uniformImages = {};
@@ -55,57 +54,21 @@ namespace pe
         InitCmdBuffers(SWAPCHAIN_IMAGES);
         CreateSwapchain(m_surface);
         CreateDescriptorPool(150); // General purpose descriptor pool
-        CreateSemaphores(SWAPCHAIN_IMAGES * 3);
+        CreateSemaphores(50);
         InitDownSampler();
     }
 
     void RHI::Destroy()
     {
         WaitDeviceIdle();
-
-        Downsampler::Destroy();
-
-        for (auto it = m_uniformBuffers.begin(); it != m_uniformBuffers.end(); ++it)
-        {
-            Buffer::Destroy(it->second.buffer);
-            it->second.buffer = nullptr;
-
-            Descriptor::Destroy(it->second.descriptor);
-            it->second.descriptor = nullptr;
-        }
-
-        for (auto it = m_uniformImages.begin(); it != m_uniformImages.end(); ++it)
-        {
-            Descriptor::Destroy(it->second.descriptor);
-            it->second.descriptor = nullptr;
-        }
-
+        
         Queue::Clear();
         CommandBuffer::Clear();
         CommandPool::Clear();
-        for (auto &semaphore : m_semaphores)
-        {
-            Semaphore::Destroy(semaphore);
-            semaphore = nullptr;
-        }
-        DescriptorPool::Destroy(m_descriptorPool);
-        m_descriptorPool = nullptr;
-        Swapchain::Destroy(m_swapchain);
-        m_swapchain = nullptr;
-        vmaDestroyAllocator(m_allocator);
-
-        for (auto &image : Image::uniqueImages)
-        {
-            Image::Destroy(image.second);
-            image.second = nullptr;
-        }
-
         IHandleBase::DestroyAllIHandles();
-
+        vmaDestroyAllocator(m_allocator);
         if (m_device)
             vkDestroyDevice(m_device, nullptr);
-        Surface::Destroy(m_surface);
-        m_surface = nullptr;
         Debug::DestroyDebugMessenger();
         Debug::DestroyCaptureApi();
         if (m_instance)
@@ -198,20 +161,22 @@ namespace pe
         for (auto &GPU : gpuList)
         {
             uint32_t queueFamPropCount;
-            vkGetPhysicalDeviceQueueFamilyProperties(GPU, &queueFamPropCount, nullptr);
+            vkGetPhysicalDeviceQueueFamilyProperties2(GPU, &queueFamPropCount, nullptr);
 
-            std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamPropCount);
-            vkGetPhysicalDeviceQueueFamilyProperties(GPU, &queueFamPropCount, queueFamilyProperties.data());
+            std::vector<VkQueueFamilyProperties2> queueFamilyProperties(queueFamPropCount);
+            for (auto &qfp : queueFamilyProperties)
+                qfp.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+            vkGetPhysicalDeviceQueueFamilyProperties2(GPU, &queueFamPropCount, queueFamilyProperties.data());
 
             VkQueueFlags flags{};
 
             for (auto &qfp : queueFamilyProperties)
             {
-                if (qfp.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+                if (qfp.queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
                     flags |= VK_QUEUE_GRAPHICS_BIT;
-                if (qfp.queueFlags & VK_QUEUE_COMPUTE_BIT)
+                if (qfp.queueFamilyProperties.queueFlags & VK_QUEUE_COMPUTE_BIT)
                     flags |= VK_QUEUE_COMPUTE_BIT;
-                if (qfp.queueFlags & VK_QUEUE_TRANSFER_BIT)
+                if (qfp.queueFamilyProperties.queueFlags & VK_QUEUE_TRANSFER_BIT)
                     flags |= VK_QUEUE_TRANSFER_BIT;
             }
 
@@ -219,9 +184,11 @@ namespace pe
                 flags & VK_QUEUE_COMPUTE_BIT &&
                 flags & VK_QUEUE_TRANSFER_BIT)
             {
-                VkPhysicalDeviceProperties properties;
-                vkGetPhysicalDeviceProperties(GPU, &properties);
-                if (properties.deviceType == preferredGpuType)
+                VkPhysicalDeviceProperties2 properties{};
+                properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+
+                vkGetPhysicalDeviceProperties2(GPU, &properties);
+                if (properties.properties.deviceType == preferredGpuType)
                 {
                     preferredGpu = GPU;
                     break;
@@ -233,13 +200,21 @@ namespace pe
 
         m_gpu = preferredGpu ? preferredGpu : validGpuList[0];
 
-        VkPhysicalDeviceProperties gpuPropertiesVK;
-        vkGetPhysicalDeviceProperties(m_gpu, &gpuPropertiesVK);
-        m_gpuName = gpuPropertiesVK.deviceName;
-        m_maxUniformBufferSize = gpuPropertiesVK.limits.maxUniformBufferRange;
-        m_maxStorageBufferSize = gpuPropertiesVK.limits.maxStorageBufferRange;
-        m_minUniformBufferOffsetAlignment = gpuPropertiesVK.limits.minUniformBufferOffsetAlignment;
-        m_minStorageBufferOffsetAlignment = gpuPropertiesVK.limits.minStorageBufferOffsetAlignment;
+        VkPhysicalDevicePushDescriptorPropertiesKHR pushDescriptorProperties{};
+        pushDescriptorProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR;
+
+        VkPhysicalDeviceProperties2 gpuPropertiesVK;
+        gpuPropertiesVK.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        gpuPropertiesVK.pNext = &pushDescriptorProperties;
+
+        vkGetPhysicalDeviceProperties2(m_gpu, &gpuPropertiesVK);
+
+        m_gpuName = gpuPropertiesVK.properties.deviceName;
+        m_maxUniformBufferSize = gpuPropertiesVK.properties.limits.maxUniformBufferRange;
+        m_maxStorageBufferSize = gpuPropertiesVK.properties.limits.maxStorageBufferRange;
+        m_minUniformBufferOffsetAlignment = gpuPropertiesVK.properties.limits.minUniformBufferOffsetAlignment;
+        m_minStorageBufferOffsetAlignment = gpuPropertiesVK.properties.limits.minStorageBufferOffsetAlignment;
+        m_maxPushDescriptorsPerSet = pushDescriptorProperties.maxPushDescriptors;
     }
 
     bool RHI::IsInstanceExtensionValid(const char *name)
@@ -306,10 +281,14 @@ namespace pe
     {
         PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SWAPCHAIN_EXTENSION_NAME), "Swapchain extension not supported!");
         PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME), "Synchronization2 extension not supported!");
+        PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME), "Push descriptor extension not supported!");
+        PE_ERROR_IF(!IsDeviceExtensionValid(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME), "Separate depth stencil layouts extension not supported!");
 
         std::vector<const char *> deviceExtensions{};
         deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         deviceExtensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+        deviceExtensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+        deviceExtensions.push_back(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
         uint32_t queueFamPropCount;
@@ -343,19 +322,20 @@ namespace pe
         deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         deviceFeatures2.pNext = &deviceFeatures13;
 
-        // Queue for supported features
+        // Supported features
         vkGetPhysicalDeviceFeatures2(m_gpu, &deviceFeatures2);
 
-        // Check for bindless descriptors
+        // Check needed features
         PE_ERROR_IF(!deviceFeatures12.descriptorBindingPartiallyBound &&
                         !deviceFeatures12.runtimeDescriptorArray &&
                         !deviceFeatures12.shaderSampledImageArrayNonUniformIndexing &&
                         !deviceFeatures12.descriptorBindingVariableDescriptorCount,
                     "Bindless descriptors are not supported on this device!");
-
         PE_ERROR_IF(!deviceFeatures2.features.shaderInt64 &&
                         !deviceFeatures2.features.shaderInt16,
                     "shaderInt64 and shaderInt16 are not supported!");
+        PE_ERROR_IF(!deviceFeatures12.separateDepthStencilLayouts,
+                    "Separate depth stencil layouts are not supported!");
 
         VkDeviceCreateInfo deviceCreateInfo{};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -433,9 +413,12 @@ namespace pe
 
     void RHI::CreateSemaphores(uint32_t semaphoresCount)
     {
-        m_semaphores.resize(semaphoresCount);
-        for (uint32_t i = 0; i < semaphoresCount; i++)
-            m_semaphores[i] = Semaphore::Create(false, "RHI_semaphore_" + std::to_string(i));
+        for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
+        {
+            m_semaphores[i].resize(semaphoresCount);
+            for (uint32_t j = 0; j < semaphoresCount; j++)
+                m_semaphores[i][j] = Semaphore::Create(false, "RHI_semaphore_" + std::to_string(i) + "_" + std::to_string(j));
+        }
     }
 
     void RHI::InitDownSampler()
@@ -450,9 +433,10 @@ namespace pe
         if (depthFormat == Format::Undefined)
         {
             std::vector<VkFormat> candidates = {
-                VK_FORMAT_D32_SFLOAT_S8_UINT,
                 VK_FORMAT_D32_SFLOAT,
-                VK_FORMAT_D24_UNORM_S8_UINT};
+                VK_FORMAT_D32_SFLOAT_S8_UINT,
+                VK_FORMAT_D24_UNORM_S8_UINT,
+            };
 
             for (auto &df : candidates)
             {

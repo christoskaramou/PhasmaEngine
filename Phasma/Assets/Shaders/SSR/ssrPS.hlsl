@@ -1,10 +1,15 @@
-#include "../Common/common.hlsl"
+#include "../Common/Structures.hlsl"
+#include "../Common/Common.hlsl"
 
-TexSamplerDecl(0, 0, Albedo)
+// Sampler Declarations
+TexSamplerDecl(0, 0, Color)
 TexSamplerDecl(1, 0, Depth)
 TexSamplerDecl(2, 0, Normal)
+TexSamplerDecl(3, 0, MetallicRoughness)
+TexSamplerDecl(4, 0, Albedo)
 
-[[vk::binding(3, 0)]] cbuffer Camera
+// Camera Buffer
+[[vk::binding(5, 0)]] cbuffer Camera
 {
     float4 cb_camPos;
     float4 cb_camFront;
@@ -13,74 +18,102 @@ TexSamplerDecl(2, 0, Normal)
     float4x4 cb_projection;
     float4x4 cb_view;
     float4x4 cb_invProj;
-};
-
-
-struct PS_INPUT {
-    float2 uv : TEXCOORD0;
-};
-struct PS_OUTPUT {
-    float4 color : SV_Target0;
-};
-
-float3 ScreenSpaceReflections(float3 position, float3 normal);
-
-PS_OUTPUT mainPS(PS_INPUT input)
-{
-    PS_OUTPUT output;
-
-    float depth = Depth.Sample(sampler_Depth, input.uv).x;
-    float3 position = GetPosFromUV(input.uv, depth, cb_invProj);
-    float4 tangent_normal = float4(Normal.Sample(sampler_Normal, input.uv).xyz * 2.0 - 1.0, 0.0);
-    float3 normal = normalize(mul(tangent_normal, cb_view).xyz); 
-
-    output.color = float4(ScreenSpaceReflections(position, normal), 1.0);
-
-    return output;
 }
 
-// Screen space reflections
-float3 ScreenSpaceReflections(float3 position, float3 normal)
+// Constants for better readability and tweaking
+static const float SSR_DELTA_THRESHOLD = 0.001f;
+static const int SSR_MAX_LOOPS = 30;
+static const int SSR_MIN_LOOPS = 5;
+static const float SSR_ANGLE_THRESHOLD = 0.1;
+
+float2 GetUVFromViewPos(float3 view_position)
 {
-    float3 reflection = reflect(position, normal);
+    float4 uv = mul(float4(view_position, 1.0), cb_projection);
+    return (uv.xy / uv.w) * 0.5f + 0.5f;
+}
 
-    float VdotR = max(dot(normalize(position), normalize(reflection)), 0.0);
-    float fresnel = pow(VdotR, 5); // small hack, not fresnel at all
+// Fresnel-Schlick approximation
+float3 FresnelSchlick(float cosTheta, float3 F0)
+{
+    return F0 + (1.0f - F0) * pow(1.0 - cosTheta, 5.0f);
+}
 
-    float3 step = reflection;
-    float3 new_pos = position + step;
+// Screen space reflections with improvements
+float3 ScreenSpaceReflections(float3 position, float3 normal, float metallic, float roughness, float3 albedo)
+{
+    float3 reflection = reflect(normalize(position), normalize(normal));
+    float VdotR       = max(0.0, dot(normalize(position), normalize(reflection)));
+    float3 F0         = lerp(0.04f, albedo, metallic);
+    float3 fresnel    = FresnelSchlick(VdotR, F0) * (1.0f - roughness);
+    float3 step       = reflection;
+    float3 new_pos    = position + step;
 
-    float loops = max(sign(VdotR), 0.0) * 30;
+    float angleFactor = 1.0 - abs(VdotR); // Closer to 1 means the vectors are more perpendicular
+    int loops = int(lerp(float(SSR_MAX_LOOPS), float(SSR_MIN_LOOPS), angleFactor));
+
+    if(abs(VdotR) < SSR_ANGLE_THRESHOLD)
+    {
+        return 0.0;
+    }
+
+    // Binary search for the closest point on the surface
     for (int i = 0; i < loops; i++)
     {
-        float4 new_view_pos = float4(new_pos, 1.0);
-        float4 uv_proj = mul(new_view_pos, cb_projection);
-        uv_proj.xy = (uv_proj.xy / uv_proj.w) * 0.5 + 0.5;
+        float2 uv = GetUVFromViewPos(new_pos);
 
-        float2 check_uv = max(sign(uv_proj.xy * (1.0 - uv_proj.xy)), 0.0);
-        if (check_uv.x * check_uv.y < 1.0){
+        // UV boundaries
+        if (any(uv < 0.0f) || any(uv > 1.0f))
+        {
             step *= 0.5;
-            new_pos -= step;
+            new_pos -= step + 0.000001;
             continue;
         }
 
-        float curr_view_depth = abs(new_view_pos.z);
-        float depth = Depth.Sample(sampler_Depth, uv_proj.xy).x;
-        float view_depth = abs(GetPosFromUV(uv_proj.xy, depth, cb_invProj).z);
+        float depth_sample       = Depth.Sample(sampler_Depth, uv).x;
+        float actual_view_depth  = abs(GetPosFromUV(uv, depth_sample, cb_invProj).z);
+        float curr_view_depth    = abs(new_pos.z);
+        float delta              = curr_view_depth - actual_view_depth;
+        float adaptive_threshold = SSR_DELTA_THRESHOLD * (1.0 + curr_view_depth);
 
-        float delta = abs(curr_view_depth - view_depth);
-        if (delta < 0.01f)
+        if (abs(delta) < 0.01f)
         {
-            float2 fade = uv_proj.xy * 2.0 - 1.0;
-            fade = abs(fade);
-            float fade_amount = min(1.0 - fade.x, 1.0 - fade.y);
-
-            return Albedo.Sample(sampler_Albedo, uv_proj.xy).xyz * fresnel * fade_amount;
+            float3 color = Color.Sample(sampler_Color, uv).xyz;
+            float2 fade  = 1.0f - abs(uv * 2.0f - 1.0f);
+            return color * fresnel * min(fade.x, fade.y);
         }
 
-        step *= 1.0 - 0.5 * max(sign(curr_view_depth - view_depth), 0.0);
-        new_pos += step * (sign(view_depth - curr_view_depth) + 0.000001);
+        // If delta is positive, we moved through the surface, so we need to reduce the step and invert the direction
+        if (delta > 0.0f)
+        {
+            step *= 0.5f;
+            new_pos -= step + 0.000001;
+        }
+        else
+        {
+            new_pos += step + 0.000001; // keep going
+        }
     }
 
     return 0.0;
+}
+
+// Main Pixel Shader
+PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
+{
+    PS_OUTPUT_Color output;
+
+    float3 albedo            = Albedo.Sample(sampler_Albedo, input.uv).xyz;
+    float4 color             = Color.Sample(sampler_Color, input.uv);
+    float depth              = Depth.Sample(sampler_Depth, input.uv).x;
+    float3 position          = GetPosFromUV(input.uv, depth, cb_invProj);
+    float4 tangent_normal    = float4(Normal.Sample(sampler_Normal, input.uv).xyz * 2.0 - 1.0, 0.0);
+    float3 normal            = normalize(mul(tangent_normal, cb_view).xyz);
+    float4 metallicRoughness = MetallicRoughness.Sample(sampler_MetallicRoughness, input.uv);
+    float metallic           = metallicRoughness.g;
+    float roughness          = metallicRoughness.b;
+
+    float3 ssr = ScreenSpaceReflections(position, normal, metallic, roughness, albedo);
+    output.color = color + float4(ssr, 1.0);
+
+    return output;
 }

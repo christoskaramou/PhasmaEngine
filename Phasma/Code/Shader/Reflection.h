@@ -1,72 +1,92 @@
 #pragma once
-
-namespace spirv_cross
-{
-    struct SPIRType;
-}
+#include "spirv_cross/spirv_cross.hpp"
+#include "Renderer/Vertex.h"
 
 namespace pe
 {
-    class ShaderInOutDesc
+    struct BaseDesc
     {
-    public:
-        ShaderInOutDesc();
-
-        uint32_t location = 0;
-        std::shared_ptr<spirv_cross::SPIRType> type;
+        std::string name;
+        spirv_cross::SPIRType typeInfo = spirv_cross::SPIRType(spv::Op::OpNop);
     };
 
-    class CombinedImageSamplerDesc
+    struct SpecializationConstantDesc : public BaseDesc
     {
-    public:
-        CombinedImageSamplerDesc();
-
-        uint32_t set = 0;
-        uint32_t binding = 0;
+        uint32_t constantId = 0;
     };
 
-    class BufferDesc
+    struct ShaderInOutDesc : public BaseDesc
     {
-    public:
-        BufferDesc();
+        int location = INT32_MIN;
+    };
 
-        uint32_t set = 0;
-        uint32_t binding = 0;
-        std::shared_ptr<spirv_cross::SPIRType> type;
+    struct CombinedImageSamplerDesc : public BaseDesc
+    {
+        int set = INT32_MIN;
+        int binding = INT32_MIN;
+    };
+
+    struct SamplerDesc : public BaseDesc
+    {
+        int set = INT32_MIN;
+        int binding = INT32_MIN;
+    };
+
+    struct ImageDesc : public BaseDesc
+    {
+        int set = INT32_MIN;
+        int binding = INT32_MIN;
+    };
+
+    struct BufferDesc : public BaseDesc
+    {
+        int set = INT32_MIN;
+        int binding = INT32_MIN;
         size_t bufferSize = 0;
     };
 
-    class PushConstantDesc
+    struct PushConstantDesc : public BaseDesc
     {
-    public:
-        PushConstantDesc();
+        bool operator==(const PushConstantDesc &other) const
+        {
+            return size == other.size && structName == other.structName;
+        }
 
+        std::string structName;
         size_t size = 0;
-        uint32_t offset = 0;
-        std::shared_ptr<spirv_cross::SPIRType> type;
     };
 
     class Shader;
-    class VertexInputBindingDescription;
-    class VertexInputAttributeDescription;
+    struct VertexInputBindingDescription;
+    struct VertexInputAttributeDescription;
+    class Descriptor;
 
     class Reflection
     {
     public:
+        ~Reflection();
+
         void Init(Shader *shader);
 
         std::vector<VertexInputBindingDescription> GetVertexBindings();
 
         std::vector<VertexInputAttributeDescription> GetVertexAttributes();
 
-        std::vector<ShaderInOutDesc> inputs{};
-        std::vector<ShaderInOutDesc> outputs{};
-        std::vector<CombinedImageSamplerDesc> samplers{};
-        std::vector<BufferDesc> uniformBuffers{};
-        std::vector<PushConstantDesc> pushConstantBuffers{};
+        std::vector<Descriptor *> GetDescriptors();
+
+        const PushConstantDesc &GetPushConstantDesc() { return m_pushConstants; }
 
     private:
+        std::vector<SpecializationConstantDesc> m_specializationConstants{};
+        std::vector<ShaderInOutDesc> m_inputs{};
+        std::vector<ShaderInOutDesc> m_outputs{};
+        std::vector<CombinedImageSamplerDesc> m_combinedImageSamplers{};
+        std::vector<SamplerDesc> m_samplers{};
+        std::vector<ImageDesc> m_images{};
+        std::vector<ImageDesc> m_storageImages{};
+        std::vector<BufferDesc> m_uniformBuffers{};
+        std::vector<BufferDesc> m_storageBuffers{};
+        PushConstantDesc m_pushConstants{};
         Shader *m_shader{};
     };
-
 }

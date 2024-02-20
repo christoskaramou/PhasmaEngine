@@ -5,7 +5,7 @@ namespace pe
     class EventSystem
     {
     public:
-        using Func = Delegate<std::any>::Func_type;
+        using Func = Delegate<std::any>::FunctionType;
         
         static void Init();
 

@@ -8,11 +8,6 @@ namespace pe
 
     constexpr uint32_t PUBLIC_FLAG = 0x0006;
 
-    bool endsWithValue(const std::string& mainStr, const std::string& toMatch)
-    {
-        return mainStr.size() >= toMatch.size() && mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0;
-    }
-
     std::vector<char> readDll(const std::string& filename)
     {
         std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -37,9 +32,9 @@ namespace pe
         ext = extension;
         std::string cmd = R"(C:\Windows\System32\cmd.exe /c Include\Mono\lib\mono\4.5\mcs -t:library Scripts\)" + name + ".cs";
         for (auto& incl : includes) {
-            if (endsWithValue(incl, ".cs"))
+            if (incl.ends_with(".cs"))
                 cmd += " Scripts\\" + incl;
-            else if (endsWithValue(incl, ".dll"))
+            else if (incl.ends_with(".dll"))
                 cmd += " -r:Scripts\\" + incl;
         }
         system(cmd.c_str());
@@ -49,7 +44,7 @@ namespace pe
         for (auto& f : std::filesystem::directory_iterator("Scripts"))
         {
             std::string n = f.path().string();
-            if (endsWithValue(n, ".dll")) {
+            if (incl.ends_with(".dll")) {
                 n = n.substr(0, n.find_last_of('.'));
                 dlls.push_back(n.substr(n.rfind('\\') + 1));	//	Scripts\\example.dll --> Scripts\\example --> example
             }
@@ -118,7 +113,7 @@ namespace pe
         for (auto& file : std::filesystem::directory_iterator("Scripts"))
         {
             std::string name = file.path().string();
-            if (endsWithValue(name, ".dll")) {
+            if (incl.ends_with(".dll")) {
                 name = name.substr(0, name.find_last_of('.'));
                 dlls.push_back(name.substr(name.rfind('\\') + 1));	//	Scripts\\example.dll --> Scripts\\example --> example
             }

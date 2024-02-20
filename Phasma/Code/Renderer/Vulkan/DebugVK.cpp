@@ -4,6 +4,7 @@
 #include "Renderer/Queue.h"
 #include "Renderer/Command.h"
 #include "RenderDoc/renderdoc_app.h"
+#include "GUI/GUI.h"
 
 namespace pe
 {
@@ -72,7 +73,7 @@ namespace pe
         if (RHII.IsInstanceExtensionValid("VK_EXT_debug_utils"))
             instanceExtensions.push_back("VK_EXT_debug_utils");
 
-#if defined(_DEBUG) && PE_DEBUG_MESSENGER == 1
+#if defined(_DEBUG) && PE_DEBUG_MESSENGER
         // === Debug Layers ============================
         // To use these debug layers, here is assumed VulkanSDK is installed
         // Also VK_LAYER_PATH environmental variable has to be created and target the bin
@@ -246,7 +247,19 @@ namespace pe
         label.color[2] = color;
         label.color[3] = 1.f;
 
+        cmd->SetPassName(name);
+
         vkCmdBeginDebugUtilsLabelEXT(cmd->Handle(), &label);
+
+        if (std::this_thread::get_id() == e_MainThreadID) // TODO: make it work with other threads
+        {
+            std::lock_guard<std::mutex> lock(s_infosMutex);
+
+            GpuTimer *timer = GpuTimer::GetFree();
+            timer->Start(cmd);
+            s_timers[cmd].push_back({timer, name});
+            s_timeInfos[timer] = {timer, "", 0};
+        }
     }
 
     void Debug::InsertCmdLabel(CommandBuffer *cmd, const std::string &name)
@@ -275,6 +288,21 @@ namespace pe
 
         vkCmdEndDebugUtilsLabelEXT(cmd->Handle());
         s_labelDepth--;
+
+        if (std::this_thread::get_id() == e_MainThreadID) // TODO: make it work with other threads
+        {
+            std::lock_guard<std::mutex> lock(s_infosMutex);
+
+            auto &timerInfos = s_timers[cmd];
+            auto &timerInfo = timerInfos.back();
+            timerInfo.timer->End();
+
+            auto &timeInfo = s_timeInfos[timerInfo.timer];
+            timeInfo.name = timerInfo.name;
+            timeInfo.depth = static_cast<uint32_t>(timerInfos.size()) - 1;
+
+            timerInfos.pop_back();
+        }
     }
 #endif
 };

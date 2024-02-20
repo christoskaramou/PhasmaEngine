@@ -1,4 +1,5 @@
 #include "Shader/Shader.h"
+#include "Renderer/Pipeline.h"
 
 namespace pe
 {
@@ -48,6 +49,56 @@ namespace pe
         FileInfo *info = static_cast<FileInfo *>(include_result->user_data);
         delete info;
         delete include_result;
+    }
+
+    std::vector<Descriptor *> Shader::PassDescriptors(const PassInfo &passInfo)
+    {
+        Shader *comp = passInfo.pCompShader;
+        Shader *vert = passInfo.pVertShader;
+        Shader *frag = passInfo.pFragShader;
+
+        if (comp)
+        {
+            PE_ERROR_IF(comp->GetShaderStage() != ShaderStage::ComputeBit, "Invalid shader stage");
+            return comp->GetReflection().GetDescriptors();
+        }
+        else if (vert && !frag)
+        {
+            PE_ERROR_IF(vert->GetShaderStage() != ShaderStage::VertexBit, "Invalid shader stage");
+            return vert->GetReflection().GetDescriptors();
+        }
+        else if (!vert && frag)
+        {
+            PE_ERROR_IF(frag->GetShaderStage() != ShaderStage::FragmentBit, "Invalid shader stage");
+            return frag->GetReflection().GetDescriptors();
+        }
+        else if (vert && frag)
+        {
+            PE_ERROR_IF(vert->GetShaderStage() != ShaderStage::VertexBit && frag->GetShaderStage() != ShaderStage::FragmentBit, "Invalid shader stages");
+        }
+        else
+        {
+            PE_ERROR("Invalid shader stages");
+        }
+
+        auto vertDesc = vert->GetReflection().GetDescriptors();
+        auto fragDesc = frag->GetReflection().GetDescriptors();
+
+        std::vector<Descriptor *> descriptors{};
+        descriptors.reserve(std::max(vertDesc.size(), fragDesc.size()));
+
+        if (vertDesc.size() > fragDesc.size())
+        {
+            for (size_t i = 0; i < vertDesc.size(); ++i)
+                descriptors.push_back(vertDesc[i] ? vertDesc[i] : fragDesc[i]); // one of the two must have a valid descriptor
+        }
+        else
+        {
+            for (size_t i = 0; i < fragDesc.size(); ++i)
+                descriptors.push_back(fragDesc[i] ? fragDesc[i] : vertDesc[i]); // one of the two must have a valid descriptor
+        }
+
+        return descriptors;
     }
 
     Shader::Shader(const std::string &sourcePath, ShaderStage shaderStage, const std::vector<Define> &defines)
@@ -228,6 +279,9 @@ namespace pe
         {
             PE_ERROR("Invalid shader stage!");
         }
+        //args.push_back(L"-fspv-preserve-bindings");
+        args.push_back(L"-fspv-preserve-interface");
+        //args.push_back(L"-fspv-reflect");
 
         // Entry point
         args.push_back(L"-E");
@@ -235,8 +289,9 @@ namespace pe
         args.push_back(entryName.c_str());
 
         args.push_back(DXC_ARG_WARNINGS_ARE_ERRORS);   //-WX
-        args.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR); //-Zp
-
+        args.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR); //-Zpr
+        //args.push_back(DXC_ARG_PACK_MATRIX_COLUMN_MAJOR); //-Zpc
+        
 #if PE_DEBUG_MODE
         // Generate symbols
         args.push_back(DXC_ARG_DEBUG); //-Zi

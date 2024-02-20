@@ -22,8 +22,8 @@ namespace pe
             PE_ERROR_IF(size > RHII.GetMaxStorageBufferSize(), "Buffer size is too big");
         }
 
-        this->size = size;
-        data = nullptr;
+        m_size = size;
+        m_data = nullptr;
 
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -60,37 +60,37 @@ namespace pe
 
     void Buffer::Map()
     {
-        if (data)
+        if (m_data)
             return;
-        PE_CHECK(vmaMapMemory(RHII.GetAllocator(), allocation, &data));
+        PE_CHECK(vmaMapMemory(RHII.GetAllocator(), allocation, &m_data));
     }
 
     void Buffer::Unmap()
     {
-        if (!data)
+        if (!m_data)
             return;
         vmaUnmapMemory(RHII.GetAllocator(), allocation);
-        data = nullptr;
+        m_data = nullptr;
     }
 
     void Buffer::Zero() const
     {
-        if (!data)
+        if (!m_data)
             PE_ERROR("Buffer::Zero: Buffer is not mapped");
-        memset(data, 0, size);
+        memset(m_data, 0, m_size);
     }
 
     void Buffer::CopyDataRaw(const void *data, size_t size, size_t offset)
     {
-        if (!this->data)
+        if (!m_data)
             PE_ERROR("Buffer::CopyDataRaw: Buffer is not mapped");
-        if (offset + size > this->size)
+        if (offset + size > m_size)
             PE_ERROR("Buffer::CopyDataRaw: Source data size is too large");
 
-        memcpy((char *)this->data + offset, data, size);
+        memcpy((char *)m_data + offset, data, size);
     }
 
-    void Buffer::Copy(uint32_t count, MemoryRange *ranges, bool persistent)
+    void Buffer::Copy(uint32_t count, MemoryRange *ranges, bool keepMapped)
     {
         // Map or check if the buffer is already mapped
         Map();
@@ -99,7 +99,7 @@ namespace pe
             CopyDataRaw(ranges[i].data, ranges[i].size, ranges[i].offset);
 
         // Keep the buffer mapped if it is persistent
-        if (!persistent)
+        if (!keepMapped)
         {
             for (uint32_t i = 0; i < count; i++)
                 Flush(ranges[i].size, ranges[i].offset);
@@ -110,7 +110,7 @@ namespace pe
 
     void Buffer::CopyBufferStaged(CommandBuffer *cmd, void *data, size_t size, size_t dtsOffset)
     {
-        if (dtsOffset + size > this->size)
+        if (dtsOffset + size > m_size)
             PE_ERROR("Buffer::StagedCopy: Data size is too large");
 
         // Staging buffer
@@ -128,33 +128,34 @@ namespace pe
         staging->Copy(1, &mr, false);
 
         // Copy staging buffer to this buffer
-        cmd->CopyBuffer(staging, this, size, 0, dtsOffset);
+        CopyBuffer(cmd, staging, size, 0, dtsOffset);
         cmd->AddAfterWaitCallback([staging]()
-                                  { Buffer::Destroy(staging); });
+                                  { Buffer *buf = staging;
+                                    Buffer::Destroy(buf); });
     }
 
     void Buffer::Flush(size_t size, size_t offset) const
     {
-        if (!data)
+        if (!m_data)
             return;
 
-        PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), allocation, offset, size > 0 ? size : this->size));
+        PE_CHECK(vmaFlushAllocation(RHII.GetAllocator(), allocation, offset, size > 0 ? size : m_size));
     }
 
     size_t Buffer::Size()
     {
-        return size;
+        return m_size;
     }
 
     void *Buffer::Data()
     {
-        return data;
+        return m_data;
     }
 
     void Buffer::CopyBuffer(CommandBuffer *cmd, Buffer *src, size_t size, size_t srcOffset, size_t dstOffset)
     {
-        PE_ERROR_IF(size + srcOffset > src->Size(), "Buffer::CopyBuffer: Source size is too large");
-        PE_ERROR_IF(size + dstOffset > this->size, "Buffer::CopyBuffer: Destination size is too small");
+        PE_ERROR_IF(size + srcOffset > src->Size(), "Buffer::CopyBuffer: Source size is too big");
+        PE_ERROR_IF(size + dstOffset > m_size, "Buffer::CopyBuffer: Destination size is too small");
 
         VkBufferCopy region{};
         region.srcOffset = srcOffset;
@@ -162,6 +163,56 @@ namespace pe
         region.size = size;
 
         vkCmdCopyBuffer(cmd->Handle(), src->Handle(), Handle(), 1, &region);
+    }
+
+    void Buffer::Barrier(CommandBuffer *cmd, const BufferBarrierInfo &info)
+    {
+        VkBufferMemoryBarrier2 barrier = {};
+        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+        barrier.srcStageMask = Translate<VkPipelineStageFlags2>(info.srcStage);
+        barrier.dstStageMask = Translate<VkPipelineStageFlags2>(info.dstStage);
+        barrier.srcAccessMask = Translate<VkAccessFlags2>(info.srcAccess);
+        barrier.dstAccessMask = Translate<VkAccessFlags2>(info.dstAccess);
+        barrier.buffer = m_handle;
+        barrier.offset = info.offset;
+        barrier.size = info.size ? info.size : VK_WHOLE_SIZE;
+
+        VkDependencyInfoKHR dependencyInfo = {};
+        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR;
+        dependencyInfo.bufferMemoryBarrierCount = 1;
+        dependencyInfo.pBufferMemoryBarriers = &barrier;
+
+        vkCmdPipelineBarrier2(cmd->Handle(), &dependencyInfo);
+    }
+
+    void Buffer::Barriers(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos)
+    {
+        std::vector<VkBufferMemoryBarrier2> barriers;
+        barriers.reserve(infos.size());
+        for (uint32_t i = 0; i < infos.size(); i++)
+        {
+            const BufferBarrierInfo &info = infos[i];
+            if (!info.buffer)
+                continue;
+
+            VkBufferMemoryBarrier2 barrier = {};
+            barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            barrier.srcStageMask = Translate<VkPipelineStageFlags2>(info.srcStage);
+            barrier.dstStageMask = Translate<VkPipelineStageFlags2>(info.dstStage);
+            barrier.srcAccessMask = Translate<VkAccessFlags2>(info.srcAccess);
+            barrier.dstAccessMask = Translate<VkAccessFlags2>(info.dstAccess);
+            barrier.buffer = info.buffer->m_handle;
+            barrier.offset = info.offset;
+            barrier.size = info.size ? info.size : VK_WHOLE_SIZE;
+            barriers.push_back(barrier);
+        }
+
+        VkDependencyInfoKHR dependencyInfo = {};
+        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR;
+        dependencyInfo.bufferMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
+        dependencyInfo.pBufferMemoryBarriers = barriers.data();
+
+        vkCmdPipelineBarrier2(cmd->Handle(), &dependencyInfo);
     }
 }
 #endif

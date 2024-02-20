@@ -14,8 +14,7 @@ namespace pe
         ~ThreadPool();
 
         template <class F, class... Args>
-        auto Enqueue(F &&f, Args &&...args)
-            -> Task<typename std::invoke_result<F, Args...>::type>;
+        auto Enqueue(F &&f, Args &&...args) -> Task<typename std::invoke_result<F, Args...>::type>;
 
     private:
         // need to keep track of threads so we can join them
@@ -31,8 +30,7 @@ namespace pe
 
     // add new work item to the pool
     template <class F, class... Args>
-    auto ThreadPool::Enqueue(F &&f, Args &&...args)
-        -> Task<typename std::invoke_result<F, Args...>::type>
+    auto ThreadPool::Enqueue(F &&f, Args &&...args) -> Task<typename std::invoke_result<F, Args...>::type>
     {
         using return_type = typename std::invoke_result<F, Args...>::type;
 

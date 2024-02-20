@@ -8,10 +8,16 @@
 #include "Renderer/Queue.h"
 #include "Renderer/Command.h"
 #include "Window/SplashScreen.h"
+#include "imgui/imgui_impl_vulkan.h"
+#include "imgui/imgui_impl_sdl.h"
+#include "imgui/imgui_internal.h"
 
 namespace pe
 {
-    App::App()
+    // Main thread id
+    std::thread::id e_MainThreadID = std::this_thread::get_id();
+
+    App::App() : m_frameTimer(FrameTimer::Instance())
     {
         // freopen("log.txt", "w", stdout);
         // freopen("errors.txt", "w", stderr);
@@ -59,12 +65,11 @@ namespace pe
         queue->WaitIdle();
 
         FileWatcher::Start(0.25);
-        m_frameTimer = &FrameTimer::Instance();
         m_context = CONTEXT;
 
         // Render some frames so everything is initialized before destroying the splash screen
         for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
-            RenderFrame();
+            Frame();
 
         m_window->Show();
 
@@ -84,24 +89,36 @@ namespace pe
         EventSystem::Destroy();
     }
 
-    bool App::RenderFrame()
+    bool App::Frame()
     {
-        m_frameTimer->Start();
+        m_frameTimer.Start();
 
-        if (!m_window->ProcessEvents(m_frameTimer->GetDelta()))
+        // Start ImGui frame
+        ImGui_ImplSDL2_NewFrame();
+        ImGui_ImplVulkan_NewFrame();
+        ImGui::NewFrame();
+
+        if (!m_window->ProcessEvents(m_frameTimer.GetDelta()))
             return false;
 
         if (!m_window->isMinimized())
         {
-            m_context->UpdateSystems(m_frameTimer->GetDelta());
-            m_frameTimer->updatesStamp = static_cast<float>(m_frameTimer->Count());
-
-            m_context->DrawSystems();
-            m_frameTimer->cpuTotal = static_cast<float>(m_frameTimer->Count());
+            m_context->UpdateSystems(m_frameTimer.GetDelta());
+            m_frameTimer.CountUpdatesStamp();
         }
 
-        m_frameTimer->ThreadSleep(1.0 / static_cast<double>(GUI::fps) - m_frameTimer->Count());
-        m_frameTimer->Tick();
+        // Get ImGui render data ready
+        ImGui::Render();
+        ImGui::UpdatePlatformWindows();
+
+        if (!m_window->isMinimized())
+        {
+            m_context->DrawSystems();
+            m_frameTimer.CountCpuTotalStamp();
+        }
+
+        m_frameTimer.ThreadSleep(1.0 / static_cast<double>(GUI::fps) - m_frameTimer.Count());
+        m_frameTimer.Tick();
 
         RHII.NextFrame();
 
@@ -110,7 +127,7 @@ namespace pe
 
     void App::Run()
     {
-        while (RenderFrame())
+        while (Frame())
         {
         }
     }

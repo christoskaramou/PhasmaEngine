@@ -1,6 +1,6 @@
-#ifndef USE_GLM
-
 #include "Core/Math.h"
+
+#if PE_USE_GLM == 0
 
 namespace pe
 {
@@ -1033,8 +1033,8 @@ namespace pe
 
     mat4 translate(cmat4 &m, cvec3 &v)
     {
-        mat4 &mat = const_cast<mat4&>(m);
-        
+        mat4 &mat = const_cast<mat4 &>(m);
+
         return mat4(
             mat[0],
             mat[1],
@@ -1099,19 +1099,19 @@ namespace pe
             vec4(t, 1.0f));
     }
 
-    mat4 perspective(float fovy, float aspect, float zNear, float zFar, bool reverseZ)
+    mat4 perspective(float fovy, float aspect, float zNear, float zFar)
     {
-        if (GlobalSettings::RightHanded)
-            return perspectiveRH(fovy, aspect, zNear, zFar, reverseZ);
+        if (Settings::Get<Global>().rightHanded)
+            return perspectiveRH(fovy, aspect, zNear, zFar);
         else
-            return perspectiveLH(fovy, aspect, zNear, zFar, reverseZ);
+            return perspectiveLH(fovy, aspect, zNear, zFar);
     }
 
     // Left handed https://thxforthefish.com/posts/reverse_z/
     // or https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_clip_space.inl
-    mat4 perspectiveLH(float fovy, float aspect, float zNear, float zFar, bool reverseZ)
+    mat4 perspectiveLH(float fovy, float aspect, float zNear, float zFar)
     {
-        if (reverseZ)
+        if (Settings::Get<Global>().reverseZ)
             std::swap(zNear, zFar);
 
         cfloat tanHalfFovy = tan(fovy * .5f);
@@ -1119,7 +1119,7 @@ namespace pe
         cfloat m00 = 1.f / (aspect * tanHalfFovy);
         cfloat m11 = 1.f / (tanHalfFovy);
         cfloat m22 = zFar / (zFar - zNear);
-        cfloat m23 = 1.0f; // reverseZ ? -1.0f : 1.0f;
+        cfloat m23 = 1.0f;
         cfloat m32 = -(zFar * zNear) / (zFar - zNear);
 
         return mat4(
@@ -1131,9 +1131,9 @@ namespace pe
 
     // https://thxforthefish.com/posts/reverse_z/
     // https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_clip_space.inl
-    mat4 perspectiveRH(float fovy, float aspect, float zNear, float zFar, bool reverseZ)
+    mat4 perspectiveRH(float fovy, float aspect, float zNear, float zFar)
     {
-        if (reverseZ)
+        if (Settings::Get<Global>().reverseZ)
             std::swap(zNear, zFar);
 
         cfloat tanHalfFovy = tan(fovy * .5f);
@@ -1141,7 +1141,7 @@ namespace pe
         cfloat m00 = 1.f / (aspect * tanHalfFovy);
         cfloat m11 = 1.f / (tanHalfFovy);
         cfloat m22 = zFar / (zNear - zFar);
-        cfloat m23 = -1.0f; // reverseZ ? 1.0f : -1.0f;
+        cfloat m23 = -1.0f;
         cfloat m32 = -(zFar * zNear) / (zFar - zNear);
 
         return mat4(
@@ -1151,24 +1151,24 @@ namespace pe
             0.f, 0.f, m32, 0.f);
     }
 
-    mat4 ortho(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ)
+    mat4 ortho(float left, float right, float bottom, float top, float zNear, float zFar)
     {
-        if (GlobalSettings::RightHanded)
-            return orthoRH(left, right, bottom, top, zNear, zFar, reverseZ);
+        if (Settings::Get<Global>().rightHanded)
+            return orthoRH(left, right, bottom, top, zNear, zFar);
         else
-            return orthoLH(left, right, bottom, top, zNear, zFar, reverseZ);
+            return orthoLH(left, right, bottom, top, zNear, zFar);
     }
 
     // https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_clip_space.inl
-    mat4 orthoLH(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ)
+    mat4 orthoLH(float left, float right, float bottom, float top, float zNear, float zFar)
     {
 
-        if (reverseZ)
+        if (Settings::Get<Global>().reverseZ)
             std::swap(zNear, zFar);
 
         cfloat m00 = 2.f / (right - left);
         cfloat m11 = 2.f / (top - bottom);
-        cfloat m22 = 1.f / (zFar - zNear); // *(reverseZ ? -1.0f : 1.0f);
+        cfloat m22 = 1.f / (zFar - zNear);
         cfloat m30 = -(right + left) / (right - left);
         cfloat m31 = -(top + bottom) / (top - bottom);
         cfloat m32 = -zNear / (zFar - zNear);
@@ -1181,14 +1181,14 @@ namespace pe
     }
 
     // https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_clip_space.inl
-    mat4 orthoRH(float left, float right, float bottom, float top, float zNear, float zFar, bool reverseZ)
+    mat4 orthoRH(float left, float right, float bottom, float top, float zNear, float zFar)
     {
-        if (reverseZ)
+        if (Settings::Get<Global>().reverseZ)
             std::swap(zNear, zFar);
 
         cfloat m00 = 2.f / (right - left);
         cfloat m11 = 2.f / (top - bottom);
-        cfloat m22 = -1.f / (zFar - zNear); // * (reverseZ ? -1.0f : 1.0f);
+        cfloat m22 = -1.f / (zFar - zNear);
         cfloat m30 = -(right + left) / (right - left);
         cfloat m31 = -(top + bottom) / (top - bottom);
         cfloat m32 = -zNear / (zFar - zNear);
@@ -1202,7 +1202,7 @@ namespace pe
 
     mat4 lookAt(cvec3 &eye, cvec3 &center, cvec3 &up)
     {
-        if (GlobalSettings::RightHanded)
+        if (Settings::Get<Global>().rightHanded)
             return lookAtRH(eye, center, up);
         else
             return lookAtLH(eye, center, up);

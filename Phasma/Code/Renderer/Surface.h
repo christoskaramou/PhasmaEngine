@@ -19,9 +19,20 @@ namespace pe
 
         void FindProperties();
 
-        Rect2D actualExtent;
-        Format format;
-        ColorSpace colorSpace;
-        PresentMode presentMode;
+        const Rect2Du &GetActualExtent() const { return m_actualExtent; }
+
+        void SetActualExtent(const Rect2Du &extent) { m_actualExtent = extent; }
+
+        Format GetFormat() const { return m_format; }
+
+        ColorSpace GetColorSpace() const { return m_colorSpace; }
+
+        PresentMode GetPresentMode() const { return m_presentMode; }
+
+private:
+        Rect2Du m_actualExtent;
+        Format m_format;
+        ColorSpace m_colorSpace;
+        PresentMode m_presentMode;
     };
 }

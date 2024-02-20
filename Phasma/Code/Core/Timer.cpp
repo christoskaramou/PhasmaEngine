@@ -38,6 +38,8 @@ namespace pe
     {
         m_total = std::chrono::high_resolution_clock::now();
         m_delta = {};
+        m_updatesStamp = 0.0;
+        m_cpuTotalStamp = 0.0;
     }
 
     void FrameTimer::Tick()
@@ -45,21 +47,32 @@ namespace pe
         m_delta = std::chrono::high_resolution_clock::now() - m_start;
     }
 
-    double FrameTimer::GetDelta()
+    double FrameTimer::GetDelta() const
     {
         return m_delta.count();
     }
 
-    
-    double FrameTimer::CountTotal()
+    double FrameTimer::CountTotal() const
     {
         const std::chrono::duration<double> t_duration = std::chrono::high_resolution_clock::now() - m_total;
         return t_duration.count();
     }
 
+    void FrameTimer::CountUpdatesStamp()
+    {
+        m_updatesStamp = Count();
+    }
+
+    void FrameTimer::CountCpuTotalStamp()
+    {
+        m_cpuTotalStamp = Count();
+    }
+
     GpuTimer::GpuTimer(const std::string &name)
     {
+        m_inUse = false;
         m_cmd = nullptr;
+        m_resultsReady = false;
 
         VkPhysicalDeviceProperties gpuProps;
         vkGetPhysicalDeviceProperties(RHII.GetGpu(), &gpuProps);
@@ -87,27 +100,33 @@ namespace pe
             vkDestroyQueryPool(RHII.GetDevice(), m_handle, nullptr);
     }
 
-    void GpuTimer::Reset()
-    {
-        vkCmdResetQueryPool(m_cmd->Handle(), m_handle, 0, 2);
-    }
-
     void GpuTimer::Start(CommandBuffer *cmd)
     {
+        PE_ERROR_IF(m_inUse, "GpuTimer::Start() called before End()");
+
         m_cmd = cmd;
-        Reset();
+        vkCmdResetQueryPool(m_cmd->Handle(), m_handle, 0, 2);
         vkCmdWriteTimestamp(m_cmd->Handle(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_handle, 0);
+        m_resultsReady = false;
+        m_inUse = true;
     }
 
-    float GpuTimer::End()
+    void GpuTimer::End()
     {
+        PE_ERROR_IF(!m_inUse, "GpuTimer::End() called before Start()");
+
         vkCmdWriteTimestamp(m_cmd->Handle(), VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_handle, 1);
-        m_cmd = nullptr;
-        return GetTime();
+        m_resultsReady = false;
+        m_inUse = false;
     }
 
     float GpuTimer::GetTime()
     {
+        PE_ERROR_IF(m_inUse, "GpuTimer::GetTime() called before End()");
+
+        if (m_resultsReady)
+            return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f; // ms
+
         VkResult res = vkGetQueryPoolResults(RHII.GetDevice(),
                                              m_handle,
                                              0,
@@ -116,9 +135,42 @@ namespace pe
                                              &m_queries,
                                              sizeof(uint64_t),
                                              VK_QUERY_RESULT_64_BIT);
+
+        m_cmd = nullptr;
+        m_resultsReady = true;
+
         if (res != VK_SUCCESS)
             return 0.f;
 
         return static_cast<float>(m_queries[1] - m_queries[0]) * m_timestampPeriod * 1e-6f; // ms
+    }
+
+    GpuTimer *GpuTimer::GetFree()
+    {
+        if (s_gpuTimers.empty())
+        {
+            for (int i = 0; i < 10; ++i)
+                s_gpuTimers.push(GpuTimer::Create("gpu timer_" + std::to_string(s_gpuTimers.size())));
+        }
+
+        GpuTimer *gpuTimer = s_gpuTimers.top();
+        s_gpuTimers.pop();
+
+        return gpuTimer;
+    }
+
+    void GpuTimer::Return(GpuTimer *gpuTimer)
+    {
+        if (gpuTimer && gpuTimer->Handle())
+            s_gpuTimers.push(gpuTimer);
+    }
+
+    void GpuTimer::DestroyAll()
+    {
+        while (!s_gpuTimers.empty())
+        {
+            GpuTimer::Destroy(s_gpuTimers.top());
+            s_gpuTimers.pop();
+        }
     }
 }
