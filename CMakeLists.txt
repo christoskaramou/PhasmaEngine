@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.5)
 set(PROJECT_NAME Phasma)
 project(${PROJECT_NAME} CXX)
 
@@ -59,13 +59,11 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE "${ADDITIONAL_COMPILE_DEFINIT
 set(ADDITIONAL_LIBRARY_DEPENDENCIES
     $<$<CONFIG:Debug>:
         spirv-cross-cored
-        GLTFSDKd
         ffx_fsr2_api_x64d
         ffx_fsr2_api_vk_x64d
     >
     $<$<CONFIG:Release>:
         spirv-cross-core
-        GLTFSDK
         ffx_fsr2_api_x64
         ffx_fsr2_api_vk_x64
     >
