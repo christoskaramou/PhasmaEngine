@@ -218,7 +218,8 @@ namespace pe
 
         // Blit to swapchain
         {
-            cmds.push_back(BlitToSwapchain(nullptr, GUI::s_currRenderImage ? GUI::s_currRenderImage : m_displayRT, imageIndex));
+            CommandBuffer *cmdBlit = BlitToSwapchain(nullptr, GUI::s_currRenderImage ? GUI::s_currRenderImage : m_displayRT, imageIndex);
+            cmds.push_back(cmdBlit);
         }
 
         return cmds;

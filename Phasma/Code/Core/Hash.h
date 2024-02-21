@@ -73,4 +73,16 @@ namespace pe
     protected:
         Hash m_hash;
     };
+
+    struct PairHash_um // pair as key for unordered_map
+    {
+        template <class T1, class T2>
+        std::size_t operator()(const std::pair<T1, T2> &pair) const
+        {
+            Hash hash;
+            hash.Combine(pair.first);
+            hash.Combine(pair.second);
+            return hash;
+        }
+    };
 }

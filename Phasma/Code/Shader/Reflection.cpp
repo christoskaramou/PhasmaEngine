@@ -173,148 +173,90 @@ namespace pe
         }
     }
 
+    static const std::unordered_map<spirv_cross::SPIRType::BaseType, size_t> s_typeSizeMap = {
+        {spirv_cross::SPIRType::Boolean, sizeof(bool)},
+        {spirv_cross::SPIRType::SByte, sizeof(int8_t)},
+        {spirv_cross::SPIRType::UByte, sizeof(uint8_t)},
+        {spirv_cross::SPIRType::Short, sizeof(int16_t)},
+        {spirv_cross::SPIRType::UShort, sizeof(uint16_t)},
+        {spirv_cross::SPIRType::Int, sizeof(int32_t)},
+        {spirv_cross::SPIRType::UInt, sizeof(uint32_t)},
+        {spirv_cross::SPIRType::Int64, sizeof(int64_t)},
+        {spirv_cross::SPIRType::UInt64, sizeof(uint64_t)},
+        {spirv_cross::SPIRType::Half, sizeof(float) / 2},
+        {spirv_cross::SPIRType::Float, sizeof(float)},
+        {spirv_cross::SPIRType::Double, sizeof(double)},
+    };
+
     uint32_t GetTypeSize(const ShaderInOutDesc &inout)
     {
-        switch (inout.typeInfo.basetype)
+        auto it = s_typeSizeMap.find(inout.typeInfo.basetype);
+        if (it != s_typeSizeMap.end())
         {
-        case spirv_cross::SPIRType::Unknown:
-        case spirv_cross::SPIRType::Void:
-        case spirv_cross::SPIRType::AtomicCounter:
-        case spirv_cross::SPIRType::Struct:
-        case spirv_cross::SPIRType::Image:
-        case spirv_cross::SPIRType::SampledImage:
-        case spirv_cross::SPIRType::Sampler:
-        case spirv_cross::SPIRType::AccelerationStructure:
-        case spirv_cross::SPIRType::RayQuery:
-        case spirv_cross::SPIRType::ControlPointArray:
-        case spirv_cross::SPIRType::Interpolant:
-        case spirv_cross::SPIRType::Char:
-            return 0;
-        case spirv_cross::SPIRType::Boolean:
-            return sizeof(bool);
-        case spirv_cross::SPIRType::SByte:
-            return sizeof(int8_t);
-        case spirv_cross::SPIRType::UByte:
-            return sizeof(uint8_t);
-        case spirv_cross::SPIRType::Short:
-            return sizeof(int16_t);
-        case spirv_cross::SPIRType::UShort:
-            return sizeof(uint16_t);
-        case spirv_cross::SPIRType::Int:
-            return sizeof(int32_t);
-        case spirv_cross::SPIRType::UInt:
-            return sizeof(uint32_t);
-        case spirv_cross::SPIRType::Int64:
-            return sizeof(int64_t);
-        case spirv_cross::SPIRType::UInt64:
-            return sizeof(uint64_t);
-        case spirv_cross::SPIRType::Half:
-            return sizeof(float_t) / 2;
-        case spirv_cross::SPIRType::Float:
-            return sizeof(float_t);
-        case spirv_cross::SPIRType::Double:
-            return sizeof(double_t);
-        default:
-            return 0;
+            return static_cast<uint32_t>(it->second);
         }
+
+        return 0; // Default case
     }
+
+    static const std::unordered_map<spirv_cross::SPIRType::BaseType, ReflectionVariableType> s_typeReflectionMap = {
+        {spirv_cross::SPIRType::Boolean, ReflectionVariableType::UInt},
+        {spirv_cross::SPIRType::UByte, ReflectionVariableType::UInt},
+        {spirv_cross::SPIRType::UShort, ReflectionVariableType::UInt},
+        {spirv_cross::SPIRType::UInt, ReflectionVariableType::UInt},
+        {spirv_cross::SPIRType::UInt64, ReflectionVariableType::UInt},
+        {spirv_cross::SPIRType::SByte, ReflectionVariableType::SInt},
+        {spirv_cross::SPIRType::Short, ReflectionVariableType::SInt},
+        {spirv_cross::SPIRType::Int, ReflectionVariableType::SInt},
+        {spirv_cross::SPIRType::Int64, ReflectionVariableType::SInt},
+        {spirv_cross::SPIRType::Half, ReflectionVariableType::SFloat},
+        {spirv_cross::SPIRType::Float, ReflectionVariableType::SFloat},
+        {spirv_cross::SPIRType::Double, ReflectionVariableType::SFloat},
+    };
 
     ReflectionVariableType GetReflectionVariableType(const ShaderInOutDesc &inout)
     {
-        switch (inout.typeInfo.basetype)
+        auto it = s_typeReflectionMap.find(inout.typeInfo.basetype);
+        if (it != s_typeReflectionMap.end())
         {
-        case spirv_cross::SPIRType::Unknown:
-        case spirv_cross::SPIRType::Void:
-        case spirv_cross::SPIRType::AtomicCounter:
-        case spirv_cross::SPIRType::Struct:
-        case spirv_cross::SPIRType::Image:
-        case spirv_cross::SPIRType::SampledImage:
-        case spirv_cross::SPIRType::Sampler:
-        case spirv_cross::SPIRType::AccelerationStructure:
-        case spirv_cross::SPIRType::RayQuery:
-        case spirv_cross::SPIRType::ControlPointArray:
-        case spirv_cross::SPIRType::Interpolant:
-        case spirv_cross::SPIRType::Char:
-            return ReflectionVariableType::None;
-        case spirv_cross::SPIRType::Boolean:
-        case spirv_cross::SPIRType::UByte:
-        case spirv_cross::SPIRType::UShort:
-        case spirv_cross::SPIRType::UInt:
-        case spirv_cross::SPIRType::UInt64:
-            return ReflectionVariableType::UInt;
-        case spirv_cross::SPIRType::SByte:
-        case spirv_cross::SPIRType::Short:
-        case spirv_cross::SPIRType::Int:
-        case spirv_cross::SPIRType::Int64:
-            return ReflectionVariableType::SInt;
-        case spirv_cross::SPIRType::Half:
-        case spirv_cross::SPIRType::Float:
-        case spirv_cross::SPIRType::Double:
-            return ReflectionVariableType::SFloat;
-        default:
-            return ReflectionVariableType::None;
+            return it->second;
         }
+
+        return ReflectionVariableType::None; // Default case
     }
 
-    Format GetAttibuteType(const ShaderInOutDesc &input)
+    static const std::unordered_map<std::pair<uint32_t, ReflectionVariableType>, Format, PairHash_um> s_attributeTypeMap = {
+        {{1, ReflectionVariableType::SInt}, {Format::R8SInt}},
+        {{1, ReflectionVariableType::UInt}, {Format::R8UInt}},
+        {{2, ReflectionVariableType::SInt}, {Format::R16SInt}},
+        {{2, ReflectionVariableType::UInt}, {Format::R16UInt}},
+        {{2, ReflectionVariableType::SFloat}, {Format::R16SFloat}},
+        {{4, ReflectionVariableType::SInt}, {Format::R32SInt}},
+        {{4, ReflectionVariableType::UInt}, {Format::R32UInt}},
+        {{4, ReflectionVariableType::SFloat}, {Format::R32SFloat}},
+        {{6, ReflectionVariableType::SInt}, {Format::RGB16SInt}},
+        {{6, ReflectionVariableType::UInt}, {Format::RGB16UInt}},
+        {{6, ReflectionVariableType::SFloat}, {Format::RGB16SFloat}},
+        {{8, ReflectionVariableType::SInt}, {Format::RG32SInt}},
+        {{8, ReflectionVariableType::UInt}, {Format::RG32UInt}},
+        {{8, ReflectionVariableType::SFloat}, {Format::RG32SFloat}},
+        {{12, ReflectionVariableType::SInt}, {Format::RGB32SInt}},
+        {{12, ReflectionVariableType::UInt}, {Format::RGB32UInt}},
+        {{12, ReflectionVariableType::SFloat}, {Format::RGB32SFloat}},
+        {{16, ReflectionVariableType::SInt}, {Format::RGBA32SInt}},
+        {{16, ReflectionVariableType::UInt}, {Format::RGBA32UInt}},
+        {{16, ReflectionVariableType::SFloat}, {Format::RGBA32SFloat}},
+    };
+
+    Format GetAttributeType(const ShaderInOutDesc &input)
     {
         uint32_t size = GetTypeSize(input) * input.typeInfo.vecsize * input.typeInfo.columns;
         ReflectionVariableType type = GetReflectionVariableType(input);
-        switch (size)
+
+        auto it = s_attributeTypeMap.find({size, type});
+        if (it != s_attributeTypeMap.end())
         {
-        case 1:
-            if (type == ReflectionVariableType::SInt)
-                return Format::R8SInt;
-            else if (type == ReflectionVariableType::UInt)
-                return Format::R8UInt;
-
-        case 2:
-            if (type == ReflectionVariableType::SInt)
-                return Format::R16SInt;
-            else if (type == ReflectionVariableType::UInt)
-                return Format::R16UInt;
-            else if (type == ReflectionVariableType::SFloat)
-                return Format::R16SFloat;
-
-        case 4:
-            if (type == ReflectionVariableType::SInt)
-                return Format::R32SInt;
-            else if (type == ReflectionVariableType::UInt)
-                return Format::R32UInt;
-            else if (type == ReflectionVariableType::SFloat)
-                return Format::R32SFloat;
-
-        case 6:
-            if (type == ReflectionVariableType::SInt)
-                return Format::RGB16SInt;
-            else if (type == ReflectionVariableType::UInt)
-                return Format::RGB16UInt;
-            else if (type == ReflectionVariableType::SFloat)
-                return Format::RGB16SFloat;
-
-        case 8:
-            if (type == ReflectionVariableType::SInt)
-                return Format::RG32SInt;
-            else if (type == ReflectionVariableType::UInt)
-                return Format::RG32UInt;
-            else if (type == ReflectionVariableType::SFloat)
-                return Format::RG32SFloat;
-
-        case 12:
-            if (type == ReflectionVariableType::SInt)
-                return Format::RGB32SInt;
-            else if (type == ReflectionVariableType::UInt)
-                return Format::RGB32UInt;
-            else if (type == ReflectionVariableType::SFloat)
-                return Format::RGB32SFloat;
-
-        case 16:
-            if (type == ReflectionVariableType::SInt)
-                return Format::RGBA32SInt;
-            else if (type == ReflectionVariableType::UInt)
-                return Format::RGBA32UInt;
-            else if (type == ReflectionVariableType::SFloat)
-                return Format::RGBA32SFloat;
+            return it->second;
         }
 
         PE_ERROR("Unsupported attribute type");
@@ -356,7 +298,7 @@ namespace pe
             VertexInputAttributeDescription attribute;
             attribute.location = input.location;
             attribute.binding = 0;
-            attribute.format = GetAttibuteType(input);
+            attribute.format = GetAttributeType(input);
             attribute.offset = offset;
             offset += size;
 
