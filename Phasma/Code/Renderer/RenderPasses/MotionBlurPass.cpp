@@ -106,15 +106,17 @@ namespace pe
         barrier.accessMask = Access::ColorAttachmentWriteBit;
         barriers.push_back(barrier);
         cmd->ImageBarriers(barriers);
+
+        auto &gSettings = Settings::Get<GlobalSettings>();
         
         cmd->BeginPass({m_attachment}, "MotionBlur");
         cmd->BindPipeline(m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_displayRT->GetWidth(), m_displayRT->GetHeight());
         cmd->SetConstant(0, 1.0f / static_cast<float>(FrameTimer::Instance().GetDelta()));
-        cmd->SetConstant(1, GUI::motionBlur_strength);
+        cmd->SetConstant(1, gSettings.motion_blur_strength);
         cmd->SetConstant(2, camera->GetProjJitter());
-        cmd->SetConstant(4, GUI::motionBlur_samples);
+        cmd->SetConstant(4, gSettings.motion_blur_samples);
         cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

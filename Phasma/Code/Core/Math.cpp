@@ -1101,7 +1101,7 @@ namespace pe
 
     mat4 perspective(float fovy, float aspect, float zNear, float zFar)
     {
-        if (Settings::Get<Global>().rightHanded)
+        if (Settings::Get<GlobalSettings>().right_handed)
             return perspectiveRH(fovy, aspect, zNear, zFar);
         else
             return perspectiveLH(fovy, aspect, zNear, zFar);
@@ -1111,7 +1111,7 @@ namespace pe
     // or https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_clip_space.inl
     mat4 perspectiveLH(float fovy, float aspect, float zNear, float zFar)
     {
-        if (Settings::Get<Global>().reverseZ)
+        if (Settings::Get<GlobalSettings>().reverse_depth)
             std::swap(zNear, zFar);
 
         cfloat tanHalfFovy = tan(fovy * .5f);
@@ -1133,7 +1133,7 @@ namespace pe
     // https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_clip_space.inl
     mat4 perspectiveRH(float fovy, float aspect, float zNear, float zFar)
     {
-        if (Settings::Get<Global>().reverseZ)
+        if (Settings::Get<GlobalSettings>().reverse_depth)
             std::swap(zNear, zFar);
 
         cfloat tanHalfFovy = tan(fovy * .5f);
@@ -1153,7 +1153,7 @@ namespace pe
 
     mat4 ortho(float left, float right, float bottom, float top, float zNear, float zFar)
     {
-        if (Settings::Get<Global>().rightHanded)
+        if (Settings::Get<GlobalSettings>().right_handed)
             return orthoRH(left, right, bottom, top, zNear, zFar);
         else
             return orthoLH(left, right, bottom, top, zNear, zFar);
@@ -1163,7 +1163,7 @@ namespace pe
     mat4 orthoLH(float left, float right, float bottom, float top, float zNear, float zFar)
     {
 
-        if (Settings::Get<Global>().reverseZ)
+        if (Settings::Get<GlobalSettings>().reverse_depth)
             std::swap(zNear, zFar);
 
         cfloat m00 = 2.f / (right - left);
@@ -1183,7 +1183,7 @@ namespace pe
     // https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_clip_space.inl
     mat4 orthoRH(float left, float right, float bottom, float top, float zNear, float zFar)
     {
-        if (Settings::Get<Global>().reverseZ)
+        if (Settings::Get<GlobalSettings>().reverse_depth)
             std::swap(zNear, zFar);
 
         cfloat m00 = 2.f / (right - left);
@@ -1202,7 +1202,7 @@ namespace pe
 
     mat4 lookAt(cvec3 &eye, cvec3 &center, cvec3 &up)
     {
-        if (Settings::Get<Global>().rightHanded)
+        if (Settings::Get<GlobalSettings>().right_handed)
             return lookAtRH(eye, center, up);
         else
             return lookAtLH(eye, center, up);

@@ -60,10 +60,12 @@ namespace pe
 
     void LightSystem::Update(double delta)
     {
+        auto &gSettings = Settings::Get<GlobalSettings>();
+
         Camera &camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
         m_lubo.camPos = {camera.GetPosition(), 1.0f};
-        m_lubo.sun.color = {.9765f, .8431f, .9098f, GUI::sun_intensity};
-        m_lubo.sun.direction = {GUI::sun_direction[0], GUI::sun_direction[1], GUI::sun_direction[2], 1.f};
+        m_lubo.sun.color = {.9765f, .8431f, .9098f, gSettings.sun_intensity};
+        m_lubo.sun.direction = {gSettings.sun_direction[0], gSettings.sun_direction[1], gSettings.sun_direction[2], 1.f};
 
         size_t frameOffset = 0; // RHII.GetFrameDynamicOffset(uniform->Size(), RHII.GetFrameIndex());
 
@@ -73,9 +75,9 @@ namespace pe
         mr.offset = frameOffset;
         m_uniform[RHII.GetFrameIndex()]->Copy(1, &mr, false);
 
-        if (GUI::randomize_lights)
+        if (gSettings.randomize_lights)
         {
-            GUI::randomize_lights = false;
+            gSettings.randomize_lights = false;
 
             for (uint32_t i = 0; i < MAX_POINT_LIGHTS; i++)
             {

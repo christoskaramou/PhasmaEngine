@@ -121,8 +121,10 @@ namespace pe
         SuperResolutionPass &sr = *WORLD_ENTITY->GetComponent<SuperResolutionPass>();
         TonemapPass &tonemap = *WORLD_ENTITY->GetComponent<TonemapPass>();
 
+        auto &gSettings = Settings::Get<GlobalSettings>();
+
         // Shadows Opaque
-        if (GUI::shadow_cast)
+        if (gSettings.shadows)
         {
             cmds.push_back(m_scene.DrawShadowPass());
         }
@@ -138,7 +140,7 @@ namespace pe
         }
 
         // Screen Space Ambient Occlusion
-        if (GUI::show_ssao)
+        if (gSettings.ssao)
         {
             cmds.push_back(ssao.Draw());
         }
@@ -159,19 +161,19 @@ namespace pe
         }
 
         // Screen Space Reflections
-        if (GUI::show_ssr)
+        if (gSettings.ssr)
         {
             cmds.push_back(ssr.Draw());
         }
 
         // Fast Approximate Anti-Aliasing
-        if (GUI::use_FXAA)
+        if (gSettings.fxaa)
         {
             cmds.push_back(fxaa.Draw());
         }
 
         // Aabbs
-        if (GUI::drawAABBs)
+        if (gSettings.draw_aabbs)
         {
             cmds.push_back(m_scene.DrawAabbsPass());
         }
@@ -188,25 +190,25 @@ namespace pe
         }
 
         // Tone Mapping
-        if (GUI::show_tonemapping)
+        if (gSettings.tonemapping)
         {
             cmds.push_back(tonemap.Draw());
         }
 
         // Bloom
-        if (GUI::show_Bloom)
+        if (gSettings.bloom)
         {
             cmds.push_back(bloom.Draw());
         }
 
         // Depth of Field
-        if (GUI::use_DOF)
+        if (gSettings.dof)
         {
             cmds.push_back(dof.Draw());
         }
 
         // Motion Blur
-        if (GUI::show_motionBlur)
+        if (gSettings.motion_blur)
         {
             cmds.push_back(motionBlur.Draw());
         }
@@ -218,7 +220,7 @@ namespace pe
 
         // Blit to swapchain
         {
-            CommandBuffer *cmdBlit = BlitToSwapchain(nullptr, GUI::s_currRenderImage ? GUI::s_currRenderImage : m_displayRT, imageIndex);
+            CommandBuffer *cmdBlit = BlitToSwapchain(nullptr, gSettings.current_rendering_image ? gSettings.current_rendering_image : m_displayRT, imageIndex);
             cmds.push_back(cmdBlit);
         }
 
@@ -233,9 +235,11 @@ namespace pe
                                         bool useMips,
                                         vec4 clearColor)
     {
-        float renderTargetScale = useRenderTergetScale ? GUI::renderTargetsScale : 1.f;
-        uint32_t width = static_cast<uint32_t>(WIDTH_f * renderTargetScale);
-        uint32_t heigth = static_cast<uint32_t>(HEIGHT_f * renderTargetScale);
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
+
+        uint32_t width = static_cast<uint32_t>(WIDTH_f * rtScale);
+        uint32_t heigth = static_cast<uint32_t>(HEIGHT_f * rtScale);
 
         ImageCreateInfo info{};
         info.format = format;
@@ -264,7 +268,7 @@ namespace pe
         rt->m_blendAttachment.alphaBlendOp = BlendOp::Add;
         rt->m_blendAttachment.colorWriteMask = ColorComponent::RGBABit;
 
-        GUI::s_renderImages.push_back(rt);
+        gSettings.rendering_images.push_back(rt);
         m_renderTargets[StringHash(name)] = rt;
 
         return rt;
@@ -277,11 +281,12 @@ namespace pe
                                               float clearDepth,
                                               uint32_t clearStencil)
     {
-        float renderTargetScale = useRenderTergetScale ? GUI::renderTargetsScale : 1.f;
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
         ImageCreateInfo info{};
-        info.width = static_cast<uint32_t>(WIDTH_f * renderTargetScale);
-        info.height = static_cast<uint32_t>(HEIGHT_f * renderTargetScale);
+        info.width = static_cast<uint32_t>(WIDTH_f * rtScale);
+        info.height = static_cast<uint32_t>(HEIGHT_f * rtScale);
         info.usage = additionalFlags | ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit;
         info.format = format;
         info.clearColor = vec4(clearDepth, static_cast<float>(clearStencil), 0.f, 0.f);
@@ -300,7 +305,7 @@ namespace pe
         samplerInfo.compareEnable = 1;
         depth->m_sampler = Sampler::Create(samplerInfo);
 
-        GUI::s_renderImages.push_back(depth);
+        gSettings.rendering_images.push_back(depth);
         m_depthStencilTargets[StringHash(name)] = depth;
 
         return depth;
@@ -328,13 +333,14 @@ namespace pe
 
     Image *Renderer::CreateFSSampledImage(bool useRenderTergetScale)
     {
-        float renderTargetScale = useRenderTergetScale ? GUI::renderTargetsScale : 1.f;
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        float rtScale = useRenderTergetScale ? gSettings.render_scale : 1.f;
 
         ImageCreateInfo info{};
         info.format = RHII.GetSurface()->GetFormat();
         info.initialLayout = ImageLayout::Undefined;
-        info.width = static_cast<uint32_t>(WIDTH_f * renderTargetScale);
-        info.height = static_cast<uint32_t>(HEIGHT_f * renderTargetScale);
+        info.width = static_cast<uint32_t>(WIDTH_f * rtScale);
+        info.height = static_cast<uint32_t>(HEIGHT_f * rtScale);
         info.tiling = ImageTiling::Optimal;
         info.usage = ImageUsage::TransferDstBit | ImageUsage::SampledBit;
         info.name = "FSSampledImage";
@@ -384,9 +390,9 @@ namespace pe
         return ImGui::GetIO().MouseWheel;
     }
 
-    static void SetTimeScale(float timeScale)
+    static void SetTimeScale(float time_scale)
     {
-        GUI::timeScale = timeScale;
+        GUI::time_scale = time_scale;
     }
     // ----------------------------------------
 #endif
@@ -443,7 +449,7 @@ namespace pe
             Image::Destroy(rt.second);
         m_depthStencilTargets.clear();
 
-        GUI::s_renderImages.clear();
+        Settings::Get<GlobalSettings>().rendering_images.clear();
 
         Format surfaceFormat = RHII.GetSurface()->GetFormat();
         m_depthStencil = CreateDepthStencilTarget("depthStencil", RHII.GetDepthFormat(), ImageUsage::TransferDstBit);

@@ -45,7 +45,7 @@ namespace pe
             tasks.reserve(10);
 
             // AabbsPass
-            if (GUI::drawAABBs)
+            if (Settings::Get<GlobalSettings>().draw_aabbs)
             {
                 auto task = e_Update_ThreadPool.Enqueue(
                     [this, frame]()

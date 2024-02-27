@@ -128,7 +128,7 @@ namespace pe
 
     void Camera::ExtractFrustum()
     {
-        if (GUI::freezeFrustumCulling)
+        if (Settings::Get<GlobalSettings>().freeze_frustum_culling)
             return;
 
         // Transpose just to make the calculations look simpler

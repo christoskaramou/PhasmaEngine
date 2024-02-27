@@ -93,7 +93,8 @@ namespace pe
 
     void SSRPass::Update(Camera *camera)
     {
-        if (GUI::show_ssr)
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        if (gSettings.ssr)
         {
             m_reflectionInput[0][0] = vec4(camera->GetPosition(), 1.0f);
             m_reflectionInput[0][1] = vec4(camera->GetFront(), 1.0f);

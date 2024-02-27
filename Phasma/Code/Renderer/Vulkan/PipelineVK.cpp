@@ -114,7 +114,7 @@ namespace pe
         depthFormat = Format::Undefined;
         depthWriteEnable = true;
         depthTestEnable = true;
-        depthCompareOp = Settings::Get<Global>().reverseZ ? CompareOp::GreaterOrEqual : CompareOp::LessOrEqual;
+        depthCompareOp = Settings::Get<GlobalSettings>().reverse_depth ? CompareOp::GreaterOrEqual : CompareOp::LessOrEqual;
         pipelineCache = {};
         stencilTestEnable = false;
         stencilFailOp = StencilOp::Keep;

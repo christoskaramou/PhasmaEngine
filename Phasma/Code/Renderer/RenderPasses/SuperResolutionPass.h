@@ -11,7 +11,7 @@ namespace pe
     class Camera;
     class Queue;
 
-    struct SRSettings : public Setting
+    struct SRSettings : public Settings
     {
         bool enable = false;
         vec2 motionScale = vec2(1.0f);

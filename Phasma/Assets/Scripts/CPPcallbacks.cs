@@ -9,7 +9,7 @@ public class Global
     public static extern bool KeyDown(Key key);
 
     [MethodImpl(MethodImplOptions.InternalCall)]
-    public static extern void SetTimeScale(float timeScale);
+    public static extern void SetTimeScale(float time_scale);
 
     [MethodImpl(MethodImplOptions.InternalCall)]
     public static extern bool MouseButtonDown(MouseButton button);

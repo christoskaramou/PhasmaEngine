@@ -1,5 +1,6 @@
 #if PE_VULKAN
 #include "Renderer/RenderPasses/ShadowPass.h"
+#include "Renderer/RenderPasses/LightPass.h"
 #include "GUI/GUI.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/Vertex.h"
@@ -24,15 +25,15 @@ namespace pe
     void ShadowPass::Init()
     {
         m_renderQueue = RHII.GetRenderQueue();
-        m_textures.resize(Settings::Get<Global>().shadowMapCascades);
+        m_textures.resize(Settings::Get<GlobalSettings>().shadow_map_cascades);
         int i = 0;
         for (auto *&texture : m_textures)
         {
             ImageCreateInfo info{};
             info.format = RHII.GetDepthFormat();
             info.initialLayout = ImageLayout::Undefined;
-            info.width = Settings::Get<Global>().shadowMapSize;
-            info.height = Settings::Get<Global>().shadowMapSize;
+            info.width = Settings::Get<GlobalSettings>().shadow_map_size;
+            info.height = Settings::Get<GlobalSettings>().shadow_map_size;
             info.tiling = ImageTiling::Optimal;
             info.usage = ImageUsage::DepthStencilAttachmentBit | ImageUsage::SampledBit;
             info.clearColor = vec4(Color::Depth, Color::Stencil, 0.0f, 1.0f);
@@ -76,7 +77,7 @@ namespace pe
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
         {
             m_uniforms[i] = Buffer::Create(
-                RHII.AlignUniform(Settings::Get<Global>().shadowMapCascades * sizeof(mat4)),
+                RHII.AlignUniform(Settings::Get<GlobalSettings>().shadow_map_cascades * sizeof(mat4)),
                 BufferUsage::UniformBufferBit,
                 AllocationCreate::HostAccessSequentialWriteBit,
                 "Shadows_uniform_buffer");
@@ -92,13 +93,14 @@ namespace pe
 
     void ShadowPass::Update(Camera *camera)
     {
-        if (GUI::shadow_cast)
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        if (gSettings.shadows)
         {
             CalculateCascades(camera);
 
             MemoryRange mr{};
             mr.data = m_cascades.data();
-            mr.size = Settings::Get<Global>().shadowMapCascades * sizeof(mat4);
+            mr.size = gSettings.shadow_map_cascades * sizeof(mat4);
             mr.offset = 0; // RHII.GetFrameDynamicOffset(uniformBuffer->Size(), RHII.GetFrameIndex());
             m_uniforms[RHII.GetFrameIndex()]->Copy(1, &mr, false);
         }
@@ -107,7 +109,7 @@ namespace pe
     constexpr float cascadeSplitLambda = 0.95f;
     void ShadowPass::CalculateCascades(Camera *camera)
     {
-        uint32_t cascades = Settings::Get<Global>().shadowMapCascades;
+        uint32_t cascades = Settings::Get<GlobalSettings>().shadow_map_cascades;
         m_cascades.resize(cascades);
 
         std::vector<float> cascadeSplits;
@@ -190,7 +192,7 @@ namespace pe
             vec3 maxExtents = vec3(radius);
             vec3 minExtents = -maxExtents;
 
-            vec3 lightDir = -normalize(make_vec3(GUI::sun_direction.data()));
+            vec3 lightDir = -normalize(make_vec3(Settings::Get<GlobalSettings>().sun_direction.data()));
             auto v0 = frustumCenter - (lightDir * radius);
             mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, camera->WorldUp());
             mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, maxExtents.z - minExtents.z, -clipRange);
@@ -254,7 +256,7 @@ namespace pe
         }
         else
         {
-            uint32_t cascades = Settings::Get<Global>().shadowMapCascades;
+            uint32_t cascades = Settings::Get<GlobalSettings>().shadow_map_cascades;
             for (uint32_t i = 0; i < cascades; i++)
             {
                 m_attachment.image = m_textures[i];

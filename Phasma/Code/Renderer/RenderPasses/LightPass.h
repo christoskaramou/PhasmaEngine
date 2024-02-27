@@ -5,6 +5,28 @@
 
 namespace pe
 {
+    struct LightPassUBO
+    {
+        mat4 invViewProj = mat4(1.0f);
+        uint32_t ssao = 1;
+        uint32_t ssr = 0;
+        uint32_t tonemapping = 0;
+        uint32_t fsr2 = 0;
+        uint32_t IBL = 1;
+        float IBL_intensity = 0.75f;
+        uint32_t volumetric = 0;
+        uint32_t volumetric_steps = 32;
+        float volumetric_dither_strength = 400.0f;
+        float lights_intensity = 7.0f;
+        float lights_range = 7.0f;
+        uint32_t fog = 0;
+        float fog_thickness = 0.3f;
+        float fog_max_height = 3.0f;
+        float fog_ground_thickness = 30.0f;
+        uint32_t shadows = 1;
+        float dummy = 0.0f;
+    };
+    
     class Descriptor;
     class Image;
     class RenderPass;
@@ -49,27 +71,6 @@ namespace pe
 
         void PassBarriers(CommandBuffer *cmd);
         
-        struct UBO
-        {
-            mat4 invViewProj;
-            uint32_t ssao;
-            uint32_t ssr;
-            uint32_t tonemapping;
-            uint32_t fsr2;
-            uint32_t IBL;
-            float IBL_intensity;
-            uint32_t volumetric;
-            uint32_t volumetric_steps;
-            float volumetric_dither_strength;
-            float lightsIntensity;
-            float lightsRange;
-            uint32_t fog;
-            float fogThickness;
-            float fogMaxHeight;
-            float fogGroundThickness;
-            uint32_t shadows;
-            float dummy;
-        } m_ubo;
         Buffer *m_uniform[SWAPCHAIN_IMAGES];
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;
@@ -87,6 +88,8 @@ namespace pe
         BlendType m_blendType = BlendType::None;
         Attachment m_attachmentOpaque;
         Attachment m_attachmentTransparent;
+
+        LightPassUBO m_ubo;
 
         Queue *m_renderQueue;
         CommandBuffer *m_cmd;

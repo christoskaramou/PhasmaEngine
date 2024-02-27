@@ -117,7 +117,7 @@ namespace pe
             m_frameTimer.CountCpuTotalStamp();
         }
 
-        m_frameTimer.ThreadSleep(1.0 / static_cast<double>(GUI::fps) - m_frameTimer.Count());
+        m_frameTimer.ThreadSleep(1.0 / static_cast<double>(Settings::Get<GlobalSettings>().fps) - m_frameTimer.Count());
         m_frameTimer.Tick();
 
         RHII.NextFrame();

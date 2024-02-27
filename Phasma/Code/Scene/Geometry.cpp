@@ -291,7 +291,7 @@ namespace pe
             {
                 auto &primitiveInfo = primitivesInfo[primitive];
 
-                if (Settings::Get<Global>().frustumCulling)
+                if (Settings::Get<GlobalSettings>().frustum_culling)
                     primitiveInfo.cull = !camera.AABBInFrustum(primitiveInfo.worldBoundingBox);
                 else
                     primitiveInfo.cull = false;
@@ -327,13 +327,13 @@ namespace pe
         int primitivesCount = static_cast<int>(meshGltf.primitives.size());
         std::vector<Task<void>> tasks{};
         tasks.reserve(primitivesCount);
-        int cullsPerTask = GUI::cullsPerTask;
-        for (int primitive = 0; primitive < primitivesCount; primitive += cullsPerTask)
+        int culls_per_task = Settings::Get<GlobalSettings>().culls_per_task;
+        for (int primitive = 0; primitive < primitivesCount; primitive += culls_per_task)
         {
-            if (primitive + cullsPerTask > primitivesCount)
-                cullsPerTask = primitivesCount - primitive;
+            if (primitive + culls_per_task > primitivesCount)
+                culls_per_task = primitivesCount - primitive;
 
-            Task task = e_Update_ThreadPool.Enqueue(cullAsync, node, primitive, cullsPerTask);
+            Task task = e_Update_ThreadPool.Enqueue(cullAsync, node, primitive, culls_per_task);
             tasks.push_back(std::move(task));
         }
 

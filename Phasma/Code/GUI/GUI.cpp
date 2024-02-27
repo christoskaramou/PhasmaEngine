@@ -180,6 +180,7 @@ namespace pe
         static const int flags = ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
                                  ImGuiWindowFlags_NoBackground;
 
+        auto &gSettings = Settings::Get<GlobalSettings>();
         if (s_modelLoading)
         {
             int x, y;
@@ -190,7 +191,7 @@ namespace pe
             ImGui::SetNextWindowSize(ImVec2(400.f, 25.f));
             ImGui::Begin("Model Loading", &metrics_open, flags);
             // LoadingIndicatorCircle("Loading", radius, color, bdcolor, 10, 4.5f);
-            const float progress = loadingCurrent / static_cast<float>(loadingTotal);
+            const float progress = gSettings.loading_current / static_cast<float>(gSettings.loading_total);
             ImGui::ProgressBar(progress, size);
             ImGui::End();
         }
@@ -201,12 +202,13 @@ namespace pe
         if (!metrics_open)
             return;
 
+        auto &gSettings = Settings::Get<GlobalSettings>();
         ImGui::Begin("Metrics", &metrics_open);
         ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
         auto framerate = ImGui::GetIO().Framerate;
         ImGui::Text("Average %.3f ms (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-        ImGui::DragInt("FPS", &fps, 0.1f);
-        fps = max(fps, 10);
+        ImGui::DragInt("FPS", &gSettings.fps, 0.1f);
+        gSettings.fps = max(gSettings.fps, 10);
         ImGui::Separator();
         ImGui::Separator();
 
@@ -248,9 +250,9 @@ namespace pe
         ImGui::Separator();
         ImGui::Text("Render Target");
         static const char *current_item = "viewport";
-        std::vector<const char *> items(s_renderImages.size());
+        std::vector<const char *> items(gSettings.rendering_images.size());
         for (int i = 0; i < items.size(); i++)
-            items[i] = s_renderImages[i]->GetName().c_str();
+            items[i] = gSettings.rendering_images[i]->GetName().c_str();
 
         if (ImGui::BeginCombo("##combo", current_item))
         {
@@ -260,7 +262,7 @@ namespace pe
                 if (ImGui::Selectable(items[n], is_selected))
                 {
                     current_item = items[n];
-                    s_currRenderImage = s_renderImages[n];
+                    gSettings.current_rendering_image = gSettings.rendering_images[n];
                 }
                 if (is_selected)
                     ImGui::SetItemDefaultFocus();
@@ -281,11 +283,11 @@ namespace pe
         // if (result)
         //{
         //	std::string res = result;
-        //	if (std::find(fileList.begin(), fileList.end(), res) == fileList.end())
+        //	if (std::find(file_list.begin(), file_list.end(), res) == file_list.end())
         //	{
         //		const std::string cmd = "type nul > " + Path::Assets + "Scripts\\" + res;
         //		system(cmd.c_str());
-        //		fileList.push_back(res);
+        //		file_list.push_back(res);
         //	}
         //	else
         //	{
@@ -295,14 +297,14 @@ namespace pe
         //	}
         // }
         //
-        // for (uint32_t i = 0; i < fileList.size(); i++)
+        // for (uint32_t i = 0; i < file_list.size(); i++)
         //{
-        //	std::string name = fileList[i] + "##" + std::to_string(i);
+        //	std::string name = file_list[i] + "##" + std::to_string(i);
         //	if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick))
         //	{
         //		if (ImGui::IsMouseDoubleClicked(0))
         //		{
-        //			std::string s = Path::Assets + "Scripts\\" + fileList[i];
+        //			std::string s = Path::Assets + "Scripts\\" + file_list[i];
         //			system(s.c_str());
         //		}
         //	}
@@ -315,19 +317,20 @@ namespace pe
         if (!shaders_open)
             return;
 
+        auto &gSettings = Settings::Get<GlobalSettings>();
         ImGui::Begin("Shaders Folder", &shaders_open);
         if (ImGui::Button("Compile Shaders"))
         {
             EventSystem::PushEvent(EventCompileShaders);
         }
-        for (uint32_t i = 0; i < shaderList.size(); i++)
+        for (uint32_t i = 0; i < gSettings.shader_list.size(); i++)
         {
-            std::string name = shaderList[i] + "##" + std::to_string(i);
+            std::string name = gSettings.shader_list[i] + "##" + std::to_string(i);
             if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick))
             {
                 if (ImGui::IsMouseDoubleClicked(0))
                 {
-                    std::string s = Path::Assets + "Shaders\\" + shaderList[i];
+                    std::string s = Path::Assets + "Shaders\\" + gSettings.shader_list[i];
                     auto lambda = [s]()
                     { system(s.c_str()); };
                     e_GUI_ThreadPool.Enqueue(lambda);
@@ -356,55 +359,49 @@ namespace pe
             initialized = true;
         }
 
-        static float rtScale = renderTargetsScale;
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &srSettings = Settings::Get<SRSettings>();
+
+        static float rtScale = gSettings.render_scale;
         ImGui::Begin("Global Properties", &properties_open);
-        ImGui::Text("Resolution: %d x %d", static_cast<int>(WIDTH_f * renderTargetsScale), static_cast<int>(HEIGHT_f * renderTargetsScale));
+        ImGui::Text("Resolution: %d x %d", static_cast<int>(WIDTH_f * gSettings.render_scale), static_cast<int>(HEIGHT_f * gSettings.render_scale));
         ImGui::DragFloat("Quality", &rtScale, 0.01f, 0.05f, 1.0f);
         if (ImGui::Button("Apply"))
         {
-            renderTargetsScale = clamp(rtScale, 0.1f, 4.0f);
+            gSettings.render_scale = clamp(rtScale, 0.1f, 4.0f);
             RHII.WaitDeviceIdle();
             EventSystem::PushEvent(EventResize);
         }
         ImGui::Separator();
 
-        ImGui::Checkbox("IBL", &use_IBL);
-        if (use_IBL)
+        ImGui::Checkbox("IBL", &gSettings.IBL);
+        if (gSettings.IBL)
         {
             ImGui::Indent(16.0f);
-            ImGui::DragFloat("IBL Intensity", &IBL_intensity, 0.01f, 0.0f, 10.0f);
+            ImGui::DragFloat("IBL Intensity", &gSettings.IBL_intensity, 0.01f, 0.0f, 10.0f);
             ImGui::Unindent(16.0f);
         }
-        ImGui::Checkbox("SSR", &show_ssr);
-        ImGui::Checkbox("SSAO", &show_ssao);
-        ImGui::Checkbox("Depth of Field", &use_DOF);
-        if (use_DOF)
+        ImGui::Checkbox("SSR", &gSettings.ssr);
+        ImGui::Checkbox("SSAO", &gSettings.ssao);
+        ImGui::Checkbox("Depth of Field", &gSettings.dof);
+        if (gSettings.dof)
         {
             ImGui::Indent(16.0f);
-            ImGui::DragFloat("Scale##DOF", &DOF_focus_scale, 0.05f, 0.5f);
-            ImGui::DragFloat("Range##DOF", &DOF_blur_range, 0.05f, 0.5f);
-            ImGui::Unindent(16.0f);
-            ImGui::Separator();
-        }
-        ImGui::Checkbox("Motion Blur", &show_motionBlur);
-        if (show_motionBlur)
-        {
-            ImGui::Indent(16.0f);
-            ImGui::DragFloat("Strength#mb", &motionBlur_strength, 0.05f, 0.2f);
-            ImGui::DragInt("Samples#mb", &motionBlur_samples, 0.1f, 8, 64);
+            ImGui::DragFloat("Scale##DOF", &gSettings.dof_focus_scale, 0.05f, 0.5f);
+            ImGui::DragFloat("Range##DOF", &gSettings.dof_blur_range, 0.05f, 0.5f);
             ImGui::Unindent(16.0f);
             ImGui::Separator();
         }
-        ImGui::Checkbox("Tone Mapping", &show_tonemapping);
-        // if (show_tonemapping)
-        // {
-        //     ImGui::Indent(16.0f);
-        //     ImGui::SliderFloat("Exposure", &exposure, 0.01f, 10.f);
-        //     ImGui::Unindent(16.0f);
-        //     ImGui::Separator();
-        // }
-
-        auto &srSettings = Settings::Get<SRSettings>();
+        ImGui::Checkbox("Motion Blur", &gSettings.motion_blur);
+        if (gSettings.motion_blur)
+        {
+            ImGui::Indent(16.0f);
+            ImGui::DragFloat("Strength#mb", &gSettings.motion_blur_strength, 0.05f, 0.2f);
+            ImGui::DragInt("Samples#mb", &gSettings.motion_blur_samples, 0.1f, 8, 64);
+            ImGui::Unindent(16.0f);
+            ImGui::Separator();
+        }
+        ImGui::Checkbox("Tone Mapping", &gSettings.tonemapping);
 #if 0
         ImGui::Checkbox("FSR2", &srSettings.enable);
 #else
@@ -421,14 +418,14 @@ namespace pe
             ImGui::Separator();
         }
 
-        ImGui::Checkbox("FXAA", &use_FXAA);
+        ImGui::Checkbox("FXAA", &gSettings.fxaa);
 
-        ImGui::Checkbox("Bloom", &show_Bloom);
-        if (show_Bloom)
+        ImGui::Checkbox("Bloom", &gSettings.bloom);
+        if (gSettings.bloom)
         {
             ImGui::Indent(16.0f);
-            ImGui::SliderFloat("Strength", &Bloom_strength, 0.01f, 10.f);
-            ImGui::SliderFloat("Range", &Bloom_range, 0.1f, 20.f);
+            ImGui::SliderFloat("Strength", &gSettings.bloom_strength, 0.01f, 10.f);
+            ImGui::SliderFloat("Range", &gSettings.bloom_range, 0.1f, 20.f);
             ImGui::Unindent(16.0f);
             ImGui::Separator();
         }
@@ -451,57 +448,58 @@ namespace pe
         //     ImGui::Unindent(16.0f);
         // }
 
-        if (ImGui::Checkbox("Sun Light", &shadow_cast))
+        if (ImGui::Checkbox("Sun Light", (bool*)&gSettings.shadows))
         {
             // Update light pass descriptor sets for the skybox change
             LightPass &lightPass = *WORLD_ENTITY->GetComponent<LightPass>();
             lightPass.UpdateDescriptorSets();
         }
-        if (shadow_cast)
+        if (gSettings.shadows)
         {
             ImGui::Indent(16.0f);
-            ImGui::SliderFloat("Intst", &sun_intensity, 0.1f, 50.f);
-            ImGui::DragFloat3("Dir", sun_direction.data(), 0.01f, -1.f, 1.f);
-            ImGui::DragFloat("Slope", &depthBias[2], 0.15f, 0.5f);
+            ImGui::SliderFloat("Intst", &gSettings.sun_intensity, 0.1f, 50.f);
+            ImGui::DragFloat3("Dir", gSettings.sun_direction.data(), 0.01f, -1.f, 1.f);
+            ImGui::DragFloat("Slope", &gSettings.depth_bias[2], 0.15f, 0.5f);
             ImGui::Separator();
             {
-                vec3 direction = normalize(make_vec3(&sun_direction[0]));
-                sun_direction[0] = direction.x;
-                sun_direction[1] = direction.y;
-                sun_direction[2] = direction.z;
+                vec3 direction = normalize(make_vec3(&gSettings.sun_direction[0]));
+                gSettings.sun_direction[0] = direction.x;
+                gSettings.sun_direction[1] = direction.y;
+                gSettings.sun_direction[2] = direction.z;
             }
             ImGui::Unindent(16.0f);
         }
 
-        ImGui::DragFloat("CamSpeed", &cameraSpeed, 0.1f, 1.f);
-        ImGui::DragFloat("TimeScale", &timeScale, 0.05f, 0.2f);
+        ImGui::DragFloat("CamSpeed", &gSettings.camera_speed, 0.1f, 1.f);
+        ImGui::DragFloat("TimeScale", &gSettings.time_scale, 0.05f, 0.2f);
         ImGui::Separator();
         if (ImGui::Button("Randomize Lights"))
-            randomize_lights = true;
-        ImGui::SliderFloat("Light Intst", &lights_intensity, 0.01f, 30.f);
-        ImGui::SliderFloat("Light Rng", &lights_range, 0.1f, 30.f);
-        ImGui::Checkbox("FreezeCamCull", &freezeFrustumCulling);
-        ImGui::Checkbox("Draw AABBs", &drawAABBs);
-        if (drawAABBs)
+            gSettings.randomize_lights = true;
+        ImGui::SliderFloat("Light Intst", &gSettings.lights_intensity, 0.01f, 30.f);
+        ImGui::SliderFloat("Light Rng", &gSettings.lights_range, 0.1f, 30.f);
+        ImGui::Checkbox("FreezeCamCull", &gSettings.freeze_frustum_culling);
+        ImGui::Checkbox("Draw AABBs", &gSettings.draw_aabbs);
+        if (gSettings.draw_aabbs)
         {
-            bool depthAware = aabbDepthAware;
+            bool depthAware = gSettings.aabbs_depth_dware;
             ImGui::Indent(16.0f);
-            ImGui::Checkbox("Depth Aware", &aabbDepthAware);
+            ImGui::Checkbox("Depth Aware", &gSettings.aabbs_depth_dware);
             ImGui::Unindent(16.0f);
         }
-        ImGui::DragInt("Culls Per Task", &cullsPerTask, 1.f, 1, 100);
+        ImGui::DragInt("Culls Per Task", &gSettings.culls_per_task, 1.f, 1, 100);
 
         ImGui::End();
     }
 
     void GUI::InitImGui()
     {
+        auto &gSettings = Settings::Get<GlobalSettings>();
         std::string directory = Path::Assets + "Scripts";
         for (auto &file : std::filesystem::recursive_directory_iterator(directory))
         {
             auto pathStr = file.path().string();
             if (pathStr.ends_with(".cs"))
-                fileList.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size() + 1));
+                gSettings.file_list.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size() + 1));
         }
 
         directory = Path::Assets + "Shaders";
@@ -511,7 +509,7 @@ namespace pe
             if (pathStr.ends_with(".vert") || pathStr.ends_with(".frag") || pathStr.ends_with(".comp") ||
                 pathStr.ends_with(".glsl"))
             {
-                shaderList.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size() + 1));
+                gSettings.shader_list.push_back(pathStr.erase(0, pathStr.find(directory) + directory.size() + 1));
             }
         }
 

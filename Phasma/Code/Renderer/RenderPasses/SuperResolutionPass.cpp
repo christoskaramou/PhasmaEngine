@@ -188,20 +188,22 @@ namespace pe
                                             fsr2OutputName,
                                             FFX_RESOURCE_STATE_UNORDERED_ACCESS);
 
-        auto &srParams = Settings::Get<SRSettings>();
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        auto &srSettings = Settings::Get<SRSettings>();
+
         dd.jitterOffset.x = m_jitter.x;
         dd.jitterOffset.y = m_jitter.y;
-        dd.motionVectorScale.x = srParams.motionScale.x * m_viewportRT->GetWidth_f();
-        dd.motionVectorScale.y = srParams.motionScale.y * m_viewportRT->GetHeight_f();
+        dd.motionVectorScale.x = srSettings.motionScale.x * m_viewportRT->GetWidth_f();
+        dd.motionVectorScale.y = srSettings.motionScale.y * m_viewportRT->GetHeight_f();
         dd.renderSize.width = m_viewportRT->GetWidth();
         dd.renderSize.height = m_viewportRT->GetHeight();
         dd.enableSharpening = true;
-        dd.sharpness = 1.0f - (GUI::renderTargetsScale * GUI::renderTargetsScale);
+        dd.sharpness = 1.0f - (gSettings.render_scale * gSettings.render_scale);
         dd.frameTimeDelta = static_cast<float>(MILLI(FrameTimer::Instance().GetDelta()));
         dd.preExposure = 1.0f;
         dd.reset = false;
-        dd.cameraNear = Settings::Get<Global>().reverseZ ? camera.GetFarPlane() : camera.GetNearPlane();
-        dd.cameraFar = Settings::Get<Global>().reverseZ ? camera.GetNearPlane() : camera.GetFarPlane();
+        dd.cameraNear = gSettings.reverse_depth ? camera.GetFarPlane() : camera.GetNearPlane();
+        dd.cameraFar = gSettings.reverse_depth ? camera.GetNearPlane() : camera.GetFarPlane();
         dd.cameraFovAngleVertical = camera.Fovy();
 
         cmd->BeginDebugRegion("SuperResolution_Pass");
@@ -235,10 +237,12 @@ namespace pe
 
     void SuperResolutionPass::GenerateJitter()
     {
+        auto &srSettings = Settings::Get<SRSettings>();
+        
         int jitterPhaseCount = ffxFsr2GetJitterPhaseCount(m_viewportRT->GetWidth(), m_display->GetHeight());
         ffxFsr2GetJitterOffset(&m_jitter.x, &m_jitter.y, RHII.GetFrameCounter(), jitterPhaseCount);
 
-        m_projectionJitter.x = GUI::FSR2_ProjScaleX * (2.0f * m_jitter.x / m_viewportRT->GetWidth());
-        m_projectionJitter.y = GUI::FSR2_ProjScaleY * (2.0f * m_jitter.y / m_viewportRT->GetHeight());
+        m_projectionJitter.x = srSettings.projScale.x * (2.0f * m_jitter.x / m_viewportRT->GetWidth());
+        m_projectionJitter.y = srSettings.projScale.y * (2.0f * m_jitter.y / m_viewportRT->GetHeight());
     }
 }

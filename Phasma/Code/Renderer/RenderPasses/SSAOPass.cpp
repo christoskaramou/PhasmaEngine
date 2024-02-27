@@ -54,7 +54,8 @@ namespace pe
 
     void SSAOPass::Update(Camera *camera)
     {
-        if (GUI::show_ssao)
+        auto &gSettings = Settings::Get<GlobalSettings>();
+        if (gSettings.ssao)
         {
             mat4 projection = camera->GetProjection();
             memcpy(&m_proj.elements[0][0], &projection[0].x, sizeof(m_proj));

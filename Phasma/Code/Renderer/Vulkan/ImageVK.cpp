@@ -90,6 +90,7 @@ namespace pe
     Sampler::Sampler(const SamplerCreateInfo &info)
     {
         this->info = info;
+        auto &gSettings = Settings::Get<GlobalSettings>();
 
         VkSamplerCreateInfo infoVK{};
         infoVK.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -101,7 +102,7 @@ namespace pe
         infoVK.addressModeU = Translate<VkSamplerAddressMode>(info.addressModeU);
         infoVK.addressModeV = Translate<VkSamplerAddressMode>(info.addressModeV);
         infoVK.addressModeW = Translate<VkSamplerAddressMode>(info.addressModeW);
-        infoVK.mipLodBias = log2(GUI::renderTargetsScale) - 1.0f;
+        infoVK.mipLodBias = log2(gSettings.render_scale) - 1.0f;
         infoVK.anisotropyEnable = info.anisotropyEnable;
         infoVK.maxAnisotropy = info.maxAnisotropy;
         infoVK.compareEnable = info.compareEnable;

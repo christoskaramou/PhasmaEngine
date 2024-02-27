@@ -68,9 +68,9 @@ namespace pe
         ShadowPass &shadows = *WORLD_ENTITY->GetComponent<ShadowPass>();
 
         const std::vector<Define> definesFrag{
-            Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<Global>().shadowMapCascades)},
-            Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<Global>().shadowMapSize)},
-            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<Global>().shadowMapSize)},
+            Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<GlobalSettings>().shadow_map_cascades)},
+            Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<GlobalSettings>().shadow_map_size)},
+            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<GlobalSettings>().shadow_map_size)},
             Define{"MAX_POINT_LIGHTS", std::to_string(MAX_POINT_LIGHTS)},
             Define{"MAX_SPOT_LIGHTS", std::to_string(MAX_SPOT_LIGHTS)}};
 
@@ -107,7 +107,7 @@ namespace pe
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
         {
             m_uniform[i] = Buffer::Create(
-                RHII.AlignUniform(sizeof(UBO)),
+                RHII.AlignUniform(sizeof(LightPassUBO)),
                 BufferUsage::UniformBufferBit,
                 AllocationCreate::HostAccessSequentialWriteBit,
                 "Gbuffer_uniform_buffer");
@@ -127,7 +127,8 @@ namespace pe
         for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
             views[i] = shadows.m_textures[i]->GetSRV();
 
-        const SkyBox &skybox = GUI::shadow_cast ? CONTEXT->GetSystem<RendererSystem>()->GetSkyBoxDay() : CONTEXT->GetSystem<RendererSystem>()->GetSkyBoxNight();
+        bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
+        const SkyBox &skybox = shadowsEnabled ? CONTEXT->GetSystem<RendererSystem>()->GetSkyBoxDay() : CONTEXT->GetSystem<RendererSystem>()->GetSkyBoxNight();
 
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
         {
@@ -187,36 +188,38 @@ namespace pe
 
     void LightPass::Update(Camera *camera)
     {
-        m_ubo = {};
+        const auto &gSettings = Settings::Get<GlobalSettings>();
+
         m_ubo.invViewProj = camera->GetInvViewProjection();
-        m_ubo.ssao = GUI::show_ssao;
-        m_ubo.ssr = GUI::show_ssr;
-        m_ubo.tonemapping = GUI::show_tonemapping;
-        m_ubo.fsr2 = Settings::Get<SRSettings>().enable;
-        m_ubo.IBL = GUI::use_IBL;
-        m_ubo.IBL_intensity = GUI::IBL_intensity;
-        m_ubo.volumetric = GUI::use_Volumetric_lights;
-        m_ubo.volumetric_steps = GUI::volumetric_steps;
-        m_ubo.volumetric_dither_strength = GUI::volumetric_dither_strength;
-        m_ubo.lightsIntensity = GUI::lights_intensity;
-        m_ubo.lightsRange = GUI::lights_range;
-        m_ubo.fog = GUI::use_fog;
-        m_ubo.fogThickness = GUI::fog_global_thickness;
-        m_ubo.fogMaxHeight = GUI::fog_max_height;
-        m_ubo.fogGroundThickness = GUI::fog_ground_thickness;
-        m_ubo.shadows = GUI::shadow_cast;
+        m_ubo.ssao = gSettings.ssao;
+        m_ubo.ssr = gSettings.ssr;
+        m_ubo.tonemapping = gSettings.tonemapping;
+        m_ubo.fsr2 = gSettings.fsr2;
+        m_ubo.IBL = gSettings.IBL;
+        m_ubo.IBL_intensity = gSettings.IBL_intensity;
+        m_ubo.volumetric = gSettings.volumetric;
+        m_ubo.volumetric_steps = gSettings.volumetric_steps;
+        m_ubo.volumetric_dither_strength = gSettings.volumetric_dither_strength;
+        m_ubo.lights_intensity = gSettings.lights_intensity;
+        m_ubo.lights_range = gSettings.lights_range;
+        m_ubo.fog = gSettings.fog;
+        m_ubo.fog_thickness = gSettings.fog_thickness;
+        m_ubo.fog_max_height = gSettings.fog_max_height;
+        m_ubo.fog_ground_thickness = gSettings.fog_ground_thickness;
+        m_ubo.shadows = gSettings.shadows;
 
         MemoryRange mr{};
         mr.data = &m_ubo;
-        mr.size = sizeof(UBO);
+        mr.size = sizeof(m_ubo);
         mr.offset = 0;
         m_uniform[RHII.GetFrameIndex()]->Copy(1, &mr, false);
     }
 
     void LightPass::PassBarriers(CommandBuffer *cmd)
     {
+        bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
         RendererSystem &rs = *CONTEXT->GetSystem<RendererSystem>();
-        const SkyBox &skybox = GUI::shadow_cast ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
+        const SkyBox &skybox = shadowsEnabled ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
         ShadowPass &shadows = *WORLD_ENTITY->GetComponent<ShadowPass>();
 
         std::vector<ImageBarrierInfo> barriers(9 + shadows.m_textures.size());
@@ -264,8 +267,11 @@ namespace pe
             cmd = m_cmd;
         }
 
+        bool shadowsEnabled = m_ubo.shadows;
+        uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().shadow_map_cascades;
+
         RendererSystem &rs = *CONTEXT->GetSystem<RendererSystem>();
-        const SkyBox &skybox = GUI::shadow_cast ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
+        const SkyBox &skybox = shadowsEnabled ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
         ShadowPass &shadows = *WORLD_ENTITY->GetComponent<ShadowPass>();
 
         bool isTransparent = m_blendType == BlendType::Transparent;
@@ -274,13 +280,13 @@ namespace pe
         std::string passName = isTransparent ? "Transparent" : "Opaque";
 
         cmd->BeginDebugRegion("LightPass");
-        cmd->SetConstant(0, GUI::shadow_cast ? 1.0f : 0.0f); // Shadow cast
-        cmd->SetConstant(1, MAX_POINT_LIGHTS);               // num point lights
-        cmd->SetConstant(2, m_viewportRT->GetWidth_f());       // framebuffer width
-        cmd->SetConstant(3, m_viewportRT->GetHeight_f());      // framebuffer height
-        cmd->SetConstant(4, isTransparent ? 1u : 0u);        // transparent pass
-        for (uint32_t i = 0; i < Settings::Get<Global>().shadowMapCascades; i++)
-            cmd->SetConstant(i + 5, shadows.m_viewZ[i]);     // shadowmap cascade distances
+        cmd->SetConstant(0, shadowsEnabled ? 1.0f : 0.0f); // Shadow cast
+        cmd->SetConstant(1, MAX_POINT_LIGHTS);             // num point lights
+        cmd->SetConstant(2, m_viewportRT->GetWidth_f());   // framebuffer width
+        cmd->SetConstant(3, m_viewportRT->GetHeight_f());  // framebuffer height
+        cmd->SetConstant(4, isTransparent ? 1u : 0u);      // transparent pass
+        for (uint32_t i = 0; i < shadowmapCascades; i++)
+            cmd->SetConstant(i + 5, shadows.m_viewZ[i]); // shadowmap cascade distances
 
         PassBarriers(cmd);
 

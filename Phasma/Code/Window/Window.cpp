@@ -130,7 +130,7 @@ namespace pe
                 return false;
         }
 
-        float speed = GUI::cameraSpeed * static_cast<float>(delta);
+        float speed = Settings::Get<GlobalSettings>().camera_speed * static_cast<float>(delta);
         if ((ImGui::IsKeyDown(ImGuiKey_W) || ImGui::IsKeyDown(ImGuiKey_S)) &&
             (ImGui::IsKeyDown(ImGuiKey_A) || ImGui::IsKeyDown(ImGuiKey_D)))
             speed *= 0.707f;

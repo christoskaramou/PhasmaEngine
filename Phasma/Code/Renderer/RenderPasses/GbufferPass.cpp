@@ -130,7 +130,7 @@ namespace pe
             transparencyRT->GetBlendAttachment()};
         m_passInfoAlpha.colorFormats = colorformats;
         m_passInfoAlpha.depthFormat = depthFormat;
-        m_passInfoAlpha.depthCompareOp = Settings::Get<Global>().reverseZ ? CompareOp::GreaterOrEqual : CompareOp::LessOrEqual;
+        m_passInfoAlpha.depthCompareOp = Settings::Get<GlobalSettings>().reverse_depth ? CompareOp::GreaterOrEqual : CompareOp::LessOrEqual;
         m_passInfoAlpha.depthTestEnable = true;
         m_passInfoAlpha.depthWriteEnable = true;
         m_passInfoAlpha.UpdateHash();

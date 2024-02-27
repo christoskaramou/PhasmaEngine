@@ -117,14 +117,16 @@ namespace pe
 
         PushConstants_AABB constants{};
         constants.projJitter = camera.GetProjJitter();
+        
+        auto &gSettings = Settings::Get<GlobalSettings>();
 
         cmd->BeginPass(attachments, "AabbsPass");
         cmd->BindIndexBuffer(m_geometry->GetBuffer(), m_geometry->GetAabbIndicesOffset());
         cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetAabbVerticesOffset());
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_viewportRT->GetWidth(), m_viewportRT->GetHeight());
-        cmd->SetLineWidth(1.f + GUI::renderTargetsScale * GUI::renderTargetsScale);
-        cmd->SetDepthTestEnable(GUI::aabbDepthAware);
+        cmd->SetLineWidth(1.f + gSettings.render_scale * gSettings.render_scale);
+        cmd->SetDepthTestEnable(gSettings.aabbs_depth_dware);
         cmd->SetDepthWriteEnable(false);
         cmd->BindPipeline(m_passInfo);
 
