@@ -22,8 +22,6 @@ namespace pe
 
         bool isMinimized();
 
-        void SetTitle(const std::string &title);
-
         void GetDrawableSize(int &width, int &height);
 
         void Show();

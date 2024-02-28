@@ -179,8 +179,6 @@ namespace pe
 
         void BlitImage(CommandBuffer *cmd, Image *src, ImageBlit *region, Filter filter);
 
-        inline static std::unordered_map<size_t, Image *> uniqueImages{};
-
         float width_f{};
         float height_f{};
         Sampler *m_sampler;

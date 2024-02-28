@@ -20,7 +20,7 @@ namespace pe
 
         auto setTitle = [this](const std::any &title)
         {
-            SetTitle(std::any_cast<std::string>(title));
+            SDL_SetWindowTitle(m_handle, std::any_cast<std::string>(title).c_str());
         };
 
         EventSystem::RegisterCallback(EventSetWindowTitle, setTitle);
@@ -31,12 +31,7 @@ namespace pe
         SDL_DestroyWindow(m_handle);
         SDL_Quit();
     }
-
-    void Window::SetTitle(const std::string &title)
-    {
-        SDL_SetWindowTitle(m_handle, title.c_str());
-    }
-
+    
     inline bool IsButtonDown(int *x, int *y, uint32_t button)
     {
         return SDL_GetMouseState(x, y) & button;
@@ -47,7 +42,7 @@ namespace pe
         SDL_SetRelativeMouseMode(enable ? SDL_TRUE : SDL_FALSE);
     }
 
-    inline bool GetRelativeMouseMode()
+    inline bool IsRelativeMouseModeOn()
     {
         return SDL_GetRelativeMouseMode() == SDL_TRUE;
     }
@@ -61,7 +56,7 @@ namespace pe
 
         if (IsButtonDown(&x, &y, triggerButton))
         {
-            if (!GetRelativeMouseMode())
+            if (!IsRelativeMouseModeOn())
             {
                 SetRelativeMouseMode(true);
                 skipNextRotation = true;
@@ -80,7 +75,7 @@ namespace pe
         }
         else
         {
-            if (GetRelativeMouseMode())
+            if (IsRelativeMouseModeOn())
             {
                 SetRelativeMouseMode(false);
                 WrapMouse(x, y);

@@ -177,10 +177,6 @@ namespace pe
             delete script;
 #endif
 
-        for (auto &texture : Image::uniqueImages)
-            Image::Destroy(texture.second);
-        Image::uniqueImages.clear();
-
         m_skyBoxDay.Destroy();
         m_skyBoxNight.Destroy();
         m_gui.Destroy();

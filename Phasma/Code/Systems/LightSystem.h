@@ -16,7 +16,6 @@ namespace pe
         SpotLight spotLights[MAX_SPOT_LIGHTS];
     };
 
-    class Descriptor;
     class Buffer;
 
     class LightSystem : public ISystem
