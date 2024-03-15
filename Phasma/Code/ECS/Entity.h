@@ -7,7 +7,7 @@ namespace pe
     class Entity
     {
     public:
-        Entity() : m_context(nullptr), m_id(NextID()), m_enabled(false)
+        Entity() : m_context(nullptr), m_id(ID::NextID()), m_enabled(false)
         {
         }
 
@@ -63,7 +63,7 @@ namespace pe
     {
         ValidateBaseClass<IComponent, T>();
 
-        auto it = m_components.find(GetTypeID<T>());
+        auto it = m_components.find(ID::GetTypeID<T>());
         if (it != m_components.end())
             return static_cast<T *>(it->second.get());
         else
@@ -75,7 +75,7 @@ namespace pe
     {
         ValidateBaseClass<IComponent, T>();
 
-        size_t id = GetTypeID<T>();
+        size_t id = ID::GetTypeID<T>();
         auto it = m_components.find(id);
 
         if (it == m_components.end())
@@ -94,7 +94,7 @@ namespace pe
     {
         ValidateBaseClass<IComponent, T>();
 
-        size_t id = GetTypeID<T>();
+        size_t id = ID::GetTypeID<T>();
         auto it = m_components.find(id);
 
         if (it != m_components.end())

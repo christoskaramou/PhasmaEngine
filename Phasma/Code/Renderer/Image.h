@@ -106,8 +106,8 @@ namespace pe
 
         uint32_t GetWidth() { return m_imageInfo.width; }
         uint32_t GetHeight() { return m_imageInfo.height; }
-        float GetWidth_f() { return width_f; }
-        float GetHeight_f() { return height_f; }
+        float GetWidth_f() { return static_cast<float>(m_imageInfo.width); }
+        float GetHeight_f() { return static_cast<float>(m_imageInfo.height); }
         Sampler *GetSampler() { return m_sampler; }
         const std::string &GetName() { return m_imageInfo.name; }
         Format GetFormat() { return m_imageInfo.format; }

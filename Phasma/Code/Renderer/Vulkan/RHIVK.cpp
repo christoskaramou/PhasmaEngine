@@ -463,7 +463,7 @@ namespace pe
 
     size_t RHI::CreateUniformBufferInfo()
     {
-        size_t key = NextID();
+        size_t key = ID::NextID();
         m_uniformBuffers[key] = UniformBufferInfo{};
         return key;
     }
@@ -476,7 +476,7 @@ namespace pe
 
     size_t RHI::CreateUniformImageInfo()
     {
-        size_t key = NextID();
+        size_t key = ID::NextID();
         m_uniformImages[key] = UniformImageInfo{};
         return key;
     }

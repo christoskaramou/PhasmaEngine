@@ -68,7 +68,7 @@ namespace pe
     {
         ValidateBaseClass<ISystem, T>();
 
-        size_t id = GetTypeID<T>();
+        size_t id = ID::GetTypeID<T>();
         auto it = m_systems.find(id);
         if (it == m_systems.end())
         {
@@ -89,7 +89,7 @@ namespace pe
     {
         ValidateBaseClass<ISystem, T>();
 
-        auto it = m_systems.find(GetTypeID<T>());
+        auto it = m_systems.find(ID::GetTypeID<T>());
         if (it != m_systems.end())
             return static_cast<T *>(it->second.get());
         return nullptr;
@@ -100,7 +100,7 @@ namespace pe
     {
         ValidateBaseClass<ISystem, T>();
 
-        auto it = m_systems.find(GetTypeID<T>());
+        auto it = m_systems.find(ID::GetTypeID<T>());
         if (it != m_systems.end())
         {
             it->second->Destroy();

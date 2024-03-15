@@ -60,11 +60,11 @@ namespace pe
         LoadResources(cmd);
 
         // Create render components
-        m_renderPassComponents[GetTypeID<ShadowPass>()] = WORLD_ENTITY->CreateComponent<ShadowPass>();
-        m_renderPassComponents[GetTypeID<DepthPass>()] = WORLD_ENTITY->CreateComponent<DepthPass>();
-        m_renderPassComponents[GetTypeID<GbufferPass>()] = WORLD_ENTITY->CreateComponent<GbufferPass>();
-        m_renderPassComponents[GetTypeID<LightPass>()] = WORLD_ENTITY->CreateComponent<LightPass>();
-        m_renderPassComponents[GetTypeID<AabbsPass>()] = WORLD_ENTITY->CreateComponent<AabbsPass>();
+        m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = WORLD_ENTITY->CreateComponent<ShadowPass>();
+        m_renderPassComponents[ID::GetTypeID<DepthPass>()] = WORLD_ENTITY->CreateComponent<DepthPass>();
+        m_renderPassComponents[ID::GetTypeID<GbufferPass>()] = WORLD_ENTITY->CreateComponent<GbufferPass>();
+        m_renderPassComponents[ID::GetTypeID<LightPass>()] = WORLD_ENTITY->CreateComponent<LightPass>();
+        m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = WORLD_ENTITY->CreateComponent<AabbsPass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {

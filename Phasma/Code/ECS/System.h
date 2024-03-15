@@ -26,7 +26,7 @@ namespace pe
         template <class T>
         inline void AttachComponent(T *component)
         {
-            size_t id = GetTypeID<T>();
+            size_t id = ID::GetTypeID<T>();
             auto it = m_components.find(id);
 
             if (it == m_components.end())
@@ -40,7 +40,7 @@ namespace pe
         {
             ValidateBaseClass<IComponent, T>();
 
-            auto id = GetTypeID<T>();
+            auto id = ID::GetTypeID<T>();
             auto map_it = m_components.find(id);
 
             if (map_it != m_components.end())
@@ -57,7 +57,7 @@ namespace pe
         {
             ValidateBaseClass<IComponent, T>();
 
-            auto id = GetTypeID<T>();
+            auto id = ID::GetTypeID<T>();
             auto it = m_components.find(id);
             if (it != m_components.end())
                 it->second.clear();
@@ -74,7 +74,7 @@ namespace pe
             ValidateBaseClass<IComponent, T>();
 
             static const std::vector<T *> empty{};
-            auto id = GetTypeID<T>();
+            auto id = ID::GetTypeID<T>();
             auto it = m_components.find(id);
 
             if (it != m_components.end())

@@ -21,7 +21,7 @@ namespace pe
         T *GetEffect()
         {
             ValidateBaseClass<IRenderPassComponent, T>();
-            return static_cast<T *>(m_renderPassComponents[GetTypeID<T>()]);
+            return static_cast<T *>(m_renderPassComponents[ID::GetTypeID<T>()]);
         }
 
     private:

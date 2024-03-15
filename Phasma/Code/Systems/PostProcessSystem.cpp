@@ -22,14 +22,14 @@ namespace pe
 
     void PostProcessSystem::Init(CommandBuffer *cmd)
     {
-        m_renderPassComponents[GetTypeID<BloomPass>()] = WORLD_ENTITY->CreateComponent<BloomPass>();
-        m_renderPassComponents[GetTypeID<DOFPass>()] = WORLD_ENTITY->CreateComponent<DOFPass>();
-        m_renderPassComponents[GetTypeID<FXAAPass>()] = WORLD_ENTITY->CreateComponent<FXAAPass>();
-        m_renderPassComponents[GetTypeID<MotionBlurPass>()] = WORLD_ENTITY->CreateComponent<MotionBlurPass>();
-        m_renderPassComponents[GetTypeID<SSAOPass>()] = WORLD_ENTITY->CreateComponent<SSAOPass>();
-        m_renderPassComponents[GetTypeID<SSRPass>()] = WORLD_ENTITY->CreateComponent<SSRPass>();
-        m_renderPassComponents[GetTypeID<SuperResolutionPass>()] = WORLD_ENTITY->CreateComponent<SuperResolutionPass>();
-        m_renderPassComponents[GetTypeID<TonemapPass>()] = WORLD_ENTITY->CreateComponent<TonemapPass>();
+        m_renderPassComponents[ID::GetTypeID<BloomPass>()] = WORLD_ENTITY->CreateComponent<BloomPass>();
+        m_renderPassComponents[ID::GetTypeID<DOFPass>()] = WORLD_ENTITY->CreateComponent<DOFPass>();
+        m_renderPassComponents[ID::GetTypeID<FXAAPass>()] = WORLD_ENTITY->CreateComponent<FXAAPass>();
+        m_renderPassComponents[ID::GetTypeID<MotionBlurPass>()] = WORLD_ENTITY->CreateComponent<MotionBlurPass>();
+        m_renderPassComponents[ID::GetTypeID<SSAOPass>()] = WORLD_ENTITY->CreateComponent<SSAOPass>();
+        m_renderPassComponents[ID::GetTypeID<SSRPass>()] = WORLD_ENTITY->CreateComponent<SSRPass>();
+        m_renderPassComponents[ID::GetTypeID<SuperResolutionPass>()] = WORLD_ENTITY->CreateComponent<SuperResolutionPass>();
+        m_renderPassComponents[ID::GetTypeID<TonemapPass>()] = WORLD_ENTITY->CreateComponent<TonemapPass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {

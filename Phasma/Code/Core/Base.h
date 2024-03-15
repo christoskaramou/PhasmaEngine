@@ -2,23 +2,26 @@
 
 namespace pe
 {
-    inline size_t NextID()
+    namespace ID
     {
-        static size_t ID = 0;
-        return ID++;
-    }
+        inline size_t NextID()
+        {
+            static size_t ID = 0;
+            return ID++;
+        }
 
-    template <typename T>
-    struct TypeIDHelper
-    {
-        static constexpr char value{};
-    };
+        template <typename T>
+        struct TypeIDHelper
+        {
+            static constexpr char value{};
+        };
 
-    template <typename T>
-    constexpr size_t GetTypeID()
-    {
-        static_assert(sizeof(size_t) >= sizeof(void *), "size_t is too small to hold a pointer");
-        return reinterpret_cast<size_t>(&TypeIDHelper<T>::value);
+        template <typename T>
+        constexpr size_t GetTypeID()
+        {
+            static_assert(sizeof(size_t) >= sizeof(void *), "size_t is too small to hold a pointer");
+            return reinterpret_cast<size_t>(&TypeIDHelper<T>::value);
+        }
     }
 
     template <uint32_t N>
@@ -227,7 +230,7 @@ namespace pe
     class IHandleBase
     {
     public:
-        IHandleBase() : m_id{NextID()} {}
+        IHandleBase() : m_id{ID::NextID()} {}
 
         virtual ~IHandleBase() {}
 

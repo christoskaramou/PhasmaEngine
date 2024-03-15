@@ -20,7 +20,7 @@ namespace pe
     Image *m_defaultWhite = nullptr;
     Sampler *m_defaultSampler = nullptr;
 
-    ModelGltf::ModelGltf() : m_id{NextID()}
+    ModelGltf::ModelGltf() : m_id{ID::NextID()}
     {
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
             dirtyUniforms[i] = false;

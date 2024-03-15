@@ -229,9 +229,6 @@ namespace pe
             }
         }
 
-        width_f = static_cast<float>(m_imageInfo.width);
-        height_f = static_cast<float>(m_imageInfo.height);
-
         VkImageCreateInfo imageInfoVK{};
         imageInfoVK.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfoVK.flags = Translate<VkImageCreateFlags>(m_imageInfo.imageFlags);
