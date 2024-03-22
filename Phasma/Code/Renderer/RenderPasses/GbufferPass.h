@@ -39,8 +39,6 @@ namespace pe
 
         void Destroy() override;
 
-        void SetCommandBuffer(CommandBuffer *cmd) { m_cmd = cmd; }
-
         void SetGeometry(Geometry *geometry) { m_geometry = geometry; }
 
         void ClearRenderTargets(CommandBuffer *cmd);
@@ -78,7 +76,6 @@ namespace pe
         BlendType m_blendType = BlendType::None;
 
         Queue *m_renderQueue;
-        CommandBuffer *m_cmd;
 
         std::vector<Attachment> m_attachmentsOpaque;
         std::vector<Attachment> m_attachmentsTransparent;         

@@ -26,7 +26,7 @@ namespace pe
     void BloomPass::Init()
     {
         m_renderQueue = RHII.GetRenderQueue();
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         m_brightFilterRT = rs->GetRenderTarget("brightFilter");
         m_gaussianBlurHorizontalRT = rs->GetRenderTarget("gaussianBlurHorizontal");
@@ -153,7 +153,7 @@ namespace pe
 
     CommandBuffer *BloomPass::Draw()
     {
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
         cmd->Begin();
 
         cmd->BeginDebugRegion("BloomPass");

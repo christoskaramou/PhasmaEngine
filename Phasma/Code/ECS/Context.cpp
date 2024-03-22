@@ -1,15 +1,19 @@
+#include "ECS/Context.h"
 #include "Renderer/RHI.h"
 #include "Renderer/Queue.h"
 #include "Renderer/Command.h"
 
 namespace pe
 {
-    Entity *Context::WorldEntity = CONTEXT->CreateEntity();
+    Context::Context()
+    {
+        m_worldEntity = CreateEntity();
+    }
 
     void Context::InitSystems()
     {
         Queue *queue = Queue::Get(QueueType::GraphicsBit | QueueType::TransferBit, 1);
-        CommandBuffer *cmd = CommandBuffer::GetFree(queue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(queue);
         cmd->Begin();
 
         for (auto &system : m_systems)
@@ -21,7 +25,7 @@ namespace pe
         cmd->End();
         cmd->Submit(queue, 0, nullptr, nullptr, 0, nullptr, nullptr);
         cmd->Wait();
-        
+
         CommandBuffer::Return(cmd);
     }
 
@@ -74,12 +78,22 @@ namespace pe
     void Context::RemoveEntity(size_t id)
     {
         auto it = m_entities.find(id);
-        if(it != m_entities.end())
+        if (it != m_entities.end())
             m_entities.erase(it);
     }
 
     std::unordered_map<size_t, std::shared_ptr<ISystem>> Context::GetSystems()
     {
         return m_systems;
+    }
+
+    void UpdateGlobalSystems(double delta)
+    {
+        Context::Get()->UpdateSystems(delta);
+    }
+
+    void DrawGlobalSystems()
+    {
+        Context::Get()->DrawSystems();
     }
 }

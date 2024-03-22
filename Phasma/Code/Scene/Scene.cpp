@@ -50,7 +50,7 @@ namespace pe
                 auto task = e_Update_ThreadPool.Enqueue(
                     [this, frame]()
                     {
-                        AabbsPass *ap = WORLD_ENTITY->GetComponent<AabbsPass>();
+                        AabbsPass *ap = GetGlobalComponent<AabbsPass>();
                         const auto &sets = ap->m_passInfo.GetDescriptors(frame);
 
                         // Set 0
@@ -69,7 +69,7 @@ namespace pe
                     auto task = e_Update_ThreadPool.Enqueue(
                         [this, frame]()
                         {
-                            DepthPass *dp = WORLD_ENTITY->GetComponent<DepthPass>();
+                            DepthPass *dp = GetGlobalComponent<DepthPass>();
                             const auto &sets = dp->m_passInfo.GetDescriptors(frame);
 
                             // set 0
@@ -95,7 +95,7 @@ namespace pe
                     auto task = e_Update_ThreadPool.Enqueue(
                         [this, frame]()
                         {
-                            ShadowPass *shadows = WORLD_ENTITY->GetComponent<ShadowPass>();
+                            ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
                             const auto &sets = shadows->m_passInfo.GetDescriptors(frame);
 
                             // set 0
@@ -112,7 +112,7 @@ namespace pe
                     auto task = e_Update_ThreadPool.Enqueue(
                         [this, frame]()
                         {
-                            GbufferPass *gb = WORLD_ENTITY->GetComponent<GbufferPass>();
+                            GbufferPass *gb = GetGlobalComponent<GbufferPass>();
                             const auto &sets = gb->m_passInfoOpaque.GetDescriptors(frame);
 
                             // set 0
@@ -139,7 +139,7 @@ namespace pe
                 auto task = e_Update_ThreadPool.Enqueue(
                     [this, frame]()
                     {
-                        GbufferPass *gb = WORLD_ENTITY->GetComponent<GbufferPass>();
+                        GbufferPass *gb = GetGlobalComponent<GbufferPass>();
                         const auto &sets = gb->m_passInfoAlpha.GetDescriptors(frame);
 
                         // set 0
@@ -174,7 +174,7 @@ namespace pe
 
     CommandBuffer *Scene::DrawShadowPass()
     {
-        ShadowPass *shadows = WORLD_ENTITY->GetComponent<ShadowPass>();
+        ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
         shadows->SetGeometry(&m_geometry);
 
         return shadows->Draw();
@@ -182,7 +182,7 @@ namespace pe
 
     CommandBuffer *Scene::DepthPrePass()
     {
-        DepthPass *dp = WORLD_ENTITY->GetComponent<DepthPass>();
+        DepthPass *dp = GetGlobalComponent<DepthPass>();
         dp->SetGeometry(&m_geometry);
 
         return dp->Draw();
@@ -190,7 +190,7 @@ namespace pe
 
     CommandBuffer *Scene::DrawGbufferPassOpaque()
     {
-        GbufferPass *gb = WORLD_ENTITY->GetComponent<GbufferPass>();
+        GbufferPass *gb = GetGlobalComponent<GbufferPass>();
         gb->SetGeometry(&m_geometry);
         gb->SetBlendType(BlendType::Opaque);
 
@@ -199,7 +199,7 @@ namespace pe
 
     CommandBuffer *Scene::DrawGbufferPassTransparent()
     {
-        GbufferPass *gb = WORLD_ENTITY->GetComponent<GbufferPass>();
+        GbufferPass *gb = GetGlobalComponent<GbufferPass>();
         gb->SetGeometry(&m_geometry);
         gb->SetBlendType(BlendType::Transparent);
 
@@ -208,7 +208,7 @@ namespace pe
 
     CommandBuffer *Scene::DrawLightPassOpaque()
     {
-        LightPass *lp = WORLD_ENTITY->GetComponent<LightPass>();
+        LightPass *lp = GetGlobalComponent<LightPass>();
         lp->SetBlendType(BlendType::Opaque);
 
         return lp->Draw();
@@ -216,7 +216,7 @@ namespace pe
 
     CommandBuffer *Scene::DrawLightPassTransparent()
     {
-        LightPass *lp = WORLD_ENTITY->GetComponent<LightPass>();
+        LightPass *lp = GetGlobalComponent<LightPass>();
         lp->SetBlendType(BlendType::Transparent);
 
         return lp->Draw();
@@ -224,7 +224,7 @@ namespace pe
 
     CommandBuffer *Scene::DrawAabbsPass()
     {
-        AabbsPass *ap = WORLD_ENTITY->GetComponent<AabbsPass>();
+        AabbsPass *ap = GetGlobalComponent<AabbsPass>();
         ap->SetGeometry(&m_geometry);
 
         return ap->Draw();

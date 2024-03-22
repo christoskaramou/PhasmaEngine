@@ -827,6 +827,11 @@ namespace pe
         return cmd;
     }
 
+    CommandBuffer *CommandBuffer::GetFree(Queue *queue)
+    {
+        return GetFree(queue->GetFamilyId());
+    }
+
     void CommandBuffer::Return(CommandBuffer *cmd)
     {
         std::lock_guard<std::mutex> lock(s_returnMutex);

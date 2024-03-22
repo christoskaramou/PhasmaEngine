@@ -60,8 +60,6 @@ namespace pe
 
         void SetBlendType(BlendType blendType) { m_blendType = blendType; }
 
-        void SetCommandBuffer(CommandBuffer *cmd) { m_cmd = cmd; }
-
         PassInfo &GetPassInfoOpaque() { return m_passInfoOpaque; };
 
         PassInfo &GetPassInfoAlpha() { return m_passInfoTransparent; };
@@ -92,6 +90,5 @@ namespace pe
         LightPassUBO m_ubo;
 
         Queue *m_renderQueue;
-        CommandBuffer *m_cmd;
     };
 }

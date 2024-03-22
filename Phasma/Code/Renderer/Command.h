@@ -12,6 +12,7 @@ namespace pe
     class Image;
     class Descriptor;
     class Semaphore;
+    class Queue;
     class PassInfo;
     class Event;
     struct ImageBarrierInfo;
@@ -255,6 +256,8 @@ namespace pe
         static void Clear();
 
         static CommandBuffer *GetFree(uint32_t familyId);
+        
+        static CommandBuffer *GetFree(Queue *queue);
 
         static void Return(CommandBuffer *cmd);
 

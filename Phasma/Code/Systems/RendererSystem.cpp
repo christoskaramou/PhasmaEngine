@@ -60,11 +60,11 @@ namespace pe
         LoadResources(cmd);
 
         // Create render components
-        m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = WORLD_ENTITY->CreateComponent<ShadowPass>();
-        m_renderPassComponents[ID::GetTypeID<DepthPass>()] = WORLD_ENTITY->CreateComponent<DepthPass>();
-        m_renderPassComponents[ID::GetTypeID<GbufferPass>()] = WORLD_ENTITY->CreateComponent<GbufferPass>();
-        m_renderPassComponents[ID::GetTypeID<LightPass>()] = WORLD_ENTITY->CreateComponent<LightPass>();
-        m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = WORLD_ENTITY->CreateComponent<AabbsPass>();
+        m_renderPassComponents[ID::GetTypeID<ShadowPass>()] = CreateGlobalComponent<ShadowPass>();
+        m_renderPassComponents[ID::GetTypeID<DepthPass>()] = CreateGlobalComponent<DepthPass>();
+        m_renderPassComponents[ID::GetTypeID<GbufferPass>()] = CreateGlobalComponent<GbufferPass>();
+        m_renderPassComponents[ID::GetTypeID<LightPass>()] = CreateGlobalComponent<LightPass>();
+        m_renderPassComponents[ID::GetTypeID<AabbsPass>()] = CreateGlobalComponent<AabbsPass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {
@@ -107,7 +107,7 @@ namespace pe
         // Scene
         m_scene.Update(delta);
 
-        CameraSystem *cameraSystem = CONTEXT->GetSystem<CameraSystem>();
+        CameraSystem *cameraSystem = GetGlobalSystem<CameraSystem>();
         Camera *camera_main = cameraSystem->GetCamera(0);
 
         // Render Components

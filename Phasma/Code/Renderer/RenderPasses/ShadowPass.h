@@ -34,8 +34,6 @@ namespace pe
 
         void Destroy() override;
 
-        void SetCommandBuffer(CommandBuffer *cmd) { m_cmd = cmd; }
-
         void SetGeometry(Geometry *geometry) { m_geometry = geometry; }
 
         void ClearDepths(CommandBuffer *cmd);
@@ -58,7 +56,6 @@ namespace pe
         Sampler *m_sampler;
         Geometry *m_geometry = nullptr;
         PassInfo m_passInfo;
-        CommandBuffer *m_cmd = nullptr;
         Queue *m_renderQueue = nullptr;
 
     };

@@ -45,7 +45,7 @@ namespace pe
     void SuperResolutionPass::Init()
     {
         m_renderQueue = RHII.GetRenderQueue();
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         m_display = rs->GetDisplayRT();
         m_viewportRT = rs->GetViewportRT();
@@ -98,7 +98,7 @@ namespace pe
 
     CommandBuffer *SuperResolutionPass::Draw()
     {
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
         cmd->Begin();
 
         cmd->BeginDebugRegion("Super Resolution");
@@ -126,7 +126,7 @@ namespace pe
 
         cmd->ImageBarriers(barriers);
 
-        Camera &camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
+        Camera &camera = *GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
         FfxFsr2DispatchDescription dd = {};
         dd.commandList = ffxGetCommandListVK(cmd->Handle());

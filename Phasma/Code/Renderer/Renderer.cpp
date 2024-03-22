@@ -97,7 +97,7 @@ namespace pe
         region.dstSubresource.aspectMask = GetAspectMask(m_displayRT->GetFormat());
         region.dstSubresource.layerCount = 1;
 
-        CommandBuffer *cmd = CommandBuffer::GetFree(RHII.GetRenderQueue()->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(RHII.GetRenderQueue());
         cmd->Begin();
         cmd->BlitImage(m_viewportRT, m_displayRT, &region, filter);
         cmd->End();
@@ -111,15 +111,15 @@ namespace pe
         cmds.reserve(20);
         Queue *renderQueue = RHII.GetRenderQueue();
 
-        ShadowPass &shadows = *WORLD_ENTITY->GetComponent<ShadowPass>();
-        SSAOPass &ssao = *WORLD_ENTITY->GetComponent<SSAOPass>();
-        SSRPass &ssr = *WORLD_ENTITY->GetComponent<SSRPass>();
-        FXAAPass &fxaa = *WORLD_ENTITY->GetComponent<FXAAPass>();
-        BloomPass &bloom = *WORLD_ENTITY->GetComponent<BloomPass>();
-        DOFPass &dof = *WORLD_ENTITY->GetComponent<DOFPass>();
-        MotionBlurPass &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlurPass>();
-        SuperResolutionPass &sr = *WORLD_ENTITY->GetComponent<SuperResolutionPass>();
-        TonemapPass &tonemap = *WORLD_ENTITY->GetComponent<TonemapPass>();
+        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        SSAOPass &ssao = *GetGlobalComponent<SSAOPass>();
+        SSRPass &ssr = *GetGlobalComponent<SSRPass>();
+        FXAAPass &fxaa = *GetGlobalComponent<FXAAPass>();
+        BloomPass &bloom = *GetGlobalComponent<BloomPass>();
+        DOFPass &dof = *GetGlobalComponent<DOFPass>();
+        MotionBlurPass &motionBlur = *GetGlobalComponent<MotionBlurPass>();
+        SuperResolutionPass &sr = *GetGlobalComponent<SuperResolutionPass>();
+        TonemapPass &tonemap = *GetGlobalComponent<TonemapPass>();
 
         auto &gSettings = Settings::Get<GlobalSettings>();
 
@@ -487,7 +487,7 @@ namespace pe
         for (auto &rc : m_renderPassComponents)
             rc->Resize(width, height);
 
-        CONTEXT->GetSystem<PostProcessSystem>()->Resize(width, height);
+        GetGlobalSystem<PostProcessSystem>()->Resize(width, height);
     }
 
     CommandBuffer *Renderer::BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)
@@ -542,18 +542,18 @@ namespace pe
     {
         RHII.WaitDeviceIdle();
 
-        ShadowPass &shadows = *WORLD_ENTITY->GetComponent<ShadowPass>();
-        SSAOPass &ssao = *WORLD_ENTITY->GetComponent<SSAOPass>();
-        SSRPass &ssr = *WORLD_ENTITY->GetComponent<SSRPass>();
-        FXAAPass &fxaa = *WORLD_ENTITY->GetComponent<FXAAPass>();
-        BloomPass &bloom = *WORLD_ENTITY->GetComponent<BloomPass>();
-        DOFPass &dof = *WORLD_ENTITY->GetComponent<DOFPass>();
-        MotionBlurPass &motionBlur = *WORLD_ENTITY->GetComponent<MotionBlurPass>();
-        DepthPass &depthPass = *WORLD_ENTITY->GetComponent<DepthPass>();
-        GbufferPass &gbuffer = *WORLD_ENTITY->GetComponent<GbufferPass>();
-        LightPass &lightPass = *WORLD_ENTITY->GetComponent<LightPass>();
-        AabbsPass &aabbs = *WORLD_ENTITY->GetComponent<AabbsPass>();
-        TonemapPass &tonemap = *WORLD_ENTITY->GetComponent<TonemapPass>();
+        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        SSAOPass &ssao = *GetGlobalComponent<SSAOPass>();
+        SSRPass &ssr = *GetGlobalComponent<SSRPass>();
+        FXAAPass &fxaa = *GetGlobalComponent<FXAAPass>();
+        BloomPass &bloom = *GetGlobalComponent<BloomPass>();
+        DOFPass &dof = *GetGlobalComponent<DOFPass>();
+        MotionBlurPass &motionBlur = *GetGlobalComponent<MotionBlurPass>();
+        DepthPass &depthPass = *GetGlobalComponent<DepthPass>();
+        GbufferPass &gbuffer = *GetGlobalComponent<GbufferPass>();
+        LightPass &lightPass = *GetGlobalComponent<LightPass>();
+        AabbsPass &aabbs = *GetGlobalComponent<AabbsPass>();
+        TonemapPass &tonemap = *GetGlobalComponent<TonemapPass>();
 
         auto NeedsUpdate = [](PassInfo &info)
         {

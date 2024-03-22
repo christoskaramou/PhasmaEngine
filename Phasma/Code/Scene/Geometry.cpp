@@ -15,7 +15,7 @@ namespace pe
 {
     Geometry::Geometry()
     {
-        Camera *camera = CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
+        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
         m_cameras.push_back(camera);
 
         // AABBs Indices

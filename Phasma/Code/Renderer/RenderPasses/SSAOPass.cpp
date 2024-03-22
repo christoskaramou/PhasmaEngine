@@ -28,7 +28,7 @@ namespace pe
         // m_queue = RHII.GetComputeQueue();
         m_queue = RHII.GetRenderQueue();
         
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         m_ssaoRT = rs->GetRenderTarget("ssao");
         m_normalRT = rs->GetRenderTarget("normal");
         m_depth = rs->GetDepthStencilTarget("depthStencil");;
@@ -119,7 +119,7 @@ namespace pe
             m_previousCmd->Wait();
         }
 
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_queue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_queue);
         cmd->Begin();
 
         cmd->BeginDebugRegion("SSAOPass");
@@ -171,7 +171,7 @@ namespace pe
     {
         PE_CHECK(FFX_CACAO_VkDestroyScreenSizeDependentResources(m_context));
 
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         m_ssaoRT = rs->GetRenderTarget("ssao");
         m_normalRT = rs->GetRenderTarget("normal");
         m_depth = rs->GetDepthStencilTarget("depthStencil");;

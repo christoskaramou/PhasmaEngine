@@ -22,14 +22,14 @@ namespace pe
 
     void PostProcessSystem::Init(CommandBuffer *cmd)
     {
-        m_renderPassComponents[ID::GetTypeID<BloomPass>()] = WORLD_ENTITY->CreateComponent<BloomPass>();
-        m_renderPassComponents[ID::GetTypeID<DOFPass>()] = WORLD_ENTITY->CreateComponent<DOFPass>();
-        m_renderPassComponents[ID::GetTypeID<FXAAPass>()] = WORLD_ENTITY->CreateComponent<FXAAPass>();
-        m_renderPassComponents[ID::GetTypeID<MotionBlurPass>()] = WORLD_ENTITY->CreateComponent<MotionBlurPass>();
-        m_renderPassComponents[ID::GetTypeID<SSAOPass>()] = WORLD_ENTITY->CreateComponent<SSAOPass>();
-        m_renderPassComponents[ID::GetTypeID<SSRPass>()] = WORLD_ENTITY->CreateComponent<SSRPass>();
-        m_renderPassComponents[ID::GetTypeID<SuperResolutionPass>()] = WORLD_ENTITY->CreateComponent<SuperResolutionPass>();
-        m_renderPassComponents[ID::GetTypeID<TonemapPass>()] = WORLD_ENTITY->CreateComponent<TonemapPass>();
+        m_renderPassComponents[ID::GetTypeID<BloomPass>()] = CreateGlobalComponent<BloomPass>();
+        m_renderPassComponents[ID::GetTypeID<DOFPass>()] = CreateGlobalComponent<DOFPass>();
+        m_renderPassComponents[ID::GetTypeID<FXAAPass>()] = CreateGlobalComponent<FXAAPass>();
+        m_renderPassComponents[ID::GetTypeID<MotionBlurPass>()] = CreateGlobalComponent<MotionBlurPass>();
+        m_renderPassComponents[ID::GetTypeID<SSAOPass>()] = CreateGlobalComponent<SSAOPass>();
+        m_renderPassComponents[ID::GetTypeID<SSRPass>()] = CreateGlobalComponent<SSRPass>();
+        m_renderPassComponents[ID::GetTypeID<SuperResolutionPass>()] = CreateGlobalComponent<SuperResolutionPass>();
+        m_renderPassComponents[ID::GetTypeID<TonemapPass>()] = CreateGlobalComponent<TonemapPass>();
 
         for (auto &renderPassComponent : m_renderPassComponents)
         {
@@ -41,7 +41,7 @@ namespace pe
 
     void PostProcessSystem::Update(double delta)
     {
-        Camera *camera_main = CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
+        Camera *camera_main = GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
         std::vector<Task<void>> tasks;
         tasks.reserve(m_renderPassComponents.size());

@@ -4,7 +4,7 @@ namespace pe
 {
     CameraSystem::CameraSystem()
     {
-        Camera *mainCamera = WORLD_ENTITY->CreateComponent<Camera>();
+        Camera *mainCamera = CreateGlobalComponent<Camera>();
         AttachComponent(mainCamera);
     }
 

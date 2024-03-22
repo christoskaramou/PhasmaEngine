@@ -2,7 +2,6 @@
 
 namespace pe
 {
-    class Context;
     class Window;
     class FrameTimer;
     class SplashScreen;
@@ -19,7 +18,6 @@ namespace pe
         void Run();
 
     private:
-        Context *m_context = nullptr;
         Window *m_window = nullptr;
         FrameTimer &m_frameTimer;
         SplashScreen *m_splashScreen = nullptr;

@@ -37,8 +37,6 @@ namespace pe
 
         void Destroy() override;
 
-        void SetCommandBuffer(CommandBuffer *cmd) { m_cmd = cmd; }
-
         void SetGeometry(Geometry *geometry) { m_geometry = geometry; }
 
         void ClearDepthStencil(CommandBuffer *cmd);
@@ -54,7 +52,6 @@ namespace pe
         PassInfo m_passInfo;
         Attachment attachment;
         
-        CommandBuffer *m_cmd;
         Queue *m_renderQueue;
     };
 }

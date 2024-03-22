@@ -451,7 +451,7 @@ namespace pe
         if (ImGui::Checkbox("Sun Light", (bool*)&gSettings.shadows))
         {
             // Update light pass descriptor sets for the skybox change
-            LightPass &lightPass = *WORLD_ENTITY->GetComponent<LightPass>();
+            LightPass &lightPass = *GetGlobalComponent<LightPass>();
             lightPass.UpdateDescriptorSets();
         }
         if (gSettings.shadows)
@@ -540,7 +540,7 @@ namespace pe
         initInfo.Allocator = nullptr;
         initInfo.CheckVkResultFn = nullptr;
 
-        renderer = CONTEXT->GetSystem<RendererSystem>();
+        renderer = GetGlobalSystem<RendererSystem>();
         attachments.resize(1);
         attachments[0] = {};
         attachments[0].image = renderer->GetDisplayRT();
@@ -550,7 +550,7 @@ namespace pe
         renderPass = CommandBuffer::GetRenderPass({attachments});
         ImGui_ImplVulkan_Init(&initInfo, renderPass->Handle());
 
-        CommandBuffer *cmd = CommandBuffer::GetFree(queue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(queue);
         cmd->Begin();
         ImGui_ImplVulkan_CreateFontsTexture(cmd->Handle());
         cmd->End();
@@ -584,7 +584,7 @@ namespace pe
         if (!render || ImGui::GetDrawData()->TotalVtxCount <= 0)
             return nullptr;
 
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
         cmd->Begin();
 
         cmd->BeginDebugRegion("GUI");

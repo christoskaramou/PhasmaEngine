@@ -85,8 +85,8 @@ namespace pe
 
     bool Window::ProcessEvents(double delta)
     {
-        RendererSystem *renderer = CONTEXT->GetSystem<RendererSystem>();
-        CameraSystem *cameraSystem = CONTEXT->GetSystem<CameraSystem>();
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        CameraSystem *cameraSystem = GetGlobalSystem<CameraSystem>();
         Camera *camera = cameraSystem->GetCamera(0);
 
         ImGuiIO &io = ImGui::GetIO();
@@ -165,7 +165,7 @@ namespace pe
 
     void Window::WrapMouse(int &x, int &y)
     {
-        const Rect2D &rect = CONTEXT->GetSystem<RendererSystem>()->GetRenderArea().scissor;
+        const Rect2D &rect = GetGlobalSystem<RendererSystem>()->GetRenderArea().scissor;
 
         if (x < rect.x + 15)
         {
@@ -190,7 +190,7 @@ namespace pe
 
     bool Window::IsInsideRenderWindow(int x, int y)
     {
-        const Rect2D &rect = CONTEXT->GetSystem<RendererSystem>()->GetRenderArea().scissor;
+        const Rect2D &rect = GetGlobalSystem<RendererSystem>()->GetRenderArea().scissor;
 
         return x > rect.x && y > rect.y && x < rect.x + rect.width &&
                y < rect.y + rect.height;

@@ -1,8 +1,5 @@
 #pragma once
 
-#define CONTEXT Context::Get()
-#define WORLD_ENTITY CONTEXT->WorldEntity
-
 namespace pe
 {
     class RHI;
@@ -27,11 +24,9 @@ namespace pe
         ~Context() = default; // destructor
 
     private:
-        Context() = default;
+        Context();
 
     public:
-        static Entity *WorldEntity;
-
         void InitSystems();
 
         void DestroySystems();
@@ -55,9 +50,13 @@ namespace pe
 
         void RemoveEntity(size_t id);
 
+        Entity *GetWorldEntity() { return m_worldEntity; }
+
         std::unordered_map<size_t, std::shared_ptr<ISystem>> GetSystems();
 
     private:
+        Entity *m_worldEntity;
+
         std::unordered_map<size_t, std::shared_ptr<ISystem>> m_systems;
         std::unordered_map<size_t, IDrawSystem *> m_drawSystems;
         std::unordered_map<size_t, std::shared_ptr<Entity>> m_entities;
@@ -107,4 +106,37 @@ namespace pe
             m_systems.erase(it);
         }
     }
+
+    template <class T>
+    inline T *CreateGlobalComponent()
+    {
+        return Context::Get()->GetWorldEntity()->CreateComponent<T>();
+    }
+
+    template <class T>
+    inline T *GetGlobalComponent()
+    {
+        return Context::Get()->GetWorldEntity()->GetComponent<T>();
+    }
+    
+    template <class T>
+    inline T *CreateGlobalSystem()
+    {
+        return Context::Get()->CreateSystem<T>();
+    }
+
+    inline void DestroyGlobalSystems()
+    {
+        Context::Get()->DestroySystems();
+    }
+
+    template <class T>
+    inline T *GetGlobalSystem()
+    {
+        return Context::Get()->GetSystem<T>();
+    }
+
+    void UpdateGlobalSystems(double delta);
+
+    void DrawGlobalSystems();
 }

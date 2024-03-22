@@ -55,7 +55,7 @@ namespace pe
 
 
         Queue *queue = RHII.GetRenderQueue();
-        CommandBuffer *cmd = CommandBuffer::GetFree(queue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(queue);
         cmd->Begin();
 
         // Upload images
@@ -520,7 +520,7 @@ namespace pe
         }
 
         modelGltf->render = false;
-        Scene &scene = CONTEXT->GetSystem<RendererSystem>()->GetScene();
+        Scene &scene = GetGlobalSystem<RendererSystem>()->GetScene();
         scene.AddModel(modelGltf);
         scene.InitGeometry(cmd);
 

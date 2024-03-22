@@ -27,7 +27,7 @@ namespace pe
     void MotionBlurPass::Init()
     {
         m_renderQueue = RHII.GetRenderQueue();
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         m_displayRT = rs->GetRenderTarget("display");
         m_velocityRT = rs->GetRenderTarget("velocity");
@@ -78,12 +78,12 @@ namespace pe
 
     CommandBuffer *MotionBlurPass::Draw()
     {
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
         cmd->Begin();
 
         cmd->BeginDebugRegion("MotionBlurPass");
 
-        Camera *camera = CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
+        Camera *camera = GetGlobalSystem<CameraSystem>()->GetCamera(0);
 
         cmd->CopyImage(m_displayRT, m_frameImage);
 

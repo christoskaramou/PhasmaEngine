@@ -17,7 +17,6 @@ namespace pe
 {
     AabbsPass::AabbsPass()
     {
-        m_cmd = nullptr;
         m_geometry = nullptr;
     }
 
@@ -28,7 +27,7 @@ namespace pe
     void AabbsPass::Init()
     {
         m_renderQueue = RHII.GetRenderQueue();
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         m_viewportRT = rs->GetRenderTarget("viewport");
         m_depthRT = rs->GetDepthStencilTarget("depthStencil");
@@ -80,21 +79,12 @@ namespace pe
         if (!m_geometry->HasDrawInfo())
             return nullptr;
 
-        CommandBuffer *cmd;
-        if (!m_cmd)
-        {
-            cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
-            cmd->Begin();
-        }
-        else
-        {
-            cmd = m_cmd;
-        }
-
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
+        cmd->Begin();
         cmd->BeginDebugRegion("Aabbs");
 
-        Camera &camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
-        ShadowPass *shadows = WORLD_ENTITY->GetComponent<ShadowPass>();
+        Camera &camera = *GetGlobalSystem<CameraSystem>()->GetCamera(0);
+        ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
 
         struct PushConstants_AABB
         {
@@ -161,13 +151,9 @@ namespace pe
 
         cmd->EndPass();
         cmd->EndDebugRegion();
+        cmd->End();
 
         m_geometry = nullptr;
-
-        if (!m_cmd)
-            cmd->End();
-        m_cmd = nullptr;
-
         return cmd;
     }
 

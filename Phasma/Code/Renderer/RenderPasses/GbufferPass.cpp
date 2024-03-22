@@ -38,9 +38,8 @@ namespace pe
 
     void GbufferPass::Init()
     {
-        m_cmd = nullptr;
         m_renderQueue = RHII.GetRenderQueue();
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         srmRT = rs->GetRenderTarget("srm"); // Specular Roughness Metallic
         normalRT = rs->GetRenderTarget("normal");
@@ -182,21 +181,12 @@ namespace pe
         PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
         PE_ERROR_IF(m_blendType == BlendType::None, "BlendType is None");
 
-        CommandBuffer *cmd;
-        if (!m_cmd)
-        {
-            cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
-            cmd->Begin();
-        }
-        else
-        {
-            cmd = m_cmd;
-        }
-
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
+        cmd->Begin();
         cmd->BeginDebugRegion("GBuffers");
 
-        Camera &camera = *CONTEXT->GetSystem<CameraSystem>()->GetCamera(0);
-        ShadowPass *shadows = WORLD_ENTITY->GetComponent<ShadowPass>();
+        Camera &camera = *GetGlobalSystem<CameraSystem>()->GetCamera(0);
+        ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
 
         struct PushConstants_GBuffer
         {
@@ -346,13 +336,10 @@ namespace pe
             }
         }
         cmd->EndDebugRegion();
+        cmd->End();
 
         m_geometry = nullptr;
         m_blendType = BlendType::None;
-
-        if (!m_cmd)
-            cmd->End();
-        m_cmd = nullptr;
 
         return cmd;
     }

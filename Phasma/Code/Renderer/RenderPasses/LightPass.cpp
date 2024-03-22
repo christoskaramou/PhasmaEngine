@@ -36,9 +36,8 @@ namespace pe
 
     void LightPass::Init()
     {
-        m_cmd = nullptr;
         m_renderQueue = RHII.GetRenderQueue();
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         m_srmRT = rs->GetRenderTarget("srm"); // Specular Roughness Metallic
         m_normalRT = rs->GetRenderTarget("normal");
@@ -65,7 +64,7 @@ namespace pe
 
     void LightPass::UpdatePassInfo()
     {
-        ShadowPass &shadows = *WORLD_ENTITY->GetComponent<ShadowPass>();
+        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         const std::vector<Define> definesFrag{
             Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<GlobalSettings>().shadow_map_cascades)},
@@ -122,13 +121,13 @@ namespace pe
 
     void LightPass::UpdateDescriptorSets()
     {
-        ShadowPass &shadows = *WORLD_ENTITY->GetComponent<ShadowPass>();
+        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         std::vector<ImageViewHandle> views(shadows.m_textures.size());
         for (uint32_t i = 0; i < shadows.m_textures.size(); i++)
             views[i] = shadows.m_textures[i]->GetSRV();
 
         bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
-        const SkyBox &skybox = shadowsEnabled ? CONTEXT->GetSystem<RendererSystem>()->GetSkyBoxDay() : CONTEXT->GetSystem<RendererSystem>()->GetSkyBoxNight();
+        const SkyBox &skybox = shadowsEnabled ? GetGlobalSystem<RendererSystem>()->GetSkyBoxDay() : GetGlobalSystem<RendererSystem>()->GetSkyBoxNight();
 
         for (uint32_t i = 0; i < SWAPCHAIN_IMAGES; i++)
         {
@@ -140,7 +139,7 @@ namespace pe
             DSetOpaque->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler()->Handle());
             DSetOpaque->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler()->Handle());
             DSetOpaque->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler()->Handle());
-            DSetOpaque->SetBuffer(4, CONTEXT->GetSystem<LightSystem>()->GetUniform(i));
+            DSetOpaque->SetBuffer(4, GetGlobalSystem<LightSystem>()->GetUniform(i));
             DSetOpaque->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler()->Handle());
             DSetOpaque->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler()->Handle());
             DSetOpaque->SetBuffer(7, m_uniform[i]);
@@ -166,7 +165,7 @@ namespace pe
             DSetAlpha->SetImageView(1, m_normalRT->GetSRV(), m_normalRT->GetSampler()->Handle());
             DSetAlpha->SetImageView(2, m_albedoRT->GetSRV(), m_albedoRT->GetSampler()->Handle());
             DSetAlpha->SetImageView(3, m_srmRT->GetSRV(), m_srmRT->GetSampler()->Handle());
-            DSetAlpha->SetBuffer(4, CONTEXT->GetSystem<LightSystem>()->GetUniform(i));
+            DSetAlpha->SetBuffer(4, GetGlobalSystem<LightSystem>()->GetUniform(i));
             DSetAlpha->SetImageView(5, m_ssaoRT->GetSRV(), m_ssaoRT->GetSampler()->Handle());
             DSetAlpha->SetImageView(6, m_emissiveRT->GetSRV(), m_emissiveRT->GetSampler()->Handle());
             DSetAlpha->SetBuffer(7, m_uniform[i]);
@@ -218,9 +217,9 @@ namespace pe
     void LightPass::PassBarriers(CommandBuffer *cmd)
     {
         bool shadowsEnabled = Settings::Get<GlobalSettings>().shadows;
-        RendererSystem &rs = *CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem &rs = *GetGlobalSystem<RendererSystem>();
         const SkyBox &skybox = shadowsEnabled ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
-        ShadowPass &shadows = *WORLD_ENTITY->GetComponent<ShadowPass>();
+        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         std::vector<ImageBarrierInfo> barriers(9 + shadows.m_textures.size());
         for (size_t i = 0; i < barriers.size(); i++)
@@ -256,30 +255,22 @@ namespace pe
     {
         PE_ERROR_IF(m_blendType == BlendType::None, "BlendType is None");
 
-        CommandBuffer *cmd;
-        if (!m_cmd)
-        {
-            cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
-            cmd->Begin();
-        }
-        else
-        {
-            cmd = m_cmd;
-        }
-
         bool shadowsEnabled = m_ubo.shadows;
         uint32_t shadowmapCascades = Settings::Get<GlobalSettings>().shadow_map_cascades;
 
-        RendererSystem &rs = *CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem &rs = *GetGlobalSystem<RendererSystem>();
         const SkyBox &skybox = shadowsEnabled ? rs.GetSkyBoxDay() : rs.GetSkyBoxNight();
-        ShadowPass &shadows = *WORLD_ENTITY->GetComponent<ShadowPass>();
+        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
 
         bool isTransparent = m_blendType == BlendType::Transparent;
         Attachment &attachment = isTransparent ? m_attachmentTransparent : m_attachmentOpaque;
         PassInfo &passInfo = isTransparent ? m_passInfoTransparent : m_passInfoOpaque;
         std::string passName = isTransparent ? "Transparent" : "Opaque";
 
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
+        cmd->Begin();
         cmd->BeginDebugRegion("LightPass");
+        
         cmd->SetConstant(0, shadowsEnabled ? 1.0f : 0.0f); // Shadow cast
         cmd->SetConstant(1, MAX_POINT_LIGHTS);             // num point lights
         cmd->SetConstant(2, m_viewportRT->GetWidth_f());   // framebuffer width
@@ -299,12 +290,9 @@ namespace pe
         cmd->EndPass();
 
         cmd->EndDebugRegion();
+        cmd->End();
 
         m_blendType = BlendType::None;
-
-        if (!m_cmd)
-            cmd->End();
-        m_cmd = nullptr;
 
         return cmd;
     }

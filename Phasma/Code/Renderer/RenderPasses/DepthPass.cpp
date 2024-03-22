@@ -33,9 +33,8 @@ namespace pe
 
     void DepthPass::Init()
     {
-        m_cmd = nullptr;
         m_renderQueue = RHII.GetRenderQueue();
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         m_depthStencil = rs->GetDepthStencilTarget("depthStencil");
 
         attachment = {};
@@ -77,17 +76,6 @@ namespace pe
     {
         PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
 
-        CommandBuffer *cmd;
-        if (!m_cmd)
-        {
-            cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
-            cmd->Begin();
-        }
-        else
-        {
-            cmd = m_cmd;
-        }
-
         struct PushConstants_DepthPass
         {
             uint32_t meshIndex;
@@ -96,6 +84,8 @@ namespace pe
             float alphaCut;
         };
 
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
+        cmd->Begin();
         cmd->BeginDebugRegion("Depth Prepass");
 
         auto &drawInfosOpaque = m_geometry->GetDrawInfosOpaque();
@@ -147,10 +137,7 @@ namespace pe
 
         m_geometry = nullptr;
         cmd->EndDebugRegion();
-
-        if (!m_cmd)
-            cmd->End();
-        m_cmd = nullptr;
+        cmd->End();
 
         return cmd;
     }

@@ -48,13 +48,13 @@ namespace pe
         RHII.Init(m_window->Handle());
 
         Queue *queue = Queue::Get(QueueType::GraphicsBit | QueueType::TransferBit, 1);
-        CommandBuffer *cmd = CommandBuffer::GetFree(queue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(queue);
 
         cmd->Begin();
-        CONTEXT->CreateSystem<CameraSystem>()->Init(cmd);
-        CONTEXT->CreateSystem<LightSystem>()->Init(cmd);
-        CONTEXT->CreateSystem<RendererSystem>()->Init(cmd);
-        CONTEXT->CreateSystem<PostProcessSystem>()->Init(cmd);
+        CreateGlobalSystem<CameraSystem>()->Init(cmd);
+        CreateGlobalSystem<LightSystem>()->Init(cmd);
+        CreateGlobalSystem<RendererSystem>()->Init(cmd);
+        CreateGlobalSystem<PostProcessSystem>()->Init(cmd);
         cmd->End();
 
         queue->Submit(1, &cmd, 0, nullptr, nullptr, 0, nullptr, nullptr);
@@ -65,7 +65,6 @@ namespace pe
         queue->WaitIdle();
 
         FileWatcher::Start(0.25);
-        m_context = CONTEXT;
 
         // Render some frames so everything is initialized before destroying the splash screen
         for (int i = 0; i < SWAPCHAIN_IMAGES; i++)
@@ -82,7 +81,7 @@ namespace pe
     {
         FileWatcher::Stop();
         FileWatcher::Clear();
-        m_context->DestroySystems();
+        DestroyGlobalSystems();
         RHII.Destroy();
         RHII.Remove();
         Window::Destroy(m_window);
@@ -103,7 +102,7 @@ namespace pe
 
         if (!m_window->isMinimized())
         {
-            m_context->UpdateSystems(m_frameTimer.GetDelta());
+            UpdateGlobalSystems(m_frameTimer.GetDelta());
             m_frameTimer.CountUpdatesStamp();
         }
 
@@ -113,7 +112,7 @@ namespace pe
 
         if (!m_window->isMinimized())
         {
-            m_context->DrawSystems();
+            DrawGlobalSystems();
             m_frameTimer.CountCpuTotalStamp();
         }
 

@@ -36,8 +36,6 @@ namespace pe
 
         void SetGeometry(Geometry *geometry) { m_geometry = geometry; }
 
-        void SetCommandBuffer(CommandBuffer *cmd) { m_cmd = cmd; }
-
     private:
         friend class Scene;
         friend class Renderer;
@@ -56,6 +54,5 @@ namespace pe
 
         Queue *m_renderQueue;
         Geometry *m_geometry;
-        CommandBuffer *m_cmd;
     };
 }

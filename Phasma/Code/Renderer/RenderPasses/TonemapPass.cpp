@@ -27,7 +27,7 @@ namespace pe
     void TonemapPass::Init()
     {
         m_renderQueue = RHII.GetRenderQueue();
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         m_displayRT = rs->GetRenderTarget("display");
         m_frameImage = rs->CreateFSSampledImage(false);
@@ -73,7 +73,7 @@ namespace pe
 
     CommandBuffer *TonemapPass::Draw()
     {
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
         cmd->Begin();
 
         cmd->BeginDebugRegion("TonemapPass");

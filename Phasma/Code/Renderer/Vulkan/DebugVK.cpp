@@ -27,44 +27,37 @@ namespace pe
     // Get function pointers for the debug report extensions from the device
     void Debug::Init(InstanceHandle instance)
     {
-        static bool initialized = false;
+        PE_ERROR_IF(s_instance, "Already initialized!");
+        PE_ERROR_IF(!instance, "Invalid initializing instance!");
 
         s_instance = instance;
 
-        if (!s_instance)
-            PE_ERROR("Invalid instance!");
+        if (!vkCreateDebugUtilsMessengerEXT)
+            vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(s_instance, "vkCreateDebugUtilsMessengerEXT");
 
-        if (!initialized)
-        {
-            if (!vkCreateDebugUtilsMessengerEXT)
-                vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+        if (!vkDestroyDebugUtilsMessengerEXT)
+            vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(s_instance, "vkDestroyDebugUtilsMessengerEXT");
 
-            if (!vkDestroyDebugUtilsMessengerEXT)
-                vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+        if (!vkSetDebugUtilsObjectNameEXT)
+            vkSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(s_instance, "vkSetDebugUtilsObjectNameEXT");
 
-            if (!vkSetDebugUtilsObjectNameEXT)
-                vkSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(instance, "vkSetDebugUtilsObjectNameEXT");
+        if (!vkQueueBeginDebugUtilsLabelEXT)
+            vkQueueBeginDebugUtilsLabelEXT = (PFN_vkQueueBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkQueueBeginDebugUtilsLabelEXT");
 
-            if (!vkQueueBeginDebugUtilsLabelEXT)
-                vkQueueBeginDebugUtilsLabelEXT = (PFN_vkQueueBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkQueueBeginDebugUtilsLabelEXT");
+        if (!vkQueueInsertDebugUtilsLabelEXT)
+            vkQueueInsertDebugUtilsLabelEXT = (PFN_vkQueueInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkQueueInsertDebugUtilsLabelEXT");
 
-            if (!vkQueueInsertDebugUtilsLabelEXT)
-                vkQueueInsertDebugUtilsLabelEXT = (PFN_vkQueueInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkQueueInsertDebugUtilsLabelEXT");
+        if (!vkQueueEndDebugUtilsLabelEXT)
+            vkQueueEndDebugUtilsLabelEXT = (PFN_vkQueueEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkQueueEndDebugUtilsLabelEXT");
 
-            if (!vkQueueEndDebugUtilsLabelEXT)
-                vkQueueEndDebugUtilsLabelEXT = (PFN_vkQueueEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkQueueEndDebugUtilsLabelEXT");
+        if (!vkCmdBeginDebugUtilsLabelEXT)
+            vkCmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkCmdBeginDebugUtilsLabelEXT");
 
-            if (!vkCmdBeginDebugUtilsLabelEXT)
-                vkCmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkCmdBeginDebugUtilsLabelEXT");
+        if (!vkCmdEndDebugUtilsLabelEXT)
+            vkCmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkCmdEndDebugUtilsLabelEXT");
 
-            if (!vkCmdEndDebugUtilsLabelEXT)
-                vkCmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkCmdEndDebugUtilsLabelEXT");
-
-            if (!vkCmdInsertDebugUtilsLabelEXT)
-                vkCmdInsertDebugUtilsLabelEXT = (PFN_vkCmdInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkCmdInsertDebugUtilsLabelEXT");
-
-            initialized = true;
-        }
+        if (!vkCmdInsertDebugUtilsLabelEXT)
+            vkCmdInsertDebugUtilsLabelEXT = (PFN_vkCmdInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(s_instance, "vkCmdInsertDebugUtilsLabelEXT");
     }
 
     void Debug::GetInstanceUtils(std::vector<const char *> &instanceExtensions,
@@ -134,8 +127,7 @@ namespace pe
     void Debug::CreateDebugMessenger()
     {
 #if defined(_DEBUG) && PE_DEBUG_MESSENGER == 1
-        if (!s_instance)
-            PE_ERROR("Invalid instance handle");
+        PE_ERROR_IF(!s_instance, "A valid instance handle is required to initialize debug messenger!");
 
         if (!vkCreateDebugUtilsMessengerEXT)
             return;

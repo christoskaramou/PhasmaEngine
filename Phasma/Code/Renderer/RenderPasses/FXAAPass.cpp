@@ -26,7 +26,7 @@ namespace pe
 
     void FXAAPass::Init()
     {
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         m_viewportRT = rs->GetRenderTarget("viewport");
         m_frameImage = rs->CreateFSSampledImage(true);
@@ -70,7 +70,7 @@ namespace pe
 
     CommandBuffer *FXAAPass::Draw()
     {
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
         cmd->Begin();
 
         cmd->BeginDebugRegion("FXAAPass");

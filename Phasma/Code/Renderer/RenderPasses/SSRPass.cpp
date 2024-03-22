@@ -28,7 +28,7 @@ namespace pe
 
     void SSRPass::Init()
     {
-        RendererSystem *rs = CONTEXT->GetSystem<RendererSystem>();
+        RendererSystem *rs = GetGlobalSystem<RendererSystem>();
 
         m_ssrRT = rs->GetRenderTarget("ssr");
         m_viewportRT = rs->GetRenderTarget("viewport");
@@ -114,7 +114,7 @@ namespace pe
 
     CommandBuffer *SSRPass::Draw()
     {
-        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
         cmd->Begin();
 
         cmd->BeginDebugRegion("SSRPass");

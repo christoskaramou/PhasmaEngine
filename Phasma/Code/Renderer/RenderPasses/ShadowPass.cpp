@@ -246,7 +246,7 @@ namespace pe
     {
         PE_ERROR_IF(m_geometry == nullptr, "Geometry was not set");
 
-        CommandBuffer *cmd = m_cmd ? m_cmd : CommandBuffer::GetFree(m_renderQueue->GetFamilyId());
+        CommandBuffer *cmd = CommandBuffer::GetFree(m_renderQueue);
         cmd->Begin();
         cmd->BeginDebugRegion("ShadowPass");
 
@@ -288,12 +288,10 @@ namespace pe
                 cmd->EndPass();
             }
         }
+        
         cmd->EndDebugRegion();
+        cmd->End();
 
-        if (!m_cmd)
-            cmd->End();
-
-        m_cmd = nullptr;
         m_geometry = nullptr;
 
         return cmd;
