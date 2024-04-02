@@ -200,7 +200,7 @@ namespace pe
 
     // Used to abstract rendering api handles
     // We can add more types here
-    template <class VK_TYPE, class DX_TYPE>
+    template <ObjectType Ob, class VK_TYPE, class DX_TYPE>
     class ApiHandle final : public ApiHandleBase
     {
         // Only work with pointers
@@ -208,19 +208,16 @@ namespace pe
         static_assert(std::is_pointer_v<DX_TYPE>, "ApiHandle of DX_TYPE type is not a pointer");
 
     public:
-        using VKType = VK_TYPE;
-        using DXType = DX_TYPE;
+        static constexpr ObjectType ObType = Ob;
 
         ApiHandle() : ApiHandleBase(nullptr) {}
         ApiHandle(const VK_TYPE &handle) : ApiHandleBase(handle) {}
         ApiHandle(const DX_TYPE &handle) : ApiHandleBase(handle) {}
 
         // Operators for auto casting
-        operator VK_TYPE() { return static_cast<VK_TYPE>(m_handle); }
         operator VK_TYPE() const { return static_cast<VK_TYPE>(m_handle); }
-        operator DX_TYPE() { return static_cast<DX_TYPE>(m_handle); }
         operator DX_TYPE() const { return static_cast<DX_TYPE>(m_handle); }
-        operator uintptr_t() { return reinterpret_cast<uintptr_t>(m_handle); }
+        operator uint64_t() const { return reinterpret_cast<uint64_t>(m_handle); }
         operator bool() { return m_handle != nullptr; }
         bool operator!() { return m_handle == nullptr; }
 
@@ -308,32 +305,32 @@ namespace pe
         HANDLE m_handle;
     };
 
-    using CommandBufferHandle = ApiHandle<VkCommandBuffer, Placeholder<0> *>;
-    using DescriptorSetLayoutHandle = ApiHandle<VkDescriptorSetLayout, Placeholder<0> *>;
-    using DescriptorSetHandle = ApiHandle<VkDescriptorSet, Placeholder<0> *>;
-    using FrameBufferHandle = ApiHandle<VkFramebuffer, Placeholder<0> *>;
-    using ImageHandle = ApiHandle<VkImage, Placeholder<0> *>;
-    using ImageViewHandle = ApiHandle<VkImageView, Placeholder<0> *>;
-    using SamplerHandle = ApiHandle<VkSampler, Placeholder<0> *>;
-    using RenderPassHandle = ApiHandle<VkRenderPass, Placeholder<0> *>;
-    using CommandPoolHandle = ApiHandle<VkCommandPool, Placeholder<0> *>;
-    using BufferHandle = ApiHandle<VkBuffer, Placeholder<0> *>;
-    using PipelineCacheHandle = ApiHandle<VkPipelineCache, Placeholder<0> *>;
-    using PipelineLayoutHandle = ApiHandle<VkPipelineLayout, Placeholder<0> *>;
-    using PipelineHandle = ApiHandle<VkPipeline, Placeholder<0> *>;
-    using SemaphoreHandle = ApiHandle<VkSemaphore, Placeholder<0> *>;
-    using QueryPoolHandle = ApiHandle<VkQueryPool, Placeholder<0> *>;
-    using SwapchainHandle = ApiHandle<VkSwapchainKHR, Placeholder<0> *>;
-    using DeviceHandle = ApiHandle<VkDevice, Placeholder<0> *>;
-    using SurfaceHandle = ApiHandle<VkSurfaceKHR, Placeholder<0> *>;
-    using InstanceHandle = ApiHandle<VkInstance, Placeholder<0> *>;
-    using GpuHandle = ApiHandle<VkPhysicalDevice, Placeholder<0> *>;
-    using DebugMessengerHandle = ApiHandle<VkDebugUtilsMessengerEXT, Placeholder<0> *>;
-    using QueueHandle = ApiHandle<VkQueue, Placeholder<0> *>;
-    using DescriptorPoolHandle = ApiHandle<VkDescriptorPool, Placeholder<0> *>;
-    using AllocationHandle = ApiHandle<VmaAllocation, Placeholder<0> *>;
-    using AllocatorHandle = ApiHandle<VmaAllocator, Placeholder<0> *>;
-    using WindowHandle = ApiHandle<SDL_Window *, Placeholder<0> *>;
-    using ShaderHandle = ApiHandle<Placeholder<0> *, Placeholder<1> *>;
-    using EventHandle = ApiHandle<VkEvent, Placeholder<0> *>;
+    using CommandBufferHandle = ApiHandle<ObjectType::CommandBuffer, VkCommandBuffer, Placeholder<0> *>;
+    using DescriptorSetLayoutHandle = ApiHandle<ObjectType::DescriptorSetLayout, VkDescriptorSetLayout, Placeholder<0> *>;
+    using DescriptorSetHandle = ApiHandle<ObjectType::DescriptorSet, VkDescriptorSet, Placeholder<0> *>;
+    using FrameBufferHandle = ApiHandle<ObjectType::Framebuffer, VkFramebuffer, Placeholder<0> *>;
+    using ImageHandle = ApiHandle<ObjectType::Image, VkImage, Placeholder<0> *>;
+    using ImageViewHandle = ApiHandle<ObjectType::ImageView, VkImageView, Placeholder<0> *>;
+    using SamplerHandle = ApiHandle<ObjectType::Sampler, VkSampler, Placeholder<0> *>;
+    using RenderPassHandle = ApiHandle<ObjectType::RenderPass, VkRenderPass, Placeholder<0> *>;
+    using CommandPoolHandle = ApiHandle<ObjectType::CommandPool, VkCommandPool, Placeholder<0> *>;
+    using BufferHandle = ApiHandle<ObjectType::Buffer, VkBuffer, Placeholder<0> *>;
+    using PipelineCacheHandle = ApiHandle<ObjectType::PipelineCache, VkPipelineCache, Placeholder<0> *>;
+    using PipelineLayoutHandle = ApiHandle<ObjectType::PipelineLayout, VkPipelineLayout, Placeholder<0> *>;
+    using PipelineHandle = ApiHandle<ObjectType::Pipeline, VkPipeline, Placeholder<0> *>;
+    using SemaphoreHandle = ApiHandle<ObjectType::Semaphore, VkSemaphore, Placeholder<0> *>;
+    using QueryPoolHandle = ApiHandle<ObjectType::QueryPool, VkQueryPool, Placeholder<0> *>;
+    using SwapchainHandle = ApiHandle<ObjectType::Swapchain, VkSwapchainKHR, Placeholder<0> *>;
+    using DeviceHandle = ApiHandle<ObjectType::Device, VkDevice, Placeholder<0> *>;
+    using SurfaceHandle = ApiHandle<ObjectType::Surface, VkSurfaceKHR, Placeholder<0> *>;
+    using InstanceHandle = ApiHandle<ObjectType::Instance, VkInstance, Placeholder<0> *>;
+    using GpuHandle = ApiHandle<ObjectType::PhysicalDevice, VkPhysicalDevice, Placeholder<0> *>;
+    using DebugMessengerHandle = ApiHandle<ObjectType::DebugUtilsMessenger, VkDebugUtilsMessengerEXT, Placeholder<0> *>;
+    using QueueHandle = ApiHandle<ObjectType::Queue, VkQueue, Placeholder<0> *>;
+    using DescriptorPoolHandle = ApiHandle<ObjectType::DescriptorPool, VkDescriptorPool, Placeholder<0> *>;
+    using EventHandle = ApiHandle<ObjectType::Event, VkEvent, Placeholder<0> *>;
+    using AllocationHandle = ApiHandle<ObjectType::Unknown, VmaAllocation, Placeholder<0> *>;
+    using AllocatorHandle = ApiHandle<ObjectType::Unknown, VmaAllocator, Placeholder<0> *>;
+    using WindowHandle = ApiHandle<ObjectType::Unknown, SDL_Window *, Placeholder<0> *>;
+    using ShaderHandle = ApiHandle<ObjectType::Unknown, Placeholder<0> *, Placeholder<1> *>;
 }

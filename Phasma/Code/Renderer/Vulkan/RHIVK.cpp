@@ -349,9 +349,9 @@ namespace pe
         PE_CHECK(vkCreateDevice(m_gpu, &deviceCreateInfo, nullptr, &deviceVK));
         m_device = deviceVK;
 
-        Debug::SetObjectName(m_surface->Handle(), ObjectType::Surface, "RHI_surface");
-        Debug::SetObjectName(m_gpu, ObjectType::PhysicalDevice, "RHI_gpu");
-        Debug::SetObjectName(m_device, ObjectType::Device, "RHI_device");
+        Debug::SetObjectName(m_surface->Handle(), "RHI_surface");
+        Debug::SetObjectName(m_gpu, "RHI_gpu");
+        Debug::SetObjectName(m_device, "RHI_device");
     }
 
     void RHI::CreateAllocator()

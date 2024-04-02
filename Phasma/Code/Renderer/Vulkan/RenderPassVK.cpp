@@ -124,7 +124,7 @@ namespace pe
         m_handle = renderPass;
 
         m_name = name;
-        Debug::SetObjectName(m_handle, ObjectType::RenderPass, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     RenderPass::~RenderPass()

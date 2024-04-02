@@ -31,7 +31,7 @@ namespace pe
         PE_CHECK(vkCreateFramebuffer(RHII.GetDevice(), &fbci, nullptr, &frameBuffer));
         m_handle = frameBuffer;
 
-        Debug::SetObjectName(m_handle, ObjectType::Framebuffer, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     FrameBuffer::~FrameBuffer()

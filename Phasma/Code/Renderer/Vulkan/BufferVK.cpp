@@ -44,7 +44,7 @@ namespace pe
 
         this->name = name;
 
-        Debug::SetObjectName(m_handle, ObjectType::Buffer, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     Buffer::~Buffer()

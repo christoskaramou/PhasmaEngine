@@ -8,27 +8,26 @@ namespace pe
 {
     DescriptorPool::DescriptorPool(uint32_t count, DescriptorPoolSize *sizes, const std::string &name)
     {
-        uint32_t maxDescriptors = 0;
+        // Type and count per element in descriptor pool
         std::vector<VkDescriptorPoolSize> descPoolsize(count);
         for (uint32_t i = 0; i < count; i++)
         {
             descPoolsize[i].type = Translate<VkDescriptorType>(sizes[i].type);
             descPoolsize[i].descriptorCount = sizes[i].descriptorCount;
-            maxDescriptors += sizes[i].descriptorCount;
         }
 
         VkDescriptorPoolCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         createInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-        createInfo.poolSizeCount = count;
+        createInfo.poolSizeCount = static_cast<uint32_t>(descPoolsize.size());
         createInfo.pPoolSizes = descPoolsize.data();
-        createInfo.maxSets = maxDescriptors;
+        createInfo.maxSets = 1; // Unique descriptor sets for each descriptor pool
 
         VkDescriptorPool descriptorPoolVK;
         PE_CHECK(vkCreateDescriptorPool(RHII.GetDevice(), &createInfo, nullptr, &descriptorPoolVK));
         m_handle = descriptorPoolVK;
 
-        Debug::SetObjectName(m_handle, ObjectType::DescriptorPool, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     DescriptorPool::~DescriptorPool()
@@ -85,8 +84,8 @@ namespace pe
 
             if (bindingInfos[i].bindless)
             {
-                // Note: As for now, there can be only one unbound array in a descriptor set and it must be the last binding
-                // I think this is a Vulkan limitation
+                // Note: As for now, it can be only one unbound array in a descriptor set and it must be the last binding
+                // Vulkan limitation?
                 if (i != bindingInfos.size() - 1)
                     PE_ERROR("DescriptorLayout: An unbound array must be the last binding");
 
@@ -116,7 +115,7 @@ namespace pe
         PE_CHECK(vkCreateDescriptorSetLayout(RHII.GetDevice(), &dslci, nullptr, &layout));
         m_handle = layout;
 
-        Debug::SetObjectName(m_handle, ObjectType::DescriptorSetLayout, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     DescriptorLayout::~DescriptorLayout()
@@ -160,6 +159,7 @@ namespace pe
             i++;
         }
 
+        // Create DescriptorPool and DescriptorLayout for this descriptor set
         m_pool = DescriptorPool::Create(i, poolSizes.data(), name + "_pool");
         m_layout = DescriptorLayout::GetOrCreate(bindingInfos, stage, pushDescriptor);
 
@@ -177,19 +177,17 @@ namespace pe
         allocateInfo.descriptorPool = m_pool->Handle();
         allocateInfo.descriptorSetCount = 1;
         allocateInfo.pSetLayouts = &dsetLayout;
-        allocateInfo.pNext = &variableDescriptorCountAllocInfo; // If not flag has been set in the layout, this will be ignored
+        allocateInfo.pNext = &variableDescriptorCountAllocInfo; // If the flag was not set in the layout, this will be ignored
 
         VkDescriptorSet dset;
         PE_CHECK(vkAllocateDescriptorSets(RHII.GetDevice(), &allocateInfo, &dset));
         m_handle = dset;
 
-        Debug::SetObjectName(m_handle, ObjectType::DescriptorSet, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     Descriptor::~Descriptor()
     {
-        //DescriptorPool::Destroy(m_pool);
-        //DescriptorLayout::Destroy(m_layout);
     }
 
     void Descriptor::SetImageViews(uint32_t binding,

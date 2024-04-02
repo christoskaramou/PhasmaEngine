@@ -35,7 +35,7 @@ namespace pe
         cmd->ImageBarrier(barrier);
         cmd->BindPipeline(*s_passInfo, false);
         cmd->BindDescriptors(1, &s_DSet[s_currentIndex]);
-        cmd->SetConstant(0, s_pushConstants);
+        cmd->SetConstants(s_pushConstants);
         cmd->PushConstants();
         cmd->Dispatch(groupCount.x, groupCount.y, s_image->GetArrayLayers());
         cmd->EndDebugRegion();

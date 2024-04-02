@@ -74,7 +74,7 @@ namespace pe
         static_assert(N % 4 == 0, "N must be a multiple of 4 bytes");
 
     public:
-        // offset for every 4 bytes count (minimum alignment), thus is counts floats, uint32_t, etc.
+        // offset for every 4 bytes count (minimum alignment), thus for floats, uint32_t, etc.
         template <class T>
         void Set(uint16_t offset, const T &value)
         {
@@ -116,7 +116,6 @@ namespace pe
         inline static std::mutex s_getNextMutex{};
         inline static std::mutex s_returnMutex{};
 
-    private:
         uint32_t m_familyId;
         CommandPoolCreateFlags m_flags;
     };
@@ -161,7 +160,7 @@ namespace pe
         void SetScissor(int x, int y, uint32_t width, uint32_t height);
 
         void SetLineWidth(float width);
-        
+
         void SetDepthBias(float constantFactor, float clamp, float slopeFactor);
 
         void SetDepthTestEnable(uint32_t enable);
@@ -171,7 +170,10 @@ namespace pe
         void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
 
         template <class T>
-        void SetConstant(uint16_t offset, const T &value) { m_pushConstants.Set(offset, value); }
+        void SetConstantAt(uint16_t offset, const T &value) { m_pushConstants.Set(offset, value); }
+
+        template <class T>
+        void SetConstants(const T &value) { m_pushConstants.Set(0, value); }
 
         void PushConstants();
 
@@ -251,17 +253,12 @@ namespace pe
 
         void AddFlags(CommandTypeFlags flags) { m_commandFlags |= flags; }
 
+        // Resourses functionality
         static void Init(GpuHandle gpu, uint32_t countPerFamily = 0);
-
         static void Clear();
-
         static CommandBuffer *GetFree(uint32_t familyId);
-        
         static CommandBuffer *GetFree(Queue *queue);
-
         static void Return(CommandBuffer *cmd);
-
-        // Cached resourses functionality
         static RenderPass *GetRenderPass(const std::vector<Attachment> &attachments);
         static FrameBuffer *GetFrameBuffer(RenderPass *renderPass, const std::vector<Attachment> &attachments);
         static Pipeline *GetPipeline(RenderPass *renderPass, PassInfo &info);
@@ -274,14 +271,16 @@ namespace pe
         friend class Queue;
         friend class Renderer;
 
+        // Resources
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_availableCmds{};
         inline static std::vector<std::unordered_map<size_t, CommandBuffer *>> s_allCmds{};
-        inline static std::mutex s_getNextMutex{};
-        inline static std::mutex s_returnMutex{};
-        inline static std::mutex s_WaitMutex{};
         inline static std::unordered_map<size_t, RenderPass *> s_renderPasses{};
         inline static std::unordered_map<size_t, FrameBuffer *> s_frameBuffers{};
         inline static std::unordered_map<size_t, Pipeline *> s_pipelines{};
+
+        inline static std::mutex s_getNextMutex{};
+        inline static std::mutex s_returnMutex{};
+        inline static std::mutex s_WaitMutex{};
 
         CommandPool *m_commandPool;
         uint32_t m_familyId;

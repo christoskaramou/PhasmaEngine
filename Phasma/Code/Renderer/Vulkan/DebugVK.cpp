@@ -161,7 +161,7 @@ namespace pe
 #endif
     }
 
-    void Debug::SetObjectName(uintptr_t object, ObjectType type, const std::string &name)
+    void Debug::SetObjectName(uint64_t handle, ObjectType type, const std::string &name)
     {
         if (!vkSetDebugUtilsObjectNameEXT)
             return;
@@ -170,7 +170,7 @@ namespace pe
         objectInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
         objectInfo.pNext = VK_NULL_HANDLE;
         objectInfo.objectType = Translate<VkObjectType>(type);
-        objectInfo.objectHandle = object;
+        objectInfo.objectHandle = handle;
         objectInfo.pObjectName = name.c_str();
 
         vkSetDebugUtilsObjectNameEXT(RHII.GetDevice(), &objectInfo);

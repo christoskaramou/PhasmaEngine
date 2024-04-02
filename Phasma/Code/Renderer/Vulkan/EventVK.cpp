@@ -15,7 +15,7 @@ namespace pe
         PE_CHECK(vkCreateEvent(RHII.GetDevice(), &ci, nullptr, &event));
         m_handle = event;
 
-        Debug::SetObjectName(m_handle, ObjectType::Event, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     Event::~Event()

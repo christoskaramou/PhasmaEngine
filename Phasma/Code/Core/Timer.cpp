@@ -91,7 +91,7 @@ namespace pe
         PE_CHECK(vkCreateQueryPool(RHII.GetDevice(), &qpci, nullptr, &pool));
         m_handle = pool;
 
-        Debug::SetObjectName(m_handle, ObjectType::QueryPool, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     GpuTimer::~GpuTimer()

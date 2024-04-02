@@ -116,7 +116,7 @@ namespace pe
         PE_CHECK(vkCreateSampler(RHII.GetDevice(), &infoVK, nullptr, &vkSampler));
         m_handle = vkSampler;
 
-        Debug::SetObjectName(m_handle, ObjectType::Sampler, info.name);
+        Debug::SetObjectName(m_handle, info.name);
     }
 
     Sampler::~Sampler()
@@ -253,7 +253,7 @@ namespace pe
         m_handle = imageVK;
         m_allocation = allocationVK;
 
-        Debug::SetObjectName(m_handle, ObjectType::Image, m_imageInfo.name);
+        Debug::SetObjectName(m_handle, m_imageInfo.name);
     }
 
     Image::~Image()
@@ -473,7 +473,7 @@ namespace pe
         VkImageView vkView;
         PE_CHECK(vkCreateImageView(RHII.GetDevice(), &viewInfoVK, nullptr, &vkView));
         ImageViewHandle view = vkView;
-        Debug::SetObjectName(view, ObjectType::ImageView, m_imageInfo.name);
+        Debug::SetObjectName(view, m_imageInfo.name);
 
         return view;
     }

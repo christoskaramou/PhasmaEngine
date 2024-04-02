@@ -102,8 +102,8 @@ namespace pe
         cmd->BindPipeline(m_passInfo);
         cmd->SetViewport(0.f, 0.f, m_displayRT->GetWidth_f(), m_displayRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_displayRT->GetWidth(), m_displayRT->GetHeight());
-        cmd->SetConstant(0, gSettings.dof_focus_scale);
-        cmd->SetConstant(1, gSettings.dof_blur_range);
+        cmd->SetConstantAt(0, gSettings.dof_focus_scale);
+        cmd->SetConstantAt(1, gSettings.dof_blur_range);
         cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);
         cmd->EndPass();

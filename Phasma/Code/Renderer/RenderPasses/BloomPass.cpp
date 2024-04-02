@@ -184,7 +184,7 @@ namespace pe
         auto &gSettings = Settings::Get<GlobalSettings>();
 
         // PushConstants_Bloom
-        cmd->SetConstant(0, gSettings.bloom_range);
+        cmd->SetConstants(gSettings.bloom_range);
 
         barrienRead.image = m_brightFilterRT;
         cmd->ImageBarrier(barrienRead);
@@ -211,7 +211,7 @@ namespace pe
         cmd->EndPass();
 
         // PushConstants_Bloom_Combine
-        cmd->SetConstant(0, gSettings.bloom_strength);
+        cmd->SetConstants(gSettings.bloom_strength);
 
         barrienRead.image = m_frameImage;
         cmd->ImageBarrier(barrienRead);

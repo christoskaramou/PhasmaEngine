@@ -463,7 +463,7 @@ namespace pe
             if (info.pFragShader && fragModule)
                 vkDestroyShaderModule(RHII.GetDevice(), fragModule, nullptr);
 
-            Debug::SetObjectName(m_handle, ObjectType::Pipeline, info.name);
+            Debug::SetObjectName(m_handle, info.name);
         }
     }
 

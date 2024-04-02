@@ -219,7 +219,7 @@ namespace pe
         if (mesh < 0)
             return;
 
-        cmd->SetConstant(16, GetUboDataOffset(model.m_meshesInfo[mesh].dataOffset)); // mesh index
+        cmd->SetConstantAt(16, GetUboDataOffset(model.m_meshesInfo[mesh].dataOffset)); // mesh index
 
         auto &primitivesInfo = model.m_meshesInfo[mesh].primitivesInfo;
 
@@ -268,8 +268,8 @@ namespace pe
                 cmd->BindIndexBuffer(m_geometry->GetBuffer(), 0);
                 cmd->BindVertexBuffer(m_geometry->GetBuffer(), m_geometry->GetPositionsOffset());
 
-                cmd->SetConstant(0, m_cascades[i]); // cascade view projection
-                cmd->SetConstant(17, 0u);           // joints count
+                cmd->SetConstantAt(0, m_cascades[i]); // cascade view projection
+                cmd->SetConstantAt(17, 0u);           // joints count
 
                 for (auto &modelPtr : m_geometry->GetModels())
                 {

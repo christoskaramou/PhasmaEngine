@@ -91,8 +91,8 @@ namespace pe
             PE_CHECK(vkCreateImageView(RHII.GetDevice(), &imageViewCreateInfo, nullptr, &imageView));
             m_images[i]->SetRTV(imageView);
 
-            Debug::SetObjectName(m_images[i]->Handle(), ObjectType::Image, "Swapchain_image" + std::to_string(i));
-            Debug::SetObjectName(m_images[i]->GetRTV(), ObjectType::ImageView, "Swapchain_image_view" + std::to_string(i));
+            Debug::SetObjectName(m_images[i]->Handle(), "Swapchain_image" + std::to_string(i));
+            Debug::SetObjectName(m_images[i]->GetRTV(), "Swapchain_image_view" + std::to_string(i));
         }
 
         if (m_handle)
@@ -103,7 +103,7 @@ namespace pe
 
         m_handle = schain;
 
-        Debug::SetObjectName(m_handle, ObjectType::Swapchain, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     Swapchain::~Swapchain()

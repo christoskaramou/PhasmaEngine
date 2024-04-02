@@ -23,7 +23,7 @@ namespace pe
         PE_CHECK(vkCreateSemaphore(RHII.GetDevice(), &si, nullptr, &semaphore));
         m_handle = semaphore;
 
-        Debug::SetObjectName(m_handle, ObjectType::Semaphore, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     Semaphore::~Semaphore()

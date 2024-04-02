@@ -242,7 +242,7 @@ namespace pe
                     for (int i = 0; i < 5; i++)
                         constants.primitiveImageIndex[i] = primitiveInfo.viewsIndex[i];
 
-                    cmd->SetConstant(0, constants);
+                    cmd->SetConstants(constants);
                     cmd->PushConstants();
 
                     cmd->DrawIndexed(
@@ -293,7 +293,7 @@ namespace pe
                     for (int i = 0; i < 5; i++)
                         constants.primitiveImageIndex[i] = primitiveInfo.viewsIndex[i];
 
-                    cmd->SetConstant(0, constants);
+                    cmd->SetConstants(constants);
                     cmd->PushConstants();
 
                     cmd->DrawIndexed(
@@ -322,7 +322,7 @@ namespace pe
                     for (int i = 0; i < 5; i++)
                         constants.primitiveImageIndex[i] = primitiveInfo.viewsIndex[i];
 
-                    cmd->SetConstant(0, constants);
+                    cmd->SetConstants(constants);
                     cmd->PushConstants();
 
                     cmd->DrawIndexed(

@@ -271,13 +271,13 @@ namespace pe
         cmd->Begin();
         cmd->BeginDebugRegion("LightPass");
         
-        cmd->SetConstant(0, shadowsEnabled ? 1.0f : 0.0f); // Shadow cast
-        cmd->SetConstant(1, MAX_POINT_LIGHTS);             // num point lights
-        cmd->SetConstant(2, m_viewportRT->GetWidth_f());   // framebuffer width
-        cmd->SetConstant(3, m_viewportRT->GetHeight_f());  // framebuffer height
-        cmd->SetConstant(4, isTransparent ? 1u : 0u);      // transparent pass
+        cmd->SetConstantAt(0, shadowsEnabled ? 1.0f : 0.0f); // Shadow cast
+        cmd->SetConstantAt(1, MAX_POINT_LIGHTS);             // num point lights
+        cmd->SetConstantAt(2, m_viewportRT->GetWidth_f());   // framebuffer width
+        cmd->SetConstantAt(3, m_viewportRT->GetHeight_f());  // framebuffer height
+        cmd->SetConstantAt(4, isTransparent ? 1u : 0u);      // transparent pass
         for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstant(i + 5, shadows.m_viewZ[i]); // shadowmap cascade distances
+            cmd->SetConstantAt(i + 5, shadows.m_viewZ[i]); // shadowmap cascade distances
 
         PassBarriers(cmd);
 

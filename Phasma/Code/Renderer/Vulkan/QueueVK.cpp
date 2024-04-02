@@ -202,7 +202,7 @@ namespace pe
                         queueFlags |= QueueType::PresentBit;
 
                     Queue *queue = Queue::Create(queueVK, i, queueFlags, mitg, "Queue_Queue_" + std::to_string(i) + "_" + std::to_string(j));
-                    Debug::SetObjectName(queue->Handle(), ObjectType::Queue, queue->name);
+                    Debug::SetObjectName(queue->Handle(), queue->name);
 
                     auto it = s_allQueues.find(queueFlags.Value());
                     if (it == s_allQueues.end())

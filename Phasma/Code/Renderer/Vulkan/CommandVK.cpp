@@ -27,7 +27,7 @@ namespace pe
         PE_CHECK(vkCreateCommandPool(RHII.GetDevice(), &cpci, nullptr, &commandPool));
         m_handle = commandPool;
 
-        Debug::SetObjectName(m_handle, ObjectType::CommandPool, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     CommandPool::~CommandPool()
@@ -113,7 +113,7 @@ namespace pe
 
         m_name = name;
 
-        Debug::SetObjectName(m_handle, ObjectType::CommandBuffer, name);
+        Debug::SetObjectName(m_handle, name);
     }
 
     CommandBuffer::~CommandBuffer()

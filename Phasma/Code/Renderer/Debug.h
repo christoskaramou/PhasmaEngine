@@ -18,7 +18,12 @@ namespace pe
 
         static void DestroyDebugMessenger();
 
-        static void SetObjectName(uintptr_t object, ObjectType type, const std::string &name);
+        template <class HANDLE>
+        static void SetObjectName(const HANDLE &handle, const std::string &name)
+        {
+            ValidateBaseClass<ApiHandleBase, HANDLE>();
+            SetObjectName(handle, HANDLE::ObType, name);
+        }
 
         static void InitCaptureApi();
 
@@ -50,6 +55,8 @@ namespace pe
     private:
         friend class CommandBuffer;
         friend class Queue;
+
+        static void SetObjectName(uint64_t handle, ObjectType type, const std::string &name);
 
         static void BeginQueueRegion(Queue *queue, const std::string &name);
 
@@ -83,7 +90,8 @@ namespace pe
 
         static void DestroyCaptureApi() {}
 
-        static void SetObjectName(uint64_t object, ObjectType type, const std::string &name) {}
+        template <class HANDLE>
+        static void SetObjectName(HANDLE &handle, const std::string &name) {}
 
         static void StartFrameCapture() {}
 
@@ -94,6 +102,8 @@ namespace pe
     private:
         friend class CommandBuffer;
         friend class Queue;
+
+        static void SetObjectName(uint64_t object, ObjectType type, const std::string &name) {}
 
         static void BeginQueueRegion(Queue *queue, const std::string &name) {}
 

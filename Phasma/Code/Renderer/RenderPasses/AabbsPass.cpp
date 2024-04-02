@@ -138,7 +138,7 @@ namespace pe
                 constants.meshIndex = GetUboDataOffset(model.m_meshesInfo[mesh].dataOffset);
                 constants.color = primitiveInfo.aabbColor;
 
-                cmd->SetConstant(0, constants);
+                cmd->SetConstants(constants);
                 cmd->PushConstants();
 
                 cmd->DrawIndexed(24, 1, 0, static_cast<int>(primitiveInfo.aabbVertexOffset), 0);
