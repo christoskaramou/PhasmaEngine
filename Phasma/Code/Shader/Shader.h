@@ -46,7 +46,7 @@ namespace pe
 
         ~Shader();
 
-        std::string &GetEntryName();
+        const std::string &GetEntryName();
 
         ShaderStage GetShaderStage() { return m_shaderStage; }
 
@@ -58,41 +58,27 @@ namespace pe
 
         Reflection &GetReflection() { return m_reflection; }
 
-        static void SetGlobalDefine(const std::string &name, const std::string &value)
-        {
-            for (auto &def : m_globalDefines)
-            {
-                if (def.name == name)
-                {
-                    def.value = value;
-                    return;
-                }
-            }
-
-            Define define{name, value};
-            m_globalDefines.push_back(define);
-        }
-
-        static std::vector<Descriptor *> PassDescriptors(const PassInfo &passInfo);
-
         ShaderCache &GetCache() { return m_cache; }
 
         StringHash GetPathID() { return m_pathID; }
 
         const PushConstantDesc &GetPushConstantDesc() { return m_reflection.GetPushConstantDesc(); }
 
+        static void SetGlobalDefine(const std::string &name, const std::string &value);
+
+        static std::vector<Descriptor *> PassDescriptors(const PassInfo &passInfo);
+
     private:
-        bool CompileGlsl(shaderc_shader_kind kind, shaderc::CompileOptions &options);
+        bool CompileGlsl(const std::string &sourcePath, const std::vector<Define> &defines);
 
         void AddDefineGlsl(const Define &define, shaderc::CompileOptions &options);
 
-        bool CompileHlsl(const std::string &sourcePath, ShaderStage shaderStage, const std::vector<Define> &defines, const std::string &shaderCode);
+        bool CompileHlsl(const std::string &sourcePath, const std::vector<Define> &defines);
 
         ShaderCache m_cache;
         Reflection m_reflection;
         ShaderStage m_shaderStage;
         shaderc::Compiler m_compiler;
-        std::vector<Define> defines{};
         std::vector<uint32_t> m_spirv{};
         StringHash m_pathID;
 
