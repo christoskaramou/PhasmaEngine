@@ -236,9 +236,9 @@ namespace pe
         inline static void DestroyAllIHandles()
         {
             std::vector<IHandleBase *> toDestroy;
-            for (auto handle : s_allHandles)
+            for (auto apiHandle : s_allApiHandles)
             {
-                toDestroy.push_back(handle);
+                toDestroy.push_back(apiHandle);
             }
 
             for (auto it = toDestroy.rbegin(); it != toDestroy.rend(); ++it)
@@ -250,7 +250,7 @@ namespace pe
     protected:
         virtual void Suicide() = 0;
 
-        inline static OrderedMap<IHandleBase *, IHandleBase *> s_allHandles{};
+        inline static OrderedMap<IHandleBase *, IHandleBase *> s_allApiHandles{};
         size_t m_id;
     };
 
@@ -273,7 +273,7 @@ namespace pe
             T *ptr = new T(std::forward<Params>(params)...);
 
             // Useful for deleting
-            s_allHandles.insert(ptr, ptr);
+            s_allApiHandles.insert(ptr, ptr);
 
             return ptr;
         }
@@ -283,7 +283,7 @@ namespace pe
             ValidateBaseClass<ApiHandleBase, API_HANDLE>();
             ValidateBaseClass<IHandle<T, API_HANDLE>, T>();
 
-            if (ptr && s_allHandles.erase(ptr))
+            if (ptr && s_allApiHandles.erase(ptr))
                 delete ptr; // should call ~T() destructor
 
             ptr = nullptr;
